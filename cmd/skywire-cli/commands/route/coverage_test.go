@@ -128,26 +128,26 @@ func TestMemoryStore(t *testing.T) {
 	require.NoError(t, s.RegisterTransport(ctx, a, nil))
 	require.NoError(t, s.RegisterTransportsBatch(ctx, a, nil))
 	require.NoError(t, s.DeregisterTransport(ctx, id))
-	_, _ = s.GetTransportByID(ctx, id)
-	_, _ = s.GetNumberOfTransports(ctx)
+	_, _ = s.GetTransportByID(ctx, id)  //nolint
+	_, _ = s.GetNumberOfTransports(ctx) //nolint
 	require.NoError(t, s.UpdateBandwidth(ctx, "tp", a, 1, 2))
 	require.NoError(t, s.UpdateLatency(ctx, "tp", 1, 2, 3))
-	_, _ = s.GetTransportBandwidth(ctx, id, "h", 1)
-	_, _ = s.GetVisorBandwidth(ctx, a, "h", 1)
-	_, _ = s.GetAllVisorSummaries(ctx, true, true)
+	_, _ = s.GetTransportBandwidth(ctx, id, "h", 1) //nolint
+	_, _ = s.GetVisorBandwidth(ctx, a, "h", 1)      //nolint
+	_, _ = s.GetAllVisorSummaries(ctx, true, true)  //nolint
 	require.NoError(t, s.RecordHeartbeat(ctx, a, "h"))
-	_ = s.GetDailyTimeline(ctx, "h", time.Now())
+	_ = s.GetDailyTimeline(ctx, "h", time.Now()) //nolint
 	require.NoError(t, s.RecordTransportHeartbeat(ctx, id, "h", time.Now()))
 	require.NoError(t, s.IngestTransportTimeline(ctx, id, "h", nil))
-	_, _ = s.GetTransportUptimeSummaries(ctx, nil, true, true)
-	_, _ = s.GetTransportUptimeByVisor(ctx, a, true, true)
-	_ = s.GetTransportDailyTimeline(ctx, "h", time.Now())
+	_, _ = s.GetTransportUptimeSummaries(ctx, nil, true, true) //nolint
+	_, _ = s.GetTransportUptimeByVisor(ctx, a, true, true)     //nolint
+	_ = s.GetTransportDailyTimeline(ctx, "h", time.Now())      //nolint
 	require.NoError(t, s.BackupAndCleanOldBandwidth(ctx, "h"))
-	_, _ = s.GetNetworkMetrics(ctx, store0())
-	_, _ = s.GetVisorAggregateMetrics(ctx, nil, store0())
-	_, _ = s.GetAllTransportMetrics(ctx, store0())
-	_, _ = s.GetTransportMetricsByIDs(ctx, nil, store0())
-	_, _ = s.GetTransportMetricsByVisors(ctx, nil, store0())
+	_, _ = s.GetNetworkMetrics(ctx, store0())                //nolint
+	_, _ = s.GetVisorAggregateMetrics(ctx, nil, store0())    //nolint
+	_, _ = s.GetAllTransportMetrics(ctx, store0())           //nolint
+	_, _ = s.GetTransportMetricsByIDs(ctx, nil, store0())    //nolint
+	_, _ = s.GetTransportMetricsByVisors(ctx, nil, store0()) //nolint
 	s.Close()
 }
 
@@ -338,5 +338,5 @@ func muteStdout(t *testing.T) func() {
 	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	require.NoError(t, err)
 	os.Stdout = devnull
-	return func() { os.Stdout = orig; _ = devnull.Close() }
+	return func() { os.Stdout = orig; _ = devnull.Close() } //nolint
 }

@@ -32,7 +32,7 @@ func TestMakeIPDetails_NonPublicIP(t *testing.T) {
 func TestMakeIPDetails_NilLogger(t *testing.T) {
 	// A nil logger must be replaced with a default one, not panic.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"country_code":"US","region_code":"CA","latitude":37.4056,"longitude":-122.0775}`))
+		_, _ = w.Write([]byte(`{"country_code":"US","region_code":"CA","latitude":37.4056,"longitude":-122.0775}`)) //nolint
 	}))
 	defer srv.Close()
 
@@ -45,7 +45,7 @@ func TestMakeIPDetails_NilLogger(t *testing.T) {
 func TestMakeIPDetails_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "8.8.8.8", r.URL.Query().Get("ip"))
-		_, _ = w.Write([]byte(`{"country_code":"US","region_code":"CA","latitude":37.4056,"longitude":-122.0775}`))
+		_, _ = w.Write([]byte(`{"country_code":"US","region_code":"CA","latitude":37.4056,"longitude":-122.0775}`)) //nolint
 	}))
 	defer srv.Close()
 
@@ -57,7 +57,7 @@ func TestMakeIPDetails_Success(t *testing.T) {
 
 func TestMakeIPDetails_EmptyResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`)) //nolint
 	}))
 	defer srv.Close()
 
@@ -69,7 +69,7 @@ func TestMakeIPDetails_EmptyResponse(t *testing.T) {
 
 func TestMakeIPDetails_InvalidJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`)) //nolint
 	}))
 	defer srv.Close()
 

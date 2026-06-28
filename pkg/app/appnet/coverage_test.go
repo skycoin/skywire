@@ -145,7 +145,7 @@ func TestDmsgNetworkerPing(t *testing.T) {
 // --- networker.go: context helpers + Ping delegation -----------------
 
 func TestAppNameContext(t *testing.T) {
-	require.Empty(t, AppNameFromContext(nil)) //nolint:staticcheck
+	require.Empty(t, AppNameFromContext(context.TODO())) //nolint:staticcheck
 	require.Empty(t, AppNameFromContext(context.Background()))
 
 	// Empty app name returns the context unchanged.
@@ -229,14 +229,14 @@ func TestRawTCPForwarding(t *testing.T) {
 	require.NoError(t, err)
 
 	// local -> remote
-	go func() { _, _ = localConn.Write([]byte("ping")) }()
+	go func() { _, _ = localConn.Write([]byte("ping")) }() //nolint
 	got := make([]byte, 4)
 	_, err = io.ReadFull(remoteA, got)
 	require.NoError(t, err)
 	require.Equal(t, "ping", string(got))
 
 	// remote -> local
-	go func() { _, _ = remoteA.Write([]byte("pong")) }()
+	go func() { _, _ = remoteA.Write([]byte("pong")) }() //nolint
 	got2 := make([]byte, 4)
 	_, err = io.ReadFull(localConn, got2)
 	require.NoError(t, err)
@@ -247,14 +247,14 @@ func TestRawTCPForwarding(t *testing.T) {
 	require.Nil(t, GetRawTCPForwardConn(fwd.ID))
 	require.NoError(t, fwd.Close())
 
-	_ = localConn.Close()
-	_ = remoteA.Close()
+	_ = localConn.Close() //nolint
+	_ = remoteA.Close()   //nolint
 }
 
 func TestNewRawTCPForwardConnListenError(t *testing.T) {
 	// Occupy a port, then ask the forwarder to bind the same one → the
 	// net.Listen failure is surfaced as an error.
-	busy, err := net.Listen("tcp", ":0")
+	busy, err := net.Listen("tcp", ":0") //nolint
 	require.NoError(t, err)
 	defer busy.Close() //nolint:errcheck
 	_, portStr, err := net.SplitHostPort(busy.Addr().String())
@@ -291,11 +291,11 @@ func TestMockNetworker(t *testing.T) {
 	m.On("Ping", pk, addr).Return(nil, nil)
 	m.On("PingContext", ctx, pk, addr).Return(nil, nil)
 
-	_, _ = m.Dial(addr)
-	_, _ = m.DialContext(ctx, addr)
-	_, _ = m.Listen(addr)
-	_, _ = m.ListenContext(ctx, addr)
-	_, _ = m.Ping(pk, addr)
-	_, _ = m.PingContext(ctx, pk, addr)
+	_, _ = m.Dial(addr)                 //nolint
+	_, _ = m.DialContext(ctx, addr)     //nolint
+	_, _ = m.Listen(addr)               //nolint
+	_, _ = m.ListenContext(ctx, addr)   //nolint
+	_, _ = m.Ping(pk, addr)             //nolint
+	_, _ = m.PingContext(ctx, pk, addr) //nolint
 	m.AssertExpectations(t)
 }

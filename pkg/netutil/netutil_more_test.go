@@ -151,9 +151,9 @@ func TestPorterRange(t *testing.T) {
 
 func TestPorterEphemeralDiag(t *testing.T) {
 	p := NewPorter(PorterMinEphemeral)
-	p.Reserve(90, "listener") //nolint:errcheck
-	_, _, _ = p.ReserveEphemeral(context.Background(), stringerVal{"info"})
-	_, _, _ = p.ReserveEphemeral(context.Background(), nil)
+	p.Reserve(90, "listener")                                               //nolint:errcheck
+	_, _, _ = p.ReserveEphemeral(context.Background(), stringerVal{"info"}) //nolint
+	_, _, _ = p.ReserveEphemeral(context.Background(), nil)                 //nolint
 
 	d := p.EphemeralDiag()
 	assert.Equal(t, 2, d.Ephemeral)
@@ -247,7 +247,7 @@ func TestCopyReadWriteCloser(t *testing.T) {
 	errCh := make(chan error, 1)
 	go func() { errCh <- CopyReadWriteCloser(a2, b1) }()
 
-	go func() { _, _ = a1.Write([]byte("hello")) }()
+	go func() { _, _ = a1.Write([]byte("hello")) }() //nolint
 
 	got := make([]byte, 5)
 	_, err := io.ReadFull(b2, got)
@@ -255,13 +255,13 @@ func TestCopyReadWriteCloser(t *testing.T) {
 	assert.Equal(t, "hello", string(got))
 
 	// Closing one external end ends the copy.
-	_ = a1.Close()
+	_ = a1.Close() //nolint
 	select {
 	case <-errCh:
 	case <-time.After(3 * time.Second):
 		t.Fatal("CopyReadWriteCloser did not return after a side closed")
 	}
-	_ = b2.Close()
+	_ = b2.Close() //nolint
 }
 
 // nonDeadlineConn is an io.ReadWriteCloser without deadline methods, exercising

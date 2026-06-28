@@ -86,7 +86,7 @@ func TestRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotUA = r.Header.Get("User-Agent")
 		gotHdr = r.Header.Get("X-Custom")
-		_, _ = w.Write([]byte("response-body"))
+		_, _ = w.Write([]byte("response-body")) //nolint
 	}))
 	defer srv.Close()
 
@@ -156,15 +156,15 @@ func TestResolveBeforeDial(t *testing.T) {
 	ctx := context.Background()
 
 	// IP literal passes straight through (no lookup).
-	_, _ = wrapped(ctx, "tcp", "127.0.0.1:80")
+	_, _ = wrapped(ctx, "tcp", "127.0.0.1:80") //nolint
 	require.Equal(t, "127.0.0.1:80", gotAddr)
 
 	// Address without host:port split passes through unchanged.
-	_, _ = wrapped(ctx, "tcp", "no-port-here")
+	_, _ = wrapped(ctx, "tcp", "no-port-here") //nolint
 	require.Equal(t, "no-port-here", gotAddr)
 
 	// Hostname is resolved before dialing → inner sees an IP:port.
-	_, _ = wrapped(ctx, "tcp", "localhost:80")
+	_, _ = wrapped(ctx, "tcp", "localhost:80") //nolint
 	require.NotEqual(t, "localhost:80", gotAddr)
 	require.True(t, strings.HasSuffix(gotAddr, ":80"))
 	host, _, err := net.SplitHostPort(gotAddr)

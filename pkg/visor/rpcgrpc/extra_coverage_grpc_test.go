@@ -213,7 +213,7 @@ func TestStreamRemoteSystemStatsProxy(t *testing.T) {
 	lis.ch <- serverConn
 	remoteSrv := grpc.NewServer()
 	RegisterPingServiceServer(remoteSrv, NewPingServer(newFakeVisor(), logging.MustGetLogger("remote")))
-	go func() { _ = remoteSrv.Serve(lis) }()
+	go func() { _ = remoteSrv.Serve(lis) }() //nolint
 	defer remoteSrv.Stop()
 
 	fv := newFakeVisor()
@@ -227,7 +227,7 @@ func TestStreamRemoteSystemStatsProxy(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = client.StreamRemoteSystemStats(ctx, validPK(t), 30*time.Millisecond, false, 0, func(s *SystemStats) {
+		_ = client.StreamRemoteSystemStats(ctx, validPK(t), 30*time.Millisecond, false, 0, func(s *SystemStats) { //nolint
 			got <- s
 		})
 	}()

@@ -194,7 +194,7 @@ func closedAddr(t *testing.T) string {
 		t.Fatalf("reserve port: %v", err)
 	}
 	addr := ln.Addr().String()
-	_ = ln.Close()
+	_ = ln.Close() //nolint
 	return addr
 }
 

@@ -44,7 +44,7 @@ func TestMustReadConfig(t *testing.T) {
 }
 
 // TestMustReadConfigMissingFile verifies a missing file flows through the
-// Fatalf guards (neutralised) and yields a zero-valued Config rather than
+// Fatalf guards (neutralized) and yields a zero-valued Config rather than
 // terminating the process.
 func TestMustReadConfigMissingFile(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist.json")
@@ -53,7 +53,7 @@ func TestMustReadConfigMissingFile(t *testing.T) {
 }
 
 // TestMustReadConfigBadJSON verifies invalid JSON is reported via Fatalf
-// (neutralised) and returns a zero-valued Config.
+// (neutralized) and returns a zero-valued Config.
 func TestMustReadConfigBadJSON(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	require.NoError(t, os.WriteFile(path, []byte("{not valid json"), 0600))

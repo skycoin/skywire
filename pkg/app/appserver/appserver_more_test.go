@@ -61,10 +61,10 @@ func TestPrintStdErr(t *testing.T) {
 	printStdErr(r, log)
 
 	// One suppressed line, one real line — neither should panic.
-	_, _ = io.WriteString(w, "RTNETLINK answers: File exists\nreal failure\n")
+	_, _ = io.WriteString(w, "RTNETLINK answers: File exists\nreal failure\n") //nolint
 	require.NoError(t, w.Close())
 	time.Sleep(50 * time.Millisecond)
-	_ = r.Close()
+	_ = r.Close() //nolint
 }
 
 // ---- proc.go: getters / setters --------------------------------------------
@@ -93,7 +93,7 @@ func TestProc_GettersSetters(t *testing.T) {
 func TestProc_InjectConn(t *testing.T) {
 	p := &Proc{connCh: make(chan struct{}, 1), log: logging.MustGetLogger("proc-test")}
 	c1, c2 := net.Pipe()
-	defer func() { _ = c1.Close(); _ = c2.Close() }()
+	defer func() { _ = c1.Close(); _ = c2.Close() }() //nolint
 
 	require.True(t, p.InjectConn(c1))  // first call wins
 	require.False(t, p.InjectConn(c2)) // subsequent calls are no-ops
@@ -118,7 +118,7 @@ func TestProc_SetDetailedStatus_RunningClosesReady(t *testing.T) {
 
 // ---- proc.go: NewProc ------------------------------------------------------
 
-func internalConf(name string) appcommon.ProcConfig {
+func internalConf(name string) appcommon.ProcConfig { //nolint
 	return appcommon.ProcConfig{
 		AppName: name,
 		ProcKey: appcommon.RandProcKey(),
@@ -174,13 +174,13 @@ func newManager(t *testing.T) *procManager {
 
 func TestProcManager_Addr(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 	require.NotNil(t, m.Addr())
 }
 
 func TestProcManager_SetGetError(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	_, ok := m.ErrorByName("app")
 	require.False(t, ok)
@@ -193,7 +193,7 @@ func TestProcManager_SetGetError(t *testing.T) {
 
 func TestProcManager_AppByPort(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	p := &Proc{}
 	p.SetAppPort(routing.Port(1234))
@@ -211,7 +211,7 @@ func TestProcManager_AppByPort(t *testing.T) {
 
 func TestProcManager_GetAppPort(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	p := &Proc{}
 	p.SetAppPort(routing.Port(7))
@@ -229,7 +229,7 @@ func TestProcManager_GetAppPort(t *testing.T) {
 
 func TestProcManager_StatsAndConnectionsSummary(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	m.mx.Lock()
 	m.procs["app"] = &Proc{}
@@ -253,7 +253,7 @@ func TestProcManager_StatsAndConnectionsSummary(t *testing.T) {
 
 func TestProcManager_StopNotRunning(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	m.mx.Lock()
 	m.procs["app"] = &Proc{} // isRunning == 0
@@ -265,7 +265,7 @@ func TestProcManager_StopNotRunning(t *testing.T) {
 
 func TestProcManager_StopRunning(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	p := &Proc{
 		disc:    mockUpdater{},
@@ -286,7 +286,7 @@ func TestProcManager_StopRunning(t *testing.T) {
 
 func TestProcManager_Wait(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	p := &Proc{}
 	p.isRunning = 1 // Wait requires running; waitMx is unlocked so it returns immediately
@@ -318,7 +318,7 @@ func TestProcManager_StartAfterClose(t *testing.T) {
 
 func TestProcManager_RegisterDuplicateRunning(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	running := &Proc{connCh: make(chan struct{}, 1), disc: mockUpdater{}, log: logging.MustGetLogger("proc-test")}
 	running.isRunning = 1

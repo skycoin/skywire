@@ -382,12 +382,12 @@ func TestWriteErrorStatuses(t *testing.T) {
 
 func TestRetrievePkFromURL(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	u, _ := url.Parse("/uptime/" + pk.Hex())
+	u, _ := url.Parse("/uptime/" + pk.Hex()) //nolint
 	got, err := retrievePkFromURL(u)
 	require.NoError(t, err)
 	require.Equal(t, pk, got)
 
-	u2, _ := url.Parse("/uptime/not-a-key")
+	u2, _ := url.Parse("/uptime/not-a-key") //nolint
 	_, err = retrievePkFromURL(u2)
 	require.Error(t, err)
 }

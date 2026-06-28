@@ -29,14 +29,14 @@ func crossDeviceDir(t *testing.T, dir string) (string, bool) {
 		if err != nil {
 			continue
 		}
-		t.Cleanup(func() { _ = os.RemoveAll(probeDir) })
+		t.Cleanup(func() { _ = os.RemoveAll(probeDir) }) //nolint
 
 		src := filepath.Join(dir, "probe-src")
 		if err := os.WriteFile(src, []byte("p"), 0600); err != nil {
 			continue
 		}
 		err = os.Rename(src, filepath.Join(probeDir, "probe-dst"))
-		_ = os.Remove(src)
+		_ = os.Remove(src) //nolint
 		if errors.Is(err, syscall.EXDEV) {
 			return probeDir, true
 		}
@@ -54,7 +54,7 @@ func TestRenameSameDevice(t *testing.T) {
 	require.NoError(t, Rename(oldPath, newPath))
 
 	assert.NoFileExists(t, oldPath)
-	got, err := os.ReadFile(newPath)
+	got, err := os.ReadFile(newPath) //nolint
 	require.NoError(t, err)
 	assert.Equal(t, "payload", string(got))
 }
@@ -79,12 +79,12 @@ func TestRenameCrossDevice(t *testing.T) {
 
 	oldPath := filepath.Join(dir, "old.txt")
 	newPath := filepath.Join(otherDir, "new.txt")
-	require.NoError(t, os.WriteFile(oldPath, []byte("cross"), 0o640))
+	require.NoError(t, os.WriteFile(oldPath, []byte("cross"), 0o640)) //nolint
 
 	require.NoError(t, Rename(oldPath, newPath))
 
 	assert.NoFileExists(t, oldPath)
-	got, err := os.ReadFile(newPath)
+	got, err := os.ReadFile(newPath) //nolint
 	require.NoError(t, err)
 	assert.Equal(t, "cross", string(got))
 
@@ -113,7 +113,7 @@ func TestMove(t *testing.T) {
 
 		// move copies; it does not remove the source (Rename does that).
 		assert.FileExists(t, oldPath)
-		got, err := os.ReadFile(newPath)
+		got, err := os.ReadFile(newPath) //nolint
 		require.NoError(t, err)
 		assert.Equal(t, "data", string(got))
 	})

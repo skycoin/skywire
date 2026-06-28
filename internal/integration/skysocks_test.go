@@ -126,8 +126,8 @@ func testSkysocksOverStcpr(t *testing.T, env *TestEnv) {
 			continue
 		}
 		status = resp.StatusCode
-		body, _ = io.ReadAll(resp.Body)
-		resp.Body.Close() //nolint:errcheck,gosec
+		body, _ = io.ReadAll(resp.Body) //nolint
+		resp.Body.Close()               //nolint:errcheck,gosec
 		if status == http.StatusOK {
 			ok = true
 			break

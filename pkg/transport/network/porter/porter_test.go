@@ -98,7 +98,7 @@ func TestReserveEphemeralSkipsReserved(t *testing.T) {
 }
 
 // TestReserveEphemeralContextCancelled verifies that when no ephemeral port is
-// available, a cancelled context aborts the search with its error.
+// available, a canceled context aborts the search with its error.
 func TestReserveEphemeralContextCancelled(t *testing.T) {
 	// minEph at the top of the uint16 range gives exactly one ephemeral slot
 	// (65535); reserving it forces the allocator to loop and hit the ctx check.

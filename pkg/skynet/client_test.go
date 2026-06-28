@@ -27,7 +27,7 @@ func TestNewClientAndGetters(t *testing.T) {
 func skynetServerHandshake(conn net.Conn, reply serverReply, echo bool) {
 	defer func() {
 		if !echo {
-			_ = conn.Close()
+			_ = conn.Close() //nolint
 		}
 	}()
 	if _, err := conn.Write([]byte{1}); err != nil { // ready signal
@@ -39,14 +39,14 @@ func skynetServerHandshake(conn net.Conn, reply serverReply, echo bool) {
 		return
 	}
 	var msg clientMsg
-	_ = json.Unmarshal(buf[:n], &msg)
-	data, _ := json.Marshal(reply)
+	_ = json.Unmarshal(buf[:n], &msg) //nolint
+	data, _ := json.Marshal(reply)    //nolint
 	if _, err := conn.Write(data); err != nil {
 		return
 	}
 	if echo {
-		_, _ = io.Copy(conn, conn)
-		_ = conn.Close()
+		_, _ = io.Copy(conn, conn) //nolint
+		_ = conn.Close()           //nolint
 	}
 }
 
@@ -80,7 +80,7 @@ func TestClientConnect_ReadyReadFails(t *testing.T) {
 	c := NewClient(testLog(), pk, 80, 0, nil)
 
 	cliEnd, srvEnd := net.Pipe()
-	_ = srvEnd.Close() // no ready signal → read fails
+	_ = srvEnd.Close() //nolint // no ready signal → read fails
 	err := c.Connect(cliEnd)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "failed to read ready signal")
@@ -92,11 +92,11 @@ func TestClientConnect_BadReplyJSON(t *testing.T) {
 
 	cliEnd, srvEnd := net.Pipe()
 	go func() {
-		_, _ = srvEnd.Write([]byte{1}) // ready
+		_, _ = srvEnd.Write([]byte{1}) //nolint // ready
 		buf := make([]byte, 1024)
-		_, _ = srvEnd.Read(buf)             // port request
-		_, _ = srvEnd.Write([]byte("{bad")) // malformed reply
-		_ = srvEnd.Close()
+		_, _ = srvEnd.Read(buf)             //nolint             // port request
+		_, _ = srvEnd.Write([]byte("{bad")) //nolint // malformed reply
+		_ = srvEnd.Close()                  //nolint
 	}()
 
 	require.NoError(t, cliEnd.SetDeadline(time.Now().Add(2*time.Second)))
@@ -155,7 +155,7 @@ func TestClientServe_EndToEnd(t *testing.T) {
 
 	got := readN(t, conn, len(payload))
 	require.Equal(t, payload, got)
-	_ = conn.Close()
+	_ = conn.Close() //nolint
 
 	require.NoError(t, c.Close())
 	require.NoError(t, c.Close()) // idempotent
@@ -205,7 +205,7 @@ func waitForListen(t *testing.T, addr string) {
 	for time.Now().Before(deadline) {
 		c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
 		if err == nil {
-			_ = c.Close()
+			_ = c.Close() //nolint
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

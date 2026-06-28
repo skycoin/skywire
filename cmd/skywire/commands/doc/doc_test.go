@@ -304,7 +304,7 @@ func TestRunCapture_Timeout(t *testing.T) {
 // mountRoot builds a small umbrella tree with RootCmd (the `doc` command)
 // and a couple of documentable subcommands mounted under it, returning the
 // umbrella root.
-func mountRoot() *cobra.Command {
+func mountRoot() *cobra.Command { //nolint
 	root := runnable("skywire", "umbrella")
 	root.AddCommand(RootCmd)
 	cli := runnable("cli", "cli short")
@@ -337,7 +337,7 @@ func TestRootCmd_Writes(t *testing.T) {
 	require.FileExists(t, filepath.Join(dir, "cli", "README.md"))
 	require.FileExists(t, filepath.Join(dir, "cli", "visor", "README.md"))
 
-	body, err := os.ReadFile(filepath.Join(dir, "README.md"))
+	body, err := os.ReadFile(filepath.Join(dir, "README.md")) //nolint
 	require.NoError(t, err)
 	require.Contains(t, string(body), "# skywire")
 }

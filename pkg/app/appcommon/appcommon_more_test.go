@@ -188,7 +188,7 @@ func TestInProcessConnRegistry(t *testing.T) {
 	require.Nil(t, GetInProcessConn(key))
 
 	a, b := net.Pipe()
-	defer func() { _ = a.Close(); _ = b.Close() }()
+	defer func() { _ = a.Close(); _ = b.Close() }() //nolint
 
 	RegisterInProcessConn(key, a)
 	require.Equal(t, a, GetInProcessConn(key))

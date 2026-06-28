@@ -57,7 +57,7 @@ func TestBuildHTTPRequest(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.MethodPost, req.Method)
 		require.Equal(t, "text/plain", req.Header.Get("Content-Type"))
-		body, _ := io.ReadAll(req.Body)
+		body, _ := io.ReadAll(req.Body) //nolint
 		require.Equal(t, "payload", string(body))
 	})
 
@@ -107,7 +107,7 @@ func TestParseOutputFile(t *testing.T) {
 		f, err := parseOutputFile(p, false)
 		require.NoError(t, err)
 		require.NotNil(t, f)
-		_ = f.Close()
+		_ = f.Close() //nolint
 		require.FileExists(t, p)
 	})
 
@@ -124,7 +124,7 @@ func TestParseOutputFile(t *testing.T) {
 		f, err := parseOutputFile(p, true)
 		require.NoError(t, err)
 		require.NotNil(t, f)
-		_ = f.Close()
+		_ = f.Close() //nolint
 		info, statErr := os.Stat(p)
 		require.NoError(t, statErr)
 		require.Equal(t, int64(0), info.Size()) // truncated
@@ -149,7 +149,7 @@ func TestPrepareOutputFile_UsesParseOutputFile(t *testing.T) {
 	f, err := prepareOutputFile()
 	require.NoError(t, err)
 	require.NotNil(t, f)
-	_ = f.Close()
+	_ = f.Close() //nolint
 }
 
 // ---- closeAndCleanFile -----------------------------------------------------
@@ -157,7 +157,7 @@ func TestPrepareOutputFile_UsesParseOutputFile(t *testing.T) {
 func TestCloseAndCleanFile_RemovesOnError(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "f.bin")
-	f, err := os.Create(p)
+	f, err := os.Create(p) //nolint
 	require.NoError(t, err)
 
 	// A non-nil err triggers removal of the partial file.
@@ -168,7 +168,7 @@ func TestCloseAndCleanFile_RemovesOnError(t *testing.T) {
 func TestCloseAndCleanFile_KeepsOnSuccess(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "f.bin")
-	f, err := os.Create(p)
+	f, err := os.Create(p) //nolint
 	require.NoError(t, err)
 
 	closeAndCleanFile(f, nil)
@@ -179,7 +179,7 @@ func TestCloseAndCleanFile_KeepsOnSuccess(t *testing.T) {
 
 func TestCloseResponseBody(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok")) //nolint
 	}))
 	t.Cleanup(srv.Close)
 	resp, err := http.Get(srv.URL) //nolint:noctx
@@ -258,7 +258,7 @@ func TestHandleRequest_WriteInitError(t *testing.T) {
 	replace = false
 
 	pk, theSK := cipher.GenerateKeyPair()
-	u, _ := url.Parse("dmsg://" + pk.Hex() + ":80/")
+	u, _ := url.Parse("dmsg://" + pk.Hex() + ":80/") //nolint
 	cErr := handleRequest(context.Background(), pk, theSK, &http.Client{}, u, "")
 	require.Equal(t, errorCode["WRITE_INIT"], cErr.Code)
 	require.Error(t, cErr.Error)
@@ -347,7 +347,7 @@ func newDmsgEnv(t *testing.T, body string) dmsgEnv {
 		t.Fatal("dmsg service client not ready")
 	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(body))
+		_, _ = w.Write([]byte(body)) //nolint
 	})
 	go func() { _ = dmsghttp.ListenAndServe(ctx, svcSK, handler, dc, 80, svc, log) }() //nolint:errcheck
 
@@ -397,7 +397,7 @@ func TestHandleRequest_DownloadOverDmsg(t *testing.T) {
 	cErr := handleRequest(ctx, pk, theSK, &http.Client{}, u, "")
 	require.Equal(t, errorCode["SUCCESS"], cErr.Code)
 
-	got, readErr := os.ReadFile(dmsgcurlOutput)
+	got, readErr := os.ReadFile(dmsgcurlOutput) //nolint
 	require.NoError(t, readErr)
 	require.Equal(t, env.body, string(got))
 }

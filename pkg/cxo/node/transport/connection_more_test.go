@@ -14,7 +14,7 @@ import (
 // frame builds a length-prefixed message matching Connection's wire format.
 func frame(payload []byte) []byte {
 	h := make([]byte, 4)
-	binary.BigEndian.PutUint32(h, uint32(len(payload)))
+	binary.BigEndian.PutUint32(h, uint32(len(payload))) //nolint
 	return append(h, payload...)
 }
 
@@ -74,7 +74,7 @@ func TestConnectionRead(t *testing.T) {
 	defer c.Close()
 	defer b.Close() //nolint:errcheck
 
-	go func() { _, _ = b.Write(frame([]byte("ping"))) }()
+	go func() { _, _ = b.Write(frame([]byte("ping"))) }() //nolint
 
 	select {
 	case got := <-c.GetChanIn():
@@ -92,7 +92,7 @@ func TestConnectionReadInvalidLength(t *testing.T) {
 	defer c.Close()
 	defer b.Close() //nolint:errcheck
 
-	go func() { _, _ = b.Write([]byte{0, 0, 0, 0}) }() // length 0 → reject
+	go func() { _, _ = b.Write([]byte{0, 0, 0, 0}) }() //nolint // length 0 → reject
 
 	select {
 	case _, ok := <-c.GetChanIn():

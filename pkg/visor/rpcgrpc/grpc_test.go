@@ -8,7 +8,7 @@
 // The fakeVisor implements the full VisorAPI with working defaults so a
 // test only overrides the behavior it cares about. Streaming RPCs that
 // loop until the client disconnects are driven from a goroutine and torn
-// down by cancelling the call context.
+// down by canceling the call context.
 package rpcgrpc
 
 import (
@@ -174,7 +174,7 @@ func newTestServer(t *testing.T, visor VisorAPI) (*PingClient, func()) {
 	}
 	srv := grpc.NewServer()
 	RegisterPingServiceServer(srv, NewPingServer(visor, logging.MustGetLogger("test")))
-	go func() { _ = srv.Serve(lis) }()
+	go func() { _ = srv.Serve(lis) }() //nolint
 
 	client, err := NewPingClient(lis.Addr().String())
 	if err != nil {
@@ -182,7 +182,7 @@ func newTestServer(t *testing.T, visor VisorAPI) (*PingClient, func()) {
 		t.Fatalf("NewPingClient: %v", err)
 	}
 	cleanup := func() {
-		_ = client.Close()
+		_ = client.Close() //nolint
 		srv.Stop()
 	}
 	return client, cleanup
@@ -422,7 +422,7 @@ func TestStreamSystemStats(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = client.StreamSystemStats(ctx, 30*time.Millisecond, false, 0, func(*SystemStats) {
+		_ = client.StreamSystemStats(ctx, 30*time.Millisecond, false, 0, func(*SystemStats) { //nolint
 			count++
 			if count >= 2 {
 				cancel()
@@ -477,7 +477,7 @@ func TestStreamAppLogsDelivers(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_ = client.StreamAppLogs(ctx, "*", true, "debug", []string{"mod"}, subscribed, func(e *AppLogEntry) {
+		_ = client.StreamAppLogs(ctx, "*", true, "debug", []string{"mod"}, subscribed, func(e *AppLogEntry) { //nolint
 			got <- e
 		})
 	}()
@@ -596,7 +596,7 @@ func TestStreamGroupMessagesDelivers(t *testing.T) {
 	go func() {
 		defer close(done)
 		// since=10 triggers the backlog replay branch.
-		_ = client.StreamGroupMessages(ctx, "g1", 10, subscribed, func(e *GroupMessageEvent) {
+		_ = client.StreamGroupMessages(ctx, "g1", 10, subscribed, func(e *GroupMessageEvent) { //nolint
 			got <- e
 		})
 	}()

@@ -161,7 +161,7 @@ func TestReadWithTimeout(t *testing.T) {
 
 	t.Run("times out when no data arrives", func(t *testing.T) {
 		pr, pw := io.Pipe()
-		defer func() { _ = pw.Close() }()
+		defer func() { _ = pw.Close() }() //nolint
 		err := readWithTimeout(pr, make([]byte, 4), 50*time.Millisecond)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "timed out")

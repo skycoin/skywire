@@ -47,7 +47,7 @@ func nonceHandler(rest http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/security/nonces/") {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"next_nonce":0}`))
+			_, _ = w.Write([]byte(`{"next_nonce":0}`)) //nolint
 			return
 		}
 		rest(w, r)
@@ -91,7 +91,7 @@ func TestRegisterEntry_AuthFails(t *testing.T) {
 func TestPostEntry_ServerError(t *testing.T) {
 	srv := httptest.NewServer(nonceHandler(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		_, _ = w.Write([]byte(`{"error":"rejected"}`))
+		_, _ = w.Write([]byte(`{"error":"rejected"}`)) //nolint
 	}))
 	defer srv.Close()
 
@@ -119,7 +119,7 @@ func TestDeleteEntry_Success(t *testing.T) {
 func TestDeleteEntry_ServerError(t *testing.T) {
 	srv := httptest.NewServer(nonceHandler(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		_, _ = w.Write([]byte(`{"code":404,"error":"gone"}`))
+		_, _ = w.Write([]byte(`{"code":404,"error":"gone"}`)) //nolint
 	}))
 	defer srv.Close()
 

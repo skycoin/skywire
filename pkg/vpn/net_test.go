@@ -20,7 +20,7 @@ func TestWriteReadJSON_RoundTrip(t *testing.T) {
 
 	want := payload{Name: "vpn", N: 7}
 	go func() {
-		_ = WriteJSON(srv, want)
+		_ = WriteJSON(srv, want) //nolint
 	}()
 
 	var got payload
@@ -35,7 +35,7 @@ func TestWriteReadJSONWithTimeout_RoundTrip(t *testing.T) {
 
 	want := payload{Name: "timeout", N: 42}
 	go func() {
-		_ = WriteJSONWithTimeout(srv, want, 2*time.Second)
+		_ = WriteJSONWithTimeout(srv, want, 2*time.Second) //nolint
 	}()
 
 	var got payload
@@ -60,8 +60,8 @@ func TestReadJSON_UnmarshalError(t *testing.T) {
 	defer srv.Close() //nolint:errcheck
 
 	go func() {
-		_, _ = srv.Write([]byte("{not valid json"))
-		_ = srv.Close()
+		_, _ = srv.Write([]byte("{not valid json")) //nolint
+		_ = srv.Close()                             //nolint
 	}()
 
 	var got payload
@@ -76,7 +76,7 @@ func TestReadJSON_ReadError(t *testing.T) {
 	var got payload
 	err := ReadJSON(cli, &got)
 	require.Error(t, err)
-	_ = cli.Close()
+	_ = cli.Close() //nolint
 }
 
 func TestWriteJSONWithTimeout_WriteError(t *testing.T) {

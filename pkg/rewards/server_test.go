@@ -17,7 +17,7 @@ func init() { gin.SetMode(gin.TestMode) }
 
 // ginCtx builds a gin context whose request carries the given RemoteAddr,
 // mimicking what the DMSG/skynet transport sets (the peer's PK as host).
-func ginCtx(remoteAddr string) (*gin.Context, *httptest.ResponseRecorder) {
+func ginCtx(remoteAddr string) (*gin.Context, *httptest.ResponseRecorder) { //nolint
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

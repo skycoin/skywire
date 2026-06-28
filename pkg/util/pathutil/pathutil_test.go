@@ -46,13 +46,13 @@ func TestAtomicWriteFile(t *testing.T) {
 	target := filepath.Join(dir, "data.bin")
 
 	require.NoError(t, AtomicWriteFile(target, []byte("first")))
-	got, err := os.ReadFile(target)
+	got, err := os.ReadFile(target) //nolint
 	require.NoError(t, err)
 	assert.Equal(t, "first", string(got))
 
 	// Overwrite: the existing target must be replaced.
 	require.NoError(t, AtomicWriteFile(target, []byte("second")))
-	got, err = os.ReadFile(target)
+	got, err = os.ReadFile(target) //nolint
 	require.NoError(t, err)
 	assert.Equal(t, "second", string(got))
 }
@@ -66,7 +66,7 @@ func TestAtomicWriteFileStaleTempFile(t *testing.T) {
 	require.NoError(t, os.WriteFile(target+tmpSuffix, []byte("stale"), 0600))
 
 	require.NoError(t, AtomicWriteFile(target, []byte("new")))
-	got, err := os.ReadFile(target)
+	got, err := os.ReadFile(target) //nolint
 	require.NoError(t, err)
 	assert.Equal(t, "new", string(got))
 	assert.False(t, Exists(target+tmpSuffix), "temp file should be consumed by the rename")
@@ -81,7 +81,7 @@ func TestAtomicAppendToFile(t *testing.T) {
 	require.NoError(t, AtomicAppendToFile(target, []byte("b")))
 	require.NoError(t, AtomicAppendToFile(target, []byte("c")))
 
-	got, err := os.ReadFile(target)
+	got, err := os.ReadFile(target) //nolint
 	require.NoError(t, err)
 	assert.Equal(t, "abc", string(got))
 }

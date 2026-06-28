@@ -97,7 +97,7 @@ func treeDiscovered() *rpcgrpc.PingTreeEvent {
 	}}
 }
 
-func treeLevelDone(level int32) *rpcgrpc.PingTreeEvent {
+func treeLevelDone(level int32) *rpcgrpc.PingTreeEvent { //nolint
 	return &rpcgrpc.PingTreeEvent{TimestampNs: 1, Payload: &rpcgrpc.PingTreeEvent_LevelDone{
 		LevelDone: &rpcgrpc.PingTreeLevelDone{Level: level, Attempted: 3, Succeeded: 2, Failed: 1, SkippedCached: 0},
 	}}

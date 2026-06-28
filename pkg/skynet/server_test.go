@@ -94,7 +94,7 @@ func TestSendError(t *testing.T) {
 		defer cli.Close() //nolint:errcheck
 		go func() {
 			s.sendError(srv, send)
-			_ = srv.Close()
+			_ = srv.Close() //nolint
 		}()
 		var reply serverReply
 		require.NoError(t, cli.SetReadDeadline(time.Now().Add(2*time.Second)))
@@ -195,8 +195,8 @@ func TestHandleConn_SuccessAndForward(t *testing.T) {
 		if aerr != nil {
 			return
 		}
-		_, _ = io.Copy(c, c) // echo
-		_ = c.Close()
+		_, _ = io.Copy(c, c) //nolint // echo
+		_ = c.Close()        //nolint
 	}()
 	echoPort := echoLis.Addr().(*net.TCPAddr).Port
 	s.AddPort(echoPort)
@@ -229,7 +229,7 @@ func TestHandleConn_SuccessAndForward(t *testing.T) {
 	got := readN(t, io.MultiReader(dec.Buffered(), cli), len(payload))
 	require.Equal(t, payload, got)
 
-	_ = cli.Close()
+	_ = cli.Close() //nolint
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
@@ -262,7 +262,7 @@ func TestServerServeAndClose(t *testing.T) {
 	// A plain (non-wrapped) connection is accepted then dropped by handleConn.
 	conn, err := net.Dial("tcp", lis.Addr().String())
 	require.NoError(t, err)
-	_ = conn.Close()
+	_ = conn.Close() //nolint
 
 	time.Sleep(100 * time.Millisecond)
 	require.NoError(t, s.Close())

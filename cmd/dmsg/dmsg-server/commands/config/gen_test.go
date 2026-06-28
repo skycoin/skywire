@@ -34,7 +34,7 @@ func TestGenConfigDefault(t *testing.T) {
 	genConfigCmd.Run(genConfigCmd, nil)
 
 	require.FileExists(t, output)
-	raw, err := os.ReadFile(output)
+	raw, err := os.ReadFile(output) //nolint
 	require.NoError(t, err)
 
 	var cfg dmsgserver.Config
@@ -51,7 +51,7 @@ func TestGenConfigTestEnv(t *testing.T) {
 
 	genConfigCmd.Run(genConfigCmd, nil)
 
-	raw, err := os.ReadFile(output)
+	raw, err := os.ReadFile(output) //nolint
 	require.NoError(t, err)
 
 	var cfg dmsgserver.Config

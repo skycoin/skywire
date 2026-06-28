@@ -62,7 +62,7 @@ func TestOffsetWriter(t *testing.T) {
 	// A non-zero starting offset writes past the gap.
 	buf2 := &bufferAt{}
 	w2 := &OffsetWriter{WriterAt: buf2, Offset: 3}
-	_, _ = w2.Write([]byte("xy"))
+	_, _ = w2.Write([]byte("xy")) //nolint
 	require.Equal(t, "\x00\x00\x00xy", string(buf2.b))
 }
 
@@ -82,7 +82,7 @@ func TestDownloadRangeable(t *testing.T) {
 	require.EqualValues(t, len(content), dl.TotalSize())
 	require.Len(t, dl.chunks, 5)
 
-	got, err := os.ReadFile(dest)
+	got, err := os.ReadFile(dest) //nolint
 	require.NoError(t, err)
 	require.Equal(t, content, got)
 
@@ -95,7 +95,7 @@ func TestDownloadNonRangeable(t *testing.T) {
 	content := testContent(3000)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Accept-Ranges", "none")
-		_, _ = w.Write(content)
+		_, _ = w.Write(content) //nolint
 	}))
 	defer srv.Close()
 
@@ -105,7 +105,7 @@ func TestDownloadNonRangeable(t *testing.T) {
 	require.NoError(t, g.Do(dl))
 
 	require.False(t, dl.IsRangeable())
-	got, err := os.ReadFile(dest)
+	got, err := os.ReadFile(dest) //nolint
 	require.NoError(t, err)
 	require.Equal(t, content, got) // written during the probe stream
 }
@@ -135,7 +135,7 @@ func TestDownloadWithProgress(t *testing.T) {
 	dl := &Download{URL: srv.URL + "/file.bin", Dest: dest, ChunkSize: 500, Interval: 1}
 	require.NoError(t, g.Do(dl))
 
-	got, err := os.ReadFile(dest)
+	got, err := os.ReadFile(dest) //nolint
 	require.NoError(t, err)
 	require.Equal(t, content, got)
 	// The progress goroutine path ran; call count is timing-dependent so we
@@ -198,7 +198,7 @@ func TestInitResume(t *testing.T) {
 
 func TestDownloadChunkNot206(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("full body, status 200")) // ignores Range → 200
+		_, _ = w.Write([]byte("full body, status 200")) //nolint // ignores Range → 200
 	}))
 	defer srv.Close()
 

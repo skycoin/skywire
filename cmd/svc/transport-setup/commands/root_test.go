@@ -111,7 +111,7 @@ func silenceStdout(t *testing.T) {
 	os.Stdout = devnull
 	t.Cleanup(func() {
 		os.Stdout = orig
-		_ = devnull.Close()
+		_ = devnull.Close() //nolint
 	})
 }
 
@@ -131,7 +131,7 @@ func TestAddTPCmd_Run(t *testing.T) {
 		w.Header().Set("Connection", "close")
 		require.Equal(t, "/add", r.URL.Path)
 		hit = true
-		_, _ = io.WriteString(w, `{"id":"e7a7f1b3-c040-47f8-9e12-a0a1459b3456","type":"stcpr"}`)
+		_, _ = io.WriteString(w, `{"id":"e7a7f1b3-c040-47f8-9e12-a0a1459b3456","type":"stcpr"}`) //nolint
 	})
 
 	from, _ := cipher.GenerateKeyPair()
@@ -159,7 +159,7 @@ func TestRmTPCmd_Run(t *testing.T) {
 		w.Header().Set("Connection", "close")
 		require.Equal(t, "/remove", r.URL.Path)
 		hit = true
-		_, _ = io.WriteString(w, `{"success":true}`)
+		_, _ = io.WriteString(w, `{"success":true}`) //nolint
 	})
 
 	from, _ := cipher.GenerateKeyPair()
@@ -182,7 +182,7 @@ func TestListTPCmd_Run(t *testing.T) {
 		w.Header().Set("Connection", "close")
 		require.Equal(t, "/"+from.Hex()+"/transports", r.URL.Path)
 		hit = true
-		_, _ = io.WriteString(w, `[{"id":"e7a7f1b3-c040-47f8-9e12-a0a1459b3456","type":"stcpr"}]`)
+		_, _ = io.WriteString(w, `[{"id":"e7a7f1b3-c040-47f8-9e12-a0a1459b3456","type":"stcpr"}]`) //nolint
 	})
 
 	fromPK = from.Hex()

@@ -26,7 +26,7 @@ func waitForListen(t *testing.T, addr string) {
 	for time.Now().Before(deadline) {
 		c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
 		if err == nil {
-			_ = c.Close()
+			_ = c.Close() //nolint
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
@@ -56,7 +56,7 @@ func TestListenAndServe_ServesRequests(t *testing.T) {
 	srvErr := make(chan error, 1)
 	go func() {
 		srvErr <- ListenAndServe(addr, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("ok"))
+			_, _ = w.Write([]byte("ok")) //nolint
 		}))
 	}()
 

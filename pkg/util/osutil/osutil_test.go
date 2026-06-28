@@ -88,7 +88,7 @@ func TestRunWithResultReader(t *testing.T) {
 	require.NoError(t, err)
 
 	buf := make([]byte, 64)
-	n, _ := r.Read(buf)
+	n, _ := r.Read(buf) //nolint
 	assert.Contains(t, string(buf[:n]), "from reader")
 }
 

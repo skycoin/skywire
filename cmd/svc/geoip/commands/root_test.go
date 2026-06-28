@@ -44,7 +44,7 @@ func TestEmbeddedGeoIP(t *testing.T) {
 func TestLookupIP(t *testing.T) {
 	db, err := geoip.OpenEmbedded()
 	require.NoError(t, err)
-	defer func() { _ = db.Close() }()
+	defer func() { _ = db.Close() }() //nolint
 
 	t.Run("valid public IP via exported wrapper", func(t *testing.T) {
 		res, err := LookupIP(db, "8.8.8.8")
@@ -122,7 +122,7 @@ func TestStartAPIServer(t *testing.T) {
 	var up bool
 	for range 100 {
 		if resp, err := http.Get(base + "/?ip=8.8.8.8"); err == nil { //nolint:gosec
-			_ = resp.Body.Close()
+			_ = resp.Body.Close() //nolint
 			up = true
 			break
 		}
@@ -133,7 +133,7 @@ func TestStartAPIServer(t *testing.T) {
 	t.Run("valid ip query → 200 JSON", func(t *testing.T) {
 		resp, err := http.Get(base + "/?ip=8.8.8.8") //nolint:gosec
 		require.NoError(t, err)
-		defer func() { _ = resp.Body.Close() }()
+		defer func() { _ = resp.Body.Close() }() //nolint
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var res lookupResult
@@ -142,18 +142,18 @@ func TestStartAPIServer(t *testing.T) {
 	})
 
 	t.Run("invalid ip header → 500", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodGet, base+"/", nil)
+		req, _ := http.NewRequest(http.MethodGet, base+"/", nil) //nolint
 		req.Header.Set("X-Real-Ip", "not-an-ip")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
-		defer func() { _ = resp.Body.Close() }()
+		defer func() { _ = resp.Body.Close() }() //nolint
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	})
 
 	t.Run("no explicit ip falls back to remote addr", func(t *testing.T) {
 		resp, err := http.Get(base + "/") //nolint:gosec
 		require.NoError(t, err)
-		defer func() { _ = resp.Body.Close() }()
+		defer func() { _ = resp.Body.Close() }()         //nolint
 		require.Equal(t, http.StatusOK, resp.StatusCode) // 127.0.0.1 resolves without error
 	})
 

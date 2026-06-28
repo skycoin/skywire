@@ -50,19 +50,19 @@ func TestDialAccept_RoundTrip(t *testing.T) {
 	cPK, cSK := cipher.GenerateKeyPair()
 
 	lis, resCh := startResponder(t, sPK, sSK)
-	defer func() { _ = lis.Close() }()
+	defer func() { _ = lis.Close() }() //nolint
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	clientConn, err := Dial(ctx, lis.Addr().String(), cPK, cSK, sPK)
 	require.NoError(t, err)
-	defer func() { _ = clientConn.Close() }()
+	defer func() { _ = clientConn.Close() }() //nolint
 
 	res := <-resCh
 	require.NoError(t, res.err)
 	require.NotNil(t, res.conn)
-	defer func() { _ = res.conn.Close() }()
+	defer func() { _ = res.conn.Close() }() //nolint
 
 	// Responder learns the initiator's PK from the handshake.
 	assert.Equal(t, cPK, res.rPK)
@@ -98,7 +98,7 @@ func TestDialAccept_RoundTrip(t *testing.T) {
 }
 
 // readFull reads exactly len(p) bytes, looping over the noise frame boundaries.
-func readFull(c net.Conn, p []byte) (int, error) {
+func readFull(c net.Conn, p []byte) (int, error) { //nolint
 	total := 0
 	for total < len(p) {
 		n, err := c.Read(p[total:])
@@ -126,7 +126,7 @@ func TestDial_BadAddr(t *testing.T) {
 	assert.Contains(t, err.Error(), "tcpnoise: dial")
 }
 
-// TestDial_CanceledContext ensures dial honours a context that is already done.
+// TestDial_CanceledContext ensures dial honors a context that is already done.
 func TestDial_CanceledContext(t *testing.T) {
 	cPK, cSK := cipher.GenerateKeyPair()
 	sPK, _ := cipher.GenerateKeyPair()
@@ -148,7 +148,7 @@ func TestDial_HandshakeMismatch(t *testing.T) {
 	wrongPK, _ := cipher.GenerateKeyPair()
 
 	lis, resCh := startResponder(t, sPK, sSK)
-	defer func() { _ = lis.Close() }()
+	defer func() { _ = lis.Close() }() //nolint
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

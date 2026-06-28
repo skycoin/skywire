@@ -29,7 +29,7 @@ func TestCloseResponseBody_CloseError(t *testing.T) {
 func TestCloseAndCleanFile_CloseErrorAndRemove(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "partial.bin")
-	f, err := os.Create(p)
+	f, err := os.Create(p) //nolint
 	require.NoError(t, err)
 
 	// Close it first so closeAndCleanFile's own file.Close() returns an

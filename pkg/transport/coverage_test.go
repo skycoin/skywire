@@ -159,7 +159,7 @@ func TestMockDiscoveryClientMethods(t *testing.T) {
 	byEdge, err := c.GetTransportsByEdge(ctx, pkA)
 	require.NoError(t, err)
 	require.Len(t, byEdge, 1)
-	if res, _ := c.GetTransportsByEdge(ctx, mustPK(t)); res != nil {
+	if res, _ := c.GetTransportsByEdge(ctx, mustPK(t)); res != nil { //nolint
 		t.Error("GetTransportsByEdge unknown edge should be nil")
 	}
 
@@ -699,7 +699,7 @@ func servingTransport(t *testing.T, tm *Manager, remote cipher.PubKey, nw types.
 	return mt, mem
 }
 
-func buildVStreamPacket(pt routing.PacketType, streamID uint64, sender cipher.PubKey, flag byte, data []byte) routing.Packet {
+func buildVStreamPacket(pt routing.PacketType, streamID uint64, sender cipher.PubKey, flag byte, data []byte) routing.Packet { //nolint
 	payload := make([]byte, VStreamHeaderSize+len(data))
 	binary.BigEndian.PutUint64(payload[:8], streamID)
 	copy(payload[8:41], sender[:])

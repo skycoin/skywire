@@ -65,7 +65,7 @@ func TestGetServiceHealth(t *testing.T) {
 	t.Run("ok", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "/health", r.URL.Path)
-			_ = json.NewEncoder(w).Encode(HealthCheckResponse{ServiceName: "svc", PublicKey: "pk"})
+			_ = json.NewEncoder(w).Encode(HealthCheckResponse{ServiceName: "svc", PublicKey: "pk"}) //nolint
 		}))
 		defer srv.Close()
 
@@ -79,7 +79,7 @@ func TestGetServiceHealth(t *testing.T) {
 	t.Run("non-200 returns HTTPError", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_ = json.NewEncoder(w).Encode(HTTPError{Status: 503, Body: "down"})
+			_ = json.NewEncoder(w).Encode(HTTPError{Status: 503, Body: "down"}) //nolint
 		}))
 		defer srv.Close()
 

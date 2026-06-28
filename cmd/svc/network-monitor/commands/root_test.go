@@ -190,7 +190,7 @@ func TestRootRun(t *testing.T) {
 	var up bool
 	for range 100 {
 		if c, err := net.DialTimeout("tcp", bind, 100*time.Millisecond); err == nil {
-			_ = c.Close()
+			_ = c.Close() //nolint
 			up = true
 			break
 		}

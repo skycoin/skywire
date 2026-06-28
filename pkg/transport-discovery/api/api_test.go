@@ -442,16 +442,16 @@ func TestPublicPostEndpoints(t *testing.T) {
 	pk := testPubKey.Hex()
 
 	// POST /transports/edges — body is a JSON list of edge PKs.
-	edgesBody, _ := json.Marshal([]string{pk})
+	edgesBody, _ := json.Marshal([]string{pk}) //nolint
 	w := serveUnique(api, 1, http.MethodPost, "/transports/edges", edgesBody, nil)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 
 	// POST /uptimes — bulk uptimes request (v1, v2, and v3 dispatch).
-	upBody, _ := json.Marshal(map[string]any{"pks": []string{pk}})
+	upBody, _ := json.Marshal(map[string]any{"pks": []string{pk}}) //nolint
 	w = serveUnique(api, 2, http.MethodPost, "/uptimes", upBody, nil)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	for i, ver := range []string{"v2", "v3"} {
-		b, _ := json.Marshal(map[string]any{"pks": []string{pk}, "version": ver})
+		b, _ := json.Marshal(map[string]any{"pks": []string{pk}, "version": ver}) //nolint
 		w = serveUnique(api, 20+i, http.MethodPost, "/uptimes", b, nil)
 		require.Less(t, w.Code, http.StatusInternalServerError, "version=%s: %s", ver, w.Body.String())
 	}
@@ -503,7 +503,7 @@ func TestAuthedEndpoints(t *testing.T) {
 	})
 
 	t.Run("deleteTransportsBatch", func(t *testing.T) {
-		body, _ := json.Marshal([]string{uuid.New().String()})
+		body, _ := json.Marshal([]string{uuid.New().String()}) //nolint
 		w := serveUnique(newTestAPI(t), 3, http.MethodPost, "/transports/delete-batch", body, validHeaders(t, body))
 		require.Less(t, w.Code, http.StatusInternalServerError, w.Body.String())
 	})

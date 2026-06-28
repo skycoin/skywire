@@ -136,7 +136,7 @@ func TestSOCKS5HomePage(t *testing.T) {
 	tpdPK, _ := cipher.GenerateKeyPair()
 	cfg := Config{
 		DomainSuffix: ".dmsg",
-		ProxyPort:    uint(port),
+		ProxyPort:    uint(port), //nolint
 		LocalPK:      selfPK,
 		Aliases:      map[string]cipher.PubKey{"skywire": selfPK, "tpd": tpdPK},
 	}
@@ -196,14 +196,14 @@ func freePort(t *testing.T) int {
 // net.Dial — here landing on a local httptest server.
 func TestSOCKS5Passthrough(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, "hello-from-backend")
+		fmt.Fprint(w, "hello-from-backend") //nolint
 	}))
 	defer backend.Close()
 	_, backendPort, err := net.SplitHostPort(backend.Listener.Addr().String())
 	require.NoError(t, err)
 
 	port := freePort(t)
-	cfg := Config{DomainSuffix: ".dmsg", ProxyPort: uint(port)}
+	cfg := Config{DomainSuffix: ".dmsg", ProxyPort: uint(port)} //nolint
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -242,7 +242,7 @@ func TestServeTCPListenError(t *testing.T) {
 	defer occupied.Close() //nolint:errcheck
 
 	pk, _ := cipher.GenerateKeyPair()
-	cfg := Config{WebPorts: []uint{uint(port)}, ResolveAddr: []DmsgTarget{{PK: pk, Port: 80}}}
+	cfg := Config{WebPorts: []uint{uint(port)}, ResolveAddr: []DmsgTarget{{PK: pk, Port: 80}}} //nolint
 	err = serveTCP(context.Background(), logging.MustGetLogger("test"), &dmsg.Client{}, cfg, 0)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "TCP listen")
@@ -251,7 +251,7 @@ func TestServeTCPListenError(t *testing.T) {
 func TestServeTCPCleanShutdown(t *testing.T) {
 	port := freePort(t)
 	pk, _ := cipher.GenerateKeyPair()
-	cfg := Config{WebPorts: []uint{uint(port)}, ResolveAddr: []DmsgTarget{{PK: pk, Port: 80}}}
+	cfg := Config{WebPorts: []uint{uint(port)}, ResolveAddr: []DmsgTarget{{PK: pk, Port: 80}}} //nolint
 
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
@@ -279,7 +279,7 @@ func TestRunSOCKS5(t *testing.T) {
 	tpdPK, _ := cipher.GenerateKeyPair()
 	cfg := Config{
 		DomainSuffix: ".dmsg",
-		ProxyPort:    uint(port),
+		ProxyPort:    uint(port), //nolint
 		Aliases:      map[string]cipher.PubKey{"tpd": tpdPK},
 	}
 
@@ -312,7 +312,7 @@ func TestRunSOCKS5(t *testing.T) {
 func TestRunFixedMapping(t *testing.T) {
 	port := freePort(t)
 	pk, _ := cipher.GenerateKeyPair()
-	cfg := Config{WebPorts: []uint{uint(port)}, ResolveAddr: []DmsgTarget{{PK: pk, Port: 80}}}
+	cfg := Config{WebPorts: []uint{uint(port)}, ResolveAddr: []DmsgTarget{{PK: pk, Port: 80}}} //nolint
 
 	ctx, cancel := context.WithCancel(context.Background())
 	runErr := make(chan error, 1)
@@ -335,7 +335,7 @@ func TestRunFixedMapping(t *testing.T) {
 // relayed through a second SOCKS5 proxy, which dials the backend.
 func TestSOCKS5Upstream(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		fmt.Fprint(w, "via-upstream")
+		fmt.Fprint(w, "via-upstream") //nolint
 	}))
 	defer backend.Close()
 	_, backendPort, err := net.SplitHostPort(backend.Listener.Addr().String())
@@ -349,7 +349,7 @@ func TestSOCKS5Upstream(t *testing.T) {
 	upPort := freePort(t)
 	upAddr := fmt.Sprintf("127.0.0.1:%d", upPort)
 	go func() {
-		_ = serveSOCKS5Direct(ctx, log, &dmsg.Client{}, Config{DomainSuffix: ".dmsg", ProxyPort: uint(upPort)})
+		_ = serveSOCKS5Direct(ctx, log, &dmsg.Client{}, Config{DomainSuffix: ".dmsg", ProxyPort: uint(upPort)}) //nolint
 	}()
 	waitForListen(t, upAddr)
 
@@ -357,7 +357,7 @@ func TestSOCKS5Upstream(t *testing.T) {
 	frontPort := freePort(t)
 	frontAddr := fmt.Sprintf("127.0.0.1:%d", frontPort)
 	go func() {
-		_ = serveSOCKS5Direct(ctx, log, &dmsg.Client{}, Config{DomainSuffix: ".dmsg", ProxyPort: uint(frontPort), UpstreamSOCKS: upAddr})
+		_ = serveSOCKS5Direct(ctx, log, &dmsg.Client{}, Config{DomainSuffix: ".dmsg", ProxyPort: uint(frontPort), UpstreamSOCKS: upAddr}) //nolint
 	}()
 	waitForListen(t, frontAddr)
 
@@ -397,7 +397,7 @@ func waitForListen(t *testing.T, addr string) {
 	for time.Now().Before(deadline) {
 		c, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
 		if err == nil {
-			_ = c.Close()
+			_ = c.Close() //nolint
 			return
 		}
 		time.Sleep(20 * time.Millisecond)

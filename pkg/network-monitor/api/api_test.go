@@ -154,7 +154,7 @@ func TestInitCleaning(t *testing.T) {
 	assert.False(t, hasSD)
 }
 
-// TestUpdateNetworkStatus verifies the live/dead bookkeeping is summarised into
+// TestUpdateNetworkStatus verifies the live/dead bookkeeping is summarized into
 // the stored status.
 func TestUpdateNetworkStatus(t *testing.T) {
 	api, s := newTestAPI(t, "http://example")
@@ -186,7 +186,7 @@ func TestUpdateNetworkStatus(t *testing.T) {
 }
 
 // TestFetchUTData covers the happy path plus the empty, bad-json, request-error
-// and cancelled-context failure modes.
+// and canceled-context failure modes.
 func TestFetchUTData(t *testing.T) {
 	t.Run("happy", func(t *testing.T) {
 		data := &mockData{uptimes: []uptimes{{Key: "v1", Online: true}, {Key: "v2", Online: false}}}
@@ -204,7 +204,7 @@ func TestFetchUTData(t *testing.T) {
 		assert.Error(t, api.fetchUTData(context.Background()))
 	})
 
-	t.Run("cancelled context", func(t *testing.T) {
+	t.Run("canceled context", func(t *testing.T) {
 		api, _ := newTestAPI(t, "http://example")
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -218,7 +218,7 @@ func TestFetchUTData(t *testing.T) {
 }
 
 // TestFetchServiceData covers the SD, AR and DMSGD fetchers, happy and
-// cancelled-context paths.
+// canceled-context paths.
 func TestFetchServiceData(t *testing.T) {
 	data := &mockData{
 		sd: []struct {
@@ -255,7 +255,7 @@ func TestFetchServiceData(t *testing.T) {
 		assert.Equal(t, []string{"d1", "d2", "d3"}, got)
 	})
 
-	t.Run("cancelled", func(t *testing.T) {
+	t.Run("canceled", func(t *testing.T) {
 		cctx, cancel := context.WithCancel(ctx)
 		cancel()
 		_, err := api.fetchSdData(cctx, "vpn")
@@ -283,14 +283,14 @@ func TestCheckingEntries(t *testing.T) {
 	require.NoError(t, api.checkingEntries(context.Background(), []string{"offline"}, "sd", "vpn"))
 	assert.Contains(t, api.deadEntries["vpn"], "offline")
 
-	t.Run("cancelled", func(t *testing.T) {
+	t.Run("canceled", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		assert.Equal(t, context.DeadlineExceeded, api.checkingEntries(ctx, nil, "sd", "vpn"))
 	})
 }
 
-// TestCleaningInfo exercises the logging helper, including its cancelled path.
+// TestCleaningInfo exercises the logging helper, including its canceled path.
 func TestCleaningInfo(t *testing.T) {
 	api, _ := newTestAPI(t, "http://example")
 	api.initCleaning()
@@ -321,7 +321,7 @@ func TestTpdCleaning(t *testing.T) {
 	assert.Contains(t, api.deadEntries["tpd"], id.String())
 	assert.Equal(t, 1, data.deregistered["tpd"])
 
-	t.Run("cancelled", func(t *testing.T) {
+	t.Run("canceled", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		assert.Equal(t, context.DeadlineExceeded, api.tpdCleaning(ctx))

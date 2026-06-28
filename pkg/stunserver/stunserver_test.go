@@ -43,7 +43,7 @@ func buildRequest(transID []byte, changeIP, changePort bool) []byte {
 	}
 	msg := make([]byte, stunHeaderSize+len(attrs))
 	binary.BigEndian.PutUint16(msg[0:2], typeBindingRequest)
-	binary.BigEndian.PutUint16(msg[2:4], uint16(len(attrs)))
+	binary.BigEndian.PutUint16(msg[2:4], uint16(len(attrs))) //nolint
 	copy(msg[4:20], transID)
 	copy(msg[20:], attrs)
 	return msg
@@ -230,9 +230,9 @@ func listenLoopback(t *testing.T) *net.UDPConn {
 func TestHandlePacket(t *testing.T) {
 	// Two server sockets on 127.0.0.1 standing in for the primary and alt ports.
 	primary := listenLoopback(t)
-	defer func() { _ = primary.Close() }()
+	defer func() { _ = primary.Close() }() //nolint
 	alt := listenLoopback(t)
-	defer func() { _ = alt.Close() }()
+	defer func() { _ = alt.Close() }() //nolint
 
 	pPort := primary.LocalAddr().(*net.UDPAddr).Port
 	aPort := alt.LocalAddr().(*net.UDPAddr).Port
@@ -246,7 +246,7 @@ func TestHandlePacket(t *testing.T) {
 	}
 
 	client := listenLoopback(t)
-	defer func() { _ = client.Close() }()
+	defer func() { _ = client.Close() }() //nolint
 	clientAddr := client.LocalAddr().(*net.UDPAddr)
 
 	// readResp reads a single datagram on the client with a deadline.
@@ -328,7 +328,7 @@ func TestHandlePacket(t *testing.T) {
 
 func TestHandlePacket_NoSocketForResponse(t *testing.T) {
 	primary := listenLoopback(t)
-	defer func() { _ = primary.Close() }()
+	defer func() { _ = primary.Close() }() //nolint
 	pPort := primary.LocalAddr().(*net.UDPAddr).Port
 
 	// conn12 is nil, so a change-port request finds no socket and drops.
@@ -340,7 +340,7 @@ func TestHandlePacket_NoSocketForResponse(t *testing.T) {
 	}
 
 	client := listenLoopback(t)
-	defer func() { _ = client.Close() }()
+	defer func() { _ = client.Close() }() //nolint
 
 	req := buildRequest(magicTransID(), false, true)
 	s.handlePacket(req, client.LocalAddr().(*net.UDPAddr), primary, "127.0.0.1", pPort)

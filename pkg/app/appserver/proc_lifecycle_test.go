@@ -15,7 +15,7 @@ import (
 
 func TestProcManager_StartExternalThenStop(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	conf := appcommon.ProcConfig{
 		AppName:   "sleeper",
@@ -41,7 +41,7 @@ func TestProcManager_StartExternalThenStop(t *testing.T) {
 
 func TestProcManager_StartBadBinary(t *testing.T) {
 	m := newManager(t)
-	defer func() { _ = m.Close() }()
+	defer func() { _ = m.Close() }() //nolint
 
 	conf := appcommon.ProcConfig{
 		AppName:   "broken",
@@ -52,7 +52,7 @@ func TestProcManager_StartBadBinary(t *testing.T) {
 	_, err := m.Start(conf)
 	require.Error(t, err) // exec.Start fails; proc is rolled back
 
-	_, ok := m.ProcByName("broken")
+	_, ok := m.ProcByName("broken") //nolint
 	require.False(t, ok)
 }
 

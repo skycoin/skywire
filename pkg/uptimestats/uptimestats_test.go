@@ -138,10 +138,10 @@ func testServer(t *testing.T, status int, body any) (*httptest.Server, *string) 
 		*lastURL = r.URL.String()
 		w.WriteHeader(status)
 		if s, ok := body.(string); ok {
-			_, _ = w.Write([]byte(s))
+			_, _ = w.Write([]byte(s)) //nolint
 			return
 		}
-		_ = json.NewEncoder(w).Encode(body)
+		_ = json.NewEncoder(w).Encode(body) //nolint
 	}))
 	t.Cleanup(srv.Close)
 	return srv, lastURL

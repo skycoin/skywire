@@ -65,7 +65,7 @@ func TestTypedData_Type(t *testing.T) {
 
 func TestBroadcaster_SendHelpers(t *testing.T) {
 	eb := NewBroadcaster(nil, time.Second)
-	defer func() { _ = eb.Close() }()
+	defer func() { _ = eb.Close() }() //nolint
 
 	// No clients registered → broadcasts are no-ops that must not panic.
 	require.NotPanics(t, func() {
@@ -159,10 +159,10 @@ func TestNewRPCClient_DialError(t *testing.T) {
 func TestHandshake_WithSubscriptions(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer func() { _ = lis.Close() }()
+	defer func() { _ = lis.Close() }() //nolint
 
 	ebc := NewBroadcaster(nil, time.Second)
-	defer func() { _ = ebc.Close() }()
+	defer func() { _ = ebc.Close() }() //nolint
 
 	helloCh := make(chan *appcommon.Hello, 1)
 	errCh := make(chan error, 1)
@@ -182,7 +182,7 @@ func TestHandshake_WithSubscriptions(t *testing.T) {
 
 	subs := NewSubscriber()
 	subs.OnTCPDial(func(TCPDialData) {}) // Count > 0 → egress listener path
-	defer func() { _ = subs.Close() }()
+	defer func() { _ = subs.Close() }()  //nolint
 
 	conf := appcommon.ProcConfig{ProcKey: appcommon.RandProcKey(), AppSrvAddr: lis.Addr().String()}
 	conn, closers, err := DoReqHandshake(conf, subs)
@@ -191,7 +191,7 @@ func TestHandshake_WithSubscriptions(t *testing.T) {
 	require.NotEmpty(t, closers)
 	defer func() {
 		for _, c := range closers {
-			_ = c.Close()
+			_ = c.Close() //nolint
 		}
 	}()
 
@@ -210,10 +210,10 @@ func TestHandshake_WithSubscriptions(t *testing.T) {
 func TestHandshake_NoSubscriptions(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer func() { _ = lis.Close() }()
+	defer func() { _ = lis.Close() }() //nolint
 
 	ebc := NewBroadcaster(nil, time.Second)
-	defer func() { _ = ebc.Close() }()
+	defer func() { _ = ebc.Close() }() //nolint
 
 	helloCh := make(chan *appcommon.Hello, 1)
 	errCh := make(chan error, 1)
@@ -237,7 +237,7 @@ func TestHandshake_NoSubscriptions(t *testing.T) {
 	require.NotNil(t, conn)
 	defer func() {
 		for _, c := range closers {
-			_ = c.Close()
+			_ = c.Close() //nolint
 		}
 	}()
 
@@ -260,8 +260,8 @@ func TestDoReqHandshake_DialError(t *testing.T) {
 
 func TestDoRespHandshake_ReadError(t *testing.T) {
 	a, b := net.Pipe()
-	_ = a.Close() // peer closed → ReadHello fails
-	defer func() { _ = b.Close() }()
+	_ = a.Close()                    //nolint // peer closed → ReadHello fails
+	defer func() { _ = b.Close() }() //nolint
 
 	ebc := NewBroadcaster(nil, time.Second)
 	_, err := DoRespHandshake(ebc, b)

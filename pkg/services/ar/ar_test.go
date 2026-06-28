@@ -237,7 +237,7 @@ func freeTCPAddr(t *testing.T) string {
 		t.Fatalf("reserve tcp port: %v", err)
 	}
 	addr := ln.Addr().String()
-	_ = ln.Close()
+	_ = ln.Close() //nolint
 	return addr
 }
 
@@ -248,7 +248,7 @@ func freeUDPAddr(t *testing.T) string {
 		t.Fatalf("reserve udp port: %v", err)
 	}
 	addr := c.LocalAddr().String()
-	_ = c.Close()
+	_ = c.Close() //nolint
 	return addr
 }
 
@@ -259,7 +259,7 @@ func closedHostPort(t *testing.T) string {
 		t.Fatalf("reserve port: %v", err)
 	}
 	addr := ln.Addr().String()
-	_ = ln.Close()
+	_ = ln.Close() //nolint
 	return addr
 }
 

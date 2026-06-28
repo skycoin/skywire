@@ -110,7 +110,7 @@ func TestServices_Success(t *testing.T) {
 
 func TestServices_Empty(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`[]`))
+		_, _ = w.Write([]byte(`[]`)) //nolint
 	}))
 	defer srv.Close()
 
@@ -123,7 +123,7 @@ func TestServices_Empty(t *testing.T) {
 func TestServices_HTTPErrorJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = w.Write([]byte(`{"code":500,"error":"boom"}`))
+		_, _ = w.Write([]byte(`{"code":500,"error":"boom"}`)) //nolint
 	}))
 	defer srv.Close()
 
@@ -139,7 +139,7 @@ func TestServices_HTTPErrorJSON(t *testing.T) {
 func TestServices_HTTPErrorNonJSON(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte(`not json`))
+		_, _ = w.Write([]byte(`not json`)) //nolint
 	}))
 	defer srv.Close()
 

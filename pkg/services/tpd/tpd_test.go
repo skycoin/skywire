@@ -211,5 +211,5 @@ func TestRun_WithSecKeyDerivesPubKey(t *testing.T) {
 	// only require that Run returns rather than hangs.
 	_, sk := cipher.GenerateKeyPair()
 	svc := New(&Config{Testing: true, Mode: "http", SecKey: sk, Addr: "127.0.0.1:0"}, testLog())
-	_ = runWithin(t, 15*time.Second, func() error { return svc.Run(canceledCtx()) })
+	_ = runWithin(t, 15*time.Second, func() error { return svc.Run(canceledCtx()) }) //nolint
 }

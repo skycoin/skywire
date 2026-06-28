@@ -34,8 +34,8 @@ func arRouter(next http.Handler) http.Handler {
 	r.Handle("/security/nonces/{pk}", http.HandlerFunc(func(w http.ResponseWriter, rq *http.Request) {
 		pk := chi.URLParam(rq, "pk")
 		var edge cipher.PubKey
-		_ = edge.Set(pk)
-		_ = json.NewEncoder(w).Encode(&httpauthclient.NextNonceResponse{Edge: edge, NextNonce: 1})
+		_ = edge.Set(pk)                                                                           //nolint
+		_ = json.NewEncoder(w).Encode(&httpauthclient.NextNonceResponse{Edge: edge, NextNonce: 1}) //nolint
 	}))
 	r.Handle("/*", next)
 	return r
@@ -64,7 +64,7 @@ func TestResolve(t *testing.T) {
 
 	mux := chi.NewRouter()
 	mux.Get("/resolve/stcpr/{pk}", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(VisorData{RemoteAddr: "1.2.3.4:5000"})
+		_ = json.NewEncoder(w).Encode(VisorData{RemoteAddr: "1.2.3.4:5000"}) //nolint
 	})
 	mux.Get("/resolve/sudph/{pk}", func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "nope", http.StatusNotFound)
@@ -114,7 +114,7 @@ func TestTransports(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		mux := chi.NewRouter()
 		mux.Get("/transports", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string][]string{
+			_ = json.NewEncoder(w).Encode(map[string][]string{ //nolint
 				"stcpr": {pk1.Hex(), pk2.Hex()},
 				"sudph": {pk1.Hex(), "not-a-key"},
 			})
@@ -150,7 +150,7 @@ func TestTransportsType(t *testing.T) {
 
 	mux := chi.NewRouter()
 	mux.Get("/transports", func(w http.ResponseWriter, _ *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string][]string{
+		_ = json.NewEncoder(w).Encode(map[string][]string{ //nolint
 			"sudph": {pk1.Hex()},
 			"stcpr": {pk2.Hex(), "bad-key"},
 		})
@@ -208,7 +208,7 @@ func TestFetchPublicUDPAddr(t *testing.T) {
 	t.Run("advertised udp_address", func(t *testing.T) {
 		mux := chi.NewRouter()
 		mux.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]string{"udp_address": "5.6.7.8:30178"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"udp_address": "5.6.7.8:30178"}) //nolint
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -220,7 +220,7 @@ func TestFetchPublicUDPAddr(t *testing.T) {
 	t.Run("host without port gets default port", func(t *testing.T) {
 		mux := chi.NewRouter()
 		mux.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]string{"udp_address": "5.6.7.8"})
+			_ = json.NewEncoder(w).Encode(map[string]string{"udp_address": "5.6.7.8"}) //nolint
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -232,7 +232,7 @@ func TestFetchPublicUDPAddr(t *testing.T) {
 	t.Run("empty udp_address yields empty", func(t *testing.T) {
 		mux := chi.NewRouter()
 		mux.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]string{})
+			_ = json.NewEncoder(w).Encode(map[string]string{}) //nolint
 		})
 		srv := httptest.NewServer(mux)
 		defer srv.Close()
@@ -368,7 +368,7 @@ func TestDelBindSUDPHLoop(t *testing.T) {
 		got := make(chan string, 1)
 		go func() {
 			buf := make([]byte, len(UDPDelBindMessage))
-			n, _ := serverConn.Read(buf)
+			n, _ := serverConn.Read(buf) //nolint
 			got <- string(buf[:n])
 		}()
 

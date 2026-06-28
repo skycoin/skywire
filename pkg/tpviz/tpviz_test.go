@@ -35,6 +35,9 @@ type fakeVisorAPI struct {
 	overview    *VisorOverview
 	overviewErr error
 
+	allTransports    []byte
+	allTransportsErr error
+
 	startedApp  string
 	stoppedApp  string
 	autoApp     string
@@ -50,6 +53,9 @@ func (f *fakeVisorAPI) AddTransport(_ context.Context, _, _ string) (*TransportS
 	return &TransportSummary{}, nil
 }
 func (f *fakeVisorAPI) RemoveTransport(_ context.Context, _ string) error { return nil }
+func (f *fakeVisorAPI) AllTransports(_ context.Context) ([]byte, error) {
+	return f.allTransports, f.allTransportsErr
+}
 func (f *fakeVisorAPI) DMSGHealth(_ context.Context, _ string) (*DMSGHealthResponse, error) {
 	return f.dmsgHealth, f.dmsgErr
 }

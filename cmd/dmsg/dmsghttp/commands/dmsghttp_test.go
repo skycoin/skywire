@@ -85,7 +85,7 @@ func TestGinHandlerAndLoggingMiddleware(t *testing.T) {
 	require.NoError(t, err)
 	orig := os.Stdout
 	os.Stdout = devnull
-	defer func() { os.Stdout = orig; _ = devnull.Close() }()
+	defer func() { os.Stdout = orig; _ = devnull.Close() }() //nolint
 
 	req := httptest.NewRequest(http.MethodGet, "/x", nil)
 	w := httptest.NewRecorder()

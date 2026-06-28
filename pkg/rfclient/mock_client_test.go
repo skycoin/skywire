@@ -80,6 +80,6 @@ func TestMockClient_NoReturnPanics(t *testing.T) {
 	m := &MockClient{}
 	m.On("FindRoutes", mock.Anything, mock.Anything, mock.Anything).Return()
 	require.PanicsWithValue(t, "no return value specified for FindRoutes", func() {
-		_, _ = m.FindRoutes(context.Background(), nil, nil)
+		_, _ = m.FindRoutes(context.Background(), nil, nil) //nolint
 	})
 }

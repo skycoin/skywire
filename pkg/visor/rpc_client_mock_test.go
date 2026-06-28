@@ -43,7 +43,7 @@ func TestMockRPCClient_AllMethods(t *testing.T) {
 
 		done := make(chan struct{})
 		go func() {
-			defer func() { _ = recover() }()
+			defer func() { _ = recover() }() //nolint
 			defer close(done)
 			if ft.IsVariadic() {
 				fn.CallSlice(args)

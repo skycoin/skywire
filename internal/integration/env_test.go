@@ -2099,7 +2099,7 @@ func (env *TestEnv) waitForTransportToPeer(visor, peerPK string, timeout time.Du
 }
 
 // waitForNonZeroBandwidth polls transport list until at least one transport to the given peer shows non-zero bandwidth.
-func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.Duration) bool {
+func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.Duration) bool { //nolint
 	type tpBW struct {
 		RemotePK  string `json:"remote_pk"`
 		RecvBytes uint64 `json:"recv_bytes,omitempty"`

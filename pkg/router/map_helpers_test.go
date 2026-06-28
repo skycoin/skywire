@@ -59,7 +59,7 @@ func TestDialHopWithRetry(t *testing.T) {
 			done <- e
 		}()
 		// Attempt 0 fails (retryable, ctx live) → enters attempt 1's backoff;
-		// cancelling there returns through the ctx.Done() select branch.
+		// canceling there returns through the ctx.Done() select branch.
 		time.Sleep(100 * time.Millisecond)
 		cancel()
 		select {

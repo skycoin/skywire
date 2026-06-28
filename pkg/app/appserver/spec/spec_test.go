@@ -3,7 +3,7 @@
 // AppConfig is a pure schema type with no executable statements, so there is no
 // statement coverage to gain here. These tests instead guard the JSON wire
 // format: AppConfig is embedded in visorconfig.V1's Launcher.Apps, so its field
-// names and omitempty behaviour are a compatibility contract for on-disk visor
+// names and omitempty behavior are a compatibility contract for on-disk visor
 // configs. The tests fail loudly if a tag is renamed or an omitempty is dropped.
 package spec
 

@@ -34,9 +34,9 @@ func TestRunE_List(t *testing.T) {
 
 	// Redirect stdout so the listing doesn't pollute test output.
 	orig := os.Stdout
-	_, w, _ := os.Pipe()
+	_, w, _ := os.Pipe() //nolint
 	os.Stdout = w
-	defer func() { os.Stdout = orig; _ = w.Close() }()
+	defer func() { os.Stdout = orig; _ = w.Close() }() //nolint
 
 	require.NoError(t, runE(t))
 }
@@ -90,5 +90,5 @@ func TestHelp_DoesNotPanic(t *testing.T) {
 	defer RootCmd.SetArgs(nil)
 	RootCmd.SetArgs([]string{"--help"})
 	RootCmd.SetOut(os.NewFile(0, os.DevNull))
-	require.NotPanics(t, func() { _ = RootCmd.Execute() })
+	require.NotPanics(t, func() { _ = RootCmd.Execute() }) //nolint
 }
