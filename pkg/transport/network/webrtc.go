@@ -130,9 +130,9 @@ func (c *webrtcClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16
 	}
 	c.log.Debugf("Dialing WebRTC %v (signaling over dmsg:%d)", rPK, webrtcSignalPort)
 
-	str, err := c.dmsgC.DialStream(ctx, dmsg.Addr{PK: rPK, Port: webrtcSignalPort})
+	str, err := c.dialSignaling(ctx, rPK)
 	if err != nil {
-		return nil, fmt.Errorf("webrtc: dial signaling: %w", err)
+		return nil, err
 	}
 	c.log.Debugf("WebRTC signaling stream to %v established; starting offerer", rPK)
 	conn, err := webrtcDial(ctx, str, c.iceURLs)
@@ -147,6 +147,43 @@ func (c *webrtcClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16
 		return nil, err
 	}
 	return tp, nil
+}
+
+// webrtcSignalDialAttempts / webrtcSignalDialRetryDelay bound the retry of the
+// dmsg signaling dial. A fresh-peer dmsg session is racy: the first DialStream
+// can return ErrCannotConnectToDelegated ("dmsg error 202") before a session to
+// the peer's delegated server is warm, then succeed moments later. Observed
+// browser→native: the WebRTC transport failed on the first dial and succeeded on
+// a manual retry every time.
+const (
+	webrtcSignalDialAttempts   = 4
+	webrtcSignalDialRetryDelay = 400 * time.Millisecond
+)
+
+// dialSignaling opens the dmsg signaling stream to rPK's WebRTC port, retrying
+// only the transient dmsg-202 (ErrCannotConnectToDelegated); any other error
+// fails fast. Honors ctx cancellation between attempts.
+func (c *webrtcClient) dialSignaling(ctx context.Context, rPK cipher.PubKey) (*dmsg.Stream, error) {
+	var lastErr error
+	for attempt := 1; attempt <= webrtcSignalDialAttempts; attempt++ {
+		str, err := c.dmsgC.DialStream(ctx, dmsg.Addr{PK: rPK, Port: webrtcSignalPort})
+		if err == nil {
+			return str, nil
+		}
+		lastErr = err
+		if !errors.Is(err, dmsg.ErrCannotConnectToDelegated) {
+			break // not the transient 202 — don't burn retries on a real failure
+		}
+		c.log.Debugf("WebRTC signaling dial to %v: %v (attempt %d/%d, retrying)", rPK, err, attempt, webrtcSignalDialAttempts)
+		if attempt < webrtcSignalDialAttempts {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(webrtcSignalDialRetryDelay):
+			}
+		}
+	}
+	return nil, fmt.Errorf("webrtc: dial signaling: %w", lastErr)
 }
 
 // Start implements Client: accept inbound WebRTC transports. It listens for
