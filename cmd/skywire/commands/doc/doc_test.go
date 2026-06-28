@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -255,49 +254,8 @@ func TestRender_CaptureErrorNoteSuppressed(t *testing.T) {
 	require.NotContains(t, buf.String(), "Capture unavailable")
 }
 
-// ---- runCapture ------------------------------------------------------------
-
-// stubSkywire writes an executable shell script named "skywire" so runCapture
-// (which uses os.Args[0] when it ends in "skywire") invokes it instead of a
-// real binary. body is the script after the shebang.
-func stubSkywire(t *testing.T, body string) string {
-	t.Helper()
-	dir := t.TempDir()
-	p := filepath.Join(dir, "skywire")
-	require.NoError(t, os.WriteFile(p, []byte("#!/bin/sh\n"+body), 0o755)) //nolint:gosec
-	return p
-}
-
-func TestRunCapture_Success(t *testing.T) {
-	saveGlobals(t)
-	captureTimeout = 5 * time.Second
-	os.Args = []string{stubSkywire(t, "echo line1\necho line2\necho line3\n")}
-
-	out, errMsg := runCapture(captureSpec{argv: []string{"x"}, maxLines: 2})
-	require.Equal(t, "", errMsg)
-	require.Contains(t, out, "line1")
-	require.Contains(t, out, "... (1 more lines)")
-}
-
-func TestRunCapture_Failure(t *testing.T) {
-	saveGlobals(t)
-	captureTimeout = 5 * time.Second
-	os.Args = []string{stubSkywire(t, "echo problem >&2\nexit 1\n")}
-
-	out, errMsg := runCapture(captureSpec{argv: []string{"x"}})
-	require.Equal(t, "", out)
-	require.Equal(t, "problem", errMsg) // first stderr line is the reason
-}
-
-func TestRunCapture_Timeout(t *testing.T) {
-	saveGlobals(t)
-	captureTimeout = 50 * time.Millisecond
-	os.Args = []string{stubSkywire(t, "sleep 5\n")}
-
-	out, errMsg := runCapture(captureSpec{argv: []string{"x"}})
-	require.Equal(t, "", out)
-	require.Contains(t, errMsg, "timed out")
-}
+// runCapture tests live in doc_runcapture_unix_test.go — they exec a /bin/sh
+// stub binary, which has no portable Windows equivalent.
 
 // ---- RootCmd.Run -----------------------------------------------------------
 
