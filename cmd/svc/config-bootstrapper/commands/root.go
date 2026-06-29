@@ -65,14 +65,17 @@ func generateExamples() string {
 		"dmsg_address": exPK1 + ":80",
 	}
 
-	// GET / - visorconfig.Services (partial, key fields shown)
+	// GET / - visorconfig.Services (partial, key fields shown). Deployment
+	// services are dmsg-only; the example pulls the real dmsg:// URLs from the
+	// embedded services-config.json (deployment.Prod) — the single source of
+	// truth — rather than hardcoding any URL.
 	servicesExample := map[string]interface{}{
-		"dmsg_discovery":      "http://dmsgd.skywire.skycoin.com",
-		"transport_discovery": "http://tpd.skywire.skycoin.com",
-		"address_resolver":    "http://ar.skywire.skycoin.com",
-		"route_finder":        "http://rf.skywire.skycoin.com",
-		"uptime_tracker":      "http://ut.skywire.skycoin.com",
-		"service_discovery":   "http://sd.skycoin.com",
+		"dmsg_discovery":      deployment.Prod.DmsgDiscoveryDmsg,
+		"transport_discovery": deployment.Prod.TransportDiscoveryDmsg,
+		"address_resolver":    deployment.Prod.AddressResolverDmsg,
+		"route_finder":        deployment.Prod.RouteFinderDmsg,
+		"uptime_tracker":      deployment.Prod.UptimeTrackerDmsg,
+		"service_discovery":   deployment.Prod.ServiceDiscoveryDmsg,
 		"route_setup_nodes":   []string{exPK1, exPK2},
 		"stun_servers":        []string{"stun.l.google.com:19302"},
 		"transport_setup":     []string{exPK1},
