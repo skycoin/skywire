@@ -49,7 +49,7 @@ export function homeTabsData(): TabButtonData[] {
     // --- network-wide ---
     { icon: 'swap_horiz', label: 'nodes.transports-title', linkParts: ['/nodes', 'transports'], group: 'network' },
     { icon: 'public', label: 'nodes.network-title', linkParts: ['/nodes', 'network'], group: 'network' },
-    { icon: 'bubble_chart', label: 'node.details.tpviz.title', linkParts: [], externalUrl: '/tp-viz/', group: 'network' },
+    { icon: 'bubble_chart', label: 'node.details.tpviz.title', linkParts: ['/nodes', 'visualizer'], group: 'network' },
     { icon: 'check_circle', label: 'nodes.services-health-title', linkParts: ['/nodes', 'services-health'], group: 'network' },
     { icon: 'schedule', label: 'nodes.uptime-title', linkParts: ['/nodes', 'uptime'], group: 'network' },
     // --- meta ---

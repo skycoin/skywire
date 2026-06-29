@@ -127,10 +127,37 @@ const nativeBrowseLauncherJS = `(function () {
     function fetchClearnet(exitPK, method, url, body) {
       return apiPost("/api/browse/clearnet", { exit_pk: exitPK, method: method || "GET", url: url, body: body != null ? b64e(String(body)) : null }).then(adapt);
     }
-    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; } });
+    // directViaBackend: when the browse upstream-proxy is set to this visor's own
+    // PK, the native visor egresses clearnet directly (http.Get) and we inline the
+    // result — so it isn't blocked by the target site's X-Frame-Options the way a
+    // browser-direct iframe load is. (A pure wasm tab leaves this unset and uses a
+    // direct iframe load, since it can't read cross-origin server-side.)
+    // api drives the visor cli REPL window: arbitrary /api calls (cookie-authed)
+    // so the operator can interrogate the running visor from the UI without a shell.
+    function api(method, path, body) {
+      var p2 = path.charAt(0) === "/" ? path : "/" + path;
+      return fetch(p2, { method: method, credentials: "same-origin", headers: body != null ? { "Content-Type": "application/json" } : {}, body: body != null ? body : undefined })
+        .then(function (r) { return r.text().then(function (t) { return { status: r.status, body: t }; }); });
+    }
+    // ptyURL points the terminal window at this visor's dmsgpty endpoint
+    // (/pty/<pk>, the same one the dashboard's Terminal tab iframes). The wasm
+    // visor leaves this unset — it has no host shell — so the term button is
+    // native-only.
+    var ptyURL = localPK ? ("/pty/" + localPK) : "";
+    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; }, directViaBackend: true, api: api, ptyURL: ptyURL });
+    // Stream the NATIVE visor's server-side log (/api/log SSE) into the log
+    // window's buffer. The wasm visor logs to the browser console (captured
+    // directly); the native visor's log lives server-side, so without this the
+    // native log window would show only browser-side entries.
+    try {
+      var es = new EventSource("/api/log");
+      es.onmessage = function (ev) {
+        try { var j = JSON.parse(ev.data); if (self.skywireLog) { self.skywireLog.emit(j.level || "log", [j.msg]); } } catch (e) {}
+      };
+    } catch (e) {}
     var btn = document.createElement("button");
     btn.textContent = "skynet"; btn.title = "browse skynet/dmsg sites + clearnet (via proxy)";
-    btn.style.cssText = "position:fixed;left:12px;top:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
+    btn.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
     btn.onclick = function () { p.toggle(); };
     document.body.appendChild(btn);
   }

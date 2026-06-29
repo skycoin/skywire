@@ -17,6 +17,41 @@
 // All fetching goes through an injected fetchDmsg(pkHost, method, path, body) that
 // returns {status, body:Uint8Array, headers} — i.e. globalThis.skywireVisor.fetchDmsg.
 (function () {
+  // --- log capture ----------------------------------------------------------
+  // Mirror console output into a ring buffer so the in-page LOG WINDOW can show
+  // the visor's live log (a wasm visor logs to console) WITHOUT browser devtools
+  // — the "logging accessibility" gap, especially in standalone PWA mode. Wrapped
+  // once (guarded); the originals still fire, so devtools is unaffected. Exposed
+  // as window.skywireLog for other scripts / the console.
+  var LOGBUF = window.skywireLog || (function () {
+    var MAX = 5000, buf = [], subs = [];
+    function fmt(a) {
+      if (typeof a === "string") return a;
+      try { return JSON.stringify(a); } catch (_) { return String(a); }
+    }
+    return {
+      all: function () { return buf; },
+      clear: function () { buf.length = 0; },
+      subscribe: function (fn) { subs.push(fn); return function () { var i = subs.indexOf(fn); if (i >= 0) subs.splice(i, 1); }; },
+      emit: function (level, args) {
+        var text; try { text = Array.prototype.map.call(args, fmt).join(" "); } catch (_) { text = "[unprintable]"; }
+        var line = { t: Date.now(), level: level, text: text };
+        buf.push(line); if (buf.length > MAX) buf.splice(0, buf.length - MAX);
+        for (var i = 0; i < subs.length; i++) { try { subs[i](line); } catch (_) {} }
+      }
+    };
+  })();
+  if (!window.__skywireLogCaptured) {
+    window.__skywireLogCaptured = true;
+    window.skywireLog = LOGBUF;
+    ["log", "info", "warn", "error", "debug"].forEach(function (lvl) {
+      var orig = console[lvl] ? console[lvl].bind(console) : function () {};
+      console[lvl] = function () { LOGBUF.emit(lvl, arguments); orig.apply(null, arguments); };
+    });
+    window.addEventListener("error", function (e) { LOGBUF.emit("error", ["[window.error] " + (e.message || e.error || e)]); });
+    window.addEventListener("unhandledrejection", function (e) { LOGBUF.emit("error", ["[unhandledrejection] " + ((e.reason && (e.reason.stack || e.reason.message)) || e.reason)]); });
+  }
+
   function sameSite(u) {
     return !!u && u.charAt(0) !== "#" && !/^https?:\/\//i.test(u) && !/^\/\//.test(u) && !/^[a-z][a-z0-9+.-]*:/i.test(u);
   }
@@ -277,7 +312,15 @@
     function clearnetPolicy() {
       var up = upstream();
       if (!up) return { mode: "block" };
-      if (up === localPK()) return { mode: "direct" };
+      if (up === localPK()) {
+        // Local-visor upstream. With a backend that can egress clearnet (the native
+        // HV UI, where the visor http.Gets directly), route through it as a
+        // proxy-with-self-exit so the visor fetches and we INLINE the result — which
+        // (unlike a browser-direct iframe load) isn't blocked by the target site's
+        // X-Frame-Options. Without such a backend (a pure browser/wasm tab, which
+        // can't read cross-origin), fall back to a direct iframe load.
+        return opts.directViaBackend ? { mode: "proxy", exit: up } : { mode: "direct" };
+      }
       return { mode: "proxy", exit: up };
     }
 
@@ -461,7 +504,7 @@
       // Thread the clearnet + self-PK providers from the panel opts so the engine
       // is host-agnostic: the wasm visor passes none (they fall back to the
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
-      fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK,
+      fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend,
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
       setAddr: function (u) { $("sb-addr").value = u; if (hooks.onTitle) { var t = u.replace(/^https?:\/\//, "").slice(0, 16); hooks.onTitle(t || "site"); } },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
@@ -678,6 +721,169 @@
   // Backward-compatible surface: returns { panel, browser, toggle, openWindow }
   // where toggle() shows/hides the desktop (opening a first window on demand), so
   // the existing skynet launcher button keeps working unchanged.
+  // createLogWindow opens a draggable window showing the live visor log (the
+  // captured console ring buffer) with a level filter + text filter — the
+  // operator can watch what the visor is doing (incl. the upstream-proxy/browse
+  // activity) without browser devtools or a shell. One per panel; toggled from
+  // the taskbar.
+  function createLogWindow(doc) {
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:fixed;top:48px;right:40px;width:46vw;height:60vh;min-width:280px;min-height:160px;" +
+      "max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;border:1px solid #2a2342;" +
+      "border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483001;display:flex;flex-direction:column;overflow:hidden";
+    wrap.innerHTML =
+      '<div class="lw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
+      '<b style="color:#9d7cff;cursor:move;flex:1">visor log</b>' +
+      '<select id="lw-level" title="min level" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342"><option value="all">all</option><option value="info">info+</option><option value="warn">warn+</option><option value="error">error</option></select>' +
+      '<input id="lw-filter" placeholder="filter" size="8" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
+      '<button id="lw-follow" title="auto-scroll" style="cursor:pointer">▼</button>' +
+      '<button id="lw-clear" title="clear" style="cursor:pointer">clear</button>' +
+      '<button id="lw-x" title="close" style="cursor:pointer">×</button></div>' +
+      '<pre id="lw-body" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>';
+    (doc.body || doc.documentElement).appendChild(wrap);
+    function $(id) { return wrap.querySelector("#" + id); }
+    var body = $("lw-body"), follow = true, minLevel = "all", filter = "";
+    var rank = { debug: 0, log: 1, info: 1, warn: 2, error: 3 };
+    var minRank = { all: 0, info: 1, warn: 2, error: 3 };
+    var color = { error: "#f7768e", warn: "#e0af68", info: "#7dcfff", log: "#cdd2da", debug: "#9aa0a6" };
+    function show(line) {
+      if ((rank[line.level] || 1) < minRank[minLevel]) return false;
+      if (filter && line.text.toLowerCase().indexOf(filter) < 0) return false;
+      return true;
+    }
+    function append(line) {
+      if (!show(line)) return;
+      var d = doc.createElement("div");
+      d.style.color = color[line.level] || "#cdd2da";
+      d.textContent = new Date(line.t).toTimeString().slice(0, 8) + " " + line.text;
+      body.appendChild(d);
+      if (body.childNodes.length > 6000) body.removeChild(body.firstChild);
+      if (follow) body.scrollTop = body.scrollHeight;
+    }
+    function rerender() { body.textContent = ""; (window.skywireLog ? window.skywireLog.all() : []).forEach(append); }
+    rerender();
+    var unsub = window.skywireLog ? window.skywireLog.subscribe(append) : function () {};
+    $("lw-level").onchange = function () { minLevel = this.value; rerender(); };
+    $("lw-filter").oninput = function () { filter = this.value.trim().toLowerCase(); rerender(); };
+    $("lw-follow").onclick = function () { follow = !follow; this.style.opacity = follow ? "1" : ".5"; if (follow) body.scrollTop = body.scrollHeight; };
+    $("lw-clear").onclick = function () { if (window.skywireLog) window.skywireLog.clear(); body.textContent = ""; };
+    var winObj = { el: wrap, close: function () { unsub(); if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
+    $("lw-x").onclick = winObj.close;
+    (function () {
+      var ox, oy, sx, sy, h = wrap.querySelector(".lw-bar b");
+      h.style.touchAction = "none";
+      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.right = "auto"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
+      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
+      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
+    })();
+    return winObj;
+  }
+
+  // createCliWindow opens a REPL that dispatches a curated command set to the
+  // visor's RPC via opts.api(method, path, body) — the wasm core's hvApi() in the
+  // wasm visor (function call, no shell needed — works in standalone PWA mode),
+  // or /api over fetch in the native HV UI. So the operator can drive the running
+  // visor from the UI without the shell + cli binary. `raw <M> <path> [body]` is
+  // the escape hatch to any API route.
+  function createCliWindow(doc, opts) {
+    var api = opts.api;
+    function self() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:fixed;top:48px;left:40px;width:50vw;height:60vh;min-width:300px;min-height:180px;max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:12px/1.4 monospace;border:1px solid #2a2342;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483001;display:flex;flex-direction:column;overflow:hidden";
+    wrap.innerHTML =
+      '<div class="cw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
+      '<b style="color:#9d7cff;cursor:move;flex:1">visor cli</b><button id="cw-x" title="close" style="cursor:pointer">×</button></div>' +
+      '<pre id="cw-out" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>' +
+      '<div style="display:flex;gap:.3em;padding:.4em;border-top:1px solid #2a2342;background:#15131c;align-items:center"><span style="color:#9ece6a">&gt;</span>' +
+      '<input id="cw-in" placeholder="help" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:12px monospace"></div>';
+    (doc.body || doc.documentElement).appendChild(wrap);
+    function $(id) { return wrap.querySelector("#" + id); }
+    var out = $("cw-out"), inp = $("cw-in"), hist = [], hi = 0;
+    function w(text, color) { var d = doc.createElement("div"); if (color) d.style.color = color; d.textContent = text; out.appendChild(d); out.scrollTop = out.scrollHeight; }
+    function pretty(s) { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (_) { return s; } }
+    var HELP = ["commands (a thin REPL over the visor RPC):",
+      "  about | info          GET /api/about",
+      "  visors | ls           GET /api/visors",
+      "  net                   GET /api/network-view",
+      "  app ls | tp ls        self apps / transports",
+      "  route ls | health     self routes / health",
+      "  raw <M> <path> [body] arbitrary call, e.g. raw GET /api/visors",
+      "  clear"].join("\n");
+    function run(cmd) {
+      cmd = cmd.trim(); if (!cmd) return;
+      w("> " + cmd, "#9ece6a");
+      if (!api) { w("no api provider wired for this host", "#e0af68"); return; }
+      var a = cmd.split(/\s+/), c = a[0], sp = "/api/visors/" + self();
+      if (c === "help") { w(HELP); return; }
+      if (c === "clear") { out.textContent = ""; return; }
+      var alias = { about: ["GET", "/api/about"], info: ["GET", "/api/about"], visors: ["GET", "/api/visors"], ls: ["GET", "/api/visors"], net: ["GET", "/api/network-view"], health: ["GET", sp + "/health"] };
+      var m, path, bodyArg = null;
+      if (c === "raw") { m = (a[1] || "GET").toUpperCase(); path = a[2] || "/api/about"; bodyArg = a.slice(3).join(" ") || null; }
+      else if (c === "app" && a[1] === "ls") { m = "GET"; path = sp + "/apps"; }
+      else if (c === "tp" && a[1] === "ls") { m = "GET"; path = sp + "/transports"; }
+      else if (c === "route" && a[1] === "ls") { m = "GET"; path = sp + "/routes"; }
+      else if (alias[c]) { m = alias[c][0]; path = alias[c][1]; }
+      else { w("unknown: " + c + "  (try help)", "#e0af68"); return; }
+      Promise.resolve(api(m, path, bodyArg)).then(function (r) {
+        w(r.status + " " + path, (r.status >= 200 && r.status < 300) ? "#7dcfff" : "#f7768e");
+        w(pretty(r.body));
+      }).catch(function (e) { w("error: " + e, "#f7768e"); });
+    }
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { var v = inp.value; inp.value = ""; if (v.trim()) { hist.push(v); hi = hist.length; } run(v); }
+      else if (e.key === "ArrowUp") { if (hi > 0) { hi--; inp.value = hist[hi] || ""; } e.preventDefault(); }
+      else if (e.key === "ArrowDown") { if (hi < hist.length - 1) { hi++; inp.value = hist[hi] || ""; } else { hi = hist.length; inp.value = ""; } e.preventDefault(); }
+    });
+    w("visor cli — type 'help'. Dispatches to the running visor's RPC.", "#9aa0a6");
+    setTimeout(function () { inp.focus(); }, 50);
+    var winObj = { el: wrap, close: function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
+    $("cw-x").onclick = winObj.close;
+    (function () {
+      var ox, oy, sx, sy, h = wrap.querySelector(".cw-bar b");
+      h.style.touchAction = "none";
+      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
+      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
+      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
+    })();
+    return winObj;
+  }
+
+  // createTerminalWindow opens a real dmsgpty terminal in a draggable window: an
+  // iframe to opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty
+  // WebSocket). Native-only — the wasm visor has no host shell and sets no
+  // ptyURL, so the taskbar button isn't shown there. The iframe is built once and
+  // kept alive while the window is open so the pty session survives drags/moves
+  // (detaching the iframe DOM node would reload it and kill the session).
+  function createTerminalWindow(doc, opts) {
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:fixed;top:60px;left:80px;width:54vw;height:64vh;min-width:320px;min-height:200px;" +
+      "max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;border:1px solid #2a2342;" +
+      "border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483002;display:flex;flex-direction:column;overflow:hidden";
+    wrap.innerHTML =
+      '<div class="tw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
+      '<b style="color:#9d7cff;cursor:move;flex:1">terminal</b>' +
+      '<button id="tw-reload" title="reload (new pty session)" style="cursor:pointer">⟳</button>' +
+      '<button id="tw-x" title="close" style="cursor:pointer">×</button></div>' +
+      '<iframe id="tw-frame" style="flex:1;border:0;width:100%;background:#0e0c14"></iframe>';
+    (doc.body || doc.documentElement).appendChild(wrap);
+    function $(id) { return wrap.querySelector("#" + id); }
+    var frame = $("tw-frame");
+    frame.src = opts.ptyURL;
+    $("tw-reload").onclick = function () { frame.src = opts.ptyURL; };
+    var winObj = { el: wrap, close: function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
+    $("tw-x").onclick = winObj.close;
+    (function () {
+      var ox, oy, sx, sy, h = wrap.querySelector(".tw-bar b");
+      h.style.touchAction = "none";
+      // Disable iframe pointer events during a drag so the moving cursor keeps
+      // hitting the window, not the terminal inside it.
+      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
+      function pu() { frame.style.pointerEvents = ""; doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
+      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; frame.style.pointerEvents = "none"; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
+    })();
+    return winObj;
+  }
+
   function mountPanel(doc, opts) {
     var zTop = 2147483000;
     var wins = [];
@@ -693,6 +899,9 @@
       '<b style="color:#9d7cff">skynet</b>' +
       '<button id="tb-new" title="new browse window" style="cursor:pointer">+ window</button>' +
       '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0"></span>' +
+      '<button id="tb-logs" title="live visor log" style="cursor:pointer">logs</button>' +
+      '<button id="tb-cli" title="visor cli (RPC repl)" style="cursor:pointer">cli</button>' +
+      (opts.ptyURL ? '<button id="tb-term" title="dmsgpty terminal" style="cursor:pointer">term</button>' : "") +
       '<button id="tb-id" title="export / import this visor\'s identity" style="cursor:pointer">identity</button>' +
       '<button id="tb-hide" title="hide skynet (windows stay open)" style="cursor:pointer">hide</button>';
     (doc.body || doc.documentElement).appendChild(bar);
@@ -732,6 +941,29 @@
     bq("tb-new").onclick = function () { var w = openWindow(); w.landHome(); };
     bq("tb-hide").onclick = function () { setDesktop(false); };
     bq("tb-id").onclick = function () { openIdentityDialog(doc, opts); };
+    var logWin = null;
+    bq("tb-logs").onclick = function () {
+      if (logWin) { logWin.close(); logWin = null; return; }
+      logWin = createLogWindow(doc);
+      var orig = logWin.close;
+      logWin.close = function () { orig(); logWin = null; };
+    };
+    var cliWin = null;
+    bq("tb-cli").onclick = function () {
+      if (cliWin) { cliWin.close(); cliWin = null; return; }
+      cliWin = createCliWindow(doc, opts);
+      var origc = cliWin.close;
+      cliWin.close = function () { origc(); cliWin = null; };
+    };
+    var termWin = null;
+    if (opts.ptyURL && bq("tb-term")) {
+      bq("tb-term").onclick = function () {
+        if (termWin) { termWin.close(); termWin = null; return; }
+        termWin = createTerminalWindow(doc, opts);
+        var origt = termWin.close;
+        termWin.close = function () { origt(); termWin = null; };
+      };
+    }
 
     function setDesktop(on) {
       visible = on;

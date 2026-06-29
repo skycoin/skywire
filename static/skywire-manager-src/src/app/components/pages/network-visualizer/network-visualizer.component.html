@@ -1,0 +1,48 @@
+<div class="row">
+  <div class="col-12">
+    <app-top-bar
+      [titleParts]="['node.details.tpviz.title']"
+      [tabsData]="tabsData"
+      [selectedTabIndex]="6"
+      [showUpdateButton]="false"
+    ></app-top-bar>
+  </div>
+
+  <div class="content col-12 mt-4.5">
+    <div class="viz-toolbar">
+      <span class="counts">{{ nodeCount }} visors · {{ edgeCount }} transports</span>
+      @if (lastUpdated) {
+        <span class="stamp">updated {{ lastUpdated | date: 'HH:mm:ss' }}</span>
+      }
+      <span class="spacer"></span>
+      <button mat-stroked-button class="viz-btn" (click)="toggleOnline()">
+        {{ showOnlineOnly ? 'online only ✓' : 'online only' }}
+      </button>
+      <button mat-stroked-button class="viz-btn" (click)="refreshNow()">refresh</button>
+    </div>
+
+    @if (loading && nodeCount === 0) {
+      <div class="loading-row">
+        <mat-spinner [diameter]="16"></mat-spinner>
+        <span class="ml-2">loading network…</span>
+      </div>
+    }
+    @if (error && nodeCount === 0) {
+      <div class="error-row">
+        <mat-icon>error_outline</mat-icon>
+        <span class="ml-2">{{ error }}</span>
+      </div>
+    }
+
+    <div #graph class="viz-graph" [class.hidden]="nodeCount === 0"></div>
+    <div class="viz-legend" [class.hidden]="nodeCount === 0">
+      <span><i class="dot online"></i> online</span>
+      <span><i class="dot offline"></i> offline</span>
+      <span><i class="dot unknown"></i> not in UT</span>
+      <span><i class="line dmsg"></i> dmsg</span>
+      <span><i class="line stcpr"></i> stcpr/stcp</span>
+      <span><i class="line sudph"></i> sudph</span>
+      <span class="hint">double-click a visor to open it</span>
+    </div>
+  </div>
+</div>
