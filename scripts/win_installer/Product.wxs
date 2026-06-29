@@ -29,7 +29,6 @@
                     <File Id="SKYWIREAUTOCONFIGBAT" Source=".\build\skywire-autoconfig.bat"/>
                     <File Id="ICON" Source=".\images\ico.ico"/>
                     <File Id="WINTUN" Source=".\build\wintun.dll"/>
-                    <File Id="NEWUPDATE" Source=".\build\new.update"/>
                </Component>
                <Directory Id="APPS" Name="apps">
                   <Component Id="AppsFiles" Guid="d6263d6c-acea-49a0-bd9b-610f8a8bce82">

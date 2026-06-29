@@ -6,12 +6,13 @@
 ::      so a fresh install has skywire.conf + skywire-config.json immediately,
 ::      without the operator having to launch first. This is the Windows
 ::      analogue of the deb/arch postinstall.
-::   2. By skywire.bat at LAUNCH, as an idempotent fallback (generate-if-
-::      missing), so manual / direct launches still self-configure.
+::   2. By skywire.bat at LAUNCH, so manual / direct launches still self-configure.
 ::
-:: It is intentionally idempotent: every step is gated on "if not exist", so
-:: re-running it (install + launch, or repeated installs) never clobbers an
-:: existing env file, config, or the operator's edits.
+:: It is idempotent: the env-file template is written only if missing (never
+:: clobbering operator edits), and the visor config is (re)generated through
+:: `skywire autoconfig`, which runs `config gen -r` — retaining the existing
+:: secret key + hypervisor PKs — so re-running it (install, upgrade, or every
+:: launch) converges on a current config without losing identity.
 ::
 :: IMPORTANT: at MSI-install time INSTALLDIR is NOT yet on PATH (the PATH
 :: environment component is applied separately), so this script calls the
@@ -40,16 +41,21 @@ if not exist "%SKYENV%" (
     "%~dp0skywire.exe" cli config gen -pqQ "%SKYENV%"
 )
 
-:: First install (no skywire-config.json yet) — generate a fresh config. cli
-:: reads %SKYENV% for PKGENV / HYPERVISORPKS / DISABLEPUBLICAUTOCONN / etc.
-if not exist "skywire-config.json" (
-    "%~dp0skywire.exe" cli config gen -irpw --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info
-)
-
-:: Upgrade marker (new.update shipped in the MSI) — regenerate with -r/-x so
-:: the existing secret key and hypervisor PK list are preserved across the
-:: update (mirrors the deb/arch post_install regen). Then consume the marker.
-if exist "new.update" (
-    "%~dp0skywire.exe" cli config gen -irpwx --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info
-    del new.update >nul 2>&1
-)
+:: (Re)generate the visor config through the SINGLE entry point — `skywire
+:: autoconfig` — never `cli config gen` directly (matches the Arch/AUR
+:: post_install). autoconfig runs `config gen -r` (regenerate, retaining the
+:: existing secret key + hypervisor PK list). `-r` is safe whether or not a
+:: config already exists, so this runs UNCONDITIONALLY — fresh install, upgrade,
+:: and launch alike — with no install/upgrade marker to track. It reads %SKYENV%
+:: for PKGENV / HYPERVISORPKS / DISABLEPUBLICAUTOCONN / etc.; PKGENV=true (written
+:: into the template above) resolves the config to
+:: C:\Program Files\Skywire\skywire-config.json — the exact path the shortcut
+:: launches with. autoconfig calls its own binary by absolute path internally, so
+:: it works even though the install dir is not yet on PATH at MSI-install time.
+:: --ishv persists ISHYPERVISOR=true (Windows runs the local hypervisor UI at
+:: http://127.0.0.1:8000 — replaces the old always-passed `-i`, and keeps the HV
+:: across upgrades, not just on first install). --no-vpnserver persists
+:: VPNSERVER=false (replaces the old `--disableapps vpn-server`). Deployment
+:: service URLs come from the embedded dmsg-only services config (the single
+:: source of truth), so no -S / -D files are needed.
+"%~dp0skywire.exe" autoconfig --ishv --no-vpnserver
