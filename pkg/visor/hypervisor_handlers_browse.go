@@ -140,6 +140,16 @@ const nativeBrowseLauncherJS = `(function () {
         .then(function (r) { return r.text().then(function (t) { return { status: r.status, body: t }; }); });
     }
     var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; }, directViaBackend: true, api: api });
+    // Stream the NATIVE visor's server-side log (/api/log SSE) into the log
+    // window's buffer. The wasm visor logs to the browser console (captured
+    // directly); the native visor's log lives server-side, so without this the
+    // native log window would show only browser-side entries.
+    try {
+      var es = new EventSource("/api/log");
+      es.onmessage = function (ev) {
+        try { var j = JSON.parse(ev.data); if (self.skywireLog) { self.skywireLog.emit(j.level || "log", [j.msg]); } } catch (e) {}
+      };
+    } catch (e) {}
     var btn = document.createElement("button");
     btn.textContent = "skynet"; btn.title = "browse skynet/dmsg sites + clearnet (via proxy)";
     btn.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
