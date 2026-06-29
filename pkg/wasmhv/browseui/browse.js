@@ -816,12 +816,13 @@
   }
 
   function mountPanel(doc, opts) {
-    var wins = [];          // open browse windows (for show-on-demand + browser())
+    var wins = [];          // {wb, chip, browser?} for every open window
     var visible = false;
+    var BARH = 36;          // launcher-bar height; the desktop starts below it
 
-    // shallow-merge helper: opts + {root, onClose, …} so each window gets the
-    // shared providers (fetchDmsg / api / selfPK / ptyURL …) plus its own root +
-    // close callback. (Avoids relying on Object.assign in odd embeds.)
+    // shallow-merge: opts + {root, onClose, …} so each window gets the shared
+    // providers (fetchDmsg / api / selfPK / ptyURL …) plus its own root + close
+    // callback. (Avoids relying on Object.assign in odd embeds.)
     function withRoot(extra) {
       var o = {}, k;
       for (k in opts) { if (Object.prototype.hasOwnProperty.call(opts, k)) o[k] = opts[k]; }
@@ -830,16 +831,14 @@
       return o;
     }
 
-    // All WinBox windows mount into this root so the whole desktop hides as a
-    // unit (display:none on the root hides every window + WinBox's own minimized
-    // bar). It must FILL THE VIEWPORT: WinBox centers windows and clamps drag/
-    // resize against the root's box, so a default (auto-height, 0px) root pins
-    // every window at 0,0 and makes them undraggable. pointer-events:none lets
-    // clicks fall through to the dashboard where no window covers; the windows
-    // re-enable pointer events via their .skywire-wb class (style below).
+    // Desktop root: fills the viewport BELOW the launcher bar, so a maximized
+    // window's title bar + the browser nav/address bar stay clear of the panel
+    // (WinBox centers + bounds windows against this box). display:none hides the
+    // whole desktop at once; pointer-events:none lets clicks fall through where
+    // no window covers — windows re-enable events via .skywire-wb.
     var root = doc.createElement("div");
     root.id = "skywire-skynet-root";
-    root.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;display:none;pointer-events:none";
+    root.style.cssText = "position:fixed;left:0;top:" + BARH + "px;right:0;bottom:0;display:none;pointer-events:none";
     (doc.body || doc.documentElement).appendChild(root);
     if (!doc.getElementById("skywire-wb-style")) {
       var st = doc.createElement("style");
@@ -848,70 +847,114 @@
       (doc.head || doc.documentElement).appendChild(st);
     }
 
+    // Launcher bar: [menu] [open-window chips…] [hide].
     var bar = doc.createElement("div");
     bar.id = "skywire-skynet-taskbar";
-    bar.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;" +
-      "display:none;gap:.5em;align-items:center;padding:.4em .6em;background:#0e0b16;" +
+    bar.style.cssText = "position:fixed;left:0;right:0;top:0;height:" + BARH + "px;box-sizing:border-box;z-index:2147483646;" +
+      "display:none;gap:.5em;align-items:center;padding:0 .6em;background:#0e0b16;" +
       "border-bottom:1px solid #2a2342;font:12px/1.3 monospace;color:#cdd2da";
     bar.innerHTML =
-      '<b style="color:#9d7cff">skynet</b>' +
-      '<button id="tb-new" title="new browse window" style="cursor:pointer">+ window</button>' +
-      '<span style="flex:1;min-width:0"></span>' +
-      '<button id="tb-logs" title="live visor log" style="cursor:pointer">logs</button>' +
-      '<button id="tb-cli" title="visor cli (RPC repl)" style="cursor:pointer">cli</button>' +
-      (opts.ptyURL ? '<button id="tb-term" title="dmsgpty terminal" style="cursor:pointer">term</button>' : "") +
-      '<button id="tb-id" title="export / import this visor\'s identity" style="cursor:pointer">identity</button>' +
-      '<button id="tb-hide" title="hide skynet (windows stay open)" style="cursor:pointer">hide</button>';
+      '<button id="tb-menu" title="apps" style="cursor:pointer;font-size:15px;line-height:1;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.2em .5em">☰</button>' +
+      '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0;overflow:hidden"></span>' +
+      '<button id="tb-hide" title="hide the panel (windows stay open)" style="cursor:pointer">hide</button>';
     (doc.body || doc.documentElement).appendChild(bar);
     function bq(id) { return bar.querySelector("#" + id); }
+    var items = bq("tb-items");
 
-    // Each create*Window builds a WinBox; WinBox owns focus, z-order, minimize,
-    // maximize and close. We only track open browse windows so toggle() can open
-    // a first one and browser() can reach the most recent.
-    function openWindow() {
-      var win = createWindow(doc, withRoot(), function () {
-        var i = wins.indexOf(win); if (i >= 0) wins.splice(i, 1);
-      });
+    // App menu (start / whisker menu) — drops below the menu button.
+    var menu = doc.createElement("div");
+    menu.id = "skywire-appmenu";
+    menu.style.cssText = "position:fixed;left:6px;top:" + BARH + "px;z-index:2147483647;display:none;min-width:168px;" +
+      "background:#15131c;border:1px solid #2a2342;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.55);padding:.3em;font:13px/1.4 monospace;color:#cdd2da";
+    (doc.body || doc.documentElement).appendChild(menu);
+    function hideMenu() { menu.style.display = "none"; }
+    function addApp(label, fn) {
+      var b = doc.createElement("button");
+      b.textContent = label;
+      b.style.cssText = "display:block;width:100%;text-align:left;cursor:pointer;background:transparent;color:#cdd2da;border:0;border-radius:5px;padding:.5em .7em;font:13px monospace";
+      b.onmouseover = function () { b.style.background = "#1b1726"; };
+      b.onmouseout = function () { b.style.background = "transparent"; };
+      b.onclick = function () { hideMenu(); fn(); };
+      menu.appendChild(b);
+    }
+    addApp("browser", function () { openBrowse(); });
+    addApp("console", function () { openCli(); });
+    if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
+    addApp("logs", function () { openLog(); });
+    addApp("identity", function () { openIdentityDialog(doc, opts); });
+    bq("tb-menu").onclick = function (e) { e.stopPropagation(); menu.style.display = (menu.style.display === "block") ? "none" : "block"; };
+    doc.addEventListener("pointerdown", function (e) {
+      if (menu.style.display === "block" && !menu.contains(e.target) && e.target !== bq("tb-menu")) hideMenu();
+    }, true);
+
+    // Window tracking: one chip per open window (focus/restore on click, × to
+    // close), so multiple windows are manageable from the bar. WinBox still owns
+    // the window chrome, focus, z-order and minimize.
+    function track(win, title) {
+      var chip = doc.createElement("span");
+      chip.style.cssText = "display:inline-flex;align-items:center;max-width:13em;background:#1b1726;border:1px solid #2a2342;border-radius:4px;overflow:hidden";
+      var f = doc.createElement("button");
+      f.textContent = title; f.title = "focus / restore";
+      f.style.cssText = "cursor:pointer;max-width:11em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent;color:#cdd2da;border:0;padding:.25em .55em;font:12px monospace";
+      f.onclick = function () { try { win.wb.minimize(false); } catch (e) {} try { win.wb.focus(); } catch (e) {} };
+      var x = doc.createElement("button");
+      x.textContent = "×"; x.title = "close";
+      x.style.cssText = "cursor:pointer;background:transparent;color:#9aa0a6;border:0;border-left:1px solid #2a2342;padding:.25em .45em;font:12px monospace";
+      x.onclick = function () { try { win.wb.close(); } catch (e) {} };
+      chip.appendChild(f); chip.appendChild(x);
+      items.appendChild(chip);
+      win.chip = chip; win.titleEl = f;
       wins.push(win);
       return win;
     }
-
-    bq("tb-new").onclick = function () { var w = openWindow(); w.landHome(); };
-    bq("tb-hide").onclick = function () { setDesktop(false); };
-    bq("tb-id").onclick = function () { openIdentityDialog(doc, opts); };
-    // logs / cli / term are singletons toggled from the bar; clicking again
-    // closes the open one (WinBox onclose resets the handle).
-    var logWin = null;
-    bq("tb-logs").onclick = function () {
-      if (logWin) { logWin.close(); return; }
-      logWin = createLogWindow(doc, withRoot({ onClose: function () { logWin = null; } }));
-    };
-    var cliWin = null;
-    bq("tb-cli").onclick = function () {
-      if (cliWin) { cliWin.close(); return; }
-      cliWin = createCliWindow(doc, withRoot({ onClose: function () { cliWin = null; } }));
-    };
-    var termWin = null;
-    if (opts.ptyURL && bq("tb-term")) {
-      bq("tb-term").onclick = function () {
-        if (termWin) { termWin.close(); return; }
-        termWin = createTerminalWindow(doc, withRoot({ onClose: function () { termWin = null; } }));
-      };
+    function untrack(win) {
+      var i = wins.indexOf(win); if (i >= 0) wins.splice(i, 1);
+      if (win.chip && win.chip.parentNode) win.chip.parentNode.removeChild(win.chip);
     }
+    function focusExisting(w) { if (!w) { return false; } try { w.wb.minimize(false); w.wb.focus(); } catch (e) {} return true; }
+
+    // App launchers. browser is multi-instance; console/terminal/logs are
+    // singletons (re-clicking focuses the open one).
+    function openBrowse() {
+      var win = createWindow(doc, withRoot(), function () { untrack(win); });
+      track(win, "browser");
+      win.landHome();
+      return win;
+    }
+    var logWin = null;
+    function openLog() {
+      if (focusExisting(logWin)) { return; }
+      logWin = createLogWindow(doc, withRoot({ onClose: function () { untrack(logWin); logWin = null; } }));
+      track(logWin, "logs");
+    }
+    var cliWin = null;
+    function openCli() {
+      if (focusExisting(cliWin)) { return; }
+      cliWin = createCliWindow(doc, withRoot({ onClose: function () { untrack(cliWin); cliWin = null; } }));
+      track(cliWin, "console");
+    }
+    var termWin = null;
+    function openTerm() {
+      if (!opts.ptyURL || focusExisting(termWin)) { return; }
+      termWin = createTerminalWindow(doc, withRoot({ onClose: function () { untrack(termWin); termWin = null; } }));
+      track(termWin, "terminal");
+    }
+
+    bq("tb-hide").onclick = function () { setDesktop(false); };
 
     function setDesktop(on) {
       visible = on;
       bar.style.display = on ? "flex" : "none";
       root.style.display = on ? "block" : "none";
-      if (on && !wins.length) { var w = openWindow(); w.landHome(); }
+      if (on) { if (!wins.length) { menu.style.display = "block"; } } else { hideMenu(); }
     }
     function toggle() { setDesktop(!visible); }
 
     return {
       panel: bar,
       toggle: toggle,
-      openWindow: openWindow,
-      browser: function () { return wins.length ? wins[wins.length - 1].browser : null; }
+      openWindow: openBrowse,
+      browser: function () { for (var i = wins.length - 1; i >= 0; i--) { if (wins[i].browser) return wins[i].browser; } return null; }
     };
   }
 

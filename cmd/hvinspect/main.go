@@ -15,7 +15,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -23,8 +26,57 @@ import (
 
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 )
+
+// resolveCDP attaches to an already-running browser via the Chrome DevTools
+// Protocol. base is the devtools HTTP endpoint (e.g. http://127.0.0.1:9222) of a
+// browser launched with --remote-debugging-port. It returns the browser-level
+// websocket URL (for NewRemoteAllocator) plus the target id of the open PAGE
+// whose URL matches want's host:port — so hvinspect drives the user's VISIBLE
+// tab rather than spawning a headless one. Falls back to the first page target.
+func resolveCDP(base, want string) (wsURL string, tid target.ID, err error) {
+	var ver struct {
+		WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+	}
+	if err = getJSON(base+"/json/version", &ver); err != nil {
+		return "", "", fmt.Errorf("GET /json/version: %w", err)
+	}
+	if ver.WebSocketDebuggerURL == "" {
+		return "", "", fmt.Errorf("no browser websocket at %s (is --remote-debugging-port set?)", base)
+	}
+	var pages []struct {
+		Type string `json:"type"`
+		URL  string `json:"url"`
+		ID   string `json:"id"`
+	}
+	if err = getJSON(base+"/json", &pages); err != nil {
+		return "", "", fmt.Errorf("GET /json: %w", err)
+	}
+	host := want
+	if u, e := url.Parse(want); e == nil && u.Host != "" {
+		host = u.Host
+	}
+	for _, p := range pages {
+		if p.Type == "page" && strings.Contains(p.URL, host) {
+			return ver.WebSocketDebuggerURL, target.ID(p.ID), nil
+		}
+	}
+	// No tab matches the wanted host. Return an empty target id (NOT a random
+	// other tab — grabbing an unrelated tab would hijack/close the user's other
+	// work); the caller opens a fresh tab instead.
+	return ver.WebSocketDebuggerURL, target.ID(""), nil
+}
+
+func getJSON(u string, v interface{}) error {
+	resp, err := http.Get(u) //nolint:gosec,noctx
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	return json.NewDecoder(resp.Body).Decode(v)
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -43,18 +95,58 @@ func main() {
 		outPrefix = os.Args[3]
 	}
 
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.ExecPath("/usr/bin/brave"),
-		chromedp.Flag("headless", true),
-		chromedp.Flag("ignore-certificate-errors", true),
-		chromedp.Flag("no-sandbox", true),
-		chromedp.Flag("disable-gpu", true),
-		chromedp.WindowSize(1280, 1400),
-	)
-	allocCtx, cancelA := chromedp.NewExecAllocator(context.Background(), opts...)
+	// Attach mode: HVINSPECT_CDP=http://host:port points at a browser the user
+	// launched with --remote-debugging-port. hvinspect then drives the user's
+	// VISIBLE tab (no headless instance, no navigation/reload — it operates on
+	// the page that's already loaded; an eval can hash-route within the SPA).
+	// Unset → the default headless Brave is launched.
+	cdpBase := os.Getenv("HVINSPECT_CDP")
+	attach := cdpBase != ""
+
+	var allocCtx context.Context
+	var cancelA context.CancelFunc
+	var attachID target.ID
+	if attach {
+		ws, tid, err := resolveCDP(cdpBase, url)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "CDP attach:", err)
+			os.Exit(1)
+		}
+		attachID = tid
+		allocCtx, cancelA = chromedp.NewRemoteAllocator(context.Background(), ws)
+	} else {
+		opts := append(chromedp.DefaultExecAllocatorOptions[:],
+			chromedp.ExecPath("/usr/bin/brave"),
+			chromedp.Flag("headless", true),
+			chromedp.Flag("ignore-certificate-errors", true),
+			chromedp.Flag("no-sandbox", true),
+			chromedp.Flag("disable-gpu", true),
+			chromedp.WindowSize(1280, 1400),
+		)
+		allocCtx, cancelA = chromedp.NewExecAllocator(context.Background(), opts...)
+	}
 	defer cancelA()
-	ctx, cancelC := chromedp.NewContext(allocCtx)
-	defer cancelC()
+
+	// attachExisting: drive a tab the user already has open (by id). Otherwise we
+	// create a tab — a headless one (no CDP) or, in attach mode when no tab
+	// matched, a fresh visible tab in the user's browser to load the visor into.
+	attachExisting := attach && attachID != ""
+	var ctx context.Context
+	var cancelC context.CancelFunc
+	if attachExisting {
+		ctx, cancelC = chromedp.NewContext(allocCtx, chromedp.WithTargetID(attachID))
+	} else {
+		ctx, cancelC = chromedp.NewContext(allocCtx)
+	}
+	// chromedp's context cancel sends Target.closeTarget. In attach mode that
+	// would close the user's tab (existing OR the fresh visor tab we just opened
+	// for them), so only close targets in headless mode. The process exits right
+	// after either way; leaking the attach context just leaves the tab open.
+	if !attach {
+		defer cancelC()
+	} else {
+		_ = cancelC
+	}
 	ctx, cancelT := context.WithTimeout(ctx, wait+45*time.Second)
 	defer cancelT()
 
@@ -100,9 +192,18 @@ func main() {
 	actions := []chromedp.Action{
 		network.Enable(),
 		runtime.Enable(),
-		chromedp.Navigate(url),
-		chromedp.Sleep(wait),
 	}
+	if !attachExisting {
+		// Headless, or attach-with-no-matching-tab: load the URL (headless tab, or
+		// the fresh visor tab we opened in the user's browser).
+		actions = append(actions, chromedp.Navigate(url))
+	} else if os.Getenv("HVINSPECT_RELOAD") != "" {
+		// Reload the ATTACHED tab (by id, so it stays on the same tab across the
+		// reload — unlike re-matching by URL, which drifts while the page is
+		// momentarily about:blank). Used to pick up new browse.js after a rebuild.
+		actions = append(actions, chromedp.Reload())
+	}
+	actions = append(actions, chromedp.Sleep(wait))
 	if evalExpr != "" {
 		actions = append(actions, chromedp.Evaluate(evalExpr, &evalResult, func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
 			return p.WithAwaitPromise(true).WithReturnByValue(true)
