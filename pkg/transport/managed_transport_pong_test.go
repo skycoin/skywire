@@ -56,15 +56,30 @@ func TestManagedTransport_HalfOpenClosesAfterMissedPongs(t *testing.T) {
 	assert.True(t, closed, "armed transport with no pongs must close after pongMissThreshold pings")
 }
 
-// TestManagedTransport_NeverPongedNeverCloses: a peer that never answers a
-// transport ping (e.g. an older visor without ping/pong support) must NOT be
-// reaped — the detector is armed only by a first pong (pongSeen).
-func TestManagedTransport_NeverPongedNeverCloses(t *testing.T) {
+// TestManagedTransport_NeverPongedButReceivingStaysOpen: a peer that never
+// answers a transport ping (e.g. an older visor without ping/pong support) but
+// is still RECEIVING traffic (its own maintenance pings / route data keep
+// lastRecv fresh) must NOT be reaped — the pong-miss detector is armed only by a
+// first pong, and the unarmed-silence reaper only fires on TOTAL silence.
+func TestManagedTransport_NeverPongedButReceivingStaysOpen(t *testing.T) {
 	mt := NewManagedTransportForTest(&okTransport{})
 	for i := 0; i < pongMissThreshold+10; i++ {
+		mt.lastRecvNanos.Store(time.Now().UnixNano()) // still receiving something
 		mt.tickPing()
 	}
-	assert.False(t, mt.IsClosed(), "a peer that never pongs (old visor) must NOT be reaped")
+	assert.False(t, mt.IsClosed(), "a still-receiving peer that never pongs (old visor) must NOT be reaped")
+}
+
+// TestManagedTransport_UnarmedSilenceCloses: an unarmed transport (never ponged)
+// that has received NOTHING for unarmedSilenceThreshold is a dead half-open link
+// (a live peer would have sent at least its own maintenance pings) and must be
+// closed — the leak that piled transports on a hub visor.
+func TestManagedTransport_UnarmedSilenceCloses(t *testing.T) {
+	mt := NewManagedTransportForTest(&okTransport{})
+	mt.lastRecvNanos.Store(time.Now().Add(-unarmedSilenceThreshold - time.Minute).UnixNano())
+	require.False(t, mt.pongSeen.Load(), "precondition: unarmed")
+	mt.tickPing()
+	assert.True(t, mt.IsClosed(), "unarmed transport silent past the threshold must be closed")
 }
 
 // TestManagedTransport_HealthyPeerStaysOpen: a peer that keeps answering pings
