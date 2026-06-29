@@ -236,7 +236,7 @@ tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+a
 	tinygo build -target wasm -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor/
-	cp ./pkg/wasmhv/browse.js ./build/wasm-visor/
+	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor/
 	@echo "built ./build/wasm-visor (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
@@ -244,7 +244,7 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor-go/
-	cp ./pkg/wasmhv/browse.js ./build/wasm-visor-go/
+	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor-go/
 	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"
 
 embed-wasm-visor: wasm-visor ## Update the COMMITTED embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasm-visor.wasm.gz) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
