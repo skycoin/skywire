@@ -28,6 +28,9 @@
     "chart.js": "^4.5.1",
     "rxjs": "^7.8.2",
     "tslib": "^2.0.0",
+    "vis-data": "^7.1.10",
+    "vis-network": "^9.1.13",
+    "vis-util": "^6.0.0",
     "zone.js": "^0.16.1"
   },
   "devDependencies": {
@@ -38,6 +41,7 @@
     "@angular/compiler-cli": "^21.2.4",
     "@angular/language-service": "^21.2.4",
     "@eslint/js": "^10.0.1",
+    "@types/hammerjs": "^2.0.46",
     "@types/jasmine": "^6.0.0",
     "@types/node": "^25.5.0",
     "angular-eslint": "^21.3.0",
