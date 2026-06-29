@@ -30,6 +30,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -129,7 +130,41 @@ func (h *hostRewriteConn) pump() {
 		if err := req.Write(h.backend); err != nil {
 			return
 		}
+
+		// Protocol upgrade (WebSocket, h2c, etc.): the wire is no longer
+		// HTTP-framed after this request. The browser will start sending
+		// raw upgrade-protocol bytes (e.g. WebSocket data frames) as soon
+		// as the backend's 101 lands; attempting to http.ReadRequest those
+		// would fail, the pump would exit, and the connection would tear
+		// down right after the handshake (the visible symptom: client gets
+		// close code 1006 immediately after open). Switch to verbatim
+		// splice for the rest of this connection's lifetime. The bufio
+		// reader carries through any bytes it had buffered past the
+		// request headers, so no data is dropped.
+		if isUpgradeRequest(req) {
+			_, _ = io.Copy(h.backend, r) //nolint:errcheck
+			return
+		}
 	}
+}
+
+// isUpgradeRequest reports whether req is asking to switch protocols
+// (RFC 9110 §7.8). Both Connection: upgrade (token, case-insensitive)
+// AND a non-empty Upgrade header are required. The protocol token
+// itself (websocket / h2c / ...) is not restricted — any non-empty
+// value means the next byte on the wire is no longer HTTP.
+func isUpgradeRequest(req *http.Request) bool {
+	if req.Header.Get("Upgrade") == "" {
+		return false
+	}
+	for _, tok := range req.Header.Values("Connection") {
+		for _, part := range strings.Split(tok, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), "upgrade") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Write accepts browser-side plaintext (post-TLS-MITM) and feeds it

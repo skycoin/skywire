@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -183,5 +184,79 @@ func TestHostRewriteConn_RewritesTwoSequentialRequests(t *testing.T) {
 		if req.URL.Path != wantPath {
 			t.Errorf("req %d Path = %q, want %q", i, req.URL.Path, wantPath)
 		}
+	}
+}
+
+// TestHostRewriteConn_UpgradeSplicesRawBytes covers the WebSocket
+// (and any HTTP protocol-upgrade) case: after the wrapper re-emits
+// the upgrade request with Host rewritten, all subsequent client
+// bytes must be forwarded VERBATIM to the backend. Before the fix
+// the pump goroutine kept calling http.ReadRequest on the post-101
+// stream, choked on the first WebSocket data frame, and tore the
+// connection down — the browser saw close code 1006 immediately
+// after the WS open event fired.
+func TestHostRewriteConn_UpgradeSplicesRawBytes(t *testing.T) {
+	backend := newFakeConn()
+	hr := NewHostRewriteConn(backend, "example.com")
+	defer hr.Close() //nolint:errcheck,gosec
+
+	const upgradeReq = "GET /ws HTTP/1.1\r\n" +
+		"Host: example.com.<pk>.skynet\r\n" +
+		"Connection: Upgrade\r\n" +
+		"Upgrade: websocket\r\n" +
+		"Sec-WebSocket-Version: 13\r\n" +
+		"Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+		"\r\n"
+	// rawFrames is what a real client (or test) would send after the
+	// server's 101 — bytes that are NOT a valid HTTP request. Includes
+	// a 0x00..0xFF run to confirm binary survives unchanged.
+	rawFrames := append([]byte{0x81, 0x05, 'h', 'e', 'l', 'l', 'o'},
+		[]byte{0x88, 0x02, 0x03, 0xE8}...) // close frame (1000)
+	for i := 0; i < 256; i++ {
+		rawFrames = append(rawFrames, byte(i))
+	}
+
+	if _, err := hr.Write([]byte(upgradeReq)); err != nil {
+		t.Fatalf("Write upgrade: %v", err)
+	}
+	if _, err := hr.Write(rawFrames); err != nil {
+		t.Fatalf("Write frames: %v", err)
+	}
+
+	// Wait until the upgrade request + every raw byte has reached the
+	// backend. Total expected size: rewritten request len + len(rawFrames).
+	// We don't know the exact rewritten-request length up front but the
+	// raw frames trail it, so wait until we see the raw-frames tail.
+	wantTail := rawFrames
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		got := backend.outSnapshot()
+		if len(got) >= len(wantTail) && bytes.HasSuffix(got, wantTail) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	got := backend.outSnapshot()
+	if !bytes.HasSuffix(got, wantTail) {
+		t.Fatalf("backend never received the raw upgrade-protocol bytes verbatim;\n got len=%d tail=%x",
+			len(got), got[max(0, len(got)-len(wantTail)):])
+	}
+
+	// And the rewritten upgrade request must precede the raw bytes,
+	// with Host: rewritten and Upgrade/Connection headers preserved.
+	headEnd := bytes.Index(got, wantTail)
+	br := bufio.NewReader(bytes.NewReader(got[:headEnd]))
+	req, err := http.ReadRequest(br)
+	if err != nil {
+		t.Fatalf("rewritten request parse: %v", err)
+	}
+	if req.Host != "example.com" {
+		t.Errorf("Host = %q, want example.com", req.Host)
+	}
+	if req.Header.Get("Upgrade") != "websocket" {
+		t.Errorf("Upgrade header lost: %q", req.Header.Get("Upgrade"))
+	}
+	if conn := req.Header.Get("Connection"); !strings.Contains(strings.ToLower(conn), "upgrade") {
+		t.Errorf("Connection header lost upgrade token: %q", conn)
 	}
 }
