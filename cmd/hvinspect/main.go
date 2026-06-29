@@ -6,7 +6,8 @@
 //   - a full-page screenshot
 //
 // Usage: hvinspect <url> [waitSeconds] [outPrefix]
-//   hvinspect 'https://localhost:8443/#/nodes/list/1' 7 /tmp/nodelist
+//
+//	hvinspect 'https://localhost:8443/#/nodes/list/1' 7 /tmp/nodelist
 //
 // Writes <outPrefix>.html, <outPrefix>.console.txt, <outPrefix>.png and echoes
 // the console to stdout. Self-signed certs are accepted (the harness uses one).
@@ -20,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
@@ -57,6 +59,8 @@ func main() {
 	defer cancelT()
 
 	var console []string
+	var netlog []string // network failures + non-2xx /api responses
+	reqURL := map[network.RequestID]string{}
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *runtime.EventConsoleAPICalled:
@@ -73,28 +77,56 @@ func main() {
 			console = append(console, strings.TrimSpace(b.String()))
 		case *runtime.EventExceptionThrown:
 			console = append(console, "[exception] "+e.ExceptionDetails.Error())
+		case *network.EventRequestWillBeSent:
+			reqURL[e.RequestID] = e.Request.URL
+		case *network.EventResponseReceived:
+			// Record /api/* responses and any non-2xx — the signal for a
+			// route that the backend doesn't serve / returns an error.
+			u := e.Response.URL
+			st := int(e.Response.Status)
+			if strings.Contains(u, "/api/") || st < 200 || st >= 300 {
+				netlog = append(netlog, fmt.Sprintf("HTTP %d  %s", st, u))
+			}
+		case *network.EventLoadingFailed:
+			u := reqURL[e.RequestID]
+			netlog = append(netlog, fmt.Sprintf("FAILED %s  %s", e.ErrorText, u))
 		}
 	})
 
 	var html string
 	var shot []byte
-	err := chromedp.Run(ctx,
+	evalExpr := os.Getenv("HVINSPECT_EVAL") // optional in-page JS probe (await-able)
+	var evalResult string
+	actions := []chromedp.Action{
+		network.Enable(),
 		runtime.Enable(),
 		chromedp.Navigate(url),
 		chromedp.Sleep(wait),
+	}
+	if evalExpr != "" {
+		actions = append(actions, chromedp.Evaluate(evalExpr, &evalResult, func(p *runtime.EvaluateParams) *runtime.EvaluateParams {
+			return p.WithAwaitPromise(true).WithReturnByValue(true)
+		}))
+	}
+	actions = append(actions,
 		chromedp.OuterHTML("html", &html, chromedp.ByQuery),
 		chromedp.FullScreenshot(&shot, 80),
 	)
-	if err != nil {
+	if err := chromedp.Run(ctx, actions...); err != nil {
 		fmt.Fprintln(os.Stderr, "inspect error:", err)
 		// still write whatever we captured
 	}
 
 	_ = os.WriteFile(outPrefix+".html", []byte(html), 0o644)
 	_ = os.WriteFile(outPrefix+".console.txt", []byte(strings.Join(console, "\n")+"\n"), 0o644)
+	_ = os.WriteFile(outPrefix+".net.txt", []byte(strings.Join(netlog, "\n")+"\n"), 0o644)
 	if len(shot) > 0 {
 		_ = os.WriteFile(outPrefix+".png", shot, 0o644)
 	}
+	if evalExpr != "" {
+		fmt.Printf("---- eval ----\n%s\n", evalResult)
+	}
+	fmt.Printf("---- network (%d) ----\n%s\n", len(netlog), strings.Join(netlog, "\n"))
 
 	fmt.Printf("=== %s ===\n", url)
 	fmt.Printf("DOM: %s.html (%d bytes)  screenshot: %s.png  console: %d lines\n",
