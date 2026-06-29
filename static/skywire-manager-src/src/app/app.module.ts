@@ -87,6 +87,7 @@ import { VpnComponent } from './components/pages/node/vpn/vpn.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
+import { NetworkVisualizerComponent } from './components/pages/network-visualizer/network-visualizer.component';
 import { MultiVisorResourcesComponent } from './components/pages/multi-visor-resources/multi-visor-resources.component';
 import { MultiVisorUptimeComponent } from './components/pages/multi-visor-uptime/multi-visor-uptime.component';
 import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
@@ -178,6 +179,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         SkysocksTabComponent,
         LogsComponent,
         NetworkViewComponent,
+        NetworkVisualizerComponent,
         MultiVisorResourcesComponent,
         MultiVisorUptimeComponent,
         NetworkTransportsComponent,
