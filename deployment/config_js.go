@@ -40,4 +40,15 @@ func init() {
 	Test = testData
 	ProdConf = prodConfData
 	TestConf = testConfData
+	// services-config.json is dmsg-only (no plain-HTTP deployment URLs except
+	// geoip); backfill the HTTP-named fields from their dmsg:// siblings. Mirrors
+	// config_native.go. See Services.BackfillClearnetFromDmsg.
+	Prod.BackfillClearnetFromDmsg()
+	Test.BackfillClearnetFromDmsg()
+	if ProdConf.Conf == "" {
+		ProdConf.Conf = Prod.ConfDmsg
+	}
+	if TestConf.Conf == "" {
+		TestConf.Conf = Test.ConfDmsg
+	}
 }

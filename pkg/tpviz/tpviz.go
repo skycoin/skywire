@@ -89,7 +89,7 @@ type Config struct {
 }
 
 // CacheDirFromURL returns a cache directory path based on the service URL host.
-// For example, "http://tpd.skywire.skycoin.com" -> "/tmp/tpd.skywire.skycoin.com"
+// For example, "dmsg://02b307…095ae:80" -> "/tmp/02b307…095ae".
 func CacheDirFromURL(serviceURL string) string {
 	u, err := url.Parse(serviceURL)
 	if err != nil || u.Host == "" {
