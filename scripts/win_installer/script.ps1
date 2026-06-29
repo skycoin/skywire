@@ -69,8 +69,6 @@ function BuildInstaller()
     Move-Item ..\..\archive\skywire.exe .\build\skywire.exe
     Copy-Item skywire.bat .\build\skywire.bat
     Copy-Item skywire-autoconfig.bat .\build\skywire-autoconfig.bat
-    New-Item new.update  > $null
-    Move-Item new.update .\build\new.update
     Invoke-WebRequest "https://deb.skywire.dev/wintun-0.14.1.zip" -OutFile wintun.zip
     Expand-Archive wintun.zip
     Copy-Item .\wintun\wintun\bin\$wintun_arch\wintun.dll .\build\wintun.dll
