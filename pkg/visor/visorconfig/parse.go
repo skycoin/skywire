@@ -47,6 +47,23 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 			log.Debug(`error on semver.Make(strings.TrimPrefix(visorBuildInfo.Version, "v"))`)
 			return conf, compat, err
 		}
+		// Surface the config version alongside the visor version (logged
+		// separately at startup) so a mismatch — the usual cause of a
+		// stale-config failure — is visible at a glance. A correctly upgraded
+		// install regenerates the config (skywire autoconfig) on every update,
+		// so config and visor versions should match; any gap means the config
+		// was not regenerated and may be missing settings this release expects.
+		log.WithField("config_version", conf.Version).
+			WithField("visor_version", visorBuildInfo.Version).
+			Info("Loaded config.")
+		switch {
+		case cVer.Major != vVer.Major:
+			log.Warnf("config major version %d differs from the visor's %d — the config is incompatible; regenerate it with `skywire autoconfig`", cVer.Major, vVer.Major)
+		case cVer.LT(vVer):
+			log.Warnf("config version %s trails the visor %s — it may be missing settings from this release; regenerate it with `skywire autoconfig`", conf.Version, visorBuildInfo.Version)
+		case cVer.GT(vVer):
+			log.Warnf("config version %s is newer than the visor %s (downgrade?) — regenerate it with `skywire autoconfig` if the visor misbehaves", conf.Version, visorBuildInfo.Version)
+		}
 		if cVer.Major == vVer.Major {
 			compat = true
 		}
