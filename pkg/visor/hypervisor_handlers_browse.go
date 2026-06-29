@@ -130,7 +130,7 @@ const nativeBrowseLauncherJS = `(function () {
     var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; } });
     var btn = document.createElement("button");
     btn.textContent = "skynet"; btn.title = "browse skynet/dmsg sites + clearnet (via proxy)";
-    btn.style.cssText = "position:fixed;left:12px;top:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
+    btn.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
     btn.onclick = function () { p.toggle(); };
     document.body.appendChild(btn);
   }
