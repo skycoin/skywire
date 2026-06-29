@@ -81,6 +81,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/netview"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 )
@@ -285,16 +286,27 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		return pk, errors.New("no dmsg seed servers (embedded set empty and no seedPk/seedWs provided)")
 	}
 	vlog(fmt.Sprintf("dmsg: connecting (%d WS seed servers)…", len(seeds)))
-	// Preload the deployment's non-registering SERVICE clients (route-finder, setup
-	// nodes, transport-discovery) delegated to the seed servers — they never publish
-	// to the dmsg-discovery, so without this a multihop DialRoutes (route-finder POST)
-	// 404s. dmsgURLPK errors are non-fatal here (a null PK is skipped downstream).
+	// Preload ALL the deployment's non-registering SERVICE clients delegated to the
+	// seed servers — they're dmsg DIRECT clients and never publish to the
+	// dmsg-discovery, so without this a DialStream to them 404s ("entry is not found
+	// in discovery"). This MUST cover the same set the native visor seeds via
+	// dmsgServicePKs() (init_dmsg.go) — dmsgd, tpd, ar, rf, sd, conf, ut — or the two
+	// visors diverge: omitting sd/ar/ut here left the wasm-visor's network-view /
+	// services-health / uptime aggregation empty (DialStream to the SD 404'd) while
+	// the native visor worked. dmsgURLPK errors are non-fatal (a null PK is skipped).
 	var servicePKs []cipher.PubKey
-	if rfPK, e := dmsgURLPK(svc.RouteFinderDmsg); e == nil {
-		servicePKs = append(servicePKs, rfPK)
-	}
-	if tpdSvcPK, e := dmsgURLPK(svc.TransportDiscoveryDmsg); e == nil {
-		servicePKs = append(servicePKs, tpdSvcPK)
+	for _, u := range []string{
+		svc.DmsgDiscoveryDmsg,
+		svc.TransportDiscoveryDmsg,
+		svc.AddressResolverDmsg,
+		svc.RouteFinderDmsg,
+		svc.ServiceDiscoveryDmsg,
+		svc.ConfDmsg,
+		svc.UptimeTrackerDmsg,
+	} {
+		if spk, e := dmsgURLPK(u); e == nil {
+			servicePKs = append(servicePKs, spk)
+		}
 	}
 	servicePKs = append(servicePKs, svc.RouteSetupNodes...)
 	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, seeds, discDmsgAddr, true, servicePKs...)
@@ -816,6 +828,51 @@ func (visorSelf) SelfRoutes() []byte {
 		})
 	}
 	b, err := json.Marshal(resp)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// SelfNetworkView builds the SD/TPD/UT-aggregated network table (the native
+// /api/network-view shape) from this tab's OWN dmsg fetch of the deployment
+// services, using the SHARED netview.Compute so it can't drift from the native
+// visor. The deployment services are dmsg DIRECT clients reachable since the
+// service-PK seed fix; without this the wasm core 404s /api/network-view and the
+// network-view table + visualizer render empty in the browser.
+func (visorSelf) SelfNetworkView() []byte {
+	if dmsgC == nil {
+		return nil
+	}
+	svc := visorcore.ResolveServices(nil)
+	hostFor := func(dmsgURL string) string {
+		if pk, e := dmsgURLPK(dmsgURL); e == nil {
+			return pk.Hex()
+		}
+		return ""
+	}
+	hosts := map[string]string{
+		"sd":  hostFor(svc.ServiceDiscoveryDmsg),
+		"tpd": hostFor(svc.TransportDiscoveryDmsg),
+		"ut":  hostFor(svc.UptimeTrackerDmsg),
+	}
+	fetch := func(service, path string) ([]byte, error) {
+		host := hosts[service]
+		if host == "" {
+			return nil, fmt.Errorf("no dmsg url for %s", service)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		status, _, body, err := dmsgclient.FetchOverDmsg(ctx, dmsgC, "GET", host, path, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		if status != 200 {
+			return nil, fmt.Errorf("%s: status %d", service, status)
+		}
+		return body, nil
+	}
+	b, err := json.Marshal(netview.Compute(fetch))
 	if err != nil {
 		return nil
 	}

@@ -221,6 +221,16 @@ type BrowseClearnetRequest struct {
 // over a yamux stream, and performs the HTTP(S) request — TLS terminates here
 // (system cert pool), so the exit only relays ciphertext for https.
 func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*SkynetHTTPResponse, error) {
+	// Self-PK exit = "fall through to clearnet directly": the local visor does the
+	// egress itself (a plain http.Get over the host's default route), NOT a skysocks
+	// route to its own PK (which would hang dialing itself, like the home.dmsg
+	// self-route). This is the opt-in non-anonymous path — the user set the browse
+	// upstream proxy to the local visor's own PK. The visor fetches and the caller
+	// inlines, so unlike a browser-direct iframe load it isn't blocked by the target
+	// site's X-Frame-Options/frame-ancestors.
+	if req.ExitPK == v.conf.PK {
+		return v.directClearnetFetch(req)
+	}
 	if v.router == nil {
 		return nil, fmt.Errorf("router not available")
 	}
@@ -262,6 +272,30 @@ func (v *Visor) BrowseClearnet(req BrowseClearnetRequest) (*SkynetHTTPResponse, 
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("fetch via skysocks: %w", err)
+	}
+	return readBrowseResp(resp)
+}
+
+// directClearnetFetch performs the request straight to the clearnet over the
+// host's default network (no skysocks hop) — the self-PK browse-upstream path.
+func (v *Visor) directClearnetFetch(req BrowseClearnetRequest) (*SkynetHTTPResponse, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
+	defer cancel()
+	method := req.Method
+	if method == "" {
+		method = "GET"
+	}
+	var rdr io.Reader
+	if len(req.Body) > 0 {
+		rdr = bytes.NewReader(req.Body)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, method, req.URL, rdr)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := (&http.Client{Timeout: browseFetchTimeout}).Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("direct clearnet fetch: %w", err)
 	}
 	return readBrowseResp(resp)
 }
