@@ -23,6 +23,7 @@ import (
 	"github.com/spf13/pflag"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -60,7 +61,7 @@ func init() {
 var logCmd = &cobra.Command{
 	Use:   "log",
 	Short: "survey & transport log collection",
-	Long:  "Fetch health, survey, and transport logging from visors which are online in the uptime tracker\nhttp://ut.skywire.skycoin.com/uptimes?v=v2\nhttp://ut.skywire.skycoin.com/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>",
+	Long:  fmt.Sprintf("Fetch health, survey, and transport logging from visors which are online in the uptime tracker\n%[1]s/uptimes?v=v2\n%[1]s/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>", deployment.Prod.UptimeTracker),
 	Run: func(cmd *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("log-collecting")
 		fver, err := version.NewVersion("v1.3.17")
