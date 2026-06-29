@@ -132,7 +132,14 @@ const nativeBrowseLauncherJS = `(function () {
     // result — so it isn't blocked by the target site's X-Frame-Options the way a
     // browser-direct iframe load is. (A pure wasm tab leaves this unset and uses a
     // direct iframe load, since it can't read cross-origin server-side.)
-    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; }, directViaBackend: true });
+    // api drives the visor cli REPL window: arbitrary /api calls (cookie-authed)
+    // so the operator can interrogate the running visor from the UI without a shell.
+    function api(method, path, body) {
+      var p2 = path.charAt(0) === "/" ? path : "/" + path;
+      return fetch(p2, { method: method, credentials: "same-origin", headers: body != null ? { "Content-Type": "application/json" } : {}, body: body != null ? body : undefined })
+        .then(function (r) { return r.text().then(function (t) { return { status: r.status, body: t }; }); });
+    }
+    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; }, directViaBackend: true, api: api });
     var btn = document.createElement("button");
     btn.textContent = "skynet"; btn.title = "browse skynet/dmsg sites + clearnet (via proxy)";
     btn.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";

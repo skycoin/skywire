@@ -779,6 +779,75 @@
     return winObj;
   }
 
+  // createCliWindow opens a REPL that dispatches a curated command set to the
+  // visor's RPC via opts.api(method, path, body) — the wasm core's hvApi() in the
+  // wasm visor (function call, no shell needed — works in standalone PWA mode),
+  // or /api over fetch in the native HV UI. So the operator can drive the running
+  // visor from the UI without the shell + cli binary. `raw <M> <path> [body]` is
+  // the escape hatch to any API route.
+  function createCliWindow(doc, opts) {
+    var api = opts.api;
+    function self() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:fixed;top:48px;left:40px;width:50vw;height:60vh;min-width:300px;min-height:180px;max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:12px/1.4 monospace;border:1px solid #2a2342;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483001;display:flex;flex-direction:column;overflow:hidden";
+    wrap.innerHTML =
+      '<div class="cw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
+      '<b style="color:#9d7cff;cursor:move;flex:1">visor cli</b><button id="cw-x" title="close" style="cursor:pointer">×</button></div>' +
+      '<pre id="cw-out" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>' +
+      '<div style="display:flex;gap:.3em;padding:.4em;border-top:1px solid #2a2342;background:#15131c;align-items:center"><span style="color:#9ece6a">&gt;</span>' +
+      '<input id="cw-in" placeholder="help" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:12px monospace"></div>';
+    (doc.body || doc.documentElement).appendChild(wrap);
+    function $(id) { return wrap.querySelector("#" + id); }
+    var out = $("cw-out"), inp = $("cw-in"), hist = [], hi = 0;
+    function w(text, color) { var d = doc.createElement("div"); if (color) d.style.color = color; d.textContent = text; out.appendChild(d); out.scrollTop = out.scrollHeight; }
+    function pretty(s) { try { return JSON.stringify(JSON.parse(s), null, 2); } catch (_) { return s; } }
+    var HELP = ["commands (a thin REPL over the visor RPC):",
+      "  about | info          GET /api/about",
+      "  visors | ls           GET /api/visors",
+      "  net                   GET /api/network-view",
+      "  app ls | tp ls        self apps / transports",
+      "  route ls | health     self routes / health",
+      "  raw <M> <path> [body] arbitrary call, e.g. raw GET /api/visors",
+      "  clear"].join("\n");
+    function run(cmd) {
+      cmd = cmd.trim(); if (!cmd) return;
+      w("> " + cmd, "#9ece6a");
+      if (!api) { w("no api provider wired for this host", "#e0af68"); return; }
+      var a = cmd.split(/\s+/), c = a[0], sp = "/api/visors/" + self();
+      if (c === "help") { w(HELP); return; }
+      if (c === "clear") { out.textContent = ""; return; }
+      var alias = { about: ["GET", "/api/about"], info: ["GET", "/api/about"], visors: ["GET", "/api/visors"], ls: ["GET", "/api/visors"], net: ["GET", "/api/network-view"], health: ["GET", sp + "/health"] };
+      var m, path, bodyArg = null;
+      if (c === "raw") { m = (a[1] || "GET").toUpperCase(); path = a[2] || "/api/about"; bodyArg = a.slice(3).join(" ") || null; }
+      else if (c === "app" && a[1] === "ls") { m = "GET"; path = sp + "/apps"; }
+      else if (c === "tp" && a[1] === "ls") { m = "GET"; path = sp + "/transports"; }
+      else if (c === "route" && a[1] === "ls") { m = "GET"; path = sp + "/routes"; }
+      else if (alias[c]) { m = alias[c][0]; path = alias[c][1]; }
+      else { w("unknown: " + c + "  (try help)", "#e0af68"); return; }
+      Promise.resolve(api(m, path, bodyArg)).then(function (r) {
+        w(r.status + " " + path, (r.status >= 200 && r.status < 300) ? "#7dcfff" : "#f7768e");
+        w(pretty(r.body));
+      }).catch(function (e) { w("error: " + e, "#f7768e"); });
+    }
+    inp.addEventListener("keydown", function (e) {
+      if (e.key === "Enter") { var v = inp.value; inp.value = ""; if (v.trim()) { hist.push(v); hi = hist.length; } run(v); }
+      else if (e.key === "ArrowUp") { if (hi > 0) { hi--; inp.value = hist[hi] || ""; } e.preventDefault(); }
+      else if (e.key === "ArrowDown") { if (hi < hist.length - 1) { hi++; inp.value = hist[hi] || ""; } else { hi = hist.length; inp.value = ""; } e.preventDefault(); }
+    });
+    w("visor cli — type 'help'. Dispatches to the running visor's RPC.", "#9aa0a6");
+    setTimeout(function () { inp.focus(); }, 50);
+    var winObj = { el: wrap, close: function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
+    $("cw-x").onclick = winObj.close;
+    (function () {
+      var ox, oy, sx, sy, h = wrap.querySelector(".cw-bar b");
+      h.style.touchAction = "none";
+      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
+      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
+      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
+    })();
+    return winObj;
+  }
+
   function mountPanel(doc, opts) {
     var zTop = 2147483000;
     var wins = [];
@@ -795,6 +864,7 @@
       '<button id="tb-new" title="new browse window" style="cursor:pointer">+ window</button>' +
       '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0"></span>' +
       '<button id="tb-logs" title="live visor log" style="cursor:pointer">logs</button>' +
+      '<button id="tb-cli" title="visor cli (RPC repl)" style="cursor:pointer">cli</button>' +
       '<button id="tb-id" title="export / import this visor\'s identity" style="cursor:pointer">identity</button>' +
       '<button id="tb-hide" title="hide skynet (windows stay open)" style="cursor:pointer">hide</button>';
     (doc.body || doc.documentElement).appendChild(bar);
@@ -840,6 +910,13 @@
       logWin = createLogWindow(doc);
       var orig = logWin.close;
       logWin.close = function () { orig(); logWin = null; };
+    };
+    var cliWin = null;
+    bq("tb-cli").onclick = function () {
+      if (cliWin) { cliWin.close(); cliWin = null; return; }
+      cliWin = createCliWindow(doc, opts);
+      var origc = cliWin.close;
+      cliWin.close = function () { origc(); cliWin = null; };
     };
 
     function setDesktop(on) {

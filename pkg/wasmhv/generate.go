@@ -273,7 +273,10 @@ const BrowseLauncherJS = `(function(){
     var p=self.SkywireBrowse.mountPanel(document,{
       fetchDmsg:function(){ return self.skywireVisor.fetchDmsg.apply(null,arguments); },
       serveContent:function(m){ return self.skywireVisor.serveContent(m); },
-      selfPK:function(){ try{ return self.skywireVisor.status().pk; }catch(e){ return ""; } }
+      selfPK:function(){ try{ return self.skywireVisor.status().pk; }catch(e){ return ""; } },
+      // api drives the visor cli REPL: a function call straight into the in-wasm
+      // core's RPC (no shell, no network) — works in standalone PWA mode.
+      api:function(m,path,body){ return self.skywireVisor.hvApi(m,path,body).then(function(r){ return {status:r.status, body:new TextDecoder().decode(r.body)}; }); }
     });
     var btn=document.createElement("button");
     btn.textContent="skynet"; btn.title="browse / host dmsg sites (multi-window)";
