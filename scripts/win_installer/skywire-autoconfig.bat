@@ -52,7 +52,10 @@ if not exist "%SKYENV%" (
 :: C:\Program Files\Skywire\skywire-config.json — the exact path the shortcut
 :: launches with. autoconfig calls its own binary by absolute path internally, so
 :: it works even though the install dir is not yet on PATH at MSI-install time.
-:: --no-vpnserver persists VPNSERVER=false (replaces the old `--disableapps
-:: vpn-server`). Deployment service URLs come from the embedded dmsg-only services
-:: config (the single source of truth), so no -S / -D files are needed.
-"%~dp0skywire.exe" autoconfig --no-vpnserver
+:: --ishv persists ISHYPERVISOR=true (Windows runs the local hypervisor UI at
+:: http://127.0.0.1:8000 — replaces the old always-passed `-i`, and keeps the HV
+:: across upgrades, not just on first install). --no-vpnserver persists
+:: VPNSERVER=false (replaces the old `--disableapps vpn-server`). Deployment
+:: service URLs come from the embedded dmsg-only services config (the single
+:: source of truth), so no -S / -D files are needed.
+"%~dp0skywire.exe" autoconfig --ishv --no-vpnserver
