@@ -116,6 +116,19 @@ type ManagedTransport struct {
 	// the still-live edge's re-registration.
 	missedPongs atomic.Int64
 
+	// lastRecvNanos is the time (UnixNano) the readLoop last received ANY packet
+	// (a pong, the peer's own ping, or route data). Stamped at Serve start and
+	// updated on every read. It is the liveness signal for the UNARMED case the
+	// pongSeen guard above skips: a live peer always sends its own 60s maintenance
+	// pings (so we receive *something*), while a peer that has gone away — e.g. a
+	// browser-visor tab that closed UNCLEANLY, leaving a half-open WS with no
+	// FIN/RST — sends nothing. A transport that never armed AND has received
+	// nothing for unarmedSilenceThreshold is a dead half-open link; close it.
+	// Without this, such transports accumulated on a hub visor (the PWA host that
+	// browser visors dial into) until the OS eventually tore the socket down —
+	// hundreds of them, driving the scheduler/timer load.
+	lastRecvNanos atomic.Int64
+
 	// cascadeHandler handles cascade protocol packets (route ID 0).
 	// Set by the transport manager from the router's CascadeHandler.
 	cascadeHandler func(p routing.Packet, mt *ManagedTransport)
@@ -266,6 +279,16 @@ const transportPingInterval = 60 * time.Second
 // slow peer, short enough that dead edges drain from TPD promptly.
 const pongMissThreshold = 3
 
+// unarmedSilenceThreshold is how long a transport that has NEVER armed (no pong
+// ever seen) may receive NOTHING — no pong, no peer ping, no route data — before
+// it is treated as a dead half-open link and closed. This covers the case the
+// pongSeen guard intentionally skips. A live peer sends its own maintenance ping
+// every transportPingInterval (60s), so a healthy unarmed transport is never
+// silent this long; only a peer that has truly gone away (e.g. a browser-visor
+// tab closed without a clean TCP FIN) goes fully silent. Set well above the ping
+// interval so a merely-slow peer is never reaped.
+const unarmedSilenceThreshold = 5 * transportPingInterval // 5 min
+
 // Serve serves and manages the transport.
 //
 // Goroutine layout: one readLoop goroutine plus the Serve goroutine
@@ -280,6 +303,7 @@ const pongMissThreshold = 3
 // goroutines from steady state.
 func (mt *ManagedTransport) Serve(readCh chan<- routing.Packet) {
 	mt.wg.Add(2)
+	mt.lastRecvNanos.Store(time.Now().UnixNano()) // baseline for the unarmed-silence reaper
 	log := mt.log.
 		WithField("tp_id", mt.Entry.ID).
 		WithField("remote_pk", mt.rPK).
@@ -372,6 +396,9 @@ func (mt *ManagedTransport) readLoop(readCh chan<- routing.Packet) {
 			mt.close()
 			return
 		}
+		// Any received packet (pong, the peer's own ping, or route data) proves
+		// the link is alive — feed the unarmed-silence reaper in tickPing.
+		mt.lastRecvNanos.Store(time.Now().UnixNano())
 		// Intercept transport-level ping/pong before forwarding to router.
 		if p.RouteID() == 0 {
 			switch p.Type() {
@@ -453,6 +480,22 @@ func (mt *ManagedTransport) tickPing() {
 			Warn("Transport peer stopped answering pings; closing half-open transport")
 		mt.close()
 		return
+	}
+
+	// Unarmed-silence reaping: a transport that never armed (no pong ever) AND has
+	// received NOTHING for unarmedSilenceThreshold is a dead half-open link — a
+	// live peer would have sent at least its own maintenance pings. This is the
+	// case the pongSeen guard above intentionally skips; without it, half-open
+	// transports (e.g. browser-visor tabs that closed without a clean TCP FIN)
+	// accumulated on a hub visor until the OS eventually tore the socket down.
+	if !mt.pongSeen.Load() {
+		if last := mt.lastRecvNanos.Load(); last > 0 && time.Since(time.Unix(0, last)) > unarmedSilenceThreshold {
+			mt.log.WithField("silent_for", time.Since(time.Unix(0, last)).Truncate(time.Second).String()).
+				WithField("remote", mt.Remote()).
+				Warn("Unarmed transport silent past threshold; closing dead half-open link")
+			mt.close()
+			return
+		}
 	}
 
 	// First time observed ready — stamp + send first ping. CAS makes
