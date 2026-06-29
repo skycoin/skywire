@@ -51,4 +51,15 @@ func init() {
 			log.Panic(err)
 		}
 	}
+	// services-config.json is dmsg-only (no plain-HTTP deployment URLs except
+	// geoip); backfill the HTTP-named fields from their dmsg:// siblings so every
+	// consumer keeps a working URL. See Services.BackfillClearnetFromDmsg.
+	Prod.BackfillClearnetFromDmsg()
+	Test.BackfillClearnetFromDmsg()
+	if ProdConf.Conf == "" {
+		ProdConf.Conf = Prod.ConfDmsg
+	}
+	if TestConf.Conf == "" {
+		TestConf.Conf = Test.ConfDmsg
+	}
 }
