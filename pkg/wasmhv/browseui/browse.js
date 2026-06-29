@@ -817,8 +817,7 @@
 
   function mountPanel(doc, opts) {
     var wins = [];          // {wb, chip, browser?} for every open window
-    var visible = false;
-    var BARH = 36;          // launcher-bar height; the desktop starts below it
+    var BARH = 36;          // bottom taskbar height; windows live above it
 
     // shallow-merge: opts + {root, onClose, …} so each window gets the shared
     // providers (fetchDmsg / api / selfPK / ptyURL …) plus its own root + close
@@ -831,43 +830,71 @@
       return o;
     }
 
-    // Desktop root: fills the viewport BELOW the launcher bar, so a maximized
-    // window's title bar + the browser nav/address bar stay clear of the panel
-    // (WinBox centers + bounds windows against this box). display:none hides the
-    // whole desktop at once; pointer-events:none lets clicks fall through where
-    // no window covers — windows re-enable events via .skywire-wb.
+    // Desktop root: the windows area, sized by applyDock() to fill the viewport
+    // on the side AWAY from the bar, so no window can hide behind the panel
+    // (WinBox centers + bounds windows against this box). pointer-events:none
+    // lets clicks fall through where no window covers — windows re-enable events
+    // via .skywire-wb. The panel is always on (no hide).
     var root = doc.createElement("div");
     root.id = "skywire-skynet-root";
-    root.style.cssText = "position:fixed;left:0;top:" + BARH + "px;right:0;bottom:0;display:none;pointer-events:none";
+    root.style.cssText = "position:fixed;left:0;right:0;pointer-events:none";
     (doc.body || doc.documentElement).appendChild(root);
     if (!doc.getElementById("skywire-wb-style")) {
       var st = doc.createElement("style");
       st.id = "skywire-wb-style";
-      st.textContent = ".skywire-wb{pointer-events:auto}";
+      // WinBox ships `.winbox iframe{position:absolute;width:100%;height:100%}`
+      // for url:-mounted windows — but that also covers the browse window's
+      // own iframe, painting over its address/nav bar. Pin the browse iframe
+      // back into the flex column (below the nav bar) so the bar shows. The
+      // terminal's url: iframe (no #sb-frame) keeps WinBox's fill behaviour.
+      st.textContent = ".skywire-wb{pointer-events:auto}" +
+        ".skywire-wb #sb-frame{position:relative!important;height:auto!important;min-height:0!important;flex:1 1 auto!important}";
       (doc.head || doc.documentElement).appendChild(st);
     }
 
-    // Launcher bar: [menu] [open-window chips…] [hide].
+    // Always-on taskbar: [menu] [open-window chips…] [dock]. Top by default; the
+    // dock button flips it top↔bottom (remembered in localStorage). No hide.
     var bar = doc.createElement("div");
     bar.id = "skywire-skynet-taskbar";
-    bar.style.cssText = "position:fixed;left:0;right:0;top:0;height:" + BARH + "px;box-sizing:border-box;z-index:2147483646;" +
-      "display:none;gap:.5em;align-items:center;padding:0 .6em;background:#0e0b16;" +
-      "border-bottom:1px solid #2a2342;font:12px/1.3 monospace;color:#cdd2da";
+    bar.style.cssText = "position:fixed;left:0;right:0;height:" + BARH + "px;box-sizing:border-box;z-index:2147483646;" +
+      "display:flex;gap:.5em;align-items:center;padding:0 .6em;background:#0e0b16;" +
+      "font:12px/1.3 monospace;color:#cdd2da";
     bar.innerHTML =
       '<button id="tb-menu" title="apps" style="cursor:pointer;font-size:15px;line-height:1;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.2em .5em">☰</button>' +
       '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0;overflow:hidden"></span>' +
-      '<button id="tb-hide" title="hide the panel (windows stay open)" style="cursor:pointer">hide</button>';
+      '<button id="tb-dock" title="dock the panel to the top or bottom" style="cursor:pointer">⇅</button>';
     (doc.body || doc.documentElement).appendChild(bar);
     function bq(id) { return bar.querySelector("#" + id); }
     var items = bq("tb-items");
 
-    // App menu (start / whisker menu) — drops below the menu button.
+    // App menu (start / whisker menu) — opens from the menu button (applyDock
+    // anchors it to the bar's edge).
     var menu = doc.createElement("div");
     menu.id = "skywire-appmenu";
-    menu.style.cssText = "position:fixed;left:6px;top:" + BARH + "px;z-index:2147483647;display:none;min-width:168px;" +
+    menu.style.cssText = "position:fixed;left:6px;z-index:2147483647;display:none;min-width:168px;" +
       "background:#15131c;border:1px solid #2a2342;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.55);padding:.3em;font:13px/1.4 monospace;color:#cdd2da";
     (doc.body || doc.documentElement).appendChild(menu);
     function hideMenu() { menu.style.display = "none"; }
+
+    // Dock the panel top or bottom; size root + anchor the menu accordingly so a
+    // window can never hide behind the bar. Persisted across reloads.
+    var DOCKKEY = "skywire-panel-dock", dock = "top";
+    try { dock = localStorage.getItem(DOCKKEY) || "top"; } catch (e) {}
+    function applyDock(d) {
+      dock = (d === "bottom") ? "bottom" : "top";
+      try { localStorage.setItem(DOCKKEY, dock); } catch (e) {}
+      if (dock === "top") {
+        bar.style.top = "0"; bar.style.bottom = "auto";
+        bar.style.borderTop = "0"; bar.style.borderBottom = "1px solid #2a2342";
+        root.style.top = BARH + "px"; root.style.bottom = "0";
+        menu.style.top = BARH + "px"; menu.style.bottom = "auto";
+      } else {
+        bar.style.bottom = "0"; bar.style.top = "auto";
+        bar.style.borderBottom = "0"; bar.style.borderTop = "1px solid #2a2342";
+        root.style.top = "0"; root.style.bottom = BARH + "px";
+        menu.style.bottom = BARH + "px"; menu.style.top = "auto";
+      }
+    }
     function addApp(label, fn) {
       var b = doc.createElement("button");
       b.textContent = label;
@@ -940,15 +967,12 @@
       track(termWin, "terminal");
     }
 
-    bq("tb-hide").onclick = function () { setDesktop(false); };
+    bq("tb-dock").onclick = function () { applyDock(dock === "top" ? "bottom" : "top"); };
+    applyDock(dock);   // position the always-on panel + windows area on load
 
-    function setDesktop(on) {
-      visible = on;
-      bar.style.display = on ? "flex" : "none";
-      root.style.display = on ? "block" : "none";
-      if (on) { if (!wins.length) { menu.style.display = "block"; } } else { hideMenu(); }
-    }
-    function toggle() { setDesktop(!visible); }
+    // The panel is permanent; toggle() (kept for launcher/back-compat) just opens
+    // the app menu so any old caller still surfaces the launcher.
+    function toggle() { menu.style.display = (menu.style.display === "block") ? "none" : "block"; }
 
     return {
       panel: bar,
