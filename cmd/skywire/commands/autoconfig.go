@@ -283,7 +283,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		msg3(fmt.Sprintf("Updated %s%s%s: %s", colorPurple, target, colorReset, strings.Join(editedKeys, " ")))
 	}
 
-	versionOut, err := exec.Command(skywireBin(), "-v").Output()
+	versionOut, err := exec.Command(skywireBin(), "-v").Output() //nolint:gosec
 	if err == nil {
 		version := strings.TrimSpace(string(versionOut))
 		if !strings.Contains(version, "unknown") {
@@ -677,7 +677,7 @@ func restartOrPrompt(r resolvedConfig) {
 }
 
 func printWelcome(pubkey string, isHypervisor bool) {
-	rewardOut, err := exec.Command(skywireBin(), "cli", "reward", "-r").Output()
+	rewardOut, err := exec.Command(skywireBin(), "cli", "reward", "-r").Output() //nolint:gosec
 	if err == nil && len(rewardOut) > 0 {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
 		msg2(fmt.Sprintf("reward metrics:\n%shttps://theskywirenetwork.net%s", colorBlue, colorReset))
