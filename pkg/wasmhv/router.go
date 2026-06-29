@@ -71,6 +71,18 @@ func (c *Core) ServeHTTP(method, path string, body []byte) (int, []byte) {
 
 	case strings.HasPrefix(p, "/visors/"):
 		return c.visorRoute(method, strings.TrimPrefix(p, "/visors/"), body)
+
+	// Network-wide SD/TPD/UT aggregation (the network-view table + the
+	// visualizer's nodes). The native HV serves this; without it here the wasm
+	// core 404s and both render empty. The tab builds it from its own dmsg fetch
+	// of the deployment services (reachable since the service-PK seed fix).
+	case p == "/network-view":
+		if self := c.selfProvider(); self != nil {
+			if b := self.SelfNetworkView(); len(b) > 0 {
+				return 200, b
+			}
+		}
+		return 200, []byte(`{"entries":[],"fetched_at":""}`)
 	}
 	return 404, []byte(`{"error":"not found in wasm hypervisor core"}`)
 }
