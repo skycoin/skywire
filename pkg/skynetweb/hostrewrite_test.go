@@ -260,3 +260,44 @@ func TestHostRewriteConn_UpgradeSplicesRawBytes(t *testing.T) {
 		t.Errorf("Connection header lost upgrade token: %q", conn)
 	}
 }
+
+// TestHostRewriteConn_SplicesUnparseableTailAfterRequest covers the general
+// robustness case behind the specific WebSocket fix: once a valid request has
+// been forwarded, a continuation the HTTP parser can't read (a non-standard
+// protocol switch, or bytes the backend negotiated out of band) must not drop
+// the connection — the remainder is spliced verbatim so the proxy keeps working
+// regardless of what the site does after a normal request. Before the fix the
+// pump returned on the parse error and the tail never reached the backend.
+func TestHostRewriteConn_SplicesUnparseableTailAfterRequest(t *testing.T) {
+	backend := newFakeConn()
+	hr := NewHostRewriteConn(backend, "example.com")
+	defer hr.Close() //nolint:errcheck,gosec
+
+	const req1 = "GET /a HTTP/1.1\r\nHost: example.com.<pk>.skynet\r\n\r\n"
+	if _, err := hr.Write([]byte(req1)); err != nil {
+		t.Fatalf("Write req1: %v", err)
+	}
+	// Wait for the first (parseable) request to be rewritten + forwarded.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && !bytes.Contains(backend.outSnapshot(), []byte("/a")) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !bytes.Contains(backend.outSnapshot(), []byte("/a")) {
+		t.Fatal("first request never reached backend")
+	}
+
+	// Now send a continuation that is NOT a valid HTTP request. The parser
+	// fails on the malformed request line; everything after the first line must
+	// still be spliced to the backend verbatim.
+	const tail = "NOT-A-VALID-REQUEST-LINE\r\nSPLICED_TAIL_MARKER"
+	if _, err := hr.Write([]byte(tail)); err != nil {
+		t.Fatalf("Write tail: %v", err)
+	}
+	for time.Now().Before(deadline) && !bytes.Contains(backend.outSnapshot(), []byte("SPLICED_TAIL_MARKER")) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !bytes.Contains(backend.outSnapshot(), []byte("SPLICED_TAIL_MARKER")) {
+		t.Fatalf("backend never received the spliced tail after the unparseable continuation;\n got=%q",
+			backend.outSnapshot())
+	}
+}

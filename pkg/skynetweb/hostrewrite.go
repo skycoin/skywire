@@ -98,16 +98,31 @@ func (h *hostRewriteConn) pump() {
 	defer h.backend.Close() //nolint:errcheck,gosec
 
 	r := bufio.NewReader(h.pipeR)
+	sawRequest := false
 	for {
 		req, err := http.ReadRequest(r)
 		if err != nil {
-			// EOF or malformed input — we can't recover the stream.
-			// Closing the backend conn lets the response pump on
-			// the Read side notice and unblock. We don't have a
-			// logger here, so any non-EOF parse error fails silently;
-			// the connection close conveys the failure to the peer.
+			// EOF, or a continuation the HTTP parser can't read. Once at
+			// least one valid request has been forwarded, the stream is
+			// known-good HTTP/1.1, so an unparseable tail is almost always a
+			// protocol switch we didn't model — a non-standard upgrade, or
+			// bytes the backend negotiated out of band — rather than garbage.
+			// Splice the remainder verbatim instead of dropping the
+			// connection, so the proxy keeps working regardless of what the
+			// site does after a normal request. For a clean EOF this copies
+			// nothing. (Standard upgrades are caught below BEFORE any raw byte
+			// reaches the parser, so this is the rare best-effort tail: the few
+			// bytes ReadRequest consumed while failing can't be replayed, but a
+			// hard drop would lose everything.) On the FIRST request we still
+			// close: an unparseable opener means the stream was never plaintext
+			// HTTP (a mis-gate), and forwarding a partial read would only
+			// confuse the backend. The Read side notices the close and unblocks.
+			if sawRequest {
+				_, _ = io.Copy(h.backend, r) //nolint:errcheck
+			}
 			return
 		}
+		sawRequest = true
 
 		// Rewrite Host. http.Request.Write uses req.Host (the canonical
 		// field) for the wire-format Host: header; also clear any
