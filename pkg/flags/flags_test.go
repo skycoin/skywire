@@ -50,7 +50,7 @@ func captureStdout(t *testing.T, fn func()) string {
 	outCh := make(chan string, 1)
 	go func() {
 		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
+		_, _ = io.Copy(&buf, r) //nolint
 		outCh <- buf.String()
 	}()
 
