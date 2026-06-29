@@ -81,6 +81,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	types "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/visor/netview"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 )
@@ -827,6 +828,51 @@ func (visorSelf) SelfRoutes() []byte {
 		})
 	}
 	b, err := json.Marshal(resp)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// SelfNetworkView builds the SD/TPD/UT-aggregated network table (the native
+// /api/network-view shape) from this tab's OWN dmsg fetch of the deployment
+// services, using the SHARED netview.Compute so it can't drift from the native
+// visor. The deployment services are dmsg DIRECT clients reachable since the
+// service-PK seed fix; without this the wasm core 404s /api/network-view and the
+// network-view table + visualizer render empty in the browser.
+func (visorSelf) SelfNetworkView() []byte {
+	if dmsgC == nil {
+		return nil
+	}
+	svc := visorcore.ResolveServices(nil)
+	hostFor := func(dmsgURL string) string {
+		if pk, e := dmsgURLPK(dmsgURL); e == nil {
+			return pk.Hex()
+		}
+		return ""
+	}
+	hosts := map[string]string{
+		"sd":  hostFor(svc.ServiceDiscoveryDmsg),
+		"tpd": hostFor(svc.TransportDiscoveryDmsg),
+		"ut":  hostFor(svc.UptimeTrackerDmsg),
+	}
+	fetch := func(service, path string) ([]byte, error) {
+		host := hosts[service]
+		if host == "" {
+			return nil, fmt.Errorf("no dmsg url for %s", service)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+		defer cancel()
+		status, _, body, err := dmsgclient.FetchOverDmsg(ctx, dmsgC, "GET", host, path, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		if status != 200 {
+			return nil, fmt.Errorf("%s: status %d", service, status)
+		}
+		return body, nil
+	}
+	b, err := json.Marshal(netview.Compute(fetch))
 	if err != nil {
 		return nil
 	}
