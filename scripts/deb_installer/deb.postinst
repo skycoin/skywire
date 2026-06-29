@@ -5,7 +5,13 @@ if [ -f "/opt/skywire/removing" ]
 then
 	rm -rf /opt/skywire/removing
 else
-	/opt/skywire/skywire-cli visor gen-config -o /opt/skywire/skywire-config.json
+	# (Re)generate the config through the single entry point, the same one the
+	# Arch/AUR post_install uses. `skywire autoconfig` runs `config gen -r`
+	# (regenerate, retaining the secret key + hypervisor PKs) so an UPGRADE
+	# refreshes service URLs / new fields instead of leaving a stale config —
+	# it never runs `config gen` directly. Run as root → PKGENV mode
+	# (/opt/skywire paths, system unit). The dh_systemd section below restarts.
+	/opt/skywire/skywire autoconfig
 fi
 
 setcap 'cap_net_admin+p' /opt/skywire/apps/vpn-client
