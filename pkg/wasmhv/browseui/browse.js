@@ -462,8 +462,11 @@
       index: 2147483000,
       "class": ["skywire-wb"]
     };
-    if (opts.x != null) cfg.x = opts.x;
-    if (opts.y != null) cfg.y = opts.y;
+    // Open centered by default (WinBox otherwise pins new windows at 0,0 — under
+    // the launcher bar — which reads as "stuck in the corner"). Callers can still
+    // pin a side (e.g. log:right, cli:left).
+    cfg.x = (opts.x != null) ? opts.x : "center";
+    cfg.y = (opts.y != null) ? opts.y : "center";
     if (opts.mount) cfg.mount = opts.mount;
     if (opts.url) cfg.url = opts.url;
     if (opts.onclose) cfg.onclose = opts.onclose;
@@ -829,11 +832,21 @@
 
     // All WinBox windows mount into this root so the whole desktop hides as a
     // unit (display:none on the root hides every window + WinBox's own minimized
-    // bar). The launcher bar sits above it.
+    // bar). It must FILL THE VIEWPORT: WinBox centers windows and clamps drag/
+    // resize against the root's box, so a default (auto-height, 0px) root pins
+    // every window at 0,0 and makes them undraggable. pointer-events:none lets
+    // clicks fall through to the dashboard where no window covers; the windows
+    // re-enable pointer events via their .skywire-wb class (style below).
     var root = doc.createElement("div");
     root.id = "skywire-skynet-root";
-    root.style.display = "none";
+    root.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;display:none;pointer-events:none";
     (doc.body || doc.documentElement).appendChild(root);
+    if (!doc.getElementById("skywire-wb-style")) {
+      var st = doc.createElement("style");
+      st.id = "skywire-wb-style";
+      st.textContent = ".skywire-wb{pointer-events:auto}";
+      (doc.head || doc.documentElement).appendChild(st);
+    }
 
     var bar = doc.createElement("div");
     bar.id = "skywire-skynet-taskbar";
