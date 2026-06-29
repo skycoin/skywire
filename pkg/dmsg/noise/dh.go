@@ -31,16 +31,36 @@ var keypairPool = func() chan noise.DHKey {
 	for i := 0; i < numGenerators; i++ {
 		go func() {
 			for {
-				pub, sec := secp256k1.GenerateKeyPair()
-				ch <- noise.DHKey{
-					Private: sec,
-					Public:  pub,
-				}
+				ch <- generateDHKey()
 			}
 		}()
 	}
 	return ch
 }()
+
+// generateDHKey wraps secp256k1.GenerateKeyPair, retrying on the rare panic it
+// raises from its internal self-test ("IMPOSSIBLE4: pubkey failed" and friends
+// in skycoin's pure-Go EC arithmetic) for certain random secret keys. The panic
+// is non-deterministic and key-specific — observed on Windows — and would
+// otherwise crash the whole process from this background goroutine. A fresh key
+// on the next iteration succeeds, so recover and retry instead of dying.
+func generateDHKey() noise.DHKey {
+	for {
+		if key, ok := tryGenerateDHKey(); ok {
+			return key
+		}
+	}
+}
+
+func tryGenerateDHKey() (key noise.DHKey, ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			ok = false
+		}
+	}()
+	pub, sec := secp256k1.GenerateKeyPair()
+	return noise.DHKey{Private: sec, Public: pub}, true
+}
 
 // Secp256k1 implements `noise.DHFunc`.
 type Secp256k1 struct{}

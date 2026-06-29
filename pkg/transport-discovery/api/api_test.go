@@ -670,6 +670,10 @@ func TestUptimeRecorderRoutes(t *testing.T) {
 
 	rec, err := serviceuptime.New(filepath.Join(t.TempDir(), "uptime.db"), serviceuptime.Config{Service: "transport-discovery"})
 	require.NoError(t, err)
+	// Close the recorder (and its bbolt DB) before the test ends, otherwise the
+	// open DB file keeps the temp dir locked on Windows and t.TempDir cleanup
+	// fails with "being used by another process".
+	t.Cleanup(func() { _ = rec.Close() }) //nolint:errcheck
 	api.SetUptimeRecorder(rec)
 	require.NotNil(t, api.getUptimeRecorder())
 

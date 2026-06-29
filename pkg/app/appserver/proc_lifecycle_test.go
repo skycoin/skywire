@@ -4,6 +4,7 @@
 package appserver
 
 import (
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -14,6 +15,15 @@ import (
 )
 
 func TestProcManager_StartExternalThenStop(t *testing.T) {
+	// The external-app stop path on Windows is IPC-based: signalStop blocks on
+	// ipcServerWg.Wait until the app dials back over the named-pipe IPC server,
+	// which a generic binary like /bin/sleep never does — so Stop would hang.
+	// On POSIX, /bin/sleep is killed via SIGINT. This test only exercises the
+	// POSIX lifecycle; skip it on Windows (also, /bin/sleep doesn't exist there).
+	if runtime.GOOS == "windows" {
+		t.Skip("external-process SIGINT lifecycle is POSIX-only; Windows uses IPC shutdown")
+	}
+
 	m := newManager(t)
 	defer func() { _ = m.Close() }() //nolint
 

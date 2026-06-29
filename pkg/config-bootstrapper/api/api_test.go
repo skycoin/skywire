@@ -181,10 +181,16 @@ func TestClose_Idempotent(t *testing.T) {
 func newHandlerAPI() *API {
 	svcs := deployment.Prod
 	return &API{
-		log:            testLogger(),
-		startedAt:      time.Now(),
-		services:       &svcs,
-		dmsghttpConfTs: time.Now().Add(-5 * time.Minute),
+		log:       testLogger(),
+		startedAt: time.Now(),
+		services:  &svcs,
+		// Seed the cache timestamp comfortably past the 5m window so the first
+		// /dmsghttp call always regenerates. Using exactly -5m sits on the
+		// staleness boundary (now()-5m vs confTs), which the coarse Windows
+		// clock resolves as equal — skipping the first generation and breaking
+		// both the content and the cache-hit assertions in
+		// TestDmsghttp_GeneratesThenCaches.
+		dmsghttpConfTs: time.Now().Add(-10 * time.Minute),
 		closeC:         make(chan struct{}),
 		dmsgAddr:       "dmsg://test:0",
 	}

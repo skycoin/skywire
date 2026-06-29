@@ -51,7 +51,10 @@ func TestAppStatus_String(t *testing.T) {
 func TestContainsAndIgnoreErrs(t *testing.T) {
 	iErrs := getIgnoreErrs()
 	require.NotEmpty(t, iErrs)
-	require.True(t, contains(iErrs, "iptables: RTNETLINK answers: File exists today"))
+	// "rpc.Serve: accept:accept" is in the suppression list on every platform
+	// (the iptables/RTNETLINK entries are unix-only — see stderr_unix.go vs
+	// stderr_windows.go), so assert against it to keep this test cross-platform.
+	require.True(t, contains(iErrs, "rpc.Serve: accept:accept tcp4 127.0.0.1:59664: use of closed network connection"))
 	require.False(t, contains(iErrs, "some genuinely unexpected error"))
 }
 

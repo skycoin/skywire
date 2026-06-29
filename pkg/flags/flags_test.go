@@ -34,19 +34,30 @@ func newTree() *cobra.Command {
 }
 
 // captureStdout runs fn with os.Stdout redirected and returns what it wrote.
+//
+// The pipe is drained in a background goroutine while fn runs. Reading only
+// after fn returns (as a single-threaded read would) deadlocks whenever fn
+// writes more than the OS pipe buffer holds — the buffer fills, fn's write
+// blocks forever, and nothing ever reads. Windows pipe buffers are small, so
+// even modest help output triggers this; concurrent draining avoids it.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	orig := os.Stdout
 	r, w, err := os.Pipe()
 	require.NoError(t, err)
 	os.Stdout = w
-	defer func() { os.Stdout = orig }()
+
+	outCh := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		outCh <- buf.String()
+	}()
 
 	fn()
 	require.NoError(t, w.Close())
-	out, err := io.ReadAll(r)
-	require.NoError(t, err)
-	return string(out)
+	os.Stdout = orig
+	return <-outCh
 }
 
 func TestInitFlags_NoUsage(t *testing.T) {
