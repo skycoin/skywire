@@ -159,10 +159,10 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "url")
 	genConfigCmd.Flags().BoolVarP(&isTestEnv, "testenv", "t", scriptExecBool("${TESTENV:-false}"), "use test deployment (ports offset +10000 from prod)")
 	gHiddenFlags = append(gHiddenFlags, "testenv")
+	// Deployment services are dmsg-only. --dmsghttp is the (default) behavior and
+	// kept as a hidden no-op for back-compat; the former --http / --dual modes are
+	// gone — plain HTTP to deployment services is no longer supported.
 	genConfigCmd.Flags().BoolVarP(&isDmsgHTTP, "dmsghttp", "d", scriptExecBool("${DMSGHTTP:-false}"), "use only dmsg for skywire services, no http (this is the default)")
-	genConfigCmd.Flags().BoolVar(&isHTTPOnly, "http", false, "use only http for skywire services (no dmsg)")
-	genConfigCmd.Flags().BoolVar(&isDual, "dual", false, "use http for skywire services with dmsg as fallback (dual)")
-	genConfigCmd.MarkFlagsMutuallyExclusive("dmsghttp", "http")
 	gHiddenFlags = append(gHiddenFlags, "dmsghttp")
 	genConfigCmd.Flags().StringVarP(&dmsgHTTPPath, "dmsgconf", "D", scriptExecString("${DMSGCONF}"), "dmsghttp config path")
 	gHiddenFlags = append(gHiddenFlags, "dmsgconf")
@@ -935,13 +935,12 @@ func readExistingConfig(log *logging.Logger) {
 var oldConfCache *visorconfig.V1
 
 // configureDMSGHTTP loads dmsghttp server list when dmsg URLs are needed.
-// This runs for both --dmsghttp (DMSG-only) and default (dual) modes.
-// With the unified services-config.json, DMSG fields are already in the services struct.
-// The separate dmsghttp-config.json path is retained for backward compatibility
-// and custom deployment overrides.
+// Deployment services are dmsg-only; the DMSG fields are already in the services
+// struct from services-config.json. The separate dmsghttp-config.json path is
+// retained for backward compatibility and custom deployment overrides.
 func configureDMSGHTTP(log *logging.Logger, outerErr error) {
 	_ = outerErr
-	if isDmsgHTTP || !isHTTPOnly {
+	{
 		if dmsgHTTPPath != "" {
 			// Override: load from user-supplied dmsghttp-config.json
 			dmsghttpConfigData, err := os.ReadFile(dmsgHTTPPath)
@@ -1240,51 +1239,29 @@ func configureLauncher(log *logging.Logger) {
 	// fields, no http). --dual keeps the http URLs with dmsg in the _dmsg
 	// fallback fields. --http (isHTTPOnly) skips the dmsg fields entirely.
 	// --dmsghttp forces dmsg-only (== the default) for backward compatibility.
-	dmsgOnly := isDmsgHTTP || !isDual
-	if !isHTTPOnly {
-		// Prefer unified services config; fall back to legacy dmsgHTTPServersList
-		if services.HasDmsgEndpoints() {
-			// Unified config: DMSG fields from services-config.json
-			conf.Dmsg.Servers = deployment.DmsgServerEntriesToDisc(services.DmsgServers)
-
-			if dmsgOnly {
-				conf.Dmsg.Discovery = services.DmsgDiscoveryDmsg
-				conf.Transport.AddressResolver = services.AddressResolverDmsg
-				conf.Transport.Discovery = services.TransportDiscoveryDmsg
-				conf.Routing.RouteFinder = services.RouteFinderDmsg
-				conf.Launcher.ServiceDisc = services.ServiceDiscoveryDmsg
-			} else {
-				conf.Dmsg.DiscoveryDmsg = services.DmsgDiscoveryDmsg
-				conf.Transport.AddressResolverDmsg = services.AddressResolverDmsg
-				conf.Transport.DiscoveryDmsg = services.TransportDiscoveryDmsg
-				conf.Routing.RouteFinderDmsg = services.RouteFinderDmsg
-				conf.Launcher.ServiceDiscDmsg = services.ServiceDiscoveryDmsg
-			}
-		} else if dmsgHTTPServersList != nil {
-			// Legacy fallback: separate dmsghttp-config.json
-			var dmsgConf *visorconfig.DmsgHTTPServersData
-			if isTestEnv {
-				dmsgConf = &dmsgHTTPServersList.Test
-			} else {
-				dmsgConf = &dmsgHTTPServersList.Prod
-			}
-			if dmsgConf != nil {
-				conf.Dmsg.Servers = dmsgConf.DMSGServers
-				if dmsgOnly {
-					conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
-					conf.Transport.AddressResolver = dmsgConf.AddressResolver
-					conf.Transport.Discovery = dmsgConf.TransportDiscovery
-					conf.Routing.RouteFinder = dmsgConf.RouteFinder
-					conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
-				} else {
-					conf.Dmsg.DiscoveryDmsg = dmsgConf.DMSGDiscovery
-					conf.Transport.AddressResolverDmsg = dmsgConf.AddressResolver
-					conf.Transport.DiscoveryDmsg = dmsgConf.TransportDiscovery
-					conf.Routing.RouteFinderDmsg = dmsgConf.RouteFinder
-					conf.Launcher.ServiceDiscDmsg = dmsgConf.ServiceDiscovery
-				}
-			}
+	// Deployment services are dmsg-only: the dmsg:// service URLs go straight into
+	// the primary config fields. (Plain-HTTP to deployment services is no longer
+	// supported — the former --http / --dual modes are gone.) The dmsg URLs come
+	// from services-config.json's *_dmsg fields, the single source of truth.
+	if services.HasDmsgEndpoints() {
+		conf.Dmsg.Servers = deployment.DmsgServerEntriesToDisc(services.DmsgServers)
+		conf.Dmsg.Discovery = services.DmsgDiscoveryDmsg
+		conf.Transport.AddressResolver = services.AddressResolverDmsg
+		conf.Transport.Discovery = services.TransportDiscoveryDmsg
+		conf.Routing.RouteFinder = services.RouteFinderDmsg
+		conf.Launcher.ServiceDisc = services.ServiceDiscoveryDmsg
+	} else if dmsgHTTPServersList != nil {
+		// Legacy fallback: separate dmsghttp-config.json (custom deployments).
+		dmsgConf := &dmsgHTTPServersList.Prod
+		if isTestEnv {
+			dmsgConf = &dmsgHTTPServersList.Test
 		}
+		conf.Dmsg.Servers = dmsgConf.DMSGServers
+		conf.Dmsg.Discovery = dmsgConf.DMSGDiscovery
+		conf.Transport.AddressResolver = dmsgConf.AddressResolver
+		conf.Transport.Discovery = dmsgConf.TransportDiscovery
+		conf.Routing.RouteFinder = dmsgConf.RouteFinder
+		conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
 	}
 
 	// Configure public visor

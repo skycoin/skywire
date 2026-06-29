@@ -191,6 +191,39 @@ type Services struct {
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`
 }
 
+// BackfillClearnetFromDmsg copies each *_dmsg deployment-service URL into its
+// historically-clearnet sibling field when that field is empty. services-config.json
+// no longer carries plain-HTTP deployment URLs (only geoip — the one allowed clearnet
+// deployment endpoint, since dmsg can't preserve the client IP a geoip lookup needs),
+// so the HTTP-named fields would otherwise be empty. In a dmsg-only deployment the
+// correct value for them IS the dmsg:// URL, so every existing consumer of the
+// HTTP-named fields keeps working unchanged — getHTTPClient builds a dmsghttp client
+// for the dmsg:// scheme. The single source of truth stays services-config.json; this
+// derives, it does not hardcode. GeoIP is deliberately left untouched.
+func (s *Services) BackfillClearnetFromDmsg() {
+	if s.DmsgDiscovery == "" {
+		s.DmsgDiscovery = s.DmsgDiscoveryDmsg
+	}
+	if s.TransportDiscovery == "" {
+		s.TransportDiscovery = s.TransportDiscoveryDmsg
+	}
+	if s.AddressResolver == "" {
+		s.AddressResolver = s.AddressResolverDmsg
+	}
+	if s.RouteFinder == "" {
+		s.RouteFinder = s.RouteFinderDmsg
+	}
+	if s.UptimeTracker == "" {
+		s.UptimeTracker = s.UptimeTrackerDmsg
+	}
+	if s.ServiceDiscovery == "" {
+		s.ServiceDiscovery = s.ServiceDiscoveryDmsg
+	}
+	if s.RewardSystem == "" {
+		s.RewardSystem = s.RewardSystemDmsg
+	}
+}
+
 // Conf is the configuration URL for the deployment which may be fetched on `skywire cli config gen`
 type Conf struct {
 	Conf string `json:"conf,omitempty"`
