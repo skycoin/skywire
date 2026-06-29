@@ -113,6 +113,43 @@ func StartDmsgSeeded(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	// needing the entry registered). Funneling through the shared helper keeps the
 	// two visors from drifting on the ordering again.
 	beforeServe := func(c *dmsg.Client) error {
+		// Seed the deployment-service (and discovery) client entries into the
+		// PERMANENT entry cache so they survive the discovery upgrade below.
+		//
+		// These services are dmsg DIRECT clients — they never publish to the
+		// dmsg-discovery. The `entries` above are installed only in the direct
+		// disc, which upgradeDiscovery then swaps for the real dmsg-discovery; a
+		// subsequent getClientEntryCached lookup for e.g. service-discovery then
+		// goes to the real discovery and 404s ("entry is not found in discovery"),
+		// so DialStream fails. That left the wasm-visor unable to reach
+		// SD/TPD/UT/AR/RF — empty network-view / services-health / uptime, broken
+		// multihop route-finder POST — while a native visor seeds the same entries
+		// permanently via seedDmsgServiceEntries (init_dmsg.go) and works.
+		// getClientEntryCached checks this permanent cache BEFORE any discovery
+		// call, so the seed short-circuits the lookup; the listed delegated servers
+		// are the seed servers (which the services are also connected to), and a
+		// Phase-2 mesh forward covers the case where the live session set drifts.
+		seed := func(spk cipher.PubKey) {
+			if spk.Null() {
+				return
+			}
+			c.SeedEntryCache(spk, &disc.Entry{
+				Version: "0.0.1",
+				Static:  spk,
+				Client:  &disc.Client{DelegatedServers: seedServerPKs},
+			})
+		}
+		for _, spk := range servicePKs {
+			seed(spk)
+		}
+		if discDmsgAddr != "" {
+			if discPKHex := dmsg.ExtractPKFromDmsgAddr(discDmsgAddr); discPKHex != "" {
+				var discPK cipher.PubKey
+				if err := discPK.UnmarshalText([]byte(discPKHex)); err == nil {
+					seed(discPK)
+				}
+			}
+		}
 		if discDmsgAddr == "" {
 			return nil
 		}

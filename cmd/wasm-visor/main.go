@@ -285,16 +285,27 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		return pk, errors.New("no dmsg seed servers (embedded set empty and no seedPk/seedWs provided)")
 	}
 	vlog(fmt.Sprintf("dmsg: connecting (%d WS seed servers)…", len(seeds)))
-	// Preload the deployment's non-registering SERVICE clients (route-finder, setup
-	// nodes, transport-discovery) delegated to the seed servers — they never publish
-	// to the dmsg-discovery, so without this a multihop DialRoutes (route-finder POST)
-	// 404s. dmsgURLPK errors are non-fatal here (a null PK is skipped downstream).
+	// Preload ALL the deployment's non-registering SERVICE clients delegated to the
+	// seed servers — they're dmsg DIRECT clients and never publish to the
+	// dmsg-discovery, so without this a DialStream to them 404s ("entry is not found
+	// in discovery"). This MUST cover the same set the native visor seeds via
+	// dmsgServicePKs() (init_dmsg.go) — dmsgd, tpd, ar, rf, sd, conf, ut — or the two
+	// visors diverge: omitting sd/ar/ut here left the wasm-visor's network-view /
+	// services-health / uptime aggregation empty (DialStream to the SD 404'd) while
+	// the native visor worked. dmsgURLPK errors are non-fatal (a null PK is skipped).
 	var servicePKs []cipher.PubKey
-	if rfPK, e := dmsgURLPK(svc.RouteFinderDmsg); e == nil {
-		servicePKs = append(servicePKs, rfPK)
-	}
-	if tpdSvcPK, e := dmsgURLPK(svc.TransportDiscoveryDmsg); e == nil {
-		servicePKs = append(servicePKs, tpdSvcPK)
+	for _, u := range []string{
+		svc.DmsgDiscoveryDmsg,
+		svc.TransportDiscoveryDmsg,
+		svc.AddressResolverDmsg,
+		svc.RouteFinderDmsg,
+		svc.ServiceDiscoveryDmsg,
+		svc.ConfDmsg,
+		svc.UptimeTrackerDmsg,
+	} {
+		if spk, e := dmsgURLPK(u); e == nil {
+			servicePKs = append(servicePKs, spk)
+		}
 	}
 	servicePKs = append(servicePKs, svc.RouteSetupNodes...)
 	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, seeds, discDmsgAddr, true, servicePKs...)
