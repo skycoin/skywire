@@ -40,16 +40,26 @@ if not exist "%SKYENV%" (
     "%~dp0skywire.exe" cli config gen -pqQ "%SKYENV%"
 )
 
-:: First install (no skywire-config.json yet) — generate a fresh config. cli
-:: reads %SKYENV% for PKGENV / HYPERVISORPKS / DISABLEPUBLICAUTOCONN / etc.
+:: (Re)generate the visor config through the SINGLE entry point — `skywire
+:: autoconfig` — never `cli config gen` directly (matches the Arch/AUR
+:: post_install). autoconfig runs `config gen -r` (regenerate, retaining the
+:: existing secret key + hypervisor PK list) and reads %SKYENV% for PKGENV /
+:: HYPERVISORPKS / DISABLEPUBLICAUTOCONN / etc. PKGENV=true (written into the
+:: template above) resolves the config to C:\Program Files\Skywire\
+:: skywire-config.json — the exact path the shortcut launches with. It calls its
+:: own binary by absolute path internally, so it works here even though the
+:: install dir is not yet on PATH at MSI-install time. --no-vpnserver persists
+:: VPNSERVER=false (replaces the old `--disableapps vpn-server`). Deployment
+:: service URLs come from the embedded dmsg-only services config (the single
+:: source of truth), so no -S / -D files are needed.
+::
+:: Run on first install (no config yet) and on upgrade (the new.update marker the
+:: MSI ships). A plain launch with an existing config + consumed marker skips
+:: both, so starting the visor stays cheap.
 if not exist "skywire-config.json" (
-    "%~dp0skywire.exe" cli config gen -irpw --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info
+    "%~dp0skywire.exe" autoconfig --no-vpnserver
 )
-
-:: Upgrade marker (new.update shipped in the MSI) — regenerate with -r/-x so
-:: the existing secret key and hypervisor PK list are preserved across the
-:: update (mirrors the deb/arch post_install regen). Then consume the marker.
 if exist "new.update" (
-    "%~dp0skywire.exe" cli config gen -irpwx --disableapps vpn-server -S services-config.json -D dmsghttp-config.json --loglvl info
+    "%~dp0skywire.exe" autoconfig --no-vpnserver
     del new.update >nul 2>&1
 )

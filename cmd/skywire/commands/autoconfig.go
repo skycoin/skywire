@@ -63,6 +63,19 @@ const (
 // would be clobbered by the next package upgrade.
 const systemdDropIn = "/etc/systemd/system/skywire.service.d/skywire-user.conf"
 
+// skywireBin returns the absolute path to the running skywire binary so the
+// sub-invocations below (config gen, reward, -v) target THIS binary rather than
+// a bare "skywire" looked up on PATH. That matters on Windows: the MSI runs
+// autoconfig as a deferred CustomAction at install time, when the install dir is
+// not yet on PATH, so a bare "skywire" would not resolve. Falls back to "skywire"
+// only if os.Executable() fails (e.g. an exotic platform), preserving old behavior.
+func skywireBin() string {
+	if exe, err := os.Executable(); err == nil && exe != "" {
+		return exe
+	}
+	return "skywire"
+}
+
 // autoconfigVals holds the runtime values of the autoconfig flags.
 // Lives at package level so the Run function can read them; the
 // pkg/skywireconfig/autoconfigcmd factory wires the bindings.
@@ -270,7 +283,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		msg3(fmt.Sprintf("Updated %s%s%s: %s", colorPurple, target, colorReset, strings.Join(editedKeys, " ")))
 	}
 
-	versionOut, err := exec.Command("skywire", "-v").Output()
+	versionOut, err := exec.Command(skywireBin(), "-v").Output()
 	if err == nil {
 		version := strings.TrimSpace(string(versionOut))
 		if !strings.Contains(version, "unknown") {
@@ -417,7 +430,7 @@ func autoconfigRun(cmd *cobra.Command, args []string) {
 		msg2(fmt.Sprintf("Remote Hypervisor Public Key:\n%s%s%s", colorPurple, strings.TrimSpace(hvPKs), colorReset))
 	}
 
-	rewardOut, err := exec.Command("skywire", "cli", "reward", "-r").Output() //nolint:gosec
+	rewardOut, err := exec.Command(skywireBin(), "cli", "reward", "-r").Output() //nolint:gosec
 	if err == nil && len(rewardOut) > 0 {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
 	}
@@ -564,7 +577,7 @@ func generateConfig(r resolvedConfig, hvArg string) error {
 	// printableArgs above show the same command without -w to paste
 	// into a terminal.
 	var stderrBuf bytes.Buffer
-	cmd := exec.Command("skywire", args...) //nolint:gosec
+	cmd := exec.Command(skywireBin(), args...) //nolint:gosec
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = &stderrBuf
 	cmd.Env = os.Environ()
@@ -664,7 +677,7 @@ func restartOrPrompt(r resolvedConfig) {
 }
 
 func printWelcome(pubkey string, isHypervisor bool) {
-	rewardOut, err := exec.Command("skywire", "cli", "reward", "-r").Output()
+	rewardOut, err := exec.Command(skywireBin(), "cli", "reward", "-r").Output()
 	if err == nil && len(rewardOut) > 0 {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
 		msg2(fmt.Sprintf("reward metrics:\n%shttps://theskywirenetwork.net%s", colorBlue, colorReset))
