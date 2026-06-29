@@ -17,6 +17,41 @@
 // All fetching goes through an injected fetchDmsg(pkHost, method, path, body) that
 // returns {status, body:Uint8Array, headers} — i.e. globalThis.skywireVisor.fetchDmsg.
 (function () {
+  // --- log capture ----------------------------------------------------------
+  // Mirror console output into a ring buffer so the in-page LOG WINDOW can show
+  // the visor's live log (a wasm visor logs to console) WITHOUT browser devtools
+  // — the "logging accessibility" gap, especially in standalone PWA mode. Wrapped
+  // once (guarded); the originals still fire, so devtools is unaffected. Exposed
+  // as window.skywireLog for other scripts / the console.
+  var LOGBUF = window.skywireLog || (function () {
+    var MAX = 5000, buf = [], subs = [];
+    function fmt(a) {
+      if (typeof a === "string") return a;
+      try { return JSON.stringify(a); } catch (_) { return String(a); }
+    }
+    return {
+      all: function () { return buf; },
+      clear: function () { buf.length = 0; },
+      subscribe: function (fn) { subs.push(fn); return function () { var i = subs.indexOf(fn); if (i >= 0) subs.splice(i, 1); }; },
+      emit: function (level, args) {
+        var text; try { text = Array.prototype.map.call(args, fmt).join(" "); } catch (_) { text = "[unprintable]"; }
+        var line = { t: Date.now(), level: level, text: text };
+        buf.push(line); if (buf.length > MAX) buf.splice(0, buf.length - MAX);
+        for (var i = 0; i < subs.length; i++) { try { subs[i](line); } catch (_) {} }
+      }
+    };
+  })();
+  if (!window.__skywireLogCaptured) {
+    window.__skywireLogCaptured = true;
+    window.skywireLog = LOGBUF;
+    ["log", "info", "warn", "error", "debug"].forEach(function (lvl) {
+      var orig = console[lvl] ? console[lvl].bind(console) : function () {};
+      console[lvl] = function () { LOGBUF.emit(lvl, arguments); orig.apply(null, arguments); };
+    });
+    window.addEventListener("error", function (e) { LOGBUF.emit("error", ["[window.error] " + (e.message || e.error || e)]); });
+    window.addEventListener("unhandledrejection", function (e) { LOGBUF.emit("error", ["[unhandledrejection] " + ((e.reason && (e.reason.stack || e.reason.message)) || e.reason)]); });
+  }
+
   function sameSite(u) {
     return !!u && u.charAt(0) !== "#" && !/^https?:\/\//i.test(u) && !/^\/\//.test(u) && !/^[a-z][a-z0-9+.-]*:/i.test(u);
   }
@@ -686,6 +721,64 @@
   // Backward-compatible surface: returns { panel, browser, toggle, openWindow }
   // where toggle() shows/hides the desktop (opening a first window on demand), so
   // the existing skynet launcher button keeps working unchanged.
+  // createLogWindow opens a draggable window showing the live visor log (the
+  // captured console ring buffer) with a level filter + text filter — the
+  // operator can watch what the visor is doing (incl. the upstream-proxy/browse
+  // activity) without browser devtools or a shell. One per panel; toggled from
+  // the taskbar.
+  function createLogWindow(doc) {
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:fixed;top:48px;right:40px;width:46vw;height:60vh;min-width:280px;min-height:160px;" +
+      "max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;border:1px solid #2a2342;" +
+      "border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483001;display:flex;flex-direction:column;overflow:hidden";
+    wrap.innerHTML =
+      '<div class="lw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
+      '<b style="color:#9d7cff;cursor:move;flex:1">visor log</b>' +
+      '<select id="lw-level" title="min level" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342"><option value="all">all</option><option value="info">info+</option><option value="warn">warn+</option><option value="error">error</option></select>' +
+      '<input id="lw-filter" placeholder="filter" size="8" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
+      '<button id="lw-follow" title="auto-scroll" style="cursor:pointer">▼</button>' +
+      '<button id="lw-clear" title="clear" style="cursor:pointer">clear</button>' +
+      '<button id="lw-x" title="close" style="cursor:pointer">×</button></div>' +
+      '<pre id="lw-body" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>';
+    (doc.body || doc.documentElement).appendChild(wrap);
+    function $(id) { return wrap.querySelector("#" + id); }
+    var body = $("lw-body"), follow = true, minLevel = "all", filter = "";
+    var rank = { debug: 0, log: 1, info: 1, warn: 2, error: 3 };
+    var minRank = { all: 0, info: 1, warn: 2, error: 3 };
+    var color = { error: "#f7768e", warn: "#e0af68", info: "#7dcfff", log: "#cdd2da", debug: "#9aa0a6" };
+    function show(line) {
+      if ((rank[line.level] || 1) < minRank[minLevel]) return false;
+      if (filter && line.text.toLowerCase().indexOf(filter) < 0) return false;
+      return true;
+    }
+    function append(line) {
+      if (!show(line)) return;
+      var d = doc.createElement("div");
+      d.style.color = color[line.level] || "#cdd2da";
+      d.textContent = new Date(line.t).toTimeString().slice(0, 8) + " " + line.text;
+      body.appendChild(d);
+      if (body.childNodes.length > 6000) body.removeChild(body.firstChild);
+      if (follow) body.scrollTop = body.scrollHeight;
+    }
+    function rerender() { body.textContent = ""; (window.skywireLog ? window.skywireLog.all() : []).forEach(append); }
+    rerender();
+    var unsub = window.skywireLog ? window.skywireLog.subscribe(append) : function () {};
+    $("lw-level").onchange = function () { minLevel = this.value; rerender(); };
+    $("lw-filter").oninput = function () { filter = this.value.trim().toLowerCase(); rerender(); };
+    $("lw-follow").onclick = function () { follow = !follow; this.style.opacity = follow ? "1" : ".5"; if (follow) body.scrollTop = body.scrollHeight; };
+    $("lw-clear").onclick = function () { if (window.skywireLog) window.skywireLog.clear(); body.textContent = ""; };
+    var winObj = { el: wrap, close: function () { unsub(); if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
+    $("lw-x").onclick = winObj.close;
+    (function () {
+      var ox, oy, sx, sy, h = wrap.querySelector(".lw-bar b");
+      h.style.touchAction = "none";
+      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.right = "auto"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
+      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
+      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
+    })();
+    return winObj;
+  }
+
   function mountPanel(doc, opts) {
     var zTop = 2147483000;
     var wins = [];
@@ -701,6 +794,7 @@
       '<b style="color:#9d7cff">skynet</b>' +
       '<button id="tb-new" title="new browse window" style="cursor:pointer">+ window</button>' +
       '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0"></span>' +
+      '<button id="tb-logs" title="live visor log" style="cursor:pointer">logs</button>' +
       '<button id="tb-id" title="export / import this visor\'s identity" style="cursor:pointer">identity</button>' +
       '<button id="tb-hide" title="hide skynet (windows stay open)" style="cursor:pointer">hide</button>';
     (doc.body || doc.documentElement).appendChild(bar);
@@ -740,6 +834,13 @@
     bq("tb-new").onclick = function () { var w = openWindow(); w.landHome(); };
     bq("tb-hide").onclick = function () { setDesktop(false); };
     bq("tb-id").onclick = function () { openIdentityDialog(doc, opts); };
+    var logWin = null;
+    bq("tb-logs").onclick = function () {
+      if (logWin) { logWin.close(); logWin = null; return; }
+      logWin = createLogWindow(doc);
+      var orig = logWin.close;
+      logWin.close = function () { orig(); logWin = null; };
+    };
 
     function setDesktop(on) {
       visible = on;
