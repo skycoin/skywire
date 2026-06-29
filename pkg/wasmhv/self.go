@@ -20,6 +20,13 @@ type SelfProvider interface {
 	// Pre-marshaled so pkg/wasmhv needn't import pkg/routing; nil/empty JSON when
 	// the edge holds no rules.
 	SelfRoutes() []byte
+	// SelfNetworkView returns the SD/TPD/UT-aggregated network table as
+	// pre-marshaled JSON (the native /api/network-view shape: {entries,fetched_at}).
+	// Pre-marshaled so pkg/wasmhv needn't import the visor aggregation; nil when the
+	// tab can't reach the deployment services. Without it the wasm core 404s
+	// /api/network-view (which the native HV serves), leaving the network-view table
+	// + visualizer empty in the browser.
+	SelfNetworkView() []byte
 }
 
 // SetSelf attaches the local visor's hypervisor view. Pass nil to detach.
