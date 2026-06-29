@@ -30,6 +30,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -97,16 +98,31 @@ func (h *hostRewriteConn) pump() {
 	defer h.backend.Close() //nolint:errcheck,gosec
 
 	r := bufio.NewReader(h.pipeR)
+	sawRequest := false
 	for {
 		req, err := http.ReadRequest(r)
 		if err != nil {
-			// EOF or malformed input — we can't recover the stream.
-			// Closing the backend conn lets the response pump on
-			// the Read side notice and unblock. We don't have a
-			// logger here, so any non-EOF parse error fails silently;
-			// the connection close conveys the failure to the peer.
+			// EOF, or a continuation the HTTP parser can't read. Once at
+			// least one valid request has been forwarded, the stream is
+			// known-good HTTP/1.1, so an unparseable tail is almost always a
+			// protocol switch we didn't model — a non-standard upgrade, or
+			// bytes the backend negotiated out of band — rather than garbage.
+			// Splice the remainder verbatim instead of dropping the
+			// connection, so the proxy keeps working regardless of what the
+			// site does after a normal request. For a clean EOF this copies
+			// nothing. (Standard upgrades are caught below BEFORE any raw byte
+			// reaches the parser, so this is the rare best-effort tail: the few
+			// bytes ReadRequest consumed while failing can't be replayed, but a
+			// hard drop would lose everything.) On the FIRST request we still
+			// close: an unparseable opener means the stream was never plaintext
+			// HTTP (a mis-gate), and forwarding a partial read would only
+			// confuse the backend. The Read side notices the close and unblocks.
+			if sawRequest {
+				_, _ = io.Copy(h.backend, r) //nolint:errcheck
+			}
 			return
 		}
+		sawRequest = true
 
 		// Rewrite Host. http.Request.Write uses req.Host (the canonical
 		// field) for the wire-format Host: header; also clear any
@@ -129,7 +145,41 @@ func (h *hostRewriteConn) pump() {
 		if err := req.Write(h.backend); err != nil {
 			return
 		}
+
+		// Protocol upgrade (WebSocket, h2c, etc.): the wire is no longer
+		// HTTP-framed after this request. The browser will start sending
+		// raw upgrade-protocol bytes (e.g. WebSocket data frames) as soon
+		// as the backend's 101 lands; attempting to http.ReadRequest those
+		// would fail, the pump would exit, and the connection would tear
+		// down right after the handshake (the visible symptom: client gets
+		// close code 1006 immediately after open). Switch to verbatim
+		// splice for the rest of this connection's lifetime. The bufio
+		// reader carries through any bytes it had buffered past the
+		// request headers, so no data is dropped.
+		if isUpgradeRequest(req) {
+			_, _ = io.Copy(h.backend, r) //nolint:errcheck
+			return
+		}
 	}
+}
+
+// isUpgradeRequest reports whether req is asking to switch protocols
+// (RFC 9110 §7.8). Both Connection: upgrade (token, case-insensitive)
+// AND a non-empty Upgrade header are required. The protocol token
+// itself (websocket / h2c / ...) is not restricted — any non-empty
+// value means the next byte on the wire is no longer HTTP.
+func isUpgradeRequest(req *http.Request) bool {
+	if req.Header.Get("Upgrade") == "" {
+		return false
+	}
+	for _, tok := range req.Header.Values("Connection") {
+		for _, part := range strings.Split(tok, ",") {
+			if strings.EqualFold(strings.TrimSpace(part), "upgrade") {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // Write accepts browser-side plaintext (post-TLS-MITM) and feeds it
