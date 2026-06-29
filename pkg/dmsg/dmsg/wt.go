@@ -35,6 +35,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"runtime"
 
 	"github.com/hashicorp/yamux"
 	"github.com/quic-go/quic-go"
@@ -143,6 +144,11 @@ func (s *Server) handleWTSession(sess *webtransport.Session) {
 // path is primarily for tests and non-browser WT clients — the production
 // browser client dials WT directly in JS over the same wire protocol.
 func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+	if runtime.GOOS == "windows" {
+		// quic-go's UDP I/O crashes on Go 1.26's windows/amd64 runtime; error out
+		// so dialSession falls back to TCP/WS. Temporary — see errQUICDisabledWindows.
+		return ClientSession{}, errQUICDisabledWindows
+	}
 	wantHash, err := hex.DecodeString(entry.Server.CertHashWT)
 	if err != nil || len(wantHash) != sha256.Size {
 		return ClientSession{}, fmt.Errorf("wt: invalid cert hash %q", entry.Server.CertHashWT)

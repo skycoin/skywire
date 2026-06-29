@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"runtime"
 	"time"
 
 	"github.com/quic-go/quic-go"
@@ -121,7 +122,17 @@ func makeServerSessionQUIC(m metrics.Metrics, entity *EntityCommon, qc *quic.Con
 // PK and encrypts the hop; the session runs over native QUIC streams with no
 // Noise handshake. EnableDatagrams so the session can later expose an unreliable
 // datagram channel.
+// errQUICDisabledWindows is returned by the dmsg QUIC/WebTransport client dials
+// on Windows, where quic-go's UDP I/O crashes the process on Go 1.26's
+// windows/amd64 runtime. Returning an error makes dialSession fall back to the
+// TCP/WS path (same contract as the TinyGo stub). Temporary — drop once a fixed
+// Go 1.26.x ships.
+var errQUICDisabledWindows = errors.New("dmsg: QUIC/WebTransport disabled on Windows (Go 1.26 runtime defect); falling back to TCP/WS")
+
 func (ce *Client) dialSessionQUIC(ctx context.Context, entry *disc.Entry) (ClientSession, error) {
+	if runtime.GOOS == "windows" {
+		return ClientSession{}, errQUICDisabledWindows
+	}
 	udpAddr, err := net.ResolveUDPAddr("udp", entry.Server.AddressUDP)
 	if err != nil {
 		return ClientSession{}, fmt.Errorf("quic: resolve %q: %w", entry.Server.AddressUDP, err)
