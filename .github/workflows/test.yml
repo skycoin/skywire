@@ -102,12 +102,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          # Stay on the stable 1.25 line on Windows: Go 1.26.1 has a
-          # windows/amd64 runtime defect (internal/poll.(*FD).execIO deferred
-          # cleanup) that crashes under quic-go's UDP I/O. Pinning here lets the
-          # QUIC/WebTransport tests run instead of being skipped. Revisit once a
-          # fixed 1.26.x is out.
-          go-version: '1.25.x'
+          go-version: '1.26.1'
           cache: true
           cache-dependency-path: go.sum
 

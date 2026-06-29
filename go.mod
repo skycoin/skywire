@@ -1,11 +1,6 @@
 module github.com/skycoin/skywire
 
-// Kept on the 1.25 line (not 1.26) because Go 1.26.1 has a windows/amd64
-// runtime defect in internal/poll.(*FD).execIO deferred cleanup that crashes
-// (access violation 0xc0000005) under quic-go's concurrent UDP I/O — see the
-// Windows CI job pinned to 1.25.x and nix/dmsg/transport QUIC tests. Linux and
-// macOS toolchains may still be newer; this directive only sets the floor.
-go 1.25.0
+go 1.26.1
 
 require (
 	fyne.io/systray v1.12.2

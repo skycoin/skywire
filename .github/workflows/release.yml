@@ -285,12 +285,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v6
         with:
-          # Build the shipped Windows binaries with the stable 1.25 line, not
-          # GO_VERSION (1.26.1): Go 1.26.1 has a windows/amd64 runtime defect in
-          # internal/poll.(*FD).execIO that crashes under quic-go's UDP I/O, so
-          # a 1.26.1-built visor could fault doing QUIC. Revisit once a fixed
-          # 1.26.x ships. Other platforms keep GO_VERSION.
-          go-version: '1.25.x'
+          go-version: ${{ env.GO_VERSION }}
           cache: false
 
       - name: Install CGO Requirements
