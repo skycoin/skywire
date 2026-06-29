@@ -299,7 +299,10 @@ func passwordGate(h http.Handler, password string) http.Handler {
 			// crafted request from forcing unbounded form parsing (gosec G120).
 			r.Body = http.MaxBytesReader(w, r.Body, 4096)
 			if r.ParseForm() == nil && tok(r.FormValue("p")) == token {
-				http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: serveTLS, MaxAge: 7 * 24 * 3600})
+				// Secure is conditional (serveTLS): the gate also serves on
+				// plain-http localhost, where forcing Secure would drop the
+				// cookie. HttpOnly + SameSite=Strict are always set.
+				http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: serveTLS, MaxAge: 7 * 24 * 3600}) //nolint:gosec
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
