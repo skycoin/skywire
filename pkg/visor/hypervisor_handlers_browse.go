@@ -127,7 +127,12 @@ const nativeBrowseLauncherJS = `(function () {
     function fetchClearnet(exitPK, method, url, body) {
       return apiPost("/api/browse/clearnet", { exit_pk: exitPK, method: method || "GET", url: url, body: body != null ? b64e(String(body)) : null }).then(adapt);
     }
-    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; } });
+    // directViaBackend: when the browse upstream-proxy is set to this visor's own
+    // PK, the native visor egresses clearnet directly (http.Get) and we inline the
+    // result — so it isn't blocked by the target site's X-Frame-Options the way a
+    // browser-direct iframe load is. (A pure wasm tab leaves this unset and uses a
+    // direct iframe load, since it can't read cross-origin server-side.)
+    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; }, directViaBackend: true });
     var btn = document.createElement("button");
     btn.textContent = "skynet"; btn.title = "browse skynet/dmsg sites + clearnet (via proxy)";
     btn.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";

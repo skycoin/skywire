@@ -277,7 +277,15 @@
     function clearnetPolicy() {
       var up = upstream();
       if (!up) return { mode: "block" };
-      if (up === localPK()) return { mode: "direct" };
+      if (up === localPK()) {
+        // Local-visor upstream. With a backend that can egress clearnet (the native
+        // HV UI, where the visor http.Gets directly), route through it as a
+        // proxy-with-self-exit so the visor fetches and we INLINE the result — which
+        // (unlike a browser-direct iframe load) isn't blocked by the target site's
+        // X-Frame-Options. Without such a backend (a pure browser/wasm tab, which
+        // can't read cross-origin), fall back to a direct iframe load.
+        return opts.directViaBackend ? { mode: "proxy", exit: up } : { mode: "direct" };
+      }
       return { mode: "proxy", exit: up };
     }
 
@@ -461,7 +469,7 @@
       // Thread the clearnet + self-PK providers from the panel opts so the engine
       // is host-agnostic: the wasm visor passes none (they fall back to the
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
-      fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK,
+      fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend,
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
       setAddr: function (u) { $("sb-addr").value = u; if (hooks.onTitle) { var t = u.replace(/^https?:\/\//, "").slice(0, 16); hooks.onTitle(t || "site"); } },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
