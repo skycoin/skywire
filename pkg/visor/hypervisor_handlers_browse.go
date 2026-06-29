@@ -139,7 +139,12 @@ const nativeBrowseLauncherJS = `(function () {
       return fetch(p2, { method: method, credentials: "same-origin", headers: body != null ? { "Content-Type": "application/json" } : {}, body: body != null ? body : undefined })
         .then(function (r) { return r.text().then(function (t) { return { status: r.status, body: t }; }); });
     }
-    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; }, directViaBackend: true, api: api });
+    // ptyURL points the terminal window at this visor's dmsgpty endpoint
+    // (/pty/<pk>, the same one the dashboard's Terminal tab iframes). The wasm
+    // visor leaves this unset — it has no host shell — so the term button is
+    // native-only.
+    var ptyURL = localPK ? ("/pty/" + localPK) : "";
+    var p = self.SkywireBrowse.mountPanel(document, { fetchDmsg: fetchDmsg, fetchClearnet: fetchClearnet, selfPK: function () { return localPK; }, directViaBackend: true, api: api, ptyURL: ptyURL });
     // Stream the NATIVE visor's server-side log (/api/log SSE) into the log
     // window's buffer. The wasm visor logs to the browser console (captured
     // directly); the native visor's log lives server-side, so without this the

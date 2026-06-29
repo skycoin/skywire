@@ -848,6 +848,42 @@
     return winObj;
   }
 
+  // createTerminalWindow opens a real dmsgpty terminal in a draggable window: an
+  // iframe to opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty
+  // WebSocket). Native-only — the wasm visor has no host shell and sets no
+  // ptyURL, so the taskbar button isn't shown there. The iframe is built once and
+  // kept alive while the window is open so the pty session survives drags/moves
+  // (detaching the iframe DOM node would reload it and kill the session).
+  function createTerminalWindow(doc, opts) {
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:fixed;top:60px;left:80px;width:54vw;height:64vh;min-width:320px;min-height:200px;" +
+      "max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;border:1px solid #2a2342;" +
+      "border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483002;display:flex;flex-direction:column;overflow:hidden";
+    wrap.innerHTML =
+      '<div class="tw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
+      '<b style="color:#9d7cff;cursor:move;flex:1">terminal</b>' +
+      '<button id="tw-reload" title="reload (new pty session)" style="cursor:pointer">⟳</button>' +
+      '<button id="tw-x" title="close" style="cursor:pointer">×</button></div>' +
+      '<iframe id="tw-frame" style="flex:1;border:0;width:100%;background:#0e0c14"></iframe>';
+    (doc.body || doc.documentElement).appendChild(wrap);
+    function $(id) { return wrap.querySelector("#" + id); }
+    var frame = $("tw-frame");
+    frame.src = opts.ptyURL;
+    $("tw-reload").onclick = function () { frame.src = opts.ptyURL; };
+    var winObj = { el: wrap, close: function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
+    $("tw-x").onclick = winObj.close;
+    (function () {
+      var ox, oy, sx, sy, h = wrap.querySelector(".tw-bar b");
+      h.style.touchAction = "none";
+      // Disable iframe pointer events during a drag so the moving cursor keeps
+      // hitting the window, not the terminal inside it.
+      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
+      function pu() { frame.style.pointerEvents = ""; doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
+      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; frame.style.pointerEvents = "none"; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
+    })();
+    return winObj;
+  }
+
   function mountPanel(doc, opts) {
     var zTop = 2147483000;
     var wins = [];
@@ -865,6 +901,7 @@
       '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0"></span>' +
       '<button id="tb-logs" title="live visor log" style="cursor:pointer">logs</button>' +
       '<button id="tb-cli" title="visor cli (RPC repl)" style="cursor:pointer">cli</button>' +
+      (opts.ptyURL ? '<button id="tb-term" title="dmsgpty terminal" style="cursor:pointer">term</button>' : "") +
       '<button id="tb-id" title="export / import this visor\'s identity" style="cursor:pointer">identity</button>' +
       '<button id="tb-hide" title="hide skynet (windows stay open)" style="cursor:pointer">hide</button>';
     (doc.body || doc.documentElement).appendChild(bar);
@@ -918,6 +955,15 @@
       var origc = cliWin.close;
       cliWin.close = function () { origc(); cliWin = null; };
     };
+    var termWin = null;
+    if (opts.ptyURL && bq("tb-term")) {
+      bq("tb-term").onclick = function () {
+        if (termWin) { termWin.close(); termWin = null; return; }
+        termWin = createTerminalWindow(doc, opts);
+        var origt = termWin.close;
+        termWin.close = function () { origt(); termWin = null; };
+      };
+    }
 
     function setDesktop(on) {
       visible = on;
