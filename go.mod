@@ -1,6 +1,6 @@
 module github.com/skycoin/skywire
 
-go 1.26.1
+go 1.26.2
 
 require (
 	fyne.io/systray v1.12.2
