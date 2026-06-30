@@ -88,6 +88,12 @@ type wtClient struct {
 	// (native only); a browser/TinyGo client never serves, so these stay empty.
 	advertisedURL      string
 	advertisedCertHash string
+
+	// sharedQUIC, when set, is the *sharedQUICMux the WT server registers its "h3"
+	// ALPN handler on, so WT serves over the unified transport_port socket instead
+	// of its own UDP port. `any` to keep this untagged file off the quic-go graph
+	// (the assertion + use live in wt_native.go); nil → dedicated WT socket.
+	sharedQUIC any
 }
 
 // AdvertisedWT returns the WT listener's dial URL and pinned cert hash after
