@@ -87,6 +87,10 @@ var prodData = Services{
 			Address   string `json:"address"`
 			AddressWS string `json:"address_ws,omitempty"`
 		}{Address: "139.162.173.101:30083"}},
+		{Static: "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0", Server: struct {
+			Address   string `json:"address"`
+			AddressWS string `json:"address_ws,omitempty"`
+		}{Address: "143.42.59.213:30088"}},
 	},
 	DmsgDiscoveryDmsg:      "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
 	TransportDiscoveryDmsg: "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
