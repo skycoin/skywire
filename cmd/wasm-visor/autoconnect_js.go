@@ -4,10 +4,14 @@
 //
 // A browser leaf can't accept inbound transports, but it CAN dial out. To join
 // the mesh (so routes can form) it periodically fetches the public-visor list
-// from service discovery, resolves each peer's reachable IP from the address
-// resolver, and dials a WebSocket transport to that peer's WS-on-stcpr-port
-// (phase 2). WS — not WebRTC — because WS is the transport a *public* visor
-// exposes by being publicly reachable (docs/design/wasm-public-autoconnect.md).
+// from service discovery, resolves each peer's reachable endpoint from the
+// address resolver, and dials a transport. It tries the direct carriers first —
+// WS (to the peer's WS-on-stcpr-port; http pages only, since https blocks plain
+// ws:// as mixed content) and WT (QUIC on the peer's unified transport port,
+// cert-hash pinned) — then falls back to WebRTC, a NAT-traversing DataChannel
+// signalled over dmsg that reaches ANY visor when the direct carriers can't
+// (the common case on an https page or against a NAT'd peer).
+// See docs/design/wasm-public-autoconnect.md.
 //
 // Both service-discovery and address-resolver are reached with net/http-free,
 // signed HTTP-over-dmsg (the std-Go http.Client/dmsghttp path deadlocks under
@@ -197,6 +201,25 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 			} else {
 				gotAny = true
 				vlog(fmt.Sprintf("ws-autoconnect: +WT transport to %s via %s", pk.Hex()[:8], url))
+			}
+		}
+
+		// WebRTC: the universal fallback. A DataChannel signalled over dmsg, it
+		// traverses NAT (ICE/STUN) and reaches ANY visor — NAT'd or not, http or
+		// https — so it's what actually connects a browser tab when the direct
+		// carriers can't: WS is mixed-content-blocked on https, and WT only
+		// reaches peers that are both publicly UDP-reachable and on the
+		// unified-transport-port build. Heavier than a direct QUIC transport, so
+		// it's a fallback: only dialled when WS/WT didn't already form one.
+		if !gotAny {
+			dctx, dcancel := context.WithTimeout(ctx, 30*time.Second)
+			_, derr := tpM.SaveTransport(dctx, pk, types.WEBRTC, transport.LabelAutomatic)
+			dcancel()
+			if derr != nil {
+				vlog(fmt.Sprintf("ws-autoconnect: WebRTC dial %s: %v", pk.Hex()[:8], derr))
+			} else {
+				gotAny = true
+				vlog(fmt.Sprintf("ws-autoconnect: +WebRTC transport to %s", pk.Hex()[:8]))
 			}
 		}
 
