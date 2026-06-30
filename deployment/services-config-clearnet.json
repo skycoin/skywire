@@ -2,6 +2,7 @@
   "test": {
     "conf": "http://conf.skywire.dev",
     "conf_dmsg": "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
+    "wss_domain_suffix": "theskywirenetwork.net",
     "dmsg_discovery": "http://dmsgd.skywire.dev",
     "transport_discovery": "http://tpd.skywire.dev",
     "address_resolver": "http://ar.skywire.dev",
@@ -101,6 +102,7 @@
   "prod": {
     "conf": "http://conf.skywire.skycoin.com",
     "conf_dmsg": "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80",
+    "wss_domain_suffix": "theskywirenetwork.net",
     "dmsg_discovery": "http://dmsgd.skywire.skycoin.com",
     "transport_discovery": "http://tpd.skywire.skycoin.com",
     "address_resolver": "http://ar.skywire.skycoin.com",
