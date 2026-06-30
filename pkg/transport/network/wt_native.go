@@ -33,25 +33,71 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-// resolveWTViaAR resolves a peer's WebTransport endpoint + pinned cert hash from
-// the address resolver when there is no explicit table entry (a native
-// `tp add -t wt`). The WT bind stored both (BindWT), so /resolve/wt returns the
-// UDP endpoint and the SHA-256 cert hash; the URL is https://host:port/skywire.
-// ok=false when there is no AR, no WT record, or no cert hash.
-func (c *wtClient) resolveWTViaAR(ctx context.Context, rPK cipher.PubKey) (url, certHash string, ok bool) {
+// dialResolvedWT resolves rPK's WebTransport endpoint + pinned cert hash from the
+// address resolver (a native `tp add -t wt`, or autoconnect without a table
+// entry) and dials it. When the peer shares our NAT / public IP or is ourselves,
+// LAN addresses are tried FIRST so same-NAT WT doesn't depend on router
+// hairpinning (mirrors resolvedClient.dialVisor — WT had no such fallback, so two
+// visors behind one NAT could never WT to each other); then the public endpoint,
+// v6 before v4 when both are advertised. The WT bind stored endpoint + SHA-256
+// cert hash via BindWT, so /resolve/wt returns both.
+func (c *wtClient) dialResolvedWT(ctx context.Context, rPK cipher.PubKey) (net.Conn, error) {
 	ar, _ := c.ar.(addrresolver.APIClient)
 	if ar == nil {
-		return "", "", false
+		return nil, ErrWTEntryNotFound
 	}
 	vd, err := ar.Resolve(ctx, string(types.WT), rPK)
-	if err != nil || vd.CertHash == "" {
-		return "", "", false
+	if err != nil {
+		return nil, fmt.Errorf("wt: resolve PK %s: %w", rPK, err)
 	}
-	addr := canonicalAddr(vd.RemoteAddr, vd.Port)
-	if addr == "" {
-		return "", "", false
+	if vd.CertHash == "" {
+		return nil, ErrWTEntryNotFound
 	}
-	return "https://" + addr + wtPath, vd.CertHash, true
+	dialAt := func(hostport string) (net.Conn, error) {
+		url := "https://" + hostport + wtPath
+		c.log.Debugf("Dialing WT %v @ %s", rPK, url)
+		return wtDial(ctx, url, vd.CertHash)
+	}
+
+	// Same-NAT / self / local: try LAN addresses first to avoid NAT hairpinning.
+	remotePublicIP := vd.RemoteAddr
+	if host, _, e := net.SplitHostPort(remotePublicIP); e == nil {
+		remotePublicIP = host
+	}
+	isSelf := rPK == c.lPK
+	samePublicIP := false
+	if lip := ar.LocalPublicIP(); lip != "" && remotePublicIP != "" {
+		samePublicIP = lip == remotePublicIP
+	}
+	if vd.IsLocal || isSelf || samePublicIP {
+		for _, host := range vd.Addresses {
+			if !isSelf && (host == "127.0.0.1" || host == "::1") {
+				continue
+			}
+			if host == remotePublicIP {
+				continue // the public IP is the fallback below
+			}
+			if conn, derr := dialAt(net.JoinHostPort(host, vd.Port)); derr == nil {
+				return conn, nil
+			}
+		}
+	}
+
+	// Public endpoint(s): prefer v6 when both are advertised.
+	addrV6 := canonicalAddr(vd.RemoteAddrV6, vd.Port)
+	addrV4 := canonicalAddr(vd.RemoteAddr, vd.Port)
+	if addrV6 != "" {
+		if conn, derr := dialAt(addrV6); derr == nil {
+			return conn, nil
+		}
+		if addrV4 == "" {
+			return nil, fmt.Errorf("wt: v6 endpoint %s unreachable", addrV6)
+		}
+	}
+	if addrV4 != "" {
+		return dialAt(addrV4)
+	}
+	return nil, fmt.Errorf("wt: no dialable endpoint for %s", rPK)
 }
 
 // wtPath is the HTTP/3 path the WebTransport endpoint is served on; the
@@ -138,6 +184,18 @@ func (c *wtClient) Start() error {
 }
 
 func (c *wtClient) serve() {
+	// Shared transport_port: register the "h3" ALPN on the unified QUIC mux so WT
+	// rides the same forwardable UDP socket as squicr instead of its own port.
+	if m, ok := c.sharedQUIC.(*sharedQUICMux); ok && m != nil {
+		lis, err := c.serveShared(m)
+		if err != nil {
+			c.log.Errorf("WT shared serve failed: %v", err)
+			return
+		}
+		c.acceptTransports(lis)
+		return
+	}
+
 	lis, err := newWTListener(c.listenAddr)
 	if err != nil {
 		c.log.Errorf("Failed to start WT listener on %q: %v", c.listenAddr, err)
@@ -192,6 +250,76 @@ func (c *wtClient) registerWT(ar addrresolver.APIClient, port, certHash string) 
 			}
 		}
 	}
+}
+
+// serveShared registers WT's "h3" ALPN handler on the shared QUIC multiplexer so
+// WebTransport rides the unified transport_port socket (alongside squicr) instead
+// of a dedicated UDP port — making WT reachable through the operator's single
+// port-forward. It returns a chan-backed listener fed by accepted WT streams; the
+// advertised/registered AR endpoint uses the master socket's port (transport_port).
+func (c *wtClient) serveShared(m *sharedQUICMux) (net.Listener, error) {
+	cert, certHash, err := skyquic.NewWebTransportCertificate()
+	if err != nil {
+		return nil, fmt.Errorf("wt: generate cert: %w", err)
+	}
+	addr := m.localAddr()
+	lis := newChanListener(addr)
+
+	srvMux := http.NewServeMux()
+	h3 := &http3.Server{
+		TLSConfig:       skyquic.WebTransportTLSConfig(cert),
+		Handler:         srvMux,
+		EnableDatagrams: true,
+		QUICConfig: &quic.Config{
+			EnableDatagrams:                  true,
+			EnableStreamResetPartialDelivery: true,
+		},
+	}
+	webtransport.ConfigureHTTP3Server(h3)
+	wtSrv := &webtransport.Server{
+		H3:          h3,
+		CheckOrigin: func(*http.Request) bool { return true }, // PK auth is in Noise, not origin
+	}
+	srvMux.HandleFunc(wtPath, func(w http.ResponseWriter, r *http.Request) {
+		sess, err := wtSrv.Upgrade(w, r)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), wtAcceptTimeout)
+		defer cancel()
+		str, err := sess.AcceptStream(ctx)
+		if err != nil {
+			sess.CloseWithError(0, "no stream") //nolint:errcheck,gosec
+			return
+		}
+		lis.push(wtStreamConn{Stream: str, local: sess.LocalAddr(), remote: sess.RemoteAddr()})
+	})
+
+	// The mux's listener performs the TLS handshake (presenting this cert for the
+	// "h3" ALPN via GetConfigForClient); each accepted h3 conn is then served as a
+	// single WebTransport connection.
+	handle := func(conn *quic.Conn) {
+		if err := wtSrv.ServeQUICConn(conn); err != nil {
+			c.log.Debugf("WT ServeQUICConn ended: %v", err)
+		}
+	}
+	if err := m.register(wtALPN, skyquic.WebTransportTLSConfig(cert), handle); err != nil {
+		return nil, fmt.Errorf("wt: register on shared mux: %w", err)
+	}
+
+	c.advertisedCertHash = hex.EncodeToString(certHash[:])
+	c.advertisedURL = fmt.Sprintf("https://%s%s", addr.String(), wtPath)
+	c.log.Infof("Serving WT transport at %s on shared transport_port (cert %s)", c.advertisedURL, c.advertisedCertHash)
+
+	if ar, _ := c.ar.(addrresolver.APIClient); ar != nil {
+		if _, port, err := net.SplitHostPort(addr.String()); err == nil {
+			go c.registerWT(ar, port, c.advertisedCertHash)
+		} else {
+			c.log.WithError(err).Warn("WT: cannot extract port for AR registration")
+		}
+	}
+	return lis, nil
 }
 
 // wtListener fronts a WebTransport (HTTP/3) server as a net.Listener: the first
