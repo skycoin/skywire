@@ -110,37 +110,19 @@ func TestNew_Defaults(t *testing.T) {
 	}
 }
 
-func TestNew_DomainReplacement(t *testing.T) {
+func TestNew_DomainIgnored(t *testing.T) {
 	setRT(networkDown)
+	// Deployment services are dmsg-only (addressed by public key, so
+	// domain-independent): the legacy per-domain HTTP-URL rewrite is gone, and a
+	// custom domain must leave the embedded prod service addresses untouched.
 	api := New(testLogger(), Config{}, "example.com", "")
 	defer api.Close()
 
-	cases := map[string]string{
-		"DmsgDiscovery":      api.services.DmsgDiscovery,
-		"TransportDiscovery": api.services.TransportDiscovery,
-		"AddressResolver":    api.services.AddressResolver,
-		"RouteFinder":        api.services.RouteFinder,
-		"UptimeTracker":      api.services.UptimeTracker,
-		"ServiceDiscovery":   api.services.ServiceDiscovery,
-	}
-	for name, got := range cases {
-		if strings.Contains(got, "skycoin.com") {
-			t.Errorf("%s = %q, still contains skycoin.com after replacement", name, got)
-		}
-		if !strings.Contains(got, "example.com") {
-			t.Errorf("%s = %q, expected it to contain example.com", name, got)
-		}
-	}
-}
-
-func TestNew_SameDomainNoReplacement(t *testing.T) {
-	setRT(networkDown)
-	// The canonical domain must be treated as the default (no replacement).
-	api := New(testLogger(), Config{}, "skywire.skycoin.com", "")
-	defer api.Close()
-
 	if api.services.DmsgDiscovery != deployment.Prod.DmsgDiscovery {
-		t.Errorf("DmsgDiscovery = %q, want unchanged %q", api.services.DmsgDiscovery, deployment.Prod.DmsgDiscovery)
+		t.Errorf("DmsgDiscovery = %q, want unchanged prod default %q", api.services.DmsgDiscovery, deployment.Prod.DmsgDiscovery)
+	}
+	if api.services.AddressResolver != deployment.Prod.AddressResolver {
+		t.Errorf("AddressResolver = %q, want unchanged prod default %q", api.services.AddressResolver, deployment.Prod.AddressResolver)
 	}
 }
 
@@ -262,8 +244,24 @@ func dmsgServingHandler(dmsgAddr, serverStatic, serverAddr string) func(*http.Re
 }
 
 func TestDmsghttp_GeneratesThenCaches(t *testing.T) {
-	setRT(dmsgServingHandler("dmsg://serviceaddr:0", "0300000000000000000000000000000000000000000000000000000000000000", "1.1.1.1:8080"))
-	a := newHandlerAPI()
+	// dmsghttpConfGen serves the dmsg:// service addresses straight from the
+	// embedded config's *_dmsg fields and the in-memory DmsgServers list, with
+	// no runtime health-probe, so seed both directly on the services config.
+	var server deployment.DmsgServerEntry
+	server.Static = "0300000000000000000000000000000000000000000000000000000000000000"
+	server.Server.Address = "1.1.1.1:8080"
+	svcs := deployment.Services{
+		AddressResolverDmsg: "dmsg://serviceaddr:0",
+		DmsgServers:         []deployment.DmsgServerEntry{server},
+	}
+	a := &API{
+		log:            testLogger(),
+		startedAt:      time.Now(),
+		services:       &svcs,
+		dmsghttpConfTs: time.Now().Add(-10 * time.Minute),
+		closeC:         make(chan struct{}),
+		dmsgAddr:       "dmsg://test:0",
+	}
 
 	rec := httptest.NewRecorder()
 	a.dmsghttp(rec, httptest.NewRequest(http.MethodGet, "/dmsghttp", nil))
@@ -281,10 +279,10 @@ func TestDmsghttp_GeneratesThenCaches(t *testing.T) {
 		t.Errorf("DMSGServers = %+v, want one entry with address 1.1.1.1:8080", conf.DMSGServers)
 	}
 
-	// Second call within the 5m window must serve the cache: switch the
-	// transport to fail, and the response must still be the cached conf.
+	// Second call within the 5m window must serve the cache: mutate the source
+	// config, and the response must still be the original cached conf.
 	cachedTs := a.dmsghttpConfTs
-	setRT(networkDown)
+	svcs.AddressResolverDmsg = "dmsg://changed:0"
 	rec2 := httptest.NewRecorder()
 	a.dmsghttp(rec2, httptest.NewRequest(http.MethodGet, "/dmsghttp", nil))
 	if rec2.Code != http.StatusOK {
@@ -357,35 +355,6 @@ func TestRefreshDmsgServersLoop_StopsOnClose(t *testing.T) {
 }
 
 // --- fetch helpers ---
-
-func TestFetchDMSGAddress(t *testing.T) {
-	t.Run("success", func(t *testing.T) {
-		setRT(func(*http.Request) (*http.Response, error) {
-			return jsonResp(http.StatusOK, httputil.HealthCheckResponse{DmsgAddr: "dmsg://x:0"}), nil
-		})
-		if got := fetchDMSGAddress("http://svc.example.com"); got != "dmsg://x:0" {
-			t.Errorf("got %q, want dmsg://x:0", got)
-		}
-	})
-	t.Run("http error", func(t *testing.T) {
-		setRT(networkDown)
-		if got := fetchDMSGAddress("http://svc.example.com"); got != "" {
-			t.Errorf("got %q, want empty on http error", got)
-		}
-	})
-	t.Run("bad json", func(t *testing.T) {
-		setRT(func(*http.Request) (*http.Response, error) { return rawResp(http.StatusOK, "}{not json"), nil })
-		if got := fetchDMSGAddress("http://svc.example.com"); got != "" {
-			t.Errorf("got %q, want empty on bad json", got)
-		}
-	})
-	t.Run("body read error", func(t *testing.T) {
-		setRT(func(*http.Request) (*http.Response, error) { return bodyErrResp(), nil })
-		if got := fetchDMSGAddress("http://svc.example.com"); got != "" {
-			t.Errorf("got %q, want empty on body read error", got)
-		}
-	})
-}
 
 func TestFetchDMSGServers(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
