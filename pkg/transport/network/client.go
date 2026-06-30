@@ -96,6 +96,11 @@ type ClientFactory struct {
 	// Typed `any` because udpDemux is //go:build !tinygo (quic-go/kcp-go), and this
 	// struct is in the untagged file; the !tinygo client_unified_udp.go manages it.
 	udpDemux any
+	// sharedQUIC holds a *sharedQUICMux when EnableUnifiedUDP has been called: the
+	// single quic.Transport over the demux's QUIC conn that multiplexes squicr + WT
+	// (by ALPN) onto transport_port. `any` for the same tinygo-tag reason as
+	// udpDemux; consumed by the !tinygo quic/WT serve paths.
+	sharedQUIC any
 	// tcpDemux holds a *tcpDemux (the unified transport_port shared TCP listener,
 	// cmux) when EnableUnifiedTCP has been called. `any` for the same reason as
 	// udpDemux; managed by the !tinygo client_unified_tcp.go.
@@ -148,11 +153,17 @@ func (f *ClientFactory) MakeClient(netType types.Type, port int) (Client, error)
 		wc := newWT(generic, f.WTTable)
 		wtc := wc.(*wtClient)
 		wtc.ar = f.ARClient // native: register/resolve WT endpoint+cert via AR
-		// WT binds its OWN UDP socket (HTTP/3-over-QUIC) — NOT f.ListenAddr, which
-		// is the STCP TCP address (:7777). Using f.ListenAddr made WT register the
-		// STCP port in the AR (a wrong, often-unforwarded port). Bind the wt_port
-		// passed via InitClient (":0" = ephemeral, registered with the AR either way).
+		// WT is HTTP/3-over-QUIC and can't share squicr's QUIC server on one socket
+		// directly, but it CAN ride the SAME unified UDP socket via ALPN: when
+		// wt_port is 0 and a transport_port is configured, WT registers its "h3"
+		// handler on the shared QUIC mux (sharedQUICMux) so it serves on
+		// transport_port — reachable through the operator's single port-forward.
+		// A non-zero wt_port (or no unified socket) keeps WT on its own UDP port
+		// (f.ListenAddr is the TCP/STCP addr, never used for WT).
 		wtc.listenAddr = fmt.Sprintf(":%d", port)
+		if port == 0 {
+			wtc.sharedQUIC = f.sharedQUIC // nil unless EnableUnifiedUDP ran
+		}
 		return wc, nil
 	case types.WEBRTC:
 		return newWebRTC(generic, f.DmsgC, f.ICEURLs), nil

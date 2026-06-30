@@ -6,20 +6,21 @@
 // wt_browser.go (js && wasm, either toolchain), which provides its own Start +
 // dial + resolve; this file covers embedded TinyGo targets (no HTTP/3 server, no
 // dial — wt_tinygo_nows.go stubs the dial). Kept disjoint from wt_browser.go so
-// tinygo+js+wasm doesn't get two definitions of Start/resolveWTViaAR.
+// tinygo+js+wasm doesn't get two definitions of Start/dialResolvedWT.
 package network
 
 import (
 	"context"
 	"errors"
+	"net"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// resolveWTViaAR has no address resolver on a TinyGo target (addrresolver is
-// !tinygo), so WT dials come only from the explicit table. Always ok=false.
-func (c *wtClient) resolveWTViaAR(_ context.Context, _ cipher.PubKey) (string, string, bool) {
-	return "", "", false
+// dialResolvedWT has no address resolver on a TinyGo target (addrresolver is
+// !tinygo), so WT dials come only from the explicit table.
+func (c *wtClient) dialResolvedWT(_ context.Context, _ cipher.PubKey) (net.Conn, error) {
+	return nil, ErrWTEntryNotFound
 }
 
 // errWTServe is returned by Start on TinyGo (no listening socket / no HTTP/3).
