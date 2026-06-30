@@ -60,8 +60,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/app/appdisc"
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
