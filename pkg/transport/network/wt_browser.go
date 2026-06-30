@@ -34,9 +34,9 @@ func (c *wtClient) Start() error {
 	return errors.New("wt: serving not supported in a browser (no HTTP/3 listener) — dial only")
 }
 
-// resolveWTViaAR is a no-op in the browser: there is no address-resolver client
+// dialResolvedWT is a no-op in the browser: there is no address-resolver client
 // (addrresolver is !tinygo and pulls quic-go); WT dials come from the table the
 // autoconnect populates with the AR-resolved endpoint + cert hash.
-func (c *wtClient) resolveWTViaAR(_ context.Context, _ cipher.PubKey) (string, string, bool) {
-	return "", "", false
+func (c *wtClient) dialResolvedWT(_ context.Context, _ cipher.PubKey) (net.Conn, error) {
+	return nil, ErrWTEntryNotFound
 }
