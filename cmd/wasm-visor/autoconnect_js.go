@@ -37,7 +37,17 @@ import (
 const (
 	autoconnectInterval  = 90 * time.Second
 	autoconnectMaxVisors = 4
+	// After all carriers to a peer fail (unreachable / NAT'd / no WT listener),
+	// don't re-dial it for this long. Without it the loop re-dials the same dead
+	// public visors every cycle — each failed WT dial makes the browser log a
+	// net::ERR_CONNECTION_REFUSED, and the 4-visor budget is burned on known-dead
+	// peers instead of reaching further down the SD list to a reachable one.
+	autoconnectFailCooldown = 10 * time.Minute
 )
+
+// pk -> time of last all-carriers-failed dial. Persists across cycles (the loop
+// is a single goroutine, so no lock needed under single-threaded wasm).
+var autoconnectFailed = map[cipher.PubKey]time.Time{}
 
 // startWSAutoconnect launches the WS public-autoconnect loop. No-op if any
 // prerequisite (SD/AR url, dmsg, transport manager, ws table) is missing.
@@ -115,6 +125,7 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 	vlog(fmt.Sprintf("ws-autoconnect: SD returned %d visors (%d existing auto-peers)", len(services), n))
 
 	added := 0
+	skippedCooldown := 0
 	for i := range services {
 		if n+added >= autoconnectMaxVisors {
 			break
@@ -122,6 +133,17 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 		pk := services[i].Addr.PubKey()
 		if pk == selfPK || have[pk] {
 			continue
+		}
+		// Skip peers that failed all carriers recently — they're unreachable
+		// (NAT'd / no WT listener); re-dialing only spams net::ERR_* and wastes
+		// the visor budget. Skipping them silently lets the loop reach a
+		// reachable peer further down the list. Cooldown expiry → re-tried.
+		if ts, bad := autoconnectFailed[pk]; bad {
+			if time.Since(ts) < autoconnectFailCooldown {
+				skippedCooldown++
+				continue
+			}
+			delete(autoconnectFailed, pk)
 		}
 		port := services[i].Addr.Port()
 		vlog(fmt.Sprintf("ws-autoconnect: resolving %s:%d", pk.Hex()[:8], port))
@@ -180,10 +202,17 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 
 		if gotAny {
 			added++
+			delete(autoconnectFailed, pk)
+		} else {
+			// All carriers failed — back off this peer (see autoconnectFailCooldown).
+			autoconnectFailed[pk] = time.Now()
 		}
 	}
 	if added > 0 {
 		vlog(fmt.Sprintf("ws-autoconnect: connected %d new visor(s) over WS/WT (%d candidates)", added, len(services)))
+	}
+	if skippedCooldown > 0 {
+		vlog(fmt.Sprintf("ws-autoconnect: skipped %d unreachable peer(s) in cooldown", skippedCooldown))
 	}
 }
 

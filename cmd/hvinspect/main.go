@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	cdplog "github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/cdproto/target"
@@ -182,6 +183,23 @@ func main() {
 		case *network.EventLoadingFailed:
 			u := reqURL[e.RequestID]
 			netlog = append(netlog, fmt.Sprintf("FAILED %s  %s", e.ErrorText, u))
+		case *cdplog.EventEntryAdded:
+			// Browser-emitted log entries (Log domain) — this is where
+			// WebTransport / fetch failures like
+			//   "Failed to establish a connection to https://ip:port/skywire:
+			//    net::ERR_CONNECTION_REFUSED"
+			// surface. They are NOT console.* calls, so without the Log domain
+			// they were invisible to capture even though the user sees them in
+			// the real DevTools console.
+			en := e.Entry
+			line := fmt.Sprintf("[%s/%s] %s", en.Source, en.Level, en.Text)
+			if en.URL != "" {
+				line += "  " + en.URL
+			}
+			netlog = append(netlog, line)
+			if en.Level == cdplog.LevelError {
+				console = append(console, "[browser-error] "+en.Text)
+			}
 		}
 	})
 
@@ -192,6 +210,7 @@ func main() {
 	actions := []chromedp.Action{
 		network.Enable(),
 		runtime.Enable(),
+		cdplog.Enable(),
 	}
 	if !attachExisting {
 		// Headless, or attach-with-no-matching-tab: load the URL (headless tab, or
