@@ -16,8 +16,15 @@ var (
 	// in-browser config-generator doesn't need.
 	DmsgHTTPPort = uint16(80)
 
-	// PublicVisorMaxTransports is the max transport count before deregistering
-	PublicVisorMaxTransports = 1000
+	// PublicVisorMaxTransports is the transport count at which a public visor
+	// drain-pauses its service-discovery registration (load-shedding). It must
+	// sit comfortably above the fleet size, because a public visor that also
+	// runs public_autoconnect dials stcpr to ~every other public visor — so its
+	// count tracks the fleet size, not its inbound load. At 1000 (≈ the fleet
+	// size) the busiest, most-reachable public visors oscillated across the cap
+	// and flapped out of the registry, starving browser/wasm clients of a
+	// WT-reachable target. 2048 gives ~2× headroom over the current fleet.
+	PublicVisorMaxTransports = 2048
 )
 
 // SkywireConfig returns the full path to the package config
