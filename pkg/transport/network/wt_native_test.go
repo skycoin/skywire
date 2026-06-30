@@ -16,7 +16,6 @@ import (
 // carrier the WT transport type wraps in Noise+yamux via initTransport. The dial
 // pins the listener's self-signed cert by SHA-256 exactly as a browser would.
 func TestWTCarrier_RoundTrip(t *testing.T) {
-	skipQUICOnWindows(t)
 	lis, err := newWTListener("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("newWTListener: %v", err)
@@ -80,7 +79,6 @@ func TestWTCarrier_RoundTrip(t *testing.T) {
 
 // TestWTCarrier_CertHashMismatch confirms the cert-hash pin rejects a wrong hash.
 func TestWTCarrier_CertHashMismatch(t *testing.T) {
-	skipQUICOnWindows(t)
 	lis, err := newWTListener("127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("newWTListener: %v", err)

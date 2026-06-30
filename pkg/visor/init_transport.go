@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"runtime"
 	"sync"
 	"time"
 
@@ -411,14 +410,7 @@ func initWSClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 // Like quic it binds an ephemeral UDP port (registered with the AR, survives
 // restarts via re-register); a fixed firewall port can be pinned later.
 // Depends on &tr so v.tpM and the AR client both exist.
-func initWTClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	// WebTransport is HTTP/3-over-QUIC; quic-go's UDP I/O crashes the process on
-	// Go 1.26's windows/amd64 runtime, so don't start it on Windows. Transport
-	// creation is also declined there (see ErrQUICDisabledWindows). Temporary.
-	if runtime.GOOS == "windows" {
-		log.Info("WebTransport disabled on Windows (Go 1.26 runtime defect in quic-go UDP I/O); skipping")
-		return nil
-	}
+func initWTClient(ctx context.Context, v *Visor, _ *logging.Logger) error {
 	// WT binds its OWN UDP port (it's HTTP/3-over-QUIC and can't share squic's
 	// socket). wt_port PINS it for NAT-forwarding; 0 binds an ephemeral port.
 	port := 0
@@ -432,14 +424,6 @@ func initWTClient(ctx context.Context, v *Visor, log *logging.Logger) error {
 // initQuicClient starts the experimental QUIC transport when a quic_port is
 // configured (#2607 QUIC follow-on). Opt-in: a zero port leaves it disabled.
 func initQuicClient(ctx context.Context, v *Visor, log *logging.Logger) error {
-	// quic-go's UDP I/O crashes the process on Go 1.26's windows/amd64 runtime
-	// (an internal/poll.(*FD).execIO defect), so don't start QUIC on Windows.
-	// Transport creation is also declined there (see ErrQUICDisabledWindows).
-	// Temporary — remove once a fixed Go 1.26.x ships.
-	if runtime.GOOS == "windows" {
-		log.Info("QUIC transport disabled on Windows (Go 1.26 runtime defect in quic-go UDP I/O); skipping")
-		return nil
-	}
 	// QUIC is on by default, like stcpr/sudph — a visor accepts every transport
 	// type it can. quic_port (if set) PINS the UDP port for a stable firewall
 	// rule / AR registration; left 0 it binds an ephemeral port, exactly as

@@ -31,7 +31,6 @@ func quicTestUDP(t *testing.T) *net.UDPConn {
 // pins the server's skywire PK and the server learns the client's — both
 // via the option-A TLS binding — then round-trips bytes on a stream.
 func TestQUICConnMutualPKAuth(t *testing.T) {
-	skipQUICOnWindows(t)
 	srvPK, srvSK := cipher.GenerateKeyPair()
 	cliPK, cliSK := cipher.GenerateKeyPair()
 
@@ -106,7 +105,6 @@ func TestQUICConnMutualPKAuth(t *testing.T) {
 // real QUIC connection through the quicStreamConn wrapper — this is what makes
 // faithful-UDP wire-real (no head-of-line blocking, unreliable delivery).
 func TestQUICDatagramRoundTrip(t *testing.T) {
-	skipQUICOnWindows(t)
 	srvPK, srvSK := cipher.GenerateKeyPair()
 	cliPK, cliSK := cipher.GenerateKeyPair()
 	srvCert, err := newQUICCertificate(srvPK, srvSK)
@@ -172,7 +170,6 @@ func TestQUICDatagramRoundTrip(t *testing.T) {
 // TestQUICConnRejectsWrongServerPK verifies the client-side pin: dialing a
 // server while expecting a different PK fails the handshake.
 func TestQUICConnRejectsWrongServerPK(t *testing.T) {
-	skipQUICOnWindows(t)
 	srvPK, srvSK := cipher.GenerateKeyPair()
 	cliPK, cliSK := cipher.GenerateKeyPair()
 	wrongPK, _ := cipher.GenerateKeyPair()

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"runtime"
 	"sync"
 	"time"
 
@@ -966,13 +965,6 @@ var ErrNotFound = errors.New("transport not found")
 // ErrUnknownNetwork occurs on attempt to use an unknown network type.
 var ErrUnknownNetwork = errors.New("unknown network type")
 
-// ErrQUICDisabledWindows is returned when a QUIC ("squicr") or WebTransport
-// ("swtr") transport is requested on Windows. Both ride quic-go's UDP I/O,
-// which crashes the process on Go 1.26's windows/amd64 runtime (an
-// internal/poll.(*FD).execIO defect). They are temporarily declined on Windows
-// rather than risk a crash; remove this guard once a fixed Go 1.26.x ships.
-var ErrQUICDisabledWindows = errors.New("QUIC/WebTransport transports are temporarily disabled on Windows (Go 1.26 runtime defect in quic-go UDP I/O); request declined")
-
 // IsKnownNetwork returns true when netName is a known
 // network type that we are able to operate in.
 //
@@ -1103,17 +1095,6 @@ func (tm *Manager) SaveTransportWithOptions(ctx context.Context, remote cipher.P
 func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, opts SaveTransportOptions) (*ManagedTransport, error) {
 	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
-	}
-
-	// Decline QUIC/WebTransport on Windows before any quic-go code runs. The
-	// client for these types is never initialized on Windows (see initQuicClient
-	// / initWTClient), so this returns a clear message to the UI/CLI instead of
-	// the opaque "client not found" error. Temporary — see ErrQUICDisabledWindows.
-	if runtime.GOOS == "windows" {
-		switch types.NormalizeType(netType) {
-		case types.QUIC, types.WT:
-			return nil, ErrQUICDisabledWindows
-		}
 	}
 
 	tpID := tm.tpIDFromPK(remote, netType)

@@ -21,7 +21,6 @@ import (
 // session establishes and a stream carries bytes both ways. This is the de-risk
 // for wiring the demux under the production QUIC transport.
 func TestUDPDemux_QUICRealTraffic(t *testing.T) {
-	skipQUICOnWindows(t)
 	srvPK, srvSK := cipher.GenerateKeyPair()
 	cliPK, cliSK := cipher.GenerateKeyPair()
 	srvCert, err := newQUICCertificate(srvPK, srvSK)
