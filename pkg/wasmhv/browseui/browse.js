@@ -460,13 +460,20 @@
       background: "#1b1726",
       border: "1",
       index: 2147483000,
-      "class": ["skywire-wb"]
+      // no-full hides WinBox's Fullscreen-API button: "maximize" should fill the
+      // area IN-TAB (over the dashboard, below the panel) — not take over the
+      // whole screen. The remaining max button stays within the top/bottom
+      // boundaries below, so it maximizes in front of the HV UI in the same tab.
+      "class": ["skywire-wb", "no-full"]
     };
-    // Open centered by default (WinBox otherwise pins new windows at 0,0 — under
-    // the launcher bar — which reads as "stuck in the corner"). Callers can still
-    // pin a side (e.g. log:right, cli:left).
+    // Open centered by default (WinBox otherwise pins new windows at 0,0).
     cfg.x = (opts.x != null) ? opts.x : "center";
     cfg.y = (opts.y != null) ? opts.y : "center";
+    // Viewport boundaries: keep the window (drag AND maximize) clear of the
+    // panel, so its title bar can never slide behind the bar and become
+    // ungrabbable. top/bottom come from the panel's current dock edge.
+    if (opts.top != null) cfg.top = opts.top;
+    if (opts.bottom != null) cfg.bottom = opts.bottom;
     if (opts.mount) cfg.mount = opts.mount;
     if (opts.url) cfg.url = opts.url;
     if (opts.onclose) cfg.onclose = opts.onclose;
@@ -515,7 +522,7 @@
 
     function $(id) { return wrap.querySelector("#" + id); }
     var wb = makeWin(doc, {
-      title: "skynet", root: opts.root, width: "74%", height: "80%", mount: wrap,
+      title: "skynet", root: opts.root, top: opts.top, bottom: opts.bottom, width: "74%", height: "80%", mount: wrap,
       onclose: function () { if (onClose) onClose(); }
     });
     var win = { wb: wb, el: wrap };
@@ -734,7 +741,7 @@
     $("lw-follow").onclick = function () { follow = !follow; this.style.opacity = follow ? "1" : ".5"; if (follow) body.scrollTop = body.scrollHeight; };
     $("lw-clear").onclick = function () { if (window.skywireLog) window.skywireLog.clear(); body.textContent = ""; };
     var wb = makeWin(doc, {
-      title: "visor log", root: opts.root, width: "46%", height: "60%", x: "right",
+      title: "visor log", root: opts.root, top: opts.top, bottom: opts.bottom, width: "46%", height: "60%",
       mount: wrap, onclose: function () { unsub(); if (opts.onClose) opts.onClose(); }
     });
     return { wb: wb, close: function () { wb.close(); } };
@@ -794,7 +801,7 @@
     });
     w("visor cli — type 'help'. Dispatches to the running visor's RPC.", "#9aa0a6");
     var wb = makeWin(doc, {
-      title: "visor cli", root: opts.root, width: "50%", height: "58%", x: "left",
+      title: "visor cli", root: opts.root, top: opts.top, bottom: opts.bottom, width: "50%", height: "58%",
       mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); }
     });
     setTimeout(function () { inp.focus(); }, 50);
@@ -809,7 +816,7 @@
   // survives moves/resizes without the manual capture hack we used before.
   function createTerminalWindow(doc, opts) {
     var wb = makeWin(doc, {
-      title: "terminal", root: opts.root, width: "54%", height: "64%",
+      title: "terminal", root: opts.root, top: opts.top, bottom: opts.bottom, width: "54%", height: "64%",
       url: opts.ptyURL, onclose: function () { if (opts.onClose) opts.onClose(); }
     });
     return { wb: wb, close: function () { wb.close(); } };
@@ -825,7 +832,7 @@
     function withRoot(extra) {
       var o = {}, k;
       for (k in opts) { if (Object.prototype.hasOwnProperty.call(opts, k)) o[k] = opts[k]; }
-      o.root = root;
+      o.root = root; o.top = barTop; o.bottom = barBottom;
       if (extra) { for (k in extra) { if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k]; } }
       return o;
     }
@@ -837,8 +844,12 @@
     // via .skywire-wb. The panel is always on (no hide).
     var root = doc.createElement("div");
     root.id = "skywire-skynet-root";
-    root.style.cssText = "position:fixed;left:0;right:0;pointer-events:none";
+    root.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none";
     (doc.body || doc.documentElement).appendChild(root);
+    // barTop / barBottom: the WinBox viewport boundary on the panel's edge, set
+    // by applyDock and applied to every window so none can drag/maximize under
+    // the bar. (0 on the free edge.)
+    var barTop = 0, barBottom = 0;
     if (!doc.getElementById("skywire-wb-style")) {
       var st = doc.createElement("style");
       st.id = "skywire-wb-style";
@@ -886,13 +897,13 @@
       if (dock === "top") {
         bar.style.top = "0"; bar.style.bottom = "auto";
         bar.style.borderTop = "0"; bar.style.borderBottom = "1px solid #2a2342";
-        root.style.top = BARH + "px"; root.style.bottom = "0";
         menu.style.top = BARH + "px"; menu.style.bottom = "auto";
+        barTop = BARH; barBottom = 0;
       } else {
         bar.style.bottom = "0"; bar.style.top = "auto";
         bar.style.borderBottom = "0"; bar.style.borderTop = "1px solid #2a2342";
-        root.style.top = "0"; root.style.bottom = BARH + "px";
         menu.style.bottom = BARH + "px"; menu.style.top = "auto";
+        barTop = 0; barBottom = BARH;
       }
     }
     function addApp(label, fn) {
