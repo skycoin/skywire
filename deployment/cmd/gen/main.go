@@ -57,6 +57,7 @@ type services struct {
 	DNSServer          string   `json:"dns_server,omitempty"`
 	GeoIP              string   `json:"geoip,omitempty"`
 	SurveyWhitelist    []string `json:"survey_whitelist,omitempty"`
+	WSSDomainSuffix    string   `json:"wss_domain_suffix,omitempty"`
 	DmsgServers        []struct {
 		Static string `json:"static"`
 		Server struct {
@@ -176,6 +177,7 @@ func emitServices(buf *bytes.Buffer, s services) {
 	emitStringField(buf, "GeoIP", s.GeoIP)
 	emitPubKeyList(buf, "SurveyWhitelist", s.SurveyWhitelist)
 	emitStringField(buf, "ConfDmsg", s.ConfDmsg)
+	emitStringField(buf, "WSSDomainSuffix", s.WSSDomainSuffix)
 	emitDmsgServers(buf, s.DmsgServers)
 	emitStringField(buf, "DmsgDiscoveryDmsg", s.DmsgDiscoveryDmsg)
 	emitStringField(buf, "TransportDiscoveryDmsg", s.TransportDiscoveryDmsg)
