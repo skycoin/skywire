@@ -84,6 +84,21 @@ func (s *Services) HasDmsgServers() bool {
 	return len(s.DmsgServers) > 0
 }
 
+// IsKnownDmsgServer reports whether pk is one of the deployment's known
+// (official) dmsg servers. Used to gate fleet-wide defaults — e.g. the
+// WSSDomainSuffix — to servers this deployment actually runs DNS/TLS for, so a
+// third party running the same binary doesn't self-advertise the deployment's
+// wss domain for a PK that has no DNS record.
+func (s *Services) IsKnownDmsgServer(pk cipher.PubKey) bool {
+	for i := range s.DmsgServers {
+		var spk cipher.PubKey
+		if spk.Set(s.DmsgServers[i].Static) == nil && spk == pk {
+			return true
+		}
+	}
+	return false
+}
+
 // DmsgServerEntriesToDisc converts a list of DmsgServerEntry to
 // []*disc.Entry suitable for direct.NewClient / direct.GetAllEntries.
 // Entries whose Static field is not a valid public key are skipped
@@ -178,14 +193,23 @@ type Services struct {
 	GeoIP              string          `json:"geoip,omitempty"` // HTTP only (dmsg doesn't preserve client IP)
 	SurveyWhitelist    []cipher.PubKey `json:"survey_whitelist,omitempty"`
 	// DMSG endpoints (dmsg:// URLs for the same services)
-	ConfDmsg               string            `json:"conf_dmsg,omitempty"`
-	DmsgServers            []DmsgServerEntry `json:"dmsg_servers,omitempty"`
-	DmsgDiscoveryDmsg      string            `json:"dmsg_discovery_dmsg,omitempty"`
-	TransportDiscoveryDmsg string            `json:"transport_discovery_dmsg,omitempty"`
-	AddressResolverDmsg    string            `json:"address_resolver_dmsg,omitempty"`
-	RouteFinderDmsg        string            `json:"route_finder_dmsg,omitempty"`
-	UptimeTrackerDmsg      string            `json:"uptime_tracker_dmsg,omitempty"`
-	ServiceDiscoveryDmsg   string            `json:"service_discovery_dmsg,omitempty"`
+	ConfDmsg    string            `json:"conf_dmsg,omitempty"`
+	DmsgServers []DmsgServerEntry `json:"dmsg_servers,omitempty"`
+	// WSSDomainSuffix is the deployment-wide DNS suffix the official dmsg servers
+	// self-derive their wss:// AddressWS from — "wss://<DNSLabel(PK)>.<suffix>/dmsg"
+	// — so an HTTPS-served browser wasm-visor reaches them without mixed content.
+	// One string for the whole fleet (each server self-labels from its own PK), so
+	// the domain lives in exactly one place (this file) instead of every dmsg
+	// server's local config. A dmsg server applies it only when its own PK is a
+	// known fleet server (IsKnownDmsgServer) — a third party running this binary
+	// never mis-advertises this domain for a PK with no DNS record.
+	WSSDomainSuffix        string `json:"wss_domain_suffix,omitempty"`
+	DmsgDiscoveryDmsg      string `json:"dmsg_discovery_dmsg,omitempty"`
+	TransportDiscoveryDmsg string `json:"transport_discovery_dmsg,omitempty"`
+	AddressResolverDmsg    string `json:"address_resolver_dmsg,omitempty"`
+	RouteFinderDmsg        string `json:"route_finder_dmsg,omitempty"`
+	UptimeTrackerDmsg      string `json:"uptime_tracker_dmsg,omitempty"`
+	ServiceDiscoveryDmsg   string `json:"service_discovery_dmsg,omitempty"`
 	// Reward system
 	RewardSystem     string `json:"reward_system,omitempty"`
 	RewardSystemDmsg string `json:"reward_system_dmsg,omitempty"`

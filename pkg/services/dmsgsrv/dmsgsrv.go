@@ -293,7 +293,16 @@ func (s *service) Run(ctx context.Context) error {
 		// wasm-visor can reach it without mixed content. The listener stays plain
 		// ws on the main port; a front proxy (Caddy) terminates TLS. We log the
 		// exact Caddy line so the operator just pastes it (no label to compute).
-		if suffix := strings.TrimPrefix(cfg.WSSDomainSuffix, "."); suffix != "" {
+		// Suffix precedence: an explicit per-server wss_domain_suffix wins; else
+		// fall back to the deployment-wide suffix from the embedded services-config
+		// (deployment.Prod.WSSDomainSuffix) — but ONLY for a known fleet server, so a
+		// third party running this binary never advertises the deployment's domain
+		// for a PK that has no DNS record.
+		suffix := strings.TrimPrefix(cfg.WSSDomainSuffix, ".")
+		if suffix == "" && deployment.Prod.IsKnownDmsgServer(cfg.PubKey) {
+			suffix = strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, ".")
+		}
+		if suffix != "" {
 			host := cfg.PubKey.DNSLabel() + "." + suffix
 			mainWSURL = "wss://" + host + "/dmsg"
 			proxyTarget := primaryAdvertised
