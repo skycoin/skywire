@@ -795,6 +795,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors-summary", hv.getAllVisorsSummary())
 				r.Get("/visors-tree-summary", hv.getVisorsTreeSummary())
 				r.Get("/network-view", hv.getNetworkView())
+				r.Get("/log", hv.getLog())
 				r.Get("/reward-rules", hv.getRewardRules())
 				r.Get("/visors/{pk}", hv.getVisor())
 				r.Get("/visors/{pk}/summary", hv.getVisorSummary())
@@ -850,6 +851,14 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/proxies", hv.getProxies())
 				r.Post("/visors/{pk}/proxies/set", hv.postProxyEnabled())
 				r.Post("/visors/{pk}/proxies/upstream", hv.postProxyUpstream())
+
+				// In-UI virtual browser (the native analog of the wasm-visor's
+				// skywireVisor.fetchDmsg / fetchClearnet): fetch a dmsg/skynet site,
+				// or a clearnet URL through a skysocks exit, via the local visor.
+				// (This group is already under r.Route("/api"), so these resolve to
+				// /api/browse/* — the launcher calls those full paths.)
+				r.Post("/browse/fetch", hv.postBrowseFetch())
+				r.Post("/browse/clearnet", hv.postBrowseClearnet())
 
 				// Skynet port forwarding (legacy simple)
 				r.Get("/visors/{pk}/skynet-ports", hv.getSkynetPorts())
@@ -963,7 +972,9 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/api/dmsg/health", tpvHandler.ServeHTTP)
 		}
 
-		r.Handle("/*", uiCacheControl(http.FileServer(http.FS(hv.c.UIAssets))))
+		// Serve the dashboard UI, with the skynet/clearnet browse engine + native
+		// launcher injected into index.html (and the browse.js / launcher assets).
+		r.Handle("/*", hv.uiHandler())
 	})
 
 	return r

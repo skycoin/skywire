@@ -273,11 +273,14 @@ const BrowseLauncherJS = `(function(){
     var p=self.SkywireBrowse.mountPanel(document,{
       fetchDmsg:function(){ return self.skywireVisor.fetchDmsg.apply(null,arguments); },
       serveContent:function(m){ return self.skywireVisor.serveContent(m); },
-      selfPK:function(){ try{ return self.skywireVisor.status().pk; }catch(e){ return ""; } }
+      selfPK:function(){ try{ return self.skywireVisor.status().pk; }catch(e){ return ""; } },
+      // api drives the visor cli REPL: a function call straight into the in-wasm
+      // core's RPC (no shell, no network) — works in standalone PWA mode.
+      api:function(m,path,body){ return self.skywireVisor.hvApi(m,path,body).then(function(r){ return {status:r.status, body:new TextDecoder().decode(r.body)}; }); }
     });
     var btn=document.createElement("button");
     btn.textContent="skynet"; btn.title="browse / host dmsg sites (multi-window)";
-    btn.style.cssText="position:fixed;left:12px;bottom:12px;z-index:2147483001;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
+    btn.style.cssText="position:fixed;left:12px;bottom:12px;z-index:2147483647;cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.5em .8em;font:bold 12px monospace;box-shadow:0 4px 14px rgba(0,0,0,.4)";
     btn.onclick=function(){ p.toggle(); };
     document.body.appendChild(btn);
   }

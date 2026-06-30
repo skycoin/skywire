@@ -21,10 +21,6 @@ import (
 )
 
 var prodData = Services{
-	DmsgDiscovery:      "http://dmsgd.skywire.skycoin.com",
-	TransportDiscovery: "http://tpd.skywire.skycoin.com",
-	AddressResolver:    "http://ar.skywire.skycoin.com",
-	RouteFinder:        "http://rf.skywire.skycoin.com",
 	RouteSetupNodes: []cipher.PubKey{
 		mustPubKey("0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"),
 		mustPubKey("024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"),
@@ -41,8 +37,6 @@ var prodData = Services{
 		mustPubKey("03aa0b1c4e23616872058c11c6efba777c130a85eaf909945d697399a1eb08426d"),
 		mustPubKey("03adb2c924987d8deef04d02bd95236c5ae172fe5dfe7273e0461d96bf4bc220be"),
 	},
-	UptimeTracker:    "http://ut.skywire.skycoin.com",
-	ServiceDiscovery: "http://sd.skycoin.com",
 	StunServers: []string{
 		"139.162.160.227:3478",
 		"172.104.247.120:3478",
@@ -99,15 +93,10 @@ var prodData = Services{
 	RouteFinderDmsg:        "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
 	UptimeTrackerDmsg:      "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
 	ServiceDiscoveryDmsg:   "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80",
-	RewardSystem:           "https://theskywirenetwork.net",
 	RewardSystemDmsg:       "dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80",
 }
 
 var testData = Services{
-	DmsgDiscovery:      "http://dmsgd.skywire.dev",
-	TransportDiscovery: "http://tpd.skywire.dev",
-	AddressResolver:    "http://ar.skywire.dev",
-	RouteFinder:        "http://rf.skywire.dev",
 	RouteSetupNodes: []cipher.PubKey{
 		mustPubKey("0324579f003e6b4048bae2def4365e634d8e0e3054a20fc7af49daf2a179658557"),
 		mustPubKey("024fbd3997d4260f731b01abcfce60b8967a6d4c6a11d1008812810ea1437ce438"),
@@ -124,8 +113,6 @@ var testData = Services{
 		mustPubKey("03aa0b1c4e23616872058c11c6efba777c130a85eaf909945d697399a1eb08426d"),
 		mustPubKey("03adb2c924987d8deef04d02bd95236c5ae172fe5dfe7273e0461d96bf4bc220be"),
 	},
-	UptimeTracker:    "http://ut.skywire.dev",
-	ServiceDiscovery: "http://sd.skywire.dev",
 	StunServers: []string{
 		"139.162.160.227:3478",
 		"172.104.247.120:3478",
@@ -182,9 +169,8 @@ var testData = Services{
 	RouteFinderDmsg:        "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
 	UptimeTrackerDmsg:      "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80",
 	ServiceDiscoveryDmsg:   "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80",
-	RewardSystem:           "https://theskywirenetwork.net",
 	RewardSystemDmsg:       "dmsg://036a70e6956061778e1883e928c1236189db14dfd446df23d83e45c321b330c91f:80",
 }
 
-var prodConfData = Conf{Conf: "http://conf.skywire.skycoin.com"}
-var testConfData = Conf{Conf: "http://conf.skywire.dev"}
+var prodConfData = Conf{Conf: ""}
+var testConfData = Conf{Conf: ""}

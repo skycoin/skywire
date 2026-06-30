@@ -43,7 +43,7 @@ or open `skywire` shortcut on start menu or desktop.
 - Q: *What is included in the packaging besides skywire? (i.e. scripts, services, batch files, etc.)*
   
   A:  - a `.bat` file that use for running skywire
-      - a `new.update` file for checking update then regenerate config file for update version and etc
+      - a `skywire-autoconfig.bat` that runs `skywire autoconfig` at install/upgrade/launch to (re)generate the config (retaining keys)
 - Q: *Where are the sources for the build of the installer or package?*
   
   A:  `scripts\win_installer`

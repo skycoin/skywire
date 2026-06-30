@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -74,18 +73,13 @@ type Config struct {
 // (deployment.Prod). The domain parameter applies HTTP URL replacements for
 // custom deployments; DMSG addresses are PK-based and don't change.
 func New(log *logging.Logger, conf Config, domain, dmsgAddr string) *API {
-	// Start from the full embedded deployment config (includes DMSG fields)
+	// Start from the full embedded deployment config (includes DMSG fields).
+	// Deployment services are dmsg-only and addressed by public key (dmsg://<pk>),
+	// which is domain-independent, so the legacy per-domain HTTP-URL rewrite is
+	// gone; a custom deployment supplies its own services-config.json (SKYDEPLOY).
+	_ = domain
 	svcs := deployment.Prod
 
-	// Apply domain replacement to HTTP URLs for custom deployments
-	if domain != "" && domain != "skywire.skycoin.com" {
-		svcs.DmsgDiscovery = strings.Replace(svcs.DmsgDiscovery, "skywire.skycoin.com", domain, -1)
-		svcs.TransportDiscovery = strings.Replace(svcs.TransportDiscovery, "skywire.skycoin.com", domain, -1)
-		svcs.AddressResolver = strings.Replace(svcs.AddressResolver, "skywire.skycoin.com", domain, -1)
-		svcs.RouteFinder = strings.Replace(svcs.RouteFinder, "skywire.skycoin.com", domain, -1)
-		svcs.UptimeTracker = strings.Replace(svcs.UptimeTracker, "skywire.skycoin.com", domain, -1)
-		svcs.ServiceDiscovery = strings.Replace(svcs.ServiceDiscovery, "skycoin.com", domain, -1)
-	}
 	// Override from config file if provided
 	if conf.SetupNodes != nil {
 		svcs.RouteSetupNodes = conf.SetupNodes
@@ -231,33 +225,27 @@ func (a *API) dmsghttp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) dmsghttpConfGen() httputil.DMSGHTTPConf {
+	a.servicesMu.RLock()
+	defer a.servicesMu.RUnlock()
+	// Deployment services are dmsg-only: serve the dmsg:// service addresses
+	// straight from the embedded config (services-config.json's *_dmsg fields —
+	// the single source of truth), with no runtime clearnet health-probe. The
+	// bootstrap server list is the in-memory DmsgServers (embedded, kept current
+	// by refreshDmsgServers).
 	var dmsghttpConf httputil.DMSGHTTPConf
-	dmsghttpConf.DMSGServers = fetchDMSGServers(a.services.DmsgDiscovery)
-	dmsghttpConf.AddressResolver = fetchDMSGAddress(a.services.AddressResolver)
-	dmsghttpConf.DMSGDiscovery = fetchDMSGAddress(a.services.DmsgDiscovery)
-	dmsghttpConf.RouteFinder = fetchDMSGAddress(a.services.RouteFinder)
-	dmsghttpConf.ServiceDiscovery = fetchDMSGAddress(a.services.ServiceDiscovery)
-	dmsghttpConf.TranspordDiscovery = fetchDMSGAddress(a.services.TransportDiscovery)
-	dmsghttpConf.UptimeTracker = fetchDMSGAddress(a.services.UptimeTracker)
-
+	for _, s := range a.services.DmsgServers {
+		var e httputil.DMSGServersConf
+		e.Static = s.Static
+		e.Server.Address = s.Server.Address
+		dmsghttpConf.DMSGServers = append(dmsghttpConf.DMSGServers, e)
+	}
+	dmsghttpConf.AddressResolver = a.services.AddressResolverDmsg
+	dmsghttpConf.DMSGDiscovery = a.services.DmsgDiscoveryDmsg
+	dmsghttpConf.RouteFinder = a.services.RouteFinderDmsg
+	dmsghttpConf.ServiceDiscovery = a.services.ServiceDiscoveryDmsg
+	dmsghttpConf.TranspordDiscovery = a.services.TransportDiscoveryDmsg
+	dmsghttpConf.UptimeTracker = a.services.UptimeTrackerDmsg
 	return dmsghttpConf
-}
-
-func fetchDMSGAddress(url string) string {
-	resp, err := http.Get(fmt.Sprintf("%s/health", url))
-	if err != nil {
-		return ""
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return ""
-	}
-	var healthResponse httputil.HealthCheckResponse
-	err = json.Unmarshal(body, &healthResponse)
-	if err != nil {
-		return ""
-	}
-	return healthResponse.DmsgAddr
 }
 
 func fetchDMSGServers(url string) []httputil.DMSGServersConf {

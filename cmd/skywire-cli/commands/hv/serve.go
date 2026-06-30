@@ -2,6 +2,7 @@
 package clihv
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -11,6 +12,8 @@ import (
 	"crypto/x509/pkix"
 	"encoding/hex"
 	"encoding/pem"
+	"fmt"
+	"html"
 	"io/fs"
 	"log"
 	"math/big"
@@ -31,15 +34,17 @@ import (
 )
 
 var (
-	serveAddr    string
-	serveHarness bool
-	serveTLS     bool
+	serveAddr     string
+	serveHarness  bool
+	serveTLS      bool
+	servePassword string
 )
 
 func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":7999", "HTTP listen address")
 	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
 	serveCmd.Flags().BoolVar(&serveTLS, "tls", false, "serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts")
+	serveCmd.Flags().StringVar(&servePassword, "password", "", "gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -101,6 +106,23 @@ page never asks anyone to type a secret key.`,
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 		serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
 		serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
+		// PWA: manifest + icons make the served page installable; sw.js gives it
+		// offline launch. Harmless to always serve these (they're only ACTIVATED
+		// when injectBoot links them, which it skips under --harness). The service
+		// worker must be no-store so a worker update is seen promptly.
+		serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
+		serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
+		serveBytes("/icon-512.png", "image/png", wasmhv.PWAIcon512)
+		// Stamp the build fingerprint into the worker so every new binary ships a
+		// byte-different sw.js → the browser detects a new worker and re-precaches
+		// the fresh shell (CACHE_VERSION embeds __BUILD__). no-store so the worker
+		// update is checked promptly.
+		swJS := bytes.ReplaceAll(wasmhv.ServiceWorkerJS, []byte("__BUILD__"), []byte(wasmVer))
+		mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/javascript")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(swJS) //nolint:errcheck // best-effort
+		})
 		// /wasm-version is the build fingerprint autoupdate.js polls; no-cache so a
 		// new binary is seen promptly (the wasm itself stays cacheable).
 		mux.HandleFunc("/wasm-version", func(w http.ResponseWriter, _ *http.Request) {
@@ -135,9 +157,14 @@ page never asks anyone to type a secret key.`,
 			fileServer.ServeHTTP(w, r)
 		})
 
+		var handler http.Handler = mux
+		if servePassword != "" {
+			handler = passwordGate(mux, servePassword)
+			cmd.Println("access-password gate enabled (--password)")
+		}
 		srv := &http.Server{
 			Addr:              serveAddr,
-			Handler:           mux,
+			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
 		}
 		if serveTLS {
@@ -232,6 +259,14 @@ func injectBoot(index []byte, wasmVer string, harness bool) []byte {
 	// drive it. Never injected on the public serving path.
 	if harness {
 		tag += "<script src=\"ctl-bridge.js\"></script>\n"
+	} else {
+		// PWA: link the manifest + theme color and register the service worker so
+		// the served page is installable + offline-capable. Skipped under --harness
+		// so a dev's browser never caches the wasm/UI across rebuilds.
+		tag += "<link rel=\"manifest\" href=\"manifest.webmanifest\">\n" +
+			"<meta name=\"theme-color\" content=\"#0e0c14\">\n" +
+			"<link rel=\"apple-touch-icon\" href=\"icon-192.png\">\n" +
+			"<script>if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(e){console.warn('sw register failed',e)})})}</script>\n"
 	}
 	lower := strings.ToLower(s)
 	if i := strings.Index(lower, "<head"); i >= 0 {
@@ -241,4 +276,43 @@ func injectBoot(index []byte, wasmVer string, harness bool) []byte {
 		}
 	}
 	return []byte(tag + s)
+}
+
+// passwordGate wraps h behind a cookie-based access-password gate for the served
+// PWA. The cookie value is the access token (sha256 of a fixed-prefix + password);
+// POST /__login with the right password sets it. This is NOT user-management (the
+// hypervisor handles that) — just one shared access password so a deployed
+// standalone PWA isn't open to anyone who has the URL. Use behind TLS.
+func passwordGate(h http.Handler, password string) http.Handler {
+	tok := func(p string) string { s := sha256.Sum256([]byte("skywire-hv:" + p)); return hex.EncodeToString(s[:]) }
+	token := tok(password)
+	const cookieName = "skywire-hv-auth"
+	loginPage := func(w http.ResponseWriter, msg string) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = fmt.Fprintf(w, `<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>skywire</title><body style="background:#0e0c14;color:#cdd2da;font:14px/1.5 system-ui;display:flex;min-height:90vh;align-items:center;justify-content:center"><form method=post action=/__login style="background:#15131c;border:1px solid #2a2342;border-radius:10px;padding:2em;max-width:300px"><h2 style="color:#9d7cff;margin-top:0">skywire</h2><p>%s</p><input name=p type=password placeholder=password autofocus style="width:100%%;box-sizing:border-box;padding:.6em;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;border-radius:6px"><button style="margin-top:1em;width:100%%;padding:.6em;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;font-weight:bold;cursor:pointer">enter</button></form></body>`, html.EscapeString(msg)) //nolint:errcheck
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/__login" && r.Method == http.MethodPost {
+			// Cap the login POST body — a password form is tiny; this stops a
+			// crafted request from forcing unbounded form parsing (gosec G120).
+			r.Body = http.MaxBytesReader(w, r.Body, 4096)
+			if r.ParseForm() == nil && tok(r.FormValue("p")) == token {
+				// Secure is conditional (serveTLS): the gate also serves on
+				// plain-http localhost, where forcing Secure would drop the
+				// cookie. HttpOnly + SameSite=Strict are always set.
+				http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: serveTLS, MaxAge: 7 * 24 * 3600}) //nolint:gosec
+				http.Redirect(w, r, "/", http.StatusSeeOther)
+				return
+			}
+			loginPage(w, "wrong password")
+			return
+		}
+		if c, err := r.Cookie(cookieName); err == nil && c.Value == token {
+			h.ServeHTTP(w, r)
+			return
+		}
+		loginPage(w, "access password required")
+	})
 }
