@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net"
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -88,6 +89,12 @@ type wtClient struct {
 	// (native only); a browser/TinyGo client never serves, so these stay empty.
 	advertisedURL      string
 	advertisedCertHash string
+
+	// sharedQUIC, when set, is the *sharedQUICMux the WT server registers its "h3"
+	// ALPN handler on, so WT serves over the unified transport_port socket instead
+	// of its own UDP port. `any` to keep this untagged file off the quic-go graph
+	// (the assertion + use live in wt_native.go); nil → dedicated WT socket.
+	sharedQUIC any
 }
 
 // AdvertisedWT returns the WT listener's dial URL and pinned cert hash after
@@ -114,25 +121,18 @@ func (c *wtClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 		return nil, io.ErrClosedPipe
 	}
 
-	// Endpoint resolution order: explicit table entry (browser autoconnect sets
-	// the URL+cert hash), then address-resolver fallback (native) — resolve the
-	// peer's WT record (https://host:port/skywire + pinned cert hash).
-	var url, certHash string
-	var ok bool
-	if c.table != nil {
-		if e, found := c.table.Entry(rPK); found {
-			url, certHash, ok = e.URL, e.CertHash, true
-		}
+	// Endpoint resolution order: an explicit table entry (browser autoconnect
+	// sets the URL+cert hash) dials that single endpoint; otherwise the native AR
+	// path (dialResolvedWT) resolves the peer's WT record and dials it LAN-first
+	// when same-NAT, falling back to the public endpoint.
+	var conn net.Conn
+	var err error
+	if e, found := c.tableEntry(rPK); found {
+		c.log.Debugf("Dialing WT %v @ %s (table)", rPK, e.URL)
+		conn, err = wtDial(ctx, e.URL, e.CertHash)
+	} else {
+		conn, err = c.dialResolvedWT(ctx, rPK)
 	}
-	if !ok {
-		url, certHash, ok = c.resolveWTViaAR(ctx, rPK)
-	}
-	if !ok {
-		return nil, ErrWTEntryNotFound
-	}
-	c.log.Debugf("Dialing WT %v @ %s", rPK, url)
-
-	conn, err := wtDial(ctx, url, certHash)
 	if err != nil {
 		return nil, err
 	}
@@ -143,4 +143,12 @@ func (c *wtClient) Dial(ctx context.Context, rPK cipher.PubKey, rPort uint16) (T
 		return nil, err
 	}
 	return tp, nil
+}
+
+// tableEntry returns a configured WT endpoint for rPK, guarding a nil table.
+func (c *wtClient) tableEntry(rPK cipher.PubKey) (WTEntry, bool) {
+	if c.table == nil {
+		return WTEntry{}, false
+	}
+	return c.table.Entry(rPK)
 }
