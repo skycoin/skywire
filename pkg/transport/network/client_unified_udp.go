@@ -12,6 +12,8 @@ package network
 import (
 	"fmt"
 	"net"
+
+	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // EnableUnifiedUDP binds the master UDP socket on port and prepares the demux.
@@ -32,12 +34,28 @@ func (f *ClientFactory) EnableUnifiedUDP(port int) error {
 	if uc, ok := conn.(*net.UDPConn); ok {
 		_ = uc.SetReadBuffer(7 << 20) //nolint:errcheck
 	}
-	f.udpDemux = newUDPDemux(conn)
+	d := newUDPDemux(conn)
+	f.udpDemux = d
+	// Build the shared QUIC multiplexer over the demux's QUIC virtual conn so
+	// squicr + WebTransport ride ONE quic.Transport on this master socket (by
+	// ALPN) instead of binding a port each. The listener starts lazily when the
+	// first QUIC-based client registers.
+	var log *logging.Logger
+	if f.MLogger != nil {
+		log = f.MLogger.PackageLogger("shared_quic")
+	} else {
+		log = logging.MustGetLogger("shared_quic")
+	}
+	f.sharedQUIC = newSharedQUICMux(d.Conn(protoQUIC), log)
 	return nil
 }
 
-// CloseUnifiedUDP closes the master UDP socket + demux, if enabled.
+// CloseUnifiedUDP closes the shared QUIC mux (its listener + transport), then the
+// master UDP socket + demux, if enabled.
 func (f *ClientFactory) CloseUnifiedUDP() error {
+	if m, ok := f.sharedQUIC.(*sharedQUICMux); ok && m != nil {
+		_ = m.Close() //nolint:errcheck
+	}
 	if d, ok := f.udpDemux.(*udpDemux); ok && d != nil {
 		return d.Close()
 	}

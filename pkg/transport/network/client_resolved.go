@@ -57,6 +57,11 @@ func (f *ClientFactory) makeResolvedClient(netType types.Type, generic *genericC
 		c.(*quicClient).table = f.QUICTable // static PK→addr pins (AR-free dial)
 		if sc := f.sharedUDPConnFor(protoQUIC, port); sc != nil {
 			c.(*quicClient).sharedConn = sc
+			// Ride the shared QUIC multiplexer (coexist with WT by ALPN) when the
+			// unified UDP socket is active and quic_port is ephemeral.
+			if m, ok := f.sharedQUIC.(*sharedQUICMux); ok {
+				c.(*quicClient).mux = m
+			}
 		}
 		return c, nil
 	}

@@ -54,10 +54,14 @@ type quicClient struct {
 	// (see udpDemux). nil = bind a dedicated socket (the default / per-type-port
 	// behavior). The master socket's lifecycle is owned by the demux, not here.
 	sharedConn net.PacketConn
-	udpConn    net.PacketConn
-	listener   *quic.Listener
-	tlsCert    tls.Certificate
-	qconf      *quic.Config
+	// mux, when set (unified transport_port + ephemeral quic_port), is the shared
+	// QUIC multiplexer squicr registers its skywire-quic-1 ALPN handler on, so it
+	// coexists with WebTransport on ONE quic.Transport over the master socket.
+	mux      *sharedQUICMux
+	udpConn  net.PacketConn
+	listener *quic.Listener
+	tlsCert  tls.Certificate
+	qconf    *quic.Config
 }
 
 // makeQuicClient is the build-tagged QUIC constructor used by MakeClient. On
@@ -267,7 +271,43 @@ func (c *quicClient) serve() {
 	c.acceptTransports(lis)
 }
 
+// listenShared registers squicr's skywire-quic-1 ALPN handler on the shared QUIC
+// multiplexer (which owns the single quic.Transport on the master socket) and
+// returns a chan-backed listener fed by accepted squicr connections. WT shares
+// the same socket via its own "h3" ALPN registration. The advertised/registered
+// AR port is the master socket's port (= transport_port).
+func (c *quicClient) listenShared() (net.Listener, error) {
+	addr := c.sharedConn.LocalAddr()
+	// Leave c.udpConn nil: the master socket + quic.Transport are owned by the
+	// shared mux (closed via CloseUnifiedUDP), not by this client's Close.
+	lis := newChanListener(addr)
+	srvTLS := quicTLSConfig(c.tlsCert, nil, nil) // accept any valid skywire PK; ALPN skywire-quic-1
+	handle := func(conn *quic.Conn) {
+		ctx, cancel := context.WithTimeout(context.Background(), quicStreamAcceptTimeout)
+		defer cancel()
+		stream, err := conn.AcceptStream(ctx)
+		if err != nil {
+			conn.CloseWithError(quicErrNoStream, "no stream opened") //nolint:errcheck,gosec
+			return
+		}
+		lis.push(&quicStreamConn{Stream: stream, conn: conn})
+	}
+	if err := c.mux.register(quicALPN, srvTLS, handle); err != nil {
+		return nil, fmt.Errorf("quic: register on shared mux: %w", err)
+	}
+	_, localPort, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		return nil, err
+	}
+	c.log.Debugf("squicr serving on shared transport_port socket %s", localPort)
+	go c.bindAndReRegister(localPort)
+	return lis, nil
+}
+
 func (c *quicClient) listen() (net.Listener, error) {
+	if c.sharedConn != nil && c.mux != nil {
+		return c.listenShared()
+	}
 	var udpConn net.PacketConn
 	if c.sharedConn != nil {
 		// Unified transport port: listen over the shared socket's QUIC demux conn.
