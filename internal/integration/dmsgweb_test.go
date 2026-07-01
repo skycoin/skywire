@@ -73,7 +73,7 @@ func TestEnv_DmsgWeb(t *testing.T) {
 	// a blank curl timeout. (Requires "dmsg_web": {"enable": true} in
 	// docker/integration/visorB.json.)
 	require.Eventually(t, func() bool {
-		out, _ := env.Exec("ss -ltn")
+		out, _ := env.Exec("ss -ltn") //nolint
 		return strings.Contains(out, ":4445")
 	}, 45*time.Second, 3*time.Second,
 		"dmsgweb SOCKS5 proxy never bound on 127.0.0.1:4445 — is dmsg_web enabled in visor-b's config (docker/integration/visorB.json)?")
