@@ -62,6 +62,14 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   private es: EventSource | null = null;
   private nodeSub: any;
 
+  // In-browser wasm visor: skychat runs in-process and is reached through the
+  // skywireVisor.skychat* JS hooks (poll skychatMessages, send via skychatSend)
+  // instead of the native SSE proxy — which the wasm core doesn't serve, so the
+  // EventSource would just sit "Disconnected — retrying…". Set on connect.
+  private wasmChat = false;
+  private pollTimer: any = null;
+  private lastPollLen = -1;
+
   // --- Password gate management state. ----------------------------
   // Whether the password section is expanded.
   pwOpen = false;
@@ -130,7 +138,11 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   private connectSSE() {
-    if (!this.node || this.es) { return; }
+    if (!this.node || this.es || this.pollTimer) { return; }
+    // In-browser wasm visor → use the in-process skychat hooks (poll), not SSE.
+    const sv = (window as any).skywireVisor;
+    this.wasmChat = (this.node as any).arch === 'wasm' && !!sv && typeof sv.skychatMessages === 'function';
+    if (this.wasmChat) { this.connectWasm(sv); return; }
     try {
       this.es = new EventSource(this.proxyUrl('sse'));
       this.es.onopen = () => { this.connected = true; this.errorText = ''; this.cdr.markForCheck(); };
@@ -146,6 +158,37 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       this.es.close();
       this.es = null;
     }
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+  }
+
+  /** In-browser wasm skychat: poll skychatMessages() (JSON [{from,text,ts,out}],
+   *  newest last) and mirror it into the message list. The in-process skychat
+   *  rides dmsg:1, so force the network label to dmsg. */
+  private connectWasm(sv: any) {
+    this.network = 'dmsg';
+    const poll = () => {
+      let arr: any[];
+      try { arr = JSON.parse(sv.skychatMessages() || '[]'); } catch {
+        this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); return;
+      }
+      if (!Array.isArray(arr)) { return; }
+      this.connected = true; this.errorText = '';
+      // Rebuild on any length change — simple + robust to buffer trims (the
+      // buffer is small). Newest last, so the tail stays scrolled.
+      if (arr.length !== this.lastPollLen) {
+        this.captureScroll();
+        this.messages = arr.slice(-500).map(m => ({
+          peer: m.from || '', direction: m.out ? 'out' : 'in', text: m.text || '', ts: m.ts || Date.now(),
+        }));
+        this.lastPollLen = arr.length;
+        this.cdr.markForCheck();
+      }
+    };
+    poll();
+    this.pollTimer = setInterval(poll, 1500);
   }
 
   /** Skychat /sse emits a stringified JSON {sender, message} payload
@@ -179,6 +222,17 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       return;
     }
     this.sending = true;
+    // In-browser wasm visor: send through the in-process skychat hook. The sent
+    // message is buffered with out:true, so the poll loop renders it — no manual
+    // push needed here.
+    if (this.wasmChat) {
+      const sv = (window as any).skywireVisor;
+      Promise.resolve(sv.skychatSend(recipient, text))
+        .then(() => { this.message = ''; })
+        .catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+        .finally(() => { this.sending = false; this.cdr.markForCheck(); });
+      return;
+    }
     fetch(this.proxyUrl('message'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -204,7 +258,8 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   /** Try to seed the message list from skychat's history. Silently
    *  skips when persistence isn't enabled (skychat returns 503). */
   private tryLoadPeers() {
-    if (!this.node || !this.historyAvailable) { return; }
+    // wasm skychat has no /history proxy; the poll loop seeds messages instead.
+    if (!this.node || !this.historyAvailable || this.wasmChat) { return; }
     fetch(this.proxyUrl('history?limit=100'))
       .then(async (resp) => {
         if (resp.status === 503) {
