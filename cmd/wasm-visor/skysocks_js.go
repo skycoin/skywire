@@ -60,6 +60,13 @@ var (
 	skysocksSessions = map[cipher.PubKey]*yamux.Session{} // one yamux session per exit
 )
 
+// proxyVerbose gates detailed per-request [skysocks-lite] / [resolve-proxy]
+// logging (the log lines surface in the "visor log" window). Off by default so
+// normal browsing doesn't spam the log; toggle from JS via
+// skywireVisor.proxyVerbose(true) to "start it with verbose debug logging".
+// Route/session establishment is always logged (one line each, not per-request).
+var proxyVerbose bool
+
 // skysocksSession returns a yamux session to the skysocks-server at serverPK,
 // lazily establishing it over a fresh route group (rtr.DialRoutes — the routing
 // layer). Cached per exit; a closed session is re-dialed.
@@ -67,15 +74,20 @@ func skysocksSession(serverPK cipher.PubKey) (*yamux.Session, error) {
 	skysocksMu.Lock()
 	defer skysocksMu.Unlock()
 	if s, ok := skysocksSessions[serverPK]; ok && !s.IsClosed() {
+		if proxyVerbose {
+			vlog(fmt.Sprintf("[skysocks-lite] reuse session to exit %s", serverPK.Hex()[:8]))
+		}
 		return s, nil
 	}
 	if rtr == nil {
 		return nil, errors.New("not booted; call boot() first")
 	}
+	t0 := time.Now()
 	dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
 	if err != nil {
+		vlog(fmt.Sprintf("[skysocks-lite] route dial to exit %s FAILED (%dms): %v", serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
 		return nil, fmt.Errorf("dial skysocks route: %w", err)
 	}
 	sess, err := yamux.Client(conn, yamux.DefaultConfig())
@@ -84,6 +96,7 @@ func skysocksSession(serverPK cipher.PubKey) (*yamux.Session, error) {
 		return nil, fmt.Errorf("yamux client: %w", err)
 	}
 	skysocksSessions[serverPK] = sess
+	vlog(fmt.Sprintf("[skysocks-lite] route+session to exit %s established (%dms)", serverPK.Hex()[:8], time.Since(t0).Milliseconds()))
 	return sess, nil
 }
 
@@ -161,12 +174,17 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		if err != nil {
 			return nil, err
 		}
+		t0 := time.Now()
 		resp, err := client.Do(req)
 		if err != nil {
+			vlog(fmt.Sprintf("[skysocks-lite] %s %s via %s FAILED (%dms): %v", method, rawURL, spk.Hex()[:8], time.Since(t0).Milliseconds(), err))
 			return nil, fmt.Errorf("fetch via skysocks: %w", err)
 		}
 		defer resp.Body.Close()                               //nolint:errcheck
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20)) // 16MB cap
+		if proxyVerbose {
+			vlog(fmt.Sprintf("[skysocks-lite] %s %s via %s → %d (%dB, %dms)", method, rawURL, spk.Hex()[:8], resp.StatusCode, len(b), time.Since(t0).Milliseconds()))
+		}
 		res := js.Global().Get("Object").New()
 		res.Set("status", resp.StatusCode)
 		buf := js.Global().Get("Uint8Array").New(len(b))
@@ -179,4 +197,16 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		res.Set("headers", hdrs)
 		return res, nil
 	})
+}
+
+// jsProxyVerbose(bool) toggles detailed per-request logging for BOTH the
+// skysocks-lite (fetchClearnet) and resolving-proxy (fetchDmsg) paths. With it
+// on, every request logs method/url/status/bytes/ms under a [skysocks-lite] /
+// [resolve-proxy] prefix in the "visor log" window. Returns the new state.
+func jsProxyVerbose(_ js.Value, args []js.Value) interface{} {
+	if len(args) > 0 {
+		proxyVerbose = args[0].Truthy()
+	}
+	vlog(fmt.Sprintf("[skysocks-lite] verbose request logging %v", proxyVerbose))
+	return proxyVerbose
 }

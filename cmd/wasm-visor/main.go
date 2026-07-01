@@ -147,6 +147,7 @@ func main() {
 		"dialRoute":       js.FuncOf(jsDialRoute),
 		"checkRegistered": js.FuncOf(jsCheckRegistered),
 		"fetchClearnet":   js.FuncOf(jsFetchClearnet),
+		"proxyVerbose":    js.FuncOf(jsProxyVerbose),
 		"skychatSend":     js.FuncOf(jsSkychatSend),
 		"skychatMessages": js.FuncOf(jsSkychatMessages),
 	}))
@@ -577,14 +578,23 @@ func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 		var status int
 		var respHeaders map[string]string
 		var b []byte
+		t0 := time.Now()
 		if homeBody != nil {
 			status, respHeaders, b = 200, map[string]string{"Content-Type": "text/html"}, homeBody
 		} else {
 			var err error
 			status, respHeaders, b, err = dmsgclient.FetchOverDmsg(ctx, dmsgC, method, resolved, path, nil, body)
 			if err != nil {
+				vlog(fmt.Sprintf("[resolve-proxy] %s %s%s → %s FAILED (%dms): %v", method, pkHost, path, resolved, time.Since(t0).Milliseconds(), err))
 				return nil, err
 			}
+		}
+		if proxyVerbose {
+			via := resolved
+			if homeBody != nil {
+				via = "in-tab home page"
+			}
+			vlog(fmt.Sprintf("[resolve-proxy] %s %s%s → %s  %d (%dB, %dms)", method, pkHost, path, via, status, len(b), time.Since(t0).Milliseconds()))
 		}
 		res := js.Global().Get("Object").New()
 		res.Set("status", status)

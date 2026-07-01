@@ -516,6 +516,7 @@
       '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
+      '<button id="sb-proxy-dbg" title="verbose skysocks-lite + resolving-proxy request logging → visor log window" style="cursor:pointer">🐞 verbose: off</button>' +
       '<span id="sb-proxy-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></span>' +
       '</div>' +
       '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
@@ -576,6 +577,16 @@
     }
     $("sb-proxy-save").onclick = saveProxy;
     $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
+    // Verbose request logging for the skysocks-lite + resolving-proxy paths. The
+    // flag is currently global to the visor (Phase 1: one log stream in the
+    // "visor log" window); per-window logging is a later phase.
+    var dbgOn = false;
+    $("sb-proxy-dbg").onclick = function () {
+      dbgOn = !dbgOn;
+      try { if (globalThis.skywireVisor && globalThis.skywireVisor.proxyVerbose) { globalThis.skywireVisor.proxyVerbose(dbgOn); } } catch (e) {}
+      this.textContent = "🐞 verbose: " + (dbgOn ? "on" : "off");
+      this.style.color = dbgOn ? "#9ece6a" : "";
+    };
 
     // uploaded holds the last picked file as {ct, b64} (base64 so binary — images,
     // fonts, … — round-trips intact); the textarea is the fallback for typed HTML.
