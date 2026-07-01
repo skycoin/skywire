@@ -72,6 +72,9 @@
     for (var i = 0; i < bytes.length; i += C) s += String.fromCharCode.apply(null, bytes.subarray(i, i + C));
     return btoa(s);
   }
+  // Module-scope HTML escaper (createBrowser has its own local copy; this one is
+  // for tool windows like createHostWindow that live outside createBrowser).
+  function esc(s) { return String(s == null ? "" : s).replace(/[<>&"]/g, function (c) { return { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]; }); }
   function ctOf(headers, path) {
     var ct = headers && (headers["Content-Type"] || headers["content-type"]);
     return (ct || mimeOf(path)).split(";")[0].trim();
@@ -570,17 +573,8 @@
       '<button id="sb-reload" title="reload" style="cursor:pointer">⟳</button>' +
       '<input id="sb-addr" placeholder="pk · pk.dmsg · home.dmsg · alias.dmsg · https://site (clearnet via proxy)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.4em">' +
       '<button id="sb-go" style="cursor:pointer">go</button>' +
-      '<button id="sb-host-t" title="host a page" style="cursor:pointer">host</button>' +
-      '<button id="sb-proxy-t" title="clearnet upstream proxy" style="cursor:pointer">⚙</button>' +
-      '</div>' +
-      '<div id="sb-host" style="display:none;gap:.3em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342;flex-direction:column">' +
-      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">path <input id="sb-hpath" value="/" size="6" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      'port <input id="sb-hport" value="80" size="4" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      'type <input id="sb-hct" value="text/html" size="9" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      '<button id="sb-host-go" style="cursor:pointer">serve over dmsg</button></div>' +
-      '<div style="display:flex;gap:.4em;align-items:center">file <input id="sb-hfile" type="file" style="flex:1;min-width:0;color:#cdd2da;font:11px monospace"></div>' +
-      '<textarea id="sb-hbody" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt; — or upload a file above" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace"></textarea>' +
-      '<span id="sb-host-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer" title="click to copy"></span>' +
+      // Content hosting moved to its own 'host' tool window (top-left ☰ menu).
+      '<button id="sb-proxy-t" title="skysocks proxy + request log" style="cursor:pointer">⚙</button>' +
       '</div>' +
       '<div id="sb-proxy" style="display:none;flex-direction:column;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342">' +
       '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
@@ -679,7 +673,6 @@
     // ⟳ reloads the current page; while a load is in flight it becomes ✕ (cancel).
     $("sb-reload").onclick = function () { if (loading) browser.cancel(); else browser.reload(); };
     $("sb-addr").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
-    $("sb-host-t").onclick = function () { var h = $("sb-host"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
     // clearnet upstream-proxy settings (per window; persists as the global default).
     $("sb-proxy-pk").value = browser.upstream();
     $("sb-proxy-t").onclick = function () { var h = $("sb-proxy"); h.style.display = h.style.display === "none" ? "flex" : "none"; $("sb-proxy-pk").value = browser.upstream(); };
@@ -711,40 +704,6 @@
       try { if (globalThis.skywireVisor && globalThis.skywireVisor.proxyVerbose) { globalThis.skywireVisor.proxyVerbose(dbgOn); } } catch (e) {}
       this.textContent = "🐞 verbose: " + (dbgOn ? "on" : "off");
       this.style.color = dbgOn ? "#9ece6a" : "";
-    };
-
-    // uploaded holds the last picked file as {ct, b64} (base64 so binary — images,
-    // fonts, … — round-trips intact); the textarea is the fallback for typed HTML.
-    var uploaded = null;
-    $("sb-hfile").onchange = function (e) {
-      var f = e.target.files && e.target.files[0];
-      if (!f) { uploaded = null; return; }
-      var rd = new FileReader();
-      rd.onload = function () {
-        var bytes = new Uint8Array(rd.result);
-        uploaded = { ct: f.type || mimeOf(f.name), b64: bytesToB64(bytes) };
-        $("sb-hct").value = uploaded.ct;
-        $("sb-host-msg").textContent = "loaded " + f.name + " (" + bytes.length + " bytes) — set path + port, then serve";
-        $("sb-host-msg").style.color = "#9ece6a";
-      };
-      rd.readAsArrayBuffer(f);
-    };
-
-    $("sb-host-go").onclick = function () {
-      if (!serveContent) { $("sb-host-msg").textContent = "serveContent unavailable"; return; }
-      var p = ($("sb-hpath").value || "/").trim() || "/";
-      var port = parseInt($("sb-hport").value, 10) || 80;
-      var entry = uploaded
-        ? { ct: uploaded.ct, body: uploaded.b64, b64: true }
-        : { ct: ($("sb-hct").value || "text/html").trim(), body: $("sb-hbody").value };
-      var m = {}; m[p] = entry;
-      serveContent(m, port);
-      var pk = ""; try { pk = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
-      var addr = (pk ? pk : "<this-pk>") + (port === 80 ? "" : ":" + port) + p;
-      var msg = $("sb-host-msg");
-      msg.textContent = "serving at " + addr + "  (click to copy)";
-      msg.style.color = "#9ece6a";
-      msg.onclick = function () { try { navigator.clipboard.writeText(addr); msg.textContent = "copied: " + addr; } catch (e) {} };
     };
 
     // home.dmsg (resolver alias for the deployment landing page), matching the
@@ -944,6 +903,93 @@
     return { wb: wb, close: function () { wb.close(); } };
   }
 
+  // createHostWindow manages content this tab hosts over dmsg. Add a text page or
+  // upload files / a whole directory; each path is served at <this-pk>.dmsg:<port>
+  // while the tab is open. Lists what's hosted with per-path enable/disable +
+  // remove. Wasm-visor only (uses skywireVisor.serveContent / hostedContent /
+  // unserveContent / setContentEnabled).
+  function createHostWindow(doc, opts) {
+    var sv = globalThis.skywireVisor || {};
+    var serveContent = opts.serveContent || sv.serveContent;
+    function selfPK() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:absolute;inset:0;background:#15131c;color:#cdd2da;font:12px/1.45 monospace;display:flex;flex-direction:column;overflow:auto";
+    var pk = selfPK();
+    wrap.innerHTML =
+      '<div style="padding:.5em;border-bottom:1px solid #2a2342;background:#1b1726">' +
+      'Hosting from this tab over dmsg — reachable at <b style="color:#9d7cff;word-break:break-all">' + (pk ? esc(pk) + ".dmsg" : "(boot the visor first)") + '</b> while this tab stays open.</div>' +
+      '<div style="padding:.5em;display:flex;flex-direction:column;gap:.4em;border-bottom:1px solid #2a2342">' +
+      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
+      'path <input id="hw-path" value="/" size="8" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      'port <input id="hw-port" value="80" size="4" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      'type <input id="hw-ct" value="text/html" size="10" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      '<button id="hw-serve" style="cursor:pointer">serve text</button></div>' +
+      '<textarea id="hw-body" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt;" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace"></textarea>' +
+      '<div style="display:flex;gap:.7em;align-items:center;flex-wrap:wrap">' +
+      '<label style="cursor:pointer">file <input id="hw-file" type="file" style="color:#cdd2da;font:11px monospace"></label>' +
+      '<label style="cursor:pointer" title="host every file in a folder, each at its relative path">directory <input id="hw-dir" type="file" webkitdirectory directory multiple style="color:#cdd2da;font:11px monospace"></label>' +
+      '</div><span id="hw-msg" style="color:#9ece6a;word-break:break-all"></span></div>' +
+      '<div style="padding:.5em;display:flex;align-items:center;gap:.5em"><b>hosted content</b><button id="hw-refresh" style="cursor:pointer">↻ refresh</button></div>' +
+      '<div id="hw-list" style="padding:0 .5em .5em;display:flex;flex-direction:column;gap:.25em"></div>';
+    function $(id) { return wrap.querySelector("#" + id); }
+    function msg(t, ok) { var m = $("hw-msg"); m.textContent = t; m.style.color = ok === false ? "#f7768e" : "#9ece6a"; }
+    function port() { return parseInt($("hw-port").value, 10) || 80; }
+    function fmtB(b) { if (b < 1024) return b + " B"; if (b < 1048576) return (b / 1024).toFixed(1) + " KB"; return (b / 1048576).toFixed(1) + " MB"; }
+
+    function renderList() {
+      var el = $("hw-list"), rows = [];
+      try { rows = JSON.parse((sv.hostedContent && sv.hostedContent()) || "[]") || []; } catch (_) {}
+      if (!rows.length) { el.innerHTML = '<span style="color:#9aa0a6">nothing hosted yet — add text or upload files / a directory above.</span>'; return; }
+      el.innerHTML = "";
+      rows.forEach(function (r) {
+        var row = doc.createElement("div");
+        row.style.cssText = "display:flex;gap:.5em;align-items:center;background:#1b1726;border:1px solid #2a2342;border-radius:4px;padding:.3em .5em;flex-wrap:wrap";
+        var cb = doc.createElement("input"); cb.type = "checkbox"; cb.checked = !!r.enabled; cb.title = "serve this path (uncheck to disable → 404, keeps the content)";
+        cb.onchange = function () { try { if (sv.setContentEnabled) sv.setContentEnabled(r.path, cb.checked, r.port); } catch (_) {} renderList(); };
+        var lbl = doc.createElement("span"); lbl.style.cssText = "flex:1;min-width:120px;word-break:break-all";
+        lbl.innerHTML = '<b style="color:' + (r.enabled ? "#9ece6a" : "#9aa0a6") + '">' + esc(r.path) + '</b> <span style="color:#9aa0a6">:' + r.port + ' · ' + esc(r.ct) + ' · ' + fmtB(r.size) + (r.enabled ? '' : ' · disabled') + '</span>';
+        var open = doc.createElement("button"); open.textContent = "open"; open.style.cursor = "pointer"; open.title = "open in a browser window";
+        open.onclick = function () { if (opts.browseTo) opts.browseTo(selfPK() + (r.port !== 80 ? ":" + r.port : ""), r.path); };
+        var rm = doc.createElement("button"); rm.textContent = "remove"; rm.style.cursor = "pointer";
+        rm.onclick = function () { try { if (sv.unserveContent) sv.unserveContent(r.path, r.port); } catch (_) {} renderList(); };
+        row.appendChild(cb); row.appendChild(lbl); row.appendChild(open); row.appendChild(rm);
+        el.appendChild(row);
+      });
+    }
+    function serveOne(path, ct, body, b64) {
+      if (!serveContent) { msg("serveContent unavailable (boot the visor first)", false); return false; }
+      var m = {}; m[path] = b64 ? { ct: ct, body: body, b64: true } : { ct: ct, body: body };
+      try { serveContent(m, port()); } catch (e) { msg("serve failed: " + e, false); return false; }
+      renderList(); return true;
+    }
+    function fileB64(f) { return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { var b = new Uint8Array(fr.result), s = "", i; for (i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); res(btoa(s)); }; fr.onerror = rej; fr.readAsArrayBuffer(f); }); }
+    function ctFor(f) { return f.type || mimeOf(f.name); }
+    $("hw-serve").onclick = function () {
+      var p = ($("hw-path").value || "/").trim() || "/";
+      if (serveOne(p, ($("hw-ct").value || "text/html").trim(), $("hw-body").value, false)) msg("serving " + p + " (text) on dmsg:" + port());
+    };
+    $("hw-file").onchange = function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f) return;
+      var p = ($("hw-path").value || "/").trim(); if (!p || p === "/") p = "/" + f.name;
+      fileB64(f).then(function (b64) { if (serveOne(p, ctFor(f), b64, true)) msg("serving " + p + " (" + fmtB(f.size) + ") on dmsg:" + port()); });
+    };
+    $("hw-dir").onchange = function (e) {
+      var files = [].slice.call(e.target.files || []); if (!files.length) return;
+      msg("uploading " + files.length + " file(s)…");
+      var n = 0;
+      files.reduce(function (chain, f) {
+        return chain.then(function () {
+          var rel = (f.webkitRelativePath || f.name).replace(/^\/+/, "");
+          return fileB64(f).then(function (b64) { if (serveOne("/" + rel, ctFor(f), b64, true)) n++; });
+        });
+      }, Promise.resolve()).then(function () { msg("hosting " + n + " file(s) from the directory on dmsg:" + port()); renderList(); });
+    };
+    $("hw-refresh").onclick = renderList;
+    renderList();
+    var wb = makeWin(doc, { title: "host content", root: opts.root, top: opts.top, bottom: opts.bottom, width: "56%", height: "66%", mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); } });
+    return { wb: wb, close: function () { wb.close(); } };
+  }
+
   // createTerminalWindow opens a real dmsgpty terminal as a WinBox iframe to
   // opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty WebSocket).
   // Native-only — the wasm visor has no host shell and sets no ptyURL, so the
@@ -1052,6 +1098,8 @@
       menu.appendChild(b);
     }
     addApp("browser", function () { openBrowse(); });
+    // 'host' is wasm-visor only — it self-hosts content over dmsg from the tab.
+    if (globalThis.skywireVisor && globalThis.skywireVisor.serveContent) { addApp("host", function () { openHost(); }); }
     addApp("console", function () { openCli(); });
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
@@ -1112,6 +1160,16 @@
       if (!opts.ptyURL || focusExisting(termWin)) { return; }
       termWin = createTerminalWindow(doc, withRoot({ onClose: function () { untrack(termWin); termWin = null; } }));
       track(termWin, "terminal");
+    }
+    var hostWin = null;
+    function openHost() {
+      if (focusExisting(hostWin)) { return; }
+      hostWin = createHostWindow(doc, withRoot({
+        onClose: function () { untrack(hostWin); hostWin = null; },
+        // let the host window open a hosted path in a fresh browser window
+        browseTo: function (host, path) { var w = openBrowse(); try { w.browser.browseTo(host, path); } catch (e) {} }
+      }));
+      track(hostWin, "host");
     }
 
     bq("tb-dock").onclick = function () { applyDock(dock === "top" ? "bottom" : "top"); };
