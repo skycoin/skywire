@@ -575,7 +575,7 @@ func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 		}
 		// Resolve resolver aliases (home.dmsg, tpd.dmsg, <pk>.dmsg) like the socks5
 		// resolving proxy, so the in-tab browser uses the same names.
-		resolved, homeBody := resolveFetchHost(pkHost)
+		resolved, vhost, homeBody := resolveFetchHost(pkHost)
 		var status int
 		var respHeaders map[string]string
 		var b []byte
@@ -583,8 +583,15 @@ func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 		if homeBody != nil {
 			status, respHeaders, b = 200, map[string]string{"Content-Type": "text/html"}, homeBody
 		} else {
+			// Carry the parsed vhost as the Host header so a name-based virtual
+			// host (bunkerofdoom.com.<pk>.dmsg) reaches the right site on a
+			// vhost-aware backend behind the destination visor.
+			var reqHeaders map[string]string
+			if vhost != "" {
+				reqHeaders = map[string]string{"Host": vhost}
+			}
 			var err error
-			status, respHeaders, b, err = dmsgclient.FetchOverDmsg(ctx, dmsgC, method, resolved, path, nil, body)
+			status, respHeaders, b, err = dmsgclient.FetchOverDmsg(ctx, dmsgC, method, resolved, path, reqHeaders, body)
 			if err != nil {
 				vlog(fmt.Sprintf("[resolve-proxy] %s %s%s → %s FAILED (%dms): %v", method, pkHost, path, resolved, time.Since(t0).Milliseconds(), err))
 				return nil, err
