@@ -115,7 +115,18 @@
       'if(!same(u))return _f.apply(this,arguments);' +
       'return relay(pathOf(u),(init&&init.method)||"GET",(init&&init.body)||null).then(function(r){' +
       'var body=r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();' +
-      'return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});});};'
+      'return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});});};' +
+      // (3) lazy image loader: images are NOT inlined into the srcdoc (that bloats
+      // a catalog page to tens of MB). Each carries a data-dmsg-src; fetch it over
+      // dmsg via the relay only when it scrolls near the viewport, then swap in a
+      // data: URL. A MutationObserver picks up images the page adds dynamically.
+      'function _limg(el){var p=el.getAttribute("data-dmsg-src");if(!p)return;el.removeAttribute("data-dmsg-src");' +
+      'relay(pathOf(p),"GET",null).then(function(r){if(r&&r.body&&(r.status||200)<400)el.src="data:"+(r.ct||"application/octet-stream")+";base64,"+r.body;}).catch(function(){});}' +
+      'var _lio=("IntersectionObserver"in window)?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){_lio.unobserve(e.target);_limg(e.target);}});},{rootMargin:"400px"}):null;' +
+      'function _lobs(el){if(_lio)_lio.observe(el);else _limg(el);}' +
+      'function _lscan(root){var ns=(root&&root.querySelectorAll)?root.querySelectorAll("img[data-dmsg-src]"):[];for(var i=0;i<ns.length;i++)_lobs(ns[i]);}' +
+      'document.addEventListener("DOMContentLoaded",function(){_lscan(document);' +
+      'new MutationObserver(function(ms){ms.forEach(function(m){if(!m.addedNodes)return;for(var i=0;i<m.addedNodes.length;i++){var n=m.addedNodes[i];if(n.nodeType!==1)continue;if(n.matches&&n.matches("img[data-dmsg-src]"))_lobs(n);_lscan(n);}});}).observe(document.documentElement,{childList:true,subtree:true});});'
     );
   }
 
@@ -139,6 +150,9 @@
     var log = opts.log || function () {};
     var currentSitePK = "";
 
+    // 1x1 transparent GIF — placeholder src for a deferred (lazy) image so it
+    // occupies layout without a broken-image flash until the real bytes arrive.
+    var BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
     var CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
     function inlineCss(pk, base, css) {
       var uniq = [...new Set([...css.matchAll(CSS_URL)].map(function (m) { return m[2]; }).filter(sameSite))];
@@ -185,12 +199,27 @@
           if (!/url\(/i.test(el.textContent || "")) return;
           jobs.push(inlineCss(pk, path, el.textContent).then(function (css) { el.textContent = css; }).catch(function () {}));
         });
-        doc.querySelectorAll("img[src],script[src],source[src]").forEach(function (el) {
+        // Scripts + <source> are inlined eagerly (a script must exist before it
+        // runs; a <picture>/<video> source is chosen at parse time and can't be
+        // swapped afterward).
+        doc.querySelectorAll("script[src],source[src]").forEach(function (el) {
           var src = el.getAttribute("src");
           if (!sameSite(src)) return;
           jobs.push(fetchDmsg(pk, "GET", resolvePath(src, path), null)
             .then(function (r) { el.setAttribute("src", "data:" + ctOf(r.headers, src) + ";base64," + bytesToB64(r.body)); })
             .catch(function () {}));
+        });
+        // Images are deferred, NOT inlined — a media-heavy catalog would bloat the
+        // srcdoc to tens of MB and stall the render. Rewrite each to a data-dmsg-src
+        // the injected lazy-loader fetches over dmsg on scroll; a transparent
+        // placeholder keeps layout stable, and srcset is dropped so the browser
+        // can't try to load a non-rewritten (CSP-blocked) candidate.
+        doc.querySelectorAll("img[src]").forEach(function (el) {
+          var src = el.getAttribute("src");
+          if (!sameSite(src)) return;
+          el.setAttribute("data-dmsg-src", resolvePath(src, path));
+          el.removeAttribute("srcset");
+          el.setAttribute("src", BLANK_IMG);
         });
         // A dmsg site may reference CLEARNET (http/https) sub-resources — gate them
         // by the upstream-proxy policy so they can't silently leak the user's IP
