@@ -26,6 +26,13 @@ export class AppsComponent extends PageBaseComponent implements OnInit, OnDestro
   // three render the per-app management surfaces inline.
   sub: 'list' | 'chat' | 'vpn' | 'skysocks' = 'list';
 
+  // True when the current node is an in-browser wasm visor, which can't run the
+  // native VPN (TUN) or skysocks-server apps — so those sub-tabs are hidden for
+  // it (Skychat runs in-process and stays). A REMOTE native visor managed from
+  // the wasm hypervisor is NOT wasm, so it keeps all sub-tabs. Gated on the
+  // node's arch, not the UI mode, for exactly that reason.
+  wasmNode = false;
+
   private dataSubscription: Subscription;
 
   ngOnInit() {
@@ -34,6 +41,10 @@ export class AppsComponent extends PageBaseComponent implements OnInit, OnDestro
       this.nodePK = node.localPk;
       this.apps = node.apps;
       this.nodeIp = node.ip;
+      this.wasmNode = (node as any).arch === 'wasm';
+      if (this.wasmNode && (this.sub === 'vpn' || this.sub === 'skysocks')) {
+        this.sub = 'list';
+      }
     });
 
     return super.ngOnInit();

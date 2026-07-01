@@ -85,7 +85,14 @@ func skysocksSession(serverPK cipher.PubKey) (*yamux.Session, error) {
 	t0 := time.Now()
 	dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
-	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
+	// Optimized routing for the browsing proxy: request a small mux (2 parallel
+	// routes) for throughput + mid-browse resilience — if one route degrades the
+	// other carries and the router's mux-auto GROW adapts. Latency weighting is
+	// the route-finder default. The policy DialHook clamps this, and it degrades
+	// gracefully to a single route when mux isn't available, so it's safe.
+	dopts := router.DefaultDialOptions()
+	dopts.MuxRoutes = 2
+	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, dopts)
 	if err != nil {
 		vlog(fmt.Sprintf("[skysocks-lite] route dial to exit %s FAILED (%dms): %v", serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
 		return nil, fmt.Errorf("dial skysocks route: %w", err)
