@@ -994,6 +994,31 @@ func (visorSelf) SelfNetworkView() []byte {
 	return b
 }
 
+// SelfNetworkTransports fetches the TPD's network-wide transport metrics (the
+// visualizer's EDGES) over dmsg — the same /metrics call the native HV proxies
+// — and returns the raw JSON array unchanged. Mirrors SelfNetworkView's TPD
+// fetch; no aggregation needed, the visualizer parses edges[]/type/live itself.
+func (visorSelf) SelfNetworkTransports(days int) []byte {
+	if dmsgC == nil {
+		return nil
+	}
+	host := ""
+	if pk, e := dmsgURLPK(visorcore.ResolveServices(nil).TransportDiscoveryDmsg); e == nil {
+		host = pk.Hex()
+	}
+	if host == "" {
+		return nil
+	}
+	path := fmt.Sprintf("/metrics?days=%d&bandwidth=true&latency=true&edges=true", days)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	status, _, body, err := dmsgclient.FetchOverDmsg(ctx, dmsgC, "GET", host, path, nil, nil)
+	if err != nil || status != 200 {
+		return nil
+	}
+	return body
+}
+
 // jsDialTransport(pkHex, netType, url, certHash) creates a direct visor↔visor
 // transport from this tab to a peer that runs the listener:
 //   - netType "ws": url is the peer's ws:// (or wss://) WebSocket endpoint.

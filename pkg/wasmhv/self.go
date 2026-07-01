@@ -27,6 +27,13 @@ type SelfProvider interface {
 	// /api/network-view (which the native HV serves), leaving the network-view table
 	// + visualizer empty in the browser.
 	SelfNetworkView() []byte
+	// SelfNetworkTransports returns the TPD network-wide transport metrics
+	// (each {edges:[a,b], type, live, bandwidth, latency}) as pre-marshaled JSON
+	// — the native /api/network/transports shape: a flat array the visualizer
+	// draws as graph EDGES. Without it the wasm core 404s and the network
+	// visualizer renders nodes with no links ("N visors · 0 transports"). nil
+	// when the tab can't reach the TPD.
+	SelfNetworkTransports(days int) []byte
 }
 
 // SetSelf attaches the local visor's hypervisor view. Pass nil to detach.
