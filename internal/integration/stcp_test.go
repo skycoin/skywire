@@ -119,7 +119,7 @@ func TestEnv_STCPDataRoute(t *testing.T) {
 	require.NoError(t, err, "STCP transport visor-a->visor-b must be creatable")
 	require.Equal(t, types.STCP, stcpTp.Type, "transport type must be STCP")
 	require.Contains(t, stcpTp.Remote.Hex(), pkB, "remote PK mismatch on STCP transport")
-	defer func() { _, _ = env.VisorTpRm(visorA, stcpTp.ID) }() // best-effort cleanup
+	defer func() { _, _ = env.VisorTpRm(visorA, stcpTp.ID) }() //nolint // best-effort cleanup
 
 	// Baseline: an idle transport moves a few bytes via keepalive/RTT ping-pong.
 	before, err := env.visorTpView(visorA, stcpTp.ID.String())
