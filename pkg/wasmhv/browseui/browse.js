@@ -97,8 +97,10 @@
   // navShimSrc is JS injected (as a <script> built via DOM, so no </script> in a
   // string) at the top of the browsed iframe's <head>: (1) same-site link clicks
   // → postMessage a nav request to the parent; (2) window.fetch override → relay
-  // the page's own same-site requests to the parent, fetched over dmsg.
-  function navShimSrc(path) {
+  // the page's own requests to the parent — same-site over dmsg, cross-origin
+  // (clearnet) through the skysocks-lite upstream proxy (gated by cnMode). cnMode
+  // is the clearnet policy at render time ("block"|"direct"|"proxy").
+  function navShimSrc(path, cnMode) {
     return (
       'var cur=' + JSON.stringify(path) + ';' +
       'function pathOf(h){try{var u=new URL(h,"http://dmsg"+cur);return u.pathname+u.search;}catch(e){return h;}}' +
@@ -110,12 +112,15 @@
       '},true);' +
       'var _rq=0,_pend={};' +
       'window.addEventListener("message",function(e){var d=e.data||{};if(d.type!=="dmsgreply")return;var p=_pend[d.id];if(!p)return;delete _pend[d.id];p(d);});' +
-      'function relay(p,m,b){return new Promise(function(res){var id=++_rq;_pend[id]=res;parent.postMessage({type:"dmsgreq",id:id,path:p,method:m||"GET",body:b||null},"*");});}' +
-      'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);' +
-      'if(!same(u))return _f.apply(this,arguments);' +
-      'return relay(pathOf(u),(init&&init.method)||"GET",(init&&init.body)||null).then(function(r){' +
-      'var body=r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();' +
-      'return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});});};' +
+      'function relay(t,m,b,cn){return new Promise(function(res){var id=++_rq;_pend[id]=res;parent.postMessage({type:"dmsgreq",id:id,path:t,method:m||"GET",body:b||null,clearnet:!!cn},"*");});}' +
+      'function _toResp(r){var body=r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});}' +
+      'var CNMODE=' + JSON.stringify(cnMode || "block") + ';' +
+      'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);var m=(init&&init.method)||"GET",b=(init&&init.body)||null;' +
+      'if(same(u))return relay(pathOf(u),m,b,false).then(_toResp);' +           // same-site → dmsg
+      'if(!/^https?:\\/\\//i.test(u||""))return _f.apply(this,arguments);' +    // data:/blob:/etc → real
+      'if(CNMODE==="direct")return _f.apply(this,arguments);' +                 // direct mode → real (CSP off)
+      'if(CNMODE!=="proxy")return Promise.resolve(new Response("clearnet blocked: set an upstream proxy",{status:403}));' +
+      'return relay(u,m,b,true).then(_toResp);};' +                            // proxy → skysocks-lite via parent
       // (3) lazy image loader: images are NOT inlined into the srcdoc (that bloats
       // a catalog page to tens of MB). Each carries a data-dmsg-src; fetch it over
       // dmsg via the relay only when it scrolls near the viewport, then swap in a
@@ -178,7 +183,7 @@
         var doc = new DOMParser().parseFromString(html, "text/html");
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("target", "_self");
-        var sc = doc.createElement("script"); sc.textContent = navShimSrc(path);
+        var sc = doc.createElement("script"); sc.textContent = navShimSrc(path, clearnetPolicy().mode);
         head.insertBefore(sc, head.firstChild);
         head.insertBefore(base, head.firstChild);
         // Strict CSP catch-all unless the window is in DIRECT clearnet mode (where
@@ -472,12 +477,26 @@
     window.addEventListener("message", async function (e) {
       var d = e.data || {};
       if (d.type === "dmsgnav" && currentSitePK) { browseTo(currentSitePK, d.path); return; }
-      if (d.type === "dmsgreq" && currentSitePK) {
+      if (d.type === "dmsgreq") {
         try {
-          var r = await fetchDmsg(currentSitePK, d.method || "GET", d.path, d.body || null);
+          var r;
+          if (d.clearnet) {
+            // The site fetched a cross-origin (clearnet) URL. Route it through the
+            // skysocks-lite upstream exit (IP-anonymous) when one is set; refuse
+            // otherwise so a dmsg page can't silently egress to clearnet.
+            var pol = clearnetPolicy();
+            if (pol.mode !== "proxy") {
+              e.source.postMessage({ type: "dmsgreply", id: d.id, status: 403, ct: "text/plain", body: btoa("clearnet blocked: no upstream proxy") }, "*");
+              return;
+            }
+            r = await fetchClearnet(pol.exit, d.method || "GET", d.path, d.body || null);
+          } else {
+            if (!currentSitePK) return;
+            r = await fetchDmsg(currentSitePK, d.method || "GET", d.path, d.body || null);
+          }
           e.source.postMessage({ type: "dmsgreply", id: d.id, status: r.status, ct: ctOf(r.headers, d.path), body: bytesToB64(r.body) }, "*");
         } catch (err) {
-          e.source.postMessage({ type: "dmsgreply", id: d.id, status: 502, ct: "text/plain", body: btoa("dmsg fetch error") }, "*");
+          e.source.postMessage({ type: "dmsgreply", id: d.id, status: 502, ct: "text/plain", body: btoa("fetch error") }, "*");
         }
       }
     });
