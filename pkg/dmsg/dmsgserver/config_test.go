@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/skycoin/skycoin/src/util/logging"
@@ -58,4 +59,34 @@ func TestConfigFlush(t *testing.T) {
 
 func TestDefaultConfigPath(t *testing.T) {
 	assert.Equal(t, "config.json", dmsgserver.DefaultConfigPath)
+}
+
+// TestWSTLS_OffByDefault locks the safety contract for the built-in autocert wss
+// listener: it is opt-in (ws_tls_address empty unless explicitly set), so every
+// existing dmsg server is unaffected, and the JSON tags round-trip.
+func TestWSTLS_OffByDefault(t *testing.T) {
+	var c dmsgserver.Config
+	dmsgserver.GenerateDefaultConfig(&c)
+	if c.WSTLSAddress != "" {
+		t.Fatalf("ws_tls_address must default to empty (off); got %q", c.WSTLSAddress)
+	}
+
+	// Set → emitted under the documented JSON keys.
+	set, err := json.Marshal(dmsgserver.Config{WSTLSAddress: ":443", WSTLSCacheDir: "/var/lib/dmsg-autocert"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(set), `"ws_tls_address":":443"`) ||
+		!strings.Contains(string(set), `"ws_tls_cache_dir":"/var/lib/dmsg-autocert"`) {
+		t.Fatalf("ws_tls fields not emitted under expected keys: %s", set)
+	}
+
+	// Unset → omitted (omitempty), so existing configs gain no new keys.
+	zb, err := json.Marshal(dmsgserver.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(zb), "ws_tls_address") {
+		t.Fatalf("ws_tls_address must be omitempty; got %s", zb)
+	}
 }
