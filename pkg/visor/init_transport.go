@@ -895,8 +895,18 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 		registrationTimeout,
 		maxTransports,
 		func() int {
-			// Return current transport count from transport manager
-			return v.tpM.TransportCount()
+			// Count DISTINCT remote visors, not raw transports. The drain cap is
+			// meant to describe how many peers this visor serves — its real load —
+			// so holding several transport TYPES to the same peer (stcpr + sudph +
+			// squicr, for route/path diversity) must count as one, not inflate the
+			// cap. Otherwise adding transport types would re-trigger the drain even
+			// though the peer set is unchanged.
+			seen := make(map[cipher.PubKey]struct{})
+			v.tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
+				seen[mt.Remote()] = struct{}{}
+				return true
+			})
+			return len(seen)
 		},
 	)
 

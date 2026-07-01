@@ -105,11 +105,20 @@ type DmsgClientSummary struct {
 	RoundTrip time.Duration `json:"round_trip"`
 }
 
+// DMSGServerInfo mirrors visor.DMSGServerInfo: a connected dmsg server with its
+// round-trip latency (0 = not measured). The node-list UI reads the `dmsg_servers`
+// array (pk + latency) to show which dmsg servers a visor is connected to.
+type DMSGServerInfo struct {
+	PK      cipher.PubKey `json:"pk"`
+	Latency time.Duration `json:"latency"`
+}
+
 // Summary mirrors the scalar fields of visor.Summary the node table reads.
 type Summary struct {
 	Overview          *Overview          `json:"overview"`
 	Health            *HealthInfo        `json:"health"`
 	DmsgStats         *DmsgClientSummary `json:"dmsg_stats"`
+	DMSGServers       []DMSGServerInfo   `json:"dmsg_servers"`
 	Uptime            float64            `json:"uptime"`
 	Online            bool               `json:"online"`
 	MinHops           uint16             `json:"min_hops"`
