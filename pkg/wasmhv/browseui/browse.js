@@ -486,16 +486,22 @@
             // otherwise so a dmsg page can't silently egress to clearnet.
             var pol = clearnetPolicy();
             if (pol.mode !== "proxy") {
+              log("clearnet " + (d.method || "GET") + " " + d.path + " → BLOCKED (no upstream)");
               e.source.postMessage({ type: "dmsgreply", id: d.id, status: 403, ct: "text/plain", body: btoa("clearnet blocked: no upstream proxy") }, "*");
               return;
             }
+            var ct0 = Date.now();
             r = await fetchClearnet(pol.exit, d.method || "GET", d.path, d.body || null);
+            log("clearnet " + (d.method || "GET") + " " + d.path + " via " + pol.exit.slice(0, 8) + "… → " + r.status + " (" + (r.body ? r.body.length : 0) + "B, " + (Date.now() - ct0) + "ms)");
           } else {
             if (!currentSitePK) return;
+            var dt0 = Date.now();
             r = await fetchDmsg(currentSitePK, d.method || "GET", d.path, d.body || null);
+            log("dmsg " + (d.method || "GET") + " " + d.path + " → " + r.status + " (" + (r.body ? r.body.length : 0) + "B, " + (Date.now() - dt0) + "ms)");
           }
           e.source.postMessage({ type: "dmsgreply", id: d.id, status: r.status, ct: ctOf(r.headers, d.path), body: bytesToB64(r.body) }, "*");
         } catch (err) {
+          log("fetch error " + (d.clearnet ? "clearnet " : "dmsg ") + d.path + ": " + String((err && err.message) || err));
           e.source.postMessage({ type: "dmsgreply", id: d.id, status: 502, ct: "text/plain", body: btoa("fetch error") }, "*");
         }
       }
@@ -576,13 +582,18 @@
       '<textarea id="sb-hbody" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt; — or upload a file above" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace"></textarea>' +
       '<span id="sb-host-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer" title="click to copy"></span>' +
       '</div>' +
-      '<div id="sb-proxy" style="display:none;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342;align-items:center;flex-wrap:wrap">' +
+      '<div id="sb-proxy" style="display:none;flex-direction:column;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342">' +
+      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
       '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks (anonymous)">clearnet upstream proxy:</span>' +
       '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
-      '<button id="sb-proxy-dbg" title="verbose skysocks-lite + resolving-proxy request logging → visor log window" style="cursor:pointer">🐞 verbose: off</button>' +
-      '<span id="sb-proxy-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></span>' +
+      '<button id="sb-proxy-dbg" title="stream the wasm visor\'s own detailed [skysocks-lite]/[resolve-proxy] lines to the visor-log window too" style="cursor:pointer">🐞 verbose: off</button>' +
+      '<button id="sb-proxy-clear" title="clear this window\'s request log" style="cursor:pointer">clear</button>' +
+      '</div>' +
+      // Terminal-like per-window request log: every fetch this browser window makes
+      // over the resolving proxy (dmsg) or skysocks-lite (clearnet), + config events.
+      '<pre id="sb-proxy-log" title="requests through this window — resolving proxy (dmsg) + skysocks-lite (clearnet)" style="margin:0;height:160px;overflow:auto;background:#0e0c14;color:#a9b1d6;border:1px solid #2a2342;padding:.45em;font:11px/1.45 monospace;white-space:pre-wrap;word-break:break-all"></pre>' +
       '</div>' +
       '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
 
@@ -598,13 +609,32 @@
     });
     var win = { wb: wb, el: wrap };
     var loading = false;
+    // Per-window request log: a small ring buffer rendered as a terminal-like pane
+    // in the ⚙ panel, so each browser window shows exactly what went through its
+    // resolving proxy / skysocks-lite — instead of a cramped one-line status that
+    // forces a trip to the main visor-log window.
+    var proxyLog = [];
+    var PROXY_LOG_MAX = 400;
+    function renderProxyLog() {
+      var el = $("sb-proxy-log");
+      if (!el) return;
+      el.textContent = proxyLog.join("\n");
+      el.scrollTop = el.scrollHeight;
+    }
+    function plog(line) {
+      var t = "";
+      try { t = new Date().toTimeString().slice(0, 8) + "  "; } catch (e) {}
+      proxyLog.push(t + line);
+      if (proxyLog.length > PROXY_LOG_MAX) proxyLog.shift();
+      renderProxyLog();
+    }
     var browser = createBrowser({
       frame: $("sb-frame"), fetchDmsg: fetchDmsg,
       // Thread the clearnet + self-PK providers from the panel opts so the engine
       // is host-agnostic: the wasm visor passes none (they fall back to the
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
       fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend,
-      log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
+      log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} plog(m); },
       // Reflect the current site into the WinBox title bar.
       setAddr: function (u) { $("sb-addr").value = u; var t = u.replace(/^https?:\/\//, "").slice(0, 18); try { wb.setTitle(t || "skynet"); } catch (e) {} },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
@@ -642,10 +672,13 @@
     function saveProxy() {
       browser.setUpstream($("sb-proxy-pk").value);
       var up = browser.upstream(), self = ""; try { self = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
-      var mode = !up ? "blocked" : (up === self ? "direct (non-anonymous)" : "via skysocks " + up.slice(0, 8) + " (anonymous)");
-      var m = $("sb-proxy-msg"); m.textContent = "clearnet: " + mode; m.style.color = up ? "#9ece6a" : "#e0af68";
+      var mode = !up ? "clearnet BLOCKED (no upstream set)"
+        : (up === self ? "clearnet DIRECT via self " + up.slice(0, 8) + "… (non-anonymous)"
+          : "clearnet via skysocks " + up.slice(0, 8) + "… (IP-anonymous exit)");
+      plog("● upstream set → " + mode);
     }
     $("sb-proxy-save").onclick = saveProxy;
+    $("sb-proxy-clear").onclick = function () { proxyLog = []; renderProxyLog(); };
     $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
     // Verbose request logging for the skysocks-lite + resolving-proxy paths. The
     // flag is currently global to the visor (Phase 1: one log stream in the
