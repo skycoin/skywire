@@ -152,9 +152,12 @@
       });
     }
 
-    async function renderSite(pk, path, html) {
+    async function renderSite(pk, path, html, scheme) {
       currentSitePK = pk;
-      if (opts.setAddr) opts.setAddr("http://" + pk + (path || "/"));
+      // Preserve the scheme the user navigated with (http/https) — the fetch is
+      // over dmsg either way (Noise-encrypted, no in-tab TLS), so the scheme is
+      // cosmetic, but echoing back what was entered avoids a surprising rewrite.
+      if (opts.setAddr) opts.setAddr((scheme || "http") + "://" + pk + (path || "/"));
       var docHtml;
       try {
         var doc = new DOMParser().parseFromString(html, "text/html");
@@ -228,7 +231,7 @@
           return { status: r.status };
         }
         var html = new TextDecoder().decode(r.body);
-        await renderSite(entry.pk, entry.path, html);
+        await renderSite(entry.pk, entry.path, html, entry.scheme);
         if (gen !== loadGen) return { status: 0, cancelled: true };
         log("browsed dmsg://" + entry.pk + entry.path + " → " + r.status + " (" + r.body.length + " bytes)");
         return { status: r.status, bytes: r.body.length, html: html };
@@ -290,11 +293,14 @@
     // dropped (skywireVisor fetches aren't AbortController-wired).
     function cancel() { loadGen++; setLoading(false); }
 
-    async function browseTo(pk, path) {
+    async function browseTo(pk, path, scheme) {
       pk = (pk || "").trim();
       path = path || "/";
       if (!pk) { log("browse: enter a site PK"); return { status: 0 }; }
-      return navigate({ kind: "dmsg", pk: pk, path: path });
+      // Inherit the current site's scheme for in-site link clicks (which don't
+      // carry one), so navigating within an https:// site stays https://.
+      if (!scheme) { var cur = hist[histIdx]; scheme = (cur && cur.kind === "dmsg" && cur.scheme) || "http"; }
+      return navigate({ kind: "dmsg", pk: pk, path: path, scheme: scheme });
     }
 
     // --- CLEARNET upstream-proxy policy ---
@@ -563,7 +569,7 @@
       var host = u.hostname, path = (u.pathname || "/") + (u.search || "");
       // .dmsg/.skynet host, or a bare 66-hex PK → dmsg/skynet site; else clearnet.
       if (/\.(dmsg|skynet)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
-        browser.browseTo(host + (u.port ? ":" + u.port : ""), path);
+        browser.browseTo(host + (u.port ? ":" + u.port : ""), path, (u.protocol || "http:").replace(":", ""));
       } else {
         browser.browseToClearnet(hadScheme ? v : "https://" + v);
       }
