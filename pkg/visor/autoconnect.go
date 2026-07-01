@@ -134,7 +134,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Check which transport types are supported locally
 			localSupportsSUDPH := a.tm.IsKnownNetwork(tptypes.SUDPH)
 			localSupportsSTCPR := a.tm.IsKnownNetwork(tptypes.STCPR)
-
+			localSupportsSQUICR := a.tm.IsKnownNetwork(tptypes.QUIC) // QUIC(squicr): 3rd distinct carrier family for route diversity
 			if !localSupportsSUDPH && !localSupportsSTCPR {
 				a.log.Warn("No supported network types available locally (SUDPH and STCPR both unavailable)")
 				continue
@@ -221,6 +221,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Count existing automatic transports by type and remote PK
 			countSTCPR := 0
 			countSUDPH := 0
+			countSQUICR := 0
 			existingByPK := make(map[cipher.PubKey]map[tptypes.Type]bool)
 			for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
 				remotePK := autoconnTP.Remote()
@@ -233,6 +234,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					countSTCPR++
 				case tptypes.SUDPH:
 					countSUDPH++
+				case tptypes.QUIC:
+					countSQUICR++
 				}
 			}
 
@@ -278,6 +281,21 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				countSTCPR += phase2.Count
 			}
 
+			// Phase 2b: QUIC (squicr) to the SAME public visors — a third distinct
+			// carrier family alongside stcpr/sudph so route setup has a real per-hop
+			// choice (the transport-preference order ranks QUIC just below STCPR).
+			// Counts against the same distinct-peer drain budget as stcpr, so it
+			// adds path diversity without inflating the visor's peer count.
+			if localSupportsSQUICR {
+				a.log.Debug("Phase 2b: Connecting to public visors via QUIC (squicr)")
+				phase2b, err := a.conn.ConnectToVisors(ctx, v.conf.PK, connectedPublicVisors, tptypes.QUIC,
+					existingByPK, nil, maxPublicVisors, 0, false)
+				if err != nil {
+					return err
+				}
+				countSQUICR += phase2b.Count
+			}
+
 			// Phase 3: SUDPH to other connected visors
 			if localSupportsSUDPH && countSUDPH < maxSUDPH && len(absent2) > 0 {
 				a.log.Debug("Phase 3: Connecting to other visors via SUDPH")
@@ -290,6 +308,7 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			}
 
 			a.log.WithField("stcpr", countSTCPR).WithField("sudph", countSUDPH).
+				WithField("squicr", countSQUICR).
 				WithField("public_visors", len(connectedPublicVisors)).
 				Debug("Public autoconnect cycle completed")
 		}
