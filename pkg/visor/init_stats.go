@@ -160,22 +160,32 @@ func announceOnce(ctx context.Context, pub *treestore.Publisher, tpdPK cipher.Pu
 	}
 }
 
-// tpdCXOPeer extracts the TPD's PK from the visor's Transport.DiscoveryDmsg
-// URL ("dmsg://<pk>:<port>"). Returns ok=false when the URL is empty
-// or unparseable; the caller treats that as "no announce target."
+// tpdCXOPeer extracts the TPD's PK from the visor's transport-discovery
+// URL ("dmsg://<pk>:<port>") — the announce target for the CXO telemetry
+// feed. Returns ok=false when no dmsg:// URL is configured.
+//
+// It reads discovery_dmsg first (the historical DMSG-HTTP fallback field,
+// paired with a clearnet discovery), then falls back to discovery itself.
+// The dmsg-only deployment migration (#3348) collapsed the deployment URLs
+// into a single source of truth, so an updated visor now carries the TPD
+// dmsg:// address directly in discovery with discovery_dmsg empty — reading
+// only discovery_dmsg left the announce loop silently disabled fleet-wide,
+// which starves TPD's /metrics of all bandwidth (it is CXO-sourced only).
 func tpdCXOPeer(v *Visor) (cipher.PubKey, bool) {
-	raw := v.conf.Transport.DiscoveryDmsg
-	if raw == "" {
-		return cipher.PubKey{}, false
+	for _, raw := range []string{v.conf.Transport.DiscoveryDmsg, v.conf.Transport.Discovery} {
+		if raw == "" {
+			continue
+		}
+		var u dmsgcurl.URL
+		if err := u.Fill(raw); err != nil {
+			continue
+		}
+		if u.Scheme != "dmsg" {
+			continue
+		}
+		return u.Addr.PK, true
 	}
-	var u dmsgcurl.URL
-	if err := u.Fill(raw); err != nil {
-		return cipher.PubKey{}, false
-	}
-	if u.Scheme != "dmsg" {
-		return cipher.PubKey{}, false
-	}
-	return u.Addr.PK, true
+	return cipher.PubKey{}, false
 }
 
 // buildStatsPublisher constructs the visor's CXO publisher feed for
