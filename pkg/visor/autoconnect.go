@@ -134,7 +134,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			// Check which transport types are supported locally
 			localSupportsSUDPH := a.tm.IsKnownNetwork(tptypes.SUDPH)
 			localSupportsSTCPR := a.tm.IsKnownNetwork(tptypes.STCPR)
-			localSupportsSQUICR := a.tm.IsKnownNetwork(tptypes.QUIC) // QUIC(squicr): 3rd distinct carrier family for route diversity
+			localSupportsSQUICR := a.tm.IsKnownNetwork(tptypes.QUIC)   // QUIC(squicr): 3rd distinct carrier family for route diversity
+			localSupportsWEBRTC := a.tm.IsKnownNetwork(tptypes.WEBRTC) // NAT-traversing (ICE/STUN); reaches more NAT types than sudph hole-punch
 			if !localSupportsSUDPH && !localSupportsSTCPR {
 				a.log.Warn("No supported network types available locally (SUDPH and STCPR both unavailable)")
 				continue
@@ -157,15 +158,19 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				transportCache = &transportDiscoveryCache{
 					entriesByPK:     make(map[cipher.PubKey][]*transport.Entry),
 					transportCounts: make(map[cipher.PubKey]int),
+					webrtcCapable:   make(map[cipher.PubKey]struct{}),
 				}
 			} else {
 				a.log.WithField("cached_keys", len(transportCache.transportCounts)).
 					Debug("Successfully cached transport discovery data")
 			}
 
-			// auto-transport logic - for non-public visors connecting to public visors
+			// absent2 = visors CONNECTED TO public visors (the network shape beyond the
+			// public core). Computed for every visor now: the WebRTC phase uses it to
+			// broaden the direct mesh to non-public peers. Sudph Phase 3 stays gated to
+			// non-public visors below.
 			var absent2 []cipher.PubKey
-			if !visorIsPublic {
+			{
 				absentSet := make(map[cipher.PubKey]struct{}, len(addrs))
 				for _, pk := range addrs {
 					absentSet[pk] = struct{}{}
@@ -211,17 +216,21 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				Debugln("Found visors to connect to")
 
 			// Public autoconnect logic:
-			// Phase 1: SUDPH to public visors (if SUDPH available)
-			// Phase 2: STCPR to public visors (both transport types to same visors)
-			// Phase 3: SUDPH to other connected visors
+			// Phase 1:  SUDPH to public visors (if SUDPH available)
+			// Phase 2:  STCPR to public visors (same visors, second carrier family)
+			// Phase 2b: QUIC (squicr) to public visors (third carrier family)
+			// Phase 3:  SUDPH to other connected visors (non-public visors only)
+			// Phase 4:  WebRTC LAST-RESORT fallback to peers no direct carrier reached
 
 			const maxPublicVisors = 5 // Connect to up to 5 public visors
 			const maxSUDPH = 30       // Max SUDPH transports to other visors
+			const maxWEBRTC = 20      // Max WebRTC transports to other (webrtc-capable) visors
 
 			// Count existing automatic transports by type and remote PK
 			countSTCPR := 0
 			countSUDPH := 0
 			countSQUICR := 0
+			countWEBRTC := 0
 			existingByPK := make(map[cipher.PubKey]map[tptypes.Type]bool)
 			for _, autoconnTP := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
 				remotePK := autoconnTP.Remote()
@@ -236,6 +245,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 					countSUDPH++
 				case tptypes.QUIC:
 					countSQUICR++
+				case tptypes.WEBRTC:
+					countWEBRTC++
 				}
 			}
 
@@ -296,8 +307,8 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				countSQUICR += phase2b.Count
 			}
 
-			// Phase 3: SUDPH to other connected visors
-			if localSupportsSUDPH && countSUDPH < maxSUDPH && len(absent2) > 0 {
+			// Phase 3: SUDPH to other connected visors (non-public visors only)
+			if localSupportsSUDPH && !visorIsPublic && countSUDPH < maxSUDPH && len(absent2) > 0 {
 				a.log.Debug("Phase 3: Connecting to other visors via SUDPH")
 				phase3, err := a.conn.ConnectToVisors(ctx, v.conf.PK, absent2, tptypes.SUDPH,
 					existingByPK, sudphCapable, maxSUDPH, countSUDPH, false)
@@ -307,8 +318,55 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 				countSUDPH += phase3.Count
 			}
 
+			// Phase 4: WebRTC as a LAST-RESORT fallback — only to peers no direct
+			// carrier (stcpr/sudph/squicr) could establish. WebRTC's ICE/STUN reaches
+			// more NAT types than sudph hole-punch, but it's heavy, so we spend it
+			// only where nothing lighter works. dmsg does NOT count as "reachable"
+			// here — the point is a DIRECT path better than dmsg relay. To public
+			// visors it's unconditional (bootstraps our webrtc-capable advertisement
+			// and reaches NAT'd publics); to non-public peers it's gated by the
+			// webrtcCapable signal so we don't blind-dial incapable visors.
+			if localSupportsWEBRTC {
+				hasDirect := map[cipher.PubKey]bool{}
+				hasWebRTC := map[cipher.PubKey]bool{}
+				for _, tp := range a.tm.GetTransportsByLabel(transport.LabelAutomatic) {
+					switch tp.Type() {
+					case tptypes.WEBRTC:
+						hasWebRTC[tp.Remote()] = true
+					case tptypes.DMSG:
+						// dmsg is the relay baseline, not a direct path — ignore
+					default:
+						hasDirect[tp.Remote()] = true
+					}
+				}
+				var webrtcTargets []cipher.PubKey
+				for _, pk := range connectedPublicVisors {
+					if !hasDirect[pk] && !hasWebRTC[pk] {
+						webrtcTargets = append(webrtcTargets, pk)
+					}
+				}
+				for _, pk := range absent2 {
+					if hasDirect[pk] || hasWebRTC[pk] {
+						continue
+					}
+					if _, ok := transportCache.webrtcCapable[pk]; ok {
+						webrtcTargets = append(webrtcTargets, pk)
+					}
+				}
+				if len(webrtcTargets) > 0 {
+					a.log.Debug("Phase 4: WebRTC fallback to direct-unreachable visors")
+					phase4, err := a.conn.ConnectToVisors(ctx, v.conf.PK, webrtcTargets, tptypes.WEBRTC,
+						existingByPK, nil, maxWEBRTC, countWEBRTC, false)
+					if err != nil {
+						return err
+					}
+					countWEBRTC += phase4.Count
+				}
+			}
+
 			a.log.WithField("stcpr", countSTCPR).WithField("sudph", countSUDPH).
 				WithField("squicr", countSQUICR).
+				WithField("webrtc", countWEBRTC).
 				WithField("public_visors", len(connectedPublicVisors)).
 				Debug("Public autoconnect cycle completed")
 		}
@@ -447,6 +505,12 @@ func (a *autoconnector) fetchSUDPHVisors(ctx context.Context) map[cipher.PubKey]
 type transportDiscoveryCache struct {
 	entriesByPK     map[cipher.PubKey][]*transport.Entry
 	transportCounts map[cipher.PubKey]int
+	// webrtcCapable is the set of visors observed holding at least one WebRTC
+	// transport in discovery. Like sudph, the only reliable signal that a visor
+	// can accept a WebRTC transport is that it already has one — so a visor
+	// advertises the capability by making WebRTC to public visors, and others
+	// use this set to reach it directly without blind trial.
+	webrtcCapable map[cipher.PubKey]struct{}
 }
 
 // fetchFallbackVisors queries TPD per-key-stats to find well-connected visors
@@ -505,13 +569,18 @@ func (a *autoconnector) buildTransportCache(ctx context.Context, v *Visor) (*tra
 	cache := &transportDiscoveryCache{
 		entriesByPK:     make(map[cipher.PubKey][]*transport.Entry),
 		transportCounts: make(map[cipher.PubKey]int),
+		webrtcCapable:   make(map[cipher.PubKey]struct{}),
 	}
 
-	// Build lookup maps: pk -> entries and pk -> count
+	// Build lookup maps: pk -> entries and pk -> count. A visor with any WebRTC
+	// transport in discovery is WebRTC-capable (see webrtcCapable doc).
 	for _, entry := range allEntries {
 		for _, edge := range entry.Edges {
 			cache.entriesByPK[edge] = append(cache.entriesByPK[edge], entry)
 			cache.transportCounts[edge]++
+			if entry.Type == tptypes.WEBRTC {
+				cache.webrtcCapable[edge] = struct{}{}
+			}
 		}
 	}
 
