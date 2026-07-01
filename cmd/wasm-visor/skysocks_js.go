@@ -24,6 +24,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"syscall/js"
 	"time"
@@ -56,9 +57,15 @@ var caPool = func() *x509.CertPool {
 const skysocksPort = routing.Port(skyenv.SkysocksPort)
 
 var (
-	skysocksMu       sync.Mutex
-	skysocksSessions = map[cipher.PubKey]*yamux.Session{} // one yamux session per exit
+	skysocksMu sync.Mutex
+	// key = winID + "|" + exitPK.Hex(): each browser WINDOW gets its OWN
+	// skysocks-client-lite session (its own route to the exit), so two windows
+	// pointed at the same exit don't share one session — independent routing +
+	// independently loggable. The resolving proxy (fetchDmsg) stays shared.
+	skysocksSessions = map[string]*yamux.Session{}
 )
+
+func skysocksKey(winID string, pk cipher.PubKey) string { return winID + "|" + pk.Hex() }
 
 // proxyVerbose gates detailed per-request [skysocks-lite] / [resolve-proxy]
 // logging (the log lines surface in the "visor log" window). Off by default so
@@ -70,12 +77,13 @@ var proxyVerbose bool
 // skysocksSession returns a yamux session to the skysocks-server at serverPK,
 // lazily establishing it over a fresh route group (rtr.DialRoutes — the routing
 // layer). Cached per exit; a closed session is re-dialed.
-func skysocksSession(serverPK cipher.PubKey) (*yamux.Session, error) {
+func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, error) {
 	skysocksMu.Lock()
 	defer skysocksMu.Unlock()
-	if s, ok := skysocksSessions[serverPK]; ok && !s.IsClosed() {
+	key := skysocksKey(winID, serverPK)
+	if s, ok := skysocksSessions[key]; ok && !s.IsClosed() {
 		if proxyVerbose {
-			vlog(fmt.Sprintf("[skysocks-lite] reuse session to exit %s", serverPK.Hex()[:8]))
+			vlog(fmt.Sprintf("[skysocks-lite %s] reuse session to exit %s", winID, serverPK.Hex()[:8]))
 		}
 		return s, nil
 	}
@@ -94,7 +102,7 @@ func skysocksSession(serverPK cipher.PubKey) (*yamux.Session, error) {
 	dopts.MuxRoutes = 2
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, dopts)
 	if err != nil {
-		vlog(fmt.Sprintf("[skysocks-lite] route dial to exit %s FAILED (%dms): %v", serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
+		vlog(fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
 		return nil, fmt.Errorf("dial skysocks route: %w", err)
 	}
 	sess, err := yamux.Client(conn, yamux.DefaultConfig())
@@ -102,9 +110,26 @@ func skysocksSession(serverPK cipher.PubKey) (*yamux.Session, error) {
 		_ = conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("yamux client: %w", err)
 	}
-	skysocksSessions[serverPK] = sess
-	vlog(fmt.Sprintf("[skysocks-lite] route+session to exit %s established (%dms)", serverPK.Hex()[:8], time.Since(t0).Milliseconds()))
+	skysocksSessions[key] = sess
+	vlog(fmt.Sprintf("[skysocks-lite %s] route+session to exit %s established (%dms)", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds()))
 	return sess, nil
+}
+
+// closeSkysocksWindow closes + drops every skysocks-lite session belonging to a
+// browser window (called when the window closes), releasing its routes.
+func closeSkysocksWindow(winID string) int {
+	skysocksMu.Lock()
+	defer skysocksMu.Unlock()
+	prefix := winID + "|"
+	n := 0
+	for k, s := range skysocksSessions {
+		if strings.HasPrefix(k, prefix) {
+			_ = s.Close() //nolint:errcheck
+			delete(skysocksSessions, k)
+			n++
+		}
+	}
+	return n
 }
 
 // streamDialer opens a fresh yamux stream per Dial. proxy.SOCKS5 runs the SOCKS5
@@ -157,6 +182,12 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 	if len(args) > 3 && !args[3].IsNull() && !args[3].IsUndefined() {
 		body = []byte(args[3].String())
 	}
+	// Optional 5th arg: the browser window id, so each window gets its own
+	// skysocks-lite session (see skysocksSessions). Absent → shared default.
+	winID := "w0"
+	if len(args) > 4 && !args[4].IsNull() && !args[4].IsUndefined() && args[4].String() != "" {
+		winID = args[4].String()
+	}
 	return promise(func() (interface{}, error) {
 		var spk cipher.PubKey
 		if err := spk.UnmarshalText([]byte(serverPKHex)); err != nil {
@@ -165,7 +196,7 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		if _, err := url.ParseRequestURI(rawURL); err != nil {
 			return nil, fmt.Errorf("bad url: %w", err)
 		}
-		sess, err := skysocksSession(spk)
+		sess, err := skysocksSession(winID, spk)
 		if err != nil {
 			return nil, err
 		}
@@ -184,13 +215,13 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		t0 := time.Now()
 		resp, err := client.Do(req)
 		if err != nil {
-			vlog(fmt.Sprintf("[skysocks-lite] %s %s via %s FAILED (%dms): %v", method, rawURL, spk.Hex()[:8], time.Since(t0).Milliseconds(), err))
+			vlog(fmt.Sprintf("[skysocks-lite %s] %s %s via %s FAILED (%dms): %v", winID, method, rawURL, spk.Hex()[:8], time.Since(t0).Milliseconds(), err))
 			return nil, fmt.Errorf("fetch via skysocks: %w", err)
 		}
 		defer resp.Body.Close()                               //nolint:errcheck
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20)) // 16MB cap
 		if proxyVerbose {
-			vlog(fmt.Sprintf("[skysocks-lite] %s %s via %s → %d (%dB, %dms)", method, rawURL, spk.Hex()[:8], resp.StatusCode, len(b), time.Since(t0).Milliseconds()))
+			vlog(fmt.Sprintf("[skysocks-lite %s] %s %s via %s → %d (%dB, %dms)", winID, method, rawURL, spk.Hex()[:8], resp.StatusCode, len(b), time.Since(t0).Milliseconds()))
 		}
 		res := js.Global().Get("Object").New()
 		res.Set("status", resp.StatusCode)
@@ -216,4 +247,17 @@ func jsProxyVerbose(_ js.Value, args []js.Value) interface{} {
 	}
 	vlog(fmt.Sprintf("[skysocks-lite] verbose request logging %v", proxyVerbose))
 	return proxyVerbose
+}
+
+// jsCloseWindow(winID) releases the skysocks-lite sessions of a browser window
+// (called on window close) so its routes to the exit don't linger.
+func jsCloseWindow(_ js.Value, args []js.Value) interface{} {
+	if len(args) < 1 || args[0].String() == "" {
+		return nil
+	}
+	winID := args[0].String()
+	if n := closeSkysocksWindow(winID); n > 0 {
+		vlog(fmt.Sprintf("[skysocks-lite %s] closed %d session(s) on window close", winID, n))
+	}
+	return nil
 }

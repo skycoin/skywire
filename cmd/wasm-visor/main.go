@@ -148,6 +148,7 @@ func main() {
 		"checkRegistered": js.FuncOf(jsCheckRegistered),
 		"fetchClearnet":   js.FuncOf(jsFetchClearnet),
 		"proxyVerbose":    js.FuncOf(jsProxyVerbose),
+		"closeWindow":     js.FuncOf(jsCloseWindow),
 		"skychatSend":     js.FuncOf(jsSkychatSend),
 		"skychatMessages": js.FuncOf(jsSkychatMessages),
 	}))

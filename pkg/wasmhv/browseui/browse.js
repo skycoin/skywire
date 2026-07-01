@@ -127,9 +127,14 @@
   function createBrowser(opts) {
     var frame = opts.frame;
     var fetchDmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    // Per-window id so this window's clearnet requests get their OWN
+    // skysocks-lite session/route (the Go side keys sessions by winId+exit).
+    var winId = opts.winId || ("w" + (globalThis.__skywireBrowserSeq = (globalThis.__skywireBrowserSeq || 0) + 1));
     // fetchClearnet(exitPK, method, url, body) → {status, body, headers}: a CLEARNET
     // fetch tunneled through a skysocks exit over a skywire route (IP-anonymous).
-    var fetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
+    // We wrap it to append winId as the 5th arg for every call site.
+    var rawFetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
+    var fetchClearnet = function (exit, m, u, b) { return rawFetchClearnet(exit, m, u, b, winId); };
     var log = opts.log || function () {};
     var currentSitePK = "";
 
@@ -439,7 +444,7 @@
     return {
       renderSite: renderSite, browseTo: browseTo, browseToClearnet: browseToClearnet,
       back: back, forward: forward, reload: reload, cancel: cancel,
-      upstream: upstream, setUpstream: setUpstream,
+      upstream: upstream, setUpstream: setUpstream, winId: winId,
       currentPK: function () { return currentSitePK; }
     };
   }
@@ -524,7 +529,12 @@
     function $(id) { return wrap.querySelector("#" + id); }
     var wb = makeWin(doc, {
       title: "skynet", root: opts.root, top: opts.top, bottom: opts.bottom, width: "74%", height: "80%", mount: wrap,
-      onclose: function () { if (onClose) onClose(); }
+      onclose: function () {
+        // Release this window's skysocks-lite sessions/routes (per-window). browser
+        // is hoisted; it exists by the time onclose fires.
+        try { if (browser && browser.winId && globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
+        if (onClose) onClose();
+      }
     });
     var win = { wb: wb, el: wrap };
     var loading = false;
