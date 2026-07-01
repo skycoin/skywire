@@ -584,10 +584,11 @@
       '</div>' +
       '<div id="sb-proxy" style="display:none;flex-direction:column;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342">' +
       '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
-      '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks (anonymous)">clearnet upstream proxy:</span>' +
+      '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks server (IP-anonymous exit)">skysocks proxy:</span>' +
       '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
+      '<button id="sb-proxy-stop" title="stop this window\'s skysocks-lite: release its route + session (re-establishes on the next clearnet request)" style="cursor:pointer">■ stop</button>' +
       '<button id="sb-proxy-dbg" title="stream the wasm visor\'s own detailed [skysocks-lite]/[resolve-proxy] lines to the visor-log window too" style="cursor:pointer">🐞 verbose: off</button>' +
       '<button id="sb-proxy-clear" title="clear this window\'s request log" style="cursor:pointer">clear</button>' +
       '</div>' +
@@ -604,6 +605,7 @@
         // Release this window's skysocks-lite sessions/routes (per-window). browser
         // is hoisted; it exists by the time onclose fires.
         try { if (browser && browser.winId && globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
+        try { if (browser && browser.winId && globalThis.__skywireBrowserPanes) { delete globalThis.__skywireBrowserPanes[browser.winId]; } } catch (e) {}
         if (onClose) onClose();
       }
     });
@@ -643,6 +645,19 @@
       onNavState: function (canBack, canFwd) { $("sb-back").disabled = !canBack; $("sb-fwd").disabled = !canFwd; }
     });
     win.browser = browser;
+    // Register this window's log sink so the wasm visor's skysocks-lite path can
+    // push its own connect/route-setup lines (keyed by winId) into THIS window's
+    // pane — see emitProxyLog / __skywireProxyLog in cmd/wasm-visor/skysocks_js.go.
+    try {
+      var paneReg = (globalThis.__skywireBrowserPanes = globalThis.__skywireBrowserPanes || {});
+      paneReg[browser.winId] = plog;
+      if (!globalThis.__skywireProxyLog) {
+        globalThis.__skywireProxyLog = function (winId, line) {
+          var p = (globalThis.__skywireBrowserPanes || {})[winId];
+          if (p) { try { p(line); } catch (e) {} }
+        };
+      }
+    } catch (e) {}
     // A clearnet http(s):// URL routes through a skysocks exit (IP-anonymous); a
     // bare PK / pk:port is a dmsg/skynet site fetched over dmsg.
     function go() {
@@ -679,6 +694,13 @@
     }
     $("sb-proxy-save").onclick = saveProxy;
     $("sb-proxy-clear").onclick = function () { proxyLog = []; renderProxyLog(); };
+    // Stop this window's skysocks-lite: release its route + session. The wasm emits
+    // a "stopped — released N route/session(s)" line via the per-window hook when a
+    // session was active; this immediate line covers the no-active-session case.
+    $("sb-proxy-stop").onclick = function () {
+      plog("■ stop requested — releasing skysocks-lite route/session for this window");
+      try { if (globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
+    };
     $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
     // Verbose request logging for the skysocks-lite + resolving-proxy paths. The
     // flag is currently global to the visor (Phase 1: one log stream in the

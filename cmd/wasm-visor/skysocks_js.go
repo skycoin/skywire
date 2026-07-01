@@ -74,6 +74,18 @@ func skysocksKey(winID string, pk cipher.PubKey) string { return winID + "|" + p
 // Route/session establishment is always logged (one line each, not per-request).
 var proxyVerbose bool
 
+// emitProxyLog logs a per-window skysocks-lite line to the visor log AND, when the
+// page registered a per-window sink (browse.js's ⚙ proxy-log pane sets
+// globalThis.__skywireProxyLog), forwards it to that browser window by id — so the
+// window shows its own connect / route-setup step explicitly, the way
+// `skywire cli proxy start --verbose` surfaces session establishment.
+func emitProxyLog(winID, msg string) {
+	vlog(msg)
+	if h := js.Global().Get("__skywireProxyLog"); h.Type() == js.TypeFunction {
+		h.Invoke(winID, msg)
+	}
+}
+
 // skysocksSession returns a yamux session to the skysocks-server at serverPK,
 // lazily establishing it over a fresh route group (rtr.DialRoutes — the routing
 // layer). Cached per exit; a closed session is re-dialed.
@@ -83,7 +95,7 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	key := skysocksKey(winID, serverPK)
 	if s, ok := skysocksSessions[key]; ok && !s.IsClosed() {
 		if proxyVerbose {
-			vlog(fmt.Sprintf("[skysocks-lite %s] reuse session to exit %s", winID, serverPK.Hex()[:8]))
+			emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] reuse session to exit %s", winID, serverPK.Hex()[:8]))
 		}
 		return s, nil
 	}
@@ -91,6 +103,7 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 		return nil, errors.New("not booted; call boot() first")
 	}
 	t0 := time.Now()
+	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] connecting to exit %s — setting up route…", winID, serverPK.Hex()[:8]))
 	dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	// Optimized routing for the browsing proxy: request a small mux (2 parallel
@@ -102,7 +115,7 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	dopts.MuxRoutes = 2
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, dopts)
 	if err != nil {
-		vlog(fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
+		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
 		return nil, fmt.Errorf("dial skysocks route: %w", err)
 	}
 	sess, err := yamux.Client(conn, yamux.DefaultConfig())
@@ -111,7 +124,7 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 		return nil, fmt.Errorf("yamux client: %w", err)
 	}
 	skysocksSessions[key] = sess
-	vlog(fmt.Sprintf("[skysocks-lite %s] route+session to exit %s established (%dms)", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds()))
+	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route+session to exit %s established (%dms)", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds()))
 	return sess, nil
 }
 
@@ -257,7 +270,7 @@ func jsCloseWindow(_ js.Value, args []js.Value) interface{} {
 	}
 	winID := args[0].String()
 	if n := closeSkysocksWindow(winID); n > 0 {
-		vlog(fmt.Sprintf("[skysocks-lite %s] closed %d session(s) on window close", winID, n))
+		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] stopped — released %d route/session(s)", winID, n))
 	}
 	return nil
 }
