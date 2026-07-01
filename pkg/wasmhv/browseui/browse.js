@@ -444,26 +444,56 @@
     };
   }
 
-  // createWindow builds ONE draggable / resizable / minimizable / maximizable
-  // browse window (its own dmsg virtual browser + host panel) into `doc`. hooks:
-  //   onFocus()       — raise this window (z-order) in the manager;
-  //   onClose()       — the manager should drop + remove this window;
-  //   onTitle(text)   — reflect the current site into the taskbar entry.
-  // Returns a window handle the manager drives (el, browser, show/hide/restore,
-  // maximize, minimized flag, landHome).
-  function createWindow(doc, opts, hooks) {
+  // makeWin wraps WinBox (winbox.min.js, vendored) with the mini-desktop
+  // defaults: dark skynet chrome, mounted into the panel's root container so the
+  // whole desktop can be hidden/shown at once, and a high z-base so windows sit
+  // over the dashboard. WinBox supplies all window chrome — drag, resize,
+  // minimize, maximize, close, and (for url:) the iframe — so the create*Window
+  // helpers only build a body. opts: {title, root, width, height, x, y,
+  // mount|url, onclose}.
+  function makeWin(doc, opts) {
+    var cfg = {
+      title: opts.title || "window",
+      root: opts.root || (doc.body || doc.documentElement),
+      width: opts.width || "70%",
+      height: opts.height || "70%",
+      background: "#1b1726",
+      border: "1",
+      index: 2147483000,
+      // no-full hides WinBox's Fullscreen-API button: "maximize" should fill the
+      // area IN-TAB (over the dashboard, below the panel) — not take over the
+      // whole screen. The remaining max button stays within the top/bottom
+      // boundaries below, so it maximizes in front of the HV UI in the same tab.
+      "class": ["skywire-wb", "no-full"]
+    };
+    // Open centered by default (WinBox otherwise pins new windows at 0,0).
+    cfg.x = (opts.x != null) ? opts.x : "center";
+    cfg.y = (opts.y != null) ? opts.y : "center";
+    // Viewport boundaries: keep the window (drag AND maximize) clear of the
+    // panel, so its title bar can never slide behind the bar and become
+    // ungrabbable. top/bottom come from the panel's current dock edge.
+    if (opts.top != null) cfg.top = opts.top;
+    if (opts.bottom != null) cfg.bottom = opts.bottom;
+    if (opts.mount) cfg.mount = opts.mount;
+    if (opts.url) cfg.url = opts.url;
+    if (opts.onclose) cfg.onclose = opts.onclose;
+    return new WinBox(cfg);
+  }
+
+  // createWindow builds ONE browse window — a dmsg virtual browser + host/proxy
+  // panels — as a WinBox. WinBox draws the title bar, window buttons and resize
+  // borders; we supply only the body (nav bar + panels + page iframe). opts.root
+  // is the WinBox mount container (so the desktop can be hidden as a unit);
+  // onClose runs when the window is closed. Returns {wb, browser, landHome}.
+  function createWindow(doc, opts, onClose) {
     var fetchDmsg = opts.fetchDmsg, serveContent = opts.serveContent;
+    // The WinBox body: nav bar + collapsible host/proxy panels + the page iframe.
+    // No window controls or resize grip here — WinBox draws those.
     var wrap = doc.createElement("div");
     wrap.className = "skywire-browse-window";
-    // Anchored below the top taskbar. Drag via the title bar; resize via the
-    // bottom-right grip (both pointer-event based, so they work with touch too).
-    wrap.style.cssText = "position:fixed;top:44px;left:40px;width:74vw;height:80vh;" +
-      "min-width:280px;min-height:200px;max-width:100vw;max-height:96vh;" +
-      "background:#15131c;color:#cdd2da;font:12px/1.4 monospace;border:1px solid #2a2342;border-radius:8px;" +
-      "box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483000;display:flex;flex-direction:column;overflow:hidden";
+    wrap.style.cssText = "position:absolute;inset:0;background:#15131c;color:#cdd2da;font:12px/1.4 monospace;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
       '<div class="sbw-bar" style="display:flex;gap:.4em;align-items:center;padding:.5em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<b style="color:#9d7cff;cursor:move">skynet</b>' +
       '<button id="sb-back" title="back" disabled style="cursor:pointer">◀</button>' +
       '<button id="sb-fwd" title="forward" disabled style="cursor:pointer">▶</button>' +
       '<button id="sb-reload" title="reload" style="cursor:pointer">⟳</button>' +
@@ -471,9 +501,6 @@
       '<button id="sb-go" style="cursor:pointer">go</button>' +
       '<button id="sb-host-t" title="host a page" style="cursor:pointer">host</button>' +
       '<button id="sb-proxy-t" title="clearnet upstream proxy" style="cursor:pointer">⚙</button>' +
-      '<button id="sb-min" title="minimize" style="cursor:pointer">_</button>' +
-      '<button id="sb-max" title="maximize / restore" style="cursor:pointer">▢</button>' +
-      '<button id="sb-x" title="close" style="cursor:pointer">×</button>' +
       '</div>' +
       '<div id="sb-host" style="display:none;gap:.3em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342;flex-direction:column">' +
       '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">path <input id="sb-hpath" value="/" size="6" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
@@ -491,13 +518,14 @@
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
       '<span id="sb-proxy-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></span>' +
       '</div>' +
-      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>' +
-      // Touch-friendly resize grip (bigger than the native resize corner).
-      '<div id="sb-grip" title="drag to resize" style="position:absolute;right:0;bottom:0;width:26px;height:26px;cursor:nwse-resize;touch-action:none;z-index:6;background:linear-gradient(135deg,transparent 45%,#9d7cff 45%,#9d7cff 55%,transparent 55%,transparent 70%,#9d7cff 70%,#9d7cff 80%,transparent 80%)"></div>';
-    (doc.body || doc.documentElement).appendChild(wrap);
+      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
 
     function $(id) { return wrap.querySelector("#" + id); }
-    var win = { el: wrap, minimized: false, maximized: false };
+    var wb = makeWin(doc, {
+      title: "skynet", root: opts.root, top: opts.top, bottom: opts.bottom, width: "74%", height: "80%", mount: wrap,
+      onclose: function () { if (onClose) onClose(); }
+    });
+    var win = { wb: wb, el: wrap };
     var loading = false;
     var browser = createBrowser({
       frame: $("sb-frame"), fetchDmsg: fetchDmsg,
@@ -506,7 +534,8 @@
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
       fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend,
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
-      setAddr: function (u) { $("sb-addr").value = u; if (hooks.onTitle) { var t = u.replace(/^https?:\/\//, "").slice(0, 16); hooks.onTitle(t || "site"); } },
+      // Reflect the current site into the WinBox title bar.
+      setAddr: function (u) { $("sb-addr").value = u; var t = u.replace(/^https?:\/\//, "").slice(0, 18); try { wb.setTitle(t || "skynet"); } catch (e) {} },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
       onLoading: function (on) { loading = on; var b = $("sb-reload"); b.textContent = on ? "✕" : "⟳"; b.title = on ? "cancel load" : "reload"; },
       // enable/disable back/forward to match history position
@@ -547,8 +576,6 @@
     }
     $("sb-proxy-save").onclick = saveProxy;
     $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
-    // Raise this window above the others on any interaction.
-    wrap.addEventListener("pointerdown", function () { if (hooks.onFocus) hooks.onFocus(); }, true);
 
     // uploaded holds the last picked file as {ct, b64} (base64 so binary — images,
     // fonts, … — round-trips intact); the textarea is the fallback for typed HTML.
@@ -584,64 +611,14 @@
       msg.onclick = function () { try { navigator.clipboard.writeText(addr); msg.textContent = "copied: " + addr; } catch (e) {} };
     };
 
-    // Window controls: minimize (hide, keep taskbar entry), maximize/restore
-    // (fill the viewport above the taskbar; resizing disabled while maximized),
-    // close (manager removes the window).
-    var prevRect = null;
-    win.maximize = function () {
-      if (win.maximized) {
-        if (prevRect) { wrap.style.left = prevRect.left; wrap.style.top = prevRect.top; wrap.style.width = prevRect.width; wrap.style.height = prevRect.height; }
-        win.maximized = false; return;
-      }
-      prevRect = { left: wrap.style.left, top: wrap.style.top, width: wrap.style.width, height: wrap.style.height };
-      // Sit below the top taskbar (~2.8em).
-      wrap.style.left = "0"; wrap.style.top = "2.8em"; wrap.style.width = "100vw"; wrap.style.height = "calc(100vh - 2.8em)";
-      win.maximized = true;
-    };
-    win.show = function () { win.minimized = false; wrap.style.display = "flex"; };
-    win.restore = win.show;
-    win.minimize = function () { win.minimized = true; wrap.style.display = "none"; if (hooks.onMinimize) hooks.onMinimize(); };
+    // home.dmsg (resolver alias for the deployment landing page), matching the
+    // socks5 resolving proxy's default — landed once per window.
     win.landHome = function () {
-      // Land on home.dmsg (resolver alias for the deployment landing page),
-      // matching the socks5 resolving proxy's default. Once per window.
       if (!wrap.dataset.landed) { wrap.dataset.landed = "1"; browser.browseTo("home.dmsg", "/"); }
     };
-    $("sb-max").onclick = win.maximize;
-    $("sb-min").onclick = win.minimize;
-    $("sb-x").onclick = function () { if (hooks.onClose) hooks.onClose(); };
-
-    // Drag-to-move (title bar) and resize (grip), both via Pointer Events so they
-    // work with mouse AND touch. touch-action:none on the handles keeps the page
-    // from scrolling under the finger mid-drag. Listeners attach only while active.
-    function dragMove(handle, onMove) {
-      if (!handle) return;
-      handle.style.touchAction = "none";
-      function pm(e) { onMove(e.clientX, e.clientY); }
-      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
-      handle.addEventListener("pointerdown", function (e) {
-        if (win.maximized) return;
-        if (hooks.onFocus) hooks.onFocus();
-        onMove.start(e.clientX, e.clientY);
-        doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu);
-        e.preventDefault(); e.stopPropagation();
-      });
-    }
-    (function () {
-      var ox, oy, sx, sy;
-      var mv = function (px, py) { wrap.style.left = Math.max(0, ox + px - sx) + "px"; wrap.style.top = Math.max(0, oy + py - sy) + "px"; };
-      mv.start = function (px, py) { sx = px; sy = py; var r = wrap.getBoundingClientRect(); ox = r.left; oy = r.top; };
-      dragMove(wrap.querySelector(".sbw-bar b"), mv);
-    })();
-    (function () {
-      var ow, oh, sx, sy;
-      var rs = function (px, py) { wrap.style.width = Math.max(280, ow + px - sx) + "px"; wrap.style.height = Math.max(200, oh + py - sy) + "px"; };
-      rs.start = function (px, py) { sx = px; sy = py; var r = wrap.getBoundingClientRect(); ow = r.width; oh = r.height; };
-      dragMove($("sb-grip"), rs);
-    })();
-
-    // On a narrow (mobile) viewport, open maximized — a 74vw floating window is
-    // fiddly to move/resize on a phone; full-screen is the usable default.
-    if (((doc.defaultView || window).innerWidth || 9999) < 640) { setTimeout(function () { if (!win.maximized) win.maximize(); }, 0); }
+    // On a narrow (mobile) viewport, open maximized — a floating window is fiddly
+    // to move/resize on a phone; full-screen is the usable default.
+    if (((doc.defaultView || window).innerWidth || 9999) < 640) { try { wb.maximize(true); } catch (e) {} }
 
     return win;
   }
@@ -726,21 +703,17 @@
   // operator can watch what the visor is doing (incl. the upstream-proxy/browse
   // activity) without browser devtools or a shell. One per panel; toggled from
   // the taskbar.
-  function createLogWindow(doc) {
+  function createLogWindow(doc, opts) {
+    opts = opts || {};
     var wrap = doc.createElement("div");
-    wrap.style.cssText = "position:fixed;top:48px;right:40px;width:46vw;height:60vh;min-width:280px;min-height:160px;" +
-      "max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;border:1px solid #2a2342;" +
-      "border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483001;display:flex;flex-direction:column;overflow:hidden";
+    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
       '<div class="lw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<b style="color:#9d7cff;cursor:move;flex:1">visor log</b>' +
       '<select id="lw-level" title="min level" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342"><option value="all">all</option><option value="info">info+</option><option value="warn">warn+</option><option value="error">error</option></select>' +
-      '<input id="lw-filter" placeholder="filter" size="8" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
+      '<input id="lw-filter" placeholder="filter" size="8" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
       '<button id="lw-follow" title="auto-scroll" style="cursor:pointer">▼</button>' +
-      '<button id="lw-clear" title="clear" style="cursor:pointer">clear</button>' +
-      '<button id="lw-x" title="close" style="cursor:pointer">×</button></div>' +
+      '<button id="lw-clear" title="clear" style="cursor:pointer">clear</button></div>' +
       '<pre id="lw-body" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>';
-    (doc.body || doc.documentElement).appendChild(wrap);
     function $(id) { return wrap.querySelector("#" + id); }
     var body = $("lw-body"), follow = true, minLevel = "all", filter = "";
     var rank = { debug: 0, log: 1, info: 1, warn: 2, error: 3 };
@@ -767,16 +740,11 @@
     $("lw-filter").oninput = function () { filter = this.value.trim().toLowerCase(); rerender(); };
     $("lw-follow").onclick = function () { follow = !follow; this.style.opacity = follow ? "1" : ".5"; if (follow) body.scrollTop = body.scrollHeight; };
     $("lw-clear").onclick = function () { if (window.skywireLog) window.skywireLog.clear(); body.textContent = ""; };
-    var winObj = { el: wrap, close: function () { unsub(); if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
-    $("lw-x").onclick = winObj.close;
-    (function () {
-      var ox, oy, sx, sy, h = wrap.querySelector(".lw-bar b");
-      h.style.touchAction = "none";
-      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.right = "auto"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
-      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
-      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
-    })();
-    return winObj;
+    var wb = makeWin(doc, {
+      title: "visor log", root: opts.root, top: opts.top, bottom: opts.bottom, width: "46%", height: "60%",
+      mount: wrap, onclose: function () { unsub(); if (opts.onClose) opts.onClose(); }
+    });
+    return { wb: wb, close: function () { wb.close(); } };
   }
 
   // createCliWindow opens a REPL that dispatches a curated command set to the
@@ -789,14 +757,11 @@
     var api = opts.api;
     function self() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
     var wrap = doc.createElement("div");
-    wrap.style.cssText = "position:fixed;top:48px;left:40px;width:50vw;height:60vh;min-width:300px;min-height:180px;max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:12px/1.4 monospace;border:1px solid #2a2342;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483001;display:flex;flex-direction:column;overflow:hidden";
+    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;color:#cdd2da;font:12px/1.4 monospace;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
-      '<div class="cw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<b style="color:#9d7cff;cursor:move;flex:1">visor cli</b><button id="cw-x" title="close" style="cursor:pointer">×</button></div>' +
       '<pre id="cw-out" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>' +
       '<div style="display:flex;gap:.3em;padding:.4em;border-top:1px solid #2a2342;background:#15131c;align-items:center"><span style="color:#9ece6a">&gt;</span>' +
       '<input id="cw-in" placeholder="help" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:12px monospace"></div>';
-    (doc.body || doc.documentElement).appendChild(wrap);
     function $(id) { return wrap.querySelector("#" + id); }
     var out = $("cw-out"), inp = $("cw-in"), hist = [], hi = 0;
     function w(text, color) { var d = doc.createElement("div"); if (color) d.style.color = color; d.textContent = text; out.appendChild(d); out.scrollTop = out.scrollHeight; }
@@ -835,149 +800,196 @@
       else if (e.key === "ArrowDown") { if (hi < hist.length - 1) { hi++; inp.value = hist[hi] || ""; } else { hi = hist.length; inp.value = ""; } e.preventDefault(); }
     });
     w("visor cli — type 'help'. Dispatches to the running visor's RPC.", "#9aa0a6");
+    var wb = makeWin(doc, {
+      title: "visor cli", root: opts.root, top: opts.top, bottom: opts.bottom, width: "50%", height: "58%",
+      mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); }
+    });
     setTimeout(function () { inp.focus(); }, 50);
-    var winObj = { el: wrap, close: function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
-    $("cw-x").onclick = winObj.close;
-    (function () {
-      var ox, oy, sx, sy, h = wrap.querySelector(".cw-bar b");
-      h.style.touchAction = "none";
-      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
-      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
-      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
-    })();
-    return winObj;
+    return { wb: wb, close: function () { wb.close(); } };
   }
 
-  // createTerminalWindow opens a real dmsgpty terminal in a draggable window: an
-  // iframe to opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty
-  // WebSocket). Native-only — the wasm visor has no host shell and sets no
-  // ptyURL, so the taskbar button isn't shown there. The iframe is built once and
-  // kept alive while the window is open so the pty session survives drags/moves
-  // (detaching the iframe DOM node would reload it and kill the session).
+  // createTerminalWindow opens a real dmsgpty terminal as a WinBox iframe to
+  // opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty WebSocket).
+  // Native-only — the wasm visor has no host shell and sets no ptyURL, so the
+  // launcher button isn't shown there. WinBox owns the iframe and applies
+  // pointer-events:none on it during drags (body.wb-lock), so the pty session
+  // survives moves/resizes without the manual capture hack we used before.
   function createTerminalWindow(doc, opts) {
-    var wrap = doc.createElement("div");
-    wrap.style.cssText = "position:fixed;top:60px;left:80px;width:54vw;height:64vh;min-width:320px;min-height:200px;" +
-      "max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;border:1px solid #2a2342;" +
-      "border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483002;display:flex;flex-direction:column;overflow:hidden";
-    wrap.innerHTML =
-      '<div class="tw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<b style="color:#9d7cff;cursor:move;flex:1">terminal</b>' +
-      '<button id="tw-reload" title="reload (new pty session)" style="cursor:pointer">⟳</button>' +
-      '<button id="tw-x" title="close" style="cursor:pointer">×</button></div>' +
-      '<iframe id="tw-frame" style="flex:1;border:0;width:100%;background:#0e0c14"></iframe>';
-    (doc.body || doc.documentElement).appendChild(wrap);
-    function $(id) { return wrap.querySelector("#" + id); }
-    var frame = $("tw-frame");
-    frame.src = opts.ptyURL;
-    $("tw-reload").onclick = function () { frame.src = opts.ptyURL; };
-    var winObj = { el: wrap, close: function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
-    $("tw-x").onclick = winObj.close;
-    (function () {
-      var ox, oy, sx, sy, h = wrap.querySelector(".tw-bar b");
-      h.style.touchAction = "none";
-      // Disable iframe pointer events during a drag so the moving cursor keeps
-      // hitting the window, not the terminal inside it.
-      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
-      function pu() { frame.style.pointerEvents = ""; doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
-      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; frame.style.pointerEvents = "none"; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
-    })();
-    return winObj;
+    var wb = makeWin(doc, {
+      title: "terminal", root: opts.root, top: opts.top, bottom: opts.bottom, width: "54%", height: "64%",
+      url: opts.ptyURL, onclose: function () { if (opts.onClose) opts.onClose(); }
+    });
+    return { wb: wb, close: function () { wb.close(); } };
   }
 
   function mountPanel(doc, opts) {
-    var zTop = 2147483000;
-    var wins = [];
-    var focused = null;
-    var visible = false;
+    var wins = [];          // {wb, chip, browser?} for every open window
+    var BARH = 36;          // bottom taskbar height; windows live above it
 
+    // shallow-merge: opts + {root, onClose, …} so each window gets the shared
+    // providers (fetchDmsg / api / selfPK / ptyURL …) plus its own root + close
+    // callback. (Avoids relying on Object.assign in odd embeds.)
+    function withRoot(extra) {
+      var o = {}, k;
+      for (k in opts) { if (Object.prototype.hasOwnProperty.call(opts, k)) o[k] = opts[k]; }
+      o.root = root; o.top = barTop; o.bottom = barBottom;
+      if (extra) { for (k in extra) { if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k]; } }
+      return o;
+    }
+
+    // Desktop root: the windows area, sized by applyDock() to fill the viewport
+    // on the side AWAY from the bar, so no window can hide behind the panel
+    // (WinBox centers + bounds windows against this box). pointer-events:none
+    // lets clicks fall through where no window covers — windows re-enable events
+    // via .skywire-wb. The panel is always on (no hide).
+    var root = doc.createElement("div");
+    root.id = "skywire-skynet-root";
+    root.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none";
+    (doc.body || doc.documentElement).appendChild(root);
+    // barTop / barBottom: the WinBox viewport boundary on the panel's edge, set
+    // by applyDock and applied to every window so none can drag/maximize under
+    // the bar. (0 on the free edge.)
+    var barTop = 0, barBottom = 0;
+    if (!doc.getElementById("skywire-wb-style")) {
+      var st = doc.createElement("style");
+      st.id = "skywire-wb-style";
+      // WinBox ships `.winbox iframe{position:absolute;width:100%;height:100%}`
+      // for url:-mounted windows — but that also covers the browse window's
+      // own iframe, painting over its address/nav bar. Pin the browse iframe
+      // back into the flex column (below the nav bar) so the bar shows. The
+      // terminal's url: iframe (no #sb-frame) keeps WinBox's fill behaviour.
+      st.textContent = ".skywire-wb{pointer-events:auto}" +
+        ".skywire-wb #sb-frame{position:relative!important;height:auto!important;min-height:0!important;flex:1 1 auto!important}";
+      (doc.head || doc.documentElement).appendChild(st);
+    }
+
+    // Always-on taskbar: [menu] [open-window chips…] [dock]. Top by default; the
+    // dock button flips it top↔bottom (remembered in localStorage). No hide.
     var bar = doc.createElement("div");
     bar.id = "skywire-skynet-taskbar";
-    bar.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;" +
-      "display:none;gap:.5em;align-items:center;padding:.4em .6em;background:#0e0b16;" +
-      "border-bottom:1px solid #2a2342;font:12px/1.3 monospace;color:#cdd2da";
+    bar.style.cssText = "position:fixed;left:0;right:0;height:" + BARH + "px;box-sizing:border-box;z-index:2147483646;" +
+      "display:flex;gap:.5em;align-items:center;padding:0 .6em;background:#0e0b16;" +
+      "font:12px/1.3 monospace;color:#cdd2da";
     bar.innerHTML =
-      '<b style="color:#9d7cff">skynet</b>' +
-      '<button id="tb-new" title="new browse window" style="cursor:pointer">+ window</button>' +
-      '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0"></span>' +
-      '<button id="tb-logs" title="live visor log" style="cursor:pointer">logs</button>' +
-      '<button id="tb-cli" title="visor cli (RPC repl)" style="cursor:pointer">cli</button>' +
-      (opts.ptyURL ? '<button id="tb-term" title="dmsgpty terminal" style="cursor:pointer">term</button>' : "") +
-      '<button id="tb-id" title="export / import this visor\'s identity" style="cursor:pointer">identity</button>' +
-      '<button id="tb-hide" title="hide skynet (windows stay open)" style="cursor:pointer">hide</button>';
+      '<button id="tb-menu" title="apps" style="cursor:pointer;font-size:15px;line-height:1;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.2em .5em">☰</button>' +
+      '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0;overflow:hidden"></span>' +
+      '<button id="tb-dock" title="dock the panel to the top or bottom" style="cursor:pointer">⇅</button>';
     (doc.body || doc.documentElement).appendChild(bar);
     function bq(id) { return bar.querySelector("#" + id); }
     var items = bq("tb-items");
 
-    function focus(win) {
-      focused = win;
-      win.el.style.zIndex = (++zTop);
-      wins.forEach(function (w) { if (w.tab) w.tab.style.fontWeight = (w === win) ? "bold" : "normal"; });
+    // App menu (start / whisker menu) — opens from the menu button (applyDock
+    // anchors it to the bar's edge).
+    var menu = doc.createElement("div");
+    menu.id = "skywire-appmenu";
+    menu.style.cssText = "position:fixed;left:6px;z-index:2147483647;display:none;min-width:168px;" +
+      "background:#15131c;border:1px solid #2a2342;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.55);padding:.3em;font:13px/1.4 monospace;color:#cdd2da";
+    (doc.body || doc.documentElement).appendChild(menu);
+    function hideMenu() { menu.style.display = "none"; }
+
+    // Dock the panel top or bottom; size root + anchor the menu accordingly so a
+    // window can never hide behind the bar. Persisted across reloads.
+    var DOCKKEY = "skywire-panel-dock", dock = "top";
+    try { dock = localStorage.getItem(DOCKKEY) || "top"; } catch (e) {}
+    function applyDock(d) {
+      dock = (d === "bottom") ? "bottom" : "top";
+      try { localStorage.setItem(DOCKKEY, dock); } catch (e) {}
+      if (dock === "top") {
+        bar.style.top = "0"; bar.style.bottom = "auto";
+        bar.style.borderTop = "0"; bar.style.borderBottom = "1px solid #2a2342";
+        menu.style.top = BARH + "px"; menu.style.bottom = "auto";
+        barTop = BARH; barBottom = 0;
+      } else {
+        bar.style.bottom = "0"; bar.style.top = "auto";
+        bar.style.borderBottom = "0"; bar.style.borderTop = "1px solid #2a2342";
+        menu.style.bottom = BARH + "px"; menu.style.top = "auto";
+        barTop = 0; barBottom = BARH;
+      }
     }
-    function openWindow() {
-      var win = createWindow(doc, opts, {
-        onFocus: function () { focus(win); },
-        onClose: function () { closeWindow(win); },
-        onMinimize: function () { if (win.tab) win.tab.style.opacity = ".55"; },
-        onTitle: function (t) { if (win.tab) win.tab.firstChild.textContent = t; }
-      });
+    function addApp(label, fn) {
+      var b = doc.createElement("button");
+      b.textContent = label;
+      b.style.cssText = "display:block;width:100%;text-align:left;cursor:pointer;background:transparent;color:#cdd2da;border:0;border-radius:5px;padding:.5em .7em;font:13px monospace";
+      b.onmouseover = function () { b.style.background = "#1b1726"; };
+      b.onmouseout = function () { b.style.background = "transparent"; };
+      b.onclick = function () { hideMenu(); fn(); };
+      menu.appendChild(b);
+    }
+    addApp("browser", function () { openBrowse(); });
+    addApp("console", function () { openCli(); });
+    if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
+    addApp("logs", function () { openLog(); });
+    addApp("identity", function () { openIdentityDialog(doc, opts); });
+    bq("tb-menu").onclick = function (e) { e.stopPropagation(); menu.style.display = (menu.style.display === "block") ? "none" : "block"; };
+    doc.addEventListener("pointerdown", function (e) {
+      if (menu.style.display === "block" && !menu.contains(e.target) && e.target !== bq("tb-menu")) hideMenu();
+    }, true);
+
+    // Window tracking: one chip per open window (focus/restore on click, × to
+    // close), so multiple windows are manageable from the bar. WinBox still owns
+    // the window chrome, focus, z-order and minimize.
+    function track(win, title) {
+      var chip = doc.createElement("span");
+      chip.style.cssText = "display:inline-flex;align-items:center;max-width:13em;background:#1b1726;border:1px solid #2a2342;border-radius:4px;overflow:hidden";
+      var f = doc.createElement("button");
+      f.textContent = title; f.title = "focus / restore";
+      f.style.cssText = "cursor:pointer;max-width:11em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent;color:#cdd2da;border:0;padding:.25em .55em;font:12px monospace";
+      f.onclick = function () { try { win.wb.minimize(false); } catch (e) {} try { win.wb.focus(); } catch (e) {} };
+      var x = doc.createElement("button");
+      x.textContent = "×"; x.title = "close";
+      x.style.cssText = "cursor:pointer;background:transparent;color:#9aa0a6;border:0;border-left:1px solid #2a2342;padding:.25em .45em;font:12px monospace";
+      x.onclick = function () { try { win.wb.close(); } catch (e) {} };
+      chip.appendChild(f); chip.appendChild(x);
+      items.appendChild(chip);
+      win.chip = chip; win.titleEl = f;
       wins.push(win);
-      var tab = doc.createElement("button");
-      tab.style.cssText = "cursor:pointer;max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#1b1726;color:#cdd2da;border:1px solid #2a2342;border-radius:4px;padding:.2em .5em";
-      tab.appendChild(doc.createTextNode("site"));
-      tab.title = "focus / restore this window";
-      tab.onclick = function () { win.show(); tab.style.opacity = "1"; focus(win); };
-      items.appendChild(tab);
-      win.tab = tab;
-      focus(win);
       return win;
     }
-    function closeWindow(win) {
+    function untrack(win) {
       var i = wins.indexOf(win); if (i >= 0) wins.splice(i, 1);
-      if (win.tab && win.tab.parentNode) win.tab.parentNode.removeChild(win.tab);
-      if (win.el && win.el.parentNode) win.el.parentNode.removeChild(win.el);
-      if (focused === win) focused = wins.length ? wins[wins.length - 1] : null;
+      if (win.chip && win.chip.parentNode) win.chip.parentNode.removeChild(win.chip);
     }
+    function focusExisting(w) { if (!w) { return false; } try { w.wb.minimize(false); w.wb.focus(); } catch (e) {} return true; }
 
-    bq("tb-new").onclick = function () { var w = openWindow(); w.landHome(); };
-    bq("tb-hide").onclick = function () { setDesktop(false); };
-    bq("tb-id").onclick = function () { openIdentityDialog(doc, opts); };
+    // App launchers. browser is multi-instance; console/terminal/logs are
+    // singletons (re-clicking focuses the open one).
+    function openBrowse() {
+      var win = createWindow(doc, withRoot(), function () { untrack(win); });
+      track(win, "browser");
+      win.landHome();
+      return win;
+    }
     var logWin = null;
-    bq("tb-logs").onclick = function () {
-      if (logWin) { logWin.close(); logWin = null; return; }
-      logWin = createLogWindow(doc);
-      var orig = logWin.close;
-      logWin.close = function () { orig(); logWin = null; };
-    };
+    function openLog() {
+      if (focusExisting(logWin)) { return; }
+      logWin = createLogWindow(doc, withRoot({ onClose: function () { untrack(logWin); logWin = null; } }));
+      track(logWin, "logs");
+    }
     var cliWin = null;
-    bq("tb-cli").onclick = function () {
-      if (cliWin) { cliWin.close(); cliWin = null; return; }
-      cliWin = createCliWindow(doc, opts);
-      var origc = cliWin.close;
-      cliWin.close = function () { origc(); cliWin = null; };
-    };
+    function openCli() {
+      if (focusExisting(cliWin)) { return; }
+      cliWin = createCliWindow(doc, withRoot({ onClose: function () { untrack(cliWin); cliWin = null; } }));
+      track(cliWin, "console");
+    }
     var termWin = null;
-    if (opts.ptyURL && bq("tb-term")) {
-      bq("tb-term").onclick = function () {
-        if (termWin) { termWin.close(); termWin = null; return; }
-        termWin = createTerminalWindow(doc, opts);
-        var origt = termWin.close;
-        termWin.close = function () { origt(); termWin = null; };
-      };
+    function openTerm() {
+      if (!opts.ptyURL || focusExisting(termWin)) { return; }
+      termWin = createTerminalWindow(doc, withRoot({ onClose: function () { untrack(termWin); termWin = null; } }));
+      track(termWin, "terminal");
     }
 
-    function setDesktop(on) {
-      visible = on;
-      bar.style.display = on ? "flex" : "none";
-      wins.forEach(function (w) { w.el.style.display = (on && !w.minimized) ? "flex" : "none"; });
-      if (on && !wins.length) { var w = openWindow(); w.landHome(); }
-    }
-    function toggle() { setDesktop(!visible); }
+    bq("tb-dock").onclick = function () { applyDock(dock === "top" ? "bottom" : "top"); };
+    applyDock(dock);   // position the always-on panel + windows area on load
+
+    // The panel is permanent; toggle() (kept for launcher/back-compat) just opens
+    // the app menu so any old caller still surfaces the launcher.
+    function toggle() { menu.style.display = (menu.style.display === "block") ? "none" : "block"; }
 
     return {
       panel: bar,
       toggle: toggle,
-      openWindow: openWindow,
-      browser: function () { return focused ? focused.browser : null; }
+      openWindow: openBrowse,
+      browser: function () { for (var i = wins.length - 1; i >= 0; i--) { if (wins[i].browser) return wins[i].browser; } return null; }
     };
   }
 

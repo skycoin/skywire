@@ -100,6 +100,9 @@ export class NodeService {
           // Ip.
           if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
             node.ip = response.overview.local_ip;
+          } else if (response.overview && response.overview.public_ip && (response.overview.public_ip as string).trim()) {
+            // Browser/wasm visors have no LAN ip; show their public ip in the IP column.
+            node.ip = response.overview.public_ip;
           } else {
             node.ip = null;
           }
@@ -335,6 +338,9 @@ return {
 
       if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
         node.ip = response.overview.local_ip;
+      } else if (response.overview && response.overview.public_ip && (response.overview.public_ip as string).trim()) {
+        // Browser/wasm visors have no LAN ip; show their public ip in the IP column.
+        node.ip = response.overview.public_ip;
       } else {
         node.ip = null;
       }
