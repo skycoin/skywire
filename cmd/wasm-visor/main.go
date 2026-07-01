@@ -338,6 +338,11 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	for _, s := range svc.StunServers {
 		iceURLs = append(iceURLs, "stun:"+s)
 	}
+	// Learn this tab's public IP via STUN (browser WebRTC). The dmsg LookupIP path
+	// (refreshSelfPublicIP) returns the wss reverse-proxy's address on an HTTPS
+	// page, not the browser's — STUN is the one route that works there. Reuses the
+	// deployment's own STUN servers.
+	go refreshSelfPublicIPViaSTUN(ctx, iceURLs)
 	factory := network.ClientFactory{
 		PK: pk, SK: sk, DmsgC: dmsgC, MLogger: mLog, EB: eb,
 		WSTable: wsTable, WTTable: wtTable, ICEURLs: iceURLs,
@@ -725,14 +730,124 @@ func refreshSelfPublicIP(ctx context.Context) {
 	}
 }
 
+// refreshSelfPublicIPViaSTUN learns this tab's public IP via the browser's WebRTC
+// STUN — the one IP-discovery path that works on an HTTPS page (the dmsg LookupIP
+// route returns the wss reverse-proxy's address, not the browser's). It opens an
+// RTCPeerConnection against the deployment STUN servers, triggers ICE gathering,
+// and reads the server-reflexive (srflx) candidate's address. Best-effort: retries
+// until learned, then refreshes periodically (a browser's IP can change).
+func refreshSelfPublicIPViaSTUN(ctx context.Context, stunURLs []string) {
+	rtcCtor := js.Global().Get("RTCPeerConnection")
+	if !rtcCtor.Truthy() {
+		return // no WebRTC in this environment
+	}
+	attempt := func() string {
+		urls := js.Global().Get("Array").New()
+		for _, u := range stunURLs {
+			urls.Call("push", u)
+		}
+		if urls.Length() == 0 {
+			return "" // no STUN servers configured
+		}
+		srv := js.Global().Get("Object").New()
+		srv.Set("urls", urls)
+		iceServers := js.Global().Get("Array").New()
+		iceServers.Call("push", srv)
+		cfg := js.Global().Get("Object").New()
+		cfg.Set("iceServers", iceServers)
+		pc := rtcCtor.New(cfg)
+		pc.Call("createDataChannel", "ip") // datachannel triggers ICE gathering
+		ipCh := make(chan string, 1)
+		onCand := js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+			cand := args[0].Get("candidate")
+			if !cand.Truthy() {
+				return nil
+			}
+			if ip := srflxIP(cand.Get("candidate").String()); ip != "" {
+				select {
+				case ipCh <- ip:
+				default:
+				}
+			}
+			return nil
+		})
+		pc.Set("onicecandidate", onCand)
+		// createOffer().then(setLocalDescription) drives candidate gathering.
+		then := js.FuncOf(func(_ js.Value, a []js.Value) interface{} {
+			pc.Call("setLocalDescription", a[0])
+			return nil
+		})
+		pc.Call("createOffer").Call("then", then)
+
+		var result string
+		select {
+		case result = <-ipCh:
+		case <-time.After(8 * time.Second):
+		case <-ctx.Done():
+		}
+		pc.Set("onicecandidate", js.Null())
+		pc.Call("close")
+		onCand.Release()
+		then.Release()
+		return result
+	}
+	for {
+		ip := attempt()
+		delay := 15 * time.Second
+		if ip != "" {
+			if prev, _ := selfPublicIP.Load().(string); prev != ip {
+				selfPublicIP.Store(ip)
+				vlog("self public IP (via STUN): " + ip)
+			}
+			delay = 5 * time.Minute
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+	}
+}
+
+// srflxIP extracts the server-reflexive (public) IP from an ICE candidate line:
+// "candidate:<foundation> <comp> <proto> <prio> <ip> <port> typ srflx ...". mDNS
+// (.local) candidates are skipped — they obfuscate the real address.
+func srflxIP(c string) string {
+	f := strings.Fields(c)
+	for i := 0; i+1 < len(f); i++ {
+		if f[i] == "typ" && (f[i+1] == "srflx" || f[i+1] == "prflx") {
+			if len(f) >= 5 && !strings.HasSuffix(f[4], ".local") {
+				return f[4]
+			}
+		}
+	}
+	return ""
+}
+
 func (s visorSelf) SelfSummary() wasmhv.Summary {
 	ov := s.SelfOverview()
+	// Connected dmsg servers: the remote PK of every live client session (the
+	// remote of a client→server session IS the server). Feeds the node-list UI's
+	// "dmsg servers" column; latency is left 0 (the tab runs no dmsg tracker).
+	var dmsgServers []wasmhv.DMSGServerInfo
+	var primarySrv cipher.PubKey
+	if dmsgC != nil {
+		for _, cs := range dmsgC.AllSessions() {
+			srv := cs.RemotePK()
+			dmsgServers = append(dmsgServers, wasmhv.DMSGServerInfo{PK: srv})
+			if primarySrv == (cipher.PubKey{}) {
+				primarySrv = srv
+			}
+		}
+	}
 	return wasmhv.Summary{
-		Overview: &ov,
-		Health:   &wasmhv.HealthInfo{ServicesHealth: "healthy"},
+		Overview:    &ov,
+		Health:      &wasmhv.HealthInfo{ServicesHealth: "healthy"},
+		DMSGServers: dmsgServers,
 		// Non-nil: the CLI's `visor info` dereferences DmsgStats.RoundTrip
 		// unconditionally. The tab has no dmsg-tracker, so RoundTrip stays 0.
-		DmsgStats: &wasmhv.DmsgClientSummary{PK: selfPK},
+		// ServerPK = the primary (first) connected server so the UI shows it.
+		DmsgStats: &wasmhv.DmsgClientSummary{PK: selfPK, ServerPK: primarySrv},
 		// A browser visor has no on-disk config file, so there is no separate
 		// "config version" — its config IS its build. Report the build version so
 		// the HV UI shows it (and treats version == config_version as up-to-date)

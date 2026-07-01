@@ -247,7 +247,12 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.dialog, route, this.router, this.filterProperties, listId
     );
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
-      this.filteredNodes = data;
+      // Guard: filteredNodes is a Node[] contract relied on by .forEach/.some/.slice
+      // below. The very first filter emission (before the initial fetch resolves) or
+      // a backend that returns a non-array `data` field (e.g. the wasm hypervisor
+      // core mid-boot) would otherwise yield a non-array here and crash the list
+      // with "filteredNodes.forEach is not a function".
+      this.filteredNodes = Array.isArray(data) ? data : [];
 
       // The local hypervisor's own visor (the machine serving this UI)
       // must never vanish from its own list. On a cold start it can

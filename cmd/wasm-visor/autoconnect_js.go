@@ -4,10 +4,14 @@
 //
 // A browser leaf can't accept inbound transports, but it CAN dial out. To join
 // the mesh (so routes can form) it periodically fetches the public-visor list
-// from service discovery, resolves each peer's reachable IP from the address
-// resolver, and dials a WebSocket transport to that peer's WS-on-stcpr-port
-// (phase 2). WS — not WebRTC — because WS is the transport a *public* visor
-// exposes by being publicly reachable (docs/design/wasm-public-autoconnect.md).
+// from service discovery, resolves each peer's reachable endpoint from the
+// address resolver, and dials a transport. It tries the direct carriers first —
+// WS (to the peer's WS-on-stcpr-port; http pages only, since https blocks plain
+// ws:// as mixed content) and WT (QUIC on the peer's unified transport port,
+// cert-hash pinned) — then falls back to WebRTC, a NAT-traversing DataChannel
+// signalled over dmsg that reaches ANY visor when the direct carriers can't
+// (the common case on an https page or against a NAT'd peer).
+// See docs/design/wasm-public-autoconnect.md.
 //
 // Both service-discovery and address-resolver are reached with net/http-free,
 // signed HTTP-over-dmsg (the std-Go http.Client/dmsghttp path deadlocks under
@@ -35,9 +39,27 @@ import (
 )
 
 const (
-	autoconnectInterval  = 90 * time.Second
-	autoconnectMaxVisors = 4
+	autoconnectInterval = 90 * time.Second
+	// Direct carriers (WT always; WS on insecure pages) are what ONLY a publicly
+	// reachable visor can accept. The wasm visor makes them to MANY public visors
+	// — its analog of a native public visor's stcpr-to-the-whole-fleet mesh
+	// participation — so it can carry/relay routes like a first-class node, not
+	// just hold a handful of links.
+	autoconnectMaxDirect = 32
+	// WebRTC (NAT-traversing DataChannel over dmsg) is reserved on a SEPARATE,
+	// smaller budget for peers no direct carrier can reach (NAT'd / WT-less
+	// visors). Kept apart so WebRTC — heavier, and something ANY visor can accept
+	// — never crowds out a direct transport slot to a public visor.
+	autoconnectMaxWebRTC = 6
+	// After a peer fails ALL carriers (direct then WebRTC), don't re-dial it for
+	// this long — avoids hammering unreachable peers + spamming net::ERR_*.
+	// Cleared on any success.
+	autoconnectFailCooldown = 10 * time.Minute
 )
+
+// pk -> time of last all-carriers-failed dial. Persists across cycles (the loop
+// is a single goroutine, so no lock needed under single-threaded wasm).
+var autoconnectFailed = map[cipher.PubKey]time.Time{}
 
 // startWSAutoconnect launches the WS public-autoconnect loop. No-op if any
 // prerequisite (SD/AR url, dmsg, transport manager, ws table) is missing.
@@ -94,97 +116,158 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 		return
 	}
 
-	// Count DISTINCT visors we already auto-connect to (a visor may hold both a
-	// WS and a WT transport — see below — so count peers, not transports).
-	have := map[cipher.PubKey]bool{}
+	// Classify existing automatic transports by carrier class. A peer already
+	// reachable by a DIRECT carrier (WT/WS) is deliberately NOT a WebRTC
+	// candidate — WebRTC is spent only where direct can't reach.
+	haveDirect := map[cipher.PubKey]bool{}
+	haveWebRTC := map[cipher.PubKey]bool{}
 	tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
-		if mt.Entry.Label == transport.LabelAutomatic {
-			have[mt.Remote()] = true
+		if mt.Entry.Label != transport.LabelAutomatic {
+			return true
+		}
+		if mt.Type() == types.WEBRTC {
+			haveWebRTC[mt.Remote()] = true
+		} else {
+			haveDirect[mt.Remote()] = true
 		}
 		return true
 	})
-	n := len(have)
 
-	// On an HTTPS page the browser blocks plain ws:// (mixed content), and a
-	// public visor has no wss endpoint (no domain/CA) — so a WS transport to it
-	// can never form. WebTransport (QUIC, cert-hash pinned) is the only
-	// HTTPS-viable DIRECT carrier, so dial WT only there; an http:// page still
-	// dials both for redundancy.
+	// On an HTTPS page the browser blocks plain ws:// (mixed content), so WT is
+	// the only direct carrier; on an insecure (http/localhost/file) page ws://
+	// works too, so dial both to each public visor for path diversity.
 	https := pageHTTPS()
 
-	vlog(fmt.Sprintf("ws-autoconnect: SD returned %d visors (%d existing auto-peers)", len(services), n))
+	vlog(fmt.Sprintf("ws-autoconnect: SD returned %d public visors (have %d direct, %d webrtc peers)", len(services), len(haveDirect), len(haveWebRTC)))
 
-	added := 0
+	// --- Pass 1: DIRECT carriers (WT, +WS on insecure) to PUBLIC visors. ---
+	// These are the transports only a publicly-reachable visor can accept, so
+	// make them broadly (up to autoconnectMaxDirect). Peers no direct carrier
+	// reaches are collected for the WebRTC pass rather than cooled down here.
+	directPeers := len(haveDirect)
+	addedDirect := 0
+	skippedCooldown := 0
+	var directFailed []cipher.PubKey
 	for i := range services {
-		if n+added >= autoconnectMaxVisors {
+		if directPeers >= autoconnectMaxDirect {
 			break
 		}
 		pk := services[i].Addr.PubKey()
-		if pk == selfPK || have[pk] {
+		if pk == selfPK || haveDirect[pk] {
 			continue
 		}
-		port := services[i].Addr.Port()
-		vlog(fmt.Sprintf("ws-autoconnect: resolving %s:%d", pk.Hex()[:8], port))
-
-		// A browser can carry WS (TCP) and WT (QUIC). On an http page dial BOTH to
-		// each public visor for redundancy + path diversity (the browser analog of
-		// a native visor making stcpr+sudph to the same peer); on an HTTPS page
-		// only WT is reachable (ws:// is mixed-content-blocked). Either succeeding
-		// counts the visor as connected.
-		gotAny := false
-
-		// WS: rides the stcpr cmux port. Resolve the peer's stcpr IP, dial
-		// ws://ip:<SD-advertised-port>/. Skipped on HTTPS (mixed content).
-		if !https {
-			if addr, err := ar.resolveStcpr(ctx, pk); err == nil && addr != "" {
-				host := addr
-				if h, _, e := net.SplitHostPort(addr); e == nil {
-					host = h
-				}
-				url := fmt.Sprintf("ws://%s:%d/", host, port)
-				wsTable.SetAddr(pk, url)
-				dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
-				_, derr := tpM.SaveTransport(dctx, pk, types.WS, transport.LabelAutomatic)
-				dcancel()
-				if derr != nil {
-					vlog(fmt.Sprintf("ws-autoconnect: WS dial %s (%s): %v", pk.Hex()[:8], url, derr))
-				} else {
-					gotAny = true
-					vlog(fmt.Sprintf("ws-autoconnect: +WS transport to %s via %s", pk.Hex()[:8], url))
-				}
-			} else if err != nil {
-				vlog(fmt.Sprintf("ws-autoconnect: AR stcpr resolve %s: %v", pk.Hex()[:8], err))
+		if ts, bad := autoconnectFailed[pk]; bad {
+			if time.Since(ts) < autoconnectFailCooldown {
+				skippedCooldown++
+				continue
 			}
+			delete(autoconnectFailed, pk)
 		}
+		if dialDirect(ctx, ar, pk, services[i].Addr.Port(), https) {
+			directPeers++
+			addedDirect++
+			delete(autoconnectFailed, pk)
+		} else {
+			directFailed = append(directFailed, pk)
+		}
+	}
 
-		// WT: a separate QUIC endpoint with its own UDP port + pinned self-signed
-		// cert, both learned from the AR's WT record (https://host:port/skywire).
-		url, certHash, werr := ar.resolveWT(ctx, pk)
-		switch {
-		case werr != nil:
-			vlog(fmt.Sprintf("ws-autoconnect: AR wt resolve %s: %v", pk.Hex()[:8], werr))
-		case url == "":
-			vlog(fmt.Sprintf("ws-autoconnect: %s has no WT entry in AR (404) — skip", pk.Hex()[:8]))
-		default:
-			wtTable.SetEntry(pk, network.WTEntry{URL: url, CertHash: certHash})
+	// --- Pass 2: WebRTC to the peers no direct carrier reached. ---
+	// Today those are NAT'd / WT-less "public" visors; the same mechanism is how
+	// the tab will reach genuinely non-public visors (discovered via public
+	// peers' transport graphs) later. Separate budget so WebRTC never displaces a
+	// direct transport. A peer that fails here too (or is over budget) is cooled
+	// down so we don't re-dial direct to it every cycle.
+	webrtcPeers := len(haveWebRTC)
+	addedWebRTC := 0
+	for _, pk := range directFailed {
+		if haveWebRTC[pk] {
+			continue
+		}
+		if webrtcPeers < autoconnectMaxWebRTC && dialWebRTC(ctx, pk) {
+			webrtcPeers++
+			addedWebRTC++
+			delete(autoconnectFailed, pk)
+		} else {
+			autoconnectFailed[pk] = time.Now()
+		}
+	}
+
+	if addedDirect > 0 || addedWebRTC > 0 {
+		vlog(fmt.Sprintf("ws-autoconnect: +%d direct, +%d webrtc (%d public candidates)", addedDirect, addedWebRTC, len(services)))
+	}
+	if skippedCooldown > 0 {
+		vlog(fmt.Sprintf("ws-autoconnect: skipped %d unreachable peer(s) in cooldown", skippedCooldown))
+	}
+}
+
+// dialDirect attempts the browser's DIRECT carriers to a public visor — WT
+// (QUIC, cert-hash pinned) always, plus WS (ws://ip:port over the stcpr cmux
+// port) on an insecure page where mixed-content rules allow it. Returns true if
+// either transport formed. These are the carriers only a publicly-reachable
+// visor can accept.
+func dialDirect(ctx context.Context, ar *arDmsg, pk cipher.PubKey, port uint16, https bool) bool {
+	got := false
+
+	// WS: rides the stcpr cmux port. Resolve the peer's stcpr IP, dial
+	// ws://ip:<SD-advertised-port>/. Skipped on HTTPS (mixed content).
+	if !https {
+		if addr, err := ar.resolveStcpr(ctx, pk); err == nil && addr != "" {
+			host := addr
+			if h, _, e := net.SplitHostPort(addr); e == nil {
+				host = h
+			}
+			url := fmt.Sprintf("ws://%s:%d/", host, port)
+			wsTable.SetAddr(pk, url)
 			dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
-			_, derr := tpM.SaveTransport(dctx, pk, types.WT, transport.LabelAutomatic)
+			_, derr := tpM.SaveTransport(dctx, pk, types.WS, transport.LabelAutomatic)
 			dcancel()
 			if derr != nil {
-				vlog(fmt.Sprintf("ws-autoconnect: WT dial %s (%s): %v", pk.Hex()[:8], url, derr))
+				vlog(fmt.Sprintf("ws-autoconnect: WS dial %s (%s): %v", pk.Hex()[:8], url, derr))
 			} else {
-				gotAny = true
-				vlog(fmt.Sprintf("ws-autoconnect: +WT transport to %s via %s", pk.Hex()[:8], url))
+				got = true
+				vlog(fmt.Sprintf("ws-autoconnect: +WS transport to %s via %s", pk.Hex()[:8], url))
 			}
+		} else if err != nil {
+			vlog(fmt.Sprintf("ws-autoconnect: AR stcpr resolve %s: %v", pk.Hex()[:8], err))
 		}
+	}
 
-		if gotAny {
-			added++
+	// WT: a QUIC endpoint + pinned self-signed cert, learned from the AR's WT
+	// record (https://host:port/skywire).
+	url, certHash, werr := ar.resolveWT(ctx, pk)
+	switch {
+	case werr != nil:
+		vlog(fmt.Sprintf("ws-autoconnect: AR wt resolve %s: %v", pk.Hex()[:8], werr))
+	case url == "":
+		// no WT entry in AR (404) — a WT-less public visor; WebRTC pass may reach it.
+	default:
+		wtTable.SetEntry(pk, network.WTEntry{URL: url, CertHash: certHash})
+		dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
+		_, derr := tpM.SaveTransport(dctx, pk, types.WT, transport.LabelAutomatic)
+		dcancel()
+		if derr != nil {
+			vlog(fmt.Sprintf("ws-autoconnect: WT dial %s (%s): %v", pk.Hex()[:8], url, derr))
+		} else {
+			got = true
+			vlog(fmt.Sprintf("ws-autoconnect: +WT transport to %s via %s", pk.Hex()[:8], url))
 		}
 	}
-	if added > 0 {
-		vlog(fmt.Sprintf("ws-autoconnect: connected %d new visor(s) over WS/WT (%d candidates)", added, len(services)))
+	return got
+}
+
+// dialWebRTC opens a WebRTC DataChannel transport (signalled over dmsg, NAT
+// traversing) to a peer no direct carrier could reach. Returns true on success.
+func dialWebRTC(ctx context.Context, pk cipher.PubKey) bool {
+	dctx, dcancel := context.WithTimeout(ctx, 30*time.Second)
+	_, derr := tpM.SaveTransport(dctx, pk, types.WEBRTC, transport.LabelAutomatic)
+	dcancel()
+	if derr != nil {
+		vlog(fmt.Sprintf("ws-autoconnect: WebRTC dial %s: %v", pk.Hex()[:8], derr))
+		return false
 	}
+	vlog(fmt.Sprintf("ws-autoconnect: +WebRTC transport to %s", pk.Hex()[:8]))
+	return true
 }
 
 // arDmsg is a minimal authenticated address-resolver client over dmsg, mirroring
