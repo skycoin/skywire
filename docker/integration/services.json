@@ -110,6 +110,7 @@
       "name": "ar",
       "addr": ":9093",
       "udp_addr": ":9093",
+      "public_udp_addr": "174.0.0.17:9093",
       "pprof_addr": ":6093",
       "redis": "redis://redis:6379/3",
       "entry_timeout": "2m",

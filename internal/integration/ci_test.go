@@ -518,8 +518,13 @@ func TestEnv_Tp(t *testing.T) {
 				// Use retry logic for transport creation (up to 3 attempts)
 				addTpSum, err := env.VisorTpAddWithRetry(visorB, pk, tpType, 3)
 				if err != nil {
-					// SUDPH/DMSG transports may not work in Docker E2E due to NAT/STUN/noise limitations
-					if tpType == types.SUDPH || tpType == types.DMSG {
+					// DMSG multi-hop-through-server transports remain flaky in Docker E2E
+					// (the DMSG server is an unaccounted intermediary), so keep them a soft
+					// skip. SUDPH now works: the deployment AR advertises a udp_address
+					// (docker/integration/services.json → public_udp_addr), so STUN/hole
+					// punching completes — it is enforced like the other UDP transports.
+					// A dedicated hard-assert lives in TestEnv_SUDPHTransport (sudph_test.go).
+					if tpType == types.DMSG {
 						t.Logf("Skipping %s transport test: %v (expected in Docker environment)", tpType, err)
 						continue
 					}
