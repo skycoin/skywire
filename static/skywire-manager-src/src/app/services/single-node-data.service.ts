@@ -204,7 +204,6 @@ export class SingleNodeDataService {
       nodeData.updateSubscription.unsubscribe();
     }
 
-    let fetchStart = 0;
     nodeData.updateSubscription = of(1).pipe(
       // Wait the requested delay.
       delay(delayMs),
@@ -214,14 +213,9 @@ export class SingleNodeDataService {
         nodeData.dataSubject.next(nodeData.lastEmitedData);
       }),
       delay(120),
-      tap(() => {
-        fetchStart = performance.now();
-        console.log('[HV-DIAG] fetching node data for', nodeData.pk.substring(0, 8) + '...');
-      }),
       // Load the data.
       mergeMap(() => this.nodeService.getNode(nodeData.pk)))
     .subscribe(result => {
-      console.log('[HV-DIAG] fetch completed in', (performance.now() - fetchStart).toFixed(0), 'ms for', nodeData.pk.substring(0, 8) + '...');
       // Reset error backoff counter on success.
       nodeData.consecutiveErrors = 0;
 
