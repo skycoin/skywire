@@ -56,7 +56,11 @@ export class PageBaseComponent implements OnInit {
    * @param value Value to save.
    */
   saveLocalValue(key: string, value: any) {
-    const state = window.history.state;
+    // window.history.state is null until something has been pushed (common on a
+    // fresh load or hash-only navigation, e.g. the wasm hypervisor's first paint),
+    // so default to {} — otherwise `state[key] = value` throws "Cannot set
+    // properties of null". getLocalValue already guards the null case.
+    const state = window.history.state || {};
     state[key] = value;
     state[key + '_time'] = new Date().getTime();
     window.history.replaceState(state, '', window.location.pathname + window.location.hash);
