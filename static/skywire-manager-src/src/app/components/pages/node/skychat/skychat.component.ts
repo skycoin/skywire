@@ -171,7 +171,10 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     this.network = 'dmsg';
     const poll = () => {
       let arr: any[];
-      try { arr = JSON.parse(sv.skychatMessages() || '[]'); } catch {
+      // skychatMessages() returns the JSON of the message buffer, which is the
+      // string "null" (not "[]") when the buffer is a nil slice — JSON.parse
+      // gives null, so coalesce to [] or the poll would bail and never connect.
+      try { arr = JSON.parse(sv.skychatMessages() || '[]') || []; } catch {
         this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); return;
       }
       if (!Array.isArray(arr)) { return; }
