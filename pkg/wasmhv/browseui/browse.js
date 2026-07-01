@@ -64,6 +64,7 @@
     return { css: "text/css", js: "text/javascript", mjs: "text/javascript", json: "application/json",
       png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", svg: "image/svg+xml",
       webp: "image/webp", ico: "image/x-icon", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf",
+      wasm: "application/wasm", // WebAssembly.instantiateStreaming requires this exact type
       html: "text/html" }[m] || "application/octet-stream";
   }
   function bytesToB64(bytes) {
@@ -406,7 +407,12 @@
       m.setAttribute("http-equiv", "Content-Security-Policy");
       m.setAttribute("content",
         "default-src 'none'; img-src data:; media-src data:; font-src data:; " +
-        "style-src data: 'unsafe-inline'; script-src data: 'unsafe-inline'; " +
+        // 'wasm-unsafe-eval' lets a fetched site compile/instantiate its own
+        // WebAssembly (many static sites ship a wasm blob) WITHOUT enabling
+        // general JS eval(). WASM is sandboxed — it reaches the DOM only through
+        // JS glue (already permitted by 'unsafe-inline'), and connect-src 'none'
+        // still blocks any network egress, so this opens no new exfil channel.
+        "style-src data: 'unsafe-inline'; script-src data: 'unsafe-inline' 'wasm-unsafe-eval'; " +
         "connect-src 'none'; frame-src 'none'; form-action 'none'");
       head.insertBefore(m, head.firstChild);
     }
