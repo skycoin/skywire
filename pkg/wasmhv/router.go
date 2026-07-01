@@ -105,6 +105,12 @@ func (c *Core) ServeHTTP(method, path string, body []byte) (int, []byte) {
 			}
 		}
 		return 200, []byte(`[]`)
+
+	// The hvui client-error-reporter POSTs console errors here to ship them to
+	// the visor log. In the browser the console already IS the log, so accept +
+	// discard rather than 404 every reported error (which itself spams console).
+	case p == "/client-log":
+		return 200, []byte(`{"ok":true}`)
 	}
 	return 404, []byte(`{"error":"not found in wasm hypervisor core"}`)
 }
