@@ -326,10 +326,16 @@ func (s *service) Run(ctx context.Context) error {
 		} else {
 			log.WithField("ws_addr", cfg.WSAddress).WithField("ws_url", cfg.PublicAddressWS).Info("Serving dmsg over WebSocket...")
 			go func() {
+				// Additive/best-effort, like the WebTransport listener below: a
+				// separate-port WS serve failure must NOT tear down the server.
+				// cancel() here would cancel runCtx and stop the WHOLE dmsg-server
+				// on any WS-listener error, dropping every client's dmsg session.
+				// Just log and let this WS endpoint go dark; TCP/QUIC (and the
+				// main-port unified WS) keep serving.
 				if err := srv.ServeWS(wsLis, cfg.PublicAddressWS); err != nil {
-					log.Errorf("ServeWS: %v", err)
-					cancel()
+					log.WithError(err).Warn("dmsg-ws: WebSocket serving stopped; continuing without it (TCP/QUIC unaffected)")
 				}
+				wsLis.Close() //nolint:errcheck,gosec
 			}()
 		}
 	} else if cfg.WSAddress != "" {
@@ -352,10 +358,16 @@ func (s *service) Run(ctx context.Context) error {
 		} else {
 			log.WithField("wt_addr", cfg.WTAddress).WithField("wt_url", cfg.PublicAddressWT).Info("Serving dmsg over WebTransport...")
 			go func() {
+				// Additive/best-effort (per the block comment): a WebTransport
+				// serve failure must NOT tear down the server — the TCP/QUIC/WS
+				// listeners that carry the clients' sessions keep running. Calling
+				// cancel() here would cancel runCtx and stop the WHOLE dmsg-server
+				// on any WT-listener error, dropping every visor's dmsg session
+				// (visor healthchecks then fail). Just log and let WT go dark.
 				if err := srv.ServeWebTransport(wtConn, cfg.PublicAddressWT, cert, certHash); err != nil {
-					log.Errorf("ServeWebTransport: %v", err)
-					cancel()
+					log.WithError(err).Warn("dmsg-wt: WebTransport serving stopped; continuing without it (TCP/QUIC/WS unaffected)")
 				}
+				wtConn.Close() //nolint:errcheck,gosec
 			}()
 		}
 	} else if cfg.WTAddress != "" {
