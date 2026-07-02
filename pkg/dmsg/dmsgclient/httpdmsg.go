@@ -177,7 +177,16 @@ func FetchOverDmsg(ctx context.Context, dmsgC *dmsg.Client, method, pkHost, path
 		}()
 	}
 
-	res, err := httpRoundTrip(stream, method, addr.PK.Hex(), path, reqHeaders, body)
+	// Host header defaults to the destination PK, but a caller can override it
+	// via reqHeaders["Host"] to carry a vhost — e.g. the resolving proxy reaching
+	// a name-based virtual host (bunkerofdoom.com.<pk>.dmsg) served by a
+	// vhost-aware backend (caddy/nginx) behind the visor. httpRoundTrip skips the
+	// "host" key when emitting reqHeaders, so this is the only channel for it.
+	hostHeader := addr.PK.Hex()
+	if h := reqHeaders["Host"]; h != "" {
+		hostHeader = h
+	}
+	res, err := httpRoundTrip(stream, method, hostHeader, path, reqHeaders, body)
 	if err != nil {
 		return 0, nil, nil, err
 	}

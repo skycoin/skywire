@@ -14,8 +14,10 @@ package main
 import (
 	"bufio"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 	"syscall/js"
@@ -28,8 +30,9 @@ import (
 const contentPort uint16 = 80
 
 type contentEntry struct {
-	ct   string
-	body []byte
+	ct      string
+	body    []byte
+	enabled bool // false → served as 404 (disabled but retained, so it can be re-enabled)
 }
 
 var (
@@ -73,7 +76,7 @@ func jsServeContent(_ js.Value, args []js.Value) interface{} {
 				body = dec
 			}
 		}
-		cm[p] = contentEntry{ct: e.Get("ct").String(), body: body}
+		cm[p] = contentEntry{ct: e.Get("ct").String(), body: body, enabled: true}
 	}
 	start := !servingPorts[port]
 	servingPorts[port] = true
@@ -145,7 +148,7 @@ func handleContentStream(s *dmsg.Stream, port uint16) {
 	contentMu.RLock()
 	e, ok := contentByPort[port][path]
 	contentMu.RUnlock()
-	if !ok {
+	if !ok || !e.enabled { // absent OR disabled by the operator → 404
 		_, _ = io.WriteString(s, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n") //nolint:errcheck
 		return
 	}
@@ -159,3 +162,83 @@ func handleContentStream(s *dmsg.Stream, port uint16) {
 // startPeerServices; nil otherwise. Read on the accept goroutine, set once at
 // boot before the port-80 server starts, so no lock is needed.
 var dynamicHandler func(port uint16, path string) (string, []byte, bool)
+
+// jsHostedContent() → JSON array of every hosted entry across all ports:
+// [{port, path, ct, size, enabled}], sorted by port then path. Powers the host
+// window's "what am I hosting" list.
+func jsHostedContent(js.Value, []js.Value) interface{} {
+	type row struct {
+		Port    uint16 `json:"port"`
+		Path    string `json:"path"`
+		CT      string `json:"ct"`
+		Size    int    `json:"size"`
+		Enabled bool   `json:"enabled"`
+	}
+	contentMu.RLock()
+	var rows []row
+	for port, cm := range contentByPort {
+		for p, e := range cm {
+			rows = append(rows, row{Port: port, Path: p, CT: e.ct, Size: len(e.body), Enabled: e.enabled})
+		}
+	}
+	contentMu.RUnlock()
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Port != rows[j].Port {
+			return rows[i].Port < rows[j].Port
+		}
+		return rows[i].Path < rows[j].Path
+	})
+	b, _ := json.Marshal(rows) //nolint:errcheck
+	return string(b)
+}
+
+// jsUnserveContent(path[, port]) removes a hosted path entirely. Returns true if
+// it existed and was removed.
+func jsUnserveContent(_ js.Value, args []js.Value) interface{} {
+	if len(args) < 1 {
+		return false
+	}
+	path := args[0].String()
+	port := hostArgPort(args, 1)
+	contentMu.Lock()
+	defer contentMu.Unlock()
+	if cm := contentByPort[port]; cm != nil {
+		if _, ok := cm[path]; ok {
+			delete(cm, path)
+			return true
+		}
+	}
+	return false
+}
+
+// jsSetContentEnabled(path, enabled[, port]) toggles whether a hosted path is
+// served (disabled → 404) WITHOUT discarding its body, so it can be re-enabled.
+// Returns the new enabled state.
+func jsSetContentEnabled(_ js.Value, args []js.Value) interface{} {
+	if len(args) < 2 {
+		return false
+	}
+	path := args[0].String()
+	enabled := args[1].Truthy()
+	port := hostArgPort(args, 2)
+	contentMu.Lock()
+	defer contentMu.Unlock()
+	if cm := contentByPort[port]; cm != nil {
+		if e, ok := cm[path]; ok {
+			e.enabled = enabled
+			cm[path] = e
+			return enabled
+		}
+	}
+	return false
+}
+
+// hostArgPort reads an optional port from args[idx], defaulting to contentPort.
+func hostArgPort(args []js.Value, idx int) uint16 {
+	if len(args) > idx && args[idx].Truthy() {
+		if p := args[idx].Int(); p > 0 && p < 65536 {
+			return uint16(p)
+		}
+	}
+	return contentPort
+}

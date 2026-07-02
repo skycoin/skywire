@@ -7,14 +7,19 @@
     <mat-icon [inline]="true">forum</mat-icon>
     {{ 'apps.tabs.chat' | translate }}
   </button>
-  <button mat-button class="sub-btn" [class.active]="sub === 'vpn'" (click)="sub = 'vpn'">
-    <mat-icon [inline]="true">vpn_lock</mat-icon>
-    {{ 'apps.tabs.vpn' | translate }}
-  </button>
-  <button mat-button class="sub-btn" [class.active]="sub === 'skysocks'" (click)="sub = 'skysocks'">
-    <mat-icon [inline]="true">cloud_download</mat-icon>
-    {{ 'apps.tabs.skysocks' | translate }}
-  </button>
+  <!-- VPN (TUN) and skysocks-server can't run in an in-browser wasm visor; hide
+       their sub-tabs for it (install on the host to use them). A remote native
+       visor managed from the wasm hypervisor is not wasm, so it keeps them. -->
+  @if (!wasmNode) {
+    <button mat-button class="sub-btn" [class.active]="sub === 'vpn'" (click)="sub = 'vpn'">
+      <mat-icon [inline]="true">vpn_lock</mat-icon>
+      {{ 'apps.tabs.vpn' | translate }}
+    </button>
+    <button mat-button class="sub-btn" [class.active]="sub === 'skysocks'" (click)="sub = 'skysocks'">
+      <mat-icon [inline]="true">cloud_download</mat-icon>
+      {{ 'apps.tabs.skysocks' | translate }}
+    </button>
+  }
 </div>
 
 @if (sub === 'list') {
