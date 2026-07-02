@@ -124,8 +124,11 @@ func TestEnv_DmsgWebTransport(t *testing.T) {
 	// dmsg via the dmsghttp RoundTripper. Because the strict WT client cannot
 	// fall back, getting the AR's own health JSON authoritatively proves the
 	// request crossed a dmsg session carried over WebTransport.
+	// NOTE: `cli dmsg curl` (clidmsg) — NOT the top-level `skywire dmsg curl`,
+	// which is a different command that has no --wt/--disc flags. --sk selects
+	// the standalone client; --wt+--disc force the strict WebTransport carrier.
 	url := fmt.Sprintf("dmsg://%s:%d/health", arDmsgPK, dmsgHTTPPort)
-	cmd := fmt.Sprintf("/release/skywire dmsg curl --sk %s --wt --disc %s %s",
+	cmd := fmt.Sprintf("/release/skywire cli dmsg curl --sk %s --wt --disc %s %s",
 		testDmsgClientSK, dmsgDiscoveryURL, url)
 
 	var body, lastErr string
