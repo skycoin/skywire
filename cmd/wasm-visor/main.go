@@ -142,11 +142,16 @@ func main() {
 		"tpdEdge":         js.FuncOf(jsTPDEdge),
 		"dialTransport":   js.FuncOf(jsDialTransport),
 		"fetchDmsg":       js.FuncOf(jsFetchDmsg),
-		"serveContent":    js.FuncOf(jsServeContent),
+		"serveContent":      js.FuncOf(jsServeContent),
+		"hostedContent":     js.FuncOf(jsHostedContent),
+		"unserveContent":    js.FuncOf(jsUnserveContent),
+		"setContentEnabled": js.FuncOf(jsSetContentEnabled),
 		"serveRPC":        js.FuncOf(jsServeRPC),
 		"dialRoute":       js.FuncOf(jsDialRoute),
 		"checkRegistered": js.FuncOf(jsCheckRegistered),
 		"fetchClearnet":   js.FuncOf(jsFetchClearnet),
+		"proxyVerbose":    js.FuncOf(jsProxyVerbose),
+		"closeWindow":     js.FuncOf(jsCloseWindow),
 		"skychatSend":     js.FuncOf(jsSkychatSend),
 		"skychatMessages": js.FuncOf(jsSkychatMessages),
 	}))
@@ -573,18 +578,34 @@ func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 		}
 		// Resolve resolver aliases (home.dmsg, tpd.dmsg, <pk>.dmsg) like the socks5
 		// resolving proxy, so the in-tab browser uses the same names.
-		resolved, homeBody := resolveFetchHost(pkHost)
+		resolved, vhost, homeBody := resolveFetchHost(pkHost)
 		var status int
 		var respHeaders map[string]string
 		var b []byte
+		t0 := time.Now()
 		if homeBody != nil {
 			status, respHeaders, b = 200, map[string]string{"Content-Type": "text/html"}, homeBody
 		} else {
+			// Carry the parsed vhost as the Host header so a name-based virtual
+			// host (bunkerofdoom.com.<pk>.dmsg) reaches the right site on a
+			// vhost-aware backend behind the destination visor.
+			var reqHeaders map[string]string
+			if vhost != "" {
+				reqHeaders = map[string]string{"Host": vhost}
+			}
 			var err error
-			status, respHeaders, b, err = dmsgclient.FetchOverDmsg(ctx, dmsgC, method, resolved, path, nil, body)
+			status, respHeaders, b, err = dmsgclient.FetchOverDmsg(ctx, dmsgC, method, resolved, path, reqHeaders, body)
 			if err != nil {
+				vlog(fmt.Sprintf("[resolve-proxy] %s %s%s → %s FAILED (%dms): %v", method, pkHost, path, resolved, time.Since(t0).Milliseconds(), err))
 				return nil, err
 			}
+		}
+		if proxyVerbose {
+			via := resolved
+			if homeBody != nil {
+				via = "in-tab home page"
+			}
+			vlog(fmt.Sprintf("[resolve-proxy] %s %s%s → %s  %d (%dB, %dms)", method, pkHost, path, via, status, len(b), time.Since(t0).Milliseconds()))
 		}
 		res := js.Global().Get("Object").New()
 		res.Set("status", status)
@@ -992,6 +1013,31 @@ func (visorSelf) SelfNetworkView() []byte {
 		return nil
 	}
 	return b
+}
+
+// SelfNetworkTransports fetches the TPD's network-wide transport metrics (the
+// visualizer's EDGES) over dmsg — the same /metrics call the native HV proxies
+// — and returns the raw JSON array unchanged. Mirrors SelfNetworkView's TPD
+// fetch; no aggregation needed, the visualizer parses edges[]/type/live itself.
+func (visorSelf) SelfNetworkTransports(days int) []byte {
+	if dmsgC == nil {
+		return nil
+	}
+	host := ""
+	if pk, e := dmsgURLPK(visorcore.ResolveServices(nil).TransportDiscoveryDmsg); e == nil {
+		host = pk.Hex()
+	}
+	if host == "" {
+		return nil
+	}
+	path := fmt.Sprintf("/metrics?days=%d&bandwidth=true&latency=true&edges=true", days)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	status, _, body, err := dmsgclient.FetchOverDmsg(ctx, dmsgC, "GET", host, path, nil, nil)
+	if err != nil || status != 200 {
+		return nil
+	}
+	return body
 }
 
 // jsDialTransport(pkHex, netType, url, certHash) creates a direct visor↔visor

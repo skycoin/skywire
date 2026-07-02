@@ -49,11 +49,34 @@ type chatMsg struct {
 	Out  bool   `json:"out"` // true = we sent it, false = received
 }
 
+// chatConn wraps a skychat conn with a write mutex: a peer conn is written from
+// two goroutines — sendChat (outbound message) and readChatConn (the chat-ack it
+// sends back on receipt) — so framing must be serialized or the 4-byte header and
+// body of two frames could interleave and corrupt the stream.
+type chatConn struct {
+	net.Conn
+	wmu sync.Mutex
+}
+
+func (c *chatConn) writeFrameLocked(payload []byte) error {
+	c.wmu.Lock()
+	defer c.wmu.Unlock()
+	return writeFrame(c.Conn, payload)
+}
+
+// chatAckEnvelope is the chat-ack reply the sender's --wait blocks on (native
+// wire format: {"type":"chat-ack","id":"<hex>"}). We only ever encode acks; the
+// full chat-msg/chat-ack schema lives in the native skychat app.
+type chatAckEnvelope struct {
+	Type string `json:"type"`
+	ID   string `json:"id"`
+}
+
 var (
 	chatMu     sync.Mutex
 	chatLog    []chatMsg
 	chatClient *app.Client
-	chatConns  = map[cipher.PubKey]net.Conn{} // cached conns keyed by peer PK
+	chatConns  = map[cipher.PubKey]*chatConn{} // cached conns keyed by peer PK
 )
 
 func appendChat(m chatMsg) {
@@ -106,14 +129,16 @@ func acceptChatLoop(lis net.Listener) {
 		if err != nil {
 			return
 		}
-		go readChatConn(conn)
+		go readChatConn(&chatConn{Conn: conn})
 	}
 }
 
 // readChatConn reads framed messages off one peer connection into the buffer
 // until the peer closes or errors. Used for both accepted (inbound) and dialed
-// (outbound) conns — a skychat conn is bidirectional.
-func readChatConn(conn net.Conn) {
+// (outbound) conns — a skychat conn is bidirectional. When the peer sends an
+// ack-requesting chat-msg (native `send --wait`), we reply with a chat-ack on the
+// same conn so the sender's wait resolves instead of falsely timing out.
+func readChatConn(conn *chatConn) {
 	defer conn.Close() //nolint:errcheck
 	from := peerPKHex(conn)
 	for {
@@ -121,7 +146,14 @@ func readChatConn(conn net.Conn) {
 		if err != nil {
 			return
 		}
-		text := decodeChatPayload(payload)
+		text, ackID := decodeChatPayload(payload)
+		if ackID != "" {
+			if b, mErr := json.Marshal(chatAckEnvelope{Type: "chat-ack", ID: ackID}); mErr == nil {
+				if wErr := conn.writeFrameLocked(b); wErr != nil {
+					vlog(fmt.Sprintf("skychat: ack to %s failed: %s", shortPK(from), wErr.Error()))
+				}
+			}
+		}
 		if text == "" {
 			continue // an ack-only envelope, or empty — nothing to surface
 		}
@@ -151,7 +183,7 @@ func sendChat(pkHex, text string) error {
 		if err != nil {
 			return fmt.Errorf("dial %s: %w", shortPK(pkHex), err)
 		}
-		conn = c
+		conn = &chatConn{Conn: c}
 		chatMu.Lock()
 		chatConns[pk] = conn
 		chatMu.Unlock()
@@ -163,7 +195,7 @@ func sendChat(pkHex, text string) error {
 			chatMu.Unlock()
 		}()
 	}
-	if err := writeFrame(conn, []byte(text)); err != nil {
+	if err := conn.writeFrameLocked([]byte(text)); err != nil {
 		chatMu.Lock()
 		delete(chatConns, pk)
 		chatMu.Unlock()
@@ -201,21 +233,32 @@ func writeFrame(conn net.Conn, payload []byte) error {
 	return err
 }
 
-// decodeChatPayload extracts the message text from a frame. Native skychat sends
-// either plain UTF-8 bytes (default) or a JSON envelope {type,id,body,ack}; we
-// return the body for a "chat-msg" envelope, "" for an ack, else the raw bytes.
-func decodeChatPayload(payload []byte) string {
+// decodeChatPayload extracts the message text from a frame, plus the ack id to
+// reply with (non-empty only when the peer's chat-msg requested an ack — native
+// `send --wait`). Native skychat sends either plain UTF-8 bytes (default) or a
+// JSON envelope {type,id,body,ack}: we return the body for a "chat-msg", ("","")
+// for a "chat-ack", else the raw bytes. Recognition is conservative (must start
+// with '{' and carry a known chat-* type) so literal JSON typed into a chat still
+// reaches the peer as plain text.
+func decodeChatPayload(payload []byte) (text, ackID string) {
 	var env struct {
 		Type string `json:"type"`
+		ID   string `json:"id"`
 		Body string `json:"body"`
+		Ack  bool   `json:"ack"`
 	}
-	if json.Unmarshal(payload, &env) == nil && env.Type != "" {
-		if env.Type == "chat-ack" {
-			return ""
+	if len(payload) > 0 && payload[0] == '{' && json.Unmarshal(payload, &env) == nil {
+		switch env.Type {
+		case "chat-ack":
+			return "", ""
+		case "chat-msg":
+			if env.Ack && env.ID != "" {
+				return env.Body, env.ID
+			}
+			return env.Body, ""
 		}
-		return env.Body
 	}
-	return string(payload)
+	return string(payload), ""
 }
 
 func peerPKHex(conn net.Conn) string {

@@ -90,7 +90,7 @@
               <td class="num" [class]="pctClass(r.stats?.mem_percent)">
                 @if (r.stats?.mem_percent !== undefined) {
                   {{ r.stats.mem_percent | number: '1.0-1' }}%
-                  <div class="dim small">{{ fmtBytes(r.stats.mem_used) }} / {{ fmtBytes(r.stats.mem_total) }}</div>
+                  <div class="dim small">{{ formatBytes(r.stats.mem_used) }} / {{ formatBytes(r.stats.mem_total) }}</div>
                 } @else { <span class="dim">-</span> }
               </td>
               <td class="num" [class]="pctClass(r.stats?.disk_percent)">
