@@ -30,24 +30,21 @@
 package commands
 
 import (
-	"encoding/json"
 	"sync"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
-// chatEnvelope is the on-the-wire shape for both chat-msg (carries
-// body) and chat-ack (just id). Fields are encoded omitempty so the
-// two share one Go struct without leaking irrelevant fields.
-type chatEnvelope struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
-	Body string `json:"body,omitempty"`
-	Ack  bool   `json:"ack,omitempty"` // chat-msg only: request ack-on-receipt
-}
+// chatEnvelope / chatTypeMsg / chatTypeAck alias the shared skychat wire types
+// (pkg/skychat/message) so this file's ack routing and the envelope construction
+// in skychat.go keep their familiar local names while the on-the-wire shape lives
+// in exactly one place.
+type chatEnvelope = message.Envelope
 
 const (
-	chatTypeMsg = "chat-msg"
-	chatTypeAck = "chat-ack"
+	chatTypeMsg = message.TypeMsg
+	chatTypeAck = message.TypeAck
 )
 
 // ackWaiters routes an inbound chat-ack envelope back to the
@@ -107,12 +104,8 @@ func deliverAck(id string) {
 // "not an envelope" so plain-text JSON-looking chat (e.g. someone
 // typing literal {} into a chat window) still reaches its peer.
 func tryHandleChatEnvelope(payload []byte, peerPKHex string, sendAck func(id string)) (handled bool, body string, id string) {
-	trimmed := bytesTrimSpace(payload)
-	if len(trimmed) == 0 || trimmed[0] != '{' {
-		return false, "", ""
-	}
-	var env chatEnvelope
-	if err := json.Unmarshal(trimmed, &env); err != nil {
+	env, ok := message.ParseEnvelope(payload)
+	if !ok {
 		return false, "", ""
 	}
 	switch env.Type {
