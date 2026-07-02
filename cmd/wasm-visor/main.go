@@ -367,6 +367,11 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	tm.InitDmsgClient(ctx, dmsgC)
 	vlog("tp_manager: dmsg client inited; serving…")
 	go tm.Serve(ctx)
+
+	// In-memory CXO telemetry: report this tab's transport bandwidth + latency to
+	// TPD (via its cxo-aggregator), so the browser visor's transports show up in
+	// TPD /metrics like a native visor's — see telemetry_js.go.
+	go startTelemetry(sk, tpdPK, mLog.PackageLogger("wasm-telemetry"))
 	vlog("tp_manager: serving")
 	// Register the browser-dialable direct transport clients. Their Start() fails
 	// closed under TinyGo (a tab can't run a WS/WT listener) — logged, non-fatal —
