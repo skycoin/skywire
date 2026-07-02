@@ -126,6 +126,7 @@
   "persistent_transports": null,
   "memory_limit": "auto",
   "hypervisor": {
+    "enable": true,
     "db_path": "/home/d0mo/go/src/github.com/0pcom/skywire/users.db",
     "enable_auth": false,
     "cookies": {
