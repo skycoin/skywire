@@ -3,6 +3,7 @@ package wasmhv
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -83,6 +84,33 @@ func (c *Core) ServeHTTP(method, path string, body []byte) (int, []byte) {
 			}
 		}
 		return 200, []byte(`{"entries":[],"fetched_at":""}`)
+
+	// The visualizer's EDGES: TPD network-wide transport metrics. The query is
+	// stripped from p above, so parse days= from the raw path (bounded 0..35 like
+	// the native handler). Without this the visualizer draws nodes with no links.
+	case p == "/network/transports":
+		days := 1
+		if q := strings.SplitN(path, "?", 2); len(q) == 2 {
+			for _, kv := range strings.Split(q[1], "&") {
+				if v, ok := strings.CutPrefix(kv, "days="); ok {
+					if n, err := strconv.Atoi(v); err == nil && n >= 0 && n <= 35 {
+						days = n
+					}
+				}
+			}
+		}
+		if self := c.selfProvider(); self != nil {
+			if b := self.SelfNetworkTransports(days); len(b) > 0 {
+				return 200, b
+			}
+		}
+		return 200, []byte(`[]`)
+
+	// The hvui client-error-reporter POSTs console errors here to ship them to
+	// the visor log. In the browser the console already IS the log, so accept +
+	// discard rather than 404 every reported error (which itself spams console).
+	case p == "/client-log":
+		return 200, []byte(`{"ok":true}`)
 	}
 	return 404, []byte(`{"error":"not found in wasm hypervisor core"}`)
 }
