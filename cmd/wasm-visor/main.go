@@ -136,24 +136,24 @@ func pageHTTPS() bool {
 func main() {
 	ctx = context.Background()
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
-		"boot":            js.FuncOf(jsBoot),
-		"status":          js.FuncOf(jsStatus),
-		"hvApi":           js.FuncOf(jsHvAPI),
-		"tpdEdge":         js.FuncOf(jsTPDEdge),
-		"dialTransport":   js.FuncOf(jsDialTransport),
-		"fetchDmsg":       js.FuncOf(jsFetchDmsg),
+		"boot":              js.FuncOf(jsBoot),
+		"status":            js.FuncOf(jsStatus),
+		"hvApi":             js.FuncOf(jsHvAPI),
+		"tpdEdge":           js.FuncOf(jsTPDEdge),
+		"dialTransport":     js.FuncOf(jsDialTransport),
+		"fetchDmsg":         js.FuncOf(jsFetchDmsg),
 		"serveContent":      js.FuncOf(jsServeContent),
 		"hostedContent":     js.FuncOf(jsHostedContent),
 		"unserveContent":    js.FuncOf(jsUnserveContent),
 		"setContentEnabled": js.FuncOf(jsSetContentEnabled),
-		"serveRPC":        js.FuncOf(jsServeRPC),
-		"dialRoute":       js.FuncOf(jsDialRoute),
-		"checkRegistered": js.FuncOf(jsCheckRegistered),
-		"fetchClearnet":   js.FuncOf(jsFetchClearnet),
-		"proxyVerbose":    js.FuncOf(jsProxyVerbose),
-		"closeWindow":     js.FuncOf(jsCloseWindow),
-		"skychatSend":     js.FuncOf(jsSkychatSend),
-		"skychatMessages": js.FuncOf(jsSkychatMessages),
+		"serveRPC":          js.FuncOf(jsServeRPC),
+		"dialRoute":         js.FuncOf(jsDialRoute),
+		"checkRegistered":   js.FuncOf(jsCheckRegistered),
+		"fetchClearnet":     js.FuncOf(jsFetchClearnet),
+		"proxyVerbose":      js.FuncOf(jsProxyVerbose),
+		"closeWindow":       js.FuncOf(jsCloseWindow),
+		"skychatSend":       js.FuncOf(jsSkychatSend),
+		"skychatMessages":   js.FuncOf(jsSkychatMessages),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
