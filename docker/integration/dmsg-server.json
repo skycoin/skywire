@@ -4,6 +4,8 @@
   "public_address": "174.0.0.17:8080",
   "local_address": ":8080",
   "health_endpoint_address": ":8082",
+  "wt_address": ":8083",
+  "public_address_wt": "https://174.0.0.17:8083/dmsg",
   "max_sessions": 100,
   "log_level": "debug",
   "enable_route_setup": true,
