@@ -581,11 +581,13 @@
       '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks server (IP-anonymous exit)">skysocks proxy:</span>' +
       '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
+      '<button id="sb-proxy-list-btn" title="pick a public skysocks server from service discovery" style="cursor:pointer">⌄ servers</button>' +
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
       '<button id="sb-proxy-stop" title="stop this window\'s skysocks-lite: release its route + session (re-establishes on the next clearnet request)" style="cursor:pointer">■ stop</button>' +
       '<button id="sb-proxy-dbg" title="stream the wasm visor\'s own detailed [skysocks-lite]/[resolve-proxy] lines to the visor-log window too" style="cursor:pointer">🐞 verbose: off</button>' +
       '<button id="sb-proxy-clear" title="clear this window\'s request log" style="cursor:pointer">clear</button>' +
       '</div>' +
+      '<select id="sb-proxy-list" style="display:none;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:11px monospace"></select>' +
       // Terminal-like per-window request log: every fetch this browser window makes
       // over the resolving proxy (dmsg) or skysocks-lite (clearnet), + config events.
       '<pre id="sb-proxy-log" title="requests through this window — resolving proxy (dmsg) + skysocks-lite (clearnet)" style="margin:0;height:160px;overflow:auto;background:#0e0c14;color:#a9b1d6;border:1px solid #2a2342;padding:.45em;font:11px/1.45 monospace;white-space:pre-wrap;word-break:break-all"></pre>' +
@@ -687,6 +689,29 @@
     }
     $("sb-proxy-save").onclick = saveProxy;
     $("sb-proxy-clear").onclick = function () { proxyLog = []; renderProxyLog(); };
+    // Populate the skysocks-server dropdown from service discovery (type=proxy),
+    // lazily on click (avoids an SD fetch for windows that never open the panel).
+    var fdmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    $("sb-proxy-list-btn").onclick = function () {
+      var sel = $("sb-proxy-list");
+      plog("● fetching skysocks servers from service discovery…");
+      Promise.resolve(fdmsg("sd.dmsg", "GET", "/api/services?type=proxy", null)).then(function (r) {
+        var list = [];
+        try { list = JSON.parse(new TextDecoder().decode(r.body)) || []; } catch (e) {}
+        sel.innerHTML = '<option value="">— ' + list.length + ' skysocks servers — pick one —</option>';
+        list.forEach(function (s) {
+          var pk = String(s.address || "").split(":")[0];
+          if (!/^[0-9a-f]{66}$/i.test(pk)) return;
+          var geo = (s.geo && s.geo.country) ? " · " + s.geo.country : "";
+          var o = doc.createElement("option");
+          o.value = pk; o.textContent = pk.slice(0, 8) + "…" + geo + (s.version ? " · " + s.version : "");
+          sel.appendChild(o);
+        });
+        sel.style.display = "";
+        plog("● " + list.length + " skysocks server(s) from SD — pick one to set it as the exit");
+      }).catch(function (e) { plog("● SD fetch failed: " + String((e && e.message) || e)); });
+    };
+    $("sb-proxy-list").onchange = function () { if (this.value) { $("sb-proxy-pk").value = this.value; saveProxy(); } };
     // Stop this window's skysocks-lite: release its route + session. The wasm emits
     // a "stopped — released N route/session(s)" line via the per-window hook when a
     // session was active; this immediate line covers the no-active-session case.
