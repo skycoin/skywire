@@ -1,3 +1,8 @@
+//go:build !js
+
+// The bbolt-backed on-disk index DB. Excluded from js/wasm (bbolt does not build
+// there); the js build gets stub constructors in drive_js.go and uses
+// NewMemeoryDB via skyobject's InMemoryDB path instead.
 package idxdb
 
 import (
