@@ -186,17 +186,39 @@ func TestEnv_HypervisorAPI(t *testing.T) {
 	// AddTransport is idempotent (returns the existing managed transport if one is
 	// already present), so this is robust to a transport left by another test.
 	t.Run("transport_lifecycle", func(t *testing.T) {
+		// The hypervisor enforces CSRF on POST/PUT/DELETE (the --csrf flag defaults
+		// ON), independent of enable_auth. Fetch a fresh stateless token from
+		// /api/csrf and send it as the X-CSRF-Token header. Header uses the
+		// no-space "Name:value" form because the exec helper splits argv on spaces.
+		csrf := func() string {
+			b, code, err := httpGet("/api/csrf")
+			if err != nil || code != 0 {
+				return ""
+			}
+			var c struct {
+				Token string `json:"csrf_token"`
+			}
+			if json.Unmarshal([]byte(b), &c) != nil {
+				return ""
+			}
+			return c.Token
+		}
+
 		// curl argv is space-split by the exec helper (no shell), so the JSON body
 		// MUST contain no spaces; httputil.ReadJSON decodes it regardless of the
 		// missing Content-Type header (but disallows unknown fields — send only the
 		// known ones).
 		body := fmt.Sprintf(`{"transport_type":"stcpr","remote_pk":"%s","label":"user"}`, pkC)
-		postCmd := fmt.Sprintf("curl -s -S -m 25 -X POST -d %s %s/api/visors/%s/transports",
-			body, hypervisorAPI, pkA)
 
 		var created hvTransportSummary
 		var last string
 		require.Eventually(t, func() bool {
+			tok := csrf()
+			if tok == "" {
+				return false
+			}
+			postCmd := fmt.Sprintf("curl -s -S -m 25 -X POST -H X-CSRF-Token:%s -d %s %s/api/visors/%s/transports",
+				tok, body, hypervisorAPI, pkA)
 			res, err := env.execResult(postCmd)
 			if err != nil || res.ExitCode != 0 {
 				return false
@@ -228,9 +250,11 @@ func TestEnv_HypervisorAPI(t *testing.T) {
 		}
 		require.Truef(t, found, "created transport %s not present in hypervisor listing for visor-a", created.ID)
 
-		// Delete it through the hypervisor; the API returns `true` on success.
-		delRes, err := env.execResult(fmt.Sprintf("curl -s -S -m 15 -X DELETE %s/api/visors/%s/transports/%s",
-			hypervisorAPI, pkA, created.ID))
+		// Delete it through the hypervisor (CSRF-guarded too); returns `true`.
+		delTok := csrf()
+		require.NotEmpty(t, delTok, "could not obtain CSRF token for DELETE")
+		delRes, err := env.execResult(fmt.Sprintf("curl -s -S -m 15 -X DELETE -H X-CSRF-Token:%s %s/api/visors/%s/transports/%s",
+			delTok, hypervisorAPI, pkA, created.ID))
 		require.NoError(t, err)
 		require.Equal(t, 0, delRes.ExitCode, "DELETE transport curl failed: %s", delRes.Stderr())
 		require.Contains(t, delRes.Stdout(), "true", "hypervisor DELETE transport should return true; got %.100q", delRes.Stdout())
