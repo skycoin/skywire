@@ -64,6 +64,7 @@
     return { css: "text/css", js: "text/javascript", mjs: "text/javascript", json: "application/json",
       png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", svg: "image/svg+xml",
       webp: "image/webp", ico: "image/x-icon", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf",
+      wasm: "application/wasm", // WebAssembly.instantiateStreaming requires this exact type
       html: "text/html" }[m] || "application/octet-stream";
   }
   function bytesToB64(bytes) {
@@ -71,6 +72,9 @@
     for (var i = 0; i < bytes.length; i += C) s += String.fromCharCode.apply(null, bytes.subarray(i, i + C));
     return btoa(s);
   }
+  // Module-scope HTML escaper (createBrowser has its own local copy; this one is
+  // for tool windows like createHostWindow that live outside createBrowser).
+  function esc(s) { return String(s == null ? "" : s).replace(/[<>&"]/g, function (c) { return { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]; }); }
   function ctOf(headers, path) {
     var ct = headers && (headers["Content-Type"] || headers["content-type"]);
     return (ct || mimeOf(path)).split(";")[0].trim();
@@ -96,8 +100,10 @@
   // navShimSrc is JS injected (as a <script> built via DOM, so no </script> in a
   // string) at the top of the browsed iframe's <head>: (1) same-site link clicks
   // → postMessage a nav request to the parent; (2) window.fetch override → relay
-  // the page's own same-site requests to the parent, fetched over dmsg.
-  function navShimSrc(path) {
+  // the page's own requests to the parent — same-site over dmsg, cross-origin
+  // (clearnet) through the skysocks-lite upstream proxy (gated by cnMode). cnMode
+  // is the clearnet policy at render time ("block"|"direct"|"proxy").
+  function navShimSrc(path, cnMode) {
     return (
       'var cur=' + JSON.stringify(path) + ';' +
       'function pathOf(h){try{var u=new URL(h,"http://dmsg"+cur);return u.pathname+u.search;}catch(e){return h;}}' +
@@ -109,12 +115,26 @@
       '},true);' +
       'var _rq=0,_pend={};' +
       'window.addEventListener("message",function(e){var d=e.data||{};if(d.type!=="dmsgreply")return;var p=_pend[d.id];if(!p)return;delete _pend[d.id];p(d);});' +
-      'function relay(p,m,b){return new Promise(function(res){var id=++_rq;_pend[id]=res;parent.postMessage({type:"dmsgreq",id:id,path:p,method:m||"GET",body:b||null},"*");});}' +
-      'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);' +
-      'if(!same(u))return _f.apply(this,arguments);' +
-      'return relay(pathOf(u),(init&&init.method)||"GET",(init&&init.body)||null).then(function(r){' +
-      'var body=r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();' +
-      'return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});});};'
+      'function relay(t,m,b,cn){return new Promise(function(res){var id=++_rq;_pend[id]=res;parent.postMessage({type:"dmsgreq",id:id,path:t,method:m||"GET",body:b||null,clearnet:!!cn},"*");});}' +
+      'function _toResp(r){var body=r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});}' +
+      'var CNMODE=' + JSON.stringify(cnMode || "block") + ';' +
+      'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);var m=(init&&init.method)||"GET",b=(init&&init.body)||null;' +
+      'if(same(u))return relay(pathOf(u),m,b,false).then(_toResp);' +           // same-site → dmsg
+      'if(!/^https?:\\/\\//i.test(u||""))return _f.apply(this,arguments);' +    // data:/blob:/etc → real
+      'if(CNMODE==="direct")return _f.apply(this,arguments);' +                 // direct mode → real (CSP off)
+      'if(CNMODE!=="proxy")return Promise.resolve(new Response("clearnet blocked: set an upstream proxy",{status:403}));' +
+      'return relay(u,m,b,true).then(_toResp);};' +                            // proxy → skysocks-lite via parent
+      // (3) lazy image loader: images are NOT inlined into the srcdoc (that bloats
+      // a catalog page to tens of MB). Each carries a data-dmsg-src; fetch it over
+      // dmsg via the relay only when it scrolls near the viewport, then swap in a
+      // data: URL. A MutationObserver picks up images the page adds dynamically.
+      'function _limg(el){var p=el.getAttribute("data-dmsg-src");if(!p)return;el.removeAttribute("data-dmsg-src");' +
+      'relay(pathOf(p),"GET",null).then(function(r){if(r&&r.body&&(r.status||200)<400)el.src="data:"+(r.ct||"application/octet-stream")+";base64,"+r.body;}).catch(function(){});}' +
+      'var _lio=("IntersectionObserver"in window)?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){_lio.unobserve(e.target);_limg(e.target);}});},{rootMargin:"400px"}):null;' +
+      'function _lobs(el){if(_lio)_lio.observe(el);else _limg(el);}' +
+      'function _lscan(root){var ns=(root&&root.querySelectorAll)?root.querySelectorAll("img[data-dmsg-src]"):[];for(var i=0;i<ns.length;i++)_lobs(ns[i]);}' +
+      'document.addEventListener("DOMContentLoaded",function(){_lscan(document);' +
+      'new MutationObserver(function(ms){ms.forEach(function(m){if(!m.addedNodes)return;for(var i=0;i<m.addedNodes.length;i++){var n=m.addedNodes[i];if(n.nodeType!==1)continue;if(n.matches&&n.matches("img[data-dmsg-src]"))_lobs(n);_lscan(n);}});}).observe(document.documentElement,{childList:true,subtree:true});});'
     );
   }
 
@@ -127,12 +147,20 @@
   function createBrowser(opts) {
     var frame = opts.frame;
     var fetchDmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    // Per-window id so this window's clearnet requests get their OWN
+    // skysocks-lite session/route (the Go side keys sessions by winId+exit).
+    var winId = opts.winId || ("w" + (globalThis.__skywireBrowserSeq = (globalThis.__skywireBrowserSeq || 0) + 1));
     // fetchClearnet(exitPK, method, url, body) → {status, body, headers}: a CLEARNET
     // fetch tunneled through a skysocks exit over a skywire route (IP-anonymous).
-    var fetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
+    // We wrap it to append winId as the 5th arg for every call site.
+    var rawFetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
+    var fetchClearnet = function (exit, m, u, b) { return rawFetchClearnet(exit, m, u, b, winId); };
     var log = opts.log || function () {};
     var currentSitePK = "";
 
+    // 1x1 transparent GIF — placeholder src for a deferred (lazy) image so it
+    // occupies layout without a broken-image flash until the real bytes arrive.
+    var BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
     var CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
     function inlineCss(pk, base, css) {
       var uniq = [...new Set([...css.matchAll(CSS_URL)].map(function (m) { return m[2]; }).filter(sameSite))];
@@ -147,15 +175,18 @@
       });
     }
 
-    async function renderSite(pk, path, html) {
+    async function renderSite(pk, path, html, scheme) {
       currentSitePK = pk;
-      if (opts.setAddr) opts.setAddr("http://" + pk + (path || "/"));
+      // Preserve the scheme the user navigated with (http/https) — the fetch is
+      // over dmsg either way (Noise-encrypted, no in-tab TLS), so the scheme is
+      // cosmetic, but echoing back what was entered avoids a surprising rewrite.
+      if (opts.setAddr) opts.setAddr((scheme || "http") + "://" + pk + (path || "/"));
       var docHtml;
       try {
         var doc = new DOMParser().parseFromString(html, "text/html");
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("target", "_self");
-        var sc = doc.createElement("script"); sc.textContent = navShimSrc(path);
+        var sc = doc.createElement("script"); sc.textContent = navShimSrc(path, clearnetPolicy().mode);
         head.insertBefore(sc, head.firstChild);
         head.insertBefore(base, head.firstChild);
         // Strict CSP catch-all unless the window is in DIRECT clearnet mode (where
@@ -176,12 +207,27 @@
           if (!/url\(/i.test(el.textContent || "")) return;
           jobs.push(inlineCss(pk, path, el.textContent).then(function (css) { el.textContent = css; }).catch(function () {}));
         });
-        doc.querySelectorAll("img[src],script[src],source[src]").forEach(function (el) {
+        // Scripts + <source> are inlined eagerly (a script must exist before it
+        // runs; a <picture>/<video> source is chosen at parse time and can't be
+        // swapped afterward).
+        doc.querySelectorAll("script[src],source[src]").forEach(function (el) {
           var src = el.getAttribute("src");
           if (!sameSite(src)) return;
           jobs.push(fetchDmsg(pk, "GET", resolvePath(src, path), null)
             .then(function (r) { el.setAttribute("src", "data:" + ctOf(r.headers, src) + ";base64," + bytesToB64(r.body)); })
             .catch(function () {}));
+        });
+        // Images are deferred, NOT inlined — a media-heavy catalog would bloat the
+        // srcdoc to tens of MB and stall the render. Rewrite each to a data-dmsg-src
+        // the injected lazy-loader fetches over dmsg on scroll; a transparent
+        // placeholder keeps layout stable, and srcset is dropped so the browser
+        // can't try to load a non-rewritten (CSP-blocked) candidate.
+        doc.querySelectorAll("img[src]").forEach(function (el) {
+          var src = el.getAttribute("src");
+          if (!sameSite(src)) return;
+          el.setAttribute("data-dmsg-src", resolvePath(src, path));
+          el.removeAttribute("srcset");
+          el.setAttribute("src", BLANK_IMG);
         });
         // A dmsg site may reference CLEARNET (http/https) sub-resources — gate them
         // by the upstream-proxy policy so they can't silently leak the user's IP
@@ -223,7 +269,7 @@
           return { status: r.status };
         }
         var html = new TextDecoder().decode(r.body);
-        await renderSite(entry.pk, entry.path, html);
+        await renderSite(entry.pk, entry.path, html, entry.scheme);
         if (gen !== loadGen) return { status: 0, cancelled: true };
         log("browsed dmsg://" + entry.pk + entry.path + " → " + r.status + " (" + r.body.length + " bytes)");
         return { status: r.status, bytes: r.body.length, html: html };
@@ -285,11 +331,14 @@
     // dropped (skywireVisor fetches aren't AbortController-wired).
     function cancel() { loadGen++; setLoading(false); }
 
-    async function browseTo(pk, path) {
+    async function browseTo(pk, path, scheme) {
       pk = (pk || "").trim();
       path = path || "/";
       if (!pk) { log("browse: enter a site PK"); return { status: 0 }; }
-      return navigate({ kind: "dmsg", pk: pk, path: path });
+      // Inherit the current site's scheme for in-site link clicks (which don't
+      // carry one), so navigating within an https:// site stays https://.
+      if (!scheme) { var cur = hist[histIdx]; scheme = (cur && cur.kind === "dmsg" && cur.scheme) || "http"; }
+      return navigate({ kind: "dmsg", pk: pk, path: path, scheme: scheme });
     }
 
     // --- CLEARNET upstream-proxy policy ---
@@ -395,7 +444,12 @@
       m.setAttribute("http-equiv", "Content-Security-Policy");
       m.setAttribute("content",
         "default-src 'none'; img-src data:; media-src data:; font-src data:; " +
-        "style-src data: 'unsafe-inline'; script-src data: 'unsafe-inline'; " +
+        // 'wasm-unsafe-eval' lets a fetched site compile/instantiate its own
+        // WebAssembly (many static sites ship a wasm blob) WITHOUT enabling
+        // general JS eval(). WASM is sandboxed — it reaches the DOM only through
+        // JS glue (already permitted by 'unsafe-inline'), and connect-src 'none'
+        // still blocks any network egress, so this opens no new exfil channel.
+        "style-src data: 'unsafe-inline'; script-src data: 'unsafe-inline' 'wasm-unsafe-eval'; " +
         "connect-src 'none'; frame-src 'none'; form-action 'none'");
       head.insertBefore(m, head.firstChild);
     }
@@ -426,12 +480,32 @@
     window.addEventListener("message", async function (e) {
       var d = e.data || {};
       if (d.type === "dmsgnav" && currentSitePK) { browseTo(currentSitePK, d.path); return; }
-      if (d.type === "dmsgreq" && currentSitePK) {
+      if (d.type === "dmsgreq") {
         try {
-          var r = await fetchDmsg(currentSitePK, d.method || "GET", d.path, d.body || null);
+          var r;
+          if (d.clearnet) {
+            // The site fetched a cross-origin (clearnet) URL. Route it through the
+            // skysocks-lite upstream exit (IP-anonymous) when one is set; refuse
+            // otherwise so a dmsg page can't silently egress to clearnet.
+            var pol = clearnetPolicy();
+            if (pol.mode !== "proxy") {
+              log("clearnet " + (d.method || "GET") + " " + d.path + " → BLOCKED (no upstream)");
+              e.source.postMessage({ type: "dmsgreply", id: d.id, status: 403, ct: "text/plain", body: btoa("clearnet blocked: no upstream proxy") }, "*");
+              return;
+            }
+            var ct0 = Date.now();
+            r = await fetchClearnet(pol.exit, d.method || "GET", d.path, d.body || null);
+            log("clearnet " + (d.method || "GET") + " " + d.path + " via " + pol.exit.slice(0, 8) + "… → " + r.status + " (" + (r.body ? r.body.length : 0) + "B, " + (Date.now() - ct0) + "ms)");
+          } else {
+            if (!currentSitePK) return;
+            var dt0 = Date.now();
+            r = await fetchDmsg(currentSitePK, d.method || "GET", d.path, d.body || null);
+            log("dmsg " + (d.method || "GET") + " " + d.path + " → " + r.status + " (" + (r.body ? r.body.length : 0) + "B, " + (Date.now() - dt0) + "ms)");
+          }
           e.source.postMessage({ type: "dmsgreply", id: d.id, status: r.status, ct: ctOf(r.headers, d.path), body: bytesToB64(r.body) }, "*");
         } catch (err) {
-          e.source.postMessage({ type: "dmsgreply", id: d.id, status: 502, ct: "text/plain", body: btoa("dmsg fetch error") }, "*");
+          log("fetch error " + (d.clearnet ? "clearnet " : "dmsg ") + d.path + ": " + String((err && err.message) || err));
+          e.source.postMessage({ type: "dmsgreply", id: d.id, status: 502, ct: "text/plain", body: btoa("fetch error") }, "*");
         }
       }
     });
@@ -439,7 +513,7 @@
     return {
       renderSite: renderSite, browseTo: browseTo, browseToClearnet: browseToClearnet,
       back: back, forward: forward, reload: reload, cancel: cancel,
-      upstream: upstream, setUpstream: setUpstream,
+      upstream: upstream, setUpstream: setUpstream, winId: winId,
       currentPK: function () { return currentSitePK; }
     };
   }
@@ -499,41 +573,66 @@
       '<button id="sb-reload" title="reload" style="cursor:pointer">⟳</button>' +
       '<input id="sb-addr" placeholder="pk · pk.dmsg · home.dmsg · alias.dmsg · https://site (clearnet via proxy)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.4em">' +
       '<button id="sb-go" style="cursor:pointer">go</button>' +
-      '<button id="sb-host-t" title="host a page" style="cursor:pointer">host</button>' +
-      '<button id="sb-proxy-t" title="clearnet upstream proxy" style="cursor:pointer">⚙</button>' +
+      // Content hosting moved to its own 'host' tool window (top-left ☰ menu).
+      '<button id="sb-proxy-t" title="skysocks proxy + request log" style="cursor:pointer">⚙</button>' +
       '</div>' +
-      '<div id="sb-host" style="display:none;gap:.3em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342;flex-direction:column">' +
-      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">path <input id="sb-hpath" value="/" size="6" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      'port <input id="sb-hport" value="80" size="4" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      'type <input id="sb-hct" value="text/html" size="9" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      '<button id="sb-host-go" style="cursor:pointer">serve over dmsg</button></div>' +
-      '<div style="display:flex;gap:.4em;align-items:center">file <input id="sb-hfile" type="file" style="flex:1;min-width:0;color:#cdd2da;font:11px monospace"></div>' +
-      '<textarea id="sb-hbody" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt; — or upload a file above" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace"></textarea>' +
-      '<span id="sb-host-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer" title="click to copy"></span>' +
-      '</div>' +
-      '<div id="sb-proxy" style="display:none;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342;align-items:center;flex-wrap:wrap">' +
-      '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks (anonymous)">clearnet upstream proxy:</span>' +
+      '<div id="sb-proxy" style="display:none;flex-direction:column;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342">' +
+      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
+      '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks server (IP-anonymous exit)">skysocks proxy:</span>' +
       '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
+      '<button id="sb-proxy-list-btn" title="pick a public skysocks server from service discovery" style="cursor:pointer">⌄ servers</button>' +
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
-      '<span id="sb-proxy-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></span>' +
+      '<button id="sb-proxy-stop" title="stop this window\'s skysocks-lite: release its route + session (re-establishes on the next clearnet request)" style="cursor:pointer">■ stop</button>' +
+      '<button id="sb-proxy-dbg" title="stream the wasm visor\'s own detailed [skysocks-lite]/[resolve-proxy] lines to the visor-log window too" style="cursor:pointer">🐞 verbose: off</button>' +
+      '<button id="sb-proxy-clear" title="clear this window\'s request log" style="cursor:pointer">clear</button>' +
+      '</div>' +
+      '<select id="sb-proxy-list" style="display:none;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:11px monospace"></select>' +
+      // Terminal-like per-window request log: every fetch this browser window makes
+      // over the resolving proxy (dmsg) or skysocks-lite (clearnet), + config events.
+      '<pre id="sb-proxy-log" title="requests through this window — resolving proxy (dmsg) + skysocks-lite (clearnet)" style="margin:0;height:160px;overflow:auto;background:#0e0c14;color:#a9b1d6;border:1px solid #2a2342;padding:.45em;font:11px/1.45 monospace;white-space:pre-wrap;word-break:break-all"></pre>' +
       '</div>' +
       '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
 
     function $(id) { return wrap.querySelector("#" + id); }
     var wb = makeWin(doc, {
       title: "skynet", root: opts.root, top: opts.top, bottom: opts.bottom, width: "74%", height: "80%", mount: wrap,
-      onclose: function () { if (onClose) onClose(); }
+      onclose: function () {
+        // Release this window's skysocks-lite sessions/routes (per-window). browser
+        // is hoisted; it exists by the time onclose fires.
+        try { if (browser && browser.winId && globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
+        try { if (browser && browser.winId && globalThis.__skywireBrowserPanes) { delete globalThis.__skywireBrowserPanes[browser.winId]; } } catch (e) {}
+        if (onClose) onClose();
+      }
     });
     var win = { wb: wb, el: wrap };
     var loading = false;
+    // Per-window request log: a small ring buffer rendered as a terminal-like pane
+    // in the ⚙ panel, so each browser window shows exactly what went through its
+    // resolving proxy / skysocks-lite — instead of a cramped one-line status that
+    // forces a trip to the main visor-log window.
+    var proxyLog = [];
+    var PROXY_LOG_MAX = 400;
+    function renderProxyLog() {
+      var el = $("sb-proxy-log");
+      if (!el) return;
+      el.textContent = proxyLog.join("\n");
+      el.scrollTop = el.scrollHeight;
+    }
+    function plog(line) {
+      var t = "";
+      try { t = new Date().toTimeString().slice(0, 8) + "  "; } catch (e) {}
+      proxyLog.push(t + line);
+      if (proxyLog.length > PROXY_LOG_MAX) proxyLog.shift();
+      renderProxyLog();
+    }
     var browser = createBrowser({
       frame: $("sb-frame"), fetchDmsg: fetchDmsg,
       // Thread the clearnet + self-PK providers from the panel opts so the engine
       // is host-agnostic: the wasm visor passes none (they fall back to the
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
       fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend,
-      log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
+      log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} plog(m); },
       // Reflect the current site into the WinBox title bar.
       setAddr: function (u) { $("sb-addr").value = u; var t = u.replace(/^https?:\/\//, "").slice(0, 18); try { wb.setTitle(t || "skynet"); } catch (e) {} },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
@@ -542,6 +641,19 @@
       onNavState: function (canBack, canFwd) { $("sb-back").disabled = !canBack; $("sb-fwd").disabled = !canFwd; }
     });
     win.browser = browser;
+    // Register this window's log sink so the wasm visor's skysocks-lite path can
+    // push its own connect/route-setup lines (keyed by winId) into THIS window's
+    // pane — see emitProxyLog / __skywireProxyLog in cmd/wasm-visor/skysocks_js.go.
+    try {
+      var paneReg = (globalThis.__skywireBrowserPanes = globalThis.__skywireBrowserPanes || {});
+      paneReg[browser.winId] = plog;
+      if (!globalThis.__skywireProxyLog) {
+        globalThis.__skywireProxyLog = function (winId, line) {
+          var p = (globalThis.__skywireBrowserPanes || {})[winId];
+          if (p) { try { p(line); } catch (e) {} }
+        };
+      }
+    } catch (e) {}
     // A clearnet http(s):// URL routes through a skysocks exit (IP-anonymous); a
     // bare PK / pk:port is a dmsg/skynet site fetched over dmsg.
     function go() {
@@ -552,7 +664,7 @@
       var host = u.hostname, path = (u.pathname || "/") + (u.search || "");
       // .dmsg/.skynet host, or a bare 66-hex PK → dmsg/skynet site; else clearnet.
       if (/\.(dmsg|skynet)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
-        browser.browseTo(host + (u.port ? ":" + u.port : ""), path);
+        browser.browseTo(host + (u.port ? ":" + u.port : ""), path, (u.protocol || "http:").replace(":", ""));
       } else {
         browser.browseToClearnet(hadScheme ? v : "https://" + v);
       }
@@ -563,7 +675,6 @@
     // ⟳ reloads the current page; while a load is in flight it becomes ✕ (cancel).
     $("sb-reload").onclick = function () { if (loading) browser.cancel(); else browser.reload(); };
     $("sb-addr").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
-    $("sb-host-t").onclick = function () { var h = $("sb-host"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
     // clearnet upstream-proxy settings (per window; persists as the global default).
     $("sb-proxy-pk").value = browser.upstream();
     $("sb-proxy-t").onclick = function () { var h = $("sb-proxy"); h.style.display = h.style.display === "none" ? "flex" : "none"; $("sb-proxy-pk").value = browser.upstream(); };
@@ -571,44 +682,53 @@
     function saveProxy() {
       browser.setUpstream($("sb-proxy-pk").value);
       var up = browser.upstream(), self = ""; try { self = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
-      var mode = !up ? "blocked" : (up === self ? "direct (non-anonymous)" : "via skysocks " + up.slice(0, 8) + " (anonymous)");
-      var m = $("sb-proxy-msg"); m.textContent = "clearnet: " + mode; m.style.color = up ? "#9ece6a" : "#e0af68";
+      var mode = !up ? "clearnet BLOCKED (no upstream set)"
+        : (up === self ? "clearnet DIRECT via self " + up.slice(0, 8) + "… (non-anonymous)"
+          : "clearnet via skysocks " + up.slice(0, 8) + "… (IP-anonymous exit)");
+      plog("● upstream set → " + mode);
     }
     $("sb-proxy-save").onclick = saveProxy;
-    $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
-
-    // uploaded holds the last picked file as {ct, b64} (base64 so binary — images,
-    // fonts, … — round-trips intact); the textarea is the fallback for typed HTML.
-    var uploaded = null;
-    $("sb-hfile").onchange = function (e) {
-      var f = e.target.files && e.target.files[0];
-      if (!f) { uploaded = null; return; }
-      var rd = new FileReader();
-      rd.onload = function () {
-        var bytes = new Uint8Array(rd.result);
-        uploaded = { ct: f.type || mimeOf(f.name), b64: bytesToB64(bytes) };
-        $("sb-hct").value = uploaded.ct;
-        $("sb-host-msg").textContent = "loaded " + f.name + " (" + bytes.length + " bytes) — set path + port, then serve";
-        $("sb-host-msg").style.color = "#9ece6a";
-      };
-      rd.readAsArrayBuffer(f);
+    $("sb-proxy-clear").onclick = function () { proxyLog = []; renderProxyLog(); };
+    // Populate the skysocks-server dropdown from service discovery (type=proxy),
+    // lazily on click (avoids an SD fetch for windows that never open the panel).
+    var fdmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    $("sb-proxy-list-btn").onclick = function () {
+      var sel = $("sb-proxy-list");
+      plog("● fetching skysocks servers from service discovery…");
+      Promise.resolve(fdmsg("sd.dmsg", "GET", "/api/services?type=proxy", null)).then(function (r) {
+        var list = [];
+        try { list = JSON.parse(new TextDecoder().decode(r.body)) || []; } catch (e) {}
+        sel.innerHTML = '<option value="">— ' + list.length + ' skysocks servers — pick one —</option>';
+        list.forEach(function (s) {
+          var pk = String(s.address || "").split(":")[0];
+          if (!/^[0-9a-f]{66}$/i.test(pk)) return;
+          var geo = (s.geo && s.geo.country) ? " · " + s.geo.country : "";
+          var o = doc.createElement("option");
+          o.value = pk; o.textContent = pk.slice(0, 8) + "…" + geo + (s.version ? " · " + s.version : "");
+          sel.appendChild(o);
+        });
+        sel.style.display = "";
+        plog("● " + list.length + " skysocks server(s) from SD — pick one to set it as the exit");
+      }).catch(function (e) { plog("● SD fetch failed: " + String((e && e.message) || e)); });
     };
-
-    $("sb-host-go").onclick = function () {
-      if (!serveContent) { $("sb-host-msg").textContent = "serveContent unavailable"; return; }
-      var p = ($("sb-hpath").value || "/").trim() || "/";
-      var port = parseInt($("sb-hport").value, 10) || 80;
-      var entry = uploaded
-        ? { ct: uploaded.ct, body: uploaded.b64, b64: true }
-        : { ct: ($("sb-hct").value || "text/html").trim(), body: $("sb-hbody").value };
-      var m = {}; m[p] = entry;
-      serveContent(m, port);
-      var pk = ""; try { pk = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
-      var addr = (pk ? pk : "<this-pk>") + (port === 80 ? "" : ":" + port) + p;
-      var msg = $("sb-host-msg");
-      msg.textContent = "serving at " + addr + "  (click to copy)";
-      msg.style.color = "#9ece6a";
-      msg.onclick = function () { try { navigator.clipboard.writeText(addr); msg.textContent = "copied: " + addr; } catch (e) {} };
+    $("sb-proxy-list").onchange = function () { if (this.value) { $("sb-proxy-pk").value = this.value; saveProxy(); } };
+    // Stop this window's skysocks-lite: release its route + session. The wasm emits
+    // a "stopped — released N route/session(s)" line via the per-window hook when a
+    // session was active; this immediate line covers the no-active-session case.
+    $("sb-proxy-stop").onclick = function () {
+      plog("■ stop requested — releasing skysocks-lite route/session for this window");
+      try { if (globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
+    };
+    $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
+    // Verbose request logging for the skysocks-lite + resolving-proxy paths. The
+    // flag is currently global to the visor (Phase 1: one log stream in the
+    // "visor log" window); per-window logging is a later phase.
+    var dbgOn = false;
+    $("sb-proxy-dbg").onclick = function () {
+      dbgOn = !dbgOn;
+      try { if (globalThis.skywireVisor && globalThis.skywireVisor.proxyVerbose) { globalThis.skywireVisor.proxyVerbose(dbgOn); } } catch (e) {}
+      this.textContent = "🐞 verbose: " + (dbgOn ? "on" : "off");
+      this.style.color = dbgOn ? "#9ece6a" : "";
     };
 
     // home.dmsg (resolver alias for the deployment landing page), matching the
@@ -808,6 +928,93 @@
     return { wb: wb, close: function () { wb.close(); } };
   }
 
+  // createHostWindow manages content this tab hosts over dmsg. Add a text page or
+  // upload files / a whole directory; each path is served at <this-pk>.dmsg:<port>
+  // while the tab is open. Lists what's hosted with per-path enable/disable +
+  // remove. Wasm-visor only (uses skywireVisor.serveContent / hostedContent /
+  // unserveContent / setContentEnabled).
+  function createHostWindow(doc, opts) {
+    var sv = globalThis.skywireVisor || {};
+    var serveContent = opts.serveContent || sv.serveContent;
+    function selfPK() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:absolute;inset:0;background:#15131c;color:#cdd2da;font:12px/1.45 monospace;display:flex;flex-direction:column;overflow:auto";
+    var pk = selfPK();
+    wrap.innerHTML =
+      '<div style="padding:.5em;border-bottom:1px solid #2a2342;background:#1b1726">' +
+      'Hosting from this tab over dmsg — reachable at <b style="color:#9d7cff;word-break:break-all">' + (pk ? esc(pk) + ".dmsg" : "(boot the visor first)") + '</b> while this tab stays open.</div>' +
+      '<div style="padding:.5em;display:flex;flex-direction:column;gap:.4em;border-bottom:1px solid #2a2342">' +
+      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
+      'path <input id="hw-path" value="/" size="8" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      'port <input id="hw-port" value="80" size="4" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      'type <input id="hw-ct" value="text/html" size="10" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      '<button id="hw-serve" style="cursor:pointer">serve text</button></div>' +
+      '<textarea id="hw-body" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt;" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace"></textarea>' +
+      '<div style="display:flex;gap:.7em;align-items:center;flex-wrap:wrap">' +
+      '<label style="cursor:pointer">file <input id="hw-file" type="file" style="color:#cdd2da;font:11px monospace"></label>' +
+      '<label style="cursor:pointer" title="host every file in a folder, each at its relative path">directory <input id="hw-dir" type="file" webkitdirectory directory multiple style="color:#cdd2da;font:11px monospace"></label>' +
+      '</div><span id="hw-msg" style="color:#9ece6a;word-break:break-all"></span></div>' +
+      '<div style="padding:.5em;display:flex;align-items:center;gap:.5em"><b>hosted content</b><button id="hw-refresh" style="cursor:pointer">↻ refresh</button></div>' +
+      '<div id="hw-list" style="padding:0 .5em .5em;display:flex;flex-direction:column;gap:.25em"></div>';
+    function $(id) { return wrap.querySelector("#" + id); }
+    function msg(t, ok) { var m = $("hw-msg"); m.textContent = t; m.style.color = ok === false ? "#f7768e" : "#9ece6a"; }
+    function port() { return parseInt($("hw-port").value, 10) || 80; }
+    function fmtB(b) { if (b < 1024) return b + " B"; if (b < 1048576) return (b / 1024).toFixed(1) + " KB"; return (b / 1048576).toFixed(1) + " MB"; }
+
+    function renderList() {
+      var el = $("hw-list"), rows = [];
+      try { rows = JSON.parse((sv.hostedContent && sv.hostedContent()) || "[]") || []; } catch (_) {}
+      if (!rows.length) { el.innerHTML = '<span style="color:#9aa0a6">nothing hosted yet — add text or upload files / a directory above.</span>'; return; }
+      el.innerHTML = "";
+      rows.forEach(function (r) {
+        var row = doc.createElement("div");
+        row.style.cssText = "display:flex;gap:.5em;align-items:center;background:#1b1726;border:1px solid #2a2342;border-radius:4px;padding:.3em .5em;flex-wrap:wrap";
+        var cb = doc.createElement("input"); cb.type = "checkbox"; cb.checked = !!r.enabled; cb.title = "serve this path (uncheck to disable → 404, keeps the content)";
+        cb.onchange = function () { try { if (sv.setContentEnabled) sv.setContentEnabled(r.path, cb.checked, r.port); } catch (_) {} renderList(); };
+        var lbl = doc.createElement("span"); lbl.style.cssText = "flex:1;min-width:120px;word-break:break-all";
+        lbl.innerHTML = '<b style="color:' + (r.enabled ? "#9ece6a" : "#9aa0a6") + '">' + esc(r.path) + '</b> <span style="color:#9aa0a6">:' + r.port + ' · ' + esc(r.ct) + ' · ' + fmtB(r.size) + (r.enabled ? '' : ' · disabled') + '</span>';
+        var open = doc.createElement("button"); open.textContent = "open"; open.style.cursor = "pointer"; open.title = "open in a browser window";
+        open.onclick = function () { if (opts.browseTo) opts.browseTo(selfPK() + (r.port !== 80 ? ":" + r.port : ""), r.path); };
+        var rm = doc.createElement("button"); rm.textContent = "remove"; rm.style.cursor = "pointer";
+        rm.onclick = function () { try { if (sv.unserveContent) sv.unserveContent(r.path, r.port); } catch (_) {} renderList(); };
+        row.appendChild(cb); row.appendChild(lbl); row.appendChild(open); row.appendChild(rm);
+        el.appendChild(row);
+      });
+    }
+    function serveOne(path, ct, body, b64) {
+      if (!serveContent) { msg("serveContent unavailable (boot the visor first)", false); return false; }
+      var m = {}; m[path] = b64 ? { ct: ct, body: body, b64: true } : { ct: ct, body: body };
+      try { serveContent(m, port()); } catch (e) { msg("serve failed: " + e, false); return false; }
+      renderList(); return true;
+    }
+    function fileB64(f) { return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { var b = new Uint8Array(fr.result), s = "", i; for (i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); res(btoa(s)); }; fr.onerror = rej; fr.readAsArrayBuffer(f); }); }
+    function ctFor(f) { return f.type || mimeOf(f.name); }
+    $("hw-serve").onclick = function () {
+      var p = ($("hw-path").value || "/").trim() || "/";
+      if (serveOne(p, ($("hw-ct").value || "text/html").trim(), $("hw-body").value, false)) msg("serving " + p + " (text) on dmsg:" + port());
+    };
+    $("hw-file").onchange = function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f) return;
+      var p = ($("hw-path").value || "/").trim(); if (!p || p === "/") p = "/" + f.name;
+      fileB64(f).then(function (b64) { if (serveOne(p, ctFor(f), b64, true)) msg("serving " + p + " (" + fmtB(f.size) + ") on dmsg:" + port()); });
+    };
+    $("hw-dir").onchange = function (e) {
+      var files = [].slice.call(e.target.files || []); if (!files.length) return;
+      msg("uploading " + files.length + " file(s)…");
+      var n = 0;
+      files.reduce(function (chain, f) {
+        return chain.then(function () {
+          var rel = (f.webkitRelativePath || f.name).replace(/^\/+/, "");
+          return fileB64(f).then(function (b64) { if (serveOne("/" + rel, ctFor(f), b64, true)) n++; });
+        });
+      }, Promise.resolve()).then(function () { msg("hosting " + n + " file(s) from the directory on dmsg:" + port()); renderList(); });
+    };
+    $("hw-refresh").onclick = renderList;
+    renderList();
+    var wb = makeWin(doc, { title: "host content", root: opts.root, top: opts.top, bottom: opts.bottom, width: "56%", height: "66%", mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); } });
+    return { wb: wb, close: function () { wb.close(); } };
+  }
+
   // createTerminalWindow opens a real dmsgpty terminal as a WinBox iframe to
   // opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty WebSocket).
   // Native-only — the wasm visor has no host shell and sets no ptyURL, so the
@@ -916,6 +1123,8 @@
       menu.appendChild(b);
     }
     addApp("browser", function () { openBrowse(); });
+    // 'host' is wasm-visor only — it self-hosts content over dmsg from the tab.
+    if (globalThis.skywireVisor && globalThis.skywireVisor.serveContent) { addApp("host", function () { openHost(); }); }
     addApp("console", function () { openCli(); });
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
@@ -976,6 +1185,16 @@
       if (!opts.ptyURL || focusExisting(termWin)) { return; }
       termWin = createTerminalWindow(doc, withRoot({ onClose: function () { untrack(termWin); termWin = null; } }));
       track(termWin, "terminal");
+    }
+    var hostWin = null;
+    function openHost() {
+      if (focusExisting(hostWin)) { return; }
+      hostWin = createHostWindow(doc, withRoot({
+        onClose: function () { untrack(hostWin); hostWin = null; },
+        // let the host window open a hosted path in a fresh browser window
+        browseTo: function (host, path) { var w = openBrowse(); try { w.browser.browseTo(host, path); } catch (e) {} }
+      }));
+      track(hostWin, "host");
     }
 
     bq("tb-dock").onclick = function () { applyDock(dock === "top" ? "bottom" : "top"); };
