@@ -47,6 +47,13 @@ func initResolver(svc visorcore.Services, self cipher.PubKey) {
 			m[fmt.Sprintf("dmsg%d", i)] = pk
 		}
 	}
+	// Self-loopback alias: "skywire.dmsg" → this visor's own PK, so it serves the
+	// tab's own hosted "/" landing page — matching the native resolving proxy,
+	// which seeds "skywire" → LocalPK (pkg/dmsgweb Aliases). Without this the wasm
+	// resolver had no mapping and skywire.dmsg failed to resolve.
+	if !self.Null() {
+		m["skywire"] = self
+	}
 	resolverAliases = m
 }
 
