@@ -26,6 +26,7 @@ func (f fakeSelf) SelfSummary() Summary {
 func (f fakeSelf) SelfTransports() []*TransportSummary { return f.tps }
 func (f fakeSelf) SelfRoutes() []byte                  { return []byte("[]") }
 func (f fakeSelf) SelfNetworkView() []byte             { return nil }
+func (f fakeSelf) SelfNetworkTransports(int) []byte    { return nil }
 
 func newSelfPK(t *testing.T) cipher.PubKey {
 	t.Helper()
