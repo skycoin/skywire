@@ -525,6 +525,17 @@
   // minimize, maximize, close, and (for url:) the iframe — so the create*Window
   // helpers only build a body. opts: {title, root, width, height, x, y,
   // mount|url, onclose}.
+  // Each new window gets a higher z-index than the last so it opens IN FRONT and
+  // is focused — a fixed shared index (the old behaviour) left a freshly-opened
+  // window stacked BEHIND the currently-focused one, obstructing it. Base sits
+  // above the HV UI but below the always-on taskbar (z 2147483646).
+  var _winZ = 2147483000;
+  function nextWinZ() {
+    _winZ += 1;
+    if (_winZ > 2147483640) _winZ = 2147483000; // cap well under the taskbar
+    return _winZ;
+  }
+
   function makeWin(doc, opts) {
     var cfg = {
       title: opts.title || "window",
@@ -533,7 +544,7 @@
       height: opts.height || "70%",
       background: "#1b1726",
       border: "1",
-      index: 2147483000,
+      index: nextWinZ(),
       // no-full hides WinBox's Fullscreen-API button: "maximize" should fill the
       // area IN-TAB (over the dashboard, below the panel) — not take over the
       // whole screen. The remaining max button stays within the top/bottom
@@ -551,7 +562,12 @@
     if (opts.mount) cfg.mount = opts.mount;
     if (opts.url) cfg.url = opts.url;
     if (opts.onclose) cfg.onclose = opts.onclose;
-    return new WinBox(cfg);
+    var wb = new WinBox(cfg);
+    // Bring the new window to the front + focus it (WinBox raises the focused
+    // window's z within its own stack; combined with the incrementing base above
+    // this guarantees a new window is never obscured by an older one).
+    try { wb.focus(); } catch (e) {}
+    return wb;
   }
 
   // createWindow builds ONE browse window — a dmsg virtual browser + host/proxy
