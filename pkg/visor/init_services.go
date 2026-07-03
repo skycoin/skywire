@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/app/appevent"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -309,6 +310,32 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 		}
 	}()
 
+	// Also accept yamux-multiplexed forwarding route groups on SkyForwardingMuxPort:
+	// one accepted route group carries a yamux session, and each accepted stream runs
+	// the same handshake + forward as the 1:1 server above. This lets a client hold
+	// ONE multihop route open (its keepalive keeps the hops warm) and reuse it across
+	// many short connections instead of dialing a fresh route each time — the fix for
+	// multihop skynet routes dying under the resolving proxy. Additive and
+	// version-negotiated: clients that want reuse dial this port and fall back to
+	// SkyForwardingServerPort against older visors. See pkg/skyroute.
+	muxApp := appnet.Addr{
+		Net:    appnet.TypeSkynet,
+		PubKey: v.conf.PK,
+		Port:   routing.Port(skyenv.SkyForwardingMuxPort),
+	}
+	if ml, err := appnet.ListenContext(ctx, muxApp); err != nil {
+		log.WithError(err).Warn("Failed to listen on skynet mux forwarding port; route reuse disabled")
+	} else {
+		v.pushCloseStack("sky_forwarding_mux", func() error {
+			cancel()
+			if cErr := ml.Close(); cErr != nil {
+				log.WithError(cErr).Error("Error closing mux listener.")
+			}
+			return nil
+		})
+		go acceptSkyForwardingMux(ctx, log, ml, v)
+	}
+
 	// Also accept direct transport connections via VStreamMux (route ID 0).
 	// This allows peers with a direct transport to skip route setup entirely.
 	log.WithField("tpM_nil", v.tpM == nil).Debug("Checking transport manager for VStreamMux")
@@ -393,6 +420,72 @@ func (c *vstreamConn) RemoteAddr() net.Addr {
 func (c *vstreamConn) SetDeadline(_ time.Time) error      { return nil }
 func (c *vstreamConn) SetReadDeadline(_ time.Time) error  { return nil }
 func (c *vstreamConn) SetWriteDeadline(_ time.Time) error { return nil }
+
+// acceptSkyForwardingMux accepts yamux-multiplexed forwarding route groups: each
+// accepted route group is a yamux session whose streams each run handleServerConn
+// (ready byte + ClientMsg + forward). See skyenv.SkyForwardingMuxPort and
+// pkg/skyroute for the client half.
+func acceptSkyForwardingMux(ctx context.Context, log *logging.Logger, l net.Listener, v *Visor) {
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			if errors.Is(err, appnet.ErrClosedConn) || ctx.Err() != nil {
+				return
+			}
+			log.WithError(err).Warn("Failed to accept mux forwarding conn, continuing")
+			continue
+		}
+		wrapped, err := appnet.WrapConn(conn)
+		if err != nil {
+			log.WithError(err).Warn("Failed to wrap mux forwarding conn, continuing")
+			_ = conn.Close() //nolint:errcheck,gosec
+			continue
+		}
+		go serveSkyForwardingMuxSession(log, wrapped, v)
+	}
+}
+
+// serveSkyForwardingMuxSession yamux-serves one accepted forwarding route group,
+// dispatching each accepted stream to handleServerConn. The route group's peer PK
+// is carried onto every stream (muxPeerConn) so the per-port PK whitelist enforced
+// in handleServerConn still works over the muxed path.
+func serveSkyForwardingMuxSession(log *logging.Logger, routeConn net.Conn, v *Visor) {
+	defer routeConn.Close() //nolint:errcheck,gosec
+	var peerPK cipher.PubKey
+	if pk, ok := remotePKFromForwardingConn(routeConn); ok {
+		peerPK = pk
+	}
+	sess, err := yamux.Server(routeConn, yamux.DefaultConfig())
+	if err != nil {
+		log.WithError(err).Warn("mux forwarding: yamux server init failed")
+		return
+	}
+	defer sess.Close() //nolint:errcheck,gosec
+	for {
+		stream, err := sess.Accept()
+		if err != nil {
+			return // session closed / route died
+		}
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					log.Errorf("Panic in mux stream handler: %v", r)
+				}
+			}()
+			handleServerConn(log, &muxPeerConn{Conn: stream, pk: peerPK}, v)
+		}()
+	}
+}
+
+// muxPeerConn makes a yamux stream report the route group's peer PK via RemotePK,
+// which remotePKFromForwardingConn prefers — so the forwarded-port PK whitelist
+// enforced in handleServerConn works over the muxed path too.
+type muxPeerConn struct {
+	net.Conn
+	pk cipher.PubKey
+}
+
+func (c *muxPeerConn) RemotePK() cipher.PubKey { return c.pk }
 
 func handleServerConn(log *logging.Logger, remoteConn net.Conn, v *Visor) {
 	// Send ready signal to synchronize with client after noise handshake

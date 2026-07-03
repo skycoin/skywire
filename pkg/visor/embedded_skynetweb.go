@@ -13,6 +13,7 @@ package visor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"sync"
@@ -31,6 +32,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/skynetweb"
+	"github.com/skycoin/skywire/pkg/skyroute"
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
@@ -211,6 +213,16 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 		skynetMuxPtr: e.skynetMux,
 		routeTimeout: time.Duration(e.cfg.RouteTimeout),
 	}
+	// Hold + reuse multihop routes across the resolving proxy's short-lived SOCKS5
+	// connections: without this, every connection dials a fresh route and closes it,
+	// so multihop routes die and re-set-up each time (the "only works for direct
+	// routes" limitation). The pool keeps one route group per destination warm and
+	// yamux-muxes over it; idle groups reclaim after ~10 min. See pkg/skyroute.
+	dialer.pool = skyroute.New(dialer.dialRouteForPool, skyroute.DefaultIdleTTL, e.log)
+	go func() {
+		<-ctx.Done()
+		_ = dialer.pool.Close() //nolint:errcheck
+	}()
 	if err := skynetweb.Run(ctx, e.log, dialer, cfg); err != nil && err != context.Canceled {
 		e.log.WithError(err).Warn("skynetweb runtime stopped")
 	}
@@ -226,6 +238,21 @@ type routerSkynetDialer struct {
 	skynetMuxPtr **transport.VStreamMux // shared with forwarding server; deref at dial time
 	routeTimeout time.Duration          // 0 = use DefaultRouteKeepAlive
 	nextPort     uint32                 // ephemeral port counter for route fallback
+	pool         *skyroute.Pool         // holds+reuses multihop routes per dest (nil = disabled)
+}
+
+// dialRouteForPool dials the destination's mux forwarding port over a route, for
+// skyroute.Pool. Mirrors the route-based path in DialSkynet (fresh ephemeral local
+// port, optional keep-alive override) but targets muxPort so the pool can yamux the
+// route group.
+func (d *routerSkynetDialer) dialRouteForPool(ctx context.Context, dest cipher.PubKey, muxPort uint16) (net.Conn, error) {
+	var opts *router.DialOptions
+	if d.routeTimeout > 0 {
+		opts = router.DefaultDialOptions()
+		opts.KeepAlive = d.routeTimeout
+	}
+	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec
+	return d.router.DialRoutes(ctx, dest, lPort, routing.Port(muxPort), opts)
 }
 
 func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKey, port uint16, route []skynetweb.RouteLabel) (net.Conn, error) {
@@ -263,6 +290,28 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 			return conn, nil
 		}
 		// No direct transport (dial failed) — fall through to route-based dial.
+	}
+
+	// Reuse a HELD, yamux-muxed multihop route via the pool: dial the mux forwarding
+	// port ONCE, then open a stream per connection. The held route group's keepalive
+	// keeps every hop warm, so reconnects don't re-run route setup — the fix for
+	// multihop skynet routes dying under the resolving proxy. Falls back to a fresh
+	// 1:1 route dial only against older visors that don't serve the mux port.
+	if d.pool != nil {
+		stream, err := d.pool.OpenStream(ctx, remote)
+		if err == nil {
+			if hErr := skynetweb.PerformHandshake(stream, port); hErr != nil {
+				_ = stream.Close() //nolint:errcheck,gosec
+				return nil, hErr
+			}
+			return stream, nil
+		}
+		if !errors.Is(err, skyroute.ErrNoMux) {
+			// A real route-setup failure — the 1:1 path would fail identically, so
+			// surface it rather than masking it behind a second route attempt.
+			return nil, err
+		}
+		d.log.WithField("remote", remote.String()).Debug("Skynet: mux forwarding unavailable; using 1:1 route")
 	}
 
 	var opts *router.DialOptions
