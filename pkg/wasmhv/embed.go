@@ -44,6 +44,16 @@ var AutoUpdateJS []byte
 //go:embed hv-boot.js
 var HvBootJS []byte
 
+// WorkerJS is pkg/wasmhv/worker.js — the dedicated Web Worker that hosts the Go/wasm
+// visor runtime OFF the page's main thread. hv-boot.js spawns it and proxies every
+// globalThis.skywireVisor call to it over postMessage, so the visor's blocking work
+// (dmsg/WS/WT dials, route setup) can't freeze the UI event loop. Served alongside
+// hv-boot.js by `hv serve` (the served model); the single-file generator keeps the
+// in-page path since it can't load a separate worker script.
+//
+//go:embed worker.js
+var WorkerJS []byte
+
 // CtlBridgeJS is pkg/wasmhv/ctl-bridge.js — the browser side of the ctlbridge
 // control surface (pkg/wasmhv/ctlbridge). It connects the tab to /ctl/events
 // over SSE so a shell can drive the in-tab wasm-visor. Injected ONLY when the

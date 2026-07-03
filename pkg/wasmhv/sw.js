@@ -26,6 +26,7 @@ const PRECACHE = [
   'icon-512.png',
   'wasm_exec.js',
   'hv-boot.js',
+  'worker.js',
   'browse.js',
 ];
 
