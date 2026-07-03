@@ -56,7 +56,7 @@ var (
 	chatMu     sync.Mutex
 	chatLog    []chatMsg
 	chatClient *app.Client
-	chatConns  = map[cipher.PubKey]*message.Conn{} // cached conns keyed by peer PK
+	chatConns  = map[string]*message.Conn{} // cached outbound conns keyed by "<network>|<peerPK hex>"
 )
 
 func appendChat(m chatMsg) {
@@ -142,46 +142,63 @@ func readChatConn(conn *message.Conn) {
 	}
 }
 
-// sendChat dials the peer on dmsg:1 (reusing a cached conn) and writes one
-// plain-text frame — the format native skychat accepts on its read loop.
-func sendChat(pkHex, text string) error {
+// sendChat dials the peer on <network>:1 (reusing a cached conn) and writes one
+// plain-text frame — the format native skychat accepts on its read loop. network
+// is "dmsg" (default) or "skynet"; conns are cached per (network, peer) so the two
+// transports don't clobber each other. The dial/connect/send steps are vlog'd so
+// the chat window's log pane can surface them (like the skysocks-lite route setup).
+func sendChat(pkHex, text, network string) error {
 	if chatClient == nil {
 		return fmt.Errorf("skychat not started yet")
 	}
 	if text == "" {
 		return fmt.Errorf("empty message")
 	}
+	var net appnet.Type
+	switch network {
+	case "", "dmsg":
+		net = appnet.TypeDmsg
+	case "skynet":
+		net = appnet.TypeSkynet
+	default:
+		return fmt.Errorf("unknown network %q (use dmsg or skynet)", network)
+	}
 	var pk cipher.PubKey
 	if err := pk.Set(pkHex); err != nil {
 		return fmt.Errorf("bad peer pk: %w", err)
 	}
+	key := string(net) + "|" + pkHex
 	chatMu.Lock()
-	conn := chatConns[pk]
+	conn := chatConns[key]
 	chatMu.Unlock()
 	if conn == nil {
-		c, err := chatClient.Dial(appnet.Addr{Net: appnet.TypeDmsg, PubKey: pk, Port: skychatPort})
+		vlog(fmt.Sprintf("skychat: dialing %s %s:%d…", net, shortPK(pkHex), skychatPort))
+		c, err := chatClient.Dial(appnet.Addr{Net: net, PubKey: pk, Port: skychatPort})
 		if err != nil {
-			return fmt.Errorf("dial %s: %w", shortPK(pkHex), err)
+			vlog(fmt.Sprintf("skychat: dial %s %s failed: %s", net, shortPK(pkHex), err.Error()))
+			return fmt.Errorf("dial %s over %s: %w", shortPK(pkHex), net, err)
 		}
+		vlog(fmt.Sprintf("skychat: connected to %s over %s", shortPK(pkHex), net))
 		conn = message.NewConn(c)
 		chatMu.Lock()
-		chatConns[pk] = conn
+		chatConns[key] = conn
 		chatMu.Unlock()
 		// Read replies on the same conn; drop it from the cache when it closes.
 		go func() {
 			readChatConn(conn)
 			chatMu.Lock()
-			delete(chatConns, pk)
+			delete(chatConns, key)
 			chatMu.Unlock()
 		}()
 	}
 	if err := conn.WriteFrame([]byte(text)); err != nil {
 		chatMu.Lock()
-		delete(chatConns, pk)
+		delete(chatConns, key)
 		chatMu.Unlock()
 		conn.Close() //nolint:errcheck,gosec
 		return fmt.Errorf("send: %w", err)
 	}
+	vlog(fmt.Sprintf("skychat: sent %d bytes to %s over %s", len(text), shortPK(pkHex), net))
 	appendChat(chatMsg{From: pkHex, Text: text, TS: nowMs(), Out: true})
 	return nil
 }
@@ -224,14 +241,19 @@ func shortPK(pk string) string {
 
 func nowMs() int64 { return time.Now().UnixMilli() }
 
-// jsSkychatSend(peerPkHex, text) → Promise<null> (rejects on error).
+// jsSkychatSend(peerPkHex, text[, network]) → Promise<null> (rejects on error).
+// network is "dmsg" (default) or "skynet".
 func jsSkychatSend(_ js.Value, args []js.Value) interface{} {
 	if len(args) < 2 {
-		return js.Global().Get("Error").New("skychatSend(peerPkHex, text)")
+		return js.Global().Get("Error").New("skychatSend(peerPkHex, text[, network])")
 	}
 	pkHex, text := args[0].String(), args[1].String()
+	network := "dmsg"
+	if len(args) >= 3 && args[2].Type() == js.TypeString {
+		network = args[2].String()
+	}
 	return promise(func() (interface{}, error) {
-		return nil, sendChat(pkHex, text)
+		return nil, sendChat(pkHex, text, network)
 	})
 }
 
