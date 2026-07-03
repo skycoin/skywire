@@ -33,19 +33,22 @@ func TestServeWithWS_RawAndWSOnOnePort(t *testing.T) {
 	tcpAddr := lis.Addr().String()
 	wsURL := "ws://" + tcpAddr + wsPath
 
-	chSrv := make(chan error, 1)
-	go func() { chSrv <- srv.ServeWithWS(lis, tcpAddr, wsURL) }()
-
 	// Publish the server entry advertising BOTH Address (TCP) and AddressWS — the
 	// SAME host:port — so a raw-TCP client and a WS client both target this one
-	// listener. (Posted manually, as ws_test does, to avoid the auto-registration
-	// retrier's cold-start timing in a mock-disc unit test; the unification under
-	// test is the cmux demux, not registration. ServeWithWS does advertise both in
-	// production via the Serve self-registration loop.)
+	// listener. Post it BEFORE starting ServeWithWS: ServeWithWS's own Serve
+	// self-registration also creates the seq-0 server entry, so racing a manual
+	// post against it made one side lose the discovery sequence check ("sequence
+	// field of new entry is not sequence of old entry + 1"). Posting first makes
+	// the self-registration a no-delta no-op (it reads back this exact entry —
+	// same Address + AddressWS via setAdvertisedWSAddr), so the unification under
+	// test (the cmux demux) is exercised deterministically without the flake.
 	srvEntry := disc.NewServerEntry(pkSrv, 0, tcpAddr, maxSessions)
 	srvEntry.Server.AddressWS = wsURL
 	require.NoError(t, srvEntry.Sign(skSrv))
 	require.NoError(t, dc.PostEntry(context.Background(), srvEntry))
+
+	chSrv := make(chan error, 1)
+	go func() { chSrv <- srv.ServeWithWS(lis, tcpAddr, wsURL) }()
 
 	// Raw-TCP client (default carrier).
 	pkA, skA := GenKeyPair(t, "tcp client")

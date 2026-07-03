@@ -316,7 +316,12 @@ func newDmsgEnv(t *testing.T, body string) dmsgEnv {
 	t.Helper()
 	log := logging.MustGetLogger("dmsgcurl_test")
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	// NOTE: ctx cancel + service-client teardown is registered LAST (below, once
+	// the service client exists) so it runs FIRST at cleanup (LIFO) — the clients
+	// must close BEFORE the srv.Close() cleanup registered further down. srv.Close
+	// does close(done)+wg.Wait(); a client session still attached when the server
+	// closes can leave a server-side session goroutine parked, hanging wg.Wait()
+	// (observed as a 5-minute package timeout in CI).
 
 	// HTTP discovery backed by an in-memory store, in test mode.
 	disco := discapi.New(log, discstore.NewMock(), discmetrics.NewEmpty(), true, false, false, "", "", 0)
@@ -350,6 +355,14 @@ func newDmsgEnv(t *testing.T, body string) dmsgEnv {
 		_, _ = w.Write([]byte(body)) //nolint
 	})
 	go func() { _ = dmsghttp.ListenAndServe(ctx, svcSK, handler, dc, 80, svc, log) }() //nolint:errcheck
+
+	// Registered LAST → runs FIRST (LIFO): stop the service client + its dmsghttp
+	// server and close the client BEFORE the srv.Close() cleanup registered above,
+	// so no client session is still attached when the dmsg server closes.
+	t.Cleanup(func() {
+		cancel()
+		_ = svc.Close() //nolint:errcheck
+	})
 
 	return dmsgEnv{
 		serverEntry: disc.Entry{Static: srvPK, Server: &disc.Server{Address: lis.Addr().String(), AvailableSessions: 100}},
