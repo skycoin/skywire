@@ -25,6 +25,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"syscall/js"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -180,16 +181,27 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 	// down so we don't re-dial direct to it every cycle.
 	webrtcPeers := len(haveWebRTC)
 	addedWebRTC := 0
-	for _, pk := range directFailed {
-		if haveWebRTC[pk] {
-			continue
-		}
-		if webrtcPeers < autoconnectMaxWebRTC && dialWebRTC(ctx, pk) {
-			webrtcPeers++
-			addedWebRTC++
-			delete(autoconnectFailed, pk)
-		} else {
-			autoconnectFailed[pk] = time.Now()
+	// WebRTC needs RTCPeerConnection, which is ABSENT in a Web Worker — where the
+	// wasm runtime now runs (pkg/wasmhv/worker.js). Attempting it there fails every
+	// dial with "syscall/js: call of Value.Get on undefined" and spams the log. Skip
+	// the pass entirely when WebRTC is unavailable; the direct carriers (WT/WS) still
+	// run. (Restoring WebRTC from the worker needs a main-thread PeerConnection
+	// proxy — a separate follow-up.) Don't cool-down the peers here: they stay
+	// eligible for a direct carrier next cycle.
+	if !webrtcAvailable() {
+		warnWebRTCUnavailableOnce()
+	} else {
+		for _, pk := range directFailed {
+			if haveWebRTC[pk] {
+				continue
+			}
+			if webrtcPeers < autoconnectMaxWebRTC && dialWebRTC(ctx, pk) {
+				webrtcPeers++
+				addedWebRTC++
+				delete(autoconnectFailed, pk)
+			} else {
+				autoconnectFailed[pk] = time.Now()
+			}
 		}
 	}
 
@@ -254,6 +266,27 @@ func dialDirect(ctx context.Context, ar *arDmsg, pk cipher.PubKey, port uint16, 
 		}
 	}
 	return got
+}
+
+// webrtcAvailable reports whether the JS context exposes RTCPeerConnection. Present
+// on the page main thread, ABSENT in a Web Worker (where the wasm runtime now runs,
+// see pkg/wasmhv/worker.js) — so WebRTC dial + STUN can't run there without a
+// main-thread PeerConnection proxy.
+func webrtcAvailable() bool {
+	return js.Global().Get("RTCPeerConnection").Truthy()
+}
+
+var warnedWebRTCUnavailable bool
+
+// warnWebRTCUnavailableOnce logs the "WebRTC off in this context" notice a single
+// time (not once per autoconnect cycle). Called from the single autoconnect
+// goroutine, so the plain bool needs no lock.
+func warnWebRTCUnavailableOnce() {
+	if warnedWebRTCUnavailable {
+		return
+	}
+	warnedWebRTCUnavailable = true
+	vlog("ws-autoconnect: WebRTC unavailable in this context (no RTCPeerConnection — Web Worker); using direct carriers (WT/WS) only")
 }
 
 // dialWebRTC opens a WebRTC DataChannel transport (signalled over dmsg, NAT
