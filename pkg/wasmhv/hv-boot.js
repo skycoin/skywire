@@ -175,12 +175,50 @@
             clearTimeout(upTimer);
             reject(new Error(m.msg));
             break;
+          case 'stun-ip':
+            // The worker has no RTCPeerConnection; run STUN here (main thread) and
+            // return the discovered public IP so the visor learns it on HTTPS.
+            runStunIP(m.ice).then(function (ip) {
+              try { worker.postMessage({ t: 'stun-ip-result', id: m.id, ip: ip || '' }); } catch (e) {}
+            });
+            break;
         }
       };
       worker.onerror = function (e) {
         clearTimeout(upTimer);
         reject(new Error('worker error: ' + ((e && e.message) || 'load failed')));
       };
+    });
+  }
+
+  // runStunIP opens an RTCPeerConnection against the given STUN server URLs, gathers
+  // ICE candidates, and resolves with the server-reflexive (public) IP — or '' if
+  // none is found within the timeout. Main-thread only (RTCPeerConnection); the
+  // worker reaches it via the stun-ip message bridge above.
+  function runStunIP(iceUrls) {
+    return new Promise(function (resolve) {
+      if (typeof RTCPeerConnection === 'undefined' || !iceUrls || !iceUrls.length) { resolve(''); return; }
+      var pc;
+      try { pc = new RTCPeerConnection({ iceServers: [{ urls: iceUrls }] }); }
+      catch (e) { resolve(''); return; }
+      var done = false;
+      function finish(ip) {
+        if (done) return;
+        done = true;
+        try { pc.onicecandidate = null; pc.close(); } catch (e) {}
+        resolve(ip || '');
+      }
+      pc.onicecandidate = function (ev) {
+        if (!ev || !ev.candidate) return;
+        // "candidate:<f> <comp> <proto> <prio> <ip> <port> typ (srflx|prflx) ..."
+        var mm = /(\d+\.\d+\.\d+\.\d+) \d+ typ (?:srflx|prflx)/.exec(ev.candidate.candidate || '');
+        if (mm) finish(mm[1]);
+      };
+      try {
+        pc.createDataChannel('ip'); // datachannel triggers ICE gathering
+        pc.createOffer().then(function (o) { return pc.setLocalDescription(o); }).catch(function () { finish(''); });
+      } catch (e) { finish(''); }
+      setTimeout(function () { finish(''); }, 8000);
     });
   }
 
