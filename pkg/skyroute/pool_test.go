@@ -25,7 +25,7 @@ func echoServer(conn net.Conn) {
 		if err != nil {
 			return
 		}
-		go func(s net.Conn) { _, _ = io.Copy(s, s); _ = s.Close() }(st)
+		go func(s net.Conn) { _, _ = io.Copy(s, s); _ = s.Close() }(st) //nolint:errcheck
 	}
 }
 
@@ -56,7 +56,7 @@ func TestPool_ReusesRouteGroup(t *testing.T) {
 		return a, nil
 	}
 	p := New(dial, time.Minute, nil)
-	defer p.Close()
+	defer p.Close() //nolint:errcheck
 
 	dest := testPK(1)
 	for i := 0; i < 4; i++ {
@@ -75,11 +75,11 @@ func TestPool_NoMuxFallbackAndNegativeCache(t *testing.T) {
 	dial := func(_ context.Context, _ cipher.PubKey, _ uint16) (net.Conn, error) {
 		atomic.AddInt32(&dials, 1)
 		a, b := net.Pipe()
-		_ = b.Close() // no yamux server → session dies immediately
+		_ = b.Close() //nolint:errcheck // no yamux server → session dies immediately
 		return a, nil
 	}
 	p := New(dial, time.Minute, nil)
-	defer p.Close()
+	defer p.Close() //nolint:errcheck
 
 	dest := testPK(2)
 	_, err := p.OpenStream(context.Background(), dest)
@@ -101,7 +101,7 @@ func TestPool_IdleReap(t *testing.T) {
 		return a, nil
 	}
 	p := New(dial, 60*time.Millisecond, nil)
-	defer p.Close()
+	defer p.Close() //nolint:errcheck
 
 	dest := testPK(3)
 	s, err := p.OpenStream(context.Background(), dest)
@@ -131,7 +131,7 @@ func TestPool_Release(t *testing.T) {
 		return a, nil
 	}
 	p := New(dial, time.Minute, nil)
-	defer p.Close()
+	defer p.Close() //nolint:errcheck
 
 	dest := testPK(4)
 	s, err := p.OpenStream(context.Background(), dest)

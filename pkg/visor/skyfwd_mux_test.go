@@ -33,8 +33,8 @@ func TestSkyForwardingMux_PoolReuseOverRealServer(t *testing.T) {
 	// needs v.services. Register an echo service on echoPort.
 	reg := NewServiceRegistry()
 	reg.Register(echoPort, "echo", func(c net.Conn) {
-		_, _ = io.Copy(c, c)
-		_ = c.Close()
+		_, _ = io.Copy(c, c) //nolint:errcheck
+		_ = c.Close() //nolint:errcheck
 	})
 	v := &Visor{services: reg}
 	log := logging.MustGetLogger("skyfwd_mux_test")
@@ -49,7 +49,7 @@ func TestSkyForwardingMux_PoolReuseOverRealServer(t *testing.T) {
 		atomic.AddInt32(&dials, 1)
 		return clientConn, nil // the single held route group
 	}, time.Minute, nil)
-	defer pool.Close()
+	defer pool.Close() //nolint:errcheck
 
 	dest, _ := cipher.GenerateKeyPair()
 
@@ -67,7 +67,7 @@ func TestSkyForwardingMux_PoolReuseOverRealServer(t *testing.T) {
 		require.NoError(t, err, "echo read %d", i)
 		require.Equal(t, "ping", string(buf))
 
-		_ = stream.Close()
+		_ = stream.Close() //nolint:errcheck
 		cancel()
 	}
 
