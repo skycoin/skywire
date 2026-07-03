@@ -444,3 +444,43 @@ go run github.com/loov/goda@latest graph github.com/skycoin/skywire/... | dot -T
 ```
 
 ![Dependency Graph](docs/skywire-goda-graph.svg "github.com/skycoin/skywire Dependency Graph")
+
+## Lines of Code
+
+Made with [gocloc](https://github.com/hhatto/gocloc) (excludes `vendor/`, `node_modules/`, `.git/`):
+
+```
+gocloc --not-match-d='(vendor|node_modules|\.git)' .
+```
+
+```
+-------------------------------------------------------------------------------
+Language                     files          blank        comment           code
+-------------------------------------------------------------------------------
+Go                            1740          45601          65791         267754
+Markdown                       660          12807             39          40089
+JSON                          1453            380              0          36078
+TypeScript                     156           3825           6460          22780
+HTML                           103           1292           1221          15820
+JavaScript                      33            392            858           6811
+Sass                            90           1239            350           6529
+BASH                            41            365            701           1661
+TOML                            10            215             37           1656
+Plain Text                       6            342              0           1351
+YAML                             8             40            127           1094
+Makefile                         3            145             34            553
+Protocol Buffers                 1             66            385            349
+Starlark                        23             59            424            271
+Nix                              3             38            151            245
+WiX                              2             31             14            145
+Batch                            2             13              0            105
+PowerShell                       1             11              0             91
+XML                              2              0              0             51
+C                                1             14             24             46
+Bourne Shell                     5             14              0             43
+CSS                              3              4             10             32
+Assembly                         3              9             13             20
+-------------------------------------------------------------------------------
+TOTAL                         4349          66902          76639         403574
+-------------------------------------------------------------------------------
+```

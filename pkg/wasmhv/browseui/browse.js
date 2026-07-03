@@ -525,6 +525,17 @@
   // minimize, maximize, close, and (for url:) the iframe — so the create*Window
   // helpers only build a body. opts: {title, root, width, height, x, y,
   // mount|url, onclose}.
+  // Each new window gets a higher z-index than the last so it opens IN FRONT and
+  // is focused — a fixed shared index (the old behaviour) left a freshly-opened
+  // window stacked BEHIND the currently-focused one, obstructing it. Base sits
+  // above the HV UI but below the always-on taskbar (z 2147483646).
+  var _winZ = 2147483000;
+  function nextWinZ() {
+    _winZ += 1;
+    if (_winZ > 2147483640) _winZ = 2147483000; // cap well under the taskbar
+    return _winZ;
+  }
+
   function makeWin(doc, opts) {
     var cfg = {
       title: opts.title || "window",
@@ -533,7 +544,7 @@
       height: opts.height || "70%",
       background: "#1b1726",
       border: "1",
-      index: 2147483000,
+      index: nextWinZ(),
       // no-full hides WinBox's Fullscreen-API button: "maximize" should fill the
       // area IN-TAB (over the dashboard, below the panel) — not take over the
       // whole screen. The remaining max button stays within the top/bottom
@@ -551,7 +562,12 @@
     if (opts.mount) cfg.mount = opts.mount;
     if (opts.url) cfg.url = opts.url;
     if (opts.onclose) cfg.onclose = opts.onclose;
-    return new WinBox(cfg);
+    var wb = new WinBox(cfg);
+    // Bring the new window to the front + focus it (WinBox raises the focused
+    // window's z within its own stack; combined with the incrementing base above
+    // this guarantees a new window is never obscured by an older one).
+    try { wb.focus(); } catch (e) {}
+    return wb;
   }
 
   // createWindow builds ONE browse window — a dmsg virtual browser + host/proxy
@@ -1015,6 +1031,147 @@
     return { wb: wb, close: function () { wb.close(); } };
   }
 
+  // createChatWindow is the WinBox desktop's 1:1 skychat client — the missing
+  // desktop peer to the skynet browser. It drives the two existing wasm-visor JS
+  // hooks: skychatSend(peerPkHex, text) → Promise and skychatMessages() → JSON of
+  // [{from,text,ts,out}] (the in-memory ring the browser-tab visor keeps). Because
+  // receiving is passive (a peer just dials us on dmsg:1), the buffer's distinct
+  // `from` PKs are surfaced as clickable chips so an incoming message from a new
+  // peer is discoverable without knowing their key in advance. Wasm-visor only
+  // (native has its own Angular skychat tab), gated exactly like the host window.
+  function createChatWindow(doc, opts) {
+    var sv = globalThis.skywireVisor || {};
+    var send = opts.skychatSend || sv.skychatSend;
+    var fetchMsgs = opts.skychatMessages || sv.skychatMessages;
+    function selfPK() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
+    var peer = "";          // active conversation peer PK (full hex)
+    var lastRender = "";    // cheap change-detection so we don't rebuild every tick
+
+    var wrap = doc.createElement("div");
+    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;color:#cdd2da;font:12px/1.45 monospace;display:flex;flex-direction:column;overflow:hidden";
+    var sp = selfPK();
+    wrap.innerHTML =
+      '<div style="padding:.45em;border-bottom:1px solid #2a2342;background:#1b1726;display:flex;flex-direction:column;gap:.35em">' +
+      '<div style="color:#9aa0a6">you: <b style="color:#9d7cff;word-break:break-all">' + (sp ? esc(sp) : "(boot the visor first)") + '</b></div>' +
+      '<div style="display:flex;gap:.4em;align-items:center">peer ' +
+      '<input id="ch-peer" placeholder="paste a peer public key (66 hex)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:12px monospace">' +
+      '<button id="ch-open" title="open conversation" style="cursor:pointer;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.3em .55em">open</button></div>' +
+      '<div style="display:flex;gap:.4em;align-items:center;font-size:11px;color:#9aa0a6">transport ' +
+      '<select id="ch-net" title="send over dmsg (direct) or skynet (routed)" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.15em"><option value="dmsg">dmsg</option><option value="skynet">skynet</option></select>' +
+      '<span style="flex:1"></span>' +
+      '<button id="ch-log-toggle" title="show/hide skychat activity log" style="cursor:pointer;background:#15131c;color:#cdd2da;border:1px solid #2a2342;border-radius:4px;padding:.15em .5em">🐞 log</button></div>' +
+      '<div id="ch-chips" style="display:flex;gap:.3em;flex-wrap:wrap"></div></div>' +
+      '<div id="ch-body" style="flex:1;padding:.5em;overflow:auto;display:flex;flex-direction:column;gap:.25em"></div>' +
+      '<div style="display:flex;gap:.3em;padding:.4em;border-top:1px solid #2a2342;background:#15131c;align-items:center">' +
+      '<input id="ch-in" placeholder="message…" autocomplete="off" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.35em;font:12px monospace" disabled>' +
+      '<button id="ch-send" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .7em" disabled>send</button></div>' +
+      '<div id="ch-status" style="padding:.2em .5em;min-height:1.2em;color:#9aa0a6;border-top:1px solid #15131c"></div>' +
+      '<pre id="ch-log" style="display:none;margin:0;height:120px;overflow:auto;background:#0e0c14;color:#a9b1d6;border-top:1px solid #2a2342;padding:.4em;font:10px/1.4 monospace;white-space:pre-wrap;word-break:break-all"></pre>';
+    function $(id) { return wrap.querySelector("#" + id); }
+    var body = $("ch-body"), input = $("ch-in"), chips = $("ch-chips"), status = $("ch-status");
+
+    function setStatus(t, color) { status.textContent = t || ""; status.style.color = color || "#9aa0a6"; }
+    function messages() {
+      if (!fetchMsgs) return [];
+      try { return JSON.parse(fetchMsgs() || "[]") || []; } catch (_) { return []; }
+    }
+    function setPeer(pk) {
+      peer = (pk || "").trim();
+      $("ch-peer").value = peer;
+      var ready = !!(send && peer);
+      input.disabled = !ready; $("ch-send").disabled = !ready;
+      lastRender = ""; render();
+      if (ready) setTimeout(function () { input.focus(); }, 30);
+    }
+    function renderChips(all) {
+      var seen = {}, order = [];
+      for (var i = 0; i < all.length; i++) { var f = all[i].from; if (f && !seen[f]) { seen[f] = true; order.push(f); } }
+      var key = order.join(",") + "|" + peer;
+      if (chips.__key === key) return; chips.__key = key;
+      chips.textContent = "";
+      order.forEach(function (f) {
+        var b = doc.createElement("button");
+        b.textContent = f.slice(0, 8) + "…";
+        b.title = f;
+        var active = (f === peer);
+        b.style.cssText = "cursor:pointer;border-radius:4px;padding:.2em .5em;font:11px monospace;border:1px solid #2a2342;" +
+          (active ? "background:#2a2342;color:#9d7cff" : "background:#15131c;color:#cdd2da");
+        b.onclick = function () { setPeer(f); };
+        chips.appendChild(b);
+      });
+    }
+    function render() {
+      var all = messages();
+      renderChips(all);
+      var thread = [];
+      for (var i = 0; i < all.length; i++) { if (all[i].from === peer) thread.push(all[i]); }
+      var sig = peer + "#" + thread.length + (thread.length ? "#" + thread[thread.length - 1].ts + thread[thread.length - 1].text : "");
+      if (sig === lastRender) return; lastRender = sig;
+      body.textContent = "";
+      if (!peer) { var h = doc.createElement("div"); h.style.color = "#9aa0a6"; h.textContent = "Paste a peer public key and press open — or pick a peer above once someone messages you."; body.appendChild(h); return; }
+      thread.forEach(function (m) {
+        var row = doc.createElement("div");
+        row.style.cssText = "display:flex;flex-direction:column;max-width:82%;" + (m.out ? "align-self:flex-end;align-items:flex-end" : "align-self:flex-start;align-items:flex-start");
+        var bub = doc.createElement("div");
+        bub.style.cssText = "padding:.3em .55em;border-radius:8px;white-space:pre-wrap;word-break:break-word;" +
+          (m.out ? "background:#1f2b1a;color:#c8e6a8" : "background:#1b1726;color:#cdd2da");
+        bub.textContent = m.text;
+        var meta = doc.createElement("div");
+        meta.style.cssText = "font-size:10px;color:#6b7280;margin:.1em .2em 0";
+        meta.textContent = (m.out ? "→ " : "← ") + new Date(m.ts).toTimeString().slice(0, 8);
+        row.appendChild(bub); row.appendChild(meta); body.appendChild(row);
+      });
+      body.scrollTop = body.scrollHeight;
+    }
+    function doSend() {
+      var text = input.value; if (!text.trim() || !send || !peer) return;
+      input.value = ""; setStatus("sending…");
+      Promise.resolve(send(peer, text, $("ch-net").value)).then(function () {
+        setStatus(""); lastRender = ""; render();
+      }).catch(function (e) {
+        setStatus("send failed: " + (e && e.message ? e.message : e), "#f7768e");
+        input.value = text; // let the operator retry without retyping
+      });
+    }
+    $("ch-open").onclick = function () { setPeer($("ch-peer").value); };
+    $("ch-peer").addEventListener("keydown", function (e) { if (e.key === "Enter") setPeer(this.value); });
+    input.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); } });
+    $("ch-send").onclick = doSend;
+
+    // Activity log pane — surfaces skychat's own dial/connect/send/receive vlog
+    // lines from the shared window.skywireLog ring (the same source the 'logs'
+    // window reads), filtered to skychat, so the operator sees the connection /
+    // route setup like the browser window's skysocks-lite log. Collapsible (🐞).
+    var logEl = $("ch-log"), logOpen = false;
+    function chatLogLine(line) {
+      if (!line || !line.text || !/skychat/i.test(line.text)) return;
+      var d = doc.createElement("div");
+      d.textContent = new Date(line.t || Date.now()).toTimeString().slice(0, 8) + " " + String(line.text).replace(/^\[visor\]\s*/, "");
+      logEl.appendChild(d);
+      if (logEl.childNodes.length > 500) logEl.removeChild(logEl.firstChild);
+      if (logOpen) logEl.scrollTop = logEl.scrollHeight;
+    }
+    var logUnsub = function () {};
+    if (window.skywireLog) {
+      try { window.skywireLog.all().forEach(chatLogLine); } catch (_) {}
+      logUnsub = window.skywireLog.subscribe(chatLogLine);
+    }
+    $("ch-log-toggle").onclick = function () {
+      logOpen = !logOpen; logEl.style.display = logOpen ? "block" : "none";
+      this.style.opacity = logOpen ? "1" : ".6";
+      if (logOpen) logEl.scrollTop = logEl.scrollHeight;
+    };
+
+    var timer = setInterval(render, 1500);
+    render();
+    if (!send) setStatus("skychat is only available in the browser-tab (wasm) visor", "#e0af68");
+    var wb = makeWin(doc, {
+      title: "skychat", root: opts.root, top: opts.top, bottom: opts.bottom, width: "42%", height: "62%",
+      mount: wrap, onclose: function () { clearInterval(timer); logUnsub(); if (opts.onClose) opts.onClose(); }
+    });
+    return { wb: wb, close: function () { wb.close(); } };
+  }
+
   // createTerminalWindow opens a real dmsgpty terminal as a WinBox iframe to
   // opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty WebSocket).
   // Native-only — the wasm visor has no host shell and sets no ptyURL, so the
@@ -1123,7 +1280,9 @@
       menu.appendChild(b);
     }
     addApp("browser", function () { openBrowse(); });
-    // 'host' is wasm-visor only — it self-hosts content over dmsg from the tab.
+    // 'chat' + 'host' are wasm-visor only — they use in-tab JS hooks the native
+    // HV UI doesn't expose (native has its own Angular skychat tab).
+    if (globalThis.skywireVisor && globalThis.skywireVisor.skychatSend) { addApp("chat", function () { openChat(); }); }
     if (globalThis.skywireVisor && globalThis.skywireVisor.serveContent) { addApp("host", function () { openHost(); }); }
     addApp("console", function () { openCli(); });
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
@@ -1185,6 +1344,12 @@
       if (!opts.ptyURL || focusExisting(termWin)) { return; }
       termWin = createTerminalWindow(doc, withRoot({ onClose: function () { untrack(termWin); termWin = null; } }));
       track(termWin, "terminal");
+    }
+    var chatWin = null;
+    function openChat() {
+      if (focusExisting(chatWin)) { return; }
+      chatWin = createChatWindow(doc, withRoot({ onClose: function () { untrack(chatWin); chatWin = null; } }));
+      track(chatWin, "skychat");
     }
     var hostWin = null;
     function openHost() {
