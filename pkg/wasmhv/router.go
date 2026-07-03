@@ -71,7 +71,11 @@ func (c *Core) ServeHTTP(method, path string, body []byte) (int, []byte) {
 		})
 
 	case strings.HasPrefix(p, "/visors/"):
-		return c.visorRoute(method, strings.TrimPrefix(p, "/visors/"), body)
+		rawQuery := ""
+		if i := strings.IndexByte(path, '?'); i >= 0 {
+			rawQuery = path[i+1:]
+		}
+		return c.visorRoute(method, strings.TrimPrefix(p, "/visors/"), body, rawQuery)
 
 	// Network-wide SD/TPD/UT aggregation (the network-view table + the
 	// visualizer's nodes). The native HV serves this; without it here the wasm
@@ -115,8 +119,10 @@ func (c *Core) ServeHTTP(method, path string, body []byte) (int, []byte) {
 	return 404, []byte(`{"error":"not found in wasm hypervisor core"}`)
 }
 
-// visorRoute handles /visors/<pk>[/sub] for all HTTP methods.
-func (c *Core) visorRoute(method, rest string, body []byte) (int, []byte) {
+// visorRoute handles /visors/<pk>[/sub] for all HTTP methods. query is the raw
+// query string (stripped from the path), threaded through for self subroutes that
+// need it (e.g. runtime-logs ?since=<cursor>).
+func (c *Core) visorRoute(method, rest string, body []byte, query string) (int, []byte) {
 	parts := strings.SplitN(rest, "/", 2)
 	var pk cipher.PubKey
 	if err := pk.UnmarshalText([]byte(parts[0])); err != nil {
@@ -129,7 +135,7 @@ func (c *Core) visorRoute(method, rest string, body []byte) (int, []byte) {
 	// The tab's OWN visor is served locally (its transport.Manager + router),
 	// not over a gob RPC dial.
 	if self := c.selfProvider(); self != nil && self.SelfPK() == pk {
-		return c.selfRoute(self, sub)
+		return c.selfRoute(self, sub, query)
 	}
 	switch {
 	case sub == "":
