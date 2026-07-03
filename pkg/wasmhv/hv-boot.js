@@ -114,11 +114,84 @@
     });
   }
 
-  CFG.ready = (async function () {
+  // --- Web Worker host (preferred) ---
+  //
+  // The Go/wasm runtime runs the visor's occasionally-blocking work (dmsg/WS/WT
+  // dials, route setup, SOCKS handshakes). On the page's MAIN thread that starves
+  // the UI event loop — a slow route setup once froze the whole HV UI. Running the
+  // runtime in a dedicated Web Worker (worker.js) keeps the UI responsive: every
+  // globalThis.skywireVisor call becomes a postMessage round-trip to the worker.
+  // All call sites already treat the API as async (Promises / fire-and-forget), so
+  // the proxy is transparent. Falls back to the in-page runtime if Workers are
+  // unavailable or the worker fails to come up.
+  function bootInWorker(sk) {
+    return new Promise(function (resolve, reject) {
+      if (typeof Worker === 'undefined') { reject(new Error('Web Workers unavailable')); return; }
+      var worker;
+      try { worker = new Worker('worker.js'); } catch (e) { reject(e); return; }
+      var nextId = 1, pending = Object.create(null);
+      var upTimer = setTimeout(function () { reject(new Error('worker did not report ready in time')); }, 30000);
+
+      // Build the main-thread proxy: one forwarding function per worker API method.
+      function makeProxy(methods) {
+        var proxy = {};
+        methods.forEach(function (fn) {
+          proxy[fn] = function () {
+            var callArgs = Array.prototype.slice.call(arguments);
+            return new Promise(function (res, rej) {
+              var id = nextId++;
+              pending[id] = { res: res, rej: rej };
+              try { worker.postMessage({ t: 'call', id: id, fn: fn, args: callArgs }); }
+              catch (e) { delete pending[id]; rej(e); }
+            });
+          };
+        });
+        return proxy;
+      }
+
+      worker.onmessage = function (ev) {
+        var m = ev.data || {};
+        switch (m.t) {
+          case 'log':
+            // Re-emit worker/visor output on the PAGE console so the HV-UI log
+            // window (which captures console.*) shows it, and feed __skylog.
+            try { (m.level === 'error' ? console.error : m.level === 'warn' ? console.warn : console.log)(m.line); } catch (e) {}
+            try { if (typeof self.__skylog === 'function') self.__skylog(m.line); } catch (e) {}
+            break;
+          case 'up':
+            clearTimeout(upTimer);
+            // Install the proxy as globalThis.skywireVisor — browse.js, the Angular
+            // backend, the skychat component, etc. call it exactly as before.
+            self.skywireVisor = makeProxy(m.methods);
+            self.skywireVisor.boot(sk, CFG.seedpk || '', CFG.seedws || '', CFG.disc || '').then(resolve, reject);
+            break;
+          case 'ret':
+            if (pending[m.id]) { pending[m.id].res(m.val); delete pending[m.id]; }
+            break;
+          case 'err':
+            if (pending[m.id]) { pending[m.id].rej(new Error(m.msg)); delete pending[m.id]; }
+            break;
+          case 'fatal':
+            clearTimeout(upTimer);
+            reject(new Error(m.msg));
+            break;
+        }
+      };
+      worker.onerror = function (e) {
+        clearTimeout(upTimer);
+        reject(new Error('worker error: ' + ((e && e.message) || 'load failed')));
+      };
+    });
+  }
+
+  // --- In-page host (fallback) ---
+  //
+  // The original path: load + run the runtime on the main thread. Used when Workers
+  // are unavailable or worker.js can't be loaded (e.g. exotic embeddings). Keeps the
+  // page working, at the cost of the main-thread-freeze risk the worker path avoids.
+  async function bootInPage(sk) {
     await loadScript('wasm_exec.js');
     var go = new Go();
-    // TinyGo's wasm_exec.js omits the gojs getRandomData import the crypto-using
-    // Go runtime needs to seed itself; inject it only when absent.
     if (go.importObject.gojs && !go.importObject.gojs['runtime.getRandomData']) {
       go.importObject.gojs['runtime.getRandomData'] = function (ptr, len) {
         crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
@@ -130,12 +203,23 @@
     while (!self.skywireVisor || !self.skywireVisor.boot) {
       await new Promise(function (r) { setTimeout(r, 10); });
     }
+    return await self.skywireVisor.boot(sk, CFG.seedpk || '', CFG.seedws || '', CFG.disc || '');
+  }
+
+  CFG.ready = (async function () {
     var sk = await resolveSK();
     // One tab per origin may run this (localStorage-shared) identity; wait here
     // until this tab is the leader before booting any dmsg client.
     await becomeLeader('skywire-wasm-visor');
-    var pk = await self.skywireVisor.boot(sk, CFG.seedpk || '', CFG.seedws || '', CFG.disc || '');
-    try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (edge + hypervisor; /api → in-wasm core)'); } catch (e) {}
+    var pk;
+    try {
+      pk = await bootInWorker(sk);
+      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (in Web Worker; UI off the runtime thread; /api → in-wasm core)'); } catch (e) {}
+    } catch (e) {
+      try { console.warn('[hv-boot] worker boot unavailable (' + ((e && e.message) || e) + '); falling back to in-page runtime'); } catch (e2) {}
+      pk = await bootInPage(sk);
+      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (in-page runtime; edge + hypervisor; /api → in-wasm core)'); } catch (e2) {}
+    }
     return pk;
   })();
 })();

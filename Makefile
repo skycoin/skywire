@@ -247,6 +247,8 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor-go/
+	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor-go/
+	cp ./pkg/wasmhv/worker.js ./build/wasm-visor-go/
 	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"
 
 embed-wasm-visor: wasm-visor ## Update the COMMITTED embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasm-visor.wasm.gz) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
