@@ -5,18 +5,25 @@
 // DataPackets, mux + reorder buffer + SACK retransmit, head-of-line
 // blocking on loss), DatagramRouteGroup is net.PacketConn-shaped
 // (ReadFrom/WriteTo, unsequenced DatagramPackets, loss-tolerant,
-// possibly-unordered delivery). Used by Stage 4's
-// forwarded_ports.udp path to expose UDP datagram semantics over
-// routed skynet hops — for VoIP, gaming, WebRTC media, anything
-// where a late packet is worse than a lost one.
+// possibly-unordered delivery). Used by the forwarded_ports.udp path
+// (pkg/visor/udp_bridge.go) and the app networker's DialPacketContext
+// to expose UDP datagram semantics over routed skynet hops — for VoIP,
+// gaming, WebRTC media, anything where a late packet is worse than a
+// lost one.
 //
-// Stage 2 scope: type definition, send/receive plumbing,
-// net.PacketConn methods, lifecycle. NO crypto wrapping yet
-// (Stage 3 will add per-datagram ChaCha20-Poly1305-IETF + sliding-
-// window anti-replay). NO router-side dispatch yet (Stage 4 will
-// wire forwarded_ports.udp). At this stage DatagramRouteGroup is
-// self-contained and unit-testable, but no packet in the running
-// system will reach it.
+// This is fully wired end to end (all of #2607 landed): each datagram
+// is independently ChaCha20-Poly1305-IETF sealed with sliding-window
+// anti-replay (SetCiphers / datagram_crypto.go), the router dispatches
+// DatagramPacket to Handle (router_packet.go handleDatagramPacket), and
+// the datagram sibling is built during route setup from the reliable
+// route's Noise ChannelBinding (datagram_setup.go). Over a QUIC
+// transport the wire carriage is native unreliable datagrams
+// (RFC 9221); over other transports WriteDatagram falls back to the
+// reliable stream, so datagram *framing* is preserved but delivery is
+// reliable. Known follow-ups: automatic rekey is not yet driven (the
+// cipher exposes NeedsRekey/Rekey but nothing schedules it, and a clean
+// rekey on this loss-tolerant channel needs an on-wire epoch marker),
+// and the group is single-peer / single-path (fwd[0]).
 
 package router
 
