@@ -225,8 +225,18 @@ type Config struct {
 	DmsgC *dmsg.Client
 
 	// DataDir is the per-visor parent directory for CXO state. Each
-	// Session carves its own group/<id>/ subtree inside it.
+	// Session carves its own group/<id>/ subtree inside it. Ignored (and
+	// may be empty) when InMemoryDB is set.
 	DataDir string
+
+	// InMemoryDB runs the session's CXO tree entirely in memory, with no
+	// DataDir / filesystem access. Required for the browser (js/wasm) visor,
+	// which has no disk. The native-TCP standalone path already forces this
+	// internally (see newPublisher); this flag extends it to the dmsg path so a
+	// wasm visor can be a full federated group member — it publishes its own
+	// feed in memory and subscribes to peers over dmsg, and the network retains
+	// whatever it published (state resets on tab reload; re-subscribe replays).
+	InMemoryDB bool
 
 	// Logger is optional; nil falls back to a tag-based default.
 	Logger *logging.Logger
@@ -543,6 +553,13 @@ const relayAckReadTimeout = 5 * time.Second
 // transport: DMSG when cfg.DmsgC is set, otherwise the CXO node's
 // native TCP transport on cfg.TCPListenAddr (no dmsg/discovery).
 func (cfg Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, error) {
+	if cfg.InMemoryDB {
+		// Browser (js/wasm) visor: no filesystem. Run the CXO tree in memory —
+		// content-addressed and republished from the in-memory tree, same as the
+		// native-TCP path below. Applies to the dmsg transport too so a wasm
+		// visor can be a full federated member.
+		pc.InMemoryDB = true
+	}
 	if cfg.DmsgC != nil {
 		return treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, pc)
 	}
@@ -576,8 +593,8 @@ func Open(cfg Config) (*Session, error) {
 	if cfg.Record.Mode == ModePrivate && len(cfg.Record.AESKey) != 32 {
 		return nil, fmt.Errorf("group: Open: private mode requires 32-byte AESKey, got %d", len(cfg.Record.AESKey))
 	}
-	if cfg.DataDir == "" {
-		return nil, errors.New("group: Open: DataDir required")
+	if cfg.DataDir == "" && !cfg.InMemoryDB {
+		return nil, errors.New("group: Open: DataDir required (unless InMemoryDB)")
 	}
 
 	log := cfg.Logger
