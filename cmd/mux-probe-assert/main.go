@@ -81,9 +81,9 @@ const (
 	exitOK                = 0
 	exitUsage             = 1
 	exitTopologyDegrade   = 2
-	exitIntegrity         = 3 //nolint:unused,deadcode // reserved
+	exitIntegrity         = 3 //nolint:unused // reserved
 	exitThroughputRegress = 4
-	exitHOLBreach         = 5 //nolint:unused,deadcode // reserved
+	exitHOLBreach         = 5 //nolint:unused // reserved
 )
 
 func main() {
