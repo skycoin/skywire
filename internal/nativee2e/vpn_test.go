@@ -14,27 +14,19 @@ import (
 )
 
 // TestVPNClient starts vpn-client on the client visor (A) pointed at vpn-server
-// on visor B and asserts it reaches Running — which requires the client's TUN
-// device to be created AND a full session to a working vpn-server.
+// on visor B and asserts it reaches Running — a full round trip that exercises
+// the OS-specific client AND server code: the client's TUN (utun on macOS,
+// pkg/vpn/os_client_darwin.go), the server's TUN (os_darwin.go Server.SetupTUN)
+// and the server's NAT/forwarding (os_server_darwin.go: sysctl + pf).
 //
-// IMPORTANT — this only runs on Linux. vpn-SERVER is Linux-only: pkg/vpn/
-// os_server.go is `//go:build !linux` and every server method returns
-// "server related methods are not supported for this OS", so a vpn-server cannot
-// run on macOS/Windows (no NAT/forward). And vpn-client dials the server BEFORE
-// creating its TUN (client.go Serve → dialServeConn first), so with no reachable
-// server it never reaches TUN creation. A self-contained vpn e2e therefore needs
-// a Linux exit node and can't run on a single macOS/Windows host. The client's
-// OS-specific utun/WinTUN code stays covered by unit tests; the full tunnel by
-// the Docker Linux e2e (internal/integration TestVPN). This test is kept so a
-// native LINUX harness run (or a future cross-platform vpn-server) exercises it.
+// Runs on Linux and macOS (both need root — TUN devices + pf/sysctl/iptables).
+// Windows is skipped: vpn-server isn't implemented there yet (os_server.go stubs).
 func TestVPNClient(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skipf("vpn-server is Linux-only (pkg/vpn/os_server.go is !linux), and vpn-client dials the "+
-			"server before creating its TUN — so a self-contained vpn e2e can't run on %s. "+
-			"Client TUN code: unit tests; full path: Docker Linux e2e (TestVPN).", runtime.GOOS)
+	if runtime.GOOS == "windows" {
+		t.Skip("vpn-server is not implemented on Windows yet (os_server.go stubs); Linux + macOS supported")
 	}
 	if !elevated() {
-		t.Skip("vpn-client TUN creation needs root; skipping")
+		t.Skip("vpn-client + vpn-server need root (TUN devices + pf/sysctl); skipping")
 	}
 	pkB := visorPK(t, rpcB)
 

@@ -97,8 +97,10 @@ func RunVPNServer(ctx context.Context, args []string) error {
 	bi := buildinfo.Get()
 	logger.Infof("Version %q built on %q against commit %q", bi.Version, bi.Date, bi.Commit)
 
-	if runtime.GOOS != "linux" {
-		err := errors.New("OS is not supported")
+	// vpn-server is supported on Linux (iptables) and macOS (pf); see
+	// pkg/vpn/os_server_*.go. Windows has no server-side NAT implementation yet.
+	if runtime.GOOS == "windows" {
+		err := errors.New("vpn-server is not yet supported on Windows")
 		logger.Error(err)
 		setAppErr(appCl, logger, err)
 		return err

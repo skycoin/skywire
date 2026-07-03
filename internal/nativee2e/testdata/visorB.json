@@ -74,7 +74,12 @@
       {
         "name": "vpn-server",
         "auto_start": true,
-        "port": 44
+        "port": 44,
+        "args": [
+          "--netifc",
+          "lo0",
+          "--secure=false"
+        ]
       }
     ],
     "server_addr": "127.0.0.1:5506",

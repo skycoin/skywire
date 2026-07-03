@@ -50,19 +50,20 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 		useWL:     len(cfg.Whitelist) > 0,
 	}
 
-	defaultNetworkIfcs, err := netutil.DefaultNetworkInterface()
-	if err != nil {
-		return nil, fmt.Errorf("error getting default network interface: %w", err)
-	}
-	ifcs, hasMultiple := s.hasMultipleNetworkInterfaces(defaultNetworkIfcs)
-	if hasMultiple {
-		if cfg.NetworkInterface == "" {
-			return nil, fmt.Errorf("multiple default network interfaces detected...set a default one for VPN server or remove one: %v", ifcs)
-		} else if !s.validateInterface(ifcs, cfg.NetworkInterface) {
-			return nil, fmt.Errorf("network interface value in config is not in default network interfaces detected: %v", ifcs)
-		}
+	if cfg.NetworkInterface != "" {
+		// An explicitly configured interface (--netifc) always wins over
+		// auto-detection. The operator knows which interface should carry egress,
+		// and auto-detect can pick the wrong one when several default routes exist
+		// (e.g. a VPN/overlay like Tailscale owning the default route).
 		defaultNetworkIfc = cfg.NetworkInterface
 	} else {
+		defaultNetworkIfcs, err := netutil.DefaultNetworkInterface()
+		if err != nil {
+			return nil, fmt.Errorf("error getting default network interface: %w", err)
+		}
+		if ifcs, hasMultiple := s.hasMultipleNetworkInterfaces(defaultNetworkIfcs); hasMultiple {
+			return nil, fmt.Errorf("multiple default network interfaces detected, set one via --netifc: %v", ifcs)
+		}
 		defaultNetworkIfc = defaultNetworkIfcs
 	}
 
@@ -424,15 +425,6 @@ func (s *Server) hasMultipleNetworkInterfaces(defaultNetworkInterface string) ([
 		return networkInterfaces, true
 	}
 	return []string{}, false
-}
-
-func (s *Server) validateInterface(ifcs []string, selectedIfc string) bool {
-	for _, ifc := range ifcs {
-		if ifc == selectedIfc {
-			return true
-		}
-	}
-	return false
 }
 
 // getRemotePK extracts the remote public key from the connection
