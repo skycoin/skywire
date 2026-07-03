@@ -19,10 +19,8 @@ package main
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 	"syscall/js"
@@ -31,15 +29,13 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
 // skychatPort is skychat's well-known routing port: native skychat dials peers
 // at appnet.Addr{...Port: 1}, so the in-process app must listen there to be
 // reachable, and dials peers there in turn.
 const skychatPort = 1
-
-// skychatMaxFrame bounds one framed message (matches native skychatMaxFrameSize).
-const skychatMaxFrame = 64 * 1024
 
 // chatMsg is one buffered message surfaced to the page (skychatMessages()).
 type chatMsg struct {
@@ -49,34 +45,18 @@ type chatMsg struct {
 	Out  bool   `json:"out"` // true = we sent it, false = received
 }
 
-// chatConn wraps a skychat conn with a write mutex: a peer conn is written from
-// two goroutines — sendChat (outbound message) and readChatConn (the chat-ack it
-// sends back on receipt) — so framing must be serialized or the 4-byte header and
-// body of two frames could interleave and corrupt the stream.
-type chatConn struct {
-	net.Conn
-	wmu sync.Mutex
-}
-
-func (c *chatConn) writeFrameLocked(payload []byte) error {
-	c.wmu.Lock()
-	defer c.wmu.Unlock()
-	return writeFrame(c.Conn, payload)
-}
-
-// chatAckEnvelope is the chat-ack reply the sender's --wait blocks on (native
-// wire format: {"type":"chat-ack","id":"<hex>"}). We only ever encode acks; the
-// full chat-msg/chat-ack schema lives in the native skychat app.
-type chatAckEnvelope struct {
-	Type string `json:"type"`
-	ID   string `json:"id"`
-}
+// Peer conns use the shared skychat wire codec: message.Conn carries the
+// length-prefixed framing plus the write mutex a bidirectional skychat conn needs
+// (sendChat writes outbound messages while readChatConn writes chat-ack replies on
+// the same conn — the two must be serialized or their frames interleave). The
+// chat-ack envelope and frame codec live in pkg/skychat/message, shared with the
+// native app.
 
 var (
 	chatMu     sync.Mutex
 	chatLog    []chatMsg
 	chatClient *app.Client
-	chatConns  = map[cipher.PubKey]*chatConn{} // cached conns keyed by peer PK
+	chatConns  = map[string]*message.Conn{} // cached outbound conns keyed by "<network>|<peerPK hex>"
 )
 
 func appendChat(m chatMsg) {
@@ -129,7 +109,7 @@ func acceptChatLoop(lis net.Listener) {
 		if err != nil {
 			return
 		}
-		go readChatConn(&chatConn{Conn: conn})
+		go readChatConn(message.NewConn(conn))
 	}
 }
 
@@ -138,18 +118,18 @@ func acceptChatLoop(lis net.Listener) {
 // (outbound) conns — a skychat conn is bidirectional. When the peer sends an
 // ack-requesting chat-msg (native `send --wait`), we reply with a chat-ack on the
 // same conn so the sender's wait resolves instead of falsely timing out.
-func readChatConn(conn *chatConn) {
+func readChatConn(conn *message.Conn) {
 	defer conn.Close() //nolint:errcheck
 	from := peerPKHex(conn)
 	for {
-		payload, err := readFrame(conn)
+		payload, err := conn.ReadFrame()
 		if err != nil {
 			return
 		}
 		text, ackID := decodeChatPayload(payload)
 		if ackID != "" {
-			if b, mErr := json.Marshal(chatAckEnvelope{Type: "chat-ack", ID: ackID}); mErr == nil {
-				if wErr := conn.writeFrameLocked(b); wErr != nil {
+			if b, mErr := (message.Envelope{Type: message.TypeAck, ID: ackID}).Marshal(); mErr == nil {
+				if wErr := conn.WriteFrame(b); wErr != nil {
 					vlog(fmt.Sprintf("skychat: ack to %s failed: %s", shortPK(from), wErr.Error()))
 				}
 			}
@@ -162,96 +142,80 @@ func readChatConn(conn *chatConn) {
 	}
 }
 
-// sendChat dials the peer on dmsg:1 (reusing a cached conn) and writes one
-// plain-text frame — the format native skychat accepts on its read loop.
-func sendChat(pkHex, text string) error {
+// sendChat dials the peer on <network>:1 (reusing a cached conn) and writes one
+// plain-text frame — the format native skychat accepts on its read loop. network
+// is "dmsg" (default) or "skynet"; conns are cached per (network, peer) so the two
+// transports don't clobber each other. The dial/connect/send steps are vlog'd so
+// the chat window's log pane can surface them (like the skysocks-lite route setup).
+func sendChat(pkHex, text, network string) error {
 	if chatClient == nil {
 		return fmt.Errorf("skychat not started yet")
 	}
 	if text == "" {
 		return fmt.Errorf("empty message")
 	}
+	var net appnet.Type
+	switch network {
+	case "", "dmsg":
+		net = appnet.TypeDmsg
+	case "skynet":
+		net = appnet.TypeSkynet
+	default:
+		return fmt.Errorf("unknown network %q (use dmsg or skynet)", network)
+	}
 	var pk cipher.PubKey
 	if err := pk.Set(pkHex); err != nil {
 		return fmt.Errorf("bad peer pk: %w", err)
 	}
+	key := string(net) + "|" + pkHex
 	chatMu.Lock()
-	conn := chatConns[pk]
+	conn := chatConns[key]
 	chatMu.Unlock()
 	if conn == nil {
-		c, err := chatClient.Dial(appnet.Addr{Net: appnet.TypeDmsg, PubKey: pk, Port: skychatPort})
+		vlog(fmt.Sprintf("skychat: dialing %s %s:%d…", net, shortPK(pkHex), skychatPort))
+		c, err := chatClient.Dial(appnet.Addr{Net: net, PubKey: pk, Port: skychatPort})
 		if err != nil {
-			return fmt.Errorf("dial %s: %w", shortPK(pkHex), err)
+			vlog(fmt.Sprintf("skychat: dial %s %s failed: %s", net, shortPK(pkHex), err.Error()))
+			return fmt.Errorf("dial %s over %s: %w", shortPK(pkHex), net, err)
 		}
-		conn = &chatConn{Conn: c}
+		vlog(fmt.Sprintf("skychat: connected to %s over %s", shortPK(pkHex), net))
+		conn = message.NewConn(c)
 		chatMu.Lock()
-		chatConns[pk] = conn
+		chatConns[key] = conn
 		chatMu.Unlock()
 		// Read replies on the same conn; drop it from the cache when it closes.
 		go func() {
 			readChatConn(conn)
 			chatMu.Lock()
-			delete(chatConns, pk)
+			delete(chatConns, key)
 			chatMu.Unlock()
 		}()
 	}
-	if err := conn.writeFrameLocked([]byte(text)); err != nil {
+	if err := conn.WriteFrame([]byte(text)); err != nil {
 		chatMu.Lock()
-		delete(chatConns, pk)
+		delete(chatConns, key)
 		chatMu.Unlock()
 		conn.Close() //nolint:errcheck,gosec
 		return fmt.Errorf("send: %w", err)
 	}
+	vlog(fmt.Sprintf("skychat: sent %d bytes to %s over %s", len(text), shortPK(pkHex), net))
 	appendChat(chatMsg{From: pkHex, Text: text, TS: nowMs(), Out: true})
 	return nil
-}
-
-// readFrame reads one length-prefixed frame (skychat wire format).
-func readFrame(conn net.Conn) ([]byte, error) {
-	var hdr [4]byte
-	if _, err := io.ReadFull(conn, hdr[:]); err != nil {
-		return nil, err
-	}
-	n := binary.BigEndian.Uint32(hdr[:])
-	if n == 0 || n > skychatMaxFrame {
-		return nil, fmt.Errorf("skychat: bad frame length %d", n)
-	}
-	buf := make([]byte, n)
-	if _, err := io.ReadFull(conn, buf); err != nil {
-		return nil, err
-	}
-	return buf, nil
-}
-
-func writeFrame(conn net.Conn, payload []byte) error {
-	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) //nolint:gosec
-	if _, err := conn.Write(hdr[:]); err != nil {
-		return err
-	}
-	_, err := conn.Write(payload)
-	return err
 }
 
 // decodeChatPayload extracts the message text from a frame, plus the ack id to
 // reply with (non-empty only when the peer's chat-msg requested an ack — native
 // `send --wait`). Native skychat sends either plain UTF-8 bytes (default) or a
-// JSON envelope {type,id,body,ack}: we return the body for a "chat-msg", ("","")
-// for a "chat-ack", else the raw bytes. Recognition is conservative (must start
-// with '{' and carry a known chat-* type) so literal JSON typed into a chat still
-// reaches the peer as plain text.
+// chat-* JSON envelope: we return the body for a "chat-msg", ("","") for a
+// "chat-ack", else the raw bytes. Recognition (message.ParseEnvelope) is
+// conservative — a known chat-* type only — so literal JSON typed into a chat
+// still reaches the peer as plain text.
 func decodeChatPayload(payload []byte) (text, ackID string) {
-	var env struct {
-		Type string `json:"type"`
-		ID   string `json:"id"`
-		Body string `json:"body"`
-		Ack  bool   `json:"ack"`
-	}
-	if len(payload) > 0 && payload[0] == '{' && json.Unmarshal(payload, &env) == nil {
+	if env, ok := message.ParseEnvelope(payload); ok {
 		switch env.Type {
-		case "chat-ack":
+		case message.TypeAck:
 			return "", ""
-		case "chat-msg":
+		case message.TypeMsg:
 			if env.Ack && env.ID != "" {
 				return env.Body, env.ID
 			}
@@ -277,14 +241,19 @@ func shortPK(pk string) string {
 
 func nowMs() int64 { return time.Now().UnixMilli() }
 
-// jsSkychatSend(peerPkHex, text) → Promise<null> (rejects on error).
+// jsSkychatSend(peerPkHex, text[, network]) → Promise<null> (rejects on error).
+// network is "dmsg" (default) or "skynet".
 func jsSkychatSend(_ js.Value, args []js.Value) interface{} {
 	if len(args) < 2 {
-		return js.Global().Get("Error").New("skychatSend(peerPkHex, text)")
+		return js.Global().Get("Error").New("skychatSend(peerPkHex, text[, network])")
 	}
 	pkHex, text := args[0].String(), args[1].String()
+	network := "dmsg"
+	if len(args) >= 3 && args[2].Type() == js.TypeString {
+		network = args[2].String()
+	}
 	return promise(func() (interface{}, error) {
-		return nil, sendChat(pkHex, text)
+		return nil, sendChat(pkHex, text, network)
 	})
 }
 
