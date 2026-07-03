@@ -154,6 +154,13 @@ func main() {
 		"closeWindow":       js.FuncOf(jsCloseWindow),
 		"skychatSend":       js.FuncOf(jsSkychatSend),
 		"skychatMessages":   js.FuncOf(jsSkychatMessages),
+		// Federated group chat (in-memory over dmsg) — see group_js.go.
+		"skychatGroupCreate":    js.FuncOf(jsGroupCreate),
+		"skychatGroupJoin":      js.FuncOf(jsGroupJoin),
+		"skychatGroupSend":      js.FuncOf(jsGroupSend),
+		"skychatGroupAddMember": js.FuncOf(jsGroupAddMember),
+		"skychatGroupList":      js.FuncOf(jsGroupList),
+		"skychatGroupMessages":  js.FuncOf(jsGroupMessages),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -372,6 +379,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// TPD (via its cxo-aggregator), so the browser visor's transports show up in
 	// TPD /metrics like a native visor's — see telemetry_js.go.
 	go startTelemetry(sk, tpdPK, mLog.PackageLogger("wasm-telemetry"))
+	go startGroupChat(sk, mLog.PackageLogger("wasm-group"))
 	vlog("tp_manager: serving")
 	// Register the browser-dialable direct transport clients. Their Start() fails
 	// closed under TinyGo (a tab can't run a WS/WT listener) — logged, non-fatal —
