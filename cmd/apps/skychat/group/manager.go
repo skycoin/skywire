@@ -42,12 +42,13 @@ import (
 // Manager owns the persistent record set and live Session instances.
 // Safe for concurrent use.
 type Manager struct {
-	store   *Store
-	dmsgC   *dmsg.Client
-	myPK    cipher.PubKey
-	mySK    cipher.SecKey
-	dataDir string
-	log     *logging.Logger
+	store      *Store
+	dmsgC      *dmsg.Client
+	myPK       cipher.PubKey
+	mySK       cipher.SecKey
+	dataDir    string
+	inMemoryDB bool
+	log        *logging.Logger
 
 	// portAlloc decides which DMSG port to assign to a brand-new
 	// owner-side group. Defaults to a random pick from a reserved
@@ -99,6 +100,11 @@ type ManagerConfig struct {
 	DataDir string
 	Logger  *logging.Logger
 
+	// InMemoryDB runs every session's CXO tree in memory (no DataDir /
+	// filesystem). Required for the browser (js/wasm) visor. When set, DataDir
+	// may be empty. Forwarded to each group.Config the Manager opens.
+	InMemoryDB bool
+
 	// HeartbeatInterval, when > 0, makes every owner-role session
 	// opened by this Manager emit a periodic no-op heartbeat probe.
 	// Members observe these to detect a silently-stalled CXO
@@ -122,8 +128,8 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 	if cfg.DmsgC == nil {
 		return nil, errors.New("group: NewManager: DmsgC required")
 	}
-	if cfg.DataDir == "" {
-		return nil, errors.New("group: NewManager: DataDir required")
+	if cfg.DataDir == "" && !cfg.InMemoryDB {
+		return nil, errors.New("group: NewManager: DataDir required (unless InMemoryDB)")
 	}
 	log := cfg.Logger
 	if log == nil {
@@ -135,6 +141,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		myPK:               cfg.MyPK,
 		mySK:               cfg.MySK,
 		dataDir:            cfg.DataDir,
+		inMemoryDB:         cfg.InMemoryDB,
 		log:                log,
 		portAlloc:          defaultPortAlloc,
 		sessions:           make(map[string]*Session),
@@ -1440,6 +1447,7 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 		Record:            r,
 		DmsgC:             m.dmsgC,
 		DataDir:           m.dataDir,
+		InMemoryDB:        m.inMemoryDB,
 		Logger:            m.log,
 		HeartbeatInterval: m.heartbeatInterval,
 	})
