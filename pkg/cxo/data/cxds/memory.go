@@ -1,12 +1,19 @@
 package cxds
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cxo/data"
 )
+
+// panicf lives here (untagged) rather than in drive.go so both the memory and the
+// on-disk (!js) CXDS can use it — drive.go is excluded from the js/wasm build.
+func panicf(format string, args ...interface{}) {
+	panic(fmt.Sprintf(format, args...))
+}
 
 type memoryCXDS struct {
 	mx  sync.RWMutex

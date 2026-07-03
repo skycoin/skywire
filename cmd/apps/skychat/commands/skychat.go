@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -38,73 +37,29 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
 var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 5, 2)
 
-// Wire-protocol constants for skychat's peer-to-peer messages.
+// skychat's peer-to-peer wire format — length-prefixed frames plus the
+// chat-msg/chat-ack envelope — now lives in one place: pkg/skychat/message.
+// framedConn is a thin alias over message.Conn so the many call sites in this
+// file keep their local name; newFramedConn wraps a raw appnet conn with framing
+// and a write mutex (needed because the /message handler and the pair-control
+// sender can race to write the same conn — interleaving one frame's length prefix
+// with another's payload would desync the receiver permanently).
 //
-// Pre-2026-05-12 the protocol was "one conn.Write = one conn.Read":
-// every message was sent as a raw byte slice and the receiver
-// assumed each Read returned exactly one message. That held for
-// dmsg (noise-framed up to 4 KB) but broke on the skynet route
-// path — appnet.directConn wraps transport.VStream, which is a
-// TCP-style stream that can split a single Write across multiple
-// Reads at arbitrary boundaries depending on route MTU. A
-// 600-byte chat message would arrive as two "messages" on the
-// receiver and the second half would surface as a separate chat
-// entry, looking to operators like the message was truncated.
-//
-// New protocol: length-prefixed frames. Each message is a 4-byte
-// big-endian length followed by exactly that many bytes of
-// payload. Old binaries can no longer talk to new ones — peers
-// must update together. The pair-control envelope (JSON `{type:
-// "pair-invite" | ...}`) keeps the same on-the-wire bytes; only
-// the framing around it changed.
-const skychatMaxFrameSize = 64 * 1024
+// History: pre-2026-05-12 the protocol was "one Write = one Read" (a raw byte
+// slice per message). That held on dmsg (noise-framed) but broke on skynet
+// routes, where a VStream can split one Write across several Reads at arbitrary
+// boundaries — a 600-byte message arrived as two chat entries. The length-prefixed
+// frame fixed that; old unframed binaries can't talk to framed ones.
+type framedConn = message.Conn
 
-// framedConn wraps an appnet conn with length-prefixed framing
-// and a write mutex. The write mutex matters because two
-// callers (the HTTP /message handler and the pair-control
-// sender) can race to write to the same underlying conn — and
-// with framing, interleaving the length prefix of one message
-// with the payload of another would desync the receiver
-// permanently. The read path has a single owner (handleConn)
-// so no read mutex is needed.
-type framedConn struct {
-	net.Conn
-	writeMu sync.Mutex
-}
-
-func newFramedConn(c net.Conn) *framedConn { return &framedConn{Conn: c} }
-
-// WriteFrame writes a length-prefixed message. Returns an error
-// if the payload is empty or exceeds skychatMaxFrameSize.
-//
-// Unbounded — if the underlying net.Conn's Write blocks (peer not
-// draining, transport stuck), the call blocks indefinitely and the
-// caller's request goroutine is wedged. messageHandler uses
-// WriteFrameDeadline below instead so a slow peer can't pin the
-// /message handler forever.
-func (c *framedConn) WriteFrame(payload []byte) error {
-	if len(payload) == 0 {
-		return errors.New("skychat: empty payload")
-	}
-	if len(payload) > skychatMaxFrameSize {
-		return fmt.Errorf("skychat: payload %d > max %d", len(payload), skychatMaxFrameSize)
-	}
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) //nolint:gosec
-	if _, err := c.Conn.Write(hdr[:]); err != nil {
-		return err
-	}
-	_, err := c.Conn.Write(payload)
-	return err
-}
+func newFramedConn(c net.Conn) *framedConn { return message.NewConn(c) }
 
 // messageWriteTimeout bounds a single WriteFrame call from the
 // /message HTTP handler. Picked above the typical successful-send
@@ -125,57 +80,6 @@ func (c *framedConn) WriteFrame(payload []byte) error {
 // surface a clean timeout, the writeMu releases, and the next
 // caller's send is freed.
 const messageWriteTimeout = 5 * time.Second
-
-// WriteFrameDeadline is the bounded variant used from
-// messageHandler. Sets a write deadline on the underlying net.Conn
-// for the duration of this Write call, then resets it on the way
-// out — so the deadline scope is exactly the framed write and
-// future calls aren't accidentally pre-expired by a lingering
-// deadline. A net.Conn-level timeout surfaces as an error from
-// Write whose Timeout() method returns true, which the caller can
-// distinguish from a connection-reset or peer-close.
-//
-// timeout must be > 0; pass 0 to fall back to plain WriteFrame
-// (no deadline). The reset uses time.Time{} which net.Conn
-// documents as "no deadline".
-func (c *framedConn) WriteFrameDeadline(payload []byte, timeout time.Duration) error {
-	if timeout <= 0 {
-		return c.WriteFrame(payload)
-	}
-	// Acquire writeMu BEFORE setting the deadline so the deadline
-	// scope tracks the actual on-wire write rather than including
-	// time spent waiting behind a concurrent same-peer writer. If
-	// the wait itself wedges, the caller's HTTP context-deadline
-	// is the outer ceiling.
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-
-	if err := c.Conn.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		// SetWriteDeadline failure is rare on a healthy net.Conn;
-		// fall through to a best-effort unbounded write rather
-		// than blocking the message entirely on a metadata error.
-		// Subsequent SetWriteDeadline(time.Time{}) reset on the
-		// way out is also best-effort.
-		_ = err //nolint:errcheck
-	}
-	defer func() {
-		_ = c.Conn.SetWriteDeadline(time.Time{}) //nolint:errcheck
-	}()
-
-	if len(payload) == 0 {
-		return errors.New("skychat: empty payload")
-	}
-	if len(payload) > skychatMaxFrameSize {
-		return fmt.Errorf("skychat: payload %d > max %d", len(payload), skychatMaxFrameSize)
-	}
-	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) //nolint:gosec
-	if _, err := c.Conn.Write(hdr[:]); err != nil {
-		return err
-	}
-	_, err := c.Conn.Write(payload)
-	return err
-}
 
 // dialAndCache dials the peer at addr (using the package retrier),
 // wraps the raw conn in framing, registers it in the conns cache,
@@ -254,29 +158,6 @@ func tryNetworkFallback(ctx context.Context, pk cipher.PubKey, currentNet appnet
 		return nil, altAddr
 	}
 	return conn, altAddr
-}
-
-// ReadFrame reads exactly one length-prefixed message. Rejects
-// frames over skychatMaxFrameSize so a malicious or out-of-sync
-// peer can't allocate gigabytes of memory by claiming a giant
-// length.
-func (c *framedConn) ReadFrame() ([]byte, error) {
-	var hdr [4]byte
-	if _, err := io.ReadFull(c.Conn, hdr[:]); err != nil {
-		return nil, err
-	}
-	length := binary.BigEndian.Uint32(hdr[:])
-	if length == 0 {
-		return nil, errors.New("skychat: zero-length frame")
-	}
-	if length > skychatMaxFrameSize {
-		return nil, fmt.Errorf("skychat: frame %d > max %d (peer running old unframed protocol?)", length, skychatMaxFrameSize)
-	}
-	payload := make([]byte, length)
-	if _, err := io.ReadFull(c.Conn, payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
 }
 
 var (

@@ -34,5 +34,9 @@ func encodeGob(v interface{}) ([]byte, error) {
 }
 
 func decodeGob(v interface{}, b []byte) error {
-	return gob.NewDecoder(bytes.NewReader(b)).Decode(v)
+	// G709 (gosec taint analysis) flags any gob decode of reader-sourced bytes.
+	// Here b is a dmsg wire frame that already arrived over a Noise-authenticated,
+	// integrity-checked session, and v is a fixed internal control type — not
+	// attacker-chosen. gob IS this protocol's framing serialization.
+	return gob.NewDecoder(bytes.NewReader(b)).Decode(v) //nolint:gosec // G709: gob frame over Noise-authenticated dmsg session, fixed internal decode target
 }

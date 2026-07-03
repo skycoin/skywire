@@ -38,7 +38,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"path/filepath"
 	"sort"
@@ -56,6 +55,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
 // cryptoRandRead aliases crypto/rand.Read so newRelayMsgID reads
@@ -225,8 +225,18 @@ type Config struct {
 	DmsgC *dmsg.Client
 
 	// DataDir is the per-visor parent directory for CXO state. Each
-	// Session carves its own group/<id>/ subtree inside it.
+	// Session carves its own group/<id>/ subtree inside it. Ignored (and
+	// may be empty) when InMemoryDB is set.
 	DataDir string
+
+	// InMemoryDB runs the session's CXO tree entirely in memory, with no
+	// DataDir / filesystem access. Required for the browser (js/wasm) visor,
+	// which has no disk. The native-TCP standalone path already forces this
+	// internally (see newPublisher); this flag extends it to the dmsg path so a
+	// wasm visor can be a full federated group member — it publishes its own
+	// feed in memory and subscribes to peers over dmsg, and the network retains
+	// whatever it published (state resets on tab reload; re-subscribe replays).
+	InMemoryDB bool
 
 	// Logger is optional; nil falls back to a tag-based default.
 	Logger *logging.Logger
@@ -525,11 +535,6 @@ type RelayAck struct {
 	MsgID string `json:"msg_id,omitempty"`
 }
 
-// relayMaxFrameSize bounds the claimed-length sanity check on the
-// owner's read side. 64 KiB matches every other framed-wire in the
-// skychat tree.
-const relayMaxFrameSize = 64 * 1024
-
 // relayAckReadTimeout caps how long the member waits for the
 // owner's RelayAck before giving up. Sized for "owner publishAs
 // completes in a normal CXO commit window" — bbolt-backed
@@ -548,6 +553,13 @@ const relayAckReadTimeout = 5 * time.Second
 // transport: DMSG when cfg.DmsgC is set, otherwise the CXO node's
 // native TCP transport on cfg.TCPListenAddr (no dmsg/discovery).
 func (cfg Config) newPublisher(pc treestore.PubConfig) (*treestore.Publisher, error) {
+	if cfg.InMemoryDB {
+		// Browser (js/wasm) visor: no filesystem. Run the CXO tree in memory —
+		// content-addressed and republished from the in-memory tree, same as the
+		// native-TCP path below. Applies to the dmsg transport too so a wasm
+		// visor can be a full federated member.
+		pc.InMemoryDB = true
+	}
 	if cfg.DmsgC != nil {
 		return treestore.NewWithDMSG(cfg.DmsgC, cfg.MySK, pc)
 	}
@@ -581,8 +593,8 @@ func Open(cfg Config) (*Session, error) {
 	if cfg.Record.Mode == ModePrivate && len(cfg.Record.AESKey) != 32 {
 		return nil, fmt.Errorf("group: Open: private mode requires 32-byte AESKey, got %d", len(cfg.Record.AESKey))
 	}
-	if cfg.DataDir == "" {
-		return nil, errors.New("group: Open: DataDir required")
+	if cfg.DataDir == "" && !cfg.InMemoryDB {
+		return nil, errors.New("group: Open: DataDir required (unless InMemoryDB)")
 	}
 
 	log := cfg.Logger
@@ -1793,7 +1805,7 @@ func (s *Session) bindRelaySkynet(port uint16) {
 // own messages — with sender attribution from the relay envelope
 // instead of the owner's PK.
 func (s *Session) handleRelay(c net.Conn) {
-	payload, err := readFrame(c)
+	payload, err := message.ReadFrame(c)
 	if err != nil {
 		s.log.WithError(err).Debug("group: relay read")
 		return
@@ -1834,7 +1846,7 @@ func (s *Session) handleRelay(c net.Conn) {
 			s.log.WithError(err).Debug("group: relay ack marshal")
 			return
 		}
-		if err := writeFrame(c, body); err != nil {
+		if err := message.WriteFrame(c, body); err != nil {
 			s.log.WithError(err).Debug("group: relay ack write")
 		}
 	}
@@ -2059,7 +2071,7 @@ var ErrRelayNoAck = errors.New("group: relay: no ack within timeout (owner pre-a
 // on missing/timeout-out ack but successful write, or a wrapped
 // error on write failure.
 func writeAndReadAck(c net.Conn, body []byte, msgID string) error {
-	if err := writeFrame(c, body); err != nil {
+	if err := message.WriteFrame(c, body); err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
 	if msgID == "" {
@@ -2071,7 +2083,7 @@ func writeAndReadAck(c net.Conn, body []byte, msgID string) error {
 	if dl, ok := c.(interface{ SetReadDeadline(time.Time) error }); ok {
 		_ = dl.SetReadDeadline(time.Now().Add(relayAckReadTimeout)) //nolint:errcheck
 	}
-	payload, err := readFrame(c)
+	payload, err := message.ReadFrame(c)
 	if err != nil {
 		return ErrRelayNoAck
 	}
@@ -2107,44 +2119,10 @@ func dialSkynetRelay(ctx context.Context, addr appnet.Addr) (net.Conn, error) {
 	return appnet.DialContext(dialCtx, addr)
 }
 
-// readFrame / writeFrame mirror the visor-app skychat post-#2504
-// length-prefixed wire so a member's relay write and an owner's
-// relay read interoperate with the same bit layout other framed
-// wires in this tree use.
-func readFrame(c net.Conn) ([]byte, error) {
-	var hdr [4]byte
-	if _, err := io.ReadFull(c, hdr[:]); err != nil {
-		return nil, err
-	}
-	length := binary.BigEndian.Uint32(hdr[:])
-	if length == 0 {
-		return nil, errors.New("group: zero-length frame")
-	}
-	if length > relayMaxFrameSize {
-		return nil, fmt.Errorf("group: frame %d > max %d", length, relayMaxFrameSize)
-	}
-	payload := make([]byte, length)
-	if _, err := io.ReadFull(c, payload); err != nil {
-		return nil, err
-	}
-	return payload, nil
-}
-
-func writeFrame(c net.Conn, payload []byte) error {
-	if len(payload) == 0 {
-		return errors.New("group: empty payload")
-	}
-	if len(payload) > relayMaxFrameSize {
-		return fmt.Errorf("group: payload %d > max %d", len(payload), relayMaxFrameSize)
-	}
-	var hdr [4]byte
-	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) //nolint:gosec
-	if _, err := c.Write(hdr[:]); err != nil {
-		return err
-	}
-	_, err := c.Write(payload)
-	return err
-}
+// Relay framing now uses the shared skychat wire codec (pkg/skychat/message):
+// message.ReadFrame / message.WriteFrame — the same length-prefixed layout the
+// member's relay write and the owner's relay read have always used, minus the
+// third private copy this file used to carry.
 
 // ReplayHistoryThrough pumps the last `cap` messages from every
 // publisher/subscriber tree this session can reach through the

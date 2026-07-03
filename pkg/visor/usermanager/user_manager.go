@@ -313,7 +313,9 @@ func (s *UserManager) newSession(w http.ResponseWriter, session Session) error {
 		return fmt.Errorf("encode SID cookie: %w", err)
 	}
 
-	http.SetCookie(w, &http.Cookie{
+	// G124 (gosec) is a false positive here: Secure/HttpOnly/SameSite ARE set,
+	// but via config accessors gosec's flow analysis can't see through.
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure/HttpOnly/SameSite set below via s.c accessors
 		Name:     sessionCookieName,
 		Value:    value,
 		Path:     s.c.Path,
@@ -404,7 +406,8 @@ func (s *UserManager) delSession(w http.ResponseWriter, r *http.Request) error {
 	delete(s.sessions, sid)
 	s.mu.Unlock()
 
-	http.SetCookie(w, &http.Cookie{
+	// G124 (gosec) false positive: attributes set via s.c accessors (see newSession).
+	http.SetCookie(w, &http.Cookie{ //nolint:gosec // G124: Secure/HttpOnly/SameSite set below via s.c accessors
 		Name:     sessionCookieName,
 		Path:     s.c.Path,
 		Domain:   s.c.Domain,
