@@ -175,6 +175,12 @@
         "server": {
           "address": "139.162.173.101:30083"
         }
+      },
+      {
+        "static": "02a49bc0aa1b5b78f638e9189be4ed095bac5d6839c828465a8350f80ac07629c0",
+        "server": {
+          "address": "143.42.59.213:30088"
+        }
       }
     ],
     "dmsg_discovery_dmsg": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
