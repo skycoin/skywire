@@ -34,7 +34,7 @@ func TestSkyForwardingMux_PoolReuseOverRealServer(t *testing.T) {
 	reg := NewServiceRegistry()
 	reg.Register(echoPort, "echo", func(c net.Conn) {
 		_, _ = io.Copy(c, c) //nolint:errcheck
-		_ = c.Close() //nolint:errcheck
+		_ = c.Close()        //nolint:errcheck
 	})
 	v := &Visor{services: reg}
 	log := logging.MustGetLogger("skyfwd_mux_test")
