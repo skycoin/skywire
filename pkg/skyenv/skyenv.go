@@ -199,6 +199,17 @@ const (
 	// Previously 47 — conflicted with DmsgTransportSetupPort
 	SkyForwardingServerPort uint16 = 57
 
+	// SkyForwardingMuxPort is the yamux-multiplexed variant of the skyfwd server:
+	// one accepted route group carries a yamux session, and each stream runs the
+	// SAME ready-byte + ClientMsg handshake as SkyForwardingServerPort. This lets a
+	// caller hold ONE multihop route open and reuse it across many short
+	// connections (the route's keepalive keeps every hop warm), instead of dialing
+	// a fresh route per connection — the fix for multihop skynet routes dying under
+	// the resolving proxy. Version negotiation is by port availability: a caller
+	// dials this port for route reuse and falls back to the 1:1
+	// SkyForwardingServerPort against older visors that don't serve it.
+	SkyForwardingMuxPort uint16 = 59
+
 	// SkyPingPort dmsg port of sky ping
 	// Previously 48 — conflicted with DmsgTransportSetupServicePort
 	SkyPingPort uint16 = 58
