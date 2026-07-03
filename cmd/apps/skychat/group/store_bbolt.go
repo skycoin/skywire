@@ -1,5 +1,9 @@
-// Package group — cmd/apps/skychat/group/store.go: bbolt-backed
-// persistence for chat groups.
+//go:build !js
+
+// Package group — cmd/apps/skychat/group/store_bbolt.go: bbolt-backed
+// persistence for chat groups (native builds; bbolt can't compile under
+// js/wasm, so the browser visor uses the in-memory store_memory.go — same API,
+// wire-identical JSON records).
 //
 // One bucket "groups" with key = group UUID, value = JSON Record.
 // Layout parallels pairing.Store deliberately so an operator who
