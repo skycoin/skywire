@@ -484,8 +484,8 @@ github.com/google/uuid
 # github.com/gookit/color v1.6.1
 ## explicit; go 1.18
 github.com/gookit/color
-# github.com/gopherjs/gopherjs v1.20.2
-## explicit; go 1.20
+# github.com/gopherjs/gopherjs v1.21.0
+## explicit; go 1.21
 github.com/gopherjs/gopherjs/js
 # github.com/gorilla/securecookie v1.1.2
 ## explicit; go 1.20
@@ -586,8 +586,8 @@ github.com/jinzhu/now
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
-# github.com/klauspost/cpuid/v2 v2.3.0
-## explicit; go 1.22
+# github.com/klauspost/cpuid/v2 v2.4.0
+## explicit; go 1.24.0
 github.com/klauspost/cpuid/v2
 # github.com/klauspost/reedsolomon v1.14.1
 ## explicit; go 1.24
@@ -626,7 +626,7 @@ github.com/lithammer/fuzzysearch/fuzzy
 # github.com/lucasb-eyer/go-colorful v1.4.0
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
-# github.com/lufia/plan9stats v0.0.0-20260330125221-c963978e514e
+# github.com/lufia/plan9stats v0.0.0-20260627054121-477a66015f15
 ## explicit; go 1.21
 github.com/lufia/plan9stats
 # github.com/mattn/go-colorable v0.1.15
@@ -690,7 +690,7 @@ github.com/orandin/lumberjackrus
 # github.com/oschwald/geoip2-golang/v2 v2.2.0
 ## explicit; go 1.25.0
 github.com/oschwald/geoip2-golang/v2
-# github.com/oschwald/maxminddb-golang/v2 v2.4.0
+# github.com/oschwald/maxminddb-golang/v2 v2.4.1
 ## explicit; go 1.25.0
 github.com/oschwald/maxminddb-golang/v2
 github.com/oschwald/maxminddb-golang/v2/internal/decoder
@@ -766,16 +766,16 @@ github.com/pion/mdns/v2
 # github.com/pion/randutil v0.1.0
 ## explicit; go 1.14
 github.com/pion/randutil
-# github.com/pion/rtcp v1.2.16
-## explicit; go 1.21
+# github.com/pion/rtcp v1.2.17
+## explicit; go 1.24.0
 github.com/pion/rtcp
-# github.com/pion/rtp v1.10.2
+# github.com/pion/rtp v1.10.3
 ## explicit; go 1.24.0
 github.com/pion/rtp
 github.com/pion/rtp/codecs
 github.com/pion/rtp/codecs/av1/obu
 github.com/pion/rtp/codecs/vp9
-# github.com/pion/sctp v1.10.2
+# github.com/pion/sctp v1.10.3
 ## explicit; go 1.24.0
 github.com/pion/sctp
 # github.com/pion/sdp/v3 v3.0.19
@@ -799,7 +799,7 @@ github.com/pion/transport/v4/reuseport
 github.com/pion/transport/v4/stdnet
 github.com/pion/transport/v4/utils/xor
 github.com/pion/transport/v4/vnet
-# github.com/pion/turn/v5 v5.0.10
+# github.com/pion/turn/v5 v5.0.12
 ## explicit; go 1.24.0
 github.com/pion/turn/v5
 github.com/pion/turn/v5/internal/allocation
@@ -808,7 +808,7 @@ github.com/pion/turn/v5/internal/client
 github.com/pion/turn/v5/internal/ipnet
 github.com/pion/turn/v5/internal/proto
 github.com/pion/turn/v5/internal/server
-# github.com/pion/webrtc/v4 v4.2.15
+# github.com/pion/webrtc/v4 v4.2.16
 ## explicit; go 1.24.0
 github.com/pion/webrtc/v4
 github.com/pion/webrtc/v4/internal/fmtp
@@ -816,8 +816,8 @@ github.com/pion/webrtc/v4/internal/mux
 github.com/pion/webrtc/v4/internal/util
 github.com/pion/webrtc/v4/pkg/media
 github.com/pion/webrtc/v4/pkg/rtcerr
-# github.com/pires/go-proxyproto v0.12.0
-## explicit; go 1.25
+# github.com/pires/go-proxyproto v0.14.0
+## explicit; go 1.25.0
 github.com/pires/go-proxyproto
 # github.com/pkg/errors v0.9.1
 ## explicit
@@ -901,7 +901,7 @@ github.com/shirou/gopsutil/v3/load
 github.com/shirou/gopsutil/v3/mem
 github.com/shirou/gopsutil/v3/net
 github.com/shirou/gopsutil/v3/process
-# github.com/shoenig/go-m1cpu v0.2.1
+# github.com/shoenig/go-m1cpu v0.2.2
 ## explicit; go 1.20
 github.com/shoenig/go-m1cpu
 # github.com/shopspring/decimal v1.4.0
@@ -1200,7 +1200,7 @@ go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
 go.opentelemetry.io/otel/trace/noop
-# go.starlark.net v0.0.0-20260613233743-8ba36ccb83fb
+# go.starlark.net v0.0.0-20260630144053-529d8e869a14
 ## explicit; go 1.25.0
 go.starlark.net/internal/compile
 go.starlark.net/internal/spell
@@ -1321,12 +1321,12 @@ golang.zx2c4.com/wireguard/conn
 golang.zx2c4.com/wireguard/conn/winrio
 golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
-# google.golang.org/genproto/googleapis/api v0.0.0-20260401024825-9d38bb4040a9
+# google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478
 ## explicit; go 1.25.0
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20260622175928-b703f567277d
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260630182238-925bb5da69e7
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.81.1
+# google.golang.org/grpc v1.82.0
 ## explicit; go 1.25.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
@@ -1347,13 +1347,13 @@ google.golang.org/grpc/credentials/insecure
 google.golang.org/grpc/encoding
 google.golang.org/grpc/encoding/internal
 google.golang.org/grpc/encoding/proto
+google.golang.org/grpc/experimental/balancer/weight
 google.golang.org/grpc/experimental/stats
 google.golang.org/grpc/grpclog
 google.golang.org/grpc/grpclog/internal
 google.golang.org/grpc/internal
 google.golang.org/grpc/internal/backoff
 google.golang.org/grpc/internal/balancer/gracefulswitch
-google.golang.org/grpc/internal/balancer/weight
 google.golang.org/grpc/internal/balancerload
 google.golang.org/grpc/internal/binarylog
 google.golang.org/grpc/internal/buffer
@@ -1379,6 +1379,7 @@ google.golang.org/grpc/internal/stats
 google.golang.org/grpc/internal/status
 google.golang.org/grpc/internal/syscall
 google.golang.org/grpc/internal/transport
+google.golang.org/grpc/internal/transport/internal
 google.golang.org/grpc/internal/transport/networktype
 google.golang.org/grpc/internal/transport/readyreader
 google.golang.org/grpc/keepalive
