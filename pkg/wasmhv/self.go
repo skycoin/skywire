@@ -1,6 +1,11 @@
 package wasmhv
 
-import "github.com/skycoin/skywire/pkg/cipher"
+import (
+	"strconv"
+	"strings"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+)
 
 // SelfProvider supplies the LOCAL (tab's own) visor's hypervisor view, so a
 // wasm-visor presents ITSELF in its hypervisor UI alongside the remote visors
@@ -34,6 +39,26 @@ type SelfProvider interface {
 	// visualizer renders nodes with no links ("N visors · 0 transports"). nil
 	// when the tab can't reach the TPD.
 	SelfNetworkTransports(days int) []byte
+	// SelfDmsgSessions returns this tab's dmsg client sessions as pre-marshaled
+	// JSON in the native /visors/{pk}/dmsg/sessions shape
+	// ({main?,route_setup?,transport_setup?} of {pk,role,count,servers}). A browser
+	// edge runs only the main client. nil when dmsg isn't up. Without it the node
+	// page's dmsg-sessions expander errors "Failed to fetch dmsg sessions".
+	SelfDmsgSessions() []byte
+	// SelfRouterSettings returns the router knobs as pre-marshaled JSON in the
+	// native /visors/{pk}/router-settings shape
+	// ({force_local_routes,existing_tp_only,mux_routes,min_hops}). nil when the
+	// router isn't up. Without it the Router Settings expander errors.
+	SelfRouterSettings() []byte
+	// SelfRuntimeConfig returns a representative runtime config as pre-marshaled
+	// JSON (a browser edge has no on-disk config file). Without it the Runtime
+	// Configuration expander errors.
+	SelfRuntimeConfig() []byte
+	// SelfRuntimeLogs returns the tab's captured log lines newer than `since` as
+	// pre-marshaled JSON in the native runtime-logs delta shape
+	// ({entries:[]string of JSON log objects, latest, dropped}). Without it the
+	// node Logs page errors "self visor subroute not implemented".
+	SelfRuntimeLogs(since int64) []byte
 }
 
 // SetSelf attaches the local visor's hypervisor view. Pass nil to detach.
@@ -54,7 +79,7 @@ func (c *Core) selfProvider() SelfProvider {
 // tab's own transport.Manager + router instead of dialing over dmsg. Only the
 // read views the dashboard needs are served; control sub-routes (app/transport
 // mutation) are not yet wired for the self visor and 404.
-func (c *Core) selfRoute(self SelfProvider, sub string) (int, []byte) {
+func (c *Core) selfRoute(self SelfProvider, sub, query string) (int, []byte) {
 	switch sub {
 	case "":
 		return jsonResp(self.SelfOverview())
@@ -92,6 +117,52 @@ func (c *Core) selfRoute(self SelfProvider, sub string) (int, []byte) {
 			"disk_total": 0, "disk_used": 0, "disk_free": 0, "disk_percent": 0,
 			"net_bytes_sent": 0, "net_bytes_recv": 0, "net_packets_sent": 0, "net_packets_recv": 0,
 		})
+	case "dmsg/sessions":
+		// The node page's dmsg-sessions expander. A browser edge runs only the main
+		// dmsg client; serve its real sessions so the expander stops erroring.
+		if body := self.SelfDmsgSessions(); body != nil {
+			return 200, body
+		}
+		return jsonResp(map[string]interface{}{})
+	case "router-settings":
+		// The Router Settings expander (force-local-routes / existing-tp-only /
+		// mux-routes / min-hops).
+		if body := self.SelfRouterSettings(); body != nil {
+			return 200, body
+		}
+		return jsonResp(map[string]interface{}{})
+	case "runtime-config":
+		// The Runtime Configuration expander. A browser edge has no on-disk config;
+		// serve a representative one so the expander renders instead of erroring.
+		if body := self.SelfRuntimeConfig(); body != nil {
+			return 200, body
+		}
+		return jsonResp(map[string]interface{}{})
+	case "runtime-logs":
+		// The node Logs page (diff-streamed: ?since=<cursor>). Serve the tab's own
+		// captured log lines so the page tails instead of 404-erroring.
+		if body := self.SelfRuntimeLogs(sinceFromQuery(query)); body != nil {
+			return 200, body
+		}
+		return jsonResp(map[string]interface{}{"entries": []string{}, "latest": 0, "dropped": 0})
+	case "ports":
+		// Forwarded-port registry: a browser edge hosts content via serveContent,
+		// not the native forwarded_ports table. Empty (not 404) so the node page's
+		// port fetch renders cleanly.
+		return jsonResp([]struct{}{})
 	}
 	return 404, []byte(`{"error":"self visor subroute not implemented in wasm core"}`)
+}
+
+// sinceFromQuery parses the runtime-logs diff cursor from a raw query string
+// ("since=<n>"); returns 0 (full buffer) when absent or malformed.
+func sinceFromQuery(query string) int64 {
+	for _, kv := range strings.Split(query, "&") {
+		if v, ok := strings.CutPrefix(kv, "since="); ok {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+				return n
+			}
+		}
+	}
+	return 0
 }

@@ -11,8 +11,9 @@ import (
 
 // fakeSelf is a SelfProvider stub for a known local visor.
 type fakeSelf struct {
-	pk  cipher.PubKey
-	tps []*TransportSummary
+	pk        cipher.PubKey
+	tps       []*TransportSummary
+	sinceSink *int64 // records the last SelfRuntimeLogs(since) arg, when non-nil
 }
 
 func (f fakeSelf) SelfPK() cipher.PubKey { return f.pk }
@@ -27,6 +28,19 @@ func (f fakeSelf) SelfTransports() []*TransportSummary { return f.tps }
 func (f fakeSelf) SelfRoutes() []byte                  { return []byte("[]") }
 func (f fakeSelf) SelfNetworkView() []byte             { return nil }
 func (f fakeSelf) SelfNetworkTransports(int) []byte    { return nil }
+func (f fakeSelf) SelfDmsgSessions() []byte {
+	return []byte(`{"main":{"pk":"","role":"main","count":1,"servers":[]}}`)
+}
+func (f fakeSelf) SelfRouterSettings() []byte {
+	return []byte(`{"force_local_routes":false,"existing_tp_only":false,"mux_routes":0,"min_hops":0}`)
+}
+func (f fakeSelf) SelfRuntimeConfig() []byte { return []byte(`{"version":"test"}`) }
+func (f fakeSelf) SelfRuntimeLogs(since int64) []byte {
+	if f.sinceSink != nil {
+		*f.sinceSink = since
+	}
+	return []byte(`{"entries":[],"latest":0,"dropped":0}`)
+}
 
 func newSelfPK(t *testing.T) cipher.PubKey {
 	t.Helper()
@@ -103,5 +117,33 @@ func TestSelf_AbsentWhenNotSet(t *testing.T) {
 	}
 	if len(sums) != 0 {
 		t.Fatalf("expected no visors without a self provider, got %d", len(sums))
+	}
+}
+
+// TestSelf_NodePageSubroutes verifies the node-page read subroutes the HV-UI needs
+// from a browser visor are served (200), not 404 — the fix for the dmsg-sessions
+// "Failed to fetch" error, the router-settings / runtime-config expander errors, and
+// the Logs page "subroute not implemented" error. Also checks runtime-logs threads
+// the ?since= cursor through to the provider.
+func TestSelf_NodePageSubroutes(t *testing.T) {
+	pk := newSelfPK(t)
+	var gotSince int64 = -1
+	core := NewCore(pk, nil)
+	core.SetSelf(fakeSelf{pk: pk, sinceSink: &gotSince})
+
+	base := "/api/visors/" + pk.Hex()
+	for _, sub := range []string{"/dmsg/sessions", "/router-settings", "/runtime-config", "/runtime-logs", "/ports"} {
+		status, body := core.ServeHTTP("GET", base+sub, nil)
+		if status != 200 {
+			t.Fatalf("%s status = %d (body %s)", sub, status, body)
+		}
+	}
+
+	// runtime-logs must parse ?since= and pass it to the provider.
+	if status, _ := core.ServeHTTP("GET", base+"/runtime-logs?since=42", nil); status != 200 {
+		t.Fatalf("runtime-logs?since= status = %d", status)
+	}
+	if gotSince != 42 {
+		t.Fatalf("runtime-logs since not threaded: got %d, want 42", gotSince)
 	}
 }

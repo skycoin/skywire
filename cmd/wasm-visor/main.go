@@ -116,9 +116,12 @@ var (
 // __skylog bridge the dev harness wires to /ctl/log — so boot progress is
 // visible from the shell.
 func vlog(msg string) {
-	fmt.Println("[visor] " + msg)
+	line := "[visor] " + msg
+	fmt.Println(line)
+	// Feed the in-tab log ring so the node Logs page (/runtime-logs) has a source.
+	vlogRing.append(line)
 	if h := js.Global().Get("__skylog"); h.Type() == js.TypeFunction {
-		h.Invoke("[visor] " + msg)
+		h.Invoke(line)
 	}
 }
 
