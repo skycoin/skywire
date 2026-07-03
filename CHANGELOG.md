@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.79
+
+3 PRs on top of v1.3.78. Headline items:
+
+-   **Bandwidth-reward telemetry restored + the browser-tab wasm visor becomes a full network participant (#3362).** A browser-tab wasm visor now reports each transport's bandwidth + latency to the transport-discovery over an **in-memory CXO feed** — the bbolt-backed CXDS/IdxDB datastores are build-tag-split so CXO compiles under `js/wasm`. This closes the gap that made browser-visor transports invisible to the bandwidth-reward calculation. The same PR carries the wasm-visor flagship: **federated group chat in the browser** (in-memory store + in-memory CXO over dmsg — the group record store is build-tag-split for js/wasm), a **shared skychat wire codec** (`pkg/skychat/message`) that collapses three duplicated framing implementations into one, a **fast-reconnect fix** that cuts federated-group first-message latency from ~30–40s to ~2s (adaptive warmup cadence + the standalone driver), a **dmsg/skynet transport selector + activity-log pane** in the skychat window, a WinBox z-order fix (new windows open in front) and a de-serialized skysocks route setup, plus a Go coding-standard compliance pass (gofmt/vet/golangci-lint green; documented gosec false-positives) and a dependency refresh. Docs: wasm-visor UI tour + skychat refactor RFC.
+-   **Deployment** (#3358): add dmsg server `02a49bc0` @ `143.42.59.213:30088` to `services-config.json`.
+-   **Dependencies** (#3364): bump the skywire-manager-src sigstore family — `sigstore` 4.1.1, `@sigstore/verify` 3.1.1, `@sigstore/core` 3.2.1 (replicates dependabot #3363/#3361/#3345).
+
+-   feat(wasm-hv): in-memory CXO telemetry — browser visor reports transport bandwidth+latency to TPD  [#3362](https://github.com/skycoin/skywire/pull/3362)
+-   chore(deployment): add dmsg server 02a49bc0 @ 143.42.59.213:30088 to services-config.json  [#3358](https://github.com/skycoin/skywire/pull/3358)
+-   chore(deps): bump sigstore 4.1.1 / @sigstore/verify 3.1.1 / @sigstore/core 3.2.1  [#3364](https://github.com/skycoin/skywire/pull/3364)
+
 ## 1.3.64
 
 14 PRs on top of v1.3.63. Headline items:
