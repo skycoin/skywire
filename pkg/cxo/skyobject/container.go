@@ -80,7 +80,12 @@ func NewContainer(conf *Config) (c *Container, err error) {
 
 func (c *Container) createDB(conf *Config) (err error) {
 
-	if conf.DataDir != "" {
+	// Only create the on-disk data dir when there IS an on-disk DB. In InMemoryDB
+	// mode the DataDir is unused (the CXDS/IdxDB live in memory), and creating it
+	// is not just wasteful — it's fatal under js/wasm, where the default DataDir
+	// resolves to /tmp and mkdir is "not implemented on js". Guarding this lets a
+	// wasm visor run an in-memory CXO publisher.
+	if conf.DataDir != "" && !conf.InMemoryDB {
 		if err = mkdirp(conf.DataDir); err != nil {
 			return err
 		}

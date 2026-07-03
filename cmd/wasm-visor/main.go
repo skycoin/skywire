@@ -136,24 +136,31 @@ func pageHTTPS() bool {
 func main() {
 	ctx = context.Background()
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
-		"boot":            js.FuncOf(jsBoot),
-		"status":          js.FuncOf(jsStatus),
-		"hvApi":           js.FuncOf(jsHvAPI),
-		"tpdEdge":         js.FuncOf(jsTPDEdge),
-		"dialTransport":   js.FuncOf(jsDialTransport),
-		"fetchDmsg":       js.FuncOf(jsFetchDmsg),
+		"boot":              js.FuncOf(jsBoot),
+		"status":            js.FuncOf(jsStatus),
+		"hvApi":             js.FuncOf(jsHvAPI),
+		"tpdEdge":           js.FuncOf(jsTPDEdge),
+		"dialTransport":     js.FuncOf(jsDialTransport),
+		"fetchDmsg":         js.FuncOf(jsFetchDmsg),
 		"serveContent":      js.FuncOf(jsServeContent),
 		"hostedContent":     js.FuncOf(jsHostedContent),
 		"unserveContent":    js.FuncOf(jsUnserveContent),
 		"setContentEnabled": js.FuncOf(jsSetContentEnabled),
-		"serveRPC":        js.FuncOf(jsServeRPC),
-		"dialRoute":       js.FuncOf(jsDialRoute),
-		"checkRegistered": js.FuncOf(jsCheckRegistered),
-		"fetchClearnet":   js.FuncOf(jsFetchClearnet),
-		"proxyVerbose":    js.FuncOf(jsProxyVerbose),
-		"closeWindow":     js.FuncOf(jsCloseWindow),
-		"skychatSend":     js.FuncOf(jsSkychatSend),
-		"skychatMessages": js.FuncOf(jsSkychatMessages),
+		"serveRPC":          js.FuncOf(jsServeRPC),
+		"dialRoute":         js.FuncOf(jsDialRoute),
+		"checkRegistered":   js.FuncOf(jsCheckRegistered),
+		"fetchClearnet":     js.FuncOf(jsFetchClearnet),
+		"proxyVerbose":      js.FuncOf(jsProxyVerbose),
+		"closeWindow":       js.FuncOf(jsCloseWindow),
+		"skychatSend":       js.FuncOf(jsSkychatSend),
+		"skychatMessages":   js.FuncOf(jsSkychatMessages),
+		// Federated group chat (in-memory over dmsg) — see group_js.go.
+		"skychatGroupCreate":    js.FuncOf(jsGroupCreate),
+		"skychatGroupJoin":      js.FuncOf(jsGroupJoin),
+		"skychatGroupSend":      js.FuncOf(jsGroupSend),
+		"skychatGroupAddMember": js.FuncOf(jsGroupAddMember),
+		"skychatGroupList":      js.FuncOf(jsGroupList),
+		"skychatGroupMessages":  js.FuncOf(jsGroupMessages),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
@@ -367,6 +374,12 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	tm.InitDmsgClient(ctx, dmsgC)
 	vlog("tp_manager: dmsg client inited; serving…")
 	go tm.Serve(ctx)
+
+	// In-memory CXO telemetry: report this tab's transport bandwidth + latency to
+	// TPD (via its cxo-aggregator), so the browser visor's transports show up in
+	// TPD /metrics like a native visor's — see telemetry_js.go.
+	go startTelemetry(sk, tpdPK, mLog.PackageLogger("wasm-telemetry"))
+	go startGroupChat(sk, mLog.PackageLogger("wasm-group"))
 	vlog("tp_manager: serving")
 	// Register the browser-dialable direct transport clients. Their Start() fails
 	// closed under TinyGo (a tab can't run a WS/WT listener) — logged, non-fatal —
