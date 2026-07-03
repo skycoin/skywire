@@ -42,12 +42,13 @@ import (
 // Manager owns the persistent record set and live Session instances.
 // Safe for concurrent use.
 type Manager struct {
-	store   *Store
-	dmsgC   *dmsg.Client
-	myPK    cipher.PubKey
-	mySK    cipher.SecKey
-	dataDir string
-	log     *logging.Logger
+	store      *Store
+	dmsgC      *dmsg.Client
+	myPK       cipher.PubKey
+	mySK       cipher.SecKey
+	dataDir    string
+	inMemoryDB bool
+	log        *logging.Logger
 
 	// portAlloc decides which DMSG port to assign to a brand-new
 	// owner-side group. Defaults to a random pick from a reserved
@@ -99,6 +100,11 @@ type ManagerConfig struct {
 	DataDir string
 	Logger  *logging.Logger
 
+	// InMemoryDB runs every session's CXO tree in memory (no DataDir /
+	// filesystem). Required for the browser (js/wasm) visor. When set, DataDir
+	// may be empty. Forwarded to each group.Config the Manager opens.
+	InMemoryDB bool
+
 	// HeartbeatInterval, when > 0, makes every owner-role session
 	// opened by this Manager emit a periodic no-op heartbeat probe.
 	// Members observe these to detect a silently-stalled CXO
@@ -122,8 +128,8 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 	if cfg.DmsgC == nil {
 		return nil, errors.New("group: NewManager: DmsgC required")
 	}
-	if cfg.DataDir == "" {
-		return nil, errors.New("group: NewManager: DataDir required")
+	if cfg.DataDir == "" && !cfg.InMemoryDB {
+		return nil, errors.New("group: NewManager: DataDir required (unless InMemoryDB)")
 	}
 	log := cfg.Logger
 	if log == nil {
@@ -135,6 +141,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		myPK:               cfg.MyPK,
 		mySK:               cfg.MySK,
 		dataDir:            cfg.DataDir,
+		inMemoryDB:         cfg.InMemoryDB,
 		log:                log,
 		portAlloc:          defaultPortAlloc,
 		sessions:           make(map[string]*Session),
@@ -598,6 +605,19 @@ func (m *Manager) Resume() error {
 // isn't dial-hammered.
 const reconnectInterval = 30 * time.Second
 
+// reconnectWarmupInterval is the fast cadence the reconnect loop uses while a
+// session still has a peer that has NEVER connected (its initial peer-sub dial
+// failed because the peer wasn't listening yet — the common case when two
+// members start close together, or a member joins late). At the steady
+// reconnectInterval (30s) that peer's first message took ~30-40s to arrive
+// (measured, 2026-07-02). While any peer is still "warming" (never connected and
+// under its failure budget) the loop ticks at this cadence so a late joiner
+// converges in a few seconds; it eases back to reconnectInterval once every peer
+// is attached, so steady-state groups keep their low-churn 30s cadence. A
+// genuinely dead peer stops qualifying once it exhausts reconnectBackoffFailures1
+// attempts, so one dead peer can't pin the loop fast forever.
+const reconnectWarmupInterval = 3 * time.Second
+
 // subscriberStaleThreshold is the lag (now - Session.LastInbound())
 // above which a member session is considered stale enough to warrant
 // a reconnect attempt. Set to 3× the owner heartbeat cadence (~30s)
@@ -673,7 +693,14 @@ func (m *Manager) startReconnectLoop() {
 //   - warn:  every backoff-interval transition
 func (m *Manager) runReconnectLoop(ctx context.Context) {
 	defer m.reconnectWG.Done()
-	t := time.NewTicker(reconnectInterval)
+	// Adaptive cadence: fast (reconnectWarmupInterval) while any peer is still
+	// warming up, easing back to reconnectInterval once every peer is attached.
+	// This is the recovery side of the "late joiner takes ~30-40s to receive its
+	// first message" fix — the initial peer-sub Connect can fail (peer not
+	// listening yet) and this loop is what retries it; at 30s that retry was slow.
+	// A single timer (not a fixed Ticker) so the interval can change per pass.
+	interval := reconnectWarmupInterval
+	t := time.NewTimer(interval)
 	defer t.Stop()
 	for {
 		select {
@@ -682,7 +709,62 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 		case <-t.C:
 		}
 		m.detectStaleAndReconnect(ctx)
+		if m.hasWarmingPeer() {
+			interval = reconnectWarmupInterval
+		} else if interval < reconnectInterval {
+			if interval *= 2; interval > reconnectInterval {
+				interval = reconnectInterval
+			}
+		}
+		t.Reset(interval)
 	}
+}
+
+// hasWarmingPeer reports whether any active/pending session still has a peer that
+// has never connected (zero PeerLastInbound) and is still within its fast-retry
+// budget (fewer than reconnectBackoffFailures1 failures). The reconnect loop uses
+// this to hold the fast warmup cadence while a freshly-joined or late-arriving
+// peer converges, then ease back to the steady 30s once everyone is attached. A
+// dead peer stops qualifying once it exhausts its budget (it then falls to the
+// 5min/30min backoff), so one dead peer can't keep the loop fast forever.
+func (m *Manager) hasWarmingPeer() bool {
+	records, err := m.store.List()
+	if err != nil {
+		return false
+	}
+	for _, r := range records {
+		if r.Status != StatusActive && r.Status != StatusPending {
+			continue
+		}
+		m.mu.RLock()
+		sess := m.sessions[r.ID]
+		m.mu.RUnlock()
+		if sess == nil {
+			continue
+		}
+		for _, pk := range sess.PeerPKs() {
+			if !sess.PeerLastInbound(pk).IsZero() {
+				continue // already attached
+			}
+			if m.peerReconnectFailures(r.ID, pk) < reconnectBackoffFailures1 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// peerReconnectFailures returns the recorded consecutive-failure count for a
+// (group, peer) reconnect entry, or 0 if none is tracked yet.
+func (m *Manager) peerReconnectFailures(id string, pk cipher.PubKey) uint32 {
+	m.reconnectMu.Lock()
+	defer m.reconnectMu.Unlock()
+	if peers, ok := m.peerReconnectState[id]; ok {
+		if st, ok := peers[pk]; ok {
+			return st.failures
+		}
+	}
+	return 0
 }
 
 // detectStaleAndReconnect walks every session (both owner-role AND
@@ -1365,6 +1447,7 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 		Record:            r,
 		DmsgC:             m.dmsgC,
 		DataDir:           m.dataDir,
+		InMemoryDB:        m.inMemoryDB,
 		Logger:            m.log,
 		HeartbeatInterval: m.heartbeatInterval,
 	})
