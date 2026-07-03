@@ -104,6 +104,9 @@ page never asks anyone to type a secret key.`,
 		serveBytes("/wasm-visor.wasm", "application/wasm", wasm)
 		serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
+		// worker.js hosts the wasm runtime off the main thread; hv-boot.js loads it
+		// by name (new Worker('worker.js')) and proxies skywireVisor over postMessage.
+		serveBytes("/worker.js", "text/javascript", wasmhv.WorkerJS)
 		serveBytes("/browse.js", "text/javascript", wasmhv.BrowseJS)
 		serveBytes("/autoupdate.js", "text/javascript", wasmhv.AutoUpdateJS)
 		// PWA: manifest + icons make the served page installable; sw.js gives it
