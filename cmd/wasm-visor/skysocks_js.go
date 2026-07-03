@@ -90,18 +90,25 @@ func emitProxyLog(winID, msg string) {
 // lazily establishing it over a fresh route group (rtr.DialRoutes — the routing
 // layer). Cached per exit; a closed session is re-dialed.
 func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, error) {
-	skysocksMu.Lock()
-	defer skysocksMu.Unlock()
 	key := skysocksKey(winID, serverPK)
+	// Fast path under the lock: an established, still-open session is reused.
+	skysocksMu.Lock()
 	if s, ok := skysocksSessions[key]; ok && !s.IsClosed() {
+		skysocksMu.Unlock()
 		if proxyVerbose {
 			emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] reuse session to exit %s", winID, serverPK.Hex()[:8]))
 		}
 		return s, nil
 	}
+	skysocksMu.Unlock()
 	if rtr == nil {
 		return nil, errors.New("not booted; call boot() first")
 	}
+	// Route setup can take many seconds. Do it WITHOUT holding skysocksMu — the
+	// lock only guards the map. Holding it across DialRoutes serialized every
+	// concurrent session (a 2nd browser window dialing a different exit would
+	// block up to 45s behind the first), piling up goroutines. Now different
+	// exits (and different windows) establish in parallel.
 	t0 := time.Now()
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] connecting to exit %s — setting up route…", winID, serverPK.Hex()[:8]))
 	dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
@@ -123,7 +130,16 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 		_ = conn.Close() //nolint:errcheck
 		return nil, fmt.Errorf("yamux client: %w", err)
 	}
+	// Re-acquire to publish. If a concurrent call for the SAME key won the race
+	// while we were dialing, discard ours and reuse theirs (avoid leaking a route).
+	skysocksMu.Lock()
+	if s, ok := skysocksSessions[key]; ok && !s.IsClosed() {
+		skysocksMu.Unlock()
+		_ = sess.Close() //nolint:errcheck
+		return s, nil
+	}
 	skysocksSessions[key] = sess
+	skysocksMu.Unlock()
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route+session to exit %s established (%dms)", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds()))
 	return sess, nil
 }
