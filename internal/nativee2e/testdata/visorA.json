@@ -23,7 +23,7 @@
   "pty": {
     "dmsg_port": 22,
     "cli_network": "unix",
-    "cli_address": "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/pty.sock",
+    "cli_address": "./localA/pty.sock",
     "whitelist": []
   },
   "ui_server": {
@@ -65,7 +65,18 @@
   },
   "launcher": {
     "service_discovery": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80",
-    "apps": [],
+    "apps": [
+      {
+        "name": "skysocks-client",
+        "auto_start": false,
+        "port": 3
+      },
+      {
+        "name": "vpn-client",
+        "auto_start": false,
+        "port": 43
+      }
+    ],
     "server_addr": "127.0.0.1:5505",
     "bin_path": "./bin",
     "display_node_ip": false
@@ -108,11 +119,5 @@
       "pk": "02817014fda7a793877e4c53764bea839e2103a7dd4da2d7bfa370d18a10181c95",
       "sk": "c45b8173ac2fd65b019971d41da6a494c4310cd232e26dd54b9e1b57dde0c542"
     }
-  },
-  "dmsgpty": {
-    "dmsg_port": 22,
-    "cli_network": "unix",
-    "cli_address": "./localA/pty.sock",
-    "whitelist_path": ""
   }
 }

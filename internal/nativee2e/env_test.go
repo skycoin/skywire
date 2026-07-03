@@ -136,25 +136,36 @@ func setup() error {
 	// setup (skysocks/vpn) is reliable — same cold-start the docker e2e absorbs
 	// with staged healthchecks. A fixed pause here keeps the route-dependent tests
 	// from racing the still-churning network.
-	fmt.Println("nativee2e: visors ready; warming up the network (45s)...")
-	time.Sleep(45 * time.Second)
+	fmt.Println("nativee2e: visors ready; warming up the network (90s)...")
+	time.Sleep(90 * time.Second)
 	fmt.Println("nativee2e: deployment + 2 visors ready")
 	return nil
 }
 
-// dumpLog prints the tail of a process log to stderr for post-mortem on failure.
+// dumpLog prints, for post-mortem on failure: (1) the lines that name the actual
+// init failure (the root cause, which the shutdown cascade otherwise pushes off
+// the tail), then (2) the last 60 lines.
 func dumpLog(name string) {
 	b, err := os.ReadFile(filepath.Join(env.work, name+".log"))
 	if err != nil {
 		return
 	}
 	lines := strings.Split(string(b), "\n")
-	from := 0
-	if len(lines) > 40 {
-		from = len(lines) - 40
+	var causes []string
+	for _, l := range lines {
+		if strings.Contains(l, "Module init failed") ||
+			strings.Contains(l, "initializing module") ||
+			strings.Contains(l, "failed to start") ||
+			strings.Contains(l, "a fatal error occurred") {
+			causes = append(causes, l)
+		}
 	}
-	fmt.Fprintf(os.Stderr, "\n===== %s.log (tail) =====\n%s\n=========================\n",
-		name, strings.Join(lines[from:], "\n"))
+	from := 0
+	if len(lines) > 60 {
+		from = len(lines) - 60
+	}
+	fmt.Fprintf(os.Stderr, "\n===== %s.log — ROOT CAUSE =====\n%s\n===== %s.log (tail) =====\n%s\n=========================\n",
+		name, strings.Join(causes, "\n"), name, strings.Join(lines[from:], "\n"))
 }
 
 func teardown() {

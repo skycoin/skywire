@@ -23,7 +23,7 @@
   "pty": {
     "dmsg_port": 22,
     "cli_network": "unix",
-    "cli_address": "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/pty.sock",
+    "cli_address": "./localB/pty.sock",
     "whitelist": []
   },
   "ui_server": {
@@ -93,11 +93,5 @@
   "is_public": false,
   "geoip": "",
   "persistent_transports": null,
-  "memory_limit": "auto",
-  "dmsgpty": {
-    "dmsg_port": 22,
-    "cli_network": "unix",
-    "cli_address": "./localB/pty.sock",
-    "whitelist_path": ""
-  }
+  "memory_limit": "auto"
 }
