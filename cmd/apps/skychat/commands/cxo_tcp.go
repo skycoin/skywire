@@ -251,8 +251,14 @@ func startCXOGroup(ctx context.Context) error {
 	// zero, i.e. never connected). Once a peer connects and its first Root
 	// lands, lastInbound is set and the treestore watchdog takes over
 	// quiet-reconnects, so we stop poking it.
+	//
+	// Cadence is short (a few seconds): two members that start close together
+	// each fail the other's initial dial (peer not listening yet), so at the
+	// old 15s cadence a late joiner's first message took ~30-40s to arrive
+	// (measured). The loop skips already-attached peers, so once everyone is
+	// connected it idles cheaply — a fast tick only costs work while warming up.
 	go func() {
-		t := time.NewTicker(15 * time.Second)
+		t := time.NewTicker(3 * time.Second)
 		defer t.Stop()
 		for {
 			select {
@@ -263,7 +269,7 @@ func startCXOGroup(ctx context.Context) error {
 					if ppk == pk || !sess.PeerLastInbound(ppk).IsZero() {
 						continue
 					}
-					rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+					rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 					if rerr := sess.ReconnectPeer(rctx, ppk); rerr != nil {
 						appLog("skychat: cxo-group reconnect %s: %v", ppk, rerr)
 					}
