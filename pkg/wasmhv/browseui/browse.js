@@ -1040,12 +1040,17 @@
       '<div style="display:flex;gap:.4em;align-items:center">peer ' +
       '<input id="ch-peer" placeholder="paste a peer public key (66 hex)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:12px monospace">' +
       '<button id="ch-open" title="open conversation" style="cursor:pointer;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.3em .55em">open</button></div>' +
+      '<div style="display:flex;gap:.4em;align-items:center;font-size:11px;color:#9aa0a6">transport ' +
+      '<select id="ch-net" title="send over dmsg (direct) or skynet (routed)" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.15em"><option value="dmsg">dmsg</option><option value="skynet">skynet</option></select>' +
+      '<span style="flex:1"></span>' +
+      '<button id="ch-log-toggle" title="show/hide skychat activity log" style="cursor:pointer;background:#15131c;color:#cdd2da;border:1px solid #2a2342;border-radius:4px;padding:.15em .5em">🐞 log</button></div>' +
       '<div id="ch-chips" style="display:flex;gap:.3em;flex-wrap:wrap"></div></div>' +
       '<div id="ch-body" style="flex:1;padding:.5em;overflow:auto;display:flex;flex-direction:column;gap:.25em"></div>' +
       '<div style="display:flex;gap:.3em;padding:.4em;border-top:1px solid #2a2342;background:#15131c;align-items:center">' +
       '<input id="ch-in" placeholder="message…" autocomplete="off" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.35em;font:12px monospace" disabled>' +
       '<button id="ch-send" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .7em" disabled>send</button></div>' +
-      '<div id="ch-status" style="padding:.2em .5em;min-height:1.2em;color:#9aa0a6;border-top:1px solid #15131c"></div>';
+      '<div id="ch-status" style="padding:.2em .5em;min-height:1.2em;color:#9aa0a6;border-top:1px solid #15131c"></div>' +
+      '<pre id="ch-log" style="display:none;margin:0;height:120px;overflow:auto;background:#0e0c14;color:#a9b1d6;border-top:1px solid #2a2342;padding:.4em;font:10px/1.4 monospace;white-space:pre-wrap;word-break:break-all"></pre>';
     function $(id) { return wrap.querySelector("#" + id); }
     var body = $("ch-body"), input = $("ch-in"), chips = $("ch-chips"), status = $("ch-status");
 
@@ -1105,7 +1110,7 @@
     function doSend() {
       var text = input.value; if (!text.trim() || !send || !peer) return;
       input.value = ""; setStatus("sending…");
-      Promise.resolve(send(peer, text)).then(function () {
+      Promise.resolve(send(peer, text, $("ch-net").value)).then(function () {
         setStatus(""); lastRender = ""; render();
       }).catch(function (e) {
         setStatus("send failed: " + (e && e.message ? e.message : e), "#f7768e");
@@ -1117,12 +1122,36 @@
     input.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); } });
     $("ch-send").onclick = doSend;
 
+    // Activity log pane — surfaces skychat's own dial/connect/send/receive vlog
+    // lines from the shared window.skywireLog ring (the same source the 'logs'
+    // window reads), filtered to skychat, so the operator sees the connection /
+    // route setup like the browser window's skysocks-lite log. Collapsible (🐞).
+    var logEl = $("ch-log"), logOpen = false;
+    function chatLogLine(line) {
+      if (!line || !line.text || !/skychat/i.test(line.text)) return;
+      var d = doc.createElement("div");
+      d.textContent = new Date(line.t || Date.now()).toTimeString().slice(0, 8) + " " + String(line.text).replace(/^\[visor\]\s*/, "");
+      logEl.appendChild(d);
+      if (logEl.childNodes.length > 500) logEl.removeChild(logEl.firstChild);
+      if (logOpen) logEl.scrollTop = logEl.scrollHeight;
+    }
+    var logUnsub = function () {};
+    if (window.skywireLog) {
+      try { window.skywireLog.all().forEach(chatLogLine); } catch (_) {}
+      logUnsub = window.skywireLog.subscribe(chatLogLine);
+    }
+    $("ch-log-toggle").onclick = function () {
+      logOpen = !logOpen; logEl.style.display = logOpen ? "block" : "none";
+      this.style.opacity = logOpen ? "1" : ".6";
+      if (logOpen) logEl.scrollTop = logEl.scrollHeight;
+    };
+
     var timer = setInterval(render, 1500);
     render();
     if (!send) setStatus("skychat is only available in the browser-tab (wasm) visor", "#e0af68");
     var wb = makeWin(doc, {
       title: "skychat", root: opts.root, top: opts.top, bottom: opts.bottom, width: "42%", height: "62%",
-      mount: wrap, onclose: function () { clearInterval(timer); if (opts.onClose) opts.onClose(); }
+      mount: wrap, onclose: function () { clearInterval(timer); logUnsub(); if (opts.onClose) opts.onClose(); }
     });
     return { wb: wb, close: function () { wb.close(); } };
   }
