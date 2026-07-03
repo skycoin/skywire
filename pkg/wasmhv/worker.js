@@ -77,8 +77,26 @@
     });
   }
 
+  // STUN-based public-IP discovery needs RTCPeerConnection, which is absent in a
+  // worker. Expose a bridge the Go runtime calls (refreshSelfPublicIPViaSTUN): it
+  // asks the main thread (hv-boot.js) to run STUN and resolves with the IP.
+  var stunSeq = 1, stunPending = {};
+  self.__skywireStunIP = function (iceServers) {
+    return new Promise(function (resolve) {
+      var id = stunSeq++;
+      stunPending[id] = resolve;
+      try { self.postMessage({ t: 'stun-ip', id: id, ice: iceServers }); }
+      catch (e) { delete stunPending[id]; resolve(''); }
+    });
+  };
+
   self.onmessage = function (ev) {
     var m = ev.data || {};
+    if (m.t === 'stun-ip-result') {
+      var r = stunPending[m.id];
+      if (r) { delete stunPending[m.id]; r(m.ip || ''); }
+      return;
+    }
     if (m.t !== 'call') { return; }
     if (!api) { queued.push(m); return; }
     dispatch(m.id, m.fn, m.args);

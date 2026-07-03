@@ -775,10 +775,20 @@ func refreshSelfPublicIP(ctx context.Context) {
 // until learned, then refreshes periodically (a browser's IP can change).
 func refreshSelfPublicIPViaSTUN(ctx context.Context, stunURLs []string) {
 	rtcCtor := js.Global().Get("RTCPeerConnection")
-	if !rtcCtor.Truthy() {
-		return // no WebRTC in this environment
+	bridge := js.Global().Get("__skywireStunIP")
+	direct := rtcCtor.Truthy()
+	viaBridge := !direct && bridge.Type() == js.TypeFunction
+	if !direct && !viaBridge {
+		return // no RTCPeerConnection (worker) and no main-thread STUN bridge
 	}
 	attempt := func() string {
+		// In a Web Worker RTCPeerConnection is absent, so STUN can't run here.
+		// Delegate to the main thread (which has it) via the bridge installed by
+		// worker.js/hv-boot.js — this is what lets a worker-hosted wasm visor still
+		// learn its public IP on an HTTPS page (where dmsg LookupIP is masked).
+		if viaBridge {
+			return stunIPViaBridge(ctx, bridge, stunURLs)
+		}
 		urls := js.Global().Get("Array").New()
 		for _, u := range stunURLs {
 			urls.Call("push", u)
@@ -843,6 +853,58 @@ func refreshSelfPublicIPViaSTUN(ctx context.Context, stunURLs []string) {
 			return
 		case <-time.After(delay):
 		}
+	}
+}
+
+// stunIPViaBridge calls the main-thread STUN bridge (self.__skywireStunIP, installed
+// by worker.js and served by hv-boot.js) and awaits the discovered public IP. Used
+// when the wasm runtime runs in a Web Worker, where RTCPeerConnection is absent.
+func stunIPViaBridge(ctx context.Context, bridge js.Value, stunURLs []string) string {
+	urls := js.Global().Get("Array").New()
+	for _, u := range stunURLs {
+		urls.Call("push", u)
+	}
+	if urls.Length() == 0 {
+		return ""
+	}
+	return awaitJSString(ctx, bridge.Invoke(urls))
+}
+
+// awaitJSString awaits a JS Promise<string>, returning "" on rejection, timeout, or
+// ctx cancellation. The then/catch callbacks self-release once the promise settles
+// (a settled promise fires exactly one of them), so no callback leaks on the normal
+// path; on timeout the eventual settle still releases them.
+func awaitJSString(ctx context.Context, p js.Value) string {
+	if p.Type() != js.TypeObject {
+		return ""
+	}
+	ch := make(chan string, 1)
+	var then, catch js.Func
+	done := func(s string) {
+		select {
+		case ch <- s:
+		default:
+		}
+		then.Release()
+		catch.Release()
+	}
+	then = js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+		s := ""
+		if len(args) > 0 && args[0].Type() == js.TypeString {
+			s = args[0].String()
+		}
+		done(s)
+		return nil
+	})
+	catch = js.FuncOf(func(js.Value, []js.Value) interface{} { done(""); return nil })
+	p.Call("then", then).Call("catch", catch)
+	select {
+	case s := <-ch:
+		return s
+	case <-ctx.Done():
+		return ""
+	case <-time.After(12 * time.Second):
+		return ""
 	}
 }
 
