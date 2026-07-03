@@ -119,3 +119,60 @@ jobs:
           $env:GO111MODULE='on'
           make check-windows
         shell: powershell
+
+  # Native (no-Docker) client-side e2e on macOS: runs a small skywire deployment
+  # + two visors as host processes on 127.0.0.1 and exercises the CLIENT runtime
+  # (visor, hypervisor, skysocks-client, vpn-client) — the OS-specific code the
+  # Linux Docker `e2e` job can't reach. See internal/nativee2e. The test binary is
+  # compiled as the runner user, then run under sudo so vpn-client can create a
+  # utun device.
+  e2e-darwin:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build binaries + compile native e2e
+        run: |
+          set -e
+          mkdir -p ./_nbin
+          go build -mod=vendor -o ./_nbin/skywire ./cmd/skywire
+          for a in skychat skysocks skysocks-client vpn-server vpn-client; do
+            go build -mod=vendor -o ./_nbin/$a ./cmd/apps/$a
+          done
+          go test -c -mod=vendor -tags client_e2e -o ./nativee2e.test ./internal/nativee2e
+
+      - name: Run native client e2e (elevated for vpn TUN)
+        run: |
+          sudo env SKYWIRE_NATIVEE2E_BIN="$PWD/_nbin" ./nativee2e.test -test.v -test.timeout=25m
+
+  # Native client-side e2e on Windows. Scoped to visor + skysocks-client for now
+  # (vpn-client needs the WinTUN driver provisioned — deferred; the test skips it
+  # on Windows). Not elevated.
+  e2e-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build + run native client e2e
+        shell: pwsh
+        run: |
+          $env:GO111MODULE='on'
+          New-Item -ItemType Directory -Force -Path ./_nbin | Out-Null
+          go build -mod=vendor -o ./_nbin/skywire.exe ./cmd/skywire
+          foreach ($a in 'skychat','skysocks','skysocks-client','vpn-server','vpn-client') {
+            go build -mod=vendor -o ./_nbin/$a.exe ./cmd/apps/$a
+          }
+          $env:SKYWIRE_NATIVEE2E_BIN = "$PWD/_nbin"
+          go test -mod=vendor -tags client_e2e -v -timeout=25m ./internal/nativee2e/

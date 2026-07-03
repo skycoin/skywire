@@ -1,0 +1,103 @@
+{
+  "version": "v1.3.32-dev-5.0.-77260094beff+dirty",
+  "sk": "36c69ac99f940f04cbb79b6654788a19e48e64e160da15f1714f99072d97cf1b",
+  "pk": "0229612f9d6c3d2aff213b322077e6a1d980bc955d3408a903a862240f095cbcdc",
+  "dmsg": {
+    "discovery": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+    "sessions_count": 2,
+    "servers": [
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+        "server": {
+          "address": "127.0.0.1:8080",
+          "availableSessions": 0
+        }
+      }
+    ],
+    "servers_type": "all",
+    "protocol": "yamux"
+  },
+  "pty": {
+    "dmsg_port": 22,
+    "cli_network": "unix",
+    "cli_address": "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/pty.sock",
+    "whitelist": []
+  },
+  "ui_server": {
+    "enable": false,
+    "local_addr": "localhost:8081",
+    "dmsg_port": 81,
+    "dmsg_whitelist": null,
+    "survey_dir": ""
+  },
+  "log_server": {
+    "local_addr": ""
+  },
+  "skywire-tcp": {
+    "pk_table": null,
+    "listening_address": ":7777"
+  },
+  "transport": {
+    "discovery": "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80",
+    "address_resolver": "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80",
+    "public_autoconnect": true,
+    "transport_setup": [
+      "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
+    ],
+    "log_store": {
+      "type": "file",
+      "location": "./local/transport_logs",
+      "rotation_interval": "168h0m0s"
+    },
+    "stcpr_port": 0,
+    "sudph_port": 0
+  },
+  "routing": {
+    "route_setup_nodes": [
+      "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
+    ],
+    "route_finder": "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80",
+    "route_finder_timeout": "10s",
+    "min_hops": 1
+  },
+  "launcher": {
+    "service_discovery": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80",
+    "apps": [
+      {
+        "name": "skysocks",
+        "auto_start": true,
+        "port": 3
+      },
+      {
+        "name": "vpn-server",
+        "auto_start": true,
+        "port": 44
+      }
+    ],
+    "server_addr": "127.0.0.1:5506",
+    "bin_path": "./bin",
+    "display_node_ip": false
+  },
+  "survey_whitelist": [],
+  "hypervisors": [],
+  "cli_addr": "localhost:3436",
+  "log_level": "",
+  "local_path": "./localB",
+  "stun_servers": [
+    "127.0.0.1:3478"
+  ],
+  "shutdown_timeout": "10s",
+  "is_public": false,
+  "geoip": "",
+  "persistent_transports": null,
+  "memory_limit": "auto",
+  "dmsgpty": {
+    "dmsg_port": 22,
+    "cli_network": "unix",
+    "cli_address": "./localB/pty.sock",
+    "whitelist_path": ""
+  }
+}
