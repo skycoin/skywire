@@ -142,6 +142,21 @@ type Config struct {
 	// server logs the exact Caddy line on startup). One uniform suffix across all
 	// servers is enough — each self-labels — so no per-server URL to hand-match.
 	WSSDomainSuffix string `json:"wss_domain_suffix,omitempty"`
+	// WSTLSAddress, when set (e.g. ":443"), makes the server SELF-TERMINATE its
+	// wss:// endpoint via Let's Encrypt (golang.org/x/crypto/acme/autocert) for
+	// its own <DNSLabel(PK)>.<suffix> host — so a dmsg host needs NO external
+	// reverse proxy (Caddy). It only ADDS a TLS listener; the plain-ws main port
+	// and the wss advert are unchanged, and if the address can't be bound (Caddy
+	// or another dmsg server already owns it) the server logs and skips, leaving
+	// the external-front path intact. Requires :443 (autocert's TLS-ALPN-01
+	// challenge runs on the same port it serves); a host running >1 dmsg server,
+	// or one that already serves :443, keeps using Caddy. Needs a wss_domain_suffix
+	// (own or deployment-wide) so a cert host can be derived. Empty = disabled.
+	WSTLSAddress string `json:"ws_tls_address,omitempty"`
+	// WSTLSCacheDir is the on-disk autocert certificate cache, so issued certs
+	// survive restarts (Let's Encrypt rate-limits re-issuance). Defaults to
+	// "dmsg-autocert" next to the config file.
+	WSTLSCacheDir string `json:"ws_tls_cache_dir,omitempty"`
 	// WTAddress is the local "host:port" the server binds a UDP socket on for
 	// the WebTransport (HTTP/3-over-QUIC) listener (dmsg-over-WebTransport).
 	// Empty disables WT — the default, so no extra port opens unless the

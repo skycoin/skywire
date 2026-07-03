@@ -64,6 +64,7 @@
     return { css: "text/css", js: "text/javascript", mjs: "text/javascript", json: "application/json",
       png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", svg: "image/svg+xml",
       webp: "image/webp", ico: "image/x-icon", woff: "font/woff", woff2: "font/woff2", ttf: "font/ttf",
+      wasm: "application/wasm", // WebAssembly.instantiateStreaming requires this exact type
       html: "text/html" }[m] || "application/octet-stream";
   }
   function bytesToB64(bytes) {
@@ -71,6 +72,9 @@
     for (var i = 0; i < bytes.length; i += C) s += String.fromCharCode.apply(null, bytes.subarray(i, i + C));
     return btoa(s);
   }
+  // Module-scope HTML escaper (createBrowser has its own local copy; this one is
+  // for tool windows like createHostWindow that live outside createBrowser).
+  function esc(s) { return String(s == null ? "" : s).replace(/[<>&"]/g, function (c) { return { "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;" }[c]; }); }
   function ctOf(headers, path) {
     var ct = headers && (headers["Content-Type"] || headers["content-type"]);
     return (ct || mimeOf(path)).split(";")[0].trim();
@@ -96,8 +100,10 @@
   // navShimSrc is JS injected (as a <script> built via DOM, so no </script> in a
   // string) at the top of the browsed iframe's <head>: (1) same-site link clicks
   // → postMessage a nav request to the parent; (2) window.fetch override → relay
-  // the page's own same-site requests to the parent, fetched over dmsg.
-  function navShimSrc(path) {
+  // the page's own requests to the parent — same-site over dmsg, cross-origin
+  // (clearnet) through the skysocks-lite upstream proxy (gated by cnMode). cnMode
+  // is the clearnet policy at render time ("block"|"direct"|"proxy").
+  function navShimSrc(path, cnMode) {
     return (
       'var cur=' + JSON.stringify(path) + ';' +
       'function pathOf(h){try{var u=new URL(h,"http://dmsg"+cur);return u.pathname+u.search;}catch(e){return h;}}' +
@@ -109,12 +115,26 @@
       '},true);' +
       'var _rq=0,_pend={};' +
       'window.addEventListener("message",function(e){var d=e.data||{};if(d.type!=="dmsgreply")return;var p=_pend[d.id];if(!p)return;delete _pend[d.id];p(d);});' +
-      'function relay(p,m,b){return new Promise(function(res){var id=++_rq;_pend[id]=res;parent.postMessage({type:"dmsgreq",id:id,path:p,method:m||"GET",body:b||null},"*");});}' +
-      'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);' +
-      'if(!same(u))return _f.apply(this,arguments);' +
-      'return relay(pathOf(u),(init&&init.method)||"GET",(init&&init.body)||null).then(function(r){' +
-      'var body=r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();' +
-      'return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});});};'
+      'function relay(t,m,b,cn){return new Promise(function(res){var id=++_rq;_pend[id]=res;parent.postMessage({type:"dmsgreq",id:id,path:t,method:m||"GET",body:b||null,clearnet:!!cn},"*");});}' +
+      'function _toResp(r){var body=r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();return new Response(body,{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});}' +
+      'var CNMODE=' + JSON.stringify(cnMode || "block") + ';' +
+      'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);var m=(init&&init.method)||"GET",b=(init&&init.body)||null;' +
+      'if(same(u))return relay(pathOf(u),m,b,false).then(_toResp);' +           // same-site → dmsg
+      'if(!/^https?:\\/\\//i.test(u||""))return _f.apply(this,arguments);' +    // data:/blob:/etc → real
+      'if(CNMODE==="direct")return _f.apply(this,arguments);' +                 // direct mode → real (CSP off)
+      'if(CNMODE!=="proxy")return Promise.resolve(new Response("clearnet blocked: set an upstream proxy",{status:403}));' +
+      'return relay(u,m,b,true).then(_toResp);};' +                            // proxy → skysocks-lite via parent
+      // (3) lazy image loader: images are NOT inlined into the srcdoc (that bloats
+      // a catalog page to tens of MB). Each carries a data-dmsg-src; fetch it over
+      // dmsg via the relay only when it scrolls near the viewport, then swap in a
+      // data: URL. A MutationObserver picks up images the page adds dynamically.
+      'function _limg(el){var p=el.getAttribute("data-dmsg-src");if(!p)return;el.removeAttribute("data-dmsg-src");' +
+      'relay(pathOf(p),"GET",null).then(function(r){if(r&&r.body&&(r.status||200)<400)el.src="data:"+(r.ct||"application/octet-stream")+";base64,"+r.body;}).catch(function(){});}' +
+      'var _lio=("IntersectionObserver"in window)?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){_lio.unobserve(e.target);_limg(e.target);}});},{rootMargin:"400px"}):null;' +
+      'function _lobs(el){if(_lio)_lio.observe(el);else _limg(el);}' +
+      'function _lscan(root){var ns=(root&&root.querySelectorAll)?root.querySelectorAll("img[data-dmsg-src]"):[];for(var i=0;i<ns.length;i++)_lobs(ns[i]);}' +
+      'document.addEventListener("DOMContentLoaded",function(){_lscan(document);' +
+      'new MutationObserver(function(ms){ms.forEach(function(m){if(!m.addedNodes)return;for(var i=0;i<m.addedNodes.length;i++){var n=m.addedNodes[i];if(n.nodeType!==1)continue;if(n.matches&&n.matches("img[data-dmsg-src]"))_lobs(n);_lscan(n);}});}).observe(document.documentElement,{childList:true,subtree:true});});'
     );
   }
 
@@ -127,12 +147,20 @@
   function createBrowser(opts) {
     var frame = opts.frame;
     var fetchDmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    // Per-window id so this window's clearnet requests get their OWN
+    // skysocks-lite session/route (the Go side keys sessions by winId+exit).
+    var winId = opts.winId || ("w" + (globalThis.__skywireBrowserSeq = (globalThis.__skywireBrowserSeq || 0) + 1));
     // fetchClearnet(exitPK, method, url, body) → {status, body, headers}: a CLEARNET
     // fetch tunneled through a skysocks exit over a skywire route (IP-anonymous).
-    var fetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
+    // We wrap it to append winId as the 5th arg for every call site.
+    var rawFetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
+    var fetchClearnet = function (exit, m, u, b) { return rawFetchClearnet(exit, m, u, b, winId); };
     var log = opts.log || function () {};
     var currentSitePK = "";
 
+    // 1x1 transparent GIF — placeholder src for a deferred (lazy) image so it
+    // occupies layout without a broken-image flash until the real bytes arrive.
+    var BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
     var CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
     function inlineCss(pk, base, css) {
       var uniq = [...new Set([...css.matchAll(CSS_URL)].map(function (m) { return m[2]; }).filter(sameSite))];
@@ -147,15 +175,18 @@
       });
     }
 
-    async function renderSite(pk, path, html) {
+    async function renderSite(pk, path, html, scheme) {
       currentSitePK = pk;
-      if (opts.setAddr) opts.setAddr("http://" + pk + (path || "/"));
+      // Preserve the scheme the user navigated with (http/https) — the fetch is
+      // over dmsg either way (Noise-encrypted, no in-tab TLS), so the scheme is
+      // cosmetic, but echoing back what was entered avoids a surprising rewrite.
+      if (opts.setAddr) opts.setAddr((scheme || "http") + "://" + pk + (path || "/"));
       var docHtml;
       try {
         var doc = new DOMParser().parseFromString(html, "text/html");
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("target", "_self");
-        var sc = doc.createElement("script"); sc.textContent = navShimSrc(path);
+        var sc = doc.createElement("script"); sc.textContent = navShimSrc(path, clearnetPolicy().mode);
         head.insertBefore(sc, head.firstChild);
         head.insertBefore(base, head.firstChild);
         // Strict CSP catch-all unless the window is in DIRECT clearnet mode (where
@@ -176,12 +207,27 @@
           if (!/url\(/i.test(el.textContent || "")) return;
           jobs.push(inlineCss(pk, path, el.textContent).then(function (css) { el.textContent = css; }).catch(function () {}));
         });
-        doc.querySelectorAll("img[src],script[src],source[src]").forEach(function (el) {
+        // Scripts + <source> are inlined eagerly (a script must exist before it
+        // runs; a <picture>/<video> source is chosen at parse time and can't be
+        // swapped afterward).
+        doc.querySelectorAll("script[src],source[src]").forEach(function (el) {
           var src = el.getAttribute("src");
           if (!sameSite(src)) return;
           jobs.push(fetchDmsg(pk, "GET", resolvePath(src, path), null)
             .then(function (r) { el.setAttribute("src", "data:" + ctOf(r.headers, src) + ";base64," + bytesToB64(r.body)); })
             .catch(function () {}));
+        });
+        // Images are deferred, NOT inlined — a media-heavy catalog would bloat the
+        // srcdoc to tens of MB and stall the render. Rewrite each to a data-dmsg-src
+        // the injected lazy-loader fetches over dmsg on scroll; a transparent
+        // placeholder keeps layout stable, and srcset is dropped so the browser
+        // can't try to load a non-rewritten (CSP-blocked) candidate.
+        doc.querySelectorAll("img[src]").forEach(function (el) {
+          var src = el.getAttribute("src");
+          if (!sameSite(src)) return;
+          el.setAttribute("data-dmsg-src", resolvePath(src, path));
+          el.removeAttribute("srcset");
+          el.setAttribute("src", BLANK_IMG);
         });
         // A dmsg site may reference CLEARNET (http/https) sub-resources — gate them
         // by the upstream-proxy policy so they can't silently leak the user's IP
@@ -223,7 +269,7 @@
           return { status: r.status };
         }
         var html = new TextDecoder().decode(r.body);
-        await renderSite(entry.pk, entry.path, html);
+        await renderSite(entry.pk, entry.path, html, entry.scheme);
         if (gen !== loadGen) return { status: 0, cancelled: true };
         log("browsed dmsg://" + entry.pk + entry.path + " → " + r.status + " (" + r.body.length + " bytes)");
         return { status: r.status, bytes: r.body.length, html: html };
@@ -285,11 +331,14 @@
     // dropped (skywireVisor fetches aren't AbortController-wired).
     function cancel() { loadGen++; setLoading(false); }
 
-    async function browseTo(pk, path) {
+    async function browseTo(pk, path, scheme) {
       pk = (pk || "").trim();
       path = path || "/";
       if (!pk) { log("browse: enter a site PK"); return { status: 0 }; }
-      return navigate({ kind: "dmsg", pk: pk, path: path });
+      // Inherit the current site's scheme for in-site link clicks (which don't
+      // carry one), so navigating within an https:// site stays https://.
+      if (!scheme) { var cur = hist[histIdx]; scheme = (cur && cur.kind === "dmsg" && cur.scheme) || "http"; }
+      return navigate({ kind: "dmsg", pk: pk, path: path, scheme: scheme });
     }
 
     // --- CLEARNET upstream-proxy policy ---
@@ -395,7 +444,12 @@
       m.setAttribute("http-equiv", "Content-Security-Policy");
       m.setAttribute("content",
         "default-src 'none'; img-src data:; media-src data:; font-src data:; " +
-        "style-src data: 'unsafe-inline'; script-src data: 'unsafe-inline'; " +
+        // 'wasm-unsafe-eval' lets a fetched site compile/instantiate its own
+        // WebAssembly (many static sites ship a wasm blob) WITHOUT enabling
+        // general JS eval(). WASM is sandboxed — it reaches the DOM only through
+        // JS glue (already permitted by 'unsafe-inline'), and connect-src 'none'
+        // still blocks any network egress, so this opens no new exfil channel.
+        "style-src data: 'unsafe-inline'; script-src data: 'unsafe-inline' 'wasm-unsafe-eval'; " +
         "connect-src 'none'; frame-src 'none'; form-action 'none'");
       head.insertBefore(m, head.firstChild);
     }
@@ -426,12 +480,32 @@
     window.addEventListener("message", async function (e) {
       var d = e.data || {};
       if (d.type === "dmsgnav" && currentSitePK) { browseTo(currentSitePK, d.path); return; }
-      if (d.type === "dmsgreq" && currentSitePK) {
+      if (d.type === "dmsgreq") {
         try {
-          var r = await fetchDmsg(currentSitePK, d.method || "GET", d.path, d.body || null);
+          var r;
+          if (d.clearnet) {
+            // The site fetched a cross-origin (clearnet) URL. Route it through the
+            // skysocks-lite upstream exit (IP-anonymous) when one is set; refuse
+            // otherwise so a dmsg page can't silently egress to clearnet.
+            var pol = clearnetPolicy();
+            if (pol.mode !== "proxy") {
+              log("clearnet " + (d.method || "GET") + " " + d.path + " → BLOCKED (no upstream)");
+              e.source.postMessage({ type: "dmsgreply", id: d.id, status: 403, ct: "text/plain", body: btoa("clearnet blocked: no upstream proxy") }, "*");
+              return;
+            }
+            var ct0 = Date.now();
+            r = await fetchClearnet(pol.exit, d.method || "GET", d.path, d.body || null);
+            log("clearnet " + (d.method || "GET") + " " + d.path + " via " + pol.exit.slice(0, 8) + "… → " + r.status + " (" + (r.body ? r.body.length : 0) + "B, " + (Date.now() - ct0) + "ms)");
+          } else {
+            if (!currentSitePK) return;
+            var dt0 = Date.now();
+            r = await fetchDmsg(currentSitePK, d.method || "GET", d.path, d.body || null);
+            log("dmsg " + (d.method || "GET") + " " + d.path + " → " + r.status + " (" + (r.body ? r.body.length : 0) + "B, " + (Date.now() - dt0) + "ms)");
+          }
           e.source.postMessage({ type: "dmsgreply", id: d.id, status: r.status, ct: ctOf(r.headers, d.path), body: bytesToB64(r.body) }, "*");
         } catch (err) {
-          e.source.postMessage({ type: "dmsgreply", id: d.id, status: 502, ct: "text/plain", body: btoa("dmsg fetch error") }, "*");
+          log("fetch error " + (d.clearnet ? "clearnet " : "dmsg ") + d.path + ": " + String((err && err.message) || err));
+          e.source.postMessage({ type: "dmsgreply", id: d.id, status: 502, ct: "text/plain", body: btoa("fetch error") }, "*");
         }
       }
     });
@@ -439,80 +513,147 @@
     return {
       renderSite: renderSite, browseTo: browseTo, browseToClearnet: browseToClearnet,
       back: back, forward: forward, reload: reload, cancel: cancel,
-      upstream: upstream, setUpstream: setUpstream,
+      upstream: upstream, setUpstream: setUpstream, winId: winId,
       currentPK: function () { return currentSitePK; }
     };
   }
 
-  // createWindow builds ONE draggable / resizable / minimizable / maximizable
-  // browse window (its own dmsg virtual browser + host panel) into `doc`. hooks:
-  //   onFocus()       — raise this window (z-order) in the manager;
-  //   onClose()       — the manager should drop + remove this window;
-  //   onTitle(text)   — reflect the current site into the taskbar entry.
-  // Returns a window handle the manager drives (el, browser, show/hide/restore,
-  // maximize, minimized flag, landHome).
-  function createWindow(doc, opts, hooks) {
+  // makeWin wraps WinBox (winbox.min.js, vendored) with the mini-desktop
+  // defaults: dark skynet chrome, mounted into the panel's root container so the
+  // whole desktop can be hidden/shown at once, and a high z-base so windows sit
+  // over the dashboard. WinBox supplies all window chrome — drag, resize,
+  // minimize, maximize, close, and (for url:) the iframe — so the create*Window
+  // helpers only build a body. opts: {title, root, width, height, x, y,
+  // mount|url, onclose}.
+  function makeWin(doc, opts) {
+    var cfg = {
+      title: opts.title || "window",
+      root: opts.root || (doc.body || doc.documentElement),
+      width: opts.width || "70%",
+      height: opts.height || "70%",
+      background: "#1b1726",
+      border: "1",
+      index: 2147483000,
+      // no-full hides WinBox's Fullscreen-API button: "maximize" should fill the
+      // area IN-TAB (over the dashboard, below the panel) — not take over the
+      // whole screen. The remaining max button stays within the top/bottom
+      // boundaries below, so it maximizes in front of the HV UI in the same tab.
+      "class": ["skywire-wb", "no-full"]
+    };
+    // Open centered by default (WinBox otherwise pins new windows at 0,0).
+    cfg.x = (opts.x != null) ? opts.x : "center";
+    cfg.y = (opts.y != null) ? opts.y : "center";
+    // Viewport boundaries: keep the window (drag AND maximize) clear of the
+    // panel, so its title bar can never slide behind the bar and become
+    // ungrabbable. top/bottom come from the panel's current dock edge.
+    if (opts.top != null) cfg.top = opts.top;
+    if (opts.bottom != null) cfg.bottom = opts.bottom;
+    if (opts.mount) cfg.mount = opts.mount;
+    if (opts.url) cfg.url = opts.url;
+    if (opts.onclose) cfg.onclose = opts.onclose;
+    return new WinBox(cfg);
+  }
+
+  // createWindow builds ONE browse window — a dmsg virtual browser + host/proxy
+  // panels — as a WinBox. WinBox draws the title bar, window buttons and resize
+  // borders; we supply only the body (nav bar + panels + page iframe). opts.root
+  // is the WinBox mount container (so the desktop can be hidden as a unit);
+  // onClose runs when the window is closed. Returns {wb, browser, landHome}.
+  function createWindow(doc, opts, onClose) {
     var fetchDmsg = opts.fetchDmsg, serveContent = opts.serveContent;
+    // The WinBox body: nav bar + collapsible host/proxy panels + the page iframe.
+    // No window controls or resize grip here — WinBox draws those.
     var wrap = doc.createElement("div");
     wrap.className = "skywire-browse-window";
-    // Anchored below the top taskbar. Drag via the title bar; resize via the
-    // bottom-right grip (both pointer-event based, so they work with touch too).
-    wrap.style.cssText = "position:fixed;top:44px;left:40px;width:74vw;height:80vh;" +
-      "min-width:280px;min-height:200px;max-width:100vw;max-height:96vh;" +
-      "background:#15131c;color:#cdd2da;font:12px/1.4 monospace;border:1px solid #2a2342;border-radius:8px;" +
-      "box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483000;display:flex;flex-direction:column;overflow:hidden";
+    wrap.style.cssText = "position:absolute;inset:0;background:#15131c;color:#cdd2da;font:12px/1.4 monospace;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
       '<div class="sbw-bar" style="display:flex;gap:.4em;align-items:center;padding:.5em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<b style="color:#9d7cff;cursor:move">skynet</b>' +
       '<button id="sb-back" title="back" disabled style="cursor:pointer">◀</button>' +
       '<button id="sb-fwd" title="forward" disabled style="cursor:pointer">▶</button>' +
       '<button id="sb-reload" title="reload" style="cursor:pointer">⟳</button>' +
       '<input id="sb-addr" placeholder="pk · pk.dmsg · home.dmsg · alias.dmsg · https://site (clearnet via proxy)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.4em">' +
       '<button id="sb-go" style="cursor:pointer">go</button>' +
-      '<button id="sb-host-t" title="host a page" style="cursor:pointer">host</button>' +
-      '<button id="sb-proxy-t" title="clearnet upstream proxy" style="cursor:pointer">⚙</button>' +
-      '<button id="sb-min" title="minimize" style="cursor:pointer">_</button>' +
-      '<button id="sb-max" title="maximize / restore" style="cursor:pointer">▢</button>' +
-      '<button id="sb-x" title="close" style="cursor:pointer">×</button>' +
+      // Content hosting moved to its own 'host' tool window (top-left ☰ menu).
+      '<button id="sb-proxy-t" title="skysocks proxy + request log" style="cursor:pointer">⚙</button>' +
       '</div>' +
-      '<div id="sb-host" style="display:none;gap:.3em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342;flex-direction:column">' +
-      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">path <input id="sb-hpath" value="/" size="6" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      'port <input id="sb-hport" value="80" size="4" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      'type <input id="sb-hct" value="text/html" size="9" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      '<button id="sb-host-go" style="cursor:pointer">serve over dmsg</button></div>' +
-      '<div style="display:flex;gap:.4em;align-items:center">file <input id="sb-hfile" type="file" style="flex:1;min-width:0;color:#cdd2da;font:11px monospace"></div>' +
-      '<textarea id="sb-hbody" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt; — or upload a file above" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace"></textarea>' +
-      '<span id="sb-host-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;cursor:pointer" title="click to copy"></span>' +
-      '</div>' +
-      '<div id="sb-proxy" style="display:none;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342;align-items:center;flex-wrap:wrap">' +
-      '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks (anonymous)">clearnet upstream proxy:</span>' +
+      '<div id="sb-proxy" style="display:none;flex-direction:column;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342">' +
+      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
+      '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks server (IP-anonymous exit)">skysocks proxy:</span>' +
       '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
+      '<button id="sb-proxy-list-btn" title="pick a public skysocks server from service discovery" style="cursor:pointer">⌄ servers</button>' +
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
-      '<span id="sb-proxy-msg" style="color:#9ece6a;overflow:hidden;white-space:nowrap;text-overflow:ellipsis"></span>' +
+      '<button id="sb-proxy-stop" title="stop this window\'s skysocks-lite: release its route + session (re-establishes on the next clearnet request)" style="cursor:pointer">■ stop</button>' +
+      '<button id="sb-proxy-dbg" title="stream the wasm visor\'s own detailed [skysocks-lite]/[resolve-proxy] lines to the visor-log window too" style="cursor:pointer">🐞 verbose: off</button>' +
+      '<button id="sb-proxy-clear" title="clear this window\'s request log" style="cursor:pointer">clear</button>' +
       '</div>' +
-      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>' +
-      // Touch-friendly resize grip (bigger than the native resize corner).
-      '<div id="sb-grip" title="drag to resize" style="position:absolute;right:0;bottom:0;width:26px;height:26px;cursor:nwse-resize;touch-action:none;z-index:6;background:linear-gradient(135deg,transparent 45%,#9d7cff 45%,#9d7cff 55%,transparent 55%,transparent 70%,#9d7cff 70%,#9d7cff 80%,transparent 80%)"></div>';
-    (doc.body || doc.documentElement).appendChild(wrap);
+      '<select id="sb-proxy-list" style="display:none;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:11px monospace"></select>' +
+      // Terminal-like per-window request log: every fetch this browser window makes
+      // over the resolving proxy (dmsg) or skysocks-lite (clearnet), + config events.
+      '<pre id="sb-proxy-log" title="requests through this window — resolving proxy (dmsg) + skysocks-lite (clearnet)" style="margin:0;height:160px;overflow:auto;background:#0e0c14;color:#a9b1d6;border:1px solid #2a2342;padding:.45em;font:11px/1.45 monospace;white-space:pre-wrap;word-break:break-all"></pre>' +
+      '</div>' +
+      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
 
     function $(id) { return wrap.querySelector("#" + id); }
-    var win = { el: wrap, minimized: false, maximized: false };
+    var wb = makeWin(doc, {
+      title: "skynet", root: opts.root, top: opts.top, bottom: opts.bottom, width: "74%", height: "80%", mount: wrap,
+      onclose: function () {
+        // Release this window's skysocks-lite sessions/routes (per-window). browser
+        // is hoisted; it exists by the time onclose fires.
+        try { if (browser && browser.winId && globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
+        try { if (browser && browser.winId && globalThis.__skywireBrowserPanes) { delete globalThis.__skywireBrowserPanes[browser.winId]; } } catch (e) {}
+        if (onClose) onClose();
+      }
+    });
+    var win = { wb: wb, el: wrap };
     var loading = false;
+    // Per-window request log: a small ring buffer rendered as a terminal-like pane
+    // in the ⚙ panel, so each browser window shows exactly what went through its
+    // resolving proxy / skysocks-lite — instead of a cramped one-line status that
+    // forces a trip to the main visor-log window.
+    var proxyLog = [];
+    var PROXY_LOG_MAX = 400;
+    function renderProxyLog() {
+      var el = $("sb-proxy-log");
+      if (!el) return;
+      el.textContent = proxyLog.join("\n");
+      el.scrollTop = el.scrollHeight;
+    }
+    function plog(line) {
+      var t = "";
+      try { t = new Date().toTimeString().slice(0, 8) + "  "; } catch (e) {}
+      proxyLog.push(t + line);
+      if (proxyLog.length > PROXY_LOG_MAX) proxyLog.shift();
+      renderProxyLog();
+    }
     var browser = createBrowser({
       frame: $("sb-frame"), fetchDmsg: fetchDmsg,
       // Thread the clearnet + self-PK providers from the panel opts so the engine
       // is host-agnostic: the wasm visor passes none (they fall back to the
       // skywireVisor.* globals), the native HV UI passes /api/browse-backed ones.
       fetchClearnet: opts.fetchClearnet, selfPK: opts.selfPK, directViaBackend: opts.directViaBackend,
-      log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} },
-      setAddr: function (u) { $("sb-addr").value = u; if (hooks.onTitle) { var t = u.replace(/^https?:\/\//, "").slice(0, 16); hooks.onTitle(t || "site"); } },
+      log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} plog(m); },
+      // Reflect the current site into the WinBox title bar.
+      setAddr: function (u) { $("sb-addr").value = u; var t = u.replace(/^https?:\/\//, "").slice(0, 18); try { wb.setTitle(t || "skynet"); } catch (e) {} },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
       onLoading: function (on) { loading = on; var b = $("sb-reload"); b.textContent = on ? "✕" : "⟳"; b.title = on ? "cancel load" : "reload"; },
       // enable/disable back/forward to match history position
       onNavState: function (canBack, canFwd) { $("sb-back").disabled = !canBack; $("sb-fwd").disabled = !canFwd; }
     });
     win.browser = browser;
+    // Register this window's log sink so the wasm visor's skysocks-lite path can
+    // push its own connect/route-setup lines (keyed by winId) into THIS window's
+    // pane — see emitProxyLog / __skywireProxyLog in cmd/wasm-visor/skysocks_js.go.
+    try {
+      var paneReg = (globalThis.__skywireBrowserPanes = globalThis.__skywireBrowserPanes || {});
+      paneReg[browser.winId] = plog;
+      if (!globalThis.__skywireProxyLog) {
+        globalThis.__skywireProxyLog = function (winId, line) {
+          var p = (globalThis.__skywireBrowserPanes || {})[winId];
+          if (p) { try { p(line); } catch (e) {} }
+        };
+      }
+    } catch (e) {}
     // A clearnet http(s):// URL routes through a skysocks exit (IP-anonymous); a
     // bare PK / pk:port is a dmsg/skynet site fetched over dmsg.
     function go() {
@@ -523,7 +664,7 @@
       var host = u.hostname, path = (u.pathname || "/") + (u.search || "");
       // .dmsg/.skynet host, or a bare 66-hex PK → dmsg/skynet site; else clearnet.
       if (/\.(dmsg|skynet)$/i.test(host) || /^[0-9a-f]{66}$/i.test(host)) {
-        browser.browseTo(host + (u.port ? ":" + u.port : ""), path);
+        browser.browseTo(host + (u.port ? ":" + u.port : ""), path, (u.protocol || "http:").replace(":", ""));
       } else {
         browser.browseToClearnet(hadScheme ? v : "https://" + v);
       }
@@ -534,7 +675,6 @@
     // ⟳ reloads the current page; while a load is in flight it becomes ✕ (cancel).
     $("sb-reload").onclick = function () { if (loading) browser.cancel(); else browser.reload(); };
     $("sb-addr").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
-    $("sb-host-t").onclick = function () { var h = $("sb-host"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
     // clearnet upstream-proxy settings (per window; persists as the global default).
     $("sb-proxy-pk").value = browser.upstream();
     $("sb-proxy-t").onclick = function () { var h = $("sb-proxy"); h.style.display = h.style.display === "none" ? "flex" : "none"; $("sb-proxy-pk").value = browser.upstream(); };
@@ -542,106 +682,63 @@
     function saveProxy() {
       browser.setUpstream($("sb-proxy-pk").value);
       var up = browser.upstream(), self = ""; try { self = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
-      var mode = !up ? "blocked" : (up === self ? "direct (non-anonymous)" : "via skysocks " + up.slice(0, 8) + " (anonymous)");
-      var m = $("sb-proxy-msg"); m.textContent = "clearnet: " + mode; m.style.color = up ? "#9ece6a" : "#e0af68";
+      var mode = !up ? "clearnet BLOCKED (no upstream set)"
+        : (up === self ? "clearnet DIRECT via self " + up.slice(0, 8) + "… (non-anonymous)"
+          : "clearnet via skysocks " + up.slice(0, 8) + "… (IP-anonymous exit)");
+      plog("● upstream set → " + mode);
     }
     $("sb-proxy-save").onclick = saveProxy;
+    $("sb-proxy-clear").onclick = function () { proxyLog = []; renderProxyLog(); };
+    // Populate the skysocks-server dropdown from service discovery (type=proxy),
+    // lazily on click (avoids an SD fetch for windows that never open the panel).
+    var fdmsg = opts.fetchDmsg || function () { return globalThis.skywireVisor.fetchDmsg.apply(null, arguments); };
+    $("sb-proxy-list-btn").onclick = function () {
+      var sel = $("sb-proxy-list");
+      plog("● fetching skysocks servers from service discovery…");
+      Promise.resolve(fdmsg("sd.dmsg", "GET", "/api/services?type=proxy", null)).then(function (r) {
+        var list = [];
+        try { list = JSON.parse(new TextDecoder().decode(r.body)) || []; } catch (e) {}
+        sel.innerHTML = '<option value="">— ' + list.length + ' skysocks servers — pick one —</option>';
+        list.forEach(function (s) {
+          var pk = String(s.address || "").split(":")[0];
+          if (!/^[0-9a-f]{66}$/i.test(pk)) return;
+          var geo = (s.geo && s.geo.country) ? " · " + s.geo.country : "";
+          var o = doc.createElement("option");
+          o.value = pk; o.textContent = pk.slice(0, 8) + "…" + geo + (s.version ? " · " + s.version : "");
+          sel.appendChild(o);
+        });
+        sel.style.display = "";
+        plog("● " + list.length + " skysocks server(s) from SD — pick one to set it as the exit");
+      }).catch(function (e) { plog("● SD fetch failed: " + String((e && e.message) || e)); });
+    };
+    $("sb-proxy-list").onchange = function () { if (this.value) { $("sb-proxy-pk").value = this.value; saveProxy(); } };
+    // Stop this window's skysocks-lite: release its route + session. The wasm emits
+    // a "stopped — released N route/session(s)" line via the per-window hook when a
+    // session was active; this immediate line covers the no-active-session case.
+    $("sb-proxy-stop").onclick = function () {
+      plog("■ stop requested — releasing skysocks-lite route/session for this window");
+      try { if (globalThis.skywireVisor && globalThis.skywireVisor.closeWindow) { globalThis.skywireVisor.closeWindow(browser.winId); } } catch (e) {}
+    };
     $("sb-proxy-pk").addEventListener("keydown", function (e) { if (e.key === "Enter") saveProxy(); });
-    // Raise this window above the others on any interaction.
-    wrap.addEventListener("pointerdown", function () { if (hooks.onFocus) hooks.onFocus(); }, true);
-
-    // uploaded holds the last picked file as {ct, b64} (base64 so binary — images,
-    // fonts, … — round-trips intact); the textarea is the fallback for typed HTML.
-    var uploaded = null;
-    $("sb-hfile").onchange = function (e) {
-      var f = e.target.files && e.target.files[0];
-      if (!f) { uploaded = null; return; }
-      var rd = new FileReader();
-      rd.onload = function () {
-        var bytes = new Uint8Array(rd.result);
-        uploaded = { ct: f.type || mimeOf(f.name), b64: bytesToB64(bytes) };
-        $("sb-hct").value = uploaded.ct;
-        $("sb-host-msg").textContent = "loaded " + f.name + " (" + bytes.length + " bytes) — set path + port, then serve";
-        $("sb-host-msg").style.color = "#9ece6a";
-      };
-      rd.readAsArrayBuffer(f);
+    // Verbose request logging for the skysocks-lite + resolving-proxy paths. The
+    // flag is currently global to the visor (Phase 1: one log stream in the
+    // "visor log" window); per-window logging is a later phase.
+    var dbgOn = false;
+    $("sb-proxy-dbg").onclick = function () {
+      dbgOn = !dbgOn;
+      try { if (globalThis.skywireVisor && globalThis.skywireVisor.proxyVerbose) { globalThis.skywireVisor.proxyVerbose(dbgOn); } } catch (e) {}
+      this.textContent = "🐞 verbose: " + (dbgOn ? "on" : "off");
+      this.style.color = dbgOn ? "#9ece6a" : "";
     };
 
-    $("sb-host-go").onclick = function () {
-      if (!serveContent) { $("sb-host-msg").textContent = "serveContent unavailable"; return; }
-      var p = ($("sb-hpath").value || "/").trim() || "/";
-      var port = parseInt($("sb-hport").value, 10) || 80;
-      var entry = uploaded
-        ? { ct: uploaded.ct, body: uploaded.b64, b64: true }
-        : { ct: ($("sb-hct").value || "text/html").trim(), body: $("sb-hbody").value };
-      var m = {}; m[p] = entry;
-      serveContent(m, port);
-      var pk = ""; try { pk = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
-      var addr = (pk ? pk : "<this-pk>") + (port === 80 ? "" : ":" + port) + p;
-      var msg = $("sb-host-msg");
-      msg.textContent = "serving at " + addr + "  (click to copy)";
-      msg.style.color = "#9ece6a";
-      msg.onclick = function () { try { navigator.clipboard.writeText(addr); msg.textContent = "copied: " + addr; } catch (e) {} };
-    };
-
-    // Window controls: minimize (hide, keep taskbar entry), maximize/restore
-    // (fill the viewport above the taskbar; resizing disabled while maximized),
-    // close (manager removes the window).
-    var prevRect = null;
-    win.maximize = function () {
-      if (win.maximized) {
-        if (prevRect) { wrap.style.left = prevRect.left; wrap.style.top = prevRect.top; wrap.style.width = prevRect.width; wrap.style.height = prevRect.height; }
-        win.maximized = false; return;
-      }
-      prevRect = { left: wrap.style.left, top: wrap.style.top, width: wrap.style.width, height: wrap.style.height };
-      // Sit below the top taskbar (~2.8em).
-      wrap.style.left = "0"; wrap.style.top = "2.8em"; wrap.style.width = "100vw"; wrap.style.height = "calc(100vh - 2.8em)";
-      win.maximized = true;
-    };
-    win.show = function () { win.minimized = false; wrap.style.display = "flex"; };
-    win.restore = win.show;
-    win.minimize = function () { win.minimized = true; wrap.style.display = "none"; if (hooks.onMinimize) hooks.onMinimize(); };
+    // home.dmsg (resolver alias for the deployment landing page), matching the
+    // socks5 resolving proxy's default — landed once per window.
     win.landHome = function () {
-      // Land on home.dmsg (resolver alias for the deployment landing page),
-      // matching the socks5 resolving proxy's default. Once per window.
       if (!wrap.dataset.landed) { wrap.dataset.landed = "1"; browser.browseTo("home.dmsg", "/"); }
     };
-    $("sb-max").onclick = win.maximize;
-    $("sb-min").onclick = win.minimize;
-    $("sb-x").onclick = function () { if (hooks.onClose) hooks.onClose(); };
-
-    // Drag-to-move (title bar) and resize (grip), both via Pointer Events so they
-    // work with mouse AND touch. touch-action:none on the handles keeps the page
-    // from scrolling under the finger mid-drag. Listeners attach only while active.
-    function dragMove(handle, onMove) {
-      if (!handle) return;
-      handle.style.touchAction = "none";
-      function pm(e) { onMove(e.clientX, e.clientY); }
-      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
-      handle.addEventListener("pointerdown", function (e) {
-        if (win.maximized) return;
-        if (hooks.onFocus) hooks.onFocus();
-        onMove.start(e.clientX, e.clientY);
-        doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu);
-        e.preventDefault(); e.stopPropagation();
-      });
-    }
-    (function () {
-      var ox, oy, sx, sy;
-      var mv = function (px, py) { wrap.style.left = Math.max(0, ox + px - sx) + "px"; wrap.style.top = Math.max(0, oy + py - sy) + "px"; };
-      mv.start = function (px, py) { sx = px; sy = py; var r = wrap.getBoundingClientRect(); ox = r.left; oy = r.top; };
-      dragMove(wrap.querySelector(".sbw-bar b"), mv);
-    })();
-    (function () {
-      var ow, oh, sx, sy;
-      var rs = function (px, py) { wrap.style.width = Math.max(280, ow + px - sx) + "px"; wrap.style.height = Math.max(200, oh + py - sy) + "px"; };
-      rs.start = function (px, py) { sx = px; sy = py; var r = wrap.getBoundingClientRect(); ow = r.width; oh = r.height; };
-      dragMove($("sb-grip"), rs);
-    })();
-
-    // On a narrow (mobile) viewport, open maximized — a 74vw floating window is
-    // fiddly to move/resize on a phone; full-screen is the usable default.
-    if (((doc.defaultView || window).innerWidth || 9999) < 640) { setTimeout(function () { if (!win.maximized) win.maximize(); }, 0); }
+    // On a narrow (mobile) viewport, open maximized — a floating window is fiddly
+    // to move/resize on a phone; full-screen is the usable default.
+    if (((doc.defaultView || window).innerWidth || 9999) < 640) { try { wb.maximize(true); } catch (e) {} }
 
     return win;
   }
@@ -726,21 +823,17 @@
   // operator can watch what the visor is doing (incl. the upstream-proxy/browse
   // activity) without browser devtools or a shell. One per panel; toggled from
   // the taskbar.
-  function createLogWindow(doc) {
+  function createLogWindow(doc, opts) {
+    opts = opts || {};
     var wrap = doc.createElement("div");
-    wrap.style.cssText = "position:fixed;top:48px;right:40px;width:46vw;height:60vh;min-width:280px;min-height:160px;" +
-      "max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;border:1px solid #2a2342;" +
-      "border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483001;display:flex;flex-direction:column;overflow:hidden";
+    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
       '<div class="lw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<b style="color:#9d7cff;cursor:move;flex:1">visor log</b>' +
       '<select id="lw-level" title="min level" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342"><option value="all">all</option><option value="info">info+</option><option value="warn">warn+</option><option value="error">error</option></select>' +
-      '<input id="lw-filter" placeholder="filter" size="8" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
+      '<input id="lw-filter" placeholder="filter" size="8" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
       '<button id="lw-follow" title="auto-scroll" style="cursor:pointer">▼</button>' +
-      '<button id="lw-clear" title="clear" style="cursor:pointer">clear</button>' +
-      '<button id="lw-x" title="close" style="cursor:pointer">×</button></div>' +
+      '<button id="lw-clear" title="clear" style="cursor:pointer">clear</button></div>' +
       '<pre id="lw-body" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>';
-    (doc.body || doc.documentElement).appendChild(wrap);
     function $(id) { return wrap.querySelector("#" + id); }
     var body = $("lw-body"), follow = true, minLevel = "all", filter = "";
     var rank = { debug: 0, log: 1, info: 1, warn: 2, error: 3 };
@@ -767,16 +860,11 @@
     $("lw-filter").oninput = function () { filter = this.value.trim().toLowerCase(); rerender(); };
     $("lw-follow").onclick = function () { follow = !follow; this.style.opacity = follow ? "1" : ".5"; if (follow) body.scrollTop = body.scrollHeight; };
     $("lw-clear").onclick = function () { if (window.skywireLog) window.skywireLog.clear(); body.textContent = ""; };
-    var winObj = { el: wrap, close: function () { unsub(); if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
-    $("lw-x").onclick = winObj.close;
-    (function () {
-      var ox, oy, sx, sy, h = wrap.querySelector(".lw-bar b");
-      h.style.touchAction = "none";
-      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.right = "auto"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
-      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
-      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
-    })();
-    return winObj;
+    var wb = makeWin(doc, {
+      title: "visor log", root: opts.root, top: opts.top, bottom: opts.bottom, width: "46%", height: "60%",
+      mount: wrap, onclose: function () { unsub(); if (opts.onClose) opts.onClose(); }
+    });
+    return { wb: wb, close: function () { wb.close(); } };
   }
 
   // createCliWindow opens a REPL that dispatches a curated command set to the
@@ -789,14 +877,11 @@
     var api = opts.api;
     function self() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
     var wrap = doc.createElement("div");
-    wrap.style.cssText = "position:fixed;top:48px;left:40px;width:50vw;height:60vh;min-width:300px;min-height:180px;max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:12px/1.4 monospace;border:1px solid #2a2342;border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483001;display:flex;flex-direction:column;overflow:hidden";
+    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;color:#cdd2da;font:12px/1.4 monospace;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
-      '<div class="cw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<b style="color:#9d7cff;cursor:move;flex:1">visor cli</b><button id="cw-x" title="close" style="cursor:pointer">×</button></div>' +
       '<pre id="cw-out" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>' +
       '<div style="display:flex;gap:.3em;padding:.4em;border-top:1px solid #2a2342;background:#15131c;align-items:center"><span style="color:#9ece6a">&gt;</span>' +
       '<input id="cw-in" placeholder="help" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:12px monospace"></div>';
-    (doc.body || doc.documentElement).appendChild(wrap);
     function $(id) { return wrap.querySelector("#" + id); }
     var out = $("cw-out"), inp = $("cw-in"), hist = [], hi = 0;
     function w(text, color) { var d = doc.createElement("div"); if (color) d.style.color = color; d.textContent = text; out.appendChild(d); out.scrollTop = out.scrollHeight; }
@@ -835,149 +920,295 @@
       else if (e.key === "ArrowDown") { if (hi < hist.length - 1) { hi++; inp.value = hist[hi] || ""; } else { hi = hist.length; inp.value = ""; } e.preventDefault(); }
     });
     w("visor cli — type 'help'. Dispatches to the running visor's RPC.", "#9aa0a6");
+    var wb = makeWin(doc, {
+      title: "visor cli", root: opts.root, top: opts.top, bottom: opts.bottom, width: "50%", height: "58%",
+      mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); }
+    });
     setTimeout(function () { inp.focus(); }, 50);
-    var winObj = { el: wrap, close: function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
-    $("cw-x").onclick = winObj.close;
-    (function () {
-      var ox, oy, sx, sy, h = wrap.querySelector(".cw-bar b");
-      h.style.touchAction = "none";
-      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
-      function pu() { doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
-      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
-    })();
-    return winObj;
+    return { wb: wb, close: function () { wb.close(); } };
   }
 
-  // createTerminalWindow opens a real dmsgpty terminal in a draggable window: an
-  // iframe to opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty
-  // WebSocket). Native-only — the wasm visor has no host shell and sets no
-  // ptyURL, so the taskbar button isn't shown there. The iframe is built once and
-  // kept alive while the window is open so the pty session survives drags/moves
-  // (detaching the iframe DOM node would reload it and kill the session).
-  function createTerminalWindow(doc, opts) {
+  // createHostWindow manages content this tab hosts over dmsg. Add a text page or
+  // upload files / a whole directory; each path is served at <this-pk>.dmsg:<port>
+  // while the tab is open. Lists what's hosted with per-path enable/disable +
+  // remove. Wasm-visor only (uses skywireVisor.serveContent / hostedContent /
+  // unserveContent / setContentEnabled).
+  function createHostWindow(doc, opts) {
+    var sv = globalThis.skywireVisor || {};
+    var serveContent = opts.serveContent || sv.serveContent;
+    function selfPK() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
     var wrap = doc.createElement("div");
-    wrap.style.cssText = "position:fixed;top:60px;left:80px;width:54vw;height:64vh;min-width:320px;min-height:200px;" +
-      "max-width:100vw;max-height:92vh;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;border:1px solid #2a2342;" +
-      "border-radius:8px;box-shadow:0 8px 30px rgba(0,0,0,.55);z-index:2147483002;display:flex;flex-direction:column;overflow:hidden";
+    wrap.style.cssText = "position:absolute;inset:0;background:#15131c;color:#cdd2da;font:12px/1.45 monospace;display:flex;flex-direction:column;overflow:auto";
+    var pk = selfPK();
     wrap.innerHTML =
-      '<div class="tw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<b style="color:#9d7cff;cursor:move;flex:1">terminal</b>' +
-      '<button id="tw-reload" title="reload (new pty session)" style="cursor:pointer">⟳</button>' +
-      '<button id="tw-x" title="close" style="cursor:pointer">×</button></div>' +
-      '<iframe id="tw-frame" style="flex:1;border:0;width:100%;background:#0e0c14"></iframe>';
-    (doc.body || doc.documentElement).appendChild(wrap);
+      '<div style="padding:.5em;border-bottom:1px solid #2a2342;background:#1b1726">' +
+      'Hosting from this tab over dmsg — reachable at <b style="color:#9d7cff;word-break:break-all">' + (pk ? esc(pk) + ".dmsg" : "(boot the visor first)") + '</b> while this tab stays open.</div>' +
+      '<div style="padding:.5em;display:flex;flex-direction:column;gap:.4em;border-bottom:1px solid #2a2342">' +
+      '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
+      'path <input id="hw-path" value="/" size="8" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      'port <input id="hw-port" value="80" size="4" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      'type <input id="hw-ct" value="text/html" size="10" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
+      '<button id="hw-serve" style="cursor:pointer">serve text</button></div>' +
+      '<textarea id="hw-body" rows="3" placeholder="&lt;h1&gt;hosted from my browser, over dmsg&lt;/h1&gt;" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;font:12px monospace"></textarea>' +
+      '<div style="display:flex;gap:.7em;align-items:center;flex-wrap:wrap">' +
+      '<label style="cursor:pointer">file <input id="hw-file" type="file" style="color:#cdd2da;font:11px monospace"></label>' +
+      '<label style="cursor:pointer" title="host every file in a folder, each at its relative path">directory <input id="hw-dir" type="file" webkitdirectory directory multiple style="color:#cdd2da;font:11px monospace"></label>' +
+      '</div><span id="hw-msg" style="color:#9ece6a;word-break:break-all"></span></div>' +
+      '<div style="padding:.5em;display:flex;align-items:center;gap:.5em"><b>hosted content</b><button id="hw-refresh" style="cursor:pointer">↻ refresh</button></div>' +
+      '<div id="hw-list" style="padding:0 .5em .5em;display:flex;flex-direction:column;gap:.25em"></div>';
     function $(id) { return wrap.querySelector("#" + id); }
-    var frame = $("tw-frame");
-    frame.src = opts.ptyURL;
-    $("tw-reload").onclick = function () { frame.src = opts.ptyURL; };
-    var winObj = { el: wrap, close: function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); } };
-    $("tw-x").onclick = winObj.close;
-    (function () {
-      var ox, oy, sx, sy, h = wrap.querySelector(".tw-bar b");
-      h.style.touchAction = "none";
-      // Disable iframe pointer events during a drag so the moving cursor keeps
-      // hitting the window, not the terminal inside it.
-      function pm(e) { wrap.style.left = (sx + e.clientX - ox) + "px"; wrap.style.top = Math.max(0, sy + e.clientY - oy) + "px"; }
-      function pu() { frame.style.pointerEvents = ""; doc.removeEventListener("pointermove", pm); doc.removeEventListener("pointerup", pu); doc.removeEventListener("pointercancel", pu); }
-      h.addEventListener("pointerdown", function (e) { var r = wrap.getBoundingClientRect(); ox = e.clientX; oy = e.clientY; sx = r.left; sy = r.top; frame.style.pointerEvents = "none"; doc.addEventListener("pointermove", pm); doc.addEventListener("pointerup", pu); doc.addEventListener("pointercancel", pu); e.preventDefault(); });
-    })();
-    return winObj;
+    function msg(t, ok) { var m = $("hw-msg"); m.textContent = t; m.style.color = ok === false ? "#f7768e" : "#9ece6a"; }
+    function port() { return parseInt($("hw-port").value, 10) || 80; }
+    function fmtB(b) { if (b < 1024) return b + " B"; if (b < 1048576) return (b / 1024).toFixed(1) + " KB"; return (b / 1048576).toFixed(1) + " MB"; }
+
+    function renderList() {
+      var el = $("hw-list"), rows = [];
+      try { rows = JSON.parse((sv.hostedContent && sv.hostedContent()) || "[]") || []; } catch (_) {}
+      if (!rows.length) { el.innerHTML = '<span style="color:#9aa0a6">nothing hosted yet — add text or upload files / a directory above.</span>'; return; }
+      el.innerHTML = "";
+      rows.forEach(function (r) {
+        var row = doc.createElement("div");
+        row.style.cssText = "display:flex;gap:.5em;align-items:center;background:#1b1726;border:1px solid #2a2342;border-radius:4px;padding:.3em .5em;flex-wrap:wrap";
+        var cb = doc.createElement("input"); cb.type = "checkbox"; cb.checked = !!r.enabled; cb.title = "serve this path (uncheck to disable → 404, keeps the content)";
+        cb.onchange = function () { try { if (sv.setContentEnabled) sv.setContentEnabled(r.path, cb.checked, r.port); } catch (_) {} renderList(); };
+        var lbl = doc.createElement("span"); lbl.style.cssText = "flex:1;min-width:120px;word-break:break-all";
+        lbl.innerHTML = '<b style="color:' + (r.enabled ? "#9ece6a" : "#9aa0a6") + '">' + esc(r.path) + '</b> <span style="color:#9aa0a6">:' + r.port + ' · ' + esc(r.ct) + ' · ' + fmtB(r.size) + (r.enabled ? '' : ' · disabled') + '</span>';
+        var open = doc.createElement("button"); open.textContent = "open"; open.style.cursor = "pointer"; open.title = "open in a browser window";
+        open.onclick = function () { if (opts.browseTo) opts.browseTo(selfPK() + (r.port !== 80 ? ":" + r.port : ""), r.path); };
+        var rm = doc.createElement("button"); rm.textContent = "remove"; rm.style.cursor = "pointer";
+        rm.onclick = function () { try { if (sv.unserveContent) sv.unserveContent(r.path, r.port); } catch (_) {} renderList(); };
+        row.appendChild(cb); row.appendChild(lbl); row.appendChild(open); row.appendChild(rm);
+        el.appendChild(row);
+      });
+    }
+    function serveOne(path, ct, body, b64) {
+      if (!serveContent) { msg("serveContent unavailable (boot the visor first)", false); return false; }
+      var m = {}; m[path] = b64 ? { ct: ct, body: body, b64: true } : { ct: ct, body: body };
+      try { serveContent(m, port()); } catch (e) { msg("serve failed: " + e, false); return false; }
+      renderList(); return true;
+    }
+    function fileB64(f) { return new Promise(function (res, rej) { var fr = new FileReader(); fr.onload = function () { var b = new Uint8Array(fr.result), s = "", i; for (i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); res(btoa(s)); }; fr.onerror = rej; fr.readAsArrayBuffer(f); }); }
+    function ctFor(f) { return f.type || mimeOf(f.name); }
+    $("hw-serve").onclick = function () {
+      var p = ($("hw-path").value || "/").trim() || "/";
+      if (serveOne(p, ($("hw-ct").value || "text/html").trim(), $("hw-body").value, false)) msg("serving " + p + " (text) on dmsg:" + port());
+    };
+    $("hw-file").onchange = function (e) {
+      var f = e.target.files && e.target.files[0]; if (!f) return;
+      var p = ($("hw-path").value || "/").trim(); if (!p || p === "/") p = "/" + f.name;
+      fileB64(f).then(function (b64) { if (serveOne(p, ctFor(f), b64, true)) msg("serving " + p + " (" + fmtB(f.size) + ") on dmsg:" + port()); });
+    };
+    $("hw-dir").onchange = function (e) {
+      var files = [].slice.call(e.target.files || []); if (!files.length) return;
+      msg("uploading " + files.length + " file(s)…");
+      var n = 0;
+      files.reduce(function (chain, f) {
+        return chain.then(function () {
+          var rel = (f.webkitRelativePath || f.name).replace(/^\/+/, "");
+          return fileB64(f).then(function (b64) { if (serveOne("/" + rel, ctFor(f), b64, true)) n++; });
+        });
+      }, Promise.resolve()).then(function () { msg("hosting " + n + " file(s) from the directory on dmsg:" + port()); renderList(); });
+    };
+    $("hw-refresh").onclick = renderList;
+    renderList();
+    var wb = makeWin(doc, { title: "host content", root: opts.root, top: opts.top, bottom: opts.bottom, width: "56%", height: "66%", mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); } });
+    return { wb: wb, close: function () { wb.close(); } };
+  }
+
+  // createTerminalWindow opens a real dmsgpty terminal as a WinBox iframe to
+  // opts.ptyURL (the visor's /pty/<pk>, which serves the xterm + pty WebSocket).
+  // Native-only — the wasm visor has no host shell and sets no ptyURL, so the
+  // launcher button isn't shown there. WinBox owns the iframe and applies
+  // pointer-events:none on it during drags (body.wb-lock), so the pty session
+  // survives moves/resizes without the manual capture hack we used before.
+  function createTerminalWindow(doc, opts) {
+    var wb = makeWin(doc, {
+      title: "terminal", root: opts.root, top: opts.top, bottom: opts.bottom, width: "54%", height: "64%",
+      url: opts.ptyURL, onclose: function () { if (opts.onClose) opts.onClose(); }
+    });
+    return { wb: wb, close: function () { wb.close(); } };
   }
 
   function mountPanel(doc, opts) {
-    var zTop = 2147483000;
-    var wins = [];
-    var focused = null;
-    var visible = false;
+    var wins = [];          // {wb, chip, browser?} for every open window
+    var BARH = 36;          // bottom taskbar height; windows live above it
 
+    // shallow-merge: opts + {root, onClose, …} so each window gets the shared
+    // providers (fetchDmsg / api / selfPK / ptyURL …) plus its own root + close
+    // callback. (Avoids relying on Object.assign in odd embeds.)
+    function withRoot(extra) {
+      var o = {}, k;
+      for (k in opts) { if (Object.prototype.hasOwnProperty.call(opts, k)) o[k] = opts[k]; }
+      o.root = root; o.top = barTop; o.bottom = barBottom;
+      if (extra) { for (k in extra) { if (Object.prototype.hasOwnProperty.call(extra, k)) o[k] = extra[k]; } }
+      return o;
+    }
+
+    // Desktop root: the windows area, sized by applyDock() to fill the viewport
+    // on the side AWAY from the bar, so no window can hide behind the panel
+    // (WinBox centers + bounds windows against this box). pointer-events:none
+    // lets clicks fall through where no window covers — windows re-enable events
+    // via .skywire-wb. The panel is always on (no hide).
+    var root = doc.createElement("div");
+    root.id = "skywire-skynet-root";
+    root.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none";
+    (doc.body || doc.documentElement).appendChild(root);
+    // barTop / barBottom: the WinBox viewport boundary on the panel's edge, set
+    // by applyDock and applied to every window so none can drag/maximize under
+    // the bar. (0 on the free edge.)
+    var barTop = 0, barBottom = 0;
+    if (!doc.getElementById("skywire-wb-style")) {
+      var st = doc.createElement("style");
+      st.id = "skywire-wb-style";
+      // WinBox ships `.winbox iframe{position:absolute;width:100%;height:100%}`
+      // for url:-mounted windows — but that also covers the browse window's
+      // own iframe, painting over its address/nav bar. Pin the browse iframe
+      // back into the flex column (below the nav bar) so the bar shows. The
+      // terminal's url: iframe (no #sb-frame) keeps WinBox's fill behaviour.
+      st.textContent = ".skywire-wb{pointer-events:auto}" +
+        ".skywire-wb #sb-frame{position:relative!important;height:auto!important;min-height:0!important;flex:1 1 auto!important}";
+      (doc.head || doc.documentElement).appendChild(st);
+    }
+
+    // Always-on taskbar: [menu] [open-window chips…] [dock]. Top by default; the
+    // dock button flips it top↔bottom (remembered in localStorage). No hide.
     var bar = doc.createElement("div");
     bar.id = "skywire-skynet-taskbar";
-    bar.style.cssText = "position:fixed;left:0;right:0;top:0;z-index:2147483646;" +
-      "display:none;gap:.5em;align-items:center;padding:.4em .6em;background:#0e0b16;" +
-      "border-bottom:1px solid #2a2342;font:12px/1.3 monospace;color:#cdd2da";
+    bar.style.cssText = "position:fixed;left:0;right:0;height:" + BARH + "px;box-sizing:border-box;z-index:2147483646;" +
+      "display:flex;gap:.5em;align-items:center;padding:0 .6em;background:#0e0b16;" +
+      "font:12px/1.3 monospace;color:#cdd2da";
     bar.innerHTML =
-      '<b style="color:#9d7cff">skynet</b>' +
-      '<button id="tb-new" title="new browse window" style="cursor:pointer">+ window</button>' +
-      '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0"></span>' +
-      '<button id="tb-logs" title="live visor log" style="cursor:pointer">logs</button>' +
-      '<button id="tb-cli" title="visor cli (RPC repl)" style="cursor:pointer">cli</button>' +
-      (opts.ptyURL ? '<button id="tb-term" title="dmsgpty terminal" style="cursor:pointer">term</button>' : "") +
-      '<button id="tb-id" title="export / import this visor\'s identity" style="cursor:pointer">identity</button>' +
-      '<button id="tb-hide" title="hide skynet (windows stay open)" style="cursor:pointer">hide</button>';
+      '<button id="tb-menu" title="apps" style="cursor:pointer;font-size:15px;line-height:1;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.2em .5em">☰</button>' +
+      '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0;overflow:hidden"></span>' +
+      '<button id="tb-dock" title="dock the panel to the top or bottom" style="cursor:pointer">⇅</button>';
     (doc.body || doc.documentElement).appendChild(bar);
     function bq(id) { return bar.querySelector("#" + id); }
     var items = bq("tb-items");
 
-    function focus(win) {
-      focused = win;
-      win.el.style.zIndex = (++zTop);
-      wins.forEach(function (w) { if (w.tab) w.tab.style.fontWeight = (w === win) ? "bold" : "normal"; });
+    // App menu (start / whisker menu) — opens from the menu button (applyDock
+    // anchors it to the bar's edge).
+    var menu = doc.createElement("div");
+    menu.id = "skywire-appmenu";
+    menu.style.cssText = "position:fixed;left:6px;z-index:2147483647;display:none;min-width:168px;" +
+      "background:#15131c;border:1px solid #2a2342;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.55);padding:.3em;font:13px/1.4 monospace;color:#cdd2da";
+    (doc.body || doc.documentElement).appendChild(menu);
+    function hideMenu() { menu.style.display = "none"; }
+
+    // Dock the panel top or bottom; size root + anchor the menu accordingly so a
+    // window can never hide behind the bar. Persisted across reloads.
+    var DOCKKEY = "skywire-panel-dock", dock = "top";
+    try { dock = localStorage.getItem(DOCKKEY) || "top"; } catch (e) {}
+    function applyDock(d) {
+      dock = (d === "bottom") ? "bottom" : "top";
+      try { localStorage.setItem(DOCKKEY, dock); } catch (e) {}
+      if (dock === "top") {
+        bar.style.top = "0"; bar.style.bottom = "auto";
+        bar.style.borderTop = "0"; bar.style.borderBottom = "1px solid #2a2342";
+        menu.style.top = BARH + "px"; menu.style.bottom = "auto";
+        barTop = BARH; barBottom = 0;
+      } else {
+        bar.style.bottom = "0"; bar.style.top = "auto";
+        bar.style.borderBottom = "0"; bar.style.borderTop = "1px solid #2a2342";
+        menu.style.bottom = BARH + "px"; menu.style.top = "auto";
+        barTop = 0; barBottom = BARH;
+      }
     }
-    function openWindow() {
-      var win = createWindow(doc, opts, {
-        onFocus: function () { focus(win); },
-        onClose: function () { closeWindow(win); },
-        onMinimize: function () { if (win.tab) win.tab.style.opacity = ".55"; },
-        onTitle: function (t) { if (win.tab) win.tab.firstChild.textContent = t; }
-      });
+    function addApp(label, fn) {
+      var b = doc.createElement("button");
+      b.textContent = label;
+      b.style.cssText = "display:block;width:100%;text-align:left;cursor:pointer;background:transparent;color:#cdd2da;border:0;border-radius:5px;padding:.5em .7em;font:13px monospace";
+      b.onmouseover = function () { b.style.background = "#1b1726"; };
+      b.onmouseout = function () { b.style.background = "transparent"; };
+      b.onclick = function () { hideMenu(); fn(); };
+      menu.appendChild(b);
+    }
+    addApp("browser", function () { openBrowse(); });
+    // 'host' is wasm-visor only — it self-hosts content over dmsg from the tab.
+    if (globalThis.skywireVisor && globalThis.skywireVisor.serveContent) { addApp("host", function () { openHost(); }); }
+    addApp("console", function () { openCli(); });
+    if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
+    addApp("logs", function () { openLog(); });
+    addApp("identity", function () { openIdentityDialog(doc, opts); });
+    bq("tb-menu").onclick = function (e) { e.stopPropagation(); menu.style.display = (menu.style.display === "block") ? "none" : "block"; };
+    doc.addEventListener("pointerdown", function (e) {
+      if (menu.style.display === "block" && !menu.contains(e.target) && e.target !== bq("tb-menu")) hideMenu();
+    }, true);
+
+    // Window tracking: one chip per open window (focus/restore on click, × to
+    // close), so multiple windows are manageable from the bar. WinBox still owns
+    // the window chrome, focus, z-order and minimize.
+    function track(win, title) {
+      var chip = doc.createElement("span");
+      chip.style.cssText = "display:inline-flex;align-items:center;max-width:13em;background:#1b1726;border:1px solid #2a2342;border-radius:4px;overflow:hidden";
+      var f = doc.createElement("button");
+      f.textContent = title; f.title = "focus / restore";
+      f.style.cssText = "cursor:pointer;max-width:11em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:transparent;color:#cdd2da;border:0;padding:.25em .55em;font:12px monospace";
+      f.onclick = function () { try { win.wb.minimize(false); } catch (e) {} try { win.wb.focus(); } catch (e) {} };
+      var x = doc.createElement("button");
+      x.textContent = "×"; x.title = "close";
+      x.style.cssText = "cursor:pointer;background:transparent;color:#9aa0a6;border:0;border-left:1px solid #2a2342;padding:.25em .45em;font:12px monospace";
+      x.onclick = function () { try { win.wb.close(); } catch (e) {} };
+      chip.appendChild(f); chip.appendChild(x);
+      items.appendChild(chip);
+      win.chip = chip; win.titleEl = f;
       wins.push(win);
-      var tab = doc.createElement("button");
-      tab.style.cssText = "cursor:pointer;max-width:14em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:#1b1726;color:#cdd2da;border:1px solid #2a2342;border-radius:4px;padding:.2em .5em";
-      tab.appendChild(doc.createTextNode("site"));
-      tab.title = "focus / restore this window";
-      tab.onclick = function () { win.show(); tab.style.opacity = "1"; focus(win); };
-      items.appendChild(tab);
-      win.tab = tab;
-      focus(win);
       return win;
     }
-    function closeWindow(win) {
+    function untrack(win) {
       var i = wins.indexOf(win); if (i >= 0) wins.splice(i, 1);
-      if (win.tab && win.tab.parentNode) win.tab.parentNode.removeChild(win.tab);
-      if (win.el && win.el.parentNode) win.el.parentNode.removeChild(win.el);
-      if (focused === win) focused = wins.length ? wins[wins.length - 1] : null;
+      if (win.chip && win.chip.parentNode) win.chip.parentNode.removeChild(win.chip);
     }
+    function focusExisting(w) { if (!w) { return false; } try { w.wb.minimize(false); w.wb.focus(); } catch (e) {} return true; }
 
-    bq("tb-new").onclick = function () { var w = openWindow(); w.landHome(); };
-    bq("tb-hide").onclick = function () { setDesktop(false); };
-    bq("tb-id").onclick = function () { openIdentityDialog(doc, opts); };
+    // App launchers. browser is multi-instance; console/terminal/logs are
+    // singletons (re-clicking focuses the open one).
+    function openBrowse() {
+      var win = createWindow(doc, withRoot(), function () { untrack(win); });
+      track(win, "browser");
+      win.landHome();
+      return win;
+    }
     var logWin = null;
-    bq("tb-logs").onclick = function () {
-      if (logWin) { logWin.close(); logWin = null; return; }
-      logWin = createLogWindow(doc);
-      var orig = logWin.close;
-      logWin.close = function () { orig(); logWin = null; };
-    };
+    function openLog() {
+      if (focusExisting(logWin)) { return; }
+      logWin = createLogWindow(doc, withRoot({ onClose: function () { untrack(logWin); logWin = null; } }));
+      track(logWin, "logs");
+    }
     var cliWin = null;
-    bq("tb-cli").onclick = function () {
-      if (cliWin) { cliWin.close(); cliWin = null; return; }
-      cliWin = createCliWindow(doc, opts);
-      var origc = cliWin.close;
-      cliWin.close = function () { origc(); cliWin = null; };
-    };
+    function openCli() {
+      if (focusExisting(cliWin)) { return; }
+      cliWin = createCliWindow(doc, withRoot({ onClose: function () { untrack(cliWin); cliWin = null; } }));
+      track(cliWin, "console");
+    }
     var termWin = null;
-    if (opts.ptyURL && bq("tb-term")) {
-      bq("tb-term").onclick = function () {
-        if (termWin) { termWin.close(); termWin = null; return; }
-        termWin = createTerminalWindow(doc, opts);
-        var origt = termWin.close;
-        termWin.close = function () { origt(); termWin = null; };
-      };
+    function openTerm() {
+      if (!opts.ptyURL || focusExisting(termWin)) { return; }
+      termWin = createTerminalWindow(doc, withRoot({ onClose: function () { untrack(termWin); termWin = null; } }));
+      track(termWin, "terminal");
+    }
+    var hostWin = null;
+    function openHost() {
+      if (focusExisting(hostWin)) { return; }
+      hostWin = createHostWindow(doc, withRoot({
+        onClose: function () { untrack(hostWin); hostWin = null; },
+        // let the host window open a hosted path in a fresh browser window
+        browseTo: function (host, path) { var w = openBrowse(); try { w.browser.browseTo(host, path); } catch (e) {} }
+      }));
+      track(hostWin, "host");
     }
 
-    function setDesktop(on) {
-      visible = on;
-      bar.style.display = on ? "flex" : "none";
-      wins.forEach(function (w) { w.el.style.display = (on && !w.minimized) ? "flex" : "none"; });
-      if (on && !wins.length) { var w = openWindow(); w.landHome(); }
-    }
-    function toggle() { setDesktop(!visible); }
+    bq("tb-dock").onclick = function () { applyDock(dock === "top" ? "bottom" : "top"); };
+    applyDock(dock);   // position the always-on panel + windows area on load
+
+    // The panel is permanent; toggle() (kept for launcher/back-compat) just opens
+    // the app menu so any old caller still surfaces the launcher.
+    function toggle() { menu.style.display = (menu.style.display === "block") ? "none" : "block"; }
 
     return {
       panel: bar,
       toggle: toggle,
-      openWindow: openWindow,
-      browser: function () { return focused ? focused.browser : null; }
+      openWindow: openBrowse,
+      browser: function () { for (var i = wins.length - 1; i >= 0; i--) { if (wins[i].browser) return wins[i].browser; } return null; }
     };
   }
 

@@ -14,6 +14,7 @@ package dmsgsrv
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,12 +23,14 @@ import (
 	"net/rpc"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	chi "github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -286,6 +289,7 @@ func (s *service) Run(ctx context.Context) error {
 	// wasm-visor with no extra port and no discovery topology change. See
 	// docs/design/dmsg-server-protocol-unification.md.
 	mainWSURL := ""
+	var wssHost string // <DNSLabel>.<suffix> this server's wss advert + built-in TLS use
 	if cfg.WSAddress == "" && primaryAdvertised != "" && !strings.HasPrefix(primaryAdvertised, ":") {
 		mainWSURL = "ws://" + primaryAdvertised + "/dmsg"
 		// wss_domain_suffix: advertise a TLS-fronted wss:// URL self-derived from
@@ -293,14 +297,23 @@ func (s *service) Run(ctx context.Context) error {
 		// wasm-visor can reach it without mixed content. The listener stays plain
 		// ws on the main port; a front proxy (Caddy) terminates TLS. We log the
 		// exact Caddy line so the operator just pastes it (no label to compute).
-		if suffix := strings.TrimPrefix(cfg.WSSDomainSuffix, "."); suffix != "" {
-			host := cfg.PubKey.DNSLabel() + "." + suffix
-			mainWSURL = "wss://" + host + "/dmsg"
+		// Suffix precedence: an explicit per-server wss_domain_suffix wins; else
+		// fall back to the deployment-wide suffix from the embedded services-config
+		// (deployment.Prod.WSSDomainSuffix) — but ONLY for a known fleet server, so a
+		// third party running this binary never advertises the deployment's domain
+		// for a PK that has no DNS record.
+		suffix := strings.TrimPrefix(cfg.WSSDomainSuffix, ".")
+		if suffix == "" && deployment.Prod.IsKnownDmsgServer(cfg.PubKey) {
+			suffix = strings.TrimPrefix(deployment.Prod.WSSDomainSuffix, ".")
+		}
+		if suffix != "" {
+			wssHost = cfg.PubKey.DNSLabel() + "." + suffix
+			mainWSURL = "wss://" + wssHost + "/dmsg"
 			proxyTarget := primaryAdvertised
 			if _, port, perr := net.SplitHostPort(primaryAdvertised); perr == nil {
 				proxyTarget = "127.0.0.1:" + port
 			}
-			log.WithField("ws_url", mainWSURL).Infof("dmsg-ws: advertising wss (front with TLS) — Caddy: %s { reverse_proxy %s }", host, proxyTarget)
+			log.WithField("ws_url", mainWSURL).Infof("dmsg-ws: advertising wss — front with TLS (Caddy: %s { reverse_proxy %s }) or set ws_tls_address to self-terminate", wssHost, proxyTarget)
 		} else {
 			log.WithField("ws_url", mainWSURL).Info("Serving dmsg over WebSocket on the main port (unified).")
 		}
@@ -314,6 +327,45 @@ func (s *service) Run(ctx context.Context) error {
 			cancel()
 		}
 	}()
+
+	// Built-in wss (opt-in via ws_tls_address): self-terminate TLS for this
+	// server's own <DNSLabel>.<suffix> host via Let's Encrypt autocert, so a dmsg
+	// host needs NO external reverse proxy (Caddy). It only ADDS a TLS listener —
+	// the plain-ws main port and the wss advert (mainWSURL) are unchanged — so it
+	// coexists with the Caddy-fronts-it path. If the address can't be bound (Caddy
+	// or another dmsg server on the host already owns :443) we log and skip, and
+	// the external-front path stands. Best-effort: a failure here never stops the
+	// server. Requires :443 (autocert's TLS-ALPN-01 challenge runs on the serving
+	// port); a host with >1 dmsg server, or that already serves :443, uses Caddy.
+	if cfg.WSTLSAddress != "" {
+		if wssHost == "" {
+			log.Warn("dmsg-ws-tls: ws_tls_address set but no wss host derivable (need wss_domain_suffix or a known fleet PK) — skipping built-in TLS")
+		} else {
+			cacheDir := cfg.WSTLSCacheDir
+			if cacheDir == "" {
+				cacheDir = "dmsg-autocert"
+				if cfg.Path != "" {
+					cacheDir = filepath.Join(filepath.Dir(cfg.Path), "dmsg-autocert")
+				}
+			}
+			acm := &autocert.Manager{
+				Prompt:     autocert.AcceptTOS,
+				HostPolicy: autocert.HostWhitelist(wssHost),
+				Cache:      autocert.DirCache(cacheDir),
+			}
+			if tlsLis, terr := tls.Listen("tcp", cfg.WSTLSAddress, acm.TLSConfig()); terr != nil {
+				log.WithError(terr).Warnf("dmsg-ws-tls: cannot bind %s (a reverse proxy or another dmsg server may own it) — leaving TLS to an external front (Caddy)", cfg.WSTLSAddress)
+			} else {
+				log.WithField("ws_url", mainWSURL).WithField("tls_addr", cfg.WSTLSAddress).WithField("cache", cacheDir).
+					Infof("dmsg-ws-tls: self-terminating wss for %s via Let's Encrypt — no reverse proxy needed", wssHost)
+				go func() {
+					if err := srv.ServeWS(tlsLis, mainWSURL); err != nil {
+						log.Errorf("dmsg-ws-tls ServeWS: %v", err)
+					}
+				}()
+			}
+		}
+	}
 
 	// dmsg-over-WebSocket on a SEPARATE port (opt-in, for CDN/wss fronting):
 	// mutually exclusive with the main-port WS above (the entry carries one

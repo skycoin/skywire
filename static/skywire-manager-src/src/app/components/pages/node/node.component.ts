@@ -155,7 +155,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     NodeComponent.trafficDataSubject = new ReplaySubject<TrafficData>(1);
     NodeComponent.currentInstanceInternal = this;
     this.instanceId = Math.random().toString(36).substring(7);
-    console.log('[HV-DIAG] NodeComponent constructor, instance:', this.instanceId);
 
     this.navigationsSubscription = router.events.subscribe(event => {
       if (event['urlAfterRedirects']) {
@@ -334,13 +333,20 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
         },
       ];
 
-      // A browser/wasm visor has no data source for some tabs — bandwidth,
-      // uptime, rewards and web-proxy all 404 (no host bandwidth, uptime
-      // tracker, rewards, or skysocks proxy in a tab). Drop them so the tab row
-      // shows only what works. selectedTabIndex is computed by route below, so a
-      // shorter array stays correct.
+      // A browser/wasm visor can't back several tabs with anything usable, so
+      // drop them from the tab row (the flagship in-browser UI should show only
+      // what actually works in the tab runtime):
+      //   bandwidth / uptime / rewards / web-proxy — no host data source (404).
+      //   resources — host CPU/mem/disk/net; a tab has none (renders all-zeros).
+      //   terminal  — dmsgpty needs a native shell; a tab can't run one.
+      //   wallet    — the current tab runs `skywire skycoin daemon` (native);
+      //               the over-dmsg thin-client wallet is a separate future tab.
+      // The host-only features (VPN, real skysocks, port forwarding, terminal)
+      // are the invitation to INSTALL the visor on the host. selectedTabIndex is
+      // computed by route below, so a shorter array stays correct.
       if (this.node && (this.node as any).arch === 'wasm') {
-        const wasmHiddenTabs = new Set(['bandwidth', 'uptime', 'rewards', 'web-proxy']);
+        const wasmHiddenTabs = new Set(['bandwidth', 'uptime', 'rewards', 'web-proxy',
+          'resources', 'terminal', 'wallet']);
         this.tabsData = this.tabsData.filter(t => {
           const seg = t.linkParts ? t.linkParts[t.linkParts.length - 1] : '';
           return !wasmHiddenTabs.has(seg);
@@ -476,29 +482,15 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
 
     // Get the node info.
     this.dataSubscription = nextOperation.subscribe((result: SingleNodeBackendData) => {
-      const t0 = performance.now();
-      console.log('[HV-DIAG] data event received', {
-        updating: result?.updating,
-        hasData: !!result?.data,
-        hasError: !!result?.error,
-        transports: result?.data?.transports?.length ?? 'n/a',
-        routes: result?.data?.routes?.length ?? 'n/a',
-        apps: result?.data?.apps?.length ?? 'n/a',
-      });
-
       if (!savedData) {
-        const t1 = performance.now();
         this.saveLocalValue(this.persistentDataResponseKey, JSON.stringify(result));
-        console.log('[HV-DIAG] saveLocalValue took', (performance.now() - t1).toFixed(1), 'ms');
       }
 
       this.updating = result ? result.updating : true;
-      console.log('[HV-DIAG] updating:', this.updating, 'node set:', !!this.node, 'notFound:', this.notFound, 'loadFailed:', this.loadFailed);
 
       if (result && !result.updating) {
         // If the data was obtained.
         if (result.data && !result.error) {
-          const tAssign = performance.now();
           this.ngZone.run(() => {
             this.node = result.data;
             this.trafficData = result.trafficData;
@@ -506,13 +498,16 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
             this.refreshHeader();
             this.maybeBuildTerminalUrl();
           });
-          console.log('[HV-DIAG] node assigned, instance:', this.instanceId, 'nodeLoaded:', this.nodeLoaded, 'node.localPk:', this.node?.localPk?.substring(0, 8), 'transports:', this.node?.transports?.length, 'routes:', this.node?.routes?.length);
-          try {
+          // Guard: a pending data callback can resolve after the component was
+          // destroyed during rapid navigation between node sub-pages, when
+          // ngOnDestroy has already completed + nulled these static subjects.
+          // Calling .next() on the undefined static then threw.
+          if (NodeComponent.nodeSubject) {
             NodeComponent.nodeSubject.next(this.node);
-          } catch(e) {
-            console.error('[HV-DIAG] ERROR in nodeSubject.next:', e);
           }
-          NodeComponent.trafficDataSubject.next(this.trafficData);
+          if (NodeComponent.trafficDataSubject) {
+            NodeComponent.trafficDataSubject.next(this.trafficData);
+          }
           if (this.nodeActionsHelper) {
             this.nodeActionsHelper.setCurrentNode(this.node);
           }
@@ -527,8 +522,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           this.loadFailed = false;
           AppComponent.currentInstance.hideDataProblemMsg();
 
-          console.log('[HV-DIAG] data processing took', (performance.now() - tAssign).toFixed(1), 'ms');
-          console.log('[HV-DIAG] AFTER ASSIGNMENT: this.node is', this.node ? 'SET' : 'NULL', 'this.notFound:', this.notFound, 'this.loadFailed:', this.loadFailed);
           this.cdr.detectChanges();
 
           if (this.lastUpdateRequestedManually) {
@@ -580,7 +573,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   ngOnDestroy() {
-    console.log('[HV-DIAG] ngOnDestroy, instance:', this.instanceId);
     this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
 
     this.dataSubscription.unsubscribe();
