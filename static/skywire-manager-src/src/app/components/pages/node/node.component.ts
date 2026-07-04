@@ -497,6 +497,12 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
             this.nodeLoaded = true;
             this.refreshHeader();
             this.maybeBuildTerminalUrl();
+            // Rebuild the tab row now that node data (incl. `arch`) is known — on
+            // the first navigation updateTabBar() runs before this.node loads, so
+            // the wasm-visor tab filter (which drops bandwidth/uptime/rewards/etc.)
+            // was skipped and all 13 tabs showed until the next navigation. Re-run
+            // it here so a wasm visor lands on its correct 6-tab row immediately.
+            this.updateTabBar();
           });
           // Guard: a pending data callback can resolve after the component was
           // destroyed during rapid navigation between node sub-pages, when
