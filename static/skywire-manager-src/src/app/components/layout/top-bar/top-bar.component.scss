@@ -475,9 +475,10 @@ $top-bar-height: 56px;
     }
 
     .switcher-chip-sub {
-      font-size: 10px;
-      opacity: 0.7;
+      font-size: 9px;
+      opacity: 0.65;
       font-family: monospace;
+      letter-spacing: -0.2px;
     }
   }
 }
