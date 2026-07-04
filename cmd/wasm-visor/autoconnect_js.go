@@ -268,12 +268,13 @@ func dialDirect(ctx context.Context, ar *arDmsg, pk cipher.PubKey, port uint16, 
 	return got
 }
 
-// webrtcAvailable reports whether the JS context exposes RTCPeerConnection. Present
-// on the page main thread, ABSENT in a Web Worker (where the wasm runtime now runs,
-// see pkg/wasmhv/worker.js) — so WebRTC dial + STUN can't run there without a
-// main-thread PeerConnection proxy.
+// webrtcAvailable reports whether WebRTC can be used from here: either a direct
+// RTCPeerConnection (page main thread / in-page boot) OR the main-thread bridge
+// (globalThis.__skywireRTC, installed by worker.js) that proxies it out of the Web
+// Worker where the wasm runtime runs. Absent both, WebRTC dials would fail, so the
+// autoconnect pass is skipped.
 func webrtcAvailable() bool {
-	return js.Global().Get("RTCPeerConnection").Truthy()
+	return js.Global().Get("RTCPeerConnection").Truthy() || js.Global().Get("__skywireRTC").Truthy()
 }
 
 var warnedWebRTCUnavailable bool
