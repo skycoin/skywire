@@ -19,7 +19,9 @@
 // ServeConn, the Call value, and ErrShutdown.
 package gobrpc
 
-import "net/rpc"
+import (
+	"net/rpc"
+)
 
 // Client is net/rpc.Client.
 type Client = rpc.Client

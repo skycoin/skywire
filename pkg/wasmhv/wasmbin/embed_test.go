@@ -1,6 +1,8 @@
 package wasmbin
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestEmbeddedGet confirms the committed wasm-visor.wasm.gz decompresses to a
 // valid wasm binary (so a default build — incl. `go install` — really carries a
