@@ -216,8 +216,13 @@ func startProc(name, bin string, args ...string) error {
 }
 
 // rewriteBinPath points both visor configs' launcher.bin_path at an absolute
-// prebuilt-binary dir (default configs use the relative "./bin").
+// prebuilt-binary dir (default configs use the relative "./bin"). The path is
+// forward-slashed: a Windows absolute path (e.g. `D:\a\skywire\skywire/_nbin`)
+// contains backslashes that are invalid JSON string escapes (`\a`, `\s`) and
+// would make the visor fail to parse its config; Go on Windows accepts
+// forward-slash paths, so this is safe on every OS.
 func rewriteBinPath(binDir string) error {
+	binDir = filepath.ToSlash(binDir)
 	for _, name := range []string{"visorA.json", "visorB.json"} {
 		p := filepath.Join(env.work, name)
 		b, err := os.ReadFile(p)

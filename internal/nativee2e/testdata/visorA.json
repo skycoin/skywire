@@ -20,12 +20,6 @@
     "servers_type": "all",
     "protocol": "yamux"
   },
-  "pty": {
-    "dmsg_port": 22,
-    "cli_network": "unix",
-    "cli_address": "./localA/pty.sock",
-    "whitelist": []
-  },
   "ui_server": {
     "enable": false,
     "local_addr": "localhost:8081",
