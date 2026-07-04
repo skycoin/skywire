@@ -12,7 +12,9 @@
 // See docs/design/tinygo-dmsg-client.md.
 package disc
 
-import stdjson "encoding/json"
+import (
+	stdjson "encoding/json"
+)
 
 var json = jsonCodec{}
 

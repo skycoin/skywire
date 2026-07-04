@@ -1,6 +1,8 @@
 package tptypes
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestValidAndKnown(t *testing.T) {
 	for _, ty := range Known() {

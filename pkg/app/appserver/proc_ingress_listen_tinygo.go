@@ -3,7 +3,9 @@
 // Package appserver pkg/app/appserver/proc_ingress_listen_tinygo.go
 package appserver
 
-import "net"
+import (
+	"net"
+)
 
 // listenIngress returns no listener on the TinyGo js/wasm target: a browser
 // cannot net.Listen("tcp"), and in-process apps (RunModeInternal — the only

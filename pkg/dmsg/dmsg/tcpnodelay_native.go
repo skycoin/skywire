@@ -3,7 +3,9 @@
 // Package dmsg pkg/dmsg/tcpnodelay_native.go
 package dmsg
 
-import "net"
+import (
+	"net"
+)
 
 // setTCPNoDelay disables Nagle's algorithm on a TCP conn (TCP_NODELAY). dmsg
 // multiplexes many small logical streams (pty keystrokes, dmsg-HTTP, RPC) over

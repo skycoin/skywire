@@ -5,7 +5,9 @@
 // (pkg/wasmhv's gob-mirror test imports pkg/visor).
 package browseui
 
-import _ "embed"
+import (
+	_ "embed"
+)
 
 // winBoxJS is WinBox.js (vendored, Apache-2.0, dependency-free, CSS inlined):
 // the window manager that provides draggable / resizable / minimizable /

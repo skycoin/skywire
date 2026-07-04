@@ -4,7 +4,9 @@
 
 package sysinfo
 
-import "github.com/google/uuid"
+import (
+	"github.com/google/uuid"
+)
 
 // Product information.
 type Product struct {
