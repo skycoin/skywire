@@ -8,6 +8,8 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
+import { homeTabsData } from '../../../utils/home-tabs';
+import { NodeService } from '../../../services/node.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { NodeActionsHelper } from './actions/node-actions-helper';
 import { SingleNodeBackendData, SingleNodeDataService, TrafficData } from 'src/app/services/single-node-data.service';
@@ -55,6 +57,13 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // Values for the tab bar.
   titleParts = [];
   tabsData: TabButtonData[] = [];
+  // Persistent hypervisor navigation shown on node pages (top-bar rows above the
+  // per-node tabs): the home nav (visor list / rewards / resources / …) and the
+  // visor-switcher chips (one per visor), so the user can move between visors
+  // without backing out to the list. Built in refreshNavRows().
+  homeNavTabs: TabButtonData[] = [];
+  switcherTabs: TabButtonData[] = [];
+  private switcherSubscription: Subscription;
   selectedTabIndex = -1;
   // Persistent visor identity rendered in the top bar — replaces
   // the translated "Visor details" title so the user can always see
@@ -141,6 +150,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   constructor(
     public storageService: StorageService,
     private singleNodeDataService: SingleNodeDataService,
+    private nodeService: NodeService,
     private route: ActivatedRoute,
     private ngZone: NgZone,
     private snackbarService: SnackbarService,
@@ -249,6 +259,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')))) {
 
       this.titleParts = ['nodes.title', 'node.title'];
+
+      // Build the persistent hypervisor nav rows (home nav + visor switcher) shown
+      // above the per-node tabs, so navigation stays available on node pages.
+      this.refreshNavRows();
 
       this.tabsData = [
         {
@@ -411,6 +425,39 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.titleParts = [];
       this.tabsData = [];
     }
+  }
+
+  // refreshNavRows builds the two persistent navigation rows shown above the
+  // per-node tabs: the home nav (top-level hypervisor tabs, minus the standalone
+  // "local visor" tab the switcher makes redundant) and the visor switcher (one
+  // chip per visor in the list, so the user can jump between visors without backing
+  // out). The switcher list is a single summaries call, throttled to ~10s.
+  private navSwitcherLoadedAt = 0;
+  private refreshNavRows() {
+    this.homeNavTabs = homeTabsData().filter(
+      t => !(t.linkParts && t.linkParts.length === 2 && t.linkParts[1] === 'local'));
+
+    const now = Date.now();
+    if (this.switcherTabs.length > 0 && now - this.navSwitcherLoadedAt < 10000) {
+      return;
+    }
+    this.navSwitcherLoadedAt = now;
+    if (this.switcherSubscription) {
+      this.switcherSubscription.unsubscribe();
+    }
+    this.switcherSubscription = this.nodeService.getNodes().subscribe(
+      (nodes: Node[]) => {
+        this.ngZone.run(() => {
+          this.switcherTabs = (nodes || []).map(n => ({
+            icon: (n as any).isHypervisor ? 'router' : ((n as any).arch === 'wasm' ? 'public' : 'devices'),
+            label: n.label || (n.localPk ? n.localPk.substring(0, 8) + '…' : '?'),
+            linkParts: ['/nodes', n.localPk, 'info'],
+          } as TabButtonData));
+          this.cdr.markForCheck();
+        });
+      },
+      () => { /* best-effort — leave the switcher as-is on error */ },
+    );
   }
 
   get isTerminalTab(): boolean {
@@ -585,6 +632,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     this.updateTimeSubscription.unsubscribe();
     this.navigationsSubscription.unsubscribe();
     this.initSubscription.unsubscribe();
+    if (this.switcherSubscription) {
+      this.switcherSubscription.unsubscribe();
+    }
 
     NodeComponent.currentInstanceInternal = undefined;
     NodeComponent.currentNodeKey = undefined;
