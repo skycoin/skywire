@@ -182,6 +182,11 @@
               try { worker.postMessage({ t: 'stun-ip-result', id: m.id, ip: ip || '' }); } catch (e) {}
             });
             break;
+          case 'rtc':
+            // WebRTC transport bridge: the worker's proxy RTCPeerConnection forwards
+            // here, where real RTCPeerConnection/RTCDataChannel objects live.
+            rtcHandle(worker, m);
+            break;
         }
       };
       worker.onerror = function (e) {
@@ -220,6 +225,92 @@
       } catch (e) { finish(''); }
       setTimeout(function () { finish(''); }, 8000);
     });
+  }
+
+  // --- WebRTC transport bridge (main-thread side) ---
+  //
+  // The worker's proxy RTCPeerConnection (worker.js __skywireRTC) forwards every
+  // op here, where the real RTCPeerConnection/RTCDataChannel live. Events flow back
+  // to the worker (icecandidate, datachannel, dc open/message/close/error). One real
+  // PeerConnection per proxy, keyed by pcId. See pkg/transport/network/webrtc_browser.go.
+  var rtcMainPCs = {};       // pcId -> { pc, dcs: {dcId -> RTCDataChannel} }
+  var rtcRemoteDcSeq = 1;    // ids for peer-initiated (ondatachannel) channels
+
+  function rtcWireDC(worker, pcId, dcId, dc) {
+    var rec = rtcMainPCs[pcId];
+    if (!rec) return;
+    try { dc.binaryType = 'arraybuffer'; } catch (e) {}
+    rec.dcs[dcId] = dc;
+    dc.onopen = function () { try { worker.postMessage({ t: 'rtc', op: 'dcOpen', pcId: pcId, dcId: dcId }); } catch (e) {} };
+    dc.onmessage = function (ev) {
+      var data = ev.data;
+      try {
+        worker.postMessage({ t: 'rtc', op: 'dcMessage', pcId: pcId, dcId: dcId, data: data },
+          (data instanceof ArrayBuffer) ? [data] : []);
+      } catch (e) {}
+    };
+    dc.onclose = function () { try { worker.postMessage({ t: 'rtc', op: 'dcClose', pcId: pcId, dcId: dcId }); } catch (e) {} };
+    dc.onerror = function () { try { worker.postMessage({ t: 'rtc', op: 'dcError', pcId: pcId, dcId: dcId }); } catch (e) {} };
+    if (dc.readyState === 'open') { try { worker.postMessage({ t: 'rtc', op: 'dcOpen', pcId: pcId, dcId: dcId }); } catch (e) {} }
+  }
+
+  function rtcPcMethod(pc, m) {
+    switch (m.method) {
+      case 'createOffer': return pc.createOffer().then(function (o) { return { type: o.type, sdp: o.sdp }; });
+      case 'createAnswer': return pc.createAnswer().then(function (o) { return { type: o.type, sdp: o.sdp }; });
+      case 'setLocalDescription': return pc.setLocalDescription(m.arg).then(function () { return null; });
+      case 'setRemoteDescription': return pc.setRemoteDescription(m.arg).then(function () { return null; });
+      case 'addIceCandidate': return pc.addIceCandidate(m.arg).then(function () { return null; });
+      default: return Promise.reject(new Error('unknown rtc method ' + m.method));
+    }
+  }
+
+  function rtcHandle(worker, m) {
+    var rec, dc;
+    switch (m.op) {
+      case 'newPC': {
+        if (typeof RTCPeerConnection === 'undefined') return;
+        var cfg = {};
+        if (m.iceServers && m.iceServers.length) { cfg.iceServers = m.iceServers; }
+        var pc;
+        try { pc = new RTCPeerConnection(cfg); } catch (e) { return; }
+        rec = { pc: pc, dcs: {} };
+        rtcMainPCs[m.pcId] = rec;
+        pc.onicecandidate = function (ev) {
+          var c = (ev && ev.candidate) ? { candidate: ev.candidate.candidate, sdpMid: ev.candidate.sdpMid, sdpMLineIndex: ev.candidate.sdpMLineIndex } : null;
+          try { worker.postMessage({ t: 'rtc', op: 'icecandidate', pcId: m.pcId, candidate: c }); } catch (e) {}
+        };
+        pc.ondatachannel = function (ev) {
+          var dcId = 'r' + (rtcRemoteDcSeq++);
+          rtcWireDC(worker, m.pcId, dcId, ev.channel);
+          try { worker.postMessage({ t: 'rtc', op: 'datachannel', pcId: m.pcId, dcId: dcId }); } catch (e) {}
+        };
+        break;
+      }
+      case 'createDC': {
+        rec = rtcMainPCs[m.pcId]; if (!rec) break;
+        try { dc = rec.pc.createDataChannel(m.label, m.opts || {}); } catch (e) { break; }
+        rtcWireDC(worker, m.pcId, m.dcId, dc);
+        break;
+      }
+      case 'pcCall': {
+        rec = rtcMainPCs[m.pcId];
+        if (!rec) { try { worker.postMessage({ t: 'rtc', op: 'ret', callId: m.callId, ok: false, msg: 'no such pc' }); } catch (e) {} break; }
+        rtcPcMethod(rec.pc, m).then(function (val) {
+          try { worker.postMessage({ t: 'rtc', op: 'ret', callId: m.callId, ok: true, val: val }); } catch (e) {}
+        }, function (err) {
+          try { worker.postMessage({ t: 'rtc', op: 'ret', callId: m.callId, ok: false, msg: String((err && err.message) || err) }); } catch (e) {}
+        });
+        break;
+      }
+      case 'dcSend': { rec = rtcMainPCs[m.pcId]; dc = rec && rec.dcs[m.dcId]; if (dc) { try { dc.send(m.data); } catch (e) {} } break; }
+      case 'dcClose': { rec = rtcMainPCs[m.pcId]; dc = rec && rec.dcs[m.dcId]; if (dc) { try { dc.close(); } catch (e) {} } break; }
+      case 'pcClose': {
+        rec = rtcMainPCs[m.pcId];
+        if (rec) { try { rec.pc.close(); } catch (e) {} delete rtcMainPCs[m.pcId]; try { worker.postMessage({ t: 'rtc', op: 'pcGone', pcId: m.pcId }); } catch (e) {} }
+        break;
+      }
+    }
   }
 
   // --- In-page host (fallback) ---
