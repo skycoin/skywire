@@ -560,9 +560,9 @@ e2e-run: ## E2E. Start e2e environment and wait for all health checks to pass
 	@# uptime-tracker + its postgres are gone (uptime is integrated
 	@# into the discovery services).
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait redis"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait deployment-services"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait deployment-services || { echo '=== deployment-services unhealthy — logs: ==='; docker compose logs --tail=150 deployment-services; exit 1; }"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b || { echo '=== visor-b unhealthy — logs: ==='; docker compose logs --tail=200 visor-b; exit 1; }"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c || { echo '=== visor-a/visor-c unhealthy — logs: ==='; docker compose logs --tail=150 visor-a visor-c; exit 1; }"
 	bash -c "DOCKER_TAG=e2e docker compose ps"
 
 e2e-logs:
