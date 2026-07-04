@@ -1,6 +1,8 @@
 package dmsg
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestPrefersWTOverWS(t *testing.T) {
 	cases := []struct {
