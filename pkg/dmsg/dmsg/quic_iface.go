@@ -1,7 +1,9 @@
 // Package dmsg pkg/dmsg/quic_iface.go
 package dmsg
 
-import "context"
+import (
+	"context"
+)
 
 // quicConn / quicStream abstract the quic-go connection + stream that the
 // session core uses, so the concrete *quic.Conn / *quic.Stream — and all of
