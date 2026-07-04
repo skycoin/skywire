@@ -49,7 +49,12 @@ dump_diagnostics() {
   printf '\n----- client sockets -----\n'
   docker exec "$CLIENT" sh -c 'ss -tnp 2>/dev/null' || true
 }
-trap 'rc=$?; [ "$rc" -ne 0 ] && dump_diagnostics; exit "$rc"' EXIT
+on_exit() {
+  local rc=$?
+  [ "$rc" -ne 0 ] && dump_diagnostics
+  exit "$rc"
+}
+trap on_exit EXIT
 
 # --- 1. discovery HTTP registry reachable over IPv6 -------------------------
 log "1. dmsg-discovery HTTP registry is reachable over IPv6"
