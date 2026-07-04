@@ -327,12 +327,12 @@ test-windows: ## Run tests on windows
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/skywire-cli... ./cmd/skywire-visor... ./cmd/skywire... ./cmd/apps...
 
 install-linters: ## Install linters
-	- VERSION=1.64.5 ./ci_scripts/install-golangci-lint.sh
+	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	GOPRIVATE=github.com/skycoin/* go get -u
 	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/incu6us/goimports-reviser/v2@latest github.com/FiloSottile/vendorcheck@latest
 
 install-linters-windows: ## Install linters
-	${OPTS} go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest golang.org/x/tools/cmd/goimports@latest
+	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest golang.org/x/tools/cmd/goimports@latest
 
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
