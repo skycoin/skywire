@@ -196,3 +196,32 @@ jobs:
           $env:GO111MODULE='on'
           $env:SKYWIRE_NATIVEE2E_BIN = "$PWD/_nbin"
           go test -mod=vendor -tags client_e2e -v -timeout=25m ./internal/nativee2e/
+
+  # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
+  # //go:build !no_ci because they need a real Redis (redis://localhost:6379),
+  # so the tag-free unit lanes (which run with -tags no_ci) skip them — leaving
+  # them running in NO job. This lane provides a Redis service and runs those
+  # store packages WITHOUT no_ci so the redis-backed tests actually execute.
+  redis-store:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run redis-backed store tests
+        run: go test -mod=vendor -timeout=5m ./pkg/address-resolver/store/... ./pkg/dmsg/discovery/store/...

@@ -1,6 +1,3 @@
-//go:build !no_ci
-// +build !no_ci
-
 package store
 
 import (
