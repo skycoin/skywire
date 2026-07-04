@@ -13,22 +13,18 @@ export function abbreviatePk(pk: string): string {
 /**
  * Builds the top-bar visor-switcher chips — one per visor in the hypervisor's
  * list. Each chip is two lines:
- *   line 1: the node's label, or its abbreviated PK (first5...last5) if unlabeled;
- *   line 2: public-ip / lan-ip (both when known and distinct, else whichever
- *           is available).
+ *   line 1: the node's label (labels auto-populate, so this is usually set;
+ *           falls back to the abbreviated PK if somehow empty);
+ *   line 2: the full public key, in a slightly smaller font.
  * Icon distinguishes hypervisor / wasm(browser) / regular visors.
  * Shared by the node-list and node (detail) pages so the row is identical on both.
  */
 export function visorSwitcherChips(nodes: Node[]): TabButtonData[] {
   return (nodes || []).map(n => {
-    const pub = (n.publicIp || '').trim();
-    const lan = (n.ip || '').trim();
-    let sub = '';
-    if (pub && lan && pub !== lan) { sub = pub + ' / ' + lan; } else { sub = pub || lan || ''; }
     return {
       icon: (n as any).isHypervisor ? 'router' : ((n as any).arch === 'wasm' ? 'public' : 'devices'),
       label: n.label || abbreviatePk(n.localPk),
-      sublabel: sub,
+      sublabel: n.localPk || '',
       linkParts: ['/nodes', n.localPk, 'info'],
     } as TabButtonData;
   });
