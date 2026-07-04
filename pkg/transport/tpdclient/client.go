@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/google/uuid"
 
@@ -31,6 +32,12 @@ type apiClient struct {
 	client *httpauthclient.Client
 	key    cipher.PubKey
 	sec    cipher.SecKey
+	// batchDeleteUnsupported is set once a TPD is found to lack the
+	// /transports/delete-batch endpoint (404), so DeleteTransports goes straight to
+	// the sequential fallback instead of re-probing the batch endpoint on every
+	// flush (each re-probe is a wasted round-trip that 404s again). An old deployed
+	// TPD would otherwise be hit with a doomed batch POST before every fallback.
+	batchDeleteUnsupported atomic.Bool
 }
 
 // NewHTTP creates a new client setting a public key to the client to be used for auth.
@@ -365,6 +372,12 @@ func (c *apiClient) DeleteTransports(ctx context.Context, ids []uuid.UUID) (int,
 		return 0, nil
 	}
 
+	// A TPD already found to lack the batch endpoint: skip the doomed re-probe and
+	// go straight to sequential (rate-limited, but the best an old TPD allows).
+	if c.batchDeleteUnsupported.Load() {
+		return c.deleteTransportsSequential(ctx, ids)
+	}
+
 	// Convert UUIDs to strings
 	idStrings := make([]string, len(ids))
 	for i, id := range ids {
@@ -384,9 +397,12 @@ func (c *apiClient) DeleteTransports(ctx context.Context, ids []uuid.UUID) (int,
 		}
 	}()
 
-	// If 404, TPD doesn't support batch delete - fall back to sequential
+	// If 404, TPD doesn't support batch delete - remember it (so we don't re-probe
+	// on every flush) and fall back to sequential.
 	if resp.StatusCode == 404 {
-		c.log.Debug("TPD does not support batch delete, falling back to sequential")
+		if c.batchDeleteUnsupported.CompareAndSwap(false, true) {
+			c.log.Warn("TPD lacks /transports/delete-batch; deletions fall back to sequential (rate-limited) until the TPD is updated")
+		}
 		return c.deleteTransportsSequential(ctx, ids)
 	}
 
