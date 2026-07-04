@@ -1361,15 +1361,26 @@ func (tm *Manager) Close() {
 		}
 	}
 
-	// Batch deregister from TPD (with fallback to sequential)
+	// Deregister all transports from TPD on shutdown. CXO-authoritative: publish an
+	// empty transport-list snapshot so TPD reconciles every one of our transports
+	// away (absence = deletion) — no HTTP DeleteTransports, which an old TPD
+	// rate-limits (429) on shutdown. tpdLeafPublisher() uses its own mutex, so this
+	// is safe under tm.mx. The publish is best-effort at process exit; anything that
+	// doesn't propagate is aged out by TPD's heartbeat timeout (same as a crash).
+	// Falls back to the HTTP batch delete only when there is no CXO publisher.
 	if len(tpIDs) > 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		deleted, err := tm.Conf.DiscoveryClient.DeleteTransports(ctx, tpIDs)
-		cancel()
-		if err != nil {
-			tm.Logger.WithError(err).Warnf("Batch deregister completed with error: %d/%d deleted", deleted, len(tpIDs))
+		if tm.tpdLeafPublisher() != nil {
+			tm.publishTPDList(nil)
+			tm.Logger.Debugf("Deregistered %d transports via empty CXO transport-list snapshot on close", len(tpIDs))
 		} else {
-			tm.Logger.Debugf("Batch deregistered %d/%d transports from TPD", deleted, len(tpIDs))
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			deleted, err := tm.Conf.DiscoveryClient.DeleteTransports(ctx, tpIDs)
+			cancel()
+			if err != nil {
+				tm.Logger.WithError(err).Warnf("Batch deregister completed with error: %d/%d deleted", deleted, len(tpIDs))
+			} else {
+				tm.Logger.Debugf("Batch deregistered %d/%d transports from TPD", deleted, len(tpIDs))
+			}
 		}
 	}
 
