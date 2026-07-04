@@ -83,22 +83,6 @@
     </div>
   }
 
-  <!-- Visor switcher: one horizontally-scrollable chip per visor (first = local).
-       The chip for the visor currently open is highlighted (not greyed). Jump
-       between visors without backing out to the list. -->
-  @if (switcherTabsData && switcherTabsData.length) {
-    <div class="secondary-nav-row visor-switcher-row d-none d-lg-flex">
-      @for (t of switcherTabsData; track t) {
-        <a mat-button class="tab-button white-theme switcher-chip"
-          [routerLink]="t.linkParts"
-          [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier"
-          [ngClass]="{'grey-button-background': !(t.linkParts && t.linkParts[1] === pageHeaderIdentifier)}">
-          <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
-        </a>
-      }
-    </div>
-  }
-
   <div class="main-container" [ngClass]="{'normal-height': !showVpnInfo}">
     <!-- Return button and title text. -->
     <div class="main-area"><div class="title" [ngClass]="{'d-none d-lg-flex': !showVpnInfo, 'd-flex': showVpnInfo}">
@@ -293,6 +277,29 @@
       </div>
     }
   </div>
+
+  <!-- Visor switcher: one horizontally-scrollable chip per visor, shown BELOW the
+       home nav. Each chip is two lines — label (or abbreviated PK) then
+       public-ip / lan-ip. The chip for the visor currently open is highlighted
+       (not greyed). Jump between visors without backing out to the list. -->
+  @if (switcherTabsData && switcherTabsData.length) {
+    <div class="secondary-nav-row visor-switcher-row d-none d-lg-flex">
+      @for (t of switcherTabsData; track t) {
+        <a mat-button class="tab-button white-theme switcher-chip"
+          [routerLink]="t.linkParts"
+          [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier"
+          [ngClass]="{'grey-button-background': !(t.linkParts && t.linkParts[1] === pageHeaderIdentifier)}">
+          <mat-icon [inline]="true">{{ t.icon }}</mat-icon>
+          <span class="switcher-chip-text">
+            <span class="switcher-chip-name">{{ t.label }}</span>
+            @if (t.sublabel) {
+              <span class="switcher-chip-sub">{{ t.sublabel }}</span>
+            }
+          </span>
+        </a>
+      }
+    </div>
+  }
 
   <!-- Remote access warning for the VPN client. -->
   @if (showVpnInfo && remoteAccess) {

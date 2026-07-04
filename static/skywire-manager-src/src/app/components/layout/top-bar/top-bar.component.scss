@@ -453,7 +453,31 @@ $top-bar-height: 56px;
   white-space: nowrap;
   scrollbar-width: thin;
 
+  // Two-line chip: label (or abbreviated PK) over public-ip / lan-ip.
   .switcher-chip {
     flex: 0 0 auto;
+    height: auto;
+    padding: 3px 10px;
+    align-items: center;
+    line-height: 1.15;
+
+    .switcher-chip-text {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      text-align: left;
+      margin: 0 2px;
+    }
+
+    .switcher-chip-name {
+      font-size: $font-size-base;
+      font-weight: 500;
+    }
+
+    .switcher-chip-sub {
+      font-size: 10px;
+      opacity: 0.7;
+      font-family: monospace;
+    }
   }
 }
