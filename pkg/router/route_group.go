@@ -502,6 +502,10 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 		return 0, timeoutError{}
 	case <-rg.closed:
 		return 0, io.ErrClosedPipe
+	case <-rg.remoteClosed:
+		// readCh is never closed (see close()), so a remote-initiated close is
+		// observed here rather than via a closed readCh returning ok==false.
+		return 0, io.EOF
 	case data, ok := <-rg.readCh:
 		if !ok || len(data) == 0 {
 			// route group got closed or empty data received. Behavior on the empty
@@ -1577,8 +1581,13 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		rg.closedOnce.Do(func() { close(rg.closed) })
 	}
 	rg.once.Do(func() {
+		// Deliberately do NOT close(rg.readCh). readCh has multiple concurrent
+		// senders (handleDataPacket, one per mux leg), so closing it races with an
+		// in-flight send — a WARNING: DATA RACE under -race, and historically a
+		// "send on closed channel" panic. Closure is signalled ONLY via rg.closed /
+		// rg.remoteClosed: the sole reader (Read) and every sender select on those,
+		// so readCh is never closed and there is nothing to race.
 		rg.setRemoteClosed()
-		close(rg.readCh)
 	})
 
 	return nil
@@ -1664,24 +1673,15 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 		return nil
 	}
 
-	// Belt-and-suspenders against the close-readCh race:
-	//
-	// The selects below send to rg.readCh and check rg.closed +
-	// rg.remoteClosed. But Go's select randomizes among ready
-	// cases — if a closer goroutine reaches close(rg.readCh) (line
-	// in close()) in the same Go-scheduling instant that this
-	// goroutine's select picks the send-to-readCh case, the send
-	// hits a closed channel and panics. That panic was crashing
-	// the entire visor (2026-05-19 repro) because nothing higher
-	// up in the packet-dispatch chain recovers.
-	//
-	// The send-to-closed-readCh case is benign at this point: the
-	// packet would have been discarded by the now-defunct route
-	// group anyway. Recovering it keeps the router goroutine alive
-	// to serve other route groups.
+	// Defensive recover. readCh is no longer closed on route-group close (closure
+	// is signalled via rg.closed / rg.remoteClosed — see close()), so the old
+	// "send on closed channel" panic can no longer occur here. The recover is kept
+	// purely as a safety net: an unexpected panic in this hot packet-dispatch path
+	// drops the packet and keeps the router goroutine serving other route groups
+	// rather than crashing the whole visor.
 	defer func() {
 		if r := recover(); r != nil {
-			rg.logger.WithField("recover", r).Debug("handleDataPacket: recovered from send-on-closed-readCh during close race")
+			rg.logger.WithField("recover", r).Debug("handleDataPacket: recovered from panic")
 			err = io.ErrClosedPipe
 		}
 	}()
