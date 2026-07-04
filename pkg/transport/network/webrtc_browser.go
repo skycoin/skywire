@@ -1,4 +1,4 @@
-//go:build tinygo && js && wasm
+//go:build js && wasm
 
 // Package network pkg/transport/network/webrtc_browser.go
 //
@@ -6,8 +6,15 @@
 // RTCPeerConnection (syscall/js), signaling over the same dmsg-backed signalConn
 // the native pion carrier uses — so a browser visor and a native pion visor
 // interoperate (identical wire format). This ports the proven cmd/dmsg-wasm
-// webrtc_js.go logic to the network.Client interface. pion doesn't compile under
-// TinyGo, so the browser uses the platform's own RTCPeerConnection instead.
+// webrtc_js.go logic to the network.Client interface.
+//
+// Used for ALL js/wasm builds (standard Go and TinyGo): pion's js backend looks up
+// `window.RTCPeerConnection`, which is absent in a Web Worker (no `window`), so the
+// wasm-visor — whose Go runtime runs in a worker — can't use pion. This hand-rolled
+// carrier instead goes through newPeerConnection, which prefers a main-thread
+// RTCPeerConnection PROXY (globalThis.__skywireRTC, installed by pkg/wasmhv
+// worker.js and driven by hv-boot.js) when present, and falls back to a direct
+// RTCPeerConnection on the page main thread otherwise.
 //
 // Start + the dmsg signaling listener are shared (untagged, webrtc.go); this file
 // supplies the build-tagged webrtcDial (offerer) + webrtcAccept (answerer).
@@ -73,7 +80,15 @@ func iceServersJS(iceURLs []string) js.Value {
 }
 
 // newPeerConnection constructs an RTCPeerConnection with the given iceServers.
+// Prefers the main-thread proxy (globalThis.__skywireRTC.newPC) when present — the
+// wasm-visor's Go runtime runs in a Web Worker with no RTCPeerConnection, so the
+// proxy forwards to a real one on the page main thread. Falls back to a direct
+// RTCPeerConnection when on the main thread (the in-page boot fallback) or under a
+// harness that exposes RTCPeerConnection to the worker.
 func newPeerConnection(iceServers js.Value) js.Value {
+	if b := js.Global().Get("__skywireRTC"); b.Truthy() {
+		return b.Call("newPC", iceServers)
+	}
 	cfg := js.Global().Get("Object").New()
 	if iceServers.Truthy() {
 		cfg.Set("iceServers", iceServers)
