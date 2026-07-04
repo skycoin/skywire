@@ -75,9 +75,19 @@ func YamuxConfig() *yamux.Config {
 		// connection is still reaped, just 35s later.
 		ConnectionWriteTimeout: 45 * time.Second,
 		MaxStreamWindowSize:    256 * 1024,
-		StreamOpenTimeout:      20 * time.Second,
-		StreamCloseTimeout:     30 * time.Second,
-		LogOutput:              io.Discard,
+		// StreamOpenTimeout is how long OpenStream waits for the peer to ACK a new
+		// stream's SYN before failing with "i/o deadline reached". At 20s it
+		// false-positived under cold-start congestion on slow (2-core CI) hosts:
+		// the dmsg-server, busy relaying the initial registration burst for every
+		// service + visor at once, can't ACK/forward a stream SYN within 20s, so
+		// the client's DialStream fails, it re-dials the session (newest-wins
+		// closes the old one → "session shutdown"), and the churn keeps the mesh
+		// from settling inside the healthcheck window. 45s lets the SYN land once
+		// the burst drains; steady-state opens are sub-second so this only bites
+		// under congestion.
+		StreamOpenTimeout:  45 * time.Second,
+		StreamCloseTimeout: 30 * time.Second,
+		LogOutput:          io.Discard,
 	}
 }
 
