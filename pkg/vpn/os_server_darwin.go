@@ -136,9 +136,9 @@ func loadPFRuleset(ruleset string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = os.Remove(f.Name()) }()
+	defer func() { _ = os.Remove(f.Name()) }() //nolint
 	if _, err := f.WriteString(ruleset); err != nil {
-		_ = f.Close()
+		_ = f.Close() //nolint
 		return err
 	}
 	if err := f.Close(); err != nil {
