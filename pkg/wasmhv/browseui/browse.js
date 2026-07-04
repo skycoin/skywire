@@ -587,10 +587,12 @@
       '<button id="sb-back" title="back" disabled style="cursor:pointer">◀</button>' +
       '<button id="sb-fwd" title="forward" disabled style="cursor:pointer">▶</button>' +
       '<button id="sb-reload" title="reload" style="cursor:pointer">⟳</button>' +
+      '<button id="sb-home" title="home (home.dmsg)" style="cursor:pointer">⌂</button>' +
       '<input id="sb-addr" placeholder="pk · pk.dmsg · home.dmsg · alias.dmsg · https://site (clearnet via proxy)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.4em">' +
       '<button id="sb-go" style="cursor:pointer">go</button>' +
       // Content hosting moved to its own 'host' tool window (top-left ☰ menu).
       '<button id="sb-proxy-t" title="skysocks proxy + request log" style="cursor:pointer">⚙</button>' +
+      '<button id="sb-info-t" title="about this browser + its limitations" style="cursor:pointer">ⓘ</button>' +
       '</div>' +
       '<div id="sb-proxy" style="display:none;flex-direction:column;gap:.4em;padding:.5em;background:#1a1726;border-bottom:1px solid #2a2342">' +
       '<div style="display:flex;gap:.4em;align-items:center;flex-wrap:wrap">' +
@@ -607,6 +609,21 @@
       // Terminal-like per-window request log: every fetch this browser window makes
       // over the resolving proxy (dmsg) or skysocks-lite (clearnet), + config events.
       '<pre id="sb-proxy-log" title="requests through this window — resolving proxy (dmsg) + skysocks-lite (clearnet)" style="margin:0;height:160px;overflow:auto;background:#0e0c14;color:#a9b1d6;border:1px solid #2a2342;padding:.45em;font:11px/1.45 monospace;white-space:pre-wrap;word-break:break-all"></pre>' +
+      '</div>' +
+      // About/limitations panel (toggled by ⓘ). The skynet browser is deliberately
+      // sandboxed; surface WHY so "my login didn't stick" reads as by-design, not a
+      // bug. See docs/skynet-browser.md for the full rationale + the native
+      // per-site-origin design that would lift the storage limit.
+      '<div id="sb-info-panel" style="display:none;flex-direction:column;gap:.5em;padding:.7em .8em;background:#1a1726;border-bottom:1px solid #2a2342;font:12px/1.5 monospace;color:#cdd2da;max-height:40%;overflow:auto">' +
+      '<div style="display:flex;align-items:center;gap:.5em"><b style="color:#9d7cff;font-size:13px">about the skynet browser</b><span style="flex:1"></span><button id="sb-info-x" style="cursor:pointer">×</button></div>' +
+      '<div>Fetches sites over <b>dmsg</b> (skynet) — no DNS, no certificate authorities, IP-anonymous. Address bar accepts a visor <b>PK</b>, <b>pk.dmsg</b>, an <b>alias.dmsg</b> (e.g. <b>home.dmsg</b>), or an <b>https://</b> clearnet site (routed through a skysocks exit — set in ⚙).</div>' +
+      '<div style="border-top:1px solid #2a2342;padding-top:.5em"><b style="color:#e0af68">Limitations (by design):</b></div>' +
+      '<ul style="margin:.1em 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:.25em">' +
+      '<li><b>No persistent storage.</b> Every page runs in a sandboxed frame with an opaque origin — <b>cookies, localStorage and logins do not persist</b>, even across a reload. Each visit is effectively fresh/incognito.</li>' +
+      '<li><b>Isolated.</b> Sites cannot read each other\'s data, and cannot read this visor\'s keys/storage.</li>' +
+      '<li><b>Scripts limited</b> (sandbox: allow-scripts allow-forms); no plugins, popups, or top-level navigation. Some clearnet sites that require cookies/service-workers may misbehave.</li>' +
+      '<li>Per-site persistent storage like a normal browser would need the <b>native desktop</b> app (each site on its own local origin) — not possible in a keyless browser tab.</li>' +
+      '</ul>' +
       '</div>' +
       '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
 
@@ -690,6 +707,9 @@
     $("sb-fwd").onclick = function () { browser.forward(); };
     // ⟳ reloads the current page; while a load is in flight it becomes ✕ (cancel).
     $("sb-reload").onclick = function () { if (loading) browser.cancel(); else browser.reload(); };
+    $("sb-home").onclick = function () { browser.browseTo("home.dmsg", "/"); };
+    $("sb-info-t").onclick = function () { var h = $("sb-info-panel"); h.style.display = h.style.display === "none" ? "flex" : "none"; };
+    $("sb-info-x").onclick = function () { $("sb-info-panel").style.display = "none"; };
     $("sb-addr").addEventListener("keydown", function (e) { if (e.key === "Enter") go(); });
     // clearnet upstream-proxy settings (per window; persists as the global default).
     $("sb-proxy-pk").value = browser.upstream();
