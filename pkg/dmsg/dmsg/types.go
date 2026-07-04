@@ -61,10 +61,19 @@ var (
 // YamuxConfig returns a tuned yamux configuration for dmsg sessions.
 func YamuxConfig() *yamux.Config {
 	return &yamux.Config{
-		AcceptBacklog:          512,
-		EnableKeepAlive:        true,
-		KeepAliveInterval:      30 * time.Second,
-		ConnectionWriteTimeout: 10 * time.Second,
+		AcceptBacklog:     512,
+		EnableKeepAlive:   true,
+		KeepAliveInterval: 30 * time.Second,
+		// ConnectionWriteTimeout is the max time ANY write (keepalive pings
+		// included) may block before yamux declares the whole session dead. At 10s
+		// it false-positived under cold-start congestion: when a dmsg-server relays
+		// for many clients at once, a client's keepalive write can back up past 10s,
+		// yamux tears the session down, every client re-dials, and the extra load
+		// makes the next write even slower — a churn feedback loop that leaves the
+		// discovery unreachable ("dmsg error 307/202") and visors unable to
+		// bootstrap. 45s tolerates the transient congestion; a genuinely dead
+		// connection is still reaped, just 35s later.
+		ConnectionWriteTimeout: 45 * time.Second,
 		MaxStreamWindowSize:    256 * 1024,
 		StreamOpenTimeout:      20 * time.Second,
 		StreamCloseTimeout:     30 * time.Second,
