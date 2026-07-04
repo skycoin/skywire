@@ -12,6 +12,7 @@ import { EditLabelComponent } from '../../layout/edit-label/edit-label.component
 import { StorageService, LabeledElementTypes } from '../../../services/storage.service';
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from 'src/app/utils/home-tabs';
+import { visorSwitcherChips } from 'src/app/utils/visor-switcher';
 import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { SelectOptionComponent, SelectableOption } from '../../layout/select-option/select-option.component';
@@ -409,12 +410,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
    * page. Best-effort: leaves the row empty until node data is available.
    */
   private buildSwitcherTabs() {
-    const nodes = this.allNodes || [];
-    this.switcherTabs = nodes.map(n => ({
-      icon: (n as any).isHypervisor ? 'router' : ((n as any).arch === 'wasm' ? 'public' : 'devices'),
-      label: n.label || (n.localPk ? n.localPk.substring(0, 8) + '…' : '?'),
-      linkParts: ['/nodes', n.localPk, 'info'],
-    } as TabButtonData));
+    this.switcherTabs = visorSwitcherChips(this.allNodes || []);
   }
 
   /**
