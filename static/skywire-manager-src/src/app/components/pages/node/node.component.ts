@@ -428,14 +428,13 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   // refreshNavRows builds the two persistent navigation rows shown above the
-  // per-node tabs: the home nav (top-level hypervisor tabs, minus the standalone
-  // "local visor" tab the switcher makes redundant) and the visor switcher (one
-  // chip per visor in the list, so the user can jump between visors without backing
+  // per-node tabs: the home nav (top-level hypervisor tabs, incl. the "Local
+  // Visor" tab, kept alongside "Visor list") and the visor switcher (one chip
+  // per visor in the list, so the user can jump between visors without backing
   // out). The switcher list is a single summaries call, throttled to ~10s.
   private navSwitcherLoadedAt = 0;
   private refreshNavRows() {
-    this.homeNavTabs = homeTabsData().filter(
-      t => !(t.linkParts && t.linkParts.length === 2 && t.linkParts[1] === 'local'));
+    this.homeNavTabs = homeTabsData();
 
     const now = Date.now();
     if (this.switcherTabs.length > 0 && now - this.navSwitcherLoadedAt < 10000) {
