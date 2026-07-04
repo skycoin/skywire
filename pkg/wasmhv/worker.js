@@ -90,8 +90,83 @@
     });
   };
 
+  // WebRTC bridge: RTCPeerConnection/RTCDataChannel don't exist in a worker, so
+  // globalThis.__skywireRTC.newPC(iceServers) returns a PROXY PeerConnection whose
+  // methods/events forward to a real one on the main thread (hv-boot.js). The Go
+  // WebRTC carrier (pkg/transport/network/webrtc_browser.go) uses it unchanged.
+  var rtcPcSeq = 1, rtcDcSeq = 1, rtcCallSeq = 1;
+  var rtcPCs = {};        // pcId -> { obj, dcs: {dcId -> dcObj} }
+  var rtcCalls = {};      // callId -> {resolve, reject}
+  function rtcPost(msg) { try { self.postMessage(msg); } catch (e) {} }
+  function rtcPcCall(pcId, method, arg) {
+    return new Promise(function (resolve, reject) {
+      var callId = rtcCallSeq++;
+      rtcCalls[callId] = { resolve: resolve, reject: reject };
+      rtcPost({ t: 'rtc', op: 'pcCall', pcId: pcId, callId: callId, method: method, arg: arg });
+    });
+  }
+  function rtcMakeDC(pcId, dcId) {
+    return {
+      binaryType: 'arraybuffer', readyState: 'connecting',
+      onopen: null, onmessage: null, onclose: null, onerror: null,
+      send: function (data) { rtcPost({ t: 'rtc', op: 'dcSend', pcId: pcId, dcId: dcId, data: data }); },
+      close: function () { rtcPost({ t: 'rtc', op: 'dcClose', pcId: pcId, dcId: dcId }); }
+    };
+  }
+  self.__skywireRTC = {
+    newPC: function (iceServers) {
+      var pcId = rtcPcSeq++;
+      var rec = { dcs: {} };
+      var pc = {
+        onicecandidate: null, ondatachannel: null,
+        createDataChannel: function (label, opts) {
+          var dcId = rtcDcSeq++;
+          var dc = rtcMakeDC(pcId, dcId);
+          rec.dcs[dcId] = dc;
+          rtcPost({ t: 'rtc', op: 'createDC', pcId: pcId, dcId: dcId, label: label, opts: opts });
+          return dc;
+        },
+        createOffer: function () { return rtcPcCall(pcId, 'createOffer', null); },
+        createAnswer: function () { return rtcPcCall(pcId, 'createAnswer', null); },
+        setLocalDescription: function (d) { return rtcPcCall(pcId, 'setLocalDescription', d); },
+        setRemoteDescription: function (d) { return rtcPcCall(pcId, 'setRemoteDescription', d); },
+        addIceCandidate: function (c) { return rtcPcCall(pcId, 'addIceCandidate', c); },
+        close: function () { rtcPost({ t: 'rtc', op: 'pcClose', pcId: pcId }); }
+      };
+      rec.obj = pc;
+      rtcPCs[pcId] = rec;
+      var ice = [];
+      try { for (var i = 0; iceServers && i < iceServers.length; i++) { ice.push({ urls: iceServers[i].urls }); } } catch (e) {}
+      rtcPost({ t: 'rtc', op: 'newPC', pcId: pcId, iceServers: ice });
+      return pc;
+    }
+  };
+  // Apply a main→worker RTC event to the proxy object (invoking the Go-set handler).
+  function rtcHandleEvent(m) {
+    var rec = rtcPCs[m.pcId];
+    switch (m.op) {
+      case 'ret': {
+        var c = rtcCalls[m.callId];
+        if (c) { delete rtcCalls[m.callId]; if (m.ok) { c.resolve(m.val); } else { c.reject(new Error(m.msg || 'rtc failed')); } }
+        break;
+      }
+      case 'icecandidate':
+        if (rec && typeof rec.obj.onicecandidate === 'function') { rec.obj.onicecandidate({ candidate: m.candidate }); }
+        break;
+      case 'datachannel':
+        if (rec) { var dc = rtcMakeDC(m.pcId, m.dcId); rec.dcs[m.dcId] = dc; if (typeof rec.obj.ondatachannel === 'function') { rec.obj.ondatachannel({ channel: dc }); } }
+        break;
+      case 'dcOpen': { var d = rec && rec.dcs[m.dcId]; if (d) { d.readyState = 'open'; if (typeof d.onopen === 'function') { d.onopen({}); } } break; }
+      case 'dcMessage': { var d2 = rec && rec.dcs[m.dcId]; if (d2 && typeof d2.onmessage === 'function') { d2.onmessage({ data: m.data }); } break; }
+      case 'dcClose': { var d3 = rec && rec.dcs[m.dcId]; if (d3) { d3.readyState = 'closed'; if (typeof d3.onclose === 'function') { d3.onclose({}); } } break; }
+      case 'dcError': { var d4 = rec && rec.dcs[m.dcId]; if (d4 && typeof d4.onerror === 'function') { d4.onerror({}); } break; }
+      case 'pcGone': delete rtcPCs[m.pcId]; break;
+    }
+  }
+
   self.onmessage = function (ev) {
     var m = ev.data || {};
+    if (m.t === 'rtc') { rtcHandleEvent(m); return; }
     if (m.t === 'stun-ip-result') {
       var r = stunPending[m.id];
       if (r) { delete stunPending[m.id]; r(m.ip || ''); }

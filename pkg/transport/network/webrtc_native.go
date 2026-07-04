@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo && !(js && wasm)
 
 // Package network pkg/transport/network/webrtc_native.go
 //
