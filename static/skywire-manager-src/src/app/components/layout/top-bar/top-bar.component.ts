@@ -23,6 +23,11 @@ export interface TabButtonData {
   icon: string;
   label: string;
   /**
+   * Optional second line rendered under the label (visor-switcher chips use it for
+   * the public-ip / lan-ip line). Plain text, not a translation key.
+   */
+  sublabel?: string;
+  /**
    * If true, the button is not visible in the "lg" window size and larger.
    */
   onlyIfLessThanLg?: boolean;

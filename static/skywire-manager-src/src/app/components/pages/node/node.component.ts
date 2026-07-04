@@ -9,6 +9,7 @@ import { Node } from '../../../app.datatypes';
 import { StorageService } from '../../../services/storage.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from '../../../utils/home-tabs';
+import { visorSwitcherChips } from '../../../utils/visor-switcher';
 import { NodeService } from '../../../services/node.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import { NodeActionsHelper } from './actions/node-actions-helper';
@@ -447,11 +448,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     this.switcherSubscription = this.nodeService.getNodes().subscribe(
       (nodes: Node[]) => {
         this.ngZone.run(() => {
-          this.switcherTabs = (nodes || []).map(n => ({
-            icon: (n as any).isHypervisor ? 'router' : ((n as any).arch === 'wasm' ? 'public' : 'devices'),
-            label: n.label || (n.localPk ? n.localPk.substring(0, 8) + '…' : '?'),
-            linkParts: ['/nodes', n.localPk, 'info'],
-          } as TabButtonData));
+          this.switcherTabs = visorSwitcherChips(nodes);
           this.cdr.markForCheck();
         });
       },
