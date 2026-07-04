@@ -63,6 +63,42 @@
     }
   </mat-menu>
 
+  <!-- Persistent hypervisor navigation on node pages: the top-level home tabs
+       (visor list / rewards / resources / …) stay visible instead of being
+       replaced by the per-node tabs, so navigation isn't lost when viewing a
+       visor. Large screens only. -->
+  @if (homeTabsData && homeTabsData.length) {
+    <div class="secondary-nav-row home-nav-row d-none d-lg-flex">
+      @for (t of homeTabsData; track t) {
+        @if (t.externalUrl) {
+          <a mat-button class="tab-button white-theme grey-button-background" [href]="t.externalUrl" target="_blank" rel="noreferrer nofollow noopener">
+            <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
+          </a>
+        } @else {
+          <a mat-button class="tab-button white-theme" [routerLink]="t.linkParts" routerLinkActive="active-home-tab" [routerLinkActiveOptions]="{exact: true}" [ngClass]="{'grey-button-background': true}">
+            <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
+          </a>
+        }
+      }
+    </div>
+  }
+
+  <!-- Visor switcher: one horizontally-scrollable chip per visor (first = local).
+       The chip for the visor currently open is highlighted (not greyed). Jump
+       between visors without backing out to the list. -->
+  @if (switcherTabsData && switcherTabsData.length) {
+    <div class="secondary-nav-row visor-switcher-row d-none d-lg-flex">
+      @for (t of switcherTabsData; track t) {
+        <a mat-button class="tab-button white-theme switcher-chip"
+          [routerLink]="t.linkParts"
+          [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier"
+          [ngClass]="{'grey-button-background': !(t.linkParts && t.linkParts[1] === pageHeaderIdentifier)}">
+          <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
+        </a>
+      }
+    </div>
+  }
+
   <div class="main-container" [ngClass]="{'normal-height': !showVpnInfo}">
     <!-- Return button and title text. -->
     <div class="main-area"><div class="title" [ngClass]="{'d-none d-lg-flex': !showVpnInfo, 'd-flex': showVpnInfo}">
