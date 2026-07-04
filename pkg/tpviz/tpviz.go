@@ -766,20 +766,28 @@ func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// The standalone uptime tracker has been decommissioned. With no UTURL
-	// configured, serve an empty uptime map so the UI's liveness overlay
-	// degrades gracefully (no node marked offline-by-UT) instead of erroring
-	// against a dead clearnet endpoint.
-	if s.config.UTURL == "" {
+	// Uptime now comes from the TPD-integrated uptime tracker; the standalone
+	// uptime tracker was decommissioned. Prefer an operator-supplied UTURL for
+	// back-compat, else fall back to the TPD's own /uptimes?v=v2 feed — it
+	// returns the same []VisorSummary ({pk,on,version,daily}) shape the UI's
+	// UptimeEntry expects, so no remapping is needed.
+	base := s.config.UTURL
+	if base == "" {
+		base = s.config.TPDURL
+	}
+	if base == "" {
 		w.Write([]byte("[]")) //nolint:errcheck,gosec
 		return
 	}
 
-	utURL := s.config.UTURL + "/uptimes?v=v2"
-	cacheFile := CacheFilePath(s.config.CacheDirUT, utURL)
-	data, err := s.getData(cacheFile, utURL)
+	upURL := base + "/uptimes?v=v2"
+	cacheFile := CacheFilePath(s.config.CacheDirUT, upURL)
+	data, err := s.getData(cacheFile, upURL)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to fetch uptime data: %v", err), http.StatusInternalServerError)
+		// An older TPD deploy may not expose /uptimes yet (404). Degrade to an
+		// empty set so the liveness overlay is simply absent, rather than
+		// erroring the whole page — the graph still renders every visor.
+		w.Write([]byte("[]")) //nolint:errcheck,gosec
 		return
 	}
 
@@ -1160,9 +1168,15 @@ func (s *Server) refreshCache() {
 		tpdURL := s.tpdBase() + "/all-transports"
 		urls[CacheFilePath(s.config.CacheDirTPD, tpdURL)] = tpdURL
 	}
+	// Uptime feed: prefer the TPD-integrated tracker (standalone UT decommissioned),
+	// falling back to an operator-supplied UTURL. Keeps the /api/uptimes cache warm
+	// so visor online/offline status is populated. Gated like the TPD fetch above.
 	if s.config.UTURL != "" {
 		utURL := s.config.UTURL + "/uptimes?v=v2"
 		urls[CacheFilePath(s.config.CacheDirUT, utURL)] = utURL
+	} else if s.getVisorAPI() == nil && s.config.TPDURL != "" && !s.deploymentFetchGated() {
+		upURL := s.tpdBase() + "/uptimes?v=v2"
+		urls[CacheFilePath(s.config.CacheDirUT, upURL)] = upURL
 	}
 
 	for cacheFile, url := range urls {
