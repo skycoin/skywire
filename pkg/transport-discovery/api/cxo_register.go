@@ -96,3 +96,64 @@ func (api *API) DeregisterTransportFromCXO(ctx context.Context, id uuid.UUID, re
 	api.mirrorEdges(ctx, touchedEdges)
 	return nil
 }
+
+// ReconcileTransportsFromCXO applies a visor's full transport list published as a
+// single snapshot leaf (transports/list). It is the declarative replacement for the
+// per-transport entry (register) + tombstone (deregister) leaves: register/refresh
+// every entry the reporter is an edge of, and deregister any of the reporter's
+// existing transports that are ABSENT from the list (absence = deletion). Idempotent
+// and self-healing — a dropped update is corrected by the next snapshot.
+func (api *API) ReconcileTransportsFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error {
+	// Accept only entries the reporter is actually an edge of (auth parity with the
+	// per-entry path); build the authoritative keep-set.
+	keep := make(map[uuid.UUID]struct{}, len(entries))
+	signed := make([]*transport.SignedEntry, 0, len(entries))
+	touchedEdges := map[cipher.PubKey]struct{}{}
+	for _, e := range entries {
+		if e == nil || e.EdgeIndex(reporter) < 0 {
+			continue
+		}
+		keep[e.ID] = struct{}{}
+		signed = append(signed, &transport.SignedEntry{Entry: e, Version: version})
+		touchedEdges[e.Edges[0]] = struct{}{}
+		touchedEdges[e.Edges[1]] = struct{}{}
+	}
+
+	// Register/refresh everything currently present.
+	if len(signed) > 0 {
+		if err := api.store.RegisterTransportsBatch(ctx, reporter, signed); err != nil {
+			return fmt.Errorf("register batch: %w", err)
+		}
+		for _, se := range signed {
+			if err := api.store.RecordTransportHeartbeat(ctx, se.Entry.ID, string(se.Entry.Type), time.Time{}); err != nil {
+				_ = err //nolint:errcheck // uptime is auxiliary; store logs
+			}
+		}
+	}
+
+	// Deregister any of the reporter's existing transports absent from the snapshot.
+	// A transport the reporter no longer lists is a deregister signal for that edge —
+	// exactly what a tombstone was in the delta model.
+	existing, err := api.store.GetTransportsByEdgeNoLatency(ctx, reporter)
+	if err != nil {
+		return fmt.Errorf("get existing: %w", err)
+	}
+	for _, e := range existing {
+		if _, ok := keep[e.ID]; ok {
+			continue
+		}
+		if err := api.store.DeregisterTransport(ctx, e.ID); err != nil {
+			// Best-effort — a failed absent-deregister self-corrects on the next
+			// snapshot; the aggregator logs if the whole reconcile returns an error.
+			continue
+		}
+		touchedEdges[e.Edges[0]] = struct{}{}
+		touchedEdges[e.Edges[1]] = struct{}{}
+	}
+
+	api.mirrorEdges(ctx, touchedEdges)
+	if err := api.store.RecordHeartbeat(ctx, reporter, version); err != nil {
+		_ = err //nolint:errcheck // visor-level heartbeat is auxiliary
+	}
+	return nil
+}
