@@ -1,0 +1,29 @@
+{
+  "services": [
+    {
+      "type": "dmsg-discovery",
+      "name": "dmsgd",
+      "addr": ":9090",
+      "redis": "redis://redis:6379/0",
+      "secret_key": "b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714",
+      "test_mode": true,
+      "dmsg_servers": [
+        {
+          "version": "",
+          "sequence": 0,
+          "timestamp": 0,
+          "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+          "server": {
+            "address": "172.21.0.4:8080",
+            "availableSessions": 0
+          }
+        }
+      ]
+    },
+    {
+      "type": "dmsg-server",
+      "name": "dmsgs",
+      "config_path": "/e2e/dmsg-server-v6.json"
+    }
+  ]
+}
