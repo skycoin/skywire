@@ -405,6 +405,43 @@ $top-bar-height: 56px;
   align-items: center;
   gap: 4px;
   padding: 2px 10px;
+
+  // These rows live OUTSIDE .main-container, so they don't inherit the
+  // `.tab-button { color: $white }` rule scoped there — without this the
+  // chips render with Material's default near-black text on the dark bar
+  // and are effectively invisible. Restate the legible styling here.
+  .tab-button {
+    color: $white;
+    opacity: 0.75;
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    border-radius: $mat-dialog-radius;
+    height: $header-buttons-height;
+
+    &:hover {
+      opacity: 1;
+    }
+
+    // The chip for the visor you're currently viewing: fully opaque with a
+    // filled background so "you are here" reads at a glance.
+    &[disabled] {
+      opacity: 1 !important;
+      color: $white;
+      background: $dark-background !important;
+    }
+
+    .mat-icon {
+      margin-right: 2px;
+      opacity: 0.85;
+      font-size: 18px;
+    }
+
+    span {
+      font-size: $font-size-base;
+      margin: 0 4px;
+    }
+  }
 }
 .home-nav-row {
   flex-wrap: wrap;
