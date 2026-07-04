@@ -41,27 +41,37 @@ func TestVPNClient(t *testing.T) {
 	// succeeds if the OS-specific TUN device came up. Retry the start cycle: like
 	// the proxy route, the route group flaps on a cold single-server loopback
 	// deployment until the network settles (each attempt sets up a fresh route).
+	// Each attempt gets a generous poll window: on Windows the WinTUN adapter
+	// creation + route/NAT setup can take well over a minute on a busy runner (the
+	// earlier all-80s "Starting…→Stopped" flaps were the client giving up before
+	// the tunnel came up, not a fast circuit-breaker reject). Re-assert the
+	// transport each round so the route always has an edge to build on, and pace
+	// attempts apart so an open destination circuit breaker has time to close.
+	const vpnAttempts = 4
 	var out, lastErr string
 	ok := false
-	for attempt := 1; attempt <= 6 && !ok; attempt++ {
-		// Re-assert the transport (idempotent) so the route always has an edge to
-		// build on, then start. When the route's destination circuit breaker is
-		// open (from an earlier cold-start failure) vpn start fails FAST, so we
-		// pace attempts ~60s apart to let the breaker close + the network warm —
-		// otherwise rapid retries just re-trip the open breaker.
+	for attempt := 1; attempt <= vpnAttempts && !ok; attempt++ {
 		_, _ = cli("tp", "add", "--rpc", rpcA, pkB, "--type", "dmsg")
 		var err error
-		out, err = cliT(120*time.Second, "vpn", "start", "--rpc", rpcA, "--pk", pkB, "--timeout", "80")
+		out, err = cliT(200*time.Second, "vpn", "start", "--rpc", rpcA, "--pk", pkB, "--timeout", "170")
 		if err == nil && strings.Contains(strings.ToLower(out), "running") {
 			ok = true
 			break
 		}
 		lastErr = out
-		t.Logf("vpn start (attempt %d) not Running: %v %.100q", attempt, err, out)
+		t.Logf("vpn start (attempt %d/%d) not Running: %v %.120q", attempt, vpnAttempts, err, out)
 		_, _ = cli("vpn", "stop", "--rpc", rpcA)
-		if attempt < 6 {
-			time.Sleep(60 * time.Second)
+		if attempt < vpnAttempts {
+			time.Sleep(45 * time.Second)
 		}
+	}
+	if !ok {
+		// `vpn start` only surfaces "Stopped!"; the real reason (route flap, open
+		// circuit breaker, WinTUN failure, or the server being offline) lives in the
+		// visor logs — the vpn-client runs in-process in visorA, the vpn-server in
+		// visorB. Dump both so a failing CI run is diagnosable.
+		dumpLog("visorA")
+		dumpLog("visorB")
 	}
 	require.Truef(t, ok, "vpn-client never reached Running (TUN creation / route setup): %s", lastErr)
 	t.Logf("vpn-client reached Running — TUN device created on %s", runtime.GOOS)

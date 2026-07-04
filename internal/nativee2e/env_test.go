@@ -151,6 +151,9 @@ var dumpLogCausePatterns = []string{
 	"a fatal error occurred", "data-plane server stopped", "http health server stopped",
 	"QUIC server stopped", "WebSocket serving stopped", "failed to bind",
 	"address already in use", "bind:", "panic:", "Serving dmsg",
+	// vpn diagnostics (client in visorA, server in visorB):
+	"circuit breaker", "no listener on port", "vpn-server offline", "wintun", "WinTun",
+	"allocating TUN", "SetupTUN", "failed to connect to the server", "New-NetNat", "route setup",
 }
 
 // dumpLog prints, for post-mortem on failure: (1) the lines matching a known
