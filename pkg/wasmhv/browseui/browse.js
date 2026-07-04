@@ -1269,6 +1269,19 @@
         menu.style.bottom = BARH + "px"; menu.style.top = "auto";
         barTop = 0; barBottom = BARH;
       }
+      // Reserve the bar's strip on the HV-UI underneath so page content isn't
+      // painted over by the always-on-top taskbar. Without this the fixed bar
+      // (z 2147483646) covers the top ~BARH px of the Angular page — e.g. the
+      // node-info page's first line, the visor public key. Padding the body pushes
+      // the normal-flow content clear; the WinBox windows are unaffected (they're
+      // fixed-positioned and bounded by barTop/barBottom above).
+      try {
+        var pg = doc.body;
+        if (pg) {
+          pg.style.paddingTop = (dock === "top") ? BARH + "px" : "";
+          pg.style.paddingBottom = (dock === "bottom") ? BARH + "px" : "";
+        }
+      } catch (e) { /* body not ready — applyDock re-runs on dock toggle */ }
     }
     function addApp(label, fn) {
       var b = doc.createElement("button");
