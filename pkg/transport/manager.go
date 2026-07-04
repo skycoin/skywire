@@ -461,23 +461,33 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 	}
 	tm.mx.RUnlock()
 
+	// CXO-authoritative registration (symmetry with the deregister flip in
+	// flushDeletionQueue): when the CXO leaf publisher is wired, publish the entry
+	// leaves on our TreeStore feed — TPD's cxoaggregator ingests them via
+	// RegisterTransportFromCXO — and skip the HTTP re-register. HTTP re-register
+	// stays as the fallback only when there is no CXO publisher.
+	//
+	// NOTE: this keeps the per-transport delta model (entry leaves + tombstones).
+	// The cleaner unification is a single snapshot leaf (publish the whole list; TPD
+	// reconciles, absence = deletion) — that removes the separate register/deregister
+	// paths and is self-healing. Tracked as a follow-up.
+	if tm.tpdLeafPublisher() != nil {
+		tm.Logger.Debugf("Re-registering %d transports via CXO entry leaves", len(bareEntries))
+		tm.publishTPDEntries(bareEntries)
+		return
+	}
+
 	// Empty publish IS still useful: when our last real transport
 	// goes away, downstream readers (DHT entries, TPD aggregator)
 	// otherwise keep serving the previous stale list under our PK
 	// indefinitely. Republishing the empty list with a fresh sequence
 	// cleans them up.
-	tm.Logger.Debugf("Re-registering %d transports with discovery", len(bareEntries))
-
+	tm.Logger.Debugf("Re-registering %d transports with discovery (HTTP fallback; no CXO publisher)", len(bareEntries))
 	if err := tm.Conf.DiscoveryClient.RegisterTransportsV3(ctx, tm.Conf.Version, bareEntries...); err != nil {
 		tm.Logger.WithError(err).Warn("Failed to re-register transports with discovery")
 	} else {
 		tm.Logger.Debugf("Successfully re-registered %d transports", len(bareEntries))
 	}
-
-	// Mirror to the CXO publisher tree. Dual-write phase: HTTP is
-	// authoritative; CXO is best-effort and converges by the next
-	// tick if a publish fails or the publisher isn't yet wired.
-	tm.publishTPDEntries(bareEntries)
 }
 
 func (tm *Manager) getPTpsCache() []PersistentTransports {
