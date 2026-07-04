@@ -45,11 +45,11 @@ func TestServer_CloseDuringSessionSetup(t *testing.T) {
 	testHookHandleSessionPreMux = func(s *Server) {
 		once.Do(func() {
 			// Deterministically reproduce the race: start Close() concurrently,
-			// wait until it has signalled shutdown (s.done), and give the
+			// wait until it has signaled shutdown (s.done), and give the
 			// awaitDone guard a moment to observe s.done and run its (no-op)
 			// session Close — all BEFORE this session installs its mux.
 			go func() {
-				_ = srv.Close()
+				_ = srv.Close() //nolint
 				close(closeReturned)
 			}()
 			<-s.done
