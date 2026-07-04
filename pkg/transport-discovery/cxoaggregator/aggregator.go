@@ -86,6 +86,14 @@ type Sink interface {
 	// entry; an unknown ID is treated as a no-op (idempotent) so a
 	// tombstone that arrives after a TPD-side eviction doesn't error.
 	DeregisterTransportFromCXO(ctx context.Context, id uuid.UUID, reporter cipher.PubKey) error
+	// ReconcileTransportsFromCXO applies the visor's full transport list
+	// published as a single snapshot leaf at transports/list: it
+	// registers every entry the reporter is an edge of AND deregisters
+	// any of the reporter's existing transports that are ABSENT from the
+	// list (absence = deletion). This is the declarative replacement for
+	// the per-transport entry/tombstone leaves — self-healing, since a
+	// missed update is corrected by the next snapshot.
+	ReconcileTransportsFromCXO(ctx context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error
 }
 
 // BandwidthSink is retained as an alias for callers that only need the
@@ -118,6 +126,15 @@ type liveSnapshot struct {
 type transportEntryLeaf struct {
 	Version string           `json:"version,omitempty"`
 	Entry   *transport.Entry `json:"entry"`
+}
+
+// transportListLeaf is the wire shape for the transports/list snapshot
+// leaf: the visor's full current transport set plus its build version.
+// Re-declared here (one-way dependency); the visor publisher in
+// pkg/transport/manager.go (publishTPDList) publishes the same JSON.
+type transportListLeaf struct {
+	Version string             `json:"version,omitempty"`
+	Entries []*transport.Entry `json:"entries"`
 }
 
 // tombstoneLeaf is the wire shape for transports/<uuid>/tombstone
@@ -407,6 +424,21 @@ func (a *Aggregator) walkAndDispatch(pack registry.Pack, n *treestore.TreeNode, 
 // Tier and service bitmaps still flow through the CXO cache but
 // aren't yet projected into TPD's redis uptime tables.
 func (a *Aggregator) dispatchLeaf(path string, leaf []byte, reporter cipher.PubKey) {
+	// transports/list — the full-set snapshot (declarative CRUD). Reconcile the
+	// reporter's transport set against it (register new + deregister absent).
+	if path == "transports/list" {
+		var list transportListLeaf
+		if err := json.Unmarshal(leaf, &list); err != nil {
+			a.log.WithError(err).WithField("path", path).Debug("CXO aggregator: transport list leaf decode failed")
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := a.sink.ReconcileTransportsFromCXO(ctx, list.Entries, reporter, list.Version); err != nil {
+			a.log.WithError(err).WithField("reporter", reporter).Debug("CXO aggregator: ReconcileTransportsFromCXO failed")
+		}
+		return
+	}
 	if tpID, date, ok := parseTransportTimelinePath(path); ok {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

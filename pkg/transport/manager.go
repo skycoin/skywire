@@ -421,8 +421,11 @@ func (tm *Manager) flushDeletionQueue() {
 	// for no benefit. HTTP delete stays as the fallback ONLY when there is no CXO
 	// publisher (a TPD/visor pairing without CXO).
 	if tm.tpdLeafPublisher() != nil {
-		tm.Logger.Debugf("Deregistering %d transports via CXO tombstones", len(ids))
-		tm.publishTPDTombstones(ids)
+		// Snapshot model: re-publish our full transport list; currentBareEntries
+		// already excludes the just-closed ids, so TPD reconciles them away
+		// (absence = deletion). No tombstone leaf, no HTTP delete.
+		tm.Logger.Debugf("Deregistering %d transports via CXO transport-list snapshot", len(ids))
+		tm.publishTPDList(tm.currentBareEntries())
 		return
 	}
 
@@ -472,8 +475,10 @@ func (tm *Manager) reRegisterTransports(ctx context.Context) {
 	// reconciles, absence = deletion) — that removes the separate register/deregister
 	// paths and is self-healing. Tracked as a follow-up.
 	if tm.tpdLeafPublisher() != nil {
-		tm.Logger.Debugf("Re-registering %d transports via CXO entry leaves", len(bareEntries))
-		tm.publishTPDEntries(bareEntries)
+		// Snapshot model: publish the full transport list as one leaf; TPD reconciles
+		// (register new + deregister absent). Replaces per-transport entry/tombstone.
+		tm.Logger.Debugf("Publishing %d transports to TPD via CXO transport-list snapshot", len(bareEntries))
+		tm.publishTPDList(bareEntries)
 		return
 	}
 
@@ -525,64 +530,53 @@ func (tm *Manager) tpdLeafPublisher() TPDLeafPublisher {
 	return tm.tpdLeafPub
 }
 
-// publishTPDEntries publishes one transports/<uuid>/entry leaf per
-// entry. Best-effort: failures are logged at debug and the next
-// reRegister tick retries.
-func (tm *Manager) publishTPDEntries(entries []*Entry) {
-	pub := tm.tpdLeafPublisher()
-	if pub == nil || len(entries) == 0 {
-		return
-	}
-	type entryLeaf struct {
-		Version string `json:"version,omitempty"`
-		Entry   *Entry `json:"entry"`
-	}
-	for _, e := range entries {
-		if e == nil {
+// currentBareEntries returns this visor's live, non-self-loop transport entries —
+// the authoritative set it publishes to TPD. Closed transports are excluded even if
+// the manager's GC ticker hasn't removed them from tm.tps yet, so a just-torn-down
+// transport is absent from the snapshot immediately.
+func (tm *Manager) currentBareEntries() []*Entry {
+	tm.mx.RLock()
+	defer tm.mx.RUnlock()
+	out := make([]*Entry, 0, len(tm.tps))
+	for _, tp := range tm.tps {
+		if tp.IsClosed() {
 			continue
 		}
-		body, err := json.Marshal(entryLeaf{Version: tm.Conf.Version, Entry: e})
-		if err != nil {
-			tm.Logger.WithError(err).WithField("transport", e.ID).
-				Debug("Failed to marshal transport entry leaf")
+		// Self-loop transports (both edges the same PK) are diagnostic-only and must
+		// never reach TPD/DHT — they'd mislead other visors' pathfinders.
+		if tp.Entry.Edges[0] == tp.Entry.Edges[1] {
 			continue
 		}
-		path := fmt.Sprintf("transports/%s/entry", e.ID.String())
-		if err := pub.Put(path, body); err != nil {
-			tm.Logger.WithError(err).WithField("path", path).
-				Debug("Failed to publish transport entry leaf to CXO")
-		}
+		out = append(out, &tp.Entry)
 	}
+	return out
 }
 
-// publishTPDTombstones publishes a transports/<uuid>/tombstone leaf
-// per id, and removes the corresponding /entry leaf. Best-effort.
-func (tm *Manager) publishTPDTombstones(ids []uuid.UUID) {
+// publishTPDList publishes this visor's full transport list as a single CXO snapshot
+// leaf (transports/list). TPD's cxoaggregator RECONCILES against it — registers every
+// entry and deregisters any of this visor's transports absent from the list — so a
+// removed transport needs no explicit tombstone (absence = deletion) and a missed
+// update self-heals on the next publish. This is the declarative unification of the
+// former per-transport entry (register) + tombstone (deregister) delta leaves; only
+// telemetry (transports/<id>/current, timeline) stays per-transport-addressed.
+func (tm *Manager) publishTPDList(entries []*Entry) {
 	pub := tm.tpdLeafPublisher()
-	if pub == nil || len(ids) == 0 {
+	if pub == nil {
 		return
+	}
+	if entries == nil {
+		entries = []*Entry{} // publish an explicit empty list (last transport gone)
 	}
 	body, err := json.Marshal(struct {
-		DeletedAt time.Time `json:"deleted_at"`
-	}{DeletedAt: time.Now().UTC()})
+		Version string   `json:"version,omitempty"`
+		Entries []*Entry `json:"entries"`
+	}{Version: tm.Conf.Version, Entries: entries})
 	if err != nil {
-		tm.Logger.WithError(err).Debug("Failed to marshal tombstone body")
+		tm.Logger.WithError(err).Debug("Failed to marshal transport list leaf")
 		return
 	}
-	for _, id := range ids {
-		// Delete the entry leaf so a future tree walk doesn't replay
-		// the now-stale registration; the tombstone leaf is the
-		// positive deletion signal that drives TPD's aggregator.
-		entryPath := fmt.Sprintf("transports/%s/entry", id.String())
-		if err := pub.Delete(entryPath); err != nil {
-			tm.Logger.WithError(err).WithField("path", entryPath).
-				Debug("Failed to delete transport entry leaf from CXO")
-		}
-		tombPath := fmt.Sprintf("transports/%s/tombstone", id.String())
-		if err := pub.Put(tombPath, body); err != nil {
-			tm.Logger.WithError(err).WithField("path", tombPath).
-				Debug("Failed to publish transport tombstone to CXO")
-		}
+	if err := pub.Put("transports/list", body); err != nil {
+		tm.Logger.WithError(err).Debug("Failed to publish transport list leaf to CXO")
 	}
 }
 
