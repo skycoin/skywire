@@ -120,6 +120,19 @@ export class TopBarComponent implements OnInit, OnDestroy {
    */
   @Input() tabsData: TabButtonData[];
   /**
+   * Optional persistent top-level navigation row rendered ABOVE the page tabs
+   * (visor list / rewards / resources / …). Shown on node pages so the hypervisor
+   * navigation stays visible instead of being replaced by the per-node tabs.
+   * Active tab is highlighted by routerLinkActive (URL match), not selectedTabIndex.
+   */
+  @Input() homeTabsData?: TabButtonData[];
+  /**
+   * Optional visor-switcher row: one horizontally-scrollable chip per visor in the
+   * hypervisor's list (first = local visor). Lets the user jump between visors'
+   * pages without backing out to the list. Active chip via routerLinkActive.
+   */
+  @Input() switcherTabsData?: TabButtonData[];
+  /**
    * Index of the currently selected tab.
    */
   @Input() selectedTabIndex = 0;
