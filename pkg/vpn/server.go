@@ -69,9 +69,13 @@ func NewServer(cfg ServerConfig, appCl *app.Client) (*Server, error) {
 
 	fmt.Printf("Got default network interface: %s\n", defaultNetworkIfc)
 
+	// The interface IPs are informational only (stored, not used for routing/NAT),
+	// so a lookup failure must not stop the server — on Windows the interface may
+	// be named in a form NetworkInterfaceIPs can't resolve (or be a placeholder
+	// like the loopback used for tests), yet the server can still serve fine.
 	defaultNetworkIfcIPs, err := netutil.NetworkInterfaceIPs(defaultNetworkIfc)
 	if err != nil {
-		return nil, fmt.Errorf("error getting IPs of interface %s: %w", defaultNetworkIfc, err)
+		fmt.Printf("Could not get IPs of interface %s (non-fatal): %v\n", defaultNetworkIfc, err)
 	}
 
 	fmt.Printf("Got IPs of interface %s: %v\n", defaultNetworkIfc, defaultNetworkIfcIPs)

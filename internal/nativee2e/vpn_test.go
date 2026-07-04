@@ -16,17 +16,16 @@ import (
 // TestVPNClient starts vpn-client on the client visor (A) pointed at vpn-server
 // on visor B and asserts it reaches Running — a full round trip that exercises
 // the OS-specific client AND server code: the client's TUN (utun on macOS,
-// pkg/vpn/os_client_darwin.go), the server's TUN (os_darwin.go Server.SetupTUN)
-// and the server's NAT/forwarding (os_server_darwin.go: sysctl + pf).
+// WinTUN on Windows, /dev/net/tun on Linux), the server's TUN (SetupTUN) and the
+// server's NAT/forwarding (os_server_{linux,darwin,windows}.go: iptables / pf /
+// WinNAT).
 //
-// Runs on Linux and macOS (both need root — TUN devices + pf/sysctl/iptables).
-// Windows is skipped: vpn-server isn't implemented there yet (os_server.go stubs).
+// Runs on Linux, macOS and Windows. Needs privileges: root on unix, and on
+// Windows an elevated (admin) process — the GitHub windows runner already is —
+// plus wintun.dll alongside the binary, which the e2e-windows CI job provisions.
 func TestVPNClient(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("vpn-server is not implemented on Windows yet (os_server.go stubs); Linux + macOS supported")
-	}
 	if !elevated() {
-		t.Skip("vpn-client + vpn-server need root (TUN devices + pf/sysctl); skipping")
+		t.Skip("vpn-client + vpn-server need root/admin (TUN devices + NAT); skipping")
 	}
 	pkB := visorPK(t, rpcB)
 
