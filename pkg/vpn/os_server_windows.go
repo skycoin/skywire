@@ -83,7 +83,7 @@ func EnableIPv6Forwarding() error { return nil }
 func EnableIPMasquerading(_ string) error {
 	// Clear any stale NAT from a previous run, then create ours. WinNAT takes one
 	// prefix per NAT, so name them per prefix.
-	_ = psRun(fmt.Sprintf("Remove-NetNat -Name '%s*' -Confirm:$false -ErrorAction SilentlyContinue", natName))
+	_ = psRun(fmt.Sprintf("Remove-NetNat -Name '%s*' -Confirm:$false -ErrorAction SilentlyContinue", natName)) //nolint
 	for i, prefix := range vpnInternalPrefixes {
 		cmd := fmt.Sprintf("New-NetNat -Name '%s-%d' -InternalIPInterfaceAddressPrefix %s -ErrorAction SilentlyContinue",
 			natName, i, prefix)
