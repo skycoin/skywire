@@ -398,3 +398,25 @@ $top-bar-height: 56px;
   font-weight: 500;
   font-size: 14px;
 }
+
+// Persistent secondary navigation rows on node pages: the home-nav row and the
+// horizontally-scrollable visor switcher (see top-bar.component.html).
+.secondary-nav-row {
+  align-items: center;
+  gap: 4px;
+  padding: 2px 10px;
+}
+.home-nav-row {
+  flex-wrap: wrap;
+}
+.visor-switcher-row {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scrollbar-width: thin;
+
+  .switcher-chip {
+    flex: 0 0 auto;
+  }
+}
