@@ -412,7 +412,21 @@ func (tm *Manager) flushDeletionQueue() {
 		return
 	}
 
-	tm.Logger.Debugf("Batch deleting %d transports from TPD", len(ids))
+	// CXO-authoritative deregister: when the CXO leaf publisher is wired, publishing
+	// a tombstone (transports/<id>/tombstone) on our TreeStore feed IS the deregister
+	// signal — TPD's cxoaggregator dispatches it to DeregisterTransportFromCXO. That
+	// makes the HTTP DeleteTransports redundant, so skip it: an old deployed TPD with
+	// no /transports/delete-batch endpoint forces the per-ID sequential fallback,
+	// which hits the 30-req/min rate limit (429s) and diverges the local↔TPD views
+	// for no benefit. HTTP delete stays as the fallback ONLY when there is no CXO
+	// publisher (a TPD/visor pairing without CXO).
+	if tm.tpdLeafPublisher() != nil {
+		tm.Logger.Debugf("Deregistering %d transports via CXO tombstones", len(ids))
+		tm.publishTPDTombstones(ids)
+		return
+	}
+
+	tm.Logger.Debugf("Batch deleting %d transports from TPD (HTTP fallback; no CXO publisher)", len(ids))
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	deleted, err := tm.Conf.DiscoveryClient.DeleteTransports(ctx, ids)
 	cancel()
@@ -421,11 +435,6 @@ func (tm *Manager) flushDeletionQueue() {
 	} else {
 		tm.Logger.Debugf("Batch deleted %d/%d transports from TPD", deleted, len(ids))
 	}
-
-	// Mirror to the CXO publisher tree. Dual-write phase: best-effort,
-	// and idempotent on TPD's side (DeregisterTransport on a
-	// not-found ID is a no-op).
-	tm.publishTPDTombstones(ids)
 }
 
 func (tm *Manager) reRegisterTransports(ctx context.Context) {
