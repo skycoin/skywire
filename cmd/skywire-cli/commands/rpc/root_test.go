@@ -1,7 +1,9 @@
 // Package clirpc root_test.go
 package clirpc
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestIsUnderBase locks in the boundary behavior that distinguishes
 // base+suffix from sub-paths beneath it. The pre-fix prefix match
