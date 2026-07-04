@@ -1584,7 +1584,7 @@ func (rg *RouteGroup) close(code routing.CloseCode) error {
 		// Deliberately do NOT close(rg.readCh). readCh has multiple concurrent
 		// senders (handleDataPacket, one per mux leg), so closing it races with an
 		// in-flight send — a WARNING: DATA RACE under -race, and historically a
-		// "send on closed channel" panic. Closure is signalled ONLY via rg.closed /
+		// "send on closed channel" panic. Closure is signaled ONLY via rg.closed /
 		// rg.remoteClosed: the sole reader (Read) and every sender select on those,
 		// so readCh is never closed and there is nothing to race.
 		rg.setRemoteClosed()
@@ -1674,7 +1674,7 @@ func (rg *RouteGroup) handleDataPacket(packet routing.Packet) (err error) {
 	}
 
 	// Defensive recover. readCh is no longer closed on route-group close (closure
-	// is signalled via rg.closed / rg.remoteClosed — see close()), so the old
+	// is signaled via rg.closed / rg.remoteClosed — see close()), so the old
 	// "send on closed channel" panic can no longer occur here. The recover is kept
 	// purely as a safety net: an unexpected panic in this hot packet-dispatch path
 	// drops the packet and keeps the router goroutine serving other route groups
