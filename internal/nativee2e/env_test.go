@@ -142,9 +142,20 @@ func setup() error {
 	return nil
 }
 
-// dumpLog prints, for post-mortem on failure: (1) the lines that name the actual
-// init failure (the root cause, which the shutdown cascade otherwise pushes off
-// the tail), then (2) the last 60 lines.
+// dumpLogCausePatterns are the log substrings that identify a process's real
+// failure — a fatal visor-module init OR a deployment listener/serve failure
+// (the dmsg-server data-plane binding :8080, QUIC/WS/health listeners, panics,
+// port clashes). These otherwise get pushed off the tail by retry churn.
+var dumpLogCausePatterns = []string{
+	"Module init failed", "initializing module", "failed to start",
+	"a fatal error occurred", "data-plane server stopped", "http health server stopped",
+	"QUIC server stopped", "WebSocket serving stopped", "failed to bind",
+	"address already in use", "bind:", "panic:", "Serving dmsg",
+}
+
+// dumpLog prints, for post-mortem on failure: (1) the lines matching a known
+// failure pattern (root cause), (2) the log HEAD (startup — where a service binds
+// its listeners, e.g. the dmsg-server on :8080), and (3) the log tail.
 func dumpLog(name string) {
 	b, err := os.ReadFile(filepath.Join(env.work, name+".log"))
 	if err != nil {
@@ -153,19 +164,24 @@ func dumpLog(name string) {
 	lines := strings.Split(string(b), "\n")
 	var causes []string
 	for _, l := range lines {
-		if strings.Contains(l, "Module init failed") ||
-			strings.Contains(l, "initializing module") ||
-			strings.Contains(l, "failed to start") ||
-			strings.Contains(l, "a fatal error occurred") {
-			causes = append(causes, l)
+		for _, p := range dumpLogCausePatterns {
+			if strings.Contains(l, p) {
+				causes = append(causes, l)
+				break
+			}
 		}
+	}
+	head := lines
+	if len(head) > 40 {
+		head = head[:40]
 	}
 	from := 0
 	if len(lines) > 60 {
 		from = len(lines) - 60
 	}
-	fmt.Fprintf(os.Stderr, "\n===== %s.log — ROOT CAUSE =====\n%s\n===== %s.log (tail) =====\n%s\n=========================\n",
-		name, strings.Join(causes, "\n"), name, strings.Join(lines[from:], "\n"))
+	fmt.Fprintf(os.Stderr,
+		"\n===== %s.log — ROOT CAUSE =====\n%s\n===== %s.log (head) =====\n%s\n===== %s.log (tail) =====\n%s\n=========================\n",
+		name, strings.Join(causes, "\n"), name, strings.Join(head, "\n"), name, strings.Join(lines[from:], "\n"))
 }
 
 func teardown() {
