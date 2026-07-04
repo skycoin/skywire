@@ -83,6 +83,10 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   loading = true;
   dataSource: Node[] = [];
   tabsData: TabButtonData[] = [];
+  // Visor-switcher chips shown in the top bar (one per visor in the list), so the
+  // switcher is present on the list page too — click a chip to jump straight to
+  // that visor's info page. Built from allNodes in buildSwitcherTabs().
+  switcherTabs: TabButtonData[] = [];
   options: MenuOptionData[] = [];
   showDmsgInfo = false;
   showRewardsInfo = false;
@@ -297,6 +301,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     });
 
     this.tabsData = homeTabsData();
+    this.buildSwitcherTabs();
 
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
@@ -395,6 +400,21 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     } else if (actionName === 'modifyRewardsAll') {
       this.changeRewardsToAll();
     }
+  }
+
+  /**
+   * Builds the visor-switcher chips (one per visor in the list) shown in the top
+   * bar. Same shape/icons as the node page's switcher so the row is consistent
+   * across the list and detail pages; clicking a chip opens that visor's info
+   * page. Best-effort: leaves the row empty until node data is available.
+   */
+  private buildSwitcherTabs() {
+    const nodes = this.allNodes || [];
+    this.switcherTabs = nodes.map(n => ({
+      icon: (n as any).isHypervisor ? 'router' : ((n as any).arch === 'wasm' ? 'public' : 'devices'),
+      label: n.label || (n.localPk ? n.localPk.substring(0, 8) + '…' : '?'),
+      linkParts: ['/nodes', n.localPk, 'info'],
+    } as TabButtonData));
   }
 
   /**
@@ -527,6 +547,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
 
           this.allNodes = result.data as Node[];
           this.dataFilterer.setData(this.allNodes);
+          this.buildSwitcherTabs();
 
           // Fetch reward data if on the rewards tab and not yet loaded
           if (this.showRewardsInfo && !this.rewardDataLoaded && !this.rewardDataLoading) {
