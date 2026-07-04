@@ -136,6 +136,7 @@ type recordingSink struct {
 	}
 	registers   []recordedRegister
 	deregisters []recordedDeregister
+	reconciles  []recordedReconcile
 }
 
 func (s *recordingSink) UpdateBandwidth(_ context.Context, _ string, _ cipher.PubKey, _, _ uint64) error {
@@ -185,6 +186,13 @@ func (s *recordingSink) DeregisterTransportFromCXO(_ context.Context, id uuid.UU
 	return nil
 }
 
+func (s *recordingSink) ReconcileTransportsFromCXO(_ context.Context, entries []*transport.Entry, reporter cipher.PubKey, version string) error {
+	s.mu.Lock()
+	s.reconciles = append(s.reconciles, recordedReconcile{entries: entries, reporter: reporter, version: version})
+	s.mu.Unlock()
+	return nil
+}
+
 type recordedRegister struct {
 	entry    *transport.Entry
 	reporter cipher.PubKey
@@ -194,6 +202,12 @@ type recordedRegister struct {
 type recordedDeregister struct {
 	id       uuid.UUID
 	reporter cipher.PubKey
+}
+
+type recordedReconcile struct {
+	entries  []*transport.Entry
+	reporter cipher.PubKey
+	version  string
 }
 
 func TestDispatchLeafLatencyGate(t *testing.T) {
@@ -432,4 +446,32 @@ func TestDispatchLeafEntryAndTombstone(t *testing.T) {
 			t.Errorf("expected drop on bad json, got %d registers", len(sink.registers))
 		}
 	})
+}
+
+func TestDispatchLeafTransportListSnapshot(t *testing.T) {
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+	id1, id2 := uuid.New(), uuid.New()
+
+	sink := &recordingSink{}
+	a := &Aggregator{sink: sink, log: logging.MustGetLogger("test")}
+	entries := []*transport.Entry{
+		{ID: id1, Edges: [2]cipher.PubKey{pkA, pkB}, Type: "stcpr"},
+		{ID: id2, Edges: [2]cipher.PubKey{pkA, pkB}, Type: "sudph"},
+	}
+	body, err := json.Marshal(transportListLeaf{Version: "v1.2.3", Entries: entries})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	a.dispatchLeaf("transports/list", body, pkA)
+	if len(sink.reconciles) != 1 {
+		t.Fatalf("expected 1 reconcile call, got %d", len(sink.reconciles))
+	}
+	got := sink.reconciles[0]
+	if len(got.entries) != 2 {
+		t.Errorf("reconcile entries = %d, want 2", len(got.entries))
+	}
+	if got.reporter != pkA || got.version != "v1.2.3" {
+		t.Errorf("reconcile reporter/version mismatch: %v %q", got.reporter, got.version)
+	}
 }
