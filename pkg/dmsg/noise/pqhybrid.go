@@ -14,10 +14,11 @@
 package noise
 
 import (
-	"crypto/hkdf"
-	"crypto/mlkem"
 	"crypto/sha256"
 	"fmt"
+
+	"crypto/hkdf"
+	"crypto/mlkem"
 )
 
 const (

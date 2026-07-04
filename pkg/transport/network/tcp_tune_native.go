@@ -2,7 +2,9 @@
 
 package network
 
-import "net"
+import (
+	"net"
+)
 
 // tuneTCPConn applies TCP_NODELAY + keepalive tuning to a raw TCP transport
 // connection (no-op for non-TCP conns). Split behind a build tag: TinyGo's

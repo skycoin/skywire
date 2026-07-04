@@ -20,13 +20,12 @@ import (
 	"os/exec"
 	"runtime"
 
+	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
-
-	ipc "github.com/james-barrow/golang-ipc"
 )
 
 // newExternalCmd builds the *exec.Cmd for an external-mode app (nil for

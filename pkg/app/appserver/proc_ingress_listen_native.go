@@ -3,7 +3,9 @@
 // Package appserver pkg/app/appserver/proc_ingress_listen_native.go
 package appserver
 
-import "net"
+import (
+	"net"
+)
 
 // listenIngress opens the proc manager's app-ingress TCP listener. External
 // (os/exec) apps dial it to reach the visor; in-process apps use net.Pipe

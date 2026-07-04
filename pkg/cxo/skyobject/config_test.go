@@ -1,6 +1,8 @@
 package skyobject
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestNewConfigPopulatesMaxFillingParallel guards against the
 // regression where NewConfig() left MaxFillingParallel at its int

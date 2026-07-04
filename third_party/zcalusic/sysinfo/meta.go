@@ -4,7 +4,9 @@
 
 package sysinfo
 
-import "time"
+import (
+	"time"
+)
 
 // Meta information.
 type Meta struct {

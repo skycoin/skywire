@@ -6,9 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/require"
-
 	skycipher "github.com/skycoin/skycoin/src/cipher"
+	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )

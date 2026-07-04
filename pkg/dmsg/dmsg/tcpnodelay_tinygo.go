@@ -3,7 +3,9 @@
 // Package dmsg pkg/dmsg/tcpnodelay_tinygo.go
 package dmsg
 
-import "net"
+import (
+	"net"
+)
 
 // setTCPNoDelay is a no-op under TinyGo: net.TCPConn has no SetNoDelay method.
 // See tcpnodelay_native.go.

@@ -7,7 +7,9 @@
 
 package sysinfo
 
-import "runtime"
+import (
+	"runtime"
+)
 
 // getCPUInfo is a no-op on non-Linux targets that import this package
 // (only for the SysInfo / CPU type shape used in survey marshaling).

@@ -2,7 +2,9 @@
 
 package dmsgclient
 
-import "syscall/js"
+import (
+	"syscall/js"
+)
 
 // jslog routes a debug line to a JS hook (window.__skylog) when present, so the
 // browser harness / control bridge can surface dmsg-disc-over-dmsg internals.
