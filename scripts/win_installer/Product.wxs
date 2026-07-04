@@ -16,6 +16,28 @@
             Language="1033">
 
       <Package InstallerVersion="200" Compressed="yes" Comments="Windows Installer Package" InstallScope="perMachine"/>
+
+      <!-- Make upgrades actually replace the previous version. The old setup
+           only scheduled <RemoveExistingProducts> but never populated the
+           Upgrade table (no <Upgrade>/FindRelatedProducts), so on upgrade the
+           prior product was never detected or removed. Because the shared
+           ApplicationFiles component (fixed GUID) was then seen as already
+           installed, its files (new skywire.exe / skywire-autoconfig.bat) were
+           skipped and the postinstall CustomAction ran the OLD binary — the
+           reported "config not updated on MSI upgrade" symptom.
+
+           <MajorUpgrade> populates the Upgrade table for our UpgradeCode,
+           detects any other version, and schedules RemoveExistingProducts
+           afterInstallValidate (same point the old bare action used) so the
+           previous product is fully removed before the new files install and
+           the postinstall runs against the new binary. AllowSameVersionUpgrades
+           handles reinstalls/repairs of the same 3-field version (Windows
+           Installer ignores the 4th field), which otherwise error out. -->
+      <MajorUpgrade
+         Schedule="afterInstallValidate"
+         AllowSameVersionUpgrades="yes"
+         DowngradeErrorMessage="A newer version of Skywire is already installed. Setup will now exit." />
+
       <WixVariable Id="WixUIBannerBmp" Value=".\images\Banner.png" />
       <WixVariable Id="WixUIDialogBmp" Value=".\images\Dialog.png" />
       <Media Id="1" Cabinet="product.cab" EmbedCab="yes"/>
@@ -110,7 +132,7 @@
                     Return="ignore"/>
 
       <InstallExecuteSequence>
-         <RemoveExistingProducts After="InstallValidate"/>
+         <!-- RemoveExistingProducts is scheduled by <MajorUpgrade> above. -->
          <!-- Run on install/upgrade only, not on uninstall. -->
          <Custom Action="RunSkywireAutoconfig" After="InstallFiles">NOT REMOVE</Custom>
       </InstallExecuteSequence>
