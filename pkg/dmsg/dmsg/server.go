@@ -680,6 +680,13 @@ func (s *Server) addAcceptedPeerSession(remotePK cipher.PubKey, ses *SessionComm
 // in quic-go, which does not compile under TinyGo. A TinyGo build is a client,
 // not a server, so they are simply absent there.
 
+// testHookHandleSessionPreMux is a test-only seam: when non-nil it is invoked
+// inside handleSession after the awaitDone shutdown-guard goroutine is spawned
+// but BEFORE the stream mux is installed — exactly the shutdown-during-setup
+// race window closed by the isClosed(s.done) re-check after setSession. Always
+// nil in production; set only by TestServer_CloseDuringSessionSetup.
+var testHookHandleSessionPreMux func(*Server)
+
 func (s *Server) handleSession(conn net.Conn) {
 	defer func() {
 		if r := recover(); r != nil {
@@ -717,6 +724,11 @@ func (s *Server) handleSession(conn net.Conn) {
 		awaitDone(ctx, s.done)
 		log.WithError(dSes.Close()).Info("Stopped session.")
 	}()
+
+	if hook := testHookHandleSessionPreMux; hook != nil {
+		hook(s)
+	}
+
 	// detect visor protocol for dmsg
 	protocol := s.entryProtocol(ctx, dSes.RemotePK())
 
@@ -748,6 +760,22 @@ func (s *Server) handleSession(conn net.Conn) {
 	// Newest-session-wins: setSession always installs this session
 	// (replacing and closing any stale predecessor), so always serve it.
 	s.setSession(ctx, dSes.SessionCommon)
+
+	// Shutdown-race guard. The awaitDone goroutine spawned above closes this
+	// session when s.done fires — but SessionCommon.Close only closes a stream
+	// mux that is already installed. If Close() fired DURING setup (between that
+	// goroutine spawning and the yamux/smux being set a few lines up), it ran
+	// dSes.Close() as a no-op and exited, leaving this session unguarded:
+	// dSes.Serve would then block on AcceptStream forever and hang Close()'s
+	// s.wg.Wait() — the deadlock seen when two peered servers are closed in
+	// sequence, since the mesh continually re-dials peer sessions. Now that the
+	// mux exists, re-check and close so Serve returns immediately. (A close that
+	// races in AFTER this check is still handled by the awaitDone goroutine,
+	// which by then is guarding a fully-installed session.)
+	if isClosed(s.done) {
+		_ = dSes.Close() //nolint:errcheck,gosec
+	}
+
 	dSes.Serve()
 
 	// If this inbound session was promoted to a forwardable peer (an
