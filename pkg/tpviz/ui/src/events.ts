@@ -16,7 +16,7 @@ import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
 import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode, setVoronoiOverlay } from './globe';
-import { showCosmos, hideCosmos, updateCosmosData, isCosmosActive } from './cosmos-graph';
+import { showCosmos, hideCosmos, updateCosmosData, isCosmosActive, cosmosFit, cosmosZoomBy } from './cosmos-graph';
 
 export function wireEventListeners(): void {
     // Filter listeners
@@ -44,20 +44,24 @@ export function wireEventListeners(): void {
     document.getElementById('version-filter')!.addEventListener('change', applyFilters);
     document.getElementById('search')!.addEventListener('input', applyFilters);
 
-    // Zoom/fit listeners
-    document.getElementById('btn-fit')!.addEventListener('click', () => S.network && S.network.fit());
+    // Zoom/fit listeners — route to the active renderer (cosmos WebGL or vis-network).
+    document.getElementById('btn-fit')!.addEventListener('click', () => {
+        if (isCosmosActive()) { cosmosFit(); } else if (S.network) { S.network.fit(); }
+    });
     document.getElementById('zoom-in')!.addEventListener('click', () => {
+        if (isCosmosActive()) { cosmosZoomBy(1.3); return; }
         if (!S.network) return;
         const scale = S.network.getScale();
         S.network.moveTo({ scale: scale * 1.3 });
     });
     document.getElementById('zoom-out')!.addEventListener('click', () => {
+        if (isCosmosActive()) { cosmosZoomBy(1 / 1.3); return; }
         if (!S.network) return;
         const scale = S.network.getScale();
         S.network.moveTo({ scale: scale / 1.3 });
     });
     document.getElementById('zoom-fit')!.addEventListener('click', () => {
-        if (S.network) S.network.fit();
+        if (isCosmosActive()) { cosmosFit(); } else if (S.network) { S.network.fit(); }
     });
 
     // Resizable sidebar
@@ -235,10 +239,17 @@ export function wireEventListeners(): void {
         });
     }
 
-    // Data initialization - flat view is default
+    // Data initialization. WebGL is the default view — at the full
+    // all-transports scale (~20k edges) the vis-network Flat view is unusable
+    // (main-thread hang), whereas the GPU-rendered WebGL view stays responsive.
+    // The flat datasets are still built (processData) so the WebGL view can read
+    // them and the user can switch to Flat/Globe.
     checkServer();
     fetchAllData();
     checkTPSStatus();
+    viewFlatBtn?.classList.remove('active');
+    viewCosmosBtn?.classList.add('active');
+    showCosmos();
 
     // Start data flow animation after a short delay (for flat view)
     setTimeout(() => {

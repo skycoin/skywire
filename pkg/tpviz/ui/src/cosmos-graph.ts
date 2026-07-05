@@ -14,7 +14,7 @@
 import { Graph } from '@cosmograph/cosmos';
 import * as S from './state';
 import { colors, LOCAL_EDGE_COLOR } from './constants';
-import { showNodeInfo } from './node-info';
+import { handleGraphNodeClick } from './node-click';
 
 interface CosmosNode {
   id: string;
@@ -166,27 +166,53 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
     // hairball into a readable ball in a couple seconds, off the main thread.
     spaceSize: 4096,
     simulation: {
-      gravity: 0.5,
-      repulsion: 0.6,
-      linkSpring: 1.2,
-      linkDistance: 4,
+      gravity: 0.9,
+      repulsion: 0.5,
+      linkSpring: 1.3,
+      linkDistance: 3,
       friction: 0.85,
       decay: 2000,
       // Re-frame once the layout settles (the initial fit is too tight while
       // every node still sits clustered near the center).
-      onEnd: () => { if (graph) { graph.fitView(400); } },
+      onEnd: () => { if (graph) { graph.fitView(400, 0.1); } },
     },
     events: {
       onClick: (node?: CosmosNode) => {
-        if (node && node.id) { showNodeInfo(node.id); }
+        if (node && node.id) { handleGraphNodeClick(node.id); }
       },
       onNodeMouseOver: (node: CosmosNode, _i: number, _pos: [number, number], event: any) => {
-        if (node && event && typeof event.clientX === 'number') { showTooltip(node, event as MouseEvent); }
+        if (!node) { return; }
+        // Highlight the hovered node's neighborhood (greys out the rest), the
+        // WebGL analogue of the flat view's showNodeEdgesOnly-on-hover.
+        if (graph) { graph.selectNodeById(node.id, true); }
+        if (event && typeof event.clientX === 'number') { showTooltip(node, event as MouseEvent); }
       },
-      onNodeMouseOut: () => { hideTooltip(); },
+      onNodeMouseOut: () => {
+        hideTooltip();
+        if (graph) { graph.unselectNodes(); }
+      },
     },
   });
   return graph;
+}
+
+// cosmosFit frames the whole graph (wired to the "Fit to Screen" + zoom-fit
+// buttons when the WebGL view is active).
+export function cosmosFit(): void {
+  if (graph) { graph.fitView(400, 0.1); }
+}
+
+// cosmosZoomBy multiplies the current zoom level (wired to the +/- buttons).
+export function cosmosZoomBy(factor: number): void {
+  if (graph) { graph.setZoomLevel(graph.getZoomLevel() * factor, 200); }
+}
+
+// cosmosFocusNode centers + zooms to a node and selects its neighborhood
+// (wired to focusNode / the sidebar visor list / search).
+export function cosmosFocusNode(pk: string): void {
+  if (!graph) { return; }
+  graph.zoomToNodeById(pk, 500, 5);
+  graph.selectNodeById(pk, true);
 }
 
 // showCosmos hides the flat/globe containers, shows the WebGL canvas and renders.
@@ -223,6 +249,6 @@ export function updateCosmosData(): void {
   g.setData(nodes, links);
   if (settleTimer) { clearTimeout(settleTimer); }
   settleTimer = setTimeout(() => {
-    if (graph && active) { graph.pause(); graph.fitView(500); }
+    if (graph && active) { graph.pause(); graph.fitView(500, 0.1); }
   }, 5000);
 }
