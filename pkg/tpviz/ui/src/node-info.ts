@@ -4,6 +4,7 @@ import * as S from './state';
 import { getVisorStatus, isLocalVisor, copyToClipboard } from './utils';
 import { LOCAL_EDGE_COLOR } from './constants';
 import { applyFilters } from './filters';
+import { isCosmosActive, cosmosFocusNode } from './cosmos-graph';
 
 export function showNodeInfo(nodeId: string): void {
     const info = document.getElementById('selected-info');
@@ -111,6 +112,7 @@ export function hideNodeInfo(): void {
 }
 
 export function focusNode(pk: string): void {
+    if (isCosmosActive()) { cosmosFocusNode(pk); return; }
     if (!S.network || !S.nodesDataset!.get(pk)) return;
     S.network.selectNodes([pk]);
     S.network.focus(pk, {
