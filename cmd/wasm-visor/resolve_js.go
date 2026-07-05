@@ -41,6 +41,7 @@ func initResolver(svc visorcore.Services, self cipher.PubKey) {
 	add("dmsgd", svc.DmsgDiscoveryDmsg)
 	add("conf", svc.ConfDmsg)
 	add("ut", svc.UptimeTrackerDmsg)
+	add("rewards", svc.RewardSystemDmsg)
 	for i, ds := range svc.DmsgServers {
 		var pk cipher.PubKey
 		if err := pk.Set(ds.Static); err == nil && !pk.Null() {
