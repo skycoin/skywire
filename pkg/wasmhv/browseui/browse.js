@@ -261,32 +261,72 @@
     }
     function dmsgUp(st) { return !!(st && (st.dmsg_connected || (st.dmsg_sessions | 0) > 0)); }
 
-    // connectingPage shows a live "connecting to the mesh" state in the iframe —
-    // shown while the visor's dmsg client boots and establishes a session, so a
-    // dmsg fetch issued before then renders this instead of a raw "not booted"
-    // error. Replaced by the real page once the fetch completes.
+    // --- live connection journey ------------------------------------------
+    // A dmsg/skynet connection is a multi-step, adaptive process, not a single
+    // request → status code. So instead of one terminal error we show the
+    // SEQUENCE OF EVENTS as it happens — dmsg boot/seeding, session
+    // establishment, (and, once routed through the log ring, route setup) —
+    // sourced live from the visor's own log stream (runtime-logs, cursor-
+    // streamed). Shown while connecting; frozen as the trail if the attempt
+    // ultimately fails, so the "error page" is the whole journey, not a code.
+    var journeyLines = [], journeyCursor = 0;
+    function selfPKOf() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (e) { return ""; } }
+    function resetJourney() { journeyLines = []; journeyCursor = 0; }
+    function pollJourney() {
+      var api = globalThis.skywireVisor && globalThis.skywireVisor.hvApi;
+      if (!api) { return Promise.resolve(); }
+      // Resolve the self PK from status() (the runtime-logs route is keyed by
+      // the visor PK), falling back to opts.selfPK() — status().pk is the source
+      // that's reliably populated in the standalone.
+      return dmsgStatus().then(function (st) {
+        var pk = (st && st.pk) || selfPKOf();
+        if (!pk) { return; }
+        return Promise.resolve(api("GET", "/api/visors/" + pk + "/runtime-logs?since=" + journeyCursor, null))
+          .then(function (r) {
+            var j = JSON.parse(new TextDecoder().decode(r.body));
+            if (typeof j.latest === "number") { journeyCursor = j.latest; }
+            (j.entries || []).forEach(function (e) {
+              var msg = e; try { var o = JSON.parse(e); msg = o.msg || e; } catch (_) {}
+              journeyLines.push(String(msg).replace(/^\[visor\]\s*/, ""));
+            });
+            if (journeyLines.length > 80) { journeyLines = journeyLines.slice(-80); }
+          });
+      }).catch(function () {});
+    }
+    function journeyHTML(maxLines) {
+      var tail = journeyLines.slice(-(maxLines || 12));
+      if (!tail.length) { return ""; }
+      return '<div style="text-align:left;margin-top:1.1rem;max-height:40vh;overflow:auto;background:#08060d;border:1px solid #1c1830;border-radius:6px;padding:.6em .8em;font:11px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:#8b93a7;white-space:pre-wrap;word-break:break-word">' +
+        tail.map(function (l) { return esc(l); }).join('\n') + '</div>';
+    }
+
+    // connectingPage shows a live "connecting to the mesh" state + the journey
+    // log, while the dmsg client boots and establishes a session. Replaced by
+    // the real page once the fetch completes.
     function connectingPage(target, sessions, note) {
       frame.removeAttribute("src");
       frame.srcdoc = '<!doctype html><meta charset=utf-8><body style="font:14px/1.6 system-ui,sans-serif;background:#0e0c14;color:#cdd2da;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">' +
-        '<div style="text-align:center;max-width:440px;padding:2rem">' +
+        '<div style="max-width:520px;width:90%;padding:2rem;text-align:center">' +
         '<div style="width:26px;height:26px;margin:0 auto 1.1rem;border:3px solid #2a2342;border-top-color:#9d7cff;border-radius:50%;animation:sp 1s linear infinite"></div>' +
         '<div style="color:#9d7cff;font-weight:600;margin-bottom:.5rem">Connecting to the mesh…</div>' +
         '<div style="opacity:.75">Establishing a dmsg session to reach<br><b style="word-break:break-all">' + esc(target) + '</b></div>' +
         '<div style="opacity:.5;font-size:.85em;margin-top:.9rem">dmsg sessions: ' + (sessions | 0) + (note ? ' · ' + esc(note) : '') + '</div>' +
+        journeyHTML(12) +
         '<style>@keyframes sp{to{transform:rotate(360deg)}}</style></div></body>';
     }
 
     // waitForDmsg holds a dmsg navigation until the visor has a live dmsg
-    // session, showing connectingPage meanwhile. Returns when connected, when a
-    // newer navigation supersedes this one, or after ~30s (then the caller
-    // proceeds and any real failure surfaces on the error page). This is what
-    // turns the transient "not booted / no session yet" window into a friendly
-    // loading state instead of a scary error.
+    // session, showing connectingPage + the live journey meanwhile. Returns when
+    // connected, when a newer navigation supersedes this one, or after ~30s
+    // (then the caller proceeds and any real failure surfaces on the error page
+    // with the accumulated journey).
     async function waitForDmsg(entry, gen) {
       var st = await dmsgStatus();
       if (dmsgUp(st)) { return; }
+      resetJourney();
       for (var i = 0; i < 60; i++) {
         if (gen !== loadGen) { return; }
+        await pollJourney();
         connectingPage(entry.pk, (st && st.dmsg_sessions) | 0, i > 20 ? "still connecting…" : "");
         await new Promise(function (r) { setTimeout(r, 500); });
         st = await dmsgStatus();
@@ -324,7 +364,13 @@
         var msg = String((e && e.message) || e);
         log("browse error: " + msg);
         // network error / timeout / no response → a browser-style error page.
-        showError("Couldn't reach this site", entry.kind === "clearnet" ? entry.url : ("dmsg://" + entry.pk + (entry.path || "")), msg);
+        // For dmsg targets, freeze the connection journey below the error so the
+        // trail (what was tried, incl. any dmsg error codes) is visible — not
+        // just the terminal message.
+        if (entry.kind !== "clearnet") { await pollJourney(); }
+        var where = entry.kind === "clearnet" ? entry.url : ("dmsg://" + entry.pk + (entry.path || ""));
+        var trail = (entry.kind !== "clearnet" && journeyLines.length) ? (msg + "\n\n— connection log —\n" + journeyLines.slice(-24).join("\n")) : msg;
+        showError("Couldn't reach this site", where, trail);
         return { status: 0, error: msg };
       } finally {
         if (gen === loadGen) setLoading(false);
