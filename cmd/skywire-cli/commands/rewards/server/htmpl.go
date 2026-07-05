@@ -12,8 +12,6 @@ import (
 
 	"github.com/bitfield/script"
 	"github.com/gin-gonic/gin"
-
-	"github.com/skycoin/skywire/deployment"
 )
 
 var (
@@ -57,14 +55,14 @@ nav .dropdown a{display:block;padding:4px 12px;}
     <a href='/log-collection/tplogs'>transport logs</a>
   </div></details>
   <details><summary>services</summary><div class='dropdown'>
-    <a href='` + strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
-    <a href='` + strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
-    <a href='` + strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
+    <a href='http://ut.dmsg/uptimes?v=v2'>uptime tracker</a>
+    <a href='http://ar.dmsg/'>address resolver</a>
+    <a href='http://tpd.dmsg/all-transports'>transport discovery</a>
   </div></details>
   <details><summary>dmsg</summary><div class='dropdown'>
-    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>entries</a>
-    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all servers</a>
-    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
+    <a href='http://dmsgd.dmsg/dmsg-discovery/entries'>entries</a>
+    <a href='http://dmsgd.dmsg/dmsg-discovery/all_servers'>all servers</a>
+    <a href='http://dmsgd.dmsg/dmsg-discovery/available_servers'>available servers</a>
   </div></details>
   <a href='/login'>login</a>
   <details><summary>resources</summary><div class='dropdown'>
@@ -278,14 +276,14 @@ var htmlMainPageTemplate = `
     <a href='/log-collection/tplogs'>transport logs</a>
   </div></details>
   <details><summary>services</summary><div class='dropdown'>
-    <a href='` + strings.ReplaceAll(deployment.Prod.UptimeTracker, "http://", "https://") + `/uptimes?v=v2'>uptime tracker</a>
-    <a href='` + strings.ReplaceAll(deployment.Prod.AddressResolver, "http://", "https://") + `'>address resolver</a>
-    <a href='` + strings.ReplaceAll(deployment.Prod.TransportDiscovery, "http://", "https://") + `/all-transports'>transport discovery</a>
+    <a href='http://ut.dmsg/uptimes?v=v2'>uptime tracker</a>
+    <a href='http://ar.dmsg/'>address resolver</a>
+    <a href='http://tpd.dmsg/all-transports'>transport discovery</a>
   </div></details>
   <details><summary>dmsg</summary><div class='dropdown'>
-    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/entries'>entries</a>
-    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/all_servers'>all servers</a>
-    <a href='` + strings.ReplaceAll(deployment.Prod.DmsgDiscovery, "http://", "https://") + `/dmsg-discovery/available_servers'>available servers</a>
+    <a href='http://dmsgd.dmsg/dmsg-discovery/entries'>entries</a>
+    <a href='http://dmsgd.dmsg/dmsg-discovery/all_servers'>all servers</a>
+    <a href='http://dmsgd.dmsg/dmsg-discovery/available_servers'>available servers</a>
   </div></details>
   <a href='/login'>login</a>
   <details><summary>resources</summary><div class='dropdown'>
