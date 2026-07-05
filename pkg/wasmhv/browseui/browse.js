@@ -692,6 +692,18 @@
     function go() {
       var v = ($("sb-addr").value || "").trim();
       if (!v) return;
+      // dmsg:// and skynet:// are explicit dmsg-site schemes. `new URL` treats them
+      // as opaque (and prepending http:// mangles them — "http://dmsg://<pk>" parses
+      // to host "dmsg"), so peel the scheme off and browse the rest over dmsg
+      // directly, preserving the scheme for the address bar.
+      var sk = /^(dmsg|skynet):\/\//i.exec(v);
+      if (sk) {
+        var rest = v.slice(sk[0].length);
+        var slash = rest.indexOf("/");
+        var shost = slash >= 0 ? rest.slice(0, slash) : rest;
+        var spath = slash >= 0 ? rest.slice(slash) : "/";
+        if (shost) { browser.browseTo(shost, spath || "/", sk[1].toLowerCase()); return; }
+      }
       var hadScheme = /^https?:\/\//i.test(v), u;
       try { u = new URL(hadScheme ? v : "http://" + v); } catch (e) { browser.browseTo(v, "/"); return; }
       var host = u.hostname, path = (u.pathname || "/") + (u.search || "");
