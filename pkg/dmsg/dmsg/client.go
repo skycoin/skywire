@@ -6,7 +6,9 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"math/rand"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -402,7 +404,14 @@ func (ce *Client) Serve(ctx context.Context) {
 				continue
 			}
 		} else {
-			entries, err = ce.discoverServers(cancellabelCtx, false)
+			// MinSessions == 0 means "connect to all servers". Use AllServers,
+			// not AvailableServers: a server at/near capacity stops advertising
+			// availability (drops out of available_servers) but still accepts
+			// sessions, and a connect-all client must keep a session to EVERY
+			// server so it can always rendezvous with a peer delegated to one
+			// that has stopped advertising. MinSessions > 0 keeps the
+			// availability-filtered list (only connect where there's room).
+			entries, err = ce.discoverServers(cancellabelCtx, ce.conf.MinSessions == 0)
 			if err != nil {
 				ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
 				if err == context.Canceled || err == context.DeadlineExceeded {
@@ -435,17 +444,45 @@ func (ce *Client) Serve(ctx context.Context) {
 			ce.serveWait()
 			continue
 		}
-		// randomize dmsg servers list using crypto/rand seed for true randomization
-		// This ensures each client connects to servers in a different order,
-		// preventing load imbalance when multiple clients start simultaneously
-		var seed int64
-		if err := binary.Read(crand.Reader, binary.BigEndian, &seed); err != nil {
-			seed = time.Now().UnixNano() // fallback to time-based seed
+		// Order the servers by CAPACITY-WEIGHTED random selection. Each server
+		// advertises AvailableSessions (its session capacity); we bias it earlier
+		// in the list proportionally to that capacity, so clients spread across
+		// servers in proportion to how much load each can take.
+		//
+		// A plain uniform shuffle (the previous behavior) sent every server an
+		// equal share of clients regardless of capacity. With ~1100 clients and
+		// server capacities varying from ~30 to ~2000, the low-capacity hosts
+		// (small fd-limit VPSes) received far more clients than they could accept
+		// and rejected the overflow with EOF, while high-capacity servers sat
+		// underused — a chronic imbalance that made low-capacity servers (and any
+		// client/service delegated only to them) intermittently unreachable.
+		//
+		// The per-item random key (Efraimidis-Spirakis A-Res: key = u^(1/w))
+		// keeps the ordering randomized within the weighting, so simultaneously
+		// starting clients still don't stampede the same server. A missing/zero
+		// AvailableSessions falls back to weight 1 (uniform), matching the old
+		// behavior for discoveries that don't populate the field.
+		seedRng := rand.New(rand.NewSource(cryptoSeed())) //nolint:gosec // G404: seed is from crypto/rand; math/rand is fine for weighting
+		type weightedEntry struct {
+			entry *disc.Entry
+			key   float64
 		}
-		rng := rand.New(rand.NewSource(seed)) //nolint:gosec // G404: seed is from crypto/rand, math/rand is fine for shuffling
-		rng.Shuffle(len(entries), func(i, j int) {
-			entries[i], entries[j] = entries[j], entries[i]
-		})
+		weighted := make([]weightedEntry, len(entries))
+		for i, entry := range entries {
+			w := 1.0
+			if entry.Server != nil && entry.Server.AvailableSessions > 0 {
+				w = float64(entry.Server.AvailableSessions)
+			}
+			u := seedRng.Float64()
+			if u <= 0 {
+				u = math.SmallestNonzeroFloat64
+			}
+			weighted[i] = weightedEntry{entry: entry, key: math.Pow(u, 1.0/w)}
+		}
+		sort.SliceStable(weighted, func(i, j int) bool { return weighted[i].key > weighted[j].key })
+		for i := range weighted {
+			entries[i] = weighted[i].entry
+		}
 
 		if needInitialPost {
 			// use this for put protocol type of client to disc, for dicision part of dmsg-server
@@ -604,6 +641,17 @@ func (ce *Client) discoverServers(ctx context.Context, all bool) (entries []*dis
 		return err
 	})
 	return entries, err
+}
+
+// cryptoSeed returns a math/rand seed sourced from crypto/rand, falling back to
+// the wall clock if the CSPRNG read fails. Used to seed the per-client server
+// ordering so simultaneously starting clients pick independent orders.
+func cryptoSeed() int64 {
+	var seed int64
+	if err := binary.Read(crand.Reader, binary.BigEndian, &seed); err != nil {
+		seed = time.Now().UnixNano()
+	}
+	return seed
 }
 
 // Close closes the dmsg client entity and waits for background goroutines to finish.
