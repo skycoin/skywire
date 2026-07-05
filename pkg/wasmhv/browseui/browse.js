@@ -1402,6 +1402,65 @@
     // the app menu so any old caller still surfaces the launcher.
     function toggle() { menu.style.display = (menu.style.display === "block") ? "none" : "block"; }
 
+    // Deep-link: ?skynet=<target>[&kiosk=1] (or a #skynet=<target> hash fragment)
+    // opens the skynet browser straight to <target> over dmsg, optionally full-page
+    // (kiosk — hides the taskbar + maximizes so the site obscures the HV UI). Lets a
+    // clearnet redirect drop a visitor into a dmsg site: e.g. Caddy sends
+    // theskywirenetwork.net → skywire.theskywirenetwork.net/?skynet=rewards.dmsg&kiosk=1.
+    function readDeepLink() {
+      // hv-boot.js captured the query param before Angular could drop it — prefer
+      // that. Fall back to the live location (query / hash fragment) for callers
+      // (e.g. the native HV) that don't preload it.
+      try {
+        var pre = self.__SKYWIRE_DEEPLINK__ || (doc.defaultView || window).__SKYWIRE_DEEPLINK__;
+        if (pre && pre.target) { return { target: pre.target, kiosk: !!pre.kiosk }; }
+      } catch (e) {}
+      var loc = (doc.defaultView || window).location, qs = {};
+      try {
+        (loc.search || "").replace(/^\?/, "").split("&").forEach(function (kv) {
+          if (!kv) return;
+          var i = kv.indexOf("="), k = i < 0 ? kv : kv.slice(0, i), v = i < 0 ? "" : kv.slice(i + 1);
+          qs[decodeURIComponent(k)] = decodeURIComponent(v);
+        });
+        var h = loc.hash || "", m = h.match(/[#&]skynet=([^&]+)/);
+        if (m && !qs.skynet) { qs.skynet = decodeURIComponent(m[1]); }
+        if (/[#&]kiosk=1\b/.test(h)) { qs.kiosk = "1"; }
+      } catch (e) {}
+      if (!qs.skynet) { return null; }
+      return { target: qs.skynet, kiosk: qs.kiosk === "1" || qs.kiosk === "true" };
+    }
+    // whenVisorConnected fires cb once the wasm visor has a live dmsg session (so a
+    // fetch over dmsg won't just error), bounded to ~20s so a stuck visor still lands
+    // on the browser's own error page instead of hanging forever.
+    function whenVisorConnected(cb) {
+      var tries = 0;
+      (function poll() {
+        Promise.resolve().then(function () { return self.skywireVisor && self.skywireVisor.status(); })
+          .then(function (st) {
+            if ((st && (st.dmsg_connected || (st.dmsg_sessions | 0) > 0)) || tries > 40) { cb(); }
+            else { tries++; setTimeout(poll, 500); }
+          }).catch(function () { if (tries > 40) { cb(); } else { tries++; setTimeout(poll, 500); } });
+      })();
+    }
+    // enterKiosk hides the taskbar and maximizes the window to the full viewport so
+    // the browsed site fills the page, obscuring the HV UI. Exit by un-maximizing.
+    function enterKiosk(win) {
+      try {
+        doc.body.classList.add("skywire-kiosk");
+        bar.style.display = "none";
+        barTop = 0; barBottom = 0;
+        if (win && win.wb && win.wb.maximize) { win.wb.maximize(true); }
+      } catch (e) {}
+    }
+    try {
+      var dl = readDeepLink();
+      if (dl) {
+        var dlWin = openBrowse();
+        if (dl.kiosk) { enterKiosk(dlWin); }
+        whenVisorConnected(function () { try { dlWin.browser.browseTo(dl.target, "/"); } catch (e) {} });
+      }
+    } catch (e) {}
+
     return {
       panel: bar,
       toggle: toggle,
