@@ -147,7 +147,7 @@ func (v *Visor) CXORefreshFeed(args CXORefreshArgs) (*FeedStatus, error) {
 	}
 	timeout := args.Timeout
 	if timeout <= 0 {
-		timeout = firstSyncTimeout + 5*time.Second
+		timeout = feedFirstSyncTimeout(feed) + 5*time.Second
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
