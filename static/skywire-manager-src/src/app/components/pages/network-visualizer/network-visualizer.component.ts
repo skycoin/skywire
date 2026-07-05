@@ -140,6 +140,11 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
         case 'dmsg': return { color: '#9d7cff' };
         case 'stcpr': case 'stcp': return { color: '#3f8cff' };
         case 'sudph': return { color: '#3fb6a8' };
+        // Newer transport types — without these they render as the gray default.
+        case 'squicr': return { color: '#8b7cff' };
+        case 'swtr': return { color: '#ff7eb6' };
+        case 'swsr': return { color: '#c3e88d' };
+        case 'webrtc': return { color: '#ff9f43' };
         default: return { color: '#9aa0a6' };
       }
     };
