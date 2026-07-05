@@ -48,6 +48,10 @@ type Services struct {
 	// uptime tracker
 	UptimeTracker     string
 	UptimeTrackerDmsg string
+	// reward system (theskywirenetwork.net) — dmsg URL powers the "rewards" resolver
+	// alias so the in-tab browser can reach reward.dmsg / rewards.dmsg.
+	RewardSystem     string
+	RewardSystemDmsg string
 	// misc
 	StunServers []string
 	GeoIP       string // HTTP-only (dmsg doesn't preserve client IP); no config override
@@ -91,6 +95,8 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 		ConfDmsg:          d.ConfDmsg,
 		UptimeTracker:     d.UptimeTracker,
 		UptimeTrackerDmsg: d.UptimeTrackerDmsg,
+		RewardSystem:      d.RewardSystem,
+		RewardSystemDmsg:  d.RewardSystemDmsg,
 		StunServers:       d.StunServers,
 		GeoIP:             d.GeoIP,
 	}
@@ -132,6 +138,9 @@ func ResolveServices(v1 *visorconfig.V1) Services {
 		s.UptimeTracker = pick(v1.UptimeTracker.Addr, s.UptimeTracker)
 		s.UptimeTrackerDmsg = pick(v1.UptimeTracker.AddrDmsg, s.UptimeTrackerDmsg)
 	}
+	// Reward system fields are top-level (not a sub-block).
+	s.RewardSystem = pick(v1.RewardSystem, s.RewardSystem)
+	s.RewardSystemDmsg = pick(v1.RewardSystemDmsg, s.RewardSystemDmsg)
 	if len(v1.StunServers) > 0 {
 		s.StunServers = v1.StunServers
 	}
