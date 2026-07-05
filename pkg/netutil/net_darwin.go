@@ -11,7 +11,11 @@ import (
 )
 
 const (
-	defaultNetworkInterfaceCMD = "route -n get default | awk 'FNR == 5 {print $2}'"
+	// Match the "interface:" line by label rather than a fixed line number:
+	// `route -n get default` omits the gateway line for link-scoped default
+	// routes (e.g. a Tailscale/utun default), which shifts every line up, so a
+	// hardcoded FNR would grab the flags line instead of the interface name.
+	defaultNetworkInterfaceCMD = "route -n get default | awk '/interface:/{print $2}'"
 )
 
 // DefaultNetworkInterface fetches default network interface name.

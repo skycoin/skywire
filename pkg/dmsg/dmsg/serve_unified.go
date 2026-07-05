@@ -30,7 +30,7 @@ func (s *Server) ServeWithWS(lis net.Listener, advertisedAddr, advertisedWSURL s
 	// Set the WS address BEFORE Serve starts its self-registration loop, so the
 	// first published entry already carries AddressWS alongside Address (both on
 	// this one port). ServeWS sets it again to the same value — harmless.
-	s.advertisedWSAddr = advertisedWSURL
+	s.setAdvertisedWSAddr(advertisedWSURL)
 
 	m := cmux.New(lis)
 	httpL := m.Match(cmux.HTTP1Fast()) // the WS upgrade is an HTTP/1 request

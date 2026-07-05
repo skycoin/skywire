@@ -51,8 +51,13 @@ func TestSessionPing_YamuxStreamRoundTrip(t *testing.T) {
 	sessions := clientA.allClientSessions(clientA.porter)
 	require.NotEmpty(t, sessions, "expected at least one client session")
 
-	// A healthy yamux session must round-trip the stream-level ping.
+	// A healthy yamux session must round-trip the stream-level ping. The
+	// round-trip actually happening is proven by require.NoError (yamuxPing does a
+	// real stream exchange that errors/times out if the server doesn't echo). The
+	// RTT is only a sanity bound: non-negative. It must NOT assert strictly >0 —
+	// on Windows a loopback round-trip can complete within the monotonic clock's
+	// granularity, so time.Since() legitimately measures exactly 0.
 	rtt, err := sessions[0].Ping()
 	require.NoError(t, err, "yamux stream-level ping must succeed on a healthy session")
-	assert.Positive(t, int64(rtt), "ping must report a positive round-trip time")
+	assert.GreaterOrEqual(t, int64(rtt), int64(0), "ping round-trip time must be non-negative")
 }
