@@ -57,6 +57,10 @@ export function applyFilters(): void {
 
     const showStcpr = (document.getElementById('show-stcpr') as HTMLInputElement)?.checked;
     const showSudph = (document.getElementById('show-sudph') as HTMLInputElement)?.checked;
+    const showSquicr = (document.getElementById('show-squicr') as HTMLInputElement)?.checked;
+    const showSwtr = (document.getElementById('show-swtr') as HTMLInputElement)?.checked;
+    const showSwsr = (document.getElementById('show-swsr') as HTMLInputElement)?.checked;
+    const showWebrtc = (document.getElementById('show-webrtc') as HTMLInputElement)?.checked;
     const showDmsg = (document.getElementById('show-dmsg') as HTMLInputElement)?.checked;
     const showDMSGServers = (document.getElementById('show-dmsg-servers') as HTMLInputElement)?.checked;
     const showOnline = (document.getElementById('show-online') as HTMLInputElement)?.checked;
@@ -144,6 +148,10 @@ export function applyFilters(): void {
         let visible = true;
         if (edge.type === 'stcpr' && !showStcpr) visible = false;
         if (edge.type === 'sudph' && !showSudph) visible = false;
+        if (edge.type === 'squicr' && !showSquicr) visible = false;
+        if (edge.type === 'swtr' && !showSwtr) visible = false;
+        if (edge.type === 'swsr' && !showSwsr) visible = false;
+        if (edge.type === 'webrtc' && !showWebrtc) visible = false;
         if (edge.type === 'dmsg' && !showDmsg) visible = false;
         if (edge.isDMSGConnection && !showDMSGServers) visible = false;
         if (hiddenNodes.has(edge.from) || hiddenNodes.has(edge.to)) {
