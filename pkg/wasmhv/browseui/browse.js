@@ -176,6 +176,7 @@
     }
 
     async function renderSite(pk, path, html, scheme) {
+      hideConnecting();
       currentSitePK = pk;
       // Preserve the scheme the user navigated with (http/https) — the fetch is
       // over dmsg either way (Noise-encrypted, no in-tab TLS), so the scheme is
@@ -300,34 +301,48 @@
         tail.map(function (l) { return esc(l); }).join('\n') + '</div>';
     }
 
-    // connectingPage shows a live "connecting to the mesh" state + the journey
-    // log, while the dmsg client boots and establishes a session. Replaced by
-    // the real page once the fetch completes.
-    function connectingPage(target, sessions, note) {
-      frame.removeAttribute("src");
-      frame.srcdoc = '<!doctype html><meta charset=utf-8><body style="font:14px/1.6 system-ui,sans-serif;background:#0e0c14;color:#cdd2da;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">' +
-        '<div style="max-width:520px;width:90%;padding:2rem;text-align:center">' +
-        '<div style="width:26px;height:26px;margin:0 auto 1.1rem;border:3px solid #2a2342;border-top-color:#9d7cff;border-radius:50%;animation:sp 1s linear infinite"></div>' +
+    // The connecting/journey state renders into the sb-connect DOM OVERLAY (a
+    // sibling of the iframe), NOT the iframe's srcdoc — so it never reloads the
+    // iframe. The shell (spinner) is rendered ONCE; only the dynamic parts
+    // (session count + journey) are mutated each tick, so the spinner animation
+    // stays smooth and nothing strobes.
+    function connectEl() { try { return frame.parentNode && frame.parentNode.querySelector("#sb-connect"); } catch (e) { return null; } }
+    function hideConnecting() { var el = connectEl(); if (el) { el.style.display = "none"; el.innerHTML = ""; } }
+    function showConnecting(target) {
+      var el = connectEl(); if (!el) { return; }
+      el.innerHTML =
+        '<div style="min-height:100%;box-sizing:border-box;display:flex;align-items:center;justify-content:center;padding:1.5rem">' +
+        '<div style="max-width:520px;width:100%;text-align:center">' +
+        '<div style="width:26px;height:26px;margin:0 auto 1.1rem;border:3px solid #2a2342;border-top-color:#9d7cff;border-radius:50%;animation:sbspin 1s linear infinite"></div>' +
         '<div style="color:#9d7cff;font-weight:600;margin-bottom:.5rem">Connecting to the mesh…</div>' +
         '<div style="opacity:.75">Establishing a dmsg session to reach<br><b style="word-break:break-all">' + esc(target) + '</b></div>' +
-        '<div style="opacity:.5;font-size:.85em;margin-top:.9rem">dmsg sessions: ' + (sessions | 0) + (note ? ' · ' + esc(note) : '') + '</div>' +
-        journeyHTML(12) +
-        '<style>@keyframes sp{to{transform:rotate(360deg)}}</style></div></body>';
+        '<div id="sb-connect-status" style="opacity:.5;font-size:.85em;margin-top:.9rem"></div>' +
+        '<div id="sb-connect-journey"></div>' +
+        '</div></div>' +
+        '<style>@keyframes sbspin{to{transform:rotate(360deg)}}</style>';
+      el.style.display = "block";
+    }
+    function updateConnecting(sessions, note) {
+      var el = connectEl(); if (!el) { return; }
+      var s = el.querySelector("#sb-connect-status");
+      if (s) { s.textContent = "dmsg sessions: " + (sessions | 0) + (note ? " · " + note : ""); }
+      var j = el.querySelector("#sb-connect-journey");
+      if (j) { j.innerHTML = journeyHTML(12); }
     }
 
     // waitForDmsg holds a dmsg navigation until the visor has a live dmsg
-    // session, showing connectingPage + the live journey meanwhile. Returns when
-    // connected, when a newer navigation supersedes this one, or after ~30s
-    // (then the caller proceeds and any real failure surfaces on the error page
-    // with the accumulated journey).
+    // session, showing the connecting overlay + live journey meanwhile. Returns
+    // when connected, when a newer navigation supersedes this one, or after ~30s
+    // (then the caller proceeds; the overlay is cleared by renderSite/showError).
     async function waitForDmsg(entry, gen) {
       var st = await dmsgStatus();
       if (dmsgUp(st)) { return; }
       resetJourney();
+      showConnecting(entry.pk);
       for (var i = 0; i < 60; i++) {
-        if (gen !== loadGen) { return; }
+        if (gen !== loadGen) { hideConnecting(); return; }
         await pollJourney();
-        connectingPage(entry.pk, (st && st.dmsg_sessions) | 0, i > 20 ? "still connecting…" : "");
+        updateConnecting((st && st.dmsg_sessions) | 0, i > 20 ? "still connecting…" : "");
         await new Promise(function (r) { setTimeout(r, 500); });
         st = await dmsgStatus();
         if (dmsgUp(st)) { return; }
@@ -378,6 +393,7 @@
     }
 
     async function fetchClearnetEntry(url, gen) {
+      hideConnecting();
       var pol = clearnetPolicy();
       if (pol.mode === "block") {
         if (gen !== loadGen) return { status: 0, cancelled: true };
@@ -506,6 +522,7 @@
     // inlined as a data: URI; scripts are stripped. The sandboxed iframe therefore
     // never reaches clearnet directly — a static, read-mostly, IP-anonymous render.
     async function renderClearnet(exit, url, html) {
+      hideConnecting();
       currentSitePK = "";
       if (opts.setAddr) opts.setAddr(url);
       var docHtml;
@@ -549,6 +566,7 @@
     // errorPage renders a browser-style failure page into the iframe (network
     // error / timeout / no response / HTTP error with no body), with a retry hint.
     function showError(title, where, detail) {
+      hideConnecting();
       frame.removeAttribute("src");
       frame.srcdoc = '<!doctype html><meta charset=utf-8><body style="font:14px/1.6 system-ui,sans-serif;background:#1b1b22;color:#cdd2da;padding:2rem">' +
         '<h2 style="color:#ff8f8f">' + esc(title) + '</h2>' +
@@ -675,6 +693,14 @@
     wrap.className = "skywire-browse-window";
     wrap.style.cssText = "position:absolute;inset:0;background:#15131c;color:#cdd2da;font:12px/1.4 monospace;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML =
+      // Dark-theme the toolbar buttons explicitly — the UA default is light-gray
+      // (rgb(239,239,239)), and disabled buttons render at 30% opacity, which
+      // read as faded/see-through against the dark bar.
+      '<style>' +
+      '.skywire-browse-window .sbw-bar button{background:#2a2342;color:#cdd2da;border:1px solid #3a3352;border-radius:3px;padding:.3em .55em;cursor:pointer;font:inherit;line-height:1}' +
+      '.skywire-browse-window .sbw-bar button:hover:not(:disabled){background:#3a3352;color:#fff}' +
+      '.skywire-browse-window .sbw-bar button:disabled{background:#201c2c;color:#5a5470;border-color:#2a2342;cursor:default}' +
+      '</style>' +
       '<div class="sbw-bar" style="display:flex;gap:.4em;align-items:center;padding:.5em;background:#1b1726;border-bottom:1px solid #2a2342">' +
       '<button id="sb-back" title="back" disabled style="cursor:pointer">◀</button>' +
       '<button id="sb-fwd" title="forward" disabled style="cursor:pointer">▶</button>' +
@@ -717,7 +743,15 @@
       '<li>Per-site persistent storage like a normal browser would need the <b>native desktop</b> app (each site on its own local origin) — not possible in a keyless browser tab.</li>' +
       '</ul>' +
       '</div>' +
-      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#fff"></iframe>';
+      // The page iframe + a DOM overlay (sb-connect) for the connecting/journey
+      // state. The overlay is rendered/updated in the PARENT dom — NOT via the
+      // iframe's srcdoc — so the "connecting" panel never reloads the iframe
+      // (re-setting srcdoc every tick flashed the iframe's background = strobe).
+      // iframe background is dark (not #fff) so any transition is not a white flash.
+      '<div id="sb-frame-wrap" style="position:relative;flex:1;display:flex;min-height:0">' +
+      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#0e0c14"></iframe>' +
+      '<div id="sb-connect" style="position:absolute;inset:0;display:none;background:#0e0c14;color:#cdd2da;font:14px/1.6 system-ui,-apple-system,sans-serif;overflow:auto"></div>' +
+      '</div>';
 
     function $(id) { return wrap.querySelector("#" + id); }
     var wb = makeWin(doc, {
@@ -1411,7 +1445,11 @@
     // via .skywire-wb. The panel is always on (no hide).
     var root = doc.createElement("div");
     root.id = "skywire-skynet-root";
-    root.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none";
+    // High z-index: the desktop (and its windows) must paint ABOVE the Angular
+    // HV-UI chrome (its top tab bar — "Visor list" etc. — is positioned/z-indexed
+    // and otherwise bleeds over a window's own nav bar). pointer-events stays
+    // none so the HV UI is still clickable wherever no window covers it.
+    root.style.cssText = "position:fixed;left:0;top:0;right:0;bottom:0;pointer-events:none;z-index:2147483000";
     (doc.body || doc.documentElement).appendChild(root);
     // barTop / barBottom: the WinBox viewport boundary on the panel's edge, set
     // by applyDock and applied to every window so none can drag/maximize under
@@ -1426,7 +1464,13 @@
       // back into the flex column (below the nav bar) so the bar shows. The
       // terminal's url: iframe (no #sb-frame) keeps WinBox's fill behaviour.
       st.textContent = ".skywire-wb{pointer-events:auto}" +
-        ".skywire-wb #sb-frame{position:relative!important;height:auto!important;min-height:0!important;flex:1 1 auto!important}";
+        ".skywire-wb #sb-frame{position:relative!important;height:auto!important;min-height:0!important;flex:1 1 auto!important}" +
+        // WinBox's own skin leaves .wb-header transparent and .wb-body white, so
+        // the HV UI behind bleeds through the title bar and white flashes before
+        // the body paints. Give the window opaque dark chrome to match the nav bar.
+        ".winbox.skywire-wb{background:#15131c}" +
+        ".skywire-wb .wb-header{background:#1b1726}" +
+        ".skywire-wb .wb-body{background:#15131c}";
       (doc.head || doc.documentElement).appendChild(st);
     }
 
