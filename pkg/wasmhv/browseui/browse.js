@@ -1694,32 +1694,30 @@
       if (dl) {
         var dlWin = openBrowse(true); // skip home.dmsg auto-land; go to the deep-link target
         if (dl.kiosk) { enterKiosk(dlWin); }
-        // Auto-open the deep-link target with a few retries. whenVisorConnected
-        // fires as soon as ANY dmsg session is live, but the target's dmsg
-        // server may not be reachable yet (a fresh WSS session to it is still
-        // being established), so the first fetch can transiently EOF. A
-        // user-typed navigation would show that error for the user to retry;
-        // the deep-link is automatic, so retry it here on TRANSIENT failure
-        // only (status 0 with an error — not a deliberate block/direct/cancel
-        // or a real HTTP response). Linear backoff, ~15s total.
-        whenVisorConnected(function () {
-          var attempts = 0, maxAttempts = 6;
-          function tryOpen() {
-            attempts++;
-            var retry = function () {
-              if (attempts < maxAttempts) { setTimeout(tryOpen, 1500 * attempts); }
-            };
-            try {
-              var p = dlWin.browser.browseTo(dl.target, "/");
-              if (p && p.then) {
-                p.then(function (res) {
-                  if (res && res.status === 0 && res.error && !res.blocked && !res.direct && !res.cancelled) { retry(); }
-                }).catch(retry);
-              }
-            } catch (e) { retry(); }
-          }
-          tryOpen();
-        });
+        // Navigate straight to the target — do NOT wait for dmsg first. render()'s
+        // waitForDmsg shows the "connecting to the mesh" overlay + live journey
+        // WHILE the session comes up, so the user sees the connecting experience
+        // from the moment the window opens, instead of a blank window that then
+        // jumps to an already-loaded page. Retry on TRANSIENT failure only
+        // (status 0 with an error — the target's dmsg server may not be reachable
+        // on the very first fetch; not a deliberate block/direct/cancel or a real
+        // HTTP response). Linear backoff.
+        var attempts = 0, maxAttempts = 6;
+        function tryOpen() {
+          attempts++;
+          var retry = function () {
+            if (attempts < maxAttempts) { setTimeout(tryOpen, 1500 * attempts); }
+          };
+          try {
+            var p = dlWin.browser.browseTo(dl.target, "/");
+            if (p && p.then) {
+              p.then(function (res) {
+                if (res && res.status === 0 && res.error && !res.blocked && !res.direct && !res.cancelled) { retry(); }
+              }).catch(retry);
+            }
+          } catch (e) { retry(); }
+        }
+        tryOpen();
       }
     } catch (e) {}
 
