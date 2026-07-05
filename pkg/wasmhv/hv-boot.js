@@ -16,6 +16,21 @@
 // the bare served HTML is a working serverless visor with zero configuration.
 (function () {
   var CFG = (window.__SKYWIRE_HV__ = window.__SKYWIRE_HV__ || {});
+  // Capture any deep-link params (?skynet=<target>[&kiosk=1]) NOW — this is the
+  // first script, so it runs before Angular's hash router boots and drops
+  // location.search. The skynet browser (browse.js mountPanel → readDeepLink)
+  // reads window.__SKYWIRE_DEEPLINK__ to open <target> over dmsg full-page on
+  // load. Lets a clearnet Caddy redirect land a visitor straight in a dmsg site.
+  try {
+    var dlp = new URLSearchParams(window.location.search || '');
+    var dlTarget = dlp.get('skynet');
+    if (dlTarget) {
+      window.__SKYWIRE_DEEPLINK__ = {
+        target: dlTarget,
+        kiosk: dlp.get('kiosk') === '1' || dlp.get('kiosk') === 'true',
+      };
+    }
+  } catch (e) {}
   // This tab is a full wasm-VISOR (edge + router + its own hypervisor); /api
   // resolves against the in-wasm core (globalThis.skywireVisor.hvApi).
   CFG.visor = true;
