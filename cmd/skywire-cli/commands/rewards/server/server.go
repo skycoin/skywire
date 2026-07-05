@@ -252,7 +252,12 @@ func buildRouter() *gin.Engine {
 					return
 				}
 				tpvizServer.SetDmsgHTTPClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(context.Background(), dmsgC)})
-				dlog.Info("tp-viz: deployment discovery now sourced over dmsg")
+				// Prefer the intermittent CXO subscriber over the same dmsg client:
+				// tp-viz sources TPD/SD/DMSG-D data (transports, uptime, services,
+				// dmsg-clients) from the deployment CXO feeds and only falls back to
+				// the HTTP-over-dmsg client above on a cache miss.
+				tpvizServer.SetCXOSubMgrFromDmsg(dmsgC)
+				dlog.Info("tp-viz: deployment discovery now sourced over dmsg (CXO-first)")
 			}()
 		}
 
