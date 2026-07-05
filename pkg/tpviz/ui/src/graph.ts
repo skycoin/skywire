@@ -431,7 +431,11 @@ export function createNetwork(): void {
     const data = { nodes: S.nodesDataset!, edges: S.edgesDataset! };
     const options = {
         nodes: { shape: 'dot', font: { size: 10, color: '#aaa' }, borderWidth: 2 },
-        edges: { smooth: { enabled: true, type: 'continuous', roundness: 0.5 } },
+        // Straight edges (not curved). With ~2500 transports, 'continuous' smooth
+        // edges are re-tessellated every redraw and block the main thread ~2s/frame
+        // (the "hang"); straight lines render an order of magnitude cheaper. Matches
+        // the Angular network-visualizer, which stays smooth at this scale.
+        edges: { smooth: false },
         layout: { improvedLayout: false },
         physics: { stabilization: { iterations: 100, fit: true }, barnesHut: { gravitationalConstant: -3000, springConstant: 0.001, springLength: 200 } },
         interaction: { hover: true, tooltipDelay: 999999999, selectConnectedEdges: false }

@@ -21,6 +21,10 @@ export function wireEventListeners(): void {
     // Filter listeners
     document.getElementById('show-stcpr')!.addEventListener('change', applyFilters);
     document.getElementById('show-sudph')!.addEventListener('change', applyFilters);
+    document.getElementById('show-squicr')?.addEventListener('change', applyFilters);
+    document.getElementById('show-swtr')?.addEventListener('change', applyFilters);
+    document.getElementById('show-swsr')?.addEventListener('change', applyFilters);
+    document.getElementById('show-webrtc')?.addEventListener('change', applyFilters);
     document.getElementById('show-dmsg')!.addEventListener('change', applyFilters);
     document.getElementById('show-dmsg-servers')!.addEventListener('change', () => { applyFilters(); updateLegend(); });
     document.getElementById('show-online')!.addEventListener('change', applyFilters);
@@ -243,6 +247,10 @@ export function wireEventListeners(): void {
     // Add globe update to filter changes
     document.getElementById('show-stcpr')!.addEventListener('change', filterChangeHandler);
     document.getElementById('show-sudph')!.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-squicr')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-swtr')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-swsr')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-webrtc')?.addEventListener('change', filterChangeHandler);
     document.getElementById('show-dmsg')!.addEventListener('change', filterChangeHandler);
     document.getElementById('show-online')!.addEventListener('change', filterChangeHandler);
     document.getElementById('show-offline')!.addEventListener('change', filterChangeHandler);

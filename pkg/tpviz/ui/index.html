@@ -35,6 +35,10 @@
         .stcpr { background: #00d9a5; }
         .sudph { background: #00b4d8; }
         .dmsg { background: #ffd166; }
+        .squicr { background: #8b7cff; }
+        .swtr { background: #ff7eb6; }
+        .swsr { background: #c3e88d; }
+        .webrtc { background: #ff9f43; }
         .status-item { display: flex; align-items: center; margin: 6px 0; font-size: 0.85em; }
         .status-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; }
         .status-online { background: #00d9a5; }
@@ -433,8 +437,12 @@
                 </div>
                 <div class="section-content">
                     <div class="control-group">
+                        <label><input type="checkbox" id="show-squicr" checked> Show QUIC</label>
                         <label><input type="checkbox" id="show-stcpr" checked> Show STCPR</label>
                         <label><input type="checkbox" id="show-sudph" checked> Show SUDPH</label>
+                        <label><input type="checkbox" id="show-swtr" checked> Show WebTransport</label>
+                        <label><input type="checkbox" id="show-swsr" checked> Show WebSocket</label>
+                        <label><input type="checkbox" id="show-webrtc" checked> Show WebRTC</label>
                         <label><input type="checkbox" id="show-dmsg" checked> Show DMSG</label>
                         <label><input type="checkbox" id="show-dmsg-servers" checked> DMSG Servers</label>
                     </div>
@@ -472,8 +480,12 @@
                     <!-- Dynamic Legend -->
                     <div style="margin-top:10px;padding-top:10px;border-top:1px solid #0f3460;">
                         <div style="font-size:0.8em;color:#888;margin-bottom:6px;">Legend</div>
+                        <div class="legend-item"><div class="legend-color squicr"></div><span>QUIC (squicr)</span></div>
                         <div class="legend-item"><div class="legend-color stcpr"></div><span>STCPR (TCP)</span></div>
                         <div class="legend-item"><div class="legend-color sudph"></div><span>SUDPH (UDP)</span></div>
+                        <div class="legend-item"><div class="legend-color swtr"></div><span>WebTransport (swtr)</span></div>
+                        <div class="legend-item"><div class="legend-color swsr"></div><span>WebSocket (swsr)</span></div>
+                        <div class="legend-item"><div class="legend-color webrtc"></div><span>WebRTC</span></div>
                         <div class="legend-item"><div class="legend-color dmsg"></div><span>DMSG</span></div>
                         <div class="legend-item"><div class="legend-color" style="background:#9f6efc;"></div><span>DMSG Server</span></div>
                         <div id="node-legend">

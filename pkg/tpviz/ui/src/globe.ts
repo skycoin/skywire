@@ -1335,12 +1335,20 @@ export function updateGlobeData(): void {
         // Check edge type filter
         const showSTCPR = (document.getElementById('show-stcpr') as HTMLInputElement)?.checked;
         const showSUDPH = (document.getElementById('show-sudph') as HTMLInputElement)?.checked;
+        const showSQUICR = (document.getElementById('show-squicr') as HTMLInputElement)?.checked;
+        const showSWTR = (document.getElementById('show-swtr') as HTMLInputElement)?.checked;
+        const showSWSR = (document.getElementById('show-swsr') as HTMLInputElement)?.checked;
+        const showWEBRTC = (document.getElementById('show-webrtc') as HTMLInputElement)?.checked;
         const showDMSG = (document.getElementById('show-dmsg') as HTMLInputElement)?.checked;
         const showDMSGServers = (document.getElementById('show-dmsg-servers') as HTMLInputElement)?.checked;
         const showRoutes = (document.getElementById('show-routes') as HTMLInputElement)?.checked;
 
         if (edge.type === 'stcpr' && !showSTCPR) return;
         if (edge.type === 'sudph' && !showSUDPH) return;
+        if (edge.type === 'squicr' && !showSQUICR) return;
+        if (edge.type === 'swtr' && !showSWTR) return;
+        if (edge.type === 'swsr' && !showSWSR) return;
+        if (edge.type === 'webrtc' && !showWEBRTC) return;
         if (edge.type === 'dmsg' && !showDMSG) return;
         if (edge.type === 'dmsg-connection' && !showDMSGServers) return;
         if (edge.type === 'route' && !showRoutes) return;
