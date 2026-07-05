@@ -40,6 +40,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
+	"github.com/skycoin/skywire/pkg/visor/logserver/landingpage"
 )
 
 // peerStartedAt is this visor's boot time, reported on /health (StartedAt). Set
@@ -103,13 +104,15 @@ func peerDynamicEndpoint(port uint16, path string) (string, []byte, bool) {
 // http://<pk>.dmsg/ sees a real page — like the native visor's landing page. A
 // later serveContent({"/":...}) call from the page overrides it.
 func registerDefaultLanding() {
-	html := fmt.Sprintf(`<!doctype html><meta charset=utf-8>`+
-		`<title>skywire wasm-visor</title>`+
-		`<h1>skywire browser visor</h1>`+
-		`<p>public key: <code>%s</code></p>`+
-		`<ul><li><a href="/health">/health</a></li><li><a href="/ping">/ping</a></li></ul>`+
-		`<p>Served in-browser over dmsg. Reachable by public key, no domain or IP.</p>`,
-		selfPK.Hex())
+	// Render with the SAME shared package the native visor's log-server uses, so a
+	// browser wasm-visor and a native visor present an identical landing page at
+	// http://<pk>.dmsg/ (and skywire.dmsg). The wasm-visor exposes only the two
+	// peer-parity endpoints it serves (/health, /ping); the frame is shared.
+	links := []string{
+		`<a href="/health">/health</a> - visor health status`,
+		`<a href="/ping">/ping</a> - liveness ping`,
+	}
+	html := landingpage.Render(selfPK.Hex(), links)
 	contentMu.Lock()
 	cm := contentByPort[contentPort]
 	if cm == nil {

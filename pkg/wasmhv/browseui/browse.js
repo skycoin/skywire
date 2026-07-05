@@ -478,6 +478,12 @@
     // Relayed from inside the browsed iframe: link clicks (dmsgnav) re-fetch a
     // page; the site's own fetch (dmsgreq) is served over dmsg, bytes posted back.
     window.addEventListener("message", async function (e) {
+      // Each browser window installs its own listener on the SAME top window, so a
+      // message must be handled ONLY by the window whose iframe sent it — otherwise
+      // a link click (dmsgnav) or in-page fetch (dmsgreq) from one window drives
+      // every open window (they'd all navigate to the clicked path). Match e.source
+      // to THIS window's iframe.
+      if (e.source !== frame.contentWindow) { return; }
       var d = e.data || {};
       if (d.type === "dmsgnav" && currentSitePK) { browseTo(currentSitePK, d.path); return; }
       if (d.type === "dmsgreq") {
