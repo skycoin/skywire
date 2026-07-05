@@ -7,7 +7,7 @@
 └─┐├┴┐└┬┘│  │ │││││
 └─┘┴ ┴ ┴ └─┘└─┘┴┘└┘
 <version>
-built with go1.26.2-X:nodwarf5
+built with go1.26.4-X:nodwarf5
 ```
 
 ## Usage

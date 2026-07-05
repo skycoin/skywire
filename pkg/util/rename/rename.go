@@ -2,20 +2,19 @@
 package rename
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"strings"
+	"syscall"
 )
-
-const crossDeviceError = "invalid cross-device link"
 
 // Rename renames (moves) oldPath to newPath using os.Rename.
 // If paths are located on different drives or filesystems, os.Rename fails.
 // In that case, Rename uses a workaround by copying oldPath to newPath and removing oldPath thereafter.
 func Rename(oldPath, newPath string) error {
-	if err := os.Rename(oldPath, newPath); err == nil || !strings.Contains(err.Error(), crossDeviceError) {
+	if err := os.Rename(oldPath, newPath); err == nil || !errors.Is(err, syscall.EXDEV) {
 		return err
 	}
 

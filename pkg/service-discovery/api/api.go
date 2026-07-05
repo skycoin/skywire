@@ -443,12 +443,24 @@ func (a *API) postEntry(w http.ResponseWriter, r *http.Request) {
 
 	if se.Geo == nil {
 		se.Geo, err = a.geoFromIP(net.ParseIP(host))
-		if err == geo.ErrIPIsNotPublic && se.Type != servicedisc.ServiceTypeVisor {
-			a.log.WithField("ip", host).Infof("Unable to get geo data of a non-public IP")
-		} else if err != nil {
-			a.log.WithError(ErrFailedToGetGeoData).Errorf("Failed to get geo data for host %q", host)
-			a.writeError(w, r, http.StatusInternalServerError, ErrFailedToGetGeoData.Error())
-			return
+		if err != nil {
+			// Geo data is best-effort enrichment. For non-visor service entries
+			// (VPN, skysocks) a failed geo lookup must not block registration —
+			// whether the IP is non-public or the geoip service is unreachable/
+			// unset, we simply register without location data. Visor entries
+			// still require resolvable geo. Previously only ErrIPIsNotPublic was
+			// tolerated, so any deployment without a reachable geoip service
+			// (e.g. the e2e env, whose 174/8 subnet IsPublicIP also treats as
+			// public, so it attempts a lookup that has no geoip backend) failed
+			// every VPN/skysocks registration with a 500 — they never appeared
+			// in service discovery.
+			if se.Type == servicedisc.ServiceTypeVisor {
+				a.log.WithError(ErrFailedToGetGeoData).Errorf("Failed to get geo data for host %q", host)
+				a.writeError(w, r, http.StatusInternalServerError, ErrFailedToGetGeoData.Error())
+				return
+			}
+			a.log.WithError(err).Infof("Registering %s service for host %q without geo data", se.Type, host)
+			se.Geo = nil
 		}
 	}
 	if a.nonceDB != nil {

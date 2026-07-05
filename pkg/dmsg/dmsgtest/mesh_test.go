@@ -337,9 +337,36 @@ func TestNonPublicServer_ReverseDial(t *testing.T) {
 	require.NoError(t, dialErr, "reverse dial must succeed when announcements are accepted")
 	require.NotNil(t, streamB)
 
-	connA, err := accA()
-	require.NoError(t, err)
+	// AcceptStream and the io.ReadFull calls below do NOT observe ctx: on a
+	// stalled reverse-forward path they block forever, hanging the whole test
+	// binary until go test's global watchdog kills the entire package with an
+	// undiagnosable "panic: test timed out" (seen intermittently on CI). Enforce
+	// this test's OWN 40s ctx on the accept + the data transfer so a stall fails
+	// fast, on THIS test, with a clear message — turning a package-wide hang into
+	// an isolated, diagnosable failure.
+	deadline, hasDeadline := ctx.Deadline()
+	require.True(t, hasDeadline)
+
+	type acceptResult struct {
+		stream *dmsg.Stream
+		err    error
+	}
+	accCh := make(chan acceptResult, 1)
+	go func() {
+		s, e := accA()
+		accCh <- acceptResult{stream: s, err: e}
+	}()
+	var connA *dmsg.Stream
+	select {
+	case r := <-accCh:
+		require.NoError(t, r.err)
+		connA = r.stream
+	case <-ctx.Done():
+		t.Fatal("reverse-forward path stalled: A never accepted the reverse-dialed stream within the test timeout")
+	}
 	defer connA.Close()
+	require.NoError(t, streamB.SetDeadline(deadline))
+	require.NoError(t, connA.SetDeadline(deadline))
 
 	payload := cipher.RandByte(1024)
 
@@ -347,8 +374,8 @@ func TestNonPublicServer_ReverseDial(t *testing.T) {
 	wg.Add(1)
 	go func() { defer wg.Done(); _, wErr := streamB.Write(payload); assert.NoError(t, wErr) }()
 	recv := make([]byte, len(payload))
-	_, err = io.ReadFull(connA, recv)
-	require.NoError(t, err)
+	_, err := io.ReadFull(connA, recv)
+	require.NoError(t, err, "B -> A read over reverse-forward path")
 	wg.Wait()
 	require.True(t, bytes.Equal(payload, recv), "data mismatch: B -> A")
 
@@ -356,7 +383,7 @@ func TestNonPublicServer_ReverseDial(t *testing.T) {
 	go func() { defer wg.Done(); _, wErr := connA.Write(payload); assert.NoError(t, wErr) }()
 	recv2 := make([]byte, len(payload))
 	_, err = io.ReadFull(streamB, recv2)
-	require.NoError(t, err)
+	require.NoError(t, err, "A -> B read over reverse-forward path")
 	wg.Wait()
 	require.True(t, bytes.Equal(payload, recv2), "data mismatch: A -> B")
 

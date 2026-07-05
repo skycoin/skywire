@@ -673,51 +673,68 @@ func (s *PingServer) muxBwProbeLoop(
 	}
 	var sequence int64
 
+	// probe runs one RTT probe and emits its event. It returns false when the
+	// measurement window has closed (ctx done, or no time left for a bounded
+	// read) and the caller should stop looping.
+	probe := func() bool {
+		// Re-check ctx before probing. Without this, a probe that landed in
+		// the same scheduler window as ctx.Done() calls PingOnce *after* the
+		// pump goroutines' StopPingRoute defer has torn down the conn —
+		// producing trailing "no ping connection ... call DialPing first"
+		// events at every run-end. Cosmetic but noisy.
+		if ctx.Err() != nil {
+			return false
+		}
+		// Bound this probe so its reads cannot outlive the measurement window
+		// (pumpCtx / idleCtx). Without this, PingOnce's default read deadline
+		// blocks pumpWg.Wait() past the run end — the mux-bw "never returns"
+		// hang. Cap at muxBwProbeTimeout, shrunk to whatever ctx time remains.
+		probeConf.Timeout = muxBwProbeTimeout
+		if dl, ok := ctx.Deadline(); ok {
+			if rem := time.Until(dl); rem < probeConf.Timeout {
+				probeConf.Timeout = rem
+			}
+		}
+		if probeConf.Timeout <= 0 {
+			return false
+		}
+		sequence++
+		latency, err := s.visor.PingOnce(probeConf)
+		elapsed := time.Since(pumpStart)
+		ev := &MuxRttProbe{
+			Sequence:  sequence,
+			ElapsedNs: elapsed.Nanoseconds(),
+		}
+		if err != nil {
+			ev.Error = err.Error()
+		} else {
+			ev.LatencyNs = latency.Nanoseconds()
+			probesMu.Lock()
+			*probesOut = append(*probesOut, ev.LatencyNs)
+			probesMu.Unlock()
+		}
+		emit(&MuxBandwidthEvent_RttProbe{RttProbe: ev})
+		return true
+	}
+
+	// Probe once immediately. The ticker's first tick is a full ProbeInterval
+	// in, so a measurement window shorter than (or close to) one interval — or
+	// a jittery/loaded scheduler — could otherwise emit ZERO probes for the
+	// whole phase (the flaky "expected at least one RTT probe event"). RTT is a
+	// point-in-time reading, so an immediate first sample is correct and
+	// guarantees the loaded/idle phase always yields at least one probe.
+	if !probe() {
+		return
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			// Re-check ctx after the ticker fires. Without this, a
-			// ticker that landed in the same scheduler window as
-			// ctx.Done() causes the probe to call PingOnce *after*
-			// the pump goroutines' StopPingRoute defer has torn
-			// down the conn — producing trailing "no ping
-			// connection for ... call DialPing first" events at
-			// every run-end. Cosmetic but noisy.
-			if ctx.Err() != nil {
+			if !probe() {
 				return
 			}
-			// Bound this probe so its reads cannot outlive the measurement
-			// window (pumpCtx / idleCtx). Without this, PingOnce's default
-			// read deadline blocks pumpWg.Wait() past the run end — the
-			// mux-bw "never returns" hang. Cap at muxBwProbeTimeout, shrunk
-			// to whatever ctx time remains.
-			probeConf.Timeout = muxBwProbeTimeout
-			if dl, ok := ctx.Deadline(); ok {
-				if rem := time.Until(dl); rem < probeConf.Timeout {
-					probeConf.Timeout = rem
-				}
-			}
-			if probeConf.Timeout <= 0 {
-				return
-			}
-			sequence++
-			latency, err := s.visor.PingOnce(probeConf)
-			elapsed := time.Since(pumpStart)
-			ev := &MuxRttProbe{
-				Sequence:  sequence,
-				ElapsedNs: elapsed.Nanoseconds(),
-			}
-			if err != nil {
-				ev.Error = err.Error()
-			} else {
-				ev.LatencyNs = latency.Nanoseconds()
-				probesMu.Lock()
-				*probesOut = append(*probesOut, ev.LatencyNs)
-				probesMu.Unlock()
-			}
-			emit(&MuxBandwidthEvent_RttProbe{RttProbe: ev})
 		}
 	}
 }

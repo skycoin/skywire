@@ -104,11 +104,20 @@ func resetIntegrationTestCase(t *testing.T, itc IntegrationTestCase) {
 		}
 	}
 
-	// Wait for DMSG to be ready on all restarted visors
-	// This ensures visors can establish DMSG connections before the next test
+	// Wait for DMSG to be ready on all restarted visors — i.e. reconnected to a
+	// DMSG server, which is the actual prerequisite for routing/transport setup.
+	//
+	// We deliberately wait on the live session (WaitForVisorDmsgReady), NOT on a
+	// freshly re-published discovery entry (WaitForDmsgDiscoveryEntry). After a
+	// restart the old entry persists at sequence N; the fresh client's re-publish
+	// hits "422 sequence not old+1" and retries on exponential backoff, so the
+	// entry refresh lags the session by ~30–55s. That fresh entry is unnecessary
+	// here: the single E2E dmsg-server means the stale entry's delegated_servers
+	// are still correct, so peers can already resolve and dial the visor. Waiting
+	// on the session instead removes ~30–55s of dead time per restarted visor.
 	for visor := range visorsToRestart {
 		t.Logf("Waiting for DMSG to be ready on %s", visor)
-		if err := env.WaitForDmsgDiscoveryEntry(visor, 120*time.Second); err != nil {
+		if err := env.WaitForVisorDmsgReady(visor, 120*time.Second); err != nil {
 			t.Logf("Warning: DMSG not ready on %s after 120s: %v", visor, err)
 		} else {
 			t.Logf("DMSG ready on %s", visor)

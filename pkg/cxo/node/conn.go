@@ -44,9 +44,10 @@ type Conn struct {
 	// the panic even if a new code path adds a redundant signal.
 	initClosed atomic.Bool
 
-	closeq chan struct{}  // signal for all goroutines to exit
-	doneq  chan struct{}  // closed when run() has fully completed (maps cleaned, transport closed)
-	await  sync.WaitGroup // wait for all goroutines to exit
+	closeq    chan struct{}  // signal for all goroutines to exit
+	closeOnce sync.Once      // guards close(closeq) — see signalClose
+	doneq     chan struct{}  // closed when run() has fully completed (maps cleaned, transport closed)
+	await     sync.WaitGroup // wait for all goroutines to exit
 
 	// lastActivityNs is the UnixNano of the most recent successful
 	// receiveMsg. Updated on every inbound message — chat traffic,
@@ -113,11 +114,7 @@ func (c *Conn) run() {
 	go func() {
 		defer c.await.Done()
 		if rcvErr = c.receiveMsg(); rcvErr != nil {
-			select {
-			case <-c.closeq:
-			default:
-				close(c.closeq)
-			}
+			c.signalClose()
 		}
 	}()
 
@@ -139,11 +136,7 @@ func (c *Conn) run() {
 	// If OnConnect returns error, connection will be closed.
 	var occErr error
 	if occErr = c.n.onConnect(c); occErr != nil {
-		select {
-		case <-c.closeq:
-		default:
-			close(c.closeq)
-		}
+		c.signalClose()
 	}
 
 	// Wait for all goroutines to exit.
@@ -524,16 +517,22 @@ func (c *Conn) getter() (cg skyobject.Getter) {
 	return &cget{c}
 }
 
+// signalClose idempotently closes closeq to signal shutdown. Multiple paths
+// race to signal it — run()'s receiveMsg/onConnect failure branches, the idle
+// watchdog, and external Close() (including concurrent closeAll iteration) — so
+// the close MUST be serialized: a plain `select { case <-closeq: default:
+// close(closeq) }` has a check-then-close TOCTOU window where two goroutines
+// both take the default branch and double-close (panic: close of closed
+// channel). sync.Once removes that window.
+func (c *Conn) signalClose() {
+	c.closeOnce.Do(func() { close(c.closeq) })
+}
+
 // Close the Conn
 // Close signals the connection to shut down. The connection is fully cleaned
 // up asynchronously by run(). Use Done() to wait for full cleanup if needed.
 func (c *Conn) Close() (err error) {
-	select {
-	case <-c.closeq:
-		// Already closing
-	default:
-		close(c.closeq)
-	}
+	c.signalClose()
 	return nil
 }
 

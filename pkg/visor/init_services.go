@@ -178,6 +178,16 @@ func getPublicIP(v *Visor, service string) (string, error) {
 		pIP = v.stun.client.PublicIP.IP()
 		return pIP, nil
 	}
+	// STUN could not determine a public IP (no reachable STUN server, or the
+	// visor is behind a NAT that STUN can't traverse). Only a PUBLIC visor —
+	// which advertises stcpr/sudph transports others dial by IP — actually needs
+	// one; for a private/NAT'd visor (is_public=false) the public IP is just an
+	// unused TPD-registration hint, so boot with an empty IP instead of aborting.
+	// This lets a visor with no STUN (e.g. a loopback / native e2e deployment)
+	// start and use dmsg-bridged transports.
+	if !v.conf.IsPublic {
+		return "", nil
+	}
 	return pIP, fmt.Errorf("cannot fetch public ip")
 }
 

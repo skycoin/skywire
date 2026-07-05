@@ -170,7 +170,7 @@ func (s *Server) ServeQUIC(udpConn net.PacketConn, advertisedUDPAddr string) err
 	if err != nil {
 		return fmt.Errorf("dmsg-quic: listen: %w", err)
 	}
-	s.advertisedUDPAddr = advertisedUDPAddr
+	s.setAdvertisedUDPAddr(advertisedUDPAddr)
 	s.log.WithField("addr_udp", advertisedUDPAddr).Info("Serving dmsg over QUIC.")
 	for {
 		qc, err := lis.Accept(context.Background())

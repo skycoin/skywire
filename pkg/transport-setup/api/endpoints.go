@@ -56,6 +56,7 @@ func (api *API) addTransport(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.From == req.To {
 		api.badRequest(w, r, fmt.Errorf("source and destination keys are the same"))
+		return
 	}
 	result := &setup.TransportResponse{}
 	rpcReq := setup.TransportRequest{RemotePK: req.To, Type: types.Type(req.Type)}
@@ -78,6 +79,7 @@ func (api *API) getTransports(w http.ResponseWriter, r *http.Request) {
 	var pk cipher.PubKey
 	if err := pk.UnmarshalText([]byte(pkParam)); err != nil {
 		api.badRequest(w, r, err)
+		return
 	}
 
 	result := &[]setup.TransportResponse{}

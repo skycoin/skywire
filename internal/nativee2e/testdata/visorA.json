@@ -1,0 +1,117 @@
+{
+  "version": "unknown",
+  "sk": "34a17275d28f5af93cdd214592cc754c40ab972718c5f2f9ce1267608227f9d9",
+  "pk": "030a4fff35f74dfeeff2ee9466cf597a1d9aecca665b118d4eb5f795d11f77ed1f",
+  "dmsg": {
+    "discovery": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80",
+    "sessions_count": 2,
+    "servers": [
+      {
+        "version": "",
+        "sequence": 0,
+        "timestamp": 0,
+        "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+        "server": {
+          "address": "127.0.0.1:8080",
+          "availableSessions": 0
+        }
+      }
+    ],
+    "servers_type": "all",
+    "protocol": "yamux"
+  },
+  "ui_server": {
+    "enable": false,
+    "local_addr": "localhost:8081",
+    "dmsg_port": 81,
+    "dmsg_whitelist": null,
+    "survey_dir": ""
+  },
+  "log_server": {
+    "local_addr": ""
+  },
+  "skywire-tcp": {
+    "pk_table": null,
+    "listening_address": ":7777"
+  },
+  "transport": {
+    "discovery": "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80",
+    "address_resolver": "dmsg://02252c40a1ac021dcf6d93f1aae38023e8fd20bb0d35b7d07cba9435a7cb7ef34f:80",
+    "public_autoconnect": true,
+    "transport_setup": [
+      "0277dda8a284d43b4d5ee2a4152771e76131e9437c47be5d8e835aafe02c45a9ae"
+    ],
+    "log_store": {
+      "type": "file",
+      "location": "./local/transport_logs",
+      "rotation_interval": "168h0m0s"
+    },
+    "stcpr_port": 0,
+    "sudph_port": 0
+  },
+  "routing": {
+    "route_setup_nodes": [
+      "02603d53d49b6575a0b8cee05b70dd23c86e42cd6cba99af769d61a6196ea2bcb1"
+    ],
+    "route_finder": "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80",
+    "route_finder_timeout": "10s",
+    "min_hops": 1
+  },
+  "launcher": {
+    "service_discovery": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80",
+    "apps": [
+      {
+        "name": "skysocks-client",
+        "auto_start": false,
+        "port": 3
+      },
+      {
+        "name": "vpn-client",
+        "auto_start": false,
+        "port": 43
+      }
+    ],
+    "server_addr": "127.0.0.1:5505",
+    "bin_path": "./bin",
+    "display_node_ip": false
+  },
+  "survey_whitelist": [],
+  "hypervisors": [],
+  "cli_addr": "localhost:3435",
+  "log_level": "",
+  "local_path": "./localA",
+  "stun_servers": [
+    "127.0.0.1:3478"
+  ],
+  "shutdown_timeout": "10s",
+  "is_public": false,
+  "geoip": "",
+  "persistent_transports": null,
+  "memory_limit": "auto",
+  "hypervisor": {
+    "enable": true,
+    "db_path": "/Users/mohammed/Projects/Skycoin/mohammed/skywire/users.db",
+    "enable_auth": false,
+    "enable_pk_endpoint": false,
+    "cookies": {
+      "hash_key": "87dfa4da144e6b18c452ed6ee46e44670d05d53883099e0a9ab862bd94e89b21c3f0d52278171957152933724c7e3715b3e069bbbb92e3393b60f80c90f81de9",
+      "block_key": "0401562c0e0e1d61f8c34ca2067b7a92ab6fe98098d44e602868584ba1e39b8e",
+      "expires_duration": 43200000000000,
+      "path": "/",
+      "domain": ""
+    },
+    "dmsg_port": 46,
+    "http_addr": ":8000",
+    "enable_tls": false,
+    "tls_cert_file": "./ssl/cert.pem",
+    "tls_key_file": "./ssl/key.pem",
+    "tp_viz": {
+      "enable": true
+    },
+    "lan_dmsg_server": {
+      "enable": true,
+      "pk": "02817014fda7a793877e4c53764bea839e2103a7dd4da2d7bfa370d18a10181c95",
+      "sk": "c45b8173ac2fd65b019971d41da6a494c4310cd232e26dd54b9e1b57dde0c542"
+    }
+  }
+}

@@ -290,6 +290,15 @@ func (s *service) runDMSG(
 }
 
 func openStore(ctx context.Context, cfg *Config, log *logging.Logger) (store.Storer, error) {
+	// test_mode WITHOUT a redis URL → in-memory mock store, so a small
+	// all-in-one / native e2e deployment needs no redis. Production and the
+	// docker e2e set `redis` explicitly and keep using it; this only triggers
+	// when the operator opted into test_mode AND left redis empty. Mirrors the
+	// Testing→Memory store switch in tpd/ar/rf.
+	if cfg.TestMode && cfg.Redis == "" {
+		log.Info("test_mode with no redis URL: using in-memory dmsg-discovery store")
+		return store.NewStore(ctx, "mock", &store.Config{}, log)
+	}
 	dbConf := &store.Config{
 		URL:      cfg.Redis,
 		Password: os.Getenv(RedisPasswordEnvName),

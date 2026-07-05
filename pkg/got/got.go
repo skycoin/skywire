@@ -191,10 +191,17 @@ func (g *Got) Do(dl *Download) error {
 	}
 
 	if g.ProgressFunc != nil {
-		defer func() {
-			dl.StopProgress = true
+		progressDone := make(chan struct{})
+		go func() {
+			dl.RunProgress(g.ProgressFunc)
+			close(progressDone)
 		}()
-		go dl.RunProgress(g.ProgressFunc)
+		// Stop the progress goroutine and wait for it to exit before returning,
+		// so no ProgressFunc call (or d field access) outlives Do.
+		defer func() {
+			dl.StopProgress.Store(true)
+			<-progressDone
+		}()
 	}
 
 	return dl.Start()

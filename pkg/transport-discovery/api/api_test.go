@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httpauth"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/storeconfig"
 	"github.com/skycoin/skywire/pkg/transport"
 	tpdiscmetrics "github.com/skycoin/skywire/pkg/transport-discovery/metrics"
@@ -358,4 +360,325 @@ func TestGETIncrementingNonces(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 		assert.Contains(t, w.Body.String(), "Invalid public key")
 	})
+}
+
+// --- additional coverage: public endpoints, helpers, background tasks --------
+
+func newTestAPI(t *testing.T) *API {
+	t.Helper()
+	mock := newTestStore(t)
+	nonceMock, err := httpauth.NewNonceStore(context.TODO(), storeconfig.Config{Type: storeconfig.Memory}, "")
+	require.NoError(t, err)
+	return New(nil, mock, nonceMock, false, tpdiscmetrics.NewEmpty(), "dmsg-addr", "")
+}
+
+// serveUnique routes one request through the API with a unique RemoteAddr so
+// the per-IP rate limiter (burst 10) never trips across a table of requests.
+func serveUnique(api *API, idx int, method, path string, body []byte, hdr http.Header) *httptest.ResponseRecorder {
+	var b *bytes.Buffer
+	if body != nil {
+		b = bytes.NewBuffer(body)
+	} else {
+		b = bytes.NewBuffer(nil)
+	}
+	r := httptest.NewRequest(method, path, b)
+	r.RemoteAddr = fmt.Sprintf("10.%d.%d.%d:1234", (idx/250)%250, idx%250, (idx*7)%250)
+	if hdr != nil {
+		r.Header = hdr
+	}
+	w := httptest.NewRecorder()
+	api.ServeHTTP(w, r)
+	return w
+}
+
+func TestPublicReadEndpoints(t *testing.T) {
+	api := newTestAPI(t)
+	pk := testPubKey.Hex()
+	id := uuid.New().String()
+
+	paths := []string{
+		"/health",
+		"/all-transports/stats",
+		"/all-transports/per-key-stats",
+		"/transports/stats/" + pk,
+		"/v3/transports/edge:" + pk,
+		"/bandwidth/transport/" + id,
+		"/bandwidth/visor/" + pk,
+		"/metric",
+		"/metric/visor/" + pk,
+		"/metrics",
+		"/metrics/" + id,
+		"/metrics/visor/" + pk,
+		"/uptimes",
+		"/uptimes?v=v2",
+		"/uptimes?v=v3",
+		"/uptimes?visors=" + pk,
+		"/uptimes/transports",
+		"/uptimes/transports?v=v2&visors=" + pk,
+		"/uptimes/transports?v=v3&edges=true",
+		"/metrics/uptime",
+		"/metrics/uptime?v=v2",
+		"/metrics/uptime/" + id,
+		"/metrics/uptime/visor/" + pk,
+		"/version",
+		"/versions",
+		"/versions?v=v2",
+		"/versions/" + pk,
+		"/all-transports?status=true",
+	}
+	for i, p := range paths {
+		w := serveUnique(api, i, http.MethodGet, p, nil, nil)
+		require.Less(t, w.Code, http.StatusInternalServerError, "%s -> %d: %s", p, w.Code, w.Body.String())
+	}
+
+	// /health reports the service name.
+	w := serveUnique(api, 100, http.MethodGet, "/health", nil, nil)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.Contains(t, w.Body.String(), "transport-discovery")
+}
+
+func TestPublicPostEndpoints(t *testing.T) {
+	api := newTestAPI(t)
+	pk := testPubKey.Hex()
+
+	// POST /transports/edges — body is a JSON list of edge PKs.
+	edgesBody, _ := json.Marshal([]string{pk}) //nolint
+	w := serveUnique(api, 1, http.MethodPost, "/transports/edges", edgesBody, nil)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+
+	// POST /uptimes — bulk uptimes request (v1, v2, and v3 dispatch).
+	upBody, _ := json.Marshal(map[string]any{"pks": []string{pk}}) //nolint
+	w = serveUnique(api, 2, http.MethodPost, "/uptimes", upBody, nil)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	for i, ver := range []string{"v2", "v3"} {
+		b, _ := json.Marshal(map[string]any{"pks": []string{pk}, "version": ver}) //nolint
+		w = serveUnique(api, 20+i, http.MethodPost, "/uptimes", b, nil)
+		require.Less(t, w.Code, http.StatusInternalServerError, "version=%s: %s", ver, w.Body.String())
+	}
+
+	// POST /uptimes/transports — bulk transport uptimes request.
+	w = serveUnique(api, 3, http.MethodPost, "/uptimes/transports", upBody, nil)
+	require.Less(t, w.Code, http.StatusInternalServerError, w.Body.String())
+
+	// POST /statuses is gone.
+	w = serveUnique(api, 4, http.MethodPost, "/statuses", nil, nil)
+	require.Equal(t, http.StatusGone, w.Code)
+
+	// Malformed edges body → bad request (exercises the parse-error path).
+	w = serveUnique(api, 5, http.MethodPost, "/transports/edges", []byte("not-json"), nil)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestDeregisterUnauthorized(t *testing.T) {
+	api := newTestAPI(t)
+	// No NM-PK header → the network-monitor whitelist check rejects it.
+	w := serveUnique(api, 1, http.MethodDelete, "/transports/deregister", nil, nil)
+	require.Equal(t, http.StatusForbidden, w.Code)
+}
+
+func TestUptimeRoutesWithoutRecorder(t *testing.T) {
+	api := newTestAPI(t)
+	for i, p := range []string{"/uptime/now", "/uptime/sessions", "/uptime/timeline", "/uptime/dates"} {
+		w := serveUnique(api, i, http.MethodGet, p, nil, nil)
+		require.Equal(t, http.StatusServiceUnavailable, w.Code, p)
+	}
+}
+
+func TestAuthedEndpoints(t *testing.T) {
+	// Each sub-test gets its own API (hence its own nonce store): the auth
+	// middleware increments the per-PK nonce, so reusing one store would
+	// 401 every request after the first (which still passes the <500
+	// assertion but skips the handler).
+
+	t.Run("registerTransportV3", func(t *testing.T) {
+		body, err := json.Marshal([]*transport.Entry{newTestEntry()})
+		require.NoError(t, err)
+		w := serveUnique(newTestAPI(t), 1, http.MethodPost, "/v3/transports/", body, validHeaders(t, body))
+		require.Less(t, w.Code, http.StatusInternalServerError, w.Body.String())
+	})
+
+	t.Run("visorHeartbeat", func(t *testing.T) {
+		w := serveUnique(newTestAPI(t), 2, http.MethodGet, "/v4/update", nil, validHeaders(t, nil))
+		require.Less(t, w.Code, http.StatusInternalServerError, w.Body.String())
+	})
+
+	t.Run("deleteTransportsBatch", func(t *testing.T) {
+		body, _ := json.Marshal([]string{uuid.New().String()}) //nolint
+		w := serveUnique(newTestAPI(t), 3, http.MethodPost, "/transports/delete-batch", body, validHeaders(t, body))
+		require.Less(t, w.Code, http.StatusInternalServerError, w.Body.String())
+	})
+}
+
+func TestRunBackgroundTasksOnce(t *testing.T) {
+	api := newTestAPI(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // already canceled → one refresh pass, then the loop returns
+	api.RunBackgroundTasks(ctx, logging.MustGetLogger("t"))
+
+	// Exercise the cache getters (empty store → may be nil; we only care
+	// that the refresh pass + getters ran without panicking).
+	_ = api.getTransportsFromCache(true)
+	_ = api.getTransportsFromCache(false)
+	_ = api.getUptimesFromCache()
+	_ = api.getUptimesV2FromCache()
+}
+
+func TestWriteErrorStatuses(t *testing.T) {
+	api := newTestAPI(t)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	cases := []struct {
+		err  error
+		want int
+	}{
+		{ErrEmptyPubKey, http.StatusBadRequest},
+		{ErrInvalidPubKey, http.StatusBadRequest},
+		{ErrEmptyTransportID, http.StatusBadRequest},
+		{ErrInvalidTransportID, http.StatusBadRequest},
+		{store.ErrTransportNotFound, http.StatusNotFound},
+		{store.ErrAlreadyRegistered, http.StatusConflict},
+		{context.DeadlineExceeded, http.StatusRequestTimeout},
+		{&json.SyntaxError{}, http.StatusBadRequest},
+		{errors.New("boom"), http.StatusInternalServerError},
+	}
+	for _, c := range cases {
+		w := httptest.NewRecorder()
+		api.writeError(w, r, c.err)
+		require.Equal(t, c.want, w.Code, c.err.Error())
+	}
+}
+
+func TestPureParseHelpers(t *testing.T) {
+	require.Equal(t, []string{"a", "b", "c"}, splitPKs("a, b ,c")) // comma-split + trim
+	require.Empty(t, splitPKs(""))
+
+	ids := parseTpIDs(uuid.New().String() + ";" + uuid.New().String() + ";not-a-uuid")
+	require.Len(t, ids, 2) // semicolon-split; invalid one dropped
+
+	pks, err := parsePKs(testPubKey.Hex())
+	require.NoError(t, err)
+	require.Len(t, pks, 1)
+
+	parsedIDs, err := parseIDs(uuid.New().String())
+	require.NoError(t, err)
+	require.Len(t, parsedIDs, 1)
+
+	// filterByPKs keeps only matching summaries.
+	other, _ := cipher.GenerateKeyPair()
+	summaries := []store.VisorSummary{{PK: testPubKey}, {PK: other}}
+	require.Len(t, filterByPKs(summaries, testPubKey.Hex()), 1)
+	require.Empty(t, filterByPKs(summaries, ""))
+}
+
+// --- CXO register + pure helpers (no CXO node needed) ------------------------
+
+func TestRegisterDeregisterFromCXO(t *testing.T) {
+	api := newTestAPI(t)
+	ctx := context.Background()
+	entry := newTestEntry() // edges = sorted(testPubKey, pk1)
+	reporter := entry.Edges[0]
+	other, _ := cipher.GenerateKeyPair()
+
+	require.Error(t, api.RegisterTransportFromCXO(ctx, nil, reporter, "v1")) // nil entry
+	require.Error(t, api.RegisterTransportFromCXO(ctx, entry, other, "v1"))  // reporter not an edge
+	require.NoError(t, api.RegisterTransportFromCXO(ctx, entry, reporter, "v1.0.0"))
+
+	require.NoError(t, api.DeregisterTransportFromCXO(ctx, uuid.New(), reporter)) // unknown id → no-op
+	require.Error(t, api.DeregisterTransportFromCXO(ctx, entry.ID, other))        // reporter not an edge
+	require.NoError(t, api.DeregisterTransportFromCXO(ctx, entry.ID, reporter))   // removes it
+}
+
+func TestCXOPathHelpers(t *testing.T) {
+	require.Equal(t, MetricsPath(7), metricsPath(7))
+	require.Equal(t, "uptimes/days/7", UptimePath(7))
+	require.NotEmpty(t, MetricsPath(30))
+}
+
+func TestTrimSummariesToDays(t *testing.T) {
+	now := time.Now()
+	recent := now.Format("2006-01-02")
+	old := now.AddDate(0, 0, -10).Format("2006-01-02")
+	in := []store.VisorSummary{{
+		PK:       testPubKey,
+		Daily:    map[string]string{recent: "100", old: "50"},
+		Timeline: map[string]string{recent: "x", old: "y"},
+	}}
+
+	// days <= 0 → no trim.
+	require.Equal(t, in, trimSummariesToDays(in, 0, now))
+
+	// days=3 drops the 10-day-old entries.
+	out := trimSummariesToDays(in, 3, now)
+	require.Len(t, out, 1)
+	require.Contains(t, out[0].Daily, recent)
+	require.NotContains(t, out[0].Daily, old)
+	require.NotContains(t, out[0].Timeline, old)
+}
+
+func TestCXOPublisherErrorTracking(t *testing.T) {
+	// recordError / LastError only touch mu + lastError, so zero-value
+	// struct literals are safe (no CXO node required).
+	boom := errors.New("boom")
+
+	a := &AllTransportsCXOPublisher{}
+	require.NoError(t, a.LastError())
+	a.recordError(boom)
+	require.Error(t, a.LastError())
+
+	m := &MetricsCXOPublisher{}
+	m.recordError(boom)
+	require.Error(t, m.LastError())
+
+	u := &UptimeCXOPublisher{}
+	u.recordError(boom)
+	require.Error(t, u.LastError())
+}
+
+// --- DHT mirror + uptime recorder --------------------------------------------
+
+type fakeDHTMirror struct{ mirrored, deleted int }
+
+func (m *fakeDHTMirror) Mirror(cipher.PubKey, interface{}, uint64)       { m.mirrored++ }
+func (m *fakeDHTMirror) MirrorMany([]cipher.PubKey, interface{}, uint64) { m.mirrored++ }
+func (m *fakeDHTMirror) Delete(cipher.PubKey)                            { m.deleted++ }
+
+func TestDHTMirror(t *testing.T) {
+	api := newTestAPI(t)
+	ctx := context.Background()
+	mir := &fakeDHTMirror{}
+	api.SetDHTMirror(mir)
+
+	entry := newTestEntry()
+	reporter := entry.Edges[0]
+
+	// Registering an edge with a live transport → mirrorEdges publishes it.
+	require.NoError(t, api.RegisterTransportFromCXO(ctx, entry, reporter, "v1.0.0"))
+	require.Positive(t, mir.mirrored)
+
+	// Backfill walks every edge and mirrors its transport list.
+	api.BackfillDHTMirror(ctx, logging.MustGetLogger("t"))
+
+	// Deregistering empties the edge → mirrorEdges deletes the DHT entry.
+	require.NoError(t, api.DeregisterTransportFromCXO(ctx, entry.ID, reporter))
+	require.Positive(t, mir.deleted)
+}
+
+func TestUptimeRecorderRoutes(t *testing.T) {
+	api := newTestAPI(t)
+
+	// Before a recorder is wired, the /uptime/* routes report 503.
+	require.Equal(t, http.StatusServiceUnavailable, serveUnique(api, 0, http.MethodGet, "/uptime/now", nil, nil).Code)
+
+	rec, err := serviceuptime.New(filepath.Join(t.TempDir(), "uptime.db"), serviceuptime.Config{Service: "transport-discovery"})
+	require.NoError(t, err)
+	// Close the recorder (and its bbolt DB) before the test ends, otherwise the
+	// open DB file keeps the temp dir locked on Windows and t.TempDir cleanup
+	// fails with "being used by another process".
+	t.Cleanup(func() { _ = rec.Close() }) //nolint:errcheck
+	api.SetUptimeRecorder(rec)
+	require.NotNil(t, api.getUptimeRecorder())
+
+	for i, p := range []string{"/uptime/now", "/uptime/sessions", "/uptime/timeline", "/uptime/dates"} {
+		w := serveUnique(api, i+1, http.MethodGet, p, nil, nil)
+		require.Less(t, w.Code, http.StatusInternalServerError, p)
+	}
 }

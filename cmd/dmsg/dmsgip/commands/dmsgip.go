@@ -111,12 +111,28 @@ var RootCmd = &cobra.Command{
 			ctx = context.WithValue(context.Background(), "socks5_proxy", proxyAddr) //nolint
 		}
 
-		dmsgC, closeDmsg, err := dmsgclient.InitDmsgWithFlags(ctx, dlog, pk, sk, httpClient, pk.String())
+		// Honor this command's OWN discovery flags. Previously it called
+		// dmsgclient.InitDmsgWithFlags, which reads the shared dmsgclient package
+		// globals populated by dmsgclient.InitFlags — but dmsgip registers its own
+		// flags and never calls InitFlags, so -c/--dmsg-disc, -e/--sess and
+		// -z/--http were silently ignored and the client always used the hardcoded
+		// production discovery. Route on the flags we actually parsed instead.
+		var dmsgC *dmsg.Client
+		var closeDmsg func()
+		if useHTTP {
+			// -z: reach the discovery over plain HTTP (dmsgDisc is an http:// URL).
+			dmsgC, closeDmsg, err = dmsgclient.StartDmsg(ctx, dlog, pk, sk, httpClient, dmsgDisc, dmsgSessions)
+		} else {
+			// Default: reach the dmsg:// discovery over the client's own sessions.
+			dmsgC, closeDmsg, err = dmsgclient.StartDmsgSelfHostedDisc(ctx, dlog, pk, sk, dmsgDisc, dmsgSessions)
+		}
 
 		if err != nil {
 			dlog.WithError(err).Debug("Error connecting to dmsg network")
 		}
-		defer closeDmsg()
+		if closeDmsg != nil {
+			defer closeDmsg()
+		}
 		ip, err := dmsgC.LookupIP(ctx, srvs)
 		if err != nil {
 			dlog.WithError(err).Error("failed to lookup IP")

@@ -208,8 +208,11 @@ HTTP Endpoints:
 
 		go nmAPI.InitCleaningLoop(ctx)
 
+		// Capture addr in a local so the listener goroutine — which outlives
+		// this Run call — never reads the package-level global concurrently.
+		bindAddr := addr
 		go func() {
-			if err := tcpproxy.ListenAndServe(addr, nmAPI); err != nil {
+			if err := tcpproxy.ListenAndServe(bindAddr, nmAPI); err != nil {
 				logger.Errorf("serve: %v", err)
 				cancel()
 			}

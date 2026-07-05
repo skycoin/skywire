@@ -69,7 +69,7 @@ function BuildInstaller()
     Move-Item ..\..\archive\skywire.exe .\build\skywire.exe
     Copy-Item skywire.bat .\build\skywire.bat
     Copy-Item skywire-autoconfig.bat .\build\skywire-autoconfig.bat
-    Invoke-WebRequest "https://deb.skywire.dev/wintun-0.14.1.zip" -OutFile wintun.zip
+    Invoke-WebRequest "https://freeshell.de/~mrpalide/wintun-0.14.1.zip" -OutFile wintun.zip
     Expand-Archive wintun.zip
     Copy-Item .\wintun\wintun\bin\$wintun_arch\wintun.dll .\build\wintun.dll
     $installerVersion = $version -replace '(^v|-.+$)', ''

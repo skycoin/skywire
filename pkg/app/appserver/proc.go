@@ -252,6 +252,18 @@ func (p *Proc) startInProcess() error {
 					_ = os.Unsetenv(parts[0]) //nolint:errcheck
 				}
 			}
+
+			// An in-process app exiting on its own (RunFunc returned or
+			// panicked) is the equivalent of an external app's process
+			// exiting. Cancel appCtx so the lifecycle goroutine runs its
+			// teardown (conn.Close + cm/lm.CloseAll), which closes the app's
+			// appnet listeners and frees their porter ports. Without this an
+			// app that reserves a port and then errors (e.g. "port already
+			// bound") leaks that reservation, so it can never be restarted on
+			// the same port. The external path already gets this via cmd.Wait.
+			if p.appCancelCtx != nil {
+				p.appCancelCtx()
+			}
 		}()
 
 		p.log.Debug("Calling app RunFunc")

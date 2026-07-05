@@ -10,16 +10,25 @@ import (
 	"gorm.io/gorm"
 )
 
+// openDB opens a gorm connection to the given DSN. It is a package var so
+// tests can substitute a fake/mock connection without a live database.
+var openDB = func(dsn string) (*gorm.DB, error) {
+	return gorm.Open(postgres.Open(dsn), &gorm.Config{})
+}
+
+// retryDelay is the wait between failed connection attempts. It is a package
+// var so tests can shorten it.
+var retryDelay = 1 * time.Second
+
 // Init creates a connection to database with retry logic for startup resilience.
 func Init(dns string, pgMaxOpenConn int) (*gorm.DB, error) {
 	const maxRetries = 5
-	const retryDelay = 1 * time.Second
 
 	var db *gorm.DB
 	var err error
 
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		db, err = gorm.Open(postgres.Open(dns), &gorm.Config{})
+		db, err = openDB(dns)
 		if err == nil {
 			dbConf, _ := db.DB() //nolint:errcheck
 			dbConf.SetMaxOpenConns(pgMaxOpenConn)

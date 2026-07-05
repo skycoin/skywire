@@ -142,9 +142,18 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}()
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Errorf("ListenAndServe: %v", err)
-		return err
-	}
+	// Serve the HTTP admin API in the background. Its TCP bind must NOT be fatal
+	// to the service: the primary interface visors use is the dmsg RPC listener
+	// above, so a failed HTTP bind should leave that serving rather than take the
+	// service — and, via the supervisor's cancel-all, the WHOLE deployment — down.
+	// This bites on Windows, where http.sys reserves :80, so `svc run` as a
+	// non-admin user cannot bind the default transport-setup port.
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.WithError(err).Warn("HTTP admin API not served (bind failed); continuing with dmsg RPC only")
+		}
+	}()
+
+	<-runCtx.Done()
 	return nil
 }

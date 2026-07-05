@@ -18,6 +18,15 @@ func (mt *ManagedTransport) CloseForTest() {
 	}
 }
 
+// InjectTransportForTest inserts mt into the manager's transport map keyed by
+// its Entry.ID. Test-only: it bypasses dialing/discovery so cross-package tests
+// can populate a Manager without a live network.
+func (tm *Manager) InjectTransportForTest(mt *ManagedTransport) {
+	tm.mx.Lock()
+	defer tm.mx.Unlock()
+	tm.tps[mt.Entry.ID] = mt
+}
+
 // NewManagedTransportForTest creates a minimal ManagedTransport for testing.
 // Only the transport field and basic channels are initialized.
 // Uses a no-op queueDeletion to avoid nil pointer on close.

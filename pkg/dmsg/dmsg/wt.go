@@ -102,8 +102,7 @@ func (s *Server) ServeWebTransport(udpConn net.PacketConn, advertisedWTURL strin
 		s.handleWTSession(sess)
 	})
 
-	s.advertisedWTAddr = advertisedWTURL
-	s.advertisedWTCertHash = certHash
+	s.setAdvertisedWT(advertisedWTURL, certHash)
 	go func() {
 		<-s.done
 		wtSrv.Close() //nolint:errcheck,gosec

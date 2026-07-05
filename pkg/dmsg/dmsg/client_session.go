@@ -71,6 +71,14 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 		return nil, err
 	}
 
+	// stream is a stable reference to the dialed stream for the cancellation
+	// watcher below. The watcher MUST NOT touch the named return `dStr`: a
+	// `return nil, err` in the handshake path rewrites `dStr` (to nil) without
+	// holding `mu`, which races with the watcher's read of it (the -race
+	// detector flags dStr.Close() vs `return nil, ...`). `stream` is assigned
+	// once, before the watcher goroutine starts, so it is safe to read there.
+	stream := dStr
+
 	// Close stream on failure — this frees the reserved ephemeral port.
 	defer func() {
 		if err != nil {
@@ -129,7 +137,7 @@ func (cs *ClientSession) DialStream(ctx context.Context, dst Addr) (dStr *Stream
 			mu.Lock()
 			if !finished {
 				closedByWatcher = true
-				dStr.Close() //nolint:errcheck,gosec
+				stream.Close() //nolint:errcheck,gosec // stable ref; see `stream :=` above (do NOT use dStr here — it races with `return nil, ...`)
 			}
 			mu.Unlock()
 		case <-ctxDone:

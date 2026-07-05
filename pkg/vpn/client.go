@@ -564,7 +564,7 @@ func (c *Client) removeDirectRoutes() {
 }
 
 func dmsgDiscIPFromEnv() (net.IP, error) {
-	return ipFromEnv(DmsgDiscAddrEnvKey)
+	return optionalIPFromEnv(DmsgDiscAddrEnvKey)
 }
 
 func dmsgSrvAddrsFromEnv() ([]net.IP, error) {
@@ -591,19 +591,19 @@ func dmsgSrvAddrsFromEnv() ([]net.IP, error) {
 }
 
 func tpDiscIPFromEnv() (net.IP, error) {
-	return ipFromEnv(TPDiscAddrEnvKey)
+	return optionalIPFromEnv(TPDiscAddrEnvKey)
 }
 
 func addressResolverIPFromEnv() (net.IP, error) {
-	return ipFromEnv(AddressResolverAddrEnvKey)
+	return optionalIPFromEnv(AddressResolverAddrEnvKey)
 }
 
 func rfIPFromEnv() (net.IP, error) {
-	return ipFromEnv(RFAddrEnvKey)
+	return optionalIPFromEnv(RFAddrEnvKey)
 }
 
 func uptimeTrackerIPFromEnv() (net.IP, error) {
-	return ipFromEnv(UptimeTrackerAddrEnvKey)
+	return optionalIPFromEnv(UptimeTrackerAddrEnvKey)
 }
 
 func tpRemoteIPsFromEnv() ([]net.IP, error) {
@@ -783,6 +783,21 @@ func ipFromEnv(key string) (net.IP, error) {
 		return nil, fmt.Errorf("env arg %s is not provided", key)
 	}
 
+	return ip, nil
+}
+
+// optionalIPFromEnv resolves a skywire-service address env arg to a direct-route
+// IP, but treats an absent arg as "no direct route needed" rather than an error.
+// In a dmsg-only deployment these services (dmsg discovery, TP discovery, AR, RF,
+// uptime tracker) are reached over dmsg — i.e. through the dmsg servers, which
+// are themselves the direct routes — so their own IP is neither configured nor
+// required. A dmsg:// address (no IP) likewise yields a nil IP. Callers filter
+// out nil IPs. A genuine resolution failure (e.g. bad DNS) is still returned.
+func optionalIPFromEnv(key string) (net.IP, error) {
+	ip, _, err := IPFromEnv(key)
+	if err != nil {
+		return nil, fmt.Errorf("error getting IP from %s: %w", key, err)
+	}
 	return ip, nil
 }
 

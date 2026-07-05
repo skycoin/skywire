@@ -3,12 +3,10 @@ package commands
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
-	"runtime"
 	"strings"
 	"syscall"
 
@@ -97,12 +95,8 @@ func RunVPNServer(ctx context.Context, args []string) error {
 	bi := buildinfo.Get()
 	logger.Infof("Version %q built on %q against commit %q", bi.Version, bi.Date, bi.Commit)
 
-	if runtime.GOOS != "linux" {
-		err := errors.New("OS is not supported")
-		logger.Error(err)
-		setAppErr(appCl, logger, err)
-		return err
-	}
+	// vpn-server is supported on Linux (iptables), macOS (pf) and Windows (WinNAT);
+	// see pkg/vpn/os_server_*.go.
 
 	localPK := cipher.PubKey{}
 	if localPKStr != "" {

@@ -26,6 +26,11 @@ func MustReadConfig(filename string, log *logging.Logger) Config {
 	if err != nil {
 		log.Fatalf("Failed to open config: %v", err)
 	}
+	// Close the handle before returning. On Windows an open handle keeps the
+	// file locked, which (in tests, where Fatalf is neutralized) breaks
+	// t.TempDir cleanup with "being used by another process". Calling Close on
+	// a nil *os.File (open failed + neutralized Fatalf) is a safe no-op.
+	defer func() { _ = rdr.Close() }() //nolint:errcheck,gosec
 	conf := Config{}
 	raw, err := io.ReadAll(rdr)
 	if err != nil {
