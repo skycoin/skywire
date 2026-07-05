@@ -117,7 +117,11 @@ func registerDefaultLanding() {
 		contentByPort[contentPort] = cm
 	}
 	if _, exists := cm["/"]; !exists {
-		cm["/"] = contentEntry{ct: "text/html; charset=utf-8", body: []byte(html)}
+		// enabled:true is REQUIRED — handleContentStream serves any entry with
+		// enabled==false (the contentEntry zero value) as 404, so without this the
+		// default landing page silently 404s and skywire.dmsg (→ this visor's PK)
+		// shows nothing, unlike native visors.
+		cm["/"] = contentEntry{ct: "text/html; charset=utf-8", body: []byte(html), enabled: true}
 	}
 	contentMu.Unlock()
 }
