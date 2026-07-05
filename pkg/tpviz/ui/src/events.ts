@@ -16,6 +16,7 @@ import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
 import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode, setVoronoiOverlay } from './globe';
+import { showCosmos, hideCosmos, updateCosmosData, isCosmosActive } from './cosmos-graph';
 
 export function wireEventListeners(): void {
     // Filter listeners
@@ -191,19 +192,22 @@ export function wireEventListeners(): void {
         }
     });
 
-    // View toggle listeners (Globe vs Flat)
+    // View toggle listeners (Globe vs Flat vs WebGL)
     const viewGlobeBtn = document.getElementById('view-globe');
     const viewFlatBtn = document.getElementById('view-flat');
+    const viewCosmosBtn = document.getElementById('view-cosmos');
 
     const clearViewButtons = () => {
         viewGlobeBtn?.classList.remove('active');
         viewFlatBtn?.classList.remove('active');
+        viewCosmosBtn?.classList.remove('active');
     };
 
     if (viewGlobeBtn) {
         viewGlobeBtn.addEventListener('click', () => {
             clearViewButtons();
             viewGlobeBtn.classList.add('active');
+            hideCosmos();
             S.setGlobeViewActive(true);
             setVoronoiMode(false);
             showGlobe();
@@ -214,8 +218,20 @@ export function wireEventListeners(): void {
         viewFlatBtn.addEventListener('click', () => {
             clearViewButtons();
             viewFlatBtn.classList.add('active');
+            hideCosmos();
             S.setGlobeViewActive(false);
             hideGlobe();
+        });
+    }
+
+    if (viewCosmosBtn) {
+        viewCosmosBtn.addEventListener('click', () => {
+            clearViewButtons();
+            viewCosmosBtn.classList.add('active');
+            // Leave the flat/globe state off; cosmos hides both containers.
+            S.setGlobeViewActive(false);
+            hideGlobe();
+            showCosmos();
         });
     }
 
@@ -233,6 +249,9 @@ export function wireEventListeners(): void {
     const filterChangeHandler = () => {
         if (isGlobeViewActive()) {
             updateGlobeData();
+        }
+        if (isCosmosActive()) {
+            updateCosmosData();
         }
     };
 

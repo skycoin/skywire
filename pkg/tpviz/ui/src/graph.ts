@@ -18,6 +18,7 @@ import { showNodeInfo, hideNodeInfo, showNodeEdgesOnly, showAllEdges, showCluste
 import { populateVisorList } from './sidebar';
 import { setupGroupDrawing, hitTestClusterBoundary } from './grouping';
 import { tpsUpdateInfo, tpsPopulateGroupSelect, mhAddHop } from './tps';
+import { isCosmosActive, updateCosmosData } from './cosmos-graph';
 
 export function processUptimeData(): void {
     S.onlineVisors.clear();
@@ -424,6 +425,9 @@ export function processData(): void {
     }
     const loadingEl = document.getElementById('loading');
     if (loadingEl) loadingEl.style.display = 'none';
+
+    // Keep the WebGL view in sync with each data refresh when it is active.
+    if (isCosmosActive()) { updateCosmosData(); }
 }
 
 export function createNetwork(): void {
