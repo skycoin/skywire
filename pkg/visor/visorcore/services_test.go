@@ -43,6 +43,7 @@ func TestResolveServicesNilMatchesDeployment(t *testing.T) {
 		{"ServiceDiscoveryDmsg", s.ServiceDiscoveryDmsg, d.ServiceDiscoveryDmsg},
 		{"ConfDmsg", s.ConfDmsg, d.ConfDmsg},
 		{"UptimeTrackerDmsg", s.UptimeTrackerDmsg, d.UptimeTrackerDmsg},
+		{"RewardSystemDmsg", s.RewardSystemDmsg, d.RewardSystemDmsg},
 	} {
 		if c.got != c.want {
 			t.Errorf("%s = %q, want %q", c.name, c.got, c.want)
