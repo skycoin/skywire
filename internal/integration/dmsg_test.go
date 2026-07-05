@@ -25,28 +25,19 @@ const (
 func TestDmsgServerHealth(t *testing.T) {
 	env := NewEnv().GatherContainersInfo()
 
-	// Get the DMSG server's PK from discovery
-	cmd := fmt.Sprintf("curl -s %s/dmsg-discovery/available_servers", dmsgDiscoveryURL)
-	result, err := env.execResult(cmd)
-	require.NoError(t, err, "Failed to query discovery")
-
-	var servers []json.RawMessage
-	require.NoError(t, json.Unmarshal([]byte(result.Stdout()), &servers))
-	require.NotEmpty(t, servers, "Need at least one DMSG server")
-
-	// Parse the first server's PK
-	var entry struct {
-		Static string `json:"static"`
-	}
-	require.NoError(t, json.Unmarshal(servers[0], &entry))
-	require.NotEmpty(t, entry.Static, "Server PK should not be empty")
-
-	// Fetch /health from the DMSG server via visor-b's DMSG client
+	// Fetch /health from the DMSG server via visor-b's DMSG client.
 	for _, v := range []string{visorA, visorB} {
 		require.NoError(t, env.WaitForVisorReady(v, 60*time.Second), "%s not ready", v)
 	}
 
-	dmsgURL := fmt.Sprintf("dmsg://%s:%d/health", entry.Static, dmsgHTTPPort)
+	// Get a DMSG server's PK from the visor's connected servers (RPC). The
+	// /dmsg-discovery/available_servers endpoint is remote-filtered and returns
+	// a 404 object to an anonymous curl, so query the visor instead.
+	serverPK, err := env.FirstDmsgServerPK(visorB, 60*time.Second)
+	require.NoError(t, err, "Could not determine a DMSG server PK")
+	require.NotEmpty(t, serverPK, "Server PK should not be empty")
+
+	dmsgURL := fmt.Sprintf("dmsg://%s:%d/health", serverPK, dmsgHTTPPort)
 	t.Logf("Fetching DMSG server health from %s", dmsgURL)
 
 	// `--loglvl debug` interleaves dmsg log lines with the response
@@ -97,22 +88,25 @@ func TestDmsgCurlHelp(t *testing.T) {
 	require.Contains(t, stdout, "dmsg", "Help output should mention dmsg")
 }
 
-// TestDmsgDiscoveryQuery tests querying the discovery service for available servers.
+// TestDmsgDiscoveryQuery tests that the discovery service is queryable and
+// returns registered entries. We hit /dmsg-discovery/entries (a plain array of
+// PKs) rather than /available_servers, which is remote-filtered and returns a
+// 404 object to an anonymous HTTP client with no dmsg identity.
 func TestDmsgDiscoveryQuery(t *testing.T) {
 	env := NewEnv().GatherContainersInfo()
 
-	cmd := fmt.Sprintf("curl -s %s/dmsg-discovery/available_servers", dmsgDiscoveryURL)
+	cmd := fmt.Sprintf("curl -s %s/dmsg-discovery/entries", dmsgDiscoveryURL)
 	result, err := env.execResult(cmd)
 	require.NoError(t, err, "Failed to query discovery service")
 
 	stdout := result.Stdout()
 	require.NotEmpty(t, stdout, "Should get response from discovery")
 
-	// Verify it's valid JSON containing at least one server entry
-	var servers []json.RawMessage
-	require.NoError(t, json.Unmarshal([]byte(stdout), &servers), "Discovery response should be valid JSON array")
-	require.NotEmpty(t, servers, "Discovery should list at least the E2E dmsg-server")
-	t.Logf("Discovery returned %d server(s)", len(servers))
+	// Verify it's a valid JSON array containing at least one registered entry.
+	var entries []json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte(stdout), &entries), "Discovery response should be valid JSON array")
+	require.NotEmpty(t, entries, "Discovery should list at least one registered entry")
+	t.Logf("Discovery returned %d entr(ies)", len(entries))
 }
 
 // TestDmsgCurl tests fetching visor-a's /health endpoint over DMSG using

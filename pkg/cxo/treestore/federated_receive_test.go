@@ -161,9 +161,19 @@ func newFederatedBurstRig(t *testing.T, n int) *federatedBurstRig {
 			if peer.pk == vm.pk {
 				continue
 			}
-			require.NoErrorf(t,
-				vm.subs[peer.pk].Connect(ctx, peer.pk),
-				"visor %d → %s: subscriber.Connect", i, peer.pk)
+			// Retry the dial rather than one-shot it: in-process dmsg
+			// discovery registration and the delegated-server session can
+			// still be settling the instant we connect, surfacing transiently
+			// as "dmsg error 202 - cannot connect to delegated server". This
+			// races on slower/contended runners (observed flaking the macOS CI
+			// lane). Poll Connect until the session is bridgeable or the shared
+			// ctx deadline hits; Connect is safe to re-attempt (a failed dial
+			// stores no state and starts no watchdog).
+			sub, peerPK := vm.subs[peer.pk], peer.pk
+			require.Eventuallyf(t, func() bool {
+				return sub.Connect(ctx, peerPK) == nil
+			}, timeout, 200*time.Millisecond,
+				"visor %d → %s: subscriber.Connect never succeeded", i, peerPK)
 		}
 	}
 

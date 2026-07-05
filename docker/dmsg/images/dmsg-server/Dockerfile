@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.26.4-alpine AS builder
 ARG CGO_ENABLED=0
 
 ENV CGO_ENABLED=${CGO_ENABLED} \

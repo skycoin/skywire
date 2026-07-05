@@ -553,7 +553,14 @@ func (env *TestEnv) visorTpExecAllowEmpty(cmd string) ([]*skyvisor.TransportSumm
 }
 
 func (env *TestEnv) VPNList(visor string) ([]servicedisc.Service, error) {
-	cmd := fmt.Sprintf("/release/skywire cli vpn --rpc %v:3435 list --sdurl http://service-discovery:9091 --json", visor)
+	// Query service-discovery directly over HTTP. `skywire cli vpn list` can't
+	// fetch a plain-HTTP --sdurl after #3100 — from the test runner its fetch
+	// chain (RPC-over-DMSG → direct-DMSG) has no mapping for the http:// URL and
+	// returns null. The raw /api/services endpoint returns the same
+	// []servicedisc.Service JSON. Mirrors the mdisc→curl switch used elsewhere.
+	// (visor param retained for call-site symmetry; the SD view is deployment-wide.)
+	_ = visor
+	cmd := "curl -s http://service-discovery:9091/api/services?type=vpn"
 	var services []servicedisc.Service
 	if err := env.ExecJSON(cmd, &services); err != nil {
 		return nil, err
@@ -607,6 +614,19 @@ func (env *TestEnv) VPNStart(app AppToRun, serverPk string) (string, error) {
 
 		// Use timeout version to prevent indefinite hangs
 		err := env.ExecJSONWithTimeout(cmd, &startResult, vpnStartTimeout)
+
+		// A prior attempt may have already started the app (e.g. attempt 1
+		// timed out but the launcher kept the proc). Treat "app already
+		// started" as success once we confirm it's running — mirrors StartApp.
+		if err != nil && err.Error() == "app already started" {
+			env.logger.Warnf("VPN start reported 'already started' on attempt %d, verifying it's running...", attempt)
+			if verifyErr := env.waitForVisorApp(app); verifyErr == nil {
+				env.logger.Info("VPN client confirmed running after 'already started'")
+				return "OK", nil
+			}
+			env.logger.Warn("VPN client not running despite 'already started'; continuing retry handling")
+		}
+
 		if err != nil {
 			lastErr = err
 			env.logger.WithError(err).Warnf("VPN start command failed on attempt %d", attempt)
@@ -836,6 +856,15 @@ func (env *TestEnv) GatherVisorPKs(visors []string) *TestEnv {
 	env.visorPKs = map[string]string{}
 
 	for _, visor := range visors {
+		// Ensure the visor's RPC is up before querying its PK. Any visor can come
+		// up well after the others (visor-b, the hypervisor, needs a DMSG session
+		// before it reports healthy), and a bare VisorPK call would otherwise
+		// panic with "connection refused" and abort the whole test binary.
+		// WaitForVisorReady returns as soon as the container reports healthy.
+		if err := env.WaitForVisorReady(visor, 180*time.Second); err != nil {
+			env.logger.Warnf("GatherVisorPKs: %s not ready after wait: %v", visor, err)
+		}
+
 		var pk string
 		var err error
 		// Retry to handle transient Docker DNS failures ("server misbehaving")
@@ -1254,10 +1283,43 @@ func (env *TestEnv) WaitForVisorDmsgReady(visor string, timeout time.Duration) e
 	return fmt.Errorf("visor %s did not connect to any DMSG servers within %v", visor, timeout)
 }
 
-// WaitForServiceDmsgReachable uses dmsg curl to verify a service is reachable via DMSG.
-// It runs from the e2e-test container which has SKYDEPLOY set, so skywire dmsg curl
-// automatically uses the test deployment config (DMSG discovery URL, servers, etc.).
-// The -Z flag uses HTTP for DMSG discovery connection (not DMSG-over-DMSG).
+// FirstDmsgServerPK returns the PK of a DMSG server the visor is connected to.
+// We ask the visor (via RPC) rather than curling /dmsg-discovery/available_servers
+// because that endpoint is remote-filtered and returns a 404 object to an
+// anonymous HTTP client with no dmsg identity.
+func (env *TestEnv) FirstDmsgServerPK(visor string, timeout time.Duration) (string, error) {
+	deadline := time.Now().Add(timeout)
+	cmd := fmt.Sprintf("/release/skywire cli --rpc %s:3435 visor dmsg-servers --json", visor)
+	type dmsgServer struct {
+		PK string `json:"pk"`
+	}
+	for time.Now().Before(deadline) {
+		var servers []dmsgServer
+		if err := env.ExecJSON(cmd, &servers); err == nil && len(servers) > 0 && servers[0].PK != "" {
+			return servers[0].PK, nil
+		}
+		time.Sleep(3 * time.Second)
+	}
+	return "", fmt.Errorf("visor %s reported no DMSG servers within %v", visor, timeout)
+}
+
+// SetVisorMinHops sets routing.min_hops on a running visor at runtime via the
+// route CLI (no restart, not persisted). Forcing min_hops >= 2 makes route
+// calculation skip a direct 1-hop transport even when one exists (e.g. one
+// created by public_autoconnect), so a multi-hop path is used.
+func (env *TestEnv) SetVisorMinHops(visor string, n int) error {
+	cmd := fmt.Sprintf("/release/skywire cli route minhops %d --rpc %s:3435", n, visor)
+	out, err := env.Exec(cmd)
+	if err != nil {
+		return fmt.Errorf("set min_hops=%d on %s: %w (out: %s)", n, visor, err, out)
+	}
+	return nil
+}
+
+// WaitForServiceDmsgReachable verifies a service is reachable via DMSG by issuing
+// `dmsg curl` through visor-a's RPC (i.e. its already-connected dmsg client). A
+// standalone client spawned in the test runner can't bootstrap discovery over
+// dmsg in this deployment, so we reuse a running visor's client instead.
 func (env *TestEnv) WaitForServiceDmsgReachable(serviceName, dmsgURL string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	checkInterval := 5 * time.Second
@@ -1265,19 +1327,25 @@ func (env *TestEnv) WaitForServiceDmsgReachable(serviceName, dmsgURL string, tim
 	env.logger.Infof("Checking DMSG reachability of %s at %s", serviceName, dmsgURL)
 
 	for time.Now().Before(deadline) {
-		cmd := fmt.Sprintf("/release/skywire dmsg curl -Z -l fatal %s", dmsgURL)
-		out, err := env.Exec(cmd)
-		if err == nil && len(out) > 0 {
-			truncated := out
-			if len(truncated) > 80 {
-				truncated = truncated[:80]
+		// Route the dmsg curl through visor-a's established dmsg client (its RPC)
+		// instead of spawning a standalone client here. The -Z/UseHTTP path FATALs
+		// (no plain-HTTP discovery URL in this dmsg-only deployment), and a cold
+		// standalone client using self-hosted discovery can't dial dmsg-discovery
+		// over dmsg either ("dmsg error 202 - cannot connect to delegated server").
+		// An already-connected visor reaches services fine. Matches
+		// checkVisorSelfHealthOverDmsg. Use the lower-level Exec (not env.Exec,
+		// which discards the exit code, nor execResult, which caps at 30s) so we
+		// can check ExitCode.
+		cmd := fmt.Sprintf("/release/skywire cli --rpc %s:3435 dmsg curl %s", visorA, dmsgURL)
+		result, err := Exec(env.ctx, env.cli, env.testRunnerID, strings.Split(cmd, " "))
+		if err == nil && result.ExitCode == 0 {
+			if stdout := strings.TrimSpace(result.Stdout()); len(stdout) > 0 {
+				env.logger.Infof("Service %s reachable via DMSG: %s", serviceName, truncate(stdout, 80))
+				return nil
 			}
-			env.logger.Infof("Service %s reachable via DMSG: %s", serviceName, truncated)
-			return nil
 		}
-		if err != nil {
-			env.logger.Debugf("DMSG curl to %s failed: %v", serviceName, err)
-		}
+		env.logger.Debugf("DMSG curl to %s not reachable yet: err=%v exit=%d stderr=%s",
+			serviceName, err, result.ExitCode, truncate(result.Stderr(), 200))
 		time.Sleep(checkInterval)
 	}
 
@@ -1332,8 +1400,14 @@ func (env *TestEnv) waitForDmsgDiscoveryEntryAfter(visor string, timeout time.Du
 	checkInterval := 3 * time.Second
 
 	for time.Now().Before(deadline) {
-		// Query DMSG discovery for this visor's entry
-		cmd := fmt.Sprintf("/release/skywire cli mdisc entry %s --url http://dmsg-discovery:9090 --json", pk)
+		// Query DMSG discovery directly over HTTP for this visor's entry.
+		// We curl the discovery endpoint rather than `skywire cli mdisc
+		// entry` because the CLI fetch chain (RPC-over-DMSG → direct-DMSG)
+		// can't serve a plain http:// discovery URL from the test runner:
+		// it has no local visor RPC, and #3100 dropped the plain-HTTP
+		// fallback. The raw endpoint returns the JSON-encoded disc.Entry,
+		// which is exactly what TestDmsgDiscoveryQuery already relies on.
+		cmd := fmt.Sprintf("curl -s %s/dmsg-discovery/entry/%s", dmsgDiscoveryURL, pk)
 
 		type dmsgClient struct {
 			DelegatedServers []string `json:"delegated_servers"`
@@ -1346,17 +1420,25 @@ func (env *TestEnv) waitForDmsgDiscoveryEntryAfter(visor string, timeout time.Du
 			Timestamp int64       `json:"timestamp"`
 		}
 
-		var entry dmsgEntry
-
-		err := env.ExecJSON(cmd, &entry)
+		result, err := env.execResult(cmd)
 		if err != nil {
-			env.logger.Debugf("mdisc query for %s failed: %v", visor, err)
+			env.logger.Debugf("dmsg discovery query for %s failed: %v", visor, err)
+			time.Sleep(checkInterval)
+			continue
+		}
+
+		var entry dmsgEntry
+		if err := json.Unmarshal([]byte(result.Stdout()), &entry); err != nil {
+			// Not-yet-registered visors yield a 404/error body that isn't
+			// a disc.Entry; treat as "keep waiting".
+			env.logger.Debugf("dmsg discovery entry for %s not parseable yet: %v", visor, err)
 			time.Sleep(checkInterval)
 			continue
 		}
 
 		if entry.Client != nil && len(entry.Client.DelegatedServers) > 0 {
-			entryTime := time.Unix(entry.Timestamp, 0)
+			// disc.Entry timestamps are UnixNano, not Unix seconds.
+			entryTime := time.Unix(0, entry.Timestamp)
 			if !notBefore.IsZero() && entryTime.Before(notBefore) {
 				env.logger.Debugf("Visor %s has stale DMSG entry (timestamp %v < notBefore %v), waiting for fresh registration",
 					visor, entryTime.Format(time.RFC3339), notBefore.Format(time.RFC3339))
@@ -1796,10 +1878,28 @@ func (env *TestEnv) ExecJSONWithTimeout(cmd string, output interface{}, timeout 
 		env.logger.Debugf("[STDERR] %s", stderr)
 	}
 
+	stdoutStr := result.Stdout()
+
+	// CLI commands emit structured errors as JSON on STDERR (not stdout),
+	// e.g. `{"error": "app already started"}`, while stdout stays empty.
+	// Promote a JSON-shaped stderr error to a real error so callers can
+	// branch on err.Error() instead of seeing "unexpected end of JSON input".
+	// Mirrors ExecJSON.
+	if strings.TrimSpace(stdoutStr) == "" {
+		if stderrStr := strings.TrimSpace(result.Stderr()); stderrStr != "" {
+			var probe struct {
+				Error string `json:"error"`
+			}
+			if jErr := json.Unmarshal([]byte(stderrStr), &probe); jErr == nil && probe.Error != "" {
+				return errors.New(probe.Error)
+			}
+		}
+	}
+
 	// Parse JSON output
-	err = json.Unmarshal([]byte(result.Stdout()), &output)
+	err = json.Unmarshal([]byte(stdoutStr), &output)
 	if err != nil {
-		env.logger.WithError(err).Errorf("[JSON PARSE FAILED] stdout: %s", result.Stdout())
+		env.logger.WithError(err).Errorf("[JSON PARSE FAILED] stdout: %s", stdoutStr)
 	}
 	return err
 }
@@ -1999,7 +2099,7 @@ func (env *TestEnv) waitForTransportToPeer(visor, peerPK string, timeout time.Du
 }
 
 // waitForNonZeroBandwidth polls transport list until at least one transport to the given peer shows non-zero bandwidth.
-func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.Duration) bool {
+func (env *TestEnv) waitForNonZeroBandwidth(visor, peerPK string, timeout time.Duration) bool { //nolint
 	type tpBW struct {
 		RemotePK  string `json:"remote_pk"`
 		RecvBytes uint64 `json:"recv_bytes,omitempty"`
