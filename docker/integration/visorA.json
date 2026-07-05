@@ -36,6 +36,9 @@
   "log_server": {
     "local_addr": ""
   },
+  "dmsg_web": {
+    "enable": true
+  },
   "skywire-tcp": {
     "pk_table": null,
     "listening_address": ":7777"

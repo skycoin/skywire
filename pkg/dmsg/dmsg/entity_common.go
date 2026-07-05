@@ -58,6 +58,12 @@ type EntityCommon struct {
 
 	updateInterval time.Duration // Minimum duration between discovery entry updates.
 
+	// advertisedMx guards the advertised{UDP,WS,WT}Addr / advertisedWTCertHash
+	// fields below. They are written by the Serve{QUIC,WS,WebTransport}
+	// goroutines, which start after Serve's entry-update loop is already reading
+	// them, so the accesses must be synchronized.
+	advertisedMx sync.RWMutex
+
 	// advertisedUDPAddr is the QUIC (UDP) endpoint a server also listens on,
 	// set by Server.ServeQUIC. When non-empty, the discovery entry carries
 	// Server.AddressUDP + Protocol="quic" so QUIC-capable clients dial QUIC
@@ -471,6 +477,40 @@ func (c *EntityCommon) updateServerEntry(ctx context.Context, addr, addrV6 strin
 	return firstErr
 }
 
+// setAdvertisedUDPAddr records the QUIC (UDP) endpoint to advertise. Safe to
+// call from the ServeQUIC goroutine while the entry-update loop reads it.
+func (c *EntityCommon) setAdvertisedUDPAddr(addr string) {
+	c.advertisedMx.Lock()
+	c.advertisedUDPAddr = addr
+	c.advertisedMx.Unlock()
+}
+
+// setAdvertisedWSAddr records the WebSocket endpoint URL to advertise. Safe to
+// call from the ServeWS goroutine while the entry-update loop reads it.
+func (c *EntityCommon) setAdvertisedWSAddr(url string) {
+	c.advertisedMx.Lock()
+	c.advertisedWSAddr = url
+	c.advertisedMx.Unlock()
+}
+
+// setAdvertisedWT records the WebTransport endpoint URL and its cert hash to
+// advertise. Safe to call from the ServeWebTransport goroutine while the
+// entry-update loop reads them.
+func (c *EntityCommon) setAdvertisedWT(url string, certHash [32]byte) {
+	c.advertisedMx.Lock()
+	c.advertisedWTAddr = url
+	c.advertisedWTCertHash = certHash
+	c.advertisedMx.Unlock()
+}
+
+// advertisedEndpoints returns a consistent snapshot of the advertised optional
+// endpoints for the entry-update loop.
+func (c *EntityCommon) advertisedEndpoints() (udp, ws, wt string, wtCertHash [32]byte) {
+	c.advertisedMx.RLock()
+	defer c.advertisedMx.RUnlock()
+	return c.advertisedUDPAddr, c.advertisedWSAddr, c.advertisedWTAddr, c.advertisedWTCertHash
+}
+
 // updateServerEntryOnEndpoint runs the read-modify-write registration
 // cycle against a single discovery endpoint. addrV6 is the optional
 // IPv6 counterpart to addr — empty when the server is v4-only, which
@@ -496,16 +536,18 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		entry.Server.ServerType = authPassphrase
 	}
 
+	advUDPAddr, advWSAddr, advWTAddr, advWTCertHash := c.advertisedEndpoints()
+
 	sessionsDelta := entry.Server.AvailableSessions != availableSessions
 	addrDelta := entry.Server.Address != addr
 	addrV6Delta := entry.Server.AddressV6 != addrV6
-	udpDelta := entry.Server.AddressUDP != c.advertisedUDPAddr
-	wsDelta := entry.Server.AddressWS != c.advertisedWSAddr
+	udpDelta := entry.Server.AddressUDP != advUDPAddr
+	wsDelta := entry.Server.AddressWS != advWSAddr
 	wtCertHashHex := ""
-	if c.advertisedWTAddr != "" {
-		wtCertHashHex = hex.EncodeToString(c.advertisedWTCertHash[:])
+	if advWTAddr != "" {
+		wtCertHashHex = hex.EncodeToString(advWTCertHash[:])
 	}
-	wtDelta := entry.Server.AddressWT != c.advertisedWTAddr || entry.Server.CertHashWT != wtCertHashHex
+	wtDelta := entry.Server.AddressWT != advWTAddr || entry.Server.CertHashWT != wtCertHashHex
 
 	// No update needed if entry has no delta AND update is not due.
 	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !wtDelta && !due {
@@ -528,8 +570,8 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	// Advertise the QUIC (UDP) endpoint + Protocol "quic" when the server runs
 	// a QUIC listener (#2607 dmsg-over-QUIC). QUIC-capable clients dial it;
 	// others keep using Address (TCP).
-	if c.advertisedUDPAddr != "" {
-		entry.Server.AddressUDP = c.advertisedUDPAddr
+	if advUDPAddr != "" {
+		entry.Server.AddressUDP = advUDPAddr
 		entry.Protocol = "quic"
 		log = log.WithField("addr_udp", entry.Server.AddressUDP)
 	}
@@ -538,16 +580,16 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	// the same Noise+yamux stack, so the entry can carry Address (TCP),
 	// AddressUDP (QUIC) and AddressWS simultaneously, each dialed by the
 	// clients that can use it.
-	if c.advertisedWSAddr != "" {
-		entry.Server.AddressWS = c.advertisedWSAddr
+	if advWSAddr != "" {
+		entry.Server.AddressWS = advWSAddr
 		log = log.WithField("addr_ws", entry.Server.AddressWS)
 	}
 	// Advertise the WebTransport endpoint + its cert hash when the server runs a
 	// WT listener (dmsg-over-WebTransport). Like WS this does NOT touch Protocol —
 	// it carries the same Noise+yamux stack. The cert hash lets a browser pin a
 	// CA-free self-signed cert via serverCertificateHashes.
-	if c.advertisedWTAddr != "" {
-		entry.Server.AddressWT = c.advertisedWTAddr
+	if advWTAddr != "" {
+		entry.Server.AddressWT = advWTAddr
 		entry.Server.CertHashWT = wtCertHashHex
 		log = log.WithField("addr_wt", entry.Server.AddressWT)
 	}

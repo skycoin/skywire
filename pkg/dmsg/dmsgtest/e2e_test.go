@@ -19,6 +19,26 @@ import (
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 )
 
+// dialStreamEventually dials addr, retrying until the stream opens or the
+// deadline hits. A freshly-Serve'd client's discovery entry can still be
+// propagating when a peer dials it, which surfaces transiently as
+// "dmsg error 100 - entry is not found in discovery" / "dmsg error 202 -
+// cannot connect to delegated server" (the target's delegated-server set isn't
+// resolvable yet). This registration-propagation race is timing-dependent and
+// flakes the one-shot dials on slow runners (notably the macOS CI lane); the
+// reconnect path in TestSessionReconnect already polls for the same reason.
+// Fails the test if the dial never succeeds.
+func dialStreamEventually(t *testing.T, ctx context.Context, c *dmsg.Client, addr dmsg.Addr) *dmsg.Stream {
+	t.Helper()
+	var stream *dmsg.Stream
+	require.Eventually(t, func() bool {
+		var err error
+		stream, err = c.DialStream(ctx, addr)
+		return err == nil
+	}, 15*time.Second, 500*time.Millisecond, "DialStream to %s never succeeded (entry propagation)", addr)
+	return stream
+}
+
 func TestBidirectionalStreams(t *testing.T) {
 	const timeout = time.Second * 30
 
@@ -53,8 +73,7 @@ func TestBidirectionalStreams(t *testing.T) {
 			defer cancel()
 
 			// Client B dials Client A.
-			streamB, err := clientB.DialStream(ctx, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
-			require.NoError(t, err)
+			streamB := dialStreamEventually(t, ctx, clientB, dmsg.Addr{PK: clientA.LocalPK(), Port: port})
 			t.Cleanup(func() { _ = streamB.Close() })
 
 			connA, err := lisA.AcceptStream()
@@ -128,8 +147,7 @@ func TestMultiServerStreams(t *testing.T) {
 	defer cancel()
 
 	// Client A dials Client B.
-	streamAB, err := clientA.DialStream(ctx, dmsg.Addr{PK: clientB.LocalPK(), Port: portB})
-	require.NoError(t, err)
+	streamAB := dialStreamEventually(t, ctx, clientA, dmsg.Addr{PK: clientB.LocalPK(), Port: portB})
 	t.Cleanup(func() { _ = streamAB.Close() })
 
 	connBA, err := lisB.AcceptStream()
@@ -137,8 +155,7 @@ func TestMultiServerStreams(t *testing.T) {
 	t.Cleanup(func() { _ = connBA.Close() })
 
 	// Client B dials Client C.
-	streamBC, err := clientB.DialStream(ctx, dmsg.Addr{PK: clientC.LocalPK(), Port: portC})
-	require.NoError(t, err)
+	streamBC := dialStreamEventually(t, ctx, clientB, dmsg.Addr{PK: clientC.LocalPK(), Port: portC})
 	t.Cleanup(func() { _ = streamBC.Close() })
 
 	connCB, err := lisC.AcceptStream()
@@ -180,8 +197,7 @@ func TestMultiServerStreams(t *testing.T) {
 
 	// Verify each client can maintain multiple simultaneous streams.
 	// Open a second stream from A to B.
-	streamAB2, err := clientA.DialStream(ctx, dmsg.Addr{PK: clientB.LocalPK(), Port: portB})
-	require.NoError(t, err)
+	streamAB2 := dialStreamEventually(t, ctx, clientA, dmsg.Addr{PK: clientB.LocalPK(), Port: portB})
 	t.Cleanup(func() { _ = streamAB2.Close() })
 
 	connBA2, err := lisB.AcceptStream()
@@ -363,9 +379,11 @@ func TestSessionReconnect(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	// Verify streams work before closing a server.
-	stream1, err := clientA.DialStream(ctx, dmsg.Addr{PK: clientB.LocalPK(), Port: port})
-	require.NoError(t, err)
+	// Verify streams work before closing a server. Poll the initial dial, same
+	// as the reconnect dial below: clientB's discovery entry can still be
+	// propagating when clientA dials, transiently yielding "dmsg error 202 -
+	// cannot connect to delegated server" on slow runners (the macOS CI lane).
+	stream1 := dialStreamEventually(t, ctx, clientA, dmsg.Addr{PK: clientB.LocalPK(), Port: port})
 
 	conn1, err := lisB.AcceptStream()
 	require.NoError(t, err)

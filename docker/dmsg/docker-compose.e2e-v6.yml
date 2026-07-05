@@ -1,12 +1,35 @@
 # Dual-stack (IPv4 + IPv6) e2e environment for the #1525 IPv6 lane.
-# Mirrors docker-compose.e2e.yml but enables IPv6 on the bridge and
-# assigns each container both an IPv4 and IPv6 address. The dmsg-server
-# config exercises the IPv6 advertisement path added in Phase 2a (#2716);
-# the dmsg-client dials over the v6 path verified by Phase 3's Happy
-# Eyeballs (#2717).
 #
-# Bridge network uses ULA range (fd00:dead:beef::/64) — no global v6
-# routing required, just docker's userland v6 stack.
+# Enables IPv6 on the docker bridge and gives each container both an
+# IPv4 and an IPv6 address (ULA range fd00:dead:beef::/64 — no global
+# v6 routing required, just docker's userland v6 stack). The
+# dmsg-server config sets public_address_v6 (the Phase 2a #2716
+# advertised-endpoint field), so this stack exercises, end-to-end:
+#
+#   1. the server building a disc.Entry that carries AddressV6
+#      alongside Address, and the discovery registry storing + serving
+#      it (the dual-stack advertisement round-trip);
+#   2. that advertised v6 endpoint being reachable, over the docker v6
+#      bridge, from a peer container; and
+#   3. the dmsg mesh continuing to work with v6 enabled (a v4-mesh
+#      regression guard — enabling dual-stack must not break the
+#      existing single-stack path).
+#
+# The deployment (dmsg-discovery + dmsg-server) runs via `skywire svc
+# run` in ONE container, exactly like the main integration e2e — that
+# intra-process wiring is what makes the strict dmsg-first server
+# registration bootstrap reliably (a dmsg-server registers with the
+# discovery OVER DMSG, so the discovery must be reachable over the mesh
+# it is simultaneously registering; svc run resolves that chicken-and-
+# egg locally). Everything is built from ONE self-contained image
+# (images/dmsg-e2e/) straight from the repo root, so `docker compose up
+# --build` needs no docker_build.sh / image_tag / base_image step.
+
+x-dmsg-build: &dmsg-build
+  # Context is the repo root (two levels up from docker/dmsg/) so the
+  # image can `go build` skywire + dmsgip from source.
+  context: ../..
+  dockerfile: docker/dmsg/images/dmsg-e2e/Dockerfile
 
 networks:
   dmsg:
@@ -30,49 +53,53 @@ services:
         ipv6_address: fd00:dead:beef::2
     ports:
       - "6381:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
 
-  dmsg-discovery:
-    build:
-      context: ..
-      dockerfile: images/dmsg-discovery/Dockerfile
-    container_name: "dmsg-e2e-v6-discovery"
-    hostname: dmsg-discovery
-    networks:
-      dmsg:
-        ipv4_address: 172.21.0.3
-        ipv6_address: fd00:dead:beef::3
-    ports:
-      - "9091:9090"
-    depends_on:
-      - redis
-    command: ["--addr", ":9090", "--redis", "redis://redis:6379", "--sk", "b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714", "-t"]
-
-  dmsg-server:
-    build:
-      context: ..
-      dockerfile: images/dmsg-server/Dockerfile
-    container_name: "dmsg-e2e-v6-server"
-    hostname: dmsg-server
+  # dmsg-discovery + dmsg-server in one process, at 172.21.0.4 /
+  # fd00:dead:beef::4. The server advertises public_address_v6 =
+  # [fd00:dead:beef::4]:8080 (see docker/config/dmsg-server-v6.json);
+  # the discovery serves the registry on :9090 (HTTP, mapped to host
+  # 9091) and over dmsg. Ports: 8080 dmsg, 8082 server health, 9090
+  # discovery HTTP.
+  dmsg-deployment:
+    build: *dmsg-build
+    image: skywire-dmsg-e2e:local
+    container_name: "dmsg-e2e-v6-deployment"
+    hostname: dmsg-deployment
     networks:
       dmsg:
         ipv4_address: 172.21.0.4
         ipv6_address: fd00:dead:beef::4
+        aliases:
+          - dmsg-discovery
+          - dmsg-server
     ports:
+      - "9091:9090"
       - "8081:8080"
     depends_on:
-      - dmsg-discovery
+      redis:
+        condition: service_healthy
     volumes:
-      # Mounts the v6-aware server config that sets both PublicAddress
-      # and PublicAddressV6 (the Phase 2a #2716 fields). The dual-stack
-      # bridge above is what makes the v6 advertisement reachable from
-      # peers in the same compose stack.
+      - ../config/services-dmsg-v6.json:/e2e/services-dmsg-v6.json:ro
       - ../config/dmsg-server-v6.json:/e2e/dmsg-server-v6.json:ro
-    command: ["start", "/e2e/dmsg-server-v6.json"]
+    command: ["skywire", "svc", "run", "--config", "/e2e/services-dmsg-v6.json"]
+    healthcheck:
+      # Server health only flips ready once the dmsg listener is up;
+      # the discovery entry (with address_v6) lands shortly after via
+      # dmsg-first registration — the assertion script waits on that.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8082/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 60
+      start_period: 10s
 
   dmsg-client:
-    build:
-      context: ..
-      dockerfile: dmsg/images/dmsg-client/Dockerfile
+    build: *dmsg-build
+    image: skywire-dmsg-e2e:local
     container_name: "dmsg-e2e-v6-client"
     hostname: dmsg-client
     networks:
@@ -80,6 +107,8 @@ services:
         ipv4_address: 172.21.0.5
         ipv6_address: fd00:dead:beef::5
     depends_on:
-      - dmsg-server
-    entrypoint: ["/bin/sh"]
-    command: ["-c", "sleep infinity"]
+      dmsg-deployment:
+        condition: service_healthy
+    # Idle; the assertion driver (scripts/assert-ipv6-e2e.sh) execs the
+    # wire-level v6 checks (nc -6, dmsgip, ss) inside this container.
+    command: ["sleep", "infinity"]

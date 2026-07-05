@@ -33,19 +33,22 @@ func TestServeWithWS_RawAndWSOnOnePort(t *testing.T) {
 	tcpAddr := lis.Addr().String()
 	wsURL := "ws://" + tcpAddr + wsPath
 
-	chSrv := make(chan error, 1)
-	go func() { chSrv <- srv.ServeWithWS(lis, tcpAddr, wsURL) }()
-
 	// Publish the server entry advertising BOTH Address (TCP) and AddressWS — the
 	// SAME host:port — so a raw-TCP client and a WS client both target this one
-	// listener. (Posted manually, as ws_test does, to avoid the auto-registration
-	// retrier's cold-start timing in a mock-disc unit test; the unification under
-	// test is the cmux demux, not registration. ServeWithWS does advertise both in
-	// production via the Serve self-registration loop.)
+	// listener. Post it BEFORE starting ServeWithWS: ServeWithWS's own Serve
+	// self-registration also creates the seq-0 server entry, so racing a manual
+	// post against it made one side lose the discovery sequence check ("sequence
+	// field of new entry is not sequence of old entry + 1"). Posting first makes
+	// the self-registration a no-delta no-op (it reads back this exact entry —
+	// same Address + AddressWS via setAdvertisedWSAddr), so the unification under
+	// test (the cmux demux) is exercised deterministically without the flake.
 	srvEntry := disc.NewServerEntry(pkSrv, 0, tcpAddr, maxSessions)
 	srvEntry.Server.AddressWS = wsURL
 	require.NoError(t, srvEntry.Sign(skSrv))
 	require.NoError(t, dc.PostEntry(context.Background(), srvEntry))
+
+	chSrv := make(chan error, 1)
+	go func() { chSrv <- srv.ServeWithWS(lis, tcpAddr, wsURL) }()
 
 	// Raw-TCP client (default carrier).
 	pkA, skA := GenKeyPair(t, "tcp client")
@@ -61,14 +64,17 @@ func TestServeWithWS_RawAndWSOnOnePort(t *testing.T) {
 	clientB.SetLogger(logging.MustGetLogger("ws_client"))
 	go clientB.Serve(context.Background())
 
+	// Both clients must hold a session to THIS unified server at the same time.
+	// Poll the specific per-server session (not just SessionCount): on a cold start
+	// a freshly-connected session can drop and re-dial ("yamux ping: read: EOF"),
+	// so a one-shot Session(pkSrv) check taken right after SessionCount>0 flakes —
+	// the session it counted may already be mid-reconnect. Retrying the exact check
+	// absorbs that churn.
 	require.Eventually(t, func() bool {
-		return clientA.SessionCount() > 0 && clientB.SessionCount() > 0
-	}, 10*time.Second, 200*time.Millisecond, "raw + WS clients failed to connect to the SAME unified server")
-
-	_, okA := clientA.Session(pkSrv)
-	_, okB := clientB.Session(pkSrv)
-	require.True(t, okA, "TCP client has no session to the unified server")
-	require.True(t, okB, "WS client has no session to the unified server")
+		_, okA := clientA.Session(pkSrv)
+		_, okB := clientB.Session(pkSrv)
+		return okA && okB
+	}, 15*time.Second, 200*time.Millisecond, "raw + WS clients failed to hold a session to the same unified server")
 
 	// Bridge a stream from the TCP client to the WS client THROUGH the one server.
 	const port = 8080
@@ -76,8 +82,16 @@ func TestServeWithWS_RawAndWSOnOnePort(t *testing.T) {
 	require.NoError(t, err)
 	defer lisB.Close() //nolint:errcheck
 
-	connA, err := clientA.DialStream(context.TODO(), Addr{PK: pkB, Port: port})
-	require.NoError(t, err)
+	// DialStream reads pkB's discovery entry to pick a delegated server. Right
+	// after connecting, pkB may not have published that entry yet ("dmsg error 103
+	// - client entry in discovery has no delegated servers"), so retry until it has
+	// propagated. Also absorbs a mid-test session re-dial.
+	var connA *Stream
+	require.Eventually(t, func() bool {
+		var derr error
+		connA, derr = clientA.DialStream(context.TODO(), Addr{PK: pkB, Port: port})
+		return derr == nil
+	}, 15*time.Second, 200*time.Millisecond, "DialStream A->B never succeeded (pkB discovery-entry propagation)")
 	defer connA.Close() //nolint:errcheck
 
 	connB, err := lisB.Accept()

@@ -1,6 +1,3 @@
-//go:build !no_ci
-// +build !no_ci
-
 // Package store pkg/address-resolver/store/address_test.go
 package store
 

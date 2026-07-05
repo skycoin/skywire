@@ -76,15 +76,23 @@ func receiveAndVerifyEntry(r io.Reader, expected *Entry, remotePK cipher.PubKey)
 type SettlementHS func(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error)
 
 // Do performs the settlement handshake.
-func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (label Label, err error) {
-	done := make(chan struct{})
+func (hs SettlementHS) Do(ctx context.Context, dc DiscoveryClient, transport network.Transport, sk cipher.SecKey) (Label, error) {
+	// Carry the result over a buffered channel rather than shared named
+	// return vars: on the ctx.Done() path this function returns while the
+	// hs goroutine may still be writing its result, so writing both to the
+	// same named returns would be a data race.
+	type result struct {
+		label Label
+		err   error
+	}
+	resCh := make(chan result, 1)
 	go func() {
-		label, err = hs(ctx, dc, transport, sk)
-		close(done)
+		label, err := hs(ctx, dc, transport, sk)
+		resCh <- result{label, err}
 	}()
 	select {
-	case <-done:
-		return label, err
+	case r := <-resCh:
+		return r.label, r.err
 	case <-ctx.Done():
 		return "", ctx.Err()
 	}

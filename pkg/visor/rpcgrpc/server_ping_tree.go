@@ -451,13 +451,17 @@ func (s *PingServer) pingTreePingLevel(
 			defer func() {
 				<-sem
 				totals.bumpInFlight(-1)
-				wg.Done()
+				// emitStatus sends on eventCh; it MUST run before
+				// wg.Done so the parent's wg.Wait (and the close(eventCh)
+				// that follows it in StreamPingTree) cannot race with —
+				// or panic on — this send to a now-closed channel.
 				emitStatus(
 					"pinging_level_"+itoa(level),
 					atomic.LoadInt32(&totals.currentInFlight),
 					atomic.LoadInt32(&pending),
 					"",
 				)
+				wg.Done()
 			}()
 			result := s.pingOneTransport(ctx, cfg, cand)
 			emit(&PingTreeEvent_PingResult{PingResult: result})

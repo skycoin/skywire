@@ -184,7 +184,7 @@ func (env *TestEnv) checkVisorDmsgEntry(visor string) bool {
 		return false
 	}
 
-	cmd := fmt.Sprintf("/release/skywire cli mdisc entry %s --url http://dmsg-discovery:9090 --json", pk)
+	cmd := fmt.Sprintf("curl -s %s/dmsg-discovery/entry/%s", dmsgDiscoveryURL, pk)
 
 	type dmsgClient struct {
 		DelegatedServers []string `json:"delegated_servers"`
@@ -196,8 +196,13 @@ func (env *TestEnv) checkVisorDmsgEntry(visor string) bool {
 	}
 	var entry dmsgEntry
 
-	if err := env.ExecJSON(cmd, &entry); err != nil {
-		env.logger.Warnf("VISOR DMSG ENTRY [%s]: mdisc query failed: %v", visor, err)
+	result, err := env.execResult(cmd)
+	if err != nil {
+		env.logger.Warnf("VISOR DMSG ENTRY [%s]: discovery query failed: %v", visor, err)
+		return false
+	}
+	if err := json.Unmarshal([]byte(result.Stdout()), &entry); err != nil {
+		env.logger.Warnf("VISOR DMSG ENTRY [%s]: discovery entry not parseable: %v", visor, err)
 		return false
 	}
 	if entry.Client == nil {
@@ -386,7 +391,13 @@ func (env *TestEnv) checkServicesDmsgHealth() bool {
 	for _, svc := range services {
 		go func(name, pk string) {
 			dmsgURL := fmt.Sprintf("dmsg://%s:80/health", pk)
-			cmd := fmt.Sprintf("/release/skywire dmsg curl -Z -l fatal %s", dmsgURL)
+			// Route through visor-a's established dmsg client (its RPC). A
+			// standalone client here can't bootstrap discovery over dmsg in
+			// this dmsg-only deployment: -Z/UseHTTP FATALs (no plain-HTTP
+			// discovery URL) and self-hosted disc can't dial dmsg-discovery
+			// over dmsg ("dmsg error 202 - cannot connect to delegated
+			// server"). Matches checkVisorSelfHealthOverDmsg.
+			cmd := fmt.Sprintf("/release/skywire cli --rpc %s:3435 dmsg curl -l fatal %s", visorA, dmsgURL)
 			out, err := env.Exec(cmd)
 			healthy := err == nil && strings.Contains(out, "build_info")
 			results <- result{name: name, out: out, err: err, healthy: healthy}
@@ -424,7 +435,7 @@ func (env *TestEnv) checkTransportSetupNode() bool {
 // signal. Previous attempts to dmsg curl /health timed out for ~1:48s per
 // check and dominated the diagnostic pass runtime; they're removed.
 func (env *TestEnv) checkDmsgServiceNode(label, pk string) bool {
-	cmd := fmt.Sprintf("/release/skywire cli mdisc entry %s --url http://dmsg-discovery:9090 --json", pk)
+	cmd := fmt.Sprintf("curl -s %s/dmsg-discovery/entry/%s", dmsgDiscoveryURL, pk)
 
 	type dmsgClient struct {
 		DelegatedServers []string `json:"delegated_servers"`
@@ -436,8 +447,13 @@ func (env *TestEnv) checkDmsgServiceNode(label, pk string) bool {
 	}
 	var entry dmsgEntry
 
-	if err := env.ExecJSON(cmd, &entry); err != nil {
-		env.logger.Warnf("%s DMSG ENTRY: query failed: %v", label, err)
+	result, err := env.execResult(cmd)
+	if err != nil {
+		env.logger.Warnf("%s DMSG ENTRY: discovery query failed: %v", label, err)
+		return false
+	}
+	if err := json.Unmarshal([]byte(result.Stdout()), &entry); err != nil {
+		env.logger.Warnf("%s DMSG ENTRY: discovery entry not parseable: %v", label, err)
 		return false
 	}
 	if entry.Client == nil {

@@ -1,0 +1,115 @@
+{
+  "services": [
+    {
+      "type": "transport-discovery",
+      "name": "tpd",
+      "addr": ":9094",
+      "pprof_addr": ":6094",
+      "entry_timeout": "2m",
+      "secret_key": "85789cd7efcdf35340c8f4cb3e15bccdff57efda49af5bcdddaae57374d25ab8",
+      "uptime_db": "",
+      "store_data_path": "/var/lib/skywire/tpd/bandwidth",
+      "dmsg": {
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "127.0.0.1:8080",
+              "availableSessions": 0
+            }
+          }
+        ],
+        "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80"
+      },
+      "testing": true
+    },
+    {
+      "type": "route-finder",
+      "name": "rf",
+      "addr": ":9092",
+      "pprof_addr": ":6092",
+      "secret_key": "640905f9fd60d6bf1ee88519f61035765d65319d9f3bac6c5f2fc14ea5cf15ca",
+      "dmsg": {
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "127.0.0.1:8080",
+              "availableSessions": 0
+            }
+          }
+        ],
+        "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80"
+      },
+      "testing": true
+    },
+    {
+      "type": "dmsg-discovery",
+      "name": "dmsgd",
+      "addr": ":9090",
+      "secret_key": "b3f6706cb72215d3873ef92cc0c6037a47fe651112b1685017d6347eed0fb714",
+      "test_mode": true,
+      "dmsg_servers": [
+        {
+          "version": "",
+          "sequence": 0,
+          "timestamp": 0,
+          "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+          "server": {
+            "address": "127.0.0.1:8080",
+            "availableSessions": 0
+          }
+        }
+      ]
+    },
+    {
+      "type": "dmsg-server",
+      "name": "dmsgs",
+      "config_path": "./dmsg-server.json"
+    },
+    {
+      "type": "setup-node",
+      "name": "sn",
+      "config_path": "./setup-node.json",
+      "pprof_mode": "http",
+      "pprof_addr": ":6070"
+    },
+    {
+      "type": "address-resolver",
+      "name": "ar",
+      "addr": ":9093",
+      "udp_addr": ":9093",
+      "public_udp_addr": "127.0.0.1:9093",
+      "pprof_addr": ":6093",
+      "entry_timeout": "2m",
+      "secret_key": "1fa0a7b80438b8d31655b5c69efd57bcf931ac828438ff2925ab36e4abcc426a",
+      "dmsg": {
+        "servers": [
+          {
+            "version": "",
+            "sequence": 0,
+            "timestamp": 0,
+            "static": "035915c609f71d0c7df27df85ec698ceca0cb262590a54f732e3bbd0cc68d89282",
+            "server": {
+              "address": "127.0.0.1:8080",
+              "availableSessions": 0
+            }
+          }
+        ],
+        "discovery_dmsg": "dmsg://02857a87410b3709eddb99bc00508cc7cfeb588d5ed87e3ef9d2aac838ad49470a:80"
+      },
+      "testing": true
+    },
+    {
+      "type": "transport-setup",
+      "name": "tps",
+      "config_path": "./transport-setup.json"
+    }
+  ]
+}

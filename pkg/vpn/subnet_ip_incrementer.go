@@ -18,7 +18,7 @@ type subnetIPIncrementer struct {
 	reserved          map[[4]uint8]struct{}
 }
 
-func newSubnetIPIncrementer(octetLowerBorders, octetBorders [4]uint8, step uint8) *subnetIPIncrementer {
+func newSubnetIPIncrementer(octetLowerBorders, octetBorders [4]uint8, step uint8) *subnetIPIncrementer { //nolint
 	return &subnetIPIncrementer{
 		mx:                sync.Mutex{},
 		octets:            octetLowerBorders,

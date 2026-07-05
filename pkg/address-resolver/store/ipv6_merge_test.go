@@ -1,6 +1,3 @@
-//go:build !no_ci
-// +build !no_ci
-
 // Package store — pkg/address-resolver/store/ipv6_merge_test.go
 //
 // Verifies the per-family merge semantics added in #1525 Phase 1:

@@ -23,6 +23,61 @@ type DmsgBootstrap struct {
 	Close   func()
 }
 
+// dmsgBootstrapOpts collects the optional knobs a caller can set via the
+// variadic DmsgBootstrapOption arguments to BootstrapDmsg.
+type dmsgBootstrapOpts struct {
+	carriers []string
+	strict   bool
+}
+
+// DmsgBootstrapOption customizes BootstrapDmsg. Options are additive and
+// default to the previous behavior (default carrier preference, all
+// advertised endpoints kept), so existing callers are unaffected.
+type DmsgBootstrapOption func(*dmsgBootstrapOpts)
+
+// WithCarriers sets the ordered dmsg CARRIER preference on the bootstrap
+// client — how each server session's byte pipe is dialed (dmsg.CarrierWT /
+// CarrierWS / CarrierQUIC / CarrierTCP). The first listed carrier a server
+// advertises wins. Empty (the default) leaves dmsg's built-in preference
+// (QUIC when advertised, else TCP).
+func WithCarriers(carriers ...string) DmsgBootstrapOption {
+	return func(o *dmsgBootstrapOpts) { o.carriers = carriers }
+}
+
+// WithStrictCarrier strips the TCP/QUIC fallback endpoints (Address /
+// AddressV6 / AddressUDP / AddressUDPV6) from the bootstrap server entries,
+// so a dial over the requested carrier cannot silently fall back to another
+// transport. Paired with WithCarriers it makes "the session came up over
+// carrier X" authoritative — e.g. an e2e proving dmsg-over-WebTransport
+// actually rode WebTransport rather than quietly falling back to TCP.
+// The browser-reachable AddressWT/AddressWS endpoints are left intact.
+func WithStrictCarrier() DmsgBootstrapOption {
+	return func(o *dmsgBootstrapOpts) { o.strict = true }
+}
+
+// stripFallbackAddrs returns copies of the server entries with the
+// TCP/QUIC endpoints cleared so no silent carrier fallback is possible.
+// The entries are copied (not mutated in place) because they may be shared
+// with the caller (e.g. the embedded dmsg.Prod.DmsgServers set).
+func stripFallbackAddrs(servers []*disc.Entry) []*disc.Entry {
+	out := make([]*disc.Entry, 0, len(servers))
+	for _, e := range servers {
+		if e == nil || e.Server == nil {
+			out = append(out, e)
+			continue
+		}
+		entryCopy := *e
+		srvCopy := *e.Server
+		srvCopy.Address = ""
+		srvCopy.AddressV6 = ""
+		srvCopy.AddressUDP = ""
+		srvCopy.AddressUDPV6 = ""
+		entryCopy.Server = &srvCopy
+		out = append(out, &entryCopy)
+	}
+	return out
+}
+
 // BootstrapDmsg creates a DMSG client for a service using the bootstrap priority:
 //  1. Embedded deployment config (dmsg.Prod/Test servers) — no network needed
 //  2. HTTP discovery fallback (only when dmsgDiscoveryDmsg is empty AND
@@ -46,7 +101,13 @@ func BootstrapDmsg(
 	dmsgDisc string,
 	dmsgDiscoveryDmsg string,
 	dmsgServerType string,
+	options ...DmsgBootstrapOption,
 ) (*DmsgBootstrap, error) {
+	opts := &dmsgBootstrapOpts{}
+	for _, o := range options {
+		o(opts)
+	}
+
 	// Step 1: Use embedded servers for initial bootstrap
 	var servers []*disc.Entry
 	for i := range embeddedServers {
@@ -82,6 +143,14 @@ func BootstrapDmsg(
 		if len(filtered) > 0 {
 			servers = filtered
 		}
+	}
+
+	// Strict carrier: drop the TCP/QUIC fallback endpoints so the session can
+	// ONLY come up over the requested carrier (WithCarriers). Applied after the
+	// server set is finalized (embedded seed or HTTP-discovery fetch) and before
+	// the direct client / seed cache are built from it.
+	if opts.strict {
+		servers = stripFallbackAddrs(servers)
 	}
 
 	// Create direct client pre-loaded with the bootstrap server entries.
@@ -140,6 +209,11 @@ func BootstrapDmsg(
 		MinSessions:          0, // 0 = connect to all available servers
 		UpdateInterval:       dmsg.DefaultUpdateInterval,
 		ConnectedServersType: dmsgServerType,
+	}
+	// Ordered carrier preference (WithCarriers). Empty leaves dmsg's default
+	// (QUIC-when-advertised, else TCP); non-empty forces e.g. WebTransport.
+	if len(opts.carriers) > 0 {
+		config.Carriers = opts.carriers
 	}
 
 	// Build dmsgDC inline (rather than via direct.StartDmsg) so the

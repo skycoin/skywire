@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.1'
+          go-version: '1.26.4'
           cache: true
           cache-dependency-path: go.sum
 
@@ -33,8 +33,27 @@ jobs:
       - name: Lint Shell Scripts
         run: make lint-shell
 
+      # golangci-lint already ran above (pinned, cached). check-ci skips the
+      # redundant second golangci-lint run but keeps go vet + config-gen smoke
+      # + the test suite.
       - name: Check Format and Run Tests
-        run: make check
+        run: make check-ci
+
+  # e2e runs as its own job so it executes in parallel with the linux check
+  # job above instead of serially after it — cutting overall wall-clock.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Setup SSH Key, Build and Run E2E
         shell: bash
@@ -60,7 +79,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.1'
+          go-version: '1.26.4'
           cache: true
           cache-dependency-path: go.sum
 
@@ -83,7 +102,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26.1'
+          go-version: '1.26.4'
           cache: true
           cache-dependency-path: go.sum
 
@@ -100,3 +119,109 @@ jobs:
           $env:GO111MODULE='on'
           make check-windows
         shell: powershell
+
+  # Native (no-Docker) client-side e2e on macOS: runs a small skywire deployment
+  # + two visors as host processes on 127.0.0.1 and exercises the CLIENT runtime
+  # (visor, hypervisor, skysocks-client, vpn-client) — the OS-specific code the
+  # Linux Docker `e2e` job can't reach. See internal/nativee2e. The test binary is
+  # compiled as the runner user, then run under sudo so vpn-client/vpn-server can
+  # create TUN devices and set up pf NAT (macOS vpn-server: os_server_darwin.go).
+  e2e-darwin:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build binaries + compile native e2e
+        run: |
+          set -e
+          mkdir -p ./_nbin
+          go build -mod=vendor -o ./_nbin/skywire ./cmd/skywire
+          for a in skychat skysocks skysocks-client vpn-server vpn-client; do
+            go build -mod=vendor -o ./_nbin/$a ./cmd/apps/$a
+          done
+          go test -c -mod=vendor -tags client_e2e -o ./nativee2e.test ./internal/nativee2e
+
+      - name: Run native client e2e (root for vpn TUN + pf)
+        run: sudo env SKYWIRE_NATIVEE2E_BIN="$PWD/_nbin" ./nativee2e.test -test.v -test.timeout=25m
+
+  # Native client-side e2e on Windows: visor + hypervisor + skysocks-client +
+  # vpn-client/vpn-server (WinTUN + WinNAT, os_server_windows.go). The runner is
+  # admin, so TUN creation + NAT work; wintun.dll is provisioned next to the
+  # binary since it isn't embedded in the wintun Go binding.
+  e2e-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build binaries + provision WinTUN driver
+        shell: pwsh
+        run: |
+          $env:GO111MODULE='on'
+          New-Item -ItemType Directory -Force -Path ./_nbin | Out-Null
+          go build -mod=vendor -o ./_nbin/skywire.exe ./cmd/skywire
+          foreach ($a in 'skychat','skysocks','skysocks-client','vpn-server','vpn-client') {
+            go build -mod=vendor -o ./_nbin/$a.exe ./cmd/apps/$a
+          }
+          # WinTUN driver DLL is NOT embedded in the golang.zx2c4.com/wintun
+          # binding (it LoadLibraryEx's wintun.dll from the app dir / System32).
+          # The visor runs vpn-client/vpn-server in-process, so the DLL must sit
+          # next to skywire.exe (= _nbin) for TUN creation to work. Zip layout:
+          # wintun/bin/amd64/wintun.dll. Try the skywire mirror first, then upstream.
+          $urls = @('https://freeshell.de/~mrpalide/wintun-0.14.1.zip','https://deb.skywire.dev/wintun-0.14.1.zip','https://www.wintun.net/builds/wintun-0.14.1.zip')
+          $ok = $false
+          foreach ($u in $urls) {
+            try { Invoke-WebRequest -Uri $u -OutFile wintun.zip -ErrorAction Stop; $ok = $true; Write-Host "downloaded wintun from $u"; break }
+            catch { Write-Host "wintun download failed from ${u}: $_" }
+          }
+          if (-not $ok) { throw 'could not download wintun.dll from any source' }
+          Expand-Archive -Path wintun.zip -DestinationPath wintun-extracted -Force
+          Copy-Item wintun-extracted/wintun/bin/amd64/wintun.dll ./_nbin/wintun.dll
+          Write-Host "wintun.dll present:" (Test-Path ./_nbin/wintun.dll)
+
+      - name: Run native client e2e (admin runner → vpn TUN + NAT)
+        shell: pwsh
+        run: |
+          $env:GO111MODULE='on'
+          $env:SKYWIRE_NATIVEE2E_BIN = "$PWD/_nbin"
+          go test -mod=vendor -tags client_e2e -v -timeout=25m ./internal/nativee2e/
+
+  # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
+  # //go:build !no_ci because they need a real Redis (redis://localhost:6379),
+  # so the tag-free unit lanes (which run with -tags no_ci) skip them — leaving
+  # them running in NO job. This lane provides a Redis service and runs those
+  # store packages WITHOUT no_ci so the redis-backed tests actually execute.
+  redis-store:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Run redis-backed store tests
+        run: go test -mod=vendor -timeout=5m ./pkg/address-resolver/store/... ./pkg/dmsg/discovery/store/...

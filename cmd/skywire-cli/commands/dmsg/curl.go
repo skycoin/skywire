@@ -36,6 +36,8 @@ var (
 	curlReplace      bool
 	curlVerbose      bool
 	curlVerboseLevel string
+	curlWT           bool
+	curlDisc         string
 )
 
 func init() {
@@ -51,6 +53,8 @@ func init() {
 	curlCmd.Flags().StringVarP(&curlAgent, "agent", "a", "skywire-cli/"+buildinfo.Version(), "HTTP user agent")
 	curlCmd.Flags().BoolVarP(&curlVerbose, "verbose", "v", false, "stream visor's dmsg-layer logs to stderr while the request is in flight")
 	curlCmd.Flags().StringVar(&curlVerboseLevel, "verbose-level", "debug", "minimum log level when --verbose is set: trace|debug|info|warn|error")
+	curlCmd.Flags().BoolVar(&curlWT, "wt", false, "standalone (--sk): dial the dmsg-server session over WebTransport (HTTP/3) with no TCP/QUIC fallback")
+	curlCmd.Flags().StringVar(&curlDisc, "disc", "", "standalone (--wt): HTTP dmsg-discovery URL to fetch the WebTransport server set from (e.g. http://dmsg-discovery:9090)")
 	if os.Getenv("DMSG_SK") != "" {
 		sk.Set(os.Getenv("DMSG_SK")) //nolint
 	}
@@ -116,6 +120,12 @@ Example URLs:
 		// Check if we're using standalone mode (--sk flag provided) or visor mode
 		pk, skErr := sk.PubKey()
 		if skErr != nil {
+			// --wt forces the standalone WebTransport path, which bootstraps
+			// its own dmsg client — it needs a client identity, so require --sk
+			// rather than silently falling back to the visor's TCP dmsg client.
+			if curlWT {
+				return fmt.Errorf("dmsg curl --wt requires a standalone client identity: pass --sk <hex> (the visor's dmsg client does not use the WebTransport carrier)")
+			}
 			// No valid SK provided, use visor's dmsg client via RPC
 			return curlViaVisor(cmd, ctx, log, args[0])
 		}
@@ -258,8 +268,19 @@ func curlViaVisor(cmd *cobra.Command, ctx context.Context, log *logging.Logger, 
 
 // curlStandalone performs the curl request using a standalone dmsg client
 func curlStandalone(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, parsedURL *url.URL) error {
-	// Start dmsg client
-	dmsgC, closeDmsg, err := startDmsgClient(ctx, log, pk, sk)
+	// Start dmsg client. --wt forces a WebTransport-only client (its
+	// server session rides dmsg-over-WebTransport with no TCP fallback);
+	// otherwise the default embedded-server bootstrap is used.
+	var (
+		dmsgC     *dmsg.Client
+		closeDmsg func()
+		err       error
+	)
+	if curlWT {
+		dmsgC, closeDmsg, err = startDmsgClientWT(ctx, log, pk, sk, curlDisc)
+	} else {
+		dmsgC, closeDmsg, err = startDmsgClient(ctx, log, pk, sk)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to start dmsg client: %w", err)
 	}
@@ -375,6 +396,52 @@ func startDmsgClient(ctx context.Context, log *logging.Logger, pk cipher.PubKey,
 	}
 
 	return dmsgC, stop, nil
+}
+
+// startDmsgClientWT starts a standalone dmsg client whose server session is
+// dialed over WebTransport (HTTP/3-over-QUIC) with NO TCP/QUIC fallback.
+//
+// Unlike startDmsgClient it does NOT seed from the embedded server set: the
+// WebTransport endpoint (Server.AddressWT) and its pinned self-signed cert
+// hash (Server.CertHashWT) live only in the discovery-PUBLISHED entry, not in
+// the address-only embedded seed. So the server set is fetched from the HTTP
+// dmsg-discovery (discURL) — those entries carry AddressWT + CertHashWT — and
+// WithCarriers(WT)+WithStrictCarrier make the session dial WebTransport and
+// forbid a silent fall-back to TCP/QUIC. A successful fetch through this
+// client therefore proves the traffic actually rode dmsg-over-WebTransport.
+func startDmsgClientWT(ctx context.Context, log *logging.Logger, pk cipher.PubKey, sk cipher.SecKey, discURL string) (*dmsg.Client, func(), error) {
+	if discURL == "" {
+		discURL = deployment.Prod.DmsgDiscovery
+	}
+	if discURL == "" {
+		return nil, nil, fmt.Errorf("no dmsg-discovery URL for --wt; pass --disc http://<host>:<port>")
+	}
+
+	// embeddedServers=nil + a plain-HTTP discovery URL makes BootstrapDmsg
+	// fetch the full server entries (incl. AddressWT/CertHashWT) from
+	// discovery, and resolve the request's destination PK over the same HTTP
+	// discovery. dmsgDiscoveryDmsg is left empty (we want HTTP discovery, not
+	// dmsg-only, since the WT bootstrap has no prior session to read it over).
+	bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, nil, discURL, "", "",
+		cmdutil.WithCarriers(dmsg.CarrierWT), cmdutil.WithStrictCarrier())
+	if err != nil {
+		return nil, nil, fmt.Errorf("dmsg bootstrap (wt): %w", err)
+	}
+	dmsgC := bootstrap.Client
+	closer := bootstrap.Close
+
+	select {
+	case <-ctx.Done():
+		closer()
+		return nil, nil, ctx.Err()
+	case <-dmsgC.Ready():
+		log.Debug("DMSG client ready (WebTransport carrier)")
+	case <-time.After(30 * time.Second):
+		closer()
+		return nil, nil, fmt.Errorf("timeout waiting for dmsg client (wt)")
+	}
+
+	return dmsgC, closer, nil
 }
 
 func rpcClient(_ *cobra.Command) (visor.API, error) {

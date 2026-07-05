@@ -2,8 +2,16 @@
   description = "Skywire packaged for Nix — source build (static musl) and prebuilt-binary variants";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    # Fetch via the codeload archive-tarball endpoint instead of the `github:`
+    # fetcher. `github:NixOS/nixpkgs/nixos-unstable` makes Nix resolve the
+    # branch through api.github.com (/commits + /tarball), which is subject to
+    # an anti-scraping throttle that returns HTTP 429 from shared CI runner IPs
+    # — even with an access token configured. The archive tarball is served by
+    # codeload.github.com (a different, un-throttled host), so this keeps us on
+    # nixos-unstable while routing around the rate-limited API. Same applies to
+    # flake-utils.
+    nixpkgs.url = "https://github.com/NixOS/nixpkgs/archive/nixos-unstable.tar.gz";
+    flake-utils.url = "https://github.com/numtide/flake-utils/archive/main.tar.gz";
   };
 
   outputs = { self, nixpkgs, flake-utils }:

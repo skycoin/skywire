@@ -35,8 +35,16 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 		log.Debug(`error on Reader(r, confPath)`)
 		return nil, compat, err
 	}
+	// A visor built without version stamping reports a Go VCS pseudo-version
+	// (v0.0.0-<timestamp>-<commit>), "(devel)", or "unknown" — a dev/CI/container
+	// build with no real release version. The config-vs-binary version check is
+	// meaningless for those: it would reject every valid config against an
+	// unstamped binary (shallow CI checkouts and docker images both build
+	// v0.0.0), so skip it and only enforce for properly released binaries.
+	visorUnversioned := visorBuildInfo.Version == "unknown" ||
+		strings.HasPrefix(visorBuildInfo.Version, "v0.0.0")
 	// we check if the version of the visor and config are the same
-	if (conf.Version != "unknown") && (visorBuildInfo.Version != "unknown") {
+	if (conf.Version != "unknown") && !visorUnversioned {
 		cVer, err := semver.Make(strings.TrimPrefix(conf.Version, "v"))
 		if err != nil {
 			log.Debug(`error on semver.Make(strings.TrimPrefix(conf.Version, "v"))`)

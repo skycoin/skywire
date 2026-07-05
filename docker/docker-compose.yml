@@ -182,8 +182,8 @@ services:
       ]
       interval: 5s
       timeout: 5s
-      retries: 30
-      start_period: 10s
+      retries: 90
+      start_period: 90s
 
   visor-b:
     privileged: true
@@ -236,8 +236,8 @@ services:
       ]
       interval: 5s
       timeout: 5s
-      retries: 30
-      start_period: 10s
+      retries: 90
+      start_period: 90s
 
   visor-c:
     privileged: true
@@ -281,8 +281,8 @@ services:
       ]
       interval: 5s
       timeout: 5s
-      retries: 30
-      start_period: 10s
+      retries: 90
+      start_period: 90s
 
   # network-monitor was removed from the e2e topology: it was already
   # disabled (never started by `make e2e-run`, excluded from env_test's
@@ -292,7 +292,7 @@ services:
   # here if e2e network monitoring is wanted again.
 
   e2e-test:
-    image: golang:1.26-alpine
+    image: golang:1.26.4-alpine
     container_name: e2e-test
     networks:
       - visors

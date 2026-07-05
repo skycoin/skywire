@@ -281,11 +281,19 @@ func (m *VStreamMux) Accept() (*VStream, error) {
 func (m *VStreamMux) Close() error {
 	m.once.Do(func() {
 		close(m.done)
+		// Snapshot the streams under the lock, then close them WITHOUT
+		// holding it: VStream.Close re-acquires streamsMu (to delete
+		// itself from the map), so closing while holding the lock here
+		// self-deadlocks on the non-reentrant mutex.
 		m.streamsMu.Lock()
+		streams := make([]*VStream, 0, len(m.streams))
 		for _, s := range m.streams {
-			s.Close() //nolint:errcheck,gosec
+			streams = append(streams, s)
 		}
 		m.streamsMu.Unlock()
+		for _, s := range streams {
+			s.Close() //nolint:errcheck,gosec
+		}
 	})
 	return nil
 }
