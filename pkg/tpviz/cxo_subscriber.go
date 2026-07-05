@@ -23,17 +23,22 @@ import (
 )
 
 // Tab identifiers used in calls to CXOSubMgr.AcquireForTab /
-// ReleaseForTab. Values match pkg/visor.CXOTab; the hypervisor
-// adapter passes them through unchanged.
+// ReleaseForTab. Values match pkg/visor.CXOTab / cxosub.Tab; the
+// hypervisor adapter and the standalone adapter pass them through.
 const (
 	CXOTabNetworkVisualizer = 0
+	CXOTabUptime            = 2 // TPD uptime feed
+	CXOTabCLITransports     = 5 // TPD all-transports feed
 )
 
 // Feed identifiers used in calls to CXOSubMgr.Walk. Values match
-// pkg/visor.CXOFeed; the hypervisor adapter passes them through.
+// pkg/visor.CXOFeed / cxosub.Feed; the adapters pass them through.
 const (
+	CXOFeedTPDMetrics           = 0 // metrics/days/<n>
+	CXOFeedTPDUptime            = 1 // uptimes/days/<n> — []VisorSummary
 	CXOFeedSDServices           = 2 // services/<type>/<pk>/{entry,tombstone}
 	CXOFeedDMSGDClientsByServer = 3 // clients-by-server/<server>/<client>/{entry,tombstone}
+	CXOFeedTPDAllTransports     = 4 // transports/all/{with-self,without-self}
 )
 
 // CXOSubMgr is the minimal slice of pkg/visor.CXOSubscriptionManager

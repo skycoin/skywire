@@ -748,6 +748,17 @@ func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// CXO-first (standalone): the TPD publishes the all-transports snapshot on
+	// its CXO feed. Serve from the subscriber's local snapshot when wired; fall
+	// through to the HTTP fetch below on a cache miss.
+	if body, ok := s.tryCXOTransports(); ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("X-Skywire-Source", "cxo")
+		w.Write(body) //nolint:errcheck,gosec
+		return
+	}
+
 	// Standalone mode (no visor): fetch from the operator-supplied TPDURL.
 	tpdURL := s.config.TPDURL + "/all-transports"
 	cacheFile := CacheFilePath(s.config.CacheDirTPD, tpdURL)
@@ -765,6 +776,16 @@ func (s *Server) handleTransports(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUptimes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	// CXO-first: the TPD publishes []VisorSummary on its uptime feed. When a CXO
+	// subscriber is wired (standalone reward server via SetCXOSubMgrFromDmsg, or
+	// the hypervisor), serve from its local snapshot; fall through to the HTTP
+	// fetch below on a cache miss (feed not yet synced).
+	if body, ok := s.tryCXOUptimes(); ok {
+		w.Header().Set("X-Skywire-Source", "cxo")
+		w.Write(body) //nolint:errcheck,gosec
+		return
+	}
 
 	// Uptime now comes from the TPD-integrated uptime tracker; the standalone
 	// uptime tracker was decommissioned. Prefer an operator-supplied UTURL for
