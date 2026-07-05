@@ -847,6 +847,97 @@
     };
   }
 
+  // startTour runs a lightweight, dependency-free guided walkthrough of the HV UI.
+  // It dims the page, spotlights each target element (a transparent cutout via a
+  // big box-shadow) and shows a callout with Back / Next / Skip. Steps whose target
+  // is absent are skipped, so the same tour works on the wasm visor and the native
+  // HV UI. The copy leans into WHAT this is (a full mesh visor in a browser tab) —
+  // it isn't obvious to a first-time visitor how unusual that is. Reopen any time
+  // from the Apps (☰) menu → tour; also offered once on first run (localStorage).
+  var TOUR_SEEN_KEY = "skywire-tour-seen";
+  function startTour(doc) {
+    doc = doc || document;
+    if (doc.getElementById("skywire-tour")) { return; }
+    var steps = [
+      { title: "This is not a normal web page",
+        body: "You're running a full <b>Skywire visor</b> — a routing peer on an encrypted peer-to-peer mesh — entirely inside this browser tab. No install, no account, and no central server. A 60-second tour of what that means." },
+      { sel: "#tb-menu", title: "Your apps",
+        body: "Everything opens from here: a browser for the mesh, encrypted 1:1 chat, a live log, a command console, and your visor's cryptographic identity." },
+      { sel: "app-top-bar", title: "The network, live",
+        body: "Visor list, rewards, transports, and a live map of the mesh — all fetched <b>peer-to-peer over dmsg</b>, never from a web server. This tab is talking directly to other visors around the world." },
+      { sel: ".visor-switcher-row", title: "Every peer is addressable",
+        body: "Each chip is a visor on the network, shown by label and public key. Click one to inspect its transports, routes, and apps. There are no usernames here — only keys." },
+      { sel: "#skywire-skynet-taskbar", title: "The mesh desktop",
+        body: "Tool windows float above the UI. The <b>skynet browser</b> fetches sites over dmsg — anonymous, no DNS, no certificate authorities; sites are addressed by public key (e.g. <code>&lt;pk&gt;.dmsg</code>). Pages run sandboxed and isolated from your keys (the ⓘ button explains)." },
+      { sel: "#tb-menu", title: "You are your keys",
+        body: "Your visor is a keypair held in this browser (Apps → identity). Export it to back up or move your visor to another device — that key <i>is</i> your identity on the mesh. Whoever holds it is this visor." },
+      { title: "A self-hosting internet, in a tab",
+        body: "No server. No account. No IP address handed out. Just your browser, cryptographic keys, and a global peer-to-peer mesh — reachable from anywhere, run by nobody. Reopen this tour any time from the Apps (☰) menu → tour. Welcome to Skywire." }
+    ];
+    var host = doc.body || doc.documentElement;
+    var ov = doc.createElement("div");
+    ov.id = "skywire-tour";
+    ov.style.cssText = "position:fixed;inset:0;z-index:2147483647;font:13px/1.55 system-ui,sans-serif";
+    var spot = doc.createElement("div");
+    spot.style.cssText = "position:fixed;border-radius:8px;box-shadow:0 0 0 9999px rgba(8,6,16,.74);transition:all .2s ease;pointer-events:none;border:2px solid #9d7cff";
+    var call = doc.createElement("div");
+    call.style.cssText = "position:fixed;max-width:340px;background:#15131c;color:#cdd2da;border:1px solid #2a2342;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.6);padding:1em 1.1em;box-sizing:border-box";
+    ov.appendChild(spot); ov.appendChild(call); host.appendChild(ov);
+    var i = 0;
+    function done() { try { localStorage.setItem(TOUR_SEEN_KEY, "1"); } catch (e) {} if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    // pickTarget returns the first VISIBLE, non-tiny element matching sel (there
+    // can be hidden/collapsed duplicates — e.g. a loading vs loaded top-bar — and
+    // spotlighting a 1px ghost looks broken).
+    function pickTarget(sel) {
+      if (!sel) { return null; }
+      var cand = doc.querySelectorAll(sel);
+      for (var j = 0; j < cand.length; j++) {
+        var cr = cand[j].getBoundingClientRect();
+        if (cr.width >= 24 && cr.height >= 10 && getComputedStyle(cand[j]).visibility !== "hidden") { return cand[j]; }
+      }
+      return null;
+    }
+    function render() {
+      var s = steps[i];
+      var el = pickTarget(s.sel);
+      if (s.sel && !el && i < steps.length - 1) { i++; return render(); } // absent/hidden target → skip
+      var last = (i === steps.length - 1);
+      call.innerHTML =
+        '<div style="display:flex;align-items:center;gap:.5em;margin-bottom:.55em">' +
+        '<b style="color:#9d7cff;font-size:14px">' + s.title + '</b><span style="flex:1"></span>' +
+        '<span style="opacity:.55;font-size:11px">' + (i + 1) + " / " + steps.length + '</span></div>' +
+        '<div style="margin-bottom:.9em">' + s.body + '</div>' +
+        '<div style="display:flex;gap:.5em;align-items:center">' +
+        '<button id="tour-skip" style="cursor:pointer;background:transparent;color:#8b93a7;border:0">skip</button>' +
+        '<span style="flex:1"></span>' +
+        (i > 0 ? '<button id="tour-back" style="cursor:pointer;background:#241f33;color:#cdd2da;border:1px solid #2a2342;border-radius:6px;padding:.4em .85em">back</button>' : '') +
+        '<button id="tour-next" style="cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.4em 1em;font-weight:600">' + (last ? "done" : "next") + '</button>' +
+        '</div>';
+      if (el) {
+        var r = el.getBoundingClientRect(), pad = 6;
+        spot.style.display = "block";
+        spot.style.left = (r.left - pad) + "px"; spot.style.top = (r.top - pad) + "px";
+        spot.style.width = (r.width + pad * 2) + "px"; spot.style.height = (r.height + pad * 2) + "px";
+        try { el.scrollIntoView({ block: "nearest" }); } catch (e) {}
+        var vw = (doc.defaultView || window).innerWidth, vh = (doc.defaultView || window).innerHeight, cw = 340;
+        call.style.transform = "none";
+        call.style.left = Math.min(Math.max(8, r.left), vw - cw - 8) + "px";
+        if (r.bottom + 170 < vh) { call.style.top = (r.bottom + 12) + "px"; call.style.bottom = "auto"; }
+        else { call.style.bottom = (vh - r.top + 12) + "px"; call.style.top = "auto"; }
+      } else {
+        spot.style.display = "none";
+        call.style.left = "50%"; call.style.top = "50%"; call.style.bottom = "auto";
+        call.style.transform = "translate(-50%,-50%)";
+      }
+      var b;
+      if ((b = call.querySelector("#tour-skip"))) b.onclick = done;
+      if ((b = call.querySelector("#tour-back"))) b.onclick = function () { if (i > 0) i--; render(); };
+      if ((b = call.querySelector("#tour-next"))) b.onclick = function () { if (last) { done(); } else { i++; render(); } };
+    }
+    render();
+  }
+  globalThis.skywireStartTour = function () { startTour(document); };
+
   // mountPanel builds a multi-window "skynet" desktop into `doc`: a bottom taskbar
   // plus any number of independent browse windows (each its own dmsg virtual
   // browser), all draggable / resizable / minimizable / maximizable. opts:
@@ -1321,6 +1412,13 @@
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
     addApp("identity", function () { openIdentityDialog(doc, opts); });
+    addApp("tour", function () { startTour(doc); });
+    // Offer the tour once, shortly after first load, so newcomers get oriented.
+    try {
+      if (!localStorage.getItem(TOUR_SEEN_KEY)) {
+        setTimeout(function () { if (!localStorage.getItem(TOUR_SEEN_KEY)) { startTour(doc); } }, 1600);
+      }
+    } catch (e) {}
     bq("tb-menu").onclick = function (e) { e.stopPropagation(); menu.style.display = (menu.style.display === "block") ? "none" : "block"; };
     doc.addEventListener("pointerdown", function (e) {
       if (menu.style.display === "block" && !menu.contains(e.target) && e.target !== bq("tb-menu")) hideMenu();
