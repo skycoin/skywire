@@ -163,21 +163,22 @@ owns the real `RTCPeerConnection`s. (Same split works for inbound WebRTC —
 
 ## Phased plan
 
-1. **Spike** — a SharedWorker that loads `wasm_exec.js` + the visor `.wasm`,
-   boots the core, one tab connects and gets `/api` results over the port; dmsg
-   over WS. Proves the core runs in a worker and the bridge works. *(Gate: does
-   the wasm boot cleanly in a SharedWorker on the target engines?)*
-2. **Multi-tab fan-out** — client set, per-tab ports, event topics; open/close
-   tabs without re-boot.
-3. **UI routing** — `SkywireHttpBackend` "worker" mode + `skywireVisor` shim over
-   the port; `browse.js` unchanged behind the shim.
-4. **WebRTC tab-agent** — split the WebRTC carrier into worker-orchestrator +
-   tab-executor (command set + zero-copy data relay + agent re-election on tab
-   close). This is the meatiest phase and the one that preserves NAT traversal.
-   Interim between phases 1–3 and 4: WebRTC simply off (WS/WT only) so the rest
-   can be built and shipped incrementally without regressing.
-5. **Remove the singleton guard** — delete the Web Locks leader election + notice
-   + takeover; the shared visor supersedes them.
+1. **Spike** ✅ — SharedWorker loads `wasm_exec.js` + the visor `.wasm`, boots the
+   core, a tab gets `/api` over the port; dmsg over WS. The wasm boots cleanly in a
+   SharedWorker on Chrome 149.
+2. **Multi-tab fan-out** ✅ — per-tab ports; open/close tabs without re-boot; the
+   visor survives closing the first tab.
+3. **UI routing** ✅ — the `skywireVisor` proxy over the port is unchanged in shape,
+   so `browse.js` and the Angular `SkywireHttpBackend` route through it unedited.
+4. **WebRTC tab-agent** ✅ (bridge live-validated) — the worker orchestrates
+   (transport manager + dmsg signaling), a single elected agent tab executes the
+   `RTCPeerConnection`; agent re-election on tab close with proper transport
+   teardown so autoconnect re-dials. Full two-visor DataChannel transport not yet
+   exercised end-to-end (infra: needs a manual dial to a webrtc-listening peer).
+5. **Singleton guard** ✅ (bypassed, retained as fallback) — the Web Locks guard is
+   skipped on the SharedWorker path and the reload "take over" button dropped; the
+   guard remains only as the dedicated-Worker fallback's collision protection, so
+   it is not deleted outright.
 
 ## Status
 
@@ -198,16 +199,43 @@ Validated on Chrome 149 against the local `hv serve` (`:8444`):
 - Closing the first tab keeps the visor alive for the second (same PK) — the
   running dmsg client/router/identity survive tab churn.
 
-**WebRTC (phase 4):** the worker↔agent bridge is wired — the worker delegates
-STUN + all `RTCPeerConnection` ops to exactly one elected agent tab (visible-tab
-preferred, re-elected on agent close), so WebRTC is *preserved*, not dropped. The
-end-to-end WebRTC transport through the agent has not yet been exercised against a
-live peer; that live test is the remaining phase-4 validation.
+**WebRTC (phase 4) — implemented and bridge validated live.** The worker
+delegates STUN + all `RTCPeerConnection` ops to exactly one elected agent tab, so
+WebRTC (the only NAT-piercing carrier) is *preserved*, not dropped. Two
+correctness fixes landed beyond the initial wiring:
 
-**Phase 5:** the Web Locks singleton guard is now bypassed on the SharedWorker
-path and kept only as the dedicated-Worker fallback's guard (the disliked
-reload-based "take over" button was dropped). Fully removing the guard waits until
-the SharedWorker path has soaked.
+- **Agent-handoff teardown.** When the agent tab closes, its `RTCPeerConnection`s
+  die but the Go carrier still holds the proxy objects. `resetRTCForNewAgent` now
+  fires `onclose` on every proxy `DataChannel` (→ `webrtc_browser.go` `dcConn.onClose`)
+  before dropping them, so the carrier tears the transport down and autoconnect
+  re-dials through the new agent (the peer re-offers over dmsg, yielding a fresh
+  `pcId` the new agent hosts cleanly). Without this the carrier would think dead
+  transports were still alive.
+- **No visibility thrash.** The agent role is *not* handed off merely because
+  visibility changed — a handoff tears down all live WebRTC transports (they can't
+  migrate between tabs), so doing it on every tab switch would thrash. The agent
+  keeps its role until it actually closes; visibility is only a preference when a
+  fresh agent must be elected. A backgrounded agent tab is throttled far less for
+  data channels than for timers (acceptable).
+
+Bridge validated live (Chrome 149, cold boot, `RTCPeerConnection` wrapped on the
+agent tab): exactly **one** `RTCPeerConnection` is constructed on the agent tab
+with the deployment STUN ICE config, and the visor *in the worker* logs
+`self public IP (via STUN): <ip>` — proving the full worker→agentPort→tab→real
+`RTCPeerConnection`→worker round-trip. The WebRTC offerer/answerer use the
+identical `newPeerConnection` → `__skywireRTC.newPC` → agent delegation. A full
+two-visor WebRTC DataChannel transport is not yet exercised end-to-end: WebRTC is
+not autoconnected (browser visors autoconnect WS/WT only), so it needs a manual
+`dialTransport(pk, "webrtc")` to a peer running the webrtc signaling listener —
+infra to arrange, not a code gap.
+
+**Phase 5 — not necessary as originally scoped.** The Web Locks singleton guard is
+already **bypassed on the SharedWorker path** (multiple tabs share one visor with
+no notice), and the disliked reload-based "take over" button was dropped. The
+guard is *retained only* as the dedicated-Worker fallback's protection (where
+SharedWorker is unavailable, it still prevents two tabs colliding on one identity).
+Fully deleting it would remove that fallback protection for no benefit, so it
+stays fallback-only rather than being removed outright.
 
 ## Fallback status
 

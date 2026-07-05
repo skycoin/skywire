@@ -221,12 +221,25 @@
       case 'pcGone': delete rtcPCs[m.pcId]; break;
     }
   }
-  // The agent tab just changed. Any RTCPeerConnections lived in the OLD agent tab
-  // and are gone; drop our proxy records so the Go carrier's autoconnect re-dials
-  // fresh through the new agent. Reject in-flight calls so they don't hang.
+  // The agent tab just changed. Every RTCPeerConnection lived in the OLD agent tab
+  // and is gone, so every WebRTC transport is dead — but the Go carrier still holds
+  // the proxy objects and doesn't know. Fire `onclose` on each proxy DataChannel
+  // (webrtc_browser.go dcConn.onClose) and mark it closed, so the carrier tears the
+  // transport down and autoconnect re-dials through the NEW agent (the peer
+  // re-offers over dmsg, producing a fresh pcId the new agent hosts cleanly).
+  // Reject in-flight pcCalls and fail pending STUN probes so nothing hangs.
   function resetRTCForNewAgent() {
     for (var cid in rtcCalls) { try { rtcCalls[cid].reject(new Error('webrtc agent tab changed')); } catch (e) {} }
     rtcCalls = {};
+    for (var pid in rtcPCs) {
+      var rec = rtcPCs[pid];
+      if (!rec) { continue; }
+      for (var did in rec.dcs) {
+        var dc = rec.dcs[did];
+        if (!dc) { continue; }
+        try { dc.readyState = 'closed'; if (typeof dc.onclose === 'function') { dc.onclose({}); } } catch (e) {}
+      }
+    }
     rtcPCs = {};
     for (var sid in stunPending) { try { stunPending[sid](''); } catch (e) {} }
     stunPending = {};
@@ -262,10 +275,16 @@
         return;
       case 'vis':
         port._vis = m.state;
-        // A tab becoming visible while the current agent is hidden/absent takes over.
-        if (m.state === 'visible' && (!agentPort || agentPort._vis !== 'visible')) {
-          if (port !== agentPort) { agentPort = port; resetRTCForNewAgent(); }
-        }
+        // We do NOT hand off the agent role on visibility change alone: the live
+        // WebRTC transports live in the current agent tab and can't migrate, so a
+        // handoff tears them all down — doing that on every tab switch would thrash.
+        // A backgrounded agent tab is throttled far less for data channels than for
+        // timers (acceptable per design), so the agent keeps its role until it
+        // actually closes. Visibility is used only as a PREFERENCE when a fresh
+        // agent must be elected (electAgent, on agent close) and there's a choice.
+        // If there is no agent at all (shouldn't happen while tabs exist), adopt
+        // this one so STUN/WebRTC have somewhere to run.
+        if (!agentPort) { agentPort = port; }
         return;
       case 'bye':
         removePort(port);
