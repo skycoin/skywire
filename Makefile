@@ -149,6 +149,11 @@ check-help: ## Cursory check of the help menus
 	go run . --help
 	@echo "compilation successful"
 
+vet: ## Run go vet (the non-golangci-lint half of 'lint')
+	CGO_ENABLED=0 ${OPTS} go vet -mod=vendor -tags 'withoutsystray withoutgotop' ./...
+
+check-ci: vet check-cg check-help test ## CI check: like 'check' but skips golangci-lint (CI runs it as a separate pinned, cached step). Keeps go vet + config-gen smoke + tests.
+
 check-windows: lint-windows test-windows ## Run linters and tests on windows image
 
 build: clean build-merged ## Install dependencies, build apps and binaries. `go build` with ${OPTS}
@@ -318,7 +323,6 @@ lint-shell:
 	find ./docker -type f -iname '*.sh' -print0 | xargs -0 -I {} bash -c "$$(command -v ./shellcheck || command -v shellcheck) -e SC2086 \"{}\""
 
 test: ## Run tests
-	-go clean -testcache &>/dev/null
 	${OPTS} go test ${TEST_OPTS} ./internal/... ./pkg/... ./cmd/...
 	${OPTS} go test ${TEST_OPTS}
 
@@ -558,9 +562,9 @@ e2e-run: ## E2E. Start e2e environment and wait for all health checks to pass
 	@# uptime-tracker + its postgres are gone (uptime is integrated
 	@# into the discovery services).
 	bash -c "DOCKER_TAG=e2e docker compose up -d --wait redis"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait deployment-services"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b"
-	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait deployment-services || { echo '=== deployment-services unhealthy — logs: ==='; docker compose logs --tail=150 deployment-services; exit 1; }"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-b || { echo '=== visor-b unhealthy — deployment-services (dmsg-server side) + visor-b logs: ==='; docker compose logs --tail=200 deployment-services; docker compose logs --tail=120 visor-b; exit 1; }"
+	bash -c "DOCKER_TAG=e2e docker compose up -d --wait visor-a visor-c || { echo '=== visor-a/visor-c unhealthy — logs: ==='; docker compose logs --tail=150 visor-a visor-c; exit 1; }"
 	bash -c "DOCKER_TAG=e2e docker compose ps"
 
 e2e-logs:

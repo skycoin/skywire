@@ -35,7 +35,7 @@ func (f *KCPConversationFilter) ClaimIncoming(in []byte, _ net.Addr) bool {
 		return false
 	}
 	expectedID := atomic.LoadUint32(&f.id)
-	receivedID := binary.LittleEndian.Uint32(in[:packetTypeOffset])
+	receivedID := binary.LittleEndian.Uint32(in[:packetTypeOffset]) //nolint
 
 	return expectedID != 0 && expectedID == receivedID
 }

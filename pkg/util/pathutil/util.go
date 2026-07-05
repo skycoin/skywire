@@ -36,8 +36,8 @@ func AtomicWriteFile(filename string, data []byte) error {
 	}
 
 	if _, err := os.Stat(tempFilePath); err == nil {
-		if err := os.Remove(filename); err != nil {
-			return fmt.Errorf("remove %s: %w", filename, err)
+		if err := os.Remove(tempFilePath); err != nil {
+			return fmt.Errorf("remove %s: %w", tempFilePath, err)
 		}
 	}
 

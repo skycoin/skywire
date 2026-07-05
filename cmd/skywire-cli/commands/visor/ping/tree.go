@@ -282,7 +282,7 @@ func writeNDJSONLine(f *os.File, ev *rpcgrpc.PingTreeEvent) {
 	_, _ = f.Write([]byte("\n"))   //nolint:errcheck
 }
 
-func classifyEvent(ev *rpcgrpc.PingTreeEvent) (string, any) {
+func classifyEvent(ev *rpcgrpc.PingTreeEvent) (string, any) { //nolint
 	switch p := ev.Payload.(type) {
 	case *rpcgrpc.PingTreeEvent_Discovered:
 		return "discovered", p.Discovered

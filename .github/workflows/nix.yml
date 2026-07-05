@@ -35,9 +35,16 @@ jobs:
 
       - uses: cachix/install-nix-action@v27
         with:
+          # Authenticate Nix's github: flake fetches. Without a token,
+          # resolving the unpinned `nixos-unstable` branch to a commit
+          # hits api.github.com unauthenticated, and from shared Actions
+          # runner IPs that gets throttled (HTTP 429), failing the build.
+          # GITHUB_TOKEN raises the rate limit enough to avoid that.
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
           extra_nix_config: |
             experimental-features = nix-command flakes
             accept-flake-config = true
+            access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
 
       # Free shared Nix cache; speeds up consecutive runs from cold
       # to warm by populating /nix/store from previous runs of this
