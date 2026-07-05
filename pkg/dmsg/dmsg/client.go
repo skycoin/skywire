@@ -404,7 +404,14 @@ func (ce *Client) Serve(ctx context.Context) {
 				continue
 			}
 		} else {
-			entries, err = ce.discoverServers(cancellabelCtx, false)
+			// MinSessions == 0 means "connect to all servers". Use AllServers,
+			// not AvailableServers: a server at/near capacity stops advertising
+			// availability (drops out of available_servers) but still accepts
+			// sessions, and a connect-all client must keep a session to EVERY
+			// server so it can always rendezvous with a peer delegated to one
+			// that has stopped advertising. MinSessions > 0 keeps the
+			// availability-filtered list (only connect where there's room).
+			entries, err = ce.discoverServers(cancellabelCtx, ce.conf.MinSessions == 0)
 			if err != nil {
 				ce.log.WithError(err).Warn("Failed to discover dmsg servers.")
 				if err == context.Canceled || err == context.DeadlineExceeded {
