@@ -252,6 +252,48 @@
 
     // render performs the fetch + render for one history entry, tagged with the
     // current loadGen; a stale result (gen advanced) is dropped.
+    // dmsgStatus resolves the visor's connection status ({dmsg_connected,
+    // dmsg_sessions}). Returns {} if the core isn't booted yet (status() throws).
+    function dmsgStatus() {
+      return Promise.resolve().then(function () {
+        return (globalThis.skywireVisor && globalThis.skywireVisor.status && globalThis.skywireVisor.status()) || {};
+      }).catch(function () { return {}; });
+    }
+    function dmsgUp(st) { return !!(st && (st.dmsg_connected || (st.dmsg_sessions | 0) > 0)); }
+
+    // connectingPage shows a live "connecting to the mesh" state in the iframe —
+    // shown while the visor's dmsg client boots and establishes a session, so a
+    // dmsg fetch issued before then renders this instead of a raw "not booted"
+    // error. Replaced by the real page once the fetch completes.
+    function connectingPage(target, sessions, note) {
+      frame.removeAttribute("src");
+      frame.srcdoc = '<!doctype html><meta charset=utf-8><body style="font:14px/1.6 system-ui,sans-serif;background:#0e0c14;color:#cdd2da;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0">' +
+        '<div style="text-align:center;max-width:440px;padding:2rem">' +
+        '<div style="width:26px;height:26px;margin:0 auto 1.1rem;border:3px solid #2a2342;border-top-color:#9d7cff;border-radius:50%;animation:sp 1s linear infinite"></div>' +
+        '<div style="color:#9d7cff;font-weight:600;margin-bottom:.5rem">Connecting to the mesh…</div>' +
+        '<div style="opacity:.75">Establishing a dmsg session to reach<br><b style="word-break:break-all">' + esc(target) + '</b></div>' +
+        '<div style="opacity:.5;font-size:.85em;margin-top:.9rem">dmsg sessions: ' + (sessions | 0) + (note ? ' · ' + esc(note) : '') + '</div>' +
+        '<style>@keyframes sp{to{transform:rotate(360deg)}}</style></div></body>';
+    }
+
+    // waitForDmsg holds a dmsg navigation until the visor has a live dmsg
+    // session, showing connectingPage meanwhile. Returns when connected, when a
+    // newer navigation supersedes this one, or after ~30s (then the caller
+    // proceeds and any real failure surfaces on the error page). This is what
+    // turns the transient "not booted / no session yet" window into a friendly
+    // loading state instead of a scary error.
+    async function waitForDmsg(entry, gen) {
+      var st = await dmsgStatus();
+      if (dmsgUp(st)) { return; }
+      for (var i = 0; i < 60; i++) {
+        if (gen !== loadGen) { return; }
+        connectingPage(entry.pk, (st && st.dmsg_sessions) | 0, i > 20 ? "still connecting…" : "");
+        await new Promise(function (r) { setTimeout(r, 500); });
+        st = await dmsgStatus();
+        if (dmsgUp(st)) { return; }
+      }
+    }
+
     async function render(entry) {
       var gen = ++loadGen;
       setLoading(true);
@@ -260,6 +302,10 @@
           var rc = await fetchClearnetEntry(entry.url, gen);
           return rc;
         }
+        // Wait for a live dmsg session before fetching (shows connectingPage),
+        // so a navigation issued during boot doesn't render a "not booted" error.
+        await waitForDmsg(entry, gen);
+        if (gen !== loadGen) return { status: 0, cancelled: true };
         var r = await fetchDmsg(entry.pk, "GET", entry.path, null);
         if (gen !== loadGen) return { status: 0, cancelled: true };
         // HTTP error with no body → a browser-style status page (with a body, the
@@ -1452,10 +1498,13 @@
 
     // App launchers. browser is multi-instance; console/terminal/logs are
     // singletons (re-clicking focuses the open one).
-    function openBrowse() {
+    function openBrowse(skipLanding) {
       var win = createWindow(doc, withRoot(), function () { untrack(win); });
       track(win, "browser");
-      win.landHome();
+      // skipLanding: don't auto-navigate to home.dmsg — used by the deep-link
+      // path, which navigates straight to its own target (so there's no
+      // home.dmsg load flashing before the target).
+      if (!skipLanding) { win.landHome(); }
       return win;
     }
     var logWin = null;
@@ -1553,7 +1602,7 @@
     try {
       var dl = readDeepLink();
       if (dl) {
-        var dlWin = openBrowse();
+        var dlWin = openBrowse(true); // skip home.dmsg auto-land; go to the deep-link target
         if (dl.kiosk) { enterKiosk(dlWin); }
         // Auto-open the deep-link target with a few retries. whenVisorConnected
         // fires as soon as ANY dmsg session is live, but the target's dmsg
