@@ -4,6 +4,7 @@ import * as S from './state';
 import { getVisorStatus, countryToFlag, getBaseVersion, compareVersions, formatBytes, getIPGroupColor } from './utils';
 import { colors } from './constants';
 import { showNodeInfo } from './node-info';
+import { isCosmosActive, cosmosFocusNode } from './cosmos-graph';
 
 export function toggleSection(sectionId: string): void {
     const section = document.getElementById(sectionId);
@@ -72,6 +73,11 @@ export function updatePkTruncation(): void {
 }
 
 export function focusVisor(pk: string): void {
+    if (isCosmosActive()) {
+        cosmosFocusNode(pk);
+        showNodeInfo(pk);
+        return;
+    }
     if (S.network && S.nodesDataset && S.nodesDataset.get(pk)) {
         S.network.focus(pk, { scale: 1.5, animation: true });
         S.network.selectNodes([pk]);

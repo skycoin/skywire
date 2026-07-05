@@ -16,11 +16,16 @@ import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
 import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode, setVoronoiOverlay } from './globe';
+import { showCosmos, hideCosmos, updateCosmosData, isCosmosActive, cosmosFit, cosmosZoomBy } from './cosmos-graph';
 
 export function wireEventListeners(): void {
     // Filter listeners
     document.getElementById('show-stcpr')!.addEventListener('change', applyFilters);
     document.getElementById('show-sudph')!.addEventListener('change', applyFilters);
+    document.getElementById('show-squicr')?.addEventListener('change', applyFilters);
+    document.getElementById('show-swtr')?.addEventListener('change', applyFilters);
+    document.getElementById('show-swsr')?.addEventListener('change', applyFilters);
+    document.getElementById('show-webrtc')?.addEventListener('change', applyFilters);
     document.getElementById('show-dmsg')!.addEventListener('change', applyFilters);
     document.getElementById('show-dmsg-servers')!.addEventListener('change', () => { applyFilters(); updateLegend(); });
     document.getElementById('show-online')!.addEventListener('change', applyFilters);
@@ -39,20 +44,24 @@ export function wireEventListeners(): void {
     document.getElementById('version-filter')!.addEventListener('change', applyFilters);
     document.getElementById('search')!.addEventListener('input', applyFilters);
 
-    // Zoom/fit listeners
-    document.getElementById('btn-fit')!.addEventListener('click', () => S.network && S.network.fit());
+    // Zoom/fit listeners — route to the active renderer (cosmos WebGL or vis-network).
+    document.getElementById('btn-fit')!.addEventListener('click', () => {
+        if (isCosmosActive()) { cosmosFit(); } else if (S.network) { S.network.fit(); }
+    });
     document.getElementById('zoom-in')!.addEventListener('click', () => {
+        if (isCosmosActive()) { cosmosZoomBy(1.3); return; }
         if (!S.network) return;
         const scale = S.network.getScale();
         S.network.moveTo({ scale: scale * 1.3 });
     });
     document.getElementById('zoom-out')!.addEventListener('click', () => {
+        if (isCosmosActive()) { cosmosZoomBy(1 / 1.3); return; }
         if (!S.network) return;
         const scale = S.network.getScale();
         S.network.moveTo({ scale: scale / 1.3 });
     });
     document.getElementById('zoom-fit')!.addEventListener('click', () => {
-        if (S.network) S.network.fit();
+        if (isCosmosActive()) { cosmosFit(); } else if (S.network) { S.network.fit(); }
     });
 
     // Resizable sidebar
@@ -187,19 +196,22 @@ export function wireEventListeners(): void {
         }
     });
 
-    // View toggle listeners (Globe vs Flat)
+    // View toggle listeners (Globe vs Flat vs WebGL)
     const viewGlobeBtn = document.getElementById('view-globe');
     const viewFlatBtn = document.getElementById('view-flat');
+    const viewCosmosBtn = document.getElementById('view-cosmos');
 
     const clearViewButtons = () => {
         viewGlobeBtn?.classList.remove('active');
         viewFlatBtn?.classList.remove('active');
+        viewCosmosBtn?.classList.remove('active');
     };
 
     if (viewGlobeBtn) {
         viewGlobeBtn.addEventListener('click', () => {
             clearViewButtons();
             viewGlobeBtn.classList.add('active');
+            hideCosmos();
             S.setGlobeViewActive(true);
             setVoronoiMode(false);
             showGlobe();
@@ -210,15 +222,34 @@ export function wireEventListeners(): void {
         viewFlatBtn.addEventListener('click', () => {
             clearViewButtons();
             viewFlatBtn.classList.add('active');
+            hideCosmos();
             S.setGlobeViewActive(false);
             hideGlobe();
         });
     }
 
-    // Data initialization - flat view is default
+    if (viewCosmosBtn) {
+        viewCosmosBtn.addEventListener('click', () => {
+            clearViewButtons();
+            viewCosmosBtn.classList.add('active');
+            // Leave the flat/globe state off; cosmos hides both containers.
+            S.setGlobeViewActive(false);
+            hideGlobe();
+            showCosmos();
+        });
+    }
+
+    // Data initialization. WebGL is the default view — at the full
+    // all-transports scale (~20k edges) the vis-network Flat view is unusable
+    // (main-thread hang), whereas the GPU-rendered WebGL view stays responsive.
+    // The flat datasets are still built (processData) so the WebGL view can read
+    // them and the user can switch to Flat/Globe.
     checkServer();
     fetchAllData();
     checkTPSStatus();
+    viewFlatBtn?.classList.remove('active');
+    viewCosmosBtn?.classList.add('active');
+    showCosmos();
 
     // Start data flow animation after a short delay (for flat view)
     setTimeout(() => {
@@ -229,6 +260,9 @@ export function wireEventListeners(): void {
     const filterChangeHandler = () => {
         if (isGlobeViewActive()) {
             updateGlobeData();
+        }
+        if (isCosmosActive()) {
+            updateCosmosData();
         }
     };
 
@@ -243,6 +277,10 @@ export function wireEventListeners(): void {
     // Add globe update to filter changes
     document.getElementById('show-stcpr')!.addEventListener('change', filterChangeHandler);
     document.getElementById('show-sudph')!.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-squicr')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-swtr')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-swsr')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-webrtc')?.addEventListener('change', filterChangeHandler);
     document.getElementById('show-dmsg')!.addEventListener('change', filterChangeHandler);
     document.getElementById('show-online')!.addEventListener('change', filterChangeHandler);
     document.getElementById('show-offline')!.addEventListener('change', filterChangeHandler);
