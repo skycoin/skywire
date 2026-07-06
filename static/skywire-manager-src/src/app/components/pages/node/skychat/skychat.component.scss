@@ -211,4 +211,91 @@
   }
 }
 
+// --- Group chat ---------------------------------------------------
+
+.sc-mode-toggle {
+  display: inline-flex;
+  gap: 2px;
+  button {
+    font-size: 12px;
+    line-height: 1.2;
+    min-width: 0;
+    padding: 0 10px;
+    opacity: 0.6;
+    mat-icon { font-size: 15px; vertical-align: middle; margin-right: 3px; }
+    &.active {
+      opacity: 1;
+      font-weight: 600;
+      background: rgba(33, 150, 243, 0.18);
+      border-radius: 4px;
+    }
+  }
+}
+
+.sc-rooms-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  .sc-rooms-actions {
+    display: inline-flex;
+    button { width: 28px; height: 28px; line-height: 28px; }
+    mat-icon { font-size: 18px; }
+  }
+}
+
+.sc-room-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 4px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.sc-inline-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 12px;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+  &:focus { outline: none; border-color: rgba(33, 150, 243, 0.6); }
+}
+
+.sc-room {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  .sc-room-name { font-size: 13px; font-weight: 500; word-break: break-word; }
+  .sc-room-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    opacity: 0.65;
+    mat-icon { font-size: 12px; width: 12px; height: 12px; }
+  }
+}
+
+.sc-room-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px 8px;
+  flex-wrap: wrap;
+  .sc-room-title { font-weight: 600; font-size: 14px; }
+  .sc-room-sub { opacity: 0.6; }
+  button { font-size: 12px; mat-icon { font-size: 15px; vertical-align: middle; margin-right: 3px; } }
+}
+
+.sc-invite-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+  .sc-inline-input { flex: 1 1 auto; }
+}
+
 // (input/textarea contrast is handled globally in styles.scss now)

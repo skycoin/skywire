@@ -243,9 +243,29 @@ func (m *Manager) Join(inv Invite) (Record, error) {
 	joinCtx, cancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
 	defer cancel()
 	if err := sess.Connect(joinCtx); err != nil {
-		_ = sess.Close()         //nolint:errcheck
-		_ = m.store.Delete(r.ID) //nolint:errcheck
-		return Record{}, fmt.Errorf("group: Join: connect: %w", err)
+		// A subscribe REJECTION means this PK isn't admitted to the group
+		// (public auto-admit aside, the owner must AddMember first). That is
+		// actionable and permanent for now, so tear the half-open membership
+		// down and surface it.
+		if isSubscribeRejected(err) {
+			_ = sess.Close()         //nolint:errcheck
+			_ = m.store.Delete(r.ID) //nolint:errcheck
+			return Record{}, fmt.Errorf("group: Join: connect: %w", err)
+		}
+		// A TRANSIENT failure — the owner publisher's dmsg dial didn't
+		// complete within the join budget (common when the joiner is a
+		// browser wasm visor over WS, or during deploy churn) — is NOT fatal.
+		// The session is already registered (openLocked), so the per-session
+		// reconnect watchdog will attach the owner feed + peerSubs in the
+		// background; the owner's own watchdog re-Connects to us in parallel.
+		// Keep the membership and join optimistically: the room appears now
+		// and messages flow once the dmsg path settles. Previously this path
+		// Close()d the session and Delete()d the freshly-persisted record, so
+		// a perfectly joinable group looked permanently un-joinable on a slow
+		// first dial (observed wasm↔native as "context deadline exceeded"
+		// while the owner was in fact re-Connecting seconds later).
+		m.log.WithError(err).WithField("id", r.ID).
+			Info("group: Join: initial connect not ready; joined optimistically — reconnect watchdog will attach the feed")
 	}
 	_ = m.store.SetStatus(r.ID, StatusActive) //nolint:errcheck
 	r.Status = StatusActive

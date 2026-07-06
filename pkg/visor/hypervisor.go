@@ -904,6 +904,18 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				// Skychat reverse-proxy: forward all calls under
 				// /skychat/proxy/* to the local skychat HTTP server.
 				r.HandleFunc("/visors/{pk}/skychat/proxy/*", hv.skychatProxyHandler())
+				// Skychat GROUP chat: bridge the hvui group panel to the
+				// local visor's group RPC (native counterpart to the wasm
+				// visor's skychatGroup* JS hooks).
+				r.Get("/visors/{pk}/skychat/groups", hv.getGroups())
+				r.Post("/visors/{pk}/skychat/groups", hv.postGroupCreate())
+				r.Post("/visors/{pk}/skychat/groups/join", hv.postGroupJoin())
+				r.Post("/visors/{pk}/skychat/groups/send", hv.postGroupSend())
+				r.Get("/visors/{pk}/skychat/groups/messages", hv.getGroupMessages())
+				r.Post("/visors/{pk}/skychat/groups/add-member", hv.postGroupAddMember())
+				r.Get("/visors/{pk}/skychat/groups/invite", hv.getGroupInvite())
+				r.Post("/visors/{pk}/skychat/groups/leave", hv.postGroupLeave())
+				r.Post("/visors/{pk}/skychat/groups/delete", hv.postGroupDelete())
 			})
 		})
 
