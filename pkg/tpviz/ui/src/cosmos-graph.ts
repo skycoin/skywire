@@ -15,9 +15,15 @@ import { Graph } from '@cosmograph/cosmos';
 import * as S from './state';
 import { colors, LOCAL_EDGE_COLOR } from './constants';
 import { handleGraphNodeClick } from './node-click';
+import { getCountryColor, getIPGroupColor, countryToFlag } from './utils';
+import { calculateGroupRadius, findNonOverlappingPosition } from './grouping';
 
 interface CosmosNode {
   id: string;
+  // Fixed positions used when grouping is active (cosmos renders at these with the
+  // simulation disabled). Absent → the GPU force layout places the node.
+  x?: number;
+  y?: number;
   color: string;
   size: number;
   status: string;
@@ -33,9 +39,20 @@ interface CosmosLink {
   live: boolean;
 }
 
+// Cosmos simulation-space extent. Nodes with explicit x/y (grouping mode) must
+// live inside [0, COSMOS_SPACE]; keep this in sync with the graph's spaceSize.
+const COSMOS_SPACE = 4096;
+
 let graph: Graph<CosmosNode, CosmosLink> | null = null;
 let active = false;
 let tooltip: HTMLDivElement | null = null;
+
+// Group-boundary overlay (grouping mode): the packed group circles + labels,
+// drawn on a canvas above the cosmos canvas and converted space→screen each frame
+// so they track pan/zoom — the WebGL analogue of the flat view's group boundaries.
+let boundaryCircles: { x: number; y: number; r: number; color: string; label: string; flag: string }[] = [];
+let boundaryCanvas: HTMLCanvasElement | null = null;
+let boundaryRAF: number | null = null;
 
 // ensureTooltip creates the floating hover panel (cosmos renders points only —
 // no text — so node detail lives in a hover tooltip, the same info the flat
@@ -73,6 +90,72 @@ function hideTooltip(): void {
   if (tooltip) { tooltip.style.display = 'none'; }
 }
 
+// ensureBoundaryCanvas creates the overlay canvas (above the cosmos WebGL canvas)
+// that the group boundaries are drawn on.
+function ensureBoundaryCanvas(): HTMLCanvasElement | null {
+  if (boundaryCanvas) { return boundaryCanvas; }
+  const container = document.getElementById('cosmos-container');
+  if (!container) { return null; }
+  const c = document.createElement('canvas');
+  c.id = 'cosmos-boundary';
+  c.style.cssText = 'position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5;';
+  container.appendChild(c);
+  boundaryCanvas = c;
+  return c;
+}
+
+function clearBoundaryCanvas(): void {
+  if (boundaryCanvas) {
+    const ctx = boundaryCanvas.getContext('2d');
+    if (ctx) { ctx.clearRect(0, 0, boundaryCanvas.width, boundaryCanvas.height); }
+  }
+}
+
+// drawBoundaries paints the group circles + labels each frame, converting the
+// space-coord circles to screen via cosmos' spaceToScreenPosition / spaceToScreenRadius
+// so they stay glued to the clusters as the user pans/zooms. Self-schedules while
+// the grouped WebGL view is active.
+function drawBoundaries(): void {
+  boundaryRAF = null;
+  if (!active || !graph || boundaryCircles.length === 0) { clearBoundaryCanvas(); return; }
+  const canvas = ensureBoundaryCanvas();
+  if (!canvas) { return; }
+  const rect = canvas.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  const w = Math.max(1, Math.round(rect.width * dpr));
+  const h = Math.max(1, Math.round(rect.height * dpr));
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+  const ctx = canvas.getContext('2d');
+  if (!ctx) { return; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  ctx.textAlign = 'center';
+  ctx.font = '13px system-ui, sans-serif';
+  for (const b of boundaryCircles) {
+    const [sx, sy] = graph.spaceToScreenPosition([b.x, b.y]);
+    const sr = graph.spaceToScreenRadius(b.r);
+    if (!isFinite(sx) || !isFinite(sy) || sr < 3) { continue; }
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, 2 * Math.PI);
+    ctx.globalAlpha = 0.07; ctx.fillStyle = b.color; ctx.fill();
+    ctx.globalAlpha = 0.55; ctx.lineWidth = 1.2; ctx.strokeStyle = b.color; ctx.stroke();
+    ctx.globalAlpha = 1;
+    const label = (b.flag ? b.flag + ' ' : '') + b.label;
+    ctx.fillStyle = b.color;
+    ctx.fillText(label, sx, sy - sr - 5);
+  }
+  boundaryRAF = requestAnimationFrame(drawBoundaries);
+}
+
+function startBoundaries(): void {
+  if (boundaryRAF == null) { boundaryRAF = requestAnimationFrame(drawBoundaries); }
+}
+
+function stopBoundaries(): void {
+  if (boundaryRAF != null) { cancelAnimationFrame(boundaryRAF); boundaryRAF = null; }
+  clearBoundaryCanvas();
+}
+
 export function isCosmosActive(): boolean {
   return active;
 }
@@ -99,9 +182,101 @@ function statusVisible(status: string): boolean {
   return on('show-unknown');
 }
 
+// cosmosGroupMode reads the same cluster-country / cluster-ip checkboxes the flat
+// view uses, so the WebGL view groups identically. Returns the active single-level
+// grouping, or null for the free force layout. (Dual country+IP nesting is a
+// flat-view refinement; when both are checked here we group by country.)
+function cosmosGroupMode(): 'country' | 'ip' | null {
+  const country = (document.getElementById('cluster-country') as HTMLInputElement)?.checked === true;
+  const ip = (document.getElementById('cluster-ip') as HTMLInputElement)?.checked === true
+    && S.ipGroupsEnabled && !!S.ipGroupsData;
+  if (country) { return 'country'; }
+  if (ip) { return 'ip'; }
+  return null;
+}
+
+function groupKeyOf(id: string, mode: 'country' | 'ip'): string {
+  if (mode === 'ip') {
+    const g = S.ipGroupsData ? S.ipGroupsData.groups[id] : undefined;
+    return g !== undefined ? 'ip_' + g : '_no_ip';
+  }
+  const svc = S.visorServices[id];
+  return (svc && svc.country) || '_unknown';
+}
+
+function groupColorOf(key: string, mode: 'country' | 'ip'): string {
+  if (mode === 'ip') {
+    if (key === '_no_ip') { return '#666'; }
+    return getIPGroupColor(parseInt(key.replace('ip_', ''), 10));
+  }
+  return getCountryColor(key === '_unknown' ? '' : key).border;
+}
+
+function groupLabelOf(key: string, mode: 'country' | 'ip'): string {
+  if (mode === 'ip') { return key === '_no_ip' ? 'No IP' : 'IP ' + key.replace('ip_', ''); }
+  return key === '_unknown' ? 'Unknown' : key;
+}
+
+function groupFlagOf(key: string, mode: 'country' | 'ip'): string {
+  if (mode === 'ip' || key === '_unknown') { return ''; }
+  return countryToFlag(key);
+}
+
+interface GroupCircle { cx: number; cy: number; r: number; color: string; label: string; flag: string }
+
+// computeGroupedLayout packs the given nodes into per-group circles using the SAME
+// geometry as the flat view's arrangeNodesIntoGroups (calculateGroupRadius +
+// findNonOverlappingPosition + single / ring(≤6) / Fibonacci-spiral placement) and
+// returns each node's fixed position + its group color. Cosmos renders at these
+// positions with the simulation disabled, so WebGL groups by country/IP like Flat.
+function computeGroupedLayout(
+  nodeIds: string[], mode: 'country' | 'ip',
+): { pos: Map<string, { x: number; y: number }>; color: Map<string, string>; groups: GroupCircle[] } {
+  const buckets = new Map<string, string[]>();
+  for (const id of nodeIds) {
+    const k = groupKeyOf(id, mode);
+    let arr = buckets.get(k);
+    if (!arr) { arr = []; buckets.set(k, arr); }
+    arr.push(id);
+  }
+  const grouped = Array.from(buckets.entries())
+    .map(([key, ids]) => ({ key, ids, radius: calculateGroupRadius(ids.length) }))
+    .sort((a, b) => b.radius - a.radius);
+
+  const placed: { x: number; y: number; radius: number }[] = [];
+  const pos = new Map<string, { x: number; y: number }>();
+  const color = new Map<string, string>();
+  const groups: GroupCircle[] = [];
+  for (const g of grouped) {
+    const c = findNonOverlappingPosition(g.radius, placed, 60);
+    placed.push({ x: c.x, y: c.y, radius: g.radius });
+    const col = groupColorOf(g.key, mode);
+    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode) });
+    const inner = g.radius - 50;
+    const n = g.ids.length;
+    g.ids.forEach((id, i) => {
+      let x: number; let y: number;
+      if (n === 1) {
+        x = c.x; y = c.y;
+      } else if (n <= 6) {
+        const a = (i / n) * 2 * Math.PI; const r = inner * 0.5;
+        x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
+      } else {
+        const ga = Math.PI * (3 - Math.sqrt(5)); const a = i * ga;
+        const r = inner * Math.sqrt(i / n) * 0.9;
+        x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
+      }
+      pos.set(id, { x, y });
+      color.set(id, col);
+    });
+  }
+  return { pos, color, groups };
+}
+
 // buildData projects the vis-network datasets into cosmos node/link arrays,
-// applying the active type/status filters.
-function buildData(): { nodes: CosmosNode[]; links: CosmosLink[] } {
+// applying the active type/status filters, then — when country/IP grouping is on —
+// assigns fixed group-packed positions + per-group colors.
+function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boolean } {
   const nodesRaw: any[] = S.nodesDataset ? S.nodesDataset.get() : [];
   const edgesRaw: any[] = S.edgesDataset ? S.edgesDataset.get() : [];
 
@@ -137,7 +312,44 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[] } {
   // Drop isolated nodes (no visible edge). Repulsion flings them far out, which
   // stretches fitView so the main cluster ends up tiny and off-center.
   const linkedNodes = nodes.filter(n => connected.has(n.id));
-  return { nodes: linkedNodes, links };
+
+  const mode = cosmosGroupMode();
+  if (mode) {
+    const { pos, color, groups } = computeGroupedLayout(linkedNodes.map(n => n.id), mode);
+    // The packed layout is centered on the origin (negative → positive). Cosmos
+    // random-inits nodes in a [0, spaceSize] box and renders provided x/y in that
+    // same space, so negative coords land off-screen. Translate + (only if needed)
+    // uniformly scale the layout to fit centered in the space with a margin.
+    let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;
+    pos.forEach(p => {
+      if (p.x < minX) { minX = p.x; } if (p.x > maxX) { maxX = p.x; }
+      if (p.y < minY) { minY = p.y; } if (p.y > maxY) { maxY = p.y; }
+    });
+    const margin = 80;
+    const usable = COSMOS_SPACE - 2 * margin;
+    const spanX = (maxX - minX) || 1; const spanY = (maxY - minY) || 1;
+    const scale = Math.min(usable / spanX, usable / spanY, 1); // don't upscale small layouts
+    const cx = (minX + maxX) / 2; const cy = (minY + maxY) / 2;
+    const toSpace = (x: number, y: number) => ({
+      x: COSMOS_SPACE / 2 + (x - cx) * scale,
+      y: COSMOS_SPACE / 2 + (y - cy) * scale,
+    });
+    for (const n of linkedNodes) {
+      const p = pos.get(n.id);
+      if (p) { const s = toSpace(p.x, p.y); n.x = s.x; n.y = s.y; }
+      // Colour by group so the clusters read at a glance (keep the local visor
+      // cyan so "YOU" stays findable).
+      if (!n.isLocal) { const col = color.get(n.id); if (col) { n.color = col; } }
+    }
+    // Group boundary circles in the SAME normalized space (drawn on the overlay).
+    boundaryCircles = groups.map(g => {
+      const s = toSpace(g.cx, g.cy);
+      return { x: s.x, y: s.y, r: g.r * scale, color: g.color, label: g.label, flag: g.flag };
+    });
+  } else {
+    boundaryCircles = [];
+  }
+  return { nodes: linkedNodes, links, grouped: !!mode };
 }
 
 function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
@@ -156,6 +368,11 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
     linkWidth: (l: CosmosLink) => (l.live ? 1 : 0.5),
     linkArrows: false,
     linkGreyoutOpacity: 0,
+    // Fade long links so inter-group edges recede and the country/IP clusters +
+    // their boundaries read at a glance; short intra-group links stay opaque. (Also
+    // declutters the free force layout.)
+    linkVisibilityDistanceRange: [40, 250],
+    linkVisibilityMinTransparency: 0.08,
     renderLinks: true,
     curvedLinks: false,
     // Small pixel dots that don't grow on zoom — at ~1k nodes, big dots overlap
@@ -164,7 +381,7 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
     fitViewOnInit: true,
     // GPU force simulation — light gravity + repulsion settle a ~20k-edge
     // hairball into a readable ball in a couple seconds, off the main thread.
-    spaceSize: 4096,
+    spaceSize: COSMOS_SPACE,
     simulation: {
       gravity: 0.9,
       repulsion: 0.5,
@@ -230,6 +447,7 @@ export function showCosmos(): void {
 export function hideCosmos(): void {
   active = false;
   hideTooltip();
+  stopBoundaries();
   const cosmosContainer = document.getElementById('cosmos-container');
   if (cosmosContainer) { cosmosContainer.style.display = 'none'; }
 }
@@ -245,9 +463,23 @@ export function updateCosmosData(): void {
   if (!active) { return; }
   const g = ensureGraph();
   if (!g) { return; }
-  const { nodes, links } = buildData();
+  const { nodes, links, grouped } = buildData();
+  if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+  if (grouped) {
+    // Fixed group-packed positions. disableSimulation keeps cosmos rendering the
+    // nodes at their x/y (so the country/IP clusters stay put, like the flat view)
+    // WITHOUT running the force layout — and, unlike pause(), leaves the render loop
+    // alive so pan/zoom still work. The boundary overlay loop draws the group
+    // circles + labels, tracking pan/zoom.
+    g.setConfig({ disableSimulation: true });
+    g.setData(nodes, links);
+    g.fitView(500, 0.1);
+    startBoundaries();
+    return;
+  }
+  stopBoundaries();
+  g.setConfig({ disableSimulation: false });
   g.setData(nodes, links);
-  if (settleTimer) { clearTimeout(settleTimer); }
   settleTimer = setTimeout(() => {
     if (graph && active) { graph.pause(); graph.fitView(500, 0.1); }
   }, 5000);
