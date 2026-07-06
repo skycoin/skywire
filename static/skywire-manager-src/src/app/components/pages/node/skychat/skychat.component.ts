@@ -418,8 +418,12 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       this.cdr.markForCheck();
     };
     if (sv) {
-      try { done(JSON.parse(sv.skychatGroupList() || '[]') || []); }
-      catch { /* hook error — leave list as-is */ }
+      // Under the SharedWorker architecture skywireVisor is a MessagePort
+      // proxy, so the hooks return Promises (not the raw JSON string the Go
+      // side returns synchronously). Promise.resolve() normalizes both.
+      Promise.resolve(sv.skychatGroupList())
+        .then((raw: any) => done(JSON.parse(raw || '[]') || []))
+        .catch(() => { /* hook error — leave list as-is */ });
       return;
     }
     this.groupApi('', 'GET')
@@ -461,8 +465,10 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     };
     const sv = this.groupSv;
     if (sv) {
-      try { done(JSON.parse(sv.skychatGroupMessages(id) || '[]') || []); }
-      catch { /* hook error */ }
+      // SharedWorker proxy → the hook returns a Promise; normalize.
+      Promise.resolve(sv.skychatGroupMessages(id))
+        .then((raw: any) => done(JSON.parse(raw || '[]') || []))
+        .catch(() => { /* hook error */ });
       return;
     }
     // Native: since_ms omitted → full ring for this group.
