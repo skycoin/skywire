@@ -9,9 +9,10 @@
 // This wires the rest of the parity set so a wasm visor is a first-class peer:
 //
 //	dmsg:80  HTTP — /health (httputil.HealthCheckResponse, identical wire to the
-//	               native log-server), /ping, and a default landing page naming
-//	               the tab's PK. Reachable via fetchDmsg(<pk>:80, "/health") and
-//	               `skywire-cli svc health <pk>`.
+//	               native log-server) and a default landing page naming the tab's
+//	               PK. Reachable via fetchDmsg(<pk>:80, "/health") and
+//	               `skywire-cli svc health <pk>`. (Liveness/RTT is NOT an HTTP
+//	               endpoint here — it lives on dmsg:7/dmsg:8 below, matching native.)
 //	dmsg:7   dmsgctrl ping/pong — what dmsgtracker (and the HV UI's dmsg latency)
 //	               uses to see this visor as alive + measure RTT.
 //	dmsg:8   dmsg ping protocol — `skywire-cli dmsg ping <pk>` RTT/bandwidth echo.
@@ -40,6 +41,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	ts "github.com/skycoin/skywire/pkg/transport/setup"
+	"github.com/skycoin/skywire/pkg/visor/logserver/landingpage"
 )
 
 // peerStartedAt is this visor's boot time, reported on /health (StartedAt). Set
@@ -53,9 +55,9 @@ var peerStartedAt time.Time
 func startPeerServices(mLog *logging.MasterLogger, tsNodes []cipher.PubKey) {
 	peerStartedAt = time.Now().UTC()
 
-	// Port 80: install the dynamic /health + /ping handler, register a default
-	// landing page, and start the dmsg:80 HTTP server. serveContent() from the
-	// page can still add paths on top (dynamicHandler wins for /health, /ping).
+	// Port 80: install the dynamic /health handler, register a default landing
+	// page, and start the dmsg:80 HTTP server. serveContent() from the page can
+	// still add paths on top (dynamicHandler wins for /health).
 	dynamicHandler = peerDynamicEndpoint
 	registerDefaultLanding()
 	contentMu.Lock()
@@ -71,8 +73,8 @@ func startPeerServices(mLog *logging.MasterLogger, tsNodes []cipher.PubKey) {
 	go serveTransportSetup(mLog, tsNodes) // dmsg:47
 }
 
-// peerDynamicEndpoint serves /health and /ping on port 80 with live data,
-// matching the native visor's log-server wire (httputil.HealthCheckResponse).
+// peerDynamicEndpoint serves /health on port 80 with live data, matching the
+// native visor's log-server wire (httputil.HealthCheckResponse).
 func peerDynamicEndpoint(port uint16, path string) (string, []byte, bool) {
 	if port != contentPort {
 		return "", nil, false
@@ -92,8 +94,6 @@ func peerDynamicEndpoint(port uint16, path string) (string, []byte, bool) {
 			return "", nil, false
 		}
 		return "application/json", b, true
-	case "/ping":
-		return "text/plain", []byte("pong"), true
 	}
 	return "", nil, false
 }
@@ -103,13 +103,16 @@ func peerDynamicEndpoint(port uint16, path string) (string, []byte, bool) {
 // http://<pk>.dmsg/ sees a real page — like the native visor's landing page. A
 // later serveContent({"/":...}) call from the page overrides it.
 func registerDefaultLanding() {
-	html := fmt.Sprintf(`<!doctype html><meta charset=utf-8>`+
-		`<title>skywire wasm-visor</title>`+
-		`<h1>skywire browser visor</h1>`+
-		`<p>public key: <code>%s</code></p>`+
-		`<ul><li><a href="/health">/health</a></li><li><a href="/ping">/ping</a></li></ul>`+
-		`<p>Served in-browser over dmsg. Reachable by public key, no domain or IP.</p>`,
-		selfPK.Hex())
+	// Render with the SAME shared package the native visor's log-server uses, so a
+	// browser wasm-visor and a native visor present an identical landing page at
+	// http://<pk>.dmsg/ (and skywire.dmsg). /health is the one HTTP endpoint the
+	// wasm-visor serves on port 80 that native also serves (liveness/RTT lives on
+	// the dedicated dmsg:7 dmsgctrl + dmsg:8 ping ports, not an HTTP endpoint); the
+	// frame is shared and native adds its own whitelist-gated links.
+	links := []string{
+		`<a href="/health">/health</a> - visor health status`,
+	}
+	html := landingpage.Render(selfPK.Hex(), links)
 	contentMu.Lock()
 	cm := contentByPort[contentPort]
 	if cm == nil {
@@ -117,7 +120,11 @@ func registerDefaultLanding() {
 		contentByPort[contentPort] = cm
 	}
 	if _, exists := cm["/"]; !exists {
-		cm["/"] = contentEntry{ct: "text/html; charset=utf-8", body: []byte(html)}
+		// enabled:true is REQUIRED — handleContentStream serves any entry with
+		// enabled==false (the contentEntry zero value) as 404, so without this the
+		// default landing page silently 404s and skywire.dmsg (→ this visor's PK)
+		// shows nothing, unlike native visors.
+		cm["/"] = contentEntry{ct: "text/html; charset=utf-8", body: []byte(html), enabled: true}
 	}
 	contentMu.Unlock()
 }

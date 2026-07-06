@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"html"
+	"io"
 	"net"
 	"net/http"
 	"net/http/pprof"
@@ -24,6 +24,7 @@ import (
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor/logserver/landingpage"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -436,20 +437,12 @@ func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.Pu
 			}
 		}
 
-		// Identity header — state which visor this is. The landing page
-		// names itself by PK only; the dmsg address is redundant here (it's
-		// just <pk>:<port>) and is carried on /health instead. HTML-escaped
-		// though the PK is fixed-shape hex from config.
-		var idHeader string
-		if api.publicKey != "" {
-			idHeader = fmt.Sprintf(`<p class="pk">public key: %s</p>`, html.EscapeString(api.publicKey))
-		}
-
+		// Render via the shared landingpage package so this page and the browser
+		// wasm-visor's (cmd/wasm-visor) are the same frame — PK identity header
+		// included. The links differ (this visor exposes more, gated on the
+		// whitelist above); the styling/structure is shared.
 		c.Writer.WriteHeader(http.StatusOK)
-		fmt.Fprintf(c.Writer, `<!doctype html><html><head><title>Skywire Visor</title>`+ //nolint:errcheck,gosec
-			`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}`+
-			`.pk{color:#5fd75f;word-break:break-all;margin:2px 0}</style>`+
-			`</head><body><h2>Skywire Visor</h2>%s<pre>%s</pre></body></html>`, idHeader, strings.Join(links, "\n"))
+		_, _ = io.WriteString(c.Writer, landingpage.Render(api.publicKey, links)) //nolint:errcheck
 	})
 
 	// Catch-all: if a custom website handler is set, serve unmatched
