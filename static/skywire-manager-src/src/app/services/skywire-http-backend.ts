@@ -72,7 +72,18 @@ export class SkywireHttpBackend implements HttpBackend {
 
   private pathOf(url: string): string {
     try {
-      const u = new URL(url, location.href);
+      // Resolve relative URLs (ApiService uses 'api/…' with no leading slash)
+      // against the app ROOT, not location.href. On file:// (the single-file
+      // serverless build) location.pathname is the .html file path, so 'api/about'
+      // would resolve to '/tmp/api/about' — misclassified as a non-API request and
+      // wrongly sent to the real XHR (→ file:///api/about → CORS-blocked, blank UI).
+      // The app is always served at '/', so anchor there. On http/https this is
+      // identical to the previous behavior.
+      const base =
+        typeof location !== 'undefined' && location.origin && location.origin !== 'null'
+          ? location.origin + '/'
+          : 'file:///';
+      const u = new URL(url, base);
       return u.pathname + u.search;
     } catch (e) {
       return url;

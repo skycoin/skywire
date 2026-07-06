@@ -478,6 +478,12 @@
     // Relayed from inside the browsed iframe: link clicks (dmsgnav) re-fetch a
     // page; the site's own fetch (dmsgreq) is served over dmsg, bytes posted back.
     window.addEventListener("message", async function (e) {
+      // Each browser window installs its own listener on the SAME top window, so a
+      // message must be handled ONLY by the window whose iframe sent it — otherwise
+      // a link click (dmsgnav) or in-page fetch (dmsgreq) from one window drives
+      // every open window (they'd all navigate to the clicked path). Match e.source
+      // to THIS window's iframe.
+      if (e.source !== frame.contentWindow) { return; }
       var d = e.data || {};
       if (d.type === "dmsgnav" && currentSitePK) { browseTo(currentSitePK, d.path); return; }
       if (d.type === "dmsgreq") {
@@ -692,6 +698,18 @@
     function go() {
       var v = ($("sb-addr").value || "").trim();
       if (!v) return;
+      // dmsg:// and skynet:// are explicit dmsg-site schemes. `new URL` treats them
+      // as opaque (and prepending http:// mangles them — "http://dmsg://<pk>" parses
+      // to host "dmsg"), so peel the scheme off and browse the rest over dmsg
+      // directly, preserving the scheme for the address bar.
+      var sk = /^(dmsg|skynet):\/\//i.exec(v);
+      if (sk) {
+        var rest = v.slice(sk[0].length);
+        var slash = rest.indexOf("/");
+        var shost = slash >= 0 ? rest.slice(0, slash) : rest;
+        var spath = slash >= 0 ? rest.slice(slash) : "/";
+        if (shost) { browser.browseTo(shost, spath || "/", sk[1].toLowerCase()); return; }
+      }
       var hadScheme = /^https?:\/\//i.test(v), u;
       try { u = new URL(hadScheme ? v : "http://" + v); } catch (e) { browser.browseTo(v, "/"); return; }
       var host = u.hostname, path = (u.pathname || "/") + (u.search || "");
