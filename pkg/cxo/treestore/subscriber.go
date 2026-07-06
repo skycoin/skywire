@@ -137,6 +137,11 @@ type Subscriber struct {
 	// the goroutine on the first successful Connect, not every
 	// subsequent reconnect.
 	reconnectStartOnce sync.Once
+	// reconnectKick lets a fill-break (handleFillingBreaks) ask the
+	// watchdog for an IMMEDIATE re-Connect instead of waiting out the
+	// quiet threshold. Buffered (cap 1) so repeated breaks coalesce into
+	// at most one pending kick. Created alongside reconnectStop.
+	reconnectKick chan struct{}
 	// reconnectAttempts counts watchdog-triggered Connect attempts
 	// (incremented BEFORE the Connect call regardless of outcome).
 	// Surfaced only for tests; treat as opaque metric otherwise.
@@ -359,6 +364,7 @@ func (s *Subscriber) Connect(ctx context.Context, publisherPK cipher.PubKey) err
 	// Start the watchdog on the FIRST successful Connect only.
 	s.reconnectStartOnce.Do(func() {
 		s.reconnectStop = make(chan struct{})
+		s.reconnectKick = make(chan struct{}, 1)
 		go s.runReconnectWatchdog()
 	})
 	return nil
@@ -397,6 +403,7 @@ func (s *Subscriber) ConnectTCP(ctx context.Context, address string) error {
 	// Start the watchdog on the FIRST successful connect only.
 	s.reconnectStartOnce.Do(func() {
 		s.reconnectStop = make(chan struct{})
+		s.reconnectKick = make(chan struct{}, 1)
 		go s.runReconnectWatchdog()
 	})
 	return nil
@@ -426,21 +433,35 @@ func (s *Subscriber) runReconnectWatchdogWith(tickEvery, quietThreshold time.Dur
 	tick := time.NewTicker(tickEvery)
 	defer tick.Stop()
 	for {
+		kicked := false
 		select {
 		case <-s.reconnectStop:
 			return
 		case <-tick.C:
+		case <-s.reconnectKick:
+			// A fill broke (handleFillingBreaks): re-Connect NOW so the
+			// publisher re-pushes the Root and the fill retries in seconds
+			// rather than after the quiet threshold. Bypass the quiet/last
+			// gates below — a fill-break means we saw a Root announcement
+			// but couldn't fetch its objects (often "no connections to fill
+			// from" when the source conn flapped, common for a browser wasm
+			// subscriber over dmsg-WS), so lastUpdateNs may be zero.
+			kicked = true
 		}
 		// Snapshot last activity; if zero (no Root ever seen) we
 		// skip the reconnect — the initial subscription may still
-		// be settling.
+		// be settling. A kick overrides this (quiet stays 0, which the
+		// log below reads as "reconnect was fill-break-triggered").
 		last := s.lastUpdateNs.Load()
-		if last == 0 {
-			continue
-		}
-		quiet := time.Since(time.Unix(0, last))
-		if quiet < quietThreshold {
-			continue
+		var quiet time.Duration
+		if !kicked {
+			if last == 0 {
+				continue
+			}
+			quiet = time.Since(time.Unix(0, last))
+			if quiet < quietThreshold {
+				continue
+			}
 		}
 		// Native-TCP subscriptions re-dial by stored address; dmsg
 		// subscriptions re-Connect by publisher PK. ConnectTCP takes
@@ -812,7 +833,17 @@ func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
 	s.log.WithError(err).
 		WithField("feed", s.feedPK.Hex()).
 		WithField("seq", r.Seq).
-		Warn("treestore-sub: Root filling aborted; subscriber will miss this Root until publisher re-pushes")
+		Warn("treestore-sub: Root filling aborted; kicking an immediate re-Connect to re-fetch")
+	// Proactive recovery (the follow-up this hook's comment anticipated):
+	// ask the watchdog to re-Connect immediately so the publisher re-pushes
+	// the Root and the fill retries now, instead of waiting out the quiet
+	// threshold (~90s). Non-blocking — the cap-1 channel coalesces repeated
+	// breaks, and a nil channel (watchdog never started, e.g. native-TCP
+	// pre-Connect) just no-ops.
+	select {
+	case s.reconnectKick <- struct{}{}:
+	default:
+	}
 }
 
 // applySnapshot replaces the cache with snap and fires the change

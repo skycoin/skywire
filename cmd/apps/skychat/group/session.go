@@ -882,6 +882,17 @@ func (s *Session) connectSub(ctx context.Context, sub *treestore.Subscriber, pk 
 	return sub.ConnectAndWaitForRoot(ctx, pk)
 }
 
+// isSubscribeRejected reports whether err is a treestore subscribe
+// rejection — the publisher's allowlist refused this PK — as opposed to a
+// transient dmsg dial/handshake failure. A rejection is actionable (the
+// joiner must be admitted by the owner) and so should fail a join; a
+// transient failure should not, since the reconnect watchdog retries.
+// Matched on the treestore sentinel's message (errSubscribeRejected is
+// unexported there) which propagates verbatim through the wrap chain.
+func isSubscribeRejected(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "subscribe rejected")
+}
+
 func (s *Session) Connect(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()

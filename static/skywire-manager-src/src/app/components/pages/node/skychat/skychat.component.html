@@ -14,6 +14,15 @@
         @if (!historyAvailable) {
           <span class="hint">· {{ 'skychat.no-history' | translate }}</span>
         }
+        <span class="status-sep">·</span>
+        <div class="sc-mode-toggle">
+          <button mat-button type="button" [ngClass]="{ 'active': chatMode === 'dm' }" (click)="switchMode('dm')">
+            <mat-icon [inline]="true">person</mat-icon> {{ 'skychat.mode-direct' | translate }}
+          </button>
+          <button mat-button type="button" [ngClass]="{ 'active': chatMode === 'groups' }" (click)="switchMode('groups')">
+            <mat-icon [inline]="true">groups</mat-icon> {{ 'skychat.mode-groups' | translate }}
+          </button>
+        </div>
         <span class="sc-status-spacer"></span>
         <button mat-button type="button" class="sc-password-toggle" (click)="togglePassword()">
           <mat-icon class="lock-icon" [inline]="true">{{ pwIsSet ? 'lock' : 'lock_open' }}</mat-icon>
@@ -54,7 +63,8 @@
         </div>
       }
 
-      <!-- Two-column layout: peers sidebar + chat panel. -->
+      <!-- Two-column layout: peers sidebar + chat panel (Direct mode). -->
+      @if (chatMode === 'dm') {
       <div class="sc-body">
         <!-- Peers sidebar (recent senders + the active recipient). -->
         <aside class="sc-sidebar">
@@ -119,6 +129,128 @@
           </div>
         </section>
       </div>
+      }
+
+      <!-- Groups mode: rooms sidebar + room log/composer. -->
+      @if (chatMode === 'groups') {
+      <div class="sc-body">
+        <aside class="sc-sidebar">
+          <div class="sc-sidebar-title sc-rooms-head">
+            <span>{{ 'skychat.rooms' | translate }}</span>
+            <span class="sc-rooms-actions">
+              <button mat-icon-button matTooltip="{{ 'skychat.create-room' | translate }}"
+                      (click)="showCreate = !showCreate; showJoin = false">
+                <mat-icon [inline]="true">add</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="{{ 'skychat.join-room' | translate }}"
+                      (click)="showJoin = !showJoin; showCreate = false">
+                <mat-icon [inline]="true">login</mat-icon>
+              </button>
+            </span>
+          </div>
+
+          @if (showCreate) {
+            <div class="sc-room-form">
+              <input class="sc-inline-input" [(ngModel)]="newGroupName" placeholder="{{ 'skychat.room-name' | translate }}">
+              <select class="sc-inline-input" [(ngModel)]="newGroupMode">
+                <option value="public">public</option>
+                <option value="private">private</option>
+              </select>
+              <button mat-raised-button color="primary" (click)="createGroup()" [disabled]="groupSending || !newGroupName.trim()">
+                {{ 'skychat.create' | translate }}
+              </button>
+            </div>
+          }
+          @if (showJoin) {
+            <div class="sc-room-form">
+              <input class="sc-inline-input" [(ngModel)]="joinInvite" placeholder="{{ 'skychat.invite-link' | translate }}">
+              <button mat-raised-button color="primary" (click)="joinGroup()" [disabled]="groupSending || !joinInvite.trim()">
+                {{ 'skychat.join' | translate }}
+              </button>
+            </div>
+          }
+
+          @if (groupError) { <div class="sc-sidebar-empty error">{{ groupError }}</div> }
+          @if (groups.length === 0 && !groupError) {
+            <div class="sc-sidebar-empty">{{ 'skychat.rooms-empty' | translate }}</div>
+          }
+          @for (g of groups; track g.id) {
+            <div class="sc-peer sc-room" [ngClass]="{ 'active': selectedGroup?.id === g.id }" (click)="selectGroup(g)">
+              <span class="sc-room-name">{{ g.name }}</span>
+              <span class="sc-room-meta mono small">
+                <mat-icon [inline]="true">{{ g.mode === 'private' ? 'lock' : 'public' }}</mat-icon>
+                {{ g.members }} · {{ g.role }}
+              </span>
+            </div>
+          }
+        </aside>
+
+        <section class="sc-chat">
+          @if (!selectedGroup) {
+            <div class="sc-empty">{{ 'skychat.rooms-pick' | translate }}</div>
+          }
+          @if (selectedGroup) {
+            <div class="sc-room-header">
+              <span class="sc-room-title">{{ selectedGroup.name }}</span>
+              <span class="mono small sc-room-sub">
+                {{ selectedGroup.mode }} · {{ selectedGroup.members }} {{ 'skychat.members' | translate }} · {{ selectedGroup.role }}
+              </span>
+              <span class="sc-status-spacer"></span>
+              <button mat-button type="button" (click)="showInvite()">
+                <mat-icon [inline]="true">share</mat-icon> {{ 'skychat.invite' | translate }}
+              </button>
+            </div>
+
+            @if (inviteLink) {
+              <div class="sc-invite-row">
+                <input class="sc-inline-input mono small" [value]="inviteLink" readonly (click)="$any($event.target).select()">
+                <button mat-icon-button matTooltip="{{ 'skychat.copy' | translate }}" (click)="copyInvite()">
+                  <mat-icon [inline]="true">content_copy</mat-icon>
+                </button>
+              </div>
+            }
+            @if (selectedGroup.role === 'owner') {
+              <div class="sc-invite-row">
+                <input class="sc-inline-input mono small" [(ngModel)]="addMemberPk" placeholder="{{ 'skychat.add-member-pk' | translate }}">
+                <button mat-stroked-button (click)="addMember()" [disabled]="!addMemberPk.trim()">
+                  <mat-icon [inline]="true">person_add</mat-icon> {{ 'skychat.add' | translate }}
+                </button>
+              </div>
+            }
+
+            <div #logEl class="sc-log">
+              @if (groupMessages.length === 0) {
+                <div class="sc-empty">{{ 'skychat.empty' | translate }}</div>
+              }
+              @for (m of groupMessages; track $index) {
+                <div class="sc-msg" [ngClass]="m.out ? 'out' : 'in'">
+                  <div class="sc-msg-meta">
+                    <span class="peer mono small" [matTooltip]="m.from">
+                      {{ m.out ? '→ ' + ('skychat.you' | translate) : '← ' + shortPk(m.from) }}
+                    </span>
+                    <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
+                  </div>
+                  <div class="sc-msg-text">{{ m.text }}</div>
+                </div>
+              }
+            </div>
+
+            <div class="sc-composer">
+              <mat-form-field appearance="outline" class="field-msg">
+                <mat-label>{{ 'skychat.message' | translate }}</mat-label>
+                <textarea matInput rows="2" [(ngModel)]="groupMessage"
+                          (keydown.enter)="$event.ctrlKey && sendGroup()"
+                          [placeholder]="('skychat.group-placeholder' | translate)"></textarea>
+              </mat-form-field>
+              <button mat-raised-button color="primary" class="send-btn" (click)="sendGroup()" [disabled]="groupSending || !groupMessage.trim()">
+                <mat-icon>send</mat-icon>
+                {{ 'skychat.send' | translate }}
+              </button>
+            </div>
+          }
+        </section>
+      </div>
+      }
     </div>
   </div>
 }
