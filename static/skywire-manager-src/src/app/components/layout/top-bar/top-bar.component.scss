@@ -453,7 +453,8 @@ $top-bar-height: 56px;
   white-space: nowrap;
   scrollbar-width: thin;
 
-  // Two-line chip: label (or abbreviated PK) over public-ip / lan-ip.
+  // Single-line chip: just the label, so the chip's width tracks the label rather
+  // than the 66-char PK (which is on hover instead). See visor-switcher.ts.
   .switcher-chip {
     flex: 0 0 auto;
     height: auto;
@@ -463,8 +464,7 @@ $top-bar-height: 56px;
 
     .switcher-chip-text {
       display: flex;
-      flex-direction: column;
-      align-items: flex-start;
+      align-items: center;
       text-align: left;
       margin: 0 2px;
     }
@@ -472,13 +472,6 @@ $top-bar-height: 56px;
     .switcher-chip-name {
       font-size: $font-size-base;
       font-weight: 500;
-    }
-
-    .switcher-chip-sub {
-      font-size: 9px;
-      opacity: 0.65;
-      font-family: monospace;
-      letter-spacing: -0.2px;
     }
   }
 }

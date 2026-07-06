@@ -137,6 +137,17 @@ export class TopBarComponent implements OnInit, OnDestroy {
    * pages without backing out to the list. Active chip via routerLinkActive.
    */
   @Input() switcherTabsData?: TabButtonData[];
+
+  /**
+   * True on node (detail) pages that have both the persistent home nav and the
+   * visor switcher: there the switcher row is rendered under the home nav and
+   * REPLACES the node-identity (back + PK) title row, so the title is hidden.
+   */
+  get switcherReplacesTitle(): boolean {
+    return !!(this.homeTabsData && this.homeTabsData.length &&
+      this.switcherTabsData && this.switcherTabsData.length);
+  }
+
   /**
    * Index of the currently selected tab.
    */
