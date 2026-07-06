@@ -32,6 +32,30 @@
     return;
   }
 
+  // file:// history-API guard. When the single-file UI is opened from file://, the
+  // document has an OPAQUE origin ('null'), where History.pushState/replaceState
+  // reject any state whose URL differs from the current document in more than the
+  // fragment — throwing SecurityError. Angular's router (hash mode, useHash:true)
+  // still calls replaceState with a path-bearing URL on init, so on file:// it
+  // throws and cascades into "Illegal invocation" errors that abort UI load. Hash
+  // routing only needs location.hash, and the stored state object is non-essential,
+  // so wrap both to retry state-only and finally swallow — the route still applies
+  // via the hash. Scoped to file:// so served (http/https) origins are untouched.
+  if (location.protocol === 'file:' && window.history) {
+    ['pushState', 'replaceState'].forEach(function (m) {
+      var orig = window.history[m] ? window.history[m].bind(window.history) : null;
+      if (!orig) return;
+      window.history[m] = function (state, title, url) {
+        try { return orig(state, title, url); }
+        catch (e) {
+          try { return orig(state, title); }   // retry without the URL (state only)
+          catch (e2) { /* swallow: hash routing still navigates via location.hash */ }
+        }
+      };
+    });
+    log('file:// history-API guard installed (opaque-origin pushState/replaceState)');
+  }
+
   // decryptKey returns the dmsg secret-key hex: plaintext CFG.sk if present,
   // else password-decrypts CFG.encsk (AES-GCM, PBKDF2-SHA256). Format of encsk:
   // base64 of [16-byte salt | 12-byte iv | ciphertext]. Empty → ephemeral key.
@@ -134,12 +158,15 @@
       }
       if (CFG.visor) {
         while (!self.skywireVisor) { await new Promise(function (r) { setTimeout(r, 10); }); }
-        var vpk = await self.skywireVisor.boot(sk, CFG.seedpk, CFG.seedws, CFG.disc);
+        // Coerce optional seed/disc config to '' — an undefined js.Value stringifies
+        // to the literal "<undefined>" on the Go side, which boot then rejects as a
+        // "bad seed server pk". Empty string = "no seed, use the embedded set".
+        var vpk = await self.skywireVisor.boot(sk, CFG.seedpk || '', CFG.seedws || '', CFG.disc || '');
         log('wasm-visor booted as ' + vpk + ' (edge + hypervisor; /api → in-wasm core)');
         return;
       }
       while (!self.skywireDmsg) { await new Promise(function (r) { setTimeout(r, 10); }); }
-      var pk = await self.skywireDmsg.connect(sk, CFG.seedpk, CFG.seedws, CFG.disc);
+      var pk = await self.skywireDmsg.connect(sk, CFG.seedpk || '', CFG.seedws || '', CFG.disc || '');
       if (CFG.standalone) {
         await self.skywireDmsg.serveHypervisor();
         log('standalone hypervisor serving as ' + pk + ' (visors dial in on port 46)');
@@ -174,8 +201,16 @@
     } catch (e) { return String(url).charAt(0) === '/'; }
   }
   function pathOf(url) {
-    try { var u = new URL(url, location.href); return u.pathname + u.search; }
-    catch (e) { return url; }
+    try {
+      // Anchor relative URLs (Angular assets: 'assets/i18n/en.json', ApiService's
+      // 'api/…') at the app ROOT, not location.href. On file:// location.pathname is
+      // the .html file path, so a relative 'assets/…' would resolve to '/tmp/assets/…'
+      // and miss the inlined __SKYWIRE_ASSETS__ map (keyed '/assets/…'). The app is
+      // always served at '/'. On http/https this is identical to the old behavior.
+      var base = (location.origin && location.origin !== 'null') ? location.origin + '/' : 'file:///';
+      var u = new URL(url, base);
+      return u.pathname + u.search;
+    } catch (e) { return url; }
   }
 
   // assetResponse serves a runtime asset (i18n JSON, images, fonts) inlined into
@@ -202,59 +237,46 @@
   }
 
   // --- XMLHttpRequest shim (Angular HttpClient's default backend) ---
-  var RealXHR = window.XMLHttpRequest;
-  function ShimXHR() {
-    this._m = 'GET'; this._u = ''; this._h = {}; this.readyState = 0; this.status = 0;
-    this.statusText = ''; this.responseText = ''; this.response = ''; this.responseType = '';
-    this.withCredentials = false; this._cb = {}; this._respHeaders = ''; this._respMap = {};
+  //
+  // /api requests are routed by the Angular SkywireHttpBackend (DI-injected, an
+  // Observable path that NEVER touches XHR — it awaits __SKYWIRE_HV__.ready, set
+  // below, then calls skywireVisor.hvApi). So this shim only has to serve the
+  // runtime assets (i18n JSON, images) that `cli hv gen` inlines into the file.
+  //
+  // CRITICAL: it must stay a REAL XMLHttpRequest. zone.js (loaded by Angular)
+  // patches XHR and, when Angular sends a request, calls the NATIVE send on the
+  // instance — which throws "TypeError: Illegal invocation" on a non-XHR fake
+  // object. (The previous shim replaced XMLHttpRequest with a plain object and so
+  // broke the whole UI on file://.) Instead, SUBCLASS the real XHR and, for an
+  // inlined asset, rewrite the request to a data: URL the native XHR machinery
+  // fetches itself — zone.js-compatible, and data: works from file://. Anything
+  // else falls through to the native XHR unchanged.
+  function assetDataURL(path) {
+    var m = self.__SKYWIRE_ASSETS__;
+    if (!m) return null;
+    var p = path.split('?')[0].split('#')[0];
+    var bare = p.replace(/^\//, '');
+    var a = m[p] || m[bare] || m['/' + bare];
+    if (!a) return null;
+    // Reuse the stored base64 verbatim (no decode+re-encode → no huge-array btoa).
+    return 'data:' + (a.ct || 'application/octet-stream') + ';base64,' + a.b;
   }
-  ShimXHR.prototype.open = function (m, u) { this._m = m; this._u = u; this._set(1); };
-  ShimXHR.prototype.setRequestHeader = function (k, v) { this._h[k] = v; };
-  ShimXHR.prototype.getAllResponseHeaders = function () { return this._respHeaders; };
-  ShimXHR.prototype.getResponseHeader = function (k) { return this._respMap[String(k).toLowerCase()] || null; };
-  ShimXHR.prototype.abort = function () {};
-  ShimXHR.prototype.addEventListener = function (ev, fn) { this._cb[ev] = fn; };
-  ShimXHR.prototype.removeEventListener = function () {};
-  ShimXHR.prototype._set = function (rs) {
-    this.readyState = rs;
-    if (this.onreadystatechange) this.onreadystatechange();
-  };
-  ShimXHR.prototype._emit = function (ev) {
-    if (this._cb[ev]) this._cb[ev]({ type: ev });
-    if (this['on' + ev]) this['on' + ev]({ type: ev });
-  };
-  ShimXHR.prototype.send = function (body) {
-    var self_ = this;
-    if (!isLocal(this._u)) { // non-local: fall back to the real XHR transparently
-      var real = new RealXHR();
-      real.open(this._m, this._u, true);
-      for (var k in this._h) real.setRequestHeader(k, this._h[k]);
-      real.onreadystatechange = function () {
-        self_.readyState = real.readyState; self_.status = real.status;
-        self_.responseText = real.responseText; self_.response = real.response;
-        if (self_.onreadystatechange) self_.onreadystatechange();
-        if (real.readyState === 4) self_._emit('load');
-      };
-      real.send(body); return;
-    }
-    serve(self_._m, pathOf(self_._u), body, self_._h).then(function (r) {
-      self_.status = r.status; self_.statusText = '';
-      var txt = new TextDecoder().decode(r.body);
-      self_.responseText = txt;
-      if (self_.responseType === 'json') {
-        try { self_.response = JSON.parse(txt); } catch (e) { self_.response = null; }
-      } else { self_.response = txt; }
-      self_._respMap = {}; var rh = '';
-      for (var k in r.headers) { self_._respMap[k.toLowerCase()] = r.headers[k]; rh += k + ': ' + r.headers[k] + '\r\n'; }
-      self_._respHeaders = rh;
-      self_._set(4);
-      self_._emit('load');
-    }).catch(function (e) {
-      log('request error ' + self_._u + ': ' + e);
-      self_.status = 0; self_._set(4); self_._emit('error');
-    });
-  };
-  window.XMLHttpRequest = ShimXHR;
+  try {
+    var RealXHR = window.XMLHttpRequest;
+    window.XMLHttpRequest = class extends RealXHR {
+      open(method, url) {
+        try {
+          if (isLocal(url)) {
+            var d = assetDataURL(pathOf(url));
+            if (d) { return super.open('GET', d); } // serve the inlined asset natively
+          }
+        } catch (e) { /* fall through to native open */ }
+        return super.open.apply(this, arguments);
+      }
+    };
+  } catch (e) {
+    log('XHR subclass unsupported; leaving native XHR in place: ' + ((e && e.message) || e));
+  }
 
   // --- fetch shim (for code paths that use fetch directly) ---
   var realFetch = window.fetch ? window.fetch.bind(window) : null;
@@ -273,6 +295,13 @@
       return new Response(r.body, { status: r.status, headers: h });
     });
   };
+
+  // Kick off the boot now and expose the promise as __SKYWIRE_HV__.ready, so the
+  // Angular SkywireHttpBackend (which owns /api) awaits the in-tab visor coming up
+  // before its first call. (The old shim booted lazily from inside the XHR path;
+  // now that /api no longer flows through this shim, boot must be kicked here.)
+  window.__SKYWIRE_HV__ = CFG;
+  CFG.ready = ensure();
 
   log('HTTP-over-dmsg override installed (hypervisor ' + CFG.pk + ')');
 })();

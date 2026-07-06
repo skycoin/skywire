@@ -29,9 +29,12 @@ import (
 // ciphertext is embedded and the page prompts to decrypt it (override.js
 // resolveSK). NEVER serve a generated (key-bearing) file from a domain.
 //
-// Known gap (tracked): runtime Angular assets (i18n JSON, flag/logo images under
-// /assets) are not yet inlined, so a generated file shows untranslated strings +
-// broken images until the asset-FS inlining lands. Scripts/styles/app logic work.
+// Runtime Angular assets (i18n JSON, flag/logo images) are inlined into
+// __SKYWIRE_ASSETS__ and served by override.js; CSS url() references (fonts,
+// background images) are rewritten to data: URLs so they load from file:// too.
+// The i18n loader fetches assets/i18n/<lang>.json (not a dynamic import(), which
+// would be a lazy chunk that can't load from file://). So a generated file renders
+// translated strings, icons and images with no server.
 
 // StandaloneConfig is the dmsg + identity config baked into a generated file.
 type StandaloneConfig struct {
@@ -68,7 +71,36 @@ var (
 	reScriptSrc = regexp.MustCompile(`(?s)<script\b([^>]*?)\bsrc="([^"]+)"([^>]*?)>\s*</script>`)
 	reLinkCSS   = regexp.MustCompile(`(?s)<link\b[^>]*?\brel="stylesheet"[^>]*?\bhref="([^"]+)"[^>]*?>`)
 	reHeadOpen  = regexp.MustCompile(`(?i)<head\b[^>]*>`)
+	reCSSURL    = regexp.MustCompile(`url\(\s*['"]?([^'")]+?)['"]?\s*\)`)
 )
+
+// inlineCSSURLs rewrites url(...) references in a stylesheet to data: URLs by
+// reading the referenced file from the UI FS. CSS-initiated loads (@font-face
+// fonts, background images) bypass override.js's fetch/XHR shims — the browser
+// resolves them against the document, which on file:// is …/hypervisor.html, so a
+// relative url(assets/…) 404s (icons then render as their ligature text, e.g.
+// "view_headline"). Inlining as data: makes them load with no server. Refs that
+// aren't in the FS (or are already data:/absolute) are left untouched.
+func inlineCSSURLs(css string, uiFS fs.FS) string {
+	return reCSSURL.ReplaceAllStringFunc(css, func(match string) string {
+		sub := reCSSURL.FindStringSubmatch(match)
+		ref := strings.TrimSpace(sub[1])
+		if ref == "" || strings.HasPrefix(ref, "data:") || strings.HasPrefix(ref, "http://") ||
+			strings.HasPrefix(ref, "https://") || strings.HasPrefix(ref, "#") {
+			return match
+		}
+		p := ref
+		if i := strings.IndexAny(p, "?#"); i >= 0 {
+			p = p[:i]
+		}
+		p = strings.TrimPrefix(strings.TrimPrefix(p, "./"), "/")
+		data, err := fs.ReadFile(uiFS, p)
+		if err != nil {
+			return match // runtime-served or missing — leave as-is
+		}
+		return "url(data:" + assetContentType(p) + ";base64," + base64.StdEncoding.EncodeToString(data) + ")"
+	})
+}
 
 // GenerateStandalone assembles the single-file hypervisor.html. uiFS is the
 // built Angular FS (must contain index.html and the referenced chunk JS/CSS);
@@ -115,7 +147,7 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 			inlineErr = fmt.Errorf("inline stylesheet %q: %w", href, rErr)
 			return tag
 		}
-		return "<style>" + string(body) + "</style>"
+		return "<style>" + inlineCSSURLs(string(body), uiFS) + "</style>"
 	})
 	if inlineErr != nil {
 		return nil, inlineErr
@@ -138,7 +170,14 @@ func GenerateStandalone(uiFS fs.FS, wasmExecJS, wasm, overrideJS []byte, cfg Sta
 	if err != nil {
 		return nil, err
 	}
-	head := "\n<script>" + cfgJS + "</script>\n" +
+	// Lead with <meta charset> so it stays within the first 1024 bytes of the
+	// document (the HTML5 cutoff for honoring it). The Angular index has its own
+	// charset meta, but our injected scripts — especially the multi-MB inlined
+	// asset map — are spliced in right after <head> and would push the original
+	// meta past the cutoff, making the browser fall back to Latin-1 (em-dashes etc.
+	// then render as mojibake, e.g. "—" → "â€"). A duplicate meta is harmless.
+	head := "\n<meta charset=\"utf-8\">\n" +
+		"<script>" + cfgJS + "</script>\n" +
 		"<script>" + assetsJS + "</script>\n" +
 		"<script>" + jsSafe(wasmExecJS) + "</script>\n" +
 		"<script>" + wasmJS + "</script>\n" +
