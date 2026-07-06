@@ -129,7 +129,104 @@
     });
   }
 
-  // --- Web Worker host (preferred) ---
+  // --- SharedWorker host (preferred) ---
+  //
+  // ONE wasm-visor per origin, shared by every same-origin tab (worker.js as a
+  // SharedWorker). The visor boots once on the first tab, stays alive while any tab
+  // is connected, and stops when the last tab closes. Opening/switching/closing tabs
+  // does NOT re-boot it — the running dmsg client, router and identity are preserved
+  // (this is what the Web Locks single-instance guard could NOT do; with a shared
+  // visor that guard is obsolete and is skipped on this path). Every tab installs a
+  // main-thread `globalThis.skywireVisor` proxy whose methods are postMessage
+  // round-trips over the tab's MessagePort; all call sites already treat the API as
+  // async, so the proxy is transparent. STUN + WebRTC (no RTCPeerConnection in any
+  // worker) are delegated by the worker to whichever tab it elected as agent — this
+  // tab handles them iff it receives {t:'stun-ip'}/{t:'rtc'} for it. Falls back to
+  // the dedicated Worker (+ singleton guard) if SharedWorker is unavailable.
+  function bootInSharedWorker(sk) {
+    return new Promise(function (resolve, reject) {
+      if (typeof SharedWorker === 'undefined') { reject(new Error('SharedWorker unavailable')); return; }
+      var sw;
+      try { sw = new SharedWorker('worker.js', { name: 'skywire-wasm-visor' }); } catch (e) { reject(e); return; }
+      var port = sw.port;
+      var nextId = 1, pending = Object.create(null);
+      var upTimer = setTimeout(function () { reject(new Error('shared worker did not report ready in time')); }, 45000);
+
+      function makeProxy(methods) {
+        var proxy = {};
+        methods.forEach(function (fn) {
+          proxy[fn] = function () {
+            var callArgs = Array.prototype.slice.call(arguments);
+            return new Promise(function (res, rej) {
+              var id = nextId++;
+              pending[id] = { res: res, rej: rej };
+              try { port.postMessage({ t: 'call', id: id, fn: fn, args: callArgs }); }
+              catch (e) { delete pending[id]; rej(e); }
+            });
+          };
+        });
+        return proxy;
+      }
+
+      port.onmessage = function (ev) {
+        var m = ev.data || {};
+        switch (m.t) {
+          case 'log':
+            try { (m.level === 'error' ? console.error : m.level === 'warn' ? console.warn : console.log)(m.line); } catch (e) {}
+            try { if (typeof self.__skylog === 'function') self.__skylog(m.line); } catch (e) {}
+            break;
+          case 'up':
+            clearTimeout(upTimer);
+            // The worker has already booted the shared visor; install the proxy and
+            // resolve with the booted PK (do NOT call boot() again — that's the
+            // whole point: one boot, shared).
+            self.skywireVisor = makeProxy(m.methods);
+            resolve(m.pk || '');
+            break;
+          case 'ret':
+            if (pending[m.id]) { pending[m.id].res(m.val); delete pending[m.id]; }
+            break;
+          case 'err':
+            if (pending[m.id]) { pending[m.id].rej(new Error(m.msg)); delete pending[m.id]; }
+            break;
+          case 'fatal':
+            clearTimeout(upTimer);
+            reject(new Error(m.msg));
+            break;
+          case 'stun-ip':
+            // This tab is the elected agent: run STUN here and return the public IP.
+            runStunIP(m.ice).then(function (ip) {
+              try { port.postMessage({ t: 'stun-ip-result', id: m.id, ip: ip || '' }); } catch (e) {}
+            });
+            break;
+          case 'rtc':
+            // This tab is the elected agent: host the real RTCPeerConnection. `port`
+            // stands in for the worker connection (same postMessage contract).
+            rtcHandle(port, m);
+            break;
+        }
+      };
+      port.start();
+
+      // First tab supplies the key + seed config; the worker boots the visor once.
+      try { port.postMessage({ t: 'init', sk: sk, seedpk: CFG.seedpk || '', seedws: CFG.seedws || '', disc: CFG.disc || '' }); }
+      catch (e) { clearTimeout(upTimer); reject(e); return; }
+
+      // Report visibility so the worker prefers a foreground tab as WebRTC/STUN
+      // agent (background tabs are throttled). And tell the worker when this tab is
+      // unloading so it can re-elect the agent / drop the port promptly.
+      function reportVis() {
+        try { port.postMessage({ t: 'vis', state: (document.visibilityState || 'visible') }); } catch (e) {}
+      }
+      try {
+        document.addEventListener('visibilitychange', reportVis);
+        reportVis();
+        self.addEventListener('pagehide', function () { try { port.postMessage({ t: 'bye' }); } catch (e) {} });
+      } catch (e) {}
+    });
+  }
+
+  // --- Web Worker host (dedicated; fallback) ---
   //
   // The Go/wasm runtime runs the visor's occasionally-blocking work (dmsg/WS/WT
   // dials, route setup, SOCKS handshakes). On the page's MAIN thread that starves
@@ -137,8 +234,8 @@
   // runtime in a dedicated Web Worker (worker.js) keeps the UI responsive: every
   // globalThis.skywireVisor call becomes a postMessage round-trip to the worker.
   // All call sites already treat the API as async (Promises / fire-and-forget), so
-  // the proxy is transparent. Falls back to the in-page runtime if Workers are
-  // unavailable or the worker fails to come up.
+  // the proxy is transparent. Used when SharedWorker is unavailable; falls back to
+  // the in-page runtime if Workers are unavailable or the worker fails to come up.
   function bootInWorker(sk) {
     return new Promise(function (resolve, reject) {
       if (typeof Worker === 'undefined') { reject(new Error('Web Workers unavailable')); return; }
@@ -176,9 +273,11 @@
           case 'up':
             clearTimeout(upTimer);
             // Install the proxy as globalThis.skywireVisor — browse.js, the Angular
-            // backend, the skychat component, etc. call it exactly as before.
+            // backend, the skychat component, etc. call it exactly as before. The
+            // worker booted the visor itself (from the {t:'init'} below), so resolve
+            // with the booted PK; no separate boot() call.
             self.skywireVisor = makeProxy(m.methods);
-            self.skywireVisor.boot(sk, CFG.seedpk || '', CFG.seedws || '', CFG.disc || '').then(resolve, reject);
+            resolve(m.pk || '');
             break;
           case 'ret':
             if (pending[m.id]) { pending[m.id].res(m.val); delete pending[m.id]; }
@@ -208,6 +307,10 @@
         clearTimeout(upTimer);
         reject(new Error('worker error: ' + ((e && e.message) || 'load failed')));
       };
+      // Supply the key + seed config; the worker boots the visor once, then reports
+      // 'up' with the booted PK. Same protocol as the SharedWorker path.
+      try { worker.postMessage({ t: 'init', sk: sk, seedpk: CFG.seedpk || '', seedws: CFG.seedws || '', disc: CFG.disc || '' }); }
+      catch (e) { clearTimeout(upTimer); reject(e); }
     });
   }
 
@@ -352,13 +455,23 @@
 
   CFG.ready = (async function () {
     var sk = await resolveSK();
-    // One tab per origin may run this (localStorage-shared) identity; wait here
-    // until this tab is the leader before booting any dmsg client.
-    await becomeLeader('skywire-wasm-visor');
     var pk;
+    // Preferred: ONE shared visor per origin (SharedWorker). No single-instance
+    // guard needed — there is only ever one dmsg client, living in the worker; tabs
+    // are thin views that come and go without re-booting it.
+    try {
+      pk = await bootInSharedWorker(sk);
+      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (shared across tabs; SharedWorker; UI off the runtime thread; /api → in-wasm core)'); } catch (e) {}
+      return pk;
+    } catch (eShared) {
+      try { console.warn('[hv-boot] shared-worker boot unavailable (' + ((eShared && eShared.message) || eShared) + '); falling back to per-tab worker + single-instance guard'); } catch (e2) {}
+    }
+    // Fallback: per-tab dedicated worker, guarded by Web Locks so two tabs don't run
+    // the same identity at once. Only reached where SharedWorker is unavailable.
+    await becomeLeader('skywire-wasm-visor');
     try {
       pk = await bootInWorker(sk);
-      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (in Web Worker; UI off the runtime thread; /api → in-wasm core)'); } catch (e) {}
+      try { console.log('[hv-boot] wasm-visor booted as ' + pk + ' (per-tab Web Worker; UI off the runtime thread; /api → in-wasm core)'); } catch (e) {}
     } catch (e) {
       try { console.warn('[hv-boot] worker boot unavailable (' + ((e && e.message) || e) + '); falling back to in-page runtime'); } catch (e2) {}
       pk = await bootInPage(sk);
