@@ -34,11 +34,11 @@ export function wireEventListeners(): void {
     document.getElementById('show-services')!.addEventListener('change', () => { applyFilters(); updateLegend(); });
     document.getElementById('show-flags')!.addEventListener('change', applyFilters);
     document.getElementById('cluster-country')!.addEventListener('change', () => {
-        applyGrouping();
+        if (isCosmosActive()) { updateCosmosData(); } else { applyGrouping(); }
         updateLegend();
     });
     document.getElementById('cluster-ip')!.addEventListener('change', () => {
-        applyGrouping();
+        if (isCosmosActive()) { updateCosmosData(); } else { applyGrouping(); }
         updateLegend();
     });
     document.getElementById('version-filter')!.addEventListener('change', applyFilters);
