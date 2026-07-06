@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
 import { NodeComponent } from '../node.component';
@@ -278,7 +279,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       const sv = (window as any).skywireVisor;
       Promise.resolve(sv.skychatSend(recipient, text))
         .then(() => { this.message = ''; })
-        .catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+        .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
         .finally(() => { this.sending = false; this.cdr.markForCheck(); });
       return;
     }
@@ -359,25 +360,19 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     return null;
   }
 
-  /** Build a hypervisor group-bridge URL (native path). */
-  private groupUrl(path: string): string {
-    const apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ? 'http-api' : 'api';
-    return `/${apiPrefix}/visors/${this.node.localPk}/skychat/groups${path}`;
+  /** Native group-bridge call over ApiService so CSRF/auth are handled
+   *  (the hypervisor group POST routes enforce the CSRF token, unlike the
+   *  DM /skychat/proxy passthrough). Returns a Promise to unify with the
+   *  wasm hooks. */
+  private groupApi(path: string, method: 'GET' | 'POST', body?: any): Promise<any> {
+    const url = `visors/${this.node.localPk}/skychat/groups${path}`;
+    const obs = method === 'POST' ? this.api.post(url, body || {}) : this.api.get(url);
+    return firstValueFrom(obs);
   }
 
-  private async groupJsonFetch(path: string, method: string, body?: any): Promise<any> {
-    const resp = await fetch(this.groupUrl(path), {
-      method,
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const txt = await resp.text();
-    let parsed: any = null;
-    try { parsed = txt ? JSON.parse(txt) : null; } catch { parsed = txt; }
-    if (!resp.ok) {
-      throw new Error((parsed && parsed.error) || txt || `HTTP ${resp.status}`);
-    }
-    return parsed;
+  /** Extract a human message from an ApiService error. */
+  private groupErrMsg(e: any): string {
+    return e?.originalError?.error?.error || e?.error?.error || e?.message || String(e);
   }
 
   switchMode(mode: 'dm' | 'groups') {
@@ -427,9 +422,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       catch { /* hook error — leave list as-is */ }
       return;
     }
-    this.groupJsonFetch('', 'GET')
+    this.groupApi('', 'GET')
       .then(done)
-      .catch((e) => { this.groupError = String(e?.message || e); this.cdr.markForCheck(); });
+      .catch((e) => { this.groupError = this.groupErrMsg(e); this.cdr.markForCheck(); });
   }
 
   selectGroup(g: GroupView) {
@@ -471,7 +466,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       return;
     }
     // Native: since_ms omitted → full ring for this group.
-    this.groupJsonFetch(`/messages?group_id=${encodeURIComponent(id)}`, 'GET')
+    this.groupApi(`/messages?group_id=${encodeURIComponent(id)}`, 'GET')
       .then((arr) => done((arr || []).map((m: any) => ({
         group_id: m.group_id, from: m.sender_pk || m.from || '', text: m.text || '',
         ts: m.ts ? (typeof m.ts === 'number' ? m.ts : Date.parse(m.ts)) : Date.now(),
@@ -494,8 +489,8 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     };
     const p = sv
       ? Promise.resolve(sv.skychatGroupCreate(name, this.newGroupMode)).then((r: any) => after(r.id, r.invite))
-      : this.groupJsonFetch('', 'POST', { name, mode: this.newGroupMode }).then((r: any) => after(r.info?.id, r.invite));
-    p.catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+      : this.groupApi('', 'POST', { name, mode: this.newGroupMode }).then((r: any) => after(r.info?.id, r.invite));
+    p.catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
       .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
   }
 
@@ -513,8 +508,8 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     };
     const p = sv
       ? Promise.resolve(sv.skychatGroupJoin(invite)).then(after)
-      : this.groupJsonFetch('/join', 'POST', { invite }).then(after);
-    p.catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+      : this.groupApi('/join', 'POST', { invite }).then(after);
+    p.catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
       .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
   }
 
@@ -527,7 +522,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     const sv = this.groupSv;
     const p = sv
       ? Promise.resolve(sv.skychatGroupSend(id, text))
-      : this.groupJsonFetch('/send', 'POST', { id, text });
+      : this.groupApi('/send', 'POST', { id, text });
     p.then(() => {
       this.groupMessage = '';
       // Optimistic local echo (the data plane won't echo our own message back).
@@ -537,7 +532,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       this.lastGroupMsgLen = -1; // force the next poll to rebuild+interleave
       this.pollGroupMessages();
     })
-      .catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+      .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
       .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
   }
 
@@ -552,9 +547,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     const sv = this.groupSv;
     const p = sv
       ? Promise.resolve(sv.skychatGroupAddMember(id, pk))
-      : this.groupJsonFetch('/add-member', 'POST', { id, pk });
+      : this.groupApi('/add-member', 'POST', { id, pk });
     p.then(() => { this.addMemberPk = ''; this.refreshGroups(); this.snackbar.showDone('Member added'); })
-      .catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+      .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
       .finally(() => this.cdr.markForCheck());
   }
 
@@ -569,9 +564,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       this.snackbar.showError('Invite is shown when the room is created (wasm visor)');
       return;
     }
-    this.groupJsonFetch(`/invite?group_id=${encodeURIComponent(id)}`, 'GET')
+    this.groupApi(`/invite?group_id=${encodeURIComponent(id)}`, 'GET')
       .then((r: any) => { this.inviteLink = r.invite || ''; this.cdr.markForCheck(); })
-      .catch((e: any) => this.snackbar.showError(String(e?.message || e)));
+      .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)));
   }
 
   copyInvite() {
