@@ -7,7 +7,9 @@
 // without refactoring, which is intentionally out of scope here.
 package commands
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestEnvInt covers envInt's parsing rules: unset, valid, zero, negative and
 // non-numeric values.

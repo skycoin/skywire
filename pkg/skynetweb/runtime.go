@@ -190,6 +190,10 @@ func (r *skynetResolver) Resolve(ctx context.Context, name string) (context.Cont
 
 func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Config) error {
 	conf := &socks5.Config{
+		// Route go-socks5's own [ERR] lines through logrus so they match the
+		// rest of the visor's log format (colored, module-tagged) instead of
+		// the library's raw stdout "2006/01/02 ... [ERR] socks:" default.
+		Logger:   logging.NewStdLogger(log),
 		Resolver: &skynetResolver{cfg: cfg},
 		Dial: func(dialCtx context.Context, network, addr string) (retConn net.Conn, retErr error) {
 			// Fail the single request instead of crashing the whole visor if
