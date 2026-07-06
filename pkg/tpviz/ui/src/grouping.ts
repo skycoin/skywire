@@ -25,7 +25,7 @@ function countCrossGroupConnections(nodeId: string, getGroupKey: (id: string) =>
 }
 
 /** Calculate radius needed for a group based on node count */
-function calculateGroupRadius(nodeCount: number): number {
+export function calculateGroupRadius(nodeCount: number): number {
     const nodeArea = 2500; // ~50x50 per node with spacing
     return Math.max(80, Math.sqrt(nodeCount * nodeArea / Math.PI) + 40);
 }
@@ -48,7 +48,7 @@ function circleOverlaps(
 }
 
 /** Find a position for a circle that doesn't overlap with placed circles */
-function findNonOverlappingPosition(
+export function findNonOverlappingPosition(
     radius: number, placedCircles: PlacedCircle[], padding: number,
 ): { x: number; y: number } {
     if (placedCircles.length === 0) {
