@@ -64,6 +64,10 @@ const (
 // timeout is per-feed (the all-transports feed needs longer than the rest).
 var feedFirstSyncTimeout = cxosub.FeedFirstSyncTimeout
 
+// CXOFeedString maps a feed constant to its stable string label. Kept as a
+// visor-package alias for existing callers (helpers_test.go round-trips it).
+var CXOFeedString = cxosub.FeedString
+
 // CXOFeedFromString is the inverse of the feed string label. Kept as a
 // visor-package alias for existing callers.
 var CXOFeedFromString = cxosub.FeedFromString
