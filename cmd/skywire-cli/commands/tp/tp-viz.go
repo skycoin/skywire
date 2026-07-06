@@ -3,12 +3,18 @@ package clitp
 
 import (
 	"fmt"
+	"net/http"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/tpviz"
 )
 
@@ -119,28 +125,63 @@ Auto-refresh keeps the cache updated at the specified interval.`,
 			}
 		}
 
-		// Standalone mode - run local HTTP server
-		cfg := tpviz.Config{
-			Addr:         vizAddr,
-			Port:         vizPort,
-			CacheDirTPD:  vizCacheDirTPD,
-			CacheDirUT:   vizCacheDirUT,
-			CacheDirSD:   vizCacheDirSD,
-			CacheDirDMSG: vizCacheDirDMSG,
-			CacheMaxAge:  vizCacheMaxAge,
-			TPDURL:       vizTPDURL,
-			UTURL:        vizUTURL,
-			SDURL:        vizSDURL,
-			DMSGURL:      vizDMSGURL,
-			NoCache:      vizNoCache,
-			AutoRefresh:  !vizNoAutoRefresh,
-			SurveyDir:    vizSurveyDir,
+		// Standalone mode - run local HTTP server. Start from DefaultConfig so the
+		// *URLDmsg fields (TPDURLDmsg/SDURLDmsg/DMSGURLDmsg) — the CXO feed publisher
+		// PKs — are set; SetCXOSubMgrFromDmsg reads them, so without this the CXO
+		// subscriber has no publisher and silently falls back to the HTTP-over-dmsg
+		// client. Then override with the CLI flags. When a discovery URL is a dmsg://
+		// form (the default), use it as the CXO feed source too so a custom
+		// --tpd/sd/dmsg-url dmsg deployment is CXO-sourced as well.
+		cfg := tpviz.DefaultConfig()
+		cfg.Addr = vizAddr
+		cfg.Port = vizPort
+		cfg.CacheDirTPD = vizCacheDirTPD
+		cfg.CacheDirUT = vizCacheDirUT
+		cfg.CacheDirSD = vizCacheDirSD
+		cfg.CacheDirDMSG = vizCacheDirDMSG
+		cfg.CacheMaxAge = vizCacheMaxAge
+		cfg.TPDURL = vizTPDURL
+		cfg.UTURL = vizUTURL
+		cfg.SDURL = vizSDURL
+		cfg.DMSGURL = vizDMSGURL
+		cfg.NoCache = vizNoCache
+		cfg.AutoRefresh = !vizNoAutoRefresh
+		cfg.SurveyDir = vizSurveyDir
+		if strings.HasPrefix(vizTPDURL, "dmsg://") {
+			cfg.TPDURLDmsg = vizTPDURL
+		}
+		if strings.HasPrefix(vizSDURL, "dmsg://") {
+			cfg.SDURLDmsg = vizSDURL
+		}
+		if strings.HasPrefix(vizDMSGURL, "dmsg://") {
+			cfg.DMSGURLDmsg = vizDMSGURL
 		}
 
 		// Standalone mode doesn't connect to visor RPC (removed due to brittleness)
 		// Use --visor flag to use the visor's embedded UI server which has direct access
 
 		server := tpviz.NewServer(cfg)
+
+		// Wire an HTTP-over-dmsg client (+ CXO subscriber) so the standalone server
+		// can reach the dmsg-only deployment discovery services (TPD/SD/DMSG-D).
+		// Without it /api/transports etc. fail with "dmsg URL requested but no dmsg
+		// HTTP client set" — standalone `tp viz` was unusable against the current
+		// dmsg-only deployment (only --visor and the reward server wired dmsg).
+		// Ephemeral keypair; best-effort and async, so the UI serves immediately and
+		// the graph populates once dmsg connects.
+		go func() {
+			dlog := logging.MustGetLogger("tpviz-dmsg")
+			pk, sk := cipher.GenerateKeyPair()
+			dmsgC, _, err := dmsgclient.StartDmsgEmbedded(cmd.Context(), dlog, pk, sk, false)
+			if err != nil {
+				dlog.WithError(err).Warn("dmsg client for deployment discovery failed to start; network-graph data unavailable")
+				return
+			}
+			server.SetDmsgHTTPClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(cmd.Context(), dmsgC)})
+			server.SetCXOSubMgrFromDmsg(dmsgC)
+			dlog.Info("deployment discovery sourced over dmsg (CXO-first)")
+		}()
+
 		if err := server.ListenAndServe(); err != nil {
 			fmt.Fprintf(os.Stderr, "Server error: %v\n", err)
 			os.Exit(1)
