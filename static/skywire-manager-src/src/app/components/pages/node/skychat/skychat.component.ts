@@ -459,7 +459,11 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
         text: m.text || '', ts: m.ts || Date.now(),
         out: (m.from || m.sender_pk || '') === me,
       }));
-      this.groupMessages = incoming.concat(sent).sort((a, b) => a.ts - b.ts).slice(-500);
+      // Drop optimistic echoes that the backend has since surfaced (the feed
+      // can return our own send back), so a sent message isn't shown twice.
+      const inKeys = new Set(incoming.map(m => m.from + '|' + m.text));
+      const sentUnique = sent.filter(m => !inKeys.has(m.from + '|' + m.text));
+      this.groupMessages = incoming.concat(sentUnique).sort((a, b) => a.ts - b.ts).slice(-500);
       this.lastGroupMsgLen = arr.length;
       this.cdr.markForCheck();
     };
