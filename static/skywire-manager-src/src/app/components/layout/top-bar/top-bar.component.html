@@ -81,11 +81,15 @@
         }
       }
     </div>
+    <!-- Node pages: the visor switcher REPLACES the node-identity (back + PK) row —
+         rendered here, directly under the home nav (the title row below is hidden
+         via switcherReplacesTitle). -->
+    <ng-container *ngTemplateOutlet="visorSwitcherRow"></ng-container>
   }
 
   <div class="main-container" [ngClass]="{'normal-height': !showVpnInfo}">
     <!-- Return button and title text. -->
-    <div class="main-area"><div class="title" [ngClass]="{'d-none d-lg-flex': !showVpnInfo, 'd-flex': showVpnInfo}">
+    <div class="main-area"><div class="title" [ngClass]="{'d-none d-lg-flex': !showVpnInfo && !switcherReplacesTitle, 'd-flex': showVpnInfo, 'd-none': !showVpnInfo && switcherReplacesTitle}">
       @if (returnText) {
         <div class="return-container">
           <a class="return-button transparent-button" (click)="requestAction(null)" [matTooltip]="returnText | translate">
@@ -278,27 +282,34 @@
     }
   </div>
 
-  <!-- Visor switcher: one horizontally-scrollable chip per visor, shown BELOW the
-       home nav. Each chip is two lines — label (or abbreviated PK) then
-       public-ip / lan-ip. The chip for the visor currently open is highlighted
-       (not greyed). Jump between visors without backing out to the list. -->
-  @if (switcherTabsData && switcherTabsData.length) {
-    <div class="secondary-nav-row visor-switcher-row d-none d-lg-flex">
-      @for (t of switcherTabsData; track t) {
-        <a mat-button class="tab-button white-theme switcher-chip"
-          [routerLink]="t.linkParts"
-          [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier"
-          [ngClass]="{'grey-button-background': !(t.linkParts && t.linkParts[1] === pageHeaderIdentifier)}">
-          <mat-icon [inline]="true">{{ t.icon }}</mat-icon>
-          <span class="switcher-chip-text">
-            <span class="switcher-chip-name">{{ t.label }}</span>
-            @if (t.sublabel) {
-              <span class="switcher-chip-sub">{{ t.sublabel }}</span>
-            }
-          </span>
-        </a>
-      }
-    </div>
+  <!-- Visor switcher: one horizontally-scrollable chip per visor. Each chip is a
+       SINGLE line (the label) so its width tracks the label, not the 66-char PK;
+       the full PK is on hover. The chip for the visor currently open is
+       highlighted (not greyed). Defined once and rendered in two places (see the
+       outlets): directly under the home nav on node pages — where it REPLACES the
+       node-identity (back + PK) row — and below the home tabs on the node list. -->
+  <ng-template #visorSwitcherRow>
+    @if (switcherTabsData && switcherTabsData.length) {
+      <div class="secondary-nav-row visor-switcher-row d-none d-lg-flex">
+        @for (t of switcherTabsData; track t) {
+          <a mat-button class="tab-button white-theme switcher-chip"
+            [routerLink]="t.linkParts"
+            [matTooltip]="t.sublabel"
+            [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier"
+            [ngClass]="{'grey-button-background': !(t.linkParts && t.linkParts[1] === pageHeaderIdentifier)}">
+            <mat-icon [inline]="true">{{ t.icon }}</mat-icon>
+            <span class="switcher-chip-text">
+              <span class="switcher-chip-name">{{ t.label }}</span>
+            </span>
+          </a>
+        }
+      </div>
+    }
+  </ng-template>
+
+  <!-- Node LIST (no home-nav row): the switcher sits below the home tabs. -->
+  @if (!(homeTabsData && homeTabsData.length)) {
+    <ng-container *ngTemplateOutlet="visorSwitcherRow"></ng-container>
   }
 
   <!-- Remote access warning for the VPN client. -->

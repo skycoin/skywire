@@ -12,10 +12,10 @@ export function abbreviatePk(pk: string): string {
 
 /**
  * Builds the top-bar visor-switcher chips — one per visor in the hypervisor's
- * list. Each chip is two lines:
- *   line 1: the node's label (labels auto-populate, so this is usually set;
- *           falls back to the abbreviated PK if somehow empty);
- *   line 2: the full public key, in a slightly smaller font.
+ * list. Each chip is a single line: the node's label (labels auto-populate, so
+ * this is usually set; falls back to the abbreviated PK if somehow empty), so the
+ * chip's width tracks the label rather than the 66-char PK. The full PK is carried
+ * in `sublabel` and surfaced as the chip's hover tooltip (top-bar template).
  * Icon distinguishes hypervisor / wasm(browser) / regular visors.
  * Shared by the node-list and node (detail) pages so the row is identical on both.
  */
