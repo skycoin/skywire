@@ -259,6 +259,10 @@ func normalize(cfg Config) Config {
 // streams are wrapped in tcpAddrConn.
 func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Config) error {
 	conf := &socks5.Config{
+		// Route go-socks5's own [ERR] lines through logrus so they match the
+		// rest of the visor's log format instead of the library's raw stdout
+		// default.
+		Logger:   logging.NewStdLogger(log),
 		Resolver: &dmsgResolver{cfg: cfg},
 		Dial: func(dialCtx context.Context, network, addr string) (conn net.Conn, dialErr error) {
 			defer func() {
