@@ -34,6 +34,25 @@ interface ChatMessage {
   ts: number;
 }
 
+/** One federated group/room as surfaced by the group list. */
+interface GroupView {
+  id: string;
+  name: string;
+  mode: string;       // 'public' | 'private'
+  role: string;       // 'owner' | 'member'
+  members: number;
+  status: string;     // 'active' | 'pending' | 'left' | 'revoked'
+}
+
+/** One group message (any sender) in a room's log. */
+interface GroupMsg {
+  group_id: string;
+  from: string;       // sender PK hex
+  text: string;
+  ts: number;         // unix ms
+  out?: boolean;      // sender === this visor
+}
+
 @Component({
   selector: 'app-skychat',
   templateUrl: './skychat.component.html',
@@ -83,6 +102,32 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // In-flight indicator for the apply / clear action.
   pwBusy = false;
 
+  // --- Group chat state. -----------------------------------------
+  // 'dm' = the existing 1:1 view; 'groups' = federated rooms.
+  chatMode: 'dm' | 'groups' = 'dm';
+  groups: GroupView[] = [];
+  selectedGroup: GroupView | null = null;
+  groupMessages: GroupMsg[] = [];
+  groupMessage = '';
+  groupSending = false;
+  groupError = '';
+  // Create/join panel state.
+  showCreate = false;
+  showJoin = false;
+  newGroupName = '';
+  newGroupMode: 'public' | 'private' = 'public';
+  joinInvite = '';
+  // Group-detail state.
+  addMemberPk = '';
+  inviteLink = '';
+  private groupTimer: any = null;
+  private lastGroupMsgLen = -1;
+  // Locally-echoed sent messages per group id. The federated data plane does
+  // NOT echo a sender its own messages (each member subscribes to the OTHER
+  // members' feeds), so we keep an optimistic local copy and merge it into the
+  // polled room log by timestamp.
+  private sentByGroup: { [id: string]: GroupMsg[] } = {};
+
   // Distinct peers seen so far, in last-touched order. Drives the
   // sidebar list. Recomputed lazily when messages change.
   get peers(): string[] {
@@ -122,6 +167,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   ngOnDestroy() {
     if (this.nodeSub) { this.nodeSub.unsubscribe(); }
     this.disconnectSSE();
+    this.stopGroupPoll();
   }
 
   ngAfterViewChecked() {
@@ -295,6 +341,249 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (!this.logEl) { this.wasAtBottom = true; return; }
     const el = this.logEl.nativeElement;
     this.wasAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
+  }
+
+  // --- Group chat -------------------------------------------------
+  // Transport split mirrors the DM path: an in-browser wasm visor drives
+  // the in-process skywireVisor.skychatGroup* JS hooks; a native visor
+  // goes over the hypervisor group HTTP bridge (/skychat/groups*). Both
+  // return the same shapes so the UI below is transport-agnostic.
+
+  /** window.skywireVisor when this node is an in-browser wasm visor with the
+   *  group hooks present, else null. */
+  private get groupSv(): any {
+    const sv = (window as any).skywireVisor;
+    if (this.node && (this.node as any).arch === 'wasm' && sv && typeof sv.skychatGroupList === 'function') {
+      return sv;
+    }
+    return null;
+  }
+
+  /** Build a hypervisor group-bridge URL (native path). */
+  private groupUrl(path: string): string {
+    const apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ? 'http-api' : 'api';
+    return `/${apiPrefix}/visors/${this.node.localPk}/skychat/groups${path}`;
+  }
+
+  private async groupJsonFetch(path: string, method: string, body?: any): Promise<any> {
+    const resp = await fetch(this.groupUrl(path), {
+      method,
+      headers: body ? { 'Content-Type': 'application/json' } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const txt = await resp.text();
+    let parsed: any = null;
+    try { parsed = txt ? JSON.parse(txt) : null; } catch { parsed = txt; }
+    if (!resp.ok) {
+      throw new Error((parsed && parsed.error) || txt || `HTTP ${resp.status}`);
+    }
+    return parsed;
+  }
+
+  switchMode(mode: 'dm' | 'groups') {
+    if (this.chatMode === mode) { return; }
+    this.chatMode = mode;
+    if (mode === 'groups') {
+      this.refreshGroups();
+      this.startGroupPoll();
+    } else {
+      this.stopGroupPoll();
+    }
+  }
+
+  private startGroupPoll() {
+    if (this.groupTimer) { return; }
+    this.groupTimer = setInterval(() => {
+      this.refreshGroups();
+      if (this.selectedGroup) { this.pollGroupMessages(); }
+    }, 2000);
+  }
+
+  private stopGroupPoll() {
+    if (this.groupTimer) { clearInterval(this.groupTimer); this.groupTimer = null; }
+  }
+
+  /** Refresh the room list from whichever transport this node uses. */
+  refreshGroups() {
+    if (!this.node) { return; }
+    const sv = this.groupSv;
+    const done = (arr: any[]) => {
+      if (!Array.isArray(arr)) { return; }
+      this.groups = arr.map((g: any): GroupView => ({
+        id: g.id, name: g.name, mode: g.mode, role: g.role,
+        members: typeof g.members === 'number' ? g.members : (Array.isArray(g.members) ? g.members.length : 0),
+        status: g.status,
+      }));
+      // Keep the selection object fresh (member counts change).
+      if (this.selectedGroup) {
+        const upd = this.groups.find(g => g.id === this.selectedGroup!.id);
+        if (upd) { this.selectedGroup = upd; }
+      }
+      this.groupError = '';
+      this.cdr.markForCheck();
+    };
+    if (sv) {
+      try { done(JSON.parse(sv.skychatGroupList() || '[]') || []); }
+      catch { /* hook error — leave list as-is */ }
+      return;
+    }
+    this.groupJsonFetch('', 'GET')
+      .then(done)
+      .catch((e) => { this.groupError = String(e?.message || e); this.cdr.markForCheck(); });
+  }
+
+  selectGroup(g: GroupView) {
+    this.selectedGroup = g;
+    this.groupMessages = [];
+    this.lastGroupMsgLen = -1;
+    this.inviteLink = '';
+    this.addMemberPk = '';
+    this.pollGroupMessages();
+    this.startGroupPoll();
+  }
+
+  /** Poll the selected room's message ring (full snapshot each tick — the
+   *  ring is bounded, so rebuild-on-change is simplest + robust). */
+  private pollGroupMessages() {
+    if (!this.node || !this.selectedGroup) { return; }
+    const id = this.selectedGroup.id;
+    const me = this.node.localPk;
+    const done = (arr: any[]) => {
+      if (!Array.isArray(arr)) { return; }
+      const sent = this.sentByGroup[id] || [];
+      // Rebuild when the incoming count changed OR we have local sends to
+      // interleave (send count is small, so this is cheap).
+      if (arr.length === this.lastGroupMsgLen && sent.length === 0) { return; }
+      this.captureScroll();
+      const incoming: GroupMsg[] = arr.map((m: any): GroupMsg => ({
+        group_id: m.group_id, from: m.from || m.sender_pk || '',
+        text: m.text || '', ts: m.ts || Date.now(),
+        out: (m.from || m.sender_pk || '') === me,
+      }));
+      this.groupMessages = incoming.concat(sent).sort((a, b) => a.ts - b.ts).slice(-500);
+      this.lastGroupMsgLen = arr.length;
+      this.cdr.markForCheck();
+    };
+    const sv = this.groupSv;
+    if (sv) {
+      try { done(JSON.parse(sv.skychatGroupMessages(id) || '[]') || []); }
+      catch { /* hook error */ }
+      return;
+    }
+    // Native: since_ms omitted → full ring for this group.
+    this.groupJsonFetch(`/messages?group_id=${encodeURIComponent(id)}`, 'GET')
+      .then((arr) => done((arr || []).map((m: any) => ({
+        group_id: m.group_id, from: m.sender_pk || m.from || '', text: m.text || '',
+        ts: m.ts ? (typeof m.ts === 'number' ? m.ts : Date.parse(m.ts)) : Date.now(),
+      }))))
+      .catch(() => { /* transient */ });
+  }
+
+  createGroup() {
+    if (!this.node || this.groupSending) { return; }
+    const name = this.newGroupName.trim();
+    if (!name) { this.snackbar.showError('Room name required'); return; }
+    this.groupSending = true;
+    const sv = this.groupSv;
+    const after = (id: string, invite: string) => {
+      this.newGroupName = '';
+      this.showCreate = false;
+      this.inviteLink = invite || '';
+      this.refreshGroups();
+      this.snackbar.showDone('Room created');
+    };
+    const p = sv
+      ? Promise.resolve(sv.skychatGroupCreate(name, this.newGroupMode)).then((r: any) => after(r.id, r.invite))
+      : this.groupJsonFetch('', 'POST', { name, mode: this.newGroupMode }).then((r: any) => after(r.info?.id, r.invite));
+    p.catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+      .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
+  }
+
+  joinGroup() {
+    if (!this.node || this.groupSending) { return; }
+    const invite = this.joinInvite.trim();
+    if (!invite) { this.snackbar.showError('Invite link required'); return; }
+    this.groupSending = true;
+    const sv = this.groupSv;
+    const after = () => {
+      this.joinInvite = '';
+      this.showJoin = false;
+      this.refreshGroups();
+      this.snackbar.showDone('Joined room');
+    };
+    const p = sv
+      ? Promise.resolve(sv.skychatGroupJoin(invite)).then(after)
+      : this.groupJsonFetch('/join', 'POST', { invite }).then(after);
+    p.catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+      .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
+  }
+
+  sendGroup() {
+    if (!this.node || this.groupSending || !this.selectedGroup) { return; }
+    const text = this.groupMessage.trim();
+    if (!text) { return; }
+    const id = this.selectedGroup.id;
+    this.groupSending = true;
+    const sv = this.groupSv;
+    const p = sv
+      ? Promise.resolve(sv.skychatGroupSend(id, text))
+      : this.groupJsonFetch('/send', 'POST', { id, text });
+    p.then(() => {
+      this.groupMessage = '';
+      // Optimistic local echo (the data plane won't echo our own message back).
+      (this.sentByGroup[id] = this.sentByGroup[id] || []).push({
+        group_id: id, from: this.node.localPk, text, ts: Date.now(), out: true,
+      });
+      this.lastGroupMsgLen = -1; // force the next poll to rebuild+interleave
+      this.pollGroupMessages();
+    })
+      .catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+      .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
+  }
+
+  addMember() {
+    if (!this.node || !this.selectedGroup) { return; }
+    const pk = this.addMemberPk.trim();
+    if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
+      this.snackbar.showError('Member must be a 66-char hex public key');
+      return;
+    }
+    const id = this.selectedGroup.id;
+    const sv = this.groupSv;
+    const p = sv
+      ? Promise.resolve(sv.skychatGroupAddMember(id, pk))
+      : this.groupJsonFetch('/add-member', 'POST', { id, pk });
+    p.then(() => { this.addMemberPk = ''; this.refreshGroups(); this.snackbar.showDone('Member added'); })
+      .catch((e: any) => this.snackbar.showError(String(e?.message || e)))
+      .finally(() => this.cdr.markForCheck());
+  }
+
+  /** Mint a fresh invite link for the selected room and reveal it. */
+  showInvite() {
+    if (!this.node || !this.selectedGroup) { return; }
+    const id = this.selectedGroup.id;
+    const sv = this.groupSv;
+    // wasm exposes invite only at create; re-mint over the bridge is native-only.
+    // For wasm we fall back to create-time link (already shown) — nothing to do.
+    if (sv) {
+      this.snackbar.showError('Invite is shown when the room is created (wasm visor)');
+      return;
+    }
+    this.groupJsonFetch(`/invite?group_id=${encodeURIComponent(id)}`, 'GET')
+      .then((r: any) => { this.inviteLink = r.invite || ''; this.cdr.markForCheck(); })
+      .catch((e: any) => this.snackbar.showError(String(e?.message || e)));
+  }
+
+  copyInvite() {
+    if (!this.inviteLink) { return; }
+    try {
+      navigator.clipboard.writeText(this.inviteLink);
+      this.snackbar.showDone('Invite copied');
+    } catch { /* clipboard blocked — user can select the text */ }
+  }
+
+  shortPk(pk: string): string {
+    return pk && pk.length > 12 ? pk.slice(0, 6) + '…' + pk.slice(-4) : pk;
   }
 
   // --- Password gate management ----------------------------------
