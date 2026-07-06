@@ -468,6 +468,16 @@ func (n *Node) initConn(
 	switch {
 	// In case of existing connection return it.
 	case !isNew && !isPending:
+		// A connection to/from this address already exists, so `c` is that
+		// EXISTING Conn and the freshly-accepted/-dialed `fc` we were handed is a
+		// duplicate that nobody will use. Close it — its readLoop/writeLoop
+		// goroutines and noise/yamux/bufio buffers are already live, and the
+		// caller only closes `fc` on ERROR (here err is nil), so without this the
+		// duplicate transport leaks. DMSG.acceptConn (unlike the TCP/UDP paths)
+		// does not pre-guard duplicates, so on the tpd's dmsg CXO node every peer
+		// reconnect while its previous Conn lingered orphaned a full connection
+		// stack — measured ~150k retained stacks / 4GB heap / GC-bound CPU.
+		fc.Close() //nolint:errcheck,gosec
 		return c, nil
 
 	// In case of existing pending connnection:
@@ -492,6 +502,10 @@ func (n *Node) initConn(
 		if err = c.waitForInit(); err != nil {
 			return nil, err
 		}
+		// Same as the active-duplicate case above: `c` is the pre-existing in-flight
+		// Conn; the `fc` we were handed is an unused duplicate the caller won't close
+		// (err is nil). Close it so the duplicate transport stack doesn't leak.
+		fc.Close() //nolint:errcheck,gosec
 		return c, nil
 
 	// In case of new connection perform/accept handshake.
