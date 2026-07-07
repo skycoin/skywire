@@ -142,6 +142,8 @@ var (
 	// Chat-group feed manager (D1 owner-centric CXO feeds with
 	// multi-PK allowlist).
 	groupingMod vinit.Module
+	// Skychat 1:1 voice-call manager (dmsg+skynet signaling, RTP media).
+	voiceMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -238,8 +240,11 @@ func registerModules(logger *logging.MasterLogger) {
 	// shape as pairingMod, same dmsgC dependency, separate bbolt
 	// store. See init_group.go.
 	groupingMod = maker("grouping", initGrouping, &dmsgC)
+	// Skychat 1:1 voice: signaling + RTP media over dmsg/skynet. Depends on
+	// dmsgC. See init_voice.go.
+	voiceMod = maker("voice", initVoice, &dmsgC)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.

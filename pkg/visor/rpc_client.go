@@ -1607,6 +1607,25 @@ func (rc *rpcClient) GroupLeave(id string) error {
 	return rc.Call("GroupLeave", &id, &struct{}{})
 }
 
+// VoiceCall implements API.
+func (rc *rpcClient) VoiceCall(peer cipher.PubKey) (string, error) {
+	var id string
+	err := rc.Call("VoiceCall", &peer, &id)
+	return id, err
+}
+
+// VoiceHangup implements API.
+func (rc *rpcClient) VoiceHangup(callID string) error {
+	return rc.Call("VoiceHangup", &callID, &struct{}{})
+}
+
+// VoiceActive implements API.
+func (rc *rpcClient) VoiceActive() ([]string, error) {
+	var out []string
+	err := rc.Call("VoiceActive", &struct{}{}, &out)
+	return out, err
+}
+
 // GroupHistory implements API. Returns persisted group messages from
 // the visor's history store; returns the wrapped ErrGroupHistoryDisabled
 // when persistence is off.

@@ -286,6 +286,11 @@ type API interface {
 	GroupHistory(groupID string, limit int) ([]GroupMessage, error)
 	GroupHistoryGroups() ([]string, error)
 
+	// Skychat 1:1 voice calls (pkg/skychat/voice).
+	VoiceCall(peer cipher.PubKey) (string, error)
+	VoiceHangup(callID string) error
+	VoiceActive() ([]string, error)
+
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
 	TPSAddTransport(targetPK, remotePK cipher.PubKey, tpType string) (*TPSTransportResponse, error)
