@@ -77,6 +77,12 @@ func (m *Manager) Serve(ctx context.Context, listeners ...net.Listener) {
 	m.sig.Serve(ctx, listeners...)
 }
 
+// AddListener joins an additional signaling listener after Serve has started
+// (used for the skynet listener, which comes up after the dmsg one).
+func (m *Manager) AddListener(ctx context.Context, lis net.Listener) {
+	m.sig.AddListener(ctx, lis)
+}
+
 // Call places an outbound call to peer: invite over signaling, and on accept
 // start a media Session over the (now media-mode) conn. Returns the live
 // Session, or the peer's decline/busy reason.
@@ -94,7 +100,10 @@ func (m *Manager) Call(ctx context.Context, peer cipher.PubKey) (*Session, error
 		return nil, fmt.Errorf("voice: call not accepted: %s", reason)
 	}
 	sess := m.startSession(callID, conn, ssrcFromPK(m.cfg.LocalPK))
-	go func() { sess.Run(ctx); m.dropCall(callID) }()
+	// The session runs independently of the (possibly short) invite ctx — it
+	// ends when the conn closes (Hangup or the peer hanging up), not when the
+	// caller's dial deadline elapses.
+	go func() { sess.Run(context.Background()); m.dropCall(callID) }() //nolint:gosec // session outlives the invite/request ctx by design
 	return sess, nil
 }
 
@@ -113,7 +122,7 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 		return
 	}
 	sess := m.startSession(inv.CallID, conn, ssrcFromPK(m.cfg.LocalPK))
-	go func() { sess.Run(context.Background()); m.dropCall(inv.CallID) }()
+	go func() { sess.Run(context.Background()); m.dropCall(inv.CallID) }() //nolint:gosec // session outlives the invite/request ctx by design
 }
 
 func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Session {

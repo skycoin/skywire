@@ -1311,6 +1311,15 @@ func (mc *mockRPCClient) GroupDelete(_ string) error { return nil }
 // GroupLeave implements API.
 func (mc *mockRPCClient) GroupLeave(_ string) error { return nil }
 
+// VoiceCall implements API.
+func (mc *mockRPCClient) VoiceCall(_ cipher.PubKey) (string, error) { return "", nil }
+
+// VoiceHangup implements API.
+func (mc *mockRPCClient) VoiceHangup(_ string) error { return nil }
+
+// VoiceActive implements API.
+func (mc *mockRPCClient) VoiceActive() ([]string, error) { return nil, nil }
+
 // GroupHistory implements API.
 func (mc *mockRPCClient) GroupHistory(_ string, _ int) ([]GroupMessage, error) { return nil, nil }
 
