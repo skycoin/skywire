@@ -118,6 +118,14 @@ const (
 	// exact port is confirmed in the signaling handshake so it can be varied.
 	SkychatVoiceMediaPort uint16 = 63
 
+	// SkychatFilePort is the port skychat FILE TRANSFER listens on. A sender
+	// dials it (over dmsg OR skynet — same port on both, like voice) and streams
+	// one offer header + chunked, sha256-verified bytes. Files are conversation
+	// messages (Telegram-style): the offer appears in chat/group history and the
+	// bytes stream out-of-band on this port so a large transfer never blocks the
+	// chat message conn. Peers already paired 1:1 or sharing a group auto-accept.
+	SkychatFilePort uint16 = 64
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 
