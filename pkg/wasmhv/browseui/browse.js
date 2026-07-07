@@ -1298,6 +1298,8 @@
     var sv = globalThis.skywireVisor || {};
     var send = opts.skychatSend || sv.skychatSend;
     var fetchMsgs = opts.skychatMessages || sv.skychatMessages;
+    var sendFile = opts.skychatSendFile || sv.skychatSendFile;
+    var fetchFile = opts.skychatFile || sv.skychatFile;
     function selfPK() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
     var peer = "";          // active conversation peer PK (full hex)
     var lastRender = "";    // cheap change-detection so we don't rebuild every tick
@@ -1319,6 +1321,8 @@
       '<div id="ch-body" style="flex:1;padding:.5em;overflow:auto;display:flex;flex-direction:column;gap:.25em"></div>' +
       '<div style="display:flex;gap:.3em;padding:.4em;border-top:1px solid #2a2342;background:#15131c;align-items:center">' +
       '<input id="ch-in" placeholder="message…" autocomplete="off" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.35em;font:12px monospace" disabled>' +
+      '<button id="ch-attach" title="send a file" style="cursor:pointer;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em" disabled>📎</button>' +
+      '<input id="ch-file" type="file" style="display:none">' +
       '<button id="ch-send" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .7em" disabled>send</button></div>' +
       '<div id="ch-status" style="padding:.2em .5em;min-height:1.2em;color:#9aa0a6;border-top:1px solid #15131c"></div>' +
       '<pre id="ch-log" style="display:none;margin:0;height:120px;overflow:auto;background:#0e0c14;color:#a9b1d6;border-top:1px solid #2a2342;padding:.4em;font:10px/1.4 monospace;white-space:pre-wrap;word-break:break-all"></pre>';
@@ -1335,6 +1339,7 @@
       $("ch-peer").value = peer;
       var ready = !!(send && peer);
       input.disabled = !ready; $("ch-send").disabled = !ready;
+      $("ch-attach").disabled = !(sendFile && peer);
       lastRender = ""; render();
       if (ready) setTimeout(function () { input.focus(); }, 30);
     }
@@ -1370,7 +1375,19 @@
         var bub = doc.createElement("div");
         bub.style.cssText = "padding:.3em .55em;border-radius:8px;white-space:pre-wrap;word-break:break-word;" +
           (m.out ? "background:#1f2b1a;color:#c8e6a8" : "background:#1b1726;color:#cdd2da");
-        bub.textContent = m.text;
+        if (m.is_file) {
+          bub.textContent = "📎 " + (m.file_name || "file") + (m.file_size ? " (" + humanBytes(m.file_size) + ")" : "");
+          // A received, verified file gets a download link (fetch its bytes on demand).
+          if (!m.out && m.file_ok && fetchFile && m.file_id) {
+            var dl = doc.createElement("button");
+            dl.textContent = "download";
+            dl.style.cssText = "cursor:pointer;margin-left:.5em;background:#15131c;color:#9d7cff;border:1px solid #2a2342;border-radius:4px;padding:.1em .45em;font:10px monospace";
+            dl.onclick = function () { downloadChatFile(m.file_id, m.file_name); };
+            bub.appendChild(dl);
+          }
+        } else {
+          bub.textContent = m.text;
+        }
         var meta = doc.createElement("div");
         meta.style.cssText = "font-size:10px;color:#6b7280;margin:.1em .2em 0";
         meta.textContent = (m.out ? "→ " : "← ") + new Date(m.ts).toTimeString().slice(0, 8);
@@ -1388,10 +1405,54 @@
         input.value = text; // let the operator retry without retyping
       });
     }
+    // humanBytes renders a byte count for a file bubble.
+    function humanBytes(n) {
+      if (n < 1024) return n + " B";
+      var u = ["KB", "MB", "GB", "TB"], i = -1;
+      do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
+      return n.toFixed(1) + " " + u[i];
+    }
+    // doSendFile reads the chosen File as base64 and streams it to the peer over
+    // the encrypted transport via skychatSendFile.
+    function doSendFile(file) {
+      if (!file || !sendFile || !peer) return;
+      setStatus("sending " + file.name + "…");
+      var reader = new FileReader();
+      reader.onload = function () {
+        // reader.result is a data URL: strip the "data:...;base64," prefix.
+        var b64 = String(reader.result || "");
+        var comma = b64.indexOf(",");
+        if (comma >= 0) b64 = b64.slice(comma + 1);
+        Promise.resolve(sendFile(peer, file.name, b64, $("ch-net").value)).then(function () {
+          setStatus(""); lastRender = ""; render();
+        }).catch(function (e) {
+          setStatus("file send failed: " + (e && e.message ? e.message : e), "#f7768e");
+        });
+      };
+      reader.onerror = function () { setStatus("could not read file", "#f7768e"); };
+      reader.readAsDataURL(file);
+    }
+    // downloadChatFile fetches a received file's bytes (base64) and saves them.
+    function downloadChatFile(id, name) {
+      if (!fetchFile) return;
+      Promise.resolve(fetchFile(id)).then(function (b64) {
+        if (!b64) { setStatus("file not available", "#f7768e"); return; }
+        var bin = atob(b64), len = bin.length, arr = new Uint8Array(len);
+        for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
+        var url = URL.createObjectURL(new Blob([arr]));
+        var a = doc.createElement("a");
+        a.href = url; a.download = name || "download";
+        doc.body.appendChild(a); a.click(); doc.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      }).catch(function (e) { setStatus("download failed: " + (e && e.message ? e.message : e), "#f7768e"); });
+    }
+
     $("ch-open").onclick = function () { setPeer($("ch-peer").value); };
     $("ch-peer").addEventListener("keydown", function (e) { if (e.key === "Enter") setPeer(this.value); });
     input.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); } });
     $("ch-send").onclick = doSend;
+    $("ch-attach").onclick = function () { $("ch-file").click(); };
+    $("ch-file").addEventListener("change", function () { if (this.files && this.files[0]) { doSendFile(this.files[0]); this.value = ""; } });
 
     // Activity log pane — surfaces skychat's own dial/connect/send/receive vlog
     // lines from the shared window.skywireLog ring (the same source the 'logs'
