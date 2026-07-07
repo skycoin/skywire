@@ -106,6 +106,18 @@ const (
 	// fleet-wide.
 	DmsgWebRTCSignalPort uint16 = 56
 
+	// SkychatVoiceSignalPort is the port skychat voice-call SIGNALING listens on
+	// — invite / accept / decline / hangup + media-session negotiation. The SAME
+	// port number is used over BOTH dmsg AND skynet: the callee listens on it on
+	// both networks, and the caller reaches it over whichever is available. Voice
+	// MEDIA rides a separately negotiated stream/datagram, not this control port.
+	SkychatVoiceSignalPort uint16 = 62
+
+	// SkychatVoiceMediaPort is the default port for the 1:1 voice MEDIA stream
+	// (RTP over a skywire transport). Also identical across dmsg + skynet; the
+	// exact port is confirmed in the signaling handshake so it can be varied.
+	SkychatVoiceMediaPort uint16 = 63
+
 	// DmsgDHTPort Listening port for the Kademlia DHT protocol.
 	DmsgDHTPort uint16 = 100
 
