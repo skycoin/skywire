@@ -128,10 +128,16 @@ type namedFile struct {
 
 // safeFileName reduces an offered name to a base name with no path separators or
 // traversal, falling back to the transfer id when the name is empty or unsafe.
+// It strips BOTH separators regardless of host OS so a Windows-style name from a
+// peer ("..\\..\\evil.exe") is sanitized on a Linux host and vice-versa.
 func safeFileName(name, id string) string {
-	name = filepath.Base(filepath.Clean("/" + name))
-	name = strings.TrimLeft(name, "/\\.")
-	if name == "" || name == "." {
+	// Normalize both separators, then keep only the last path component.
+	name = strings.ReplaceAll(name, `\`, "/")
+	if i := strings.LastIndexByte(name, '/'); i >= 0 {
+		name = name[i+1:]
+	}
+	name = strings.TrimLeft(name, ".")
+	if name == "" || strings.Contains(name, "..") {
 		name = "file-" + id
 	}
 	return name
