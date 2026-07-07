@@ -157,6 +157,9 @@ func main() {
 		"closeWindow":       js.FuncOf(jsCloseWindow),
 		"skychatSend":       js.FuncOf(jsSkychatSend),
 		"skychatMessages":   js.FuncOf(jsSkychatMessages),
+		// File sharing (in-process, over the encrypted transport) — see filexfer_js.go.
+		"skychatSendFile": js.FuncOf(jsSkychatSendFile),
+		"skychatFile":     js.FuncOf(jsSkychatFile),
 		// Federated group chat (in-memory over dmsg) — see group_js.go.
 		"skychatGroupCreate":    js.FuncOf(jsGroupCreate),
 		"skychatGroupJoin":      js.FuncOf(jsGroupJoin),
