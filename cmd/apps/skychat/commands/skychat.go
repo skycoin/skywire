@@ -369,6 +369,17 @@ type chatEvent struct {
 	Text      string    `json:"text"`
 	ReplyToID string    `json:"reply_to_id,omitempty"`
 	Len       int       `json:"len"`
+
+	// File attachment fields (Telegram-style: a file is a message). Set only on
+	// file events; empty on plain chat. FileID is the transfer id; FileName /
+	// FileSize describe the file; FilePath is the LOCAL path the receiver saved
+	// it to (populated on "in" events once the transfer verifies, empty on the
+	// sender's "out" event). FileStatus is "sent"|"received"|"failed".
+	FileID     string `json:"file_id,omitempty"`
+	FileName   string `json:"file_name,omitempty"`
+	FileSize   int64  `json:"file_size,omitempty"`
+	FilePath   string `json:"file_path,omitempty"`
+	FileStatus string `json:"file_status,omitempty"`
 }
 
 // eventSub is a /events subscriber: a buffered channel plus the set of
@@ -863,6 +874,10 @@ func RunSkychat(ctx context.Context, args []string) error {
 	if err := startCXOTCP(ctx); err != nil {
 		appLog("skychat: cxo startup failed: %v — continuing without CXO mode", err)
 	}
+	// File transfer: listens on skyenv.SkychatFilePort over the enabled networks
+	// so peers can send us files (Telegram-style). Nil-effect if appCl is nil.
+	// See filexfer.go.
+	startFileXfer(ctx)
 	if !useSkynet && !useDmsg && tcpListen == "" && len(tcpPeers) == 0 && !cxoEnable && cxoGroup == "" {
 		appLog("Warning: no network types enabled, skychat will not accept connections")
 	}
@@ -905,6 +920,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/history", requireAuthFunc(historyHandler))
 	mux.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
+	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
+	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
 	registerPairHTTPHandlers(ctx, mux)
 
 	url := ""
