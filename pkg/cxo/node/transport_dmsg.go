@@ -44,8 +44,25 @@ func newDMSG(n *Node, factory *transport.DMSGFactory) *DMSG {
 
 func (d *DMSG) addConn(pk cipher.PubKey, c *Conn) {
 	d.mx.Lock()
-	defer d.mx.Unlock()
+	old := d.cs[pk]
 	d.cs[pk] = c
+	d.mx.Unlock()
+	// A peer reconnected: a fresh Conn (accepted or dialed) supersedes an
+	// existing one for the same PK. Close the OLD conn so its transport
+	// read/write loops exit — dmsg does not reliably surface the old
+	// stream's close to us, so without this the superseded Conn's goroutine
+	// blocks forever in ReadRawFrame and the *Conn (+ its bufio readers +
+	// noise streams) never GC. That is one leak PER RECONNECT; under
+	// reconnect churn (e.g. subscribers to TPD's large all-transports feed)
+	// it accumulated into a multi-GB accept-side connection heap that turned
+	// TPD GC-bound. closeConn (added for the teardown path) never fired for
+	// these because nothing closed the old Conn, so its run loop never
+	// reached cleanup. Close OUTSIDE d.mx: Conn.Close → run-cleanup →
+	// closeConn re-takes d.mx, and closeConn is identity-checked so it only
+	// evicts `old` (already overwritten here), never the new `c`.
+	if old != nil && old != c {
+		old.Close() //nolint:errcheck,gosec
+	}
 }
 
 func (d *DMSG) getConn(pk cipher.PubKey) *Conn {
