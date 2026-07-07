@@ -55,6 +55,17 @@ const reconnectWatchdogTick = 30 * time.Second
 // watchdog goroutine.
 const reconnectConnectTimeout = 15 * time.Second
 
+// fill-break kick backoff (see fillBreakStreak): the Nth consecutive
+// fill-break kicks a reconnect only once fillBreakKickBase<<(N-1) has
+// elapsed since the last kick, capped at fillBreakKickMax. So the first
+// break kicks ~immediately, then 2s, 4s, 8s … up to the cap — a feed
+// that never fills converges to the quiet-threshold watchdog cadence
+// instead of tight-looping reconnects into the publisher's accept path.
+const (
+	fillBreakKickBase = 2 * time.Second
+	fillBreakKickMax  = reconnectQuietThreshold
+)
+
 // UpdateEvent describes a single leaf change observed by the
 // subscriber. Value is nil when the leaf was deleted (path missing
 // in the new Root that was present in the previous one).
@@ -142,6 +153,17 @@ type Subscriber struct {
 	// quiet threshold. Buffered (cap 1) so repeated breaks coalesce into
 	// at most one pending kick. Created alongside reconnectStop.
 	reconnectKick chan struct{}
+	// fillBreakStreak counts consecutive fill-breaks since the last
+	// successful fill; lastFillBreakKickNs is the last time a break kicked
+	// a reconnect. Together they exponentially back the kick off so a feed
+	// that PERSISTENTLY fails to fill (e.g. one too large to ever fetch
+	// over a flaky link, like TPD's all-transports feed) can't tight-loop
+	// reconnects and flood the publisher's accept path — a persistent break
+	// converges to the plain quiet-threshold watchdog cadence, while a
+	// transient break (fills after one reconnect) still recovers fast.
+	// handleRootFilled resets the streak on success.
+	fillBreakStreak     atomic.Int64
+	lastFillBreakKickNs atomic.Int64
 	// reconnectAttempts counts watchdog-triggered Connect attempts
 	// (incremented BEFORE the Connect call regardless of outcome).
 	// Surfaced only for tests; treat as opaque metric otherwise.
@@ -782,6 +804,10 @@ func (s *Subscriber) handleRootFilled(r *registry.Root) {
 	// matching Roots or walk-failures don't count as live activity
 	// for THIS subscriber's purposes.
 	s.lastUpdateNs.Store(time.Now().UnixNano())
+	// A successful fill clears the fill-break backoff so the next transient
+	// break gets a fast kick again.
+	s.fillBreakStreak.Store(0)
+	s.lastFillBreakKickNs.Store(0)
 	// Signal any ConnectAndWaitForRoot caller blocked on this
 	// subscriber that a Root was received and the fill walk
 	// completed — the subscription is verifiably live now.
@@ -830,16 +856,41 @@ func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
 	if r.Pub != skycipher.PubKey(s.feedPK) {
 		return
 	}
+	// Proactive recovery (the follow-up this hook's comment anticipated):
+	// ask the watchdog to re-Connect so the publisher re-pushes the Root and
+	// the fill retries, instead of waiting out the quiet threshold (~90s).
+	// BUT exponentially back off (fillBreakStreak) so a feed that never fills
+	// — e.g. one too large to fetch over a flaky link, like TPD's
+	// all-transports feed — can't tight-loop reconnects and flood the
+	// publisher's accept path (that regressed TPD into a multi-GB accept-side
+	// connection leak). A transient break fills after one reconnect and the
+	// streak resets in handleRootFilled; a persistent break converges to the
+	// quiet-threshold watchdog cadence.
+	streak := s.fillBreakStreak.Add(1)
+	shift := streak - 1
+	if shift > 6 { // 2s<<6 = 128s already exceeds the cap; avoid shift overflow
+		shift = 6
+	}
+	backoff := fillBreakKickBase << uint(shift)
+	if backoff > fillBreakKickMax {
+		backoff = fillBreakKickMax
+	}
+	now := time.Now().UnixNano()
+	if last := s.lastFillBreakKickNs.Load(); last != 0 && time.Duration(now-last) < backoff {
+		s.log.WithError(err).
+			WithField("feed", s.feedPK.Hex()).WithField("seq", r.Seq).
+			WithField("break_streak", streak).
+			Debug("treestore-sub: Root filling aborted; kick backed off (persistent break)")
+		return
+	}
+	s.lastFillBreakKickNs.Store(now)
 	s.log.WithError(err).
 		WithField("feed", s.feedPK.Hex()).
 		WithField("seq", r.Seq).
-		Warn("treestore-sub: Root filling aborted; kicking an immediate re-Connect to re-fetch")
-	// Proactive recovery (the follow-up this hook's comment anticipated):
-	// ask the watchdog to re-Connect immediately so the publisher re-pushes
-	// the Root and the fill retries now, instead of waiting out the quiet
-	// threshold (~90s). Non-blocking — the cap-1 channel coalesces repeated
-	// breaks, and a nil channel (watchdog never started, e.g. native-TCP
-	// pre-Connect) just no-ops.
+		WithField("break_streak", streak).
+		Warn("treestore-sub: Root filling aborted; kicking a re-Connect to re-fetch")
+	// Non-blocking — the cap-1 channel coalesces repeated breaks, and a nil
+	// channel (watchdog never started, e.g. native-TCP pre-Connect) no-ops.
 	select {
 	case s.reconnectKick <- struct{}{}:
 	default:
