@@ -834,6 +834,21 @@ func (proxyDefaultAPI) GroupLeave(_ string) error {
 	return ErrProxyNotSupported
 }
 
+// VoiceCall implements API (not proxied).
+func (proxyDefaultAPI) VoiceCall(_ cipher.PubKey) (string, error) {
+	return "", ErrProxyNotSupported
+}
+
+// VoiceHangup implements API (not proxied).
+func (proxyDefaultAPI) VoiceHangup(_ string) error {
+	return ErrProxyNotSupported
+}
+
+// VoiceActive implements API (not proxied).
+func (proxyDefaultAPI) VoiceActive() ([]string, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupHistory(_ string, _ int) ([]GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }

@@ -149,6 +149,19 @@ func (s *Signaler) Serve(ctx context.Context, listeners ...net.Listener) {
 	wg.Wait()
 }
 
+// AddListener starts accepting on an ADDITIONAL listener after Serve has already
+// begun — e.g. the skynet networker registers later than the dmsg client, so its
+// listener joins once it's up. Runs an accept loop until ctx is done.
+func (s *Signaler) AddListener(ctx context.Context, lis net.Listener) {
+	if lis == nil {
+		return
+	}
+	s.mu.Lock()
+	s.serving = append(s.serving, lis)
+	s.mu.Unlock()
+	go s.acceptLoop(ctx, lis)
+}
+
 func (s *Signaler) acceptLoop(ctx context.Context, lis net.Listener) {
 	for {
 		conn, err := lis.Accept()

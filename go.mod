@@ -77,6 +77,7 @@ require (
 	github.com/peterh/liner v1.2.2
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
 	github.com/pion/datachannel v1.6.2
+	github.com/pion/rtp v1.10.3
 	github.com/pion/webrtc/v4 v4.2.16
 	github.com/pkg/sftp v1.13.10
 	github.com/quic-go/webtransport-go v0.11.0
@@ -118,7 +119,6 @@ require (
 	github.com/pion/mdns/v2 v2.1.0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/rtcp v1.2.17 // indirect
-	github.com/pion/rtp v1.10.3 // indirect
 	github.com/pion/sctp v1.10.3 // indirect
 	github.com/pion/sdp/v3 v3.0.19 // indirect
 	github.com/pion/srtp/v3 v3.0.12 // indirect
