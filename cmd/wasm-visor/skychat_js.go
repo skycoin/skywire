@@ -43,6 +43,15 @@ type chatMsg struct {
 	Text string `json:"text"`
 	TS   int64  `json:"ts"`  // unix milliseconds
 	Out  bool   `json:"out"` // true = we sent it, false = received
+
+	// File attachment fields (Telegram-style: a file is a message). Set only on
+	// file events; empty on plain chat. On a received file (Out=false) FileID
+	// keys the in-memory blob the page fetches via skychatFile(id) to download.
+	IsFile   bool   `json:"is_file,omitempty"`
+	FileID   string `json:"file_id,omitempty"`
+	FileName string `json:"file_name,omitempty"`
+	FileSize int64  `json:"file_size,omitempty"`
+	FileOK   bool   `json:"file_ok,omitempty"` // transfer verified
 }
 
 // Peer conns use the shared skychat wire codec: message.Conn carries the
@@ -98,6 +107,9 @@ func runBrowserSkychat(ctx context.Context, _ []string) error {
 	if started == 0 {
 		return fmt.Errorf("skychat: no listeners started")
 	}
+	// File transfer shares the same app.Client: listen on the file port over the
+	// same networks so peers can send us files (see filexfer_js.go).
+	startFileXferWasm(ctx, cl)
 	<-ctx.Done()
 	return nil
 }
