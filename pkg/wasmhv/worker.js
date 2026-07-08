@@ -145,6 +145,13 @@
     });
   };
 
+  // ----- Voice audio bridge (delegated to the agent tab) -----
+  // getUserMedia/AudioContext are main-thread-only. The Go voice Sink calls
+  // self.__skyvoiceEmit(bytes) with each decoded frame; we forward it to the agent
+  // tab (voice-audio.js) for playback. Captured mic frames come back as {t:'voiceMic'}
+  // and are handed to the Go Source via self.__skyvoiceMic (installed by the wasm).
+  self.__skyvoiceEmit = function (bytes) { agentPost({ t: 'voicePlay', b: bytes }); };
+
   // ----- WebRTC bridge (delegated to the agent tab) -----
   // RTCPeerConnection/RTCDataChannel don't exist in a worker, so
   // globalThis.__skywireRTC.newPC(iceServers) returns a PROXY PeerConnection whose
@@ -296,6 +303,9 @@
       }
       case 'rtc':
         rtcHandleEvent(m);
+        return;
+      case 'voiceMic':
+        if (typeof self.__skyvoiceMic === 'function') { self.__skyvoiceMic(m.b); }
         return;
       case 'call':
         if (!api || bootedPK === null) { queued.push({ port: port, m: m }); return; }

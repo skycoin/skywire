@@ -190,6 +190,71 @@ func TestCallDeliversAudio(t *testing.T) {
 	}
 }
 
+// blockingSource mimics a real audio device (or the wasm mic ring) with no
+// frames flowing: Read blocks until the source is Closed, then returns EOF.
+type blockingSource struct {
+	closed chan struct{}
+	once   sync.Once
+}
+
+func newBlockingSource() *blockingSource { return &blockingSource{closed: make(chan struct{})} }
+func (s *blockingSource) Read([]int16) (int, error) {
+	<-s.closed
+	return 0, io.EOF
+}
+func (s *blockingSource) Close() error { s.once.Do(func() { close(s.closed) }); return nil }
+
+// TestHangupWithBlockedSourceDropsCall is a regression test: when the sendLoop
+// is parked inside a blocking Source.Read (e.g. a mic with no frames — the wasm
+// case with the audio proxy not started), Hangup must still tear the session
+// down and drop it from Active(). Session.Close closes the source so the
+// blocked Read unblocks, sendLoop exits, Run's wg.Wait returns, and dropCall
+// fires. Without that, the call leaked in the manager forever.
+func TestHangupWithBlockedSourceDropsCall(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+
+	lis := newMemListener()
+	defer lis.Close() //nolint:errcheck
+
+	mgrB := NewManager(Config{
+		LocalPK:    pkB,
+		Dial:       func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return nil, io.EOF },
+		OnIncoming: func(Sig) bool { return true },
+	})
+	go mgrB.Serve(ctx, lis)
+
+	// Visualize wraps the Source in a teeSource — the wasm case, where the leak
+	// actually bit: the tee must forward Close to the blocking inner Source.
+	mgrA := NewManager(Config{
+		LocalPK:   pkA,
+		Dial:      func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return lis.dial() },
+		NewSource: func() Source { return newBlockingSource() },
+		Visualize: true,
+	})
+	sess, err := mgrA.Call(ctx, pkB)
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if got := mgrA.Active(); len(got) != 1 {
+		t.Fatalf("active calls = %d, want 1", len(got))
+	}
+	if err := mgrA.Hangup(sess.CallID); err != nil {
+		t.Fatalf("hangup: %v", err)
+	}
+	// dropCall runs after Run returns; poll for the call to disappear.
+	deadline := time.After(2 * time.Second)
+	for len(mgrA.Active()) != 0 {
+		select {
+		case <-deadline:
+			t.Fatalf("call not dropped after hangup: %v", mgrA.Active())
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
 // TestManualAnswerRing exercises the explicit-answer (ring) flow: the callee
 // parks the invite until Answer, and the caller's Call returns only then.
 func TestManualAnswerRing(t *testing.T) {

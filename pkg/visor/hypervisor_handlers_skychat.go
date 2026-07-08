@@ -96,6 +96,18 @@ func (hv *Hypervisor) skychatProxyHandler() http.HandlerFunc {
 		}
 		skychatPath := strings.TrimPrefix(path[idx+len("/skychat/proxy"):], "/")
 
+		// SSE / event streams are infinite — the buffered SkychatProxy (io.ReadAll
+		// + 30s client timeout) blocks forever on them, which is why the DM live
+		// stream showed "Disconnected". Proxy those with flushing instead.
+		base := skychatPath
+		if i := strings.IndexByte(base, '?'); i >= 0 {
+			base = base[:i]
+		}
+		if base == "sse" || base == "events" || strings.Contains(strings.ToLower(r.Header.Get("Accept")), "text/event-stream") {
+			hv.streamSkychatProxy(w, r, skychatPath)
+			return
+		}
+
 		status, hdr, body, err := hv.visor.SkychatProxy(r.Method, skychatPath, r.URL.RawQuery, r.Header, r.Body)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusBadGateway, err)
@@ -112,5 +124,74 @@ func (hv *Hypervisor) skychatProxyHandler() http.HandlerFunc {
 		}
 		w.WriteHeader(status)
 		_, _ = w.Write(body) //nolint:errcheck,gosec
+	}
+}
+
+// streamSkychatProxy forwards a long-lived (SSE) request to the local skychat
+// server and copies the response to the client with per-chunk flushing, so the
+// live message stream reaches the hvui in real time instead of being buffered
+// until the (never-arriving) end. Canceled when the client disconnects
+// (r.Context()). Local visor only, same internal-token bypass as the buffered
+// path.
+func (hv *Hypervisor) streamSkychatProxy(w http.ResponseWriter, r *http.Request, skychatPath string) {
+	addr := skychatLocalAddr(hv.visor)
+	if addr == "" {
+		http.Error(w, "skychat proxy: addr not configured", http.StatusBadGateway)
+		return
+	}
+	url := "http://" + addr + "/" + strings.TrimPrefix(skychatPath, "/")
+	if r.URL.RawQuery != "" {
+		url += "?" + r.URL.RawQuery
+	}
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, url, r.Body) //nolint:gosec // visor-controlled localhost addr
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	for k, vv := range r.Header {
+		if strings.EqualFold(k, "Host") || strings.EqualFold(k, "Connection") {
+			continue
+		}
+		for _, h := range vv {
+			req.Header.Add(k, h)
+		}
+	}
+	req.Header.Set("X-Skychat-Internal-Token", hv.visor.skychatInternalToken())
+
+	// No client Timeout — an SSE stream is long-lived; r.Context() ends it.
+	resp, err := (&http.Client{}).Do(req) //nolint:gosec // visor-controlled localhost addr
+	if err != nil {
+		http.Error(w, "skychat proxy: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close() //nolint:errcheck,gosec
+	for k, vv := range resp.Header {
+		lk := strings.ToLower(k)
+		if lk == "content-length" || lk == "connection" || lk == "transfer-encoding" {
+			continue
+		}
+		for _, h := range vv {
+			w.Header().Add(k, h)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	flusher, _ := w.(http.Flusher)
+	if flusher != nil {
+		flusher.Flush()
+	}
+	buf := make([]byte, 4096)
+	for {
+		n, rerr := resp.Body.Read(buf)
+		if n > 0 {
+			if _, werr := w.Write(buf[:n]); werr != nil {
+				return
+			}
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+		if rerr != nil {
+			return
+		}
 	}
 }

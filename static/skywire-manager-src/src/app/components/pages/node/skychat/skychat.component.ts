@@ -45,6 +45,12 @@ interface GroupView {
   status: string;     // 'active' | 'pending' | 'left' | 'revoked'
 }
 
+/** One ringing inbound voice call awaiting an answer. */
+interface IncomingCall {
+  id: string;         // call id (to answer/decline)
+  from: string;       // caller PK hex ('' when the transport doesn't carry it)
+}
+
 /** One group message (any sender) in a room's log. */
 interface GroupMsg {
   group_id: string;
@@ -129,6 +135,22 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // polled room log by timestamp.
   private sentByGroup: { [id: string]: GroupMsg[] } = {};
 
+  // --- Voice call state. -----------------------------------------
+  // Mirrors the DM/group transport split: a native visor drives the voice
+  // HTTP bridge (/skychat/voice/*), a wasm visor the in-process
+  // skywireVisor.skychatVoice* hooks. Both surface the same shapes here.
+  voiceActive: string[] = [];                 // active call ids
+  voiceIncoming: IncomingCall[] = [];         // ringing inbound calls
+  voiceBusy = false;                          // a call/answer is in flight
+  voiceAvailable = true;                      // false when the visor has no voice (503)
+  micMuted = false;                           // our mic muted (peer hears silence)
+  spkMuted = false;                           // caller muted (we hear nothing)
+  private callStartMs = 0;                    // wall-clock when the current call went active
+  private voiceTimer: any = null;
+  // Remember which ringing calls we've already surfaced, so re-polls don't
+  // re-prompt (native auto-answer never rings; explicit-answer mode does).
+  private voiceRingSeen = new Set<string>();
+
   // Distinct peers seen so far, in last-touched order. Drives the
   // sidebar list. Recomputed lazily when messages change.
   get peers(): string[] {
@@ -160,6 +182,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
         this.connectSSE();
         this.tryLoadPeers();
         this.refreshPasswordState();
+        this.startVoicePoll();
       }
     });
     return super.ngOnInit();
@@ -169,6 +192,8 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (this.nodeSub) { this.nodeSub.unsubscribe(); }
     this.disconnectSSE();
     this.stopGroupPoll();
+    this.stopVoicePoll();
+    this.stopViz();
   }
 
   ngAfterViewChecked() {
@@ -216,12 +241,12 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
    *  rides dmsg:1, so force the network label to dmsg. */
   private connectWasm(sv: any) {
     this.network = 'dmsg';
-    const poll = () => {
+    const handle = (raw: any) => {
       let arr: any[];
       // skychatMessages() returns the JSON of the message buffer, which is the
       // string "null" (not "[]") when the buffer is a nil slice — JSON.parse
       // gives null, so coalesce to [] or the poll would bail and never connect.
-      try { arr = JSON.parse(sv.skychatMessages() || '[]') || []; } catch {
+      try { arr = JSON.parse(raw || '[]') || []; } catch {
         this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); return;
       }
       if (!Array.isArray(arr)) { return; }
@@ -236,6 +261,16 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
         this.lastPollLen = arr.length;
         this.cdr.markForCheck();
       }
+    };
+    // Under the SharedWorker architecture skywireVisor is a MessagePort proxy,
+    // so skychatMessages() returns a Promise (not the raw JSON string the Go
+    // side returns synchronously in the single-file build). Promise.resolve()
+    // normalizes both — calling JSON.parse on the Promise object is what threw
+    // "chat hook error" before, same fix as the group hooks.
+    const poll = () => {
+      Promise.resolve(sv.skychatMessages())
+        .then(handle)
+        .catch(() => { this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); });
     };
     poll();
     this.pollTimer = setInterval(poll, 1500);
@@ -591,6 +626,321 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     return pk && pk.length > 12 ? pk.slice(0, 6) + '…' + pk.slice(-4) : pk;
   }
 
+  // --- Voice calls -----------------------------------------------
+  // Opus voice over the encrypted mesh (dmsg/skynet), same media plane as
+  // the wasm visor. Native audio flows only when the visor runs with
+  // SKYWIRE_VOICE_AUDIO=mic|monitor; otherwise the call still connects
+  // (silent), so the control plane is always demonstrable from here.
+
+  /** window.skywireVisor when this node is an in-browser wasm visor with the
+   *  voice hooks present, else null (native → HTTP bridge). */
+  private get voiceSv(): any {
+    const sv = (window as any).skywireVisor;
+    if (this.node && (this.node as any).arch === 'wasm' && sv && typeof sv.skychatVoiceCall === 'function') {
+      return sv;
+    }
+    return null;
+  }
+
+  /** Native voice-bridge call over ApiService (CSRF/auth handled). */
+  private voiceApi(path: string, method: 'GET' | 'POST', body?: any): Promise<any> {
+    const url = `visors/${this.node.localPk}/skychat/voice${path}`;
+    const obs = method === 'POST' ? this.api.post(url, body || {}) : this.api.get(url);
+    return firstValueFrom(obs);
+  }
+
+  /** True while at least one call is up (drives the Call/Hang-up toggle). */
+  get inCall(): boolean {
+    return this.voiceActive.length > 0;
+  }
+
+  private startVoicePoll() {
+    if (this.voiceTimer || !this.node) { return; }
+    this.pollVoice();
+    this.voiceTimer = setInterval(() => this.pollVoice(), 1800);
+  }
+
+  private stopVoicePoll() {
+    if (this.voiceTimer) { clearInterval(this.voiceTimer); this.voiceTimer = null; }
+  }
+
+  /** Normalize active-call ids from either transport (wasm returns a JSON
+   *  string, native an array). */
+  private parseIds(raw: any): string[] {
+    let arr = raw;
+    if (typeof raw === 'string') { try { arr = JSON.parse(raw || '[]'); } catch { arr = []; } }
+    return Array.isArray(arr) ? arr.map((x: any) => String(x)) : [];
+  }
+
+  /** Normalize ringing calls: wasm gives [{id,from}] (as a JSON string),
+   *  native gives ["<id> from <pk>"]. */
+  private parseIncoming(raw: any): IncomingCall[] {
+    let arr = raw;
+    if (typeof raw === 'string') { try { arr = JSON.parse(raw || '[]'); } catch { arr = []; } }
+    if (!Array.isArray(arr)) { return []; }
+    return arr.map((x: any): IncomingCall => {
+      if (x && typeof x === 'object') { return { id: String(x.id || ''), from: String(x.from || '') }; }
+      const s = String(x);
+      const m = s.match(/^(\S+)\s+from\s+(\S+)/);
+      return m ? { id: m[1], from: m[2] } : { id: s, from: '' };
+    }).filter(c => c.id);
+  }
+
+  /** Track call start/end so the duration timer + mute state reset cleanly. */
+  private syncCallState() {
+    if (this.voiceActive.length && !this.callStartMs) {
+      this.callStartMs = Date.now();
+      this.micMuted = false;
+      this.spkMuted = false;
+      // Defer so the *ngIf'd canvas is in the DOM before the first draw.
+      setTimeout(() => this.startViz(), 300);
+    } else if (!this.voiceActive.length && this.callStartMs) {
+      this.callStartMs = 0;
+      this.micMuted = false;
+      this.spkMuted = false;
+      this.stopViz();
+    }
+  }
+
+  private pollVoice() {
+    if (!this.node) { return; }
+    const sv = this.voiceSv;
+    if (sv) {
+      Promise.resolve(sv.skychatVoiceActive()).then((r: any) => { this.voiceActive = this.parseIds(r); this.syncCallState(); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
+      Promise.resolve(sv.skychatVoiceIncoming()).then((r: any) => { this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
+      return;
+    }
+    this.voiceApi('/active', 'GET')
+      .then((r) => { this.voiceActive = this.parseIds(r); this.voiceAvailable = true; this.syncCallState(); this.cdr.markForCheck(); })
+      .catch((e) => { if (e?.originalError?.status === 503) { this.voiceAvailable = false; this.cdr.markForCheck(); } });
+    this.voiceApi('/incoming', 'GET')
+      .then((r) => { this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); })
+      .catch(() => { /* transient / disabled — /active already flags availability */ });
+  }
+
+  /** mm:ss since the current call went active ('' when not in a call). */
+  get callDuration(): string {
+    if (!this.callStartMs) { return ''; }
+    const s = Math.max(0, Math.floor((Date.now() - this.callStartMs) / 1000));
+    const mm = Math.floor(s / 60), ss = s % 60;
+    return `${mm}:${ss < 10 ? '0' : ''}${ss}`;
+  }
+
+  /** Push the current mute state to the active call (both directions). */
+  private voiceMute() {
+    const id = this.voiceActive[0];
+    if (!id) { return; }
+    const sv = this.voiceSv;
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceMute ? sv.skychatVoiceMute(id, this.micMuted, this.spkMuted) : null)
+      : this.voiceApi('/mute', 'POST', { call_id: id, mic: this.micMuted, speaker: this.spkMuted });
+    p.catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)));
+  }
+
+  /** Toggle our mic (the peer hears silence while muted). */
+  toggleMicMute() {
+    this.micMuted = !this.micMuted;
+    this.voiceMute();
+    this.cdr.markForCheck();
+  }
+
+  /** Toggle the caller's audio (we hear silence while muted). */
+  toggleSpeakerMute() {
+    this.spkMuted = !this.spkMuted;
+    this.voiceMute();
+    this.cdr.markForCheck();
+  }
+
+  // --- In-call audio visualization -------------------------------
+  // Default: a Telegram-style scrolling level meter (peer + you). Toggle to a
+  // scrolling spectrogram (FFT heatmap of the received audio). Data comes from
+  // the call's audio tap — over the HTTP bridge on a native visor, the
+  // skychatVoiceLevels/Audio JS hooks on a wasm visor.
+  @ViewChild('vizCanvas') vizCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('vizBig') vizBig?: ElementRef<HTMLCanvasElement>;        // incoming (peer)
+  @ViewChild('vizBigSent') vizBigSent?: ElementRef<HTMLCanvasElement>; // outgoing (you)
+  showSpectrogram = false;   // small in-bar canvas: spectrogram vs level meter
+  bigViz = false;            // expand a large spectrogram into the message area
+  private vizTimer: any = null;
+  private lvlSent: number[] = [];   // rolling recent RMS history (0..1)
+  private lvlRecv: number[] = [];
+  private readonly lvlMax = 96;     // history length (columns)
+
+  private voiceLevels(id: string): Promise<{ sent: number; recv: number }> {
+    const sv = this.voiceSv;
+    if (sv && typeof sv.skychatVoiceLevels === 'function') {
+      return Promise.resolve(sv.skychatVoiceLevels(id)).then((r: any) => JSON.parse(r || '{}'));
+    }
+    return this.voiceApi(`/levels?call=${encodeURIComponent(id)}`, 'GET');
+  }
+
+  private voiceAudioData(id: string): Promise<{ sent: number[]; recv: number[] }> {
+    const sv = this.voiceSv;
+    if (sv && typeof sv.skychatVoiceAudio === 'function') {
+      return Promise.resolve(sv.skychatVoiceAudio(id)).then((r: any) => JSON.parse(r || '{}'));
+    }
+    return this.voiceApi(`/audio?call=${encodeURIComponent(id)}`, 'GET');
+  }
+
+  toggleSpectrogram() {
+    this.showSpectrogram = !this.showSpectrogram;
+    this.clearCanvas(this.vizCanvas?.nativeElement);
+    this.cdr.markForCheck();
+  }
+
+  /** Expand a large spectrogram into the message-log area (toggle off = messages). */
+  toggleBigViz() {
+    this.bigViz = !this.bigViz;
+    this.cdr.markForCheck();
+  }
+
+  private clearCanvas(c?: HTMLCanvasElement) {
+    if (c) { c.getContext('2d')?.clearRect(0, 0, c.width, c.height); }
+  }
+
+  private startViz() {
+    if (this.vizTimer) { return; }
+    this.lvlSent = []; this.lvlRecv = [];
+    this.vizTimer = setInterval(() => this.tickViz(), 100);
+  }
+
+  private stopViz() {
+    if (this.vizTimer) { clearInterval(this.vizTimer); this.vizTimer = null; }
+    this.lvlSent = []; this.lvlRecv = [];
+  }
+
+  private tickViz() {
+    const id = this.voiceActive[0];
+    if (!id) { return; }
+    // The small in-bar canvas shows spectrogram or level meter; the big canvas
+    // (message-area) is always a spectrogram. Fetch PCM if either wants it.
+    const needAudio = this.showSpectrogram || this.bigViz;
+    const needLevels = !this.showSpectrogram;
+    if (needLevels) {
+      this.voiceLevels(id).then((l) => {
+        this.lvlRecv.push(Math.min(1, (l && l.recv) || 0));
+        this.lvlSent.push(Math.min(1, (l && l.sent) || 0));
+        if (this.lvlRecv.length > this.lvlMax) { this.lvlRecv.shift(); }
+        if (this.lvlSent.length > this.lvlMax) { this.lvlSent.shift(); }
+        this.drawLevels(this.vizCanvas?.nativeElement);
+      }).catch(() => { /* transient */ });
+    }
+    if (needAudio) {
+      this.voiceAudioData(id).then((d) => {
+        const recv = (d && d.recv) || [], sent = (d && d.sent) || [];
+        if (this.showSpectrogram) { this.drawSpectrogram(this.vizCanvas?.nativeElement, recv); }
+        if (this.bigViz) {
+          this.drawSpectrogram(this.vizBig?.nativeElement, recv);      // incoming (peer)
+          this.drawSpectrogram(this.vizBigSent?.nativeElement, sent);  // outgoing (you)
+        }
+      }).catch(() => { /* transient */ });
+    }
+  }
+
+  /** Telegram-style dual level meter: peer (green) foreground, you (violet) behind. */
+  private drawLevels(c?: HTMLCanvasElement) {
+    if (!c) { return; }
+    const ctx = c.getContext('2d');
+    if (!ctx) { return; }
+    const W = c.width, H = c.height, n = this.lvlMax, bw = W / n;
+    ctx.clearRect(0, 0, W, H);
+    const bar = (hist: number[], color: string, wf: number) => {
+      ctx.fillStyle = color;
+      for (let i = 0; i < hist.length; i++) {
+        const v = hist[i];
+        const h = Math.max(1, Math.pow(v, 0.6) * H); // perceptual boost
+        const x = i * bw;
+        ctx.fillRect(x + bw * (1 - wf) / 2, (H - h) / 2, Math.max(1, bw * wf - 1), h);
+      }
+    };
+    bar(this.lvlSent, 'rgba(157,124,255,0.55)', 1.0);  // you
+    bar(this.lvlRecv, 'rgba(158,206,106,0.95)', 0.6);  // peer (prominent)
+  }
+
+  /** Scrolling FFT heatmap (newest column on the right), matched to the
+   *  audioprism-go spectrogram: Hann window, magnitude = |FFT| (no N scaling),
+   *  ScaleLog 20·log10, normalized over 0..45 dB, heat colormap. 0..12 kHz with
+   *  low frequencies at the bottom. Silence → 0 dB → black. */
+  private drawSpectrogram(c: HTMLCanvasElement | undefined, pcm: number[]) {
+    const N = 2048;
+    if (!c || pcm.length < N) { return; }
+    const ctx = c.getContext('2d');
+    if (!ctx) { return; }
+    const W = c.width, H = c.height, col = 2;
+    const start = pcm.length - N;
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      re[i] = (pcm[start + i] / 32768) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (N - 1)));
+    }
+    fft(re, im);
+    ctx.drawImage(c, -col, 0); // scroll left, new column on the right
+    // 0..12 kHz = the lower quarter of the N/2 bins at 48 kHz (Nyquist 24 kHz).
+    const maxBin = N / 4;
+    for (let y = 0; y < H; y++) {
+      const bin = Math.floor((1 - y / H) * (maxBin - 1));
+      const mag = Math.hypot(re[bin], im[bin]);
+      const dB = 20 * Math.log10(mag + 1e-10);
+      const t = Math.max(0, Math.min(1, dB / 45)); // magMin 0, magMax 45
+      ctx.fillStyle = heat(t);
+      ctx.fillRect(W - col, y, col, 1);
+    }
+  }
+
+  /** Place a call to the composed recipient PK. */
+  voiceCall() {
+    if (this.voiceBusy || this.inCall) { return; }
+    const peer = this.toPK.trim();
+    if (peer.length !== 66 || !/^[0-9a-fA-F]+$/.test(peer)) {
+      this.snackbar.showError('Recipient must be a 66-char hex public key');
+      return;
+    }
+    this.voiceBusy = true;
+    const sv = this.voiceSv;
+    const done = () => { this.voiceBusy = false; this.pollVoice(); this.cdr.markForCheck(); };
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceCall(peer))
+      : this.voiceApi('/call', 'POST', { peer });
+    p.then(() => { this.snackbar.showDone('Call connected'); done(); })
+      .catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+  }
+
+  /** Hang up an active call (defaults to the first). */
+  voiceHangup(id?: string) {
+    const callID = id || this.voiceActive[0];
+    if (!callID) { return; }
+    const sv = this.voiceSv;
+    const done = () => { this.pollVoice(); this.cdr.markForCheck(); };
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceHangup(callID))
+      : this.voiceApi('/hangup', 'POST', { call_id: callID });
+    p.then(done).catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+  }
+
+  /** Answer a ringing inbound call. */
+  voiceAnswer(id: string) {
+    if (this.voiceBusy) { return; }
+    this.voiceBusy = true;
+    this.voiceRingSeen.add(id);
+    const sv = this.voiceSv;
+    const done = () => { this.voiceBusy = false; this.pollVoice(); this.cdr.markForCheck(); };
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceAnswer(id))
+      : this.voiceApi('/answer', 'POST', { call_id: id });
+    p.then(() => { this.snackbar.showDone('Call answered'); done(); })
+      .catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+  }
+
+  /** Decline a ringing inbound call. */
+  voiceDecline(id: string) {
+    this.voiceRingSeen.add(id);
+    const sv = this.voiceSv;
+    const done = () => { this.pollVoice(); this.cdr.markForCheck(); };
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceDecline ? sv.skychatVoiceDecline(id) : null)
+      : this.voiceApi('/decline', 'POST', { call_id: id });
+    p.then(done).catch(() => done());
+  }
+
   // --- Password gate management ----------------------------------
 
   togglePassword() {
@@ -672,4 +1022,51 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       },
     );
   }
+}
+
+// --- Small DSP helpers for the in-call spectrogram ----------------
+
+/** In-place iterative radix-2 Cooley–Tukey FFT (length must be a power of 2). */
+function fft(re: Float64Array, im: Float64Array): void {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) { j ^= bit; }
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = i + k + len / 2;
+        const tRe = re[b] * curRe - im[b] * curIm;
+        const tIm = re[b] * curIm + im[b] * curRe;
+        re[b] = re[a] - tRe; im[b] = im[a] - tIm;
+        re[a] += tRe; im[a] += tIm;
+        const nRe = curRe * wRe - curIm * wIm;
+        curIm = curRe * wIm + curIm * wRe;
+        curRe = nRe;
+      }
+    }
+  }
+}
+
+/** audioprism-go's exact heat colormap (ValueToPixelHeat): black→blue→cyan→
+ *  green→yellow→red→white. value 0 → black, so silence renders black. */
+function heat(v: number): string {
+  v = Math.max(0, Math.min(1, v));
+  const n = (x: number, a: number, c: number) => { const t = (x - a) / (c - a); return t < 0 ? 0 : t > 1 ? 1 : t; };
+  let r = 0, g = 0, b = 0;
+  if (v < 1 / 5) { b = Math.round(255 * n(v, 0, 1 / 5)); }
+  else if (v < 2 / 5) { const c = Math.round(255 * n(v, 1 / 5, 2 / 5)); r = 0; g = c; b = 255 - c; }
+  else if (v < 3 / 5) { r = Math.round(255 * n(v, 2 / 5, 3 / 5)); g = 255; b = 0; }
+  else if (v < 4 / 5) { r = 255; g = Math.round(255 - 255 * n(v, 3 / 5, 4 / 5)); b = 0; }
+  else { const c = Math.round(255 * n(v, 4 / 5, 1)); r = 255; g = c; b = c; }
+  return `rgb(${r},${g},${b})`;
 }

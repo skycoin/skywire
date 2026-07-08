@@ -110,6 +110,8 @@ func runBrowserSkychat(ctx context.Context, _ []string) error {
 	// File transfer shares the same app.Client: listen on the file port over the
 	// same networks so peers can send us files (see filexfer_js.go).
 	startFileXferWasm(ctx, cl)
+	// Voice: listens for inbound calls on the voice port over the same networks.
+	startVoiceWasm(ctx, cl)
 	<-ctx.Done()
 	return nil
 }

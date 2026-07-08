@@ -5,6 +5,8 @@ package visor
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"net/http"
 	"strconv"
@@ -94,13 +96,63 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 		fallback.ServeHTTP(w, r)
 		return
 	}
+	// Stamp the served bundle's fingerprint + a poller that reloads the tab when
+	// a newer bundle is served (after the visor binary updates its embedded UI),
+	// so an open dashboard never sits on a stale build. Mirrors the wasm
+	// visor's autoupdate.js. The fingerprint is a hash of index.html, which
+	// references the content-hashed chunk filenames — it changes iff the UI does.
+	ver := uiVersionHash(b)
 	inject := []byte(`<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(hv.visor.conf.PK.Hex()) +
-		`</script><script src="browse.js"></script><script src="skywire-browse-launcher.js"></script>`)
+		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;</script>` +
+		`<script src="browse.js"></script><script src="skywire-browse-launcher.js"></script>` +
+		`<script>` + uiAutoReloadJS + `</script>`)
 	out := bytes.Replace(b, []byte("</body>"), append(inject, []byte("</body>")...), 1)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	_, _ = w.Write(out) //nolint:errcheck
 }
+
+// uiVersionHash fingerprints the served UI bundle (short sha256 of index.html,
+// which embeds the content-hashed chunk names).
+func uiVersionHash(indexHTML []byte) string {
+	sum := sha256.Sum256(indexHTML)
+	return hex.EncodeToString(sum[:])[:16]
+}
+
+// getUIVersion → GET /api/ui-version : the current served-bundle fingerprint
+// (no-store), polled by the injected auto-reloader.
+func (hv *Hypervisor) getUIVersion() http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		var ver string
+		if hv.c.UIAssets != nil {
+			if f, err := hv.c.UIAssets.Open("index.html"); err == nil {
+				if b, rerr := io.ReadAll(f); rerr == nil {
+					ver = uiVersionHash(b)
+				}
+				_ = f.Close() //nolint:errcheck
+			}
+		}
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write([]byte(ver)) //nolint:errcheck
+	}
+}
+
+// uiAutoReloadJS polls the served-bundle fingerprint and reloads once it changes
+// (a new visor binary shipped a new embedded UI). Silent, with a short grace so
+// an in-flight click isn't cut off.
+const uiAutoReloadJS = `(function(){
+  var booted = window.__SKYWIRE_UI_VERSION__;
+  if (!booted) { return; }
+  setInterval(function(){
+    fetch('/api/ui-version', {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(v){
+      if (v && v !== booted) {
+        try { console.log('skywire: new hypervisor UI available — reloading'); } catch(e){}
+        setTimeout(function(){ location.reload(); }, 1500);
+      }
+    }).catch(function(){});
+  }, 30000);
+})();`
 
 // nativeBrowseLauncherJS is the native HV-UI launcher: it gives browse.js the
 // fetchDmsg / fetchClearnet / selfPK providers backed by /api/browse/* (the wasm

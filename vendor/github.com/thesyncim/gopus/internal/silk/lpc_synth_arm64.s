@@ -1,0 +1,431 @@
+//go:build (arm64) && !purego
+
+#include "textflag.h"
+
+// func synthesizeLPCOrder16Core(sLPC []int32, A_Q12 []int16, presQ14 []int32, pxq []int16, gainQ10 int32, subfrLength int)
+TEXT ·synthesizeLPCOrder16Core(SB), NOSPLIT, $0-112
+	MOVD  sLPC_base+0(FP), R0
+	MOVD  A_Q12_base+24(FP), R1
+	MOVD  presQ14_base+48(FP), R2
+	MOVD  pxq_base+72(FP), R3
+	MOVW  gainQ10+96(FP), R4
+	MOVD  subfrLength+104(FP), R5
+
+	CBZ   R5, lpc16_done
+
+	MOVW  60(R0), R8
+	MOVW  56(R0), R9
+	MOVW  52(R0), R10
+	MOVW  48(R0), R11
+	MOVW  44(R0), R12
+	MOVW  40(R0), R13
+	MOVW  36(R0), R14
+	MOVW  32(R0), R15
+	MOVW  28(R0), R16
+	MOVW  24(R0), R17
+	MOVW  20(R0), R19
+	MOVW  16(R0), R20
+	MOVW  12(R0), R21
+	MOVW  8(R0), R22
+	MOVW  4(R0), R23
+	MOVW  (R0), R24
+	ADD   $64, R0, R0
+
+lpc16_pair_check:
+	CMP   $2, R5
+	BLT   lpc16_tail_check
+
+lpc16_pair_loop:
+	MOVD  $8, R6
+
+	MOVH  (R1), R7
+	MUL   R7, R8, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  2(R1), R7
+	MUL   R7, R9, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  4(R1), R7
+	MUL   R7, R10, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  6(R1), R7
+	MUL   R7, R11, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  8(R1), R7
+	MUL   R7, R12, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  10(R1), R7
+	MUL   R7, R13, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  12(R1), R7
+	MUL   R7, R14, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  14(R1), R7
+	MUL   R7, R15, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  16(R1), R7
+	MUL   R7, R16, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  18(R1), R7
+	MUL   R7, R17, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  20(R1), R7
+	MUL   R7, R19, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  22(R1), R7
+	MUL   R7, R20, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  24(R1), R7
+	MUL   R7, R21, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  26(R1), R7
+	MUL   R7, R22, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  28(R1), R7
+	MUL   R7, R23, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  30(R1), R7
+	MUL   R7, R24, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	SXTW  R6, R6
+	LSL   $4, R6, R25
+	SXTW  R25, R7
+	CMP   R7, R25
+	BEQ   lpc16_pair0_add_pres
+
+	MOVD $2147483647, R25
+	CMP  $0, R6
+	BGE  lpc16_pair0_add_pres
+	MOVD $-2147483648, R25
+
+lpc16_pair0_add_pres:
+	MOVW.P 4(R2), R24
+	ADDSW  R25, R24, R26
+	BVC    lpc16_pair0_add_done
+	MOVD   $2147483647, R7
+	MOVD   $-2147483648, R26
+	CSEL   MI, R7, R26, R26
+lpc16_pair0_add_done:
+	SXTW   R26, R26
+
+lpc16_pair0_store_s:
+	MOVW.P R26, 4(R0)
+
+	MUL    R4, R26, R24
+	ASR    $16, R24, R24
+	SXTW   R24, R24
+	ADD    $128, R24, R24
+	ASR    $8, R24, R24
+
+	MOVD   $32767, R7
+	CMPW   R7, R24
+	CSEL   GT, R7, R24, R24
+	MOVD   $-32768, R7
+	CMPW   R7, R24
+	CSEL   LT, R7, R24, R24
+
+lpc16_pair0_store_out:
+	MOVH.P R24, 2(R3)
+
+	MOVD  $8, R6
+
+	MOVH  (R1), R7
+	MUL   R7, R26, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  2(R1), R7
+	MUL   R7, R8, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  4(R1), R7
+	MUL   R7, R9, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  6(R1), R7
+	MUL   R7, R10, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  8(R1), R7
+	MUL   R7, R11, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  10(R1), R7
+	MUL   R7, R12, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  12(R1), R7
+	MUL   R7, R13, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  14(R1), R7
+	MUL   R7, R14, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  16(R1), R7
+	MUL   R7, R15, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  18(R1), R7
+	MUL   R7, R16, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  20(R1), R7
+	MUL   R7, R17, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  22(R1), R7
+	MUL   R7, R19, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  24(R1), R7
+	MUL   R7, R20, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  26(R1), R7
+	MUL   R7, R21, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  28(R1), R7
+	MUL   R7, R22, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  30(R1), R7
+	MUL   R7, R23, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	SXTW  R6, R6
+	LSL   $4, R6, R25
+	SXTW  R25, R7
+	CMP   R7, R25
+	BEQ   lpc16_pair1_add_pres
+
+	MOVD $2147483647, R25
+	CMP  $0, R6
+	BGE  lpc16_pair1_add_pres
+	MOVD $-2147483648, R25
+
+lpc16_pair1_add_pres:
+	MOVW.P 4(R2), R24
+	ADDSW  R25, R24, R27
+	BVC    lpc16_pair1_add_done
+	MOVD   $2147483647, R7
+	MOVD   $-2147483648, R27
+	CSEL   MI, R7, R27, R27
+lpc16_pair1_add_done:
+	SXTW   R27, R27
+
+lpc16_pair1_store_s:
+	MOVW.P R27, 4(R0)
+
+	MUL    R4, R27, R24
+	ASR    $16, R24, R24
+	SXTW   R24, R24
+	ADD    $128, R24, R24
+	ASR    $8, R24, R24
+
+	MOVD   $32767, R7
+	CMPW   R7, R24
+	CSEL   GT, R7, R24, R24
+	MOVD   $-32768, R7
+	CMPW   R7, R24
+	CSEL   LT, R7, R24, R24
+
+lpc16_pair1_store_out:
+	MOVH.P R24, 2(R3)
+
+	MOVD   R22, R24
+	MOVD   R21, R23
+	MOVD   R20, R22
+	MOVD   R19, R21
+	MOVD   R17, R20
+	MOVD   R16, R19
+	MOVD   R15, R17
+	MOVD   R14, R16
+	MOVD   R13, R15
+	MOVD   R12, R14
+	MOVD   R11, R13
+	MOVD   R10, R12
+	MOVD   R9, R11
+	MOVD   R8, R10
+	MOVD   R26, R9
+	MOVD   R27, R8
+
+	SUBS   $2, R5, R5
+	CMP    $2, R5
+	BGE    lpc16_pair_loop
+
+lpc16_tail_check:
+	CBZ   R5, lpc16_done
+
+lpc16_tail:
+	MOVD  $8, R6
+
+	MOVH  (R1), R7
+	MUL   R7, R8, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  2(R1), R7
+	MUL   R7, R9, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  4(R1), R7
+	MUL   R7, R10, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  6(R1), R7
+	MUL   R7, R11, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  8(R1), R7
+	MUL   R7, R12, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  10(R1), R7
+	MUL   R7, R13, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  12(R1), R7
+	MUL   R7, R14, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  14(R1), R7
+	MUL   R7, R15, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  16(R1), R7
+	MUL   R7, R16, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  18(R1), R7
+	MUL   R7, R17, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  20(R1), R7
+	MUL   R7, R19, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  22(R1), R7
+	MUL   R7, R20, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  24(R1), R7
+	MUL   R7, R21, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  26(R1), R7
+	MUL   R7, R22, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  28(R1), R7
+	MUL   R7, R23, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	MOVH  30(R1), R7
+	MUL   R7, R24, R25
+	ASR   $16, R25, R25
+	ADDW  R25, R6, R6
+
+	SXTW  R6, R6
+	LSL   $4, R6, R25
+	SXTW  R25, R7
+	CMP   R7, R25
+	BEQ   lpc16_tail_add_pres
+
+	MOVD $2147483647, R25
+	CMP  $0, R6
+	BGE  lpc16_tail_add_pres
+	MOVD $-2147483648, R25
+
+lpc16_tail_add_pres:
+	MOVW.P 4(R2), R24
+	ADDSW  R25, R24, R26
+	BVC    lpc16_tail_add_done
+	MOVD   $2147483647, R7
+	MOVD   $-2147483648, R26
+	CSEL   MI, R7, R26, R26
+lpc16_tail_add_done:
+	SXTW   R26, R26
+
+lpc16_tail_store_s:
+	MOVW.P R26, 4(R0)
+
+	MUL    R4, R26, R24
+	ASR    $16, R24, R24
+	SXTW   R24, R24
+	ADD    $128, R24, R24
+	ASR    $8, R24, R24
+
+	MOVD   $32767, R7
+	CMPW   R7, R24
+	CSEL   GT, R7, R24, R24
+	MOVD   $-32768, R7
+	CMPW   R7, R24
+	CSEL   LT, R7, R24, R24
+
+lpc16_tail_store_out:
+	MOVH.P R24, 2(R3)
+
+lpc16_done:
+	RET

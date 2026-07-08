@@ -8,7 +8,10 @@
 // tee just observes.
 package voice
 
-import "sync"
+import (
+	"io"
+	"sync"
+)
 
 // audioRing keeps the most recent int16 samples (drop-oldest on overflow).
 type audioRing struct {
@@ -50,6 +53,16 @@ func (t *teeSource) Read(pcm []int16) (int, error) {
 	return n, err
 }
 
+// Close forwards to the wrapped Source so Session.Close can unblock a blocking
+// Read (e.g. an audio ring). Without this the tee hides the inner Closer and a
+// wedged sendLoop would never let the call be dropped.
+func (t *teeSource) Close() error {
+	if c, ok := t.inner.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
+
 // teeSink wraps a Sink, copying each written frame into a ring (RECEIVED audio).
 type teeSink struct {
 	inner Sink
@@ -59,6 +72,14 @@ type teeSink struct {
 func (t *teeSink) Write(pcm []int16) (int, error) {
 	t.ring.add(pcm)
 	return t.inner.Write(pcm)
+}
+
+// Close forwards to the wrapped Sink (mirrors teeSource.Close).
+func (t *teeSink) Close() error {
+	if c, ok := t.inner.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
 }
 
 // callTap holds the sent/received audio rings for one active call.

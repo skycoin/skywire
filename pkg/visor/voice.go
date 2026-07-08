@@ -88,3 +88,13 @@ func (v *Visor) VoiceCallAudio(callID string) (sent, recv []int16, err error) {
 	}
 	return v.voice.CallAudio(callID)
 }
+
+// VoiceMute toggles the mic (send) and speaker (playback) mute of an active
+// call. mic silences what the peer hears from us; speaker silences what we hear
+// from the peer.
+func (v *Visor) VoiceMute(callID string, mic, speaker bool) error {
+	if v.voice == nil {
+		return ErrVoiceDisabled
+	}
+	return v.voice.SetMute(callID, mic, speaker)
+}

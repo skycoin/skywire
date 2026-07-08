@@ -16,78 +16,11 @@ package voice
 import (
 	"fmt"
 	"io"
-	"sync"
 
 	"github.com/jfreymuth/pulse"
 )
 
-// sampleRing is a bounded, thread-safe int16 FIFO bridging pulse's push-model
-// capture callback (and pull-model playback callback) to the voice package's
-// pull-model Source / push-model Sink. On overflow it keeps the NEWEST samples
-// (drop-oldest) so latency can't grow unbounded.
-//
-// popBlocking (capture) waits for a full frame so a reader is naturally paced by
-// the capture rate rather than spinning and draining silence. popSilence
-// (playback) never blocks — pulse needs samples immediately and gets silence on
-// underrun.
-type sampleRing struct {
-	mu     sync.Mutex
-	cond   *sync.Cond
-	buf    []int16
-	max    int
-	closed bool
-}
-
-func newSampleRing(max int) *sampleRing {
-	r := &sampleRing{max: max}
-	r.cond = sync.NewCond(&r.mu)
-	return r
-}
-
-func (r *sampleRing) push(s []int16) {
-	r.mu.Lock()
-	r.buf = append(r.buf, s...)
-	if len(r.buf) > r.max {
-		r.buf = append(r.buf[:0], r.buf[len(r.buf)-r.max:]...)
-	}
-	r.cond.Broadcast()
-	r.mu.Unlock()
-}
-
-// popBlocking fills dst, waiting until a full frame is buffered (or the ring is
-// closed, after which it pads silence and returns).
-func (r *sampleRing) popBlocking(dst []int16) int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for len(r.buf) < len(dst) && !r.closed {
-		r.cond.Wait()
-	}
-	return r.drainLocked(dst)
-}
-
-// popSilence fills dst with whatever is buffered, padding the tail with silence,
-// never blocking.
-func (r *sampleRing) popSilence(dst []int16) int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.drainLocked(dst)
-}
-
-func (r *sampleRing) drainLocked(dst []int16) int {
-	n := copy(dst, r.buf)
-	r.buf = append(r.buf[:0], r.buf[n:]...)
-	for i := n; i < len(dst); i++ {
-		dst[i] = 0
-	}
-	return len(dst)
-}
-
-func (r *sampleRing) close() {
-	r.mu.Lock()
-	r.closed = true
-	r.cond.Broadcast()
-	r.mu.Unlock()
-}
+// The sampleRing shared with the malgo backend lives in audio_ring.go.
 
 // pulseSource is a voice.Source backed by a PulseAudio record stream.
 type pulseSource struct {
@@ -129,8 +62,11 @@ func NewMicSource(monitor bool, rate int) (Source, error) {
 	return &pulseSource{client: c, stream: st, ring: ring}, nil
 }
 
-// Read implements Source (pulls the next PCM frame; silence when quiet).
-func (p *pulseSource) Read(pcm []int16) (int, error) { return p.ring.popBlocking(pcm), nil }
+// Read implements Source (pulls the next PCM frame; silence when quiet). Never
+// blocks — silence-pads on underrun so the ticker-paced send loop always emits a
+// keepalive frame and a quiet side never starves the peer into the dmsg
+// idle-read timeout (which was dropping calls).
+func (p *pulseSource) Read(pcm []int16) (int, error) { return p.ring.popSilence(pcm), nil }
 
 // Close stops and releases the capture stream.
 func (p *pulseSource) Close() error {

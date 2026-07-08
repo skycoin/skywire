@@ -865,6 +865,11 @@ func (proxyDefaultAPI) VoiceCallAudio(_ string) (sent, recv []int16, err error) 
 	return nil, nil, ErrProxyNotSupported
 }
 
+// VoiceMute implements API (not proxied).
+func (proxyDefaultAPI) VoiceMute(_ string, _, _ bool) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupHistory(_ string, _ int) ([]GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }

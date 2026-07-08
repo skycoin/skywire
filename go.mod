@@ -70,6 +70,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/flynn/noise v1.1.0
 	github.com/gdamore/tcell/v2 v2.13.10
+	github.com/gen2brain/malgo v0.11.25
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/hanwen/go-fuse/v2 v2.10.1
 	github.com/itchyny/gojq v0.12.19
@@ -85,6 +86,7 @@ require (
 	github.com/rivo/tview v0.42.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/tetratelabs/wazero v1.12.0
+	github.com/thesyncim/gopus v0.1.1
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	go.starlark.net v0.0.0-20260630144053-529d8e869a14
 	golang.org/x/time v0.15.0
