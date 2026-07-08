@@ -1626,6 +1626,32 @@ func (rc *rpcClient) VoiceActive() ([]string, error) {
 	return out, err
 }
 
+// VoiceAnswer implements API.
+func (rc *rpcClient) VoiceAnswer(callID string) error {
+	return rc.Call("VoiceAnswer", &callID, &struct{}{})
+}
+
+// VoiceDecline implements API.
+func (rc *rpcClient) VoiceDecline(callID string) error {
+	return rc.Call("VoiceDecline", &callID, &struct{}{})
+}
+
+// VoiceIncoming implements API.
+func (rc *rpcClient) VoiceIncoming() ([]string, error) {
+	var out []string
+	err := rc.Call("VoiceIncoming", &struct{}{}, &out)
+	return out, err
+}
+
+// VoiceCallAudio implements API.
+func (rc *rpcClient) VoiceCallAudio(callID string) (sent, recv []int16, err error) {
+	var out VoiceAudioSnapshot
+	if err = rc.Call("VoiceCallAudio", &callID, &out); err != nil {
+		return nil, nil, err
+	}
+	return out.Sent, out.Recv, nil
+}
+
 // GroupHistory implements API. Returns persisted group messages from
 // the visor's history store; returns the wrapped ErrGroupHistoryDisabled
 // when persistence is off.
