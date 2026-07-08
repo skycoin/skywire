@@ -65,6 +65,7 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 	default:
 		monitor := mode == "monitor"
 		cfg.ManualAnswer = true
+		cfg.Visualize = true // tap call audio for `voice spectrogram --call`
 		cfg.NewSource = func() skyvoice.Source {
 			s, err := skyvoice.NewMicSource(monitor, 0)
 			if err != nil {

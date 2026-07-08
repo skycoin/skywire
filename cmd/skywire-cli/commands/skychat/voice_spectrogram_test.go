@@ -14,11 +14,11 @@ import (
 // freq/12000 * bufferHeight. A 3 kHz tone (at the 24 kHz spectrogram rate) must
 // peak ~1/4 of the way up the fixed buffer.
 func TestSpectrogramColumnFreqPosition(t *testing.T) {
-	v := newSpecView()
 	const (
 		rate = spectrogram.SampleRate // 24000
 		freq = 3000.0
 	)
+	v := newSpecView(rate)
 	samp := make([]float32, 4096)
 	for i := range samp {
 		samp[i] = float32(math.Sin(2 * math.Pi * freq * float64(i) / rate))

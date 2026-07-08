@@ -1329,6 +1329,11 @@ func (mc *mockRPCClient) VoiceDecline(_ string) error { return nil }
 // VoiceIncoming implements API.
 func (mc *mockRPCClient) VoiceIncoming() ([]string, error) { return nil, nil }
 
+// VoiceCallAudio implements API.
+func (mc *mockRPCClient) VoiceCallAudio(_ string) (sent, recv []int16, err error) {
+	return nil, nil, nil
+}
+
 // GroupHistory implements API.
 func (mc *mockRPCClient) GroupHistory(_ string, _ int) ([]GroupMessage, error) { return nil, nil }
 

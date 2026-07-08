@@ -48,7 +48,10 @@ type Config struct {
 	// notified when a call starts ringing.
 	ManualAnswer bool
 	Ring         func(inv Sig)
-	Logger       *logging.Logger
+	// Visualize, when true, taps each call's sent/received PCM into a small ring
+	// so CallAudio can serve it for a live spectrogram. The audio is unaffected.
+	Visualize bool
+	Logger    *logging.Logger
 }
 
 // ringingCall is an inbound invite parked awaiting an explicit answer/decline.
@@ -67,6 +70,7 @@ type Manager struct {
 	mu      sync.Mutex
 	calls   map[string]*Session
 	ringing map[string]*ringingCall
+	taps    map[string]*callTap
 }
 
 // NewManager constructs a Manager. Call Serve to start accepting.
@@ -83,7 +87,7 @@ func NewManager(cfg Config) *Manager {
 	if cfg.NewSink == nil {
 		cfg.NewSink = func() Sink { return NullSink{} }
 	}
-	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall)}
+	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap)}
 	m.sig = NewSignaler(cfg.LocalPK, cfg.SignalPort, cfg.Dial, cfg.Logger)
 	m.sig.SetInviteHandler(m.handleInvite)
 	return m
@@ -215,7 +219,17 @@ func (m *Manager) Incoming() []Sig {
 }
 
 func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Session {
-	sess := NewSession(callID, conn, m.cfg.Codec, m.cfg.NewSource(), m.cfg.NewSink(), ssrc, m.log)
+	src := m.cfg.NewSource()
+	sink := m.cfg.NewSink()
+	if m.cfg.Visualize {
+		tap := &callTap{sent: newAudioRing(sampleRate), recv: newAudioRing(sampleRate)} // ~1s each
+		src = &teeSource{inner: src, ring: tap.sent}
+		sink = &teeSink{inner: sink, ring: tap.recv}
+		m.mu.Lock()
+		m.taps[callID] = tap
+		m.mu.Unlock()
+	}
+	sess := NewSession(callID, conn, m.cfg.Codec, src, sink, ssrc, m.log)
 	m.mu.Lock()
 	m.calls[callID] = sess
 	m.mu.Unlock()
@@ -223,10 +237,23 @@ func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Sessi
 	return sess
 }
 
+// CallAudio returns the most recent buffered sent + received PCM for a call
+// (Visualize mode). Used to drive a live spectrogram.
+func (m *Manager) CallAudio(callID string) (sent, recv []int16, err error) {
+	m.mu.Lock()
+	tap := m.taps[callID]
+	m.mu.Unlock()
+	if tap == nil {
+		return nil, nil, errors.New("voice: no visualized audio for that call")
+	}
+	return tap.sent.snapshot(), tap.recv.snapshot(), nil
+}
+
 func (m *Manager) dropCall(callID string) {
 	m.mu.Lock()
 	sess := m.calls[callID]
 	delete(m.calls, callID)
+	delete(m.taps, callID)
 	m.mu.Unlock()
 	if sess != nil {
 		sess.Close()

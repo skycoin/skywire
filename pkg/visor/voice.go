@@ -78,3 +78,13 @@ func (v *Visor) VoiceIncoming() ([]string, error) {
 	}
 	return out, nil
 }
+
+// VoiceCallAudio returns the most recent buffered sent + received PCM for an
+// active call (only when the visor runs with real audio, which taps call audio).
+// The CLI polls this to draw a live two-panel spectrogram.
+func (v *Visor) VoiceCallAudio(callID string) (sent, recv []int16, err error) {
+	if v.voice == nil {
+		return nil, nil, ErrVoiceDisabled
+	}
+	return v.voice.CallAudio(callID)
+}

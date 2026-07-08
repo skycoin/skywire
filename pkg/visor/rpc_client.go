@@ -1643,6 +1643,15 @@ func (rc *rpcClient) VoiceIncoming() ([]string, error) {
 	return out, err
 }
 
+// VoiceCallAudio implements API.
+func (rc *rpcClient) VoiceCallAudio(callID string) (sent, recv []int16, err error) {
+	var out VoiceAudioSnapshot
+	if err = rc.Call("VoiceCallAudio", &callID, &out); err != nil {
+		return nil, nil, err
+	}
+	return out.Sent, out.Recv, nil
+}
+
 // GroupHistory implements API. Returns persisted group messages from
 // the visor's history store; returns the wrapped ErrGroupHistoryDisabled
 // when persistence is off.

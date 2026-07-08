@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	skyvoice "github.com/skycoin/skywire/pkg/skychat/voice"
 	"github.com/skycoin/skywire/pkg/skychat/voice/spectrogram"
 )
@@ -33,14 +34,25 @@ const (
 	specBufferWidth  = 2048
 	specBufferHeight = 1024
 	specMaxFreqHz    = 12000 // vertical axis spans 0..12 kHz, like audioprism
+	callAudioRate    = 48000 // voice call PCM sample rate (pkg/skychat/voice)
 )
 
-var voiceSpectrogramMonitor bool
+var (
+	voiceSpectrogramMonitor bool
+	voiceSpectrogramCall    string
+)
 
 func init() {
 	voiceSpectrogramCmd.Flags().BoolVar(&voiceSpectrogramMonitor, "monitor", false,
 		"capture the system output (default sink monitor) instead of the microphone — visualize whatever audio is playing, no mic needed")
+	voiceSpectrogramCmd.Flags().StringVar(&voiceSpectrogramCall, "call", "",
+		"visualize an active call by id instead of local audio — two panels (sent | received), polled from the visor")
 	voiceCmd.AddCommand(voiceSpectrogramCmd)
+}
+
+// callAudioRPC is the visor RPC surface the call-spectrogram view needs.
+type callAudioRPC interface {
+	VoiceCallAudio(callID string) (sent, recv []int16, err error)
 }
 
 var voiceSpectrogramCmd = &cobra.Command{
@@ -53,8 +65,20 @@ Captures local audio (the microphone by default, or the system output with
 feed on a voice call. Matches the audioprism-go tcell view. Linux only
 (PulseAudio/PipeWire). Press q / Esc / Ctrl-C to quit.`,
 	Run: func(cmd *cobra.Command, _ []string) {
-		// Capture at the spectrogram's native rate so the frequency mapping and
-		// magnitude scaling match audioprism-go exactly.
+		// --call: two-panel sent/received view of an active call, polled from the
+		// visor (audio is captured/played server-side).
+		if voiceSpectrogramCall != "" {
+			rpcClient, err := clirpc.Client(cmd.Flags())
+			if err != nil {
+				cliutil.PrintFatalError(cmd.Flags(), err)
+			}
+			if err := runCallSpectrogramTUI(rpcClient, voiceSpectrogramCall); err != nil {
+				cliutil.PrintFatalError(cmd.Flags(), err)
+			}
+			return
+		}
+		// Default: local audio, captured at the spectrogram's native rate so the
+		// frequency mapping and magnitude scaling match audioprism-go exactly.
 		src, err := skyvoice.NewMicSource(voiceSpectrogramMonitor, spectrogram.SampleRate)
 		if err != nil {
 			cliutil.PrintFatalError(cmd.Flags(), err)
@@ -76,10 +100,14 @@ type specView struct {
 	overlap []float32       // sliding FFT window
 	pending []float32       // samples not yet stepped through
 	dftSize int
+	rate    int // sample rate of the fed audio (freq→bin mapping)
 }
 
-func newSpecView() *specView {
-	v := &specView{dftSize: spectrogram.S.GetDFTSize()}
+func newSpecView(rate int) *specView {
+	if rate <= 0 {
+		rate = spectrogram.SampleRate
+	}
+	v := &specView{dftSize: spectrogram.S.GetDFTSize(), rate: rate}
 	v.overlap = make([]float32, v.dftSize)
 	v.history = make([][]color.Color, specBufferWidth)
 	for i := range v.history {
@@ -110,7 +138,7 @@ func (v *specView) push(samples []float32) {
 		col := make([]color.Color, specBufferHeight)
 		for y := 0; y < specBufferHeight; y++ {
 			freq := float64(y) / float64(specBufferHeight) * specMaxFreqHz
-			bin := int(freq * float64(v.dftSize) / float64(spectrogram.SampleRate))
+			bin := int(freq * float64(v.dftSize) / float64(v.rate))
 			if bin < len(mags) {
 				col[y] = spectrogram.MagnitudeToPixel(mags[bin])
 			} else {
@@ -143,9 +171,10 @@ func (v *specView) drainInto() {
 	v.mu.Unlock()
 }
 
-// draw renders the most recent w columns, scaling specBufferHeight to h with low
-// frequencies at the bottom (audioprism's drawSpectrogram).
-func (v *specView) draw(screen tcell.Screen, w, h int) {
+// draw renders the most recent w columns into the screen region starting at x0,
+// scaling specBufferHeight to h with low frequencies at the bottom (audioprism's
+// drawSpectrogram).
+func (v *specView) draw(screen tcell.Screen, x0, w, h int) {
 	v.mu.RLock()
 	defer v.mu.RUnlock()
 	start := (v.head - w + specBufferWidth) % specBufferWidth
@@ -158,7 +187,7 @@ func (v *specView) draw(screen tcell.Screen, w, h int) {
 			}
 			r, g, b, _ := v.history[idx][by].RGBA()
 			style := tcell.StyleDefault.Background(tcell.NewRGBColor(int32(r>>8), int32(g>>8), int32(b>>8)))
-			screen.SetContent(x, h-1-y, ' ', nil, style)
+			screen.SetContent(x0+x, h-1-y, ' ', nil, style)
 		}
 	}
 }
@@ -176,7 +205,7 @@ func runSpectrogramTUI(src skyvoice.Source) error {
 	defer screen.Fini()
 	screen.Clear()
 
-	view := newSpecView()
+	view := newSpecView(spectrogram.SampleRate)
 	quit := make(chan struct{})
 
 	// Audio reader → step columns.
@@ -231,10 +260,121 @@ func runSpectrogramTUI(src skyvoice.Source) error {
 		specH := h - 1 // bottom row = hint
 		view.drainInto()
 		screen.Clear()
-		view.draw(screen, w, specH)
+		view.draw(screen, 0, w, specH)
 		drawHint(screen, h-1, w, voiceSpectrogramMonitor)
 		screen.Show()
 	}
+}
+
+// runCallSpectrogramTUI polls the visor for an active call's sent/received PCM
+// and draws two side-by-side spectrograms (left: sent, right: received).
+func runCallSpectrogramTUI(rpc callAudioRPC, callID string) error {
+	screen, err := tcell.NewScreen()
+	if err != nil {
+		return err
+	}
+	if err := screen.Init(); err != nil {
+		return err
+	}
+	defer screen.Fini()
+	screen.Clear()
+
+	sent := newSpecView(callAudioRate)
+	recv := newSpecView(callAudioRate)
+	quit := make(chan struct{})
+
+	go func() {
+		for {
+			switch ev := screen.PollEvent().(type) {
+			case *tcell.EventKey:
+				if ev.Key() == tcell.KeyEscape || ev.Key() == tcell.KeyCtrlC ||
+					ev.Rune() == 'q' || ev.Rune() == 'Q' {
+					close(quit)
+					return
+				}
+			case *tcell.EventResize:
+				screen.Sync()
+			}
+		}
+	}()
+
+	const pollMs = 60
+	tailN := callAudioRate * pollMs / 1000 // ~one poll-interval of new audio
+	ticker := time.NewTicker(pollMs * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-quit:
+			return nil
+		case <-ticker.C:
+		}
+		s, r, aerr := rpc.VoiceCallAudio(callID)
+		if aerr != nil {
+			drawCentered(screen, "call "+callID+": "+aerr.Error()+"  (q to quit)")
+			continue
+		}
+		sent.push(int16Tail(s, tailN))
+		recv.push(int16Tail(r, tailN))
+		sent.drainInto()
+		recv.drainInto()
+
+		w, h := screen.Size()
+		if w < 4 || h < 2 {
+			continue
+		}
+		specH := h - 1
+		mid := w / 2
+		leftW := mid - 1
+		if leftW < 1 {
+			leftW = 1
+		}
+		screen.Clear()
+		sent.draw(screen, 0, leftW, specH)
+		recv.draw(screen, mid, w-mid, specH)
+		for y := 0; y < specH; y++ { // divider
+			screen.SetContent(mid-1, y, '│', nil, tcell.StyleDefault.Foreground(tcell.ColorGray))
+		}
+		drawCallHint(screen, h-1, w, callID)
+		screen.Show()
+	}
+}
+
+// int16Tail returns the last n samples of s as normalized float32.
+func int16Tail(s []int16, n int) []float32 {
+	if len(s) > n {
+		s = s[len(s)-n:]
+	}
+	out := make([]float32, len(s))
+	for i, v := range s {
+		out[i] = float32(v) / 32768.0
+	}
+	return out
+}
+
+func drawCallHint(screen tcell.Screen, y, w int, callID string) {
+	hint := []rune(" call " + callID + " — left: sent   right: received — q/Esc to quit ")
+	st := tcell.StyleDefault.Foreground(tcell.ColorWhite).Background(tcell.ColorBlack)
+	for x := 0; x < w; x++ {
+		r := ' '
+		if x < len(hint) {
+			r = hint[x]
+		}
+		screen.SetContent(x, y, r, nil, st)
+	}
+}
+
+func drawCentered(screen tcell.Screen, msg string) {
+	w, h := screen.Size()
+	screen.Clear()
+	runes := []rune(msg)
+	x := (w - len(runes)) / 2
+	if x < 0 {
+		x = 0
+	}
+	for i, r := range runes {
+		screen.SetContent(x+i, h/2, r, nil, tcell.StyleDefault)
+	}
+	screen.Show()
 }
 
 func closeSource(src skyvoice.Source) error {

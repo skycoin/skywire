@@ -70,3 +70,23 @@ func (r *RPC) VoiceIncoming(_ *struct{}, out *[]string) (err error) {
 	*out = ids
 	return nil
 }
+
+// VoiceAudioSnapshot is the recent sent/received PCM of an active call.
+type VoiceAudioSnapshot struct {
+	Sent []int16
+	Recv []int16
+}
+
+// VoiceCallAudio replies with the recent sent + received PCM of a call.
+func (r *RPC) VoiceCallAudio(callID *string, out *VoiceAudioSnapshot) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceCallAudio", callID)(nil, &err)
+	if callID == nil {
+		return fmt.Errorf("nil request")
+	}
+	sent, recv, err := r.visor.VoiceCallAudio(*callID)
+	if err != nil {
+		return err
+	}
+	out.Sent, out.Recv = sent, recv
+	return nil
+}

@@ -301,3 +301,52 @@ func TestManualAnswerDecline(t *testing.T) {
 		t.Fatal("Call did not return after Decline")
 	}
 }
+
+// TestCallAudioTap verifies Visualize mode taps a call's sent audio so
+// CallAudio can serve it for the live spectrogram.
+func TestCallAudioTap(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+
+	lis := newMemListener()
+	defer lis.Close() //nolint:errcheck
+
+	mgrB := NewManager(Config{
+		LocalPK:    pkB,
+		Dial:       func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return nil, io.EOF },
+		OnIncoming: func(Sig) bool { return true },
+	})
+	go mgrB.Serve(ctx, lis)
+
+	mgrA := NewManager(Config{
+		LocalPK:   pkA,
+		Dial:      func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return lis.dial() },
+		NewSource: func() Source { return &toneSource{} },
+		Visualize: true,
+	})
+	sess, err := mgrA.Call(ctx, pkB)
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	// Let a few frames of the tone flow through the tap.
+	time.Sleep(300 * time.Millisecond)
+	sent, _, err := mgrA.CallAudio(sess.CallID)
+	if err != nil {
+		t.Fatalf("CallAudio: %v", err)
+	}
+	if len(sent) == 0 {
+		t.Fatal("tap captured no sent audio")
+	}
+	nonzero := false
+	for _, s := range sent {
+		if s != 0 {
+			nonzero = true
+			break
+		}
+	}
+	if !nonzero {
+		t.Fatal("tapped sent audio is all silence")
+	}
+}

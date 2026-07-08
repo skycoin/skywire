@@ -293,6 +293,7 @@ type API interface {
 	VoiceAnswer(callID string) error
 	VoiceDecline(callID string) error
 	VoiceIncoming() ([]string, error)
+	VoiceCallAudio(callID string) (sent, recv []int16, err error)
 
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
