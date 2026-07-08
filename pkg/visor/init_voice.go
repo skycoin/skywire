@@ -66,6 +66,19 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		monitor := mode == "monitor"
 		cfg.ManualAnswer = true
 		cfg.Visualize = true // tap call audio for `voice spectrogram --call`
+		// Prefer Opus (~24 kbit/s) when the binary was built with -tags opus;
+		// otherwise the manager keeps the PCM passthrough. Each session gets its
+		// own codec (opus is stateful).
+		if _, oerr := skyvoice.NewOpusCodec(); oerr == nil {
+			cfg.NewCodec = func() skyvoice.Codec {
+				c, err := skyvoice.NewOpusCodec()
+				if err != nil {
+					return skyvoice.NewPCMCodec()
+				}
+				return c
+			}
+			log.Info("voice: using Opus codec")
+		}
 		cfg.NewSource = func() skyvoice.Source {
 			s, err := skyvoice.NewMicSource(monitor, 0)
 			if err != nil {
