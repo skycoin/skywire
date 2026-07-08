@@ -10,10 +10,15 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
+
+// ringTimeout bounds how long an unanswered inbound call rings before it's
+// auto-declined (in ManualAnswer mode).
+const ringTimeout = 45 * time.Second
 
 // Config wires a Manager. Dial + the listeners are supplied by the runtime
 // (native visor or wasm) so this package stays transport-agnostic (KG7): both a
@@ -32,11 +37,27 @@ type Config struct {
 	// audio hardware; a real audio backend swaps these in.
 	NewSource func() Source
 	NewSink   func() Sink
-	// OnIncoming decides whether to accept an inbound invite. nil => decline all
-	// (voice off). A UI wires this to a ring/accept prompt; a headless/test peer
-	// can return true to auto-answer.
+	// OnIncoming decides whether to accept an inbound invite IMMEDIATELY (used in
+	// auto-answer mode). nil => decline all (voice off). A headless/test peer
+	// returns true to auto-answer. Ignored when ManualAnswer is set.
 	OnIncoming func(inv Sig) bool
-	Logger     *logging.Logger
+	// ManualAnswer, when true, makes an inbound invite RING (park, pending) until
+	// Answer(callID) or Decline(callID) — never auto-accepting. This is the mode
+	// used once real mic capture is enabled, so a visor never streams its
+	// microphone to a caller without an explicit answer. Ring (optional) is
+	// notified when a call starts ringing.
+	ManualAnswer bool
+	Ring         func(inv Sig)
+	// Visualize, when true, taps each call's sent/received PCM into a small ring
+	// so CallAudio can serve it for a live spectrogram. The audio is unaffected.
+	Visualize bool
+	Logger    *logging.Logger
+}
+
+// ringingCall is an inbound invite parked awaiting an explicit answer/decline.
+type ringingCall struct {
+	inv     Sig
+	decided chan bool // buffered(1): true=answer, false=decline
 }
 
 // Manager owns the local voice endpoint: it accepts inbound calls via the
@@ -46,8 +67,10 @@ type Manager struct {
 	sig *Signaler
 	log *logging.Logger
 
-	mu    sync.Mutex
-	calls map[string]*Session
+	mu      sync.Mutex
+	calls   map[string]*Session
+	ringing map[string]*ringingCall
+	taps    map[string]*callTap
 }
 
 // NewManager constructs a Manager. Call Serve to start accepting.
@@ -64,7 +87,7 @@ func NewManager(cfg Config) *Manager {
 	if cfg.NewSink == nil {
 		cfg.NewSink = func() Sink { return NullSink{} }
 	}
-	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session)}
+	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap)}
 	m.sig = NewSignaler(cfg.LocalPK, cfg.SignalPort, cfg.Dial, cfg.Logger)
 	m.sig.SetInviteHandler(m.handleInvite)
 	return m
@@ -107,15 +130,54 @@ func (m *Manager) Call(ctx context.Context, peer cipher.PubKey) (*Session, error
 	return sess, nil
 }
 
-// handleInvite is the callee side: decide accept/decline, and on accept reply
-// SigAccept and start a media Session over the same conn.
+// handleInvite is the callee side. In auto-answer mode it decides immediately
+// via OnIncoming; in ManualAnswer mode it RINGS (parks the conn) until an
+// explicit Answer/Decline or the ring timeout. On accept it replies SigAccept
+// and starts a media Session over the same conn.
 func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
-	accept := m.cfg.OnIncoming != nil && m.cfg.OnIncoming(inv)
-	if !accept {
+	if m.cfg.ManualAnswer {
+		if !m.ringAndWait(inv) {
+			_ = writeSig(conn, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "no answer"}) //nolint:errcheck
+			_ = conn.Close()                                                                                          //nolint:errcheck
+			return
+		}
+		m.accept(inv, conn)
+		return
+	}
+	if m.cfg.OnIncoming == nil || !m.cfg.OnIncoming(inv) {
 		_ = writeSig(conn, Sig{Type: SigDecline, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Reason: "declined"}) //nolint:errcheck
 		_ = conn.Close()                                                                                         //nolint:errcheck
 		return
 	}
+	m.accept(inv, conn)
+}
+
+// ringAndWait parks the invite as a ringing call and blocks until it's answered,
+// declined, or the ring timeout fires. Returns true only on an explicit answer.
+func (m *Manager) ringAndWait(inv Sig) bool {
+	rc := &ringingCall{inv: inv, decided: make(chan bool, 1)}
+	m.mu.Lock()
+	m.ringing[inv.CallID] = rc
+	m.mu.Unlock()
+	if m.cfg.Ring != nil {
+		m.cfg.Ring(inv)
+	}
+	m.log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
+		Info("voice: incoming call RINGING — answer with `skychat voice answer <id>`")
+
+	var ok bool
+	select {
+	case ok = <-rc.decided:
+	case <-time.After(ringTimeout):
+	}
+	m.mu.Lock()
+	delete(m.ringing, inv.CallID)
+	m.mu.Unlock()
+	return ok
+}
+
+// accept replies SigAccept and starts the media session over conn.
+func (m *Manager) accept(inv Sig, conn net.Conn) {
 	ack := Sig{Type: SigAccept, CallID: inv.CallID, FromPK: m.cfg.LocalPK, Codec: m.cfg.Codec.Name(), MediaPort: m.cfg.SignalPort}
 	if err := writeSig(conn, ack); err != nil {
 		_ = conn.Close() //nolint:errcheck
@@ -125,8 +187,49 @@ func (m *Manager) handleInvite(inv Sig, conn net.Conn) {
 	go func() { sess.Run(context.Background()); m.dropCall(inv.CallID) }() //nolint:gosec // session outlives the invite/request ctx by design
 }
 
+// Answer accepts a ringing inbound call by id (ManualAnswer mode).
+func (m *Manager) Answer(callID string) error { return m.decide(callID, true) }
+
+// Decline rejects a ringing inbound call by id.
+func (m *Manager) Decline(callID string) error { return m.decide(callID, false) }
+
+func (m *Manager) decide(callID string, ok bool) error {
+	m.mu.Lock()
+	rc := m.ringing[callID]
+	m.mu.Unlock()
+	if rc == nil {
+		return errors.New("voice: no ringing call with that id")
+	}
+	select {
+	case rc.decided <- ok:
+	default: // already decided
+	}
+	return nil
+}
+
+// Incoming returns the invites of calls currently ringing (awaiting answer).
+func (m *Manager) Incoming() []Sig {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Sig, 0, len(m.ringing))
+	for _, rc := range m.ringing {
+		out = append(out, rc.inv)
+	}
+	return out
+}
+
 func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Session {
-	sess := NewSession(callID, conn, m.cfg.Codec, m.cfg.NewSource(), m.cfg.NewSink(), ssrc, m.log)
+	src := m.cfg.NewSource()
+	sink := m.cfg.NewSink()
+	if m.cfg.Visualize {
+		tap := &callTap{sent: newAudioRing(sampleRate), recv: newAudioRing(sampleRate)} // ~1s each
+		src = &teeSource{inner: src, ring: tap.sent}
+		sink = &teeSink{inner: sink, ring: tap.recv}
+		m.mu.Lock()
+		m.taps[callID] = tap
+		m.mu.Unlock()
+	}
+	sess := NewSession(callID, conn, m.cfg.Codec, src, sink, ssrc, m.log)
 	m.mu.Lock()
 	m.calls[callID] = sess
 	m.mu.Unlock()
@@ -134,10 +237,23 @@ func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Sessi
 	return sess
 }
 
+// CallAudio returns the most recent buffered sent + received PCM for a call
+// (Visualize mode). Used to drive a live spectrogram.
+func (m *Manager) CallAudio(callID string) (sent, recv []int16, err error) {
+	m.mu.Lock()
+	tap := m.taps[callID]
+	m.mu.Unlock()
+	if tap == nil {
+		return nil, nil, errors.New("voice: no visualized audio for that call")
+	}
+	return tap.sent.snapshot(), tap.recv.snapshot(), nil
+}
+
 func (m *Manager) dropCall(callID string) {
 	m.mu.Lock()
 	sess := m.calls[callID]
 	delete(m.calls, callID)
+	delete(m.taps, callID)
 	m.mu.Unlock()
 	if sess != nil {
 		sess.Close()

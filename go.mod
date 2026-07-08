@@ -73,6 +73,7 @@ require (
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/hanwen/go-fuse/v2 v2.10.1
 	github.com/itchyny/gojq v0.12.19
+	github.com/jfreymuth/pulse v0.1.1
 	github.com/kr/pretty v0.3.1
 	github.com/peterh/liner v1.2.2
 	github.com/pgavlin/femto v0.0.0-20201224065653-0c9d20f9cac4
