@@ -365,6 +365,9 @@ github.com/gdamore/tcell/v2/terminfo/x/xterm_kitty
 # github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 ## explicit
 github.com/gen2brain/dlgs
+# github.com/gen2brain/malgo v0.11.25
+## explicit; go 1.21
+github.com/gen2brain/malgo
 # github.com/gin-contrib/sse v1.1.1
 ## explicit; go 1.23
 github.com/gin-contrib/sse
@@ -1074,6 +1077,29 @@ github.com/tetratelabs/wazero/internal/wasm/binary
 github.com/tetratelabs/wazero/internal/wasmdebug
 github.com/tetratelabs/wazero/internal/wasmruntime
 github.com/tetratelabs/wazero/sys
+# github.com/thesyncim/gopus v0.1.1
+## explicit; go 1.25.0
+github.com/thesyncim/gopus
+github.com/thesyncim/gopus/internal/celt
+github.com/thesyncim/gopus/internal/cpufeat
+github.com/thesyncim/gopus/internal/dnnblob
+github.com/thesyncim/gopus/internal/dnnmath
+github.com/thesyncim/gopus/internal/dred
+github.com/thesyncim/gopus/internal/dred/rdovae
+github.com/thesyncim/gopus/internal/encoder
+github.com/thesyncim/gopus/internal/extsupport
+github.com/thesyncim/gopus/internal/fixedpoint
+github.com/thesyncim/gopus/internal/hybrid
+github.com/thesyncim/gopus/internal/lpcnetplc
+github.com/thesyncim/gopus/internal/opusmath
+github.com/thesyncim/gopus/internal/osce/bwe
+github.com/thesyncim/gopus/internal/osce/lace
+github.com/thesyncim/gopus/internal/plc
+github.com/thesyncim/gopus/internal/rangecoding
+github.com/thesyncim/gopus/internal/silk
+github.com/thesyncim/gopus/internal/util
+github.com/thesyncim/gopus/multistream
+github.com/thesyncim/gopus/types
 # github.com/tidwall/pretty v1.2.1
 ## explicit; go 1.16
 github.com/tidwall/pretty

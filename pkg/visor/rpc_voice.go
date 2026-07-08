@@ -71,6 +71,22 @@ func (r *RPC) VoiceIncoming(_ *struct{}, out *[]string) (err error) {
 	return nil
 }
 
+// VoiceMuteReq toggles the mic/speaker mute of a call.
+type VoiceMuteReq struct {
+	CallID  string
+	Mic     bool
+	Speaker bool
+}
+
+// VoiceMute toggles the mic (send) and speaker (playback) mute of an active call.
+func (r *RPC) VoiceMute(req *VoiceMuteReq, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceMute", req)(nil, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.VoiceMute(req.CallID, req.Mic, req.Speaker)
+}
+
 // VoiceAudioSnapshot is the recent sent/received PCM of an active call.
 type VoiceAudioSnapshot struct {
 	Sent []int16

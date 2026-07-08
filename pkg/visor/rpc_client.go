@@ -1652,6 +1652,11 @@ func (rc *rpcClient) VoiceCallAudio(callID string) (sent, recv []int16, err erro
 	return out.Sent, out.Recv, nil
 }
 
+// VoiceMute implements API.
+func (rc *rpcClient) VoiceMute(callID string, mic, speaker bool) error {
+	return rc.Call("VoiceMute", &VoiceMuteReq{CallID: callID, Mic: mic, Speaker: speaker}, &struct{}{})
+}
+
 // GroupHistory implements API. Returns persisted group messages from
 // the visor's history store; returns the wrapped ErrGroupHistoryDisabled
 // when persistence is off.

@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1.7-labs
+
+ARG GO_VERSION=1.26
+FROM golang:${GO_VERSION}-bookworm
+
+ARG LIBOPUS_VERSION=1.6.1
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PATH=/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    LIBOPUS_VERSION=${LIBOPUS_VERSION} \
+    GOPUS_DISABLE_OPUSDEC=1 \
+    GOMODCACHE=/go/pkg/mod \
+    GOCACHE=/root/.cache/go-build
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update \
+    && apt-get install -y --no-install-recommends \
+        autoconf \
+        automake \
+        ca-certificates \
+        curl \
+        ffmpeg \
+        gcc \
+        g++ \
+        libtool \
+        make \
+        opus-tools \
+        pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
+
+CMD ["bash"]

@@ -30,8 +30,13 @@ type Config struct {
 	Dial DialFunc
 	// SignalPort / MediaPort default to the skyenv voice ports when zero.
 	SignalPort uint16
-	// Codec defaults to the PCM passthrough (Opus is a cgo follow-up).
+	// Codec is the template codec, used for the codec NAME in signaling. Defaults
+	// to the PCM passthrough.
 	Codec Codec
+	// NewCodec builds a fresh codec per session. A stateful codec (Opus keeps
+	// encoder/decoder state) MUST NOT be shared across concurrent calls, so each
+	// session gets its own. Defaults to returning the (stateless) Codec.
+	NewCodec func() Codec
 	// NewSource / NewSink build the mic / speaker for a call. Default to
 	// SilentSource / NullSink (headless) so the control+media plane runs without
 	// audio hardware; a real audio backend swaps these in.
@@ -78,8 +83,14 @@ func NewManager(cfg Config) *Manager {
 	if cfg.Logger == nil {
 		cfg.Logger = logging.MustGetLogger("voice")
 	}
-	if cfg.Codec == nil {
-		cfg.Codec = NewPCMCodec()
+	if cfg.NewCodec == nil {
+		if cfg.Codec == nil {
+			cfg.Codec = NewPCMCodec()
+		}
+		tmpl := cfg.Codec
+		cfg.NewCodec = func() Codec { return tmpl } // stateless PCM: share the instance
+	} else if cfg.Codec == nil {
+		cfg.Codec = cfg.NewCodec() // derive the template for the signaling name
 	}
 	if cfg.NewSource == nil {
 		cfg.NewSource = func() Source { return SilentSource{} }
@@ -229,7 +240,7 @@ func (m *Manager) startSession(callID string, conn net.Conn, ssrc uint32) *Sessi
 		m.taps[callID] = tap
 		m.mu.Unlock()
 	}
-	sess := NewSession(callID, conn, m.cfg.Codec, src, sink, ssrc, m.log)
+	sess := NewSession(callID, conn, m.cfg.NewCodec(), src, sink, ssrc, m.log)
 	m.mu.Lock()
 	m.calls[callID] = sess
 	m.mu.Unlock()
@@ -270,6 +281,21 @@ func (m *Manager) Hangup(callID string) error {
 		return errors.New("voice: no such call")
 	}
 	sess.Close()
+	return nil
+}
+
+// SetMute toggles the mic (send) and speaker (playback) mute state of an active
+// call. mic=true silences what the peer hears from us; speaker=true silences
+// what we hear from the peer ("mute the caller").
+func (m *Manager) SetMute(callID string, mic, speaker bool) error {
+	m.mu.Lock()
+	sess := m.calls[callID]
+	m.mu.Unlock()
+	if sess == nil {
+		return errors.New("voice: no such call")
+	}
+	sess.SetMicMuted(mic)
+	sess.SetSpeakerMuted(speaker)
 	return nil
 }
 
