@@ -1471,10 +1471,13 @@
       }
       if (!voiceCall || !peer) return;
       setStatus("calling " + peer.slice(0, 8) + "… (grant mic access)");
-      Promise.resolve(startAudio()).then(function () {
+      var micOk;
+      Promise.resolve(startAudio()).then(function (ok) {
+        micOk = ok;
         return Promise.resolve(voiceCall(peer)); // blocks until the callee answers
       }).then(function (r) {
         inCall(r && r.id);
+        if (micOk === false) setStatus("in call — no microphone, receive-only", "#e0af68");
       }).catch(function (e) {
         callEnded(); setStatus("call failed: " + (e && e.message ? e.message : e), "#f7768e");
       });
@@ -1490,8 +1493,9 @@
         if (ringAsked[c.id]) return; ringAsked[c.id] = true;
         if (window.confirm("Incoming voice call from " + String(c.from).slice(0, 12) + "…  Answer?")) {
           setStatus("answering… (grant mic access)");
-          Promise.resolve(startAudio()).then(function () { return Promise.resolve(voiceAnswer(c.id)); })
-            .then(function () { inCall(c.id); })
+          var micOk;
+          Promise.resolve(startAudio()).then(function (ok) { micOk = ok; return Promise.resolve(voiceAnswer(c.id)); })
+            .then(function () { inCall(c.id); if (micOk === false) setStatus("in call — no microphone, receive-only", "#e0af68"); })
             .catch(function (e) { callEnded(); setStatus("answer failed: " + (e && e.message ? e.message : e), "#f7768e"); });
         } else if (sv.skychatVoiceDecline) { try { sv.skychatVoiceDecline(c.id); } catch (_) {} }
       }).catch(function () {});
@@ -1898,21 +1902,30 @@
     ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: RATE });
     if (ctx.state === 'suspended') await ctx.resume();
 
-    // capture: mic -> deliverMic
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
-    src = ctx.createMediaStreamSource(micStream);
-    capNode = ctx.createScriptProcessor(2048, 1, 1);
-    capNode.onaudioprocess = function (e) {
-      var f32 = e.inputBuffer.getChannelData(0);
-      var i16 = new Int16Array(f32.length);
-      for (var i = 0; i < f32.length; i++) {
-        var s = Math.max(-1, Math.min(1, f32[i]));
-        i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-      }
-      deliverMic(new Uint8Array(i16.buffer));
-    };
-    src.connect(capNode);
-    capNode.connect(ctx.destination); // node only runs when connected; its own output is silent
+    // capture: mic -> deliverMic. Optional: if there's no microphone or the user
+    // denies access, the call still connects receive-only (we can hear the peer,
+    // we just send silence) rather than failing outright. Returns whether the mic
+    // is live so the caller can surface "receive-only".
+    var micOk = false;
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+      src = ctx.createMediaStreamSource(micStream);
+      capNode = ctx.createScriptProcessor(2048, 1, 1);
+      capNode.onaudioprocess = function (e) {
+        var f32 = e.inputBuffer.getChannelData(0);
+        var i16 = new Int16Array(f32.length);
+        for (var i = 0; i < f32.length; i++) {
+          var s = Math.max(-1, Math.min(1, f32[i]));
+          i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        deliverMic(new Uint8Array(i16.buffer));
+      };
+      src.connect(capNode);
+      capNode.connect(ctx.destination); // node only runs when connected; its own output is silent
+      micOk = true;
+    } catch (e) {
+      try { console.warn('skyvoice: no microphone (' + (e && e.name ? e.name : e) + ') — receive-only'); } catch (_) {}
+    }
 
     // playback: queued frames -> speakers
     playNode = ctx.createScriptProcessor(2048, 1, 1);
@@ -1926,6 +1939,7 @@
       }
     };
     playNode.connect(ctx.destination);
+    return micOk;
   }
 
   function stop() {
