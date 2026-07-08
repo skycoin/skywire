@@ -82,17 +82,6 @@ BUILDTAGINFO := -X $(PROJECT_BASE)/pkg/visor.BuildTag=$(BUILDTAG)
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAGINFO)
 INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 
-# cmd/wasm-visor imports github.com/skycoin/skywire/pkg/buildinfo (NOT the
-# skywire-utilities one the native binary stamps). Without an injected version
-# the js/wasm buildinfo falls back to Go's VCS stamp, which tags the build
-# "-dirty" when the working tree has uncommitted changes — and the embed
-# workflow ALWAYS builds from a dirty tree (source edits aren't committed until
-# after the blob is regenerated). Injecting a clean `git describe --always`
-# version (no --dirty) here makes the embedded wasm report a real, clean version
-# instead. -buildvcs=false stops the VCS "-dirty" stamp from leaking in at all.
-WASM_BUILDINFO_PATH := $(PROJECT_BASE)/pkg/buildinfo
-WASM_BUILDINFO := -X $(WASM_BUILDINFO_PATH).version=$(VERSION) -X $(WASM_BUILDINFO_PATH).commit=$(COMMIT) -X $(WASM_BUILDINFO_PATH).date=$(DATE)
-
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 BUILD_OPTS_RACE?="-race"
@@ -258,7 +247,7 @@ tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+a
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
 	mkdir -p ./build/wasm-visor-go
-	GOOS=js GOARCH=wasm go build -buildvcs=false -ldflags="-s -w $(WASM_BUILDINFO)" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/
