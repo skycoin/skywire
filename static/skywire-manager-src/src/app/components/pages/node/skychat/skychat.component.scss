@@ -46,10 +46,12 @@
 // component's inline fields (the select-panel overlay is themed in styles.scss).
 :host ::ng-deep .sc-shell {
   .mdc-floating-label,
+  mat-label,
+  .mat-mdc-floating-label,
   .mat-mdc-select-value-text,
   .mat-mdc-select-placeholder,
-  .mat-mdc-select-arrow { color: #9aa0a6; }
-  .mdc-text-field--focused .mdc-floating-label { color: #9d7cff; }
+  .mat-mdc-select-arrow { color: #9aa0a6 !important; }
+  .mdc-text-field--focused .mdc-floating-label { color: #9d7cff !important; }
 }
 
 .sc-password {
