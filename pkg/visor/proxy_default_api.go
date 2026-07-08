@@ -849,6 +849,22 @@ func (proxyDefaultAPI) VoiceActive() ([]string, error) {
 	return nil, ErrProxyNotSupported
 }
 
+// VoiceAnswer implements API (not proxied).
+func (proxyDefaultAPI) VoiceAnswer(_ string) error { return ErrProxyNotSupported }
+
+// VoiceDecline implements API (not proxied).
+func (proxyDefaultAPI) VoiceDecline(_ string) error { return ErrProxyNotSupported }
+
+// VoiceIncoming implements API (not proxied).
+func (proxyDefaultAPI) VoiceIncoming() ([]string, error) {
+	return nil, ErrProxyNotSupported
+}
+
+// VoiceCallAudio implements API (not proxied).
+func (proxyDefaultAPI) VoiceCallAudio(_ string) (sent, recv []int16, err error) {
+	return nil, nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupHistory(_ string, _ int) ([]GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }
