@@ -1,0 +1,53 @@
+# IDE
+.idea
+.goland-state.json
+.vscode
+
+# Test binaries
+*.test
+
+# Downloaded official test vectors (runtime cache)
+testvectors/testdata/opus_testvectors/
+
+# Build artifacts
+tmp_check
+.gocache/
+.tmp/
+.docker-cache/
+*.o
+*.a
+*.so
+*.dylib
+
+# Profiling
+*.prof
+*.pprof
+*.trace
+cpu.out
+mem.out
+
+# Example binaries
+examples/*/bench-*
+examples/*/*.exe
+
+# Retired planning directory (keep migration stubs only)
+.planning/*
+!.planning/ACTIVE.md
+!.planning/DECISIONS.md
+!.planning/WORK_CLAIMS.md
+
+# Local autoresearch artifacts
+results.tsv
+run.log
+reports/autoresearch/
+reports/quality/
+reports/release/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage.out
+coverage.html
+.claude/

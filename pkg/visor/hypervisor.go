@@ -916,6 +916,18 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/skychat/groups/invite", hv.getGroupInvite())
 				r.Post("/visors/{pk}/skychat/groups/leave", hv.postGroupLeave())
 				r.Post("/visors/{pk}/skychat/groups/delete", hv.postGroupDelete())
+				// Skychat VOICE calls: bridge the hvui skychat panel to the
+				// local visor's voice surface (native counterpart to the
+				// wasm visor's skychatVoice* JS hooks).
+				r.Get("/visors/{pk}/skychat/voice/active", hv.getVoiceActive())
+				r.Get("/visors/{pk}/skychat/voice/incoming", hv.getVoiceIncoming())
+				r.Post("/visors/{pk}/skychat/voice/call", hv.postVoiceCall())
+				r.Post("/visors/{pk}/skychat/voice/answer", hv.postVoiceAnswer())
+				r.Post("/visors/{pk}/skychat/voice/decline", hv.postVoiceDecline())
+				r.Post("/visors/{pk}/skychat/voice/hangup", hv.postVoiceHangup())
+				r.Post("/visors/{pk}/skychat/voice/mute", hv.postVoiceMute())
+				r.Get("/visors/{pk}/skychat/voice/levels", hv.getVoiceLevels())
+				r.Get("/visors/{pk}/skychat/voice/audio", hv.getVoiceAudio())
 			})
 		})
 
@@ -986,6 +998,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 		// Serve the dashboard UI, with the skynet/clearnet browse engine + native
 		// launcher injected into index.html (and the browse.js / launcher assets).
+		r.Get("/api/ui-version", hv.getUIVersion())
 		r.Handle("/*", hv.uiHandler())
 	})
 
