@@ -299,3 +299,22 @@
 }
 
 // (input/textarea contrast is handled globally in styles.scss now)
+
+// Ringing inbound voice call banner (explicit-answer mode).
+.sc-voice-ring {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin: 4px 0 8px;
+  border-radius: 6px;
+  background: rgba(158, 206, 106, 0.12);
+  border: 1px solid rgba(158, 206, 106, 0.45);
+  font-size: 13px;
+
+  .sc-voice-ring-text { display: flex; align-items: center; gap: 6px; }
+  .sc-status-spacer { flex: 1 1 auto; }
+}
+
+// Call / hang-up button sits beside Send in the composer.
+.call-btn { margin-left: 8px; }

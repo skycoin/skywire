@@ -63,6 +63,25 @@
         </div>
       }
 
+      <!-- Ringing inbound voice calls (explicit-answer mode). Shown in both
+           modes so a call is never missed. -->
+      @for (c of voiceIncoming; track c.id) {
+        <div class="sc-voice-ring">
+          <mat-icon [inline]="true">ring_volume</mat-icon>
+          <span class="sc-voice-ring-text">
+            {{ 'skychat.voice.incoming' | translate }}
+            <span class="mono small">{{ c.from ? shortPk(c.from) : c.id }}</span>
+          </span>
+          <span class="sc-status-spacer"></span>
+          <button mat-raised-button color="primary" (click)="voiceAnswer(c.id)" [disabled]="voiceBusy">
+            <mat-icon [inline]="true">call</mat-icon> {{ 'skychat.voice.answer' | translate }}
+          </button>
+          <button mat-stroked-button color="warn" (click)="voiceDecline(c.id)">
+            {{ 'skychat.voice.decline' | translate }}
+          </button>
+        </div>
+      }
+
       <!-- Two-column layout: peers sidebar + chat panel (Direct mode). -->
       @if (chatMode === 'dm') {
       <div class="sc-body">
@@ -126,6 +145,15 @@
               <mat-icon>send</mat-icon>
               {{ 'skychat.send' | translate }}
             </button>
+            @if (voiceAvailable) {
+              <button mat-raised-button class="call-btn" [color]="inCall ? 'warn' : 'accent'"
+                      (click)="inCall ? voiceHangup() : voiceCall()"
+                      [disabled]="voiceBusy || (!inCall && !toPK.trim())"
+                      [matTooltip]="(inCall ? 'skychat.voice.hangup-tip' : 'skychat.voice.call-tip') | translate">
+                <mat-icon>{{ inCall ? 'call_end' : 'call' }}</mat-icon>
+                {{ (inCall ? 'skychat.voice.hangup' : 'skychat.voice.call') | translate }}
+              </button>
+            }
           </div>
         </section>
       </div>

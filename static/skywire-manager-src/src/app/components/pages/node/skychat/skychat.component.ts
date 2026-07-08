@@ -45,6 +45,12 @@ interface GroupView {
   status: string;     // 'active' | 'pending' | 'left' | 'revoked'
 }
 
+/** One ringing inbound voice call awaiting an answer. */
+interface IncomingCall {
+  id: string;         // call id (to answer/decline)
+  from: string;       // caller PK hex ('' when the transport doesn't carry it)
+}
+
 /** One group message (any sender) in a room's log. */
 interface GroupMsg {
   group_id: string;
@@ -129,6 +135,19 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // polled room log by timestamp.
   private sentByGroup: { [id: string]: GroupMsg[] } = {};
 
+  // --- Voice call state. -----------------------------------------
+  // Mirrors the DM/group transport split: a native visor drives the voice
+  // HTTP bridge (/skychat/voice/*), a wasm visor the in-process
+  // skywireVisor.skychatVoice* hooks. Both surface the same shapes here.
+  voiceActive: string[] = [];                 // active call ids
+  voiceIncoming: IncomingCall[] = [];         // ringing inbound calls
+  voiceBusy = false;                          // a call/answer is in flight
+  voiceAvailable = true;                      // false when the visor has no voice (503)
+  private voiceTimer: any = null;
+  // Remember which ringing calls we've already surfaced, so re-polls don't
+  // re-prompt (native auto-answer never rings; explicit-answer mode does).
+  private voiceRingSeen = new Set<string>();
+
   // Distinct peers seen so far, in last-touched order. Drives the
   // sidebar list. Recomputed lazily when messages change.
   get peers(): string[] {
@@ -160,6 +179,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
         this.connectSSE();
         this.tryLoadPeers();
         this.refreshPasswordState();
+        this.startVoicePoll();
       }
     });
     return super.ngOnInit();
@@ -169,6 +189,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (this.nodeSub) { this.nodeSub.unsubscribe(); }
     this.disconnectSSE();
     this.stopGroupPoll();
+    this.stopVoicePoll();
   }
 
   ngAfterViewChecked() {
@@ -589,6 +610,137 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
 
   shortPk(pk: string): string {
     return pk && pk.length > 12 ? pk.slice(0, 6) + '…' + pk.slice(-4) : pk;
+  }
+
+  // --- Voice calls -----------------------------------------------
+  // Opus voice over the encrypted mesh (dmsg/skynet), same media plane as
+  // the wasm visor. Native audio flows only when the visor runs with
+  // SKYWIRE_VOICE_AUDIO=mic|monitor; otherwise the call still connects
+  // (silent), so the control plane is always demonstrable from here.
+
+  /** window.skywireVisor when this node is an in-browser wasm visor with the
+   *  voice hooks present, else null (native → HTTP bridge). */
+  private get voiceSv(): any {
+    const sv = (window as any).skywireVisor;
+    if (this.node && (this.node as any).arch === 'wasm' && sv && typeof sv.skychatVoiceCall === 'function') {
+      return sv;
+    }
+    return null;
+  }
+
+  /** Native voice-bridge call over ApiService (CSRF/auth handled). */
+  private voiceApi(path: string, method: 'GET' | 'POST', body?: any): Promise<any> {
+    const url = `visors/${this.node.localPk}/skychat/voice${path}`;
+    const obs = method === 'POST' ? this.api.post(url, body || {}) : this.api.get(url);
+    return firstValueFrom(obs);
+  }
+
+  /** True while at least one call is up (drives the Call/Hang-up toggle). */
+  get inCall(): boolean {
+    return this.voiceActive.length > 0;
+  }
+
+  private startVoicePoll() {
+    if (this.voiceTimer || !this.node) { return; }
+    this.pollVoice();
+    this.voiceTimer = setInterval(() => this.pollVoice(), 1800);
+  }
+
+  private stopVoicePoll() {
+    if (this.voiceTimer) { clearInterval(this.voiceTimer); this.voiceTimer = null; }
+  }
+
+  /** Normalize active-call ids from either transport (wasm returns a JSON
+   *  string, native an array). */
+  private parseIds(raw: any): string[] {
+    let arr = raw;
+    if (typeof raw === 'string') { try { arr = JSON.parse(raw || '[]'); } catch { arr = []; } }
+    return Array.isArray(arr) ? arr.map((x: any) => String(x)) : [];
+  }
+
+  /** Normalize ringing calls: wasm gives [{id,from}] (as a JSON string),
+   *  native gives ["<id> from <pk>"]. */
+  private parseIncoming(raw: any): IncomingCall[] {
+    let arr = raw;
+    if (typeof raw === 'string') { try { arr = JSON.parse(raw || '[]'); } catch { arr = []; } }
+    if (!Array.isArray(arr)) { return []; }
+    return arr.map((x: any): IncomingCall => {
+      if (x && typeof x === 'object') { return { id: String(x.id || ''), from: String(x.from || '') }; }
+      const s = String(x);
+      const m = s.match(/^(\S+)\s+from\s+(\S+)/);
+      return m ? { id: m[1], from: m[2] } : { id: s, from: '' };
+    }).filter(c => c.id);
+  }
+
+  private pollVoice() {
+    if (!this.node) { return; }
+    const sv = this.voiceSv;
+    if (sv) {
+      Promise.resolve(sv.skychatVoiceActive()).then((r: any) => { this.voiceActive = this.parseIds(r); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
+      Promise.resolve(sv.skychatVoiceIncoming()).then((r: any) => { this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
+      return;
+    }
+    this.voiceApi('/active', 'GET')
+      .then((r) => { this.voiceActive = this.parseIds(r); this.voiceAvailable = true; this.cdr.markForCheck(); })
+      .catch((e) => { if (e?.originalError?.status === 503) { this.voiceAvailable = false; this.cdr.markForCheck(); } });
+    this.voiceApi('/incoming', 'GET')
+      .then((r) => { this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); })
+      .catch(() => { /* transient / disabled — /active already flags availability */ });
+  }
+
+  /** Place a call to the composed recipient PK. */
+  voiceCall() {
+    if (this.voiceBusy || this.inCall) { return; }
+    const peer = this.toPK.trim();
+    if (peer.length !== 66 || !/^[0-9a-fA-F]+$/.test(peer)) {
+      this.snackbar.showError('Recipient must be a 66-char hex public key');
+      return;
+    }
+    this.voiceBusy = true;
+    const sv = this.voiceSv;
+    const done = () => { this.voiceBusy = false; this.pollVoice(); this.cdr.markForCheck(); };
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceCall(peer))
+      : this.voiceApi('/call', 'POST', { peer });
+    p.then(() => { this.snackbar.showDone('Call connected'); done(); })
+      .catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+  }
+
+  /** Hang up an active call (defaults to the first). */
+  voiceHangup(id?: string) {
+    const callID = id || this.voiceActive[0];
+    if (!callID) { return; }
+    const sv = this.voiceSv;
+    const done = () => { this.pollVoice(); this.cdr.markForCheck(); };
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceHangup(callID))
+      : this.voiceApi('/hangup', 'POST', { call_id: callID });
+    p.then(done).catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+  }
+
+  /** Answer a ringing inbound call. */
+  voiceAnswer(id: string) {
+    if (this.voiceBusy) { return; }
+    this.voiceBusy = true;
+    this.voiceRingSeen.add(id);
+    const sv = this.voiceSv;
+    const done = () => { this.voiceBusy = false; this.pollVoice(); this.cdr.markForCheck(); };
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceAnswer(id))
+      : this.voiceApi('/answer', 'POST', { call_id: id });
+    p.then(() => { this.snackbar.showDone('Call answered'); done(); })
+      .catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+  }
+
+  /** Decline a ringing inbound call. */
+  voiceDecline(id: string) {
+    this.voiceRingSeen.add(id);
+    const sv = this.voiceSv;
+    const done = () => { this.pollVoice(); this.cdr.markForCheck(); };
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceDecline ? sv.skychatVoiceDecline(id) : null)
+      : this.voiceApi('/decline', 'POST', { call_id: id });
+    p.then(done).catch(() => done());
   }
 
   // --- Password gate management ----------------------------------

@@ -679,6 +679,15 @@
     "send": "Send",
     "mode-direct": "Direct",
     "mode-groups": "Groups",
+    "voice": {
+      "call": "Call",
+      "hangup": "Hang up",
+      "call-tip": "Voice call this peer (Opus over the encrypted mesh)",
+      "hangup-tip": "End the voice call",
+      "incoming": "Incoming voice call from",
+      "answer": "Answer",
+      "decline": "Decline"
+    },
     "rooms": "Rooms",
     "rooms-empty": "No rooms yet. Create one or join with an invite link.",
     "rooms-pick": "Pick a room on the left, or create/join one.",
