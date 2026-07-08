@@ -204,9 +204,16 @@
             // stands in for the worker connection (same postMessage contract).
             rtcHandle(port, m);
             break;
+          case 'voicePlay':
+            // A decoded voice frame from the worker's Sink — hand it to the
+            // main-thread WebAudio proxy (voice-audio.js) for playback.
+            try { if (typeof globalThis.__skyvoiceOnPlay === 'function') globalThis.__skyvoiceOnPlay(m.b); } catch (e) {}
+            break;
         }
       };
       port.start();
+      // Let voice-audio.js send captured mic frames to the worker's Source.
+      globalThis.__skyvoiceToWorker = function (bytes) { try { port.postMessage({ t: 'voiceMic', b: bytes }); } catch (e) {} };
 
       // First tab supplies the key + seed config; the worker boots the visor once.
       try { port.postMessage({ t: 'init', sk: sk, seedpk: CFG.seedpk || '', seedws: CFG.seedws || '', disc: CFG.disc || '' }); }
@@ -301,8 +308,13 @@
             // here, where real RTCPeerConnection/RTCDataChannel objects live.
             rtcHandle(worker, m);
             break;
+          case 'voicePlay':
+            try { if (typeof globalThis.__skyvoiceOnPlay === 'function') globalThis.__skyvoiceOnPlay(m.b); } catch (e) {}
+            break;
         }
       };
+      // Let voice-audio.js send captured mic frames to the worker's Source.
+      globalThis.__skyvoiceToWorker = function (bytes) { try { worker.postMessage({ t: 'voiceMic', b: bytes }); } catch (e) {} };
       worker.onerror = function (e) {
         clearTimeout(upTimer);
         reject(new Error('worker error: ' + ((e && e.message) || 'load failed')));

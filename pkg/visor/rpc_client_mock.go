@@ -1334,6 +1334,11 @@ func (mc *mockRPCClient) VoiceCallAudio(_ string) (sent, recv []int16, err error
 	return nil, nil, nil
 }
 
+// VoiceMute implements API.
+func (mc *mockRPCClient) VoiceMute(_ string, _, _ bool) error {
+	return nil
+}
+
 // GroupHistory implements API.
 func (mc *mockRPCClient) GroupHistory(_ string, _ int) ([]GroupMessage, error) { return nil, nil }
 
