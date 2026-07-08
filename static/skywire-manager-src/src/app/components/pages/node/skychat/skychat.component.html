@@ -155,6 +155,27 @@
               </button>
             }
           </div>
+
+          <!-- In-call control strip: mute mic / mute caller + live duration. -->
+          @if (voiceAvailable && inCall) {
+            <div class="sc-incall-bar">
+              <mat-icon class="sc-incall-dot" [inline]="true">graphic_eq</mat-icon>
+              <span class="sc-incall-timer mono">{{ callDuration }}</span>
+              <span class="sc-status-spacer"></span>
+              <button mat-stroked-button class="mute-btn" [ngClass]="{ 'muted': micMuted }"
+                      (click)="toggleMicMute()"
+                      [matTooltip]="(micMuted ? 'skychat.voice.unmute-mic-tip' : 'skychat.voice.mute-mic-tip') | translate">
+                <mat-icon [inline]="true">{{ micMuted ? 'mic_off' : 'mic' }}</mat-icon>
+                {{ (micMuted ? 'skychat.voice.mic-muted' : 'skychat.voice.mute-mic') | translate }}
+              </button>
+              <button mat-stroked-button class="mute-btn" [ngClass]="{ 'muted': spkMuted }"
+                      (click)="toggleSpeakerMute()"
+                      [matTooltip]="(spkMuted ? 'skychat.voice.unmute-caller-tip' : 'skychat.voice.mute-caller-tip') | translate">
+                <mat-icon [inline]="true">{{ spkMuted ? 'volume_off' : 'volume_up' }}</mat-icon>
+                {{ (spkMuted ? 'skychat.voice.caller-muted' : 'skychat.voice.mute-caller') | translate }}
+              </button>
+            </div>
+          }
         </section>
       </div>
       }

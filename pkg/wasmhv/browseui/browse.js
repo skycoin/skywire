@@ -1300,8 +1300,9 @@
     var fetchMsgs = opts.skychatMessages || sv.skychatMessages;
     var sendFile = opts.skychatSendFile || sv.skychatSendFile;
     var fetchFile = opts.skychatFile || sv.skychatFile;
-    var voiceCall = sv.skychatVoiceCall, voiceAnswer = sv.skychatVoiceAnswer, voiceHangup = sv.skychatVoiceHangup, voiceIncoming = sv.skychatVoiceIncoming;
+    var voiceCall = sv.skychatVoiceCall, voiceAnswer = sv.skychatVoiceAnswer, voiceHangup = sv.skychatVoiceHangup, voiceIncoming = sv.skychatVoiceIncoming, voiceMute = sv.skychatVoiceMute;
     var activeCall = null; // current call id while in a call
+    var micMuted = false, spkMuted = false; // in-call mute state
     function selfPK() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
     var peer = "";          // active conversation peer PK (full hex)
     var lastRender = "";    // cheap change-detection so we don't rebuild every tick
@@ -1326,6 +1327,8 @@
       '<button id="ch-attach" title="send a file" style="cursor:pointer;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em" disabled>📎</button>' +
       '<input id="ch-file" type="file" style="display:none">' +
       '<button id="ch-call" title="voice call (Opus over the encrypted mesh)" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em" disabled>📞</button>' +
+      '<button id="ch-mute-mic" title="mute your microphone" style="display:none;cursor:pointer;background:#1b1726;color:#cdd2da;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em">🎙️</button>' +
+      '<button id="ch-mute-spk" title="mute the caller" style="display:none;cursor:pointer;background:#1b1726;color:#cdd2da;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em">🔊</button>' +
       '<button id="ch-send" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .7em" disabled>send</button></div>' +
       '<div id="ch-status" style="padding:.2em .5em;min-height:1.2em;color:#9aa0a6;border-top:1px solid #15131c"></div>' +
       '<pre id="ch-log" style="display:none;margin:0;height:120px;overflow:auto;background:#0e0c14;color:#a9b1d6;border-top:1px solid #2a2342;padding:.4em;font:10px/1.4 monospace;white-space:pre-wrap;word-break:break-all"></pre>';
@@ -1461,8 +1464,29 @@
     // --- voice calls ---
     function startAudio() { try { if (globalThis.skywireVoiceAudioStart) return globalThis.skywireVoiceAudioStart(); } catch (_) {} }
     function stopAudio() { try { if (globalThis.skywireVoiceAudioStop) globalThis.skywireVoiceAudioStop(); } catch (_) {} }
-    function inCall(id) { activeCall = id; $("ch-call").textContent = "🔴"; $("ch-call").title = "hang up"; setStatus("in call", "#9ece6a"); }
-    function callEnded() { activeCall = null; $("ch-call").textContent = "📞"; $("ch-call").title = "voice call"; stopAudio(); }
+    function applyMute() {
+      $("ch-mute-mic").textContent = micMuted ? "🔇" : "🎙️";
+      $("ch-mute-mic").style.color = micMuted ? "#f7768e" : "#cdd2da";
+      $("ch-mute-mic").title = micMuted ? "unmute your microphone" : "mute your microphone";
+      $("ch-mute-spk").textContent = spkMuted ? "🔇" : "🔊";
+      $("ch-mute-spk").style.color = spkMuted ? "#f7768e" : "#cdd2da";
+      $("ch-mute-spk").title = spkMuted ? "unmute the caller" : "mute the caller";
+      if (voiceMute && activeCall) { try { Promise.resolve(voiceMute(activeCall, micMuted, spkMuted)).catch(function () {}); } catch (_) {} }
+    }
+    function showMute(on) { $("ch-mute-mic").style.display = $("ch-mute-spk").style.display = on ? "" : "none"; }
+    function inCall(id) {
+      activeCall = id; micMuted = false; spkMuted = false;
+      $("ch-call").textContent = "🔴"; $("ch-call").title = "hang up";
+      showMute(true); applyMute();
+      setStatus("in call", "#9ece6a");
+    }
+    function callEnded() {
+      activeCall = null; micMuted = false; spkMuted = false;
+      $("ch-call").textContent = "📞"; $("ch-call").title = "voice call";
+      showMute(false); stopAudio();
+    }
+    $("ch-mute-mic").onclick = function () { if (!activeCall) { return; } micMuted = !micMuted; applyMute(); };
+    $("ch-mute-spk").onclick = function () { if (!activeCall) { return; } spkMuted = !spkMuted; applyMute(); };
     $("ch-call").onclick = function () {
       if (activeCall) { // hang up
         try { if (voiceHangup) voiceHangup(activeCall); } catch (_) {}

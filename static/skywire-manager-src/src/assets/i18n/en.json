@@ -686,7 +686,15 @@
       "hangup-tip": "End the voice call",
       "incoming": "Incoming voice call from",
       "answer": "Answer",
-      "decline": "Decline"
+      "decline": "Decline",
+      "mute-mic": "Mute",
+      "mic-muted": "Muted",
+      "mute-mic-tip": "Mute your microphone (the peer hears silence)",
+      "unmute-mic-tip": "Unmute your microphone",
+      "mute-caller": "Deafen",
+      "caller-muted": "Deafened",
+      "mute-caller-tip": "Mute the caller (you hear silence)",
+      "unmute-caller-tip": "Unmute the caller"
     },
     "rooms": "Rooms",
     "rooms-empty": "No rooms yet. Create one or join with an invite link.",

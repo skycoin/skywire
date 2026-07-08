@@ -318,3 +318,20 @@
 
 // Call / hang-up button sits beside Send in the composer.
 .call-btn { margin-left: 8px; }
+
+// In-call control strip (mute mic / deafen caller + duration).
+.sc-incall-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-top: 6px;
+  border-radius: 6px;
+  background: rgba(122, 162, 247, 0.10);
+  border: 1px solid rgba(122, 162, 247, 0.35);
+
+  .sc-incall-dot { color: #9ece6a; }
+  .sc-incall-timer { font-size: 13px; opacity: 0.9; }
+  .sc-status-spacer { flex: 1 1 auto; }
+  .mute-btn.muted { color: rgba(229, 57, 53, 0.95); border-color: rgba(229, 57, 53, 0.6); }
+}

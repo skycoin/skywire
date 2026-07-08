@@ -284,6 +284,21 @@ func (m *Manager) Hangup(callID string) error {
 	return nil
 }
 
+// SetMute toggles the mic (send) and speaker (playback) mute state of an active
+// call. mic=true silences what the peer hears from us; speaker=true silences
+// what we hear from the peer ("mute the caller").
+func (m *Manager) SetMute(callID string, mic, speaker bool) error {
+	m.mu.Lock()
+	sess := m.calls[callID]
+	m.mu.Unlock()
+	if sess == nil {
+		return errors.New("voice: no such call")
+	}
+	sess.SetMicMuted(mic)
+	sess.SetSpeakerMuted(speaker)
+	return nil
+}
+
 // Active returns the ids of live calls.
 func (m *Manager) Active() []string {
 	m.mu.Lock()

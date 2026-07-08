@@ -143,6 +143,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   voiceIncoming: IncomingCall[] = [];         // ringing inbound calls
   voiceBusy = false;                          // a call/answer is in flight
   voiceAvailable = true;                      // false when the visor has no voice (503)
+  micMuted = false;                           // our mic muted (peer hears silence)
+  spkMuted = false;                           // caller muted (we hear nothing)
+  private callStartMs = 0;                    // wall-clock when the current call went active
   private voiceTimer: any = null;
   // Remember which ringing calls we've already surfaced, so re-polls don't
   // re-prompt (native auto-answer never rings; explicit-answer mode does).
@@ -672,20 +675,66 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     }).filter(c => c.id);
   }
 
+  /** Track call start/end so the duration timer + mute state reset cleanly. */
+  private syncCallState() {
+    if (this.voiceActive.length && !this.callStartMs) {
+      this.callStartMs = Date.now();
+      this.micMuted = false;
+      this.spkMuted = false;
+    } else if (!this.voiceActive.length && this.callStartMs) {
+      this.callStartMs = 0;
+      this.micMuted = false;
+      this.spkMuted = false;
+    }
+  }
+
   private pollVoice() {
     if (!this.node) { return; }
     const sv = this.voiceSv;
     if (sv) {
-      Promise.resolve(sv.skychatVoiceActive()).then((r: any) => { this.voiceActive = this.parseIds(r); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
+      Promise.resolve(sv.skychatVoiceActive()).then((r: any) => { this.voiceActive = this.parseIds(r); this.syncCallState(); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
       Promise.resolve(sv.skychatVoiceIncoming()).then((r: any) => { this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
       return;
     }
     this.voiceApi('/active', 'GET')
-      .then((r) => { this.voiceActive = this.parseIds(r); this.voiceAvailable = true; this.cdr.markForCheck(); })
+      .then((r) => { this.voiceActive = this.parseIds(r); this.voiceAvailable = true; this.syncCallState(); this.cdr.markForCheck(); })
       .catch((e) => { if (e?.originalError?.status === 503) { this.voiceAvailable = false; this.cdr.markForCheck(); } });
     this.voiceApi('/incoming', 'GET')
       .then((r) => { this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); })
       .catch(() => { /* transient / disabled — /active already flags availability */ });
+  }
+
+  /** mm:ss since the current call went active ('' when not in a call). */
+  get callDuration(): string {
+    if (!this.callStartMs) { return ''; }
+    const s = Math.max(0, Math.floor((Date.now() - this.callStartMs) / 1000));
+    const mm = Math.floor(s / 60), ss = s % 60;
+    return `${mm}:${ss < 10 ? '0' : ''}${ss}`;
+  }
+
+  /** Push the current mute state to the active call (both directions). */
+  private voiceMute() {
+    const id = this.voiceActive[0];
+    if (!id) { return; }
+    const sv = this.voiceSv;
+    const p = sv
+      ? Promise.resolve(sv.skychatVoiceMute ? sv.skychatVoiceMute(id, this.micMuted, this.spkMuted) : null)
+      : this.voiceApi('/mute', 'POST', { call_id: id, mic: this.micMuted, speaker: this.spkMuted });
+    p.catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)));
+  }
+
+  /** Toggle our mic (the peer hears silence while muted). */
+  toggleMicMute() {
+    this.micMuted = !this.micMuted;
+    this.voiceMute();
+    this.cdr.markForCheck();
+  }
+
+  /** Toggle the caller's audio (we hear silence while muted). */
+  toggleSpeakerMute() {
+    this.spkMuted = !this.spkMuted;
+    this.voiceMute();
+    this.cdr.markForCheck();
   }
 
   /** Place a call to the composed recipient PK. */

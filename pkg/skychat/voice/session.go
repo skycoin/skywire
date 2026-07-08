@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/pion/rtp"
@@ -38,8 +39,25 @@ type Session struct {
 	ssrc   uint32
 	log    *logging.Logger
 
+	// micMuted: stop sending our capture (the peer hears silence). spkMuted:
+	// stop playing what we receive ("mute the caller"). Both keep the RTP
+	// stream flowing at full cadence so timing/keepalive are unaffected — mic
+	// mute just sends a zeroed frame, speaker mute just drops playback.
+	micMuted atomic.Bool
+	spkMuted atomic.Bool
+
 	closeOnce sync.Once
 }
+
+// SetMicMuted toggles whether our captured audio is sent to the peer.
+func (s *Session) SetMicMuted(m bool) { s.micMuted.Store(m) }
+
+// SetSpeakerMuted toggles whether received audio is played locally.
+func (s *Session) SetSpeakerMuted(m bool) { s.spkMuted.Store(m) }
+
+// MicMuted / SpeakerMuted report the current mute state (for the UI).
+func (s *Session) MicMuted() bool     { return s.micMuted.Load() }
+func (s *Session) SpeakerMuted() bool { return s.spkMuted.Load() }
 
 // NewSession builds a media session over conn with the given codec + audio.
 func NewSession(callID string, conn net.Conn, codec Codec, source Source, sink Sink, ssrc uint32, log *logging.Logger) *Session {
@@ -89,6 +107,13 @@ func (s *Session) sendLoop(ctx context.Context) {
 				s.log.WithError(err).Debug("voice: source read")
 			}
 			return
+		}
+		// Mic muted → send a silent frame (keeps cadence/keepalive; peer just
+		// hears nothing) instead of our capture.
+		if s.micMuted.Load() {
+			for i := range pcm {
+				pcm[i] = 0
+			}
 		}
 		payload, err := s.codec.Encode(pcm)
 		if err != nil {
@@ -154,6 +179,11 @@ func (s *Session) recvLoop(ctx context.Context) {
 		pcm, err := s.codec.Decode(pkt.Payload)
 		if err != nil {
 			s.log.WithError(err).Debug("voice: decode")
+			continue
+		}
+		// Speaker muted ("mute the caller") → decode (to keep the codec state
+		// consistent) but drop playback.
+		if s.spkMuted.Load() {
 			continue
 		}
 		if _, err := s.sink.Write(pcm); err != nil {

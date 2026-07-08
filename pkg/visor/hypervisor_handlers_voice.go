@@ -123,3 +123,28 @@ func (hv *Hypervisor) postVoiceDecline() http.HandlerFunc {
 func (hv *Hypervisor) postVoiceHangup() http.HandlerFunc {
 	return hv.voiceCallIDAction(func(ctx *httpCtx, callID string) error { return ctx.API.VoiceHangup(callID) })
 }
+
+// postVoiceMute → POST /skychat/voice/mute {call_id, mic, speaker} : toggle the
+// mic (what the peer hears from us) and speaker (what we hear) mute of a call.
+func (hv *Hypervisor) postVoiceMute() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			CallID  string `json:"call_id"`
+			Mic     bool   `json:"mic"`
+			Speaker bool   `json:"speaker"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		if rb.CallID == "" {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "call_id required"})
+			return
+		}
+		if err := ctx.API.VoiceMute(rb.CallID, rb.Mic, rb.Speaker); err != nil {
+			hv.writeVoiceErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
+	})
+}

@@ -139,6 +139,21 @@ func jsSkychatVoiceHangup(_ js.Value, args []js.Value) interface{} {
 	return voiceAct(args, func(id string) error { return voiceMgr.Hangup(id) })
 }
 
+// jsSkychatVoiceMute(callID, mic, speaker) → Promise<null>. mic mutes what the
+// peer hears from us; speaker ("mute the caller") mutes what we hear.
+func jsSkychatVoiceMute(_ js.Value, args []js.Value) interface{} {
+	if len(args) < 3 {
+		return js.Global().Get("Error").New("expected callID, mic, speaker")
+	}
+	id, mic, spk := args[0].String(), args[1].Bool(), args[2].Bool()
+	return promise(func() (interface{}, error) {
+		if voiceMgr == nil {
+			return nil, fmt.Errorf("voice not started")
+		}
+		return nil, voiceMgr.SetMute(id, mic, spk)
+	})
+}
+
 func voiceAct(args []js.Value, fn func(id string) error) interface{} {
 	if len(args) < 1 {
 		return js.Global().Get("Error").New("expected callID")
