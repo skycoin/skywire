@@ -1,8 +1,4 @@
-//go:build opus
-
 // Package voice pkg/skychat/voice/codec_opus_test.go c2-app-chat
-//
-// Run with: go test -tags opus ./pkg/skychat/voice/  (needs libopus).
 package voice
 
 import (

@@ -51,6 +51,18 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		Logger:     log,
 	}
 
+	// Opus is pure-Go (thesyncim/gopus — no cgo, no libopus, always available), so
+	// use it for EVERY call — both the silent auto-answer path and the real-audio
+	// path — so both ends always agree on the codec. Each session gets its own
+	// (opus is stateful); fall back to PCM only if the encoder can't initialize.
+	cfg.NewCodec = func() skyvoice.Codec {
+		c, err := skyvoice.NewOpusCodec()
+		if err != nil {
+			return skyvoice.NewPCMCodec()
+		}
+		return c
+	}
+
 	// Real audio is OPT-IN (SKYWIRE_VOICE_AUDIO=mic|monitor|1). Default: silent
 	// media + auto-answer — safe for headless visors, accepting a call leaks no
 	// audio. When enabled, capture live audio AND switch to explicit-answer
@@ -66,19 +78,6 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		monitor := mode == "monitor"
 		cfg.ManualAnswer = true
 		cfg.Visualize = true // tap call audio for `voice spectrogram --call`
-		// Prefer Opus (~24 kbit/s) when the binary was built with -tags opus;
-		// otherwise the manager keeps the PCM passthrough. Each session gets its
-		// own codec (opus is stateful).
-		if _, oerr := skyvoice.NewOpusCodec(); oerr == nil {
-			cfg.NewCodec = func() skyvoice.Codec {
-				c, err := skyvoice.NewOpusCodec()
-				if err != nil {
-					return skyvoice.NewPCMCodec()
-				}
-				return c
-			}
-			log.Info("voice: using Opus codec")
-		}
 		cfg.NewSource = func() skyvoice.Source {
 			s, err := skyvoice.NewMicSource(monitor, 0)
 			if err != nil {

@@ -1077,6 +1077,29 @@ github.com/tetratelabs/wazero/internal/wasm/binary
 github.com/tetratelabs/wazero/internal/wasmdebug
 github.com/tetratelabs/wazero/internal/wasmruntime
 github.com/tetratelabs/wazero/sys
+# github.com/thesyncim/gopus v0.1.1
+## explicit; go 1.25.0
+github.com/thesyncim/gopus
+github.com/thesyncim/gopus/internal/celt
+github.com/thesyncim/gopus/internal/cpufeat
+github.com/thesyncim/gopus/internal/dnnblob
+github.com/thesyncim/gopus/internal/dnnmath
+github.com/thesyncim/gopus/internal/dred
+github.com/thesyncim/gopus/internal/dred/rdovae
+github.com/thesyncim/gopus/internal/encoder
+github.com/thesyncim/gopus/internal/extsupport
+github.com/thesyncim/gopus/internal/fixedpoint
+github.com/thesyncim/gopus/internal/hybrid
+github.com/thesyncim/gopus/internal/lpcnetplc
+github.com/thesyncim/gopus/internal/opusmath
+github.com/thesyncim/gopus/internal/osce/bwe
+github.com/thesyncim/gopus/internal/osce/lace
+github.com/thesyncim/gopus/internal/plc
+github.com/thesyncim/gopus/internal/rangecoding
+github.com/thesyncim/gopus/internal/silk
+github.com/thesyncim/gopus/internal/util
+github.com/thesyncim/gopus/multistream
+github.com/thesyncim/gopus/types
 # github.com/tidwall/pretty v1.2.1
 ## explicit; go 1.16
 github.com/tidwall/pretty
@@ -1434,9 +1457,6 @@ google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/timestamppb
-# gopkg.in/hraban/opus.v2 v2.0.0-20230925203106-0188a62cb302
-## explicit
-gopkg.in/hraban/opus.v2
 # gopkg.in/natefinch/lumberjack.v2 v2.2.1
 ## explicit; go 1.13
 gopkg.in/natefinch/lumberjack.v2

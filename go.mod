@@ -86,12 +86,12 @@ require (
 	github.com/rivo/tview v0.42.0
 	github.com/soheilhy/cmux v0.1.5
 	github.com/tetratelabs/wazero v1.12.0
+	github.com/thesyncim/gopus v0.1.1
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	go.starlark.net v0.0.0-20260630144053-529d8e869a14
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.82.0
 	google.golang.org/protobuf v1.36.11
-	gopkg.in/hraban/opus.v2 v2.0.0-20230925203106-0188a62cb302
 )
 
 require (

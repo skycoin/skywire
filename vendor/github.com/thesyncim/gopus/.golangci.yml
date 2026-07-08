@@ -1,0 +1,129 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - gosimple
+    - revive
+    - gocritic
+
+linters-settings:
+  gocritic:
+    enabled-tags:
+      - diagnostic
+    disabled-checks:
+      - appendAssign
+      - assignOp
+      - badCall
+      - builtinShadowDecl
+      - captLocal
+      - commentedOutCode
+      - elseif
+      - filepathJoin
+      - ifElseChain
+      - truncateCmp
+      - unlambda
+      - unslice
+      - valSwap
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: errorf
+      - name: unreachable-code
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+    - path: example_test\.go
+      linters:
+        - revive
+    # Preserve explicit nil checks in decode hot paths until the codec cleanup lane
+    # takes them on; they are deliberate and not worth churn for this baseline.
+    - text: "S1009:"
+      linters:
+        - gosimple
+    - text: "S1021:"
+      linters:
+        - gosimple
+    - text: "S1031:"
+      linters:
+        - gosimple
+    # Existing trace-hook placeholders currently trip SA9003 in CELT internals.
+    - path: ^internal/celt/
+      text: "SA9003:"
+      linters:
+        - staticcheck
+    # CELT parity trace hooks deliberately return unexported instrumentation
+    # types consumed only by in-package libopus parity tests.
+    - path: ^internal/celt/(plc|synthesis)_stage_trace\.go$
+      text: "unexported-return:"
+      linters:
+        - revive
+    - path: ^internal/celt/(bands|dynalloc|encode_frame|pvq_search|qext_alloc)\.go$
+      text: "SA4006:"
+      linters:
+        - staticcheck
+    # FIXED_POINT median_of_5 twin: the t0/t3 swap mirrors libopus structure and
+    # the bit-exact port is LOCKED; see the ineffassign rule above.
+    - path: ^internal/fixedpoint/celt_dynalloc_analysis\.go$
+      text: "SA4006:"
+      linters:
+        - staticcheck
+    - path: ^internal/encoder/encoder\.go$
+      text: "SA4006:"
+      linters:
+        - staticcheck
+    - path: ^internal/silk/(libopus_decode|pitch_detect)\.go$
+      text: "SA4006:"
+      linters:
+        - staticcheck
+    # Seed the CI/static-analysis lane without crossing into unrelated runtime/tool
+    # refactors owned by other workers.
+    - path: ^internal/benchutil/opus_demo\.go$
+      linters:
+        - errcheck
+    - path: ^tools/gen_opusdec_crossval_fixture\.go$
+      linters:
+        - errcheck
+    - path: ^internal/encoder/encoder\.go$
+      linters:
+        - errcheck
+        - ineffassign
+    - path: ^internal/celt/(bands|bands_quant|channel_adapters|decoder_flow_helpers|dynalloc|encode_frame|pvq_search|qext_alloc)\.go$
+      linters:
+        - ineffassign
+    # FIXED_POINT twins of the CELT kernels: the flagged stores are faithful
+    # mirrors of libopus structure (median_of_5 swaps both halves, comb_filter
+    # clamps both T0/T1, xcorr_kernel_c's final tail advances its pointers,
+    # run_prefilter resets gain1) where one half is unused by the caller. The
+    # bit-exact port is LOCKED, so the redundant store is kept, not the lint.
+    - path: ^internal/fixedpoint/celt_(dynalloc_analysis|encode|pitch|plc)\.go$
+      linters:
+        - ineffassign
+    - path: ^multistream/framing\.go$
+      linters:
+        - ineffassign
+    - path: ^internal/silk/(libopus_decode|pitch_detect)\.go$
+      linters:
+        - ineffassign
