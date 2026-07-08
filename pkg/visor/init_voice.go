@@ -63,17 +63,34 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		return c
 	}
 
-	// Real audio is OPT-IN (SKYWIRE_VOICE_AUDIO=mic|monitor|1). Default: silent
-	// media + auto-answer — safe for headless visors, accepting a call leaks no
-	// audio. When enabled, capture live audio AND switch to explicit-answer
-	// (ring) so a visor never streams its microphone to a caller without an
-	// explicit `skychat voice answer`.
+	// Voice ALWAYS uses explicit-answer: a visor never streams audio to a caller
+	// until the call is accepted (the Answer button in the hvui, or `skychat
+	// voice answer`). That privacy guarantee is what lets us enable real audio
+	// BY DEFAULT — no env var or restart needed for voice chats to actually
+	// carry audio. On a headless host with no audio device, capture/playback
+	// degrade to silence and the call still connects (receive-only).
+	//
+	// SKYWIRE_VOICE_AUDIO only OVERRIDES the default:
+	//   (unset)/mic       → the system default input device (a mic, or on a
+	//                        desktop with no mic the monitor, per the OS default)
+	//   monitor           → force the default sink's monitor (system audio)
+	//   off/none/silent/0 → no local capture (receive-only), still explicit-answer
+	//   auto/auto-answer  → auto-accept inbound calls, silent (headless/testing)
+	ring := func(inv skyvoice.Sig) {
+		log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
+			Warn("voice: INCOMING CALL — answer in the hvui or `skywire cli skychat voice answer <id>`")
+	}
 	switch mode := strings.ToLower(strings.TrimSpace(os.Getenv("SKYWIRE_VOICE_AUDIO"))); mode {
-	case "", "0", "off", "false":
+	case "auto", "auto-answer", "autoanswer":
+		// Headless/testing: accept every inbound call silently.
 		cfg.OnIncoming = func(inv skyvoice.Sig) bool {
-			log.WithField("from", inv.FromPK.Hex()).Info("voice: inbound call — auto-answering (silent, no audio)")
+			log.WithField("from", inv.FromPK.Hex()).Info("voice: inbound call — auto-answering (silent)")
 			return true
 		}
+	case "off", "none", "silent", "0", "false":
+		cfg.ManualAnswer = true
+		cfg.Ring = ring
+		log.Info("voice: real audio OFF (SKYWIRE_VOICE_AUDIO) — calls ring; answer to connect (silent)")
 	default:
 		monitor := mode == "monitor"
 		cfg.ManualAnswer = true
@@ -81,7 +98,7 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		cfg.NewSource = func() skyvoice.Source {
 			s, err := skyvoice.NewMicSource(monitor, 0)
 			if err != nil {
-				log.WithError(err).Warn("voice: audio capture unavailable — using silence")
+				log.WithError(err).Warn("voice: audio capture unavailable — using silence (call still connects)")
 				return skyvoice.SilentSource{}
 			}
 			return s
@@ -93,15 +110,12 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 			}
 			return s
 		}
-		cfg.Ring = func(inv skyvoice.Sig) {
-			log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
-				Warn("voice: INCOMING CALL — `skywire cli skychat voice answer <id>` to accept")
-		}
-		srcKind := "mic"
+		cfg.Ring = ring
+		srcKind := "system default input"
 		if monitor {
 			srcKind = "system-audio monitor"
 		}
-		log.Infof("voice: real audio ENABLED (%s) — incoming calls ring; answer explicitly", srcKind)
+		log.Infof("voice: real audio enabled (%s) — calls ring; answer to connect", srcKind)
 	}
 
 	mgr := skyvoice.NewManager(cfg)
