@@ -356,12 +356,13 @@
     border-bottom: 1px solid #2a2342;
     .viz-collapse { color: #9aa0a6; }
   }
-  // Two stacked panels: incoming (peer) + outgoing (you).
+  // Two stacked panels: incoming (peer) + outgoing (you). Explicit min-height —
+  // flex-grow collapsed the canvas to 0px in this container (invisible).
   .sc-viz-big-panel {
-    flex: 1 1 0;
+    flex: 1 1 150px;
+    min-height: 150px;
     display: flex;
     flex-direction: column;
-    min-height: 0;
     position: relative;
     &:first-of-type { border-bottom: 1px solid #2a2342; }
     .sc-viz-big-label {
@@ -379,7 +380,8 @@
   .sc-viz-big {
     flex: 1 1 auto;
     width: 100%;
-    min-height: 0;
+    height: 100%;
+    min-height: 148px;
     display: block;
   }
 }
