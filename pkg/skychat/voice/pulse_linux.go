@@ -62,8 +62,11 @@ func NewMicSource(monitor bool, rate int) (Source, error) {
 	return &pulseSource{client: c, stream: st, ring: ring}, nil
 }
 
-// Read implements Source (pulls the next PCM frame; silence when quiet).
-func (p *pulseSource) Read(pcm []int16) (int, error) { return p.ring.popBlocking(pcm), nil }
+// Read implements Source (pulls the next PCM frame; silence when quiet). Never
+// blocks — silence-pads on underrun so the ticker-paced send loop always emits a
+// keepalive frame and a quiet side never starves the peer into the dmsg
+// idle-read timeout (which was dropping calls).
+func (p *pulseSource) Read(pcm []int16) (int, error) { return p.ring.popSilence(pcm), nil }
 
 // Close stops and releases the capture stream.
 func (p *pulseSource) Close() error {

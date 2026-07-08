@@ -12,25 +12,19 @@ package voice
 import "sync"
 
 // sampleRing keeps the most recent int16 samples (drop-oldest on overflow so
-// latency can't grow unbounded).
-//
-// popBlocking (capture) waits for a full frame so a reader is naturally paced by
-// the capture rate rather than spinning and draining silence. popSilence
-// (playback) never blocks — the device needs samples immediately and gets
-// silence on underrun.
+// latency can't grow unbounded). All reads go through popSilence: it never
+// blocks, returning buffered samples and padding the tail with silence on
+// underrun. That keeps the ticker-paced send loop emitting a frame every tick —
+// real audio when present, silence when idle — so a quiet side never starves the
+// peer into the dmsg idle-read timeout (which dropped calls). A blocking read
+// here was the culprit.
 type sampleRing struct {
-	mu     sync.Mutex
-	cond   *sync.Cond
-	buf    []int16
-	max    int
-	closed bool
+	mu  sync.Mutex
+	buf []int16
+	max int
 }
 
-func newSampleRing(max int) *sampleRing {
-	r := &sampleRing{max: max}
-	r.cond = sync.NewCond(&r.mu)
-	return r
-}
+func newSampleRing(max int) *sampleRing { return &sampleRing{max: max} }
 
 func (r *sampleRing) push(s []int16) {
 	r.mu.Lock()
@@ -38,19 +32,7 @@ func (r *sampleRing) push(s []int16) {
 	if len(r.buf) > r.max {
 		r.buf = append(r.buf[:0], r.buf[len(r.buf)-r.max:]...)
 	}
-	r.cond.Broadcast()
 	r.mu.Unlock()
-}
-
-// popBlocking fills dst, waiting until a full frame is buffered (or the ring is
-// closed, after which it pads silence and returns).
-func (r *sampleRing) popBlocking(dst []int16) int {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for len(r.buf) < len(dst) && !r.closed {
-		r.cond.Wait()
-	}
-	return r.drainLocked(dst)
 }
 
 // popSilence fills dst with whatever is buffered, padding the tail with silence,
@@ -70,9 +52,9 @@ func (r *sampleRing) drainLocked(dst []int16) int {
 	return len(dst)
 }
 
+// close releases the buffer; a source's Read simply returns silence afterward.
 func (r *sampleRing) close() {
 	r.mu.Lock()
-	r.closed = true
-	r.cond.Broadcast()
+	r.buf = nil
 	r.mu.Unlock()
 }

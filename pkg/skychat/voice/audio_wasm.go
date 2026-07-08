@@ -68,7 +68,12 @@ func NewMicSource(_ bool, _ int) (Source, error) {
 	return &wasmSource{ring: ring}, nil
 }
 
-func (s *wasmSource) Read(pcm []int16) (int, error) { return s.ring.popBlocking(pcm), nil }
+// Read never blocks: it returns captured mic audio when available and pads with
+// silence on underrun (e.g. before the WebAudio proxy starts, or with no mic).
+// The send loop is ticker-paced, so emitting a silent frame every tick keeps the
+// media conn alive — a blocking read here starved the peer and tripped the dmsg
+// idle-read deadline, dropping the call.
+func (s *wasmSource) Read(pcm []int16) (int, error) { return s.ring.popSilence(pcm), nil }
 
 func (s *wasmSource) Close() error {
 	s.ring.close()

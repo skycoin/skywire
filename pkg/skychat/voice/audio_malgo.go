@@ -74,7 +74,9 @@ func NewMicSource(_ bool, rate int) (Source, error) {
 	return &malgoSource{ctx: ctx, dev: dev, ring: ring}, nil
 }
 
-func (s *malgoSource) Read(pcm []int16) (int, error) { return s.ring.popBlocking(pcm), nil }
+// Read never blocks: captured audio when available, silence-padded on underrun
+// (keepalive for the ticker-paced send loop — see sampleRing).
+func (s *malgoSource) Read(pcm []int16) (int, error) { return s.ring.popSilence(pcm), nil }
 
 func (s *malgoSource) Close() error {
 	s.ring.close()
