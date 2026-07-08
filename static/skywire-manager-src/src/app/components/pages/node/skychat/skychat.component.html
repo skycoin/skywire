@@ -102,24 +102,38 @@
           }
         </aside>
 
-        <!-- Chat panel: message log + composer. -->
+        <!-- Chat panel: message log (or expanded spectrogram) + composer. -->
         <section class="sc-chat">
-          <div #logEl class="sc-log">
-            @if (messages.length === 0) {
-              <div class="sc-empty">{{ 'skychat.empty' | translate }}</div>
-            }
-            @for (m of messages; track $index) {
-              <div class="sc-msg" [ngClass]="m.direction">
-                <div class="sc-msg-meta">
-                  <span class="peer mono small" (click)="pickRecipient(m.peer)" [matTooltip]="m.peer">
-                    {{ m.direction === 'out' ? '→' : '←' }} {{ m.peer }}
-                  </span>
-                  <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
-                </div>
-                <div class="sc-msg-text">{{ m.text }}</div>
+          @if (bigViz && inCall) {
+            <!-- Expanded spectrogram takes over the message area during a call. -->
+            <div class="sc-viz-big-wrap">
+              <div class="sc-viz-big-head">
+                <span>{{ 'skychat.voice.spectrogram-title' | translate }}</span>
+                <button mat-icon-button class="viz-collapse" (click)="toggleBigViz()"
+                        [matTooltip]="'skychat.voice.viz-collapse' | translate">
+                  <mat-icon [inline]="true">close_fullscreen</mat-icon>
+                </button>
               </div>
-            }
-          </div>
+              <canvas #vizBig class="sc-viz-big" width="900" height="240"></canvas>
+            </div>
+          } @else {
+            <div #logEl class="sc-log">
+              @if (messages.length === 0) {
+                <div class="sc-empty">{{ 'skychat.empty' | translate }}</div>
+              }
+              @for (m of messages; track $index) {
+                <div class="sc-msg" [ngClass]="m.direction">
+                  <div class="sc-msg-meta">
+                    <span class="peer mono small" (click)="pickRecipient(m.peer)" [matTooltip]="m.peer">
+                      {{ m.direction === 'out' ? '→' : '←' }} {{ m.peer }}
+                    </span>
+                    <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
+                  </div>
+                  <div class="sc-msg-text">{{ m.text }}</div>
+                </div>
+              }
+            </div>
+          }
 
           <div class="sc-composer">
             <mat-form-field appearance="outline" class="field-pk">
@@ -168,6 +182,11 @@
                       (click)="toggleSpectrogram()"
                       [matTooltip]="'skychat.voice.viz-toggle' | translate">
                 <mat-icon [inline]="true">{{ showSpectrogram ? 'graphic_eq' : 'gradient' }}</mat-icon>
+              </button>
+              <button mat-icon-button class="viz-toggle" [ngClass]="{ 'active': bigViz }"
+                      (click)="toggleBigViz()"
+                      [matTooltip]="'skychat.voice.viz-expand' | translate">
+                <mat-icon [inline]="true">{{ bigViz ? 'close_fullscreen' : 'open_in_full' }}</mat-icon>
               </button>
               <button mat-stroked-button class="mute-btn" [ngClass]="{ 'muted': micMuted }"
                       (click)="toggleMicMute()"

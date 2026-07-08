@@ -757,7 +757,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // the call's audio tap — over the HTTP bridge on a native visor, the
   // skychatVoiceLevels/Audio JS hooks on a wasm visor.
   @ViewChild('vizCanvas') vizCanvas?: ElementRef<HTMLCanvasElement>;
-  showSpectrogram = false;
+  @ViewChild('vizBig') vizBig?: ElementRef<HTMLCanvasElement>;
+  showSpectrogram = false;   // small in-bar canvas: spectrogram vs level meter
+  bigViz = false;            // expand a large spectrogram into the message area
   private vizTimer: any = null;
   private lvlSent: number[] = [];   // rolling recent RMS history (0..1)
   private lvlRecv: number[] = [];
@@ -781,9 +783,18 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
 
   toggleSpectrogram() {
     this.showSpectrogram = !this.showSpectrogram;
-    const c = this.vizCanvas?.nativeElement;
-    if (c) { c.getContext('2d')?.clearRect(0, 0, c.width, c.height); }
+    this.clearCanvas(this.vizCanvas?.nativeElement);
     this.cdr.markForCheck();
+  }
+
+  /** Expand a large spectrogram into the message-log area (toggle off = messages). */
+  toggleBigViz() {
+    this.bigViz = !this.bigViz;
+    this.cdr.markForCheck();
+  }
+
+  private clearCanvas(c?: HTMLCanvasElement) {
+    if (c) { c.getContext('2d')?.clearRect(0, 0, c.width, c.height); }
   }
 
   private startViz() {
@@ -800,22 +811,30 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   private tickViz() {
     const id = this.voiceActive[0];
     if (!id) { return; }
-    if (this.showSpectrogram) {
-      this.voiceAudioData(id).then((d) => this.drawSpectrogram(d && d.recv || [])).catch(() => { /* transient */ });
-    } else {
+    // The small in-bar canvas shows spectrogram or level meter; the big canvas
+    // (message-area) is always a spectrogram. Fetch PCM if either wants it.
+    const needAudio = this.showSpectrogram || this.bigViz;
+    const needLevels = !this.showSpectrogram;
+    if (needLevels) {
       this.voiceLevels(id).then((l) => {
         this.lvlRecv.push(Math.min(1, (l && l.recv) || 0));
         this.lvlSent.push(Math.min(1, (l && l.sent) || 0));
         if (this.lvlRecv.length > this.lvlMax) { this.lvlRecv.shift(); }
         if (this.lvlSent.length > this.lvlMax) { this.lvlSent.shift(); }
-        this.drawLevels();
+        this.drawLevels(this.vizCanvas?.nativeElement);
+      }).catch(() => { /* transient */ });
+    }
+    if (needAudio) {
+      this.voiceAudioData(id).then((d) => {
+        const pcm = (d && d.recv) || [];
+        if (this.showSpectrogram) { this.drawSpectrogram(this.vizCanvas?.nativeElement, pcm); }
+        if (this.bigViz) { this.drawSpectrogram(this.vizBig?.nativeElement, pcm); }
       }).catch(() => { /* transient */ });
     }
   }
 
   /** Telegram-style dual level meter: peer (green) foreground, you (violet) behind. */
-  private drawLevels() {
-    const c = this.vizCanvas?.nativeElement;
+  private drawLevels(c?: HTMLCanvasElement) {
     if (!c) { return; }
     const ctx = c.getContext('2d');
     if (!ctx) { return; }
@@ -835,8 +854,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   /** Scrolling FFT heatmap of the received audio (newest column on the right). */
-  private drawSpectrogram(pcm: number[]) {
-    const c = this.vizCanvas?.nativeElement;
+  private drawSpectrogram(c: HTMLCanvasElement | undefined, pcm: number[]) {
     if (!c || pcm.length < 256) { return; }
     const ctx = c.getContext('2d');
     if (!ctx) { return; }

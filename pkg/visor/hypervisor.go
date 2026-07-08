@@ -998,6 +998,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 
 		// Serve the dashboard UI, with the skynet/clearnet browse engine + native
 		// launcher injected into index.html (and the browse.js / launcher assets).
+		r.Get("/api/ui-version", hv.getUIVersion())
 		r.Handle("/*", hv.uiHandler())
 	})
 

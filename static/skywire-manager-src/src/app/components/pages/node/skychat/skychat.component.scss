@@ -319,6 +319,36 @@
 // Call / hang-up button sits beside Send in the composer.
 .call-btn { margin-left: 8px; }
 
+// Expanded spectrogram: takes over the message-log area during a call.
+.sc-viz-big-wrap {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border: 1px solid #2a2342;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #0e0c14;
+
+  .sc-viz-big-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: #9aa0a6;
+    background: #15131c;
+    border-bottom: 1px solid #2a2342;
+    .viz-collapse { color: #9aa0a6; }
+  }
+  .sc-viz-big {
+    flex: 1 1 auto;
+    width: 100%;
+    min-height: 0;
+    display: block;
+  }
+}
+
 // In-call control strip (audio viz + mute mic / deafen caller + duration).
 .sc-incall-bar {
   display: flex;
