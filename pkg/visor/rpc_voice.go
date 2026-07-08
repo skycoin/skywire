@@ -41,3 +41,52 @@ func (r *RPC) VoiceActive(_ *struct{}, out *[]string) (err error) {
 	*out = ids
 	return nil
 }
+
+// VoiceAnswer accepts a ringing inbound call by id.
+func (r *RPC) VoiceAnswer(callID *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceAnswer", callID)(nil, &err)
+	if callID == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.VoiceAnswer(*callID)
+}
+
+// VoiceDecline rejects a ringing inbound call by id.
+func (r *RPC) VoiceDecline(callID *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceDecline", callID)(nil, &err)
+	if callID == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.VoiceDecline(*callID)
+}
+
+// VoiceIncoming replies with the ringing inbound calls awaiting an answer.
+func (r *RPC) VoiceIncoming(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceIncoming", nil)(out, &err)
+	ids, err := r.visor.VoiceIncoming()
+	if err != nil {
+		return err
+	}
+	*out = ids
+	return nil
+}
+
+// VoiceAudioSnapshot is the recent sent/received PCM of an active call.
+type VoiceAudioSnapshot struct {
+	Sent []int16
+	Recv []int16
+}
+
+// VoiceCallAudio replies with the recent sent + received PCM of a call.
+func (r *RPC) VoiceCallAudio(callID *string, out *VoiceAudioSnapshot) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceCallAudio", callID)(nil, &err)
+	if callID == nil {
+		return fmt.Errorf("nil request")
+	}
+	sent, recv, err := r.visor.VoiceCallAudio(*callID)
+	if err != nil {
+		return err
+	}
+	out.Sent, out.Recv = sent, recv
+	return nil
+}
