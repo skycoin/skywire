@@ -193,6 +193,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     this.disconnectSSE();
     this.stopGroupPoll();
     this.stopVoicePoll();
+    this.stopViz();
   }
 
   ngAfterViewChecked() {
@@ -691,10 +692,13 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       this.callStartMs = Date.now();
       this.micMuted = false;
       this.spkMuted = false;
+      // Defer so the *ngIf'd canvas is in the DOM before the first draw.
+      setTimeout(() => this.startViz(), 300);
     } else if (!this.voiceActive.length && this.callStartMs) {
       this.callStartMs = 0;
       this.micMuted = false;
       this.spkMuted = false;
+      this.stopViz();
     }
   }
 
@@ -745,6 +749,118 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     this.spkMuted = !this.spkMuted;
     this.voiceMute();
     this.cdr.markForCheck();
+  }
+
+  // --- In-call audio visualization -------------------------------
+  // Default: a Telegram-style scrolling level meter (peer + you). Toggle to a
+  // scrolling spectrogram (FFT heatmap of the received audio). Data comes from
+  // the call's audio tap — over the HTTP bridge on a native visor, the
+  // skychatVoiceLevels/Audio JS hooks on a wasm visor.
+  @ViewChild('vizCanvas') vizCanvas?: ElementRef<HTMLCanvasElement>;
+  showSpectrogram = false;
+  private vizTimer: any = null;
+  private lvlSent: number[] = [];   // rolling recent RMS history (0..1)
+  private lvlRecv: number[] = [];
+  private readonly lvlMax = 96;     // history length (columns)
+
+  private voiceLevels(id: string): Promise<{ sent: number; recv: number }> {
+    const sv = this.voiceSv;
+    if (sv && typeof sv.skychatVoiceLevels === 'function') {
+      return Promise.resolve(sv.skychatVoiceLevels(id)).then((r: any) => JSON.parse(r || '{}'));
+    }
+    return this.voiceApi(`/levels?call=${encodeURIComponent(id)}`, 'GET');
+  }
+
+  private voiceAudioData(id: string): Promise<{ sent: number[]; recv: number[] }> {
+    const sv = this.voiceSv;
+    if (sv && typeof sv.skychatVoiceAudio === 'function') {
+      return Promise.resolve(sv.skychatVoiceAudio(id)).then((r: any) => JSON.parse(r || '{}'));
+    }
+    return this.voiceApi(`/audio?call=${encodeURIComponent(id)}`, 'GET');
+  }
+
+  toggleSpectrogram() {
+    this.showSpectrogram = !this.showSpectrogram;
+    const c = this.vizCanvas?.nativeElement;
+    if (c) { c.getContext('2d')?.clearRect(0, 0, c.width, c.height); }
+    this.cdr.markForCheck();
+  }
+
+  private startViz() {
+    if (this.vizTimer) { return; }
+    this.lvlSent = []; this.lvlRecv = [];
+    this.vizTimer = setInterval(() => this.tickViz(), 100);
+  }
+
+  private stopViz() {
+    if (this.vizTimer) { clearInterval(this.vizTimer); this.vizTimer = null; }
+    this.lvlSent = []; this.lvlRecv = [];
+  }
+
+  private tickViz() {
+    const id = this.voiceActive[0];
+    if (!id) { return; }
+    if (this.showSpectrogram) {
+      this.voiceAudioData(id).then((d) => this.drawSpectrogram(d && d.recv || [])).catch(() => { /* transient */ });
+    } else {
+      this.voiceLevels(id).then((l) => {
+        this.lvlRecv.push(Math.min(1, (l && l.recv) || 0));
+        this.lvlSent.push(Math.min(1, (l && l.sent) || 0));
+        if (this.lvlRecv.length > this.lvlMax) { this.lvlRecv.shift(); }
+        if (this.lvlSent.length > this.lvlMax) { this.lvlSent.shift(); }
+        this.drawLevels();
+      }).catch(() => { /* transient */ });
+    }
+  }
+
+  /** Telegram-style dual level meter: peer (green) foreground, you (violet) behind. */
+  private drawLevels() {
+    const c = this.vizCanvas?.nativeElement;
+    if (!c) { return; }
+    const ctx = c.getContext('2d');
+    if (!ctx) { return; }
+    const W = c.width, H = c.height, n = this.lvlMax, bw = W / n;
+    ctx.clearRect(0, 0, W, H);
+    const bar = (hist: number[], color: string, wf: number) => {
+      ctx.fillStyle = color;
+      for (let i = 0; i < hist.length; i++) {
+        const v = hist[i];
+        const h = Math.max(1, Math.pow(v, 0.6) * H); // perceptual boost
+        const x = i * bw;
+        ctx.fillRect(x + bw * (1 - wf) / 2, (H - h) / 2, Math.max(1, bw * wf - 1), h);
+      }
+    };
+    bar(this.lvlSent, 'rgba(157,124,255,0.55)', 1.0);  // you
+    bar(this.lvlRecv, 'rgba(158,206,106,0.95)', 0.6);  // peer (prominent)
+  }
+
+  /** Scrolling FFT heatmap of the received audio (newest column on the right). */
+  private drawSpectrogram(pcm: number[]) {
+    const c = this.vizCanvas?.nativeElement;
+    if (!c || pcm.length < 256) { return; }
+    const ctx = c.getContext('2d');
+    if (!ctx) { return; }
+    const W = c.width, H = c.height, N = 512, col = 2;
+    // Newest N samples, Hann-windowed.
+    const start = Math.max(0, pcm.length - N);
+    const re = new Float64Array(N), im = new Float64Array(N);
+    for (let i = 0; i < N; i++) {
+      const s = (start + i < pcm.length) ? pcm[start + i] / 32768 : 0;
+      re[i] = s * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (N - 1)));
+    }
+    fft(re, im);
+    // Scroll left by `col`, draw the new column on the right.
+    ctx.drawImage(c, -col, 0);
+    const bins = N / 2;
+    for (let y = 0; y < H; y++) {
+      // low freq at bottom
+      const b = Math.floor((1 - y / H) * (bins - 1));
+      const mag = Math.hypot(re[b], im[b]);
+      const db = 20 * Math.log10(mag + 1e-6);
+      const t = Math.max(0, Math.min(1, (db + 60) / 60)); // -60..0 dB → 0..1
+      ctx.fillStyle = heat(t);
+      ctx.fillRect(W - col, y, col, 1);
+    }
   }
 
   /** Place a call to the composed recipient PK. */
@@ -883,4 +999,46 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       },
     );
   }
+}
+
+// --- Small DSP helpers for the in-call spectrogram ----------------
+
+/** In-place iterative radix-2 Cooley–Tukey FFT (length must be a power of 2). */
+function fft(re: Float64Array, im: Float64Array): void {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) { j ^= bit; }
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = (-2 * Math.PI) / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const a = i + k, b = i + k + len / 2;
+        const tRe = re[b] * curRe - im[b] * curIm;
+        const tIm = re[b] * curIm + im[b] * curRe;
+        re[b] = re[a] - tRe; im[b] = im[a] - tIm;
+        re[a] += tRe; im[a] += tIm;
+        const nRe = curRe * wRe - curIm * wIm;
+        curIm = curRe * wIm + curIm * wRe;
+        curRe = nRe;
+      }
+    }
+  }
+}
+
+/** Map 0..1 to a dark→green→yellow heat color (matches the tcell spectrogram). */
+function heat(t: number): string {
+  t = Math.max(0, Math.min(1, t));
+  let r: number, g: number, b: number;
+  if (t < 0.5) { const u = t / 0.5; r = 0; g = Math.round(60 + 160 * u); b = Math.round(90 * (1 - u)); }
+  else { const u = (t - 0.5) / 0.5; r = Math.round(230 * u); g = Math.round(220 + 20 * u); b = 0; }
+  return `rgb(${r},${g},${b})`;
 }

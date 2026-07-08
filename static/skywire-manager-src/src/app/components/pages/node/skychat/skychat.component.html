@@ -156,12 +156,19 @@
             }
           </div>
 
-          <!-- In-call control strip: mute mic / mute caller + live duration. -->
+          <!-- In-call control strip: live audio viz (level meter / spectrogram),
+               mute mic / mute caller, duration. -->
           @if (voiceAvailable && inCall) {
             <div class="sc-incall-bar">
               <mat-icon class="sc-incall-dot" [inline]="true">graphic_eq</mat-icon>
               <span class="sc-incall-timer mono">{{ callDuration }}</span>
-              <span class="sc-status-spacer"></span>
+              <canvas #vizCanvas class="sc-viz" width="360" height="44"
+                      [matTooltip]="(showSpectrogram ? 'skychat.voice.viz-spectrogram' : 'skychat.voice.viz-levels') | translate"></canvas>
+              <button mat-icon-button class="viz-toggle" [ngClass]="{ 'active': showSpectrogram }"
+                      (click)="toggleSpectrogram()"
+                      [matTooltip]="'skychat.voice.viz-toggle' | translate">
+                <mat-icon [inline]="true">{{ showSpectrogram ? 'graphic_eq' : 'gradient' }}</mat-icon>
+              </button>
               <button mat-stroked-button class="mute-btn" [ngClass]="{ 'muted': micMuted }"
                       (click)="toggleMicMute()"
                       [matTooltip]="(micMuted ? 'skychat.voice.unmute-mic-tip' : 'skychat.voice.mute-mic-tip') | translate">

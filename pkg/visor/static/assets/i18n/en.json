@@ -694,7 +694,10 @@
       "mute-caller": "Deafen",
       "caller-muted": "Deafened",
       "mute-caller-tip": "Mute the caller (you hear silence)",
-      "unmute-caller-tip": "Unmute the caller"
+      "unmute-caller-tip": "Unmute the caller",
+      "viz-toggle": "Toggle spectrogram / level meter",
+      "viz-levels": "Audio level (you = violet, peer = green)",
+      "viz-spectrogram": "Spectrogram of the received audio"
     },
     "rooms": "Rooms",
     "rooms-empty": "No rooms yet. Create one or join with an invite link.",

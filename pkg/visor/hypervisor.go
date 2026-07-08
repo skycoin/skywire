@@ -926,6 +926,8 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/skychat/voice/decline", hv.postVoiceDecline())
 				r.Post("/visors/{pk}/skychat/voice/hangup", hv.postVoiceHangup())
 				r.Post("/visors/{pk}/skychat/voice/mute", hv.postVoiceMute())
+				r.Get("/visors/{pk}/skychat/voice/levels", hv.getVoiceLevels())
+				r.Get("/visors/{pk}/skychat/voice/audio", hv.getVoiceAudio())
 			})
 		})
 

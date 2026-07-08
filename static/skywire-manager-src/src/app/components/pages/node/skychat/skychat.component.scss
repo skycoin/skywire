@@ -319,7 +319,7 @@
 // Call / hang-up button sits beside Send in the composer.
 .call-btn { margin-left: 8px; }
 
-// In-call control strip (mute mic / deafen caller + duration).
+// In-call control strip (audio viz + mute mic / deafen caller + duration).
 .sc-incall-bar {
   display: flex;
   align-items: center;
@@ -331,7 +331,28 @@
   border: 1px solid rgba(122, 162, 247, 0.35);
 
   .sc-incall-dot { color: #9ece6a; }
-  .sc-incall-timer { font-size: 13px; opacity: 0.9; }
-  .sc-status-spacer { flex: 1 1 auto; }
-  .mute-btn.muted { color: rgba(229, 57, 53, 0.95); border-color: rgba(229, 57, 53, 0.6); }
+  .sc-incall-timer { font-size: 13px; color: #cdd2da; }
+
+  // Live audio visualizer: level meter (default) or spectrogram.
+  .sc-viz {
+    flex: 1 1 auto;
+    min-width: 80px;
+    height: 44px;
+    background: #0e0c14;
+    border: 1px solid #2a2342;
+    border-radius: 5px;
+  }
+
+  // Explicit light foreground: the panel is dark and Material's default button
+  // text is near-black — that was the unreadable mute/deafen text.
+  .viz-toggle {
+    color: #9aa0a6;
+    &.active { color: #9d7cff; }
+  }
+  .mute-btn {
+    color: #cdd2da;
+    border-color: #2a2342;
+    ::ng-deep .mat-icon { color: inherit; }
+    &.muted { color: #f7768e; border-color: rgba(247, 118, 142, 0.6); }
+  }
 }

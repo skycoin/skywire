@@ -18,7 +18,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"math"
 	"net"
+	"strconv"
+	"strings"
 	"syscall/js"
 
 	"github.com/skycoin/skywire/pkg/app"
@@ -180,6 +183,66 @@ func jsSkychatVoiceIncoming(js.Value, []js.Value) interface{} {
 		out += fmt.Sprintf(`{"id":%q,"from":%q}`, inv.CallID, inv.FromPK.Hex())
 	}
 	return out + "]"
+}
+
+// jsSkychatVoiceLevels(callID) → JSON {sent, recv} current RMS levels (0..1) for
+// the live level meter.
+func jsSkychatVoiceLevels(_ js.Value, args []js.Value) interface{} {
+	if voiceMgr == nil || len(args) < 1 {
+		return `{"sent":0,"recv":0}`
+	}
+	sent, recv, err := voiceMgr.CallAudio(args[0].String())
+	if err != nil {
+		return `{"sent":0,"recv":0}`
+	}
+	return fmt.Sprintf(`{"sent":%.4f,"recv":%.4f}`, rmsLevel(sent), rmsLevel(recv))
+}
+
+// jsSkychatVoiceCallAudio(callID) → JSON {sent:[],recv:[]} recent PCM for the
+// spectrogram (only polled while the spectrogram view is open).
+func jsSkychatVoiceCallAudio(_ js.Value, args []js.Value) interface{} {
+	if voiceMgr == nil || len(args) < 1 {
+		return `{"sent":[],"recv":[]}`
+	}
+	sent, recv, err := voiceMgr.CallAudio(args[0].String())
+	if err != nil {
+		return `{"sent":[],"recv":[]}`
+	}
+	var b strings.Builder
+	b.WriteString(`{"sent":`)
+	writeInt16Array(&b, sent)
+	b.WriteString(`,"recv":`)
+	writeInt16Array(&b, recv)
+	b.WriteString("}")
+	return b.String()
+}
+
+func writeInt16Array(b *strings.Builder, a []int16) {
+	b.WriteByte('[')
+	for i, s := range a {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteString(strconv.Itoa(int(s)))
+	}
+	b.WriteByte(']')
+}
+
+// rmsLevel: RMS of the last ~0.1s of pcm, normalized 0..1.
+func rmsLevel(pcm []int16) float64 {
+	if len(pcm) == 0 {
+		return 0
+	}
+	const window = 4800
+	if len(pcm) > window {
+		pcm = pcm[len(pcm)-window:]
+	}
+	var sum float64
+	for _, s := range pcm {
+		f := float64(s) / 32768.0
+		sum += f * f
+	}
+	return math.Sqrt(sum / float64(len(pcm)))
 }
 
 // jsSkychatVoiceActive() → JSON [callID] of active calls.

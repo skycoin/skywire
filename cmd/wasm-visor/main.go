@@ -168,6 +168,8 @@ func main() {
 		"skychatVoiceIncoming": js.FuncOf(jsSkychatVoiceIncoming),
 		"skychatVoiceActive":   js.FuncOf(jsSkychatVoiceActive),
 		"skychatVoiceMute":     js.FuncOf(jsSkychatVoiceMute),
+		"skychatVoiceLevels":   js.FuncOf(jsSkychatVoiceLevels),
+		"skychatVoiceAudio":    js.FuncOf(jsSkychatVoiceCallAudio),
 		// Federated group chat (in-memory over dmsg) — see group_js.go.
 		"skychatGroupCreate":    js.FuncOf(jsGroupCreate),
 		"skychatGroupJoin":      js.FuncOf(jsGroupJoin),

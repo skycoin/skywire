@@ -14,6 +14,7 @@
 package visor
 
 import (
+	"math"
 	"net/http"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -122,6 +123,71 @@ func (hv *Hypervisor) postVoiceDecline() http.HandlerFunc {
 // postVoiceHangup → POST /skychat/voice/hangup {call_id} : end an active call.
 func (hv *Hypervisor) postVoiceHangup() http.HandlerFunc {
 	return hv.voiceCallIDAction(func(ctx *httpCtx, callID string) error { return ctx.API.VoiceHangup(callID) })
+}
+
+// getVoiceLevels → GET /skychat/voice/levels?call=<id> : current send/receive
+// audio RMS levels (0..1) of a call, for the live level meter. Tiny payload
+// (two floats) — the UI polls it fast and keeps its own scrolling history.
+func (hv *Hypervisor) getVoiceLevels() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		callID := r.URL.Query().Get("call")
+		if callID == "" {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "call required"})
+			return
+		}
+		sent, recv, err := ctx.API.VoiceCallAudio(callID)
+		if err != nil {
+			hv.writeVoiceErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]float64{
+			"sent": rmsLevel(sent),
+			"recv": rmsLevel(recv),
+		})
+	})
+}
+
+// getVoiceAudio → GET /skychat/voice/audio?call=<id> : recent sent/received PCM
+// (int16) of a call, for the spectrogram. Heavier — the UI only polls it while
+// the spectrogram view is open.
+func (hv *Hypervisor) getVoiceAudio() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		callID := r.URL.Query().Get("call")
+		if callID == "" {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "call required"})
+			return
+		}
+		sent, recv, err := ctx.API.VoiceCallAudio(callID)
+		if err != nil {
+			hv.writeVoiceErr(w, r, err)
+			return
+		}
+		if sent == nil {
+			sent = []int16{}
+		}
+		if recv == nil {
+			recv = []int16{}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string][]int16{"sent": sent, "recv": recv})
+	})
+}
+
+// rmsLevel returns the RMS amplitude of the tail of pcm, normalized to 0..1.
+func rmsLevel(pcm []int16) float64 {
+	if len(pcm) == 0 {
+		return 0
+	}
+	// Last ~0.1s (4800 samples @ 48k) is "now".
+	const window = 4800
+	if len(pcm) > window {
+		pcm = pcm[len(pcm)-window:]
+	}
+	var sum float64
+	for _, s := range pcm {
+		f := float64(s) / 32768.0
+		sum += f * f
+	}
+	return math.Sqrt(sum / float64(len(pcm)))
 }
 
 // postVoiceMute → POST /skychat/voice/mute {call_id, mic, speaker} : toggle the
