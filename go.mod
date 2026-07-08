@@ -70,6 +70,7 @@ require (
 	github.com/coder/websocket v1.8.15
 	github.com/flynn/noise v1.1.0
 	github.com/gdamore/tcell/v2 v2.13.10
+	github.com/gen2brain/malgo v0.11.25
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/hanwen/go-fuse/v2 v2.10.1
 	github.com/itchyny/gojq v0.12.19

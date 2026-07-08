@@ -365,6 +365,9 @@ github.com/gdamore/tcell/v2/terminfo/x/xterm_kitty
 # github.com/gen2brain/dlgs v0.0.0-20220603100644-40c77870fa8d
 ## explicit
 github.com/gen2brain/dlgs
+# github.com/gen2brain/malgo v0.11.25
+## explicit; go 1.21
+github.com/gen2brain/malgo
 # github.com/gin-contrib/sse v1.1.1
 ## explicit; go 1.23
 github.com/gin-contrib/sse
