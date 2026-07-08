@@ -1,11 +1,11 @@
-//go:build !linux && (!voiceaudio || (!windows && !darwin))
+//go:build !linux && !(js && wasm) && (!voiceaudio || (!windows && !darwin))
 
 // Package voice pkg/skychat/voice/pulse_other.go c2-app-chat
 //
 // Audio stub for platforms without a native backend: everything that isn't Linux
-// (which uses the pure-Go PulseAudio backend) and isn't a Windows/macOS build
-// with the `voiceaudio` tag (which uses the cgo malgo backend, audio_malgo.go).
-// These return an error so callers degrade gracefully to silent audio.
+// (pure-Go PulseAudio), isn't a Windows/macOS `voiceaudio` build (cgo malgo,
+// audio_malgo.go), and isn't js/wasm (browser WebAudio, audio_wasm.go). These
+// return an error so callers degrade gracefully to silent audio.
 package voice
 
 import "errors"

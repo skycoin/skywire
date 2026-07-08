@@ -160,6 +160,13 @@ func main() {
 		// File sharing (in-process, over the encrypted transport) — see filexfer_js.go.
 		"skychatSendFile": js.FuncOf(jsSkychatSendFile),
 		"skychatFile":     js.FuncOf(jsSkychatFile),
+		// 1:1 voice calls (Opus over the encrypted transport) — see voice_js.go.
+		"skychatVoiceCall":     js.FuncOf(jsSkychatVoiceCall),
+		"skychatVoiceAnswer":   js.FuncOf(jsSkychatVoiceAnswer),
+		"skychatVoiceDecline":  js.FuncOf(jsSkychatVoiceDecline),
+		"skychatVoiceHangup":   js.FuncOf(jsSkychatVoiceHangup),
+		"skychatVoiceIncoming": js.FuncOf(jsSkychatVoiceIncoming),
+		"skychatVoiceActive":   js.FuncOf(jsSkychatVoiceActive),
 		// Federated group chat (in-memory over dmsg) — see group_js.go.
 		"skychatGroupCreate":    js.FuncOf(jsGroupCreate),
 		"skychatGroupJoin":      js.FuncOf(jsGroupJoin),
