@@ -700,7 +700,9 @@
       "viz-spectrogram": "Spectrogram of the received audio",
       "viz-expand": "Expand spectrogram into the message area",
       "viz-collapse": "Back to messages",
-      "spectrogram-title": "Spectrogram — received audio"
+      "spectrogram-title": "Spectrograms",
+      "viz-incoming": "Incoming — peer",
+      "viz-outgoing": "Outgoing — you"
     },
     "rooms": "Rooms",
     "rooms-empty": "No rooms yet. Create one or join with an invite link.",

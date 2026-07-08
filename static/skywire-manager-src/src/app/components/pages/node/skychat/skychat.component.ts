@@ -757,7 +757,8 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // the call's audio tap — over the HTTP bridge on a native visor, the
   // skychatVoiceLevels/Audio JS hooks on a wasm visor.
   @ViewChild('vizCanvas') vizCanvas?: ElementRef<HTMLCanvasElement>;
-  @ViewChild('vizBig') vizBig?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('vizBig') vizBig?: ElementRef<HTMLCanvasElement>;        // incoming (peer)
+  @ViewChild('vizBigSent') vizBigSent?: ElementRef<HTMLCanvasElement>; // outgoing (you)
   showSpectrogram = false;   // small in-bar canvas: spectrogram vs level meter
   bigViz = false;            // expand a large spectrogram into the message area
   private vizTimer: any = null;
@@ -826,9 +827,12 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     }
     if (needAudio) {
       this.voiceAudioData(id).then((d) => {
-        const pcm = (d && d.recv) || [];
-        if (this.showSpectrogram) { this.drawSpectrogram(this.vizCanvas?.nativeElement, pcm); }
-        if (this.bigViz) { this.drawSpectrogram(this.vizBig?.nativeElement, pcm); }
+        const recv = (d && d.recv) || [], sent = (d && d.sent) || [];
+        if (this.showSpectrogram) { this.drawSpectrogram(this.vizCanvas?.nativeElement, recv); }
+        if (this.bigViz) {
+          this.drawSpectrogram(this.vizBig?.nativeElement, recv);      // incoming (peer)
+          this.drawSpectrogram(this.vizBigSent?.nativeElement, sent);  // outgoing (you)
+        }
       }).catch(() => { /* transient */ });
     }
   }
@@ -853,29 +857,30 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     bar(this.lvlRecv, 'rgba(158,206,106,0.95)', 0.6);  // peer (prominent)
   }
 
-  /** Scrolling FFT heatmap of the received audio (newest column on the right). */
+  /** Scrolling FFT heatmap (newest column on the right), matched to the
+   *  audioprism-go spectrogram: Hann window, magnitude = |FFT| (no N scaling),
+   *  ScaleLog 20·log10, normalized over 0..45 dB, heat colormap. 0..12 kHz with
+   *  low frequencies at the bottom. Silence → 0 dB → black. */
   private drawSpectrogram(c: HTMLCanvasElement | undefined, pcm: number[]) {
-    if (!c || pcm.length < 256) { return; }
+    const N = 2048;
+    if (!c || pcm.length < N) { return; }
     const ctx = c.getContext('2d');
     if (!ctx) { return; }
-    const W = c.width, H = c.height, N = 512, col = 2;
-    // Newest N samples, Hann-windowed.
-    const start = Math.max(0, pcm.length - N);
+    const W = c.width, H = c.height, col = 2;
+    const start = pcm.length - N;
     const re = new Float64Array(N), im = new Float64Array(N);
     for (let i = 0; i < N; i++) {
-      const s = (start + i < pcm.length) ? pcm[start + i] / 32768 : 0;
-      re[i] = s * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (N - 1)));
+      re[i] = (pcm[start + i] / 32768) * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (N - 1)));
     }
     fft(re, im);
-    // Scroll left by `col`, draw the new column on the right.
-    ctx.drawImage(c, -col, 0);
-    const bins = N / 2;
+    ctx.drawImage(c, -col, 0); // scroll left, new column on the right
+    // 0..12 kHz = the lower quarter of the N/2 bins at 48 kHz (Nyquist 24 kHz).
+    const maxBin = N / 4;
     for (let y = 0; y < H; y++) {
-      // low freq at bottom
-      const b = Math.floor((1 - y / H) * (bins - 1));
-      const mag = Math.hypot(re[b], im[b]);
-      const db = 20 * Math.log10(mag + 1e-6);
-      const t = Math.max(0, Math.min(1, (db + 60) / 60)); // -60..0 dB → 0..1
+      const bin = Math.floor((1 - y / H) * (maxBin - 1));
+      const mag = Math.hypot(re[bin], im[bin]);
+      const dB = 20 * Math.log10(mag + 1e-10);
+      const t = Math.max(0, Math.min(1, dB / 45)); // magMin 0, magMax 45
       ctx.fillStyle = heat(t);
       ctx.fillRect(W - col, y, col, 1);
     }
@@ -1052,11 +1057,16 @@ function fft(re: Float64Array, im: Float64Array): void {
   }
 }
 
-/** Map 0..1 to a dark→green→yellow heat color (matches the tcell spectrogram). */
-function heat(t: number): string {
-  t = Math.max(0, Math.min(1, t));
-  let r: number, g: number, b: number;
-  if (t < 0.5) { const u = t / 0.5; r = 0; g = Math.round(60 + 160 * u); b = Math.round(90 * (1 - u)); }
-  else { const u = (t - 0.5) / 0.5; r = Math.round(230 * u); g = Math.round(220 + 20 * u); b = 0; }
+/** audioprism-go's exact heat colormap (ValueToPixelHeat): black→blue→cyan→
+ *  green→yellow→red→white. value 0 → black, so silence renders black. */
+function heat(v: number): string {
+  v = Math.max(0, Math.min(1, v));
+  const n = (x: number, a: number, c: number) => { const t = (x - a) / (c - a); return t < 0 ? 0 : t > 1 ? 1 : t; };
+  let r = 0, g = 0, b = 0;
+  if (v < 1 / 5) { b = Math.round(255 * n(v, 0, 1 / 5)); }
+  else if (v < 2 / 5) { const c = Math.round(255 * n(v, 1 / 5, 2 / 5)); r = 0; g = c; b = 255 - c; }
+  else if (v < 3 / 5) { r = Math.round(255 * n(v, 2 / 5, 3 / 5)); g = 255; b = 0; }
+  else if (v < 4 / 5) { r = 255; g = Math.round(255 - 255 * n(v, 3 / 5, 4 / 5)); b = 0; }
+  else { const c = Math.round(255 * n(v, 4 / 5, 1)); r = 255; g = c; b = c; }
   return `rgb(${r},${g},${b})`;
 }

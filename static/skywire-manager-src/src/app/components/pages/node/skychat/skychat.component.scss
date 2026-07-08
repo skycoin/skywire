@@ -356,6 +356,26 @@
     border-bottom: 1px solid #2a2342;
     .viz-collapse { color: #9aa0a6; }
   }
+  // Two stacked panels: incoming (peer) + outgoing (you).
+  .sc-viz-big-panel {
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    position: relative;
+    &:first-of-type { border-bottom: 1px solid #2a2342; }
+    .sc-viz-big-label {
+      position: absolute;
+      top: 3px; left: 6px;
+      font-size: 10px;
+      color: #9aa0a6;
+      background: rgba(14, 12, 20, 0.6);
+      padding: 0 4px;
+      border-radius: 3px;
+      pointer-events: none;
+      z-index: 1;
+    }
+  }
   .sc-viz-big {
     flex: 1 1 auto;
     width: 100%;
