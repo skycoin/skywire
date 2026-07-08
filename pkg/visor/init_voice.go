@@ -10,6 +10,8 @@ package visor
 import (
 	"context"
 	"net"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -42,19 +44,54 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		return v.dmsgC.DialStream(dctx, dmsgpkg.Addr{PK: peer, Port: p})
 	}
 
-	mgr := skyvoice.NewManager(skyvoice.Config{
+	cfg := skyvoice.Config{
 		LocalPK:    localPK,
 		Dial:       dial,
 		SignalPort: port,
-		// Headless auto-answer for now: media is silent/null until the audio
-		// backend lands, so accepting an inbound call leaks no audio. A UI
-		// ring/consent hook replaces this before real mic capture ships.
-		OnIncoming: func(inv skyvoice.Sig) bool {
-			log.WithField("from", inv.FromPK.Hex()).Info("voice: inbound call — auto-answering (headless)")
+		Logger:     log,
+	}
+
+	// Real audio is OPT-IN (SKYWIRE_VOICE_AUDIO=mic|monitor|1). Default: silent
+	// media + auto-answer — safe for headless visors, accepting a call leaks no
+	// audio. When enabled, capture live audio AND switch to explicit-answer
+	// (ring) so a visor never streams its microphone to a caller without an
+	// explicit `skychat voice answer`.
+	switch mode := strings.ToLower(strings.TrimSpace(os.Getenv("SKYWIRE_VOICE_AUDIO"))); mode {
+	case "", "0", "off", "false":
+		cfg.OnIncoming = func(inv skyvoice.Sig) bool {
+			log.WithField("from", inv.FromPK.Hex()).Info("voice: inbound call — auto-answering (silent, no audio)")
 			return true
-		},
-		Logger: log,
-	})
+		}
+	default:
+		monitor := mode == "monitor"
+		cfg.ManualAnswer = true
+		cfg.NewSource = func() skyvoice.Source {
+			s, err := skyvoice.NewMicSource(monitor, 0)
+			if err != nil {
+				log.WithError(err).Warn("voice: audio capture unavailable — using silence")
+				return skyvoice.SilentSource{}
+			}
+			return s
+		}
+		cfg.NewSink = func() skyvoice.Sink {
+			s, err := skyvoice.NewSpeakerSink(0)
+			if err != nil {
+				return skyvoice.NullSink{}
+			}
+			return s
+		}
+		cfg.Ring = func(inv skyvoice.Sig) {
+			log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
+				Warn("voice: INCOMING CALL — `skywire cli skychat voice answer <id>` to accept")
+		}
+		srcKind := "mic"
+		if monitor {
+			srcKind = "system-audio monitor"
+		}
+		log.Infof("voice: real audio ENABLED (%s) — incoming calls ring; answer explicitly", srcKind)
+	}
+
+	mgr := skyvoice.NewManager(cfg)
 	v.voice = mgr
 
 	// dmsg signaling listener on the shared port, now.

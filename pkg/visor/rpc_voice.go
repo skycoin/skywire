@@ -41,3 +41,32 @@ func (r *RPC) VoiceActive(_ *struct{}, out *[]string) (err error) {
 	*out = ids
 	return nil
 }
+
+// VoiceAnswer accepts a ringing inbound call by id.
+func (r *RPC) VoiceAnswer(callID *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceAnswer", callID)(nil, &err)
+	if callID == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.VoiceAnswer(*callID)
+}
+
+// VoiceDecline rejects a ringing inbound call by id.
+func (r *RPC) VoiceDecline(callID *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceDecline", callID)(nil, &err)
+	if callID == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.VoiceDecline(*callID)
+}
+
+// VoiceIncoming replies with the ringing inbound calls awaiting an answer.
+func (r *RPC) VoiceIncoming(_ *struct{}, out *[]string) (err error) {
+	defer rpcutil.LogCall(r.log, "VoiceIncoming", nil)(out, &err)
+	ids, err := r.visor.VoiceIncoming()
+	if err != nil {
+		return err
+	}
+	*out = ids
+	return nil
+}

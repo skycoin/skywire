@@ -189,3 +189,115 @@ func TestCallDeliversAudio(t *testing.T) {
 		t.Fatalf("hangup: %v", err)
 	}
 }
+
+// TestManualAnswerRing exercises the explicit-answer (ring) flow: the callee
+// parks the invite until Answer, and the caller's Call returns only then.
+func TestManualAnswerRing(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+
+	lis := newMemListener()
+	defer lis.Close() //nolint:errcheck
+
+	rang := make(chan Sig, 1)
+	mgrB := NewManager(Config{
+		LocalPK:      pkB,
+		Dial:         func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return nil, io.EOF },
+		ManualAnswer: true,
+		Ring:         func(inv Sig) { rang <- inv },
+	})
+	go mgrB.Serve(ctx, lis)
+
+	mgrA := NewManager(Config{
+		LocalPK: pkA,
+		Dial:    func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return lis.dial() },
+	})
+
+	type res struct {
+		sess *Session
+		err  error
+	}
+	resc := make(chan res, 1)
+	go func() { s, e := mgrA.Call(ctx, pkB); resc <- res{s, e} }()
+
+	var inv Sig
+	select {
+	case inv = <-rang:
+	case <-time.After(2 * time.Second):
+		t.Fatal("call never rang")
+	}
+	if inc := mgrB.Incoming(); len(inc) != 1 || inc[0].CallID != inv.CallID {
+		t.Fatalf("Incoming() = %v, want the ringing call %s", inc, inv.CallID)
+	}
+	// Not answered yet → caller still blocked.
+	select {
+	case r := <-resc:
+		t.Fatalf("Call returned before answer: %+v", r)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if err := mgrB.Answer(inv.CallID); err != nil {
+		t.Fatalf("Answer: %v", err)
+	}
+	select {
+	case r := <-resc:
+		if r.err != nil {
+			t.Fatalf("Call after answer: %v", r.err)
+		}
+		if r.sess == nil {
+			t.Fatal("nil session after answer")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Call did not return after Answer")
+	}
+	if inc := mgrB.Incoming(); len(inc) != 0 {
+		t.Fatalf("still ringing after answer: %v", inc)
+	}
+}
+
+// TestManualAnswerDecline: an explicit Decline makes the caller's Call fail.
+func TestManualAnswerDecline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	pkA, _ := cipher.GenerateKeyPair()
+	pkB, _ := cipher.GenerateKeyPair()
+
+	lis := newMemListener()
+	defer lis.Close() //nolint:errcheck
+
+	rang := make(chan Sig, 1)
+	mgrB := NewManager(Config{
+		LocalPK:      pkB,
+		Dial:         func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return nil, io.EOF },
+		ManualAnswer: true,
+		Ring:         func(inv Sig) { rang <- inv },
+	})
+	go mgrB.Serve(ctx, lis)
+
+	mgrA := NewManager(Config{
+		LocalPK: pkA,
+		Dial:    func(context.Context, cipher.PubKey, uint16) (net.Conn, error) { return lis.dial() },
+	})
+
+	errc := make(chan error, 1)
+	go func() { _, e := mgrA.Call(ctx, pkB); errc <- e }()
+
+	var inv Sig
+	select {
+	case inv = <-rang:
+	case <-time.After(2 * time.Second):
+		t.Fatal("call never rang")
+	}
+	if err := mgrB.Decline(inv.CallID); err != nil {
+		t.Fatalf("Decline: %v", err)
+	}
+	select {
+	case e := <-errc:
+		if e == nil {
+			t.Fatal("Call should fail after decline")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Call did not return after Decline")
+	}
+}

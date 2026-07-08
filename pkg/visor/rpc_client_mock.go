@@ -1320,6 +1320,15 @@ func (mc *mockRPCClient) VoiceHangup(_ string) error { return nil }
 // VoiceActive implements API.
 func (mc *mockRPCClient) VoiceActive() ([]string, error) { return nil, nil }
 
+// VoiceAnswer implements API.
+func (mc *mockRPCClient) VoiceAnswer(_ string) error { return nil }
+
+// VoiceDecline implements API.
+func (mc *mockRPCClient) VoiceDecline(_ string) error { return nil }
+
+// VoiceIncoming implements API.
+func (mc *mockRPCClient) VoiceIncoming() ([]string, error) { return nil, nil }
+
 // GroupHistory implements API.
 func (mc *mockRPCClient) GroupHistory(_ string, _ int) ([]GroupMessage, error) { return nil, nil }
 

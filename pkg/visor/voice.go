@@ -48,3 +48,33 @@ func (v *Visor) VoiceActive() ([]string, error) {
 	}
 	return v.voice.Active(), nil
 }
+
+// VoiceAnswer accepts a ringing inbound call by id (explicit-answer mode, when
+// real audio is enabled).
+func (v *Visor) VoiceAnswer(callID string) error {
+	if v.voice == nil {
+		return ErrVoiceDisabled
+	}
+	return v.voice.Answer(callID)
+}
+
+// VoiceDecline rejects a ringing inbound call by id.
+func (v *Visor) VoiceDecline(callID string) error {
+	if v.voice == nil {
+		return ErrVoiceDisabled
+	}
+	return v.voice.Decline(callID)
+}
+
+// VoiceIncoming returns the ringing inbound calls awaiting an answer, each
+// formatted as "<call-id> from <peer-pk>".
+func (v *Visor) VoiceIncoming() ([]string, error) {
+	if v.voice == nil {
+		return nil, ErrVoiceDisabled
+	}
+	var out []string
+	for _, inv := range v.voice.Incoming() {
+		out = append(out, inv.CallID+" from "+inv.FromPK.Hex())
+	}
+	return out, nil
+}

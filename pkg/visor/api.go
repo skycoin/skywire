@@ -290,6 +290,9 @@ type API interface {
 	VoiceCall(peer cipher.PubKey) (string, error)
 	VoiceHangup(callID string) error
 	VoiceActive() ([]string, error)
+	VoiceAnswer(callID string) error
+	VoiceDecline(callID string) error
+	VoiceIncoming() ([]string, error)
 
 	// Embedded Transport Setup Node (TPS) controls
 	TPSStatus() (*TPSStatus, error)
