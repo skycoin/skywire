@@ -240,12 +240,12 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
    *  rides dmsg:1, so force the network label to dmsg. */
   private connectWasm(sv: any) {
     this.network = 'dmsg';
-    const poll = () => {
+    const handle = (raw: any) => {
       let arr: any[];
       // skychatMessages() returns the JSON of the message buffer, which is the
       // string "null" (not "[]") when the buffer is a nil slice — JSON.parse
       // gives null, so coalesce to [] or the poll would bail and never connect.
-      try { arr = JSON.parse(sv.skychatMessages() || '[]') || []; } catch {
+      try { arr = JSON.parse(raw || '[]') || []; } catch {
         this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); return;
       }
       if (!Array.isArray(arr)) { return; }
@@ -260,6 +260,16 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
         this.lastPollLen = arr.length;
         this.cdr.markForCheck();
       }
+    };
+    // Under the SharedWorker architecture skywireVisor is a MessagePort proxy,
+    // so skychatMessages() returns a Promise (not the raw JSON string the Go
+    // side returns synchronously in the single-file build). Promise.resolve()
+    // normalizes both — calling JSON.parse on the Promise object is what threw
+    // "chat hook error" before, same fix as the group hooks.
+    const poll = () => {
+      Promise.resolve(sv.skychatMessages())
+        .then(handle)
+        .catch(() => { this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); });
     };
     poll();
     this.pollTimer = setInterval(poll, 1500);
