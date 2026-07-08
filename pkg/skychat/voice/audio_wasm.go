@@ -3,18 +3,19 @@
 // Package voice pkg/skychat/voice/audio_wasm.go c2-app-chat
 //
 // Browser audio backend for the wasm visor. getUserMedia + AudioContext are
-// main-thread-only, but the wasm visor runs in a Web Worker, so the actual
-// WebAudio graph lives in a main-thread JS proxy (like the WebRTC proxy). This
-// file is only the WORKER-side Go glue: a Source whose ring is fed by mic frames
-// the proxy delivers, and a Sink whose ring the proxy drains for playback. The
-// bridge is three functions the proxy calls on globalThis:
+// main-thread-only, but the visor runs in a Web Worker, so the WebAudio graph
+// lives in a main-thread JS proxy (voice-audio.js) and audio crosses the worker
+// boundary by postMessage — exactly like the WebRTC/STUN proxies (worker.js
+// __skywireRTC / __skywireStunIP). This file is the WORKER-side Go glue:
 //
-//	__skyvoiceMic(Uint8Array)  — deliver a captured frame (LE int16 bytes) → Source
-//	__skyvoicePlay(nSamples)   — pull nSamples LE int16 bytes for playback ← Sink
-//	                             (returns a Uint8Array; short/silent on underrun)
-//	globalThis.__skyvoiceActive(bool) — the proxy checks this to start/stop capture
+//	CAPTURE  main thread mic → {t:'voiceMic'} → worker.js calls __skyvoiceMic(bytes)
+//	         → this Source's ring → session sendLoop.
+//	PLAYBACK session recvLoop → this Sink → self.__skyvoiceEmit(bytes)
+//	         → worker.js posts {t:'voicePlay'} → main thread plays.
 //
-// PCM everywhere is 48 kHz mono int16, matching the rest of pkg/skychat/voice.
+// In the in-page (single-file) visor, worker.js isn't involved: voice-audio.js
+// defines __skyvoiceEmit/__skyvoiceMic on the same global and the calls are
+// direct. PCM is 48 kHz mono int16 throughout.
 package voice
 
 import (
@@ -24,15 +25,14 @@ import (
 
 var (
 	audioMu    sync.Mutex
-	curMicRing *sampleRing // current call's capture ring (proxy → Source)
-	curSpkRing *sampleRing // current call's playback ring (Sink → proxy)
+	curMicRing *sampleRing // current call's capture ring (bridge → Source)
 	bridgeOnce sync.Once
 )
 
-// installBridge registers the JS functions the main-thread audio proxy calls.
+// installBridge registers __skyvoiceMic — the function the capture side calls to
+// deliver one mic frame (LE int16 bytes) to the current call's Source.
 func installBridge() {
-	g := js.Global()
-	g.Set("__skyvoiceMic", js.FuncOf(func(_ js.Value, args []js.Value) any {
+	js.Global().Set("__skyvoiceMic", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) < 1 {
 			return nil
 		}
@@ -52,40 +52,13 @@ func installBridge() {
 		}
 		return nil
 	}))
-	g.Set("__skyvoicePlay", js.FuncOf(func(_ js.Value, args []js.Value) any {
-		n := 0
-		if len(args) >= 1 {
-			n = args[0].Int()
-		}
-		audioMu.Lock()
-		r := curSpkRing
-		audioMu.Unlock()
-		pcm := make([]int16, n)
-		if r != nil {
-			r.popSilence(pcm)
-		}
-		buf := make([]byte, n*2)
-		for i, s := range pcm {
-			buf[i*2] = byte(s)
-			buf[i*2+1] = byte(uint16(s) >> 8) //nolint:gosec // LE int16 packing
-		}
-		out := js.Global().Get("Uint8Array").New(len(buf))
-		js.CopyBytesToJS(out, buf)
-		return out
-	}))
-	g.Set("__skyvoiceActive", js.FuncOf(func(_ js.Value, _ []js.Value) any {
-		audioMu.Lock()
-		active := curMicRing != nil || curSpkRing != nil
-		audioMu.Unlock()
-		return active
-	}))
 }
 
-// wasmSource is a voice.Source fed by mic frames from the main-thread proxy.
+// wasmSource is a voice.Source fed by mic frames the capture proxy delivers.
 type wasmSource struct{ ring *sampleRing }
 
 // NewMicSource returns a browser capture Source. monitor is ignored (browsers
-// can't capture arbitrary system audio). rate is fixed at the package rate.
+// can't capture arbitrary system audio); rate is fixed at the package rate.
 func NewMicSource(_ bool, _ int) (Source, error) {
 	bridgeOnce.Do(installBridge)
 	ring := newSampleRing(sampleRate)
@@ -107,29 +80,31 @@ func (s *wasmSource) Close() error {
 	return nil
 }
 
-// wasmSink is a voice.Sink whose ring the main-thread proxy drains for playback.
-type wasmSink struct{ ring *sampleRing }
+// wasmSink is a voice.Sink that pushes each decoded frame to the playback proxy
+// via the __skyvoiceEmit hook (defined by worker.js in worker mode, or
+// voice-audio.js in-page).
+type wasmSink struct{}
 
 // NewSpeakerSink returns a browser playback Sink.
 func NewSpeakerSink(_ int) (Sink, error) {
 	bridgeOnce.Do(installBridge)
-	ring := newSampleRing(sampleRate)
-	audioMu.Lock()
-	curSpkRing = ring
-	audioMu.Unlock()
-	return &wasmSink{ring: ring}, nil
+	return &wasmSink{}, nil
 }
 
 func (s *wasmSink) Write(pcm []int16) (int, error) {
-	s.ring.push(pcm)
+	emit := js.Global().Get("__skyvoiceEmit")
+	if emit.Type() != js.TypeFunction {
+		return len(pcm), nil // no playback sink wired — drop
+	}
+	buf := make([]byte, len(pcm)*2)
+	for i, v := range pcm {
+		buf[i*2] = byte(v)
+		buf[i*2+1] = byte(uint16(v) >> 8) //nolint:gosec // LE int16 packing
+	}
+	u8 := js.Global().Get("Uint8Array").New(len(buf))
+	js.CopyBytesToJS(u8, buf)
+	emit.Invoke(u8)
 	return len(pcm), nil
 }
 
-func (s *wasmSink) Close() error {
-	audioMu.Lock()
-	if curSpkRing == s.ring {
-		curSpkRing = nil
-	}
-	audioMu.Unlock()
-	return nil
-}
+func (s *wasmSink) Close() error { return nil }

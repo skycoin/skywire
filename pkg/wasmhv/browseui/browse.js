@@ -1300,6 +1300,8 @@
     var fetchMsgs = opts.skychatMessages || sv.skychatMessages;
     var sendFile = opts.skychatSendFile || sv.skychatSendFile;
     var fetchFile = opts.skychatFile || sv.skychatFile;
+    var voiceCall = sv.skychatVoiceCall, voiceAnswer = sv.skychatVoiceAnswer, voiceHangup = sv.skychatVoiceHangup, voiceIncoming = sv.skychatVoiceIncoming;
+    var activeCall = null; // current call id while in a call
     function selfPK() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
     var peer = "";          // active conversation peer PK (full hex)
     var lastRender = "";    // cheap change-detection so we don't rebuild every tick
@@ -1323,6 +1325,7 @@
       '<input id="ch-in" placeholder="message…" autocomplete="off" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.35em;font:12px monospace" disabled>' +
       '<button id="ch-attach" title="send a file" style="cursor:pointer;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em" disabled>📎</button>' +
       '<input id="ch-file" type="file" style="display:none">' +
+      '<button id="ch-call" title="voice call (Opus over the encrypted mesh)" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em" disabled>📞</button>' +
       '<button id="ch-send" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .7em" disabled>send</button></div>' +
       '<div id="ch-status" style="padding:.2em .5em;min-height:1.2em;color:#9aa0a6;border-top:1px solid #15131c"></div>' +
       '<pre id="ch-log" style="display:none;margin:0;height:120px;overflow:auto;background:#0e0c14;color:#a9b1d6;border-top:1px solid #2a2342;padding:.4em;font:10px/1.4 monospace;white-space:pre-wrap;word-break:break-all"></pre>';
@@ -1340,6 +1343,7 @@
       var ready = !!(send && peer);
       input.disabled = !ready; $("ch-send").disabled = !ready;
       $("ch-attach").disabled = !(sendFile && peer);
+      $("ch-call").disabled = !(voiceCall && peer);
       lastRender = ""; render();
       if (ready) setTimeout(function () { input.focus(); }, 30);
     }
@@ -1453,6 +1457,47 @@
     $("ch-send").onclick = doSend;
     $("ch-attach").onclick = function () { $("ch-file").click(); };
     $("ch-file").addEventListener("change", function () { if (this.files && this.files[0]) { doSendFile(this.files[0]); this.value = ""; } });
+
+    // --- voice calls ---
+    function startAudio() { try { if (globalThis.skywireVoiceAudioStart) return globalThis.skywireVoiceAudioStart(); } catch (_) {} }
+    function stopAudio() { try { if (globalThis.skywireVoiceAudioStop) globalThis.skywireVoiceAudioStop(); } catch (_) {} }
+    function inCall(id) { activeCall = id; $("ch-call").textContent = "🔴"; $("ch-call").title = "hang up"; setStatus("in call", "#9ece6a"); }
+    function callEnded() { activeCall = null; $("ch-call").textContent = "📞"; $("ch-call").title = "voice call"; stopAudio(); }
+    $("ch-call").onclick = function () {
+      if (activeCall) { // hang up
+        try { if (voiceHangup) voiceHangup(activeCall); } catch (_) {}
+        callEnded(); setStatus("call ended");
+        return;
+      }
+      if (!voiceCall || !peer) return;
+      setStatus("calling " + peer.slice(0, 8) + "… (grant mic access)");
+      Promise.resolve(startAudio()).then(function () {
+        return Promise.resolve(voiceCall(peer)); // blocks until the callee answers
+      }).then(function (r) {
+        inCall(r && r.id);
+      }).catch(function (e) {
+        callEnded(); setStatus("call failed: " + (e && e.message ? e.message : e), "#f7768e");
+      });
+    };
+    // Poll for inbound (ringing) calls and offer to answer.
+    var ringAsked = {};
+    var voicePoll = setInterval(function () {
+      if (activeCall || !voiceIncoming) return;
+      Promise.resolve(voiceIncoming()).then(function (js) {
+        var list = []; try { list = JSON.parse(js || "[]") || []; } catch (_) {}
+        if (!list.length) return;
+        var c = list[0];
+        if (ringAsked[c.id]) return; ringAsked[c.id] = true;
+        if (window.confirm("Incoming voice call from " + String(c.from).slice(0, 12) + "…  Answer?")) {
+          setStatus("answering… (grant mic access)");
+          Promise.resolve(startAudio()).then(function () { return Promise.resolve(voiceAnswer(c.id)); })
+            .then(function () { inCall(c.id); })
+            .catch(function (e) { callEnded(); setStatus("answer failed: " + (e && e.message ? e.message : e), "#f7768e"); });
+        } else if (sv.skychatVoiceDecline) { try { sv.skychatVoiceDecline(c.id); } catch (_) {} }
+      }).catch(function () {});
+    }, 1500);
+    // Stop polling when the window's DOM is removed (WinBox destroys wrap on close).
+    var voiceWatch = setInterval(function () { if (!wrap.isConnected) { clearInterval(voicePoll); clearInterval(voiceWatch); callEnded(); } }, 3000);
 
     // Activity log pane — surfaces skychat's own dial/connect/send/receive vlog
     // lines from the shared window.skywireLog ring (the same source the 'logs'
@@ -1809,4 +1854,91 @@
   }
 
   globalThis.SkywireBrowse = { createBrowser: createBrowser, mountPanel: mountPanel };
+})();
+
+// voice-audio.js — main-thread WebAudio proxy for the wasm-visor's 1:1 voice.
+//
+// getUserMedia + AudioContext are main-thread-only, but the visor's audio
+// Source/Sink live in the wasm (pkg/skychat/voice/audio_wasm.go). Audio crosses
+// the boundary like the WebRTC/STUN proxies:
+//
+//   CAPTURE:  this file records the mic → deliverMic(bytes):
+//               worker mode  → globalThis.__skyvoiceToWorker(bytes)  (hv-boot.js posts it)
+//               in-page mode → globalThis.__skyvoiceMic(bytes)       (same global)
+//   PLAYBACK: the wasm Sink emits frames → globalThis.__skyvoiceOnPlay(bytes),
+//             which this file queues and the playback graph drains.
+//             (In-page, the Sink calls __skyvoiceEmit, aliased here to __skyvoiceOnPlay.)
+//
+// PCM is 48 kHz mono int16 to match pkg/skychat/voice.
+(function () {
+  var RATE = 48000;
+  var ctx = null, micStream = null, capNode = null, playNode = null, src = null;
+  var playFrames = [], playPos = 0;
+
+  function have(fn) { return typeof globalThis[fn] === 'function'; }
+
+  // pushPlay queues a decoded frame (Uint8Array of LE int16) for playback.
+  function pushPlay(bytes) {
+    if (!bytes || !bytes.buffer) return;
+    var f = new Int16Array(new Int16Array(bytes.buffer, bytes.byteOffset, bytes.byteLength >> 1)); // copy
+    playFrames.push(f);
+    if (playFrames.length > 50) { playFrames.splice(0, playFrames.length - 25); playPos = 0; } // cap backlog
+  }
+
+  function deliverMic(u8) {
+    if (have('__skyvoiceToWorker')) globalThis.__skyvoiceToWorker(u8);
+    else if (have('__skyvoiceMic')) globalThis.__skyvoiceMic(u8);
+  }
+
+  async function start() {
+    if (ctx) return; // already running
+    globalThis.__skyvoiceOnPlay = pushPlay;   // worker mode: hv-boot forwards here
+    globalThis.__skyvoiceEmit = pushPlay;     // in-page mode: the Sink calls this directly
+
+    ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: RATE });
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    // capture: mic -> deliverMic
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true } });
+    src = ctx.createMediaStreamSource(micStream);
+    capNode = ctx.createScriptProcessor(2048, 1, 1);
+    capNode.onaudioprocess = function (e) {
+      var f32 = e.inputBuffer.getChannelData(0);
+      var i16 = new Int16Array(f32.length);
+      for (var i = 0; i < f32.length; i++) {
+        var s = Math.max(-1, Math.min(1, f32[i]));
+        i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+      }
+      deliverMic(new Uint8Array(i16.buffer));
+    };
+    src.connect(capNode);
+    capNode.connect(ctx.destination); // node only runs when connected; its own output is silent
+
+    // playback: queued frames -> speakers
+    playNode = ctx.createScriptProcessor(2048, 1, 1);
+    playNode.onaudioprocess = function (e) {
+      var out = e.outputBuffer.getChannelData(0);
+      for (var i = 0; i < out.length; i++) {
+        if (playFrames.length === 0) { out[i] = 0; continue; }
+        var fr = playFrames[0];
+        out[i] = fr[playPos++] / 0x8000;
+        if (playPos >= fr.length) { playFrames.shift(); playPos = 0; }
+      }
+    };
+    playNode.connect(ctx.destination);
+  }
+
+  function stop() {
+    try { if (capNode) capNode.disconnect(); } catch (_) {}
+    try { if (playNode) playNode.disconnect(); } catch (_) {}
+    try { if (src) src.disconnect(); } catch (_) {}
+    try { if (micStream) micStream.getTracks().forEach(function (t) { t.stop(); }); } catch (_) {}
+    try { if (ctx) ctx.close(); } catch (_) {}
+    ctx = micStream = capNode = playNode = src = null;
+    playFrames = []; playPos = 0;
+    try { delete globalThis.__skyvoiceOnPlay; delete globalThis.__skyvoiceEmit; } catch (_) {}
+  }
+
+  globalThis.skywireVoiceAudioStart = start;
+  globalThis.skywireVoiceAudioStop = stop;
 })();
