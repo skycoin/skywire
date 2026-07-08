@@ -164,7 +164,18 @@ func (s *Session) recvLoop(ctx context.Context) {
 }
 
 // Close tears down the session's conn (idempotent). The Run loops observe the
-// conn error and exit.
+// conn error and exit. It also closes the source and sink if they are Closers:
+// a blocking Source.Read (e.g. an audio ring with no frames flowing) would
+// otherwise wedge sendLoop, so Run's wg.Wait would never return and the call
+// would never be dropped from the manager.
 func (s *Session) Close() {
-	s.closeOnce.Do(func() { _ = s.conn.Close() }) //nolint:errcheck
+	s.closeOnce.Do(func() {
+		_ = s.conn.Close() //nolint:errcheck
+		if c, ok := s.source.(io.Closer); ok {
+			_ = c.Close() //nolint:errcheck
+		}
+		if c, ok := s.sink.(io.Closer); ok {
+			_ = c.Close() //nolint:errcheck
+		}
+	})
 }
