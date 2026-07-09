@@ -342,7 +342,11 @@ type Session struct {
 	members   []cipher.PubKey
 
 	handler MessageHandler
-	log     *logging.Logger
+	// onRosterChange is invoked with a snapshot of the reconciled members +
+	// admins after applyRosterLeaf/applyAdminLeaf mutate the roster, so the
+	// manager can persist the converged Record. See SetRosterChangeHandler.
+	onRosterChange func(members, admins []cipher.PubKey)
+	log            *logging.Logger
 
 	// lastInboundNs is the unified liveness signal for this session,
 	// in unix-nanoseconds. Set on every observable inbound event —
@@ -678,7 +682,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 				Warn("group: owner peer-sub create failed; group still usable via legacy relay path")
 			continue
 		}
-		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.SetPrefixes(subscribedPrefixes())
 		s.peerLastInboundNs[peerPK] = new(atomic.Int64)
 		s.peerUpdateCount[peerPK] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
@@ -792,7 +796,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		_ = pub.Close() //nolint:errcheck
 		return nil, fmt.Errorf("group: Open member: attach subscriber: %w", err)
 	}
-	sub.SetPrefixes([]string{MessagePathPrefix})
+	sub.SetPrefixes(subscribedPrefixes())
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log,
 		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
@@ -838,7 +842,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		// Subscribe to both primary (peer's own sends) AND mirror
 		// (admin-relayed copies of other members' sends) — see the
 		// openOwner equivalent for the full rationale.
-		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.SetPrefixes(subscribedPrefixes())
 		s.peerUpdateCount[peerPK] = new(atomic.Uint64)
 		s.peerLastInboundNs[peerPK] = new(atomic.Int64)
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
@@ -1449,7 +1453,7 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 				Warn("group: SetAllowlist: peer-sub create failed; will retry on next allowlist change")
 			continue
 		}
-		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.SetPrefixes(subscribedPrefixes())
 		s.peerLastInboundNs[pk] = new(atomic.Int64)
 		s.peerUpdateCount[pk] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(pk))
@@ -1587,7 +1591,7 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 				Warn("group: SetAdminRoster: peer-sub create failed; will retry on next admin-roster change")
 			continue
 		}
-		ps.SetPrefixes([]string{MessagePathPrefix})
+		ps.SetPrefixes(subscribedPrefixes())
 		s.peerLastInboundNs[pk] = new(atomic.Int64)
 		s.peerUpdateCount[pk] = new(atomic.Uint64)
 		ps.OnUpdate(s.makePeerOnUpdate(pk))
@@ -2308,12 +2312,30 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 	// per-peer subscriber walks the publisher's CXO tree from
 	// SinceTimestampNs and gets every leaf the publisher still has,
 	// without needing a separate admin-driven mirror.
+	// Receive-side roster/admin reconciler (#3426): apply signed membership +
+	// admin mutations issued by current admins so late joiners converge to the
+	// real roster. Runs before the handler gate so it works even on sessions
+	// with no message handler installed.
+	for _, ev := range events {
+		if ev.Value == nil {
+			continue
+		}
+		if strings.HasPrefix(ev.Path, RosterPathPrefix+"/") {
+			s.applyRosterLeaf(ev.Value)
+		} else if strings.HasPrefix(ev.Path, AdminPathPrefix+"/") {
+			s.applyAdminLeaf(ev.Value)
+		}
+	}
 	h := s.handler
 	if h == nil {
 		return
 	}
 	for _, ev := range events {
 		if ev.Value == nil {
+			continue
+		}
+		// roster/admin leaves were handled by the reconciler pre-pass above.
+		if strings.HasPrefix(ev.Path, RosterPathPrefix+"/") || strings.HasPrefix(ev.Path, AdminPathPrefix+"/") {
 			continue
 		}
 		// Cross-source dedup: collapse the (primary + N mirror copies)
@@ -2415,6 +2437,15 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 		// up to the user handler — they're wire-level liveness
 		// probes, not chat content.
 		if IsHeartbeat(msg) {
+			continue
+		}
+		// Don't deliver our OWN messages back to us. A non-admin member reads an
+		// admin's canonical feed, and the admin republishes every verified leaf
+		// verbatim — INCLUDING this member's own sends — so without this guard a
+		// member sees its own message echoed back after sending. The UI shows
+		// local sends optimistically, so the round-tripped copy is a duplicate.
+		// (Owner-role self-echo is delivered separately from publishAs, not here.)
+		if msg.SenderPK == s.cfg.MyPK {
 			continue
 		}
 		h(s.cfg.Record.ID, msg.SenderPK, msg)
