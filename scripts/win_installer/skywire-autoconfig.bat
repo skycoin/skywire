@@ -33,12 +33,24 @@ if not exist "%ProgramData%\Skywire\" (
     mkdir "%ProgramData%\Skywire" >nul 2>&1
 )
 
+:: Log everything to %ProgramData%\Skywire\autoconfig-install.log. The MSI runs
+:: this as a deferred CustomAction with Return="ignore", so WITHOUT a log any
+:: failure (a config-gen error, or — the classic upgrade bug — the OLD binary
+:: running because the new one was locked by a still-running skywire) is silent
+:: and undiagnosable. Recording `skywire --version` up front pins down exactly
+:: which binary regenerated the config, which is the clincher when a user reports
+:: "config not updated on upgrade".
+set "SKYLOG=%ProgramData%\Skywire\autoconfig-install.log"
+echo(>> "%SKYLOG%"
+echo ===== skywire-autoconfig %DATE% %TIME% =====>> "%SKYLOG%"
+"%~dp0skywire.exe" --version >> "%SKYLOG%" 2>&1
+
 :: Generate the env-file template ONLY if missing. -p forces package-mode
 :: defaults (paths under C:\Program Files\Skywire), -q renders the template,
 :: -Q writes it to the file. Mirrors the deb/arch
 :: `[[ ! -f /etc/skywire.conf ]] && skywire cli config gen -pqQ ...` pattern.
 if not exist "%SKYENV%" (
-    "%~dp0skywire.exe" cli config gen -pqQ "%SKYENV%"
+    "%~dp0skywire.exe" cli config gen -pqQ "%SKYENV%" >> "%SKYLOG%" 2>&1
 )
 
 :: (Re)generate the visor config through the SINGLE entry point — `skywire
@@ -58,4 +70,5 @@ if not exist "%SKYENV%" (
 :: VPNSERVER=false (replaces the old `--disableapps vpn-server`). Deployment
 :: service URLs come from the embedded dmsg-only services config (the single
 :: source of truth), so no -S / -D files are needed.
-"%~dp0skywire.exe" autoconfig --ishv --no-vpnserver
+"%~dp0skywire.exe" autoconfig --ishv --no-vpnserver >> "%SKYLOG%" 2>&1
+echo ----- autoconfig exit %ERRORLEVEL% ----->> "%SKYLOG%"
