@@ -161,6 +161,15 @@ func (r *RPC) GroupSend(req *GroupSendArgs, _ *struct{}) (err error) {
 	return r.visor.GroupSend(*req)
 }
 
+// GroupUnsend deletes a message the local visor published, by UnixNano TS.
+func (r *RPC) GroupUnsend(req *GroupUnsendArgs, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupUnsend", req)(nil, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.GroupUnsend(*req)
+}
+
 // GroupPoll drains inbound group messages with TS strictly after Since.
 func (r *RPC) GroupPoll(req *GroupPollRequest, out *[]GroupMessage) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupPoll", req)(out, &err)
