@@ -143,7 +143,7 @@ func buildRouter() *gin.Engine {
 			c.Writer.WriteHeader(http.StatusOK)
 			base := strings.TrimRight(canonicalDomain, "/")
 			if base == "" {
-				base = "https://theskywirenetwork.net"
+				base = "https://reward.theskywirenetwork.net"
 			}
 			urls := []struct{ loc, priority string }{
 				{"/", "1.0"},
