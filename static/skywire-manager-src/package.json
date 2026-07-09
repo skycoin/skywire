@@ -7,6 +7,7 @@
     "start-no-ssl": "ng serve --proxy-config proxy.config.json",
     "build": "ng build --configuration production",
     "test": "ng test",
+    "test-headless": "ng test --watch=false --browsers=ChromeHeadlessNoSandbox",
     "lint": "ng lint",
     "lint-fix": "ng lint --fix"
   },

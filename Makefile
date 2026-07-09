@@ -520,6 +520,9 @@ run-vpnsrv-dmsghttp: prepare ## Run skywire from source with dmsghttp config and
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
 
+test-ui:  ## Run the hypervisor UI unit tests headless (needs Chrome; set CHROME_BIN if it isn't on PATH)
+	cd $(MANAGER_UI_DIR) && npm run test-headless
+
 build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build
 	mkdir -p ${PWD}/bin
