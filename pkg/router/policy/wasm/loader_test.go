@@ -10,11 +10,19 @@ import (
 	"github.com/skycoin/skywire/pkg/router/policy"
 )
 
-// findExampleWASM walks up from the test's runtime directory
-// looking for the docs/examples/routing-policies/wasm/app-mux/
-// app-mux.wasm artifact. Returns "" when not found (caller
-// t.Skip's).
+// findExampleWASM locates the app-mux.wasm artifact. It first honours
+// SKYWIRE_APPMUX_WASM (set by the CI `test-wasm-policy` lane, which
+// rebuilds the fixture from source with TinyGo so the test exercises a
+// FRESH build rather than the possibly-stale committed blob). Failing
+// that it walks up from the test's runtime directory looking for the
+// committed docs/examples/routing-policies/wasm/app-mux/app-mux.wasm.
+// Returns "" when not found (caller t.Skip's).
 func findExampleWASM() string {
+	if p := os.Getenv("SKYWIRE_APPMUX_WASM"); p != "" {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
 	_, here, _, _ := runtime.Caller(0)
 	repoRoot := here
 	for i := 0; i < 8; i++ {
