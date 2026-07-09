@@ -1554,11 +1554,14 @@
     var timer = setInterval(render, 1500);
     render();
     if (!send) setStatus("skychat is only available in the browser-tab (wasm) visor", "#e0af68");
+    // Deep-link (?skydm=<pk>): open a conversation pre-addressed to this peer so a
+    // shared theskywirenetwork.net link drops the visitor straight into a 1:1 chat.
+    if (opts.initialPeer) { try { setPeer(opts.initialPeer); } catch (e) {} }
     var wb = makeWin(doc, {
       title: "skychat", root: opts.root, top: opts.top, bottom: opts.bottom, width: "42%", height: "62%",
       mount: wrap, onclose: function () { clearInterval(timer); logUnsub(); if (opts.onClose) opts.onClose(); }
     });
-    return { wb: wb, close: function () { wb.close(); } };
+    return { wb: wb, close: function () { wb.close(); }, setPeer: setPeer };
   }
 
   // createTerminalWindow opens a real dmsgpty terminal as a WinBox iframe to
@@ -1768,10 +1771,15 @@
       track(termWin, "terminal");
     }
     var chatWin = null;
-    function openChat() {
-      if (focusExisting(chatWin)) { return; }
-      chatWin = createChatWindow(doc, withRoot({ onClose: function () { untrack(chatWin); chatWin = null; } }));
+    function openChat(initialPeer) {
+      if (focusExisting(chatWin)) {
+        // Already open — retarget it to the deep-linked peer if one was given.
+        if (initialPeer && chatWin && chatWin.setPeer) { try { chatWin.setPeer(initialPeer); } catch (e) {} }
+        return chatWin;
+      }
+      chatWin = createChatWindow(doc, withRoot({ onClose: function () { untrack(chatWin); chatWin = null; }, initialPeer: initialPeer || "" }));
       track(chatWin, "skychat");
+      return chatWin;
     }
     var hostWin = null;
     function openHost() {
@@ -1802,7 +1810,9 @@
       // (e.g. the native HV) that don't preload it.
       try {
         var pre = self.__SKYWIRE_DEEPLINK__ || (doc.defaultView || window).__SKYWIRE_DEEPLINK__;
-        if (pre && pre.target) { return { target: pre.target, kiosk: !!pre.kiosk }; }
+        if (pre && (pre.target || pre.skydm || pre.skygroup)) {
+          return { target: pre.target || "", skydm: pre.skydm || "", skygroup: pre.skygroup || "", kiosk: !!pre.kiosk };
+        }
       } catch (e) {}
       var loc = (doc.defaultView || window).location, qs = {};
       try {
@@ -1813,10 +1823,14 @@
         });
         var h = loc.hash || "", m = h.match(/[#&]skynet=([^&]+)/);
         if (m && !qs.skynet) { qs.skynet = decodeURIComponent(m[1]); }
+        var md = h.match(/[#&]skydm=([^&]+)/);
+        if (md && !qs.skydm) { qs.skydm = decodeURIComponent(md[1]); }
+        var mg = h.match(/[#&]skygroup=([^&]+)/);
+        if (mg && !qs.skygroup) { qs.skygroup = decodeURIComponent(mg[1]); }
         if (/[#&]kiosk=1\b/.test(h)) { qs.kiosk = "1"; }
       } catch (e) {}
-      if (!qs.skynet) { return null; }
-      return { target: qs.skynet, kiosk: qs.kiosk === "1" || qs.kiosk === "true" };
+      if (!qs.skynet && !qs.skydm && !qs.skygroup) { return null; }
+      return { target: qs.skynet || "", skydm: qs.skydm || "", skygroup: qs.skygroup || "", kiosk: qs.kiosk === "1" || qs.kiosk === "true" };
     }
     // whenVisorConnected fires cb once the wasm visor has a live dmsg session (so a
     // fetch over dmsg won't just error), bounded to ~20s so a stuck visor still lands
@@ -1843,7 +1857,29 @@
     }
     try {
       var dl = readDeepLink();
-      if (dl) {
+      // ?skydm=<pk> — open a 1:1 skychat pre-addressed to the peer ("message me"
+      // links). wasm-visor only (needs the in-tab skychatSend hook); a native HV
+      // has its own Angular skychat tab. Handled before the skynet-browse path so
+      // a chat deep-link never falls through to openBrowse.
+      if (dl && dl.skydm && globalThis.skywireVisor && globalThis.skywireVisor.skychatSend) {
+        var cwin = openChat(dl.skydm);
+        if (cwin && dl.kiosk) { enterKiosk(cwin); }
+        dl = null; // handled — skip the skynet-browse path below
+      }
+      // ?skygroup=<invite> — join the federated group from the invite blob so a
+      // shared link drops the visitor straight into membership. browse.js has no
+      // group message view (that lives in the Angular skychat tab, which owns the
+      // group UI); this wiring performs the JOIN, then the operator opens the
+      // skychat tab to read/post. Best-effort: a failed join is logged, not fatal.
+      if (dl && dl.skygroup && globalThis.skywireVisor && globalThis.skywireVisor.skychatGroupJoin) {
+        Promise.resolve(skywireVisor.skychatGroupJoin(dl.skygroup)).then(function (g) {
+          try { log("skygroup: joined " + ((g && g.name) ? g.name : "group") + " — open the skychat tab to view it"); } catch (e) {}
+        }).catch(function (e) {
+          try { log("skygroup: join failed: " + ((e && e.message) || e)); } catch (e2) {}
+        });
+        dl = null; // handled — skip the skynet-browse path below
+      }
+      if (dl && dl.target) {
         var dlWin = openBrowse(true); // skip home.dmsg auto-land; go to the deep-link target
         if (dl.kiosk) { enterKiosk(dlWin); }
         // Navigate straight to the target — do NOT wait for dmsg first. render()'s
