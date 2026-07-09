@@ -248,14 +248,16 @@ jobs:
       - name: Rebuild app-mux.wasm and run the policy runtime smoke test
         run: make test-wasm-policy
 
-  # Hypervisor manager UI (Angular). The UI build + lint only ever ran as
-  # manually-invoked Makefile targets, so a regression that breaks `ng build`
-  # or trips an eslint rule shipped undetected. This job installs the node deps
-  # once, lints (fail-fast), then builds the production bundle so both classes
-  # of breakage fail CI. Build is invoked directly (not `make build-ui`) to
-  # reuse the single npm install above — build-ui re-runs `npm ci` via its
-  # install-deps-ui prerequisite, and CI doesn't need the artifact copy into
-  # pkg/visor/static that build-ui also does.
+  # Hypervisor manager UI (Angular). The UI build + lint + unit tests only ever
+  # ran as manually-invoked Makefile targets, so a regression that breaks
+  # `ng build`, trips an eslint rule, or fails a spec shipped undetected. This
+  # job installs the node deps once, lints (fail-fast), builds the production
+  # bundle, then runs the karma unit specs headless. Build is invoked directly
+  # (not `make build-ui`) to reuse the single npm install above — build-ui
+  # re-runs `npm ci` via its install-deps-ui prerequisite, and CI doesn't need
+  # the artifact copy into pkg/visor/static that build-ui also does. The specs
+  # run in headless Chrome via the ChromeHeadlessNoSandbox launcher (see
+  # src/karma.conf.js); browser-actions/setup-chrome provides the binary.
   ui:
     runs-on: ubuntu-latest
     steps:
@@ -267,6 +269,9 @@ jobs:
           cache: npm
           cache-dependency-path: static/skywire-manager-src/package-lock.json
 
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+
       - name: Install UI dependencies
         run: make install-deps-ui
 
@@ -275,6 +280,11 @@ jobs:
 
       - name: Build UI
         run: cd static/skywire-manager-src && npm run build
+
+      - name: Test UI
+        run: make test-ui
+        env:
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
 
   # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
   # //go:build !no_ci because they need a real Redis (redis://localhost:6379),
