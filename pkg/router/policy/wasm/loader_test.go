@@ -10,7 +10,7 @@ import (
 	"github.com/skycoin/skywire/pkg/router/policy"
 )
 
-// findExampleWASM locates the app-mux.wasm artifact. It first honours
+// findExampleWASM locates the app-mux.wasm artifact. It first honors
 // SKYWIRE_APPMUX_WASM (set by the CI `test-wasm-policy` lane, which
 // rebuilds the fixture from source with TinyGo so the test exercises a
 // FRESH build rather than the possibly-stale committed blob). Failing
@@ -19,7 +19,7 @@ import (
 // Returns "" when not found (caller t.Skip's).
 func findExampleWASM() string {
 	if p := os.Getenv("SKYWIRE_APPMUX_WASM"); p != "" {
-		if _, err := os.Stat(p); err == nil {
+		if _, err := os.Stat(p); err == nil { //nolint
 			return p
 		}
 	}
