@@ -428,8 +428,10 @@ jobs:
           $productWxs = $productWxs -replace "skywireVersion", $VERSION
           Set-Content -Path Product.wxs -Value $productWxs
 
-          # Build MSI
-          ..\..\wix\candle.exe UI.wxs Product.wxs -arch ${{ matrix.wix_arch }}
+          # Build MSI. -ext WixUtilExtension on candle too (not just light) so the
+          # <util:CloseApplication> element in Product.wxs — which stops a running
+          # skywire so an upgrade isn't blocked by locked files — compiles.
+          ..\..\wix\candle.exe -ext WixUtilExtension UI.wxs Product.wxs -arch ${{ matrix.wix_arch }}
           ..\..\wix\light.exe -ext WixUIExtension -ext WixUtilExtension -sacl -spdb -out skywire.msi UI.wixobj Product.wixobj
           Move-Item skywire.msi ..\..\dist\$MSI_NAME.msi
 
