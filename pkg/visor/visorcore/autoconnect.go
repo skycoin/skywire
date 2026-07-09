@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math/big"
 	"net"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -148,8 +149,24 @@ func ShufflePubKeys(keys []cipher.PubKey) []cipher.PubKey {
 	return keys
 }
 
+// perAttemptTransportTimeout bounds a SINGLE autoconnect transport-establishment
+// attempt. The autoconnect loop hands its visor-lifetime context straight down to
+// SaveTransport, and a dial that neither completes nor errors blocks that call
+// forever: SaveTransport waits on an unbuffered errCh fed by an async dial, and
+// the WebRTC dialer's awaitConn only unblocks on connCh/errCh/ctx.Done() — so a
+// last-resort Phase-4 WebRTC ICE negotiation to an unreachable peer (no answer,
+// no error) with a never-canceled ctx wedges the whole loop: no further ticks
+// fire and no transports are ever made (observed live, a v1.3.79 visor stuck here
+// for 5+ days with 0 transports). Every dial path (stcpr DialContext, sudph, quic,
+// webrtc awaitConn) honors ctx, so a bounded per-attempt deadline lets a stuck
+// dial return DeadlineExceeded and the loop advances to the next target/tick.
+const perAttemptTransportTimeout = 30 * time.Second
+
 // tryEstablishTransport attempts to establish a transport of the specified type to the given public key, and return error.
 func (c *Connector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, netType tptypes.Type, logger *logrus.Entry) error {
+	ctx, cancel := context.WithTimeout(ctx, perAttemptTransportTimeout)
+	defer cancel()
+
 	if _, err := c.Tm.SaveTransport(ctx, pk, netType, transport.LabelAutomatic); err != nil {
 		return err
 	}
