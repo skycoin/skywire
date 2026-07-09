@@ -1,4 +1,5 @@
 import { of, throwError } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
 
 import { AuthService, AuthStates } from './auth.service';
 import { OperationError } from '../utils/operation-error';
@@ -66,7 +67,7 @@ describe('AuthService', () => {
     });
 
     it('maps a 401 to NotLogged and sets forceFail', (done) => {
-      apiService.get.and.returnValue(throwError(() => ({ status: 401 })));
+      apiService.get.and.returnValue(throwError(() => new HttpErrorResponse({ status: 401 })));
       service.checkLogin().subscribe((state) => {
         expect(state).toBe(AuthStates.NotLogged);
         expect(authGuardService.forceFail).toBeTrue();
@@ -75,7 +76,7 @@ describe('AuthService', () => {
     });
 
     it('rethrows non-401 errors', (done) => {
-      apiService.get.and.returnValue(throwError(() => ({ status: 500 })));
+      apiService.get.and.returnValue(throwError(() => new HttpErrorResponse({ status: 500 })));
       service.checkLogin().subscribe({
         next: () => fail('expected an error'),
         error: (err: OperationError) => {
@@ -118,7 +119,7 @@ describe('AuthService', () => {
     });
 
     it('translates a 401 to the bad-old-password message', (done) => {
-      apiService.post.and.returnValue(throwError(() => ({ status: 401 })));
+      apiService.post.and.returnValue(throwError(() => new HttpErrorResponse({ status: 401 })));
       service.changePassword('old', 'new').subscribe({
         next: () => fail('expected an error'),
         error: (err: OperationError) => {
@@ -139,7 +140,7 @@ describe('AuthService', () => {
     });
 
     it('translates a 500 to the initial-config error message', (done) => {
-      apiService.post.and.returnValue(throwError(() => ({ status: 500 })));
+      apiService.post.and.returnValue(throwError(() => new HttpErrorResponse({ status: 500 })));
       service.initialConfig('pw').subscribe({
         next: () => fail('expected an error'),
         error: (err: OperationError) => {
@@ -168,7 +169,7 @@ describe('AuthService', () => {
     });
 
     it('defaults to true (assume account exists) on error', (done) => {
-      apiService.get.and.returnValue(throwError(() => ({ status: 500 })));
+      apiService.get.and.returnValue(throwError(() => new HttpErrorResponse({ status: 500 })));
       service.userExists().subscribe((exists) => {
         expect(exists).toBeTrue();
         done();
