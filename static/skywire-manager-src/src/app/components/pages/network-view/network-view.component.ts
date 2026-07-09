@@ -85,6 +85,7 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
           this.error = err?.message || 'Failed to fetch network view';
         },
       });
+
     return super.ngOnInit();
   }
 
@@ -108,7 +109,9 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
   }
 
   ngOnDestroy(): void {
-    if (this.sub) { this.sub.unsubscribe(); }
+    if (this.sub) {
+ this.sub.unsubscribe(); 
+}
   }
 
   applyFilters() {
@@ -132,8 +135,11 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
       }
       if (term) {
         const haystack = [e.pk, e.country, e.version, e.services].join(' ').toLowerCase();
-        if (!haystack.includes(term)) { return false; }
+        if (!haystack.includes(term)) {
+ return false; 
+}
       }
+
       return true;
     });
   }
@@ -141,9 +147,16 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
   /** CSS class for a row based on health classification. */
   rowClass(e: NetworkEntry): string {
     const realT = (e.stcpr || 0) + (e.sudph || 0);
-    if ((e.ut_status || '') === '') { return 'row-not-in-ut'; }
-    if ((e.ut_status || '') === 'offline') { return 'row-offline'; }
-    if (realT < 2) { return 'row-low-transports'; }
+    if ((e.ut_status || '') === '') {
+ return 'row-not-in-ut'; 
+}
+    if ((e.ut_status || '') === 'offline') {
+ return 'row-offline'; 
+}
+    if (realT < 2) {
+ return 'row-low-transports'; 
+}
+
     return '';
   }
 
@@ -152,10 +165,15 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
     let online = 0, offline = 0, notInUT = 0;
     for (const e of this.entries) {
       const s = e.ut_status || '';
-      if (s === 'online') { online++; }
-      else if (s === 'offline') { offline++; }
-      else { notInUT++; }
+      if (s === 'online') {
+ online++; 
+} else if (s === 'offline') {
+ offline++; 
+} else {
+ notInUT++; 
+}
     }
-    return { all: this.entries.length, online, offline, notInUT };
+
+    return { all: this.entries.length, online: online, offline: offline, notInUT: notInUT };
   }
 }

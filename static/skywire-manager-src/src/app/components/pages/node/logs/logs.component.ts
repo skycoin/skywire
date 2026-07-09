@@ -99,14 +99,19 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
     private snackbar: SnackbarService,
     private ngZone: NgZone,
     private cdr: ChangeDetectorRef,
-  ) { super(); }
+  ) {
+ super(); 
+}
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;
-      if (wasUnset && node) { this.loadData(0); }
+      if (wasUnset && node) {
+ this.loadData(0); 
+}
     });
+
     return super.ngOnInit();
   }
 
@@ -133,6 +138,7 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
         // Keep the prior regex active rather than dropping all output;
         // surface the error so the user knows the pattern was rejected.
         this.moduleFilterError = e?.message || 'invalid regex';
+
         return;
       }
     }
@@ -146,17 +152,26 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
 
   toggleLiveTail() {
     this.liveTail = !this.liveTail;
-    if (this.liveTail) { this.loadData(0); } else { this.subscription?.unsubscribe(); }
+    if (this.liveTail) {
+ this.loadData(0); 
+} else {
+ this.subscription?.unsubscribe(); 
+}
   }
 
   fullLogsUrl(): string {
-    if (!this.node) { return ''; }
+    if (!this.node) {
+ return ''; 
+}
     const apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ? 'http-api' : 'api';
+
     return window.location.origin + '/' + apiPrefix + '/visors/' + this.node.localPk + '/runtime-logs';
   }
 
   private loadData(delayMs: number) {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     this.subscription?.unsubscribe();
     this.captureScrollTailState();
     this.loading = this.logEntries.length === 0;
@@ -172,17 +187,27 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   private onDelta(delta: any) {
-    if (!delta) { this.loading = false; this.scheduleNext(); return; }
+    if (!delta) {
+ this.loading = false; this.scheduleNext();
+
+ return; 
+}
     const isInitial = this.logCursor === 0;
     this.logCursor = (typeof delta.latest === 'number') ? delta.latest : this.logCursor;
-    if (typeof delta.dropped === 'number' && delta.dropped > 0) { this.totalDropped += delta.dropped; }
+    if (typeof delta.dropped === 'number' && delta.dropped > 0) {
+ this.totalDropped += delta.dropped; 
+}
 
     const raws: string[] = Array.isArray(delta.entries) ? delta.entries : [];
     const parsed: any[] = [];
     for (const r of raws) {
-      try { parsed.push(JSON.parse(r)); } catch { /* skip malformed */ }
+      try {
+ parsed.push(JSON.parse(r)); 
+} catch { /* skip malformed */ }
     }
-    if (isInitial) { this.logEntries = []; }
+    if (isInitial) {
+ this.logEntries = []; 
+}
     this.appendParsed(parsed);
 
     if (this.logEntries.length > this.maxBufferEntries) {
@@ -207,10 +232,14 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
         module: e._module,
         extra: [],
       };
-      if (e.error) { entry.extra.push({ name: 'error', value: e.error }); }
+      if (e.error) {
+ entry.extra.push({ name: 'error', value: e.error }); 
+}
       const known = new Set(['time', '_module', 'msg', 'func', 'level', 'log_line', 'error']);
       for (const k in e) {
-        if (!known.has(k)) { entry.extra.push({ name: k, value: e[k] }); }
+        if (!known.has(k)) {
+ entry.extra.push({ name: k, value: e[k] }); 
+}
       }
       this.logEntries.push(entry);
     }
@@ -218,13 +247,28 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
 
   private parseLevel(s: string): Level {
     const lc = (s || '').toLowerCase();
-    if (lc.includes('panic')) { return Level.Panic; }
-    if (lc.includes('fatal')) { return Level.Fatal; }
-    if (lc.includes('error')) { return Level.Error; }
-    if (lc.includes('warn')) { return Level.Warn; }
-    if (lc.includes('info')) { return Level.Info; }
-    if (lc.includes('debug')) { return Level.Debug; }
-    if (lc.includes('trace')) { return Level.Trace; }
+    if (lc.includes('panic')) {
+ return Level.Panic; 
+}
+    if (lc.includes('fatal')) {
+ return Level.Fatal; 
+}
+    if (lc.includes('error')) {
+ return Level.Error; 
+}
+    if (lc.includes('warn')) {
+ return Level.Warn; 
+}
+    if (lc.includes('info')) {
+ return Level.Info; 
+}
+    if (lc.includes('debug')) {
+ return Level.Debug; 
+}
+    if (lc.includes('trace')) {
+ return Level.Trace; 
+}
+
     return Level.Unknown;
   }
 
@@ -232,8 +276,12 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
     const moduleRe = this.moduleRe;
     const textLC = this.textFilter.toLowerCase();
     this.filteredLogEntries = this.logEntries.filter((e) => {
-      if (e.level < this.minLevel) { return false; }
-      if (moduleRe && !moduleRe.test(e.module || '')) { return false; }
+      if (e.level < this.minLevel) {
+ return false; 
+}
+      if (moduleRe && !moduleRe.test(e.module || '')) {
+ return false; 
+}
       if (textLC) {
         // Match against msg, module, and all extra k=v pairs so the
         // search box behaves like ad-hoc grep over the full record.
@@ -244,6 +292,7 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
           return false;
         }
       }
+
       return true;
     });
     if (this.wasAtBottom) {
@@ -257,13 +306,19 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   private captureScrollTailState() {
-    if (!this.content) { this.wasAtBottom = true; return; }
+    if (!this.content) {
+ this.wasAtBottom = true;
+
+ return; 
+}
     const el = this.content.nativeElement as HTMLElement;
     this.wasAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
   }
 
   private scheduleNext() {
-    if (this.liveTail) { this.ngZone.run(() => this.loadData(this.livePollMs)); }
+    if (this.liveTail) {
+ this.ngZone.run(() => this.loadData(this.livePollMs)); 
+}
   }
 
   private onError(err: OperationError) {
@@ -302,5 +357,7 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
     }
   }
 
-  trackEntry(_: number, e: LogEntry) { return e; }
+  trackEntry(_: number, e: LogEntry) {
+ return e; 
+}
 }

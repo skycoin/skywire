@@ -116,6 +116,7 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
         switchMap(() => this.fetch()),
       )
       .subscribe();
+
     return super.ngOnInit();
   }
 
@@ -123,10 +124,14 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
     this.sub?.unsubscribe();
   }
 
-  refreshNow() { this.fetch().subscribe(); }
+  refreshNow() {
+ this.fetch().subscribe(); 
+}
 
   setDays(d: number) {
-    if (d === this.days) { return; }
+    if (d === this.days) {
+ return; 
+}
     this.days = d;
     this.fetch().subscribe();
   }
@@ -152,29 +157,41 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
    *  visors whose every transport is offline; surviving visors keep
    *  only their live children). */
   get visibleByVisor(): VisorNode[] {
-    if (!this.hideOffline) { return this.byVisor; }
+    if (!this.hideOffline) {
+ return this.byVisor; 
+}
+
     return this.byVisor
-      .map((v) => ({
+      .map((v) => {
+return {
         ...v,
         transports: v.transports.filter((c) => c.live),
-      }))
+      }
+})
       .filter((v) => v.transports.length > 0);
   }
 
-  toggleVisor(v: VisorNode) { v.expanded = !v.expanded; }
+  toggleVisor(v: VisorNode) {
+ v.expanded = !v.expanded; 
+}
 
   private fetch() {
     this.loading = this.byTransport.length === 0 && this.byVisor.length === 0;
+
     return this.api.get(`network/transports?days=${this.days}`).pipe(
       catchError((err) => {
         this.error = err?.message || 'Failed to fetch transports';
         this.loading = false;
         this.cdr.markForCheck();
+
         return of(null);
       }),
       switchMap((rows) => {
-        if (rows === null) { return of(null); }
+        if (rows === null) {
+ return of(null); 
+}
         this.consume(Array.isArray(rows) ? rows : []);
+
         return of(rows);
       }),
     );
@@ -187,11 +204,15 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
     const byVisorMap = new Map<string, VisorNode>();
 
     for (const m of metrics) {
-      if (!m.edges || m.edges.length < 2) { continue; }
+      if (!m.edges || m.edges.length < 2) {
+ continue; 
+}
       const [aToB, bToA] = this.verifiedBandwidth(m);
       const bw = aToB + bToA;
       networkBw += bw;
-      if (bw === 0 && !m.latency) { continue; }
+      if (bw === 0 && !m.latency) {
+ continue; 
+}
 
       byTp.push({
         id: m.id,
@@ -208,7 +229,11 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
       // Edge A perspective.
       const a = byVisorMap.get(m.edges[0]) || this.newVisorNode(m.edges[0]);
       a.sent += aToB; a.recv += bToA; a.bandwidth += bw;
-      if (m.live) { a.liveCount++; } else { a.offlineCount++; }
+      if (m.live) {
+ a.liveCount++; 
+} else {
+ a.offlineCount++; 
+}
       a.transports.push({
         id: m.id, type: m.type, remote: m.edges[1],
         sent: aToB, recv: bToA, bandwidth: bw, latency: m.latency,
@@ -219,7 +244,11 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
       // Edge B perspective.
       const b = byVisorMap.get(m.edges[1]) || this.newVisorNode(m.edges[1]);
       b.sent += bToA; b.recv += aToB; b.bandwidth += bw;
-      if (m.live) { b.liveCount++; } else { b.offlineCount++; }
+      if (m.live) {
+ b.liveCount++; 
+} else {
+ b.offlineCount++; 
+}
       b.transports.push({
         id: m.id, type: m.type, remote: m.edges[0],
         sent: bToA, recv: aToB, bandwidth: bw, latency: m.latency,
@@ -242,7 +271,7 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   }
 
   private newVisorNode(pk: string): VisorNode {
-    return { pk, sent: 0, recv: 0, bandwidth: 0, transports: [], liveCount: 0, offlineCount: 0, expanded: false };
+    return { pk: pk, sent: 0, recv: 0, bandwidth: 0, transports: [], liveCount: 0, offlineCount: 0, expanded: false };
   }
 
   /** Mirrors verifiedBandwidth() in cmd/skywire-cli/commands/tp/tp-metrics.go. */
@@ -262,33 +291,55 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
         bToA += d.b.sent || 0;
       }
     }
+
     return [aToB, bToA];
   }
 
   /** Bytes → human readable (KiB/MiB/GiB). */
   fmtBytes(b: number): string {
-    if (!b || b < 0) { return '-'; }
+    if (!b || b < 0) {
+ return '-'; 
+}
     const u = ['B', 'KB', 'MB', 'GB', 'TB'];
     let i = 0, v = b;
-    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    while (v >= 1024 && i < u.length - 1) {
+ v /= 1024; i++; 
+}
+
     return v < 10 ? v.toFixed(1) + ' ' + u[i] : Math.round(v) + ' ' + u[i];
   }
 
   /** Latency µs → "X.Xms" or "Yμs". */
   fmtLatency(l?: TransportLatency): string {
-    if (!l || !l.avg) { return '-'; }
+    if (!l || !l.avg) {
+ return '-'; 
+}
     const ms = l.avg / 1000;
-    if (ms < 1) { return Math.round(l.avg) + 'μs'; }
-    if (ms < 1000) { return ms.toFixed(1) + 'ms'; }
+    if (ms < 1) {
+ return Math.round(l.avg) + 'μs'; 
+}
+    if (ms < 1000) {
+ return ms.toFixed(1) + 'ms'; 
+}
+
     return (ms / 1000).toFixed(2) + 's';
   }
 
   fmtLatencyFull(l?: TransportLatency): string {
-    if (!l || !l.avg) { return '-'; }
+    if (!l || !l.avg) {
+ return '-'; 
+}
+
     return (l.min / 1000).toFixed(1) + ' / ' + (l.avg / 1000).toFixed(1) + ' / ' + (l.max / 1000).toFixed(1) + ' ms';
   }
 
-  trackTpId(_: number, e: ByTransportRow): string { return e.id; }
-  trackVisorPk(_: number, n: VisorNode): string { return n.pk; }
-  trackChildId(_: number, c: VisorChildTp): string { return c.id; }
+  trackTpId(_: number, e: ByTransportRow): string {
+ return e.id; 
+}
+  trackVisorPk(_: number, n: VisorNode): string {
+ return n.pk; 
+}
+  trackChildId(_: number, c: VisorChildTp): string {
+ return c.id; 
+}
 }

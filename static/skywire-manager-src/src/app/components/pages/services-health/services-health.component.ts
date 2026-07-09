@@ -60,6 +60,14 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   private sub: Subscription;
   private rsnSub: Subscription;
 
+  // Drill-down state: per-service-name expanded body + the loaded
+  // raw JSON. Keyed by service name so clicking "Drill" twice on
+  // different services keeps both expanded.
+  drilledName: string | null = null;
+  drillBody: { [name: string]: string } = {};
+  drillError: { [name: string]: string } = {};
+  drillLoading: { [name: string]: boolean } = {};
+
   constructor(private healthSvc: ServiceHealthService, private api: ApiService) {
     super();
     this.tabsData = homeTabsData();
@@ -98,7 +106,9 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
           this.rsnStats = Array.isArray(rows) ? rows : [];
           this.rsnLoading = false;
         },
-        error: () => { this.rsnLoading = false; },
+        error: () => {
+ this.rsnLoading = false; 
+},
       });
 
     return super.ngOnInit();
@@ -108,14 +118,6 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
     this.sub?.unsubscribe();
     this.rsnSub?.unsubscribe();
   }
-
-  // Drill-down state: per-service-name expanded body + the loaded
-  // raw JSON. Keyed by service name so clicking "Drill" twice on
-  // different services keeps both expanded.
-  drilledName: string | null = null;
-  drillBody: { [name: string]: string } = {};
-  drillError: { [name: string]: string } = {};
-  drillLoading: { [name: string]: boolean } = {};
 
   /** Map UI service name → svc-fetch service key. */
   private svcKey(name: string): string | null {
@@ -138,6 +140,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
       const key = this.svcKey(entry.name);
       if (!key) {
         this.drillError[entry.name] = 'Drill-down not supported for this service';
+
         return;
       }
       this.drillLoading[entry.name] = true;
@@ -178,9 +181,14 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
 
   /** Top 3 failure reasons for one RSN, sorted by count desc. */
   topFailureReasons(snap?: RSNSnapshot): { reason: string, count: number }[] {
-    if (!snap?.failures_by_reason) { return []; }
+    if (!snap?.failures_by_reason) {
+ return []; 
+}
+
     return Object.entries(snap.failures_by_reason)
-      .map(([reason, count]) => ({ reason, count: count as number }))
+      .map(([reason, count]) => {
+return { reason: reason, count: count as number }
+})
       .filter((x) => x.count > 0)
       .sort((a, b) => b.count - a.count)
       .slice(0, 3);
@@ -188,12 +196,19 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
 
   successClass(snap?: RSNSnapshot): string {
     const r = snap?.success_rate_pct ?? 0;
-    if (r >= 90) { return 'latency-fast'; }
-    if (r >= 70) { return 'latency-medium'; }
+    if (r >= 90) {
+ return 'latency-fast'; 
+}
+    if (r >= 70) {
+ return 'latency-medium'; 
+}
+
     return 'latency-slow';
   }
 
-  trackRSN(_: number, e: RSNRemoteStat): string { return e.pk; }
+  trackRSN(_: number, e: RSNRemoteStat): string {
+ return e.pk; 
+}
 
   /** Map the backend status string to a CSS class for the status dot. */
   statusClass(entry: ServiceHealthEntry): string {
@@ -204,6 +219,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
     if (s === 'DOWN') {
       return 'dot-red';
     }
+
     return 'dot-outline-gray';
   }
 
@@ -221,6 +237,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
     if (ms < 2000) {
       return 'latency-medium';
     }
+
     return 'latency-slow';
   }
 
@@ -236,6 +253,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
       return '';
     }
     const s = url.trim().replace(/\/+$/, '');
+
     return /\/health$/i.test(s) ? s : s + '/health';
   }
 

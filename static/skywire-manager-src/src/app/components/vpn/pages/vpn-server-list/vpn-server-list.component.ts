@@ -769,6 +769,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
     if (letters < 2) {
       return '-';
     }
+
     return trimmed;
   }
 

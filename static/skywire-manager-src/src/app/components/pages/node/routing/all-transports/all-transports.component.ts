@@ -59,23 +59,34 @@ export class AllTransportsComponent extends PageBaseComponent implements OnInit,
   }
 
   private computeTransportStats(node: Node): { total: number, byType: { type: string, count: number }[] } {
-    if (!node || !node.transports) { return { total: 0, byType: [] }; }
+    if (!node || !node.transports) {
+ return { total: 0, byType: [] }; 
+}
     const counts: { [k: string]: number } = {};
-    for (const tp of node.transports) { counts[tp.type] = (counts[tp.type] || 0) + 1; }
+    for (const tp of node.transports) {
+ counts[tp.type] = (counts[tp.type] || 0) + 1; 
+}
     const byType = Object.entries(counts)
-      .map(([type, count]) => ({ type, count }))
+      .map(([type, count]) => {
+return { type: type, count: count }
+})
       .sort((a, b) => b.count - a.count);
-    return { total: node.transports.length, byType };
+
+    return { total: node.transports.length, byType: byType };
   }
 
   private fetchPublicStatus(pk: string) {
     this.apiService.get(`visors/${pk}/public`).subscribe((result: any) => {
       this.isPublic = !!(result && result.is_public === true);
-    }, () => { this.isPublic = false; });
+    }, () => {
+ this.isPublic = false; 
+});
   }
 
   changeTransportsConfig() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     const next = !this.node.autoconnectTransports;
     this.autoconnectSubscription = this.transportService.changeAutoconnectSetting(
       this.node.localPk, next,
@@ -91,7 +102,9 @@ export class AllTransportsComponent extends PageBaseComponent implements OnInit,
   }
 
   changePublicConfig() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     const next = !this.isPublic;
     this.publicToggleSubscription = this.apiService.put(`visors/${this.node.localPk}/public`, { is_public: next }).subscribe(() => {
       this.isPublic = next;

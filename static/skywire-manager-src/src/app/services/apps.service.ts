@@ -43,7 +43,7 @@ export class AppsService {
    * rest live in args).
    */
   setAppEnv(nodeKey: string, appName: string, env: { [key: string]: string }) {
-    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`, { env });
+    return this.apiService.put(`visors/${nodeKey}/apps/${encodeURIComponent(appName)}`, { env: env });
   }
 
   /**

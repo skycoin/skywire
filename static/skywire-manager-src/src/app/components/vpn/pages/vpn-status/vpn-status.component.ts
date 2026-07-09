@@ -348,6 +348,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     if (value > this.maxRouteOption) {
       value = this.maxRouteOption;
     }
+
     return value;
   }
 

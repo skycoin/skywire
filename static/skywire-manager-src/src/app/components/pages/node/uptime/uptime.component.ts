@@ -99,7 +99,9 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
   private nodeSub: Subscription;
   private pollSub: Subscription;
 
-  constructor(private api: ApiService, private cdr: ChangeDetectorRef) { super(); }
+  constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
+ super(); 
+}
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
@@ -110,6 +112,7 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
         this.fetchServiceUptime();
       }
     });
+
     return super.ngOnInit();
   }
 
@@ -121,7 +124,9 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
    * panel.
    */
   fetchServiceUptime() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     const pk = this.node.localPk;
     this.serviceUptimeLoading = true;
     this.serviceUptime = [
@@ -144,19 +149,24 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
           // exists. The shape is { pk, daily: { 'YYYY-MM-DD': pct, ... } }.
           let payload: any = raw;
           if (typeof raw === 'string') {
-            try { payload = JSON.parse(raw); } catch { /* ignore */ }
+            try {
+ payload = JSON.parse(raw); 
+} catch { /* ignore */ }
           }
           const arr = Array.isArray(payload) ? payload : (payload?.uptimes || payload?.data || []);
           const entry = Array.isArray(arr) ? arr.find((e: any) => e?.pk === pk || e?.public_key === pk) : null;
           if (!entry) {
             s.row.days = [];
+
             return;
           }
           const daily = entry.daily || entry.percent_daily || {};
-          s.row.days = Object.keys(daily).sort().reverse().slice(0, 7).map((d) => ({
+          s.row.days = Object.keys(daily).sort().reverse().slice(0, 7).map((d) => {
+return {
             date: d,
             pct: Number(daily[d]) || 0,
-          }));
+          }
+});
           this.cdr.markForCheck();
         },
         error: (err: any) => {
@@ -174,13 +184,17 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   setWindow(d: WindowDays) {
-    if (d === this.windowDays) { return; }
+    if (d === this.windowDays) {
+ return; 
+}
     this.windowDays = d;
     this.refreshNow();
   }
 
   refreshNow() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     this.fetchOnce().subscribe();
   }
 
@@ -197,15 +211,20 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
     const until = new Date();
     const since = new Date(until.getTime() - this.windowDays * 86400 * 1000);
     const qs = `?since=${since.toISOString()}&until=${until.toISOString()}`;
+
     return this.api.get(`visors/${this.node.localPk}/local-uptime-stats${qs}`).pipe(
       catchError((err) => {
         this.error = err?.message || 'Failed to fetch uptime';
         this.loading = false;
         this.cdr.markForCheck();
+
         return of(null);
       }),
       switchMap((resp: UptimeResp | null) => {
-        if (resp) { this.consume(resp); }
+        if (resp) {
+ this.consume(resp); 
+}
+
         return of(resp);
       }),
     );
@@ -223,8 +242,12 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
     const dateSet = new Set<string>();
     for (const name of TIER_ORDER) {
       const days = tiers[name];
-      if (!days) { continue; }
-      for (const d of Object.keys(days)) { dateSet.add(d); }
+      if (!days) {
+ continue; 
+}
+      for (const d of Object.keys(days)) {
+ dateSet.add(d); 
+}
     }
     const sortedDates = Array.from(dateSet).sort().reverse(); // newest first
 
@@ -242,27 +265,33 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
         let online = 0;
         let known = 0;
         for (const c of cells) {
-          if (c.state === 'future') { continue; }
+          if (c.state === 'future') {
+ continue; 
+}
           known++;
-          if (c.state === 'on') { online++; }
+          if (c.state === 'on') {
+ online++; 
+}
         }
         tierLines.push({
-          name,
-          cells,
+          name: name,
+          cells: cells,
           pct: known > 0 ? (online / known) * 100 : 0,
           empty: !ascii,
         });
         onlineByTier[name] = (onlineByTier[name] || 0) + online;
         knownByTier[name] = (knownByTier[name] || 0) + known;
       }
-      out.push({ date, isToday, tiers: tierLines });
+      out.push({ date: date, isToday: isToday, tiers: tierLines });
     }
 
     this.days = out;
-    this.summary = TIER_ORDER.map((name) => ({
-      name,
+    this.summary = TIER_ORDER.map((name) => {
+return {
+      name: name,
       pct: knownByTier[name] > 0 ? (onlineByTier[name] / knownByTier[name]) * 100 : 0,
-    }));
+    }
+});
     this.fetchedAt = resp.fetched_at ? new Date(resp.fetched_at) : new Date();
     this.loading = false;
     this.error = null;
@@ -272,8 +301,12 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
   private buildCells(ascii: string, isToday: boolean, nowSlot: number): DayCell[] {
     const expected = 288;
     let s = ascii || '';
-    if (s.length < expected) { s = s.padEnd(expected, ' '); }
-    if (s.length > expected) { s = s.slice(0, expected); }
+    if (s.length < expected) {
+ s = s.padEnd(expected, ' '); 
+}
+    if (s.length > expected) {
+ s = s.slice(0, expected); 
+}
     const cells: DayCell[] = new Array(expected);
     for (let i = 0; i < expected; i++) {
       let state: DayCell['state'];
@@ -285,8 +318,9 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
       } else {
         state = s.charAt(i) === '.' ? 'on' : 'off';
       }
-      cells[i] = { state, slot: i };
+      cells[i] = { state: state, slot: i };
     }
+
     return cells;
   }
 
@@ -294,6 +328,7 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
     const minutes = slot * 5;
     const hh = Math.floor(minutes / 60).toString().padStart(2, '0');
     const mm = (minutes % 60).toString().padStart(2, '0');
+
     return `${hh}:${mm}`;
   }
 
@@ -306,26 +341,49 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
       case 'off': label = 'offline'; break;
       default: label = 'future';
     }
+
     return `${start}–${end} UTC: ${label}`;
   }
 
   fmtPct(p: number): string {
-    if (p >= 99.95) { return '100%'; }
-    if (p > 0 && p < 1) { return '<1%'; }
+    if (p >= 99.95) {
+ return '100%'; 
+}
+    if (p > 0 && p < 1) {
+ return '<1%'; 
+}
+
     return p.toFixed(1) + '%';
   }
 
   pctClass(p: number, empty: boolean = false): string {
-    if (empty) { return 'dim'; }
-    if (p >= 99) { return 'up-good'; }
-    if (p >= 80) { return 'up-mid'; }
+    if (empty) {
+ return 'dim'; 
+}
+    if (p >= 99) {
+ return 'up-good'; 
+}
+    if (p >= 80) {
+ return 'up-mid'; 
+}
+
     return 'up-bad';
   }
 
-  tierLabel(name: string): string { return 'uptime.tier-' + name; }
-  tierInfo(name: string): string { return 'uptime.tier-' + name + '-info'; }
+  tierLabel(name: string): string {
+ return 'uptime.tier-' + name; 
+}
+  tierInfo(name: string): string {
+ return 'uptime.tier-' + name + '-info'; 
+}
 
-  trackDay(_: number, d: DayBlock): string { return d.date; }
-  trackTier(_: number, t: TierLine): string { return t.name; }
-  trackCell(_: number, c: DayCell): number { return c.slot; }
+  trackDay(_: number, d: DayBlock): string {
+ return d.date; 
+}
+  trackTier(_: number, t: TierLine): string {
+ return t.name; 
+}
+  trackCell(_: number, c: DayCell): number {
+ return c.slot; 
+}
 }

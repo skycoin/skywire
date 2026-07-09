@@ -85,8 +85,11 @@ export class BandwidthComponent extends PageBaseComponent implements OnInit, OnD
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;
-      if (wasUnset && node) { this.startPolling(); }
+      if (wasUnset && node) {
+ this.startPolling(); 
+}
     });
+
     return super.ngOnInit();
   }
 
@@ -96,17 +99,23 @@ export class BandwidthComponent extends PageBaseComponent implements OnInit, OnD
   }
 
   setWindow(d: WindowDays) {
-    if (d === this.windowDays) { return; }
+    if (d === this.windowDays) {
+ return; 
+}
     this.windowDays = d;
     this.recompute();
   }
 
   refreshNow() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     this.fetchOnce().subscribe();
   }
 
-  toggleRow(r: Row) { r.expanded = !r.expanded; }
+  toggleRow(r: Row) {
+ r.expanded = !r.expanded; 
+}
 
   private startPolling() {
     // 30s cadence — local store updates on the visor's 10s sampler,
@@ -123,12 +132,14 @@ export class BandwidthComponent extends PageBaseComponent implements OnInit, OnD
         this.error = err?.message || 'Failed to fetch bandwidth';
         this.loading = false;
         this.cdr.markForCheck();
+
         return of(null);
       }),
       switchMap((resp: Resp | null) => {
         if (resp) {
           this.consume(resp);
         }
+
         return of(resp);
       }),
     );
@@ -184,35 +195,57 @@ export class BandwidthComponent extends PageBaseComponent implements OnInit, OnD
 
   /** Format bytes → human readable. */
   fmtBytes(b?: number): string {
-    if (b === undefined || b === null) { return '-'; }
-    if (b === 0) { return '0 B'; }
+    if (b === undefined || b === null) {
+ return '-'; 
+}
+    if (b === 0) {
+ return '0 B'; 
+}
     const u = ['B', 'KB', 'MB', 'GB', 'TB'];
     let i = 0; let v = b;
-    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    while (v >= 1024 && i < u.length - 1) {
+ v /= 1024; i++; 
+}
+
     return v < 10 ? v.toFixed(1) + ' ' + u[i] : Math.round(v) + ' ' + u[i];
   }
 
   /** Latency ms → "X.Xms" or "Xms". */
   fmtLatency(ms?: number): string {
-    if (!ms) { return '-'; }
-    if (ms < 10) { return ms.toFixed(2) + ' ms'; }
+    if (!ms) {
+ return '-'; 
+}
+    if (ms < 10) {
+ return ms.toFixed(2) + ' ms'; 
+}
+
     return Math.round(ms) + ' ms';
   }
 
   fmtLatencyTriple(d?: { latency_min_ms?: number, latency_max_ms?: number, latency_avg_ms?: number }): string {
-    if (!d || !d.latency_avg_ms) { return '-'; }
+    if (!d || !d.latency_avg_ms) {
+ return '-'; 
+}
     const min = d.latency_min_ms ?? 0;
     const max = d.latency_max_ms ?? 0;
     const avg = d.latency_avg_ms;
+
     return `${this.fmtLatency(min)} / ${this.fmtLatency(avg)} / ${this.fmtLatency(max)}`;
   }
 
   /** Remote PK from the edges array — picks the one that isn't us. */
   remotePK(r: Row): string {
-    if (!r.edges || !this.node) { return ''; }
+    if (!r.edges || !this.node) {
+ return ''; 
+}
+
     return r.edges.find((e) => e !== this.node.localPk) || r.edges[0] || '';
   }
 
-  trackRow(_: number, r: Row): string { return r.id; }
-  trackDay(_: number, d: DailyRollup): string { return d.date; }
+  trackRow(_: number, r: Row): string {
+ return r.id; 
+}
+  trackDay(_: number, d: DailyRollup): string {
+ return d.date; 
+}
 }

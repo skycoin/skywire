@@ -19,10 +19,16 @@ import { Injectable } from '@angular/core';
  */
 @Injectable()
 export class AppReuseStrategy implements RouteReuseStrategy {
-  shouldDetach(_route: ActivatedRouteSnapshot): boolean { return false; }
+  shouldDetach(_route: ActivatedRouteSnapshot): boolean {
+ return false; 
+}
   store(_route: ActivatedRouteSnapshot, _handle: DetachedRouteHandle): void {}
-  shouldAttach(_route: ActivatedRouteSnapshot): boolean { return false; }
-  retrieve(_route: ActivatedRouteSnapshot): DetachedRouteHandle | null { return null; }
+  shouldAttach(_route: ActivatedRouteSnapshot): boolean {
+ return false; 
+}
+  retrieve(_route: ActivatedRouteSnapshot): DetachedRouteHandle | null {
+ return null; 
+}
 
   shouldReuseRoute(future: ActivatedRouteSnapshot, curr: ActivatedRouteSnapshot): boolean {
     return future.routeConfig === curr.routeConfig;

@@ -489,6 +489,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       return `last seen ${hr}h ago`;
     }
     const day = Math.floor(hr / 24);
+
     return `last seen ${day}d ago`;
   }
 
@@ -671,6 +672,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         ordered.push(n);
       }
     });
+
     return ordered;
   }
 
@@ -943,6 +945,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       }
       counts[tp] = (counts[tp] || 0) + 1;
     });
+
     return Object.keys(counts).sort().map(k => ({type: k, count: counts[k]}));
   }
 
@@ -968,6 +971,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     if (node.autoconnectTransports) {
       services.push('Autoconnect');
     }
+
     return services;
   }
 
@@ -1006,6 +1010,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     if (!data || !data.dailyAmounts[date] || data.dailyAmounts[date] === 0) {
       return '-';
     }
+
     return data.dailyAmounts[date].toFixed(2);
   }
 
@@ -1017,6 +1022,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     if (!data || !data.dailyAmounts[date] || data.dailyAmounts[date] === 0) {
       return '';
     }
+
     return data.dailySent[date] ? 'reward-sent' : 'reward-pending';
   }
 
@@ -1028,6 +1034,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     if (!data || data.weekTotal === 0) {
       return '-';
     }
+
     return data.weekTotal.toFixed(2);
   }
 
@@ -1045,6 +1052,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     if (data?.rewardAddress) {
       return data.rewardAddress;
     }
+
     return '-';
   }
 

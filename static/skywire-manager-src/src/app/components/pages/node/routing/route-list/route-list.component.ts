@@ -88,6 +88,7 @@ export class RouteListComponent implements OnDestroy {
     const newKeys = val.map(r => r.key).sort().join(',');
     if (newKeys === this.lastRouteKeys && val.length === this.lastRouteCount) {
       this.cdr.markForCheck();
+
       return;
     }
     this.lastRouteCount = val.length;

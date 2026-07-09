@@ -66,12 +66,15 @@ export class ReachabilityComponent extends PageBaseComponent implements OnInit, 
   private nodeSub: Subscription;
   private actionSub: Subscription;
 
-  constructor(private api: ApiService) { super(); }
+  constructor(private api: ApiService) {
+ super(); 
+}
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
     });
+
     return super.ngOnInit();
   }
 
@@ -80,19 +83,27 @@ export class ReachabilityComponent extends PageBaseComponent implements OnInit, 
     this.actionSub?.unsubscribe();
   }
 
-  clearResults() { this.results = []; }
+  clearResults() {
+ this.results = []; 
+}
 
-  runSkynetPing() { this.runPing('skynet-ping', `visors/${this.node.localPk}/ping-target`); }
-  runDmsgPing()   { this.runPing('dmsg-ping',   `visors/${this.node.localPk}/dmsg-ping-target`); }
+  runSkynetPing() {
+ this.runPing('skynet-ping', `visors/${this.node.localPk}/ping-target`); 
+}
+  runDmsgPing()   {
+ this.runPing('dmsg-ping',   `visors/${this.node.localPk}/dmsg-ping-target`); 
+}
 
   /** Skywire-route or DMSG ping (the URL is the only difference). */
   private runPing(kind: 'skynet-ping' | 'dmsg-ping', endpoint: string) {
-    if (!this.node || !this.target.trim()) { return; }
+    if (!this.node || !this.target.trim()) {
+ return; 
+}
     this.inFlight = kind;
     const startedAt = new Date();
     const target = this.target.trim();
     this.actionSub = this.api.post(endpoint, {
-      target,
+      target: target,
       tries: Number(this.tries) || 5,
       size: Number(this.size) || 1,
     }).subscribe({
@@ -103,13 +114,13 @@ export class ReachabilityComponent extends PageBaseComponent implements OnInit, 
           ? `${r.success_count}/${r.latencies_ms.length} OK — mean ${r.mean_ms}ms (${r.min_ms}–${r.max_ms}ms)`
           : `0/${r.latencies_ms.length} successful`;
         const detail = `latencies: [${r.latencies_ms.join(', ')}] ms`;
-        this.results.unshift({ kind, target, startedAt, ok, summary, detail });
+        this.results.unshift({ kind: kind, target: target, startedAt: startedAt, ok: ok, summary: summary, detail: detail });
       },
       error: (err: any) => {
         this.inFlight = null;
         const msg = err?.error?.error || err?.message || 'request failed';
         this.results.unshift({
-          kind, target, startedAt, ok: false,
+          kind: kind, target: target, startedAt: startedAt, ok: false,
           summary: 'error',
           detail: msg,
         });
@@ -119,7 +130,9 @@ export class ReachabilityComponent extends PageBaseComponent implements OnInit, 
 
   /** Fetch /health over DMSG. */
   runHealth() {
-    if (!this.node || !this.target.trim()) { return; }
+    if (!this.node || !this.target.trim()) {
+ return; 
+}
     this.inFlight = 'health';
     const startedAt = new Date();
     const target = this.target.trim();
@@ -139,18 +152,20 @@ export class ReachabilityComponent extends PageBaseComponent implements OnInit, 
           const parsed = JSON.parse(r.body || '{}');
           detail = JSON.stringify(parsed, null, 2);
         } catch { /* leave raw */ }
-        if (r.error) { detail = r.error; }
+        if (r.error) {
+ detail = r.error; 
+}
         this.results.unshift({
-          kind: 'health', target, startedAt, ok,
-          summary,
-          detail,
+          kind: 'health', target: target, startedAt: startedAt, ok: ok,
+          summary: summary,
+          detail: detail,
         });
       },
       error: (err: any) => {
         this.inFlight = null;
         const msg = err?.error?.error || err?.message || 'request failed';
         this.results.unshift({
-          kind: 'health', target, startedAt, ok: false,
+          kind: 'health', target: target, startedAt: startedAt, ok: false,
           summary: 'error',
           detail: msg,
         });

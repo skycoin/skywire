@@ -23,10 +23,13 @@ export class NodeResourcesComponent extends PageBaseComponent implements OnInit,
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
     });
+
     return super.ngOnInit();
   }
 
   ngOnDestroy() {
-    if (this.dataSubscription) { this.dataSubscription.unsubscribe(); }
+    if (this.dataSubscription) {
+ this.dataSubscription.unsubscribe(); 
+}
   }
 }
