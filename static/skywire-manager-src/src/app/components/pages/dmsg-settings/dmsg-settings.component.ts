@@ -65,6 +65,7 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
         this.startPolling();
       }
     });
+
     return super.ngOnInit();
   }
 
@@ -97,7 +98,9 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
   }
 
   refresh(): void {
-    if (!this.pk) { return; }
+    if (!this.pk) {
+ return; 
+}
     this.dmsgSvc.getSessions(this.pk).subscribe({
       next: (sessions) => {
         this.sessions = sessions || {};
@@ -108,7 +111,9 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
   }
 
   connectAll(): void {
-    if (this.connectAllInFlight || !this.pk) { return; }
+    if (this.connectAllInFlight || !this.pk) {
+ return; 
+}
     this.connectAllInFlight = true;
     this.lastActionResult = null;
     this.dmsgSvc.connectAll(this.pk).subscribe({
@@ -129,9 +134,12 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
   }
 
   applySessionsCount(): void {
-    if (this.setCountInFlight || !this.pk) { return; }
+    if (this.setCountInFlight || !this.pk) {
+ return; 
+}
     if (this.sessionsCountInput < 0) {
       this.snackbar.showError('Sessions count must be >= 0');
+
       return;
     }
     this.setCountInFlight = true;
@@ -155,10 +163,19 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
 
   clientList(): DmsgClientSessionInfo[] {
     const out: DmsgClientSessionInfo[] = [];
-    if (!this.sessions) { return out; }
-    if (this.sessions.main) { out.push(this.sessions.main); }
-    if (this.sessions.route_setup) { out.push(this.sessions.route_setup); }
-    if (this.sessions.transport_setup) { out.push(this.sessions.transport_setup); }
+    if (!this.sessions) {
+ return out; 
+}
+    if (this.sessions.main) {
+ out.push(this.sessions.main); 
+}
+    if (this.sessions.route_setup) {
+ out.push(this.sessions.route_setup); 
+}
+    if (this.sessions.transport_setup) {
+ out.push(this.sessions.transport_setup); 
+}
+
     return out;
   }
 
@@ -171,8 +188,12 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
     }
   }
 
-  trackByRole(_: number, c: DmsgClientSessionInfo): string { return c.role; }
-  trackByPk(_: number, pk: string): string { return pk; }
+  trackByRole(_: number, c: DmsgClientSessionInfo): string {
+ return c.role; 
+}
+  trackByPk(_: number, pk: string): string {
+ return pk; 
+}
 
   objectKeys(o: { [k: string]: any } | undefined | null): string[] {
     return o ? Object.keys(o) : [];
