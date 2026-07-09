@@ -4,10 +4,9 @@ package ui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
-	"net/http"
-	"strings"
+	"syscall/js"
 )
 
 // TransportData represents a transport from the API
@@ -154,18 +153,72 @@ func NewDataFetcher() *DataFetcher {
 	return &DataFetcher{}
 }
 
+// doFetch performs an HTTP request via the browser Fetch API and returns the
+// response body. It blocks the calling goroutine — not the JS event loop —
+// until the request settles. We use syscall/js directly rather than net/http
+// because net/http does not compile under TinyGo/wasm (its roundtrip_js.go
+// references an unexported Transport.roundTrip that TinyGo does not provide).
+func doFetch(method, url, contentType, body string) ([]byte, error) {
+	type result struct {
+		data []byte
+		err  error
+	}
+	ch := make(chan result, 1)
+
+	opts := map[string]interface{}{"method": method}
+	if body != "" {
+		opts["body"] = body
+	}
+	if contentType != "" {
+		opts["headers"] = map[string]interface{}{"Content-Type": contentType}
+	}
+
+	var onResp, onBody, onErr js.Func
+	release := func() {
+		onResp.Release()
+		onBody.Release()
+		onErr.Release()
+	}
+
+	onErr = js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+		msg := "fetch failed"
+		if len(args) > 0 {
+			msg = args[0].Call("toString").String()
+		}
+		ch <- result{err: errors.New(msg)}
+		return nil
+	})
+
+	onBody = js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+		u8 := js.Global().Get("Uint8Array").New(args[0])
+		buf := make([]byte, u8.Get("length").Int())
+		js.CopyBytesToGo(buf, u8)
+		ch <- result{data: buf}
+		return nil
+	})
+
+	onResp = js.FuncOf(func(_ js.Value, args []js.Value) interface{} {
+		resp := args[0]
+		if !resp.Get("ok").Bool() {
+			ch <- result{err: fmt.Errorf("HTTP %d", resp.Get("status").Int())}
+			return nil
+		}
+		resp.Call("arrayBuffer").Call("then", onBody).Call("catch", onErr)
+		return nil
+	})
+
+	js.Global().Call("fetch", url, opts).Call("then", onResp).Call("catch", onErr)
+
+	res := <-ch
+	release()
+	return res.data, res.err
+}
+
 func fetchJSON(url string, target interface{}) error {
-	resp, err := http.Get(url)
+	body, err := doFetch("GET", url, "", "")
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
 	return json.Unmarshal(body, target)
 }
 
@@ -268,13 +321,7 @@ func postJSON(url string, body interface{}, target interface{}) error {
 		return err
 	}
 
-	resp, err := http.Post(url, "application/json", strings.NewReader(string(jsonBody)))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := doFetch("POST", url, "application/json", string(jsonBody))
 	if err != nil {
 		return err
 	}
