@@ -43,7 +43,9 @@ export class ProxySettingsComponent {
         this.form.get('skynetEnabled').setValue(skynetRunning);
         this.form.get('upstream').setValue(upstream);
       },
-      () => { this.loading = false; }
+      () => {
+ this.loading = false; 
+}
     );
   }
 
@@ -67,10 +69,14 @@ export class ProxySettingsComponent {
             this.snackbarService.showDone(enable ? 'Resolving proxy enabled' : 'Resolving proxy disabled');
             this.loadStatus();
           },
-          () => { this.loading = false; }
+          () => {
+ this.loading = false; 
+}
         );
       },
-      () => { this.loading = false; this.snackbarService.showError('Failed to toggle proxy'); }
+      () => {
+ this.loading = false; this.snackbarService.showError('Failed to toggle proxy'); 
+}
     );
   }
 
@@ -83,7 +89,9 @@ export class ProxySettingsComponent {
         this.snackbarService.showDone(addr ? `Upstream set to ${addr}` : 'Upstream cleared');
         this.loadStatus();
       },
-      () => { this.loading = false; this.snackbarService.showError('Failed to set upstream'); }
+      () => {
+ this.loading = false; this.snackbarService.showError('Failed to set upstream'); 
+}
     );
   }
 
@@ -91,6 +99,7 @@ export class ProxySettingsComponent {
     const port = parseInt(this.newPort, 10);
     if (isNaN(port) || port < 1 || port > 65535) {
       this.snackbarService.showError('Invalid port number');
+
       return;
     }
     this.nodeService.registerSkynetPort(this.data.nodeKey, port).subscribe(
@@ -111,7 +120,9 @@ export class ProxySettingsComponent {
         this.snackbarService.showDone(`Port ${port} removed`);
         this.loadPorts();
       },
-      () => { this.snackbarService.showError('Failed to deregister port'); }
+      () => {
+ this.snackbarService.showError('Failed to deregister port'); 
+}
     );
   }
 

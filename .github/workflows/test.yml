@@ -248,6 +248,34 @@ jobs:
       - name: Rebuild app-mux.wasm and run the policy runtime smoke test
         run: make test-wasm-policy
 
+  # Hypervisor manager UI (Angular). The UI build + lint only ever ran as
+  # manually-invoked Makefile targets, so a regression that breaks `ng build`
+  # or trips an eslint rule shipped undetected. This job installs the node deps
+  # once, lints (fail-fast), then builds the production bundle so both classes
+  # of breakage fail CI. Build is invoked directly (not `make build-ui`) to
+  # reuse the single npm install above — build-ui re-runs `npm ci` via its
+  # install-deps-ui prerequisite, and CI doesn't need the artifact copy into
+  # pkg/visor/static that build-ui also does.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: static/skywire-manager-src/package-lock.json
+
+      - name: Install UI dependencies
+        run: make install-deps-ui
+
+      - name: Lint UI
+        run: make lint-ui
+
+      - name: Build UI
+        run: cd static/skywire-manager-src && npm run build
+
   # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
   # //go:build !no_ci because they need a real Redis (redis://localhost:6379),
   # so the tag-free unit lanes (which run with -tags no_ci) skip them — leaving

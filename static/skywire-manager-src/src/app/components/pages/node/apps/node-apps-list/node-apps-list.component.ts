@@ -48,23 +48,6 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     'skycoin-daemon', 'skycoin-web',
   ]);
 
-  // isOfficialApp covers the multi-instance naming scheme:
-  // 'skysocks-client-2' → skysocks-client family,
-  // 'skycoin-daemon-aix' → skycoin-daemon family. Multi-instance
-  // entries should land under "Official" alongside their canonical
-  // sibling, not in "User".
-  private isOfficialApp(name: string): boolean {
-    if (this.officialAppsList.has(name)) {
-      return true;
-    }
-    for (const base of this.officialAppsList) {
-      if (name.startsWith(base + '-')) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   @Input() nodePK: string;
   @Input() nodeIp: string;
   @Input() showOfficialApps = true;
@@ -196,6 +179,11 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
 
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
+
+  // Names of apps whose universal settings panel is currently
+  // expanded. Multiple panels can be open at once — they're inline
+  // so they don't fight for focus the way the old dialogs did.
+  expandedApps = new Set<string>();
 
   constructor(
     private appsService: AppsService,
@@ -568,10 +556,23 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     }
   }
 
-  // Names of apps whose universal settings panel is currently
-  // expanded. Multiple panels can be open at once — they're inline
-  // so they don't fight for focus the way the old dialogs did.
-  expandedApps = new Set<string>();
+  // isOfficialApp covers the multi-instance naming scheme:
+  // 'skysocks-client-2' → skysocks-client family,
+  // 'skycoin-daemon-aix' → skycoin-daemon family. Multi-instance
+  // entries should land under "Official" alongside their canonical
+  // sibling, not in "User".
+  private isOfficialApp(name: string): boolean {
+    if (this.officialAppsList.has(name)) {
+      return true;
+    }
+    for (const base of this.officialAppsList) {
+      if (name.startsWith(base + '-')) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 
   toggleExpanded(name: string): void {
     if (this.expandedApps.has(name)) {

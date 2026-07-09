@@ -106,7 +106,9 @@ export class NodeInfoContentComponent implements OnDestroy {
   }
 
   private recomputeTimeOnline() {
-    if (!this.nodeFetchedAt) { return; }
+    if (!this.nodeFetchedAt) {
+ return; 
+}
     const elapsedSeconds = this.baselineSecondsOnline
       + Math.floor((Date.now() - this.nodeFetchedAt) / 1000);
     this.timeOnline = TimeUtils.getElapsedTime(elapsedSeconds);
@@ -142,6 +144,7 @@ export class NodeInfoContentComponent implements OnDestroy {
     if (!this.node || this.node.dmsgServerPk.replace(/0/g, '').length === 0) {
       return false;
     }
+
     return true;
   }
 
@@ -153,16 +156,19 @@ export class NodeInfoContentComponent implements OnDestroy {
     if (ms < 10) {
       return ms.toFixed(2) + 'ms';
     }
+
     return Math.round(ms) + 'ms';
   }
 
   private fetchPorts(pk: string) {
     this.apiService.get(`visors/${pk}/ports`).subscribe((result: any) => {
       if (result && typeof result === 'object') {
-        this.ports = Object.entries(result).map(([name, value]) => ({
+        this.ports = Object.entries(result).map(([name, value]) => {
+return {
           name: name,
           value: JSON.stringify(value),
-        }));
+        }
+});
       } else {
         this.ports = [];
       }
@@ -181,7 +187,9 @@ export class NodeInfoContentComponent implements OnDestroy {
   }
 
   private fetchRouterSettings() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     this.apiService.get(`visors/${this.node.localPk}/router-settings`).subscribe(
       (result: any) => {
         this.routerSettings = {
@@ -192,12 +200,16 @@ export class NodeInfoContentComponent implements OnDestroy {
         };
         this.routerSettingsLoaded = true;
       },
-      () => { this.snackbarService.showError('common.loading-error'); },
+      () => {
+ this.snackbarService.showError('common.loading-error'); 
+},
     );
   }
 
   saveRouterSettings() {
-    if (!this.node || this.routerSettingsSaving) { return; }
+    if (!this.node || this.routerSettingsSaving) {
+ return; 
+}
     this.routerSettingsSaving = true;
     this.routerSettingsSaveMsg = '';
     this.routerSettingsSaveErr = '';
@@ -229,8 +241,12 @@ export class NodeInfoContentComponent implements OnDestroy {
     this.showConfigSection = !this.showConfigSection;
     if (this.showConfigSection && !this.rawConfig) {
       this.apiService.get(`visors/${this.node.localPk}/runtime-config`).subscribe(
-        (result: any) => { this.rawConfig = JSON.stringify(result, null, 2); },
-        () => { this.snackbarService.showError('common.loading-error'); },
+        (result: any) => {
+ this.rawConfig = JSON.stringify(result, null, 2); 
+},
+        () => {
+ this.snackbarService.showError('common.loading-error'); 
+},
       );
     }
   }
@@ -261,6 +277,7 @@ export class NodeInfoContentComponent implements OnDestroy {
     this.configSaveErr = '';
     if (!next.trim()) {
       this.configError = 'Config is empty';
+
       return;
     }
     try {
@@ -275,7 +292,9 @@ export class NodeInfoContentComponent implements OnDestroy {
    *  (strict decode + SK/PK consistency); on success we update
    *  rawConfig so the read-only pre re-renders the saved state. */
   saveConfig() {
-    if (this.configError || this.configSaving) { return; }
+    if (this.configError || this.configSaving) {
+ return; 
+}
     this.configSaving = true;
     this.configSaveErr = '';
     this.configSaveMsg = '';
