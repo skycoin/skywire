@@ -16,17 +16,24 @@
 // the bare served HTML is a working serverless visor with zero configuration.
 (function () {
   var CFG = (window.__SKYWIRE_HV__ = window.__SKYWIRE_HV__ || {});
-  // Capture any deep-link params (?skynet=<target>[&kiosk=1]) NOW — this is the
-  // first script, so it runs before Angular's hash router boots and drops
-  // location.search. The skynet browser (browse.js mountPanel → readDeepLink)
-  // reads window.__SKYWIRE_DEEPLINK__ to open <target> over dmsg full-page on
-  // load. Lets a clearnet Caddy redirect land a visitor straight in a dmsg site.
+  // Capture any deep-link params NOW — this is the first script, so it runs
+  // before Angular's hash router boots and drops location.search. browse.js
+  // (mountPanel → readDeepLink) reads window.__SKYWIRE_DEEPLINK__ on load:
+  //   ?skynet=<target>   open a dmsg site full-page (clearnet→dmsg gateway)
+  //   ?skydm=<pk>        open a 1:1 skychat pre-addressed to <pk> ("message me")
+  //   ?skygroup=<invite> join + open a federated group chat from an invite blob
+  //   &kiosk=1           full-page (hide the HV taskbar, maximize)
+  // so a clearnet Caddy redirect can land a visitor straight in a site OR a chat.
   try {
     var dlp = new URLSearchParams(window.location.search || '');
     var dlTarget = dlp.get('skynet');
-    if (dlTarget) {
+    var dlDm = dlp.get('skydm');
+    var dlGroup = dlp.get('skygroup');
+    if (dlTarget || dlDm || dlGroup) {
       window.__SKYWIRE_DEEPLINK__ = {
-        target: dlTarget,
+        target: dlTarget || '',
+        skydm: dlDm || '',
+        skygroup: dlGroup || '',
         kiosk: dlp.get('kiosk') === '1' || dlp.get('kiosk') === 'true',
       };
     }
