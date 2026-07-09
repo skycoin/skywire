@@ -8,7 +8,8 @@
     <?error Unsupported value of sys.BUILDARCH=$(sys.BUILDARCH)?>
 <?endif?>
 
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
    <Product Id="*" UpgradeCode="cd7955bc-304e-470f-9c24-eb9f429a8085"
             Name="Skywire"
             Version="skywireVersion"
@@ -37,6 +38,34 @@
          Schedule="afterInstallValidate"
          AllowSameVersionUpgrades="yes"
          DowngradeErrorMessage="A newer version of Skywire is already installed. Setup will now exit." />
+
+      <!-- Close a RUNNING skywire before the file operations. Windows users
+           leave the systray visor running, which keeps skywire.exe (and the
+           open skywire-config.json) LOCKED in C:\Program Files\Skywire. Without
+           this, an upgrade can't replace the locked binary — RestartManager
+           defers the swap to reboot — yet the RunSkywireAutoconfig CustomAction
+           still runs mid-transaction against the OLD on-disk binary, so the
+           config is regenerated with old defaults: the reported "config not
+           updated as part of the postinstall" symptom on upgrade. (This is a
+           SEPARATE gap from the MajorUpgrade file-skip fixed above — that one
+           was about the old product never being detected/removed; this one is
+           about the new files being locked by the still-running app.)
+
+           WixCloseApplications (scheduled by this element after InstallInitialize,
+           before InstallFiles) sends WM_CLOSE to skywire's systray window for a
+           graceful shutdown; ElevatedCloseMessage reaches the elevated perMachine
+           process, and TerminateProcess force-closes it if it doesn't exit within
+           the timeout (covers a windowless/unresponsive visor). RebootPrompt="no"
+           so a stubborn process never turns the upgrade into a reboot prompt. With
+           the app closed, InstallFiles lays down the NEW skywire.exe before the
+           postinstall runs it. -->
+      <util:CloseApplication
+         Id="CloseSkywireOnUpgrade"
+         Target="skywire.exe"
+         CloseMessage="yes"
+         ElevatedCloseMessage="yes"
+         TerminateProcess="0"
+         RebootPrompt="no" />
 
       <WixVariable Id="WixUIBannerBmp" Value=".\images\Banner.png" />
       <WixVariable Id="WixUIDialogBmp" Value=".\images\Dialog.png" />
