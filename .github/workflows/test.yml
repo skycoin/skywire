@@ -217,6 +217,37 @@ jobs:
       - name: Compile-check js/wasm binaries
         run: make build-wasm
 
+  # TinyGo lane. Several wasm binaries are ALSO built with TinyGo for the
+  # embedded/browser targets (smaller output, no crypto/tls): the dmsg IoT
+  # probe (wasip1), the tpviz/dmsg-wasm/wasm-visor browser edges (wasm), and
+  # the app-mux routing policy (wasi). The standard-Go `wasm` job above cannot
+  # catch TinyGo-only breakage (different compiler, different std-lib subset),
+  # so this job installs TinyGo and compile-checks each of them. It then runs a
+  # real WASM *runtime* smoke test: rebuild app-mux.wasm from source and drive
+  # it through the wazero evaluator (pkg/router/policy/wasm), so the policy
+  # loader test exercises a fresh build instead of the committed (stale-able)
+  # blob. Runs in parallel with the other jobs.
+  wasm-tinygo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: acifani/setup-tinygo@v2
+        with:
+          tinygo-version: '0.41.1'
+
+      - name: Compile-check TinyGo wasm binaries
+        run: make build-wasm-tinygo
+
+      - name: Rebuild app-mux.wasm and run the policy runtime smoke test
+        run: make test-wasm-policy
+
   # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
   # //go:build !no_ci because they need a real Redis (redis://localhost:6379),
   # so the tag-free unit lanes (which run with -tags no_ci) skip them — leaving
