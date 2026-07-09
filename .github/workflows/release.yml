@@ -65,7 +65,12 @@ jobs:
 
       - name: Fetch build-libusb-musl.sh
         run: |
-          curl -sL "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/ci_scripts/build-libusb-musl.sh" -o build-libusb-musl.sh
+          # -f fails on HTTP error (so a raw.github 404/429 right after the tag
+          # push isn't saved as an error page and run as a shell script); retry
+          # to ride out raw.github propagation lag / rate-limiting.
+          curl -fsSL --retry 6 --retry-all-errors --retry-delay 4 \
+            "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/ci_scripts/build-libusb-musl.sh" \
+            -o build-libusb-musl.sh
           chmod +x build-libusb-musl.sh
 
       - name: Cache musl toolchain
@@ -300,13 +305,20 @@ jobs:
         run: |
           $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/scripts/win_installer"
           New-Item -ItemType Directory -Force -Path "scripts\win_installer\images"
-          Invoke-WebRequest "$base/Product.wxs" -OutFile "scripts\win_installer\Product.wxs"
-          Invoke-WebRequest "$base/UI.wxs" -OutFile "scripts\win_installer\UI.wxs"
-          Invoke-WebRequest "$base/skywire.bat" -OutFile "scripts\win_installer\skywire.bat"
-          Invoke-WebRequest "$base/skywire-autoconfig.bat" -OutFile "scripts\win_installer\skywire-autoconfig.bat"
-          Invoke-WebRequest "$base/images/Banner.png" -OutFile "scripts\win_installer\images\Banner.png"
-          Invoke-WebRequest "$base/images/Dialog.png" -OutFile "scripts\win_installer\images\Dialog.png"
-          Invoke-WebRequest "$base/images/ico.ico" -OutFile "scripts\win_installer\images\ico.ico"
+          # Retry each fetch — raw.github rate-limits (429) / lags right after a
+          # tag push, and Invoke-WebRequest throws on that, failing the release.
+          function Fetch($rel) {
+            $url = "$base/$rel"
+            $out = "scripts\win_installer\" + ($rel -replace '/', '\')
+            for ($i = 1; $i -le 6; $i++) {
+              try { Invoke-WebRequest $url -OutFile $out -UseBasicParsing; return }
+              catch { Write-Host "fetch $rel attempt $i failed: $_"; Start-Sleep -Seconds (4 * $i) }
+            }
+            throw "failed to fetch $rel after 6 attempts"
+          }
+          foreach ($f in @("Product.wxs","UI.wxs","skywire.bat","skywire-autoconfig.bat","images/Banner.png","images/Dialog.png","images/ico.ico")) {
+            Fetch $f
+          }
 
       - name: Build skywire
         env:
