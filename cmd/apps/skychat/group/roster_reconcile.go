@@ -17,9 +17,15 @@ package group
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
+
+// rosterBroadcastDelay is how long the manager waits after opening a session
+// before re-broadcasting the roster, giving the publisher + dmsg time to settle
+// so the roster/admin Puts actually land.
+const rosterBroadcastDelay = 3 * time.Second
 
 // subscribedPrefixes is the set of CXO path prefixes every group subscriber
 // watches: msgs/ (chat) plus roster/ and admin/ (signed membership + admin
@@ -175,5 +181,52 @@ func (s *Session) applyAdminLeaf(body []byte) {
 	}
 	if s.onRosterChange != nil {
 		s.onRosterChange(members, admins)
+	}
+}
+
+// BroadcastRoster re-publishes the current member + admin set as signed roster/
+// admin gossip on this session's own feed. Joiners bootstrap their Record from
+// the invite as just [owner, self] and converge by hydrating these leaves via
+// the reconciler — so WITHOUT this, a member added at CREATE time (--member /
+// Create's initialMembers) leaves no roster/ leaf and is never learned by a
+// late joiner (the reconciler only applies leaves that exist on the feed).
+//
+// Only an admin's mutations are authoritative (the reconciler rejects non-admin
+// issuers), so only admins broadcast; a non-admin or publisher-less session is a
+// no-op. Idempotent on the receive side (Add of an existing member is a no-op),
+// so it's safe to call on every owner-session open. Best-effort: publish errors
+// are debug-logged and retried on the next open.
+func (s *Session) BroadcastRoster() {
+	if s.pub == nil {
+		return
+	}
+	s.membersMu.RLock()
+	self := s.cfg.MyPK
+	owner := s.cfg.Record.OwnerPK
+	if !s.cfg.Record.IsAdmin(self) {
+		s.membersMu.RUnlock()
+		return
+	}
+	members := append([]cipher.PubKey(nil), s.cfg.Record.Members...)
+	admins := append([]cipher.PubKey(nil), s.cfg.Record.Admins...)
+	s.membersMu.RUnlock()
+
+	for _, pk := range members {
+		if pk == self {
+			continue
+		}
+		if _, err := s.PublishRosterMutation(RosterOpAdd, pk, 0); err != nil {
+			s.log.WithError(err).WithField("peer", pk.String()).
+				Debug("group: BroadcastRoster: roster add publish failed")
+		}
+	}
+	for _, pk := range admins {
+		if pk == self || pk == owner {
+			continue // owner is an implicit admin; self needs no promotion
+		}
+		if _, err := s.PublishAdminMutation(AdminOpPromote, pk, 0); err != nil {
+			s.log.WithError(err).WithField("peer", pk.String()).
+				Debug("group: BroadcastRoster: admin promote publish failed")
+		}
 	}
 }
