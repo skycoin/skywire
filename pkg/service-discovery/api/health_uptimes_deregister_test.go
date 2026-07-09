@@ -45,7 +45,7 @@ func TestAPI_Health(t *testing.T) {
 // primeUptimesCache builds an API whose in-memory uptimes caches are populated
 // via the real refresh path: v1 summaries for the default cache, v2 for the
 // v2/v3 cache. Returns the API plus the two PKs seeded.
-func primeUptimesCache(t *testing.T) (*API, cipher.PubKey, cipher.PubKey) {
+func primeUptimesCache(t *testing.T) (*API, cipher.PubKey, cipher.PubKey) { //nolint
 	t.Helper()
 	pk1, _ := cipher.GenerateKeyPair()
 	pk2, _ := cipher.GenerateKeyPair()
@@ -107,14 +107,14 @@ func TestAPI_PostUptimes(t *testing.T) {
 	api, pk1, _ := primeUptimesCache(t)
 
 	t.Run("v2 bulk query filters by pks", func(t *testing.T) {
-		body, _ := json.Marshal(bulkUptimesRequest{PKs: []string{pk1.Hex()}, Version: "v2"})
+		body, _ := json.Marshal(bulkUptimesRequest{PKs: []string{pk1.Hex()}, Version: "v2"}) //nolint
 		got := decodeSummaries(t, serve(api, httptest.NewRequest(http.MethodPost, "/uptimes", bytes.NewReader(body))))
 		require.Len(t, got, 1)
 		require.Equal(t, pk1.Hex(), got[0].PK.Hex())
 	})
 
 	t.Run("no pks returns whole cache", func(t *testing.T) {
-		body, _ := json.Marshal(bulkUptimesRequest{})
+		body, _ := json.Marshal(bulkUptimesRequest{}) //nolint
 		got := decodeSummaries(t, serve(api, httptest.NewRequest(http.MethodPost, "/uptimes", bytes.NewReader(body))))
 		require.Len(t, got, 2)
 	})
@@ -146,7 +146,7 @@ func TestAPI_DeregisterEntry_Success(t *testing.T) {
 	db.On("DeleteService", mock.Anything, "vpn", mock.Anything).Return((*servicedisc.HTTPError)(nil))
 	api := newTestAPI(t, db)
 
-	body, _ := json.Marshal([]string{deadPK.Hex()})
+	body, _ := json.Marshal([]string{deadPK.Hex()}) //nolint
 	req := httptest.NewRequest(http.MethodDelete, "/api/services/deregister/vpn", bytes.NewReader(body))
 	req.Header.Set("NM-PK", nmPK.Hex())
 	req.Header.Set("NM-Sign", sig.Hex())
