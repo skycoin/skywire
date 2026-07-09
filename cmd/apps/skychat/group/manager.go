@@ -1518,6 +1518,15 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	m.mu.Lock()
 	m.sessions[r.ID] = sess
 	m.mu.Unlock()
+	// Re-broadcast the roster as signed gossip so late joiners can hydrate the
+	// full member set — including create-time (--member) members that otherwise
+	// leave no roster/ leaf to learn from (#3426 follow-up). No-ops for non-admin
+	// / publisher-less sessions; idempotent on the receive side. Deferred a few
+	// seconds so the publisher + dmsg have settled before we Put.
+	go func() {
+		time.Sleep(rosterBroadcastDelay)
+		sess.BroadcastRoster()
+	}()
 	return sess, nil
 }
 
