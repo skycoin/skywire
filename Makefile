@@ -212,6 +212,25 @@ build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run 
 	done
 	@echo "all js/wasm binaries compile."
 
+build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no run) — mirrors the CI wasm-tinygo lane
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/design/tinygo-dmsg-client.md (TinyGo 0.41+)"; exit 1; }
+	@echo "compile-checking TinyGo wasm binaries..."
+	@echo "  tinygo build -target wasip1 ./cmd/dmsg-tinygo-probe"
+	@tinygo build -target wasip1 -no-debug -opt=z -o /dev/null ./cmd/dmsg-tinygo-probe || exit 1
+	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor; do \
+		echo "  tinygo build -target wasm $$p"; \
+		tinygo build -target wasm -no-debug -o /dev/null "$$p" || exit 1; \
+	done
+	@echo "  tinygo build -target wasi (app-mux routing policy)"
+	@cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
+	@echo "all TinyGo wasm binaries compile."
+
+test-wasm-policy: ## Rebuild app-mux.wasm from source with TinyGo and run the policy loader test against the FRESH build (real WASM runtime smoke test)
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.32+)"; exit 1; }
+	@mkdir -p ./build/wasm-fixtures
+	cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
+	SKYWIRE_APPMUX_WASM="$(CURDIR)/build/wasm-fixtures/app-mux.wasm" go test -mod=vendor -count=1 -v -run TestWasmEvaluator ./pkg/router/policy/wasm/
+
 tpviz-wasm: ## Build transport visualizer WASM binary into pkg/tpviz/dist for embedding
 	GOOS=js GOARCH=wasm go build -o ./pkg/tpviz/dist/main.wasm ./pkg/tpviz/wasm
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/tpviz/dist/
