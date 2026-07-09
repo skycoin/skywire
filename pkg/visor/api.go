@@ -280,6 +280,7 @@ type API interface {
 	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupSend(args GroupSendArgs) error
+	GroupUnsend(args GroupUnsendArgs) error
 	GroupPoll(since time.Time) ([]GroupMessage, error)
 	GroupDelete(id string) error
 	GroupLeave(id string) error

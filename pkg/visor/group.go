@@ -460,6 +460,24 @@ func (v *Visor) GroupSend(args GroupSendArgs) error {
 	return mgr.SendToGroup(ctx, args.ID, args.Text)
 }
 
+// GroupUnsendArgs is the RPC input for GroupUnsend. TS is the message's
+// UnixNano timestamp (the value carried in the delivered message).
+type GroupUnsendArgs struct {
+	ID string `json:"id"`
+	TS int64  `json:"ts"`
+}
+
+// GroupUnsend deletes a message the local visor published to the group,
+// by its UnixNano timestamp. Only the sender can remove their own
+// message; the deletion propagates to subscribers via CXO snapshot-diff.
+func (v *Visor) GroupUnsend(args GroupUnsendArgs) error {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return ErrGroupingDisabled
+	}
+	return mgr.Unsend(args.ID, args.TS)
+}
+
 // GroupPoll drains messages with TS > since. Mirrors PairPoll.
 func (v *Visor) GroupPoll(since time.Time) ([]GroupMessage, error) {
 	v.initLock.RLock()

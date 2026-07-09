@@ -1352,6 +1352,28 @@ func (s *Session) Send(text string) error {
 	return s.publishAs(s.cfg.MyPK, text, time.Now().UTC())
 }
 
+// Unsend deletes a message this session previously published, identified
+// by its timestamp (UnixNano — the value carried in the delivered
+// Message.TS, so the UI already has it). Only leaves on THIS session's
+// own feed can be removed — a publisher controls only its own feed — so
+// unsend is inherently sender-scoped and needs no extra authority check.
+//
+// PrunePrefix wipes the msgs/<myPK>/<ts> subtree, i.e. the single leaf at
+// that timestamp (seq lives one level below ts). CXO's snapshot-diff
+// replication then reports the removal to every subscriber (see
+// treestore TestSubscriberApplySnapshotReportsDeletes), so the message is
+// genuinely deleted from members' replicas — not merely hidden locally.
+// The unavoidable caveat is inherent to any federated store: a member
+// that is offline forever, or a modified client that archived the bytes,
+// cannot be forced to forget.
+func (s *Session) Unsend(tsNano int64) error {
+	if s.pub == nil {
+		return errors.New("group: Unsend: session has no publisher")
+	}
+	prefix := MessagePathPrefix + "/" + s.cfg.MyPK.Hex() + "/" + strconv.FormatInt(tsNano, 10)
+	return s.pub.PrunePrefix(prefix)
+}
+
 // SetAllowlist updates the publisher's subscriber allowlist AND the
 // owner-side relay-gate's view of the member set, both live. Owner-
 // side only. Used when an invite is issued or a member is removed.
