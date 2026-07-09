@@ -1590,6 +1590,11 @@ func (rc *rpcClient) GroupSend(args GroupSendArgs) error {
 	return rc.Call("GroupSend", &args, &struct{}{})
 }
 
+// GroupUnsend implements API.
+func (rc *rpcClient) GroupUnsend(args GroupUnsendArgs) error {
+	return rc.Call("GroupUnsend", &args, &struct{}{})
+}
+
 // GroupPoll implements API.
 func (rc *rpcClient) GroupPoll(since time.Time) ([]GroupMessage, error) {
 	var resp []GroupMessage

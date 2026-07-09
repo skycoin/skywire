@@ -1302,6 +1302,9 @@ func (mc *mockRPCClient) GroupDemoteAdmin(_ string, _ cipher.PubKey) (GroupInfo,
 // GroupSend implements API.
 func (mc *mockRPCClient) GroupSend(_ GroupSendArgs) error { return nil }
 
+// GroupUnsend implements API.
+func (mc *mockRPCClient) GroupUnsend(_ GroupUnsendArgs) error { return nil }
+
 // GroupPoll implements API.
 func (mc *mockRPCClient) GroupPoll(_ time.Time) ([]GroupMessage, error) { return nil, nil }
 

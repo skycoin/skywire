@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -75,7 +76,7 @@ func init() {
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
 		groupJoinCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd,
-		groupSendCmd, groupListenCmd, groupHistoryCmd,
+		groupSendCmd, groupUnsendCmd, groupListenCmd, groupHistoryCmd,
 		groupLeaveCmd, groupDeleteCmd,
 	)
 	RootCmd.AddCommand(groupCmd)
@@ -391,6 +392,34 @@ var groupSendCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("sent to %s\n", id))
+	},
+}
+
+var groupUnsendCmd = &cobra.Command{
+	Use:   "unsend <group-id> <ts-unixnano>",
+	Short: "Delete a message you published, by its UnixNano timestamp",
+	Long: `Delete a message the local visor published to a group, identified
+by its UnixNano timestamp (the ts field in ` + "`group history --json`" + `).
+
+Only your own messages can be unsent — a visor owns only its own feed.
+The deletion is replicated to other members via CXO (a genuine delete,
+not just a local hide), though an offline member or a client that already
+archived the message cannot be forced to forget it.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		id := args[0]
+		ts, err := strconv.ParseInt(args[1], 10, 64)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid ts (want UnixNano int): %w", err))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.GroupUnsend(visor.GroupUnsendArgs{ID: id, TS: ts}); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), nil, fmt.Sprintf("unsent %d from %s\n", ts, id))
 	},
 }
 

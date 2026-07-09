@@ -822,6 +822,10 @@ func (proxyDefaultAPI) GroupSend(_ GroupSendArgs) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GroupUnsend(_ GroupUnsendArgs) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupPoll(_ time.Time) ([]GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }
