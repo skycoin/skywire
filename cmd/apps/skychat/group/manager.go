@@ -164,6 +164,26 @@ func (m *Manager) SetMessageHandler(h MessageHandler) {
 	m.mu.RUnlock()
 }
 
+// persistRoster returns a roster-change callback (installed on every session)
+// that writes the reconciler's converged member+admin set back to the store,
+// so group info/list reflect convergence and it survives restart. Best-effort:
+// a store failure is debug-logged, not propagated — the live session state has
+// already converged regardless. See #3426.
+func (m *Manager) persistRoster(id string) func(members, admins []cipher.PubKey) {
+	return func(members, admins []cipher.PubKey) {
+		r, ok, err := m.store.Get(id)
+		if err != nil || !ok {
+			return
+		}
+		r.Members = members
+		r.Admins = admins
+		r.EnsureFounderInAdmins()
+		if err := m.store.Put(r); err != nil {
+			m.log.WithError(err).WithField("id", id).Debug("group: persistRoster: store put failed")
+		}
+	}
+}
+
 // Create constructs a new owner-side group, persists it, and opens
 // the publisher. Returns the persisted Record (with ID + Port + key
 // populated) so the caller can build the invite link.
@@ -1477,6 +1497,9 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	if h != nil {
 		sess.SetMessageHandler(m.wrapHandler(r.ID, h))
 	}
+	// Persist reconciled roster changes back to the store so group info/list
+	// reflect convergence and it survives restart (#3426).
+	sess.SetRosterChangeHandler(m.persistRoster(r.ID))
 	m.mu.Lock()
 	m.sessions[r.ID] = sess
 	m.mu.Unlock()
