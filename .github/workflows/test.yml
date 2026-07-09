@@ -197,6 +197,26 @@ jobs:
           $env:SKYWIRE_NATIVEE2E_BIN = "$PWD/_nbin"
           go test -mod=vendor -tags client_e2e -v -timeout=25m ./internal/nativee2e/
 
+  # Compile-only lane for the browser/wasm binaries. Every wasm main package is
+  # guarded by //go:build js && wasm, so the default-GOARCH unit lanes never even
+  # build them — a break in the js/wasm code (e.g. an import that isn't
+  # browser-portable) ships undetected. This job cross-compiles each one with
+  # GOOS=js GOARCH=wasm (no run) so build regressions fail CI. Runs in parallel
+  # with the other jobs; fast (build only, cached module deps).
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Compile-check js/wasm binaries
+        run: make build-wasm
+
   # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
   # //go:build !no_ci because they need a real Redis (redis://localhost:6379),
   # so the tag-free unit lanes (which run with -tags no_ci) skip them — leaving
