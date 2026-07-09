@@ -25,6 +25,17 @@ module.exports = function (config) {
     colors: true,
     logLevel: config.LOG_INFO,
     autoWatch: true,
+    // ChromeHeadlessNoSandbox is the CI launcher: headless Chrome needs
+    // --no-sandbox inside the GitHub Actions container (it runs as root, where
+    // Chrome's sandbox refuses to start). Selected in CI via
+    // `ng test --browsers=ChromeHeadlessNoSandbox --watch=false`; interactive
+    // local runs keep the default headed 'Chrome'.
+    customLaunchers: {
+      ChromeHeadlessNoSandbox: {
+        base: 'ChromeHeadless',
+        flags: ['--no-sandbox', '--disable-gpu']
+      }
+    },
     browsers: ['Chrome'],
     singleRun: false
   });
