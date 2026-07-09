@@ -162,7 +162,9 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   setView(v: RoutingView) {
-    if (v === this.activeView) { return; }
+    if (v === this.activeView) {
+ return; 
+}
     this.activeView = v;
     if (v === 'groups' && !this.groupsSubscription) {
       this.startGroupsPolling();
@@ -173,12 +175,17 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   policyAppNames(): string[] {
-    if (!this.routingPolicies || !this.routingPolicies.per_app) { return []; }
+    if (!this.routingPolicies || !this.routingPolicies.per_app) {
+ return []; 
+}
+
     return Object.keys(this.routingPolicies.per_app).sort();
   }
 
   submitRouteFind() {
-    if (!this.nodePK || !this.findDstPk) { return; }
+    if (!this.nodePK || !this.findDstPk) {
+ return; 
+}
     this.findLoading = true;
     this.findError = null;
     this.findResults = [];
@@ -199,7 +206,9 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   submitRouteCalc() {
-    if (!this.nodePK || !this.calcDstPk) { return; }
+    if (!this.nodePK || !this.calcDstPk) {
+ return; 
+}
     this.calcLoading = true;
     this.calcError = null;
     this.calcResults = [];
@@ -221,7 +230,9 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   private startGroupsPolling() {
-    if (!this.nodePK) { return; }
+    if (!this.nodePK) {
+ return; 
+}
     // Active route groups change on tp churn. 5s is a reasonable
     // poll cadence — frequent enough to feel live, slow enough to
     // not hammer the visor's RPC.
@@ -231,11 +242,14 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
         catchError((err) => {
           this.routeGroupsError = err?.message || 'Failed to fetch route groups';
           this.routeGroupsLoading = false;
+
           return of(null);
         }),
       )),
     ).subscribe((rgs: any) => {
-      if (rgs == null) { return; }
+      if (rgs == null) {
+ return; 
+}
       this.routeGroupsError = null;
       this.routeGroupsLoading = false;
       this.routeGroups = Array.isArray(rgs) ? rgs : [];
@@ -247,18 +261,23 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   // or runtime swap), so 15s is plenty of refresh cadence. Same
   // shape as startGroupsPolling otherwise.
   private startPoliciesPolling() {
-    if (!this.nodePK) { return; }
+    if (!this.nodePK) {
+ return; 
+}
     this.policiesSubscription = interval(15000).pipe(
       startWith(0),
       switchMap(() => this.routeService.routingPolicies(this.nodePK).pipe(
         catchError((err) => {
           this.routingPoliciesError = err?.message || 'Failed to fetch routing policies';
           this.routingPoliciesLoading = false;
+
           return of(null);
         }),
       )),
     ).subscribe((summary: any) => {
-      if (summary == null) { return; }
+      if (summary == null) {
+ return; 
+}
       this.routingPoliciesError = null;
       this.routingPoliciesLoading = false;
       this.routingPolicies = summary as RoutingPoliciesSummary;
@@ -274,7 +293,9 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   submitRouterConfig() {
-    if (!this.routerForm.valid || !this.node) { return; }
+    if (!this.routerForm.valid || !this.node) {
+ return; 
+}
     const min = parseInt(this.routerForm.get('min').value, 10);
     this.saveRouterSubscription = this.routeService.setMinHops(this.node.localPk, min).subscribe({
       next: () => {

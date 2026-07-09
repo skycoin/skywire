@@ -14,9 +14,11 @@ import { ApiService } from './api.service';
 export const localVisorGuard: CanActivateFn = (): Observable<UrlTree> => {
   const api = inject(ApiService);
   const router = inject(Router);
+
   return api.get('about').pipe(
     map((about: any) => {
       const pk = about && about.public_key;
+
       return pk ? router.parseUrl('/nodes/' + pk) : router.parseUrl('/nodes/list/1');
     }),
     catchError(() => of(router.parseUrl('/nodes/list/1'))),

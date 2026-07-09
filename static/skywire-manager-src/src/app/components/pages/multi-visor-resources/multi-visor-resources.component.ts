@@ -96,14 +96,17 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
             catchError((err) => of({ __error: err?.message || 'failed' })),
           ),
         );
+
         return forkJoin(fetches).pipe(
           switchMap((results: any[]) => of({
             nodes: nodes || [],
-            stats: results.map((r, i) => ({
+            stats: results.map((r, i) => {
+return {
               pk: online[i].localPk,
               stats: r && !r.__error ? (r as HostStats) : undefined,
               error: r && r.__error ? r.__error : undefined,
-            })),
+            }
+}),
           })),
         );
       }),
@@ -140,7 +143,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
     const next = nodes.map((node) => {
       const fresh = byPk.get(node.localPk);
       const prev = prevByPk.get(node.localPk);
-      const row: VisorRow = { node, ...fresh };
+      const row: VisorRow = { node: node, ...fresh };
       if (fresh?.stats) {
         const sent = fresh.stats.net_bytes_sent || 0;
         const recv = fresh.stats.net_bytes_recv || 0;
@@ -157,6 +160,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
         row.prevRecv = recv;
         row.lastSampleAt = now;
       }
+
       return row;
     });
     // Stable-sort by label (case-insensitive), falling back to PK so
@@ -165,7 +169,10 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
     next.sort((a, b) => {
       const la = (a.node.label || '').toLowerCase();
       const lb = (b.node.label || '').toLowerCase();
-      if (la !== lb) { return la < lb ? -1 : 1; }
+      if (la !== lb) {
+ return la < lb ? -1 : 1; 
+}
+
       return a.node.localPk < b.node.localPk ? -1 : 1;
     });
     this.rows = next;
@@ -173,28 +180,47 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
 
   /** Color class buckets — same thresholds as per-visor monitor. */
   pctClass(pct?: number): string {
-    if (pct === undefined || pct === null) { return 'pct-na'; }
-    if (pct >= 90) { return 'pct-bad'; }
-    if (pct >= 70) { return 'pct-warn'; }
+    if (pct === undefined || pct === null) {
+ return 'pct-na'; 
+}
+    if (pct >= 90) {
+ return 'pct-bad'; 
+}
+    if (pct >= 70) {
+ return 'pct-warn'; 
+}
+
     return 'pct-ok';
   }
 
   /** Bytes-per-second → human readable. */
   formatRate(bps?: number): string {
-    if (bps === undefined || bps === null || bps < 0) { return '-'; }
+    if (bps === undefined || bps === null || bps < 0) {
+ return '-'; 
+}
     const u = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
     let i = 0; let v = bps;
-    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    while (v >= 1024 && i < u.length - 1) {
+ v /= 1024; i++; 
+}
+
     return v < 10 ? v.toFixed(1) + ' ' + u[i] : Math.round(v) + ' ' + u[i];
   }
 
   formatBytes(b?: number): string {
-    if (b === undefined || b === null) { return '-'; }
+    if (b === undefined || b === null) {
+ return '-'; 
+}
     const u = ['B', 'KB', 'MB', 'GB', 'TB'];
     let i = 0; let v = b;
-    while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+    while (v >= 1024 && i < u.length - 1) {
+ v /= 1024; i++; 
+}
+
     return v < 10 ? v.toFixed(1) + ' ' + u[i] : Math.round(v) + ' ' + u[i];
   }
 
-  trackRow(_: number, r: VisorRow): string { return r.node.localPk; }
+  trackRow(_: number, r: VisorRow): string {
+ return r.node.localPk; 
+}
 }

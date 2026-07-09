@@ -291,6 +291,7 @@ return {
         }
         sections.push(nodeSection);
       }
+
       return sections;
     }));
   }
@@ -351,11 +352,21 @@ return {
       }
       if (response.overview) {
         node.isSymmeticNat = response.overview.is_symmetic_nat;
-        if (response.overview.country_code) { node.countryCode = response.overview.country_code; }
-        if (response.overview.region_name) { node.regionName = response.overview.region_name; }
-        if (response.overview.city_name) { node.cityName = response.overview.city_name; }
-        if (response.overview.latitude) { node.latitude = response.overview.latitude; }
-        if (response.overview.longitude) { node.longitude = response.overview.longitude; }
+        if (response.overview.country_code) {
+ node.countryCode = response.overview.country_code; 
+}
+        if (response.overview.region_name) {
+ node.regionName = response.overview.region_name; 
+}
+        if (response.overview.city_name) {
+ node.cityName = response.overview.city_name; 
+}
+        if (response.overview.latitude) {
+ node.latitude = response.overview.latitude; 
+}
+        if (response.overview.longitude) {
+ node.longitude = response.overview.longitude; 
+}
       }
 
       const labelInfo = this.storageService.getLabelInfo(node.localPk);
@@ -402,6 +413,7 @@ return {
 
       out.push(node);
     });
+
     return out;
   }
 
@@ -681,6 +693,7 @@ return {
    */
   getNetworkView(refresh = false) {
     const q = refresh ? '?refresh=true' : '';
+
     return this.apiService.get(`network-view${q}`);
   }
 
@@ -710,14 +723,14 @@ return {
    * Enables or disables a resolving proxy.
    */
   setProxyEnabled(nodeKey: string, kind: string, enable: boolean): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/proxies/set`, { kind, enable });
+    return this.apiService.post(`visors/${nodeKey}/proxies/set`, { kind: kind, enable: enable });
   }
 
   /**
    * Sets the upstream SOCKS5 address for a resolving proxy.
    */
   setProxyUpstream(nodeKey: string, kind: string, addr: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/proxies/upstream`, { kind, addr });
+    return this.apiService.post(`visors/${nodeKey}/proxies/upstream`, { kind: kind, addr: addr });
   }
 
   /**
@@ -731,14 +744,14 @@ return {
    * Registers a local port for skynet forwarding.
    */
   registerSkynetPort(nodeKey: string, port: number): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/skynet-ports/register`, { port });
+    return this.apiService.post(`visors/${nodeKey}/skynet-ports/register`, { port: port });
   }
 
   /**
    * Deregisters a local port from skynet forwarding.
    */
   deregisterSkynetPort(nodeKey: string, port: number): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/skynet-ports/deregister`, { port });
+    return this.apiService.post(`visors/${nodeKey}/skynet-ports/deregister`, { port: port });
   }
 
   /**
@@ -776,7 +789,7 @@ return {
    */
   skynetConnect(nodeKey: string, network: string, remotePK: string, remotePort: number, localPort: number): Observable<any> {
     return this.apiService.post(`visors/${nodeKey}/skynet-forwards/connect`, {
-      network, remote_pk: remotePK, remote_port: remotePort, local_port: localPort
+      network: network, remote_pk: remotePK, remote_port: remotePort, local_port: localPort
     });
   }
 
@@ -784,7 +797,7 @@ return {
    * Disconnects a skynet forward by UUID.
    */
   skynetDisconnect(nodeKey: string, id: string): Observable<any> {
-    return this.apiService.post(`visors/${nodeKey}/skynet-forwards/disconnect`, { id });
+    return this.apiService.post(`visors/${nodeKey}/skynet-forwards/disconnect`, { id: id });
   }
 
   /**

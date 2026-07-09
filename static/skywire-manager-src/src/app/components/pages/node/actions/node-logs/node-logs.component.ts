@@ -259,6 +259,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
   private captureScrollTailState() {
     if (!this.content) {
       this.wasAtBottom = true;
+
       return;
     }
     const el = this.content.nativeElement as HTMLElement;
@@ -293,6 +294,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     if (!delta) {
       this.loading = false;
       this.scheduleNextPoll();
+
       return;
     }
     const isInitial = this.logCursor === 0;
@@ -308,6 +310,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
       this.shouldShowError = true;
       this.startUpdatingTime();
       this.scheduleNextPoll();
+
       return;
     }
 

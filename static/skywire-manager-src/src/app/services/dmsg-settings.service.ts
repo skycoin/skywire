@@ -67,6 +67,6 @@ export class DmsgSettingsService {
    * visors hosting the embedded route or transport setup-node.
    */
   setSessionsCount(pk: string, count: number): Observable<DmsgConnectAllResult> {
-    return this.apiService.put(`visors/${pk}/dmsg/sessions-count`, { count }) as Observable<DmsgConnectAllResult>;
+    return this.apiService.put(`visors/${pk}/dmsg/sessions-count`, { count: count }) as Observable<DmsgConnectAllResult>;
   }
 }

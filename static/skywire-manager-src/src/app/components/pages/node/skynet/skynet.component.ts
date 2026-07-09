@@ -75,6 +75,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     this.nodeKey = NodeComponent.getCurrentNodeKey();
     this.loadPorts();
     this.loadForwards();
+
     return super.ngOnInit();
   }
 
@@ -90,7 +91,9 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.ports = (ports || []).sort((a: any, b: any) => a.port - b.port);
         this.portsLoading = false;
       },
-      () => { this.ports = []; this.portsLoading = false; }
+      () => {
+ this.ports = []; this.portsLoading = false; 
+}
     );
   }
 
@@ -98,6 +101,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     const port = parseInt(this.newPort, 10);
     if (isNaN(port) || port < 1 || port > 65535) {
       this.snackbarService.showError('Enter a valid port (1-65535)');
+
       return;
     }
     const localPort = this.newLocalPort ? parseInt(this.newLocalPort, 10) : 0;
@@ -109,12 +113,13 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
       for (const pk of whitelist) {
         if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
           this.snackbarService.showError(`Invalid public key in whitelist: ${pk}`);
+
           return;
         }
       }
     }
     const fp: any = {
-      port,
+      port: port,
       local_port: localPort || undefined,
       proxy_addr: proxyAddr || undefined,
       label: this.newLabel,
@@ -135,14 +140,20 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.snackbarService.showDone(`Port ${port} forwarded`);
         this.loadPorts();
       },
-      (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed'); }
+      (err: any) => {
+ this.snackbarService.showError(err?.error?.error || 'Failed'); 
+}
     );
   }
 
   removePort(port: number) {
     this.nodeService.deregisterSkynetPort(this.nodeKey, port).subscribe(
-      () => { this.snackbarService.showDone(`Port ${port} removed`); this.loadPorts(); },
-      () => { this.snackbarService.showError('Failed to remove port'); }
+      () => {
+ this.snackbarService.showDone(`Port ${port} removed`); this.loadPorts(); 
+},
+      () => {
+ this.snackbarService.showError('Failed to remove port'); 
+}
     );
   }
 
@@ -150,7 +161,9 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     fp.show_on_landing = !fp.show_on_landing;
     this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
       () => {},
-      () => { this.snackbarService.showError('Failed to update'); this.loadPorts(); }
+      () => {
+ this.snackbarService.showError('Failed to update'); this.loadPorts(); 
+}
     );
   }
 
@@ -158,7 +171,9 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     fp.skynet = !fp.skynet;
     this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
       () => {},
-      () => { this.snackbarService.showError('Failed to update'); this.loadPorts(); }
+      () => {
+ this.snackbarService.showError('Failed to update'); this.loadPorts(); 
+}
     );
   }
 
@@ -166,7 +181,9 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     fp.dmsg = !fp.dmsg;
     this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
       () => {},
-      () => { this.snackbarService.showError('Failed to update'); this.loadPorts(); }
+      () => {
+ this.snackbarService.showError('Failed to update'); this.loadPorts(); 
+}
     );
   }
 
@@ -188,6 +205,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
       for (const pk of pks) {
         if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
           this.snackbarService.showError(`Invalid public key: ${pk}`);
+
           return;
         }
       }
@@ -201,7 +219,9 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.cancelEditWhitelist();
         this.loadPorts();
       },
-      (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed to update whitelist'); }
+      (err: any) => {
+ this.snackbarService.showError(err?.error?.error || 'Failed to update whitelist'); 
+}
     );
   }
 
@@ -213,7 +233,9 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.cancelEditWhitelist();
         this.loadPorts();
       },
-      (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed to clear whitelist'); }
+      (err: any) => {
+ this.snackbarService.showError(err?.error?.error || 'Failed to clear whitelist'); 
+}
     );
   }
 
@@ -225,7 +247,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         if (data) {
           for (const [id, fwd] of Object.entries(data as Record<string, any>)) {
             this.forwards.push({
-              id,
+              id: id,
               network: fwd.network || 'skynet',
               remotePK: fwd.remote_pk || '',
               remotePort: fwd.remote_port || 0,
@@ -235,18 +257,33 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         }
         this.forwardsLoading = false;
       },
-      () => { this.forwards = []; this.forwardsLoading = false; }
+      () => {
+ this.forwards = []; this.forwardsLoading = false; 
+}
     );
   }
 
   connect() {
     const rPort = parseInt(this.connectRemotePort, 10);
     const lPort = parseInt(this.connectLocalPort, 10);
-    if (!this.connectPK || this.connectPK.length !== 66) { this.snackbarService.showError('Enter a valid public key'); return; }
-    if (isNaN(rPort) || rPort < 1) { this.snackbarService.showError('Enter a valid remote port'); return; }
-    if (isNaN(lPort) || lPort < 1) { this.snackbarService.showError('Enter a valid local port'); return; }
+    if (!this.connectPK || this.connectPK.length !== 66) {
+ this.snackbarService.showError('Enter a valid public key');
+
+ return; 
+}
+    if (isNaN(rPort) || rPort < 1) {
+ this.snackbarService.showError('Enter a valid remote port');
+
+ return; 
+}
+    if (isNaN(lPort) || lPort < 1) {
+ this.snackbarService.showError('Enter a valid local port');
+
+ return; 
+}
     if (this.connectNetwork !== 'skynet' && this.connectNetwork !== 'dmsg') {
       this.snackbarService.showError('Network must be skynet or dmsg');
+
       return;
     }
     this.nodeService.skynetConnect(this.nodeKey, this.connectNetwork, this.connectPK, rPort, lPort).subscribe(
@@ -255,14 +292,20 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.snackbarService.showDone(`Connected via ${this.connectNetwork}: remote ${rPort} → localhost:${lPort}`);
         this.loadForwards();
       },
-      (err: any) => { this.snackbarService.showError(err?.error?.error || 'Failed'); }
+      (err: any) => {
+ this.snackbarService.showError(err?.error?.error || 'Failed'); 
+}
     );
   }
 
   disconnect(id: string) {
     this.nodeService.skynetDisconnect(this.nodeKey, id).subscribe(
-      () => { this.snackbarService.showDone('Disconnected'); this.loadForwards(); },
-      () => { this.snackbarService.showError('Failed'); }
+      () => {
+ this.snackbarService.showDone('Disconnected'); this.loadForwards(); 
+},
+      () => {
+ this.snackbarService.showError('Failed'); 
+}
     );
   }
 }
