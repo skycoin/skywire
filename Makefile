@@ -204,6 +204,14 @@ docs-install-deps: ## Install MkDocs + plugins (run once per machine)
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./build ./local
 
+build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
+	@echo "compile-checking js/wasm binaries..."
+	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/skywire/commands/web/wasm; do \
+		echo "  GOOS=js GOARCH=wasm go build $$p"; \
+		GOOS=js GOARCH=wasm go build -mod=vendor -o /dev/null "$$p" || exit 1; \
+	done
+	@echo "all js/wasm binaries compile."
+
 tpviz-wasm: ## Build transport visualizer WASM binary into pkg/tpviz/dist for embedding
 	GOOS=js GOARCH=wasm go build -o ./pkg/tpviz/dist/main.wasm ./pkg/tpviz/wasm
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/tpviz/dist/
