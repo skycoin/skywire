@@ -680,7 +680,7 @@ func printWelcome(pubkey string, isHypervisor bool) {
 	rewardOut, err := exec.Command(skywireBin(), "cli", "reward", "-r").Output() //nolint:gosec
 	if err == nil && len(rewardOut) > 0 {
 		msg2(fmt.Sprintf("skycoin reward address:\n%s%s%s", colorGreen, strings.TrimSpace(string(rewardOut)), colorReset))
-		msg2(fmt.Sprintf("reward metrics:\n%shttps://theskywirenetwork.net%s", colorBlue, colorReset))
+		msg2(fmt.Sprintf("reward metrics:\n%shttps://reward.theskywirenetwork.net%s", colorBlue, colorReset))
 		msg2(fmt.Sprintf("distribution notifications:\n%shttps://t.me/skywire_reward%s", colorBlue, colorReset))
 	} else {
 		msg2(fmt.Sprintf("reward eligibility rules:\n%shttps://github.com/skycoin/skywire/blob/develop/mainnet_rules.md%s", colorYellow, colorReset))
