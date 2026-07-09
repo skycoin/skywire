@@ -1866,8 +1866,19 @@
         if (cwin && dl.kiosk) { enterKiosk(cwin); }
         dl = null; // handled — skip the skynet-browse path below
       }
-      // NOTE: ?skygroup=<invite> (join+open a federated group) is handled by the
-      // Angular skychat tab, which owns the group UI; browse.js has no group view.
+      // ?skygroup=<invite> — join the federated group from the invite blob so a
+      // shared link drops the visitor straight into membership. browse.js has no
+      // group message view (that lives in the Angular skychat tab, which owns the
+      // group UI); this wiring performs the JOIN, then the operator opens the
+      // skychat tab to read/post. Best-effort: a failed join is logged, not fatal.
+      if (dl && dl.skygroup && globalThis.skywireVisor && globalThis.skywireVisor.skychatGroupJoin) {
+        Promise.resolve(skywireVisor.skychatGroupJoin(dl.skygroup)).then(function (g) {
+          try { log("skygroup: joined " + ((g && g.name) ? g.name : "group") + " — open the skychat tab to view it"); } catch (e) {}
+        }).catch(function (e) {
+          try { log("skygroup: join failed: " + ((e && e.message) || e)); } catch (e2) {}
+        });
+        dl = null; // handled — skip the skynet-browse path below
+      }
       if (dl && dl.target) {
         var dlWin = openBrowse(true); // skip home.dmsg auto-land; go to the deep-link target
         if (dl.kiosk) { enterKiosk(dlWin); }
