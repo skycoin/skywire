@@ -374,6 +374,21 @@ func (m *Manager) SendToGroup(ctx context.Context, id, text string) error {
 	return nil
 }
 
+// Unsend removes a message the local visor published to group id,
+// identified by its UnixNano timestamp. Only the sender can unsend their
+// own message (a publisher controls only its own feed); the deletion
+// propagates to subscribers via CXO snapshot-diff replication. Returns an
+// error if there is no live session for the group.
+func (m *Manager) Unsend(id string, tsNano int64) error {
+	m.mu.RLock()
+	sess, ok := m.sessions[id]
+	m.mu.RUnlock()
+	if !ok {
+		return fmt.Errorf("group: Unsend: no live session for %s", id)
+	}
+	return sess.Unsend(tsNano)
+}
+
 // AddMember (owner) extends the allowlist + persisted member list.
 // Returns the updated record so the caller can re-issue the invite.
 func (m *Manager) AddMember(id string, pk cipher.PubKey) (Record, error) {
