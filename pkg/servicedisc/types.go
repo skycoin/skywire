@@ -25,6 +25,13 @@ const (
 	ServiceTypeVPN = "vpn"
 	// ServiceTypeVisor stands for visor.
 	ServiceTypeVisor = "visor"
+	// ServiceTypeCoin stands for a discoverable fibercoin node. Intentionally
+	// GENERIC — any fibercoin, not skycoin specifically — so a (browser/wasm)
+	// thin-client wallet can discover a node for the right coin/network over
+	// dmsg and reach its HTTP API through the mesh, with no local full node and
+	// no launch flags. The coin identity + capabilities live in Service.Coin
+	// (CoinInfo); the node's dmsg address is Service.Addr.
+	ServiceTypeCoin = "coin"
 )
 
 // Errors associated with service discovery types.
@@ -129,6 +136,45 @@ type Service struct {
 	Version       string            `json:"version,omitempty"`
 	LocalIPs      pq.StringArray    `json:"local_ips,omitempty" gorm:"type:text[]"`
 	Info          *VPNInfo          `json:"info,omitempty" gorm:"-"`
+	// Coin, set for ServiceTypeCoin entries, carries the fibercoin identity +
+	// capabilities so a thin-client wallet can filter discovery by coin/network
+	// without launch flags. Transient (gorm:"-"), like Info.
+	Coin *CoinInfo `json:"coin,omitempty" gorm:"-"`
+}
+
+// CoinInfo describes a discoverable fibercoin node (ServiceTypeCoin). The
+// enclosing Service.Addr is the node's dmsg address (the forwarding visor's PK +
+// dmsg port). Every field here is DETECTED from the node's own health/metadata
+// response — never operator-configured — so an advertisement can't be
+// misconfigured (accidentally or maliciously) to claim the wrong chain. A wallet
+// filters and TRUSTS on the cryptographic chain identity (BlockchainPubKey /
+// genesis), not on the human name. Generic across fibercoins.
+type CoinInfo struct {
+	// BlockchainPubKey is the block-publisher public key that signs this chain —
+	// the AUTHORITATIVE, cryptographic chain identifier. A wallet must verify it
+	// is on the intended chain by THIS key, not by the human name, so a node can
+	// never spoof another chain by calling itself "skycoin".
+	BlockchainPubKey string `json:"blockchain_pubkey,omitempty"`
+	// GenesisAddress + GenesisSignature anchor the chain's genesis block — an
+	// independent identity check beyond the block-publisher key.
+	GenesisAddress   string `json:"genesis_address,omitempty"`
+	GenesisSignature string `json:"genesis_signature,omitempty"`
+	// Fiber is the human-readable coin name (e.g. "skycoin", "mdl") for display +
+	// coarse filtering ONLY — never the trust anchor; BlockchainPubKey is.
+	Fiber string `json:"fiber,omitempty"`
+	// Network is the coin network — "main" or "test".
+	Network string `json:"network,omitempty"`
+	// Version + Commit identify the DAEMON's OWN build, as reported by its HTTP
+	// API (skycoin /api/v1/health -> version{version, commit}). This is
+	// deliberately NOT the visor's compiled-in skycoin import (`skywire -d`): the
+	// daemon runs independently, so its build can differ from the visor's, and the
+	// advertisement must reflect the ACTUAL running node. Commit pins the exact
+	// build precisely.
+	Version string `json:"version,omitempty"`
+	Commit  string `json:"commit,omitempty"`
+	// HeadSeq is the current block-head sequence, so a wallet can prefer a
+	// well-synced node. Also a freshness signal alongside the SD re-registration.
+	HeadSeq uint64 `json:"head_seq,omitempty"`
 }
 
 // VPNInfo used for showing VPN metrics info, like latency, uptime and count of connections
