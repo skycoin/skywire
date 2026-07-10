@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,11 +40,15 @@ import (
 //     e.g. when an operator forwards port 80 to a Caddy that
 //     serves N domains, paired with the resolver's subdomain
 //     rewrite (skynetweb) on the visitor side.
-//   - Origin header (when present) is rewritten to the backend's URL so
-//     WebSocket upgrades through the visor's port-80 reverse proxy
-//     pass same-origin checks. Without this, audioprism and any other
+//   - Origin header is rewritten to the backend's URL ONLY for WebSocket
+//     upgrade requests, so WS handshakes through the visor's port-80 reverse
+//     proxy pass same-origin checks. Without this, audioprism and any other
 //     app that rejects cross-origin WS handshakes silently fail their
-//     audio/data channel even though the WASM/HTML loaded fine.
+//     audio/data channel even though the WASM/HTML loaded fine. Regular HTTP
+//     requests keep their real Origin — a plain-HTTP backend that validates
+//     Origin against a whitelist or emits CORS (e.g. a fibercoin node API)
+//     needs it preserved, or it 403s the request / returns a mismatched
+//     Access-Control-Allow-Origin that a cross-origin browser rejects.
 //   - ErrorHandler logs reverse-proxy and upgrade failures so the
 //     symptom isn't a silently broken WS connection.
 func buildReverseProxy(log *logging.Logger, target *url.URL, preserveHost bool) *httputil.ReverseProxy {
@@ -59,7 +64,16 @@ func buildReverseProxy(log *logging.Logger, target *url.URL, preserveHost bool) 
 			} else {
 				r.Out.Host = target.Host
 			}
-			if r.In.Header.Get("Origin") != "" {
+			// Rewrite Origin to the backend ONLY for WebSocket upgrades.
+			// WS servers reject cross-origin handshakes (#2377, audioprism),
+			// so the handshake must look same-origin. Regular HTTP backends,
+			// by contrast, may validate Origin against a whitelist and/or emit
+			// CORS (e.g. a skycoin/fibercoin node API): rewriting their Origin
+			// makes the node 403 the request AND makes its
+			// Access-Control-Allow-Origin reflect the wrong origin, so a
+			// cross-origin browser blocks the response. Gate on the upgrade
+			// header so both cases work.
+			if r.In.Header.Get("Origin") != "" && strings.EqualFold(r.In.Header.Get("Upgrade"), "websocket") {
 				r.Out.Header.Set("Origin", target.Scheme+"://"+target.Host)
 			}
 		},
