@@ -151,6 +151,21 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // re-prompt (native auto-answer never rings; explicit-answer mode does).
   private voiceRingSeen = new Set<string>();
 
+  // --- In-call audio visualization -------------------------------
+  // Default: a Telegram-style scrolling level meter (peer + you). Toggle to a
+  // scrolling spectrogram (FFT heatmap of the received audio). Data comes from
+  // the call's audio tap — over the HTTP bridge on a native visor, the
+  // skychatVoiceLevels/Audio JS hooks on a wasm visor.
+  @ViewChild('vizCanvas') vizCanvas?: ElementRef<HTMLCanvasElement>;
+  @ViewChild('vizBig') vizBig?: ElementRef<HTMLCanvasElement>;        // incoming (peer)
+  @ViewChild('vizBigSent') vizBigSent?: ElementRef<HTMLCanvasElement>; // outgoing (you)
+  showSpectrogram = false;   // small in-bar canvas: spectrogram vs level meter
+  bigViz = false;            // expand a large spectrogram into the message area
+  private vizTimer: any = null;
+  private lvlSent: number[] = [];   // rolling recent RMS history (0..1)
+  private lvlRecv: number[] = [];
+  private readonly lvlMax = 96;     // history length (columns)
+
   // Distinct peers seen so far, in last-touched order. Drives the
   // sidebar list. Recomputed lazily when messages change.
   get peers(): string[] {
@@ -159,10 +174,13 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     // Iterate newest-first so the most recently active peer is on top.
     for (let i = this.messages.length - 1; i >= 0; i--) {
       const pk = this.messages[i].peer;
-      if (!pk || have.has(pk)) { continue; }
+      if (!pk || have.has(pk)) {
+ continue; 
+}
       have.add(pk);
       seen.push(pk);
     }
+
     return seen;
   }
 
@@ -185,11 +203,14 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
         this.startVoicePoll();
       }
     });
+
     return super.ngOnInit();
   }
 
   ngOnDestroy() {
-    if (this.nodeSub) { this.nodeSub.unsubscribe(); }
+    if (this.nodeSub) {
+ this.nodeSub.unsubscribe(); 
+}
     this.disconnectSSE();
     this.stopGroupPoll();
     this.stopVoicePoll();
@@ -206,19 +227,30 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   /** Build the proxy URL for a skychat path. */
   private proxyUrl(path: string): string {
     const apiPrefix = !environment.production && location.protocol.indexOf('http:') !== -1 ? 'http-api' : 'api';
+
     return `/${apiPrefix}/visors/${this.node.localPk}/skychat/proxy/${path.replace(/^\/+/, '')}`;
   }
 
   private connectSSE() {
-    if (!this.node || this.es || this.pollTimer) { return; }
+    if (!this.node || this.es || this.pollTimer) {
+ return; 
+}
     // In-browser wasm visor → use the in-process skychat hooks (poll), not SSE.
     const sv = (window as any).skywireVisor;
     this.wasmChat = (this.node as any).arch === 'wasm' && !!sv && typeof sv.skychatMessages === 'function';
-    if (this.wasmChat) { this.connectWasm(sv); return; }
+    if (this.wasmChat) {
+ this.connectWasm(sv);
+
+ return; 
+}
     try {
       this.es = new EventSource(this.proxyUrl('sse'));
-      this.es.onopen = () => { this.connected = true; this.errorText = ''; this.cdr.markForCheck(); };
-      this.es.onerror = () => { this.connected = false; this.errorText = 'Disconnected — retrying…'; this.cdr.markForCheck(); };
+      this.es.onopen = () => {
+ this.connected = true; this.errorText = ''; this.cdr.markForCheck(); 
+};
+      this.es.onerror = () => {
+ this.connected = false; this.errorText = 'Disconnected — retrying…'; this.cdr.markForCheck(); 
+};
       this.es.onmessage = (ev) => this.handleSSE(ev.data);
     } catch (e: any) {
       this.errorText = `SSE setup failed: ${e?.message || e}`;
@@ -246,18 +278,26 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       // skychatMessages() returns the JSON of the message buffer, which is the
       // string "null" (not "[]") when the buffer is a nil slice — JSON.parse
       // gives null, so coalesce to [] or the poll would bail and never connect.
-      try { arr = JSON.parse(raw || '[]') || []; } catch {
-        this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); return;
+      try {
+ arr = JSON.parse(raw || '[]') || []; 
+} catch {
+        this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck();
+
+ return;
       }
-      if (!Array.isArray(arr)) { return; }
+      if (!Array.isArray(arr)) {
+ return; 
+}
       this.connected = true; this.errorText = '';
       // Rebuild on any length change — simple + robust to buffer trims (the
       // buffer is small). Newest last, so the tail stays scrolled.
       if (arr.length !== this.lastPollLen) {
         this.captureScroll();
-        this.messages = arr.slice(-500).map(m => ({
+        this.messages = arr.slice(-500).map(m => {
+return {
           peer: m.from || '', direction: m.out ? 'out' : 'in', text: m.text || '', ts: m.ts || Date.now(),
-        }));
+        }
+});
         this.lastPollLen = arr.length;
         this.cdr.markForCheck();
       }
@@ -270,7 +310,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     const poll = () => {
       Promise.resolve(sv.skychatMessages())
         .then(handle)
-        .catch(() => { this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); });
+        .catch(() => {
+ this.connected = false; this.errorText = 'chat hook error'; this.cdr.markForCheck(); 
+});
     };
     poll();
     this.pollTimer = setInterval(poll, 1500);
@@ -281,29 +323,42 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
    *  — sender is the peer's PK which is what we want to display. */
   private handleSSE(raw: string) {
     let data: any = null;
-    try { data = JSON.parse(raw); } catch { /* ignore */ }
-    if (!data || typeof data !== 'object') { return; }
+    try {
+ data = JSON.parse(raw); 
+} catch { /* ignore */ }
+    if (!data || typeof data !== 'object') {
+ return; 
+}
     const msg: ChatMessage = {
       peer: data.sender || data.from || '',
       direction: 'in',
       text: typeof data.message === 'string' ? data.message : (data.text || ''),
       ts: Date.now(),
     };
-    if (!msg.peer || !msg.text) { return; }
+    if (!msg.peer || !msg.text) {
+ return; 
+}
     this.captureScroll();
     this.messages.push(msg);
-    if (this.messages.length > 500) { this.messages.shift(); }
+    if (this.messages.length > 500) {
+ this.messages.shift(); 
+}
     this.cdr.markForCheck();
   }
 
   /** Send the composed message. */
   send() {
-    if (this.sending) { return; }
+    if (this.sending) {
+ return; 
+}
     const recipient = this.toPK.trim();
     const text = this.message.trim();
-    if (!recipient || !text) { return; }
+    if (!recipient || !text) {
+ return; 
+}
     if (recipient.length !== 66 || !/^[0-9a-fA-F]+$/.test(recipient)) {
       this.snackbar.showError('Recipient must be a 66-char hex public key');
+
       return;
     }
     this.sending = true;
@@ -313,23 +368,30 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (this.wasmChat) {
       const sv = (window as any).skywireVisor;
       Promise.resolve(sv.skychatSend(recipient, text))
-        .then(() => { this.message = ''; })
+        .then(() => {
+ this.message = ''; 
+})
         .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
-        .finally(() => { this.sending = false; this.cdr.markForCheck(); });
+        .finally(() => {
+ this.sending = false; this.cdr.markForCheck(); 
+});
+
       return;
     }
     fetch(this.proxyUrl('message'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient, message: text, network: this.network }),
+      body: JSON.stringify({ recipient: recipient, message: text, network: this.network }),
     }).then(async (resp) => {
       if (!resp.ok) {
         const body = await resp.text();
         throw new Error(body || `HTTP ${resp.status}`);
       }
       this.captureScroll();
-      this.messages.push({ peer: recipient, direction: 'out', text, ts: Date.now() });
-      if (this.messages.length > 500) { this.messages.shift(); }
+      this.messages.push({ peer: recipient, direction: 'out', text: text, ts: Date.now() });
+      if (this.messages.length > 500) {
+ this.messages.shift(); 
+}
       this.message = '';
       this.cdr.markForCheck();
     }).catch((err) => {
@@ -344,24 +406,34 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
    *  skips when persistence isn't enabled (skychat returns 503). */
   private tryLoadPeers() {
     // wasm skychat has no /history proxy; the poll loop seeds messages instead.
-    if (!this.node || !this.historyAvailable || this.wasmChat) { return; }
+    if (!this.node || !this.historyAvailable || this.wasmChat) {
+ return; 
+}
     fetch(this.proxyUrl('history?limit=100'))
       .then(async (resp) => {
         if (resp.status === 503) {
           this.historyAvailable = false;
+
           return null;
         }
-        if (!resp.ok) { throw new Error(`HTTP ${resp.status}`); }
+        if (!resp.ok) {
+ throw new Error(`HTTP ${resp.status}`); 
+}
+
         return resp.json();
       })
       .then((rows: any) => {
-        if (!Array.isArray(rows)) { return; }
-        const seeded: ChatMessage[] = rows.map((m: any): ChatMessage => ({
+        if (!Array.isArray(rows)) {
+ return; 
+}
+        const seeded: ChatMessage[] = rows.map((m: any): ChatMessage => {
+return {
           peer: m.peer || m.sender || '',
           direction: m.direction === 'out' ? 'out' : 'in',
           text: m.message || m.text || '',
           ts: m.timestamp || m.ts || Date.now(),
-        })).filter((m: ChatMessage) => m.peer && m.text);
+        }
+}).filter((m: ChatMessage) => m.peer && m.text);
         // Prepend so existing live tail keeps its order.
         this.messages = seeded.concat(this.messages);
         this.cdr.markForCheck();
@@ -374,7 +446,11 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   private captureScroll() {
-    if (!this.logEl) { this.wasAtBottom = true; return; }
+    if (!this.logEl) {
+ this.wasAtBottom = true;
+
+ return; 
+}
     const el = this.logEl.nativeElement;
     this.wasAtBottom = (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
   }
@@ -392,6 +468,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (this.node && (this.node as any).arch === 'wasm' && sv && typeof sv.skychatGroupList === 'function') {
       return sv;
     }
+
     return null;
   }
 
@@ -402,6 +479,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   private groupApi(path: string, method: 'GET' | 'POST', body?: any): Promise<any> {
     const url = `visors/${this.node.localPk}/skychat/groups${path}`;
     const obs = method === 'POST' ? this.api.post(url, body || {}) : this.api.get(url);
+
     return firstValueFrom(obs);
   }
 
@@ -411,7 +489,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   switchMode(mode: 'dm' | 'groups') {
-    if (this.chatMode === mode) { return; }
+    if (this.chatMode === mode) {
+ return; 
+}
     this.chatMode = mode;
     if (mode === 'groups') {
       this.refreshGroups();
@@ -422,32 +502,46 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   private startGroupPoll() {
-    if (this.groupTimer) { return; }
+    if (this.groupTimer) {
+ return; 
+}
     this.groupTimer = setInterval(() => {
       this.refreshGroups();
-      if (this.selectedGroup) { this.pollGroupMessages(); }
+      if (this.selectedGroup) {
+ this.pollGroupMessages(); 
+}
     }, 2000);
   }
 
   private stopGroupPoll() {
-    if (this.groupTimer) { clearInterval(this.groupTimer); this.groupTimer = null; }
+    if (this.groupTimer) {
+ clearInterval(this.groupTimer); this.groupTimer = null; 
+}
   }
 
   /** Refresh the room list from whichever transport this node uses. */
   refreshGroups() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     const sv = this.groupSv;
     const done = (arr: any[]) => {
-      if (!Array.isArray(arr)) { return; }
-      this.groups = arr.map((g: any): GroupView => ({
+      if (!Array.isArray(arr)) {
+ return; 
+}
+      this.groups = arr.map((g: any): GroupView => {
+return {
         id: g.id, name: g.name, mode: g.mode, role: g.role,
         members: typeof g.members === 'number' ? g.members : (Array.isArray(g.members) ? g.members.length : 0),
         status: g.status,
-      }));
+      }
+});
       // Keep the selection object fresh (member counts change).
       if (this.selectedGroup) {
         const upd = this.groups.find(g => g.id === this.selectedGroup!.id);
-        if (upd) { this.selectedGroup = upd; }
+        if (upd) {
+ this.selectedGroup = upd; 
+}
       }
       this.groupError = '';
       this.cdr.markForCheck();
@@ -459,11 +553,14 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       Promise.resolve(sv.skychatGroupList())
         .then((raw: any) => done(JSON.parse(raw || '[]') || []))
         .catch(() => { /* hook error — leave list as-is */ });
+
       return;
     }
     this.groupApi('', 'GET')
       .then(done)
-      .catch((e) => { this.groupError = this.groupErrMsg(e); this.cdr.markForCheck(); });
+      .catch((e) => {
+ this.groupError = this.groupErrMsg(e); this.cdr.markForCheck(); 
+});
   }
 
   selectGroup(g: GroupView) {
@@ -479,21 +576,29 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   /** Poll the selected room's message ring (full snapshot each tick — the
    *  ring is bounded, so rebuild-on-change is simplest + robust). */
   private pollGroupMessages() {
-    if (!this.node || !this.selectedGroup) { return; }
+    if (!this.node || !this.selectedGroup) {
+ return; 
+}
     const id = this.selectedGroup.id;
     const me = this.node.localPk;
     const done = (arr: any[]) => {
-      if (!Array.isArray(arr)) { return; }
+      if (!Array.isArray(arr)) {
+ return; 
+}
       const sent = this.sentByGroup[id] || [];
       // Rebuild when the incoming count changed OR we have local sends to
       // interleave (send count is small, so this is cheap).
-      if (arr.length === this.lastGroupMsgLen && sent.length === 0) { return; }
+      if (arr.length === this.lastGroupMsgLen && sent.length === 0) {
+ return; 
+}
       this.captureScroll();
-      const incoming: GroupMsg[] = arr.map((m: any): GroupMsg => ({
+      const incoming: GroupMsg[] = arr.map((m: any): GroupMsg => {
+return {
         group_id: m.group_id, from: m.from || m.sender_pk || '',
         text: m.text || '', ts: m.ts || Date.now(),
         out: (m.from || m.sender_pk || '') === me,
-      }));
+      }
+});
       // Drop optimistic echoes that the backend has since surfaced (the feed
       // can return our own send back), so a sent message isn't shown twice.
       const inKeys = new Set(incoming.map(m => m.from + '|' + m.text));
@@ -508,21 +613,30 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       Promise.resolve(sv.skychatGroupMessages(id))
         .then((raw: any) => done(JSON.parse(raw || '[]') || []))
         .catch(() => { /* hook error */ });
+
       return;
     }
     // Native: since_ms omitted → full ring for this group.
     this.groupApi(`/messages?group_id=${encodeURIComponent(id)}`, 'GET')
-      .then((arr) => done((arr || []).map((m: any) => ({
+      .then((arr) => done((arr || []).map((m: any) => {
+return {
         group_id: m.group_id, from: m.sender_pk || m.from || '', text: m.text || '',
         ts: m.ts ? (typeof m.ts === 'number' ? m.ts : Date.parse(m.ts)) : Date.now(),
-      }))))
+      }
+})))
       .catch(() => { /* transient */ });
   }
 
   createGroup() {
-    if (!this.node || this.groupSending) { return; }
+    if (!this.node || this.groupSending) {
+ return; 
+}
     const name = this.newGroupName.trim();
-    if (!name) { this.snackbar.showError('Room name required'); return; }
+    if (!name) {
+ this.snackbar.showError('Room name required');
+
+ return; 
+}
     this.groupSending = true;
     const sv = this.groupSv;
     const after = (id: string, invite: string) => {
@@ -534,15 +648,23 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     };
     const p = sv
       ? Promise.resolve(sv.skychatGroupCreate(name, this.newGroupMode)).then((r: any) => after(r.id, r.invite))
-      : this.groupApi('', 'POST', { name, mode: this.newGroupMode }).then((r: any) => after(r.info?.id, r.invite));
+      : this.groupApi('', 'POST', { name: name, mode: this.newGroupMode }).then((r: any) => after(r.info?.id, r.invite));
     p.catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
-      .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
+      .finally(() => {
+ this.groupSending = false; this.cdr.markForCheck(); 
+});
   }
 
   joinGroup() {
-    if (!this.node || this.groupSending) { return; }
+    if (!this.node || this.groupSending) {
+ return; 
+}
     const invite = this.joinInvite.trim();
-    if (!invite) { this.snackbar.showError('Invite link required'); return; }
+    if (!invite) {
+ this.snackbar.showError('Invite link required');
+
+ return; 
+}
     this.groupSending = true;
     const sv = this.groupSv;
     const after = () => {
@@ -553,69 +675,89 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     };
     const p = sv
       ? Promise.resolve(sv.skychatGroupJoin(invite)).then(after)
-      : this.groupApi('/join', 'POST', { invite }).then(after);
+      : this.groupApi('/join', 'POST', { invite: invite }).then(after);
     p.catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
-      .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
+      .finally(() => {
+ this.groupSending = false; this.cdr.markForCheck(); 
+});
   }
 
   sendGroup() {
-    if (!this.node || this.groupSending || !this.selectedGroup) { return; }
+    if (!this.node || this.groupSending || !this.selectedGroup) {
+ return; 
+}
     const text = this.groupMessage.trim();
-    if (!text) { return; }
+    if (!text) {
+ return; 
+}
     const id = this.selectedGroup.id;
     this.groupSending = true;
     const sv = this.groupSv;
     const p = sv
       ? Promise.resolve(sv.skychatGroupSend(id, text))
-      : this.groupApi('/send', 'POST', { id, text });
+      : this.groupApi('/send', 'POST', { id: id, text: text });
     p.then(() => {
       this.groupMessage = '';
       // Optimistic local echo (the data plane won't echo our own message back).
       (this.sentByGroup[id] = this.sentByGroup[id] || []).push({
-        group_id: id, from: this.node.localPk, text, ts: Date.now(), out: true,
+        group_id: id, from: this.node.localPk, text: text, ts: Date.now(), out: true,
       });
       this.lastGroupMsgLen = -1; // force the next poll to rebuild+interleave
       this.pollGroupMessages();
     })
       .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
-      .finally(() => { this.groupSending = false; this.cdr.markForCheck(); });
+      .finally(() => {
+ this.groupSending = false; this.cdr.markForCheck(); 
+});
   }
 
   addMember() {
-    if (!this.node || !this.selectedGroup) { return; }
+    if (!this.node || !this.selectedGroup) {
+ return; 
+}
     const pk = this.addMemberPk.trim();
     if (pk.length !== 66 || !/^[0-9a-fA-F]+$/.test(pk)) {
       this.snackbar.showError('Member must be a 66-char hex public key');
+
       return;
     }
     const id = this.selectedGroup.id;
     const sv = this.groupSv;
     const p = sv
       ? Promise.resolve(sv.skychatGroupAddMember(id, pk))
-      : this.groupApi('/add-member', 'POST', { id, pk });
-    p.then(() => { this.addMemberPk = ''; this.refreshGroups(); this.snackbar.showDone('Member added'); })
+      : this.groupApi('/add-member', 'POST', { id: id, pk: pk });
+    p.then(() => {
+ this.addMemberPk = ''; this.refreshGroups(); this.snackbar.showDone('Member added'); 
+})
       .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
       .finally(() => this.cdr.markForCheck());
   }
 
   /** Mint a fresh invite link for the selected room and reveal it. */
   showInvite() {
-    if (!this.node || !this.selectedGroup) { return; }
+    if (!this.node || !this.selectedGroup) {
+ return; 
+}
     const id = this.selectedGroup.id;
     const sv = this.groupSv;
     // wasm exposes invite only at create; re-mint over the bridge is native-only.
     // For wasm we fall back to create-time link (already shown) — nothing to do.
     if (sv) {
       this.snackbar.showError('Invite is shown when the room is created (wasm visor)');
+
       return;
     }
     this.groupApi(`/invite?group_id=${encodeURIComponent(id)}`, 'GET')
-      .then((r: any) => { this.inviteLink = r.invite || ''; this.cdr.markForCheck(); })
+      .then((r: any) => {
+ this.inviteLink = r.invite || ''; this.cdr.markForCheck(); 
+})
       .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)));
   }
 
   copyInvite() {
-    if (!this.inviteLink) { return; }
+    if (!this.inviteLink) {
+ return; 
+}
     try {
       navigator.clipboard.writeText(this.inviteLink);
       this.snackbar.showDone('Invite copied');
@@ -639,6 +781,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (this.node && (this.node as any).arch === 'wasm' && sv && typeof sv.skychatVoiceCall === 'function') {
       return sv;
     }
+
     return null;
   }
 
@@ -646,6 +789,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   private voiceApi(path: string, method: 'GET' | 'POST', body?: any): Promise<any> {
     const url = `visors/${this.node.localPk}/skychat/voice${path}`;
     const obs = method === 'POST' ? this.api.post(url, body || {}) : this.api.get(url);
+
     return firstValueFrom(obs);
   }
 
@@ -655,20 +799,31 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   private startVoicePoll() {
-    if (this.voiceTimer || !this.node) { return; }
+    if (this.voiceTimer || !this.node) {
+ return; 
+}
     this.pollVoice();
     this.voiceTimer = setInterval(() => this.pollVoice(), 1800);
   }
 
   private stopVoicePoll() {
-    if (this.voiceTimer) { clearInterval(this.voiceTimer); this.voiceTimer = null; }
+    if (this.voiceTimer) {
+ clearInterval(this.voiceTimer); this.voiceTimer = null; 
+}
   }
 
   /** Normalize active-call ids from either transport (wasm returns a JSON
    *  string, native an array). */
   private parseIds(raw: any): string[] {
     let arr = raw;
-    if (typeof raw === 'string') { try { arr = JSON.parse(raw || '[]'); } catch { arr = []; } }
+    if (typeof raw === 'string') {
+ try {
+ arr = JSON.parse(raw || '[]'); 
+} catch {
+ arr = []; 
+} 
+}
+
     return Array.isArray(arr) ? arr.map((x: any) => String(x)) : [];
   }
 
@@ -676,12 +831,24 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
    *  native gives ["<id> from <pk>"]. */
   private parseIncoming(raw: any): IncomingCall[] {
     let arr = raw;
-    if (typeof raw === 'string') { try { arr = JSON.parse(raw || '[]'); } catch { arr = []; } }
-    if (!Array.isArray(arr)) { return []; }
+    if (typeof raw === 'string') {
+ try {
+ arr = JSON.parse(raw || '[]'); 
+} catch {
+ arr = []; 
+} 
+}
+    if (!Array.isArray(arr)) {
+ return []; 
+}
+
     return arr.map((x: any): IncomingCall => {
-      if (x && typeof x === 'object') { return { id: String(x.id || ''), from: String(x.from || '') }; }
+      if (x && typeof x === 'object') {
+ return { id: String(x.id || ''), from: String(x.from || '') }; 
+}
       const s = String(x);
       const m = s.match(/^(\S+)\s+from\s+(\S+)/);
+
       return m ? { id: m[1], from: m[2] } : { id: s, from: '' };
     }).filter(c => c.id);
   }
@@ -703,33 +870,53 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   private pollVoice() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     const sv = this.voiceSv;
     if (sv) {
-      Promise.resolve(sv.skychatVoiceActive()).then((r: any) => { this.voiceActive = this.parseIds(r); this.syncCallState(); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
-      Promise.resolve(sv.skychatVoiceIncoming()).then((r: any) => { this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); }).catch(() => { /* hook error */ });
+      Promise.resolve(sv.skychatVoiceActive()).then((r: any) => {
+ this.voiceActive = this.parseIds(r); this.syncCallState(); this.cdr.markForCheck(); 
+}).catch(() => { /* hook error */ });
+      Promise.resolve(sv.skychatVoiceIncoming()).then((r: any) => {
+ this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); 
+}).catch(() => { /* hook error */ });
+
       return;
     }
     this.voiceApi('/active', 'GET')
-      .then((r) => { this.voiceActive = this.parseIds(r); this.voiceAvailable = true; this.syncCallState(); this.cdr.markForCheck(); })
-      .catch((e) => { if (e?.originalError?.status === 503) { this.voiceAvailable = false; this.cdr.markForCheck(); } });
+      .then((r) => {
+ this.voiceActive = this.parseIds(r); this.voiceAvailable = true; this.syncCallState(); this.cdr.markForCheck(); 
+})
+      .catch((e) => {
+ if (e?.originalError?.status === 503) {
+ this.voiceAvailable = false; this.cdr.markForCheck(); 
+} 
+});
     this.voiceApi('/incoming', 'GET')
-      .then((r) => { this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); })
+      .then((r) => {
+ this.voiceIncoming = this.parseIncoming(r); this.cdr.markForCheck(); 
+})
       .catch(() => { /* transient / disabled — /active already flags availability */ });
   }
 
   /** mm:ss since the current call went active ('' when not in a call). */
   get callDuration(): string {
-    if (!this.callStartMs) { return ''; }
+    if (!this.callStartMs) {
+ return ''; 
+}
     const s = Math.max(0, Math.floor((Date.now() - this.callStartMs) / 1000));
     const mm = Math.floor(s / 60), ss = s % 60;
+
     return `${mm}:${ss < 10 ? '0' : ''}${ss}`;
   }
 
   /** Push the current mute state to the active call (both directions). */
   private voiceMute() {
     const id = this.voiceActive[0];
-    if (!id) { return; }
+    if (!id) {
+ return; 
+}
     const sv = this.voiceSv;
     const p = sv
       ? Promise.resolve(sv.skychatVoiceMute ? sv.skychatVoiceMute(id, this.micMuted, this.spkMuted) : null)
@@ -751,26 +938,12 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     this.cdr.markForCheck();
   }
 
-  // --- In-call audio visualization -------------------------------
-  // Default: a Telegram-style scrolling level meter (peer + you). Toggle to a
-  // scrolling spectrogram (FFT heatmap of the received audio). Data comes from
-  // the call's audio tap — over the HTTP bridge on a native visor, the
-  // skychatVoiceLevels/Audio JS hooks on a wasm visor.
-  @ViewChild('vizCanvas') vizCanvas?: ElementRef<HTMLCanvasElement>;
-  @ViewChild('vizBig') vizBig?: ElementRef<HTMLCanvasElement>;        // incoming (peer)
-  @ViewChild('vizBigSent') vizBigSent?: ElementRef<HTMLCanvasElement>; // outgoing (you)
-  showSpectrogram = false;   // small in-bar canvas: spectrogram vs level meter
-  bigViz = false;            // expand a large spectrogram into the message area
-  private vizTimer: any = null;
-  private lvlSent: number[] = [];   // rolling recent RMS history (0..1)
-  private lvlRecv: number[] = [];
-  private readonly lvlMax = 96;     // history length (columns)
-
   private voiceLevels(id: string): Promise<{ sent: number; recv: number }> {
     const sv = this.voiceSv;
     if (sv && typeof sv.skychatVoiceLevels === 'function') {
       return Promise.resolve(sv.skychatVoiceLevels(id)).then((r: any) => JSON.parse(r || '{}'));
     }
+
     return this.voiceApi(`/levels?call=${encodeURIComponent(id)}`, 'GET');
   }
 
@@ -779,6 +952,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (sv && typeof sv.skychatVoiceAudio === 'function') {
       return Promise.resolve(sv.skychatVoiceAudio(id)).then((r: any) => JSON.parse(r || '{}'));
     }
+
     return this.voiceApi(`/audio?call=${encodeURIComponent(id)}`, 'GET');
   }
 
@@ -795,23 +969,31 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   private clearCanvas(c?: HTMLCanvasElement) {
-    if (c) { c.getContext('2d')?.clearRect(0, 0, c.width, c.height); }
+    if (c) {
+ c.getContext('2d')?.clearRect(0, 0, c.width, c.height); 
+}
   }
 
   private startViz() {
-    if (this.vizTimer) { return; }
+    if (this.vizTimer) {
+ return; 
+}
     this.lvlSent = []; this.lvlRecv = [];
     this.vizTimer = setInterval(() => this.tickViz(), 100);
   }
 
   private stopViz() {
-    if (this.vizTimer) { clearInterval(this.vizTimer); this.vizTimer = null; }
+    if (this.vizTimer) {
+ clearInterval(this.vizTimer); this.vizTimer = null; 
+}
     this.lvlSent = []; this.lvlRecv = [];
   }
 
   private tickViz() {
     const id = this.voiceActive[0];
-    if (!id) { return; }
+    if (!id) {
+ return; 
+}
     // The small in-bar canvas shows spectrogram or level meter; the big canvas
     // (message-area) is always a spectrogram. Fetch PCM if either wants it.
     const needAudio = this.showSpectrogram || this.bigViz;
@@ -820,15 +1002,21 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
       this.voiceLevels(id).then((l) => {
         this.lvlRecv.push(Math.min(1, (l && l.recv) || 0));
         this.lvlSent.push(Math.min(1, (l && l.sent) || 0));
-        if (this.lvlRecv.length > this.lvlMax) { this.lvlRecv.shift(); }
-        if (this.lvlSent.length > this.lvlMax) { this.lvlSent.shift(); }
+        if (this.lvlRecv.length > this.lvlMax) {
+ this.lvlRecv.shift(); 
+}
+        if (this.lvlSent.length > this.lvlMax) {
+ this.lvlSent.shift(); 
+}
         this.drawLevels(this.vizCanvas?.nativeElement);
       }).catch(() => { /* transient */ });
     }
     if (needAudio) {
       this.voiceAudioData(id).then((d) => {
         const recv = (d && d.recv) || [], sent = (d && d.sent) || [];
-        if (this.showSpectrogram) { this.drawSpectrogram(this.vizCanvas?.nativeElement, recv); }
+        if (this.showSpectrogram) {
+ this.drawSpectrogram(this.vizCanvas?.nativeElement, recv); 
+}
         if (this.bigViz) {
           this.drawSpectrogram(this.vizBig?.nativeElement, recv);      // incoming (peer)
           this.drawSpectrogram(this.vizBigSent?.nativeElement, sent);  // outgoing (you)
@@ -839,9 +1027,13 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
 
   /** Telegram-style dual level meter: peer (green) foreground, you (violet) behind. */
   private drawLevels(c?: HTMLCanvasElement) {
-    if (!c) { return; }
+    if (!c) {
+ return; 
+}
     const ctx = c.getContext('2d');
-    if (!ctx) { return; }
+    if (!ctx) {
+ return; 
+}
     const W = c.width, H = c.height, n = this.lvlMax, bw = W / n;
     ctx.clearRect(0, 0, W, H);
     const bar = (hist: number[], color: string, wf: number) => {
@@ -863,9 +1055,13 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
    *  low frequencies at the bottom. Silence → 0 dB → black. */
   private drawSpectrogram(c: HTMLCanvasElement | undefined, pcm: number[]) {
     const N = 2048;
-    if (!c || pcm.length < N) { return; }
+    if (!c || pcm.length < N) {
+ return; 
+}
     const ctx = c.getContext('2d');
-    if (!ctx) { return; }
+    if (!ctx) {
+ return; 
+}
     const W = c.width, H = c.height, col = 2;
     const start = pcm.length - N;
     const re = new Float64Array(N), im = new Float64Array(N);
@@ -888,53 +1084,78 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
 
   /** Place a call to the composed recipient PK. */
   voiceCall() {
-    if (this.voiceBusy || this.inCall) { return; }
+    if (this.voiceBusy || this.inCall) {
+ return; 
+}
     const peer = this.toPK.trim();
     if (peer.length !== 66 || !/^[0-9a-fA-F]+$/.test(peer)) {
       this.snackbar.showError('Recipient must be a 66-char hex public key');
+
       return;
     }
     this.voiceBusy = true;
     const sv = this.voiceSv;
-    const done = () => { this.voiceBusy = false; this.pollVoice(); this.cdr.markForCheck(); };
+    const done = () => {
+ this.voiceBusy = false; this.pollVoice(); this.cdr.markForCheck(); 
+};
     const p = sv
       ? Promise.resolve(sv.skychatVoiceCall(peer))
-      : this.voiceApi('/call', 'POST', { peer });
-    p.then(() => { this.snackbar.showDone('Call connected'); done(); })
-      .catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+      : this.voiceApi('/call', 'POST', { peer: peer });
+    p.then(() => {
+ this.snackbar.showDone('Call connected'); done(); 
+})
+      .catch((e: any) => {
+ this.snackbar.showError(this.groupErrMsg(e)); done(); 
+});
   }
 
   /** Hang up an active call (defaults to the first). */
   voiceHangup(id?: string) {
     const callID = id || this.voiceActive[0];
-    if (!callID) { return; }
+    if (!callID) {
+ return; 
+}
     const sv = this.voiceSv;
-    const done = () => { this.pollVoice(); this.cdr.markForCheck(); };
+    const done = () => {
+ this.pollVoice(); this.cdr.markForCheck(); 
+};
     const p = sv
       ? Promise.resolve(sv.skychatVoiceHangup(callID))
       : this.voiceApi('/hangup', 'POST', { call_id: callID });
-    p.then(done).catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+    p.then(done).catch((e: any) => {
+ this.snackbar.showError(this.groupErrMsg(e)); done(); 
+});
   }
 
   /** Answer a ringing inbound call. */
   voiceAnswer(id: string) {
-    if (this.voiceBusy) { return; }
+    if (this.voiceBusy) {
+ return; 
+}
     this.voiceBusy = true;
     this.voiceRingSeen.add(id);
     const sv = this.voiceSv;
-    const done = () => { this.voiceBusy = false; this.pollVoice(); this.cdr.markForCheck(); };
+    const done = () => {
+ this.voiceBusy = false; this.pollVoice(); this.cdr.markForCheck(); 
+};
     const p = sv
       ? Promise.resolve(sv.skychatVoiceAnswer(id))
       : this.voiceApi('/answer', 'POST', { call_id: id });
-    p.then(() => { this.snackbar.showDone('Call answered'); done(); })
-      .catch((e: any) => { this.snackbar.showError(this.groupErrMsg(e)); done(); });
+    p.then(() => {
+ this.snackbar.showDone('Call answered'); done(); 
+})
+      .catch((e: any) => {
+ this.snackbar.showError(this.groupErrMsg(e)); done(); 
+});
   }
 
   /** Decline a ringing inbound call. */
   voiceDecline(id: string) {
     this.voiceRingSeen.add(id);
     const sv = this.voiceSv;
-    const done = () => { this.pollVoice(); this.cdr.markForCheck(); };
+    const done = () => {
+ this.pollVoice(); this.cdr.markForCheck(); 
+};
     const p = sv
       ? Promise.resolve(sv.skychatVoiceDecline ? sv.skychatVoiceDecline(id) : null)
       : this.voiceApi('/decline', 'POST', { call_id: id });
@@ -953,7 +1174,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   private refreshPasswordState() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     this.api.get(`visors/${this.node.localPk}/skychat/password`).subscribe(
       (resp: any) => {
         this.pwIsSet = !!(resp && resp.set);
@@ -976,13 +1199,20 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     if (this.pwNew !== this.pwConfirm) {
       return 'skychat.password.errors.mismatch';
     }
+
     return null;
   }
 
   applyPassword() {
-    if (!this.node || this.pwBusy) { return; }
+    if (!this.node || this.pwBusy) {
+ return; 
+}
     const err = this.validateNewPassword();
-    if (err) { this.snackbar.showError(err); return; }
+    if (err) {
+ this.snackbar.showError(err);
+
+ return; 
+}
     this.pwBusy = true;
     this.api.put(`visors/${this.node.localPk}/skychat/password`, {
       old_password: this.pwIsSet ? this.pwOld : '',
@@ -1004,8 +1234,14 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   clearPassword() {
-    if (!this.node || this.pwBusy || !this.pwIsSet) { return; }
-    if (!this.pwOld) { this.snackbar.showError('skychat.password.errors.old-required'); return; }
+    if (!this.node || this.pwBusy || !this.pwIsSet) {
+ return; 
+}
+    if (!this.pwOld) {
+ this.snackbar.showError('skychat.password.errors.old-required');
+
+ return; 
+}
     this.pwBusy = true;
     this.api.delete(`visors/${this.node.localPk}/skychat/password?old_password=${encodeURIComponent(this.pwOld)}`).subscribe(
       () => {
@@ -1031,7 +1267,9 @@ function fft(re: Float64Array, im: Float64Array): void {
   const n = re.length;
   for (let i = 1, j = 0; i < n; i++) {
     let bit = n >> 1;
-    for (; j & bit; bit >>= 1) { j ^= bit; }
+    for (; j & bit; bit >>= 1) {
+ j ^= bit; 
+}
     j ^= bit;
     if (i < j) {
       [re[i], re[j]] = [re[j], re[i]];
@@ -1061,12 +1299,23 @@ function fft(re: Float64Array, im: Float64Array): void {
  *  green→yellow→red→white. value 0 → black, so silence renders black. */
 function heat(v: number): string {
   v = Math.max(0, Math.min(1, v));
-  const n = (x: number, a: number, c: number) => { const t = (x - a) / (c - a); return t < 0 ? 0 : t > 1 ? 1 : t; };
-  let r = 0, g = 0, b = 0;
-  if (v < 1 / 5) { b = Math.round(255 * n(v, 0, 1 / 5)); }
-  else if (v < 2 / 5) { const c = Math.round(255 * n(v, 1 / 5, 2 / 5)); r = 0; g = c; b = 255 - c; }
-  else if (v < 3 / 5) { r = Math.round(255 * n(v, 2 / 5, 3 / 5)); g = 255; b = 0; }
-  else if (v < 4 / 5) { r = 255; g = Math.round(255 - 255 * n(v, 3 / 5, 4 / 5)); b = 0; }
-  else { const c = Math.round(255 * n(v, 4 / 5, 1)); r = 255; g = c; b = c; }
+  const n = (x: number, a: number, c: number) => {
+ const t = (x - a) / (c - a);
+
+ return t < 0 ? 0 : t > 1 ? 1 : t; 
+};
+  let r = 0, g = 0, b: number;
+  if (v < 1 / 5) {
+ b = Math.round(255 * n(v, 0, 1 / 5)); 
+} else if (v < 2 / 5) {
+ const c = Math.round(255 * n(v, 1 / 5, 2 / 5)); r = 0; g = c; b = 255 - c; 
+} else if (v < 3 / 5) {
+ r = Math.round(255 * n(v, 2 / 5, 3 / 5)); g = 255; b = 0; 
+} else if (v < 4 / 5) {
+ r = 255; g = Math.round(255 - 255 * n(v, 3 / 5, 4 / 5)); b = 0; 
+} else {
+ const c = Math.round(255 * n(v, 4 / 5, 1)); r = 255; g = c; b = c; 
+}
+
   return `rgb(${r},${g},${b})`;
 }

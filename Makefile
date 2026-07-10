@@ -204,6 +204,38 @@ docs-install-deps: ## Install MkDocs + plugins (run once per machine)
 clean: ## Clean project: remove created binaries and apps
 	-rm -rf ./build ./local
 
+build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
+	@echo "compile-checking js/wasm binaries..."
+	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/skywire/commands/web/wasm; do \
+		echo "  GOOS=js GOARCH=wasm go build $$p"; \
+		GOOS=js GOARCH=wasm go build -mod=vendor -o /dev/null "$$p" || exit 1; \
+	done
+	@echo "all js/wasm binaries compile."
+
+build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no run) — mirrors the CI wasm-tinygo lane
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/design/tinygo-dmsg-client.md (TinyGo 0.41+)"; exit 1; }
+	@echo "compile-checking TinyGo wasm binaries..."
+	@echo "  tinygo build -target wasip1 ./cmd/dmsg-tinygo-probe"
+	@tinygo build -target wasip1 -no-debug -opt=z -o /dev/null ./cmd/dmsg-tinygo-probe || exit 1
+	@# Only net/http-free binaries belong here: TinyGo 0.41 cannot compile net/http
+	@# for wasm (roundtrip_js.go references an unexported Transport.roundTrip). The
+	@# full js/wasm binaries ./cmd/dmsg-wasm and ./cmd/wasm-visor deliberately use
+	@# net/http (HTTP-over-dmsg; dmsg-wasm also needs logrus+gob reflection) and are
+	@# standard-Go-only — they are compile-checked by the `build-wasm` lane instead.
+	@for p in ./pkg/tpviz/wasm; do \
+		echo "  tinygo build -target wasm $$p"; \
+		tinygo build -target wasm -no-debug -o /dev/null "$$p" || exit 1; \
+	done
+	@echo "  tinygo build -target wasi (app-mux routing policy)"
+	@cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o /dev/null . || exit 1
+	@echo "all TinyGo wasm binaries compile."
+
+test-wasm-policy: ## Rebuild app-mux.wasm from source with TinyGo and run the policy loader test against the FRESH build (real WASM runtime smoke test)
+	@command -v tinygo >/dev/null 2>&1 || { echo "tinygo not installed — see docs/examples/routing-policies/wasm/README.md (TinyGo 0.32+)"; exit 1; }
+	@mkdir -p ./build/wasm-fixtures
+	cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
+	SKYWIRE_APPMUX_WASM="$(CURDIR)/build/wasm-fixtures/app-mux.wasm" go test -mod=vendor -count=1 -v -run TestWasmEvaluator ./pkg/router/policy/wasm/
+
 tpviz-wasm: ## Build transport visualizer WASM binary into pkg/tpviz/dist for embedding
 	GOOS=js GOARCH=wasm go build -o ./pkg/tpviz/dist/main.wasm ./pkg/tpviz/wasm
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/tpviz/dist/
@@ -492,6 +524,9 @@ run-vpnsrv-dmsghttp: prepare ## Run skywire from source with dmsghttp config and
 
 lint-ui:  ## Lint the UI code
 	cd $(MANAGER_UI_DIR) && npm run lint
+
+test-ui:  ## Run the hypervisor UI unit tests headless (needs Chrome; set CHROME_BIN if it isn't on PATH)
+	cd $(MANAGER_UI_DIR) && npm run test-headless
 
 build-ui: install-deps-ui  ## Builds the UI
 	cd $(MANAGER_UI_DIR) && npm run build

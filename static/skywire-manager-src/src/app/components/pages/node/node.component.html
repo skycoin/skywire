@@ -1,5 +1,5 @@
 <!-- Use nodeLoaded boolean flag with if/else to avoid Angular @if detection issues -->
-<ng-container *ngIf="nodeLoaded; else loadingBlock">
+@if (nodeLoaded) {
   <div class="row">
     <div class="col-12">
       <app-top-bar
@@ -22,38 +22,38 @@
     </div>
     <div class="col-12">
       <!-- Right-bar / split-view is gone. The active tab content
-           is full-width; the visor's identity (label + PK) lives
-           in the top bar instead, persistent across tabs. -->
+      is full-width; the visor's identity (label + PK) lives
+      in the top bar instead, persistent across tabs. -->
       <div class="full-size-main-area">
         <div class="d-flex flex-column h-100">
           <!-- Router outlet hosts every tab except Terminal. The
-               terminal iframe is rendered as a sibling below so its
-               DOM element stays mounted across tab switches; pulling
-               it through router-outlet would let Angular detach the
-               element on navigation, which forces a browser-level
-               iframe reload and resets the dmsgpty session. -->
+          terminal iframe is rendered as a sibling below so its
+          DOM element stays mounted across tab switches; pulling
+          it through router-outlet would let Angular detach the
+          element on navigation, which forces a browser-level
+          iframe reload and resets the dmsgpty session. -->
           <div [hidden]="isTerminalTab" class="d-flex flex-column h-100">
             <router-outlet></router-outlet>
           </div>
-          <div *ngIf="terminalIframeUrl" [hidden]="!isTerminalTab" class="rounded-elevated-box mt-3 term-box">
-            <div class="box-internal-container term-shell">
-              <div class="term-controls">
-                <span class="dim small">{{ 'terminal.help' | translate }}</span>
-                <button mat-stroked-button class="term-fullscreen" (click)="openTerminalFullWindow()">
-                  <mat-icon [inline]="true">open_in_new</mat-icon>
-                  {{ 'terminal.open-fullscreen' | translate }}
-                </button>
+          @if (terminalIframeUrl) {
+            <div [hidden]="!isTerminalTab" class="rounded-elevated-box mt-3 term-box">
+              <div class="box-internal-container term-shell">
+                <div class="term-controls">
+                  <span class="dim small">{{ 'terminal.help' | translate }}</span>
+                  <button mat-stroked-button class="term-fullscreen" (click)="openTerminalFullWindow()">
+                    <mat-icon [inline]="true">open_in_new</mat-icon>
+                    {{ 'terminal.open-fullscreen' | translate }}
+                  </button>
+                </div>
+                <iframe class="term-frame" [src]="terminalIframeUrl" allowfullscreen></iframe>
               </div>
-              <iframe class="term-frame" [src]="terminalIframeUrl" allowfullscreen></iframe>
             </div>
-          </div>
+          }
         </div>
       </div>
     </div>
   </div>
-</ng-container>
-
-<ng-template #loadingBlock>
+} @else {
   <div class="d-flex flex-column h-100 w-100">
     <div>
       <app-top-bar
@@ -68,30 +68,31 @@
         (optionSelected)="performAction($event)"
       ></app-top-bar>
     </div>
-    <ng-container *ngIf="!notFound && !loadFailed">
+    @if (!notFound && !loadFailed) {
       <app-loading-indicator></app-loading-indicator>
-    </ng-container>
+    }
     <!-- Msg shown if the node is not found. -->
-    <ng-container *ngIf="notFound">
+    @if (notFound) {
       <div class="w-100 h-100 d-flex not-found-label">
         <div>
           <mat-icon [inline]="true">error</mat-icon>
           {{ 'node.not-found' | translate }}
         </div>
       </div>
-    </ng-container>
+    }
     <!-- Msg shown if loading failed after multiple retries. -->
-    <ng-container *ngIf="loadFailed">
+    @if (loadFailed) {
       <div class="w-100 h-100 d-flex not-found-label">
         <div>
           <mat-icon [inline]="true">error</mat-icon>
           {{ 'node.error-load' | translate }}
           <br>
-          <button mat-raised-button color="primary" style="margin-top: 16px;" (click)="retryLoading()">
-            {{ 'common.refresh' | translate }}
-          </button>
+            <button mat-raised-button color="primary" style="margin-top: 16px;" (click)="retryLoading()">
+              {{ 'common.refresh' | translate }}
+            </button>
+          </div>
         </div>
-      </div>
-    </ng-container>
-  </div>
-</ng-template>
+      }
+    </div>
+  }
+

@@ -151,25 +151,44 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
 
   /** Format a byte count as a human-readable string (B/K/M/G). */
   fmtBytes(n: number): string {
-    if (n == null || isNaN(n)) { return '-'; }
-    if (n >= 1e9) { return (n / 1e9).toFixed(1) + 'G'; }
-    if (n >= 1e6) { return (n / 1e6).toFixed(1) + 'M'; }
-    if (n >= 1e3) { return (n / 1e3).toFixed(1) + 'K'; }
+    if (n == null || isNaN(n)) {
+ return '-'; 
+}
+    if (n >= 1e9) {
+ return (n / 1e9).toFixed(1) + 'G'; 
+}
+    if (n >= 1e6) {
+ return (n / 1e6).toFixed(1) + 'M'; 
+}
+    if (n >= 1e3) {
+ return (n / 1e3).toFixed(1) + 'K'; 
+}
+
     return n.toFixed(0) + 'B';
   }
 
   fmtBps(n: number): string {
-    if (n == null || isNaN(n) || n < 0) { return '0B/s'; }
+    if (n == null || isNaN(n) || n < 0) {
+ return '0B/s'; 
+}
+
     return this.fmtBytes(n) + '/s';
   }
 
   fmtUptime(s?: number): string {
-    if (!s) { return '-'; }
+    if (!s) {
+ return '-'; 
+}
     const d = Math.floor(s / 86400);
     const h = Math.floor((s % 86400) / 3600);
     const m = Math.floor((s % 3600) / 60);
-    if (d > 0) { return `${d}d ${h}h`; }
-    if (h > 0) { return `${h}h ${m}m`; }
+    if (d > 0) {
+ return `${d}d ${h}h`; 
+}
+    if (h > 0) {
+ return `${h}h ${m}m`; 
+}
+
     return `${m}m`;
   }
 
@@ -189,14 +208,24 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
   }
 
   private stopPolling() {
-    if (this.pollSub) { this.pollSub.unsubscribe(); this.pollSub = null; }
-    if (this.hostSub) { this.hostSub.unsubscribe(); this.hostSub = null; }
-    if (this.procSub) { this.procSub.unsubscribe(); this.procSub = null; }
+    if (this.pollSub) {
+ this.pollSub.unsubscribe(); this.pollSub = null; 
+}
+    if (this.hostSub) {
+ this.hostSub.unsubscribe(); this.hostSub = null; 
+}
+    if (this.procSub) {
+ this.procSub.unsubscribe(); this.procSub = null; 
+}
   }
 
   private pollHost() {
-    if (!this.nodeKey) { return; }
-    if (this.hostSub) { this.hostSub.unsubscribe(); }
+    if (!this.nodeKey) {
+ return; 
+}
+    if (this.hostSub) {
+ this.hostSub.unsubscribe(); 
+}
     this.hostSub = this.nodeService.getHostStats(this.nodeKey).subscribe(
       (s: HostStats) => this.onHostStats(s),
       // Silent error — keep polling; the snackbar would scream once
@@ -206,8 +235,12 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
   }
 
   private pollProc() {
-    if (!this.nodeKey) { return; }
-    if (this.procSub) { this.procSub.unsubscribe(); }
+    if (!this.nodeKey) {
+ return; 
+}
+    if (this.procSub) {
+ this.procSub.unsubscribe(); 
+}
     this.procSub = this.nodeService.getRuntimeStats(this.nodeKey).subscribe(
       (s: RuntimeStats) => this.onRuntimeStats(s),
       () => {},
@@ -221,7 +254,9 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
 
     const nowMs = Date.now();
     let dtSec = (nowMs - this.prevSampleAtMs) / 1000;
-    if (dtSec <= 0 || dtSec > 5) { dtSec = 1; } // clamp on cold-start
+    if (dtSec <= 0 || dtSec > 5) {
+ dtSec = 1; 
+} // clamp on cold-start
     this.prevSampleAtMs = nowMs;
 
     // Gauges — push the absolute values straight in.
@@ -261,6 +296,8 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
 
   private push(arr: number[], v: number) {
     arr.push(v);
-    if (arr.length > WINDOW) { arr.shift(); }
+    if (arr.length > WINDOW) {
+ arr.shift(); 
+}
   }
 }

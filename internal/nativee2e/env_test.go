@@ -21,9 +21,11 @@
 package nativee2e
 
 import (
+	"bytes"
 	"context"
 	"embed"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -159,32 +161,77 @@ var dumpLogCausePatterns = []string{
 // dumpLog prints, for post-mortem on failure: (1) the lines matching a known
 // failure pattern (root cause), (2) the log HEAD (startup — where a service binds
 // its listeners, e.g. the dmsg-server on :8080), and (3) the log tail.
+// dumpLogChunk bounds how much of a log we ever pull into memory from each end.
+// A failing app (e.g. a vpn-client stuck on "Starting......") can emit a log
+// that grows to many GB; os.ReadFile of that OOMs the whole test binary and
+// masks the real failure. 256 KiB from each end is plenty for head/tail/causes.
+const dumpLogChunk = 256 << 10
+
 func dumpLog(name string) {
-	b, err := os.ReadFile(filepath.Join(env.work, name+".log"))
+	f, err := os.Open(filepath.Join(env.work, name+".log"))
 	if err != nil {
 		return
 	}
-	lines := strings.Split(string(b), "\n")
+	defer func() { _ = f.Close() }()
+
+	fi, err := f.Stat()
+	if err != nil {
+		return
+	}
+	size := fi.Size()
+
+	// Head: first dumpLogChunk bytes.
+	headBuf := make([]byte, min(size, int64(dumpLogChunk)))
+	n, _ := io.ReadFull(f, headBuf)
+	headBuf = headBuf[:n]
+
+	// Tail: last dumpLogChunk bytes, only if the file is larger than the head we
+	// already read (otherwise head already covers the whole file).
+	var tailBuf []byte
+	if size > int64(len(headBuf)) {
+		tn := min(size, int64(dumpLogChunk))
+		tailBuf = make([]byte, tn)
+		if _, err := f.ReadAt(tailBuf, size-tn); err != nil && err != io.EOF {
+			tailBuf = nil
+		} else if i := bytes.IndexByte(tailBuf, '\n'); i >= 0 {
+			tailBuf = tailBuf[i+1:] // drop the partial first line
+		}
+	}
+
+	headLines := strings.Split(string(headBuf), "\n")
+	tailLines := strings.Split(string(tailBuf), "\n")
+
+	// Causes: scan the head+tail we captured for known failure patterns. Each
+	// buffer is capped, so this stays bounded even for a multi-GB log.
 	var causes []string
-	for _, l := range lines {
+	seen := make(map[string]struct{})
+	for _, l := range append(append([]string{}, headLines...), tailLines...) {
 		for _, p := range dumpLogCausePatterns {
 			if strings.Contains(l, p) {
-				causes = append(causes, l)
+				if _, ok := seen[l]; !ok {
+					seen[l] = struct{}{}
+					causes = append(causes, l)
+				}
 				break
 			}
 		}
 	}
-	head := lines
+
+	head := headLines
 	if len(head) > 40 {
 		head = head[:40]
 	}
-	from := 0
-	if len(lines) > 60 {
-		from = len(lines) - 60
+	tail := tailLines
+	if len(tail) > 60 {
+		tail = tail[len(tail)-60:]
+	}
+	truncated := ""
+	if size > int64(dumpLogChunk) {
+		truncated = fmt.Sprintf(" [log %d bytes — middle truncated]", size)
 	}
 	fmt.Fprintf(os.Stderr,
-		"\n===== %s.log — ROOT CAUSE =====\n%s\n===== %s.log (head) =====\n%s\n===== %s.log (tail) =====\n%s\n=========================\n",
-		name, strings.Join(causes, "\n"), name, strings.Join(head, "\n"), name, strings.Join(lines[from:], "\n"))
+		"\n===== %s.log — ROOT CAUSE%s =====\n%s\n===== %s.log (head) =====\n%s\n===== %s.log (tail) =====\n%s\n=========================\n",
+		name, truncated, strings.Join(causes, "\n"), name, strings.Join(head, "\n"), name, strings.Join(tail, "\n"))
 }
 
 func teardown() {

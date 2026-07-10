@@ -61,14 +61,19 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
     private api: ApiService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
-  ) { super(); }
+  ) {
+ super(); 
+}
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;
-      if (wasUnset && node) { this.startPolling(); }
+      if (wasUnset && node) {
+ this.startPolling(); 
+}
     });
+
     return super.ngOnInit();
   }
 
@@ -79,7 +84,9 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   refreshNow() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     this.fetchOnce().subscribe();
   }
 
@@ -90,7 +97,9 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
    * eagerly establish the rest.
    */
   connectAll() {
-    if (!this.node || this.connectAllInFlight) { return; }
+    if (!this.node || this.connectAllInFlight) {
+ return; 
+}
     this.connectAllInFlight = true;
     this.actionSub?.unsubscribe();
     this.actionSub = this.api.post(
@@ -124,6 +133,7 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
         this.error = err?.message || 'Failed to fetch dmsg sessions';
         this.loading = false;
         this.cdr.markForCheck();
+
         return of(null);
       }),
       switchMap((resp: DmsgClientSessionsResponse | null) => {
@@ -134,11 +144,16 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
           this.fetchedAt = new Date();
           this.cdr.markForCheck();
         }
+
         return of(resp);
       }),
     );
   }
 
-  trackClient(_idx: number, c: DmsgClient): string { return c.pk; }
-  trackServer(_idx: number, pk: string): string { return pk; }
+  trackClient(_idx: number, c: DmsgClient): string {
+ return c.pk; 
+}
+  trackServer(_idx: number, pk: string): string {
+ return pk; 
+}
 }

@@ -99,6 +99,7 @@ export class TransportListComponent implements OnDestroy {
         });
         this.cdr.markForCheck();
       }
+
       return;
     }
     this.lastTransportCount = val.transports.length;
@@ -468,8 +469,13 @@ export class TransportListComponent implements OnDestroy {
       mergeMap(() => this.transportService.types(NodeComponent.getCurrentNodeKey())),
     ).subscribe((types: string[]) => {
       types.sort((a, b) => {
-        if (a.toLowerCase() === 'stcp') { return 1; }
-        if (b.toLowerCase() === 'stcp') { return -1; }
+        if (a.toLowerCase() === 'stcp') {
+ return 1; 
+}
+        if (b.toLowerCase() === 'stcp') {
+ return -1; 
+}
+
         return a.localeCompare(b);
       });
       let defaultIndex = types.findIndex(t => t.toLowerCase() === 'dmsg');
@@ -580,6 +586,7 @@ export class TransportListComponent implements OnDestroy {
       if (nothingToDo) {
         this.snackbarService.showDone('transports.no-changes-needed');
         NodeComponent.refreshCurrentDisplayedData();
+
         return;
       }
 
