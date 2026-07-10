@@ -197,6 +197,95 @@ jobs:
           $env:SKYWIRE_NATIVEE2E_BIN = "$PWD/_nbin"
           go test -mod=vendor -tags client_e2e -v -timeout=25m ./internal/nativee2e/
 
+  # Compile-only lane for the browser/wasm binaries. Every wasm main package is
+  # guarded by //go:build js && wasm, so the default-GOARCH unit lanes never even
+  # build them — a break in the js/wasm code (e.g. an import that isn't
+  # browser-portable) ships undetected. This job cross-compiles each one with
+  # GOOS=js GOARCH=wasm (no run) so build regressions fail CI. Runs in parallel
+  # with the other jobs; fast (build only, cached module deps).
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Compile-check js/wasm binaries
+        run: make build-wasm
+
+  # TinyGo lane. Several wasm binaries are ALSO built with TinyGo for the
+  # embedded/browser targets (smaller output, no crypto/tls): the dmsg IoT
+  # probe (wasip1), the tpviz/dmsg-wasm/wasm-visor browser edges (wasm), and
+  # the app-mux routing policy (wasi). The standard-Go `wasm` job above cannot
+  # catch TinyGo-only breakage (different compiler, different std-lib subset),
+  # so this job installs TinyGo and compile-checks each of them. It then runs a
+  # real WASM *runtime* smoke test: rebuild app-mux.wasm from source and drive
+  # it through the wazero evaluator (pkg/router/policy/wasm), so the policy
+  # loader test exercises a fresh build instead of the committed (stale-able)
+  # blob. Runs in parallel with the other jobs.
+  wasm-tinygo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: acifani/setup-tinygo@v2
+        with:
+          tinygo-version: '0.41.1'
+
+      - name: Compile-check TinyGo wasm binaries
+        run: make build-wasm-tinygo
+
+      - name: Rebuild app-mux.wasm and run the policy runtime smoke test
+        run: make test-wasm-policy
+
+  # Hypervisor manager UI (Angular). The UI build + lint + unit tests only ever
+  # ran as manually-invoked Makefile targets, so a regression that breaks
+  # `ng build`, trips an eslint rule, or fails a spec shipped undetected. This
+  # job installs the node deps once, lints (fail-fast), builds the production
+  # bundle, then runs the karma unit specs headless. Build is invoked directly
+  # (not `make build-ui`) to reuse the single npm install above — build-ui
+  # re-runs `npm ci` via its install-deps-ui prerequisite, and CI doesn't need
+  # the artifact copy into pkg/visor/static that build-ui also does. The specs
+  # run in headless Chrome via the ChromeHeadlessNoSandbox launcher (see
+  # src/karma.conf.js); browser-actions/setup-chrome provides the binary.
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: static/skywire-manager-src/package-lock.json
+
+      - uses: browser-actions/setup-chrome@v1
+        id: setup-chrome
+
+      - name: Install UI dependencies
+        run: make install-deps-ui
+
+      - name: Lint UI
+        run: make lint-ui
+
+      - name: Build UI
+        run: cd static/skywire-manager-src && npm run build
+
+      - name: Test UI
+        run: make test-ui
+        env:
+          CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+
   # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
   # //go:build !no_ci because they need a real Redis (redis://localhost:6379),
   # so the tag-free unit lanes (which run with -tags no_ci) skip them — leaving

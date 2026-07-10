@@ -76,13 +76,16 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     private sanitizer: DomSanitizer,
     private appsService: AppsService,
     private snackbar: SnackbarService,
-  ) { super(); }
+  ) {
+ super(); 
+}
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
     });
+
     return super.ngOnInit();
   }
 
@@ -93,7 +96,11 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   /** Re-evaluates the UI state from the latest node snapshot. Cheap;
    *  safe to call on every NodeComponent polling tick. */
   private recompute() {
-    if (!this.node) { this.state = 'unknown'; return; }
+    if (!this.node) {
+ this.state = 'unknown';
+
+ return; 
+}
 
     const apps = (this.node.apps || []) as Application[];
     this.daemons = apps
@@ -105,6 +112,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     if (!app) {
       this.state = 'not-configured';
       this.iframeUrl = null;
+
       return;
     }
 
@@ -115,6 +123,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     if (app.status !== 1) {
       this.state = 'not-running';
       this.iframeUrl = null;
+
       return;
     }
 
@@ -136,17 +145,25 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   openFullWindow() {
-    if (!this.fullWindowUrl) { return; }
+    if (!this.fullWindowUrl) {
+ return; 
+}
     window.open(this.fullWindowUrl, '_blank', 'noopener noreferrer');
   }
 
   // ---- skycoin-web app controls (start/stop + settings) ----
 
-  isWebRunning(): boolean { return !!this.webApp && this.webApp.status === 1; }
-  isWebStarting(): boolean { return !!this.webApp && this.webApp.status === 3; }
+  isWebRunning(): boolean {
+ return !!this.webApp && this.webApp.status === 1; 
+}
+  isWebStarting(): boolean {
+ return !!this.webApp && this.webApp.status === 3; 
+}
 
   webStatusKey(): string {
-    if (!this.webApp) { return 'wallet.daemons.status.unknown'; }
+    if (!this.webApp) {
+ return 'wallet.daemons.status.unknown'; 
+}
     switch (this.webApp.status) {
       case 0: return 'wallet.daemons.status.stopped';
       case 1: return 'wallet.daemons.status.running';
@@ -157,12 +174,16 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   toggleWebApp() {
-    if (!this.node || !this.webApp || this.webAppBusy) { return; }
+    if (!this.node || !this.webApp || this.webAppBusy) {
+ return; 
+}
     const start = !this.isWebRunning();
     const name = this.webApp.name;
     this.webAppBusy = true;
     this.appsService.changeAppState(this.node.localPk, name, start).subscribe({
-      next: () => { this.webAppBusy = false; },
+      next: () => {
+ this.webAppBusy = false; 
+},
       error: () => {
         this.webAppBusy = false;
         this.snackbar.showError(start ? 'wallet.daemons.start-error' : 'wallet.daemons.stop-error');
@@ -170,8 +191,12 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     });
   }
 
-  toggleWebSettings() { this.webAppSettingsOpen = !this.webAppSettingsOpen; }
-  onWebSettingsSaved() { this.webAppSettingsOpen = false; }
+  toggleWebSettings() {
+ this.webAppSettingsOpen = !this.webAppSettingsOpen; 
+}
+  onWebSettingsSaved() {
+ this.webAppSettingsOpen = false; 
+}
 
   // True iff there are running skycoin-daemon* instances whose ports
   // could be added to skycoin-web's --node-url list. Drives the
@@ -186,14 +211,18 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
    *  restarted (Stop, then Start) for it to pick up the new node
    *  list — skycoin-web reads --node-url at startup. */
   applyLocalDaemons() {
-    if (!this.node || !this.webApp) { return; }
+    if (!this.node || !this.webApp) {
+ return; 
+}
     const running = this.daemons.filter((d) => d.status === 1);
     if (running.length === 0) {
       this.snackbar.showError('wallet.daemons.no-running');
+
       return;
     }
     const nodeUrls = running.map((d) => {
       const port = parseDaemonPort((d.args as string[]) || []);
+
       return `http://127.0.0.1:${port}`;
     });
 
@@ -215,8 +244,12 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   // ---- Skycoin daemon multi-instance controls ----
 
-  isDaemonRunning(d: Application): boolean { return d.status === 1; }
-  isDaemonStarting(d: Application): boolean { return d.status === 3; }
+  isDaemonRunning(d: Application): boolean {
+ return d.status === 1; 
+}
+  isDaemonStarting(d: Application): boolean {
+ return d.status === 3; 
+}
 
   daemonStatusKey(d: Application): string {
     switch (d.status) {
@@ -229,7 +262,9 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   toggleDaemon(d: Application) {
-    if (!this.node || this.daemonsBusy.has(d.name)) { return; }
+    if (!this.node || this.daemonsBusy.has(d.name)) {
+ return; 
+}
     const start = !this.isDaemonRunning(d);
     const name = d.name;
     this.daemonsBusy.add(name);
@@ -262,18 +297,26 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   addDaemon() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     let suggested = SKYCOIN_DAEMON_PREFIX;
     if (this.daemons.some((d) => d.name === SKYCOIN_DAEMON_PREFIX)) {
       const used = new Set(this.daemons.map((d) => d.name));
       let n = 2;
-      while (used.has(`${SKYCOIN_DAEMON_PREFIX}-${n}`)) { n++; }
+      while (used.has(`${SKYCOIN_DAEMON_PREFIX}-${n}`)) {
+ n++; 
+}
       suggested = `${SKYCOIN_DAEMON_PREFIX}-${n}`;
     }
-    // eslint-disable-next-line no-alert
+     
     const name = (window.prompt('Daemon instance name (one per fiberchain):', suggested) || '').trim();
-    if (!name) { return; }
-    if (this.daemonsBusy.has('add')) { return; }
+    if (!name) {
+ return; 
+}
+    if (this.daemonsBusy.has('add')) {
+ return; 
+}
     this.daemonsBusy.add('add');
     this.appsService.addApp(this.node.localPk, name, SKYCOIN_DAEMON_PREFIX).subscribe({
       next: (app: Application) => {
@@ -302,13 +345,18 @@ function parseDaemonPort(args: string[]): number {
     if (a === '--port' || a === '-p') {
       if (i + 1 < args.length) {
         const n = parseInt(args[i + 1], 10);
-        if (!isNaN(n)) { return n; }
+        if (!isNaN(n)) {
+ return n; 
+}
       }
     } else if (a.startsWith('--port=')) {
       const n = parseInt(a.substring('--port='.length), 10);
-      if (!isNaN(n)) { return n; }
+      if (!isNaN(n)) {
+ return n; 
+}
     }
   }
+
   return 6420;
 }
 
@@ -330,6 +378,7 @@ function stripFlag(args: string[], flag: string): string[] {
     }
     out.push(a);
   }
+
   return out;
 }
 
@@ -350,18 +399,25 @@ function parseHostPort(args: string[]): { host: string, port: number } {
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--host' || a === '-H') {
-      if (i + 1 < args.length) { host = args[i + 1]; }
+      if (i + 1 < args.length) {
+ host = args[i + 1]; 
+}
     } else if (a.startsWith('--host=')) {
       host = a.substring('--host='.length);
     } else if (a === '--port' || a === '-p') {
       if (i + 1 < args.length) {
         const n = parseInt(args[i + 1], 10);
-        if (!isNaN(n)) { port = n; }
+        if (!isNaN(n)) {
+ port = n; 
+}
       }
     } else if (a.startsWith('--port=')) {
       const n = parseInt(a.substring('--port='.length), 10);
-      if (!isNaN(n)) { port = n; }
+      if (!isNaN(n)) {
+ port = n; 
+}
     }
   }
-  return { host, port };
+
+  return { host: host, port: port };
 }

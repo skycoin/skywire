@@ -77,14 +77,19 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
       )
       .subscribe({
         next: (r: any) => this.onData(r?.net?.entries || [], r?.tps || []),
-        error: (e) => { this.loading = false; this.error = e?.message || 'Failed to load network data'; },
+        error: (e) => {
+ this.loading = false; this.error = e?.message || 'Failed to load network data'; 
+},
       });
+
     return super.ngOnInit();
   }
 
   ngAfterViewInit() {
     this.viewReady = true;
-    if (this.pending) { this.render(this.pending.entries, this.pending.tps); this.pending = null; }
+    if (this.pending) {
+ this.render(this.pending.entries, this.pending.tps); this.pending = null; 
+}
   }
 
   refreshNow() {
@@ -99,43 +104,63 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
     this.loading = false;
     this.error = null;
     this.lastUpdated = new Date();
-    if (!this.viewReady) { this.pending = { entries, tps }; return; }
+    if (!this.viewReady) {
+ this.pending = { entries: entries, tps: tps };
+
+ return; 
+}
     this.render(entries, tps);
   }
 
   private statusColor(s?: string): string {
-    if (s === 'online') { return '#3f8cff'; }
-    if (s === 'offline') { return '#e05757'; }
+    if (s === 'online') {
+ return '#3f8cff'; 
+}
+    if (s === 'offline') {
+ return '#e05757'; 
+}
+
     return '#888888'; // not in UT / unknown
   }
 
   private render(entries: NetworkEntry[], tps: TransportMetric[]) {
     const byPK = new Map<string, NetworkEntry>();
-    for (const e of entries) { byPK.set(e.pk, e); }
+    for (const e of entries) {
+ byPK.set(e.pk, e); 
+}
 
     const wantOnline = this.showOnlineOnly;
     const include = (pk: string) => {
-      if (!wantOnline) { return true; }
+      if (!wantOnline) {
+ return true; 
+}
       const e = byPK.get(pk);
+
       return !!e && (e.ut_status || '') === 'online';
     };
 
     const nodeIds = new Set<string>();
     const nodeArr: any[] = [];
     const addNode = (pk: string) => {
-      if (nodeIds.has(pk) || !include(pk)) { return; }
+      if (nodeIds.has(pk) || !include(pk)) {
+ return; 
+}
       nodeIds.add(pk);
       const e = byPK.get(pk);
       const title = e
         ? `${pk}\n${e.country || '?'} · ${e.version || '?'}\ntransports: ${e.total || 0} (stcpr ${e.stcpr || 0}, sudph ${e.sudph || 0}, dmsg ${e.dmsg || 0})\nstatus: ${e.ut_status || 'unknown'}`
         : pk;
-      nodeArr.push({ id: pk, label: pk.substring(0, 6) + '…', color: this.statusColor(e?.ut_status), title });
+      nodeArr.push({ id: pk, label: pk.substring(0, 6) + '…', color: this.statusColor(e?.ut_status), title: title });
     };
 
-    for (const e of entries) { addNode(e.pk); }
+    for (const e of entries) {
+ addNode(e.pk); 
+}
 
     const edgeColor = (t: TransportMetric) => {
-      if (!t.live) { return { color: '#b04a4a', opacity: 0.5 }; }
+      if (!t.live) {
+ return { color: '#b04a4a', opacity: 0.5 }; 
+}
       switch ((t.type || '').toLowerCase()) {
         case 'dmsg': return { color: '#9d7cff' };
         case 'stcpr': case 'stcp': return { color: '#3f8cff' };
@@ -150,10 +175,14 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
     };
     const edgeArr: any[] = [];
     for (const t of tps) {
-      if (!t.edges || t.edges.length < 2) { continue; }
+      if (!t.edges || t.edges.length < 2) {
+ continue; 
+}
       const [a, b] = t.edges;
       addNode(a); addNode(b);
-      if (!nodeIds.has(a) || !nodeIds.has(b)) { continue; }
+      if (!nodeIds.has(a) || !nodeIds.has(b)) {
+ continue; 
+}
       edgeArr.push({ id: t.id, from: a, to: b, color: edgeColor(t), title: `${t.type} ${t.live ? '' : '(offline)'}`.trim() });
     }
 
@@ -170,15 +199,23 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
         interaction: { hover: true, tooltipDelay: 120 },
       });
       this.network.on('doubleClick', (p: any) => {
-        if (p?.nodes?.length) { this.router.navigate(['/nodes', p.nodes[0], 'info']); }
+        if (p?.nodes?.length) {
+ this.router.navigate(['/nodes', p.nodes[0], 'info']); 
+}
       });
     }
   }
 
-  toggleOnline() { this.showOnlineOnly = !this.showOnlineOnly; this.refreshNow(); }
+  toggleOnline() {
+ this.showOnlineOnly = !this.showOnlineOnly; this.refreshNow(); 
+}
 
   ngOnDestroy(): void {
-    if (this.sub) { this.sub.unsubscribe(); }
-    if (this.network) { this.network.destroy(); this.network = null; }
+    if (this.sub) {
+ this.sub.unsubscribe(); 
+}
+    if (this.network) {
+ this.network.destroy(); this.network = null; 
+}
   }
 }

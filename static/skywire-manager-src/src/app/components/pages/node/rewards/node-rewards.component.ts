@@ -82,7 +82,9 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   }
 
   loadHistory() {
-    if (!this.pk) { return; }
+    if (!this.pk) {
+ return; 
+}
     this.loading = true;
     this.errorMsg = '';
     this.dataSub = this.http.get<any>(
@@ -90,6 +92,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     ).pipe(
       catchError(err => {
         this.errorMsg = 'Failed to load reward data';
+
         return of({ history: [] });
       })
     ).subscribe(resp => {
@@ -106,16 +109,23 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
 
   formatDate(dateStr: string): string {
     const d = new Date(dateStr + 'T00:00:00');
+
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   }
 
   statusClass(day: RewardDay): string {
-    if (!day.amount || day.amount === 0) { return 'no-reward'; }
+    if (!day.amount || day.amount === 0) {
+ return 'no-reward'; 
+}
+
     return day.sent ? 'sent' : 'pending';
   }
 
   statusText(day: RewardDay): string {
-    if (!day.amount || day.amount === 0) { return 'No reward'; }
+    if (!day.amount || day.amount === 0) {
+ return 'No reward'; 
+}
+
     return day.sent ? 'Sent' : 'Pending';
   }
 
@@ -134,7 +144,9 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   }
 
   submitRewardAddress() {
-    if (!this.rewardForm.valid) { return; }
+    if (!this.rewardForm.valid) {
+ return; 
+}
     const newAddr = (this.rewardForm.get('address').value || '').trim();
     const op = newAddr
       ? this.nodeService.setRewardsAddress(this.pk, newAddr)
@@ -156,8 +168,12 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     this.showRewardRules = !this.showRewardRules;
     if (this.showRewardRules && this.rewardRules === null) {
       this.rewardRulesSubscription = this.nodeService.getRewardRules().subscribe(
-        (text: string) => { this.rewardRules = text || ''; },
-        () => { this.rewardRules = ''; this.snackbarService.showError('common.loading-error'); },
+        (text: string) => {
+ this.rewardRules = text || ''; 
+},
+        () => {
+ this.rewardRules = ''; this.snackbarService.showError('common.loading-error'); 
+},
       );
     }
   }
