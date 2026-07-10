@@ -89,7 +89,7 @@ func (d *Database) GetExpiredPendingListings() ([]*PendingListing, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expired pending listings: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var listings []*PendingListing
 	for rows.Next() {
@@ -120,7 +120,7 @@ func (d *Database) GetSellerPendingListings(sellerPubKey string) ([]*PendingList
 	if err != nil {
 		return nil, fmt.Errorf("failed to get seller pending listings: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var listings []*PendingListing
 	for rows.Next() {

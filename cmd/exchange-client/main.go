@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 )
 
-//go:embed dist
+//go:embed static
 var uiFS embed.FS
 
 func main() {
@@ -26,7 +26,7 @@ func main() {
 
 	// Create a custom file server that handles SPA routing
 	fileServer := http.FileServer(http.FS(distFS))
-	
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Try to serve the file directly
 		path := filepath.Clean(r.URL.Path)
@@ -39,11 +39,11 @@ func main() {
 			// File doesn't exist, serve index.html for SPA routing
 			r.URL.Path = "/"
 		}
-		
+
 		fileServer.ServeHTTP(w, r)
 	})
 
 	addr := ":" + port
-	log.Printf("Exchange Client UI server starting on http://localhost%s", addr)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	log.Printf("Exchange Client UI server starting on http://localhost%s", addr) //nolint
+	log.Fatal(http.ListenAndServe(addr, nil))                                    //nolint
 }

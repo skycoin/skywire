@@ -91,7 +91,7 @@ func (d *Database) GetAllConfig() (map[string]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get all config: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	config := make(map[string]string)
 	for rows.Next() {
