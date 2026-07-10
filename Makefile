@@ -217,7 +217,12 @@ build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no r
 	@echo "compile-checking TinyGo wasm binaries..."
 	@echo "  tinygo build -target wasip1 ./cmd/dmsg-tinygo-probe"
 	@tinygo build -target wasip1 -no-debug -opt=z -o /dev/null ./cmd/dmsg-tinygo-probe || exit 1
-	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor; do \
+	@# Only net/http-free binaries belong here: TinyGo 0.41 cannot compile net/http
+	@# for wasm (roundtrip_js.go references an unexported Transport.roundTrip). The
+	@# full js/wasm binaries ./cmd/dmsg-wasm and ./cmd/wasm-visor deliberately use
+	@# net/http (HTTP-over-dmsg; dmsg-wasm also needs logrus+gob reflection) and are
+	@# standard-Go-only — they are compile-checked by the `build-wasm` lane instead.
+	@for p in ./pkg/tpviz/wasm; do \
 		echo "  tinygo build -target wasm $$p"; \
 		tinygo build -target wasm -no-debug -o /dev/null "$$p" || exit 1; \
 	done
