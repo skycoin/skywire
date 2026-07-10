@@ -335,6 +335,8 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "skycoindinstances")
 	genConfigCmd.Flags().StringVar(&skycoinDaemonFlags, "skycoindflags", scriptExecString("${SKYCOIND_FLAGS}"), "extra flags appended to every skycoin daemon (port and data dir auto allocated)")
 	gHiddenFlags = append(gHiddenFlags, "skycoindflags")
+	genConfigCmd.Flags().StringVar(&coinNodes, "coin-nodes", scriptExecArray("${COIN_NODES[@]}"), "fibercoin nodes to forward over dmsg + advertise (type=coin); CSV of local_addr[@dmsg_port]")
+	gHiddenFlags = append(gHiddenFlags, "coin-nodes")
 	genConfigCmd.Flags().BoolVar(&isSkycoinWebEnable, "skycoinweb", scriptExecBool("${SKYCOINWEB:-false}"), "autostart skycoin web wallet (thin client)")
 	// 8002 to avoid colliding with skychat's default at 127.0.0.1:8001.
 	// Both apps' upstream defaults happen to be 8001; skychat got there
@@ -1394,6 +1396,46 @@ func configureHypervisor(log *logging.Logger) {
 	}
 }
 
+// buildCoinNodes parses the --coin-nodes CSV (${COIN_NODES[@]}) into
+// visorconfig.CoinNodeConfig entries. Each spec is "<local_addr>" or
+// "<local_addr>@<dmsg_port>", where local_addr is the node's HTTP API on this
+// host (host:port). When the dmsg port is omitted it defaults to local_addr's
+// TCP port — so "127.0.0.1:6420" is advertised on dmsg port 6420. Whitelist is
+// not expressible via the flag (public read-mostly coin APIs are the common
+// case); edit the config directly to restrict peers. Returns nil for empty.
+func buildCoinNodes() ([]visorconfig.CoinNodeConfig, error) {
+	specs := splitCSV(coinNodes)
+	if len(specs) == 0 {
+		return nil, nil
+	}
+	out := make([]visorconfig.CoinNodeConfig, 0, len(specs))
+	for _, s := range specs {
+		addr := s
+		var dport uint64
+		if at := strings.LastIndex(s, "@"); at >= 0 {
+			addr = s[:at]
+			p, err := strconv.ParseUint(s[at+1:], 10, 16)
+			if err != nil {
+				return nil, fmt.Errorf("coin-nodes: invalid dmsg port in %q: %w", s, err)
+			}
+			dport = p
+		}
+		_, portStr, err := net.SplitHostPort(addr)
+		if err != nil {
+			return nil, fmt.Errorf("coin-nodes: invalid local_addr %q (want host:port): %w", addr, err)
+		}
+		if dport == 0 {
+			p, err := strconv.ParseUint(portStr, 10, 16)
+			if err != nil {
+				return nil, fmt.Errorf("coin-nodes: invalid port in %q: %w", addr, err)
+			}
+			dport = p
+		}
+		out = append(out, visorconfig.CoinNodeConfig{LocalAddr: addr, DmsgPort: uint16(dport)})
+	}
+	return out, nil
+}
+
 // buildSkycoinDaemonApps emits the AppConfig slice for skycoin-daemon
 // instances based on the SKYCOIND_* knobs.
 //
@@ -1728,6 +1770,15 @@ func configureApps(log *logging.Logger) {
 			},
 		}
 	}
+
+	// Fibercoin node discovery (servicedisc.ServiceTypeCoin). Independent
+	// of the apps mode above — the node runs on its own; the visor only
+	// forwards + advertises it. See pkg/visor/init_coinnode.go.
+	coinNodeCfgs, cnErr := buildCoinNodes()
+	if cnErr != nil {
+		log.WithError(cnErr).Fatal("invalid coin-nodes configuration")
+	}
+	conf.CoinNodes = coinNodeCfgs
 
 	// Disable apps --disable-apps flag
 	if disableApps != "" {
