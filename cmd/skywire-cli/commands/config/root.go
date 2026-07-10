@@ -140,12 +140,19 @@ var (
 	// instance's args (e.g. "--enable-gui-api-sets READ,STATUS").
 	// --port and --data-dir are auto-allocated per instance and
 	// must not appear here — gen errors out if they do.
-	skycoinDaemonFlags       string
-	isSkycoinWebEnable       bool
-	skycoinWebAddr           string
-	skycoinWebNodeURLs       string // comma-separated; rendered as repeated --node-url flags
-	skycoinWebWalletDir      string
-	skycoinWebUser           string
+	skycoinDaemonFlags  string
+	isSkycoinWebEnable  bool
+	skycoinWebAddr      string
+	skycoinWebNodeURLs  string // comma-separated; rendered as repeated --node-url flags
+	skycoinWebWalletDir string
+	skycoinWebUser      string
+	// coinNodes advertises already-running fibercoin nodes over dmsg +
+	// service-discovery (servicedisc.ServiceTypeCoin). CSV of
+	// "<local_addr>[@<dmsg_port>]" specs; each becomes a
+	// visorconfig.CoinNodeConfig the visor forwards + health-gates. The
+	// node runs INDEPENDENTLY (it need not be a skywire-managed daemon
+	// app), so this is orthogonal to SKYCOIND. Driven by ${COIN_NODES[@]}.
+	coinNodes                string
 	rewardSkyAddr            string
 	hvHTTPAddr               string
 	stunServers              string
