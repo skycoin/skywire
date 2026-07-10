@@ -67,7 +67,7 @@ func (d *Database) GetBuyerOrders(buyerPubKey string) ([]*Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get buyer orders: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var orders []*Order
 	for rows.Next() {
@@ -100,7 +100,7 @@ func (d *Database) GetSellerOrders(sellerPubKey string) ([]*Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get seller orders: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var orders []*Order
 	for rows.Next() {
@@ -242,7 +242,7 @@ func (d *Database) GetExpiredOrders() ([]*Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expired orders: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var orders []*Order
 	for rows.Next() {
@@ -274,7 +274,7 @@ func (d *Database) GetPendingPaymentOrders() ([]*Order, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get pending payment orders: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var orders []*Order
 	for rows.Next() {
@@ -306,7 +306,7 @@ func (d *Database) GetCompletedOrdersOlderThan(age time.Duration) ([]*Order, err
 	if err != nil {
 		return nil, fmt.Errorf("failed to get completed orders: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var orders []*Order
 	for rows.Next() {

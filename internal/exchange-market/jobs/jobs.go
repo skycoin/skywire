@@ -24,7 +24,7 @@ package jobs
 // 4. ReturnScheduler (every 1 minute)
 //    - Return SKY to sellers after 1 hour for:
 //      * Expired listings
-//      * Cancelled listings
+//      * Canceled listings
 //      * Unsold products
 //
 // 5. CleanupJob (every 1 hour)

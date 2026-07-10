@@ -31,7 +31,7 @@ func New(dbPath, workDir string) (*Database, error) {
 
 	// Ensure the directory exists
 	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil { //nolint
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
@@ -44,7 +44,7 @@ func New(dbPath, workDir string) (*Database, error) {
 
 	// Test the connection
 	if err := conn.Ping(); err != nil {
-		conn.Close()
+		conn.Close() //nolint
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -99,14 +99,14 @@ func (d *Database) Migrate() error {
 // InitDefaultConfig initializes default market configuration if not already present.
 func (d *Database) InitDefaultConfig() error {
 	defaults := map[string]string{
-		"wallet_sky":            "",       // Market wallet for SKY escrow
-		"fee_rate_sch_per_sky":  "0.001",  // Commission: SCH per SKY sold
-		"freeze_violations_limit": "3",    // Number of violations before ban
-		"ban_duration_days":       "7",    // Ban duration in days
-		"listing_expiry_minutes":  "15",   // Minutes before pending listing expires
-		"order_expiry_minutes":    "15",   // Minutes before pending order expires
-		"return_delay_hours":      "1",    // Hours before returning SKY to seller
-		"cleanup_days":            "3",    // Days after which completed orders are deleted
+		"wallet_sky":              "",      // Market wallet for SKY escrow
+		"fee_rate_sch_per_sky":    "0.001", // Commission: SCH per SKY sold
+		"freeze_violations_limit": "3",     // Number of violations before ban
+		"ban_duration_days":       "7",     // Ban duration in days
+		"listing_expiry_minutes":  "15",    // Minutes before pending listing expires
+		"order_expiry_minutes":    "15",    // Minutes before pending order expires
+		"return_delay_hours":      "1",     // Hours before returning SKY to seller
+		"cleanup_days":            "3",     // Days after which completed orders are deleted
 	}
 
 	d.mu.Lock()

@@ -132,7 +132,7 @@ func (d *Database) GetExpiredBans() ([]*Ban, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get expired bans: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var bans []*Ban
 	for rows.Next() {

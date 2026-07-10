@@ -65,7 +65,7 @@ func (d *Database) GetActiveProducts() ([]*Product, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active products: %w", err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint
 
 	var products []*Product
 	for rows.Next() {
@@ -147,7 +147,7 @@ func (d *Database) MarkProductSold(productID string) error {
 	return nil
 }
 
-// MarkProductCancelled marks a product as cancelled (seller withdrew or expired).
+// MarkProductCancelled marks a product as canceled (seller withdrew or expired).
 func (d *Database) MarkProductCancelled(productID string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -159,7 +159,7 @@ func (d *Database) MarkProductCancelled(productID string) error {
 	`, productID)
 
 	if err != nil {
-		return fmt.Errorf("failed to mark product as cancelled: %w", err)
+		return fmt.Errorf("failed to mark product as canceled: %w", err)
 	}
 
 	return nil
