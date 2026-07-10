@@ -139,11 +139,23 @@ func initCoinNodes(_ context.Context, v *Visor, log *logging.Logger) error {
 
 		// (1) Expose the node's local API over dmsg on DmsgPort. ProxyAddr fronts
 		// the external local endpoint; LocalPort 0 means "use ProxyAddr".
+		//
+		// InjectPK makes this an HTTP reverse-proxy (not a raw byte splice) so
+		// the visor REWRITES the Host header to the backend (ProxyAddr) — with
+		// PreserveHost left false. Fibercoin daemons run a DNS-rebinding
+		// host-whitelist header-check on their HTTP API: a raw splice forwards
+		// the caller's Host (the visor PK address), which isn't whitelisted, so
+		// the daemon answers 403 "Invalid Host". Rewriting Host to the loopback
+		// backend passes the daemon's built-in localhost exemption, so a mesh
+		// caller reaches the API without the operator having to weaken the
+		// daemon's local header-check. The stamped X-Skywire-Remote-PK header is
+		// a harmless bonus the node may use for caller attribution.
 		fp := ForwardedPort{
 			Port:      int(node.DmsgPort),
 			ProxyAddr: node.LocalAddr,
 			Label:     "coin",
 			DMSG:      true,
+			InjectPK:  true,
 			Whitelist: node.Whitelist,
 		}
 		if rerr := v.forwardedPorts.Register(fp); rerr != nil {
