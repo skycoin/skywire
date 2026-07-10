@@ -36,7 +36,9 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
     private appsService: AppsService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
-  ) { super(); }
+  ) {
+ super(); 
+}
 
   toggleSettings(name: string) {
     if (this.expandedSettings.has(name)) {
@@ -45,14 +47,19 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
       this.expandedSettings.add(name);
     }
   }
-  isSettingsOpen(name: string): boolean { return this.expandedSettings.has(name); }
-  onSettingsSaved(name: string) { this.expandedSettings.delete(name); }
+  isSettingsOpen(name: string): boolean {
+ return this.expandedSettings.has(name); 
+}
+  onSettingsSaved(name: string) {
+ this.expandedSettings.delete(name); 
+}
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
     });
+
     return super.ngOnInit();
   }
 
@@ -76,7 +83,9 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
   }
 
   statusKey(app: Application | null): string {
-    if (!app) { return 'vpn-tab.status.not-configured'; }
+    if (!app) {
+ return 'vpn-tab.status.not-configured'; 
+}
     switch (app.status) {
       case 0: return 'vpn-tab.status.stopped';
       case 1: return 'vpn-tab.status.running';
@@ -87,7 +96,9 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
   }
 
   toggle(app: Application | null, name: string) {
-    if (!this.node || !app || this.busy.has(name)) { return; }
+    if (!this.node || !app || this.busy.has(name)) {
+ return; 
+}
     const start = !this.isRunning(app);
     this.busy.add(name);
     this.appsService.changeAppState(this.node.localPk, name, start).subscribe({
@@ -103,7 +114,9 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
   }
 
   openStandaloneClient() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     window.open(location.origin + '/#/vpn/' + this.node.localPk + '/status', '_blank', 'noopener noreferrer');
   }
 }

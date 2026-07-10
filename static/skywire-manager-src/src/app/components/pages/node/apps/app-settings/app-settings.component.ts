@@ -35,6 +35,19 @@ import { Application, Node } from 'src/app/app.datatypes';
   standalone: false,
 })
 export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
+  // Apps whose binary or name is registered via launcher.RegisterApp
+  // (in-process AppFunc). Only these can run in launcher "internal"
+  // mode — skycoin-daemon / skycoin-web are cobra subcommands of
+  // the skywire binary, not in-process functions, so internal mode
+  // isn't available for them. Multi-instance entries match by their
+  // family prefix (skysocks-client-2 → skysocks-client).
+  private static readonly internalCapable = new Set<string>([
+    'skysocks', 'skysocks-client',
+    'vpn-client', 'vpn-server',
+    'skychat',
+    'skynet', 'skynet-client',
+  ]);
+
   @Input() app!: Application;
   @Output() saved = new EventEmitter<void>();
   @Output() cancelled = new EventEmitter<void>();
@@ -52,45 +65,41 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
 
   private subs: Subscription[] = [];
 
-  constructor(
-    private appsService: AppsService,
-    private formBuilder: UntypedFormBuilder,
-    private snackbarService: SnackbarService,
-  ) {}
-
   // Tracks which app the form is bound to so we can distinguish
   // "different app entirely" (rebuild form, reset help) from "same
   // app, fresh poll snapshot" (no-op — would otherwise clobber the
   // operator's in-progress edits every couple of seconds).
   private boundAppName = '';
 
-  // Apps whose binary or name is registered via launcher.RegisterApp
-  // (in-process AppFunc). Only these can run in launcher "internal"
-  // mode — skycoin-daemon / skycoin-web are cobra subcommands of
-  // the skywire binary, not in-process functions, so internal mode
-  // isn't available for them. Multi-instance entries match by their
-  // family prefix (skysocks-client-2 → skysocks-client).
-  private static readonly internalCapable = new Set<string>([
-    'skysocks', 'skysocks-client',
-    'vpn-client', 'vpn-server',
-    'skychat',
-    'skynet', 'skynet-client',
-  ]);
+  constructor(
+    private appsService: AppsService,
+    private formBuilder: UntypedFormBuilder,
+    private snackbarService: SnackbarService,
+  ) {}
 
   /** True iff the launcher's "internal" mode is meaningful for this
    *  app — i.e. an in-process RunFunc is registered for it. */
   get internalModeAvailable(): boolean {
-    if (!this.app) { return false; }
+    if (!this.app) {
+ return false; 
+}
     const candidates = [this.app.name];
     const bin = (this.app as any).binary as string | undefined;
-    if (bin) { candidates.push(bin); }
+    if (bin) {
+ candidates.push(bin); 
+}
     for (const c of candidates) {
-      if (AppSettingsComponent.internalCapable.has(c)) { return true; }
+      if (AppSettingsComponent.internalCapable.has(c)) {
+ return true; 
+}
       // Multi-instance: skysocks-client-2 → skysocks-client family.
       for (const base of AppSettingsComponent.internalCapable) {
-        if (c.startsWith(base + '-')) { return true; }
+        if (c.startsWith(base + '-')) {
+ return true; 
+}
       }
     }
+
     return false;
   }
 
@@ -100,7 +109,9 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   ngOnChanges(changes: SimpleChanges) {
-    if (!changes['app']) { return; }
+    if (!changes['app']) {
+ return; 
+}
     const next = (this.app && this.app.name) || '';
     if (next === this.boundAppName) {
       // Same app rebinding from the parent's poll loop. Don't
@@ -127,7 +138,10 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
    * whitespace get wrapped in quotes for round-trip.
    */
   private argsToString(args: string[] | undefined): string {
-    if (!args || args.length === 0) { return ''; }
+    if (!args || args.length === 0) {
+ return ''; 
+}
+
     return args.map(a => /[\s"']/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a).join(' ');
   }
 
@@ -167,7 +181,11 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     this.helpLoading = true;
     this.helpError = '';
     NodeComponent.currentNode.pipe(take(1)).subscribe((node: Node) => {
-      if (!node) { this.helpLoading = false; return; }
+      if (!node) {
+ this.helpLoading = false;
+
+ return; 
+}
       const sub = this.appsService.getAppHelp(node.localPk, this.app.name).subscribe({
         next: (resp: any) => {
           this.helpLoading = false;
@@ -187,7 +205,9 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
   }
 
   save() {
-    if (this.saving) { return; }
+    if (this.saving) {
+ return; 
+}
     this.saving = true;
     this.saveError = '';
     NodeComponent.currentNode.pipe(take(1)).subscribe((node: Node) => {
@@ -199,6 +219,7 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     if (!node) {
       this.saveError = 'No active node';
       this.saving = false;
+
       return;
     }
 
@@ -232,9 +253,14 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
 
   // Surface the visor's last-known DetailedStatus when status is Errored.
   // The AppStatus enum: 0=stopped, 1=running, 2=errored, 3=starting.
-  get isErrored(): boolean { return this.app && this.app.status === 2; }
+  get isErrored(): boolean {
+ return this.app && this.app.status === 2; 
+}
   get lastError(): string {
-    if (!this.isErrored) { return ''; }
+    if (!this.isErrored) {
+ return ''; 
+}
+
     return (this.app as any).detailed_status || (this.app as any).detailedStatus || 'errored';
   }
 }

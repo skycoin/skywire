@@ -161,10 +161,10 @@ func TestReconnectWatchdog_StopsRetryingWhileActivityContinues(t *testing.T) {
 	go s.runReconnectWatchdogWith(10*time.Millisecond, 100*time.Millisecond)
 	defer close(s.reconnectStop)
 
+	// Quiet feed → the watchdog fires at least once.
 	waitFor(t, 300*time.Millisecond, "initial reconnect attempts", func() bool {
 		return s.reconnectAttempts.Load() >= 1
 	})
-	stableAt := s.reconnectAttempts.Load()
 
 	// Simulate continued activity — bump every 20ms, well under the
 	// 100ms quiet threshold. While this loop runs the watchdog should
@@ -183,7 +183,17 @@ func TestReconnectWatchdog_StopsRetryingWhileActivityContinues(t *testing.T) {
 			time.Sleep(20 * time.Millisecond)
 		}
 	}()
-	time.Sleep(300 * time.Millisecond) // ~30 ticks, ~15 bumps
+
+	// Snapshot the baseline only AFTER activity has established a fresh
+	// lastUpdateNs and any in-flight quiet-triggered tick has drained (one
+	// full quiet window). Snapshotting earlier races the watchdog: until the
+	// first bump lands the feed is still "quiet" (lastUpdateNs ~1s old), so a
+	// tick between the snapshot and the first bump would legitimately fire once
+	// more and fail the test spuriously.
+	time.Sleep(150 * time.Millisecond) // > 100ms quiet threshold
+	stableAt := s.reconnectAttempts.Load()
+
+	time.Sleep(300 * time.Millisecond) // ~30 more ticks, ~15 bumps
 	close(stop)
 	<-done
 	if got := s.reconnectAttempts.Load(); got != stableAt {

@@ -41,7 +41,9 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
     private appsService: AppsService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
-  ) { super(); }
+  ) {
+ super(); 
+}
 
   toggleSettings(name: string) {
     if (this.expandedSettings.has(name)) {
@@ -50,14 +52,19 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
       this.expandedSettings.add(name);
     }
   }
-  isSettingsOpen(name: string): boolean { return this.expandedSettings.has(name); }
-  onSettingsSaved(name: string) { this.expandedSettings.delete(name); }
+  isSettingsOpen(name: string): boolean {
+ return this.expandedSettings.has(name); 
+}
+  onSettingsSaved(name: string) {
+ this.expandedSettings.delete(name); 
+}
 
   ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
     });
+
     return super.ngOnInit();
   }
 
@@ -83,7 +90,9 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
   }
 
   statusKey(app: Application | null): string {
-    if (!app) { return 'skysocks-tab.status.not-configured'; }
+    if (!app) {
+ return 'skysocks-tab.status.not-configured'; 
+}
     switch (app.status) {
       case 0: return 'skysocks-tab.status.stopped';
       case 1: return 'skysocks-tab.status.running';
@@ -94,7 +103,9 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
   }
 
   toggle(app: Application | null) {
-    if (!this.node || !app || this.busy.has(app.name)) { return; }
+    if (!this.node || !app || this.busy.has(app.name)) {
+ return; 
+}
     const start = !this.isRunning(app);
     const name = app.name;
     this.busy.add(name);
@@ -111,20 +122,28 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
   }
 
   addClient() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     // Suggest the next free skysocks-client-N name based on what
     // already exists; the operator can override in the prompt.
     let suggested = SKYSOCKS_CLIENT_PREFIX;
     if (this.clients.some((c) => c.name === SKYSOCKS_CLIENT_PREFIX)) {
       const used = new Set(this.clients.map((c) => c.name));
       let n = 2;
-      while (used.has(`${SKYSOCKS_CLIENT_PREFIX}-${n}`)) { n++; }
+      while (used.has(`${SKYSOCKS_CLIENT_PREFIX}-${n}`)) {
+ n++; 
+}
       suggested = `${SKYSOCKS_CLIENT_PREFIX}-${n}`;
     }
-    // eslint-disable-next-line no-alert
+     
     const name = (window.prompt('Instance name (must be unique on this visor):', suggested) || '').trim();
-    if (!name) { return; }
-    if (this.busy.has('add')) { return; }
+    if (!name) {
+ return; 
+}
+    if (this.busy.has('add')) {
+ return; 
+}
     this.busy.add('add');
     this.appsService.addApp(this.node.localPk, name, SKYSOCKS_CLIENT_PREFIX).subscribe({
       next: (app: Application) => {

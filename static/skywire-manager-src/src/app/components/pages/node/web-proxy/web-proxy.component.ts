@@ -50,8 +50,11 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;
-      if (wasUnset && node) { this.loadStatus(); }
+      if (wasUnset && node) {
+ this.loadStatus(); 
+}
     });
+
     return super.ngOnInit();
   }
 
@@ -60,7 +63,9 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   loadStatus() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     this.loading = true;
     this.nodeService.getProxies(this.node.localPk).subscribe(
       (status: any) => {
@@ -72,12 +77,16 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
         this.form.get('upstream').setValue(upstream);
         this.cdr.markForCheck();
       },
-      () => { this.loading = false; this.cdr.markForCheck(); },
+      () => {
+ this.loading = false; this.cdr.markForCheck(); 
+},
     );
   }
 
   toggleProxy() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     const enable = this.form.get('skynetEnabled').value;
     this.loading = true;
     this.nodeService.setProxyEnabled(this.node.localPk, 'skynet', enable).subscribe(
@@ -88,15 +97,21 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
             this.snackbar.showDone(enable ? 'Resolving proxy enabled' : 'Resolving proxy disabled');
             this.loadStatus();
           },
-          () => { this.loading = false; },
+          () => {
+ this.loading = false; 
+},
         );
       },
-      () => { this.loading = false; this.snackbar.showError('Failed to toggle proxy'); },
+      () => {
+ this.loading = false; this.snackbar.showError('Failed to toggle proxy'); 
+},
     );
   }
 
   setUpstream() {
-    if (!this.node) { return; }
+    if (!this.node) {
+ return; 
+}
     const addr = (this.form.get('upstream').value || '').trim();
     this.loading = true;
     this.nodeService.setProxyUpstream(this.node.localPk, 'skynet', addr).subscribe(
@@ -105,9 +120,13 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
         this.snackbar.showDone(addr ? `Upstream set to ${addr}` : 'Upstream cleared');
         this.loadStatus();
       },
-      () => { this.loading = false; this.snackbar.showError('Failed to set upstream'); },
+      () => {
+ this.loading = false; this.snackbar.showError('Failed to set upstream'); 
+},
     );
   }
 
-  refresh() { this.loadStatus(); }
+  refresh() {
+ this.loadStatus(); 
+}
 }

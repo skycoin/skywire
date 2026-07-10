@@ -2,7 +2,7 @@
   <app-lang-button></app-lang-button>
   <div
     class="row main-container"
-  >
+    >
     <img src="/assets/img/logo-v.png" class="logo" />
     <form class="mt-5" [formGroup]="form">
       <div class="login-input" [ngClass]="{'element-disabled' : loading}">
@@ -12,12 +12,14 @@
           autocomplete="off"
           [placeholder]="'login.password' | translate"
           (keydown.enter)="login()"
-        >
+          >
         <button [disabled]="!form.valid || loading" (click)="login()">
           <mat-icon>chevron_right</mat-icon>
         </button>
       </div>
     </form>
-    <div class="config-link" *ngIf="!userExists" (click)="configure()">{{ 'login.initial-config' | translate }}</div>
+    @if (!userExists) {
+      <div class="config-link" (click)="configure()">{{ 'login.initial-config' | translate }}</div>
+    }
   </div>
 </div>

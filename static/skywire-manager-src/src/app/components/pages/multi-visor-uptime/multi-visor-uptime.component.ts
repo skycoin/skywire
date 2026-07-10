@@ -155,6 +155,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
       startWith(0),
       switchMap(() => this.fetchOnce()),
     ).subscribe();
+
     return super.ngOnInit();
   }
 
@@ -163,13 +164,17 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   }
 
   setWindow(d: WindowDays) {
-    if (d === this.windowDays) { return; }
+    if (d === this.windowDays) {
+ return; 
+}
     this.windowDays = d;
     this.refreshNow();
   }
 
   setFilter(f: FleetFilter) {
-    if (f === this.filter) { return; }
+    if (f === this.filter) {
+ return; 
+}
     this.filter = f;
     this.applyFilter();
   }
@@ -187,6 +192,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
           this.error = err?.message || 'Failed to fetch network uptime';
           this.loading = false;
           this.cdr.markForCheck();
+
           return of([]);
         }),
       ),
@@ -194,6 +200,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
     }).pipe(
       switchMap(({ summaries, nodes }) => {
         this.consume((summaries as VisorSummary[]) || [], nodes || []);
+
         return of(null);
       }),
     );
@@ -201,14 +208,20 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
 
   private consume(summaries: VisorSummary[], nodes: Node[]) {
     const managedByPk: { [pk: string]: Node } = {};
-    for (const n of nodes) { managedByPk[n.localPk] = n; }
+    for (const n of nodes) {
+ managedByPk[n.localPk] = n; 
+}
 
     // Union of all dates the server returned, sorted ascending so
     // bars read left-to-right oldest → newest like the CLI.
     const dateSet = new Set<string>();
     for (const s of summaries) {
-      for (const d of Object.keys(s.timeline || {})) { dateSet.add(d); }
-      for (const d of Object.keys(s.daily || {})) { dateSet.add(d); }
+      for (const d of Object.keys(s.timeline || {})) {
+ dateSet.add(d); 
+}
+      for (const d of Object.keys(s.daily || {})) {
+ dateSet.add(d); 
+}
     }
     const dates = Array.from(dateSet).sort();
 
@@ -226,7 +239,9 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
       let online = 0;
       let known = 0;
       for (const b of blocks) {
-        if (b.future) { continue; }
+        if (b.future) {
+ continue; 
+}
         // Each block has up to SLOTS_PER_HOUR underlying samples.
         online += b.count;
         known += SLOTS_PER_HOUR;
@@ -244,7 +259,9 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
         const sorted = Object.keys(dailyMap).sort().reverse();
         for (const d of sorted) {
           const v = parseFloat(dailyMap[d]);
-          if (!isNaN(v)) { recentPct = v; break; }
+          if (!isNaN(v)) {
+ recentPct = v; break; 
+}
         }
       }
 
@@ -253,10 +270,10 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
         pk: s.pk,
         online: s.on,
         version: s.version || '',
-        blocks,
-        windowPct,
-        recentPct,
-        managed,
+        blocks: blocks,
+        windowPct: windowPct,
+        recentPct: recentPct,
+        managed: managed,
         label: managed ? (managedByPk[s.pk].label || '') : '',
       });
     }
@@ -302,16 +319,24 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
 
     for (const s of summaries) {
       const version = this.normalizeVersion(s.version || '');
-      if (!version) { continue; }
+      if (!version) {
+ continue; 
+}
       const daily = s.daily || {};
       for (const date of Object.keys(daily)) {
         const upStr = daily[date];
         const up = parseFloat(upStr);
-        if (isNaN(up) || up < this.versionHistoryMinUptime) { continue; }
+        if (isNaN(up) || up < this.versionHistoryMinUptime) {
+ continue; 
+}
         const dedupKey = date + '|' + s.pk;
-        if (seen.has(dedupKey)) { continue; }
+        if (seen.has(dedupKey)) {
+ continue; 
+}
         seen.add(dedupKey);
-        if (!dateVersionCounts[date]) { dateVersionCounts[date] = {}; }
+        if (!dateVersionCounts[date]) {
+ dateVersionCounts[date] = {}; 
+}
         dateVersionCounts[date][version] = (dateVersionCounts[date][version] || 0) + 1;
       }
     }
@@ -327,8 +352,10 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
         versionSet.add(v);
         total += byVersion[v];
       }
-      if (total > max) { max = total; }
-      history.push({ date, byVersion, total });
+      if (total > max) {
+ max = total; 
+}
+      history.push({ date: date, byVersion: byVersion, total: total });
     }
 
     // Sort versions by reverse semver-ish so newer renders on top of
@@ -344,7 +371,9 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
       '#FF6666', '#00CCCC',
     ];
     const colors: { [v: string]: string } = {};
-    versions.forEach((v, i) => { colors[v] = palette[i % palette.length]; });
+    versions.forEach((v, i) => {
+ colors[v] = palette[i % palette.length]; 
+});
 
     this.versionHistory = history;
     this.versionHistoryVersions = versions;
@@ -354,8 +383,11 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
 
   private normalizeVersion(v: string): string {
     let out = (v || '').trim();
-    if (!out) { return ''; }
+    if (!out) {
+ return ''; 
+}
     out = out.replace(/\+dirty/g, '').replace(/ dirty/g, '').replace(/-dirty/g, '').trim();
+
     return out;
   }
 
@@ -370,13 +402,17 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   versionHistoryPath(version: string): string {
     const days = this.versionHistory;
     const max = this.versionHistoryMax;
-    if (days.length === 0 || max === 0) { return ''; }
+    if (days.length === 0 || max === 0) {
+ return ''; 
+}
     const versions = this.versionHistoryVersions;
     // Compute the index of `version` in the stack — versions before
     // it (in versionHistoryVersions order) sit underneath in the
     // stack, so we offset by their cumulative count.
     const idx = versions.indexOf(version);
-    if (idx < 0) { return ''; }
+    if (idx < 0) {
+ return ''; 
+}
     const xStep = days.length > 1 ? 100 / (days.length - 1) : 0;
     const yScale = 100 / max;
     const top: string[] = [];
@@ -397,6 +433,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
       top.push(`${x.toFixed(2)},${yTop.toFixed(2)}`);
       bottom.push(`${x.toFixed(2)},${yBottom.toFixed(2)}`);
     }
+
     // Polygon: walk top edge left→right, then bottom edge right→left.
     return [...top, ...bottom.reverse()].join(' ');
   }
@@ -406,18 +443,27 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
    * 2026-05-27 / Total: 147 visors ≥75% uptime").
    */
   versionHistoryLatestDate(): string {
-    if (this.versionHistory.length === 0) { return ''; }
+    if (this.versionHistory.length === 0) {
+ return ''; 
+}
+
     return this.versionHistory[this.versionHistory.length - 1].date;
   }
   versionHistoryLatestTotal(): number {
-    if (this.versionHistory.length === 0) { return 0; }
+    if (this.versionHistory.length === 0) {
+ return 0; 
+}
+
     return this.versionHistory[this.versionHistory.length - 1].total;
   }
   /** Mid-point date label for the chart's x-axis. Template uses
    * this instead of inlining `Math.floor(...)` because Angular's
    * template language doesn't expose globals. */
   versionHistoryMidDate(): string {
-    if (this.versionHistory.length < 3) { return ''; }
+    if (this.versionHistory.length < 3) {
+ return ''; 
+}
+
     return this.versionHistory[Math.floor(this.versionHistory.length / 2)].date;
   }
 
@@ -440,7 +486,9 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
         const blockEnd = blockStart + SLOTS_PER_HOUR;
         let count = 0;
         for (let i = blockStart; i < blockEnd; i++) {
-          if (padded.charAt(i) === '.') { count++; }
+          if (padded.charAt(i) === '.') {
+ count++; 
+}
         }
         let future = false;
         if (isToday && h > nowHour) {
@@ -451,13 +499,16 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
           // Mixed: count only the slots up to nowSlot.
           count = 0;
           for (let i = blockStart; i < Math.min(blockEnd, nowSlot); i++) {
-            if (padded.charAt(i) === '.') { count++; }
+            if (padded.charAt(i) === '.') {
+ count++; 
+}
           }
         }
         const label = `${date} ${this.fmtHour(h)} UTC`;
-        out.push({ count, future, label });
+        out.push({ count: count, future: future, label: label });
       }
     }
+
     return out;
   }
 
@@ -469,26 +520,43 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   // row in the dataset, on both ends. Mirrors the CLI's
   // printSingleLineTimelines behaviour.
   private applyTrimmed(rows: VisorRow[]) {
-    if (rows.length === 0) { return; }
+    if (rows.length === 0) {
+ return; 
+}
     const len = rows[0].blocks.length;
-    if (len === 0) { return; }
+    if (len === 0) {
+ return; 
+}
 
     const sharedEmpty = (idx: number): boolean => {
       for (const r of rows) {
         const b = r.blocks[idx];
-        if (!b) { return false; }
-        if (b.future) { return false; }
-        if (b.count > 0) { return false; }
+        if (!b) {
+ return false; 
+}
+        if (b.future) {
+ return false; 
+}
+        if (b.count > 0) {
+ return false; 
+}
       }
+
       return true;
     };
 
     let lead = 0;
-    while (lead < len && sharedEmpty(lead)) { lead++; }
+    while (lead < len && sharedEmpty(lead)) {
+ lead++; 
+}
     let trail = 0;
-    while (trail < len - lead && sharedEmpty(len - 1 - trail)) { trail++; }
+    while (trail < len - lead && sharedEmpty(len - 1 - trail)) {
+ trail++; 
+}
 
-    if (lead === 0 && trail === 0) { return; }
+    if (lead === 0 && trail === 0) {
+ return; 
+}
     for (const r of rows) {
       r.blocks = r.blocks.slice(lead, len - trail);
     }
@@ -497,7 +565,9 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   // Build tick positions — every 24 blocks (one per day boundary)
   // until the dataset ends, plus a final "now" marker.
   private buildTicks(totalBlocks: number): { label: string; left: number }[] {
-    if (totalBlocks <= 0) { return []; }
+    if (totalBlocks <= 0) {
+ return []; 
+}
     const out: { label: string; left: number }[] = [];
     // Every-24 is "1d" boundary; only label when total >= 48 to avoid clutter.
     if (totalBlocks >= 48) {
@@ -507,6 +577,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
         day++;
       }
     }
+
     return out;
   }
 
@@ -520,34 +591,64 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   }
 
   fmtPct(p: number): string {
-    if (p >= 99.95) { return '100%'; }
-    if (p > 0 && p < 1) { return '<1%'; }
+    if (p >= 99.95) {
+ return '100%'; 
+}
+    if (p > 0 && p < 1) {
+ return '<1%'; 
+}
+
     return p.toFixed(1) + '%';
   }
 
   pctClass(p: number): string {
-    if (p >= 99) { return 'up-good'; }
-    if (p >= 80) { return 'up-mid'; }
+    if (p >= 99) {
+ return 'up-good'; 
+}
+    if (p >= 80) {
+ return 'up-mid'; 
+}
+
     return 'up-bad';
   }
 
   // Map an online-slots-per-hour count (0..12) to one of five density
   // classes. Same threshold layout the CLI uses for unicode block art.
   blockClass(b: BarBlock): string {
-    if (b.future) { return 'future'; }
-    if (b.count <= 0) { return 'lvl0'; }
-    if (b.count <= 3) { return 'lvl1'; }
-    if (b.count <= 6) { return 'lvl2'; }
-    if (b.count <= 9) { return 'lvl3'; }
+    if (b.future) {
+ return 'future'; 
+}
+    if (b.count <= 0) {
+ return 'lvl0'; 
+}
+    if (b.count <= 3) {
+ return 'lvl1'; 
+}
+    if (b.count <= 6) {
+ return 'lvl2'; 
+}
+    if (b.count <= 9) {
+ return 'lvl3'; 
+}
+
     return 'lvl4';
   }
 
   blockTooltip(b: BarBlock): string {
-    if (b.future) { return `${b.label} — future`; }
-    if (b.count < 0) { return `${b.label} — no data`; }
+    if (b.future) {
+ return `${b.label} — future`; 
+}
+    if (b.count < 0) {
+ return `${b.label} — no data`; 
+}
+
     return `${b.label} — ${b.count}/12 slots online`;
   }
 
-  trackRow(_: number, r: VisorRow): string { return r.pk; }
-  trackBlock(i: number, _b: BarBlock): number { return i; }
+  trackRow(_: number, r: VisorRow): string {
+ return r.pk; 
+}
+  trackBlock(i: number, _b: BarBlock): number {
+ return i; 
+}
 }
