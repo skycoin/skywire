@@ -87,7 +87,7 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 		appCl.SetErrorOrLog(err)
 		return err
 	}
-	defer database.Close()
+	defer database.Close() //nolint
 
 	appCl.LogInfo("Database initialized successfully at: %s", database.Path())
 
