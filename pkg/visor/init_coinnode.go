@@ -222,7 +222,10 @@ func runCoinRegistrar(ctx context.Context, log logrus.FieldLogger, sd *servicedi
 		select {
 		case <-ctx.Done():
 			if registered {
-				dctx, cancel := context.WithTimeout(context.Background(), coinHealthProbeTimeout)
+				// ctx is already canceled here (shutdown), so derive a live,
+				// non-cancelable context from it for the final deregister —
+				// keeps values, drops the cancellation, no bare Background.
+				dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), coinHealthProbeTimeout)
 				_ = sd.DeleteEntry(dctx) //nolint:errcheck
 				cancel()
 			}
