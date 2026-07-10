@@ -62,11 +62,13 @@ export class SkywireHttpBackend implements HttpBackend {
     if (!this.active || !this.isApi(req.urlWithParams)) {
       return this.xhr.handle(req);
     }
+
     return from(this.dispatch(req)).pipe(switchMap(r => this.toEvent(req, r)));
   }
 
   private isApi(url: string): boolean {
     const p = this.pathOf(url);
+
     return p === '/api' || p.indexOf('/api/') === 0;
   }
 
@@ -84,6 +86,7 @@ export class SkywireHttpBackend implements HttpBackend {
           ? location.origin + '/'
           : 'file:///';
       const u = new URL(url, base);
+
       return u.pathname + u.search;
     } catch (e) {
       return url;
@@ -98,6 +101,7 @@ export class SkywireHttpBackend implements HttpBackend {
         out[k] = v;
       }
     }
+
     return out;
   }
 
@@ -120,12 +124,14 @@ export class SkywireHttpBackend implements HttpBackend {
     const raw = req.serializeBody();
     const body = raw == null ? null : String(raw);
 
-    const synth = (r: any): GatewayResponse => ({
+    const synth = (r: any): GatewayResponse => {
+return {
       status: r.status,
       body: r.body,
       // hvApi carries no response headers of its own; synthesize JSON.
       headers: r.headers || { 'Content-Type': 'application/json' },
-    });
+    }
+};
 
     if (this.cfg.visor && w.skywireVisor && w.skywireVisor.hvApi) {
       return w.skywireVisor.hvApi(method, path, body).then(synth);
@@ -155,10 +161,11 @@ export class SkywireHttpBackend implements HttpBackend {
     const headers = new HttpHeaders(r.headers || { 'Content-Type': 'application/json' });
     const url = req.urlWithParams;
     if (r.status >= 200 && r.status < 300) {
-      return of(new HttpResponse({ body, status: r.status, statusText: 'OK', headers, url }));
+      return of(new HttpResponse({ body: body, status: r.status, statusText: 'OK', headers: headers, url: url }));
     }
+
     return throwError(
-      () => new HttpErrorResponse({ error: body, status: r.status, statusText: 'Error', headers, url }),
+      () => new HttpErrorResponse({ error: body, status: r.status, statusText: 'Error', headers: headers, url: url }),
     );
   }
 }

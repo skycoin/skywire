@@ -117,6 +117,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   terminalIframeUrl: SafeResourceUrl | null = null;
   terminalFullWindowUrl = '';
   private boundTerminalPk = '';
+  // Throttle timestamp for the visor-switcher summaries call (see refreshNavRows).
+  private navSwitcherLoadedAt = 0;
 
   /**
    * Ask the currently displayed instance of this page to reload the node data.
@@ -225,6 +227,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     if (!this.node) {
       this.headerLabel = '';
       this.headerIdentifier = '';
+
       return;
     }
     const labelInfo = this.storageService.getLabelInfo(this.node.localPk);
@@ -364,6 +367,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           'resources', 'terminal', 'wallet']);
         this.tabsData = this.tabsData.filter(t => {
           const seg = t.linkParts ? t.linkParts[t.linkParts.length - 1] : '';
+
           return !wasmHiddenTabs.has(seg);
         });
       }
@@ -433,7 +437,6 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // Visor" tab, kept alongside "Visor list") and the visor switcher (one chip
   // per visor in the list, so the user can jump between visors without backing
   // out). The switcher list is a single summaries call, throttled to ~10s.
-  private navSwitcherLoadedAt = 0;
   private refreshNavRows() {
     this.homeNavTabs = homeTabsData();
 
@@ -467,9 +470,15 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
    * shell session live for as long as NodeComponent does.
    */
   private maybeBuildTerminalUrl() {
-    if (!this.isTerminalTab) { return; }
-    if (!this.node || !this.node.localPk) { return; }
-    if (this.boundTerminalPk === this.node.localPk) { return; }
+    if (!this.isTerminalTab) {
+ return; 
+}
+    if (!this.node || !this.node.localPk) {
+ return; 
+}
+    if (this.boundTerminalPk === this.node.localPk) {
+ return; 
+}
     const url = '/pty/' + this.node.localPk;
     this.terminalIframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
     this.terminalFullWindowUrl = window.location.origin + url;
@@ -477,7 +486,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   openTerminalFullWindow() {
-    if (!this.terminalFullWindowUrl) { return; }
+    if (!this.terminalFullWindowUrl) {
+ return; 
+}
     window.open(this.terminalFullWindowUrl, '_blank', 'noopener noreferrer');
   }
 
@@ -596,6 +607,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
             this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
             this.snackbarService.showError('common.loading-error', null, true, result.error);
             AppComponent.currentInstance.showDataProblemMsg();
+
             return;
           }
 

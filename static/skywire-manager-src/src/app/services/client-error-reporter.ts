@@ -95,6 +95,7 @@ function pickStack(args: any[]): string | undefined {
       return a.stack;
     }
   }
+
   return undefined;
 }
 
@@ -114,8 +115,7 @@ export function installClientErrorReporter(): void {
     postReport('error', 'unhandledrejection: ' + msg, reason ? reason.stack : undefined);
   });
 
-  const wrap = (level: 'error' | 'warn', orig: (...a: any[]) => void) => {
-    return (...args: any[]) => {
+  const wrap = (level: 'error' | 'warn', orig: (...a: any[]) => void) => (...args: any[]) => {
       try {
         postReport(level, args.map(formatArg).join(' '), pickStack(args));
       } catch {
@@ -123,7 +123,6 @@ export function installClientErrorReporter(): void {
       }
       orig.apply(console, args);
     };
-  };
   // Bind to keep the originals so devtools still shows everything.
   console.error = wrap('error', console.error.bind(console));
   console.warn = wrap('warn', console.warn.bind(console));

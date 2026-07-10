@@ -55,6 +55,7 @@ export class RewardService {
       d.setDate(d.getDate() - i);
       dates.push(d.toISOString().split('T')[0]);
     }
+
     return dates;
   }
 
@@ -64,6 +65,7 @@ export class RewardService {
   formatDateShort(dateStr: string): string {
     const d = new Date(dateStr + 'T00:00:00');
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
     return months[d.getMonth()] + ' ' + d.getDate();
   }
 
@@ -105,14 +107,14 @@ export class RewardService {
 
     // Fetch per-visor reward history (last 7 days) using the per-PK endpoint.
     // This is much more efficient than fetching all rewards for all visors.
-    const requests: Observable<{ pk: string; history: any[] }>[] = visorPks.map(pk => {
-      return this.http.get<any>(
+    const requests: Observable<{ pk: string; history: any[] }>[] = visorPks.map(pk => this.http.get<any>(
         `${this.rewardSystemUrl}/skycoin-rewards/visor/${pk}?days=7`
       ).pipe(
-        map(resp => ({ pk, history: (resp && resp.history ? resp.history : []) })),
-        catchError(() => of({ pk, history: [] as any[] }))
-      );
-    });
+        map(resp => {
+return { pk: pk, history: (resp && resp.history ? resp.history : []) }
+}),
+        catchError(() => of({ pk: pk, history: [] as any[] }))
+      ));
 
     return forkJoin(requests).pipe(
       map(results => {
@@ -120,7 +122,7 @@ export class RewardService {
 
         for (const { pk, history } of results) {
           const visorData: VisorRewardData = {
-            pk,
+            pk: pk,
             rewardAddress: '',
             dailyAmounts: {},
             dailySent: {},
@@ -147,6 +149,7 @@ export class RewardService {
       }),
       catchError(err => {
         this.fetching = false;
+
         return of(new Map<string, VisorRewardData>());
       })
     );

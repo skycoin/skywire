@@ -157,7 +157,9 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
     if (enabled) {
       window.skywireAutoUpdate.enable();
       // Re-enabling: check immediately so a pending update isn't missed for a poll cycle.
-      try { window.skywireAutoUpdate.checkNow(); } catch (e) {}
+      try {
+ window.skywireAutoUpdate.checkNow(); 
+} catch (e) {}
     } else {
       window.skywireAutoUpdate.disable();
     }

@@ -6,7 +6,10 @@ import { TabButtonData } from '../components/layout/top-bar/top-bar.component';
  * used as the visor-switcher chip label when a node has no custom label.
  */
 export function abbreviatePk(pk: string): string {
-  if (!pk) { return '?'; }
+  if (!pk) {
+ return '?'; 
+}
+
   return pk.length <= 12 ? pk : pk.substring(0, 5) + '...' + pk.substring(pk.length - 5);
 }
 
@@ -20,12 +23,10 @@ export function abbreviatePk(pk: string): string {
  * Shared by the node-list and node (detail) pages so the row is identical on both.
  */
 export function visorSwitcherChips(nodes: Node[]): TabButtonData[] {
-  return (nodes || []).map(n => {
-    return {
+  return (nodes || []).map(n => ({
       icon: (n as any).isHypervisor ? 'router' : ((n as any).arch === 'wasm' ? 'public' : 'devices'),
       label: n.label || abbreviatePk(n.localPk),
       sublabel: n.localPk || '',
       linkParts: ['/nodes', n.localPk, 'info'],
-    } as TabButtonData;
-  });
+    } as TabButtonData));
 }
