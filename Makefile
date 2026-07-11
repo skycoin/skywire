@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wallet prune-wasm-embed-history
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
@@ -291,6 +291,12 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 embed-wasm-visor: wasm-visor ## Update the COMMITTED embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasm-visor.wasm.gz) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
 	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasm-visor.wasm.gz
 	@echo "updated pkg/wasmhv/wasmbin/wasm-visor.wasm.gz — review with 'git status', commit intentionally (it's a ~8MB blob)."
+
+embed-wallet: ## Sync the vendored skycoin-web wallet dist into the embedded PWA tree (pkg/visor/static/wallet). Run after re-vendoring skycoin, then `git add` + commit it (~11MB). The wallet loads same-origin in the wasm-visor PWA; only its node API traffic crosses dmsg. Source (relative asset paths) lives upstream in skycoin/skycoin — the base href is rewritten to /wallet/ at serve time.
+	rm -rf ./pkg/visor/static/wallet
+	mkdir -p ./pkg/visor/static/wallet
+	cp -a ./vendor/github.com/skycoin/skycoin/src/skycoin-web/src/gui/dist/. ./pkg/visor/static/wallet/
+	@echo "synced pkg/visor/static/wallet from the vendored skycoin-web dist — review with 'git status', commit intentionally (~11MB)."
 
 prune-wasm-embed-history: ## Drop OLD embedded wasm-visor blobs from git history, keeping only the current one (reclaims ~9MB per past update). REWRITES HISTORY — needs git-filter-repo; run on a fresh clone, then force-push. See scripts/prune-wasm-embed-history.sh for the full warning.
 	scripts/prune-wasm-embed-history.sh

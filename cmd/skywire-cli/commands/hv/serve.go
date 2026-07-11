@@ -150,6 +150,25 @@ page never asks anyone to type a secret key.`,
 		// assets). Routing is hash-based (#/...), so the server only ever sees "/"
 		// plus real asset paths — no SPA rewrite needed.
 		fileServer := http.FileServer(http.FS(uiFS))
+
+		// Skycoin-web thin-client wallet, bundled into the PWA (make embed-wallet)
+		// and served under /wallet/ from the embedded static/wallet tree. The
+		// vendored dist ships <base href="/"> (skycoin's own root deployment);
+		// rewrite it to /wallet/ so the wallet's relative asset paths resolve under
+		// this mount. Only registered when the wallet is actually embedded.
+		if walletIndex, werr := fs.ReadFile(uiFS, "wallet/index.html"); werr == nil {
+			walletIndex = bytes.Replace(walletIndex, []byte(`<base href="/">`), []byte(`<base href="/wallet/">`), 1)
+			mux.HandleFunc("/wallet/", func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/wallet/" || r.URL.Path == "/wallet/index.html" {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					w.Header().Set("Cache-Control", "no-cache")
+					_, _ = w.Write(walletIndex) //nolint:errcheck // best-effort
+					return
+				}
+				fileServer.ServeHTTP(w, r) // /wallet/<asset> → static/wallet/<asset>
+			})
+		}
+
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
