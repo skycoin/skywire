@@ -1634,6 +1634,46 @@ func skychatInternalArgs(addr string, pair bool) []string {
 	return args
 }
 
+// skycoinWebFlagsEnv builds the bare skycoin-web flags (--host/--port/
+// --node-url/--wallet-dir) and the resolving-proxy env shared by both the
+// external-launch form (`skywire skycoin web <flags>`) and the internal
+// launcher app (RunSkycoinWeb, handed the flags directly). Keeping one
+// source for both is what lets skycoin-web launch identically on the
+// host-native and (via the same internal path) the wasm visor.
+func skycoinWebFlagsEnv() (flags, env []string) {
+	if skycoinWebAddr != "" {
+		if h, p, err := net.SplitHostPort(offsetAddr(skycoinWebAddr)); err == nil {
+			flags = append(flags, "--host", h, "--port", p)
+		}
+	}
+	nodeURLs := skycoinWebNodeURLs
+	if strings.TrimSpace(nodeURLs) == "" && (enableDmsgWeb || enableSkynetWeb) {
+		// No explicit SKYCOINWEBNODES and a resolving proxy is enabled →
+		// default to the deployment skycoin node over the mesh (same PK:port
+		// as services-config.json prod.skycoin_node_dmsg and the wasm
+		// wallet's defaultCoinNode; here as an http URL the proxy resolves).
+		nodeURLs = "http://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1.dmsg:6420"
+	}
+	for _, u := range strings.Split(nodeURLs, ",") {
+		if u = strings.TrimSpace(u); u != "" {
+			flags = append(flags, "--node-url", u)
+		}
+	}
+	if skycoinWebWalletDir != "" {
+		flags = append(flags, "--wallet-dir", skycoinWebWalletDir)
+	}
+	// dmsgweb (:4445) auto-chains skynetweb, so it's the single entry point
+	// when both are on; skynetweb-only uses :4446.
+	if enableDmsgWeb || enableSkynetWeb {
+		proxy := "socks5://127.0.0.1:4445"
+		if !enableDmsgWeb && enableSkynetWeb {
+			proxy = "socks5://127.0.0.1:4446"
+		}
+		env = []string{"HTTP_PROXY=" + proxy, "HTTPS_PROXY=" + proxy}
+	}
+	return flags, env
+}
+
 // configureApps sets up launcher app configurations (internal or external),
 // handles app disable/enable flags, and configures VPN/proxy app settings.
 func configureApps(log *logging.Logger) {
@@ -1706,45 +1746,10 @@ func configureApps(log *logging.Logger) {
 		// (default skycoin + fibercoins). The User= field lets
 		// the wallet drop to the operator's UID so the wallet dir
 		// is writable even when the visor itself runs as _skywire.
-		webArgs := []string{"skycoin", "web"}
-		if skycoinWebAddr != "" {
-			if h, p, err := net.SplitHostPort(offsetAddr(skycoinWebAddr)); err == nil {
-				webArgs = append(webArgs, "--host", h, "--port", p)
-			}
-		}
-		nodeURLs := skycoinWebNodeURLs
-		if strings.TrimSpace(nodeURLs) == "" && (enableDmsgWeb || enableSkynetWeb) {
-			// No explicit SKYCOINWEBNODES and a resolving proxy is enabled →
-			// default the host-native wallet to the deployment skycoin node
-			// over the mesh. Same PK:port as services-config.json
-			// prod.skycoin_node_dmsg (dmsg://<pk>:6420) and the wasm wallet's
-			// defaultCoinNode — here as an http URL the proxy (webEnv below)
-			// resolves: http://<pk>.dmsg:<port> → dmsg dial <pk>:6420.
-			nodeURLs = "http://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1.dmsg:6420"
-		}
-		for _, u := range strings.Split(nodeURLs, ",") {
-			u = strings.TrimSpace(u)
-			if u != "" {
-				webArgs = append(webArgs, "--node-url", u)
-			}
-		}
-		if skycoinWebWalletDir != "" {
-			webArgs = append(webArgs, "--wallet-dir", skycoinWebWalletDir)
-		}
-		// When an embedded resolving proxy is enabled, route the
-		// wallet's node HTTP client through it so mesh node URLs
-		// (<name>.dmsg / <name>.skynet in SKYCOINWEBNODES) resolve
-		// remotely — the default mesh mode for the host-native wallet.
-		// dmsgweb (:4445) auto-chains skynetweb, so it's the single
-		// entry point when both are on; skynetweb-only uses :4446.
-		var webEnv []string
-		if enableDmsgWeb || enableSkynetWeb {
-			proxy := "socks5://127.0.0.1:4445"
-			if !enableDmsgWeb && enableSkynetWeb {
-				proxy = "socks5://127.0.0.1:4446"
-			}
-			webEnv = []string{"HTTP_PROXY=" + proxy, "HTTPS_PROXY=" + proxy}
-		}
+		// External-launch form: `skywire skycoin web <flags>` (Binary=skywire).
+		// Opt-in — the default is the internal launcher app in the else branch.
+		webFlags, webEnv := skycoinWebFlagsEnv()
+		webArgs := append([]string{"skycoin", "web"}, webFlags...)
 		apps = append(apps, appserver.AppConfig{
 			Name:      skyenv.SkycoinWebName,
 			Binary:    "skywire",
@@ -1758,6 +1763,7 @@ func configureApps(log *logging.Logger) {
 		conf.Launcher.Apps = apps
 	} else {
 		// Internal apps configuration (default - apps run within visor process)
+		swFlags, swEnv := skycoinWebFlagsEnv()
 		conf.Launcher.Apps = []appserver.AppConfig{
 			{
 				Name:      skyenv.VPNClientName,
@@ -1792,6 +1798,18 @@ func configureApps(log *logging.Logger) {
 				AutoStart: isVpnServerEnable,
 				Args:      []string{},
 				Port:      routing.Port(skyenv.VPNServerPort),
+			},
+			{
+				// skycoin-web thin-client wallet as an INTERNAL app — Binary
+				// empty → RunSkycoinWeb (cmd/apps/skycoin-web/commands). This
+				// is the default; the same internal path serves it on the wasm
+				// visor. External (`skywire skycoin web`) is the opt-in above.
+				Name:      skyenv.SkycoinWebName,
+				AutoStart: isSkycoinWebEnable,
+				Port:      routing.Port(skyenv.SkycoinWebPort),
+				Args:      swFlags,
+				Env:       swEnv,
+				User:      skycoinWebUser,
 			},
 		}
 	}
