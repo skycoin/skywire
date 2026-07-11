@@ -1699,6 +1699,11 @@
     // HV UI doesn't expose (native has its own Angular skychat tab).
     if (globalThis.skywireVisor && globalThis.skywireVisor.skychatSend) { addApp("chat", function () { openChat(); }); }
     if (globalThis.skywireVisor && globalThis.skywireVisor.serveContent) { addApp("host", function () { openHost(); }); }
+    // 'wallet' is the skycoin-web thin-client bundled into the PWA at /wallet/
+    // (same-origin — the app never loads over dmsg; only its node API does, via
+    // the Service Worker → fetchDmsg bridge). Only offered in the wasm-visor
+    // context, where /wallet/ is embedded and dmsg routing is available.
+    if (globalThis.skywireVisor) { addApp("wallet", function () { openWallet(); }); }
     addApp("console", function () { openCli(); });
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
@@ -1751,6 +1756,20 @@
       // home.dmsg load flashing before the target).
       if (!skipLanding) { win.landHome(); }
       return win;
+    }
+    var walletWin = null;
+    function openWallet() {
+      if (focusExisting(walletWin)) { return; }
+      // Same-origin iframe onto the PWA-bundled skycoin-web wallet. WinBox builds
+      // the iframe from url:. The wallet's crypto (skycoin-lite.wasm) + wallets
+      // (localStorage) are fully client-side; its node API (/api/v1|v2) is routed
+      // over dmsg by the Service Worker → fetchDmsg bridge.
+      walletWin = makeWin(doc, withRoot({
+        title: "skycoin wallet", url: "/wallet/", width: "460px", height: "720px",
+        top: barTop, bottom: barBottom,
+        onclose: function () { untrack(walletWin); walletWin = null; }
+      }));
+      track(walletWin, "wallet");
     }
     var logWin = null;
     function openLog() {
