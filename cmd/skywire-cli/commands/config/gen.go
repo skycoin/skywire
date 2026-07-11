@@ -1712,7 +1712,17 @@ func configureApps(log *logging.Logger) {
 				webArgs = append(webArgs, "--host", h, "--port", p)
 			}
 		}
-		for _, u := range strings.Split(skycoinWebNodeURLs, ",") {
+		nodeURLs := skycoinWebNodeURLs
+		if strings.TrimSpace(nodeURLs) == "" && (enableDmsgWeb || enableSkynetWeb) {
+			// No explicit SKYCOINWEBNODES and a resolving proxy is enabled →
+			// default the host-native wallet to the deployment skycoin node
+			// over the mesh. Same PK:port as services-config.json
+			// prod.skycoin_node_dmsg (dmsg://<pk>:6420) and the wasm wallet's
+			// defaultCoinNode — here as an http URL the proxy (webEnv below)
+			// resolves: http://<pk>.dmsg:<port> → dmsg dial <pk>:6420.
+			nodeURLs = "http://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1.dmsg:6420"
+		}
+		for _, u := range strings.Split(nodeURLs, ",") {
 			u = strings.TrimSpace(u)
 			if u != "" {
 				webArgs = append(webArgs, "--node-url", u)
@@ -1721,12 +1731,27 @@ func configureApps(log *logging.Logger) {
 		if skycoinWebWalletDir != "" {
 			webArgs = append(webArgs, "--wallet-dir", skycoinWebWalletDir)
 		}
+		// When an embedded resolving proxy is enabled, route the
+		// wallet's node HTTP client through it so mesh node URLs
+		// (<name>.dmsg / <name>.skynet in SKYCOINWEBNODES) resolve
+		// remotely — the default mesh mode for the host-native wallet.
+		// dmsgweb (:4445) auto-chains skynetweb, so it's the single
+		// entry point when both are on; skynetweb-only uses :4446.
+		var webEnv []string
+		if enableDmsgWeb || enableSkynetWeb {
+			proxy := "socks5://127.0.0.1:4445"
+			if !enableDmsgWeb && enableSkynetWeb {
+				proxy = "socks5://127.0.0.1:4446"
+			}
+			webEnv = []string{"HTTP_PROXY=" + proxy, "HTTPS_PROXY=" + proxy}
+		}
 		apps = append(apps, appserver.AppConfig{
 			Name:      skyenv.SkycoinWebName,
 			Binary:    "skywire",
 			AutoStart: isSkycoinWebEnable,
 			Port:      routing.Port(skyenv.SkycoinWebPort),
 			Args:      webArgs,
+			Env:       webEnv,
 			User:      skycoinWebUser,
 		})
 

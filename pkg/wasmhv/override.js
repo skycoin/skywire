@@ -303,36 +303,8 @@
   window.__SKYWIRE_HV__ = CFG;
   CFG.ready = ensure();
 
-  // Service-Worker → dmsg bridge for the bundled skycoin-web wallet's node API.
-  // sw.js intercepts the same-origin /api/v1|v2 requests the wallet's XHR makes
-  // and postMessages them here; we resolve each over dmsg — via the wasm visor's
-  // fetchDmsg — to the configured coin node, and reply over the message port.
-  // The node is localStorage['skywire-coin-node'] = "<pk>:<port>" (the visor's
-  // health-gated type=coin forward; see pkg/visor/init_coinnode.go). TODO: pick
-  // it automatically from ServiceType=coin service discovery + a node picker UI.
-  // Only wired in visor mode (self.skywireVisor); a viewer/dormant tab ignores it.
-  try {
-    if (navigator.serviceWorker && CFG.visor) {
-      navigator.serviceWorker.addEventListener('message', function (e) {
-        var d = e.data;
-        if (!d || d.type !== 'coin-fetch') { return; }
-        var port = e.ports && e.ports[0];
-        var reply = function (status, body) { if (port) { try { port.postMessage({ status: status, body: body }); } catch (x) {} } };
-        var node = '';
-        try { node = localStorage.getItem('skywire-coin-node') || ''; } catch (x) {}
-        if (!node) { reply(503, '{"error":"no coin node configured (set localStorage skywire-coin-node to <pk>:<port>)"}'); return; }
-        ensure().then(function () {
-          return self.skywireVisor.fetchDmsg(node, d.method, d.path, d.body || null);
-        }).then(function (r) {
-          var b = (r && typeof r.body === 'string') ? r.body : (r && r.body ? new TextDecoder().decode(r.body) : '');
-          reply((r && r.status) || 502, b);
-        }).catch(function (err) {
-          reply(502, JSON.stringify({ error: String(err) }));
-        });
-      });
-      log('coin-fetch bridge installed (wallet node API → dmsg)');
-    }
-  } catch (e) {}
+  // (The bundled wallet's node API is intercepted inside the wallet iframe by the
+  // dmsg fetch shim injected by serve.go's /wallet/ handler — no SW bridge here.)
 
   log('HTTP-over-dmsg override installed (hypervisor ' + CFG.pk + ')');
 })();
