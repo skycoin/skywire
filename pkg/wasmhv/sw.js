@@ -54,21 +54,10 @@ self.addEventListener('fetch', (event) => {
   const req = event.request;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) { return; } // never touch cross-origin
-
-  // The bundled skycoin-web wallet (served same-origin at /wallet/) reaches its
-  // fibercoin node via same-origin /api/v1|v2/* requests (skycoin API). Route
-  // those over dmsg to the configured coin node, through a window client that
-  // owns the wasm visor's fetchDmsg — this is what lets the same-origin wallet
-  // read/write the chain with no backend. Handles GET + POST (txn submit), so
-  // this must precede the GET-only guard below. Non-coin /api/* (the HV UI's own
-  // API) is answered in-page by override.js and never becomes a network request,
-  // so it doesn't reach here.
-  if (/^\/api\/v[12]\//.test(url.pathname)) {
-    event.respondWith(coinFetch(req));
-    return;
-  }
-
   if (req.method !== 'GET') { return; }
+  // Note: the bundled wallet's node API (/api/v1|v2) is NOT routed here — it's
+  // intercepted inside the wallet iframe by the dmsg fetch shim (serve.go's
+  // /wallet/ handler), so it works without a Service Worker (--harness, file://).
 
   // The auto-updater's build-version poll MUST always reach the real server — a
   // cached value would mask a new build forever. Don't intercept it at all
@@ -90,39 +79,6 @@ self.addEventListener('fetch', (event) => {
       .catch(() => caches.match(req).then((hit) => hit || caches.match('./')))
   );
 });
-
-// coinFetch relays one wallet node-API request to a window client that owns the
-// wasm visor's dmsg fetch (the SW can't call skywireVisor directly). The client
-// resolves it over dmsg to the configured coin node and replies over a
-// MessageChannel port. Returns a synthetic JSON Response — the wallet's XHR sees
-// a normal same-origin response, unaware the bytes crossed the mesh.
-async function coinFetch(req) {
-  try {
-    const url = new URL(req.url);
-    const method = req.method;
-    const body = (method === 'GET' || method === 'HEAD') ? null : await req.text();
-    const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    if (!clients.length) {
-      return jsonResp(503, { error: 'no visor client to route coin API' });
-    }
-    const data = await new Promise((resolve) => {
-      const ch = new MessageChannel();
-      const timer = setTimeout(() => resolve({ status: 504, body: '{"error":"coin fetch timeout"}' }), 30000);
-      ch.port1.onmessage = (e) => { clearTimeout(timer); resolve(e.data || {}); };
-      clients[0].postMessage({ type: 'coin-fetch', method: method, path: url.pathname + url.search, body: body }, [ch.port2]);
-    });
-    return new Response(data.body != null ? data.body : '', {
-      status: data.status || 502,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  } catch (e) {
-    return jsonResp(502, { error: String(e) });
-  }
-}
-
-function jsonResp(status, obj) {
-  return new Response(JSON.stringify(obj), { status: status, headers: { 'Content-Type': 'application/json' } });
-}
 
 function putInCache(req, res) {
   // Only cache complete, basic (same-origin) 200s; clone before the body is used.
