@@ -50,6 +50,15 @@ var (
 // forward). Everything else falls through to native fetch. No Service Worker
 // needed, so this works under --harness and file:// too. Same-origin iframe, so
 // it reads the parent's visor + the shared localStorage directly.
+// defaultCoinNode is the deployment skycoin node the bundled wallet talks to
+// out of the box: node.skycoin.com, whose visor forwards the local skycoin
+// node's :6420 over dmsg (addressed as "<pk>:<port>" for skywireVisor.fetchDmsg).
+// Users override it via the wallet's Settings->Nodes (localStorage
+// 'skywire-coin-node'). Same PK:port as deployment/services-config.json
+// prod.skycoin_node_dmsg ("dmsg://<pk>:6420") — here without the scheme,
+// which is what skywireVisor.fetchDmsg expects.
+const defaultCoinNode = "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:6420"
+
 const walletDmsgFetchShim = `<script>(function(){` +
 	`var rf=window.fetch?window.fetch.bind(window):null;` +
 	`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
@@ -63,7 +72,7 @@ const walletDmsgFetchShim = `<script>(function(){` +
 	`var v=window.parent&&window.parent.skywireVisor;` +
 	`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
 	`var node="";try{node=localStorage.getItem("skywire-coin-node")||"";}catch(e){}` +
-	`if(!node)return Promise.resolve(jr(503,{error:"no coin node configured (set localStorage skywire-coin-node to <pk>:<port>)"}));` +
+	`if(!node)node="` + defaultCoinNode + `";` +
 	`return Promise.resolve(v.fetchDmsg(node,init.method||"GET",p(url)+q(url),init.body||null)).then(function(r){` +
 	`var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");` +
 	`return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});` +
