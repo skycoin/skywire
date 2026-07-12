@@ -191,6 +191,8 @@ func (s *Server) dispatch(remotePK string, req protocol.Envelope) protocol.Envel
 		return s.handleGetOrders(remotePK, req)
 	case protocol.TypeGetOrderStatus:
 		return s.handleGetOrderStatus(remotePK, req)
+	case protocol.TypeGetListings:
+		return s.handleGetListings(remotePK, req)
 	default:
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "unknown message type: "+req.Type)
 	}

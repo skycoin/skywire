@@ -340,6 +340,41 @@ func (s *Server) handleGetOrders(pk string, req protocol.Envelope) protocol.Enve
 	return success(req.ID, protocol.GetOrdersResponse{Orders: views})
 }
 
+// handleGetListings returns the caller's own pending sell listings so the seller
+// can track each one's lifecycle: pending (awaiting the SKY deposit) -> confirmed
+// (deposit detected on-chain; the listing is now a purchasable product). It also
+// returns the market wallet so the UI can restate the deposit target for
+// still-pending listings.
+func (s *Server) handleGetListings(pk string, req protocol.Envelope) protocol.Envelope {
+	listings, err := s.db.GetSellerPendingListings(pk)
+	if err != nil {
+		return s.internal(req.ID, "get_listings", err)
+	}
+	wallet, err := s.db.GetMarketWallet()
+	if err != nil {
+		return s.internal(req.ID, "get_listings.wallet", err)
+	}
+	views := make([]protocol.ListingView, 0, len(listings))
+	for _, l := range listings {
+		v := protocol.ListingView{
+			ID:                l.ID,
+			AmountSKY:         l.AmountSKY,
+			ExpectedAmountSKY: l.ExpectedAmountSKY,
+			Price:             l.Price,
+			PaymentCurrency:   l.PaymentCurrency,
+			Status:            l.Status,
+			ExpiresAt:         l.ExpiresAt.Format(time.RFC3339),
+			CreatedAt:         l.CreatedAt.Format(time.RFC3339),
+			TxHash:            l.TxHash,
+		}
+		if l.ConfirmedAt != nil {
+			v.ConfirmedAt = l.ConfirmedAt.Format(time.RFC3339)
+		}
+		views = append(views, v)
+	}
+	return success(req.ID, protocol.GetListingsResponse{Listings: views, MarketWallet: wallet})
+}
+
 // handleGetOrderStatus returns the live status of one of the caller's orders.
 func (s *Server) handleGetOrderStatus(pk string, req protocol.Envelope) protocol.Envelope {
 	var r protocol.GetOrderStatusRequest
