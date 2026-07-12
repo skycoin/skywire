@@ -106,6 +106,11 @@ func (d *Database) Migrate() error {
 			return err
 		}
 	}
+	// products.listing_id links a product back to the listing it was promoted
+	// from, so a seller cancel can locate and refund the right escrow.
+	if err := d.ensureColumn("products", "listing_id", "TEXT"); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -199,6 +204,7 @@ CREATE INDEX IF NOT EXISTS idx_pending_listings_expires ON pending_listings(expi
 const createProductsTable = `
 CREATE TABLE IF NOT EXISTS products (
     id                  TEXT PRIMARY KEY,
+    listing_id          TEXT,
     seller_pubkey       TEXT NOT NULL,
     amount_sky          REAL NOT NULL,
     price               REAL NOT NULL,
@@ -210,6 +216,8 @@ CREATE TABLE IF NOT EXISTS products (
     sold_at             DATETIME,
     FOREIGN KEY (seller_pubkey) REFERENCES users(pubkey)
 );
+
+CREATE INDEX IF NOT EXISTS idx_products_listing ON products(listing_id);
 
 CREATE INDEX IF NOT EXISTS idx_products_status ON products(status);
 CREATE INDEX IF NOT EXISTS idx_products_seller ON products(seller_pubkey);

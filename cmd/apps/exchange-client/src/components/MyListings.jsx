@@ -8,6 +8,8 @@ function MyListings() {
   const [listings, setListings] = useState([])
   const [marketWallet, setMarketWallet] = useState('')
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busyId, setBusyId] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -25,6 +27,29 @@ function MyListings() {
     const id = setInterval(load, 5000)
     return () => clearInterval(id)
   }, [load])
+
+  // The seller can cancel their offer while it is pending (no deposit yet) or
+  // confirmed (an active product), as long as no buyer has selected it. A
+  // confirmed offer's escrowed SKY is returned within 1 hour of the deposit.
+  const cancelListing = async (l) => {
+    const msg =
+      l.status === 'pending'
+        ? 'Cancel this listing?'
+        : 'Cancel this offer? Your escrowed SKY will be returned within 1 hour of the original deposit.'
+    if (!window.confirm(msg)) return
+    setBusyId(l.id)
+    setError('')
+    try {
+      const resp = await api.cancelListing(l.id)
+      setNotice(resp.message || 'Offer canceled.')
+      setTimeout(() => setNotice(''), 8000)
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusyId('')
+    }
+  }
 
   // The three lifecycle steps, with the current one highlighted.
   const steps = ['pending', 'confirmed', 'product']
@@ -59,6 +84,7 @@ function MyListings() {
     <div>
       <h2 className="mb-4">My Listings</h2>
 
+      {notice && <div className="alert alert-info">{notice}</div>}
       {error && <div className="alert alert-danger">{error}</div>}
 
       {listings.length === 0 ? (
@@ -77,6 +103,7 @@ function MyListings() {
                 <th>Lifecycle</th>
                 <th>Deposit Tx</th>
                 <th>Expires</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -100,6 +127,19 @@ function MyListings() {
                     {l.status === 'pending' && l.expires_at
                       ? new Date(l.expires_at).toLocaleTimeString()
                       : '-'}
+                  </td>
+                  <td>
+                    {l.status === 'pending' || l.status === 'confirmed' ? (
+                      <button
+                        className="btn btn-sm btn-outline-danger"
+                        disabled={busyId === l.id}
+                        onClick={() => cancelListing(l)}
+                      >
+                        {busyId === l.id ? 'Canceling…' : 'Cancel'}
+                      </button>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
                   </td>
                 </tr>
               ))}

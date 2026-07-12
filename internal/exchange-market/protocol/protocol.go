@@ -46,6 +46,7 @@ const (
 	TypeCreateListing  = "client.create_listing"
 	TypeBuyProduct     = "client.buy_product"
 	TypeCancelListing  = "client.cancel_listing"
+	TypeCancelOrder    = "client.cancel_order"
 	TypeGetOrders      = "client.get_orders"
 	TypeGetOrderStatus = "client.get_order_status"
 	TypeGetListings    = "client.get_listings"
@@ -68,6 +69,7 @@ const (
 	CodeProductUnavailable  = "PRODUCT_UNAVAILABLE"
 	CodeListingNotFound     = "LISTING_NOT_FOUND"
 	CodeOrderNotFound       = "ORDER_NOT_FOUND"
+	CodeBuyerBlocked        = "BUYER_BLOCKED"
 	CodeCurrencyUnavailable = "CURRENCY_UNAVAILABLE"
 	CodeSessionConflict     = "SESSION_CONFLICT"
 	CodeInternalError       = "INTERNAL_ERROR"
@@ -242,9 +244,19 @@ type BuyProductResponse struct {
 	ExpiresAt             string  `json:"expires_at"`
 }
 
-// CancelListingRequest cancels a pending sell order.
+// CancelListingRequest cancels a seller's own sell offer. It works while the
+// listing is still pending (no deposit yet) and after it has become an active
+// product, as long as no buyer has selected it; the escrowed SKY (if any) is
+// returned by the Return Scheduler.
 type CancelListingRequest struct {
 	ListingID string `json:"listing_id"`
+}
+
+// CancelOrderRequest cancels a buyer's own in-flight buy order (before payment
+// is observed), releasing the product back to the market. The buyer is then
+// blocked from re-buying that same product.
+type CancelOrderRequest struct {
+	OrderID string `json:"order_id"`
 }
 
 // OrderView is an order as presented to clients.
