@@ -164,3 +164,37 @@ func (d *Database) MarkProductCancelled(productID string) error {
 
 	return nil
 }
+
+// GetAllProducts returns every product regardless of status, newest first.
+// Used by the market operator UI for monitoring.
+func (d *Database) GetAllProducts() ([]*Product, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`
+		SELECT id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
+		FROM products
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all products: %w", err)
+	}
+	defer rows.Close() //nolint
+
+	var products []*Product
+	for rows.Next() {
+		product := &Product{}
+		err := rows.Scan(&product.ID, &product.SellerPubKey, &product.AmountSKY, &product.Price,
+			&product.PaymentCurrency, &product.Status, &product.CreatedAt,
+			&product.FrozenAt, &product.FrozenBy, &product.SoldAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan product: %w", err)
+		}
+		products = append(products, product)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate products: %w", err)
+	}
+
+	return products, nil
+}
