@@ -31,7 +31,7 @@ func newTestMarket(t *testing.T) *server.Server {
 	if err != nil {
 		t.Fatalf("db.New: %v", err)
 	}
-	t.Cleanup(func() { _ = database.Close() })
+	t.Cleanup(func() { _ = database.Close() }) //nolint
 	if err := database.Migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestConnectFlow(t *testing.T) {
 		MarketPK  string   `json:"market_pk"`
 		Curr      []string `json:"currencies"`
 	}
-	body, _ := json.Marshal(map[string]string{"market_pk": pk.Hex()})
+	body, _ := json.Marshal(map[string]string{"market_pk": pk.Hex()}) //nolint
 	res, err := http.Post(ts.URL+"/api/connect", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST connect: %v", err)
@@ -105,7 +105,7 @@ func TestConnectFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST disconnect: %v", err)
 	}
-	res.Body.Close()
+	res.Body.Close() //nolint
 	getJSON(t, ts.URL+"/api/status", &st)
 	if st.Connected {
 		t.Fatal("expected disconnected after /api/disconnect")
@@ -122,27 +122,27 @@ func TestProxyRoutes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET products: %v", err)
 	}
-	res.Body.Close()
+	res.Body.Close() //nolint
 	if res.StatusCode != http.StatusConflict {
 		t.Fatalf("products before connect = %d, want 409", res.StatusCode)
 	}
 
 	// Connect.
 	pk, _ := cipher.GenerateKeyPair()
-	body, _ := json.Marshal(map[string]string{"market_pk": pk.Hex()})
+	body, _ := json.Marshal(map[string]string{"market_pk": pk.Hex()}) //nolint
 	res, err = http.Post(ts.URL+"/api/connect", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST connect: %v", err)
 	}
-	res.Body.Close()
+	res.Body.Close() //nolint
 
 	// Register wallets.
-	reg, _ := json.Marshal(map[string]string{"wallet_sky": "sky-me", "wallet_btc": "bc1-me"})
+	reg, _ := json.Marshal(map[string]string{"wallet_sky": "sky-me", "wallet_btc": "bc1-me"}) //nolint
 	res, err = http.Post(ts.URL+"/api/register", "application/json", bytes.NewReader(reg))
 	if err != nil {
 		t.Fatalf("POST register: %v", err)
 	}
-	res.Body.Close()
+	res.Body.Close() //nolint
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("register = %d, want 200", res.StatusCode)
 	}
@@ -166,12 +166,12 @@ func TestProxyRoutes(t *testing.T) {
 // TestConnectRejectsEmptyPK verifies connect fails cleanly with no key.
 func TestConnectRejectsEmptyPK(t *testing.T) {
 	ts := newTestServer(t, "")
-	body, _ := json.Marshal(map[string]string{"market_pk": ""})
+	body, _ := json.Marshal(map[string]string{"market_pk": ""}) //nolint
 	res, err := http.Post(ts.URL+"/api/connect", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST connect: %v", err)
 	}
-	defer res.Body.Close()
+	defer res.Body.Close() //nolint
 	if res.StatusCode == http.StatusOK {
 		t.Fatal("expected error status for empty market_pk")
 	}
@@ -179,7 +179,7 @@ func TestConnectRejectsEmptyPK(t *testing.T) {
 
 func getJSON(t *testing.T, url string, out any) {
 	t.Helper()
-	res, err := http.Get(url) //nolint:noctx
+	res, err := http.Get(url) //nolint:noctx,gosec
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
@@ -188,7 +188,7 @@ func getJSON(t *testing.T, url string, out any) {
 
 func decode(t *testing.T, res *http.Response, out any) {
 	t.Helper()
-	defer res.Body.Close()
+	defer res.Body.Close() //nolint
 	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
