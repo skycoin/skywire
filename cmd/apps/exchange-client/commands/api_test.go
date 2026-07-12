@@ -112,6 +112,57 @@ func TestConnectFlow(t *testing.T) {
 	}
 }
 
+// TestProxyRoutes verifies the UI-facing proxy routes forward to the connected
+// market and return its data (register -> products -> currencies).
+func TestProxyRoutes(t *testing.T) {
+	ts := newTestServer(t, "")
+
+	// Proxying before connecting must be rejected with 409.
+	res, err := http.Get(ts.URL + "/api/products") //nolint:noctx
+	if err != nil {
+		t.Fatalf("GET products: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusConflict {
+		t.Fatalf("products before connect = %d, want 409", res.StatusCode)
+	}
+
+	// Connect.
+	pk, _ := cipher.GenerateKeyPair()
+	body, _ := json.Marshal(map[string]string{"market_pk": pk.Hex()})
+	res, err = http.Post(ts.URL+"/api/connect", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST connect: %v", err)
+	}
+	res.Body.Close()
+
+	// Register wallets.
+	reg, _ := json.Marshal(map[string]string{"wallet_sky": "sky-me", "wallet_btc": "bc1-me"})
+	res, err = http.Post(ts.URL+"/api/register", "application/json", bytes.NewReader(reg))
+	if err != nil {
+		t.Fatalf("POST register: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("register = %d, want 200", res.StatusCode)
+	}
+
+	// Products returns an empty list (nothing listed yet).
+	var prods struct {
+		Products []any `json:"products"`
+	}
+	getJSON(t, ts.URL+"/api/products", &prods)
+	if prods.Products == nil {
+		t.Fatalf("products payload missing 'products' field")
+	}
+
+	// Currencies returns a (possibly empty) list.
+	var cur struct {
+		Currencies []string `json:"currencies"`
+	}
+	getJSON(t, ts.URL+"/api/currencies", &cur)
+}
+
 // TestConnectRejectsEmptyPK verifies connect fails cleanly with no key.
 func TestConnectRejectsEmptyPK(t *testing.T) {
 	ts := newTestServer(t, "")

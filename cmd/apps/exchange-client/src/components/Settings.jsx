@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api } from '../api'
 
 function Settings({ marketPubKey }) {
   const [wallets, setWallets] = useState({
@@ -9,6 +10,8 @@ function Settings({ marketPubKey }) {
     USDT_TRC20: '',
     USDT_ERC20: ''
   })
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState(null)
 
   const handleWalletChange = (currency, value) => {
     setWallets({
@@ -17,9 +20,28 @@ function Settings({ marketPubKey }) {
     })
   }
 
-  const handleSaveWallets = () => {
-    console.log('Saving wallets:', wallets)
-    alert('Wallet addresses saved')
+  const handleSaveWallets = async () => {
+    setMessage(null)
+    if (!wallets.SKY.trim()) {
+      setMessage({ type: 'danger', text: 'A SKY wallet address is required.' })
+      return
+    }
+    setSaving(true)
+    try {
+      await api.register({
+        wallet_sky: wallets.SKY.trim(),
+        wallet_btc: wallets.BTC.trim(),
+        wallet_bch: wallets.BCH.trim(),
+        wallet_ltc: wallets.LTC.trim(),
+        wallet_usdt_erc20: wallets.USDT_ERC20.trim(),
+        wallet_usdt_trc20: wallets.USDT_TRC20.trim(),
+      })
+      setMessage({ type: 'success', text: 'Wallet addresses saved to the market.' })
+    } catch (e) {
+      setMessage({ type: 'danger', text: e.message })
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -115,11 +137,16 @@ function Settings({ marketPubKey }) {
           />
         </div>
 
-        <button 
-          className="btn btn-primary"
+        {message && (
+          <div className={`alert alert-${message.type} py-2`}>{message.text}</div>
+        )}
+
+        <button
+          className="btn btn-connect"
           onClick={handleSaveWallets}
+          disabled={saving}
         >
-          Save Addresses
+          {saving ? 'Saving…' : 'Save Addresses'}
         </button>
       </div>
     </div>

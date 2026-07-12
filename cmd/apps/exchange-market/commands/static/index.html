@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exchange Market — Operator</title>
+  <style>
+    :root {
+      --sky-navy: #101F34;
+      --sky-white: #FFFFFF;
+      --sky-blue: #0273FF;
+      --panel: rgba(255, 255, 255, 0.04);
+      --border: rgba(2, 115, 255, 0.35);
+      --muted: rgba(255, 255, 255, 0.6);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--sky-navy);
+      color: var(--sky-white);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    header {
+      border-bottom: 2px solid var(--sky-blue);
+      padding: 1rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    header h1 { font-size: 1.15rem; margin: 0; }
+    header h1 span { color: var(--sky-blue); }
+    .pk { font-family: 'Courier New', monospace; font-size: 0.8rem; color: var(--sky-blue); word-break: break-all; }
+    .pk button {
+      margin-left: 0.5rem; font-size: 0.7rem; padding: 0.1rem 0.5rem;
+      background: transparent; color: var(--sky-white);
+      border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    }
+    nav { display: flex; gap: 0.25rem; padding: 0 1.5rem; border-bottom: 1px solid var(--border); }
+    nav button {
+      background: transparent; border: none; color: var(--muted);
+      padding: 0.75rem 1rem; cursor: pointer; font-size: 0.95rem;
+      border-bottom: 2px solid transparent;
+    }
+    nav button.active { color: var(--sky-white); border-bottom-color: var(--sky-blue); }
+    main { padding: 1.5rem; max-width: 1100px; }
+    .panel {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem;
+    }
+    .panel h2 { margin-top: 0; font-size: 1rem; color: var(--sky-blue); }
+    label { display: block; font-size: 0.85rem; margin: 0.75rem 0 0.25rem; }
+    .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
+    input {
+      width: 100%; padding: 0.5rem 0.65rem; border-radius: 6px;
+      border: 1px solid var(--border); background: rgba(0,0,0,0.25);
+      color: var(--sky-white); font-family: 'Courier New', monospace; font-size: 0.85rem;
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.5rem 1rem; }
+    button.primary {
+      background: var(--sky-blue); color: var(--sky-white); border: none;
+      padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; margin-top: 1rem;
+    }
+    button.primary:disabled { opacity: 0.5; cursor: default; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+    td code { color: var(--sky-blue); }
+    .badge { padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.72rem; background: rgba(255,255,255,0.12); }
+    .badge.active, .badge.completed { background: #1e7e34; }
+    .badge.frozen, .badge.pending_payment, .badge.pending { background: #b8860b; }
+    .badge.sold { background: #0257c4; }
+    .badge.expired, .badge.cancelled { background: #6c757d; }
+    .msg { padding: 0.6rem 0.85rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; }
+    .msg.ok { background: rgba(30,126,52,0.25); border: 1px solid #1e7e34; }
+    .msg.err { background: rgba(220,53,69,0.25); border: 1px solid #dc3545; }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
+    .tab { display: none; }
+    .tab.active { display: block; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Exchange <span>Market</span> — Operator</h1>
+    <div class="pk">
+      <span id="market-pk">loading…</span>
+      <button id="copy-pk" title="Copy public key">copy</button>
+    </div>
+  </header>
+
+  <nav>
+    <button data-tab="config" class="active">Configuration</button>
+    <button data-tab="products">Products</button>
+    <button data-tab="orders">Orders</button>
+    <button data-tab="bans">Banned Users</button>
+  </nav>
+
+  <main>
+    <!-- Configuration -->
+    <section id="tab-config" class="tab active">
+      <div id="config-msg"></div>
+      <form id="config-form">
+        <div class="panel">
+          <h2>Escrow &amp; SKY node</h2>
+          <label>Market SKY wallet (escrow)</label>
+          <input name="wallet_sky" placeholder="market SKY wallet address">
+          <label>SKY fullnode URL</label>
+          <input name="sky_fullnode_url" placeholder="http://127.0.0.1:6420">
+        </div>
+
+        <div class="panel">
+          <h2>Payment explorers <span class="hint">(leave empty to disable that coin)</span></h2>
+          <div class="grid">
+            <div><label>BTC explorer</label><input name="explorer_btc" placeholder="disabled"></div>
+            <div><label>BCH explorer</label><input name="explorer_bch" placeholder="disabled"></div>
+            <div><label>LTC explorer</label><input name="explorer_ltc" placeholder="disabled"></div>
+            <div><label>USDT (ERC20) explorer</label><input name="explorer_usdt_erc20" placeholder="disabled"></div>
+            <div><label>USDT (TRC20) explorer</label><input name="explorer_usdt_trc20" placeholder="disabled"></div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Rules</h2>
+          <div class="grid">
+            <div><label>Freeze violations before ban</label><input name="freeze_violations_limit" type="number" min="1"></div>
+            <div><label>Ban duration (days)</label><input name="ban_duration_days" type="number" min="1"></div>
+            <div><label>Listing expiry (minutes)</label><input name="listing_expiry_minutes" type="number" min="1"></div>
+            <div><label>Order expiry (minutes)</label><input name="order_expiry_minutes" type="number" min="1"></div>
+            <div><label>Return delay (hours)</label><input name="return_delay_hours" type="number" min="0"></div>
+            <div><label>Cleanup after (days)</label><input name="cleanup_days" type="number" min="1"></div>
+            <div><label>Fee rate (SCH per SKY)</label><input name="fee_rate_sch_per_sky"></div>
+          </div>
+        </div>
+
+        <button type="submit" class="primary" id="save-btn">Save configuration</button>
+      </form>
+    </section>
+
+    <!-- Products -->
+    <section id="tab-products" class="tab">
+      <div class="panel">
+        <h2>Products</h2>
+        <div id="products-body"><div class="empty">Loading…</div></div>
+      </div>
+    </section>
+
+    <!-- Orders -->
+    <section id="tab-orders" class="tab">
+      <div class="panel">
+        <h2>Orders</h2>
+        <div id="orders-body"><div class="empty">Loading…</div></div>
+      </div>
+    </section>
+
+    <!-- Bans -->
+    <section id="tab-bans" class="tab">
+      <div class="panel">
+        <h2>Temporarily banned users</h2>
+        <div id="bans-body"><div class="empty">Loading…</div></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const CONFIG_FIELDS = [
+      'wallet_sky','sky_fullnode_url','explorer_btc','explorer_bch','explorer_ltc',
+      'explorer_usdt_erc20','explorer_usdt_trc20','freeze_violations_limit','ban_duration_days',
+      'listing_expiry_minutes','order_expiry_minutes','return_delay_hours','cleanup_days','fee_rate_sch_per_sky'
+    ];
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"]/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    }
+    function shorten(s) { s = String(s || ''); return s.length > 16 ? s.slice(0, 10) + '…' + s.slice(-4) : s; }
+    function badge(status) { return '<span class="badge ' + esc(status) + '">' + esc(status) + '</span>'; }
+    function fmt(t) { return t ? new Date(t).toLocaleString() : '-'; }
+
+    async function getJSON(url) { const r = await fetch(url); return r.json(); }
+
+    // Tabs
+    let current = 'config';
+    document.querySelectorAll('nav button').forEach((b) => {
+      b.onclick = () => {
+        current = b.dataset.tab;
+        document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('active', x === b));
+        document.querySelectorAll('.tab').forEach((t) => t.classList.toggle('active', t.id === 'tab-' + current));
+        refresh();
+      };
+    });
+
+    // Market public key
+    getJSON('/api/info').then((d) => { $('#market-pk').textContent = d.public_key || 'unknown'; });
+    $('#copy-pk').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('#market-pk').textContent);
+
+    // Config
+    async function loadConfig() {
+      const cfg = await getJSON('/api/config');
+      CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) el.value = cfg[k] || ''; });
+    }
+    $('#config-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = $('#save-btn'); btn.disabled = true;
+      const body = {};
+      CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) body[k] = el.value.trim(); });
+      try {
+        const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'save failed');
+        $('#config-msg').innerHTML = '<div class="msg ok">Configuration saved.</div>';
+      } catch (err) {
+        $('#config-msg').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>';
+      } finally {
+        btn.disabled = false;
+        setTimeout(() => { $('#config-msg').innerHTML = ''; }, 5000);
+      }
+    };
+
+    async function loadProducts() {
+      const d = await getJSON('/api/products');
+      const rows = (d.products || []).map((p) =>
+        '<tr><td><code>' + esc(shorten(p.id)) + '</code></td><td><code>' + esc(shorten(p.seller_pubkey)) +
+        '</code></td><td>' + esc(p.amount_sky) + ' SKY</td><td>' + esc(p.price) + ' ' + esc(p.payment_currency) +
+        '</td><td>' + badge(p.status) + '</td><td>' + fmt(p.created_at) + '</td></tr>').join('');
+      $('#products-body').innerHTML = rows
+        ? '<table><thead><tr><th>ID</th><th>Seller</th><th>Amount</th><th>Price</th><th>Status</th><th>Created</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<div class="empty">No products.</div>';
+    }
+
+    async function loadOrders() {
+      const d = await getJSON('/api/orders');
+      const rows = (d.orders || []).map((o) =>
+        '<tr><td><code>' + esc(shorten(o.id)) + '</code></td><td><code>' + esc(shorten(o.buyer_pubkey)) +
+        '</code></td><td>' + esc(o.amount_sky) + ' SKY</td><td>' + esc(o.price) + ' ' + esc(o.payment_currency) +
+        '</td><td>' + badge(o.status) + '</td><td>' + esc(o.confirmations) + '</td><td>' + fmt(o.expires_at) + '</td></tr>').join('');
+      $('#orders-body').innerHTML = rows
+        ? '<table><thead><tr><th>ID</th><th>Buyer</th><th>Amount</th><th>Price</th><th>Status</th><th>Conf.</th><th>Expires</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<div class="empty">No orders.</div>';
+    }
+
+    async function loadBans() {
+      const d = await getJSON('/api/bans');
+      const rows = (d.bans || []).map((b) =>
+        '<tr><td><code>' + esc(shorten(b.pubkey)) + '</code></td><td>' + esc(b.violations) +
+        '</td><td>' + fmt(b.ban_until) + '</td></tr>').join('');
+      $('#bans-body').innerHTML = rows
+        ? '<table><thead><tr><th>Public Key</th><th>Violations</th><th>Banned Until</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<div class="empty">No banned users.</div>';
+    }
+
+    function refresh() {
+      if (current === 'config') loadConfig();
+      else if (current === 'products') loadProducts();
+      else if (current === 'orders') loadOrders();
+      else if (current === 'bans') loadBans();
+    }
+
+    loadConfig();
+    setInterval(() => { if (current !== 'config') refresh(); }, 5000);
+  </script>
+</body>
+</html>

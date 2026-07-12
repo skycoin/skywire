@@ -168,3 +168,36 @@ func (d *Database) DeleteOldViolations(age time.Duration) (int64, error) {
 
 	return rowsAffected, nil
 }
+
+// GetActiveBans returns bans that are still in effect (ban_until in the future),
+// soonest-to-expire first. Used by the market operator UI.
+func (d *Database) GetActiveBans() ([]*Ban, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	now := time.Now().UTC()
+	rows, err := d.db.Query(`
+		SELECT pubkey, violations, ban_until, created_at
+		FROM bans
+		WHERE ban_until > ?
+		ORDER BY ban_until ASC
+	`, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active bans: %w", err)
+	}
+	defer rows.Close() //nolint
+
+	var bans []*Ban
+	for rows.Next() {
+		ban := &Ban{}
+		if err := rows.Scan(&ban.PubKey, &ban.Violations, &ban.BanUntil, &ban.CreatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan ban: %w", err)
+		}
+		bans = append(bans, ban)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate bans: %w", err)
+	}
+
+	return bans, nil
+}

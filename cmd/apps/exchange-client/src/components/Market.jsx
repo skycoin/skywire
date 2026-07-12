@@ -1,62 +1,102 @@
-import { useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { api } from '../api'
 
-function Market({ isConnected }) {
+function Market() {
   const [showCreateListing, setShowCreateListing] = useState(false)
-  
-  // Mock data - will be replaced with real API calls
-  const [products] = useState([
-    { id: 1, amount: 10, price: 2.0, currency: 'USDT', seller: '02abc123...' },
-    { id: 2, amount: 50, price: 9.5, currency: 'BTC', seller: '03def456...' },
-    { id: 3, amount: 25, price: 4.8, currency: 'USDT', seller: '04ghi789...' },
-  ])
+  const [products, setProducts] = useState([])
+  const [currencies, setCurrencies] = useState([])
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const [newListing, setNewListing] = useState({
-    amount: '',
+    amount_sky: '',
     price: '',
-    currency: 'USDT'
+    payment_currency: '',
   })
 
-  const handleBuy = (product) => {
-    if (!isConnected) {
-      alert('Please connect to market first')
-      return
+  const loadProducts = useCallback(async () => {
+    try {
+      const data = await api.getProducts()
+      setProducts(data.products || [])
+      setError('')
+    } catch (e) {
+      setError(e.message)
     }
-    console.log('Buying product:', product)
-    alert(`Buying ${product.amount} SKY for ${product.price} ${product.currency}`)
+  }, [])
+
+  // Load currencies once, products on an interval (simple polling).
+  useEffect(() => {
+    api
+      .getCurrencies()
+      .then((d) => {
+        const list = d.currencies || []
+        setCurrencies(list)
+        setNewListing((prev) => ({ ...prev, payment_currency: prev.payment_currency || list[0] || '' }))
+      })
+      .catch(() => {})
+    loadProducts()
+    const id = setInterval(loadProducts, 5000)
+    return () => clearInterval(id)
+  }, [loadProducts])
+
+  const flash = (msg) => {
+    setNotice(msg)
+    setTimeout(() => setNotice(''), 8000)
   }
 
-  const handleCreateListing = (e) => {
+  const handleBuy = async (product) => {
+    setError('')
+    setBusy(true)
+    try {
+      const order = await api.buyProduct(product.id)
+      flash(
+        `Order placed. Pay exactly ${order.expected_payment_amount} ${order.payment_currency} to ${order.seller_wallet} before ${new Date(order.expires_at).toLocaleTimeString()}.`
+      )
+      loadProducts()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleCreateListing = async (e) => {
     e.preventDefault()
-    if (!isConnected) {
-      alert('Please connect to market first')
-      return
+    setError('')
+    setBusy(true)
+    try {
+      const resp = await api.createListing({
+        amount_sky: parseFloat(newListing.amount_sky),
+        price: parseFloat(newListing.price),
+        payment_currency: newListing.payment_currency,
+      })
+      flash(
+        `Listing created. Transfer exactly ${resp.expected_amount_sky} SKY to the market wallet ${resp.market_wallet} within 15 minutes.`
+      )
+      setShowCreateListing(false)
+      setNewListing({ amount_sky: '', price: '', payment_currency: currencies[0] || '' })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBusy(false)
     }
-    console.log('Creating listing:', newListing)
-    alert(`Sell order created: ${newListing.amount} SKY for ${newListing.price} ${newListing.currency}`)
-    setShowCreateListing(false)
-    setNewListing({ amount: '', price: '', currency: 'USDT' })
-  }
-
-  if (!isConnected) {
-    return (
-      <div className="alert alert-warning">
-        <h4>⚠️ Not Connected</h4>
-        <p>Please go to Settings and enter your wallet addresses and Market Public Key first.</p>
-      </div>
-    )
   }
 
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-4">
         <h2>Market</h2>
-        <button 
-          className="btn btn-primary"
+        <button
+          className="btn btn-connect"
           onClick={() => setShowCreateListing(!showCreateListing)}
         >
           {showCreateListing ? 'Cancel' : '+ Create Sell Order'}
         </button>
       </div>
+
+      {notice && <div className="alert alert-info">{notice}</div>}
+      {error && <div className="alert alert-danger">{error}</div>}
 
       {showCreateListing && (
         <div className="card mb-4">
@@ -65,12 +105,12 @@ function Market({ isConnected }) {
             <div className="row mb-3">
               <div className="col-md-4">
                 <label className="form-label">SKY Amount</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   className="form-control"
                   placeholder="e.g. 10"
-                  value={newListing.amount}
-                  onChange={(e) => setNewListing({...newListing, amount: e.target.value})}
+                  value={newListing.amount_sky}
+                  onChange={(e) => setNewListing({ ...newListing, amount_sky: e.target.value })}
                   required
                   step="0.0001"
                   min="0"
@@ -78,12 +118,12 @@ function Market({ isConnected }) {
               </div>
               <div className="col-md-4">
                 <label className="form-label">Price</label>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   className="form-control"
                   placeholder="e.g. 2.00"
                   value={newListing.price}
-                  onChange={(e) => setNewListing({...newListing, price: e.target.value})}
+                  onChange={(e) => setNewListing({ ...newListing, price: e.target.value })}
                   required
                   step="0.0001"
                   min="0"
@@ -91,19 +131,20 @@ function Market({ isConnected }) {
               </div>
               <div className="col-md-4">
                 <label className="form-label">Payment Currency</label>
-                <select 
+                <select
                   className="form-select"
-                  value={newListing.currency}
-                  onChange={(e) => setNewListing({...newListing, currency: e.target.value})}
+                  value={newListing.payment_currency}
+                  onChange={(e) => setNewListing({ ...newListing, payment_currency: e.target.value })}
+                  required
                 >
-                  <option value="USDT">USDT</option>
-                  <option value="BTC">BTC</option>
-                  <option value="BCH">BCH</option>
-                  <option value="LTC">LTC</option>
+                  {currencies.length === 0 && <option value="">No currencies enabled</option>}
+                  {currencies.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
                 </select>
               </div>
             </div>
-            <button type="submit" className="btn btn-primary">
+            <button type="submit" className="btn btn-connect" disabled={busy || currencies.length === 0}>
               Create Sell Order
             </button>
           </form>
@@ -115,24 +156,22 @@ function Market({ isConnected }) {
 
       <h4 className="mb-3">Available Products</h4>
       {products.length === 0 ? (
-        <div className="alert alert-info">
-          No products available for sale.
-        </div>
+        <div className="alert alert-secondary">No products available for sale.</div>
       ) : (
         <div className="row">
           {products.map((product) => (
             <div key={product.id} className="col-md-6 col-lg-4 mb-3">
-              <div className="card product-card" onClick={() => handleBuy(product)}>
+              <div className="card product-card">
                 <div className="product-amount mb-2">
-                  <strong>{product.amount} SKY</strong>
+                  <strong>{product.amount_sky} SKY</strong>
                 </div>
                 <div className="product-price mb-2">
-                  {product.price} {product.currency}
+                  {product.price} {product.payment_currency}
                 </div>
                 <div className="text-muted small mb-3">
-                  Seller: {product.seller}
+                  Seller: <code>{shorten(product.seller_pubkey)}</code>
                 </div>
-                <button className="btn btn-primary w-100">
+                <button className="btn btn-connect w-100" disabled={busy} onClick={() => handleBuy(product)}>
                   Buy
                 </button>
               </div>
@@ -142,6 +181,11 @@ function Market({ isConnected }) {
       )}
     </div>
   )
+}
+
+function shorten(pk) {
+  if (!pk || pk.length <= 14) return pk
+  return `${pk.slice(0, 8)}…${pk.slice(-4)}`
 }
 
 export default Market

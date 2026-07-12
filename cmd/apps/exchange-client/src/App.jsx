@@ -102,11 +102,9 @@ function App() {
       </div>
 
       <div className="content">
-        {activeTab === 'market' && <Market isConnected={isConnected} />}
-        {activeTab === 'orders' && <Orders isConnected={isConnected} />}
-        {activeTab === 'settings' && (
-          <Settings isConnected={isConnected} marketPubKey={marketPubKey} />
-        )}
+        {activeTab === 'market' && <Market />}
+        {activeTab === 'orders' && <Orders />}
+        {activeTab === 'settings' && <Settings marketPubKey={marketPubKey} />}
       </div>
     </div>
   )

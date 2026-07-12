@@ -336,3 +336,38 @@ func (d *Database) DeleteOrder(orderID string) error {
 
 	return nil
 }
+
+// GetAllOrders returns every order regardless of status, newest first.
+// Used by the market operator UI for monitoring.
+func (d *Database) GetAllOrders() ([]*Order, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`
+		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		FROM orders
+		ORDER BY created_at DESC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all orders: %w", err)
+	}
+	defer rows.Close() //nolint
+
+	var orders []*Order
+	for rows.Next() {
+		order := &Order{}
+		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
+			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
+			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan order: %w", err)
+		}
+		orders = append(orders, order)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate orders: %w", err)
+	}
+
+	return orders, nil
+}
