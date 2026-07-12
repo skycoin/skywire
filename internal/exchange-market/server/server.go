@@ -187,6 +187,8 @@ func (s *Server) dispatch(remotePK string, req protocol.Envelope) protocol.Envel
 		return s.handleBuyProduct(remotePK, req)
 	case protocol.TypeCancelListing:
 		return s.handleCancelListing(remotePK, req)
+	case protocol.TypeCancelOrder:
+		return s.handleCancelOrder(remotePK, req)
 	case protocol.TypeGetOrders:
 		return s.handleGetOrders(remotePK, req)
 	case protocol.TypeGetOrderStatus:

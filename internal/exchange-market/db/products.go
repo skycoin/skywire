@@ -15,9 +15,9 @@ func (d *Database) CreateProduct(product *Product) error {
 	product.CreatedAt = time.Now().UTC()
 
 	_, err := d.db.Exec(`
-		INSERT INTO products (id, seller_pubkey, amount_sky, price, payment_currency, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, product.ID, product.SellerPubKey, product.AmountSKY, product.Price,
+		INSERT INTO products (id, listing_id, seller_pubkey, amount_sky, price, payment_currency, status, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, product.ID, nullIfEmpty(product.ListingID), product.SellerPubKey, product.AmountSKY, product.Price,
 		product.PaymentCurrency, product.Status, product.CreatedAt)
 
 	if err != nil {
@@ -25,6 +25,41 @@ func (d *Database) CreateProduct(product *Product) error {
 	}
 
 	return nil
+}
+
+// nullIfEmpty maps an empty string to a SQL NULL so optional foreign-key-ish
+// columns (e.g. products.listing_id) store NULL rather than "" when unset.
+func nullIfEmpty(s string) any {
+	if s == "" {
+		return nil
+	}
+	return s
+}
+
+// GetProductByListingID returns the product promoted from the given listing, or
+// nil if none exists. Used by a seller cancel to locate the escrow-holding
+// product for a confirmed listing.
+func (d *Database) GetProductByListingID(listingID string) (*Product, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	product := &Product{}
+	err := d.db.QueryRow(`
+		SELECT id, COALESCE(listing_id, '') AS listing_id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
+		FROM products
+		WHERE listing_id = ?
+	`, listingID).Scan(&product.ID, &product.ListingID, &product.SellerPubKey, &product.AmountSKY, &product.Price,
+		&product.PaymentCurrency, &product.Status, &product.CreatedAt,
+		&product.FrozenAt, &product.FrozenBy, &product.SoldAt)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get product by listing: %w", err)
+	}
+
+	return product, nil
 }
 
 // GetProduct retrieves a product by ID.

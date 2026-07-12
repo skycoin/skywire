@@ -236,6 +236,16 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 		return protocol.ErrorResponse(req.ID, protocol.CodeProductUnavailable, "this product is no longer available")
 	}
 
+	// A buyer who previously canceled (or let expire) an order for this product
+	// may not buy it again.
+	blocked, err := s.db.BuyerBlockedFromProduct(pk, product.ID)
+	if err != nil {
+		return s.internal(req.ID, "buy.block_check", err)
+	}
+	if blocked {
+		return protocol.ErrorResponse(req.ID, protocol.CodeBuyerBlocked, "you can no longer buy this product")
+	}
+
 	// Resolve the seller's wallet for the product's payment currency.
 	sellerWallet, err := s.db.GetUserWallet(product.SellerPubKey, product.PaymentCurrency)
 	if err != nil {
@@ -293,8 +303,13 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 	})
 }
 
-// handleCancelListing cancels the caller's own pending listing. The escrowed
-// SKY (if already deposited) is returned by the Return Scheduler job.
+// handleCancelListing cancels the caller's own sell offer. It works while the
+// listing is still pending (no deposit yet — nothing to return) and after it has
+// become an active product, provided no buyer has selected (frozen) it. For a
+// confirmed listing the derived product is deactivated and the escrowed SKY is
+// returned by the Return Scheduler (measured from when the SKY was deposited: if
+// that was already longer than the return delay ago, it goes back on the next
+// scheduler tick, otherwise once the delay elapses).
 func (s *Server) handleCancelListing(pk string, req protocol.Envelope) protocol.Envelope {
 	var r protocol.CancelListingRequest
 	if err := req.Bind(&r); err != nil || r.ListingID == "" {
@@ -309,14 +324,71 @@ func (s *Server) handleCancelListing(pk string, req protocol.Envelope) protocol.
 	if listing == nil || listing.SellerPubKey != pk {
 		return protocol.ErrorResponse(req.ID, protocol.CodeListingNotFound, "listing not found")
 	}
-	if listing.Status != "pending" {
+
+	switch listing.Status {
+	case "pending":
+		// No deposit confirmed yet: just cancel. The Return Scheduler still
+		// checks the chain in case a deposit lands late.
+		if err := s.db.UpdatePendingListingStatus(listing.ID, "canceled", ""); err != nil {
+			return s.internal(req.ID, "cancel.update", err)
+		}
+		return success(req.ID, protocol.MessageData{Message: "Listing canceled."})
+
+	case "confirmed":
+		// The deposit settled and became a product. It can only be canceled
+		// while still active — once a buyer freezes or buys it, the seller is
+		// committed to the trade.
+		product, err := s.db.GetProductByListingID(listing.ID)
+		if err != nil {
+			return s.internal(req.ID, "cancel.get_product", err)
+		}
+		if product != nil && product.Status != "active" {
+			return protocol.ErrorResponse(req.ID, protocol.CodeProductUnavailable, "a buyer has already selected this offer; it can no longer be canceled")
+		}
+		if product != nil {
+			if err := s.db.MarkProductCancelled(product.ID); err != nil {
+				return s.internal(req.ID, "cancel.deactivate_product", err)
+			}
+		}
+		if err := s.db.UpdatePendingListingStatus(listing.ID, "canceled", listing.TxHash); err != nil {
+			return s.internal(req.ID, "cancel.update", err)
+		}
+		return success(req.ID, protocol.MessageData{Message: "Offer canceled. Your SKY will be returned within 1 hour of the original deposit."})
+
+	default:
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "listing can no longer be canceled")
 	}
+}
 
-	if err := s.db.UpdatePendingListingStatus(listing.ID, "canceled", ""); err != nil {
-		return s.internal(req.ID, "cancel.update", err)
+// handleCancelOrder cancels the caller's own in-flight buy order before payment
+// is observed, releasing the product back to the market. The buyer is then
+// blocked from re-buying that same product (BuyerBlockedFromProduct).
+func (s *Server) handleCancelOrder(pk string, req protocol.Envelope) protocol.Envelope {
+	var r protocol.CancelOrderRequest
+	if err := req.Bind(&r); err != nil || r.OrderID == "" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid cancel payload")
 	}
-	return success(req.ID, protocol.MessageData{Message: "Listing canceled. SKY will be returned within 1 hour."})
+
+	order, err := s.db.GetOrder(r.OrderID)
+	if err != nil {
+		return s.internal(req.ID, "cancel_order.get", err)
+	}
+	// Only the buyer on the order may cancel it; hide others as not-found.
+	if order == nil || order.BuyerPubKey != pk {
+		return protocol.ErrorResponse(req.ID, protocol.CodeOrderNotFound, "order not found")
+	}
+	// Only cancelable before payment is observed. Once paid/confirmed the
+	// payment is in flight and the trade must settle.
+	if order.Status != "pending_payment" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "this order can no longer be canceled")
+	}
+
+	if err := s.db.MarkOrderCanceled(order.ID); err != nil {
+		return s.internal(req.ID, "cancel_order.update", err)
+	}
+	// Release the product so other buyers can purchase it.
+	s.unfreeze(order.ProductID)
+	return success(req.ID, protocol.MessageData{Message: "Order canceled. You cannot buy this product again."})
 }
 
 // handleGetOrders returns the caller's buy and sell orders.

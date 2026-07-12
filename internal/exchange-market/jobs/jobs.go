@@ -124,6 +124,7 @@ func (r *Runner) RunListingCheck() error {
 		}
 		product := &db.Product{
 			ID:              uuid.NewString(),
+			ListingID:       l.ID,
 			SellerPubKey:    l.SellerPubKey,
 			AmountSKY:       l.AmountSKY,
 			Price:           l.Price,
@@ -193,11 +194,13 @@ func (r *Runner) RunEscrowCheck() error {
 	return nil
 }
 
-// RunReturnScheduler refunds escrowed SKY to sellers whose listing was canceled
-// or expired after they had already deposited into the market wallet. A refund
-// is only sent once the configured delay (return_delay_hours) has elapsed and
-// the deposit is still verifiable on-chain, then it is recorded so it happens
-// at most once (exchange-design.md §7.8/4).
+// RunReturnScheduler refunds escrowed SKY to sellers whose offer was canceled
+// or expired after they had already deposited into the market wallet. The
+// return_delay_hours window is measured from when the SKY was deposited (not
+// from the cancel), so a deposit older than the window is refunded on the next
+// tick while a fresh one waits out the remainder (GetReturnableListings applies
+// the cutoff). A refund is only sent once the deposit is still verifiable
+// on-chain, then it is recorded so it happens at most once (design §7.8/4).
 func (r *Runner) RunReturnScheduler() error {
 	marketWallet, err := r.db.GetMarketWallet()
 	if err != nil {

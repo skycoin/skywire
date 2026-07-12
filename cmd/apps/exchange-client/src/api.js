@@ -34,6 +34,7 @@ export const api = {
   getListings: () => request('GET', '/api/listings/mine'),
   createListing: (listing) => request('POST', '/api/listings', listing),
   cancelListing: (listingId) => request('POST', '/api/listings/cancel', { listing_id: listingId }),
+  cancelOrder: (orderId) => request('POST', '/api/orders/cancel', { order_id: orderId }),
   buyProduct: (productId) => request('POST', '/api/buy', { product_id: productId }),
   getOrderStatus: (orderId) => request('POST', '/api/order-status', { order_id: orderId }),
 }

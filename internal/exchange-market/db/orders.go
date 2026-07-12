@@ -210,6 +210,43 @@ func (d *Database) MarkOrderCompleted(orderID string) error {
 	return nil
 }
 
+// MarkOrderCanceled marks an in-flight order as canceled by the buyer.
+func (d *Database) MarkOrderCanceled(orderID string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	_, err := d.db.Exec(`
+		UPDATE orders
+		SET status = 'canceled'
+		WHERE id = ?
+	`, orderID)
+
+	if err != nil {
+		return fmt.Errorf("failed to mark order as canceled: %w", err)
+	}
+
+	return nil
+}
+
+// BuyerBlockedFromProduct reports whether the buyer has a prior order for this
+// product that was canceled or expired. Such a buyer may not buy that same
+// product again (design: a buyer who backs out cannot retry the same offer).
+func (d *Database) BuyerBlockedFromProduct(buyerPubKey, productID string) (bool, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	var n int
+	err := d.db.QueryRow(`
+		SELECT COUNT(*) FROM orders
+		WHERE buyer_pubkey = ? AND product_id = ?
+		  AND status IN ('canceled', 'cancelled', 'expired')
+	`, buyerPubKey, productID).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("failed to check buyer block: %w", err)
+	}
+	return n > 0, nil
+}
+
 // MarkOrderExpired marks an order as expired.
 func (d *Database) MarkOrderExpired(orderID string) error {
 	d.mu.Lock()
