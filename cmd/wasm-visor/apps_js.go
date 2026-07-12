@@ -19,10 +19,13 @@ import (
 	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
-const (
-	appSkychat    = "skychat"
-	appSkycoinWeb = "skycoin-web"
-)
+const appSkychat = "skychat"
+
+// The wallet is intentionally NOT an app here. It's a built-in hypervisor UI
+// feature (served at /wallet/, reached via the ☰ menu / wallet tab), not a
+// process — so it doesn't belong in the Apps list. The skycoin-web *server*
+// (disk wallets, server-side multi-coin) is the opt-in backend app, and a tab
+// has no server, so it's absent here. See docs/design/gui-app-serving-modes.md.
 
 // appAutoStart holds the per-session autostart preference. A tab has no
 // on-disk config, so this is best-effort for the current boot (SetAutoStart
@@ -30,8 +33,7 @@ const (
 var (
 	appAutoMu    sync.Mutex
 	appAutoStart = map[string]bool{
-		appSkychat:    true,
-		appSkycoinWeb: false,
+		appSkychat: true,
 	}
 )
 
@@ -66,16 +68,6 @@ func selfAppStates() []wasmhv.AppState {
 			},
 			Status: status, DetailedStatus: detail,
 		},
-		{
-			// The bundled skycoin-web wallet, served at /wallet/ (always
-			// reachable in the tab). Args carries the "open" address the UI
-			// resolves — the wasm/native-aligned wallet URL.
-			AppConfig: wasmhv.AppConfig{
-				Name: appSkycoinWeb, Args: []string{"url:/wallet/"}, Port: 0, LauncherMode: "internal",
-				AutoStart: autoStartPref(appSkycoinWeb),
-			},
-			Status: 1, DetailedStatus: "Running",
-		},
 	}
 }
 
@@ -108,8 +100,6 @@ func (visorSelf) StartApp(name string) error {
 			RunMode:     appcommon.RunModeInternal,
 		})
 		return err
-	case appSkycoinWeb:
-		return nil // the wallet is always served at /wallet/
 	}
 	return errors.New("unknown app: " + name)
 }
@@ -122,8 +112,6 @@ func (visorSelf) StopApp(name string) error {
 			return nil
 		}
 		return procM.Stop(appSkychat)
-	case appSkycoinWeb:
-		return nil
 	}
 	return errors.New("unknown app: " + name)
 }
