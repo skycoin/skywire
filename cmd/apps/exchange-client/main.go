@@ -6,7 +6,8 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
+	"path"
+	"strings"
 )
 
 //go:embed static
@@ -18,8 +19,8 @@ func main() {
 		port = p
 	}
 
-	// Remove the "dist" prefix from the file system
-	distFS, err := fs.Sub(uiFS, "dist")
+	// Strip the "static" prefix so paths are served from the embed root.
+	distFS, err := fs.Sub(uiFS, "static")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -28,15 +29,16 @@ func main() {
 	fileServer := http.FileServer(http.FS(distFS))
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Try to serve the file directly
-		path := filepath.Clean(r.URL.Path)
-		if path == "/" {
-			path = "index.html"
+		// Resolve the request to an embed-relative path (no leading slash,
+		// which io/fs requires). Empty means the root document.
+		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if name == "" {
+			name = "index.html"
 		}
 
-		// Check if file exists
-		if _, err := fs.Stat(distFS, path); os.IsNotExist(err) {
-			// File doesn't exist, serve index.html for SPA routing
+		// If the requested file is not part of the built UI, fall back to
+		// index.html so client-side (SPA) routes resolve correctly.
+		if _, err := fs.Stat(distFS, name); err != nil {
 			r.URL.Path = "/"
 		}
 

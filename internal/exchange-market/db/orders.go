@@ -35,7 +35,7 @@ func (d *Database) GetOrder(id string) (*Order, error) {
 
 	order := &Order{}
 	err := d.db.QueryRow(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE id = ?
 	`, id).Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
@@ -59,7 +59,7 @@ func (d *Database) GetBuyerOrders(buyerPubKey string) ([]*Order, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE buyer_pubkey = ?
 		ORDER BY created_at DESC
@@ -91,7 +91,7 @@ func (d *Database) GetSellerOrders(sellerPubKey string) ([]*Order, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT o.id, o.product_id, o.buyer_pubkey, o.amount_sky, o.price, o.payment_currency, o.expected_payment_amount, o.seller_wallet, o.status, o.expires_at, o.created_at, o.paid_at, o.payment_tx_hash, o.confirmations, o.completed_at
+		SELECT o.id, o.product_id, o.buyer_pubkey, o.amount_sky, o.price, o.payment_currency, o.expected_payment_amount, o.seller_wallet, o.status, o.expires_at, o.created_at, o.paid_at, COALESCE(o.payment_tx_hash, '') AS payment_tx_hash, o.confirmations, o.completed_at
 		FROM orders o
 		INNER JOIN products p ON o.product_id = p.id
 		WHERE p.seller_pubkey = ?
@@ -235,7 +235,7 @@ func (d *Database) GetExpiredOrders() ([]*Order, error) {
 
 	now := time.Now().UTC()
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE status = 'pending_payment' AND expires_at <= ?
 	`, now)
@@ -266,7 +266,7 @@ func (d *Database) GetPendingPaymentOrders() ([]*Order, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE status = 'pending_payment' AND expires_at > ?
 		ORDER BY created_at ASC
@@ -299,7 +299,7 @@ func (d *Database) GetCompletedOrdersOlderThan(age time.Duration) ([]*Order, err
 
 	cutoff := time.Now().UTC().Add(-age)
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE status = 'completed' AND completed_at <= ?
 	`, cutoff)

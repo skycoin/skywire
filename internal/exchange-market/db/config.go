@@ -5,8 +5,53 @@ import (
 	"database/sql"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
+
+// paymentCurrencyExplorer maps each payment currency to the market_config key
+// holding its explorer URL. A currency is tradable only when its explorer URL
+// is configured (non-empty).
+var paymentCurrencyExplorer = map[string]string{
+	"BTC":        "explorer_btc",
+	"BCH":        "explorer_bch",
+	"LTC":        "explorer_ltc",
+	"USDT_ERC20": "explorer_usdt_erc20",
+	"USDT_TRC20": "explorer_usdt_trc20",
+}
+
+// paymentCurrencyOrder is the stable display order for available currencies.
+var paymentCurrencyOrder = []string{"BTC", "BCH", "LTC", "USDT_ERC20", "USDT_TRC20"}
+
+// IsCurrencyAvailable reports whether the given payment currency is tradable at
+// this market, i.e. its explorer URL is configured.
+func (d *Database) IsCurrencyAvailable(currency string) (bool, error) {
+	key, ok := paymentCurrencyExplorer[currency]
+	if !ok {
+		return false, nil
+	}
+	v, err := d.GetConfig(key)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(v) != "", nil
+}
+
+// AvailableCurrencies returns the payment currencies whose explorer the
+// operator has configured, in stable display order.
+func (d *Database) AvailableCurrencies() ([]string, error) {
+	var out []string
+	for _, c := range paymentCurrencyOrder {
+		ok, err := d.IsCurrencyAvailable(c)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
 
 // GetConfig retrieves a configuration value by key.
 func (d *Database) GetConfig(key string) (string, error) {
