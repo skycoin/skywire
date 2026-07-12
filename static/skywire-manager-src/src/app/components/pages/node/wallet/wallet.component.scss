@@ -27,8 +27,11 @@
     color: rgba(255, 255, 255, 0.6);
   }
 
-  .wallet-fullscreen {
-    color: rgba(255, 255, 255, 0.85) !important;
+  // All stroked buttons in the control row (Node toggle, fullscreen) —
+  // legible light text + visible border on the dark box.
+  button.mat-mdc-outlined-button:not(:disabled) {
+    color: rgba(255, 255, 255, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
     .mat-icon { color: inherit; }
   }
 }
@@ -210,11 +213,27 @@
   gap: 8px;
   padding: 10px 12px;
   margin: 4px 0 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.05);
 
-  .wallet-backend-help { line-height: 1.4; }
+  // Help text: legible, not near-black. (default .dim is fine, but the
+  // panel sits on a lighter surface so nudge it brighter.)
+  .wallet-backend-help {
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.82) !important;
+    b { color: rgba(255, 255, 255, 0.95); }
+    .mono { color: rgba(255, 255, 255, 0.7); }
+  }
+
+  // Stroked buttons (mode toggle, "Add coin node") default to Material's
+  // themed foreground, which is near-invisible on this dark panel — pin
+  // them to legible light text + a visible border, same as .web-header.
+  button.mat-mdc-outlined-button:not(:disabled) {
+    color: rgba(255, 255, 255, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    .mat-icon { color: inherit; }
+  }
 
   .wallet-backend-row {
     display: flex;
@@ -226,12 +245,85 @@
     flex: 1;
     min-width: 0;
     padding: 6px 8px;
-    background: rgba(0, 0, 0, 0.25);
-    color: inherit;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.35);
+    color: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.28);
     border-radius: 4px;
     font-size: 12px;
+
+    &::placeholder { color: rgba(255, 255, 255, 0.45); }
+    &:focus {
+      outline: none;
+      border-color: #6f4bd8;
+    }
   }
 
   .wallet-backend-error { color: #f7768e; }
+}
+
+// Coin-backend panel: mode toggle + node list.
+.wallet-backend {
+  .wallet-backend-modes {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 4px;
+
+    // Active mode: violet accent. !important to beat the panel-wide
+    // legibility override above (which pins stroked buttons to white).
+    button.mode-active {
+      border-color: #6f4bd8 !important;
+      color: #cbb8ff !important;
+      background: rgba(111, 75, 216, 0.18);
+    }
+  }
+
+  .wallet-node-idx {
+    min-width: 3.5em;
+    text-align: right;
+    opacity: 0.65;
+  }
+
+  .wallet-add-node {
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+
+  .wallet-backend-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 4px;
+  }
+}
+
+// Status pill — promoted from the (removed) .web-header scope so it applies
+// to the wallet-controls "served" indicator and the optional local
+// skycoin-web server row inside the backend panel.
+.web-status {
+  font-size: 0.85em;
+  padding: 2px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+
+  &.status-running { background: rgba(74, 222, 128, 0.18); color: #4ade80; }
+  &.status-stopped { background: rgba(248, 113, 113, 0.15); color: #f87171; }
+  &.status-starting { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+}
+
+// Optional "run a local skycoin-web server" row inside the service-mode panel.
+.wallet-localserver {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.10);
+
+  button.mat-mdc-outlined-button:not(:disabled) {
+    color: rgba(255, 255, 255, 0.92) !important;
+    border-color: rgba(255, 255, 255, 0.35) !important;
+    .mat-icon { color: inherit; }
+  }
 }

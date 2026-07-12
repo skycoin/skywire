@@ -41,17 +41,29 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   iframeUrl: SafeResourceUrl | null = null;
   fullWindowUrl = '';
 
-  // ---- coin-backend config (the wallet's "which node" pre-wallet setting) ----
-  // The node the HV-served wallet queries over dmsg, "<pk>:<port>". Stored in
-  // localStorage['skywire-coin-node'] — the SAME key the wasm fetchDmsg shim and
-  // the native /wallet/ shim (X-Skywire-Coin-Node) read, so config is unified
-  // across visors and settable BEFORE any wallet exists. Empty = deployment
-  // default. This is the first field of what grows into the multi-coin + BTC
-  // backends panel (docs/design/gui-app-serving-modes.md).
-  static readonly COIN_NODE_KEY = 'skywire-coin-node';
-  coinNode = '';
+  // ---- coin-backend config (settable BEFORE any wallet exists) ----
+  // All keys are stored in the browser and read by the /wallet/ shim (native
+  // X-Skywire-Coin-Node header, wasm fetchDmsg) so config is unified across the
+  // native and wasm visors. See docs/design/gui-app-serving-modes.md.
+  //   K_MODE     'browser' (client-side wallets) | 'service' (remote skycoin-web)
+  //   K_NODES    JSON string[] of coin nodes (browser mode; index 0 = default,
+  //              index N drives /coin/N for multi-coin/fibercoins)
+  //   K_SERVICE  a remote wallet-service address (service mode) — server wallets
+  //   K_BTC      a Bitcoin backend (node RPC / electrum), optional
+  //   K_PRIMARY  the effective primary backend — what the existing single-backend
+  //              shim/proxy reads; kept in sync so nothing else has to change
+  static readonly K_MODE = 'skywire-wallet-mode';
+  static readonly K_NODES = 'skywire-coin-nodes';
+  static readonly K_SERVICE = 'skywire-wallet-service';
+  static readonly K_BTC = 'skywire-btc-backend';
+  static readonly K_PRIMARY = 'skywire-coin-node';
+
   backendOpen = false;
   nodeError = '';
+  walletMode: 'browser' | 'service' = 'browser';
+  coinNodes: string[] = [''];
+  walletService = '';
+  btcBackend = '';
   // Last node PK we built the iframe URL for. NodeComponent.currentNode
   // emits on every polling refresh; rebuilding the SafeResourceUrl on
   // every tick reloads the iframe and tears down whatever the wallet
@@ -87,11 +99,9 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 }
 
   ngOnInit() {
-    // Load the configured coin node ONCE (not in recompute — that runs every
-    // poll tick and would clobber the field while the user is editing it).
-    try {
-      this.coinNode = localStorage.getItem(WalletComponent.COIN_NODE_KEY) || '';
-    } catch (e) { /* private-mode / disabled storage */ }
+    // Load the backend config ONCE (not in recompute — that runs every poll
+    // tick and would clobber the fields while the user is editing them).
+    this.loadBackend();
 
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
@@ -109,28 +119,92 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     this.backendOpen = !this.backendOpen;
   }
 
-  /** Saves the coin-node selection (or clears it for the default) and reloads
-   *  the wallet iframe so it picks up the new backend. `val` comes straight
-   *  from the input (template ref) — no FormsModule dependency. */
-  saveCoinNode(val: string) {
-    const v = (val || '').trim().replace(/^dmsg:\/\//, '');
-    // Accept a dmsg node (<pk>:<port>, dialed directly) OR an http(s):// URL
-    // (a clearnet or .dmsg node, fetched via the visor / resolving proxy).
-    const isDmsg = /^[0-9a-fA-F]{66}:\d+$/.test(v);
-    const isHttp = /^https?:\/\/.+/i.test(v);
-    if (v && !isDmsg && !isHttp) {
-      this.nodeError = 'Expected a dmsg node (<66-hex-pk>:<port>) or an http(s):// URL, or empty for the default.';
+  private loadBackend() {
+    try {
+      const W = WalletComponent;
+      const mode = localStorage.getItem(W.K_MODE);
+      this.walletMode = mode === 'service' ? 'service' : 'browser';
+      const rawNodes = localStorage.getItem(W.K_NODES);
+      let nodes: string[] = rawNodes ? (JSON.parse(rawNodes) || []) : [];
+      if (!Array.isArray(nodes)) { nodes = []; }
+      if (nodes.length === 0) {
+        // seed from the legacy single-node key so existing config carries over
+        const legacy = localStorage.getItem(W.K_PRIMARY) || '';
+        nodes = [legacy];
+      }
+      this.coinNodes = nodes;
+      this.walletService = localStorage.getItem(W.K_SERVICE) || '';
+      this.btcBackend = localStorage.getItem(W.K_BTC) || '';
+    } catch (e) { /* private-mode / disabled storage */ }
+  }
+
+  setMode(mode: 'browser' | 'service') {
+    this.walletMode = mode;
+    this.nodeError = '';
+  }
+
+  addNode() {
+    this.coinNodes = [...this.coinNodes, ''];
+  }
+
+  removeNode(i: number) {
+    this.coinNodes = this.coinNodes.filter((_, idx) => idx !== i);
+    if (this.coinNodes.length === 0) { this.coinNodes = ['']; }
+  }
+
+  trackByIndex(i: number): number {
+    return i;
+  }
+
+  /** Validates a backend: empty, a dmsg node (<pk>:<port>), a .dmsg/.skynet
+   *  host, or an http(s):// URL. Same forms the /wallet/ shim + proxy accept. */
+  private validBackend(v: string): boolean {
+    const s = (v || '').trim().replace(/^dmsg:\/\//, '');
+    if (!s) { return true; }
+    if (/^[0-9a-fA-F]{66}(:\d+)?$/.test(s)) { return true; }
+    if (/^[^/\s]+\.(dmsg|skynet)(:\d+)?$/i.test(s)) { return true; }
+    return /^https?:\/\/.+/i.test(s);
+  }
+
+  /** Saves the full backend config, keeps K_PRIMARY in sync with the effective
+   *  primary backend (what the existing shim/proxy reads), and reloads the
+   *  wallet iframe so it picks up the change. */
+  saveBackend() {
+    const W = WalletComponent;
+    if (this.walletMode === 'service') {
+      if (!this.validBackend(this.walletService) || !(this.walletService || '').trim()) {
+        this.nodeError = 'Enter the wallet service address (a dmsg <pk>:<port> or URL).';
+        return;
+      }
+    } else {
+      for (const n of this.coinNodes) {
+        if (!this.validBackend(n)) {
+          this.nodeError = 'Each node must be a dmsg <pk>:<port>, a .dmsg/.skynet host, or an http(s):// URL.';
+          return;
+        }
+      }
+    }
+    if (!this.validBackend(this.btcBackend)) {
+      this.nodeError = 'BTC backend must be a dmsg node/electrum host or an http(s):// URL.';
       return;
     }
     this.nodeError = '';
+
+    const clean = (v: string) => (v || '').trim().replace(/^dmsg:\/\//, '');
+    const nodes = this.coinNodes.map(clean).filter(Boolean);
+    const service = clean(this.walletService);
+    const primary = this.walletMode === 'service' ? service : (nodes[0] || '');
     try {
-      if (v) {
-        localStorage.setItem(WalletComponent.COIN_NODE_KEY, v);
+      localStorage.setItem(W.K_MODE, this.walletMode);
+      localStorage.setItem(W.K_NODES, JSON.stringify(nodes));
+      localStorage.setItem(W.K_SERVICE, service);
+      localStorage.setItem(W.K_BTC, clean(this.btcBackend));
+      if (primary) {
+        localStorage.setItem(W.K_PRIMARY, primary);
       } else {
-        localStorage.removeItem(WalletComponent.COIN_NODE_KEY);
+        localStorage.removeItem(W.K_PRIMARY);
       }
     } catch (e) { /* storage unavailable */ }
-    this.coinNode = v;
     this.reloadWallet();
   }
 
@@ -233,6 +307,14 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // "Use local daemons" button's visibility / disabled state.
   get hasRunningDaemons(): boolean {
     return this.daemons.some((d) => d.status === 1);
+  }
+
+  /** A browser/wasm visor can't run skycoin-daemon or skycoin-web host
+   *  processes, so the daemon-instance controls are hidden there — the
+   *  /wallet/ feature (client-side wallets, node proxied over dmsg) is all
+   *  that applies. Mirrors node.component's wasm gating. */
+  get isWasm(): boolean {
+    return !!this.node && (this.node as any).arch === 'wasm';
   }
 
   /** Replaces skycoin-web's --node-url args with the http endpoints
