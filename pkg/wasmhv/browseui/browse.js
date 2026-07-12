@@ -1754,11 +1754,12 @@
     // HV UI doesn't expose (native has its own Angular skychat tab).
     if (globalThis.skywireVisor && globalThis.skywireVisor.skychatSend) { addApp("chat", function () { openChat(); }); }
     if (globalThis.skywireVisor && globalThis.skywireVisor.serveContent) { addApp("host", function () { openHost(); }); }
-    // 'wallet' is the skycoin-web thin-client bundled into the PWA at /wallet/
-    // (same-origin — the app never loads over dmsg; only its node API does, via
-    // the Service Worker → fetchDmsg bridge). Only offered in the wasm-visor
-    // context, where /wallet/ is embedded and dmsg routing is available.
-    if (globalThis.skywireVisor) { addApp("wallet", function () { openWallet(); }); }
+    // 'wallet' is the skycoin-web thin-client served same-origin at /wallet/ —
+    // the app never loads over dmsg, only its node API does. Ungated: both the
+    // wasm visor (browser fetchDmsg shim) and the native HV (server-side dmsg
+    // proxy, hypervisor_handlers_wallet.go) serve /wallet/, so the ☰ wallet
+    // opens the hosting visor's wallet on either.
+    addApp("wallet", function () { openWallet(); });
     addApp("console", function () { openCli(); });
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
@@ -1818,15 +1819,49 @@
     var walletWin = null;
     function openWallet() {
       if (focusExisting(walletWin)) { return; }
-      // Same-origin iframe onto the PWA-bundled skycoin-web wallet. WinBox builds
-      // the iframe from url:. The wallet's crypto (skycoin-lite.wasm) + wallets
-      // (localStorage) are fully client-side; its node API (/api/v1|v2) is routed
-      // over dmsg by the Service Worker → fetchDmsg bridge.
+      // Same-origin body: a thin coin-node config strip above the PWA-bundled
+      // skycoin-web wallet iframe. The wallet's crypto (skycoin-lite.wasm) +
+      // wallets (localStorage) are client-side; its node API (/api/v1|v2) is
+      // routed over dmsg by the injected shim, which reads the coin node from
+      // localStorage['skywire-coin-node']. The ☰-launched wallet otherwise had
+      // no way to reach that setting (the full backend panel lives in the
+      // Angular wallet tab); this exposes the essential one inline. Same key +
+      // origin as the iframe, so config is unified across the tab and ☰ window.
+      var K_PRIMARY = "skywire-coin-node", K_NODES = "skywire-coin-nodes";
+      function curNode() { try { return localStorage.getItem(K_PRIMARY) || ""; } catch (e) { return ""; } }
+      var wrap = doc.createElement("div");
+      wrap.style.cssText = "position:absolute;inset:0;display:flex;flex-direction:column;background:#15131c;overflow:hidden";
+      wrap.innerHTML =
+        '<div style="display:flex;gap:.45em;align-items:center;padding:.45em .55em;background:#1b1726;border-bottom:1px solid #2a2342;font:12px monospace;color:#cdd2da">' +
+        '<span style="opacity:.7;white-space:nowrap">coin node</span>' +
+        '<input id="sww-node" spellcheck="false" title="dmsg &lt;pk&gt;:&lt;port&gt; or http(s):// URL — blank uses the deployment default" ' +
+        'placeholder="039a6d1e…:6420 or http://node… (blank = default)" ' +
+        'style="flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .5em;font:inherit">' +
+        '<button id="sww-apply" style="background:#6f4bd8;color:#fff;border:0;border-radius:3px;padding:.4em .8em;cursor:pointer;font:inherit">Apply</button>' +
+        '</div>' +
+        '<iframe id="sww-frame" src="/wallet/" allowfullscreen style="flex:1;width:100%;border:0;background:#fff"></iframe>';
       walletWin = makeWin(doc, withRoot({
-        title: "skycoin wallet", url: "/wallet/", width: "460px", height: "720px",
-        top: barTop, bottom: barBottom,
+        title: "skycoin wallet", width: "480px", height: "760px",
+        top: barTop, bottom: barBottom, mount: wrap,
         onclose: function () { untrack(walletWin); walletWin = null; }
       }));
+      var input = wrap.querySelector("#sww-node");
+      var frame = wrap.querySelector("#sww-frame");
+      input.value = curNode();
+      function apply() {
+        var v = (input.value || "").trim();
+        try {
+          // skywire-coin-node is the effective key the /wallet/ shim reads;
+          // mirror into the tab's node list so both surfaces agree. Leave the
+          // wallet-mode / service keys alone so a service-mode config set in the
+          // tab isn't clobbered by a quick node edit here.
+          localStorage.setItem(K_PRIMARY, v);
+          localStorage.setItem(K_NODES, JSON.stringify(v ? [v] : [""]));
+        } catch (e) {}
+        try { frame.src = "/wallet/?_=" + Date.now(); } catch (e) {}
+      }
+      wrap.querySelector("#sww-apply").onclick = apply;
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { apply(); } });
       track(walletWin, "wallet");
     }
     var logWin = null;
