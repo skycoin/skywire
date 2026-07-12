@@ -241,13 +241,13 @@ func (s *Server) handleCancelListing(pk string, req protocol.Envelope) protocol.
 		return protocol.ErrorResponse(req.ID, protocol.CodeListingNotFound, "listing not found")
 	}
 	if listing.Status != "pending" {
-		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "listing can no longer be cancelled")
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "listing can no longer be canceled")
 	}
 
-	if err := s.db.UpdatePendingListingStatus(listing.ID, "cancelled", ""); err != nil {
+	if err := s.db.UpdatePendingListingStatus(listing.ID, "canceled", ""); err != nil {
 		return s.internal(req.ID, "cancel.update", err)
 	}
-	return success(req.ID, protocol.MessageData{Message: "Listing cancelled. SKY will be returned within 1 hour."})
+	return success(req.ID, protocol.MessageData{Message: "Listing canceled. SKY will be returned within 1 hour."})
 }
 
 // handleGetOrders returns the caller's buy and sell orders.

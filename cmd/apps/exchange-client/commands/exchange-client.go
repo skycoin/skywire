@@ -147,7 +147,7 @@ func serveUI(ctx context.Context, appCl *app.Client, addr string) {
 		Handler:           mux,
 		ReadHeaderTimeout: 5 * time.Second,
 	}
-	go func() {
+	go func() { //nolint
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
