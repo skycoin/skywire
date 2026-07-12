@@ -542,7 +542,11 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
             this.localHypervisorPk = '';
           }
 
-          this.allNodes = result.data as Node[];
+          // Never store a non-array in allNodes: a malformed/error summary body
+          // would otherwise break the data filterer + the switcher (see
+          // visorSwitcherChips). Fall back to empty so the UI renders instead of
+          // hanging when the fleet is mid-churn (visors restarting/reconfiguring).
+          this.allNodes = Array.isArray(result.data) ? (result.data as Node[]) : [];
           this.dataFilterer.setData(this.allNodes);
           this.buildSwitcherTabs();
 
