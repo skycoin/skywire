@@ -21,7 +21,7 @@ func newTestDB(t *testing.T) *db.Database {
 	if err != nil {
 		t.Fatalf("db.New: %v", err)
 	}
-	t.Cleanup(func() { _ = database.Close() })
+	t.Cleanup(func() { _ = database.Close() }) //nolint
 	if err := database.Migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -39,7 +39,7 @@ func dialTestServer(t *testing.T, database *db.Database, buyerPK string) *market
 	clientEnd, serverEnd := net.Pipe()
 	go srv.Serve(serverEnd, buyerPK)
 	c := market.NewConn(clientEnd)
-	t.Cleanup(func() { _ = c.Close() })
+	t.Cleanup(func() { _ = c.Close() }) //nolint
 	return c
 }
 
