@@ -183,6 +183,16 @@ func (c *HTTPClient) Services(ctx context.Context, quantity int, version, countr
 	return out, err
 }
 
+// SetCoinInfo attaches fibercoin identity/metadata (CoinInfo) to the entry
+// this client registers. Call before Register/RegisterEntry, and again between
+// heartbeats to refresh volatile fields (e.g. HeadSeq). Only meaningful for a
+// ServiceTypeCoin client; ignored by other service types on the SD server side.
+func (c *HTTPClient) SetCoinInfo(info *CoinInfo) {
+	c.entryMx.Lock()
+	c.entry.Coin = info
+	c.entryMx.Unlock()
+}
+
 // RegisterEntry calls 'POST /api/services', retrieves the entry
 // and updates local field with the result
 // if there are no ip addresses in the entry it also tries to fetch those

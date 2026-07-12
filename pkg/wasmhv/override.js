@@ -303,5 +303,8 @@
   window.__SKYWIRE_HV__ = CFG;
   CFG.ready = ensure();
 
+  // (The bundled wallet's node API is intercepted inside the wallet iframe by the
+  // dmsg fetch shim injected by serve.go's /wallet/ handler — no SW bridge here.)
+
   log('HTTP-over-dmsg override installed (hypervisor ' + CFG.pk + ')');
 })();
