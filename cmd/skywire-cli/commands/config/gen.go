@@ -1646,6 +1646,20 @@ func configureApps(log *logging.Logger) {
 				Port:      routing.Port(skyenv.VPNServerPort),
 				Args:      []string{"app", "vpn-server"},
 			},
+			{
+				Name:      skyenv.ExchangeMarketName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.ExchangeMarketPort),
+				Args:      []string{"app", "exchange-market", "--addr", skyenv.ExchangeMarketAddr},
+			},
+			{
+				Name:      skyenv.ExchangeClientName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.ExchangeClientPort),
+				Args:      []string{"app", "exchange-client", "--addr", skyenv.ExchangeClientAddr},
+			},
 		}
 		// Skycoin daemon — full node, syncs the chain locally. May
 		// emit one entry (legacy single-instance) or N (one per
@@ -1725,6 +1739,18 @@ func configureApps(log *logging.Logger) {
 				AutoStart: isVpnServerEnable,
 				Args:      []string{},
 				Port:      routing.Port(skyenv.VPNServerPort),
+			},
+			{
+				Name:      skyenv.ExchangeMarketName,
+				AutoStart: false,
+				Args:      []string{"--addr", skyenv.ExchangeMarketAddr},
+				Port:      routing.Port(skyenv.ExchangeMarketPort),
+			},
+			{
+				Name:      skyenv.ExchangeClientName,
+				AutoStart: false,
+				Args:      []string{"--addr", skyenv.ExchangeClientAddr},
+				Port:      routing.Port(skyenv.ExchangeClientPort),
 			},
 		}
 	}

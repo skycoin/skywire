@@ -33,7 +33,9 @@ type Port = routing.Port
 
 // DefaultPort is the routing port the market listens on for dmsg app
 // connections, and the port the client dials on the market's public key.
-const DefaultPort Port = 46
+// It mirrors skyenv.ExchangeMarketPort (kept as a literal here so this shared
+// package has no dependency on pkg/skyenv).
+const DefaultPort Port = 8050
 
 // Request message types (client -> market).
 const (

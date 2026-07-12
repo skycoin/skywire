@@ -19,19 +19,25 @@ import (
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 var (
 	// dbPath is the path to the SQLite database file
 	dbPath string
-	// port is the routing port for communication between app and visor
+	// port is the routing port the market listens on (dmsg). 0 = use the
+	// visor-assigned routing port.
 	port uint16
+	// uiAddr is the localhost address the operator UI is served on.
+	uiAddr string
 )
 
 func init() {
-	launcher.RegisterApp("exchange-market", RunExchangeMarket)
+	launcher.RegisterApp(skyenv.ExchangeMarketName, RunExchangeMarket)
 	RootCmd.Flags().StringVar(&dbPath, "db", "", "path to SQLite database file (default: <work-dir>/exchange-market.db)")
 	RootCmd.Flags().Uint16Var(&port, "port", 0, "routing port for communication between app and visor")
+	RootCmd.Flags().StringVar(&uiAddr, "addr", skyenv.ExchangeMarketAddr, "address to serve the operator UI on")
 }
 
 // RootCmd is the root command for exchange-market
@@ -66,6 +72,7 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 		fs := pflag.NewFlagSet("exchange-market", pflag.ContinueOnError)
 		fs.StringVar(&dbPath, "db", "", "path to SQLite database file")
 		fs.Uint16Var(&port, "port", 0, "routing port")
+		fs.StringVar(&uiAddr, "addr", skyenv.ExchangeMarketAddr, "operator UI address")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -107,9 +114,17 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 	}
 	appCl.LogInfo("Market configuration initialized.")
 
+	// Resolve the dmsg listen port: default to the visor-assigned routing port,
+	// overridden by --port when set (mirrors vpn-client / skychat).
+	listenPort := routing.Port(appCl.RoutingPort())
+	if port != 0 {
+		listenPort = routing.Port(port)
+		appCl.Client.SetAppPortOrLog(listenPort)
+	}
+
 	// Start the dmsg transport server. The market Listens on appnet.TypeDmsg
 	// via the visor; clients Dial the market's public key on the same port.
-	srv := server.New(database, appCl.Log(), protocol.Port(port))
+	srv := server.New(database, appCl.Log(), protocol.Port(listenPort))
 	go func() {
 		if err := srv.ListenAndServe(ctx, appCl); err != nil {
 			appCl.LogError("dmsg server stopped: %v", err)
@@ -118,9 +133,13 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 		}
 	}()
 
+	// Serve the operator UI (config + monitoring) on the localhost address.
+	go serveUI(ctx, appCl, uiAddr)
+
 	// TODO: Start background jobs (in next phase)
 
 	appCl.LogInfo("Exchange market is ready and waiting for client connections.")
+	appCl.LogInfo("Operator UI available at http://%s", uiAddr)
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 
 	// Handle shutdown signals
