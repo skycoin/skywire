@@ -40,6 +40,18 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // defaults when those flags aren't passed.
   iframeUrl: SafeResourceUrl | null = null;
   fullWindowUrl = '';
+
+  // ---- coin-backend config (the wallet's "which node" pre-wallet setting) ----
+  // The node the HV-served wallet queries over dmsg, "<pk>:<port>". Stored in
+  // localStorage['skywire-coin-node'] — the SAME key the wasm fetchDmsg shim and
+  // the native /wallet/ shim (X-Skywire-Coin-Node) read, so config is unified
+  // across visors and settable BEFORE any wallet exists. Empty = deployment
+  // default. This is the first field of what grows into the multi-coin + BTC
+  // backends panel (docs/design/gui-app-serving-modes.md).
+  static readonly COIN_NODE_KEY = 'skywire-coin-node';
+  coinNode = '';
+  backendOpen = false;
+  nodeError = '';
   // Last node PK we built the iframe URL for. NodeComponent.currentNode
   // emits on every polling refresh; rebuilding the SafeResourceUrl on
   // every tick reloads the iframe and tears down whatever the wallet
@@ -75,6 +87,12 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 }
 
   ngOnInit() {
+    // Load the configured coin node ONCE (not in recompute — that runs every
+    // poll tick and would clobber the field while the user is editing it).
+    try {
+      this.coinNode = localStorage.getItem(WalletComponent.COIN_NODE_KEY) || '';
+    } catch (e) { /* private-mode / disabled storage */ }
+
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
@@ -85,6 +103,40 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   ngOnDestroy(): void {
     this.nodeSub?.unsubscribe();
+  }
+
+  toggleBackend() {
+    this.backendOpen = !this.backendOpen;
+  }
+
+  /** Saves the coin-node selection (or clears it for the default) and reloads
+   *  the wallet iframe so it picks up the new backend. `val` comes straight
+   *  from the input (template ref) — no FormsModule dependency. */
+  saveCoinNode(val: string) {
+    const v = (val || '').trim().replace(/^dmsg:\/\//, '');
+    if (v && !/^[0-9a-fA-F]{66}:\d+$/.test(v)) {
+      this.nodeError = 'Expected <66-hex-pk>:<port> (a dmsg node), or empty for the default.';
+      return;
+    }
+    this.nodeError = '';
+    try {
+      if (v) {
+        localStorage.setItem(WalletComponent.COIN_NODE_KEY, v);
+      } else {
+        localStorage.removeItem(WalletComponent.COIN_NODE_KEY);
+      }
+    } catch (e) { /* storage unavailable */ }
+    this.coinNode = v;
+    this.reloadWallet();
+  }
+
+  /** Recreates the iframe so it re-fetches against the new coin node. */
+  private reloadWallet() {
+    this.iframeUrl = null;
+    // Re-assign on the next tick so Angular tears down + rebuilds the iframe.
+    setTimeout(() => {
+      this.iframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl('/wallet/?_=' + Date.now());
+    }, 0);
   }
 
   /** Re-evaluates the UI state from the latest node snapshot. Cheap;

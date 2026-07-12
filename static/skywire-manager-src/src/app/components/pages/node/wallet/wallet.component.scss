@@ -202,3 +202,36 @@
     line-height: 1.4;
   }
 }
+
+// Coin-backend config panel (the wallet's "which node" setting).
+.wallet-backend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 4px 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.02);
+
+  .wallet-backend-help { line-height: 1.4; }
+
+  .wallet-backend-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .wallet-node-input {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 8px;
+    background: rgba(0, 0, 0, 0.25);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 4px;
+    font-size: 12px;
+  }
+
+  .wallet-backend-error { color: #f7768e; }
+}

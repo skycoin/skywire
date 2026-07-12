@@ -65,11 +65,47 @@
             {{ 'wallet.help' | translate }}
             <span class="mono small">/wallet/</span>
           </span>
+          <span class="spacer"></span>
+          <button mat-stroked-button (click)="toggleBackend()"
+                  [class.settings-toggle-open]="backendOpen"
+                  matTooltip="Configure the coin node this wallet uses (over dmsg)">
+            <mat-icon [inline]="true">{{ backendOpen ? 'expand_less' : 'dns' }}</mat-icon>
+            Node
+          </button>
           <button mat-stroked-button class="wallet-fullscreen" (click)="openFullWindow()">
             <mat-icon [inline]="true">open_in_new</mat-icon>
             {{ 'wallet.open-fullscreen' | translate }}
           </button>
         </div>
+
+        @if (backendOpen) {
+          <!-- Coin-backend config: the node the wallet queries over dmsg,
+               settable before any wallet exists. Stored in the browser
+               (localStorage) and read by the /wallet/ shim; empty = the
+               deployment default. First field of the multi-coin + BTC panel. -->
+          <div class="wallet-backend">
+            <div class="dim small wallet-backend-help">
+              Coin node this wallet queries, over dmsg
+              (<span class="mono">&lt;pk&gt;:&lt;port&gt;</span>). Empty = the default
+              deployment node. Stored in this browser; applies on both this and the
+              wasm visor.
+            </div>
+            <div class="wallet-backend-row">
+              <input #nodeInput class="wallet-node-input mono"
+                     [value]="coinNode"
+                     placeholder="039a6d1e…:6420   (empty = default)"
+                     (keyup.enter)="saveCoinNode(nodeInput.value)" />
+              <button mat-raised-button color="primary" (click)="saveCoinNode(nodeInput.value)">
+                <mat-icon [inline]="true">save</mat-icon>
+                Apply
+              </button>
+            </div>
+            @if (nodeError) {
+              <div class="wallet-backend-error small">{{ nodeError }}</div>
+            }
+          </div>
+        }
+
         @if (iframeUrl) {
           <iframe class="wallet-frame" [src]="iframeUrl" allowfullscreen></iframe>
         }
