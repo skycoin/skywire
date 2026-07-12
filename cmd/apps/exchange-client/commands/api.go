@@ -190,6 +190,8 @@ func registerAPI(mux *http.ServeMux, sess *session) {
 	mux.HandleFunc("/api/listings", proxyPost(sess, protocol.TypeCreateListing))
 	// POST /api/listings/cancel  -> client.cancel_listing  {listing_id}
 	mux.HandleFunc("/api/listings/cancel", proxyPost(sess, protocol.TypeCancelListing))
+	// POST /api/orders/cancel    -> client.cancel_order    {order_id}
+	mux.HandleFunc("/api/orders/cancel", proxyPost(sess, protocol.TypeCancelOrder))
 	// POST /api/buy              -> client.buy_product      {product_id}
 	mux.HandleFunc("/api/buy", proxyPost(sess, protocol.TypeBuyProduct))
 	// POST /api/order-status     -> client.get_order_status {order_id}
@@ -263,7 +265,7 @@ func statusForCode(code string) int {
 		return http.StatusForbidden
 	case protocol.CodeProductNotFound, protocol.CodeListingNotFound, protocol.CodeOrderNotFound:
 		return http.StatusNotFound
-	case protocol.CodeProductUnavailable, protocol.CodeSessionConflict:
+	case protocol.CodeProductUnavailable, protocol.CodeSessionConflict, protocol.CodeBuyerBlocked:
 		return http.StatusConflict
 	case protocol.CodeInternalError:
 		return http.StatusBadGateway

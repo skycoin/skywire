@@ -184,10 +184,14 @@ func (d *Database) GetPendingListings() ([]*PendingListing, error) {
 }
 
 // GetReturnableListings returns terminal (expired/canceled) pending listings
-// that have not yet been refunded and whose closed_at is at or before `before`
-// (the refund-delay cutoff). These are candidates whose seller may have already
-// deposited SKY into the market wallet; the Return Scheduler verifies the
-// on-chain deposit before actually sending anything back.
+// that have not yet been refunded and whose escrow-placement time is at or
+// before `before` (the refund-delay cutoff). The delay is measured from when the
+// SKY was put into escrow — confirmed_at (deposit detected) if present, else
+// created_at — NOT from the cancel time. So a listing whose deposit is already
+// older than the delay is eligible immediately upon cancellation, while a fresh
+// one waits out the remainder. closed_at IS NOT NULL restricts to actually
+// terminated listings. The Return Scheduler still verifies the on-chain deposit
+// before sending anything back.
 func (d *Database) GetReturnableListings(before time.Time) ([]*PendingListing, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -198,8 +202,8 @@ func (d *Database) GetReturnableListings(before time.Time) ([]*PendingListing, e
 		WHERE status IN ('expired', 'canceled', 'cancelled')
 		  AND returned_at IS NULL
 		  AND closed_at IS NOT NULL
-		  AND closed_at <= ?
-		ORDER BY closed_at ASC
+		  AND COALESCE(confirmed_at, created_at) <= ?
+		ORDER BY COALESCE(confirmed_at, created_at) ASC
 	`, before)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get returnable listings: %w", err)

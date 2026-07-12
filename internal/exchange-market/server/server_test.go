@@ -224,6 +224,127 @@ func TestGetListings(t *testing.T) {
 	}
 }
 
+// TestBuyerCancelBlocksRebuy verifies a buyer can cancel their in-flight buy
+// (releasing the product) but is then blocked from buying that same product
+// again, while another buyer still can.
+func TestBuyerCancelBlocksRebuy(t *testing.T) {
+	database := newTestDB(t)
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
+		t.Fatal(err)
+	}
+
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	const buyerPK = "0322222222222222222222222222222222222222222222222222222222222222bb"
+	const buyer2PK = "0333333333333333333333333333333333333333333333333333333333333333cc"
+
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-seller", WalletBTC: "bc1-seller"})
+	if err := database.CreateProduct(&db.Product{
+		ID: "prod-1", SellerPubKey: sellerPK, AmountSKY: 10, Price: 2, PaymentCurrency: "BTC", Status: "active",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	buyer := dialTestServer(t, database, buyerPK)
+	mustSuccess(t, buyer, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-buyer", WalletBTC: "bc1-buyer"})
+
+	var buy protocol.BuyProductResponse
+	bindSuccess(t, buyer, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"}, &buy)
+
+	// Cancel the in-flight order; the product returns to active.
+	mustSuccess(t, buyer, protocol.TypeCancelOrder, protocol.CancelOrderRequest{OrderID: buy.OrderID})
+	if p, _ := database.GetProduct("prod-1"); p == nil || p.Status != "active" { //nolint
+		t.Fatalf("product after cancel = %+v, want active", p)
+	}
+
+	// The same buyer may not buy it again.
+	reb, err := buyer.Do(protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"})
+	if err != nil {
+		t.Fatalf("rebuy transport error: %v", err)
+	}
+	if !reb.IsError() || errCode(t, reb) != protocol.CodeBuyerBlocked {
+		t.Fatalf("rebuy = %+v, want BUYER_BLOCKED", reb)
+	}
+
+	// A different buyer still can.
+	buyer2 := dialTestServer(t, database, buyer2PK)
+	mustSuccess(t, buyer2, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-buyer2", WalletBTC: "bc1-buyer2"})
+	var buy2 protocol.BuyProductResponse
+	bindSuccess(t, buyer2, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"}, &buy2)
+	if buy2.OrderID == "" {
+		t.Fatal("second buyer should be able to buy the released product")
+	}
+}
+
+// TestSellerCancelConfirmedOffer verifies a seller can cancel a confirmed offer
+// (deactivating the product and marking the listing canceled for refund), but
+// not once a buyer has frozen it.
+func TestSellerCancelConfirmedOffer(t *testing.T) {
+	database := newTestDB(t)
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	const buyerPK = "0322222222222222222222222222222222222222222222222222222222222222bb"
+
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-seller", WalletBTC: "bc1-seller"})
+
+	var listing protocol.CreateListingResponse
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
+		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC",
+	}, &listing)
+
+	// Simulate the Listing Checker promoting the confirmed deposit into a product.
+	if err := database.UpdatePendingListingStatus(listing.ListingID, "confirmed", "dep-tx"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.CreateProduct(&db.Product{
+		ID: "prod-1", ListingID: listing.ListingID, SellerPubKey: sellerPK,
+		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC", Status: "active",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Cancel the confirmed offer: product deactivated, listing canceled.
+	mustSuccess(t, seller, protocol.TypeCancelListing, protocol.CancelListingRequest{ListingID: listing.ListingID})
+	if p, _ := database.GetProduct("prod-1"); p == nil || p.Status != "cancelled" { //nolint
+		t.Fatalf("product after seller cancel = %+v, want cancelled", p)
+	}
+	if l, _ := database.GetPendingListing(listing.ListingID); l == nil || l.Status != "canceled" { //nolint
+		t.Fatalf("listing after seller cancel = %+v, want canceled", l)
+	}
+
+	// A second, frozen offer cannot be canceled.
+	var listing2 protocol.CreateListingResponse
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
+		AmountSKY: 5, Price: 1, PaymentCurrency: "BTC",
+	}, &listing2)
+	if err := database.UpdatePendingListingStatus(listing2.ListingID, "confirmed", "dep-tx-2"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.CreateProduct(&db.Product{
+		ID: "prod-2", ListingID: listing2.ListingID, SellerPubKey: sellerPK,
+		AmountSKY: 5, Price: 1, PaymentCurrency: "BTC", Status: "active",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.FreezeProduct("prod-2", buyerPK); err != nil {
+		t.Fatal(err)
+	}
+	resp, err := seller.Do(protocol.TypeCancelListing, protocol.CancelListingRequest{ListingID: listing2.ListingID})
+	if err != nil {
+		t.Fatalf("cancel frozen transport error: %v", err)
+	}
+	if !resp.IsError() || errCode(t, resp) != protocol.CodeProductUnavailable {
+		t.Fatalf("cancel of frozen offer = %+v, want PRODUCT_UNAVAILABLE", resp)
+	}
+}
+
 func TestUnknownMessageType(t *testing.T) {
 	database := newTestDB(t)
 	c := dialTestServer(t, database, "03deadbeef")

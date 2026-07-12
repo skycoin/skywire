@@ -38,6 +38,7 @@ type PendingListing struct {
 // Product represents an active product (sell order) available for purchase.
 type Product struct {
 	ID              string     `json:"id" db:"id"`
+	ListingID       string     `json:"listing_id,omitempty" db:"listing_id"` // the pending_listing it was promoted from
 	SellerPubKey    string     `json:"seller_pubkey" db:"seller_pubkey"`
 	AmountSKY       float64    `json:"amount_sky" db:"amount_sky"`
 	Price           float64    `json:"price" db:"price"`
