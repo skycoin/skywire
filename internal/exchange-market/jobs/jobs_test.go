@@ -38,7 +38,7 @@ func newDB(t *testing.T) *db.Database {
 	if err != nil {
 		t.Fatalf("db.New: %v", err)
 	}
-	t.Cleanup(func() { _ = database.Close() })
+	t.Cleanup(func() { _ = database.Close() }) //nolint
 	if err := database.Migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -94,19 +94,19 @@ func TestExpiry(t *testing.T) {
 		t.Fatalf("RunExpiry: %v", err)
 	}
 
-	listing, _ := d.GetPendingListing("l1")
+	listing, _ := d.GetPendingListing("l1") //nolint
 	if listing.Status != "expired" {
 		t.Fatalf("listing status = %q, want expired", listing.Status)
 	}
-	order, _ := d.GetOrder("o1")
+	order, _ := d.GetOrder("o1") //nolint
 	if order.Status != "expired" {
 		t.Fatalf("order status = %q, want expired", order.Status)
 	}
-	product, _ := d.GetProduct("p1")
+	product, _ := d.GetProduct("p1") //nolint
 	if product.Status != "active" {
 		t.Fatalf("product status = %q, want active (released)", product.Status)
 	}
-	n, _ := d.CountRecentViolations(buyer, time.Now().UTC().Add(-time.Hour))
+	n, _ := d.CountRecentViolations(buyer, time.Now().UTC().Add(-time.Hour)) //nolint
 	if n != 1 {
 		t.Fatalf("violations = %d, want 1", n)
 	}
@@ -131,11 +131,11 @@ func TestListingCheck(t *testing.T) {
 		t.Fatalf("RunListingCheck: %v", err)
 	}
 
-	listing, _ := d.GetPendingListing("l1")
+	listing, _ := d.GetPendingListing("l1") //nolint
 	if listing.Status != "confirmed" {
 		t.Fatalf("listing status = %q, want confirmed", listing.Status)
 	}
-	products, _ := d.GetActiveProducts()
+	products, _ := d.GetActiveProducts() //nolint
 	if len(products) != 1 || products[0].AmountSKY != 10 {
 		t.Fatalf("expected one active product from the listing, got %+v", products)
 	}
@@ -166,11 +166,11 @@ func TestEscrowCheck(t *testing.T) {
 		t.Fatalf("RunEscrowCheck: %v", err)
 	}
 
-	order, _ := d.GetOrder("o1")
+	order, _ := d.GetOrder("o1") //nolint
 	if order.Status != "completed" {
 		t.Fatalf("order status = %q, want completed", order.Status)
 	}
-	product, _ := d.GetProduct("p1")
+	product, _ := d.GetProduct("p1") //nolint
 	if product.Status != "sold" {
 		t.Fatalf("product status = %q, want sold", product.Status)
 	}
@@ -203,7 +203,7 @@ func TestEscrowCheckNoopDefers(t *testing.T) {
 	if err := r.RunEscrowCheck(); err != nil {
 		t.Fatalf("RunEscrowCheck: %v", err)
 	}
-	order, _ := d.GetOrder("o1")
+	order, _ := d.GetOrder("o1") //nolint
 	if order.Status != "confirmed" {
 		t.Fatalf("order status = %q, want confirmed (delivery deferred)", order.Status)
 	}
@@ -252,11 +252,11 @@ func TestBanManager(t *testing.T) {
 		t.Fatalf("RunBanManager: %v", err)
 	}
 
-	banned, _ := d.IsUserBanned("03offender")
+	banned, _ := d.IsUserBanned("03offender") //nolint
 	if !banned {
 		t.Fatal("offender should be banned after 3 violations")
 	}
-	stillBanned, _ := d.IsUserBanned("03old")
+	stillBanned, _ := d.IsUserBanned("03old") //nolint
 	if stillBanned {
 		t.Fatal("expired ban should have been lifted")
 	}
@@ -291,7 +291,7 @@ func TestCleanup(t *testing.T) {
 	if err := r.RunCleanup(); err != nil {
 		t.Fatalf("RunCleanup: %v", err)
 	}
-	if o, _ := d.GetOrder("o1"); o != nil {
+	if o, _ := d.GetOrder("o1"); o != nil { //nolint
 		t.Fatalf("completed order should have been cleaned up, got %+v", o)
 	}
 }

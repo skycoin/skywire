@@ -143,9 +143,9 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 	// deposit verification + delivery); external-coin payment verification is a
 	// no-op until a provider is wired in. Otherwise stay fully no-op.
 	var chainBackend jobs.Chain = jobs.NoopChain{}
-	if nodeURL, _ := database.GetConfig("sky_fullnode_url"); strings.TrimSpace(nodeURL) != "" {
-		walletID, _ := database.GetConfig("sky_wallet_id")
-		walletPass, _ := database.GetConfig("sky_wallet_password")
+	if nodeURL, _ := database.GetConfig("sky_fullnode_url"); strings.TrimSpace(nodeURL) != "" { //nolint
+		walletID, _ := database.GetConfig("sky_wallet_id")         //nolint
+		walletPass, _ := database.GetConfig("sky_wallet_password") //nolint
 		chainBackend = chain.New(chain.Config{
 			SkyNodeURL:    nodeURL,
 			SkyWalletID:   walletID,

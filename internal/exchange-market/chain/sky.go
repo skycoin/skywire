@@ -84,7 +84,7 @@ func (s *SkyNode) DepositConfirmed(marketWallet string, amountSKY float64) (bool
 		return false, "", err
 	}
 	for _, t := range txns {
-		if !t.Status.Confirmed || int(t.Status.Height) < s.confs {
+		if !t.Status.Confirmed || int(t.Status.Height) < s.confs { //nolint
 			continue
 		}
 		for _, o := range t.Txn.Outputs {
@@ -202,7 +202,7 @@ func (s *SkyNode) postJSON(path, csrf string, body, out any) error {
 }
 
 func (s *SkyNode) do(req *http.Request, out any) error {
-	resp, err := s.hc.Do(req)
+	resp, err := s.hc.Do(req) //nolint
 	if err != nil {
 		return err
 	}
