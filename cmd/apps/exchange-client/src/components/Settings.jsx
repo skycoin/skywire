@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-function Settings({ isConnected, marketPubKey, setMarketPubKey, setIsConnected }) {
+function Settings({ marketPubKey }) {
   const [wallets, setWallets] = useState({
     SKY: '',
     BTC: '',
@@ -17,22 +17,6 @@ function Settings({ isConnected, marketPubKey, setMarketPubKey, setIsConnected }
     })
   }
 
-  const handleConnect = () => {
-    if (!marketPubKey) {
-      alert('Please enter the Market Public Key')
-      return
-    }
-    // Mock connection - will be replaced with real dmsg connection
-    console.log('Connecting to market:', marketPubKey)
-    setIsConnected(true)
-    alert('Connected successfully!')
-  }
-
-  const handleDisconnect = () => {
-    setIsConnected(false)
-    alert('Disconnected')
-  }
-
   const handleSaveWallets = () => {
     console.log('Saving wallets:', wallets)
     alert('Wallet addresses saved')
@@ -44,36 +28,19 @@ function Settings({ isConnected, marketPubKey, setMarketPubKey, setIsConnected }
 
       <div className="card mb-4">
         <h4>Market Connection</h4>
-        <div className="mb-3">
-          <label className="form-label">Market Public Key</label>
-          <input 
-            type="text" 
+        <div className="mb-1">
+          <label className="form-label">Connected Market Public Key</label>
+          <input
+            type="text"
             className="form-control"
-            placeholder="02abc123def456..."
             value={marketPubKey}
-            onChange={(e) => setMarketPubKey(e.target.value)}
-            disabled={isConnected}
+            readOnly
+            disabled
           />
           <small className="text-muted">
-            The public key of the market visor you want to connect to
+            Use the Disconnect button in the top bar to switch markets.
           </small>
         </div>
-
-        {isConnected ? (
-          <button 
-            className="btn btn-danger"
-            onClick={handleDisconnect}
-          >
-            Disconnect
-          </button>
-        ) : (
-          <button 
-            className="btn btn-primary"
-            onClick={handleConnect}
-          >
-            Connect to Market
-          </button>
-        )}
       </div>
 
       <div className="card">
