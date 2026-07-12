@@ -201,3 +201,37 @@ func (d *Database) GetActiveBans() ([]*Ban, error) {
 
 	return bans, nil
 }
+
+// GetBannablePubKeys returns buyer public keys that have accrued at least limit
+// freeze violations since the given time and are not already banned.
+func (d *Database) GetBannablePubKeys(since time.Time, limit int) ([]string, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`
+		SELECT fv.buyer_pubkey
+		FROM freeze_violations fv
+		WHERE fv.created_at >= ?
+		GROUP BY fv.buyer_pubkey
+		HAVING COUNT(*) >= ?
+		   AND fv.buyer_pubkey NOT IN (SELECT pubkey FROM bans WHERE ban_until > ?)
+	`, since, limit, time.Now().UTC())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get bannable pubkeys: %w", err)
+	}
+	defer rows.Close() //nolint
+
+	var pks []string
+	for rows.Next() {
+		var pk string
+		if err := rows.Scan(&pk); err != nil {
+			return nil, fmt.Errorf("failed to scan bannable pubkey: %w", err)
+		}
+		pks = append(pks, pk)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate bannable pubkeys: %w", err)
+	}
+
+	return pks, nil
+}

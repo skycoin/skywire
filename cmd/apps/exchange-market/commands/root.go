@@ -6,13 +6,16 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/exchange-market/app"
+	"github.com/skycoin/skywire/internal/exchange-market/chain"
 	"github.com/skycoin/skywire/internal/exchange-market/db"
+	"github.com/skycoin/skywire/internal/exchange-market/jobs"
 	"github.com/skycoin/skywire/internal/exchange-market/server"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -135,7 +138,25 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 	// Serve the operator UI (config + monitoring) on the localhost address.
 	go serveUI(ctx, appCl, database, uiAddr)
 
-	// TODO: Start background jobs (in next phase)
+	// Start the background jobs (escrow/listing checks, expiry, cleanup, bans).
+	// When a SKY fullnode URL is configured, use the real Skycoin backend (SKY
+	// deposit verification + delivery); external-coin payment verification is a
+	// no-op until a provider is wired in. Otherwise stay fully no-op.
+	var chainBackend jobs.Chain = jobs.NoopChain{}
+	if nodeURL, _ := database.GetConfig("sky_fullnode_url"); strings.TrimSpace(nodeURL) != "" {
+		walletID, _ := database.GetConfig("sky_wallet_id")
+		walletPass, _ := database.GetConfig("sky_wallet_password")
+		chainBackend = chain.New(chain.Config{
+			SkyNodeURL:    nodeURL,
+			SkyWalletID:   walletID,
+			SkyWalletPass: walletPass,
+			Confirmations: jobs.RequiredConfirmations,
+		}, database)
+		appCl.LogInfo("Chain backend: Skycoin node at %s (external payments via configured explorers)", nodeURL)
+	} else {
+		appCl.LogInfo("Chain backend: none configured (set sky_fullnode_url to enable SKY verification)")
+	}
+	go jobs.NewRunner(database, chainBackend, appCl.Log()).Run(ctx)
 
 	appCl.LogInfo("Exchange market is ready and waiting for client connections.")
 	appCl.LogInfo("Operator UI available at http://%s", uiAddr)

@@ -371,3 +371,74 @@ func (d *Database) GetAllOrders() ([]*Order, error) {
 
 	return orders, nil
 }
+
+// SetOrderConfirmations sets the current confirmation count for an order.
+func (d *Database) SetOrderConfirmations(orderID string, confirmations int) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	_, err := d.db.Exec(`
+		UPDATE orders SET confirmations = ? WHERE id = ?
+	`, confirmations, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to set order confirmations: %w", err)
+	}
+	return nil
+}
+
+// GetInFlightOrders returns orders that are actively being processed by the
+// escrow checker: awaiting payment (not yet expired), paid, or confirmed.
+func (d *Database) GetInFlightOrders() ([]*Order, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	now := time.Now().UTC()
+	rows, err := d.db.Query(`
+		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		FROM orders
+		WHERE status IN ('paid', 'confirmed')
+		   OR (status = 'pending_payment' AND expires_at > ?)
+		ORDER BY created_at ASC
+	`, now)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get in-flight orders: %w", err)
+	}
+	defer rows.Close() //nolint
+
+	var orders []*Order
+	for rows.Next() {
+		order := &Order{}
+		if err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
+			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
+			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan order: %w", err)
+		}
+		orders = append(orders, order)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate in-flight orders: %w", err)
+	}
+
+	return orders, nil
+}
+
+// OrderPaymentAmountExists reports whether an order awaiting payment already
+// expects a payment within tol of amount to the same seller wallet in the same
+// currency. Used to keep every pending payment's non-round amount unique per
+// recipient wallet.
+func (d *Database) OrderPaymentAmountExists(sellerWallet, currency string, amount, tol float64) (bool, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	var n int
+	err := d.db.QueryRow(`
+		SELECT COUNT(*) FROM orders
+		WHERE status = 'pending_payment' AND seller_wallet = ? AND payment_currency = ?
+		  AND ABS(expected_payment_amount - ?) < ?
+	`, sellerWallet, currency, amount, tol).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("failed to check pending payment amount: %w", err)
+	}
+	return n > 0, nil
+}
