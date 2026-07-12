@@ -11,22 +11,18 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
 const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
 
 /**
- * Per-visor Wallet tab. Iframes the embedded `skywire skycoin web`
- * thin-client wallet — only meaningful when:
+ * Per-visor Wallet tab. Iframes the hypervisor-served wallet at the
+ * same-origin path `/wallet/` — the HV serves the static skycoin-web
+ * bundle and proxies its node API over the visor's dmsg client
+ * (pkg/visor/hypervisor_handlers_wallet.go), so the wallet is ALWAYS
+ * available with no skycoin-web process, no port, and works for remote
+ * hypervisors (same-origin, not a cross-host `:8002`). Identical URL on
+ * the native and wasm visors — see docs/design/gui-app-serving-modes.md.
  *
- *   1. The skycoin-web app is configured for this visor (default-off
- *      out of config-gen; operator opts in via the Apps tab).
- *   2. The hypervisor UI's browser can reach the visor's local
- *      skycoin-web port. That works when the hypervisor and visor
- *      run on the same host (the common case — local hypervisor
- *      managing the local visor) because both share window.location's
- *      hostname. For remote visors the operator either points the
- *      browser at the visor's machine directly, or registers
- *      skycoin-web's port for skynet forwarding (`cli serve add`).
- *
- * The tab renders a clear "not configured" / "not running" / "running
- * but not iframable" message in the cases where we can't show the
- * wallet inline; only the working path actually iframes.
+ * The skycoin-web *app* (own port, disk wallets, server-side multi-coin)
+ * remains an opt-in "power" mode: when it's configured on the visor the
+ * header exposes start/stop + settings, but it no longer gates the
+ * inline wallet.
  */
 @Component({
   selector: 'app-wallet',
@@ -44,8 +40,6 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // defaults when those flags aren't passed.
   iframeUrl: SafeResourceUrl | null = null;
   fullWindowUrl = '';
-  resolvedHost = '';
-  resolvedPort = 0;
   // Last node PK we built the iframe URL for. NodeComponent.currentNode
   // emits on every polling refresh; rebuilding the SafeResourceUrl on
   // every tick reloads the iframe and tears down whatever the wallet
@@ -106,36 +100,16 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     this.daemons = apps
       .filter((a) => a.name === SKYCOIN_DAEMON_PREFIX || a.name.startsWith(SKYCOIN_DAEMON_PREFIX + '-'))
       .sort((a, b) => a.name.localeCompare(b.name));
-    const app = apps.find((a) => a.name === 'skycoin-web') || null;
-    this.webApp = app;
+    // The skycoin-web app entry, when configured — drives the OPTIONAL
+    // header controls (start/stop the standalone server). It no longer
+    // gates the wallet.
+    this.webApp = apps.find((a) => a.name === 'skycoin-web') || null;
 
-    if (!app) {
-      this.state = 'not-configured';
-      this.iframeUrl = null;
-
-      return;
-    }
-
-    // Status enum: 0=stopped, 1=running, 2=errored, 3=starting (per
-    // appserver.AppStatus.String()). Anything other than running is
-    // surfaced as "not running" so the user gets the same start-it
-    // hint regardless of stopped/errored/starting.
-    if (app.status !== 1) {
-      this.state = 'not-running';
-      this.iframeUrl = null;
-
-      return;
-    }
-
-    const { host, port } = parseHostPort(app.args || []);
-    this.resolvedHost = host;
-    this.resolvedPort = port;
-
-    // Construct the iframe URL using window.location.hostname for the
-    // host part — that way local-hypervisor + local-visor "just works"
-    // (same machine, same hostname). Remote visors will show a broken
-    // iframe; the help text under the iframe explains why.
-    const url = `http://${window.location.hostname}:${port}/`;
+    // Always iframe the same-origin, hypervisor-served wallet. Same URL on
+    // the native and wasm visors → symmetric, and remote-safe (no
+    // cross-host :8002). The HV serves /wallet/ (static bundle + node API
+    // proxied over dmsg); no skycoin-web port is required.
+    const url = '/wallet/';
     if (this.boundPk !== this.node.localPk || !this.iframeUrl) {
       this.iframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
       this.boundPk = this.node.localPk;
@@ -390,34 +364,3 @@ function shellJoin(args: string[]): string {
   return args.map(a => /[\s"']/.test(a) ? `"${a.replace(/"/g, '\\"')}"` : a).join(' ');
 }
 
-/** Picks --host and --port values out of the app args slice, with
- *  upstream skycoin-web defaults (127.0.0.1:8001) as the fallback.
- *  Accepts both `--host=value` and `--host value` forms. */
-function parseHostPort(args: string[]): { host: string, port: number } {
-  let host = '127.0.0.1';
-  let port = 8001;
-  for (let i = 0; i < args.length; i++) {
-    const a = args[i];
-    if (a === '--host' || a === '-H') {
-      if (i + 1 < args.length) {
- host = args[i + 1]; 
-}
-    } else if (a.startsWith('--host=')) {
-      host = a.substring('--host='.length);
-    } else if (a === '--port' || a === '-p') {
-      if (i + 1 < args.length) {
-        const n = parseInt(args[i + 1], 10);
-        if (!isNaN(n)) {
- port = n; 
-}
-      }
-    } else if (a.startsWith('--port=')) {
-      const n = parseInt(a.substring('--port='.length), 10);
-      if (!isNaN(n)) {
- port = n; 
-}
-    }
-  }
-
-  return { host: host, port: port };
-}
