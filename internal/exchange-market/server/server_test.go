@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/skycoin/skywire/internal/exchange-client/market"
 	"github.com/skycoin/skywire/internal/exchange-market/db"
@@ -256,6 +257,10 @@ func TestBuyerCancelBlocksRebuy(t *testing.T) {
 	if p, _ := database.GetProduct("prod-1"); p == nil || p.Status != "active" { //nolint
 		t.Fatalf("product after cancel = %+v, want active", p)
 	}
+	// A voluntary cancel counts as a freeze violation (toward the ban system).
+	if n, _ := database.CountRecentViolations(buyerPK, time.Now().UTC().Add(-time.Hour)); n != 1 { //nolint
+		t.Fatalf("violations after cancel = %d, want 1", n)
+	}
 
 	// The same buyer may not buy it again.
 	reb, err := buyer.Do(protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"})
@@ -313,7 +318,7 @@ func TestSellerCancelConfirmedOffer(t *testing.T) {
 	// Cancel the confirmed offer: product deactivated, listing canceled.
 	mustSuccess(t, seller, protocol.TypeCancelListing, protocol.CancelListingRequest{ListingID: listing.ListingID})
 	if p, _ := database.GetProduct("prod-1"); p == nil || p.Status != "cancelled" { //nolint
-		t.Fatalf("product after seller cancel = %+v, want cancelled", p)
+		t.Fatalf("product after seller cancel = %+v, want canceled", p)
 	}
 	if l, _ := database.GetPendingListing(listing.ListingID); l == nil || l.Status != "canceled" { //nolint
 		t.Fatalf("listing after seller cancel = %+v, want canceled", l)
