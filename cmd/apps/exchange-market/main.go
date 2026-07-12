@@ -1,11 +1,11 @@
-// Package main cmd/exchange-market/main.go
+// Package main cmd/apps/exchange-market/main.go
 package main
 
 import (
 	cc "github.com/ivanpirog/coloredcobra"
 	"github.com/spf13/cobra"
 
-	"github.com/skycoin/skywire/cmd/exchange-market/commands"
+	"github.com/skycoin/skywire/cmd/apps/exchange-market/commands"
 )
 
 func init() {

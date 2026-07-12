@@ -1,4 +1,4 @@
-// Package commands cmd/exchange-market/commands/root.go
+// Package commands cmd/apps/exchange-market/commands/root.go
 package commands
 
 import (
@@ -13,6 +13,8 @@ import (
 
 	"github.com/skycoin/skywire/internal/exchange-market/app"
 	"github.com/skycoin/skywire/internal/exchange-market/db"
+	"github.com/skycoin/skywire/internal/exchange-market/protocol"
+	"github.com/skycoin/skywire/internal/exchange-market/server"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -105,7 +107,17 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 	}
 	appCl.LogInfo("Market configuration initialized.")
 
-	// TODO: Start dmsg server (in next phase)
+	// Start the dmsg transport server. The market Listens on appnet.TypeDmsg
+	// via the visor; clients Dial the market's public key on the same port.
+	srv := server.New(database, appCl.Log(), protocol.Port(port))
+	go func() {
+		if err := srv.ListenAndServe(ctx, appCl); err != nil {
+			appCl.LogError("dmsg server stopped: %v", err)
+			appCl.SetErrorOrLog(err)
+			cancel()
+		}
+	}()
+
 	// TODO: Start background jobs (in next phase)
 
 	appCl.LogInfo("Exchange market is ready and waiting for client connections.")
