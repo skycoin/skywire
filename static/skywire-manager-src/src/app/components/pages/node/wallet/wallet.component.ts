@@ -114,8 +114,12 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
    *  from the input (template ref) — no FormsModule dependency. */
   saveCoinNode(val: string) {
     const v = (val || '').trim().replace(/^dmsg:\/\//, '');
-    if (v && !/^[0-9a-fA-F]{66}:\d+$/.test(v)) {
-      this.nodeError = 'Expected <66-hex-pk>:<port> (a dmsg node), or empty for the default.';
+    // Accept a dmsg node (<pk>:<port>, dialed directly) OR an http(s):// URL
+    // (a clearnet or .dmsg node, fetched via the visor / resolving proxy).
+    const isDmsg = /^[0-9a-fA-F]{66}:\d+$/.test(v);
+    const isHttp = /^https?:\/\/.+/i.test(v);
+    if (v && !isDmsg && !isHttp) {
+      this.nodeError = 'Expected a dmsg node (<66-hex-pk>:<port>) or an http(s):// URL, or empty for the default.';
       return;
     }
     this.nodeError = '';

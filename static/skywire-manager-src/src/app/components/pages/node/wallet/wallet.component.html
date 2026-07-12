@@ -85,15 +85,18 @@
                deployment default. First field of the multi-coin + BTC panel. -->
           <div class="wallet-backend">
             <div class="dim small wallet-backend-help">
-              Coin node this wallet queries, over dmsg
-              (<span class="mono">&lt;pk&gt;:&lt;port&gt;</span>). Empty = the default
-              deployment node. Stored in this browser; applies on both this and the
-              wasm visor.
+              Coin node this wallet queries. A <b>dmsg node</b>
+              (<span class="mono">&lt;pk&gt;:&lt;port&gt;</span>) is dialed directly
+              over the mesh; an <b>http(s):// URL</b> (a clearnet node, or a
+              <span class="mono">.dmsg</span> URL) goes via the visor's resolving
+              proxy — one hop more, but any existing node URL just works. Empty =
+              the default deployment node. Stored in this browser; applies on both
+              this and the wasm visor.
             </div>
             <div class="wallet-backend-row">
               <input #nodeInput class="wallet-node-input mono"
                      [value]="coinNode"
-                     placeholder="039a6d1e…:6420   (empty = default)"
+                     placeholder="039a6d1e…:6420  or  http://node.skycoin.com   (empty = default)"
                      (keyup.enter)="saveCoinNode(nodeInput.value)" />
               <button mat-raised-button color="primary" (click)="saveCoinNode(nodeInput.value)">
                 <mat-icon [inline]="true">save</mat-icon>

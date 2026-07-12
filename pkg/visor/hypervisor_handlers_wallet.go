@@ -15,15 +15,23 @@
 package visor
 
 import (
+	"bytes"
 	"io"
 	"io/fs"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 )
+
+// walletHTTPClient fetches http(s) coin backends (a clearnet node, or a
+// .dmsg/.skynet URL the visor's resolving proxy handles) directly from the
+// visor — the "lean on the proxy" path for non-dmsg-native backends. dmsg
+// <pk>:<port> backends use DmsgHTTP instead (one hop fewer).
+var walletHTTPClient = &http.Client{Timeout: 20 * time.Second}
 
 // walletNodeDmsg is the skycoin node the HV-served wallet talks to by DEFAULT:
 // the deployment node addressed over dmsg (same PK:port as
@@ -114,13 +122,13 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 		http.Error(w, "visor not ready", http.StatusServiceUnavailable)
 		return
 	}
-	// Node selection: the operator's configured node (X-Skywire-Coin-Node,
-	// "<pk>:<port>") when present + valid, else the deployment default.
-	node := walletNodeDmsg
-	if n := normalizeCoinNode(r.Header.Get("X-Skywire-Coin-Node")); n != "" {
-		node = n
-	}
-	url := node + "/" + rest
+	// Backend selection: the operator's configured backend (X-Skywire-Coin-Node)
+	// when present, else the deployment default. A dmsg <pk>:<port> is dialed
+	// directly over dmsg; an http(s) URL (a clearnet node, or a .dmsg URL the
+	// resolving proxy handles) is fetched by the visor — one hop more, but it
+	// makes skycoin-web's existing http node URLs (and BTC) just work.
+	base, isDmsg := coinBackend(r.Header.Get("X-Skywire-Coin-Node"))
+	url := strings.TrimRight(base, "/") + "/" + rest
 	if r.URL.RawQuery != "" {
 		url += "?" + r.URL.RawQuery
 	}
@@ -128,30 +136,73 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	if r.Body != nil {
 		body, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20)) //nolint:errcheck
 	}
-	header := map[string]string{}
-	if ct := r.Header.Get("Content-Type"); ct != "" {
-		header["Content-Type"] = ct
-	}
-	if csrf := r.Header.Get("X-CSRF-Token"); csrf != "" {
-		header["X-CSRF-Token"] = csrf
-	}
-	resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
-		URL:    url,
-		Method: r.Method,
-		Header: header,
-		Body:   body,
-	})
-	if err != nil {
-		http.Error(w, "node unreachable over dmsg: "+err.Error(), http.StatusBadGateway)
+
+	if isDmsg {
+		header := map[string]string{}
+		if ct := r.Header.Get("Content-Type"); ct != "" {
+			header["Content-Type"] = ct
+		}
+		if csrf := r.Header.Get("X-CSRF-Token"); csrf != "" {
+			header["X-CSRF-Token"] = csrf
+		}
+		resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{URL: url, Method: r.Method, Header: header, Body: body})
+		if err != nil {
+			http.Error(w, "node unreachable over dmsg: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		if ct := resp.Header["Content-Type"]; ct != "" {
+			w.Header().Set("Content-Type", ct)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+		}
+		w.WriteHeader(resp.StatusCode)
+		_, _ = w.Write(resp.Body) //nolint:errcheck
 		return
 	}
-	if ct := resp.Header["Content-Type"]; ct != "" {
+
+	// http(s) backend — the visor makes the request (clearnet / resolving proxy).
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, url, bytes.NewReader(body)) //nolint:gosec // operator-configured backend
+	if err != nil {
+		http.Error(w, "bad backend url: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	if ct := r.Header.Get("Content-Type"); ct != "" {
+		req.Header.Set("Content-Type", ct)
+	}
+	if csrf := r.Header.Get("X-CSRF-Token"); csrf != "" {
+		req.Header.Set("X-CSRF-Token", csrf)
+	}
+	// The backend URL is the operator's own configured node — a deliberate,
+	// not attacker-controlled, request target (same as skycoin-web's --node-url).
+	resp, err := walletHTTPClient.Do(req) //nolint:gosec // operator-configured backend
+	if err != nil {
+		http.Error(w, "node unreachable: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
+	if ct := resp.Header.Get("Content-Type"); ct != "" {
 		w.Header().Set("Content-Type", ct)
-	} else {
-		w.Header().Set("Content-Type", "application/json")
 	}
 	w.WriteHeader(resp.StatusCode)
-	_, _ = w.Write(resp.Body) //nolint:errcheck
+	_, _ = io.Copy(w, io.LimitReader(resp.Body, 8<<20)) //nolint:errcheck
+}
+
+// coinBackend resolves the wallet's configured backend selection into a base
+// URL + whether it's a dmsg address (→ DmsgHTTP) or an http(s) URL (→ direct
+// fetch). Empty / unrecognized → the deployment default (dmsg). Accepts:
+// "<pk>:<port>" or "dmsg://<pk>:<port>" (dmsg); "http://…" / "https://…" (http).
+func coinBackend(sel string) (base string, isDmsg bool) {
+	sel = strings.TrimSpace(sel)
+	if sel == "" {
+		return walletNodeDmsg, true
+	}
+	if d := normalizeCoinNode(sel); d != "" {
+		return d, true
+	}
+	if strings.HasPrefix(sel, "http://") || strings.HasPrefix(sel, "https://") {
+		return sel, false
+	}
+	return walletNodeDmsg, true
 }
 
 // normalizeCoinNode validates an operator-supplied coin-node selection and
