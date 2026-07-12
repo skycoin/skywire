@@ -736,6 +736,10 @@ func (s visorSelf) SelfOverview() wasmhv.Overview {
 	// "Transports" count reflects reality (the autoconnect WS transports). The
 	// transports tab reads SelfTransports() directly; the summary reads this.
 	ov.SetSelfTransports(s.SelfTransports())
+	// Surface the tab's in-process apps (skychat, skycoin-web) in the overview
+	// so the hvui Apps tab renders them (node.apps ← overview.apps) — the same
+	// list the /apps control endpoint serves, from one builder.
+	ov.SetSelfApps(selfAppStates())
 	if ip, ok := selfPublicIP.Load().(string); ok {
 		ov.PublicIP = ip
 	}
