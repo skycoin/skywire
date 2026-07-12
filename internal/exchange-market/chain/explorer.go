@@ -179,7 +179,7 @@ func (e *esplora) PaymentConfirmations(_ /*currency*/, addr string, amount float
 		}
 		confs := 0
 		if tx.Status.Confirmed && tip >= tx.Status.BlockHeight {
-			confs = int(tip-tx.Status.BlockHeight) + 1
+			confs = int(tip-tx.Status.BlockHeight) + 1 //nolint
 		}
 		if confs > best {
 			best = confs
