@@ -23,10 +23,15 @@ export function abbreviatePk(pk: string): string {
  * Shared by the node-list and node (detail) pages so the row is identical on both.
  */
 export function visorSwitcherChips(nodes: Node[]): TabButtonData[] {
-  return (nodes || []).map(n => ({
-      icon: (n as any).isHypervisor ? 'router' : ((n as any).arch === 'wasm' ? 'public' : 'devices'),
-      label: n.label || abbreviatePk(n.localPk),
-      sublabel: n.localPk || '',
-      linkParts: ['/nodes', n.localPk, 'info'],
-    } as TabButtonData));
+  // Guard with Array.isArray, not `nodes || []`: a truthy-but-non-array value
+  // (e.g. an error/object body assigned to allNodes when the fleet is churning)
+  // would otherwise pass through `|| []` and throw "(...).map is not a function",
+  // which crashes buildSwitcherTabs and hangs the whole hypervisor UI. One bad
+  // summary response must not take down the switcher.
+  return (Array.isArray(nodes) ? nodes : []).map(n => ({
+    icon: (n as any).isHypervisor ? 'router' : ((n as any).arch === 'wasm' ? 'public' : 'devices'),
+    label: n.label || abbreviatePk(n.localPk),
+    sublabel: n.localPk || '',
+    linkParts: ['/nodes', n.localPk, 'info'],
+  } as TabButtonData));
 }

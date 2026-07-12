@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -26,6 +27,18 @@ func (hv *Hypervisor) getLog() http.HandlerFunc {
 		if !ok {
 			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 			return
+		}
+		// This is a long-lived stream. The hypervisor http.Server sets
+		// WriteTimeout (10s), which is a single deadline for the WHOLE
+		// response — for an endless SSE stream it fires ~10s in and forcibly
+		// closes the connection, which the browser surfaces as a recurring
+		// ERR_INCOMPLETE_CHUNKED_ENCODING and a 10s-cyclic gap in the log
+		// window. Clear the write deadline for THIS response only (via
+		// ResponseController); every other endpoint keeps WriteTimeout.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+			// Non-fatal: on a transport without deadline control the stream
+			// still works, it just re-inherits the server WriteTimeout.
+			hv.log(r).WithError(err).Debug("log SSE: could not clear write deadline")
 		}
 		// Empty filter = firehose (every module, Debug+). See Broadcaster.matches.
 		ch, cancel := hv.visor.SubscribeLogs(logging.Filter{MinLevel: logrus.DebugLevel}, 512)
