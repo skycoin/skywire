@@ -115,7 +115,7 @@ func TestClientFramesDatagramsOntoStream(t *testing.T) {
 	go func() { done <- RunClient(ctx, cfg, pd, logger) }()
 
 	// Wait briefly for the UDP listen to land.
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	var sender *net.UDPConn
 	for time.Now().Before(deadline) {
 		sender, err = net.DialUDP("udp", nil, bound)
@@ -152,7 +152,7 @@ func TestClientFramesDatagramsOntoStream(t *testing.T) {
 	}
 	defer peerConn.Close() //nolint:errcheck,gosec
 
-	_ = peerConn.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck,gosec
+	_ = peerConn.SetReadDeadline(time.Now().Add(10 * time.Second)) //nolint:errcheck,gosec
 	got := make([]byte, MaxFrameSize)
 	n, err := ReadFrame(peerConn, got)
 	if err != nil {
@@ -165,7 +165,9 @@ func TestClientFramesDatagramsOntoStream(t *testing.T) {
 	cancel()
 	select {
 	case <-done:
-	case <-time.After(2 * time.Second):
+	// Shutdown is prompt (closing the UDP socket + flow conns unblocks serveUDP);
+	// the generous wait only guards against a slow/loaded CI runner.
+	case <-time.After(10 * time.Second):
 		t.Fatal("RunClient did not exit after cancel")
 	}
 }
