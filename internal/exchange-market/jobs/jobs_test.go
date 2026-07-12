@@ -216,6 +216,101 @@ func (noopButConfirmed) PaymentConfirmations(string, string, float64) (int, stri
 	return 2, "pay-tx", nil
 }
 
+// TestReturnScheduler refunds escrowed SKY for a canceled listing whose deposit
+// landed, once the refund delay has elapsed, and records the refund exactly once.
+func TestReturnScheduler(t *testing.T) {
+	d := newDB(t)
+	if err := d.SetConfig("wallet_sky", "market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	mustUser(t, d, "03seller", "sky-seller")
+
+	// A listing the seller deposited for, then canceled.
+	if err := d.CreatePendingListing(&db.PendingListing{
+		ID: "l1", SellerPubKey: "03seller", AmountSKY: 5, ExpectedAmountSKY: 5.013, Price: 1,
+		PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdatePendingListingStatus("l1", "canceled", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	chain := &fakeChain{deposit: true}
+	r := jobs.NewRunner(d, chain, nil)
+
+	// closed_at is "now", so with the default 1h delay nothing is due yet.
+	if err := r.RunReturnScheduler(); err != nil {
+		t.Fatalf("RunReturnScheduler (not due): %v", err)
+	}
+	if len(chain.sends) != 0 {
+		t.Fatalf("no refund should be due before the delay, got %+v", chain.sends)
+	}
+
+	// Drop the delay to 0 so the refund is due immediately.
+	if err := d.SetConfig("return_delay_hours", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.RunReturnScheduler(); err != nil {
+		t.Fatalf("RunReturnScheduler (due): %v", err)
+	}
+	if len(chain.sends) != 1 || chain.sends[0].addr != "sky-seller" || chain.sends[0].amt != 5.013 {
+		t.Fatalf("SendSKY calls = %+v, want one refund of 5.013 to sky-seller", chain.sends)
+	}
+	listing, _ := d.GetPendingListing("l1") //nolint
+	if listing.Status != "returned" {
+		t.Fatalf("listing status = %q, want returned", listing.Status)
+	}
+	if listing.ReturnTxHash != "send-tx" {
+		t.Fatalf("return_tx_hash = %q, want send-tx", listing.ReturnTxHash)
+	}
+
+	// Idempotent: a second pass must not refund again.
+	if err := r.RunReturnScheduler(); err != nil {
+		t.Fatalf("RunReturnScheduler (second pass): %v", err)
+	}
+	if len(chain.sends) != 1 {
+		t.Fatalf("refund must happen at most once, got %+v", chain.sends)
+	}
+}
+
+// TestReturnSchedulerNoDeposit verifies escrow is NOT refunded when no matching
+// deposit is found on-chain (guards against draining the wallet for a listing
+// the seller never funded).
+func TestReturnSchedulerNoDeposit(t *testing.T) {
+	d := newDB(t)
+	if err := d.SetConfig("wallet_sky", "market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetConfig("return_delay_hours", "0"); err != nil {
+		t.Fatal(err)
+	}
+	mustUser(t, d, "03seller", "sky-seller")
+	if err := d.CreatePendingListing(&db.PendingListing{
+		ID: "l1", SellerPubKey: "03seller", AmountSKY: 5, ExpectedAmountSKY: 5.013, Price: 1,
+		PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdatePendingListingStatus("l1", "expired", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// deposit:false => DepositConfirmed reports the SKY never arrived.
+	chain := &fakeChain{deposit: false}
+	r := jobs.NewRunner(d, chain, nil)
+	if err := r.RunReturnScheduler(); err != nil {
+		t.Fatalf("RunReturnScheduler: %v", err)
+	}
+	if len(chain.sends) != 0 {
+		t.Fatalf("must not refund without an on-chain deposit, got %+v", chain.sends)
+	}
+	listing, _ := d.GetPendingListing("l1") //nolint
+	if listing.Status != "expired" {
+		t.Fatalf("listing status = %q, want expired (unchanged)", listing.Status)
+	}
+}
+
 // TestBanManager bans a user over the violation limit and lifts an expired ban.
 func TestBanManager(t *testing.T) {
 	d := newDB(t)
