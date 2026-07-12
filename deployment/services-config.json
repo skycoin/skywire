@@ -24,6 +24,9 @@
     ],
     "dns_server": "1.1.1.1",
     "geoip": "http://ip.skywire.dev",
+    "skycoin_node_dmsg": "dmsg://03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c:6420",
+    "skycoin_explorer_dmsg": "dmsg://03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c:8081",
+    "skycoin_blog_dmsg": "dmsg://03d1d78e7323e1dc63a6cbbf79e52974791e3cd7b5aaab77f045d72a21b066ee8c:8082",
     "survey_whitelist": [
       "02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637",
       "03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3",
@@ -116,6 +119,9 @@
     ],
     "dns_server": "1.1.1.1",
     "geoip": "http://ip.skycoin.com",
+    "skycoin_node_dmsg": "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:6420",
+    "skycoin_explorer_dmsg": "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:8081",
+    "skycoin_blog_dmsg": "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:8082",
     "survey_whitelist": [
       "02b5ee5333aa6b7f5fc623b7d5f35f505cb7f974e98a70751cf41962f84c8c4637",
       "03714c8bdaee0fb48f47babbc47c33e1880752b6620317c9d56b30f3b0ff58a9c3",

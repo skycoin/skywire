@@ -51,6 +51,8 @@ type v1JSON struct {
 	Stats   *Stats   `json:"stats,omitempty"`
 	Skychat *Skychat `json:"skychat,omitempty"`
 
+	CoinNodes []CoinNodeConfig `json:"coin_nodes,omitempty"`
+
 	SurveyWhitelist     []cipher.PubKey `json:"survey_whitelist"`
 	UserSurveyWhitelist []cipher.PubKey `json:"user_survey_whitelist,omitempty"`
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
@@ -109,6 +111,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.Launcher = mirror.Launcher
 	v.Stats = mirror.Stats
 	v.Skychat = mirror.Skychat
+	v.CoinNodes = mirror.CoinNodes
 	v.SurveyWhitelist = mirror.SurveyWhitelist
 	v.UserSurveyWhitelist = mirror.UserSurveyWhitelist
 	v.Hypervisors = mirror.Hypervisors
