@@ -1754,11 +1754,12 @@
     // HV UI doesn't expose (native has its own Angular skychat tab).
     if (globalThis.skywireVisor && globalThis.skywireVisor.skychatSend) { addApp("chat", function () { openChat(); }); }
     if (globalThis.skywireVisor && globalThis.skywireVisor.serveContent) { addApp("host", function () { openHost(); }); }
-    // 'wallet' is the skycoin-web thin-client bundled into the PWA at /wallet/
-    // (same-origin — the app never loads over dmsg; only its node API does, via
-    // the Service Worker → fetchDmsg bridge). Only offered in the wasm-visor
-    // context, where /wallet/ is embedded and dmsg routing is available.
-    if (globalThis.skywireVisor) { addApp("wallet", function () { openWallet(); }); }
+    // 'wallet' is the skycoin-web thin-client served same-origin at /wallet/ —
+    // the app never loads over dmsg, only its node API does. Ungated: both the
+    // wasm visor (browser fetchDmsg shim) and the native HV (server-side dmsg
+    // proxy, hypervisor_handlers_wallet.go) serve /wallet/, so the ☰ wallet
+    // opens the hosting visor's wallet on either.
+    addApp("wallet", function () { openWallet(); });
     addApp("console", function () { openCli(); });
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
