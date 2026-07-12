@@ -172,7 +172,7 @@ func (d *Database) GetPendingListings() ([]*PendingListing, error) {
 	return listings, nil
 }
 
-// DeleteOldPendingListings removes terminal (expired/confirmed/cancelled)
+// DeleteOldPendingListings removes terminal (expired/confirmed/canceled)
 // pending listings older than age. Returns the number deleted.
 func (d *Database) DeleteOldPendingListings(age time.Duration) (int64, error) {
 	d.mu.Lock()
