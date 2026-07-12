@@ -7,7 +7,10 @@ export default defineConfig({
     port: 8787
   },
   build: {
-    outDir: 'dist',
+    // Build straight into the Go package that embeds the UI (commands/static),
+    // so `go build` picks up the freshly built assets via //go:embed.
+    outDir: 'commands/static',
+    emptyOutDir: true,
     assetsDir: 'assets',
     rollupOptions: {
       output: {

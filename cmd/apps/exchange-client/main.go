@@ -1,51 +1,43 @@
+// Package main cmd/apps/exchange-client/main.go
 package main
 
 import (
-	"embed"
-	"io/fs"
-	"log"
-	"net/http"
-	"os"
-	"path"
-	"strings"
+	cc "github.com/ivanpirog/coloredcobra"
+	"github.com/spf13/cobra"
+
+	"github.com/skycoin/skywire/cmd/apps/exchange-client/commands"
 )
 
-//go:embed static
-var uiFS embed.FS
+func init() {
+	var helpflag bool
+	commands.RootCmd.SetUsageTemplate(help)
+	commands.RootCmd.PersistentFlags().BoolVarP(&helpflag, "help", "h", false, "help menu")
+	commands.RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+	commands.RootCmd.PersistentFlags().MarkHidden("help") //nolint:errcheck,gosec
+}
 
 func main() {
-	port := "8787"
-	if p := os.Getenv("PORT"); p != "" {
-		port = p
-	}
-
-	// Strip the "static" prefix so paths are served from the embed root.
-	distFS, err := fs.Sub(uiFS, "static")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	// Create a custom file server that handles SPA routing
-	fileServer := http.FileServer(http.FS(distFS))
-
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Resolve the request to an embed-relative path (no leading slash,
-		// which io/fs requires). Empty means the root document.
-		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-		if name == "" {
-			name = "index.html"
-		}
-
-		// If the requested file is not part of the built UI, fall back to
-		// index.html so client-side (SPA) routes resolve correctly.
-		if _, err := fs.Stat(distFS, name); err != nil {
-			r.URL.Path = "/"
-		}
-
-		fileServer.ServeHTTP(w, r)
+	cc.Init(&cc.Config{
+		RootCmd:         commands.RootCmd,
+		Headings:        cc.HiBlue + cc.Bold,
+		Commands:        cc.HiBlue + cc.Bold,
+		CmdShortDescr:   cc.HiBlue,
+		Example:         cc.HiBlue + cc.Italic,
+		ExecName:        cc.HiBlue + cc.Bold,
+		Flags:           cc.HiBlue + cc.Bold,
+		FlagsDescr:      cc.HiBlue,
+		NoExtraNewlines: true,
+		NoBottomNewline: true,
 	})
-
-	addr := ":" + port
-	log.Printf("Exchange Client UI server starting on http://localhost%s", addr) //nolint
-	log.Fatal(http.ListenAndServe(addr, nil))                                    //nolint
+	commands.Execute()
 }
+
+const help = "Usage:\r\n" +
+	"  {{.UseLine}}{{if .HasAvailableSubCommands}}{{end}} {{if gt (len .Aliases) 0}}\r\n\r\n" +
+	"{{.NameAndAliases}}{{end}}{{if .HasAvailableSubCommands}}\r\n\r\n" +
+	"Available Commands:{{range .Commands}}{{if (or .IsAvailableCommand)}}\r\n  " +
+	"{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}\r\n\r\n" +
+	"Flags:\r\n" +
+	"{{.LocalFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}{{if .HasAvailableInheritedFlags}}\r\n\r\n" +
+	"Global Flags:\r\n" +
+	"{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces}}{{end}}\r\n\r\n"

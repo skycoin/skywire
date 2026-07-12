@@ -1,4 +1,4 @@
-.PHONY: dev build clean
+.PHONY: install dev build clean build-go full-build
 
 # Install dependencies
 install:
@@ -8,20 +8,22 @@ install:
 dev:
 	npm run dev
 
-# Build for production
+# Build for production (outputs to commands/static, which is embedded by the Go binary)
 build:
 	npm run build
 
-# Clean build artifacts
+# Clean build artifacts (keep commands/static, it is committed and embedded)
 clean:
-	rm -rf dist node_modules
+	rm -rf node_modules
 
-# Build and run Go server with embedded UI
-run:
+# Build the UI then the Go binary with the embedded UI.
+# The client runs as a Skywire visor app (`skywire app exchange-client`),
+# so it is normally launched by the visor rather than run standalone.
+build-go:
 	@echo "Building UI..."
 	@npm run build
-	@echo "Starting Go server..."
-	@go run main.go
+	@echo "Building exchange-client binary..."
+	@cd ../../.. && go build -o bin/exchange-client ./cmd/apps/exchange-client
 
 # Full build (install + build)
 full-build: install build

@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	xc "github.com/skycoin/skywire/cmd/apps/exchange-client/commands"
 	xm "github.com/skycoin/skywire/cmd/apps/exchange-market/commands"
 	pty "github.com/skycoin/skywire/cmd/apps/pty/commands"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
@@ -44,6 +45,7 @@ func init() {
 		sn.RootCmd,
 		snc.RootCmd,
 		xm.RootCmd,
+		xc.RootCmd,
 		pty.RootCmd,
 		skysocksPairCmd,
 		vpnPairCmd,
