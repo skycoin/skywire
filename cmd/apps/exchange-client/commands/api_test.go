@@ -161,6 +161,15 @@ func TestProxyRoutes(t *testing.T) {
 		Currencies []string `json:"currencies"`
 	}
 	getJSON(t, ts.URL+"/api/currencies", &cur)
+
+	// The caller's own listings proxy returns a (possibly empty) list.
+	var mine struct {
+		Listings []any `json:"listings"`
+	}
+	getJSON(t, ts.URL+"/api/listings/mine", &mine)
+	if mine.Listings == nil {
+		t.Fatalf("listings payload missing 'listings' field")
+	}
 }
 
 // TestConnectRejectsEmptyPK verifies connect fails cleanly with no key.

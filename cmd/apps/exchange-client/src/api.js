@@ -31,6 +31,7 @@ export const api = {
   getCurrencies: () => request('GET', '/api/currencies'),
   getProducts: () => request('GET', '/api/products'),
   getOrders: () => request('GET', '/api/orders'),
+  getListings: () => request('GET', '/api/listings/mine'),
   createListing: (listing) => request('POST', '/api/listings', listing),
   cancelListing: (listingId) => request('POST', '/api/listings/cancel', { listing_id: listingId }),
   buyProduct: (productId) => request('POST', '/api/buy', { product_id: productId }),
