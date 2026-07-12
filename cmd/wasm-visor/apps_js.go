@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/skycoin/skywire/pkg/app/appcommon"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
 const (
@@ -40,18 +41,6 @@ func autoStartPref(name string) bool {
 	return appAutoStart[name]
 }
 
-// appStateJSON is the native appserver.AppState wire shape the Angular Apps
-// tab reads (the subset the tab renders; no `binary` → internal app).
-type appStateJSON struct {
-	Name           string   `json:"name"`
-	Args           []string `json:"args,omitempty"`
-	AutoStart      bool     `json:"auto_start"`
-	Port           uint16   `json:"port"`
-	LauncherMode   string   `json:"launcher_mode"`
-	Status         int      `json:"status"`
-	DetailedStatus string   `json:"detailed_status"`
-}
-
 func skychatRunning() bool {
 	if procM == nil {
 		return false
@@ -60,28 +49,40 @@ func skychatRunning() bool {
 	return ok
 }
 
-// SelfApps returns the tab's in-process apps as the native []AppState JSON so
-// the shared Apps tab lists + controls them like a native visor.
-func (visorSelf) SelfApps() []byte {
-	status := 0
-	detail := "Stopped"
+// selfAppStates builds the tab's in-process apps in the native AppState shape.
+// Shared by SelfApps() (the /apps control endpoint) and SelfOverview (which
+// stamps them into overview.apps — the field the hvui Apps tab actually renders
+// from). Keeping one builder means the list + control endpoint can't drift.
+func selfAppStates() []wasmhv.AppState {
+	status, detail := 0, "Stopped"
 	if skychatRunning() {
 		status, detail = 1, "Running"
 	}
-	apps := []appStateJSON{
+	return []wasmhv.AppState{
 		{
-			Name: appSkychat, Port: skychatPort, LauncherMode: "internal",
-			AutoStart: autoStartPref(appSkychat), Status: status, DetailedStatus: detail,
+			AppConfig: wasmhv.AppConfig{
+				Name: appSkychat, Port: skychatPort, LauncherMode: "internal",
+				AutoStart: autoStartPref(appSkychat),
+			},
+			Status: status, DetailedStatus: detail,
 		},
 		{
 			// The bundled skycoin-web wallet, served at /wallet/ (always
 			// reachable in the tab). Args carries the "open" address the UI
 			// resolves — the wasm/native-aligned wallet URL.
-			Name: appSkycoinWeb, Args: []string{"url:/wallet/"}, Port: 0, LauncherMode: "internal",
-			AutoStart: autoStartPref(appSkycoinWeb), Status: 1, DetailedStatus: "Running",
+			AppConfig: wasmhv.AppConfig{
+				Name: appSkycoinWeb, Args: []string{"url:/wallet/"}, Port: 0, LauncherMode: "internal",
+				AutoStart: autoStartPref(appSkycoinWeb),
+			},
+			Status: 1, DetailedStatus: "Running",
 		},
 	}
-	b, err := json.Marshal(apps)
+}
+
+// SelfApps returns the tab's in-process apps as the native []AppState JSON so
+// the shared Apps tab lists + controls them like a native visor.
+func (visorSelf) SelfApps() []byte {
+	b, err := json.Marshal(selfAppStates())
 	if err != nil {
 		return nil
 	}
