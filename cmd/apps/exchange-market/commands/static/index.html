@@ -78,6 +78,10 @@
     .empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
     .tab { display: none; }
     .tab.active { display: block; }
+    .cur-row { display: grid; grid-template-columns: 70px 150px 1fr 1fr auto; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+    .cur-code { font-weight: 600; }
+    .cur-row select, .cur-row input { width: 100%; }
+    @media (max-width: 640px) { .cur-row { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
 <body>
@@ -107,17 +111,16 @@
           <input name="wallet_sky" placeholder="market SKY wallet address">
           <label>SKY fullnode URL</label>
           <input name="sky_fullnode_url" placeholder="http://127.0.0.1:6420">
+          <div class="grid">
+            <div><label>SKY hot wallet id</label><input name="sky_wallet_id" placeholder="wallet .wlt filename"></div>
+            <div><label>SKY wallet password</label><input name="sky_wallet_password" type="password" placeholder="blank if unencrypted"></div>
+          </div>
         </div>
 
         <div class="panel">
-          <h2>Payment explorers <span class="hint">(leave empty to disable that coin)</span></h2>
-          <div class="grid">
-            <div><label>BTC explorer</label><input name="explorer_btc" placeholder="disabled"></div>
-            <div><label>BCH explorer</label><input name="explorer_bch" placeholder="disabled"></div>
-            <div><label>LTC explorer</label><input name="explorer_ltc" placeholder="disabled"></div>
-            <div><label>USDT (ERC20) explorer</label><input name="explorer_usdt_erc20" placeholder="disabled"></div>
-            <div><label>USDT (TRC20) explorer</label><input name="explorer_usdt_trc20" placeholder="disabled"></div>
-          </div>
+          <h2>Payment currencies <span class="hint">(pick an explorer per coin to accept it)</span></h2>
+          <div id="currency-rows"><div class="empty">Loading…</div></div>
+          <div class="hint" style="margin-top:.5rem">A coin becomes available to buyers/sellers once you select an explorer for it. Leave the provider blank to disable a coin. "Base URL" and "API key" are optional overrides.</div>
         </div>
 
         <div class="panel">
@@ -165,9 +168,9 @@
   <script>
     const $ = (s) => document.querySelector(s);
     const CONFIG_FIELDS = [
-      'wallet_sky','sky_fullnode_url','explorer_btc','explorer_bch','explorer_ltc',
-      'explorer_usdt_erc20','explorer_usdt_trc20','freeze_violations_limit','ban_duration_days',
-      'listing_expiry_minutes','order_expiry_minutes','return_delay_hours','cleanup_days','fee_rate_sch_per_sky'
+      'wallet_sky','sky_fullnode_url','sky_wallet_id','sky_wallet_password',
+      'freeze_violations_limit','ban_duration_days','listing_expiry_minutes',
+      'order_expiry_minutes','return_delay_hours','cleanup_days','fee_rate_sch_per_sky'
     ];
 
     function esc(s) {
@@ -196,15 +199,44 @@
     $('#copy-pk').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('#market-pk').textContent);
 
     // Config
+    let currencyList = [];
+    async function loadCurrencies() {
+      const d = await getJSON('/api/currencies');
+      currencyList = d.currencies || [];
+      const rows = currencyList.map((c) => {
+        const key = esc(c.code);
+        const opts = ['<option value="">— disabled —</option>']
+          .concat((c.providers || []).map((p) =>
+            '<option value="' + esc(p) + '"' + (c.provider === p ? ' selected' : '') + '>' + esc(p) + '</option>'));
+        const disabled = (c.providers || []).length === 0 ? ' disabled' : '';
+        return '<div class="cur-row" data-coin="' + key + '">' +
+          '<span class="cur-code">' + key + '</span>' +
+          '<select class="cur-provider"' + disabled + '>' + opts.join('') +
+          '</select>' +
+          '<input class="cur-url" placeholder="base URL (optional)" value="' + esc(c.url || '') + '">' +
+          '<input class="cur-key" placeholder="API key (optional)" value="' + esc(c.key || '') + '">' +
+          (disabled ? '<span class="hint">no adapter yet</span>' : '') +
+          '</div>';
+      }).join('');
+      $('#currency-rows').innerHTML = rows || '<div class="empty">No supported currencies.</div>';
+    }
     async function loadConfig() {
       const cfg = await getJSON('/api/config');
       CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) el.value = cfg[k] || ''; });
+      await loadCurrencies();
     }
     $('#config-form').onsubmit = async (e) => {
       e.preventDefault();
       const btn = $('#save-btn'); btn.disabled = true;
       const body = {};
       CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) body[k] = el.value.trim(); });
+      // Collect each coin's explorer config (provider/url/key).
+      document.querySelectorAll('.cur-row').forEach((row) => {
+        const coin = row.dataset.coin.toLowerCase();
+        body['explorer_' + coin + '_provider'] = row.querySelector('.cur-provider').value;
+        body['explorer_' + coin + '_url'] = row.querySelector('.cur-url').value.trim();
+        body['explorer_' + coin + '_key'] = row.querySelector('.cur-key').value.trim();
+      });
       try {
         const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const data = await res.json();

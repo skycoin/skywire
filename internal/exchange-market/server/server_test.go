@@ -52,8 +52,8 @@ func TestTradeRoundTrip(t *testing.T) {
 	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
 	const buyerPK = "0322222222222222222222222222222222222222222222222222222222222222bb"
 
-	// Enable BTC by configuring its explorer, and set the market escrow wallet.
-	if err := database.SetConfig("explorer_btc", "https://btc.example/api"); err != nil {
+	// Enable BTC as a payment currency, and set the market escrow wallet.
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
 		t.Fatal(err)
 	}
 	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
@@ -135,6 +135,35 @@ func TestTradeRoundTrip(t *testing.T) {
 	bindSuccess(t, buyer, protocol.TypeGetOrders, nil, &orders)
 	if len(orders.Orders) != 1 || orders.Orders[0].Type != "buy" || orders.Orders[0].Status != "pending_payment" {
 		t.Fatalf("get_orders = %+v, want one pending_payment buy", orders.Orders)
+	}
+}
+
+// TestUniqueDepositAmounts verifies two listings of the same SKY amount get
+// distinct non-round deposit amounts (uniqueness guarantee to the shared market
+// wallet), so a deposit can only match one listing.
+func TestUniqueDepositAmounts(t *testing.T) {
+	database := newTestDB(t)
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-seller", WalletBTC: "bc1"})
+
+	var a, b protocol.CreateListingResponse
+	req := protocol.CreateListingRequest{AmountSKY: 10, Price: 2, PaymentCurrency: "BTC"}
+	bindSuccess(t, seller, protocol.TypeCreateListing, req, &a)
+	bindSuccess(t, seller, protocol.TypeCreateListing, req, &b)
+
+	if a.ExpectedAmountSKY == b.ExpectedAmountSKY {
+		t.Fatalf("two listings got the same deposit amount %v — not unique", a.ExpectedAmountSKY)
+	}
+	if a.ExpectedAmountSKY <= 10 || b.ExpectedAmountSKY <= 10 {
+		t.Fatalf("deposit amounts should be non-round above base: %v, %v", a.ExpectedAmountSKY, b.ExpectedAmountSKY)
 	}
 }
 

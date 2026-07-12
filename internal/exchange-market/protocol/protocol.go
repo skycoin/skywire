@@ -20,6 +20,7 @@ package protocol
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -71,11 +72,22 @@ const (
 	CodeInternalError       = "INTERNAL_ERROR"
 )
 
-// PaymentCurrencies is the fixed set of payment currencies a buyer may use to
-// pay for SKY, in a stable display order. Whether each one is actually
-// available at a given market depends on that market having configured the
-// corresponding blockchain explorer (see GetCurrenciesResponse).
-var PaymentCurrencies = []string{"BTC", "BCH", "LTC", "USDT_ERC20", "USDT_TRC20"}
+// PaymentCurrencies is the canonical set of payment currencies the market can
+// verify (native coins looked up by address via the block explorer), in a
+// stable display order. A market operator enables a subset of these; whether a
+// given currency is actually available at a market is that enabled/disabled
+// choice (see GetCurrenciesResponse and the per-coin explorer config).
+//
+// Tokens (USDT ERC-20/TRC-20) and privacy coins (XMR) are intentionally absent:
+// tokens need per-contract explorer endpoints, and privacy coins cannot be
+// verified by address at all.
+var PaymentCurrencies = []string{"BTC", "BCH", "LTC", "DOGE", "DASH"}
+
+// IsSupportedCurrency reports whether code is one of the canonical payment
+// currencies the market can verify.
+func IsSupportedCurrency(code string) bool {
+	return slices.Contains(PaymentCurrencies, code)
+}
 
 // Envelope is the JSON message exchanged in each frame. For a request, Status
 // is empty and Data holds the request payload. For a response, Type is

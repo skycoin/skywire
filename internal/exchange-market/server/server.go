@@ -38,6 +38,10 @@ type Server struct {
 
 	mu       sync.Mutex
 	sessions map[string]struct{} // active remote public keys (single-session enforcement)
+
+	// allocMu serializes non-round-amount allocation + insert so two concurrent
+	// listings/orders can't be assigned the same amount to the same wallet.
+	allocMu sync.Mutex
 }
 
 // New creates a Server bound to the given database. A zero port falls back to

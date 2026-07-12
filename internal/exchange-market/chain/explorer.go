@@ -1,0 +1,230 @@
+package chain
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"math"
+	"net/http"
+	"net/url"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
+)
+
+// Explorer verifies a buyer's payment on an external chain. Concrete adapters
+// (esplora, …) implement it; the router below dispatches each currency to the
+// adapter the operator configured for it.
+type Explorer interface {
+	// PaymentConfirmations returns the confirmation count of a payment of
+	// expectedAmount received at addr in the given currency (0 if not observed
+	// or unconfirmed), plus its transaction hash.
+	PaymentConfirmations(currency, addr string, expectedAmount float64) (int, string, error)
+}
+
+// noExplorer is used when no config store is available; it never confirms.
+type noExplorer struct{}
+
+func (noExplorer) PaymentConfirmations(string, string, float64) (int, string, error) {
+	return 0, "", nil
+}
+
+// ExplorerConfigStore returns the operator's configured explorer for a currency:
+// the provider name and its optional base-URL override / API key. An empty
+// provider means the currency is disabled.
+type ExplorerConfigStore interface {
+	ExplorerConfig(currency string) (provider, baseURL, apiKey string, err error)
+}
+
+// providerFactory describes an explorer adapter: which currencies it can verify
+// and how to build one from the operator's per-coin config.
+type providerFactory struct {
+	covers map[string]bool
+	build  func(currency, baseURL, apiKey string, hc *http.Client) Explorer
+}
+
+// registry of available explorer adapters, keyed by provider name. New providers
+// (blockcypher, etherscan, trongrid, 3xpl, …) are added here.
+var registry = map[string]providerFactory{
+	"esplora": {
+		covers: map[string]bool{"BTC": true, "LTC": true},
+		build: func(currency, baseURL, _ string, hc *http.Client) Explorer {
+			return newEsplora(currency, baseURL, hc)
+		},
+	},
+}
+
+// ProvidersFor returns the explorer provider names that can verify currency, so
+// the operator UI can offer a per-coin dropdown. Sorted for stable output.
+func ProvidersFor(currency string) []string {
+	var out []string
+	for name, f := range registry {
+		if f.covers[currency] {
+			out = append(out, name)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// SupportsProvider reports whether provider can verify currency (used to
+// validate operator config before saving).
+func SupportsProvider(currency, provider string) bool {
+	f, ok := registry[provider]
+	return ok && f.covers[currency]
+}
+
+// router dispatches each currency to its configured adapter, caching built
+// adapters. It reads config lazily so operator changes take effect without a
+// restart.
+type router struct {
+	store ExplorerConfigStore
+	hc    *http.Client
+
+	mu    sync.Mutex
+	cache map[string]Explorer
+}
+
+func newRouter(store ExplorerConfigStore, hc *http.Client) *router {
+	return &router{store: store, hc: hc, cache: make(map[string]Explorer)}
+}
+
+func (r *router) PaymentConfirmations(currency, addr string, amount float64) (int, string, error) {
+	provider, baseURL, apiKey, err := r.store.ExplorerConfig(currency)
+	if err != nil {
+		return 0, "", err
+	}
+	provider = strings.TrimSpace(provider)
+	if provider == "" {
+		return 0, "", nil // currency not configured => never confirms
+	}
+	f, ok := registry[provider]
+	if !ok || !f.covers[currency] {
+		return 0, "", fmt.Errorf("no %q explorer adapter for %s", provider, currency)
+	}
+
+	cacheKey := currency + "|" + provider + "|" + baseURL
+	r.mu.Lock()
+	exp, ok := r.cache[cacheKey]
+	if !ok {
+		exp = f.build(currency, baseURL, apiKey, r.hc)
+		r.cache[cacheKey] = exp
+	}
+	r.mu.Unlock()
+
+	return exp.PaymentConfirmations(currency, addr, amount)
+}
+
+// --- Esplora adapter (mempool.space / litecoinspace / Blockstream) ---
+
+// esploraDefaultBase is the default API host per coin; overridable via config.
+var esploraDefaultBase = map[string]string{
+	"BTC": "https://mempool.space",
+	"LTC": "https://litecoinspace.org",
+}
+
+type esplora struct {
+	base string
+	hc   *http.Client
+}
+
+func newEsplora(currency, baseURL string, hc *http.Client) *esplora {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	if base == "" {
+		base = esploraDefaultBase[currency]
+	}
+	return &esplora{base: base, hc: hc}
+}
+
+type esploraTx struct {
+	TxID   string `json:"txid"`
+	Status struct {
+		Confirmed   bool   `json:"confirmed"`
+		BlockHeight uint64 `json:"block_height"`
+	} `json:"status"`
+	Vout []struct {
+		Address string `json:"scriptpubkey_address"`
+		Value   uint64 `json:"value"` // satoshis/litoshis
+	} `json:"vout"`
+}
+
+// PaymentConfirmations scans the address's recent transactions for one that
+// pays exactly amount to addr, returning its confirmation count.
+func (e *esplora) PaymentConfirmations(_ /*currency*/, addr string, amount float64) (int, string, error) {
+	var txs []esploraTx
+	if err := e.getJSON("/api/address/"+url.PathEscape(addr)+"/txs", &txs); err != nil {
+		return 0, "", err
+	}
+	tip, err := e.tipHeight()
+	if err != nil {
+		return 0, "", err
+	}
+
+	const eps = 0.5 / 1e8 // half a base unit (8 decimals)
+	best := -1
+	var bestTx string
+	for _, tx := range txs {
+		var received uint64
+		for _, o := range tx.Vout {
+			if o.Address == addr {
+				received += o.Value
+			}
+		}
+		if received == 0 {
+			continue
+		}
+		if math.Abs(float64(received)/1e8-amount) > eps {
+			continue
+		}
+		confs := 0
+		if tx.Status.Confirmed && tip >= tx.Status.BlockHeight {
+			confs = int(tip-tx.Status.BlockHeight) + 1
+		}
+		if confs > best {
+			best = confs
+			bestTx = tx.TxID
+		}
+	}
+	if best < 0 {
+		return 0, "", nil // payment not seen yet
+	}
+	return best, bestTx, nil
+}
+
+func (e *esplora) tipHeight() (uint64, error) {
+	body, err := e.get("/api/blocks/tip/height")
+	if err != nil {
+		return 0, err
+	}
+	h, err := strconv.ParseUint(strings.TrimSpace(string(body)), 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("esplora tip height: %w", err)
+	}
+	return h, nil
+}
+
+func (e *esplora) getJSON(path string, out any) error {
+	body, err := e.get(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(body, out)
+}
+
+func (e *esplora) get(path string) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, e.base+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := e.hc.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("esplora %s: %w", path, err)
+	}
+	defer resp.Body.Close()                                 //nolint:errcheck
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("esplora %s: status %d", path, resp.StatusCode)
+	}
+	return data, nil
+}
