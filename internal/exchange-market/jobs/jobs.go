@@ -40,6 +40,7 @@ func (r *Runner) Run(ctx context.Context) {
 	go r.loop(ctx, 10*time.Second, "expiry", r.RunExpiry)
 	go r.loop(ctx, 30*time.Second, "listing-check", r.RunListingCheck)
 	go r.loop(ctx, 30*time.Second, "escrow-check", r.RunEscrowCheck)
+	go r.loop(ctx, time.Minute, "return-scheduler", r.RunReturnScheduler)
 	go r.loop(ctx, time.Minute, "ban-manager", r.RunBanManager)
 	go r.loop(ctx, time.Hour, "cleanup", r.RunCleanup)
 	<-ctx.Done()
@@ -187,6 +188,58 @@ func (r *Runner) RunEscrowCheck() error {
 		}
 		if err := r.db.MarkProductSold(o.ProductID); err != nil {
 			r.log.WithError(err).Warnf("escrow-check: failed to mark product %s sold", o.ProductID)
+		}
+	}
+	return nil
+}
+
+// RunReturnScheduler refunds escrowed SKY to sellers whose listing was canceled
+// or expired after they had already deposited into the market wallet. A refund
+// is only sent once the configured delay (return_delay_hours) has elapsed and
+// the deposit is still verifiable on-chain, then it is recorded so it happens
+// at most once (exchange-design.md §7.8/4).
+func (r *Runner) RunReturnScheduler() error {
+	marketWallet, err := r.db.GetMarketWallet()
+	if err != nil {
+		return err
+	}
+	if marketWallet == "" {
+		return nil // escrow wallet not configured yet
+	}
+	delayHours, err := r.db.GetReturnDelayHours()
+	if err != nil {
+		return err
+	}
+	cutoff := time.Now().UTC().Add(-time.Duration(delayHours) * time.Hour)
+	listings, err := r.db.GetReturnableListings(cutoff)
+	if err != nil {
+		return err
+	}
+	for _, l := range listings {
+		// Only refund SKY that actually arrived in the market wallet. Without
+		// this on-chain check a seller could create-and-cancel listings to
+		// drain the escrow wallet for deposits they never made.
+		confirmed, _, err := r.chain.DepositConfirmed(marketWallet, l.ExpectedAmountSKY)
+		if err != nil {
+			r.log.WithError(err).Warnf("return-scheduler: deposit check failed for listing %s", l.ID)
+			continue
+		}
+		if !confirmed {
+			continue // nothing escrowed for this listing
+		}
+		sellerSKY, err := r.db.GetUserWallet(l.SellerPubKey, "SKY")
+		if err != nil || sellerSKY == "" {
+			r.log.Warnf("return-scheduler: seller %s has no SKY wallet; deferring refund of listing %s", l.SellerPubKey, l.ID)
+			continue
+		}
+		txHash, err := r.chain.SendSKY(sellerSKY, l.ExpectedAmountSKY)
+		if err != nil {
+			// e.g. NoopChain (no backend) — leave it and retry next tick.
+			r.log.WithError(err).Warnf("return-scheduler: SKY refund deferred for listing %s", l.ID)
+			continue
+		}
+		if err := r.db.MarkListingReturned(l.ID, txHash); err != nil {
+			r.log.WithError(err).Warnf("return-scheduler: failed to record refund for listing %s", l.ID)
 		}
 	}
 	return nil
