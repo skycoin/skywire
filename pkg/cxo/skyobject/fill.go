@@ -183,7 +183,15 @@ func (f *Filler) requset(key cipher.SHA256) (ok bool) {
 // goroutines the split creates
 func (f *Filler) Close() {
 	f.closeo.Do(func() {
+		// Close closeq under f.mx so it is serialized against the
+		// await.Add in Go. Once closeq is closed, Go no longer adds
+		// new goroutines, so the Wait below observes the final count
+		// and cannot return while a still-to-be-spawned Split escapes
+		// it (the Add-after-Wait leak that let a Split goroutine touch
+		// the filler after Close returned).
+		f.mx.Lock()
 		close(f.closeq)
+		f.mx.Unlock()
 		f.await.Wait()
 	})
 }
@@ -261,7 +269,24 @@ func (f *Filler) Go(fn func()) {
 
 		// parallel
 
+		// Register the goroutine under f.mx so the Add is serialized
+		// against close(f.closeq) in Close. If the filler is already
+		// closing, don't spawn: release the acquired limit slot and
+		// bail, so no goroutine can escape Close's await.Wait and read
+		// the filler after it has been torn down and its memory reused.
+		f.mx.Lock()
+		select {
+		case <-f.closeq:
+			f.mx.Unlock()
+			if f.limit != nil {
+				<-f.limit // release the slot acquire took
+			}
+			return
+		default:
+		}
 		f.await.Add(1)
+		f.mx.Unlock()
+
 		go func() {
 			defer f.await.Done()
 			<-f.limit // release
