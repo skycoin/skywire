@@ -15,23 +15,13 @@
 package visor
 
 import (
-	"bytes"
 	"io"
 	"io/fs"
-	"net"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
-
-// walletHTTPClient fetches http(s) coin backends (a clearnet node, or a
-// .dmsg/.skynet URL the visor's resolving proxy handles) directly from the
-// visor — the "lean on the proxy" path for non-dmsg-native backends. dmsg
-// <pk>:<port> backends use DmsgHTTP instead (one hop fewer).
-var walletHTTPClient = &http.Client{Timeout: 20 * time.Second}
 
 // walletNodeDmsg is the skycoin node the HV-served wallet talks to by DEFAULT:
 // the deployment node addressed over dmsg (same PK:port as
@@ -114,119 +104,121 @@ func (hv *Hypervisor) serveWalletIndex(w http.ResponseWriter, _ *http.Request, u
 	_, _ = w.Write(b) //nolint:errcheck
 }
 
-// walletNodeProxy forwards a wallet node-API call to the skycoin node over the
-// visor's dmsg client (the server-side equivalent of the wasm wallet's
-// fetchDmsg shim). rest is the path after /wallet/ (e.g. "api/v1/health").
+// walletNodeProxy forwards a wallet node-API call to the configured coin
+// backend using the SAME resolving fetch the native browser uses — no bespoke
+// routing. A mesh host (<pk>[:port] / <pk>.dmsg / alias / name.skynet) goes via
+// BrowseFetch (resolve + dmsg/skynet); a clearnet URL goes via BrowseClearnet
+// with the self exit (the local visor does the egress). The mesh-vs-clearnet
+// dispatch is the same one browse.js makes. rest is the path after /wallet/.
 func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, rest string) {
 	if hv.visor == nil {
 		http.Error(w, "visor not ready", http.StatusServiceUnavailable)
 		return
 	}
-	// Backend selection: the operator's configured backend (X-Skywire-Coin-Node)
-	// when present, else the deployment default. A dmsg <pk>:<port> is dialed
-	// directly over dmsg; an http(s) URL (a clearnet node, or a .dmsg URL the
-	// resolving proxy handles) is fetched by the visor — one hop more, but it
-	// makes skycoin-web's existing http node URLs (and BTC) just work.
-	base, isDmsg := coinBackend(r.Header.Get("X-Skywire-Coin-Node"))
-	url := strings.TrimRight(base, "/") + "/" + rest
+	backend := strings.TrimSpace(r.Header.Get("X-Skywire-Coin-Node"))
+	if backend == "" {
+		backend = walletNodeDmsg
+	}
+	path := "/" + rest
 	if r.URL.RawQuery != "" {
-		url += "?" + r.URL.RawQuery
+		path += "?" + r.URL.RawQuery
 	}
 	var body []byte
 	if r.Body != nil {
 		body, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20)) //nolint:errcheck
 	}
 
-	if isDmsg {
-		header := map[string]string{}
-		if ct := r.Header.Get("Content-Type"); ct != "" {
-			header["Content-Type"] = ct
-		}
-		if csrf := r.Header.Get("X-CSRF-Token"); csrf != "" {
-			header["X-CSRF-Token"] = csrf
-		}
-		resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{URL: url, Method: r.Method, Header: header, Body: body})
-		if err != nil {
-			http.Error(w, "node unreachable over dmsg: "+err.Error(), http.StatusBadGateway)
-			return
-		}
-		if ct := resp.Header["Content-Type"]; ct != "" {
-			w.Header().Set("Content-Type", ct)
-		} else {
-			w.Header().Set("Content-Type", "application/json")
-		}
-		w.WriteHeader(resp.StatusCode)
-		_, _ = w.Write(resp.Body) //nolint:errcheck
-		return
-	}
-
-	// http(s) backend — the visor makes the request (clearnet / resolving proxy).
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, url, bytes.NewReader(body)) //nolint:gosec // operator-configured backend
-	if err != nil {
-		http.Error(w, "bad backend url: "+err.Error(), http.StatusBadGateway)
-		return
-	}
+	header := map[string]string{}
 	if ct := r.Header.Get("Content-Type"); ct != "" {
-		req.Header.Set("Content-Type", ct)
+		header["Content-Type"] = ct
 	}
 	if csrf := r.Header.Get("X-CSRF-Token"); csrf != "" {
-		req.Header.Set("X-CSRF-Token", csrf)
+		header["X-CSRF-Token"] = csrf
 	}
-	// The backend URL is the operator's own configured node — a deliberate,
-	// not attacker-controlled, request target (same as skycoin-web's --node-url).
-	resp, err := walletHTTPClient.Do(req) //nolint:gosec // operator-configured backend
-	if err != nil {
-		http.Error(w, "node unreachable: "+err.Error(), http.StatusBadGateway)
+
+	if walletBackendIsClearnet(backend) {
+		// Clearnet → BrowseClearnet with the self exit: the visor does the
+		// egress itself (the parity path the native browser already uses).
+		u := backend
+		if l := strings.ToLower(u); !strings.HasPrefix(l, "http://") && !strings.HasPrefix(l, "https://") {
+			u = "http://" + u
+		}
+		resp, err := hv.visor.BrowseClearnet(BrowseClearnetRequest{
+			ExitPK: hv.visor.conf.PK,
+			Method: r.Method,
+			URL:    strings.TrimRight(u, "/") + path,
+			Body:   body,
+		})
+		if err != nil {
+			http.Error(w, "node unreachable: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+		walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
 		return
 	}
-	defer func() { _ = resp.Body.Close() }() //nolint:errcheck
-	if ct := resp.Header.Get("Content-Type"); ct != "" {
+
+	// Mesh coin node (dmsg-served API) → dmsg-HTTP over the AUTHORITATIVE dmsg
+	// client (DmsgHTTP uses v.dmsgC). Not BrowseFetch — that's for browsing
+	// (skynet-first + the secondary dmsg client), which is the wrong tool for a
+	// pure dmsg node API.
+	resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
+		URL:    "dmsg://" + walletBackendStrip(backend) + path,
+		Method: r.Method,
+		Header: header,
+		Body:   body,
+	})
+	if err != nil {
+		http.Error(w, "node unreachable over dmsg: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
+}
+
+// walletWriteResp writes a proxied backend response (shared by the dmsg and
+// clearnet paths — both carry StatusCode + Header map + Body).
+func walletWriteResp(w http.ResponseWriter, status int, header map[string]string, body []byte) {
+	if ct := header["Content-Type"]; ct != "" {
 		w.Header().Set("Content-Type", ct)
+	} else {
+		w.Header().Set("Content-Type", "application/json")
 	}
-	w.WriteHeader(resp.StatusCode)
-	_, _ = io.Copy(w, io.LimitReader(resp.Body, 8<<20)) //nolint:errcheck
+	w.WriteHeader(status)
+	_, _ = w.Write(body) //nolint:errcheck
 }
 
-// coinBackend resolves the wallet's configured backend selection into a base
-// URL + whether it's a dmsg address (→ DmsgHTTP) or an http(s) URL (→ direct
-// fetch). Empty / unrecognized → the deployment default (dmsg). Accepts:
-// "<pk>:<port>" or "dmsg://<pk>:<port>" (dmsg); "http://…" / "https://…" (http).
-func coinBackend(sel string) (base string, isDmsg bool) {
-	sel = strings.TrimSpace(sel)
-	if sel == "" {
-		return walletNodeDmsg, true
-	}
-	if d := normalizeCoinNode(sel); d != "" {
-		return d, true
-	}
-	if strings.HasPrefix(sel, "http://") || strings.HasPrefix(sel, "https://") {
-		return sel, false
-	}
-	return walletNodeDmsg, true
+// walletBackendStrip drops the scheme (dmsg://, skynet://, http(s)://) + any
+// trailing path, leaving the host[:port] BrowseFetch's resolver keys on.
+func walletBackendStrip(b string) string {
+	b = strings.TrimSpace(b)
+	b = strings.TrimPrefix(b, "dmsg://")
+	b = strings.TrimPrefix(b, "skynet://")
+	return browseStripHost(b)
 }
 
-// normalizeCoinNode validates an operator-supplied coin-node selection and
-// returns it as a dmsg:// URL, or "" if it isn't a well-formed dmsg address.
-// Accepts "<pk>:<port>" or "dmsg://<pk>:<port>" (pk = 66 hex chars). Rejecting
-// anything else keeps the header from being used to point the proxy at an
-// arbitrary non-dmsg URL.
-func normalizeCoinNode(n string) string {
-	n = strings.TrimSpace(n)
-	n = strings.TrimPrefix(n, "dmsg://")
-	if n == "" {
-		return ""
+// walletBackendIsClearnet reports whether a backend is a plain clearnet host —
+// i.e. NOT a mesh host (bare <pk>[:port], <pk>.dmsg, alias.dmsg, name.skynet).
+// Same split browse.js makes: clearnet → BrowseClearnet (self exit), mesh →
+// BrowseFetch.
+func walletBackendIsClearnet(b string) bool {
+	h := walletBackendStrip(b)
+	if i := strings.LastIndexByte(h, ':'); i > 0 {
+		h = h[:i]
 	}
-	host, port, err := net.SplitHostPort(n)
-	if err != nil || len(host) != 66 {
-		return ""
+	lower := strings.ToLower(h)
+	if strings.HasSuffix(lower, ".dmsg") || strings.HasSuffix(lower, ".skynet") {
+		return false
 	}
-	if _, err := strconv.Atoi(port); err != nil {
-		return ""
+	if len(h) == 66 && isHexStr(h) {
+		return false
 	}
-	for _, c := range host {
+	return true
+}
+
+func isHexStr(s string) bool {
+	for _, c := range s {
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
-			return ""
+			return false
 		}
 	}
-	return "dmsg://" + n
+	return s != ""
 }
