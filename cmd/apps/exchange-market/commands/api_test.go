@@ -21,7 +21,7 @@ func newTestOperatorServer(t *testing.T) (*httptest.Server, *db.Database) {
 	if err != nil {
 		t.Fatalf("db.New: %v", err)
 	}
-	t.Cleanup(func() { _ = database.Close() })
+	t.Cleanup(func() { _ = database.Close() }) //nolint
 	if err := database.Migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -50,12 +50,12 @@ func TestOperatorConfigReadWrite(t *testing.T) {
 	}
 
 	// POST a valid update.
-	body, _ := json.Marshal(map[string]string{"explorer_btc": "https://btc.example", "wallet_sky": "sky-w"})
+	body, _ := json.Marshal(map[string]string{"explorer_btc": "https://btc.example", "wallet_sky": "sky-w"}) //nolint
 	res, err := http.Post(ts.URL+"/api/config", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST config: %v", err)
 	}
-	res.Body.Close()
+	res.Body.Close() //nolint
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("POST config = %d, want 200", res.StatusCode)
 	}
@@ -65,12 +65,12 @@ func TestOperatorConfigReadWrite(t *testing.T) {
 	}
 
 	// POST an unknown key is rejected.
-	bad, _ := json.Marshal(map[string]string{"evil_key": "x"})
+	bad, _ := json.Marshal(map[string]string{"evil_key": "x"}) //nolint
 	res, err = http.Post(ts.URL+"/api/config", "application/json", bytes.NewReader(bad))
 	if err != nil {
 		t.Fatalf("POST bad config: %v", err)
 	}
-	res.Body.Close()
+	res.Body.Close() //nolint
 	if res.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unknown key = %d, want 400", res.StatusCode)
 	}
@@ -103,7 +103,7 @@ func TestOperatorMonitoring(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
 		}
-		res.Body.Close()
+		res.Body.Close() //nolint
 		if res.StatusCode != http.StatusOK {
 			t.Fatalf("GET %s = %d, want 200", path, res.StatusCode)
 		}
@@ -117,7 +117,7 @@ func TestServeUIServesHTMLAndAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("db.New: %v", err)
 	}
-	t.Cleanup(func() { _ = database.Close() })
+	t.Cleanup(func() { _ = database.Close() }) //nolint
 	if err := database.Migrate(); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -135,8 +135,8 @@ func TestServeUIServesHTMLAndAPI(t *testing.T) {
 	for i := 0; i < 40; i++ {
 		res, err := http.Get(base + "/") //nolint:noctx
 		if err == nil {
-			body, _ = io.ReadAll(res.Body)
-			res.Body.Close()
+			body, _ = io.ReadAll(res.Body) //nolint
+			res.Body.Close()               //nolint
 			break
 		}
 		time.Sleep(25 * time.Millisecond)
@@ -150,7 +150,7 @@ func TestServeUIServesHTMLAndAPI(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/config: %v", err)
 	}
-	res.Body.Close()
+	res.Body.Close() //nolint
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("/api/config = %d, want 200", res.StatusCode)
 	}
@@ -158,11 +158,11 @@ func TestServeUIServesHTMLAndAPI(t *testing.T) {
 
 func getJSONInto(t *testing.T, url string, out any) {
 	t.Helper()
-	res, err := http.Get(url) //nolint:noctx
+	res, err := http.Get(url) //nolint:noctx,gosec
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
-	defer res.Body.Close()
+	defer res.Body.Close() //nolint
 	if err := json.NewDecoder(res.Body).Decode(out); err != nil {
 		t.Fatalf("decode %s: %v", url, err)
 	}
