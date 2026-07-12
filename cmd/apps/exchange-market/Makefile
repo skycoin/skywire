@@ -3,7 +3,7 @@
 # Build the exchange-market binary
 build:
 	@echo "Building exchange-market..."
-	@cd /Users/mohammed/Projects/Skycoin/mohammed/skywire && go build -o bin/exchange-market ./cmd/exchange-market
+	@cd /Users/mohammed/Projects/Skycoin/mohammed/skywire && go build -o bin/exchange-market ./cmd/apps/exchange-market
 
 # Clean build artifacts
 clean:
@@ -28,9 +28,9 @@ deps:
 # Format code
 fmt:
 	@echo "Formatting code..."
-	@cd /Users/mohammed/Projects/Skycoin/mohammed/skywire && gofmt -s -w ./cmd/exchange-market
+	@cd /Users/mohammed/Projects/Skycoin/mohammed/skywire && gofmt -s -w ./cmd/apps/exchange-market
 
 # Run tests
 test:
 	@echo "Running tests..."
-	@cd /Users/mohammed/Projects/Skycoin/mohammed/skywire && go test ./cmd/exchange-market/...
+	@cd /Users/mohammed/Projects/Skycoin/mohammed/skywire && go test ./cmd/apps/exchange-market/...
