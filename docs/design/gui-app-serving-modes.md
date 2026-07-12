@@ -1,0 +1,96 @@
+# GUI visor-app serving modes (skychat, skycoin-web)
+
+How a visor's GUI apps (skychat, skycoin-web/wallet) are **served to the
+operator** and **connect to their backends**, across the wasm visor and the
+host-native visor. Written because the config space *looks* like a large
+cross-product but collapses to one primary axis plus a couple of knobs.
+
+## The one axis that matters: control-surface vs own-port
+
+An app's UI/API is reached in exactly one of two ways:
+
+- **Control-surface ("serverless")** — reached *through the visor*: the wasm
+  visor's in-tab `skywireVisor.*` hooks, or the native HV's reverse-proxy /
+  RPC. **No separate HTTP port.** This is the default and it makes the wasm and
+  host-native visors behave identically.
+- **Own-port** — the app binds its own TCP listener (skychat `127.0.0.1:8001`,
+  skycoin-web `127.0.0.1:8002`) that the browser/operator reaches directly.
+  Opt-in.
+
+"Serverless" here means *no own HTTP port; reached via the visor control
+surface* — **not** "no process runs." Two sub-flavors, invisible to the user
+but worth naming because they decide how multi-coin works:
+
+- **No process** (wallet, web-only): skycoin-web doesn't run at all. The HV
+  serves the static `/wallet/` bundle; wallet crypto is client-side; the
+  node API is proxied by the visor over dmsg. Possible only because in
+  web-only mode skycoin-web's server does nothing essential.
+- **In-process logic** (skychat always; wallet if you want its server for
+  `/coin/N` multi-coin discovery): the app's logic runs in the visor process
+  (RunModeInternal) and is reached via the control surface — still no port.
+
+## Process model is a *separate*, mostly-invisible choice
+
+Whether the app logic runs in-process or as a child process is about
+**privilege and isolation only** — it does **not** decide the port question:
+
+| | internal app | external app |
+|---|---|---|
+| runs in | the visor process | a child `skywire app …` process |
+| app↔visor pipe | `net.Pipe` | unix socket |
+| UID | the visor's (root, typically) | `setuid` to `User=` |
+| `User=` honored | **no** (no child to setuid) | **yes** |
+| own HTTP port | optional knob | optional knob* |
+| node transport | appnet (via the visor) | appnet (via the visor) |
+
+\* Today an external app must bind a port to be reachable; the endgame
+(below) removes that. Standalone / non-visor-managed skycoin-web is the only
+case that *needs* a real port + its own node dialing — it isn't visor-managed,
+so there's no control surface to use.
+
+## Knobs
+
+- **serve-on-own-port** (`--skycoinweb-port` style): default **off** → UI only
+  via the HV. Meaningful for the app modes; a no-op / error for a mode that
+  has no process to listen. The escape hatch for "I want to hit the app
+  directly without the HV."
+- **wallet storage**: browser (no `--wallet-dir`, the default) or disk
+  (`--wallet-dir`). Disk requires a running app; on a root internal app the
+  dir lands under root's HOME (`User=` can't drop an internal app — run it
+  external to write under a user's HOME).
+- **node transport**: visor-managed apps reach the node over **appnet** (the
+  visor routes, no SOCKS5 port). The `--socks5-proxy` path still works.
+  skycoin-web takes an injected `NodeHTTPClient` so skywire supplies the
+  dmsg-backed transport with `net/http` as the only skycoin dependency.
+- **multi-coin / BTC**: not an architectural limit — configure additional
+  `--node-url`s (fibercoins) or an electrum endpoint (BTC) port-forwarded over
+  dmsg/skynet. In the app modes the server does `/coin/N`; in the no-process
+  wallet mode the HV proxy / shim must route `/coin/N` → the Nth node. Off by
+  default; on after you configure the nodes.
+
+## Defaults
+
+Both apps default to **control-surface / no own port**, so native == wasm out
+of the box:
+
+- **wallet** → **no-process serverless**: HV serves `/wallet/`, proxies the
+  node over dmsg, wallets in the browser. Zero config, zero skycoin change.
+- **skychat** → **in-process, control-surface**: runs in the visor, reached
+  via the HV (RPC / appnet proxy), no `:8001`. The `:8001` HTTP server stays
+  available behind a flag for CI/E2E (and CI can increasingly use
+  `skywire cli skychat` / RPC instead of curling it).
+
+Opt into an **app with own-port** only when you want the full skycoin-web
+server (server-side multi-coin, disk wallets) or direct non-HV access.
+
+## Endgame
+
+Give skychat/skycoin-web an **injectable `net.Listener`** (the server-side twin
+of `NodeHTTPClient`): the app serves its UI/API over the appnet connection, so
+even an **external** app needs no localhost port — every app UI is reached
+uniformly through the HV, in every mode. Until then, own-port is how a
+non-visor-managed or externally-launched app is reached.
+
+Guiding assumption: if you're using GUI visor apps, the hypervisor UI is
+already running — so making app GUIs HV-first (own-port as the exception) costs
+nothing in practice and buys same-origin, remote-safe access for free.
