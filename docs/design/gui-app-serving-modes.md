@@ -5,6 +5,27 @@ operator** and **connect to their backends**, across the wasm visor and the
 host-native visor. Written because the config space *looks* like a large
 cross-product but collapses to one primary axis plus a couple of knobs.
 
+## The wallet is a FEATURE, not an app
+
+The single most clarifying distinction: **the wallet is a built-in hypervisor
+UI feature** — like the browser, the terminal, the network view — reached via
+the ☰ menu and the per-node wallet tab. It's a *UI* (client-side Angular +
+`skycoin-lite.wasm`, wallets in browser storage) that just needs to be *served*
+(the HV serves `/wallet/` same-origin) and a *node* to reach (over dmsg by
+default). It is **not a process**, so it does NOT appear in the Apps list and
+has no running/stopped status — it's always available.
+
+A **backend wallet service IS an app**: `skycoin-daemon` (the node), or the
+full `skycoin-web` *server* if you want its server-side features (disk-wallet
+management, server-side multi-coin). These are processes → startable/stoppable
+entries in the Apps tab.
+
+So don't read "wallet works but the skycoin-web app is stopped" as a
+contradiction: the wallet is the feature (always on); `skycoin-web` in the Apps
+list is the optional backend *server* (a different thing that happens to share
+the vendored code). native and wasm agree: **Apps list = services only; the
+wallet is a feature.**
+
 ## The one axis that matters: control-surface vs own-port
 
 An app's UI/API is reached in exactly one of two ways:
