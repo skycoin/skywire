@@ -34,7 +34,7 @@ func (d *Database) GetPendingListing(id string) (*PendingListing, error) {
 
 	listing := &PendingListing{}
 	err := d.db.QueryRow(`
-		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, tx_hash
+		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
 		FROM pending_listings
 		WHERE id = ?
 	`, id).Scan(&listing.ID, &listing.SellerPubKey, &listing.AmountSKY, &listing.ExpectedAmountSKY,
@@ -82,7 +82,7 @@ func (d *Database) GetExpiredPendingListings() ([]*PendingListing, error) {
 
 	now := time.Now().UTC()
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, tx_hash
+		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
 		FROM pending_listings
 		WHERE status = 'pending' AND expires_at <= ?
 	`, now)
@@ -112,7 +112,7 @@ func (d *Database) GetSellerPendingListings(sellerPubKey string) ([]*PendingList
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, tx_hash
+		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
 		FROM pending_listings
 		WHERE seller_pubkey = ? AND status IN ('pending', 'confirmed')
 		ORDER BY created_at DESC

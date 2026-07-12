@@ -1,0 +1,340 @@
+package server
+
+import (
+	"crypto/rand"
+	"encoding/binary"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/skycoin/skywire/internal/exchange-market/db"
+	"github.com/skycoin/skywire/internal/exchange-market/protocol"
+)
+
+// success builds a success response, degrading to an internal error if the
+// payload cannot be marshaled.
+func success(id string, data any) protocol.Envelope {
+	env, err := protocol.NewResponse(id, protocol.StatusSuccess, data)
+	if err != nil {
+		return protocol.ErrorResponse(id, protocol.CodeInternalError, "failed to encode response")
+	}
+	return env
+}
+
+// internal logs op with err and returns a generic internal-error response so
+// implementation details never leak to clients.
+func (s *Server) internal(id, op string, err error) protocol.Envelope {
+	s.log.WithError(err).Errorf("exchange-market: %s failed", op)
+	return protocol.ErrorResponse(id, protocol.CodeInternalError, "internal error")
+}
+
+// handleRegister upserts the caller's wallet addresses, keyed by the
+// authenticated connection public key (never a self-reported field).
+func (s *Server) handleRegister(pk string, req protocol.Envelope) protocol.Envelope {
+	var r protocol.RegisterRequest
+	if err := req.Bind(&r); err != nil {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid register payload")
+	}
+	if r.WalletSKY == "" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "wallet_sky is required")
+	}
+	u := &db.User{
+		PubKey:           pk,
+		WalletSKY:        r.WalletSKY,
+		WalletBTC:        r.WalletBTC,
+		WalletBCH:        r.WalletBCH,
+		WalletLTC:        r.WalletLTC,
+		WalletUSDT_ERC20: r.WalletUSDTERC20,
+		WalletUSDT_TRC20: r.WalletUSDTTRC20,
+	}
+	if err := s.db.CreateUser(u); err != nil {
+		return s.internal(req.ID, "register", err)
+	}
+	return success(req.ID, protocol.MessageData{Message: "User registered successfully"})
+}
+
+// handleGetCurrencies returns the payment currencies this market accepts, i.e.
+// the ones whose explorer the operator has configured.
+func (s *Server) handleGetCurrencies(req protocol.Envelope) protocol.Envelope {
+	cur, err := s.db.AvailableCurrencies()
+	if err != nil {
+		return s.internal(req.ID, "get_currencies", err)
+	}
+	if cur == nil {
+		cur = []string{}
+	}
+	return success(req.ID, protocol.GetCurrenciesResponse{Currencies: cur})
+}
+
+// handleGetProducts returns all active products.
+func (s *Server) handleGetProducts(req protocol.Envelope) protocol.Envelope {
+	products, err := s.db.GetActiveProducts()
+	if err != nil {
+		return s.internal(req.ID, "get_products", err)
+	}
+	views := make([]protocol.ProductView, 0, len(products))
+	for _, p := range products {
+		views = append(views, protocol.ProductView{
+			ID:              p.ID,
+			SellerPubKey:    p.SellerPubKey,
+			AmountSKY:       p.AmountSKY,
+			Price:           p.Price,
+			PaymentCurrency: p.PaymentCurrency,
+			CreatedAt:       p.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	return success(req.ID, protocol.GetProductsResponse{Products: views})
+}
+
+// handleCreateListing records a sell order awaiting the seller's SKY deposit to
+// the market wallet, and returns the non-round deposit amount to transfer.
+func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.Envelope {
+	var r protocol.CreateListingRequest
+	if err := req.Bind(&r); err != nil {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid listing payload")
+	}
+	if r.AmountSKY <= 0 || r.Price <= 0 {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky and price must be positive")
+	}
+
+	// The seller must be registered (wallet addresses on file).
+	if u, err := s.db.GetUser(pk); err != nil {
+		return s.internal(req.ID, "create_listing.get_user", err)
+	} else if u == nil {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "register your wallets first")
+	}
+
+	// The chosen payment currency must be enabled at this market.
+	avail, err := s.db.IsCurrencyAvailable(r.PaymentCurrency)
+	if err != nil {
+		return s.internal(req.ID, "create_listing.currency", err)
+	}
+	if !avail {
+		return protocol.ErrorResponse(req.ID, protocol.CodeCurrencyUnavailable, "payment currency not available at this market: "+r.PaymentCurrency)
+	}
+
+	marketWallet, err := s.db.GetMarketWallet()
+	if err != nil {
+		return s.internal(req.ID, "create_listing.wallet", err)
+	}
+	if marketWallet == "" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInternalError, "market wallet not configured")
+	}
+
+	expiry := s.listingExpiry()
+	listing := &db.PendingListing{
+		ID:                uuid.NewString(),
+		SellerPubKey:      pk,
+		AmountSKY:         r.AmountSKY,
+		ExpectedAmountSKY: nonRound(r.AmountSKY),
+		Price:             r.Price,
+		PaymentCurrency:   r.PaymentCurrency,
+		Status:            "pending",
+		ExpiresAt:         time.Now().UTC().Add(expiry),
+	}
+	if err := s.db.CreatePendingListing(listing); err != nil {
+		return s.internal(req.ID, "create_listing", err)
+	}
+
+	return success(req.ID, protocol.CreateListingResponse{
+		ListingID:         listing.ID,
+		ExpectedAmountSKY: listing.ExpectedAmountSKY,
+		MarketWallet:      marketWallet,
+		ExpiresAt:         listing.ExpiresAt.Format(time.RFC3339),
+	})
+}
+
+// handleBuyProduct freezes a product for the buyer and opens a buy order,
+// returning the non-round amount to pay the seller.
+func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Envelope {
+	var r protocol.BuyProductRequest
+	if err := req.Bind(&r); err != nil || r.ProductID == "" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid buy payload")
+	}
+
+	banned, err := s.db.IsUserBanned(pk)
+	if err != nil {
+		return s.internal(req.ID, "buy.ban_check", err)
+	}
+	if banned {
+		return protocol.ErrorResponse(req.ID, protocol.CodeUserBanned, "you are temporarily banned from buying")
+	}
+
+	// The buyer must be registered so we can deliver SKY to them later.
+	if u, err := s.db.GetUser(pk); err != nil {
+		return s.internal(req.ID, "buy.get_user", err)
+	} else if u == nil {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "register your wallets first")
+	}
+
+	product, err := s.db.GetProduct(r.ProductID)
+	if err != nil {
+		return s.internal(req.ID, "buy.get_product", err)
+	}
+	if product == nil {
+		return protocol.ErrorResponse(req.ID, protocol.CodeProductNotFound, "product not found")
+	}
+	if product.Status != "active" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeProductUnavailable, "this product is no longer available")
+	}
+
+	// Resolve the seller's wallet for the product's payment currency.
+	sellerWallet, err := s.db.GetUserWallet(product.SellerPubKey, product.PaymentCurrency)
+	if err != nil {
+		return s.internal(req.ID, "buy.seller_wallet", err)
+	}
+	if sellerWallet == "" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInternalError, "seller wallet not configured")
+	}
+
+	// Freeze first: this atomically moves active->frozen and rejects a racing
+	// second buyer (design §5 product freeze).
+	if err := s.db.FreezeProduct(product.ID, pk); err != nil {
+		return protocol.ErrorResponse(req.ID, protocol.CodeProductUnavailable, "this product is no longer available")
+	}
+
+	order := &db.Order{
+		ID:                    uuid.NewString(),
+		ProductID:             product.ID,
+		BuyerPubKey:           pk,
+		AmountSKY:             product.AmountSKY,
+		Price:                 product.Price,
+		PaymentCurrency:       product.PaymentCurrency,
+		ExpectedPaymentAmount: nonRound(product.Price),
+		SellerWallet:          sellerWallet,
+		Status:                "pending_payment",
+		ExpiresAt:             time.Now().UTC().Add(s.orderExpiry()),
+	}
+	if err := s.db.CreateOrder(order); err != nil {
+		// Roll back the freeze so the product returns to the market.
+		if uerr := s.db.UnfreezeProduct(product.ID); uerr != nil {
+			s.log.WithError(uerr).Error("exchange-market: failed to unfreeze after order-create failure")
+		}
+		return s.internal(req.ID, "buy.create_order", err)
+	}
+
+	return success(req.ID, protocol.BuyProductResponse{
+		OrderID:               order.ID,
+		AmountSKY:             order.AmountSKY,
+		Price:                 order.Price,
+		PaymentCurrency:       order.PaymentCurrency,
+		ExpectedPaymentAmount: order.ExpectedPaymentAmount,
+		SellerWallet:          order.SellerWallet,
+		ExpiresAt:             order.ExpiresAt.Format(time.RFC3339),
+	})
+}
+
+// handleCancelListing cancels the caller's own pending listing. The escrowed
+// SKY (if already deposited) is returned by the Return Scheduler job.
+func (s *Server) handleCancelListing(pk string, req protocol.Envelope) protocol.Envelope {
+	var r protocol.CancelListingRequest
+	if err := req.Bind(&r); err != nil || r.ListingID == "" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid cancel payload")
+	}
+
+	listing, err := s.db.GetPendingListing(r.ListingID)
+	if err != nil {
+		return s.internal(req.ID, "cancel.get_listing", err)
+	}
+	// Treat "not yours" the same as "not found" so listing IDs aren't probeable.
+	if listing == nil || listing.SellerPubKey != pk {
+		return protocol.ErrorResponse(req.ID, protocol.CodeListingNotFound, "listing not found")
+	}
+	if listing.Status != "pending" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "listing can no longer be cancelled")
+	}
+
+	if err := s.db.UpdatePendingListingStatus(listing.ID, "cancelled", ""); err != nil {
+		return s.internal(req.ID, "cancel.update", err)
+	}
+	return success(req.ID, protocol.MessageData{Message: "Listing cancelled. SKY will be returned within 1 hour."})
+}
+
+// handleGetOrders returns the caller's buy and sell orders.
+func (s *Server) handleGetOrders(pk string, req protocol.Envelope) protocol.Envelope {
+	buys, err := s.db.GetBuyerOrders(pk)
+	if err != nil {
+		return s.internal(req.ID, "get_orders.buyer", err)
+	}
+	sells, err := s.db.GetSellerOrders(pk)
+	if err != nil {
+		return s.internal(req.ID, "get_orders.seller", err)
+	}
+
+	views := make([]protocol.OrderView, 0, len(buys)+len(sells))
+	for _, o := range buys {
+		views = append(views, orderView(o, "buy"))
+	}
+	for _, o := range sells {
+		views = append(views, orderView(o, "sell"))
+	}
+	return success(req.ID, protocol.GetOrdersResponse{Orders: views})
+}
+
+// handleGetOrderStatus returns the live status of one of the caller's orders.
+func (s *Server) handleGetOrderStatus(pk string, req protocol.Envelope) protocol.Envelope {
+	var r protocol.GetOrderStatusRequest
+	if err := req.Bind(&r); err != nil || r.OrderID == "" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid order-status payload")
+	}
+	order, err := s.db.GetOrder(r.OrderID)
+	if err != nil {
+		return s.internal(req.ID, "get_order_status", err)
+	}
+	// Only the buyer on the order may query it; hide others as not-found.
+	if order == nil || order.BuyerPubKey != pk {
+		return protocol.ErrorResponse(req.ID, protocol.CodeOrderNotFound, "order not found")
+	}
+
+	resp := protocol.GetOrderStatusResponse{
+		OrderID:       order.ID,
+		Status:        order.Status,
+		Confirmations: order.Confirmations,
+		PaymentTxHash: order.PaymentTxHash,
+	}
+	if order.PaidAt != nil {
+		resp.PaidAt = order.PaidAt.Format(time.RFC3339)
+	}
+	return success(req.ID, resp)
+}
+
+// orderView projects a db.Order into the client-facing view with a buy/sell tag.
+func orderView(o *db.Order, kind string) protocol.OrderView {
+	return protocol.OrderView{
+		ID:              o.ID,
+		Type:            kind,
+		ProductID:       o.ProductID,
+		AmountSKY:       o.AmountSKY,
+		Price:           o.Price,
+		PaymentCurrency: o.PaymentCurrency,
+		Status:          o.Status,
+		ExpiresAt:       o.ExpiresAt.Format(time.RFC3339),
+		CreatedAt:       o.CreatedAt.Format(time.RFC3339),
+	}
+}
+
+func (s *Server) listingExpiry() time.Duration {
+	if m, err := s.db.GetListingExpiryMinutes(); err == nil && m > 0 {
+		return time.Duration(m) * time.Minute
+	}
+	return 15 * time.Minute
+}
+
+func (s *Server) orderExpiry() time.Duration {
+	if m, err := s.db.GetOrderExpiryMinutes(); err == nil && m > 0 {
+		return time.Duration(m) * time.Minute
+	}
+	return 15 * time.Minute
+}
+
+// nonRound returns base plus a small random delta (1e-8 .. ~1e-3) so the
+// on-chain amount is unique and precisely identifiable in the recipient wallet
+// (design §1 non-round-number validation).
+func nonRound(base float64) float64 {
+	var b [4]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return base
+	}
+	n := binary.BigEndian.Uint32(b[:]) % 100000 // 0..99999
+	return base + float64(n+1)/1e8
+}

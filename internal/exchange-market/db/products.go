@@ -34,7 +34,7 @@ func (d *Database) GetProduct(id string) (*Product, error) {
 
 	product := &Product{}
 	err := d.db.QueryRow(`
-		SELECT id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, frozen_by, sold_at
+		SELECT id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
 		FROM products
 		WHERE id = ?
 	`, id).Scan(&product.ID, &product.SellerPubKey, &product.AmountSKY, &product.Price,
@@ -57,7 +57,7 @@ func (d *Database) GetActiveProducts() ([]*Product, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, frozen_by, sold_at
+		SELECT id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
 		FROM products
 		WHERE status = 'active'
 		ORDER BY created_at DESC
