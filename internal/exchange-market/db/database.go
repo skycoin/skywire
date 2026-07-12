@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -93,6 +94,30 @@ func (d *Database) Migrate() error {
 		}
 	}
 
+	// Evolve the schema for databases created before escrow-return tracking
+	// existed. CREATE TABLE IF NOT EXISTS above is a no-op on such databases,
+	// so the Return Scheduler's columns are added here.
+	for _, c := range []struct{ col, ddl string }{
+		{"closed_at", "DATETIME"},
+		{"returned_at", "DATETIME"},
+		{"return_tx_hash", "TEXT"},
+	} {
+		if err := d.ensureColumn("pending_listings", c.col, c.ddl); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ensureColumn adds a column to a table if it is not already present. SQLite has
+// no "ADD COLUMN IF NOT EXISTS", so a "duplicate column name" error (the column
+// already exists) is treated as success, making this idempotent across runs.
+func (d *Database) ensureColumn(table, column, ddl string) error {
+	_, err := d.db.Exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s %s", table, column, ddl))
+	if err != nil && !strings.Contains(err.Error(), "duplicate column name") {
+		return fmt.Errorf("ensure column %s.%s: %w", table, column, err)
+	}
 	return nil
 }
 
@@ -160,6 +185,9 @@ CREATE TABLE IF NOT EXISTS pending_listings (
     created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
     confirmed_at        DATETIME,
     tx_hash             TEXT,
+    closed_at           DATETIME,
+    returned_at         DATETIME,
+    return_tx_hash      TEXT,
     FOREIGN KEY (seller_pubkey) REFERENCES users(pubkey)
 );
 

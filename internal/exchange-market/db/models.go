@@ -25,11 +25,14 @@ type PendingListing struct {
 	ExpectedAmountSKY float64    `json:"expected_amount_sky" db:"expected_amount_sky"`
 	Price             float64    `json:"price" db:"price"`
 	PaymentCurrency   string     `json:"payment_currency" db:"payment_currency"`
-	Status            string     `json:"status" db:"status"` // pending, confirmed, expired, canceled
+	Status            string     `json:"status" db:"status"` // pending, confirmed, expired, canceled, returned
 	ExpiresAt         time.Time  `json:"expires_at" db:"expires_at"`
 	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
 	ConfirmedAt       *time.Time `json:"confirmed_at,omitempty" db:"confirmed_at"`
 	TxHash            string     `json:"tx_hash,omitempty" db:"tx_hash"`
+	ClosedAt          *time.Time `json:"closed_at,omitempty" db:"closed_at"`     // when it went terminal (expired/canceled)
+	ReturnedAt        *time.Time `json:"returned_at,omitempty" db:"returned_at"` // when escrowed SKY was refunded
+	ReturnTxHash      string     `json:"return_tx_hash,omitempty" db:"return_tx_hash"`
 }
 
 // Product represents an active product (sell order) available for purchase.
