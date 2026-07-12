@@ -1824,7 +1824,7 @@ func configureApps(log *logging.Logger) {
 				AutoStart: false,
 				Args:      []string{"--addr", skyenv.ExchangeClientAddr},
 				Port:      routing.Port(skyenv.ExchangeClientPort),
-      },
+			},
 			{
 				// skycoin-web thin-client wallet as an INTERNAL app — Binary
 				// empty → RunSkycoinWeb (cmd/apps/skycoin-web/commands). This
