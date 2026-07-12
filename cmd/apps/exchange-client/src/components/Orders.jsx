@@ -14,6 +14,8 @@ function Orders() {
   // statuses maps order id -> live {status, confirmations, payment_tx_hash, paid_at}.
   const [statuses, setStatuses] = useState({})
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [busyId, setBusyId] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +52,28 @@ function Orders() {
     const id = setInterval(load, 5000)
     return () => clearInterval(id)
   }, [load])
+
+  // A buyer can cancel their own buy only before payment is observed. Once
+  // canceled, the market blocks them from re-buying that same product.
+  const cancelOrder = async (orderId) => {
+    if (!window.confirm('Cancel this buy? You will not be able to buy this product again.')) {
+      return
+    }
+    setBusyId(orderId)
+    setError('')
+    try {
+      const resp = await api.cancelOrder(orderId)
+      setNotice(resp.message || 'Order canceled.')
+      setTimeout(() => setNotice(''), 6000)
+      await load()
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusyId('')
+    }
+  }
+
+  const canCancel = (order) => order.type === 'buy' && liveStatus(order) === 'pending_payment'
 
   const getStatusBadge = (status) => {
     const statusMap = {
@@ -119,6 +143,7 @@ function Orders() {
     <div>
       <h2 className="mb-4">My Orders</h2>
 
+      {notice && <div className="alert alert-info">{notice}</div>}
       {error && <div className="alert alert-danger">{error}</div>}
 
       {orders.length === 0 ? (
@@ -136,6 +161,7 @@ function Orders() {
                 <th>Progress</th>
                 <th>Payment Tx</th>
                 <th>Created</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -149,6 +175,19 @@ function Orders() {
                   <td>{renderProgress(order)}</td>
                   <td>{renderTx(order)}</td>
                   <td>{order.created_at ? new Date(order.created_at).toLocaleString() : '-'}</td>
+                  <td>
+                    {canCancel(order) ? (
+                      <button
+                        className="btn btn-sm btn-outline-danger"
+                        disabled={busyId === order.id}
+                        onClick={() => cancelOrder(order.id)}
+                      >
+                        {busyId === order.id ? 'Canceling…' : 'Cancel'}
+                      </button>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
