@@ -13,7 +13,6 @@ import (
 
 	"github.com/skycoin/skywire/internal/exchange-market/app"
 	"github.com/skycoin/skywire/internal/exchange-market/db"
-	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 	"github.com/skycoin/skywire/internal/exchange-market/server"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
@@ -124,7 +123,7 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 
 	// Start the dmsg transport server. The market Listens on appnet.TypeDmsg
 	// via the visor; clients Dial the market's public key on the same port.
-	srv := server.New(database, appCl.Log(), protocol.Port(listenPort))
+	srv := server.New(database, appCl.Log(), listenPort)
 	go func() {
 		if err := srv.ListenAndServe(ctx, appCl); err != nil {
 			appCl.LogError("dmsg server stopped: %v", err)
