@@ -40,6 +40,46 @@ var (
 	servePassword string
 )
 
+// walletDmsgFetchShim is injected into the bundled skycoin-web wallet's index
+// (right after <base>, before the wallet's own scripts) by the /wallet/ handler.
+// The wallet uses Angular's fetch backend (skycoin-web withFetch), so overriding
+// window.fetch is enough to intercept its node API. Coin API calls
+// (/api/v1|/api/v2) are routed over dmsg via the parent PWA's visor
+// (skywireVisor.fetchDmsg) to the configured coin node
+// (localStorage['skywire-coin-node'] = "<pk>:<port>" — the visor's type=coin
+// forward). Everything else falls through to native fetch. No Service Worker
+// needed, so this works under --harness and file:// too. Same-origin iframe, so
+// it reads the parent's visor + the shared localStorage directly.
+// defaultCoinNode is the deployment skycoin node the bundled wallet talks to
+// out of the box: node.skycoin.com, whose visor forwards the local skycoin
+// node's :6420 over dmsg (addressed as "<pk>:<port>" for skywireVisor.fetchDmsg).
+// Users override it via the wallet's Settings->Nodes (localStorage
+// 'skywire-coin-node'). Same PK:port as deployment/services-config.json
+// prod.skycoin_node_dmsg ("dmsg://<pk>:6420") — here without the scheme,
+// which is what skywireVisor.fetchDmsg expects.
+const defaultCoinNode = "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:6420"
+
+const walletDmsgFetchShim = `<script>(function(){` +
+	`var rf=window.fetch?window.fetch.bind(window):null;` +
+	`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
+	`function q(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
+	`function isCoin(u){return /^\/api\/v[12]\//.test(p(u));}` +
+	`function jr(s,o){return new Response(JSON.stringify(o),{status:s,headers:{"Content-Type":"application/json"}});}` +
+	`window.fetch=function(input,init){` +
+	`var url=(typeof input==="string")?input:(input&&input.url);` +
+	`if(!isCoin(url))return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
+	`init=init||{};` +
+	`var v=window.parent&&window.parent.skywireVisor;` +
+	`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
+	`var node="";try{node=localStorage.getItem("skywire-coin-node")||"";}catch(e){}` +
+	`if(!node)node="` + defaultCoinNode + `";` +
+	`return Promise.resolve(v.fetchDmsg(node,init.method||"GET",p(url)+q(url),init.body||null)).then(function(r){` +
+	`var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");` +
+	`return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});` +
+	`}).catch(function(e){return jr(502,{error:String(e)});});` +
+	`};` +
+	`})();</script>`
+
 func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":7999", "HTTP listen address")
 	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
@@ -150,6 +190,34 @@ page never asks anyone to type a secret key.`,
 		// assets). Routing is hash-based (#/...), so the server only ever sees "/"
 		// plus real asset paths — no SPA rewrite needed.
 		fileServer := http.FileServer(http.FS(uiFS))
+
+		// Skycoin-web thin-client wallet, bundled into the PWA (make embed-wallet)
+		// and served under /wallet/ from the embedded static/wallet tree. The
+		// vendored dist ships <base href="/"> (skycoin's own root deployment);
+		// rewrite it to /wallet/ so the wallet's relative asset paths resolve under
+		// this mount. Only registered when the wallet is actually embedded.
+		if walletIndex, werr := fs.ReadFile(uiFS, "wallet/index.html"); werr == nil {
+			// Rewrite the base href AND inject the dmsg fetch shim right after it,
+			// so the shim runs before the wallet's own scripts. The shim overrides
+			// window.fetch (the wallet uses Angular's fetch backend) to route the
+			// node API (/api/v1|v2) over dmsg via the parent PWA's visor. This
+			// works in every mode (no Service Worker needed — so it also works
+			// under `hv serve --harness` and file:// single-file), unlike the
+			// origin-wide SW interception.
+			walletIndex = bytes.Replace(walletIndex,
+				[]byte(`<base href="/">`),
+				[]byte(`<base href="/wallet/">`+walletDmsgFetchShim), 1)
+			mux.HandleFunc("/wallet/", func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/wallet/" || r.URL.Path == "/wallet/index.html" {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					w.Header().Set("Cache-Control", "no-cache")
+					_, _ = w.Write(walletIndex) //nolint:errcheck // best-effort
+					return
+				}
+				fileServer.ServeHTTP(w, r) // /wallet/<asset> → static/wallet/<asset>
+			})
+		}
+
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path == "/" || r.URL.Path == "/index.html" {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
