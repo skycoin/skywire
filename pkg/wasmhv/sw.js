@@ -52,9 +52,12 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET') { return; }
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) { return; } // never touch cross-origin
+  if (req.method !== 'GET') { return; }
+  // Note: the bundled wallet's node API (/api/v1|v2) is NOT routed here — it's
+  // intercepted inside the wallet iframe by the dmsg fetch shim (serve.go's
+  // /wallet/ handler), so it works without a Service Worker (--harness, file://).
 
   // The auto-updater's build-version poll MUST always reach the real server — a
   // cached value would mask a new build forever. Don't intercept it at all

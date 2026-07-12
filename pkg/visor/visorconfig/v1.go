@@ -39,6 +39,15 @@ type V1 struct {
 	// persistence; expected to grow as the chat surface evolves.
 	Skychat *Skychat `json:"skychat,omitempty"`
 
+	// CoinNodes lists fibercoin nodes (see servicedisc.ServiceTypeCoin)
+	// this visor forwards over dmsg and advertises in service discovery,
+	// so a browser/thin-client wallet can discover and reach a node for
+	// the right coin over the mesh with no local full node and no launch
+	// flags. Each entry is health-gated (see pkg/visor/init_coinnode.go):
+	// the visor probes the node's HTTP /health on the SD heartbeat
+	// interval and only advertises it while it answers — no dead entries.
+	CoinNodes []CoinNodeConfig `json:"coin_nodes,omitempty"`
+
 	SurveyWhitelist     []cipher.PubKey `json:"survey_whitelist"`
 	UserSurveyWhitelist []cipher.PubKey `json:"user_survey_whitelist,omitempty"` // user-added keys, preserved across config refresh
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
@@ -94,6 +103,27 @@ type Skychat struct {
 	// aware overrides (rate-limit disabled, larger per-group cap).
 	// A future config knob may expose the limits directly.
 	GroupHistoryDB string `json:"group_history_db,omitempty"`
+}
+
+// CoinNodeConfig describes one fibercoin node this visor exposes over dmsg
+// and advertises in service discovery (servicedisc.ServiceTypeCoin). The node
+// (e.g. `skywire skycoin daemon`) runs INDEPENDENTLY of the visor and serves a
+// plain HTTP API on localhost; the visor merely reverse-proxies it over the
+// mesh and, on the SD heartbeat interval, reads its /api/v1/health to build a
+// truthful, DETECTED CoinInfo advertisement (never operator-claimed identity).
+type CoinNodeConfig struct {
+	// LocalAddr is the node's HTTP API address on this host
+	// (e.g. "127.0.0.1:6420" — the skycoin daemon default). The visor
+	// reverse-proxies this over dmsg and probes <LocalAddr>/api/v1/health.
+	LocalAddr string `json:"local_addr"`
+	// DmsgPort is the dmsg port the node is exposed on. The advertised SD
+	// entry address is <this-visor-PK>:<DmsgPort>, which a wallet dials
+	// through the mesh (or the wasm visor's HTTP-over-dmsg shim).
+	DmsgPort uint16 `json:"dmsg_port"`
+	// Whitelist, when non-empty, restricts which peer PKs may reach the
+	// forwarded node. Empty (default) = any authenticated peer — the usual
+	// choice for a public read-mostly coin API.
+	Whitelist []cipher.PubKey `json:"whitelist,omitempty"`
 }
 
 // Pty configures the pseudoterminal subsystem (formerly Dmsgpty).

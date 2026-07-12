@@ -229,6 +229,20 @@ const envfileLinux = `#
 #	the default skycoin-web entry already has).
 #SKYCOINWEBUSER='youruser'
 
+#--	Advertise already-running fibercoin nodes over dmsg + service
+#	discovery (type=coin), so a thin-client wallet — including the
+#	browser wasm visor — can discover and reach a node for the right
+#	coin over the mesh, with no local full node and no launch flags.
+#	Bash array. Each entry is "<local_addr>[@<dmsg_port>]" where
+#	local_addr is the node's HTTP API on this host; dmsg_port defaults
+#	to local_addr's port. The node runs INDEPENDENTLY of the visor
+#	(it need not be a skywire SKYCOIND app) and is health-gated: the
+#	visor advertises it only while its /api/v1/health answers.
+#		COIN_NODES=('127.0.0.1:6420')
+#	Multi-coin (skycoin + a fibercoin on 6430):
+#		COIN_NODES=('127.0.0.1:6420' '127.0.0.1:6430@6430')
+#COIN_NODES=('')
+
 ### Advanced Tuning #####################################################
 
 #--	CLI RPC address (default localhost:3435)

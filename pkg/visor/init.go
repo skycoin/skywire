@@ -144,6 +144,8 @@ var (
 	groupingMod vinit.Module
 	// Skychat 1:1 voice-call manager (dmsg+skynet signaling, RTP media).
 	voiceMod vinit.Module
+	// coinNodesMod forwards + advertises configured fibercoin nodes
+	coinNodesMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
 	// config initialization
@@ -243,8 +245,12 @@ func registerModules(logger *logging.MasterLogger) {
 	// Skychat 1:1 voice: signaling + RTP media over dmsg/skynet. Depends on
 	// dmsgC. See init_voice.go.
 	voiceMod = maker("voice", initVoice, &dmsgC)
+	// Fibercoin node discovery: forward configured coin-node HTTP APIs over
+	// dmsg + health-gated type=coin SD registration. Depends on dmsgC (forward
+	// + SD dmsg client) and skyFwd (dmsg forwarder). See init_coinnode.go.
+	coinNodesMod = maker("coin_nodes", initCoinNodes, &dmsgC, &skyFwd)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
