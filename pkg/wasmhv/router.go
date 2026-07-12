@@ -135,7 +135,7 @@ func (c *Core) visorRoute(method, rest string, body []byte, query string) (int, 
 	// The tab's OWN visor is served locally (its transport.Manager + router),
 	// not over a gob RPC dial.
 	if self := c.selfProvider(); self != nil && self.SelfPK() == pk {
-		return c.selfRoute(self, sub, query)
+		return c.selfRoute(self, method, sub, body, query)
 	}
 	switch {
 	case sub == "":

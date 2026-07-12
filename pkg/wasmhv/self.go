@@ -1,6 +1,7 @@
 package wasmhv
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 
@@ -59,6 +60,20 @@ type SelfProvider interface {
 	// ({entries:[]string of JSON log objects, latest, dropped}). Without it the
 	// node Logs page errors "self visor subroute not implemented".
 	SelfRuntimeLogs(since int64) []byte
+	// SelfApps returns the tab's own in-process launcher apps as pre-marshaled
+	// JSON ([]AppState, the native /visors/{pk}/apps shape). nil/empty when the
+	// browser visor has no app registry. This is what lets the SHARED Angular
+	// Apps tab list + control the wasm visor's apps (skychat, skycoin-web, …)
+	// exactly as it does a native visor — closing the biggest management gap.
+	SelfApps() []byte
+	// StartApp / StopApp / SetAutoStart control an in-process app by name. A
+	// browser tab has no child processes, so "start/stop" toggles the in-tab
+	// AppFunc/route rather than spawning/killing a subprocess; autostart is
+	// best-effort per-session (no on-disk config in a tab). Return an error the
+	// Apps tab surfaces; unknown app → error.
+	StartApp(name string) error
+	StopApp(name string) error
+	SetAutoStart(name string, autostart bool) error
 }
 
 // SetSelf attaches the local visor's hypervisor view. Pass nil to detach.
@@ -79,7 +94,7 @@ func (c *Core) selfProvider() SelfProvider {
 // tab's own transport.Manager + router instead of dialing over dmsg. Only the
 // read views the dashboard needs are served; control sub-routes (app/transport
 // mutation) are not yet wired for the self visor and 404.
-func (c *Core) selfRoute(self SelfProvider, sub, query string) (int, []byte) {
+func (c *Core) selfRoute(self SelfProvider, method, sub string, body []byte, query string) (int, []byte) {
 	switch sub {
 	case "":
 		return jsonResp(self.SelfOverview())
@@ -150,8 +165,66 @@ func (c *Core) selfRoute(self SelfProvider, sub, query string) (int, []byte) {
 		// not the native forwarded_ports table. Empty (not 404) so the node page's
 		// port fetch renders cleanly.
 		return jsonResp([]struct{}{})
+	case "apps":
+		// The tab's own in-process apps, so the shared Apps tab lists + controls
+		// them like a native visor (instead of 404-ing on GET .../apps).
+		if b := self.SelfApps(); len(b) > 0 {
+			return 200, b
+		}
+		return jsonResp([]struct{}{})
+	}
+	if strings.HasPrefix(sub, "apps/") {
+		return c.selfAppRoute(self, method, strings.TrimPrefix(sub, "apps/"), body)
 	}
 	return 404, []byte(`{"error":"self visor subroute not implemented in wasm core"}`)
+}
+
+// selfAppRoute handles /visors/<selfPK>/apps/<app> for the tab's own visor —
+// the self-visor mirror of the remote appRoute (router.go). GET returns the
+// single app; PUT applies status (start/stop) and/or autostart via the
+// SelfProvider's in-process app control, then returns the fresh state.
+func (c *Core) selfAppRoute(self SelfProvider, method, appName string, body []byte) (int, []byte) {
+	// Only the bare app name; apps/<app>/logs|stats|connections aren't wired for
+	// the self visor (a browser tab has no per-app BoltDB log). Strip the tail.
+	appName = strings.SplitN(appName, "/", 2)[0]
+	if method == "PUT" {
+		var req struct {
+			Status    *int  `json:"status,omitempty"`
+			AutoStart *bool `json:"autostart,omitempty"`
+		}
+		if err := json.Unmarshal(body, &req); err != nil {
+			return 400, []byte(`{"error":"bad request body"}`)
+		}
+		if req.AutoStart != nil {
+			if err := self.SetAutoStart(appName, *req.AutoStart); err != nil {
+				return errResp(err)
+			}
+		}
+		if req.Status != nil {
+			switch *req.Status {
+			case 0:
+				if err := self.StopApp(appName); err != nil {
+					return errResp(err)
+				}
+			case 1:
+				if err := self.StartApp(appName); err != nil {
+					return errResp(err)
+				}
+			default:
+				return 400, []byte(`{"error":"status must be 0 (stop) or 1 (start)"}`)
+			}
+		}
+	}
+	// Return the single app's fresh state, read back from the app list.
+	var apps []*AppState
+	if err := json.Unmarshal(self.SelfApps(), &apps); err == nil {
+		for _, a := range apps {
+			if a != nil && a.Name == appName {
+				return jsonResp(a)
+			}
+		}
+	}
+	return 404, []byte(`{"error":"app not found"}`)
 }
 
 // sinceFromQuery parses the runtime-logs diff cursor from a raw query string
