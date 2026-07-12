@@ -388,6 +388,12 @@ func (s *Server) handleCancelOrder(pk string, req protocol.Envelope) protocol.En
 	}
 	// Release the product so other buyers can purchase it.
 	s.unfreeze(order.ProductID)
+	// A voluntary cancel counts as a freeze violation, same as letting the order
+	// expire: a buyer who repeatedly freezes then backs out is banned by the Ban
+	// Manager (design §5). Best-effort — the cancel itself already succeeded.
+	if err := s.db.CreateFreezeViolation(order.BuyerPubKey, order.ID); err != nil {
+		s.log.WithError(err).Errorf("exchange-market: failed to record freeze violation for %s", order.BuyerPubKey)
+	}
 	return success(req.ID, protocol.MessageData{Message: "Order canceled. You cannot buy this product again."})
 }
 
