@@ -34,8 +34,9 @@ var (
 	// port is the app routing port (source port for dmsg dials to the market).
 	// 0 = use the visor-assigned routing port.
 	port uint16
-	// marketPK is the public key of the market to connect to (optional; the
-	// user can also set it from the UI settings once wired up).
+	// marketPK is the default market public key shown pre-filled in the UI's
+	// connect screen. The client does NOT connect automatically; the user
+	// confirms/edits it and clicks Connect.
 	marketPK string
 )
 
@@ -43,7 +44,7 @@ func init() {
 	launcher.RegisterApp(skyenv.ExchangeClientName, RunExchangeClient)
 	RootCmd.Flags().StringVar(&uiAddr, "addr", skyenv.ExchangeClientAddr, "address to serve the trading UI on")
 	RootCmd.Flags().Uint16Var(&port, "port", 0, "routing port for communication between app and visor")
-	RootCmd.Flags().StringVar(&marketPK, "market", "", "public key of the market to connect to")
+	RootCmd.Flags().StringVar(&marketPK, "market-pk", "", "default exchange-market public key (pre-filled in the UI; not auto-connected)")
 }
 
 // RootCmd is the root command for exchange-client.
@@ -79,7 +80,7 @@ func RunExchangeClient(ctx context.Context, args []string) error {
 		fs := pflag.NewFlagSet("exchange-client", pflag.ContinueOnError)
 		fs.StringVar(&uiAddr, "addr", skyenv.ExchangeClientAddr, "trading UI address")
 		fs.Uint16Var(&port, "port", 0, "routing port")
-		fs.StringVar(&marketPK, "market", "", "market public key")
+		fs.StringVar(&marketPK, "market-pk", "", "default market public key")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -101,8 +102,14 @@ func RunExchangeClient(ctx context.Context, args []string) error {
 		appCl.Client.SetAppPortOrLog(routing.Port(port))
 	}
 
-	// Serve the embedded single-page trading UI.
-	go serveUI(ctx, appCl, uiAddr)
+	// The session drives the (manual) connection to a market over dmsg. It is
+	// seeded with the configured default market public key but does NOT connect
+	// until the user clicks Connect in the UI.
+	sess := newSession(appCl, marketPK)
+	defer sess.close()
+
+	// Serve the embedded single-page trading UI plus the local control API.
+	go serveUI(ctx, appCl, sess, uiAddr)
 
 	appCl.LogInfo("Exchange client UI available at http://%s", uiAddr)
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
@@ -120,9 +127,10 @@ func RunExchangeClient(ctx context.Context, args []string) error {
 	return nil
 }
 
-// serveUI serves the embedded SPA on addr until ctx is canceled. Any path that
-// isn't a real asset falls back to index.html so client-side routes resolve.
-func serveUI(ctx context.Context, appCl *app.Client, addr string) {
+// serveUI serves the embedded SPA plus the local control API on addr until ctx
+// is canceled. Any path that isn't a real asset falls back to index.html so
+// client-side routes resolve.
+func serveUI(ctx context.Context, appCl *app.Client, sess *session, addr string) {
 	distFS, err := fs.Sub(uiFS, "static")
 	if err != nil {
 		appCl.LogError("failed to open embedded UI: %v", err)
@@ -131,6 +139,7 @@ func serveUI(ctx context.Context, appCl *app.Client, addr string) {
 	fileServer := http.FileServer(http.FS(distFS))
 
 	mux := http.NewServeMux()
+	registerAPI(mux, sess)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
 		if name == "" {

@@ -178,3 +178,31 @@ body {
   border: 1px solid #28a745;
   color: var(--sky-white);
 }
+
+/* Connection gate */
+.connect-card {
+  background-color: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--sky-blue);
+  border-radius: 10px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+}
+
+.connect-card .form-control {
+  font-family: 'Courier New', monospace;
+}
+
+.btn-connect {
+  background-color: var(--sky-blue);
+  border-color: var(--sky-blue);
+  color: var(--sky-white);
+  font-weight: 600;
+}
+
+.btn-connect:hover:not(:disabled) {
+  background-color: #0257c4;
+  border-color: #0257c4;
+  color: var(--sky-white);
+}
