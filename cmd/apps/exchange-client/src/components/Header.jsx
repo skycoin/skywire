@@ -1,4 +1,4 @@
-function Header({ isConnected, marketPubKey }) {
+function Header({ isConnected, marketPubKey, onDisconnect }) {
   return (
     <header className="header">
       <div className="status-bar">
@@ -8,13 +8,19 @@ function Header({ isConnected, marketPubKey }) {
             {isConnected ? 'Connected to Market' : 'Disconnected'}
           </span>
         </div>
-        
+
         {marketPubKey && (
           <div className="market-pubkey">
             <small>Market Public Key:</small>
             <br />
             <code>{marketPubKey}</code>
           </div>
+        )}
+
+        {isConnected && (
+          <button className="btn btn-sm btn-outline-light" onClick={onDisconnect}>
+            Disconnect
+          </button>
         )}
       </div>
     </header>
