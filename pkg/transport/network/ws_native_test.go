@@ -75,7 +75,9 @@ func TestWSCarrier_RoundTrip(t *testing.T) {
 }
 
 func readFull(c net.Conn, b []byte) error {
-	if err := c.SetReadDeadline(time.Now().Add(3 * time.Second)); err != nil {
+	// Generous deadline (matches the sibling WS/dmsg round-trip tests) so a
+	// slow/loaded CI runner doesn't flake mid-handshake.
+	if err := c.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
 		return err
 	}
 	_, err := io.ReadFull(c, b)
