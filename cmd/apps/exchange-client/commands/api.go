@@ -181,6 +181,8 @@ func registerAPI(mux *http.ServeMux, sess *session) {
 	mux.HandleFunc("/api/products", proxyGet(sess, protocol.TypeGetProducts))
 	// GET  /api/orders           -> client.get_orders
 	mux.HandleFunc("/api/orders", proxyGet(sess, protocol.TypeGetOrders))
+	// GET  /api/listings/mine    -> client.get_listings (the caller's own listings)
+	mux.HandleFunc("/api/listings/mine", proxyGet(sess, protocol.TypeGetListings))
 
 	// POST /api/register         -> client.register        {wallet_*}
 	mux.HandleFunc("/api/register", proxyPost(sess, protocol.TypeRegister))

@@ -48,6 +48,7 @@ const (
 	TypeCancelListing  = "client.cancel_listing"
 	TypeGetOrders      = "client.get_orders"
 	TypeGetOrderStatus = "client.get_order_status"
+	TypeGetListings    = "client.get_listings"
 )
 
 // TypeResponse is the Type of every reply the market sends.
@@ -262,6 +263,29 @@ type OrderView struct {
 // GetOrdersResponse is the reply to TypeGetOrders.
 type GetOrdersResponse struct {
 	Orders []OrderView `json:"orders"`
+}
+
+// ListingView is a seller's own pending sell listing, presented to the client
+// for live lifecycle tracking: pending (awaiting the SKY deposit) -> confirmed
+// (deposit detected on-chain; the listing is now a purchasable product).
+type ListingView struct {
+	ID                string  `json:"id"`
+	AmountSKY         float64 `json:"amount_sky"`
+	ExpectedAmountSKY float64 `json:"expected_amount_sky"`
+	Price             float64 `json:"price"`
+	PaymentCurrency   string  `json:"payment_currency"`
+	Status            string  `json:"status"`
+	ExpiresAt         string  `json:"expires_at"`
+	CreatedAt         string  `json:"created_at"`
+	ConfirmedAt       string  `json:"confirmed_at,omitempty"`
+	TxHash            string  `json:"tx_hash,omitempty"`
+}
+
+// GetListingsResponse is the reply to TypeGetListings: the caller's own pending
+// listings plus the market wallet address the deposit must be sent to.
+type GetListingsResponse struct {
+	Listings     []ListingView `json:"listings"`
+	MarketWallet string        `json:"market_wallet"`
 }
 
 // GetOrderStatusRequest asks for one order's live status.

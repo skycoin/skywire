@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Header from './components/Header'
 import Market from './components/Market'
+import MyListings from './components/MyListings'
 import Orders from './components/Orders'
 import Settings from './components/Settings'
 import ConnectGate from './components/ConnectGate'
@@ -84,6 +85,14 @@ function App() {
           </li>
           <li className="nav-item">
             <button
+              className={`nav-link ${activeTab === 'listings' ? 'active' : ''}`}
+              onClick={() => setActiveTab('listings')}
+            >
+              My Listings
+            </button>
+          </li>
+          <li className="nav-item">
+            <button
               className={`nav-link ${activeTab === 'orders' ? 'active' : ''}`}
               onClick={() => setActiveTab('orders')}
             >
@@ -103,6 +112,7 @@ function App() {
 
       <div className="content">
         {activeTab === 'market' && <Market />}
+        {activeTab === 'listings' && <MyListings />}
         {activeTab === 'orders' && <Orders />}
         {activeTab === 'settings' && <Settings marketPubKey={marketPubKey} />}
       </div>

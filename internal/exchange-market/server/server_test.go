@@ -168,6 +168,62 @@ func TestUniqueDepositAmounts(t *testing.T) {
 }
 
 // TestUnknownMessageType verifies the dispatcher rejects unknown types cleanly.
+// TestGetListings verifies a seller sees their own pending listings (with the
+// deposit amount and market wallet) and their live status, and that another
+// caller does not see them.
+func TestGetListings(t *testing.T) {
+	database := newTestDB(t)
+
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	const otherPK = "0322222222222222222222222222222222222222222222222222222222222222bb"
+
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{
+		WalletSKY: "sky-seller", WalletBTC: "bc1-seller",
+	})
+
+	var listing protocol.CreateListingResponse
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
+		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC",
+	}, &listing)
+
+	// The seller sees the pending listing with the deposit amount + wallet.
+	var mine protocol.GetListingsResponse
+	bindSuccess(t, seller, protocol.TypeGetListings, nil, &mine)
+	if len(mine.Listings) != 1 {
+		t.Fatalf("get_listings = %+v, want one pending listing", mine.Listings)
+	}
+	l := mine.Listings[0]
+	if l.Status != "pending" || l.ExpectedAmountSKY != listing.ExpectedAmountSKY || mine.MarketWallet != "sky-market-wallet" {
+		t.Fatalf("listing view = %+v (wallet %q), want pending with the deposit amount", l, mine.MarketWallet)
+	}
+
+	// Once the deposit is confirmed, the listing shows as confirmed.
+	if err := database.UpdatePendingListingStatus(l.ID, "confirmed", "deposit-tx"); err != nil {
+		t.Fatal(err)
+	}
+	bindSuccess(t, seller, protocol.TypeGetListings, nil, &mine)
+	if len(mine.Listings) != 1 || mine.Listings[0].Status != "confirmed" || mine.Listings[0].TxHash != "deposit-tx" {
+		t.Fatalf("after confirm, get_listings = %+v, want one confirmed listing with tx", mine.Listings)
+	}
+
+	// A different caller does not see the seller's listings.
+	other := dialTestServer(t, database, otherPK)
+	mustSuccess(t, other, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-other"})
+	var theirs protocol.GetListingsResponse
+	bindSuccess(t, other, protocol.TypeGetListings, nil, &theirs)
+	if len(theirs.Listings) != 0 {
+		t.Fatalf("other caller get_listings = %+v, want none", theirs.Listings)
+	}
+}
+
 func TestUnknownMessageType(t *testing.T) {
 	database := newTestDB(t)
 	c := dialTestServer(t, database, "03deadbeef")
