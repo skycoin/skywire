@@ -133,7 +133,7 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 	}()
 
 	// Serve the operator UI (config + monitoring) on the localhost address.
-	go serveUI(ctx, appCl, uiAddr)
+	go serveUI(ctx, appCl, database, uiAddr)
 
 	// TODO: Start background jobs (in next phase)
 

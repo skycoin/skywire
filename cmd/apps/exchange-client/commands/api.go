@@ -9,6 +9,7 @@ package commands
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -17,6 +18,10 @@ import (
 	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 	"github.com/skycoin/skywire/pkg/cipher"
 )
+
+// errNotConnected is returned when a market request is made with no active
+// connection.
+var errNotConnected = errors.New("not connected to a market")
 
 // session holds the client's (single) connection to a market. It is safe for
 // concurrent use by the HTTP handlers.
@@ -96,6 +101,18 @@ func (s *session) status() (connected bool, pk string) {
 	return s.conn != nil, s.pk
 }
 
+// do forwards one request to the connected market and returns its response
+// envelope. It returns errNotConnected when there is no active connection.
+func (s *session) do(msgType string, data any) (protocol.Envelope, error) {
+	s.mu.Lock()
+	conn := s.conn
+	s.mu.Unlock()
+	if conn == nil {
+		return protocol.Envelope{}, errNotConnected
+	}
+	return conn.Do(msgType, data)
+}
+
 // registerAPI mounts the control API routes on mux.
 func registerAPI(mux *http.ServeMux, sess *session) {
 	// GET /api/config — the default market public key to pre-fill in the UI.
@@ -152,6 +169,105 @@ func registerAPI(mux *http.ServeMux, sess *session) {
 		sess.disconnect()
 		writeJSON(w, http.StatusOK, map[string]any{"connected": false})
 	})
+
+	// The following routes proxy straight through to the connected market,
+	// forwarding the request body as-is and returning the market's response
+	// data (or a mapped error). The market remains the single source of truth
+	// for validation and identity.
+
+	// GET  /api/currencies       -> client.get_currencies
+	mux.HandleFunc("/api/currencies", proxyGet(sess, protocol.TypeGetCurrencies))
+	// GET  /api/products         -> client.get_products
+	mux.HandleFunc("/api/products", proxyGet(sess, protocol.TypeGetProducts))
+	// GET  /api/orders           -> client.get_orders
+	mux.HandleFunc("/api/orders", proxyGet(sess, protocol.TypeGetOrders))
+
+	// POST /api/register         -> client.register        {wallet_*}
+	mux.HandleFunc("/api/register", proxyPost(sess, protocol.TypeRegister))
+	// POST /api/listings         -> client.create_listing  {amount_sky, price, payment_currency}
+	mux.HandleFunc("/api/listings", proxyPost(sess, protocol.TypeCreateListing))
+	// POST /api/listings/cancel  -> client.cancel_listing  {listing_id}
+	mux.HandleFunc("/api/listings/cancel", proxyPost(sess, protocol.TypeCancelListing))
+	// POST /api/buy              -> client.buy_product      {product_id}
+	mux.HandleFunc("/api/buy", proxyPost(sess, protocol.TypeBuyProduct))
+	// POST /api/order-status     -> client.get_order_status {order_id}
+	mux.HandleFunc("/api/order-status", proxyPost(sess, protocol.TypeGetOrderStatus))
+}
+
+// proxyGet builds a GET handler that forwards msgType (no body) to the market.
+func proxyGet(sess *session, msgType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		forward(w, sess, msgType, nil)
+	}
+}
+
+// proxyPost builds a POST handler that forwards the request body verbatim as
+// the message payload.
+func proxyPost(sess *session, msgType string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "failed to read request body")
+			return
+		}
+		var data any
+		if len(body) > 0 {
+			data = json.RawMessage(body)
+		}
+		forward(w, sess, msgType, data)
+	}
+}
+
+// forward performs the market request and translates the response envelope into
+// an HTTP response: the success payload is written through as-is; an error
+// envelope maps to an HTTP status with {error, code}.
+func forward(w http.ResponseWriter, sess *session, msgType string, data any) {
+	resp, err := sess.do(msgType, data)
+	if err != nil {
+		if errors.Is(err, errNotConnected) {
+			writeError(w, http.StatusConflict, "not connected to a market")
+			return
+		}
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if resp.IsError() {
+		var e protocol.ErrorData
+		_ = resp.Bind(&e) //nolint:errcheck
+		writeJSON(w, statusForCode(e.Code), map[string]any{"error": e.Message, "code": e.Code})
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if len(resp.Data) == 0 {
+		_, _ = w.Write([]byte("{}")) //nolint:errcheck
+		return
+	}
+	_, _ = w.Write(resp.Data) //nolint:errcheck
+}
+
+// statusForCode maps a protocol error code to an HTTP status.
+func statusForCode(code string) int {
+	switch code {
+	case protocol.CodeUserBanned:
+		return http.StatusForbidden
+	case protocol.CodeProductNotFound, protocol.CodeListingNotFound, protocol.CodeOrderNotFound:
+		return http.StatusNotFound
+	case protocol.CodeProductUnavailable, protocol.CodeSessionConflict:
+		return http.StatusConflict
+	case protocol.CodeInternalError:
+		return http.StatusBadGateway
+	default:
+		return http.StatusBadRequest
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
