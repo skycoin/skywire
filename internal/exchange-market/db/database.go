@@ -101,6 +101,8 @@ func (d *Database) InitDefaultConfig() error {
 	defaults := map[string]string{
 		"wallet_sky":              "",      // Market wallet for SKY escrow
 		"sky_fullnode_url":        "",      // SKY fullnode API base URL (native SKY verification)
+		"sky_wallet_id":           "",      // SKY hot wallet id on the node (for spending/escrow payouts)
+		"sky_wallet_password":     "",      // password for the SKY hot wallet (empty if unencrypted)
 		"fee_rate_sch_per_sky":    "0.001", // Commission: SCH per SKY sold
 		"freeze_violations_limit": "3",     // Number of violations before ban
 		"ban_duration_days":       "7",     // Ban duration in days
@@ -108,14 +110,9 @@ func (d *Database) InitDefaultConfig() error {
 		"order_expiry_minutes":    "15",    // Minutes before pending order expires
 		"return_delay_hours":      "1",     // Hours before returning SKY to seller
 		"cleanup_days":            "3",     // Days after which completed orders are deleted
-		// Explorer base URLs per payment currency. An empty value means the
-		// operator has not enabled that coin, so it is unavailable for trading.
-		"explorer_btc":        "", // Bitcoin explorer API base URL
-		"explorer_bch":        "", // Bitcoin Cash explorer API base URL
-		"explorer_ltc":        "", // Litecoin explorer API base URL
-		"explorer_usdt_erc20": "", // USDT (ERC20) explorer API base URL
-		"explorer_usdt_trc20": "", // USDT (TRC20) explorer API base URL
 	}
+	// Per-coin explorer config keys are created on demand when the operator
+	// configures a coin (see db.ExplorerConfig); they are not seeded here.
 
 	d.mu.Lock()
 	defer d.mu.Unlock()

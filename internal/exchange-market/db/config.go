@@ -7,41 +7,70 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 )
 
-// paymentCurrencyExplorer maps each payment currency to the market_config key
-// holding its explorer URL. A currency is tradable only when its explorer URL
-// is configured (non-empty).
-var paymentCurrencyExplorer = map[string]string{
-	"BTC":        "explorer_btc",
-	"BCH":        "explorer_bch",
-	"LTC":        "explorer_ltc",
-	"USDT_ERC20": "explorer_usdt_erc20",
-	"USDT_TRC20": "explorer_usdt_trc20",
+// ExplorerKeyPrefix returns the market_config key prefix for a currency's
+// explorer settings, e.g. "explorer_btc". The full keys are <prefix>_provider,
+// <prefix>_url and <prefix>_key.
+func ExplorerKeyPrefix(currency string) string {
+	return "explorer_" + strings.ToLower(currency)
 }
 
-// paymentCurrencyOrder is the stable display order for available currencies.
-var paymentCurrencyOrder = []string{"BTC", "BCH", "LTC", "USDT_ERC20", "USDT_TRC20"}
+// configOrEmpty reads a config value, returning "" (not an error) when the key
+// has never been set.
+func (d *Database) configOrEmpty(key string) (string, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
 
-// IsCurrencyAvailable reports whether the given payment currency is tradable at
-// this market, i.e. its explorer URL is configured.
+	var v string
+	err := d.db.QueryRow(`SELECT value FROM market_config WHERE key = ?`, key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get config %s: %w", key, err)
+	}
+	return v, nil
+}
+
+// ExplorerConfig returns the operator's configured explorer provider, optional
+// base-URL override and API key for a currency. An empty provider means the
+// currency has no explorer configured (and is therefore unavailable). Satisfies
+// chain.ExplorerConfigStore.
+func (d *Database) ExplorerConfig(currency string) (provider, baseURL, apiKey string, err error) {
+	p := ExplorerKeyPrefix(currency)
+	if provider, err = d.configOrEmpty(p + "_provider"); err != nil {
+		return "", "", "", err
+	}
+	if baseURL, err = d.configOrEmpty(p + "_url"); err != nil {
+		return "", "", "", err
+	}
+	if apiKey, err = d.configOrEmpty(p + "_key"); err != nil {
+		return "", "", "", err
+	}
+	return provider, baseURL, apiKey, nil
+}
+
+// IsCurrencyAvailable reports whether currency is supported and has an explorer
+// provider configured.
 func (d *Database) IsCurrencyAvailable(currency string) (bool, error) {
-	key, ok := paymentCurrencyExplorer[currency]
-	if !ok {
+	if !protocol.IsSupportedCurrency(currency) {
 		return false, nil
 	}
-	v, err := d.GetConfig(key)
+	provider, _, _, err := d.ExplorerConfig(currency)
 	if err != nil {
 		return false, err
 	}
-	return strings.TrimSpace(v) != "", nil
+	return strings.TrimSpace(provider) != "", nil
 }
 
-// AvailableCurrencies returns the payment currencies whose explorer the
-// operator has configured, in stable display order.
+// AvailableCurrencies returns the supported currencies that have an explorer
+// configured, in canonical display order.
 func (d *Database) AvailableCurrencies() ([]string, error) {
 	var out []string
-	for _, c := range paymentCurrencyOrder {
+	for _, c := range protocol.PaymentCurrencies {
 		ok, err := d.IsCurrencyAvailable(c)
 		if err != nil {
 			return nil, err
