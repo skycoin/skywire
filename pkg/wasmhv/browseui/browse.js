@@ -926,6 +926,61 @@
   // openIdentityDialog shows a modal to export / import / reset this visor's
   // identity (the 32-byte secret key in localStorage). opts.selfPK() supplies the
   // PK for display. Self-contained; reads/writes the same slot hv-boot.js uses.
+  // openAboutDialog shows the visor's version / build / identity + dmsg status,
+  // read from GET /api/about via opts.api — so it renders identically on the
+  // wasm visor (hvApi routes to the in-tab core) and the native HV (fetch to the
+  // visor's HV server). It's the ☰ menu's "about" entry, added to both
+  // hypervisor UIs so that menu stays equivalent across native and wasm.
+  function openAboutDialog(doc, opts) {
+    var existing = doc.getElementById("skywire-about-dialog");
+    if (existing) { existing.style.display = "flex"; return; }
+    var ov = doc.createElement("div");
+    ov.id = "skywire-about-dialog";
+    ov.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(8,6,16,.62)";
+    var box = doc.createElement("div");
+    box.style.cssText = "width:min(520px,92vw);max-height:90vh;overflow:auto;background:#15131c;color:#cdd2da;border:1px solid #2a2342;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.6);font:12px/1.6 monospace;padding:1em;box-sizing:border-box";
+    box.innerHTML =
+      '<div style="display:flex;align-items:center;gap:.5em;margin-bottom:.7em">' +
+      '<b style="color:#9d7cff;font-size:14px">about skywire</b><span style="flex:1"></span>' +
+      '<button id="ab-x" style="cursor:pointer;background:transparent;color:#cdd2da;border:0;font-size:15px">×</button></div>' +
+      '<div id="ab-body" style="opacity:.9">loading…</div>';
+    ov.appendChild(box);
+    (doc.body || doc.documentElement).appendChild(ov);
+    function close() { ov.style.display = "none"; }
+    box.querySelector("#ab-x").onclick = close;
+    ov.addEventListener("click", function (e) { if (e.target === ov) { close(); } });
+    function row(k, v) {
+      if (!v || !String(v).trim()) { return ""; }
+      return '<div style="display:flex;gap:.6em;margin:.15em 0"><span style="min-width:8.5em;color:#8b93a7">' + k +
+        '</span><span style="flex:1;color:#cdd2da;word-break:break-all">' + v + '</span></div>';
+    }
+    // opts.api's r.body is a Uint8Array under hvApi (wasm core) but a plain
+    // string under the harness/native fetch path — decode both.
+    function decBody(r) {
+      var b = r && r.body; if (b == null) { return ""; }
+      if (typeof b === "string") { return b; }
+      try { return new TextDecoder().decode(b); } catch (e) {}
+      try { return new TextDecoder().decode(new Uint8Array(b)); } catch (e) {}
+      return "";
+    }
+    Promise.resolve(opts.api("GET", "/api/about", null)).then(function (r) {
+      var a = {}; try { a = JSON.parse(decBody(r)); } catch (e) {}
+      var b = a.build || a.Build || {};
+      var pk = a.public_key || a.PubKey || (opts.selfPK && opts.selfPK()) || "";
+      var mode = globalThis.skywireVisor ? "browser (wasm) visor" : "native visor";
+      // Static build/identity info only — live status (dmsg sessions, transports,
+      // routes) lives on the dashboard, not here.
+      box.querySelector("#ab-body").innerHTML =
+        row("mode", mode) +
+        row("version", b.version || b.Version) +
+        row("commit", b.commit || b.Commit) +
+        row("built", b.date || b.Date) +
+        row("go", b.go || b.Go) +
+        row("platform", (b.os || b.OS) ? ((b.os || b.OS) + "/" + (b.arch || b.Arch || "")) : "") +
+        row("public key", pk);
+    }).catch(function (e) { box.querySelector("#ab-body").textContent = "failed to load /api/about: " + e; });
+  }
+
   function openIdentityDialog(doc, opts) {
     var existing = doc.getElementById("skywire-identity-dialog");
     if (existing) { existing.style.display = "flex"; return; }
@@ -1708,6 +1763,9 @@
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
     addApp("identity", function () { openIdentityDialog(doc, opts); });
+    // 'about' works on both HV UIs (reads /api/about via opts.api) — kept
+    // ungated so the native and wasm ☰ menus stay equivalent.
+    addApp("about", function () { openAboutDialog(doc, opts); });
     addApp("tour", function () { startTour(doc); });
     // Offer the tour once, shortly after first load, so newcomers get oriented.
     try {
