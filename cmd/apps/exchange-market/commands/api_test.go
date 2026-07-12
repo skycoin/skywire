@@ -45,12 +45,12 @@ func TestOperatorConfigReadWrite(t *testing.T) {
 	// GET returns the seeded defaults.
 	var cfg map[string]string
 	getJSONInto(t, ts.URL+"/api/config", &cfg)
-	if _, ok := cfg["explorer_btc"]; !ok {
-		t.Fatalf("config missing explorer_btc: %v", cfg)
+	if _, ok := cfg["sky_fullnode_url"]; !ok {
+		t.Fatalf("config missing sky_fullnode_url: %v", cfg)
 	}
 
-	// POST a valid update.
-	body, _ := json.Marshal(map[string]string{"explorer_btc": "https://btc.example", "wallet_sky": "sky-w"}) //nolint
+	// POST a valid update: enable BTC via its explorer provider.
+	body, _ := json.Marshal(map[string]string{"explorer_btc_provider": "esplora", "wallet_sky": "sky-w"}) //nolint
 	res, err := http.Post(ts.URL+"/api/config", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST config: %v", err)
@@ -60,7 +60,7 @@ func TestOperatorConfigReadWrite(t *testing.T) {
 		t.Fatalf("POST config = %d, want 200", res.StatusCode)
 	}
 	getJSONInto(t, ts.URL+"/api/config", &cfg)
-	if cfg["explorer_btc"] != "https://btc.example" || cfg["wallet_sky"] != "sky-w" {
+	if cfg["explorer_btc_provider"] != "esplora" || cfg["wallet_sky"] != "sky-w" {
 		t.Fatalf("config not persisted: %v", cfg)
 	}
 
@@ -73,6 +73,17 @@ func TestOperatorConfigReadWrite(t *testing.T) {
 	res.Body.Close() //nolint
 	if res.StatusCode != http.StatusBadRequest {
 		t.Fatalf("unknown key = %d, want 400", res.StatusCode)
+	}
+
+	// POST an explorer provider that doesn't support the coin is rejected.
+	badProv, _ := json.Marshal(map[string]string{"explorer_btc_provider": "bogus"}) //nolint
+	res, err = http.Post(ts.URL+"/api/config", "application/json", bytes.NewReader(badProv))
+	if err != nil {
+		t.Fatalf("POST bad provider: %v", err)
+	}
+	res.Body.Close() //nolint
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("bad provider = %d, want 400", res.StatusCode)
 	}
 }
 

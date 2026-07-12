@@ -3,6 +3,8 @@ package server
 import (
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,6 +12,42 @@ import (
 	"github.com/skycoin/skywire/internal/exchange-market/db"
 	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 )
+
+// Decimal precision per asset. SKY uses 6 (droplets); the supported external
+// payment coins (BTC/BCH/LTC/DOGE/DASH) use 8.
+const (
+	skyDecimals     = 6
+	paymentDecimals = 8
+)
+
+// Amount-collision tolerances: half the smallest unit of each asset, so two
+// amounts are "the same" only if they round to the same on-chain value.
+const (
+	skyTol     = 0.5e-6
+	paymentTol = 0.5e-8
+)
+
+// errNoUniqueAmount means the non-round amount space to a wallet is momentarily
+// exhausted (too many concurrent pending payments of the same base amount).
+var errNoUniqueAmount = errors.New("could not allocate a unique payment amount")
+
+// allocUniqueAmount generates a non-round amount for base that is not already
+// pending (per the exists check), retrying on collision. The caller must hold a
+// lock spanning this call and the subsequent insert so the chosen amount can't
+// be taken by a concurrent allocation.
+func allocUniqueAmount(base float64, decimals int, exists func(float64) (bool, error)) (float64, error) {
+	for i := 0; i < 100; i++ {
+		amt := nonRound(base, decimals)
+		dup, err := exists(amt)
+		if err != nil {
+			return 0, err
+		}
+		if !dup {
+			return amt, nil
+		}
+	}
+	return 0, errNoUniqueAmount
+}
 
 // success builds a success response, degrading to an internal error if the
 // payload cannot be marshaled.
@@ -26,6 +64,13 @@ func success(id string, data any) protocol.Envelope {
 func (s *Server) internal(id, op string, err error) protocol.Envelope {
 	s.log.WithError(err).Errorf("exchange-market: %s failed", op)
 	return protocol.ErrorResponse(id, protocol.CodeInternalError, "internal error")
+}
+
+// unfreeze best-effort returns a product to the market after a failed buy.
+func (s *Server) unfreeze(productID string) {
+	if err := s.db.UnfreezeProduct(productID); err != nil {
+		s.log.WithError(err).Errorf("exchange-market: failed to unfreeze product %s", productID)
+	}
 }
 
 // handleRegister upserts the caller's wallet addresses, keyed by the
@@ -122,17 +167,30 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	}
 
 	expiry := s.listingExpiry()
+
+	// Allocate a unique non-round deposit amount and insert atomically, so no two
+	// pending listings share an amount to the (shared) market wallet.
+	s.allocMu.Lock()
+	expected, err := allocUniqueAmount(r.AmountSKY, skyDecimals, func(a float64) (bool, error) {
+		return s.db.PendingListingAmountExists(a, skyTol)
+	})
+	if err != nil {
+		s.allocMu.Unlock()
+		return s.internal(req.ID, "create_listing.alloc", err)
+	}
 	listing := &db.PendingListing{
 		ID:                uuid.NewString(),
 		SellerPubKey:      pk,
 		AmountSKY:         r.AmountSKY,
-		ExpectedAmountSKY: nonRound(r.AmountSKY),
+		ExpectedAmountSKY: expected,
 		Price:             r.Price,
 		PaymentCurrency:   r.PaymentCurrency,
 		Status:            "pending",
 		ExpiresAt:         time.Now().UTC().Add(expiry),
 	}
-	if err := s.db.CreatePendingListing(listing); err != nil {
+	err = s.db.CreatePendingListing(listing)
+	s.allocMu.Unlock()
+	if err != nil {
 		return s.internal(req.ID, "create_listing", err)
 	}
 
@@ -193,6 +251,18 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 		return protocol.ErrorResponse(req.ID, protocol.CodeProductUnavailable, "this product is no longer available")
 	}
 
+	// Allocate a unique non-round payment amount to the seller's wallet and
+	// insert the order atomically, so no two pending orders to that wallet share
+	// an amount. Roll back the freeze on any failure.
+	s.allocMu.Lock()
+	expected, err := allocUniqueAmount(product.Price, paymentDecimals, func(a float64) (bool, error) {
+		return s.db.OrderPaymentAmountExists(sellerWallet, product.PaymentCurrency, a, paymentTol)
+	})
+	if err != nil {
+		s.allocMu.Unlock()
+		s.unfreeze(product.ID)
+		return s.internal(req.ID, "buy.alloc", err)
+	}
 	order := &db.Order{
 		ID:                    uuid.NewString(),
 		ProductID:             product.ID,
@@ -200,16 +270,15 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 		AmountSKY:             product.AmountSKY,
 		Price:                 product.Price,
 		PaymentCurrency:       product.PaymentCurrency,
-		ExpectedPaymentAmount: nonRound(product.Price),
+		ExpectedPaymentAmount: expected,
 		SellerWallet:          sellerWallet,
 		Status:                "pending_payment",
 		ExpiresAt:             time.Now().UTC().Add(s.orderExpiry()),
 	}
-	if err := s.db.CreateOrder(order); err != nil {
-		// Roll back the freeze so the product returns to the market.
-		if uerr := s.db.UnfreezeProduct(product.ID); uerr != nil {
-			s.log.WithError(uerr).Error("exchange-market: failed to unfreeze after order-create failure")
-		}
+	err = s.db.CreateOrder(order)
+	s.allocMu.Unlock()
+	if err != nil {
+		s.unfreeze(product.ID)
 		return s.internal(req.ID, "buy.create_order", err)
 	}
 
@@ -327,14 +396,18 @@ func (s *Server) orderExpiry() time.Duration {
 	return 15 * time.Minute
 }
 
-// nonRound returns base plus a small random delta (1e-8 .. ~1e-3) so the
-// on-chain amount is unique and precisely identifiable in the recipient wallet
-// (design §1 non-round-number validation).
-func nonRound(base float64) float64 {
+// nonRound returns base plus a small random delta at the asset's precision, so
+// the on-chain amount is unique and precisely identifiable in the recipient
+// wallet (design §1 non-round-number validation). decimals is the asset's
+// precision (6 for SKY, 8 for the payment coins); the result is rounded to it so
+// it is always a valid on-chain amount.
+func nonRound(base float64, decimals int) float64 {
+	scale := math.Pow(10, float64(decimals))
 	var b [4]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return base
+		return math.Round(base*scale) / scale
 	}
-	n := binary.BigEndian.Uint32(b[:]) % 100000 // 0..99999
-	return base + float64(n+1)/1e8
+	// 1..1000 least-significant units of delta.
+	n := binary.BigEndian.Uint32(b[:])%1000 + 1
+	return math.Round(base*scale+float64(n)) / scale
 }
