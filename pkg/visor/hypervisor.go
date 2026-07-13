@@ -996,6 +996,13 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/api/dmsg/health", tpvHandler.ServeHTTP)
 		}
 
+		// HV-served skycoin wallet: embedded /wallet/ static + node API proxied
+		// over the visor's dmsg client — no skycoin-web process/port, the native
+		// equivalent of the wasm visor's /wallet/. Mounted before the UI
+		// catch-all so /wallet/* is claimed here. See
+		// docs/design/gui-app-serving-modes.md.
+		r.Handle("/wallet/*", hv.walletHandler())
+
 		// Serve the dashboard UI, with the skynet/clearnet browse engine + native
 		// launcher injected into index.html (and the browse.js / launcher assets).
 		r.Get("/api/ui-version", hv.getUIVersion())
