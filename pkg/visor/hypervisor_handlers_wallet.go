@@ -20,9 +20,27 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/skycoin/skywire/pkg/btcgateway"
 )
+
+var (
+	nativeBtcGatewayOnce sync.Once
+	nativeBtcGatewayInst *btcgateway.Gateway
+)
+
+// nativeBtcGateway is the HV's shared BTC electrum gateway for the native
+// HV-served wallet. A nil dialer means clearnet egress — a host visor reaches
+// public electrum servers directly; the per-request electrum URL comes from the
+// X-Skywire-Btc-Backend header (set by the wallet shim from
+// localStorage['skywire-btc-backend']).
+func nativeBtcGateway() *btcgateway.Gateway {
+	nativeBtcGatewayOnce.Do(func() { nativeBtcGatewayInst = btcgateway.New(nil) })
+	return nativeBtcGatewayInst
+}
 
 // walletNodeDmsg is the skycoin node the HV-served wallet talks to by DEFAULT:
 // the deployment node addressed over dmsg (same PK:port as
@@ -42,18 +60,27 @@ const walletNodeDmsg = "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812
 // X-Skywire-Coin-Node so walletNodeProxy dials it over dmsg. Empty selection →
 // the deployment default. This is the native twin of the wasm fetchDmsg shim;
 // same localStorage key, so node config is unified across both visors.
+// It ALSO intercepts the wallet's BTC API (/v1/btc/*) and tags the operator-
+// selected electrum backend (localStorage['skywire-btc-backend'], "ssl://host:
+// port") as X-Skywire-Btc-Backend, so the HV's in-process BTC gateway
+// (pkg/btcgateway) reaches it — keys + signing stay in the browser, only chain
+// queries cross. Same localStorage keys as the wasm shim + the config panel.
 const walletNodeShim = `<script>(function(){` +
 	`var rf=window.fetch?window.fetch.bind(window):null;if(!rf){return;}` +
-	`function node(){try{return localStorage.getItem("skywire-coin-node")||"";}catch(e){return "";}}` +
+	`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
 	`function pathOf(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
 	`window.fetch=function(input,init){` +
 	`var url=(typeof input==="string")?input:(input&&input.url)||"";` +
-	`var m=/^\/(wallet\/)?api\/v[12]\//.exec(pathOf(url));` +
-	`if(!m){return rf(input,init);}` +
-	`var target=m[1]?url:url.replace(pathOf(url),"/wallet"+pathOf(url));` +
+	`var p=pathOf(url);` +
+	`var mn=/^\/(wallet\/)?api\/v[12]\//.exec(p);` +
+	`var mb=/^\/(wallet\/)?v1\/btc\//.exec(p);` +
+	`if(!mn&&!mb){return rf(input,init);}` +
+	`var pre=(mn&&mn[1])||(mb&&mb[1]);` +
+	`var target=pre?url:url.replace(p,"/wallet"+p);` +
 	`init=init||{};` +
 	`var h=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
-	`var n=node();if(n){h.set("X-Skywire-Coin-Node",n);}` +
+	`if(mn){var n=ls("skywire-coin-node");if(n){h.set("X-Skywire-Coin-Node",n);}}` +
+	`else{var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}}` +
 	`init.headers=h;return rf(target,init);` +
 	`};})();</script>`
 
@@ -73,6 +100,15 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 		// wallet's crypto is client-side; only these calls cross the mesh.
 		if strings.HasPrefix(rest, "api/v1/") || strings.HasPrefix(rest, "api/v2/") {
 			hv.walletNodeProxy(w, r, rest)
+			return
+		}
+		// BTC API (/wallet/v1/btc/*) → the in-process electrum gateway. The
+		// browser derives + signs BTC itself; only chain queries come here. The
+		// electrum server (X-Skywire-Btc-Backend, set by the shim) is dialed on
+		// the clearnet by the native visor (nil dialer).
+		if strings.HasPrefix(rest, "v1/btc/") {
+			r.URL.Path = "/" + rest
+			nativeBtcGateway().ServeHTTP(w, r)
 			return
 		}
 		if fsErr != nil {
