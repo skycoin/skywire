@@ -319,3 +319,60 @@ func readBrowseResp(resp *http.Response) (*SkynetHTTPResponse, error) {
 type yamuxStreamDialer struct{ sess *yamux.Session }
 
 func (d yamuxStreamDialer) Dial(_, _ string) (net.Conn, error) { return d.sess.Open() }
+
+// tunnelConn ties extra closers (the yamux session + the underlying route conn)
+// to the lifetime of a tunneled stream, so closing the carried connection tears
+// the whole skysocks tunnel down instead of leaking the route group.
+type tunnelConn struct {
+	net.Conn
+	closers []io.Closer
+}
+
+func (c *tunnelConn) Close() error {
+	err := c.Conn.Close()
+	for _, cl := range c.closers {
+		_ = cl.Close() //nolint:errcheck
+	}
+	return err
+}
+
+// skysocksDialFunc returns a raw dialer (electrum.DialFunc-shaped) that carries
+// each connection through the given exit visor's skysocks-server: a skywire
+// route to exitPK:skysocks, a yamux client over it, and a SOCKS5 CONNECT to the
+// target host. This is the native equivalent of the wasm visor's in-tab
+// skysocks-lite BTC egress — it lets the native BTC gateway reach a clearnet
+// electrum server through ANOTHER visor for IP privacy, instead of egressing
+// itself. The returned conn owns the yamux session + route conn (both closed on
+// Close), and the electrum backend keeps ONE conn per server, so this is a
+// single tunnel per (exit, electrum-server), reused across chain queries.
+func (v *Visor) skysocksDialFunc(exitPK cipher.PubKey) func(network, addr string) (net.Conn, error) {
+	return func(network, addr string) (net.Conn, error) {
+		if v.router == nil {
+			return nil, fmt.Errorf("router not available")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), browseFetchTimeout)
+		defer cancel()
+		conn, err := v.router.DialRoutes(ctx, exitPK, 0, routing.Port(skyenv.SkysocksPort), nil)
+		if err != nil {
+			return nil, fmt.Errorf("dial skysocks route: %w", err)
+		}
+		sess, err := yamux.Client(conn, yamux.DefaultConfig())
+		if err != nil {
+			_ = conn.Close() //nolint:errcheck
+			return nil, fmt.Errorf("yamux client: %w", err)
+		}
+		sd, err := proxy.SOCKS5("tcp", "skysocks", nil, yamuxStreamDialer{sess})
+		if err != nil {
+			_ = sess.Close() //nolint:errcheck
+			_ = conn.Close() //nolint:errcheck
+			return nil, err
+		}
+		stream, err := sd.Dial(network, addr)
+		if err != nil {
+			_ = sess.Close() //nolint:errcheck
+			_ = conn.Close() //nolint:errcheck
+			return nil, fmt.Errorf("skysocks dial %s: %w", addr, err)
+		}
+		return &tunnelConn{Conn: stream, closers: []io.Closer{sess, conn}}, nil
+	}
+}
