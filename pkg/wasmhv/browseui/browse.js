@@ -1899,7 +1899,9 @@
 
       function refreshCur() {
         var eff = mode === "service" ? ls(K_SERVICE, "") : (nodes[0] || "");
-        $("sww-cur").textContent = eff ? eff.replace(/^https?:\/\//, "") : "default node";
+        // Blank field = the deployment default coin node (node.skycoin.com's
+        // skycoin node over dmsg); show that so it's clear what's in effect.
+        $("sww-cur").textContent = eff ? eff.replace(/^https?:\/\//, "") : "default · node.skycoin.com";
       }
       function renderNodes() {
         var box = $("sww-nodes"); box.innerHTML = "";
@@ -1907,7 +1909,7 @@
           var row = doc.createElement("div"); row.className = "sww-row";
           var lab = doc.createElement("label"); lab.textContent = "coin " + i;
           var inp = doc.createElement("input"); inp.spellcheck = false; inp.value = n || "";
-          inp.placeholder = "039a6d1e…:6420 or http://node…" + (i === 0 ? "  (blank = default)" : "");
+          inp.placeholder = "039a6d1e…:6420 or node.skycoin.com.<pk>.dmsg:6420" + (i === 0 ? "  (blank = node.skycoin.com)" : "");
           inp.oninput = function () { nodes[i] = inp.value; };
           row.appendChild(lab); row.appendChild(inp);
           if (nodes.length > 1) {

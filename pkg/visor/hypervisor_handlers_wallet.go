@@ -15,6 +15,7 @@
 package visor
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -157,12 +158,20 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 
-	// Mesh coin node (dmsg-served API) → dmsg-HTTP over the AUTHORITATIVE dmsg
-	// client (DmsgHTTP uses v.dmsgC). Not BrowseFetch — that's for browsing
-	// (skynet-first + the secondary dmsg client), which is the wrong tool for a
-	// pure dmsg node API.
+	// Mesh coin node: resolve the host with the SAME resolver the iframe browser
+	// uses (bare "<pk>[:port]", the readable "<name>.<pk>.dmsg[:port]" alias,
+	// "alias.dmsg", …) via resolveBrowseHost, then dmsg-HTTP over the
+	// AUTHORITATIVE dmsg client. We reuse the resolver but NOT BrowseFetch's
+	// fetch step: BrowseFetch dials over the secondary dmsg client (v.dmsgHTTP /
+	// dmsgDC), which has session conflicts on the coin node (see Visor.DmsgHTTP);
+	// v.dmsgC (DmsgHTTP) has stable sessions.
+	pk, port, rerr := hv.visor.resolveBrowseHost(walletBackendStrip(backend), 0)
+	if rerr != nil {
+		http.Error(w, "coin node resolve failed: "+rerr.Error(), http.StatusBadGateway)
+		return
+	}
 	resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
-		URL:    "dmsg://" + walletBackendStrip(backend) + path,
+		URL:    fmt.Sprintf("dmsg://%s:%d%s", pk.Hex(), port, path),
 		Method: r.Method,
 		Header: header,
 		Body:   body,
