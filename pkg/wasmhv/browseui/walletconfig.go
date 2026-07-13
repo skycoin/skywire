@@ -68,7 +68,7 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <option value="ssl://electrum.jochen-hoenicke.de:50006"></option>
 </datalist>
 <div class="hint"><b>Skysocks exit</b> <span id="proxyreq"></span>: the visor PK whose skysocks-server relays the clearnet connection — the BTC electrum egress AND the iframe browser share this exit. <span id="proxynote"></span></div>
-<div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex)"><button class="add" id="psrv" title="list skysocks-server PKs from service discovery">servers ▾</button></div>
+<div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex)"><button class="add" id="psrv" title="list skysocks-server PKs from service discovery">servers ▾</button><button class="add" id="prnd" title="pick a random skysocks server from service discovery">🎲 random</button></div>
 <div class="row" id="pselrow" style="display:none"><label></label><select id="psel"></select></div>
 <pre id="plog" class="plog" title="live: resolving proxy (dmsg) + skysocks-lite (clearnet)"></pre>
 </div>
@@ -113,14 +113,19 @@ function visor(){try{return parent&&parent.skywireVisor;}catch(e){return null;}}
 var plogBuf=[];
 function plog(s){var t="";try{t=new Date().toTimeString().slice(0,8);}catch(e){}plogBuf.push(t+"  "+s);if(plogBuf.length>300)plogBuf.shift();var el=$("plog");if(el){el.classList.add("on");el.textContent=plogBuf.join("\n");el.scrollTop=el.scrollHeight;}}
 try{var LG=parent&&parent.skywireLog;if(LG&&LG.subscribe){LG.subscribe(function(lvl,args){var m=[].map.call(args||[],String).join(" ");if(/\[wallet\]|skysocks|resolve-proxy|electrum|dmsg:\/\//i.test(m))plog(m.slice(0,220));});plog("● attached to visor log");}}catch(e){}
-$("psrv").onclick=function(){var v=visor();if(!v||!v.fetchDmsg){plog("● no in-tab visor here — open the wallet in the browser-tab (wasm) visor to list servers");return;}
+function fetchProxies(cb){var v=visor();if(!v||!v.fetchDmsg){plog("● no in-tab visor here — open the wallet in the browser-tab (wasm) visor to list servers");return;}
 plog("● fetching skysocks servers from service discovery…");
 Promise.resolve(v.fetchDmsg("sd.dmsg","GET","/api/services?type=proxy",null)).then(function(r){
 var list=[];try{list=JSON.parse((r&&typeof r.body==="string")?r.body:new TextDecoder().decode(r.body))||[];}catch(e){}
+cb(list.filter(function(s){return /^[0-9a-f]{66}$/i.test(String(s.address||"").split(":")[0]);}));
+}).catch(function(e){plog("● SD fetch failed: "+String((e&&e.message)||e));});}
+$("psrv").onclick=function(){fetchProxies(function(list){
 var sel=$("psel");sel.innerHTML='<option value="">— '+list.length+' skysocks servers — pick one —</option>';
-list.forEach(function(s){var pk=String(s.address||"").split(":")[0];if(!/^[0-9a-f]{66}$/i.test(pk))return;var geo=(s.geo&&s.geo.country)?" · "+s.geo.country:"";var o=document.createElement("option");o.value=pk;o.textContent=pk.slice(0,8)+"…"+geo+(s.version?" · "+s.version:"");sel.appendChild(o);});
-$("pselrow").style.display="";plog("● "+list.length+" skysocks server(s) from SD — pick one to set the exit");
-}).catch(function(e){plog("● SD fetch failed: "+String((e&&e.message)||e));});};
+list.forEach(function(s){var pk=String(s.address).split(":")[0];var geo=(s.geo&&s.geo.country)?" · "+s.geo.country:"";var o=document.createElement("option");o.value=pk;o.textContent=pk.slice(0,8)+"…"+geo+(s.version?" · "+s.version:"");sel.appendChild(o);});
+$("pselrow").style.display="";plog("● "+list.length+" skysocks server(s) from SD — pick one to set the exit");});};
+$("prnd").onclick=function(){fetchProxies(function(list){if(!list.length){plog("● no skysocks servers found");return;}
+var s=list[Math.floor(Math.random()*list.length)];var pk=String(s.address).split(":")[0];
+$("proxy").value=pk;plog("● 🎲 random exit → "+pk.slice(0,8)+"…"+((s.geo&&s.geo.country)?" · "+s.geo.country:"")+" (Apply to save)");});};
 $("psel").onchange=function(){if(this.value){$("proxy").value=this.value;plog("● exit set → "+this.value.slice(0,8)+"… (Apply to save)");}};
 $("apply").onclick=function(){var e=$("err");e.style.display="none";e.textContent="";
 if(mode==="service"){var s=($("svc").value||"").trim();if(!s){e.textContent="Enter the wallet service address.";e.style.display="";return;}
