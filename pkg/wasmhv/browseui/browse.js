@@ -1833,7 +1833,7 @@
         '.sww-bar button{background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .65em;cursor:pointer;font:inherit;line-height:1}' +
         '.sww-bar button:hover{background:#3a3352;color:#fff}.sww-bar button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.2)}' +
         '.sww-served{font-size:.92em;padding:.15em .6em;border-radius:999px;background:rgba(74,222,128,.18);color:#4ade80}' +
-        '#sww-cfg{display:none;border:0;border-bottom:1px solid #2a2342;width:100%;height:48%;min-height:0;background:#15131c}' +
+        '#sww-cfg{display:none;border:0;border-bottom:1px solid #2a2342;width:100%;height:62%;min-height:0;background:#15131c}' +
         '#sww-cfg.open{display:block}' +
         '</style>' +
         '<div class="sww-bar">' +
