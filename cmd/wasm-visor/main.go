@@ -153,6 +153,7 @@ func main() {
 		"dialRoute":         js.FuncOf(jsDialRoute),
 		"checkRegistered":   js.FuncOf(jsCheckRegistered),
 		"fetchClearnet":     js.FuncOf(jsFetchClearnet),
+		"btcFetch":          js.FuncOf(jsBtcFetch),
 		"proxyVerbose":      js.FuncOf(jsProxyVerbose),
 		"closeWindow":       js.FuncOf(jsCloseWindow),
 		"skychatSend":       js.FuncOf(jsSkychatSend),
