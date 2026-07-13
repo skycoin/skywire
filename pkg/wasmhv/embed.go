@@ -25,6 +25,11 @@ var OverrideJS []byte
 // (pkg/wasmhv's gob-mirror test imports pkg/visor).
 var BrowseJS = browseui.BrowseJS
 
+// WalletConfigHTML is the single wallet-config page (served at /wallet/config by
+// both the native HV and `hv serve`, embedded via iframe by the ☰ wallet window
+// and the Angular wallet tab). Re-exported from the browseui leaf like BrowseJS.
+var WalletConfigHTML = browseui.WalletConfigHTML
+
 // AutoUpdateJS is pkg/wasmhv/autoupdate.js — the wasm-visor self-update poller for
 // the `hv serve` page: it compares a /wasm-version fingerprint against the version
 // the page booted with and reloads to a newer build (toast + opt-out). Injected
