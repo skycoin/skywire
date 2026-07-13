@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/internal/exchange-market/db"
+	"github.com/skycoin/skywire/internal/exchange-market/jobs"
 	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 	"github.com/skycoin/skywire/internal/exchange-market/walletaddr"
 )
@@ -517,10 +518,11 @@ func (s *Server) handleGetOrderStatus(pk string, req protocol.Envelope) protocol
 	}
 
 	resp := protocol.GetOrderStatusResponse{
-		OrderID:       order.ID,
-		Status:        order.Status,
-		Confirmations: order.Confirmations,
-		PaymentTxHash: order.PaymentTxHash,
+		OrderID:               order.ID,
+		Status:                order.Status,
+		Confirmations:         order.Confirmations,
+		RequiredConfirmations: jobs.RequiredConfirmations,
+		PaymentTxHash:         order.PaymentTxHash,
 	}
 	if order.PaidAt != nil {
 		resp.PaidAt = order.PaidAt.Format(time.RFC3339)
