@@ -1,6 +1,7 @@
 package server_test
 
 import (
+	"math"
 	"net"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,19 @@ import (
 	"github.com/skycoin/skywire/internal/exchange-market/db"
 	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 	"github.com/skycoin/skywire/internal/exchange-market/server"
+)
+
+// Valid mainnet payout addresses (SKY base58check, BTC P2PKH) — registration
+// now validates addresses, so tests use real ones. Generated deterministically;
+// see internal/exchange-market/walletaddr for the format rules.
+const (
+	skySeller = "FbmPhy5bhsMX8JNeAQdQ4W3DeCYFH97FBg"
+	skyBuyer  = "23Lqf6WpmaiFdzr4g5gerqUBu8H7SyeDHJU"
+	skyBuyer2 = "2joBpuNB6z3MReAjzQwGdxphxD5BmbrGV1k"
+	skyOther  = "xPHfK6xn5LZvWAPB5EV6A62WyzQLywci1J"
+	btcSeller = "19wiPpvWPxHEmcANKzwUjiRgABQk8wZzCp"
+	btcBuyer  = "15rB1CxysqYZ6soyEoVpiUcz7Sb2yJwpS2"
+	btcBuyer2 = "17qzzrRtvo6FYVHiN2xdtyrWXBEhujfAmN"
 )
 
 // newTestDB spins up a real (temp-file) SQLite database with migrations and
@@ -65,7 +79,7 @@ func TestTradeRoundTrip(t *testing.T) {
 	seller := dialTestServer(t, database, sellerPK)
 
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{
-		WalletSKY: "sky-seller", WalletBTC: "bc1-seller",
+		WalletSKY: skySeller, WalletBTC: btcSeller,
 	})
 
 	// get_currencies should now include BTC (explorer configured) but not LTC.
@@ -107,7 +121,7 @@ func TestTradeRoundTrip(t *testing.T) {
 	// --- buyer registers, sees the product, and buys it ---
 	buyer := dialTestServer(t, database, buyerPK)
 	mustSuccess(t, buyer, protocol.TypeRegister, protocol.RegisterRequest{
-		WalletSKY: "sky-buyer", WalletBTC: "bc1-buyer",
+		WalletSKY: skyBuyer, WalletBTC: btcBuyer,
 	})
 
 	var products protocol.GetProductsResponse
@@ -118,7 +132,7 @@ func TestTradeRoundTrip(t *testing.T) {
 
 	var buy protocol.BuyProductResponse
 	bindSuccess(t, buyer, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"}, &buy)
-	if buy.SellerWallet != "bc1-seller" || buy.ExpectedPaymentAmount <= 2 {
+	if buy.SellerWallet != btcSeller || buy.ExpectedPaymentAmount <= 2 {
 		t.Fatalf("unexpected buy response: %+v", buy)
 	}
 
@@ -153,7 +167,7 @@ func TestUniqueDepositAmounts(t *testing.T) {
 
 	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
 	seller := dialTestServer(t, database, sellerPK)
-	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-seller", WalletBTC: "bc1"})
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 
 	var a, b protocol.CreateListingResponse
 	req := protocol.CreateListingRequest{AmountSKY: 10, Price: 2, PaymentCurrency: "BTC"}
@@ -165,6 +179,88 @@ func TestUniqueDepositAmounts(t *testing.T) {
 	}
 	if a.ExpectedAmountSKY <= 10 || b.ExpectedAmountSKY <= 10 {
 		t.Fatalf("deposit amounts should be non-round above base: %v, %v", a.ExpectedAmountSKY, b.ExpectedAmountSKY)
+	}
+}
+
+// TestRegisterRejectsBadWallet verifies registration validates payout address
+// format: a malformed BTC address (or SKY address) is rejected up front.
+func TestRegisterRejectsBadWallet(t *testing.T) {
+	database := newTestDB(t)
+	const pk = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	c := dialTestServer(t, database, pk)
+
+	// Valid SKY but a malformed BTC address.
+	badBTC, err := c.Do(protocol.TypeRegister, protocol.RegisterRequest{
+		WalletSKY: skySeller, WalletBTC: "bc1-not-a-real-address",
+	})
+	if err != nil {
+		t.Fatalf("transport error: %v", err)
+	}
+	if !badBTC.IsError() || errCode(t, badBTC) != protocol.CodeInvalidWallet {
+		t.Fatalf("register(bad BTC) = %+v, want INVALID_WALLET", badBTC)
+	}
+
+	// Malformed SKY address.
+	badSKY, err := c.Do(protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "not-a-sky-address"})
+	if err != nil {
+		t.Fatalf("transport error: %v", err)
+	}
+	if !badSKY.IsError() || errCode(t, badSKY) != protocol.CodeInvalidWallet {
+		t.Fatalf("register(bad SKY) = %+v, want INVALID_WALLET", badSKY)
+	}
+
+	// A fully valid registration still succeeds.
+	mustSuccess(t, c, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
+}
+
+// TestCreateListingPrecision verifies amounts are normalized to SKY's on-chain
+// precision (sub-droplet input yields a whole-droplet deposit) and that out-of-
+// range amounts are rejected.
+func TestCreateListingPrecision(t *testing.T) {
+	database := newTestDB(t)
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
+
+	// A sub-droplet AmountSKY (9 dp) is normalized: the deposit is a whole number
+	// of droplets, equal to the 6-dp base (10.123457) plus a <= 0.001 delta.
+	var l protocol.CreateListingResponse
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
+		AmountSKY: 10.123456789, Price: 2, PaymentCurrency: "BTC",
+	}, &l)
+	if scaled := l.ExpectedAmountSKY * 1e6; math.Abs(scaled-math.Round(scaled)) > 1e-6 {
+		t.Fatalf("deposit %v is not a whole number of droplets", l.ExpectedAmountSKY)
+	}
+	if l.ExpectedAmountSKY <= 10.123457 || l.ExpectedAmountSKY > 10.123457+0.001+1e-9 {
+		t.Fatalf("deposit %v outside the normalized band [10.123458, 10.124457]", l.ExpectedAmountSKY)
+	}
+
+	// An amount above the safe float range is rejected.
+	tooBig, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{
+		AmountSKY: 1e10, Price: 2, PaymentCurrency: "BTC",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tooBig.IsError() || errCode(t, tooBig) != protocol.CodeInvalidRequest {
+		t.Fatalf("too-large listing = %+v, want INVALID_REQUEST", tooBig)
+	}
+
+	// An amount that rounds to zero at SKY precision is rejected.
+	tooSmall, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{
+		AmountSKY: 1e-9, Price: 2, PaymentCurrency: "BTC",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !tooSmall.IsError() || errCode(t, tooSmall) != protocol.CodeInvalidRequest {
+		t.Fatalf("too-small listing = %+v, want INVALID_REQUEST", tooSmall)
 	}
 }
 
@@ -187,7 +283,7 @@ func TestGetListings(t *testing.T) {
 
 	seller := dialTestServer(t, database, sellerPK)
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{
-		WalletSKY: "sky-seller", WalletBTC: "bc1-seller",
+		WalletSKY: skySeller, WalletBTC: btcSeller,
 	})
 
 	var listing protocol.CreateListingResponse
@@ -217,7 +313,7 @@ func TestGetListings(t *testing.T) {
 
 	// A different caller does not see the seller's listings.
 	other := dialTestServer(t, database, otherPK)
-	mustSuccess(t, other, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-other"})
+	mustSuccess(t, other, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skyOther})
 	var theirs protocol.GetListingsResponse
 	bindSuccess(t, other, protocol.TypeGetListings, nil, &theirs)
 	if len(theirs.Listings) != 0 {
@@ -239,7 +335,7 @@ func TestBuyerCancelBlocksRebuy(t *testing.T) {
 	const buyer2PK = "0333333333333333333333333333333333333333333333333333333333333333cc"
 
 	seller := dialTestServer(t, database, sellerPK)
-	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-seller", WalletBTC: "bc1-seller"})
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 	if err := database.CreateProduct(&db.Product{
 		ID: "prod-1", SellerPubKey: sellerPK, AmountSKY: 10, Price: 2, PaymentCurrency: "BTC", Status: "active",
 	}); err != nil {
@@ -247,7 +343,7 @@ func TestBuyerCancelBlocksRebuy(t *testing.T) {
 	}
 
 	buyer := dialTestServer(t, database, buyerPK)
-	mustSuccess(t, buyer, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-buyer", WalletBTC: "bc1-buyer"})
+	mustSuccess(t, buyer, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skyBuyer, WalletBTC: btcBuyer})
 
 	var buy protocol.BuyProductResponse
 	bindSuccess(t, buyer, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"}, &buy)
@@ -273,7 +369,7 @@ func TestBuyerCancelBlocksRebuy(t *testing.T) {
 
 	// A different buyer still can.
 	buyer2 := dialTestServer(t, database, buyer2PK)
-	mustSuccess(t, buyer2, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-buyer2", WalletBTC: "bc1-buyer2"})
+	mustSuccess(t, buyer2, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skyBuyer2, WalletBTC: btcBuyer2})
 	var buy2 protocol.BuyProductResponse
 	bindSuccess(t, buyer2, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"}, &buy2)
 	if buy2.OrderID == "" {
@@ -297,7 +393,7 @@ func TestSellerCancelConfirmedOffer(t *testing.T) {
 	const buyerPK = "0322222222222222222222222222222222222222222222222222222222222222bb"
 
 	seller := dialTestServer(t, database, sellerPK)
-	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-seller", WalletBTC: "bc1-seller"})
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 
 	var listing protocol.CreateListingResponse
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
