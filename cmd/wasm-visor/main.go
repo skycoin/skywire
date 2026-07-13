@@ -153,6 +153,7 @@ func main() {
 		"dialRoute":         js.FuncOf(jsDialRoute),
 		"checkRegistered":   js.FuncOf(jsCheckRegistered),
 		"fetchClearnet":     js.FuncOf(jsFetchClearnet),
+		"btcFetch":          js.FuncOf(jsBtcFetch),
 		"proxyVerbose":      js.FuncOf(jsProxyVerbose),
 		"closeWindow":       js.FuncOf(jsCloseWindow),
 		"skychatSend":       js.FuncOf(jsSkychatSend),
@@ -601,6 +602,21 @@ func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 	if len(args) > 3 && !args[3].IsNull() && !args[3].IsUndefined() {
 		body = []byte(args[3].String())
 	}
+	// Optional 5th arg: a headers object (e.g. {"Content-Type":"application/
+	// x-www-form-urlencoded"}). Forwarded as request headers so POSTs keep their
+	// real Content-Type — without it httpRoundTrip assumes application/json for
+	// any body, which breaks form-encoded skycoin API POSTs (balance, txns).
+	var extraHeaders map[string]string
+	if len(args) > 4 && !args[4].IsNull() && !args[4].IsUndefined() && args[4].Type() == js.TypeObject {
+		keys := js.Global().Get("Object").Call("keys", args[4])
+		for i := 0; i < keys.Length(); i++ {
+			k := keys.Index(i).String()
+			if extraHeaders == nil {
+				extraHeaders = map[string]string{}
+			}
+			extraHeaders[k] = args[4].Get(k).String()
+		}
+	}
 	return promise(func() (interface{}, error) {
 		if dmsgC == nil {
 			return nil, errors.New("not booted; call boot() first")
@@ -621,6 +637,12 @@ func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 			var reqHeaders map[string]string
 			if vhost != "" {
 				reqHeaders = map[string]string{"Host": vhost}
+			}
+			for k, v := range extraHeaders {
+				if reqHeaders == nil {
+					reqHeaders = map[string]string{}
+				}
+				reqHeaders[k] = v
 			}
 			var err error
 			status, respHeaders, b, err = dmsgclient.FetchOverDmsg(ctx, dmsgC, method, resolved, path, reqHeaders, body)
