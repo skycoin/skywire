@@ -1873,7 +1873,17 @@
         '<div id="sww-nodes"></div>' +
         '<button class="sww-add" id="sww-addnode">+ Add coin node</button>' +
         '<div class="sww-hint"><b>Bitcoin</b> (optional): an <span class="mono">ssl://host:port</span> electrum server. Reached over the mesh by the visor\'s BTC gateway — your keys + signing stay in this browser, only chain queries cross.</div>' +
-        '<div class="sww-row"><label>btc</label><input id="sww-btc" spellcheck="false" placeholder="ssl://electrum.blockstream.info:50002  (optional)"></div>' +
+        '<div class="sww-row"><label>btc</label><input id="sww-btc" list="sww-btc-list" spellcheck="false" placeholder="pick or type an ssl:// electrum server  (optional)"></div>' +
+        // Curated public electrum servers (a starting list, like Electrum's own
+        // servers.json) — a datalist, so you pick from it OR type a custom one.
+        '<datalist id="sww-btc-list">' +
+        '<option value="ssl://electrum.blockstream.info:50002"></option>' +
+        '<option value="ssl://fortress.qtornado.com:50002"></option>' +
+        '<option value="ssl://electrum.emzy.de:50002"></option>' +
+        '<option value="ssl://electrum.bitaroo.net:50002"></option>' +
+        '<option value="ssl://bitcoin.lu.ke:50002"></option>' +
+        '<option value="ssl://electrum.jochen-hoenicke.de:50006"></option>' +
+        '</datalist>' +
         '</div>' +
         '<div id="sww-service" style="display:none">' +
         '<div class="sww-hint">Point at a remote <b>skycoin-web server</b> over dmsg. Wallets live on that server; all wallet + node API routes to it.</div>' +
