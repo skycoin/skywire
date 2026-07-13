@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,6 +14,20 @@ import (
 // RequiredConfirmations is the number of blockchain confirmations a payment must
 // reach before a trade completes (exchange-design.md §3).
 const RequiredConfirmations = 2
+
+// CommissionSCH returns the Coin Hours (SCH) commission for a sale of amountSKY
+// at rateSchPerSky SCH per SKY (design §2: "one hour's worth of coin hours" =
+// rate 1). Coin Hours are whole numbers, so the result is floored — a sub-1-SKY
+// trade at the default rate books 0. The commission is booked for accounting;
+// it is actually retained as the coin hours the escrowed SKY accrued to the
+// market wallet (realized via the delivery tx's hours_selection, once a real
+// node is wired in).
+func CommissionSCH(amountSKY, rateSchPerSky float64) int64 {
+	if amountSKY <= 0 || rateSchPerSky <= 0 {
+		return 0
+	}
+	return int64(math.Floor(amountSKY * rateSchPerSky))
+}
 
 // Runner owns and schedules the market's background jobs.
 type Runner struct {
@@ -186,6 +201,16 @@ func (r *Runner) RunEscrowCheck() error {
 		if err := r.db.MarkOrderCompleted(o.ID); err != nil {
 			r.log.WithError(err).Warnf("escrow-check: failed to complete order %s", o.ID)
 			continue
+		}
+		// Book the Coin Hours commission on the completed sale.
+		rate, err := r.db.GetFeeRateSchPerSky()
+		if err != nil {
+			rate = 1 // fall back to one hour's worth per SKY
+		}
+		if sch := CommissionSCH(o.AmountSKY, rate); sch > 0 {
+			if err := r.db.SetOrderCommission(o.ID, sch); err != nil {
+				r.log.WithError(err).Warnf("escrow-check: failed to record commission for order %s", o.ID)
+			}
 		}
 		if err := r.db.MarkProductSold(o.ProductID); err != nil {
 			r.log.WithError(err).Warnf("escrow-check: failed to mark product %s sold", o.ProductID)

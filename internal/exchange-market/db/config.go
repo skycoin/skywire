@@ -214,3 +214,9 @@ func (d *Database) GetReturnDelayHours() (int, error) {
 func (d *Database) GetCleanupDays() (int, error) {
 	return d.GetConfigInt("cleanup_days")
 }
+
+// GetFeeRateSchPerSky returns the commission rate in Coin Hours (SCH) charged
+// per SKY sold. Default 1 (one hour's worth of coin hours per SKY).
+func (d *Database) GetFeeRateSchPerSky() (float64, error) {
+	return d.GetConfigFloat("fee_rate_sch_per_sky")
+}

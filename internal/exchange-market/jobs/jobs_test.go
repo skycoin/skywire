@@ -177,6 +177,33 @@ func TestEscrowCheck(t *testing.T) {
 	if len(chain.sends) != 1 || chain.sends[0].addr != "sky-buyer" || chain.sends[0].amt != 7 {
 		t.Fatalf("SendSKY calls = %+v, want one send of 7 to sky-buyer", chain.sends)
 	}
+	// Commission booked at the default 1 SCH/SKY: floor(7 * 1) = 7 SCH.
+	all, _ := d.GetAllOrders() //nolint
+	if len(all) != 1 || all[0].CommissionSCH != 7 {
+		t.Fatalf("commission = %v, want 7 SCH on the completed order", all)
+	}
+}
+
+// TestCommissionSCH covers the commission formula: floor(amount_sky * rate),
+// with sub-1-SKY (default rate) and a disabled rate booking zero.
+func TestCommissionSCH(t *testing.T) {
+	cases := []struct {
+		amount, rate float64
+		want         int64
+	}{
+		{10, 1, 10},   // 10 SKY at 1 SCH/SKY
+		{10.9, 1, 10}, // floored to whole coin hours
+		{100, 2, 200}, // operator raised the rate to 2 hours' worth
+		{0.5, 1, 0},   // sub-1-SKY books nothing at the default rate
+		{10, 0, 0},    // commission disabled
+		{0, 1, 0},     // no amount
+		{-5, 1, 0},    // guard against negatives
+	}
+	for _, c := range cases {
+		if got := jobs.CommissionSCH(c.amount, c.rate); got != c.want {
+			t.Errorf("CommissionSCH(%v, %v) = %d, want %d", c.amount, c.rate, got, c.want)
+		}
+	}
 }
 
 // TestEscrowCheckNoopDefers verifies that without a chain backend the order is
