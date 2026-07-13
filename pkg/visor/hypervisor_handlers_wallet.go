@@ -24,23 +24,48 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/skycoin/skywire/pkg/cipher"
+
 	"github.com/skycoin/skywire/pkg/btcgateway"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
 
 var (
-	nativeBtcGatewayOnce sync.Once
-	nativeBtcGatewayInst *btcgateway.Gateway
+	nativeBtcGatewaysMu sync.Mutex
+	nativeBtcGateways   = map[string]*btcgateway.Gateway{}
 )
 
-// nativeBtcGateway is the HV's shared BTC electrum gateway for the native
-// HV-served wallet. A nil dialer means clearnet egress — a host visor reaches
-// public electrum servers directly; the per-request electrum URL comes from the
-// X-Skywire-Btc-Backend header (set by the wallet shim from
-// localStorage['skywire-btc-backend']).
-func nativeBtcGateway() *btcgateway.Gateway {
-	nativeBtcGatewayOnce.Do(func() { nativeBtcGatewayInst = btcgateway.New(nil) })
-	return nativeBtcGatewayInst
+// nativeBtcGateway is the HV's BTC electrum gateway for the given skysocks exit.
+// exitPK == "" (or the local visor's own PK) means clearnet egress: a nil dialer
+// so the host visor reaches public electrum servers over its own default route
+// (the zero-config native default — self-egress). A non-empty REMOTE exit PK
+// routes the electrum connection through that visor's skysocks-server for IP
+// privacy (the native twin of the wasm wallet's required skysocks exit). The
+// per-request electrum URL comes from X-Skywire-Btc-Backend; the exit from
+// X-Skywire-Btc-Proxy — both set by the wallet shim from localStorage
+// (skywire-btc-backend / skywire-btc-proxy, written by the config page).
+//
+// Gateways are cached per exit so the electrum backends (and their long-lived
+// per-server connections) are reused across chain queries.
+func (hv *Hypervisor) nativeBtcGateway(exitPK string) *btcgateway.Gateway {
+	exitPK = strings.TrimSpace(exitPK)
+	nativeBtcGatewaysMu.Lock()
+	defer nativeBtcGatewaysMu.Unlock()
+	if g, ok := nativeBtcGateways[exitPK]; ok {
+		return g
+	}
+	var g *btcgateway.Gateway
+	if exitPK != "" && hv.visor != nil {
+		var pk cipher.PubKey
+		if err := pk.Set(exitPK); err == nil && pk != hv.visor.conf.PK {
+			g = btcgateway.New(hv.visor.skysocksDialFunc(pk))
+		}
+	}
+	if g == nil { // empty / self / unparseable exit → clearnet self-egress
+		g = btcgateway.New(nil)
+	}
+	nativeBtcGateways[exitPK] = g
+	return g
 }
 
 // walletNodeDmsg is the skycoin node the HV-served wallet talks to by DEFAULT:
@@ -81,7 +106,8 @@ const walletNodeShim = `<script>(function(){` +
 	`init=init||{};` +
 	`var h=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
 	`if(mn){var n=ls("skywire-coin-node");if(n){h.set("X-Skywire-Coin-Node",n);}}` +
-	`else{var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}}` +
+	`else{var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
+	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}}` +
 	`init.headers=h;return rf(target,init);` +
 	`};})();</script>`
 
@@ -113,11 +139,13 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 		}
 		// BTC API (/wallet/v1/btc/*) → the in-process electrum gateway. The
 		// browser derives + signs BTC itself; only chain queries come here. The
-		// electrum server (X-Skywire-Btc-Backend, set by the shim) is dialed on
-		// the clearnet by the native visor (nil dialer).
+		// electrum server (X-Skywire-Btc-Backend) is reached either directly on
+		// the clearnet (self-egress, the default) or — when the operator sets a
+		// skysocks exit (X-Skywire-Btc-Proxy) — routed through that visor for IP
+		// privacy. Both headers are set by the shim from localStorage.
 		if strings.HasPrefix(rest, "v1/btc/") {
 			r.URL.Path = "/" + rest
-			nativeBtcGateway().ServeHTTP(w, r)
+			hv.nativeBtcGateway(r.Header.Get("X-Skywire-Btc-Proxy")).ServeHTTP(w, r)
 			return
 		}
 		if fsErr != nil {
