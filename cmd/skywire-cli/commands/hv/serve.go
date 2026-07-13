@@ -27,6 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
@@ -50,62 +51,72 @@ var (
 // forward). Everything else falls through to native fetch. No Service Worker
 // needed, so this works under --harness and file:// too. Same-origin iframe, so
 // it reads the parent's visor + the shared localStorage directly.
-// defaultCoinNode is the deployment skycoin node the bundled wallet talks to
-// out of the box: node.skycoin.com, whose visor forwards the local skycoin
-// node's :6420 over dmsg (addressed as "<pk>:<port>" for skywireVisor.fetchDmsg).
-// Users override it via the wallet's Settings->Nodes (localStorage
-// 'skywire-coin-node'). Same PK:port as deployment/services-config.json
-// prod.skycoin_node_dmsg ("dmsg://<pk>:6420") — here without the scheme,
-// which is what skywireVisor.fetchDmsg expects.
-const defaultCoinNode = "039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:6420"
+// coinNodeDefault is the deployment skycoin node the bundled wallet talks to out
+// of the box, sourced from the embedded services-config.json
+// (prod.skycoin_node_dmsg) instead of hardcoded. node.skycoin.com over the mesh
+// as the resolver VHOST form "https://<vhost>.<base32-pk>.dmsg" (base32 =
+// PubKey.DNSLabel of the node's visor 039a6d1e…): routed through that visor's
+// port-80 forward (Caddy, --preserve-host) exactly like clearnet. The wallet
+// shim strips the https:// scheme and hands the host to skywireVisor.fetchDmsg,
+// which resolves the vhost + pk and sends Host: node.skycoin.com so Caddy
+// vhost-routes /api to the local skycoin node. Users override it via the wallet
+// config panel (localStorage 'skywire-coin-node').
+func coinNodeDefault() string {
+	if n := strings.TrimSpace(dmsg.Prod.SkycoinNode); n != "" {
+		return n
+	}
+	return "https://node.skycoin.com.aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc.dmsg"
+}
 
-const walletDmsgFetchShim = `<script>(function(){` +
-	`var rf=window.fetch?window.fetch.bind(window):null;` +
-	`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
-	`function q(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
-	`function isCoin(u){return /^\/api\/v[12]\//.test(p(u));}` +
-	`function isBtc(u){return /^\/(wallet\/)?v1\/btc\//.test(p(u));}` +
-	`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
-	// The wallet POSTs balance/transactions as x-www-form-urlencoded; forward the
-	// request Content-Type so fetchDmsg/fetchClearnet don't mislabel the body as
-	// JSON (which makes the skycoin node ignore the form → "addrs is required").
-	`function ctOf(input,init){try{var h;if(init&&init.headers)h=new Headers(init.headers);else if(input&&input.headers&&input.headers.get)h=input.headers;if(h&&h.get){var c=h.get("content-type");if(c)return c;}}catch(e){}return "";}` +
-	`function jr(s,o){return new Response(JSON.stringify(o),{status:s,headers:{"Content-Type":"application/json"}});}` +
-	`function mkResp(r){var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});}` +
-	`window.fetch=function(input,init){` +
-	`var url=(typeof input==="string")?input:(input&&input.url);` +
-	`var coin=isCoin(url),btc=isBtc(url);` +
-	`if(!coin&&!btc)return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
-	`init=init||{};` +
-	`var v=window.parent&&window.parent.skywireVisor;` +
-	`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
-	// BTC: the wallet does keys+signing itself; only chain queries go over the
-	// mesh, through the in-tab electrum gateway (skywireVisor.btcFetch), which
-	// dials the ssl:// electrum via skysocks-lite (upstream-proxy exit).
-	`if(btc){` +
-	`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
-	`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
-	`return Promise.resolve(v.btcFetch(back,init.method||"GET",p(url)+q(url),init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
-	`}` +
-	// COIN node API: routed exactly like the iframe browser (browse.js). A dmsg
-	// host (pk:port / pk.dmsg / name.pk.dmsg / alias) goes through the dmsg
-	// resolving proxy (fetchDmsg). A clearnet http(s):// node (not .dmsg) goes
-	// through skysocks-client-lite (fetchClearnet) via the SAME upstream-proxy
-	// exit the browser uses (skywire-upstream-proxy) — IP-anonymous. Requests are
-	// logged to the shared skywireLog so they show in the browser's log panel.
-	`var node=ls("skywire-coin-node")||"` + defaultCoinNode + `";` +
-	`var m=init.method||"GET",pth=p(url)+q(url),ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
-	`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
-	`if(/^https?:\/\//i.test(node)&&!/\.dmsg\b/i.test(node)){` +
-	`if(!v.fetchClearnet)return Promise.resolve(jr(503,{error:"skysocks clearnet gateway not available"}));` +
-	`var up=ls("skywire-upstream-proxy");if(!up)return Promise.resolve(jr(502,{error:"clearnet coin node needs a skysocks exit — set an upstream proxy"}));` +
-	`var full=node.replace(/\/+$/,"")+pth;wlog(m+" "+full+" via skysocks "+up.slice(0,8));` +
-	`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
-	`}` +
-	`var host=node.replace(/^\w+:\/\//,"");wlog(m+" dmsg://"+host+pth);` +
-	`return Promise.resolve(v.fetchDmsg(host,m,pth,init.body||null,hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
-	`};` +
-	`})();</script>`
+func walletDmsgFetchShim() string {
+	return `<script>(function(){` +
+		`var rf=window.fetch?window.fetch.bind(window):null;` +
+		`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
+		`function q(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
+		`function isCoin(u){return /^\/api\/v[12]\//.test(p(u));}` +
+		`function isBtc(u){return /^\/(wallet\/)?v1\/btc\//.test(p(u));}` +
+		`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
+		// The wallet POSTs balance/transactions as x-www-form-urlencoded; forward the
+		// request Content-Type so fetchDmsg/fetchClearnet don't mislabel the body as
+		// JSON (which makes the skycoin node ignore the form → "addrs is required").
+		`function ctOf(input,init){try{var h;if(init&&init.headers)h=new Headers(init.headers);else if(input&&input.headers&&input.headers.get)h=input.headers;if(h&&h.get){var c=h.get("content-type");if(c)return c;}}catch(e){}return "";}` +
+		`function jr(s,o){return new Response(JSON.stringify(o),{status:s,headers:{"Content-Type":"application/json"}});}` +
+		`function mkResp(r){var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});}` +
+		`window.fetch=function(input,init){` +
+		`var url=(typeof input==="string")?input:(input&&input.url);` +
+		`var coin=isCoin(url),btc=isBtc(url);` +
+		`if(!coin&&!btc)return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
+		`init=init||{};` +
+		`var v=window.parent&&window.parent.skywireVisor;` +
+		`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
+		// BTC: the wallet does keys+signing itself; only chain queries go over the
+		// mesh, through the in-tab electrum gateway (skywireVisor.btcFetch), which
+		// dials the ssl:// electrum via skysocks-lite (upstream-proxy exit).
+		`if(btc){` +
+		`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
+		`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
+		`return Promise.resolve(v.btcFetch(back,init.method||"GET",p(url)+q(url),init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`}` +
+		// COIN node API: routed exactly like the iframe browser (browse.js). A dmsg
+		// host (pk:port / pk.dmsg / name.pk.dmsg / alias) goes through the dmsg
+		// resolving proxy (fetchDmsg). A clearnet http(s):// node (not .dmsg) goes
+		// through skysocks-client-lite (fetchClearnet) via the SAME upstream-proxy
+		// exit the browser uses (skywire-upstream-proxy) — IP-anonymous. Requests are
+		// logged to the shared skywireLog so they show in the browser's log panel.
+		`var node=ls("skywire-coin-node")||"` + coinNodeDefault() + `";` +
+		`var m=init.method||"GET",pth=p(url)+q(url),ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
+		`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
+		`if(/^https?:\/\//i.test(node)&&!/\.dmsg\b/i.test(node)){` +
+		`if(!v.fetchClearnet)return Promise.resolve(jr(503,{error:"skysocks clearnet gateway not available"}));` +
+		`var up=ls("skywire-upstream-proxy");if(!up)return Promise.resolve(jr(502,{error:"clearnet coin node needs a skysocks exit — set an upstream proxy"}));` +
+		`var full=node.replace(/\/+$/,"")+pth;wlog(m+" "+full+" via skysocks "+up.slice(0,8));` +
+		`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`}` +
+		`var host=node.replace(/^\w+:\/\//,"");wlog(m+" dmsg://"+host+pth);` +
+		`return Promise.resolve(v.fetchDmsg(host,m,pth,init.body||null,hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`};` +
+		`})();</script>`
+}
 
 func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":7999", "HTTP listen address")
@@ -233,7 +244,7 @@ page never asks anyone to type a secret key.`,
 			// origin-wide SW interception.
 			walletIndex = bytes.Replace(walletIndex,
 				[]byte(`<base href="/">`),
-				[]byte(`<base href="/wallet/">`+walletDmsgFetchShim), 1)
+				[]byte(`<base href="/wallet/">`+walletDmsgFetchShim()), 1)
 			mux.HandleFunc("/wallet/", func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path == "/wallet/" || r.URL.Path == "/wallet/index.html" {
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
