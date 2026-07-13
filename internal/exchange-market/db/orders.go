@@ -381,7 +381,7 @@ func (d *Database) GetAllOrders() ([]*Order, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at, commission_sch
 		FROM orders
 		ORDER BY created_at DESC
 	`)
@@ -396,7 +396,7 @@ func (d *Database) GetAllOrders() ([]*Order, error) {
 		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
 			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
-			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt)
+			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt, &order.CommissionSCH)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan order: %w", err)
 		}
@@ -407,6 +407,18 @@ func (d *Database) GetAllOrders() ([]*Order, error) {
 	}
 
 	return orders, nil
+}
+
+// SetOrderCommission records the Coin Hours commission booked on a sale.
+func (d *Database) SetOrderCommission(orderID string, sch int64) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	_, err := d.db.Exec(`UPDATE orders SET commission_sch = ? WHERE id = ?`, sch, orderID)
+	if err != nil {
+		return fmt.Errorf("failed to set order commission: %w", err)
+	}
+	return nil
 }
 
 // SetOrderConfirmations sets the current confirmation count for an order.
