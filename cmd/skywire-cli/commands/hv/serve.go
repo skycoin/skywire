@@ -66,6 +66,10 @@ const walletDmsgFetchShim = `<script>(function(){` +
 	`function isCoin(u){return /^\/api\/v[12]\//.test(p(u));}` +
 	`function isBtc(u){return /^\/(wallet\/)?v1\/btc\//.test(p(u));}` +
 	`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
+	// The wallet POSTs balance/transactions as x-www-form-urlencoded; forward the
+	// request Content-Type so fetchDmsg/fetchClearnet don't mislabel the body as
+	// JSON (which makes the skycoin node ignore the form → "addrs is required").
+	`function ctOf(input,init){try{var h;if(init&&init.headers)h=new Headers(init.headers);else if(input&&input.headers&&input.headers.get)h=input.headers;if(h&&h.get){var c=h.get("content-type");if(c)return c;}}catch(e){}return "";}` +
 	`function jr(s,o){return new Response(JSON.stringify(o),{status:s,headers:{"Content-Type":"application/json"}});}` +
 	`function mkResp(r){var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});}` +
 	`window.fetch=function(input,init){` +
@@ -83,9 +87,23 @@ const walletDmsgFetchShim = `<script>(function(){` +
 	`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
 	`return Promise.resolve(v.btcFetch(back,init.method||"GET",p(url)+q(url),init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
 	`}` +
-	`var node=ls("skywire-coin-node");` +
-	`if(!node)node="` + defaultCoinNode + `";` +
-	`return Promise.resolve(v.fetchDmsg(node,init.method||"GET",p(url)+q(url),init.body||null)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+	// COIN node API: routed exactly like the iframe browser (browse.js). A dmsg
+	// host (pk:port / pk.dmsg / name.pk.dmsg / alias) goes through the dmsg
+	// resolving proxy (fetchDmsg). A clearnet http(s):// node (not .dmsg) goes
+	// through skysocks-client-lite (fetchClearnet) via the SAME upstream-proxy
+	// exit the browser uses (skywire-upstream-proxy) — IP-anonymous. Requests are
+	// logged to the shared skywireLog so they show in the browser's log panel.
+	`var node=ls("skywire-coin-node")||"` + defaultCoinNode + `";` +
+	`var m=init.method||"GET",pth=p(url)+q(url),ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
+	`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
+	`if(/^https?:\/\//i.test(node)&&!/\.dmsg\b/i.test(node)){` +
+	`if(!v.fetchClearnet)return Promise.resolve(jr(503,{error:"skysocks clearnet gateway not available"}));` +
+	`var up=ls("skywire-upstream-proxy");if(!up)return Promise.resolve(jr(502,{error:"clearnet coin node needs a skysocks exit — set an upstream proxy"}));` +
+	`var full=node.replace(/\/+$/,"")+pth;wlog(m+" "+full+" via skysocks "+up.slice(0,8));` +
+	`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+	`}` +
+	`var host=node.replace(/^\w+:\/\//,"");wlog(m+" dmsg://"+host+pth);` +
+	`return Promise.resolve(v.fetchDmsg(host,m,pth,init.body||null,hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
 	`};` +
 	`})();</script>`
 
