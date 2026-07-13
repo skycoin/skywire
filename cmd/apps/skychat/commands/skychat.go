@@ -161,9 +161,10 @@ func tryNetworkFallback(ctx context.Context, pk cipher.PubKey, currentNet appnet
 }
 
 var (
-	addr   string
-	appCl  *app.Client
-	appLog func(format string, args ...interface{}) // App logger function
+	addr     string
+	portless bool
+	appCl    *app.Client
+	appLog   func(format string, args ...interface{}) // App logger function
 	// chatLog is the package-level logrus logger every code path can
 	// reach without going through appCl. In visor-launched mode it
 	// proxies through appCl.Log(); in --standalone mode appCl is nil
@@ -677,6 +678,7 @@ func parseEventChannels(csv string) map[string]bool {
 func init() {
 	launcher.RegisterApp("skychat", RunSkychat)
 	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind (default: localhost-only); use \"*:PORT\" to bind on all interfaces")
+	RootCmd.Flags().BoolVar(&portless, "portless", false, "portless-internal: don't bind a TCP port; publish the HTTP surface in-process for the visor's control surface to serve (default for internal-app deployments)")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
 	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", true, "listen on dmsg network")
@@ -751,6 +753,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		// Create independent FlagSet for parsing without initialization cycle
 		fs := pflag.NewFlagSet("skychat", pflag.ContinueOnError)
 		fs.StringVar(&addr, "addr", ":8001", "address to bind")
+		fs.BoolVar(&portless, "portless", false, "portless-internal: no TCP port; publish HTTP surface in-process")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
 		fs.BoolVar(&useDmsg, "dmsg", true, "listen on dmsg")
@@ -923,6 +926,23 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
 	registerPairHTTPHandlers(ctx, mux)
+
+	// Portless-internal mode: no TCP port. Publish the mux to the visor's
+	// in-process HTTP-handler registry so the hypervisor's control surface
+	// (Visor.SkychatProxy) serves it directly via ServeHTTP — no loopback dial,
+	// and no http.Server WriteTimeout to strangle the SSE stream. The dmsg:1 /
+	// skynet:1 mesh listeners (the actual chat transport, started above) run
+	// regardless. This is the native twin of the wasm visor's in-process
+	// skychat, and the default for an internal-app deployment.
+	if portless {
+		launcher.RegisterHTTPHandler(skyenv.SkychatName, mux)
+		defer launcher.RegisterHTTPHandler(skyenv.SkychatName, nil)
+		appLog("Serving skychat in-process (portless) via the visor control surface")
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
+		<-ctx.Done()
+		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
+		return nil
+	}
 
 	url := ""
 	address := addr
