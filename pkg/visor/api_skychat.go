@@ -18,12 +18,14 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -135,6 +137,12 @@ func (v *Visor) ClearSkychatPassword(oldPassword string) error {
 // "history/peers"). The proxy attaches the internal token so the
 // password gate is bypassed for in-process hvui calls.
 func (v *Visor) SkychatProxy(method, path string, query string, headers http.Header, body io.Reader) (int, http.Header, []byte, error) {
+	// Portless-internal skychat publishes its mux to the in-process handler
+	// registry — serve it directly, no loopback dial. Falls through to the TCP
+	// proxy when skychat runs externally on its own port.
+	if h := launcher.GetHTTPHandler(skyenv.SkychatName); h != nil {
+		return v.serveSkychatInProcess(h, method, path, query, headers, body)
+	}
 	addr := skychatLocalAddr(v)
 	if addr == "" {
 		return 0, nil, nil, errors.New("skychat addr not configured")
@@ -172,6 +180,39 @@ func (v *Visor) SkychatProxy(method, path string, query string, headers http.Hea
 		return resp.StatusCode, resp.Header, nil, err
 	}
 	return resp.StatusCode, resp.Header, respBody, nil
+}
+
+// serveSkychatInProcess runs the portless-internal skychat mux directly (no
+// TCP), returning the buffered response — the no-loopback twin of the HTTP
+// proxy above. The streaming (SSE) path uses streamSkychatInProcess so the
+// live message stream isn't buffered until an end that never comes.
+func (v *Visor) serveSkychatInProcess(h http.Handler, method, path, query string, headers http.Header, body io.Reader) (int, http.Header, []byte, error) {
+	target := "/" + strings.TrimPrefix(path, "/")
+	if query != "" {
+		target += "?" + query
+	}
+	req, err := http.NewRequest(method, target, body) //nolint:gosec // in-process, visor-controlled target
+	if err != nil {
+		return 0, nil, nil, err
+	}
+	for k, vv := range headers {
+		if strings.EqualFold(k, "Host") || strings.EqualFold(k, "Connection") {
+			continue
+		}
+		for _, hval := range vv {
+			req.Header.Add(k, hval)
+		}
+	}
+	req.Header.Set("X-Skychat-Internal-Token", v.skychatInternalToken())
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	res := rec.Result()
+	respBody, err := io.ReadAll(res.Body)
+	_ = res.Body.Close() //nolint:errcheck
+	if err != nil {
+		return res.StatusCode, res.Header, nil, err
+	}
+	return res.StatusCode, res.Header, respBody, nil
 }
 
 // SkychatLocalAddr returns the host:port the visor's skychat is

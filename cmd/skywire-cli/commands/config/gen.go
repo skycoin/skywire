@@ -1623,11 +1623,15 @@ func skychatExternalArgs(addr string, pair bool) []string {
 	return args
 }
 
-// skychatInternalArgs mirrors skychatExternalArgs for internal-apps
-// mode (apps run inside the visor process). The external-mode "app"
-// "skychat" prefix is dropped — the launcher routes by app Name.
-func skychatInternalArgs(addr string, pair bool) []string {
-	args := []string{"--addr", addr}
+// skychatInternalArgs builds the launcher Args for skychat under the (default)
+// internal-apps mode: apps run inside the visor process. The external-mode
+// "app skychat" prefix is dropped (the launcher routes by app Name), and
+// --addr is replaced by --portless — the in-process skychat binds no TCP port
+// and instead publishes its HTTP surface to the visor's control surface (which
+// serves the hvui's /skychat/proxy/* routes directly). The dmsg/skynet mesh
+// listeners that carry actual chat traffic are unaffected.
+func skychatInternalArgs(pair bool) []string {
+	args := []string{"--portless"}
 	if pair {
 		args = append(args, "--pair-enable")
 	}
@@ -1779,8 +1783,9 @@ func configureApps(log *logging.Logger) {
 				// --pair-enable opens chat-app ↔ visor pair-RPC for
 				// group chat. See the external-apps branch above for
 				// the rationale; mirrored here so internal-apps
-				// generated configs behave the same.
-				Args: skychatInternalArgs(chatAddr, isSkychatPairEnable),
+				// generated configs behave the same. Portless: no TCP
+				// port — served in-process via the visor control surface.
+				Args: skychatInternalArgs(isSkychatPairEnable),
 			},
 			{
 				Name:      skyenv.SkysocksName,
