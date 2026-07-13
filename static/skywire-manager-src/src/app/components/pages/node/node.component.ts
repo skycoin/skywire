@@ -357,14 +357,15 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       //   bandwidth / uptime / rewards / web-proxy — no host data source (404).
       //   resources — host CPU/mem/disk/net; a tab has none (renders all-zeros).
       //   terminal  — dmsgpty needs a native shell; a tab can't run one.
-      //   wallet    — the current tab runs `skywire skycoin daemon` (native);
-      //               the over-dmsg thin-client wallet is a separate future tab.
+      // The wallet tab IS shown on wasm: the browser-tab visor serves /wallet/
+      // (client-side wallets, node/backend proxied over dmsg) just like the
+      // native HV-served wallet — the daemon-instance controls simply hide there.
       // The host-only features (VPN, real skysocks, port forwarding, terminal)
       // are the invitation to INSTALL the visor on the host. selectedTabIndex is
       // computed by route below, so a shorter array stays correct.
       if (this.node && (this.node as any).arch === 'wasm') {
         const wasmHiddenTabs = new Set(['bandwidth', 'uptime', 'rewards', 'web-proxy',
-          'resources', 'terminal', 'wallet']);
+          'resources', 'terminal']);
         this.tabsData = this.tabsData.filter(t => {
           const seg = t.linkParts ? t.linkParts[t.linkParts.length - 1] : '';
 

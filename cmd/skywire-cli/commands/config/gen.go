@@ -1623,11 +1623,15 @@ func skychatExternalArgs(addr string, pair bool) []string {
 	return args
 }
 
-// skychatInternalArgs mirrors skychatExternalArgs for internal-apps
-// mode (apps run inside the visor process). The external-mode "app"
-// "skychat" prefix is dropped — the launcher routes by app Name.
-func skychatInternalArgs(addr string, pair bool) []string {
-	args := []string{"--addr", addr}
+// skychatInternalArgs builds the launcher Args for skychat under the (default)
+// internal-apps mode: apps run inside the visor process. The external-mode
+// "app skychat" prefix is dropped (the launcher routes by app Name), and
+// --addr is replaced by --portless — the in-process skychat binds no TCP port
+// and instead publishes its HTTP surface to the visor's control surface (which
+// serves the hvui's /skychat/proxy/* routes directly). The dmsg/skynet mesh
+// listeners that carry actual chat traffic are unaffected.
+func skychatInternalArgs(pair bool) []string {
+	args := []string{"--portless"}
 	if pair {
 		args = append(args, "--pair-enable")
 	}
@@ -1760,10 +1764,11 @@ func configureApps(log *logging.Logger) {
 		// (default skycoin + fibercoins). The User= field lets
 		// the wallet drop to the operator's UID so the wallet dir
 		// is writable even when the visor itself runs as _skywire.
-		// External-launch form: `skywire skycoin web <flags>` (Binary=skywire).
+		// External-launch form: `skywire app skycoin web <flags>` (Binary=skywire),
+		// under the same `skywire app <name>` namespace as the other apps.
 		// Opt-in — the default is the internal launcher app in the else branch.
 		webFlags, webEnv := skycoinWebFlagsEnv()
-		webArgs := append([]string{"skycoin", "web"}, webFlags...)
+		webArgs := append([]string{"app", "skycoin", "web"}, webFlags...)
 		apps = append(apps, appserver.AppConfig{
 			Name:      skyenv.SkycoinWebName,
 			Binary:    "skywire",
@@ -1792,8 +1797,9 @@ func configureApps(log *logging.Logger) {
 				// --pair-enable opens chat-app ↔ visor pair-RPC for
 				// group chat. See the external-apps branch above for
 				// the rationale; mirrored here so internal-apps
-				// generated configs behave the same.
-				Args: skychatInternalArgs(chatAddr, isSkychatPairEnable),
+				// generated configs behave the same. Portless: no TCP
+				// port — served in-process via the visor control surface.
+				Args: skychatInternalArgs(isSkychatPairEnable),
 			},
 			{
 				Name:      skyenv.SkysocksName,
@@ -1830,6 +1836,19 @@ func configureApps(log *logging.Logger) {
 				// empty → RunSkycoinWeb (cmd/apps/skycoin-web/commands). This
 				// is the default; the same internal path serves it on the wasm
 				// visor. External (`skywire skycoin web`) is the opt-in above.
+				//
+				// IMPORTANT — User= is a NO-OP for an internal app. Internal
+				// apps run IN the visor process (RunModeInternal AppFunc), so
+				// there is no child process to setuid: on a root visor (common,
+				// for VPN + root pty) an internal skycoin-web IS root, and any
+				// wallet dir it writes lands under root's HOME
+				// (/root/.skycoin/wallets). To actually drop to SKYCOINWEBUSER
+				// and write wallets under that user's HOME, run skycoin-web
+				// EXTERNAL (the --external-apps branch above), which the
+				// launcher spawns as a separate process and can setuid. The
+				// default (no --wallet-dir) sidesteps this entirely: skycoin-web
+				// runs web-only, wallets live in browser storage — same as the
+				// wasm visor.
 				Name:      skyenv.SkycoinWebName,
 				AutoStart: isSkycoinWebEnable,
 				Port:      routing.Port(skyenv.SkycoinWebPort),

@@ -1,47 +1,12 @@
 @if (node) {
-  <!-- skycoin-web thin-client. Header carries the app's status pill +
-       start/stop + settings; iframe sits below when running. -->
+  <!-- The wallet is a hypervisor FEATURE: the HV serves the static wallet
+       at /wallet/ and proxies the node API over dmsg. It is ALWAYS available
+       — no skycoin-web process, no port. The optional skycoin-web *server*
+       (own-port, server-side wallets) is demoted into the backend panel's
+       "Remote wallet service" mode as "run one locally" — it is NOT the
+       wallet's on/off switch, so it no longer sits at the top as "Stopped". -->
   <div class="rounded-elevated-box mt-3 wallet-box">
     <div class="box-internal-container wallet-shell">
-
-      @if (webApp) {
-        <div class="web-header">
-          <span class="web-name mono">{{ webApp.name }}</span>
-          <span class="web-status"
-                [class.status-running]="isWebRunning()"
-                [class.status-stopped]="!isWebRunning() && !isWebStarting()"
-                [class.status-starting]="isWebStarting()">
-            {{ webStatusKey() | translate }}
-          </span>
-          <span class="spacer"></span>
-          <button mat-raised-button
-                  color="{{ isWebRunning() ? 'warn' : 'primary' }}"
-                  [disabled]="webAppBusy || isWebStarting()"
-                  (click)="toggleWebApp()">
-            <mat-icon [inline]="true">{{ isWebRunning() ? 'stop' : 'play_arrow' }}</mat-icon>
-            {{ (isWebRunning() ? 'wallet.daemons.stop' : 'wallet.daemons.start') | translate }}
-          </button>
-          @if (hasRunningDaemons) {
-            <button mat-stroked-button (click)="applyLocalDaemons()"
-                    [matTooltip]="'wallet.daemons.use-local-tooltip' | translate">
-              <mat-icon [inline]="true">link</mat-icon>
-              {{ 'wallet.daemons.use-local' | translate }}
-            </button>
-          }
-          <button mat-stroked-button (click)="toggleWebSettings()"
-                  [class.settings-toggle-open]="webAppSettingsOpen">
-            <mat-icon [inline]="true">{{ webAppSettingsOpen ? 'expand_less' : 'settings' }}</mat-icon>
-            {{ 'wallet.daemons.settings' | translate }}
-          </button>
-        </div>
-        @if (webAppSettingsOpen) {
-          <app-app-settings
-            [app]="webApp"
-            (saved)="onWebSettingsSaved()"
-            (cancelled)="toggleWebSettings()">
-          </app-app-settings>
-        }
-      }
 
       @if (state === 'not-configured') {
         <div class="wallet-empty">
@@ -61,15 +26,155 @@
 
       @if (state === 'running') {
         <div class="wallet-controls">
+          <span class="web-status status-running"
+                matTooltip="Served by the hypervisor at /wallet/ — always available, no process or port needed.">
+            served
+          </span>
           <span class="dim small">
             {{ 'wallet.help' | translate }}
-            <span class="mono small">http://{{ resolvedHost }}:{{ resolvedPort }}</span>
+            <span class="mono small">/wallet/</span>
           </span>
+          <span class="spacer"></span>
+          <button mat-stroked-button (click)="toggleBackend()"
+                  [class.settings-toggle-open]="backendOpen"
+                  matTooltip="Configure the coin node this wallet uses (over dmsg)">
+            <mat-icon [inline]="true">{{ backendOpen ? 'expand_less' : 'dns' }}</mat-icon>
+            Node
+          </button>
           <button mat-stroked-button class="wallet-fullscreen" (click)="openFullWindow()">
             <mat-icon [inline]="true">open_in_new</mat-icon>
             {{ 'wallet.open-fullscreen' | translate }}
           </button>
         </div>
+
+        @if (backendOpen) {
+          <!-- Coin-backend config, settable before any wallet exists. Stored in
+               the browser (localStorage) and read by the /wallet/ shim; applies
+               on both this and the wasm visor. See
+               docs/design/gui-app-serving-modes.md. -->
+          <div class="wallet-backend">
+            <div class="wallet-backend-modes">
+              <button mat-stroked-button [class.mode-active]="walletMode === 'browser'"
+                      (click)="setMode('browser')">
+                <mat-icon [inline]="true">web</mat-icon> Browser wallets
+              </button>
+              <button mat-stroked-button [class.mode-active]="walletMode === 'service'"
+                      (click)="setMode('service')">
+                <mat-icon [inline]="true">dns</mat-icon> Remote wallet service
+              </button>
+            </div>
+
+            @if (walletMode === 'browser') {
+              <div class="dim small wallet-backend-help">
+                Wallets are created + stored in <b>this browser</b> (client-side
+                keys). Configure the coin node(s) it queries over dmsg — the first
+                is the default; add one per fibercoin for multi-coin. A
+                <span class="mono">&lt;pk&gt;:&lt;port&gt;</span> dmsg node is dialed
+                directly; an <span class="mono">http(s)://</span> / .dmsg URL goes
+                via the resolving proxy.
+              </div>
+              @for (n of coinNodes; track trackByIndex($index); let i = $index) {
+                <div class="wallet-backend-row">
+                  <span class="dim small wallet-node-idx mono">coin {{ i }}</span>
+                  <input class="wallet-node-input mono" [(ngModel)]="coinNodes[i]"
+                         placeholder="039a6d1e…:6420  or  http://node.skycoin.com" />
+                  <button mat-icon-button (click)="removeNode(i)"
+                          [matTooltip]="'Remove'">
+                    <mat-icon [inline]="true">close</mat-icon>
+                  </button>
+                </div>
+              }
+              <button mat-stroked-button class="wallet-add-node" (click)="addNode()">
+                <mat-icon [inline]="true">add</mat-icon> Add coin node
+              </button>
+
+              <div class="dim small wallet-backend-help">
+                <b>Bitcoin</b> (optional): a node RPC or electrum backend, over dmsg
+                or clearnet. Full BTC support needs a wallet service.
+              </div>
+              <div class="wallet-backend-row">
+                <span class="dim small wallet-node-idx mono">btc</span>
+                <input class="wallet-node-input mono" [(ngModel)]="btcBackend"
+                       placeholder="electrum host / http://…   (optional)" />
+              </div>
+            }
+
+            @if (walletMode === 'service') {
+              <div class="dim small wallet-backend-help">
+                Point at a <b>skycoin-web server</b> over dmsg — wallets live on
+                that server (server-side), and all wallet + node API routes to
+                it. Good for shared or multi-coin setups you run yourself. Give a
+                remote <span class="mono">&lt;pk&gt;:&lt;port&gt;</span>, or run one
+                locally on this visor below.
+              </div>
+              <div class="wallet-backend-row">
+                <span class="dim small wallet-node-idx mono">service</span>
+                <input class="wallet-node-input mono" [(ngModel)]="walletService"
+                       placeholder="03d1d78e…:8002   (remote, optional)" />
+              </div>
+
+              @if (webApp) {
+                <!-- Optional: run a local skycoin-web server (own port,
+                     server-side wallets). This is the app process the wallet
+                     tab used to show at the top as "Stopped"; it's demoted here
+                     because the wallet FEATURE works without it. -->
+                <div class="wallet-localserver">
+                  <span class="dim small wallet-node-idx mono">local</span>
+                  <span class="dim small">local skycoin-web server</span>
+                  <span class="web-status"
+                        [class.status-running]="isWebRunning()"
+                        [class.status-stopped]="!isWebRunning() && !isWebStarting()"
+                        [class.status-starting]="isWebStarting()">
+                    {{ webStatusKey() | translate }}
+                  </span>
+                  <span class="spacer"></span>
+                  @if (hasRunningDaemons) {
+                    <button mat-stroked-button (click)="applyLocalDaemons()"
+                            [matTooltip]="'wallet.daemons.use-local-tooltip' | translate">
+                      <mat-icon [inline]="true">link</mat-icon>
+                      {{ 'wallet.daemons.use-local' | translate }}
+                    </button>
+                  }
+                  <button mat-raised-button
+                          color="{{ isWebRunning() ? 'warn' : 'primary' }}"
+                          [disabled]="webAppBusy || isWebStarting()"
+                          (click)="toggleWebApp()">
+                    <mat-icon [inline]="true">{{ isWebRunning() ? 'stop' : 'play_arrow' }}</mat-icon>
+                    {{ (isWebRunning() ? 'wallet.daemons.stop' : 'wallet.daemons.start') | translate }}
+                  </button>
+                  <button mat-stroked-button (click)="toggleWebSettings()"
+                          [class.settings-toggle-open]="webAppSettingsOpen">
+                    <mat-icon [inline]="true">{{ webAppSettingsOpen ? 'expand_less' : 'settings' }}</mat-icon>
+                    {{ 'wallet.daemons.settings-label' | translate }}
+                  </button>
+                </div>
+                @if (webAppSettingsOpen) {
+                  <app-app-settings
+                    [app]="webApp"
+                    (saved)="onWebSettingsSaved()"
+                    (cancelled)="toggleWebSettings()">
+                  </app-app-settings>
+                }
+                <div class="dim small wallet-backend-help">
+                  Starting this launches a local <span class="mono">skycoin-web</span>
+                  process on its own port (a second, standalone copy of the wallet).
+                  The <span class="mono">/wallet/</span> feature above keeps working
+                  whether it's running or not.
+                </div>
+              }
+            }
+
+            @if (nodeError) {
+              <div class="wallet-backend-error small">{{ nodeError }}</div>
+            }
+            <div class="wallet-backend-actions">
+              <button mat-raised-button color="primary" (click)="saveBackend()">
+                <mat-icon [inline]="true">save</mat-icon> Apply
+              </button>
+            </div>
+          </div>
+        }
+
         @if (iframeUrl) {
           <iframe class="wallet-frame" [src]="iframeUrl" allowfullscreen></iframe>
         }
@@ -80,7 +185,9 @@
 
   <!-- Skycoin daemon instances. Beneath the wallet UI since the
        wallet is the primary surface here; the daemon list is a
-       backing-detail panel one or more fibercoins per visor. -->
+       backing-detail panel one or more fibercoins per visor. Native only:
+       a browser/wasm visor can't run daemon processes. -->
+  @if (!isWasm) {
   <div class="rounded-elevated-box mt-3 daemons-box">
     <div class="box-internal-container">
       <div class="daemons-header">
@@ -115,7 +222,7 @@
           <button mat-stroked-button (click)="toggleDaemonSettings(d.name)"
                   [class.settings-toggle-open]="isDaemonSettingsOpen(d.name)">
             <mat-icon [inline]="true">{{ isDaemonSettingsOpen(d.name) ? 'expand_less' : 'settings' }}</mat-icon>
-            {{ 'wallet.daemons.settings' | translate }}
+            {{ 'wallet.daemons.settings-label' | translate }}
           </button>
         </div>
         @if (isDaemonSettingsOpen(d.name)) {
@@ -138,4 +245,5 @@
       </div>
     </div>
   </div>
+  }
 }
