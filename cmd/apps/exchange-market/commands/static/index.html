@@ -266,9 +266,9 @@
       const rows = (d.orders || []).map((o) =>
         '<tr><td><code>' + esc(shorten(o.id)) + '</code></td><td><code>' + esc(shorten(o.buyer_pubkey)) +
         '</code></td><td>' + esc(o.amount_sky) + ' SKY</td><td>' + esc(o.price) + ' ' + esc(o.payment_currency) +
-        '</td><td>' + badge(o.status) + '</td><td>' + esc(o.confirmations) + '</td><td>' + fmt(o.expires_at) + '</td></tr>').join('');
+        '</td><td>' + badge(o.status) + '</td><td>' + esc(o.confirmations) + '</td><td>' + esc(o.commission_sch || 0) + ' SCH</td><td>' + fmt(o.expires_at) + '</td></tr>').join('');
       $('#orders-body').innerHTML = rows
-        ? '<table><thead><tr><th>ID</th><th>Buyer</th><th>Amount</th><th>Price</th><th>Status</th><th>Conf.</th><th>Expires</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        ? '<table><thead><tr><th>ID</th><th>Buyer</th><th>Amount</th><th>Price</th><th>Status</th><th>Conf.</th><th>Commission</th><th>Expires</th></tr></thead><tbody>' + rows + '</tbody></table>'
         : '<div class="empty">No orders.</div>';
     }
 
