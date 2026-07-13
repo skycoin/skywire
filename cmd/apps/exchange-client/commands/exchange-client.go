@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/exchange-client/app"
+	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -38,6 +39,9 @@ var (
 	// connect screen. The client does NOT connect automatically; the user
 	// confirms/edits it and clicks Connect.
 	marketPK string
+	// marketPort is the market's dmsg routing port the client dials. It must
+	// match the market's --port; defaults to the protocol default (8050).
+	marketPort uint16
 )
 
 func init() {
@@ -45,6 +49,7 @@ func init() {
 	RootCmd.Flags().StringVar(&uiAddr, "addr", skyenv.ExchangeClientAddr, "address to serve the trading UI on")
 	RootCmd.Flags().Uint16Var(&port, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().StringVar(&marketPK, "market-pk", "", "default exchange-market public key (pre-filled in the UI; not auto-connected)")
+	RootCmd.Flags().Uint16Var(&marketPort, "market-port", uint16(protocol.DefaultPort), "market dmsg routing port to dial (must match the market's --port)")
 }
 
 // RootCmd is the root command for exchange-client.
@@ -81,6 +86,7 @@ func RunExchangeClient(ctx context.Context, args []string) error {
 		fs.StringVar(&uiAddr, "addr", skyenv.ExchangeClientAddr, "trading UI address")
 		fs.Uint16Var(&port, "port", 0, "routing port")
 		fs.StringVar(&marketPK, "market-pk", "", "default market public key")
+		fs.Uint16Var(&marketPort, "market-port", uint16(protocol.DefaultPort), "market dmsg routing port to dial")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -105,7 +111,7 @@ func RunExchangeClient(ctx context.Context, args []string) error {
 	// The session drives the (manual) connection to a market over dmsg. It is
 	// seeded with the configured default market public key but does NOT connect
 	// until the user clicks Connect in the UI.
-	sess := newSession(appCl, marketPK)
+	sess := newSession(appCl, marketPK, protocol.Port(marketPort))
 	defer sess.close()
 
 	// Serve the embedded single-page trading UI plus the local control API.
