@@ -84,6 +84,16 @@
   background: #fff;
 }
 
+// The shared /wallet/config page, embedded in the Node panel. It's a compact
+// dark form; give it enough height to show the modes + node list + BTC fields.
+.wallet-config-frame {
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: #15131c;
+  min-height: 340px;
+}
+
 .wallet-empty {
   flex: 1;
   display: flex;
