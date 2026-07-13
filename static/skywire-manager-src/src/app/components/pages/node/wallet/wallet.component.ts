@@ -31,16 +31,6 @@ const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
   standalone: false,
 })
 export class WalletComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
-  // Possible UI states. The template branches on these.
-  state: 'unknown' | 'not-configured' | 'not-running' | 'running' = 'unknown';
-  // The URL the iframe / "open in new tab" button points at when
-  // state === 'running'. Built from whatever --host/--port the
-  // skycoin-web app is configured with, falling back to the upstream
-  // defaults when those flags aren't passed.
-  iframeUrl: SafeResourceUrl | null = null;
-  fullWindowUrl = '';
-
   // ---- coin-backend config (settable BEFORE any wallet exists) ----
   // All keys are stored in the browser and read by the /wallet/ shim (native
   // X-Skywire-Coin-Node header, wasm fetchDmsg) so config is unified across the
@@ -57,6 +47,16 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   static readonly K_SERVICE = 'skywire-wallet-service';
   static readonly K_BTC = 'skywire-btc-backend';
   static readonly K_PRIMARY = 'skywire-coin-node';
+
+  node: Node;
+  // Possible UI states. The template branches on these.
+  state: 'unknown' | 'not-configured' | 'not-running' | 'running' = 'unknown';
+  // The URL the iframe / "open in new tab" button points at when
+  // state === 'running'. Built from whatever --host/--port the
+  // skycoin-web app is configured with, falling back to the upstream
+  // defaults when those flags aren't passed.
+  iframeUrl: SafeResourceUrl | null = null;
+  fullWindowUrl = '';
 
   backendOpen = false;
   nodeError = '';
@@ -95,8 +95,8 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     private appsService: AppsService,
     private snackbar: SnackbarService,
   ) {
- super(); 
-}
+    super();
+  }
 
   ngOnInit() {
     // Load the backend config ONCE (not in recompute — that runs every poll
@@ -126,7 +126,9 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
       this.walletMode = mode === 'service' ? 'service' : 'browser';
       const rawNodes = localStorage.getItem(W.K_NODES);
       let nodes: string[] = rawNodes ? (JSON.parse(rawNodes) || []) : [];
-      if (!Array.isArray(nodes)) { nodes = []; }
+      if (!Array.isArray(nodes)) {
+        nodes = [];
+      }
       if (nodes.length === 0) {
         // seed from the legacy single-node key so existing config carries over
         const legacy = localStorage.getItem(W.K_PRIMARY) || '';
@@ -149,7 +151,9 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   removeNode(i: number) {
     this.coinNodes = this.coinNodes.filter((_, idx) => idx !== i);
-    if (this.coinNodes.length === 0) { this.coinNodes = ['']; }
+    if (this.coinNodes.length === 0) {
+      this.coinNodes = [''];
+    }
   }
 
   trackByIndex(i: number): number {
@@ -160,9 +164,16 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
    *  host, or an http(s):// URL. Same forms the /wallet/ shim + proxy accept. */
   private validBackend(v: string): boolean {
     const s = (v || '').trim().replace(/^dmsg:\/\//, '');
-    if (!s) { return true; }
-    if (/^[0-9a-fA-F]{66}(:\d+)?$/.test(s)) { return true; }
-    if (/^[^/\s]+\.(dmsg|skynet)(:\d+)?$/i.test(s)) { return true; }
+    if (!s) {
+      return true;
+    }
+    if (/^[0-9a-fA-F]{66}(:\d+)?$/.test(s)) {
+      return true;
+    }
+    if (/^[^/\s]+\.(dmsg|skynet)(:\d+)?$/i.test(s)) {
+      return true;
+    }
+
     return /^https?:\/\/.+/i.test(s);
   }
 
@@ -174,18 +185,21 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     if (this.walletMode === 'service') {
       if (!this.validBackend(this.walletService) || !(this.walletService || '').trim()) {
         this.nodeError = 'Enter the wallet service address (a dmsg <pk>:<port> or URL).';
+
         return;
       }
     } else {
       for (const n of this.coinNodes) {
         if (!this.validBackend(n)) {
           this.nodeError = 'Each node must be a dmsg <pk>:<port>, a .dmsg/.skynet host, or an http(s):// URL.';
+
           return;
         }
       }
     }
     if (!this.validBackend(this.btcBackend)) {
       this.nodeError = 'BTC backend must be a dmsg node/electrum host or an http(s):// URL.';
+
       return;
     }
     this.nodeError = '';
@@ -221,10 +235,10 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
    *  safe to call on every NodeComponent polling tick. */
   private recompute() {
     if (!this.node) {
- this.state = 'unknown';
+      this.state = 'unknown';
 
- return; 
-}
+      return;
+    }
 
     const apps = (this.node.apps || []) as Application[];
     this.daemons = apps
@@ -250,24 +264,24 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   openFullWindow() {
     if (!this.fullWindowUrl) {
- return; 
-}
+      return;
+    }
     window.open(this.fullWindowUrl, '_blank', 'noopener noreferrer');
   }
 
   // ---- skycoin-web app controls (start/stop + settings) ----
 
   isWebRunning(): boolean {
- return !!this.webApp && this.webApp.status === 1; 
-}
+    return !!this.webApp && this.webApp.status === 1;
+  }
   isWebStarting(): boolean {
- return !!this.webApp && this.webApp.status === 3; 
-}
+    return !!this.webApp && this.webApp.status === 3;
+  }
 
   webStatusKey(): string {
     if (!this.webApp) {
- return 'wallet.daemons.status.unknown'; 
-}
+      return 'wallet.daemons.status.unknown';
+    }
     switch (this.webApp.status) {
       case 0: return 'wallet.daemons.status.stopped';
       case 1: return 'wallet.daemons.status.running';
@@ -279,15 +293,15 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   toggleWebApp() {
     if (!this.node || !this.webApp || this.webAppBusy) {
- return; 
-}
+      return;
+    }
     const start = !this.isWebRunning();
     const name = this.webApp.name;
     this.webAppBusy = true;
     this.appsService.changeAppState(this.node.localPk, name, start).subscribe({
       next: () => {
- this.webAppBusy = false; 
-},
+        this.webAppBusy = false;
+      },
       error: () => {
         this.webAppBusy = false;
         this.snackbar.showError(start ? 'wallet.daemons.start-error' : 'wallet.daemons.stop-error');
@@ -296,11 +310,11 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   toggleWebSettings() {
- this.webAppSettingsOpen = !this.webAppSettingsOpen; 
-}
+    this.webAppSettingsOpen = !this.webAppSettingsOpen;
+  }
   onWebSettingsSaved() {
- this.webAppSettingsOpen = false; 
-}
+    this.webAppSettingsOpen = false;
+  }
 
   // True iff there are running skycoin-daemon* instances whose ports
   // could be added to skycoin-web's --node-url list. Drives the
@@ -324,8 +338,8 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
    *  list — skycoin-web reads --node-url at startup. */
   applyLocalDaemons() {
     if (!this.node || !this.webApp) {
- return; 
-}
+      return;
+    }
     const running = this.daemons.filter((d) => d.status === 1);
     if (running.length === 0) {
       this.snackbar.showError('wallet.daemons.no-running');
@@ -357,11 +371,11 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // ---- Skycoin daemon multi-instance controls ----
 
   isDaemonRunning(d: Application): boolean {
- return d.status === 1; 
-}
+    return d.status === 1;
+  }
   isDaemonStarting(d: Application): boolean {
- return d.status === 3; 
-}
+    return d.status === 3;
+  }
 
   daemonStatusKey(d: Application): string {
     switch (d.status) {
@@ -375,8 +389,8 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   toggleDaemon(d: Application) {
     if (!this.node || this.daemonsBusy.has(d.name)) {
- return; 
-}
+      return;
+    }
     const start = !this.isDaemonRunning(d);
     const name = d.name;
     this.daemonsBusy.add(name);
@@ -410,25 +424,25 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
 
   addDaemon() {
     if (!this.node) {
- return; 
-}
+      return;
+    }
     let suggested = SKYCOIN_DAEMON_PREFIX;
     if (this.daemons.some((d) => d.name === SKYCOIN_DAEMON_PREFIX)) {
       const used = new Set(this.daemons.map((d) => d.name));
       let n = 2;
       while (used.has(`${SKYCOIN_DAEMON_PREFIX}-${n}`)) {
- n++; 
-}
+        n++;
+      }
       suggested = `${SKYCOIN_DAEMON_PREFIX}-${n}`;
     }
-     
+
     const name = (window.prompt('Daemon instance name (one per fiberchain):', suggested) || '').trim();
     if (!name) {
- return; 
-}
+      return;
+    }
     if (this.daemonsBusy.has('add')) {
- return; 
-}
+      return;
+    }
     this.daemonsBusy.add('add');
     this.appsService.addApp(this.node.localPk, name, SKYCOIN_DAEMON_PREFIX).subscribe({
       next: (app: Application) => {
@@ -458,14 +472,14 @@ function parseDaemonPort(args: string[]): number {
       if (i + 1 < args.length) {
         const n = parseInt(args[i + 1], 10);
         if (!isNaN(n)) {
- return n; 
-}
+          return n;
+        }
       }
     } else if (a.startsWith('--port=')) {
       const n = parseInt(a.substring('--port='.length), 10);
       if (!isNaN(n)) {
- return n; 
-}
+        return n;
+      }
     }
   }
 
