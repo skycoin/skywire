@@ -64,19 +64,28 @@ const walletDmsgFetchShim = `<script>(function(){` +
 	`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
 	`function q(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
 	`function isCoin(u){return /^\/api\/v[12]\//.test(p(u));}` +
+	`function isBtc(u){return /^\/(wallet\/)?v1\/btc\//.test(p(u));}` +
+	`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
 	`function jr(s,o){return new Response(JSON.stringify(o),{status:s,headers:{"Content-Type":"application/json"}});}` +
+	`function mkResp(r){var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});}` +
 	`window.fetch=function(input,init){` +
 	`var url=(typeof input==="string")?input:(input&&input.url);` +
-	`if(!isCoin(url))return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
+	`var coin=isCoin(url),btc=isBtc(url);` +
+	`if(!coin&&!btc)return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
 	`init=init||{};` +
 	`var v=window.parent&&window.parent.skywireVisor;` +
 	`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
-	`var node="";try{node=localStorage.getItem("skywire-coin-node")||"";}catch(e){}` +
+	// BTC: the wallet does keys+signing itself; only chain queries go over the
+	// mesh, through the in-tab electrum gateway (skywireVisor.btcFetch), which
+	// dials the ssl:// electrum via skysocks-lite (upstream-proxy exit).
+	`if(btc){` +
+	`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
+	`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
+	`return Promise.resolve(v.btcFetch(back,init.method||"GET",p(url)+q(url),init.body||null,ls("skywire-upstream-proxy"))).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+	`}` +
+	`var node=ls("skywire-coin-node");` +
 	`if(!node)node="` + defaultCoinNode + `";` +
-	`return Promise.resolve(v.fetchDmsg(node,init.method||"GET",p(url)+q(url),init.body||null)).then(function(r){` +
-	`var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");` +
-	`return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});` +
-	`}).catch(function(e){return jr(502,{error:String(e)});});` +
+	`return Promise.resolve(v.fetchDmsg(node,init.method||"GET",p(url)+q(url),init.body||null)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
 	`};` +
 	`})();</script>`
 
