@@ -27,22 +27,23 @@ const WalletConfigHTML = `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 :root{color-scheme:dark}
-body{margin:0;background:#15131c;color:#e8e8f0;font:12px/1.45 -apple-system,system-ui,monospace}
-.wrap{padding:.7em .8em;display:flex;flex-direction:column;gap:.6em}
-h1{font-size:12px;font-weight:600;margin:0;opacity:.75;letter-spacing:.3px;text-transform:uppercase}
-.modes{display:flex;gap:.4em}
-.modes button{flex:1;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:4px;padding:.5em;cursor:pointer;font:inherit}
+*{box-sizing:border-box}
+body{margin:0;background:#15131c;color:#e8e8f0;font:13.5px/1.55 -apple-system,system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:1.3em 1.5em;display:flex;flex-direction:column;gap:1.05em}
+h1{font-size:13px;font-weight:600;margin:0;opacity:.75;letter-spacing:.3px;text-transform:uppercase}
+.modes{display:flex;gap:.6em}
+.modes button{flex:1;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:6px;padding:.75em;cursor:pointer;font:inherit}
 .modes button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.18)}
-.row{display:flex;gap:.4em;align-items:center}
-.row label{opacity:.72;min-width:4.5em;text-align:right;white-space:nowrap}
-.row input{flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.4em .5em;font:inherit}
+.row{display:flex;gap:.65em;align-items:center}
+.row label{opacity:.72;min-width:5.5em;text-align:right;white-space:nowrap}
+.row input{flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:5px;padding:.6em .75em;font:inherit}
 .row input:focus{outline:none;border-color:#6f4bd8}
-.hint{opacity:.72;line-height:1.4}.hint b{color:#e8e8f0}.mono{font-family:monospace;opacity:.85}
-button.add{align-self:flex-start;background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;cursor:pointer;font:inherit;padding:.35em .6em}
-button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inherit;padding:.2em .5em}button.rm:hover{color:#f7768e}
-.apply{align-self:flex-end;background:#6f4bd8;color:#fff;border:0;border-radius:4px;padding:.5em 1.2em;cursor:pointer;font:inherit}
+.hint{opacity:.72;line-height:1.5}.hint b{color:#e8e8f0}.mono{font-family:monospace;opacity:.85}
+button.add{align-self:flex-start;background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:5px;cursor:pointer;font:inherit;padding:.55em .9em}
+button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inherit;padding:.35em .6em}button.rm:hover{color:#f7768e}
+.apply{align-self:flex-end;background:#6f4bd8;color:#fff;border:0;border-radius:6px;padding:.7em 1.6em;cursor:pointer;font:inherit;font-weight:600}
 .err{color:#f7768e;display:none}
-.sec{border-top:1px solid #2a2342;padding-top:.6em;display:flex;flex-direction:column;gap:.5em}
+.sec{border-top:1px solid #2a2342;padding-top:1em;display:flex;flex-direction:column;gap:.7em}
 </style></head><body><div class="wrap">
 <div class="modes">
 <button id="mb" title="Wallets stored in this browser; pick the coin node it queries.">Browser wallets</button>
