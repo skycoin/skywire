@@ -25,6 +25,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/btcgateway"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
@@ -68,14 +69,18 @@ func (hv *Hypervisor) nativeBtcGateway(exitPK string) *btcgateway.Gateway {
 	return g
 }
 
-// walletNodeDmsg is the skycoin node the HV-served wallet talks to by DEFAULT:
-// the deployment node addressed over dmsg (same PK:port as
-// services-config.json prod.skycoin_node_dmsg and the wasm wallet's
-// defaultCoinNode). Overridden per-request by the X-Skywire-Coin-Node header
-// (set from localStorage['skywire-coin-node'] by the injected shim — the
-// wallet tab's Node config panel writes that key). TODO(config): also source
-// the default from config + support multiple nodes (multi-coin /coin/N).
-const walletNodeDmsg = "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:6420"
+// walletNodeDefault is the skycoin node the HV-served wallet talks to by DEFAULT,
+// sourced from the embedded services-config.json (prod.skycoin_node_dmsg) — the
+// same value the wasm wallet's coinNodeDefault() uses. Overridden per-request by
+// the X-Skywire-Coin-Node header (from localStorage['skywire-coin-node'], set by
+// the wallet config panel). Falls back to the node.skycoin.com vhost form if the
+// deployment config field is empty. TODO(config): multi-coin /coin/N.
+func walletNodeDefault() string {
+	if n := strings.TrimSpace(dmsg.Prod.SkycoinNode); n != "" {
+		return n
+	}
+	return "https://node.skycoin.com.aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc.dmsg"
+}
 
 // walletNodeShim is injected into the HV-served wallet index (right after
 // <base>). The skycoin-web GUI fetches the node API at absolute /api/v1|v2
@@ -191,7 +196,7 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	}
 	backend := strings.TrimSpace(r.Header.Get("X-Skywire-Coin-Node"))
 	if backend == "" {
-		backend = walletNodeDmsg
+		backend = walletNodeDefault()
 	}
 	path := "/" + rest
 	if r.URL.RawQuery != "" {
@@ -238,10 +243,17 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	// fetch step: BrowseFetch dials over the secondary dmsg client (v.dmsgHTTP /
 	// dmsgDC), which has session conflicts on the coin node (see Visor.DmsgHTTP);
 	// v.dmsgC (DmsgHTTP) has stable sessions.
-	pk, port, rerr := hv.visor.resolveBrowseHost(walletBackendStrip(backend), 0)
+	pk, port, vhost, rerr := hv.visor.resolveBrowseHost(walletBackendStrip(backend), 0)
 	if rerr != nil {
 		http.Error(w, "coin node resolve failed: "+rerr.Error(), http.StatusBadGateway)
 		return
+	}
+	// A "<name>.<pk>.dmsg" backend (e.g. node.skycoin.com.<pk>.dmsg) resolves to a
+	// vhost; send it as Host so the destination visor's port-80 forward (Caddy,
+	// --preserve-host) vhost-routes /api to the skycoin node — the same Host the
+	// wasm wallet's fetchDmsg sets, and what clearnet uses.
+	if vhost != "" {
+		header["Host"] = vhost
 	}
 	resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
 		URL:    fmt.Sprintf("dmsg://%s:%d%s", pk.Hex(), port, path),

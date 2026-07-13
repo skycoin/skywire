@@ -73,6 +73,12 @@ type DmsghttpConfig struct {
 	RouteFinder        string       `json:"route_finder_dmsg"`
 	UptimeTracker      string       `json:"uptime_tracker_dmsg"`
 	ServiceDiscovery   string       `json:"service_discovery_dmsg"`
+	// SkycoinNode is the deployment's skycoin node, reachable over the mesh — the
+	// default coin node for the HV-served wallet (native + wasm). The resolver
+	// VHOST form "https://<vhost>.<base32-pk>.dmsg" routes /api through the node's
+	// visor port-80 forward (Caddy, --preserve-host) like clearnet; a bare
+	// "dmsg://<pk>:6420" hits the node directly (deployments without a web front).
+	SkycoinNode string `json:"skycoin_node_dmsg"`
 }
 
 func init() {
