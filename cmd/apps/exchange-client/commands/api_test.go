@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/skycoin/skywire/internal/exchange-market/db"
+	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 	"github.com/skycoin/skywire/internal/exchange-market/server"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -43,7 +44,7 @@ func newTestMarket(t *testing.T) *server.Server {
 
 func newTestServer(t *testing.T, defaultPK string) *httptest.Server {
 	t.Helper()
-	sess := newSession(fakeDialer{srv: newTestMarket(t)}, defaultPK)
+	sess := newSession(fakeDialer{srv: newTestMarket(t)}, defaultPK, protocol.DefaultPort)
 	mux := http.NewServeMux()
 	registerAPI(mux, sess)
 	ts := httptest.NewServer(mux)

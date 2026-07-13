@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
 
-// Confirmations required before a trade settles (mirrors the market's
-// jobs.RequiredConfirmations). Used only for the "n/N" progress display.
+// Fallback confirmation threshold for the "n/N" progress display. The market
+// reports its own value in each order-status (required_confirmations); this is
+// only used if that field is absent (older market).
 const REQUIRED_CONFIRMATIONS = 2
 
 // Buy orders in these states are still in flight, so their on-chain progress
@@ -112,12 +113,15 @@ function Orders() {
       return <span className="text-muted">Awaiting payment…</span>
     }
     const confs = live.confirmations || 0
-    const pct = Math.min(100, Math.round((confs / REQUIRED_CONFIRMATIONS) * 100))
+    // The market reports its own threshold; fall back to the default only if an
+    // older market omits it.
+    const required = live.required_confirmations || REQUIRED_CONFIRMATIONS
+    const pct = Math.min(100, Math.round((confs / required) * 100))
     return (
       <div style={{ minWidth: '120px' }}>
         <div className="d-flex justify-content-between small mb-1">
           <span>Confirmations</span>
-          <span>{confs}/{REQUIRED_CONFIRMATIONS}</span>
+          <span>{confs}/{required}</span>
         </div>
         <div className="progress" style={{ height: '6px' }}>
           <div
@@ -126,7 +130,7 @@ function Orders() {
             style={{ width: `${pct}%` }}
             aria-valuenow={confs}
             aria-valuemin={0}
-            aria-valuemax={REQUIRED_CONFIRMATIONS}
+            aria-valuemax={required}
           />
         </div>
       </div>

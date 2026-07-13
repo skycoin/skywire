@@ -1744,7 +1744,10 @@ func configureApps(log *logging.Logger) {
 				Binary:    "skywire",
 				AutoStart: false,
 				Port:      routing.Port(skyenv.ExchangeClientPort),
-				Args:      []string{"app", "exchange-client", "--addr", skyenv.ExchangeClientAddr},
+				// --market-port is sourced from the same constant as the market
+				// app's routing Port above, so the client always dials where the
+				// market listens (single source of truth).
+				Args: []string{"app", "exchange-client", "--addr", skyenv.ExchangeClientAddr, "--market-port", strconv.Itoa(int(skyenv.ExchangeMarketPort))},
 			},
 		}
 		// Skycoin daemon — full node, syncs the chain locally. May
@@ -1828,8 +1831,10 @@ func configureApps(log *logging.Logger) {
 			{
 				Name:      skyenv.ExchangeClientName,
 				AutoStart: false,
-				Args:      []string{"--addr", skyenv.ExchangeClientAddr},
-				Port:      routing.Port(skyenv.ExchangeClientPort),
+				// --market-port from the same constant as the market's routing Port,
+				// so the client always dials where the market listens.
+				Args: []string{"--addr", skyenv.ExchangeClientAddr, "--market-port", strconv.Itoa(int(skyenv.ExchangeMarketPort))},
+				Port: routing.Port(skyenv.ExchangeClientPort),
 			},
 			{
 				// skycoin-web thin-client wallet as an INTERNAL app — Binary
