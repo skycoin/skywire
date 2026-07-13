@@ -104,8 +104,11 @@ func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, u
 	if reqPort != 0 {
 		port = reqPort
 	}
-	lower := strings.ToLower(host)
-	// bare hex PK, optionally with :port (a hex PK never contains a colon).
+	// Split off an optional :port up front (a hex PK never contains a colon; a
+	// .dmsg/.skynet host may carry a non-80 port like :6420). The suffix match
+	// below MUST be on the port-stripped host — otherwise "<host>.dmsg:6420"
+	// never matches ".dmsg" and falls through to "cannot resolve" (which broke
+	// the coin node's readable "node.skycoin.com.<pk>.dmsg:6420" form).
 	hp := host
 	if i := strings.LastIndexByte(host, ':'); i > 0 {
 		// ParseUint with bitSize 16 bounds the value to a valid port, so the
@@ -117,6 +120,8 @@ func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, u
 			}
 		}
 	}
+	lower := strings.ToLower(hp)
+	// bare hex PK, optionally with :port (handled above).
 	var pk cipher.PubKey
 	if err := pk.Set(hp); err == nil {
 		return pk, port, nil
