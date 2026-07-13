@@ -1819,49 +1819,146 @@
     var walletWin = null;
     function openWallet() {
       if (focusExisting(walletWin)) { return; }
-      // Same-origin body: a thin coin-node config strip above the PWA-bundled
-      // skycoin-web wallet iframe. The wallet's crypto (skycoin-lite.wasm) +
-      // wallets (localStorage) are client-side; its node API (/api/v1|v2) is
-      // routed over dmsg by the injected shim, which reads the coin node from
-      // localStorage['skywire-coin-node']. The ☰-launched wallet otherwise had
-      // no way to reach that setting (the full backend panel lives in the
-      // Angular wallet tab); this exposes the essential one inline. Same key +
-      // origin as the iframe, so config is unified across the tab and ☰ window.
-      var K_PRIMARY = "skywire-coin-node", K_NODES = "skywire-coin-nodes";
-      function curNode() { try { return localStorage.getItem(K_PRIMARY) || ""; } catch (e) { return ""; } }
+      // The ☰ wallet: the PWA-bundled skycoin-web wallet iframe with the FULL
+      // coin-backend config behind a ⚙ toggle (collapsed by default) — parity
+      // with the Angular wallet tab's panel. The wallet's crypto
+      // (skycoin-lite.wasm) + wallets (localStorage) are client-side; its node
+      // API (/api/v1|v2) is routed over dmsg by the injected shim. This panel
+      // writes the SAME localStorage keys the tab + shim read, so config is
+      // unified across the tab, the ☰ window and the shim. (The tab's native-
+      // only "run a local skycoin-web server" control stays tab-only — it needs
+      // the app-management RPC that browse.js doesn't carry.)
+      var K_MODE = "skywire-wallet-mode", K_NODES = "skywire-coin-nodes",
+        K_SERVICE = "skywire-wallet-service", K_BTC = "skywire-btc-backend",
+        K_PRIMARY = "skywire-coin-node";
+      function ls(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
+      function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+      var mode = ls(K_MODE, "browser");
+      var nodes = null;
+      try { nodes = JSON.parse(ls(K_NODES, "") || "null"); } catch (e) { nodes = null; }
+      if (!nodes || !nodes.length) { var p0 = ls(K_PRIMARY, ""); nodes = p0 ? [p0] : [""]; }
+
       var wrap = doc.createElement("div");
-      wrap.style.cssText = "position:absolute;inset:0;display:flex;flex-direction:column;background:#15131c;overflow:hidden";
+      wrap.style.cssText = "position:absolute;inset:0;display:flex;flex-direction:column;background:#15131c;overflow:hidden;font:12px monospace;color:#cdd2da";
       wrap.innerHTML =
-        '<div style="display:flex;gap:.45em;align-items:center;padding:.45em .55em;background:#1b1726;border-bottom:1px solid #2a2342;font:12px monospace;color:#cdd2da">' +
-        '<span style="opacity:.7;white-space:nowrap">coin node</span>' +
-        '<input id="sww-node" spellcheck="false" title="dmsg &lt;pk&gt;:&lt;port&gt; or http(s):// URL — blank uses the deployment default" ' +
-        'placeholder="039a6d1e…:6420 or http://node… (blank = default)" ' +
-        'style="flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .5em;font:inherit">' +
-        '<button id="sww-apply" style="background:#6f4bd8;color:#fff;border:0;border-radius:3px;padding:.4em .8em;cursor:pointer;font:inherit">Apply</button>' +
+        '<style>' +
+        '.sww-bar{display:flex;gap:.5em;align-items:center;padding:.4em .55em;background:#1b1726;border-bottom:1px solid #2a2342}' +
+        '.sww-bar button{background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .65em;cursor:pointer;font:inherit;line-height:1}' +
+        '.sww-bar button:hover{background:#3a3352;color:#fff}.sww-bar button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.2)}' +
+        '.sww-served{font-size:.92em;padding:.15em .6em;border-radius:999px;background:rgba(74,222,128,.18);color:#4ade80}' +
+        '.sww-panel{display:none;flex-direction:column;gap:.5em;padding:.6em .7em;background:#181521;border-bottom:1px solid #2a2342;max-height:60%;overflow:auto}' +
+        '.sww-panel.open{display:flex}' +
+        '.sww-modes{display:flex;gap:.4em}.sww-modes button{flex:1;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:4px;padding:.45em;cursor:pointer;font:inherit}' +
+        '.sww-modes button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.18)}' +
+        '.sww-row{display:flex;gap:.4em;align-items:center}.sww-row label{opacity:.72;min-width:4em;text-align:right;white-space:nowrap}' +
+        '.sww-row input{flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.4em .5em;font:inherit}' +
+        '.sww-row input:focus{outline:none;border-color:#6f4bd8}' +
+        '.sww-hint{opacity:.75;line-height:1.4}.sww-hint b{color:#e8e8f0}' +
+        '.sww-add{align-self:flex-start;background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;cursor:pointer;font:inherit;padding:.35em .6em}' +
+        '.sww-rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inherit;padding:.2em .5em}.sww-rm:hover{color:#f7768e}' +
+        '.sww-apply{align-self:flex-end;background:#6f4bd8;color:#fff;border:0;border-radius:3px;padding:.45em 1.1em;cursor:pointer;font:inherit}' +
+        '</style>' +
+        '<div class="sww-bar">' +
+        '<button id="sww-gear" title="wallet configuration">⚙ settings</button>' +
+        '<span class="sww-served" title="Served by this visor at /wallet/ — wallets are client-side; only the node API crosses the mesh.">served</span>' +
+        '<span style="flex:1"></span><span style="opacity:.5" id="sww-cur"></span>' +
         '</div>' +
-        '<iframe id="sww-frame" src="/wallet/" allowfullscreen style="flex:1;width:100%;border:0;background:#fff"></iframe>';
+        '<div class="sww-panel" id="sww-panel">' +
+        '<div class="sww-modes">' +
+        '<button id="sww-mb" title="Wallets stored in this browser; pick the coin node it queries.">Browser wallets</button>' +
+        '<button id="sww-ms" title="Point at a remote skycoin-web server over dmsg; wallets live there.">Remote wallet service</button>' +
+        '</div>' +
+        '<div id="sww-browser">' +
+        '<div class="sww-hint">Wallets are created + stored in <b>this browser</b>. Configure the coin node(s) it queries over dmsg — the first is the default; add one per fibercoin. A &lt;pk&gt;:&lt;port&gt; dmsg node is dialed directly; an http(s):// / .dmsg URL goes via the resolving proxy.</div>' +
+        '<div id="sww-nodes"></div>' +
+        '<button class="sww-add" id="sww-addnode">+ Add coin node</button>' +
+        '<div class="sww-hint"><b>Bitcoin</b> (optional): a node RPC / electrum backend. Full BTC support needs a wallet service.</div>' +
+        '<div class="sww-row"><label>btc</label><input id="sww-btc" spellcheck="false" placeholder="electrum host / http://…  (optional)"></div>' +
+        '</div>' +
+        '<div id="sww-service" style="display:none">' +
+        '<div class="sww-hint">Point at a remote <b>skycoin-web server</b> over dmsg. Wallets live on that server; all wallet + node API routes to it.</div>' +
+        '<div class="sww-row"><label>service</label><input id="sww-svc" spellcheck="false" placeholder="03d1d78e…:8002"></div>' +
+        '</div>' +
+        '<div id="sww-err" style="color:#f7768e;display:none"></div>' +
+        '<button class="sww-apply" id="sww-apply">Apply</button>' +
+        '</div>' +
+        // WinBox styles window-body iframes position:absolute (to fill for its
+        // url: mode), which would cover the bar + panel. Give the iframe a
+        // position:relative flex container so it fills only the region below.
+        '<div style="flex:1;position:relative;min-height:0">' +
+        '<iframe id="sww-frame" src="/wallet/" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff"></iframe>' +
+        '</div>';
+
       walletWin = makeWin(doc, withRoot({
-        title: "skycoin wallet", width: "480px", height: "760px",
+        title: "skycoin wallet", width: "500px", height: "780px",
         top: barTop, bottom: barBottom, mount: wrap,
         onclose: function () { untrack(walletWin); walletWin = null; }
       }));
-      var input = wrap.querySelector("#sww-node");
-      var frame = wrap.querySelector("#sww-frame");
-      input.value = curNode();
-      function apply() {
-        var v = (input.value || "").trim();
-        try {
-          // skywire-coin-node is the effective key the /wallet/ shim reads;
-          // mirror into the tab's node list so both surfaces agree. Leave the
-          // wallet-mode / service keys alone so a service-mode config set in the
-          // tab isn't clobbered by a quick node edit here.
-          localStorage.setItem(K_PRIMARY, v);
-          localStorage.setItem(K_NODES, JSON.stringify(v ? [v] : [""]));
-        } catch (e) {}
-        try { frame.src = "/wallet/?_=" + Date.now(); } catch (e) {}
+      var $ = function (id) { return wrap.querySelector("#" + id); };
+      var frame = $("sww-frame");
+
+      function refreshCur() {
+        var eff = mode === "service" ? ls(K_SERVICE, "") : (nodes[0] || "");
+        $("sww-cur").textContent = eff ? eff.replace(/^https?:\/\//, "") : "default node";
       }
-      wrap.querySelector("#sww-apply").onclick = apply;
-      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { apply(); } });
+      function renderNodes() {
+        var box = $("sww-nodes"); box.innerHTML = "";
+        nodes.forEach(function (n, i) {
+          var row = doc.createElement("div"); row.className = "sww-row";
+          var lab = doc.createElement("label"); lab.textContent = "coin " + i;
+          var inp = doc.createElement("input"); inp.spellcheck = false; inp.value = n || "";
+          inp.placeholder = "039a6d1e…:6420 or http://node…" + (i === 0 ? "  (blank = default)" : "");
+          inp.oninput = function () { nodes[i] = inp.value; };
+          row.appendChild(lab); row.appendChild(inp);
+          if (nodes.length > 1) {
+            var rm = doc.createElement("button"); rm.className = "sww-rm"; rm.textContent = "✕"; rm.title = "remove";
+            rm.onclick = function () { nodes.splice(i, 1); renderNodes(); };
+            row.appendChild(rm);
+          }
+          box.appendChild(row);
+        });
+      }
+      function setMode(m) {
+        mode = m;
+        $("sww-mb").classList.toggle("on", m === "browser");
+        $("sww-ms").classList.toggle("on", m === "service");
+        $("sww-browser").style.display = m === "browser" ? "" : "none";
+        $("sww-service").style.display = m === "service" ? "" : "none";
+        refreshCur();
+      }
+      function apply() {
+        var err = $("sww-err"); err.style.display = "none"; err.textContent = "";
+        if (mode === "service") {
+          var svc = ($("sww-svc").value || "").trim();
+          if (!svc) { err.textContent = "Enter the wallet service address (a dmsg <pk>:<port> or URL)."; err.style.display = ""; return; }
+          lsSet(K_MODE, "service"); lsSet(K_SERVICE, svc); lsSet(K_PRIMARY, svc);
+        } else {
+          var clean = nodes.map(function (n) { return (n || "").trim(); }).filter(function (n, i) { return n || i === 0; });
+          if (!clean.length) { clean = [""]; }
+          nodes = clean;
+          lsSet(K_MODE, "browser");
+          lsSet(K_NODES, JSON.stringify(clean));
+          lsSet(K_BTC, ($("sww-btc").value || "").trim());
+          lsSet(K_PRIMARY, clean[0] || "");
+        }
+        refreshCur();
+        try { frame.src = "/wallet/?_=" + Date.now(); } catch (e) { }
+        $("sww-panel").classList.remove("open");
+      }
+
+      $("sww-btc").value = ls(K_BTC, "");
+      $("sww-svc").value = ls(K_SERVICE, "");
+      renderNodes();
+      setMode(mode);
+      refreshCur();
+      $("sww-gear").onclick = function () {
+        var p = $("sww-panel"); p.classList.toggle("open");
+        $("sww-gear").classList.toggle("on", p.classList.contains("open"));
+      };
+      $("sww-mb").onclick = function () { setMode("browser"); };
+      $("sww-ms").onclick = function () { setMode("service"); };
+      $("sww-addnode").onclick = function () { nodes.push(""); renderNodes(); };
+      $("sww-apply").onclick = apply;
       track(walletWin, "wallet");
     }
     var logWin = null;
