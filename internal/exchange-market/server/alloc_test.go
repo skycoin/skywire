@@ -2,8 +2,43 @@ package server
 
 import (
 	"errors"
+	"math"
 	"testing"
 )
+
+// TestRoundToDecimals normalizes to an asset's on-chain precision.
+func TestRoundToDecimals(t *testing.T) {
+	cases := []struct {
+		in   float64
+		d    int
+		want float64
+	}{
+		{10.123456789, skyDecimals, 10.123457},     // SKY: 6 dp
+		{2.123456789, paymentDecimals, 2.12345679}, // payment coin: 8 dp
+		{0.0000001, skyDecimals, 0},                // below half a droplet -> 0
+		{10.0, skyDecimals, 10.0},
+	}
+	for _, c := range cases {
+		if got := roundToDecimals(c.in, c.d); math.Abs(got-c.want) > 1e-12 {
+			t.Errorf("roundToDecimals(%v, %d) = %v, want %v", c.in, c.d, got, c.want)
+		}
+	}
+}
+
+// TestNonRoundExactAtCap verifies that at the max allowed amount, base*10^dec is
+// still within float64's exact-integer range, so nonRound's delta survives and
+// every draw is a whole, above-base droplet (uniqueness not silently lost).
+func TestNonRoundExactAtCap(t *testing.T) {
+	for i := 0; i < 500; i++ {
+		v := nonRound(maxAmountSKY, skyDecimals)
+		if scaled := v * 1e6; scaled != math.Trunc(scaled) {
+			t.Fatalf("value %v is not a whole number of droplets at the cap", v)
+		}
+		if v <= maxAmountSKY {
+			t.Fatalf("delta was lost at the cap: %v <= %v", v, maxAmountSKY)
+		}
+	}
+}
 
 // TestAllocUniqueAmountRetries verifies the allocator retries past collisions
 // and returns a non-colliding amount.

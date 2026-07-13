@@ -64,6 +64,7 @@ const (
 // Error codes (carried in ErrorData.Code on an error response).
 const (
 	CodeInvalidRequest      = "INVALID_REQUEST"
+	CodeInvalidWallet       = "INVALID_WALLET"
 	CodeUserBanned          = "USER_BANNED"
 	CodeProductNotFound     = "PRODUCT_NOT_FOUND"
 	CodeProductUnavailable  = "PRODUCT_UNAVAILABLE"

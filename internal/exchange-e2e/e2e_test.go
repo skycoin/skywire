@@ -30,6 +30,15 @@ import (
 
 const marketPort = uint16(8050)
 
+// Real mainnet payout addresses (SKY base58check, BTC P2PKH) — registration
+// validates address format, so tests use well-formed ones.
+const (
+	skySeller = "FbmPhy5bhsMX8JNeAQdQ4W3DeCYFH97FBg"
+	skyBuyer  = "23Lqf6WpmaiFdzr4g5gerqUBu8H7SyeDHJU"
+	btcSeller = "19wiPpvWPxHEmcANKzwUjiRgABQk8wZzCp"
+	btcBuyer  = "15rB1CxysqYZ6soyEoVpiUcz7Sb2yJwpS2"
+)
+
 // scriptChain is a jobs.Chain whose on-chain answers are armed by the test, so
 // the deposit/payment/delivery lifecycle can be driven deterministically without
 // a real node. Swap this for chain.New(...) against a real Skycoin node +
@@ -153,7 +162,7 @@ func TestExchangeTradeOverDmsg(t *testing.T) {
 	buyer := dialMarket(t, dmsgBuyer, pkMarket)
 
 	// --- seller registers and lists 10 SKY for 2 BTC ---
-	mustOK(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-seller", WalletBTC: "bc1-seller"})
+	mustOK(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 
 	var listing protocol.CreateListingResponse
 	bindOK(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
@@ -181,7 +190,7 @@ func TestExchangeTradeOverDmsg(t *testing.T) {
 	}
 
 	// --- buyer registers, sees the product, and buys it ---
-	mustOK(t, buyer, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: "sky-buyer", WalletBTC: "bc1-buyer"})
+	mustOK(t, buyer, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skyBuyer, WalletBTC: btcBuyer})
 
 	var products protocol.GetProductsResponse
 	bindOK(t, buyer, protocol.TypeGetProducts, nil, &products)
@@ -192,7 +201,7 @@ func TestExchangeTradeOverDmsg(t *testing.T) {
 
 	var buy protocol.BuyProductResponse
 	bindOK(t, buyer, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: productID}, &buy)
-	if buy.SellerWallet != "bc1-seller" || buy.ExpectedPaymentAmount <= 2 {
+	if buy.SellerWallet != btcSeller || buy.ExpectedPaymentAmount <= 2 {
 		t.Fatalf("unexpected buy response: %+v", buy)
 	}
 
@@ -220,8 +229,8 @@ func TestExchangeTradeOverDmsg(t *testing.T) {
 	if chain.sendCount() != 1 {
 		t.Fatalf("SendSKY calls = %d, want exactly one delivery", chain.sendCount())
 	}
-	if s := chain.lastSend(); s.addr != "sky-buyer" || s.amt != 10 {
-		t.Fatalf("delivery = %+v, want 10 SKY to sky-buyer", s)
+	if s := chain.lastSend(); s.addr != skyBuyer || s.amt != 10 {
+		t.Fatalf("delivery = %+v, want 10 SKY to the buyer SKY wallet", s)
 	}
 
 	// The buyer's order also shows completed in get_orders.
