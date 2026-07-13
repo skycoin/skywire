@@ -25,6 +25,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/skycoin/skywire/pkg/btcgateway"
+	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
 
 var (
@@ -96,6 +97,14 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		rest := chi.URLParam(r, "*")
+		// The ONE wallet config page (mode / coin nodes / BTC / skysocks exit),
+		// embedded via iframe by the ☰ wallet window AND the Angular wallet tab.
+		if rest == "config" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write([]byte(browseui.WalletConfigHTML)) //nolint:errcheck
+			return
+		}
 		// Node API (/wallet/api/v1|v2/*) → proxy to the node over dmsg. The
 		// wallet's crypto is client-side; only these calls cross the mesh.
 		if strings.HasPrefix(rest, "api/v1/") || strings.HasPrefix(rest, "api/v2/") {
