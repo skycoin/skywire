@@ -81,7 +81,7 @@ const walletDmsgFetchShim = `<script>(function(){` +
 	`if(btc){` +
 	`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
 	`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
-	`return Promise.resolve(v.btcFetch(back,init.method||"GET",p(url)+q(url),init.body||null,ls("skywire-upstream-proxy"))).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+	`return Promise.resolve(v.btcFetch(back,init.method||"GET",p(url)+q(url),init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
 	`}` +
 	`var node=ls("skywire-coin-node");` +
 	`if(!node)node="` + defaultCoinNode + `";` +
@@ -221,6 +221,14 @@ page never asks anyone to type a secret key.`,
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
 					w.Header().Set("Cache-Control", "no-cache")
 					_, _ = w.Write(walletIndex) //nolint:errcheck // best-effort
+					return
+				}
+				// The ONE wallet config page, embedded via iframe by the ☰ wallet
+				// window and the Angular wallet tab (same page as the native HV).
+				if r.URL.Path == "/wallet/config" {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					w.Header().Set("Cache-Control", "no-cache")
+					_, _ = w.Write([]byte(wasmhv.WalletConfigHTML)) //nolint:errcheck
 					return
 				}
 				fileServer.ServeHTTP(w, r) // /wallet/<asset> → static/wallet/<asset>
