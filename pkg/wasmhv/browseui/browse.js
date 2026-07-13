@@ -1872,8 +1872,8 @@
         '<div class="sww-hint">Wallets are created + stored in <b>this browser</b>. Configure the coin node(s) it queries over dmsg — the first is the default; add one per fibercoin. A &lt;pk&gt;:&lt;port&gt; dmsg node is dialed directly; an http(s):// / .dmsg URL goes via the resolving proxy.</div>' +
         '<div id="sww-nodes"></div>' +
         '<button class="sww-add" id="sww-addnode">+ Add coin node</button>' +
-        '<div class="sww-hint"><b>Bitcoin</b> (optional): a node RPC / electrum backend. Full BTC support needs a wallet service.</div>' +
-        '<div class="sww-row"><label>btc</label><input id="sww-btc" spellcheck="false" placeholder="electrum host / http://…  (optional)"></div>' +
+        '<div class="sww-hint"><b>Bitcoin</b> (optional): an <span class="mono">ssl://host:port</span> electrum server. Reached over the mesh by the visor\'s BTC gateway — your keys + signing stay in this browser, only chain queries cross.</div>' +
+        '<div class="sww-row"><label>btc</label><input id="sww-btc" spellcheck="false" placeholder="ssl://electrum.blockstream.info:50002  (optional)"></div>' +
         '</div>' +
         '<div id="sww-service" style="display:none">' +
         '<div class="sww-hint">Point at a remote <b>skycoin-web server</b> over dmsg. Wallets live on that server; all wallet + node API routes to it.</div>' +
