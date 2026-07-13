@@ -15,13 +15,58 @@
 package visor
 
 import (
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+
+	"github.com/skycoin/skywire/pkg/btcgateway"
+	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
+
+var (
+	nativeBtcGatewaysMu sync.Mutex
+	nativeBtcGateways   = map[string]*btcgateway.Gateway{}
+)
+
+// nativeBtcGateway is the HV's BTC electrum gateway for the given skysocks exit.
+// exitPK == "" (or the local visor's own PK) means clearnet egress: a nil dialer
+// so the host visor reaches public electrum servers over its own default route
+// (the zero-config native default — self-egress). A non-empty REMOTE exit PK
+// routes the electrum connection through that visor's skysocks-server for IP
+// privacy (the native twin of the wasm wallet's required skysocks exit). The
+// per-request electrum URL comes from X-Skywire-Btc-Backend; the exit from
+// X-Skywire-Btc-Proxy — both set by the wallet shim from localStorage
+// (skywire-btc-backend / skywire-btc-proxy, written by the config page).
+//
+// Gateways are cached per exit so the electrum backends (and their long-lived
+// per-server connections) are reused across chain queries.
+func (hv *Hypervisor) nativeBtcGateway(exitPK string) *btcgateway.Gateway {
+	exitPK = strings.TrimSpace(exitPK)
+	nativeBtcGatewaysMu.Lock()
+	defer nativeBtcGatewaysMu.Unlock()
+	if g, ok := nativeBtcGateways[exitPK]; ok {
+		return g
+	}
+	var g *btcgateway.Gateway
+	if exitPK != "" && hv.visor != nil {
+		var pk cipher.PubKey
+		if err := pk.Set(exitPK); err == nil && pk != hv.visor.conf.PK {
+			g = btcgateway.New(hv.visor.skysocksDialFunc(pk))
+		}
+	}
+	if g == nil { // empty / self / unparseable exit → clearnet self-egress
+		g = btcgateway.New(nil)
+	}
+	nativeBtcGateways[exitPK] = g
+	return g
+}
 
 // walletNodeDmsg is the skycoin node the HV-served wallet talks to by DEFAULT:
 // the deployment node addressed over dmsg (same PK:port as
@@ -41,18 +86,28 @@ const walletNodeDmsg = "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812
 // X-Skywire-Coin-Node so walletNodeProxy dials it over dmsg. Empty selection →
 // the deployment default. This is the native twin of the wasm fetchDmsg shim;
 // same localStorage key, so node config is unified across both visors.
+// It ALSO intercepts the wallet's BTC API (/v1/btc/*) and tags the operator-
+// selected electrum backend (localStorage['skywire-btc-backend'], "ssl://host:
+// port") as X-Skywire-Btc-Backend, so the HV's in-process BTC gateway
+// (pkg/btcgateway) reaches it — keys + signing stay in the browser, only chain
+// queries cross. Same localStorage keys as the wasm shim + the config panel.
 const walletNodeShim = `<script>(function(){` +
 	`var rf=window.fetch?window.fetch.bind(window):null;if(!rf){return;}` +
-	`function node(){try{return localStorage.getItem("skywire-coin-node")||"";}catch(e){return "";}}` +
+	`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
 	`function pathOf(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
 	`window.fetch=function(input,init){` +
 	`var url=(typeof input==="string")?input:(input&&input.url)||"";` +
-	`var m=/^\/(wallet\/)?api\/v[12]\//.exec(pathOf(url));` +
-	`if(!m){return rf(input,init);}` +
-	`var target=m[1]?url:url.replace(pathOf(url),"/wallet"+pathOf(url));` +
+	`var p=pathOf(url);` +
+	`var mn=/^\/(wallet\/)?api\/v[12]\//.exec(p);` +
+	`var mb=/^\/(wallet\/)?v1\/btc\//.exec(p);` +
+	`if(!mn&&!mb){return rf(input,init);}` +
+	`var pre=(mn&&mn[1])||(mb&&mb[1]);` +
+	`var target=pre?url:url.replace(p,"/wallet"+p);` +
 	`init=init||{};` +
 	`var h=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
-	`var n=node();if(n){h.set("X-Skywire-Coin-Node",n);}` +
+	`if(mn){var n=ls("skywire-coin-node");if(n){h.set("X-Skywire-Coin-Node",n);}}` +
+	`else{var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
+	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}}` +
 	`init.headers=h;return rf(target,init);` +
 	`};})();</script>`
 
@@ -68,10 +123,29 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		rest := chi.URLParam(r, "*")
+		// The ONE wallet config page (mode / coin nodes / BTC / skysocks exit),
+		// embedded via iframe by the ☰ wallet window AND the Angular wallet tab.
+		if rest == "config" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write([]byte(browseui.WalletConfigHTML)) //nolint:errcheck
+			return
+		}
 		// Node API (/wallet/api/v1|v2/*) → proxy to the node over dmsg. The
 		// wallet's crypto is client-side; only these calls cross the mesh.
 		if strings.HasPrefix(rest, "api/v1/") || strings.HasPrefix(rest, "api/v2/") {
 			hv.walletNodeProxy(w, r, rest)
+			return
+		}
+		// BTC API (/wallet/v1/btc/*) → the in-process electrum gateway. The
+		// browser derives + signs BTC itself; only chain queries come here. The
+		// electrum server (X-Skywire-Btc-Backend) is reached either directly on
+		// the clearnet (self-egress, the default) or — when the operator sets a
+		// skysocks exit (X-Skywire-Btc-Proxy) — routed through that visor for IP
+		// privacy. Both headers are set by the shim from localStorage.
+		if strings.HasPrefix(rest, "v1/btc/") {
+			r.URL.Path = "/" + rest
+			hv.nativeBtcGateway(r.Header.Get("X-Skywire-Btc-Proxy")).ServeHTTP(w, r)
 			return
 		}
 		if fsErr != nil {
@@ -157,12 +231,20 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 		return
 	}
 
-	// Mesh coin node (dmsg-served API) → dmsg-HTTP over the AUTHORITATIVE dmsg
-	// client (DmsgHTTP uses v.dmsgC). Not BrowseFetch — that's for browsing
-	// (skynet-first + the secondary dmsg client), which is the wrong tool for a
-	// pure dmsg node API.
+	// Mesh coin node: resolve the host with the SAME resolver the iframe browser
+	// uses (bare "<pk>[:port]", the readable "<name>.<pk>.dmsg[:port]" alias,
+	// "alias.dmsg", …) via resolveBrowseHost, then dmsg-HTTP over the
+	// AUTHORITATIVE dmsg client. We reuse the resolver but NOT BrowseFetch's
+	// fetch step: BrowseFetch dials over the secondary dmsg client (v.dmsgHTTP /
+	// dmsgDC), which has session conflicts on the coin node (see Visor.DmsgHTTP);
+	// v.dmsgC (DmsgHTTP) has stable sessions.
+	pk, port, rerr := hv.visor.resolveBrowseHost(walletBackendStrip(backend), 0)
+	if rerr != nil {
+		http.Error(w, "coin node resolve failed: "+rerr.Error(), http.StatusBadGateway)
+		return
+	}
 	resp, err := hv.visor.DmsgHTTP(DmsgHTTPRequest{
-		URL:    "dmsg://" + walletBackendStrip(backend) + path,
+		URL:    fmt.Sprintf("dmsg://%s:%d%s", pk.Hex(), port, path),
 		Method: r.Method,
 		Header: header,
 		Body:   body,

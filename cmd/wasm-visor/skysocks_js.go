@@ -217,6 +217,20 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 	if len(args) > 4 && !args[4].IsNull() && !args[4].IsUndefined() && args[4].String() != "" {
 		winID = args[4].String()
 	}
+	// Optional 6th arg: a request-headers object (e.g. Content-Type), forwarded
+	// verbatim so form-encoded POSTs aren't mislabeled — the clearnet twin of
+	// fetchDmsg's header forwarding.
+	var extraHeaders map[string]string
+	if len(args) > 5 && !args[5].IsNull() && !args[5].IsUndefined() && args[5].Type() == js.TypeObject {
+		keys := js.Global().Get("Object").Call("keys", args[5])
+		for i := 0; i < keys.Length(); i++ {
+			k := keys.Index(i).String()
+			if extraHeaders == nil {
+				extraHeaders = map[string]string{}
+			}
+			extraHeaders[k] = args[5].Get(k).String()
+		}
+	}
 	return promise(func() (interface{}, error) {
 		var spk cipher.PubKey
 		if err := spk.UnmarshalText([]byte(serverPKHex)); err != nil {
@@ -240,6 +254,9 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		req, err := http.NewRequestWithContext(ctx, method, rawURL, rdr)
 		if err != nil {
 			return nil, err
+		}
+		for k, v := range extraHeaders {
+			req.Header.Set(k, v)
 		}
 		t0 := time.Now()
 		resp, err := client.Do(req)

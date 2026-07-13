@@ -1816,52 +1816,57 @@
       if (!skipLanding) { win.landHome(); }
       return win;
     }
-    var walletWin = null;
+    var walletWin = null, walletCfgListener = null;
     function openWallet() {
       if (focusExisting(walletWin)) { return; }
-      // Same-origin body: a thin coin-node config strip above the PWA-bundled
-      // skycoin-web wallet iframe. The wallet's crypto (skycoin-lite.wasm) +
-      // wallets (localStorage) are client-side; its node API (/api/v1|v2) is
-      // routed over dmsg by the injected shim, which reads the coin node from
-      // localStorage['skywire-coin-node']. The ☰-launched wallet otherwise had
-      // no way to reach that setting (the full backend panel lives in the
-      // Angular wallet tab); this exposes the essential one inline. Same key +
-      // origin as the iframe, so config is unified across the tab and ☰ window.
-      var K_PRIMARY = "skywire-coin-node", K_NODES = "skywire-coin-nodes";
-      function curNode() { try { return localStorage.getItem(K_PRIMARY) || ""; } catch (e) { return ""; } }
+      // The ☰ wallet: the PWA-bundled skycoin-web wallet iframe, with a ⚙
+      // settings toggle that reveals the ONE shared config page (/wallet/config)
+      // — the SAME page the Angular wallet tab embeds. Same origin → shared
+      // localStorage; on Apply the config posts back and we reload the wallet.
+      var isWasm = !!(globalThis.skywireVisor);
+      var cfgSrc = "/wallet/config" + (isWasm ? "?wasm=1" : "");
       var wrap = doc.createElement("div");
-      wrap.style.cssText = "position:absolute;inset:0;display:flex;flex-direction:column;background:#15131c;overflow:hidden";
+      wrap.style.cssText = "position:absolute;inset:0;display:flex;flex-direction:column;background:#15131c;overflow:hidden;font:12px monospace;color:#cdd2da";
       wrap.innerHTML =
-        '<div style="display:flex;gap:.45em;align-items:center;padding:.45em .55em;background:#1b1726;border-bottom:1px solid #2a2342;font:12px monospace;color:#cdd2da">' +
-        '<span style="opacity:.7;white-space:nowrap">coin node</span>' +
-        '<input id="sww-node" spellcheck="false" title="dmsg &lt;pk&gt;:&lt;port&gt; or http(s):// URL — blank uses the deployment default" ' +
-        'placeholder="039a6d1e…:6420 or http://node… (blank = default)" ' +
-        'style="flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .5em;font:inherit">' +
-        '<button id="sww-apply" style="background:#6f4bd8;color:#fff;border:0;border-radius:3px;padding:.4em .8em;cursor:pointer;font:inherit">Apply</button>' +
+        '<style>' +
+        '.sww-bar{display:flex;gap:.5em;align-items:center;padding:.4em .55em;background:#1b1726;border-bottom:1px solid #2a2342}' +
+        '.sww-bar button{background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .65em;cursor:pointer;font:inherit;line-height:1}' +
+        '.sww-bar button:hover{background:#3a3352;color:#fff}.sww-bar button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.2)}' +
+        '.sww-served{font-size:.92em;padding:.15em .6em;border-radius:999px;background:rgba(74,222,128,.18);color:#4ade80}' +
+        '#sww-cfg{display:none;border:0;border-bottom:1px solid #2a2342;width:100%;height:48%;min-height:0;background:#15131c}' +
+        '#sww-cfg.open{display:block}' +
+        '</style>' +
+        '<div class="sww-bar">' +
+        '<button id="sww-gear" title="wallet configuration">⚙ settings</button>' +
+        '<span class="sww-served" title="Served by this visor at /wallet/ — wallets are client-side; only the node/BTC queries cross the mesh.">served</span>' +
+        '<span style="flex:1"></span>' +
         '</div>' +
-        '<iframe id="sww-frame" src="/wallet/" allowfullscreen style="flex:1;width:100%;border:0;background:#fff"></iframe>';
+        '<iframe id="sww-cfg" src="' + cfgSrc + '"></iframe>' +
+        // WinBox styles window-body iframes position:absolute; give the wallet
+        // iframe a relative flex container so it fills only the region below.
+        '<div style="flex:1;position:relative;min-height:0">' +
+        '<iframe id="sww-frame" src="/wallet/" allowfullscreen style="position:absolute;inset:0;width:100%;height:100%;border:0;background:#fff"></iframe>' +
+        '</div>';
       walletWin = makeWin(doc, withRoot({
-        title: "skycoin wallet", width: "480px", height: "760px",
+        title: "skycoin wallet", width: "500px", height: "800px",
         top: barTop, bottom: barBottom, mount: wrap,
-        onclose: function () { untrack(walletWin); walletWin = null; }
+        onclose: function () {
+          untrack(walletWin); walletWin = null;
+          if (walletCfgListener) { try { window.removeEventListener("message", walletCfgListener); } catch (e) {} walletCfgListener = null; }
+        }
       }));
-      var input = wrap.querySelector("#sww-node");
       var frame = wrap.querySelector("#sww-frame");
-      input.value = curNode();
-      function apply() {
-        var v = (input.value || "").trim();
-        try {
-          // skywire-coin-node is the effective key the /wallet/ shim reads;
-          // mirror into the tab's node list so both surfaces agree. Leave the
-          // wallet-mode / service keys alone so a service-mode config set in the
-          // tab isn't clobbered by a quick node edit here.
-          localStorage.setItem(K_PRIMARY, v);
-          localStorage.setItem(K_NODES, JSON.stringify(v ? [v] : [""]));
-        } catch (e) {}
-        try { frame.src = "/wallet/?_=" + Date.now(); } catch (e) {}
-      }
-      wrap.querySelector("#sww-apply").onclick = apply;
-      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { apply(); } });
+      var cfg = wrap.querySelector("#sww-cfg");
+      wrap.querySelector("#sww-gear").onclick = function () {
+        this.classList.toggle("on", cfg.classList.toggle("open"));
+      };
+      // Reload the wallet iframe when the config page applies (same-origin).
+      walletCfgListener = function (ev) {
+        if (ev && ev.data && ev.data.type === "skywire-wallet-config") {
+          try { frame.src = "/wallet/?_=" + Date.now(); } catch (e) {}
+        }
+      };
+      window.addEventListener("message", walletCfgListener);
       track(walletWin, "wallet");
     }
     var logWin = null;
