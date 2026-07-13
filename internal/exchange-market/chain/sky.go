@@ -21,6 +21,12 @@ import (
 // of each other are treated as equal.
 const skyEpsilon = 0.0000005
 
+// maxNodeResponse caps how much of a node response we read. The verbose
+// /transactions list for an escrow wallet with a long history is the large one;
+// 32 MiB is generous headroom (~tens of thousands of txns) while still bounding
+// memory.
+const maxNodeResponse = 32 << 20
+
 // SkyNode talks to a Skycoin fullnode's REST API (default port 6420). It
 // verifies incoming SKY deposits and spends SKY from a hot wallet on the node.
 type SkyNode struct {
@@ -206,8 +212,11 @@ func (s *SkyNode) do(req *http.Request, out any) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()                                 //nolint:errcheck
-	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck
+	defer resp.Body.Close() //nolint:errcheck
+	// The verbose /transactions list for an escrow wallet with a long history can
+	// be large; cap generously so a busy wallet's response isn't truncated (which
+	// would silently break deposit detection). POST/other responses are tiny.
+	data, _ := io.ReadAll(io.LimitReader(resp.Body, maxNodeResponse)) //nolint:errcheck
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("node %s: status %d: %s", req.URL.Path, resp.StatusCode, strings.TrimSpace(string(data)))
 	}
