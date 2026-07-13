@@ -14,7 +14,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"sync"
+	"time"
 
 	"github.com/sirupsen/logrus"
 
@@ -22,6 +24,17 @@ import (
 	"github.com/skycoin/skywire/internal/exchange-market/protocol"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/skychat/message"
+)
+
+const (
+	// defaultIdleTimeout closes a session that goes this long without sending a
+	// request (exchange-design.md §7 "5-minute rule"). It frees the single-session
+	// slot and serving goroutine an abandoned connection would otherwise hold. The
+	// client's UI polls well within this window, so an active user never trips it.
+	defaultIdleTimeout = 5 * time.Minute
+	// writeTimeout bounds a single response write so a peer that stops draining
+	// the connection can't pin the serving goroutine indefinitely.
+	writeTimeout = 30 * time.Second
 )
 
 // Listener is the subset of *app.Client the server needs to accept dmsg
@@ -39,6 +52,10 @@ type Server struct {
 	mu       sync.Mutex
 	sessions map[string]struct{} // active remote public keys (single-session enforcement)
 
+	// idleTimeout is how long a session may go without a request before it is
+	// closed. Defaults to defaultIdleTimeout; overridable for tests.
+	idleTimeout time.Duration
+
 	// allocMu serializes non-round-amount allocation + insert so two concurrent
 	// listings/orders can't be assigned the same amount to the same wallet.
 	allocMu sync.Mutex
@@ -54,10 +71,11 @@ func New(database *db.Database, log logrus.FieldLogger, port protocol.Port) *Ser
 		log = logrus.New()
 	}
 	return &Server{
-		db:       database,
-		log:      log,
-		port:     port,
-		sessions: make(map[string]struct{}),
+		db:          database,
+		log:         log,
+		port:        port,
+		sessions:    make(map[string]struct{}),
+		idleTimeout: defaultIdleTimeout,
 	}
 }
 
@@ -133,11 +151,23 @@ func (s *Server) release(pk string) {
 // for the authenticated remote public key. It returns when the connection ends.
 // Exposed (transport-agnostic) so it can be driven over net.Pipe in tests.
 func (s *Server) Serve(conn net.Conn, remotePK string) {
+	idle := s.idleTimeout
+	if idle <= 0 {
+		idle = defaultIdleTimeout
+	}
 	fc := message.NewConn(conn)
 	for {
+		// Reset the idle deadline before each read: the clock covers the time
+		// spent waiting for the next request, so it resets on every request and
+		// only fires when the session is genuinely idle.
+		_ = conn.SetReadDeadline(time.Now().Add(idle)) //nolint:errcheck
+
 		payload, err := fc.ReadFrame()
 		if err != nil {
-			if !errors.Is(err, net.ErrClosed) {
+			switch {
+			case errors.Is(err, os.ErrDeadlineExceeded):
+				s.log.Debugf("exchange-market: session %s idle-timed out after %s", remotePK, idle)
+			case !errors.Is(err, net.ErrClosed):
 				s.log.Debugf("exchange-market: read from %s ended: %v", remotePK, err)
 			}
 			return
@@ -165,7 +195,7 @@ func (s *Server) writeFrame(fc *message.Conn, env protocol.Envelope) bool {
 		s.log.WithError(err).Error("exchange-market: failed to marshal response")
 		return false
 	}
-	if err := fc.WriteFrame(out); err != nil {
+	if err := fc.WriteFrameDeadline(out, writeTimeout); err != nil {
 		s.log.Debugf("exchange-market: write failed: %v", err)
 		return false
 	}

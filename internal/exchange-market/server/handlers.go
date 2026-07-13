@@ -5,12 +5,14 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/internal/exchange-market/db"
 	"github.com/skycoin/skywire/internal/exchange-market/protocol"
+	"github.com/skycoin/skywire/internal/exchange-market/walletaddr"
 )
 
 // Decimal precision per asset. SKY uses 6 (droplets); the supported external
@@ -26,6 +28,24 @@ const (
 	skyTol     = 0.5e-6
 	paymentTol = 0.5e-8
 )
+
+// Upper bounds on request amounts. Beyond these, base*10^decimals would exceed
+// float64's exact-integer range (2^53 ≈ 9e15), so nonRound's small delta would
+// be lost to rounding and uniqueness could silently break. The caps keep
+// base*10^decimals ≤ 1e15 and sit far above any real trade (SKY total supply is
+// ~1e8; a payment-coin price of 1e7 is already absurd).
+const (
+	maxAmountSKY = 1e9
+	maxPrice     = 1e7
+)
+
+// roundToDecimals rounds v to an asset's on-chain precision (SKY 6, payment coin
+// 8), so stored amounts are always valid, representable values and the escrow
+// deposit reconciles exactly with later delivery.
+func roundToDecimals(v float64, decimals int) float64 {
+	scale := math.Pow(10, float64(decimals))
+	return math.Round(v*scale) / scale
+}
 
 // errNoUniqueAmount means the non-round amount space to a wallet is momentarily
 // exhausted (too many concurrent pending payments of the same base amount).
@@ -80,8 +100,25 @@ func (s *Server) handleRegister(pk string, req protocol.Envelope) protocol.Envel
 	if err := req.Bind(&r); err != nil {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid register payload")
 	}
-	if r.WalletSKY == "" {
+	if strings.TrimSpace(r.WalletSKY) == "" {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "wallet_sky is required")
+	}
+	// Phase 1 trades SKY (the seller receives SKY refunds; the buyer receives
+	// the purchased SKY) for BTC or LTC (the seller's payout address). Validate
+	// those addresses so a typo is rejected here rather than surfacing later as a
+	// failed payout. SKY is required (checked above); BTC/LTC are optional and
+	// only validated when present.
+	for _, w := range []struct{ currency, addr string }{
+		{"SKY", r.WalletSKY},
+		{"BTC", r.WalletBTC},
+		{"LTC", r.WalletLTC},
+	} {
+		if strings.TrimSpace(w.addr) == "" {
+			continue
+		}
+		if err := walletaddr.Validate(w.currency, w.addr); err != nil {
+			return protocol.ErrorResponse(req.ID, protocol.CodeInvalidWallet, "invalid "+w.currency+" wallet address")
+		}
 	}
 	u := &db.User{
 		PubKey:           pk,
@@ -140,6 +177,17 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	}
 	if r.AmountSKY <= 0 || r.Price <= 0 {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky and price must be positive")
+	}
+	if r.AmountSKY > maxAmountSKY || r.Price > maxPrice {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky or price is too large")
+	}
+	// Normalize to each asset's on-chain precision so the escrow deposit and the
+	// later delivery reconcile exactly and no sub-unit dust is stored. Re-check
+	// positivity: a value below half a unit rounds to zero.
+	r.AmountSKY = roundToDecimals(r.AmountSKY, skyDecimals)
+	r.Price = roundToDecimals(r.Price, paymentDecimals)
+	if r.AmountSKY <= 0 || r.Price <= 0 {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky or price is too small to represent")
 	}
 
 	// The seller must be registered (wallet addresses on file).

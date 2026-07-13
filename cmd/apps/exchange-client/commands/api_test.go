@@ -137,7 +137,11 @@ func TestProxyRoutes(t *testing.T) {
 	res.Body.Close() //nolint
 
 	// Register wallets.
-	reg, _ := json.Marshal(map[string]string{"wallet_sky": "sky-me", "wallet_btc": "bc1-me"}) //nolint
+	// Real mainnet addresses — registration validates address format.
+	reg, _ := json.Marshal(map[string]string{ //nolint
+		"wallet_sky": "xPHfK6xn5LZvWAPB5EV6A62WyzQLywci1J",
+		"wallet_btc": "1CLdkSYgwRA4Hm7EUPqaqpAtGG9zgT7dFm",
+	})
 	res, err = http.Post(ts.URL+"/api/register", "application/json", bytes.NewReader(reg))
 	if err != nil {
 		t.Fatalf("POST register: %v", err)
