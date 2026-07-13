@@ -26,16 +26,20 @@ var errNotConnected = errors.New("not connected to a market")
 // session holds the client's (single) connection to a market. It is safe for
 // concurrent use by the HTTP handlers.
 type session struct {
-	dialer    market.Dialer
-	defaultPK string
+	dialer     market.Dialer
+	defaultPK  string
+	marketPort protocol.Port // the market's dmsg routing port to dial
 
 	mu   sync.Mutex
 	conn *market.Conn
 	pk   string // public key of the currently connected market ("" if none)
 }
 
-func newSession(dialer market.Dialer, defaultPK string) *session {
-	return &session{dialer: dialer, defaultPK: strings.TrimSpace(defaultPK)}
+func newSession(dialer market.Dialer, defaultPK string, marketPort protocol.Port) *session {
+	if marketPort == 0 {
+		marketPort = protocol.DefaultPort
+	}
+	return &session{dialer: dialer, defaultPK: strings.TrimSpace(defaultPK), marketPort: marketPort}
 }
 
 // connect dials the market at pkHex over dmsg and performs a lightweight
@@ -51,7 +55,7 @@ func (s *session) connect(pkHex string) ([]string, error) {
 		return nil, errors.New("invalid market public key")
 	}
 
-	conn, err := market.Dial(s.dialer, pk, protocol.DefaultPort)
+	conn, err := market.Dial(s.dialer, pk, s.marketPort)
 	if err != nil {
 		return nil, err
 	}

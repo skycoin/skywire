@@ -306,11 +306,14 @@ type GetOrderStatusRequest struct {
 	OrderID string `json:"order_id"`
 }
 
-// GetOrderStatusResponse reports an order's live status.
+// GetOrderStatusResponse reports an order's live status. RequiredConfirmations
+// is the market's threshold, so the client shows progress (n/N) without
+// hardcoding N.
 type GetOrderStatusResponse struct {
-	OrderID       string `json:"order_id"`
-	Status        string `json:"status"`
-	Confirmations int    `json:"confirmations"`
-	PaymentTxHash string `json:"payment_tx_hash,omitempty"`
-	PaidAt        string `json:"paid_at,omitempty"`
+	OrderID               string `json:"order_id"`
+	Status                string `json:"status"`
+	Confirmations         int    `json:"confirmations"`
+	RequiredConfirmations int    `json:"required_confirmations"`
+	PaymentTxHash         string `json:"payment_tx_hash,omitempty"`
+	PaidAt                string `json:"paid_at,omitempty"`
 }
