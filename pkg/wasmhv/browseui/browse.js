@@ -926,6 +926,61 @@
   // openIdentityDialog shows a modal to export / import / reset this visor's
   // identity (the 32-byte secret key in localStorage). opts.selfPK() supplies the
   // PK for display. Self-contained; reads/writes the same slot hv-boot.js uses.
+  // openAboutDialog shows the visor's version / build / identity + dmsg status,
+  // read from GET /api/about via opts.api — so it renders identically on the
+  // wasm visor (hvApi routes to the in-tab core) and the native HV (fetch to the
+  // visor's HV server). It's the ☰ menu's "about" entry, added to both
+  // hypervisor UIs so that menu stays equivalent across native and wasm.
+  function openAboutDialog(doc, opts) {
+    var existing = doc.getElementById("skywire-about-dialog");
+    if (existing) { existing.style.display = "flex"; return; }
+    var ov = doc.createElement("div");
+    ov.id = "skywire-about-dialog";
+    ov.style.cssText = "position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;background:rgba(8,6,16,.62)";
+    var box = doc.createElement("div");
+    box.style.cssText = "width:min(520px,92vw);max-height:90vh;overflow:auto;background:#15131c;color:#cdd2da;border:1px solid #2a2342;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.6);font:12px/1.6 monospace;padding:1em;box-sizing:border-box";
+    box.innerHTML =
+      '<div style="display:flex;align-items:center;gap:.5em;margin-bottom:.7em">' +
+      '<b style="color:#9d7cff;font-size:14px">about skywire</b><span style="flex:1"></span>' +
+      '<button id="ab-x" style="cursor:pointer;background:transparent;color:#cdd2da;border:0;font-size:15px">×</button></div>' +
+      '<div id="ab-body" style="opacity:.9">loading…</div>';
+    ov.appendChild(box);
+    (doc.body || doc.documentElement).appendChild(ov);
+    function close() { ov.style.display = "none"; }
+    box.querySelector("#ab-x").onclick = close;
+    ov.addEventListener("click", function (e) { if (e.target === ov) { close(); } });
+    function row(k, v) {
+      if (!v || !String(v).trim()) { return ""; }
+      return '<div style="display:flex;gap:.6em;margin:.15em 0"><span style="min-width:8.5em;color:#8b93a7">' + k +
+        '</span><span style="flex:1;color:#cdd2da;word-break:break-all">' + v + '</span></div>';
+    }
+    // opts.api's r.body is a Uint8Array under hvApi (wasm core) but a plain
+    // string under the harness/native fetch path — decode both.
+    function decBody(r) {
+      var b = r && r.body; if (b == null) { return ""; }
+      if (typeof b === "string") { return b; }
+      try { return new TextDecoder().decode(b); } catch (e) {}
+      try { return new TextDecoder().decode(new Uint8Array(b)); } catch (e) {}
+      return "";
+    }
+    Promise.resolve(opts.api("GET", "/api/about", null)).then(function (r) {
+      var a = {}; try { a = JSON.parse(decBody(r)); } catch (e) {}
+      var b = a.build || a.Build || {};
+      var pk = a.public_key || a.PubKey || (opts.selfPK && opts.selfPK()) || "";
+      var mode = globalThis.skywireVisor ? "browser (wasm) visor" : "native visor";
+      // Static build/identity info only — live status (dmsg sessions, transports,
+      // routes) lives on the dashboard, not here.
+      box.querySelector("#ab-body").innerHTML =
+        row("mode", mode) +
+        row("version", b.version || b.Version) +
+        row("commit", b.commit || b.Commit) +
+        row("built", b.date || b.Date) +
+        row("go", b.go || b.Go) +
+        row("platform", (b.os || b.OS) ? ((b.os || b.OS) + "/" + (b.arch || b.Arch || "")) : "") +
+        row("public key", pk);
+    }).catch(function (e) { box.querySelector("#ab-body").textContent = "failed to load /api/about: " + e; });
+  }
+
   function openIdentityDialog(doc, opts) {
     var existing = doc.getElementById("skywire-identity-dialog");
     if (existing) { existing.style.display = "flex"; return; }
@@ -1699,15 +1754,19 @@
     // HV UI doesn't expose (native has its own Angular skychat tab).
     if (globalThis.skywireVisor && globalThis.skywireVisor.skychatSend) { addApp("chat", function () { openChat(); }); }
     if (globalThis.skywireVisor && globalThis.skywireVisor.serveContent) { addApp("host", function () { openHost(); }); }
-    // 'wallet' is the skycoin-web thin-client bundled into the PWA at /wallet/
-    // (same-origin — the app never loads over dmsg; only its node API does, via
-    // the Service Worker → fetchDmsg bridge). Only offered in the wasm-visor
-    // context, where /wallet/ is embedded and dmsg routing is available.
-    if (globalThis.skywireVisor) { addApp("wallet", function () { openWallet(); }); }
+    // 'wallet' is the skycoin-web thin-client served same-origin at /wallet/ —
+    // the app never loads over dmsg, only its node API does. Ungated: both the
+    // wasm visor (browser fetchDmsg shim) and the native HV (server-side dmsg
+    // proxy, hypervisor_handlers_wallet.go) serve /wallet/, so the ☰ wallet
+    // opens the hosting visor's wallet on either.
+    addApp("wallet", function () { openWallet(); });
     addApp("console", function () { openCli(); });
     if (opts.ptyURL) addApp("terminal", function () { openTerm(); });
     addApp("logs", function () { openLog(); });
     addApp("identity", function () { openIdentityDialog(doc, opts); });
+    // 'about' works on both HV UIs (reads /api/about via opts.api) — kept
+    // ungated so the native and wasm ☰ menus stay equivalent.
+    addApp("about", function () { openAboutDialog(doc, opts); });
     addApp("tour", function () { startTour(doc); });
     // Offer the tour once, shortly after first load, so newcomers get oriented.
     try {
@@ -1760,15 +1819,49 @@
     var walletWin = null;
     function openWallet() {
       if (focusExisting(walletWin)) { return; }
-      // Same-origin iframe onto the PWA-bundled skycoin-web wallet. WinBox builds
-      // the iframe from url:. The wallet's crypto (skycoin-lite.wasm) + wallets
-      // (localStorage) are fully client-side; its node API (/api/v1|v2) is routed
-      // over dmsg by the Service Worker → fetchDmsg bridge.
+      // Same-origin body: a thin coin-node config strip above the PWA-bundled
+      // skycoin-web wallet iframe. The wallet's crypto (skycoin-lite.wasm) +
+      // wallets (localStorage) are client-side; its node API (/api/v1|v2) is
+      // routed over dmsg by the injected shim, which reads the coin node from
+      // localStorage['skywire-coin-node']. The ☰-launched wallet otherwise had
+      // no way to reach that setting (the full backend panel lives in the
+      // Angular wallet tab); this exposes the essential one inline. Same key +
+      // origin as the iframe, so config is unified across the tab and ☰ window.
+      var K_PRIMARY = "skywire-coin-node", K_NODES = "skywire-coin-nodes";
+      function curNode() { try { return localStorage.getItem(K_PRIMARY) || ""; } catch (e) { return ""; } }
+      var wrap = doc.createElement("div");
+      wrap.style.cssText = "position:absolute;inset:0;display:flex;flex-direction:column;background:#15131c;overflow:hidden";
+      wrap.innerHTML =
+        '<div style="display:flex;gap:.45em;align-items:center;padding:.45em .55em;background:#1b1726;border-bottom:1px solid #2a2342;font:12px monospace;color:#cdd2da">' +
+        '<span style="opacity:.7;white-space:nowrap">coin node</span>' +
+        '<input id="sww-node" spellcheck="false" title="dmsg &lt;pk&gt;:&lt;port&gt; or http(s):// URL — blank uses the deployment default" ' +
+        'placeholder="039a6d1e…:6420 or http://node… (blank = default)" ' +
+        'style="flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .5em;font:inherit">' +
+        '<button id="sww-apply" style="background:#6f4bd8;color:#fff;border:0;border-radius:3px;padding:.4em .8em;cursor:pointer;font:inherit">Apply</button>' +
+        '</div>' +
+        '<iframe id="sww-frame" src="/wallet/" allowfullscreen style="flex:1;width:100%;border:0;background:#fff"></iframe>';
       walletWin = makeWin(doc, withRoot({
-        title: "skycoin wallet", url: "/wallet/", width: "460px", height: "720px",
-        top: barTop, bottom: barBottom,
+        title: "skycoin wallet", width: "480px", height: "760px",
+        top: barTop, bottom: barBottom, mount: wrap,
         onclose: function () { untrack(walletWin); walletWin = null; }
       }));
+      var input = wrap.querySelector("#sww-node");
+      var frame = wrap.querySelector("#sww-frame");
+      input.value = curNode();
+      function apply() {
+        var v = (input.value || "").trim();
+        try {
+          // skywire-coin-node is the effective key the /wallet/ shim reads;
+          // mirror into the tab's node list so both surfaces agree. Leave the
+          // wallet-mode / service keys alone so a service-mode config set in the
+          // tab isn't clobbered by a quick node edit here.
+          localStorage.setItem(K_PRIMARY, v);
+          localStorage.setItem(K_NODES, JSON.stringify(v ? [v] : [""]));
+        } catch (e) {}
+        try { frame.src = "/wallet/?_=" + Date.now(); } catch (e) {}
+      }
+      wrap.querySelector("#sww-apply").onclick = apply;
+      input.addEventListener("keydown", function (e) { if (e.key === "Enter") { apply(); } });
       track(walletWin, "wallet");
     }
     var logWin = null;

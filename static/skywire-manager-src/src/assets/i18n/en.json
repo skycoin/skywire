@@ -540,7 +540,7 @@
       "add": "Add Daemon Instance",
       "start": "Start",
       "stop": "Stop",
-      "settings": "Settings",
+      "settings-label": "Settings",
       "status": {
         "stopped": "Stopped",
         "running": "Running",

@@ -73,27 +73,44 @@ type Overview struct {
 	// leave it nil (their transports arrive over the per-visor /transports RPC
 	// instead) and only the self overview populates it via SetSelfTransports.
 	transports []*TransportSummary
+
+	// apps holds THIS (self) visor's in-process apps so MarshalJSON can emit
+	// them in the overview's "apps" array — that's the field the hvui's Apps
+	// tab renders from (node.apps ← overview.apps), NOT the /apps control
+	// endpoint. Unexported for the same reason as transports (gob-skipped so
+	// remote mirrored overviews don't inherit the self visor's app list); set
+	// on the self overview via SetSelfApps.
+	apps []AppState
 }
 
 // SetSelfTransports attaches the self visor's live transports for MarshalJSON.
 // Call on the OWN overview only; remote (gob-mirrored) overviews leave it nil.
 func (o *Overview) SetSelfTransports(ts []*TransportSummary) { o.transports = ts }
 
-// MarshalJSON emits the Overview fields plus apps + transports arrays. Apps stay
-// empty (not surfaced in the wasm core yet); transports carry the self visor's
-// live list when set (see SetSelfTransports), else an empty array so UI
-// templates that index it don't choke.
+// SetSelfApps attaches the self visor's in-process apps for MarshalJSON, so the
+// hvui Apps tab (which reads overview.apps) lists + controls them like a native
+// visor. Call on the OWN overview only; remote overviews carry their own apps.
+func (o *Overview) SetSelfApps(a []AppState) { o.apps = a }
+
+// MarshalJSON emits the Overview fields plus apps + transports arrays. Apps and
+// transports carry the self visor's live lists when set (see SetSelfApps /
+// SetSelfTransports), else empty arrays so UI templates that index them don't
+// choke.
 func (o Overview) MarshalJSON() ([]byte, error) {
 	type alias Overview
 	tps := o.transports
 	if tps == nil {
 		tps = []*TransportSummary{}
 	}
+	apps := o.apps
+	if apps == nil {
+		apps = []AppState{}
+	}
 	return jsonMarshal(struct {
 		alias
-		Apps       []struct{}          `json:"apps"`
+		Apps       []AppState          `json:"apps"`
 		Transports []*TransportSummary `json:"transports"`
-	}{alias(o), []struct{}{}, tps})
+	}{alias(o), apps, tps})
 }
 
 // DmsgClientSummary mirrors visor/dmsgtracker.DmsgClientSummary. The CLI's

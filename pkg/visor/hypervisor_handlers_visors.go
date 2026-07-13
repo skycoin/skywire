@@ -112,6 +112,19 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		localPK := hv.visor.conf.PK
 
+		// This handler does a parallel sub-hypervisor RPC walk with a 10s
+		// per-remote timeout, then a 5s fallback Summary pass, then writes a
+		// large (often >1MB) body — all BEFORE the first byte goes out. That
+		// can exceed the http.Server WriteTimeout (10s), which then closes the
+		// connection with no body written: the browser sees ERR_EMPTY_RESPONSE
+		// and the node list fails to load, precisely when a sub-hypervisor is
+		// slow/unreachable (the same condition that produces the error
+		// sections). Give this response a generous write deadline so a slow
+		// remote can't blow the whole tree; other endpoints keep WriteTimeout.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(45 * time.Second)); err != nil {
+			hv.log(r).WithError(err).Debug("tree-summary: could not extend write deadline")
+		}
+
 		// Build the local section by reusing the same Summary
 		// machinery as /visors-summary — same fields, same cache,
 		// same offline-row semantics.
@@ -320,6 +333,18 @@ func (hv *Hypervisor) getVisorsTreeSummary() http.HandlerFunc {
 		// across sections, which matches the doc comment at the top
 		// of this function ("Visor entries replicate across sections
 		// when a visor is connected to multiple hypervisors").
+
+		// A nil Visors slice marshals to JSON `null`, not `[]`. The hvui's
+		// node-list concatenates every section's `visors` and maps over the
+		// result; a `null` there throws "(...).map is not a function", which
+		// crashes buildSwitcherTabs and hangs the whole UI with a spinner. The
+		// SubError branch (an errored/timed-out sub-hypervisor) leaves Visors
+		// nil, so coerce every section to an empty array before writing.
+		for i := range sections {
+			if sections[i].Visors == nil {
+				sections[i].Visors = []Summary{}
+			}
+		}
 
 		httputil.WriteJSON(w, r, http.StatusOK, VisorTreeResponse{Sections: sections})
 	}

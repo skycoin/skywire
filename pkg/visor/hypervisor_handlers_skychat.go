@@ -11,8 +11,11 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/httputil"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor/usermanager"
 )
 
@@ -134,6 +137,13 @@ func (hv *Hypervisor) skychatProxyHandler() http.HandlerFunc {
 // (r.Context()). Local visor only, same internal-token bypass as the buffered
 // path.
 func (hv *Hypervisor) streamSkychatProxy(w http.ResponseWriter, r *http.Request, skychatPath string) {
+	// Portless-internal skychat: serve the registered mux directly, streaming
+	// to the client with no loopback dial. Falls through to the TCP proxy when
+	// skychat runs externally on its own port.
+	if h := launcher.GetHTTPHandler(skyenv.SkychatName); h != nil {
+		hv.streamSkychatInProcess(h, w, r, skychatPath)
+		return
+	}
 	addr := skychatLocalAddr(hv.visor)
 	if addr == "" {
 		http.Error(w, "skychat proxy: addr not configured", http.StatusBadGateway)
@@ -194,4 +204,39 @@ func (hv *Hypervisor) streamSkychatProxy(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
+}
+
+// streamSkychatInProcess serves a long-lived (SSE) request against the
+// portless-internal skychat mux directly. The mux's SSE handler writes and
+// flushes events to the client's ResponseWriter, so passing it straight
+// through streams live with no loopback hop — and, since there is no
+// intermediate http.Server, no WriteTimeout to strangle it (the very bug the
+// TCP path worked around with flushing). The HV server's own write deadline is
+// cleared for the same reason; r.Context() ends the stream on client
+// disconnect.
+func (hv *Hypervisor) streamSkychatInProcess(h http.Handler, w http.ResponseWriter, r *http.Request, skychatPath string) {
+	target := "/" + strings.TrimPrefix(skychatPath, "/")
+	if r.URL.RawQuery != "" {
+		target += "?" + r.URL.RawQuery
+	}
+	// target is a routing path (not a dialed URL): this request is served
+	// in-process by ServeHTTP below and never touches the network.
+	req, err := http.NewRequestWithContext(r.Context(), r.Method, target, r.Body) //nolint:gosec // in-process ServeHTTP, no network dial
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	for k, vv := range r.Header {
+		if strings.EqualFold(k, "Host") || strings.EqualFold(k, "Connection") {
+			continue
+		}
+		for _, hval := range vv {
+			req.Header.Add(k, hval)
+		}
+	}
+	req.Header.Set("X-Skychat-Internal-Token", hv.visor.skychatInternalToken())
+	// Long-lived stream: clear the HV server write deadline (mirrors the SSE
+	// deadline handling added for /api/log) so it isn't torn down at 10s.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Time{}) //nolint:errcheck
+	h.ServeHTTP(w, req)
 }

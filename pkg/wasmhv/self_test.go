@@ -42,6 +42,11 @@ func (f fakeSelf) SelfRuntimeLogs(since int64) []byte {
 	return []byte(`{"entries":[],"latest":0,"dropped":0}`)
 }
 
+func (f fakeSelf) SelfApps() []byte                { return []byte("[]") }
+func (f fakeSelf) StartApp(string) error           { return nil }
+func (f fakeSelf) StopApp(string) error            { return nil }
+func (f fakeSelf) SetAutoStart(string, bool) error { return nil }
+
 func newSelfPK(t *testing.T) cipher.PubKey {
 	t.Helper()
 	pk, _ := cipher.GenerateKeyPair()
@@ -132,7 +137,7 @@ func TestSelf_NodePageSubroutes(t *testing.T) {
 	core.SetSelf(fakeSelf{pk: pk, sinceSink: &gotSince})
 
 	base := "/api/visors/" + pk.Hex()
-	for _, sub := range []string{"/dmsg/sessions", "/router-settings", "/runtime-config", "/runtime-logs", "/ports"} {
+	for _, sub := range []string{"/dmsg/sessions", "/router-settings", "/runtime-config", "/runtime-logs", "/ports", "/apps"} {
 		status, body := core.ServeHTTP("GET", base+sub, nil)
 		if status != 200 {
 			t.Fatalf("%s status = %d (body %s)", sub, status, body)

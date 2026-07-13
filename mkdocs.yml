@@ -86,6 +86,7 @@ nav:
           - vpn/README.md
           - vpn/client.md
   - Specs: specs/index.md
+  - Glossary: glossary.md
   - Rewards: rewards/index.md
   - Blog: https://blog.theskywirenetwork.net
 

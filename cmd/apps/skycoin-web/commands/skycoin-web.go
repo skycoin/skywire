@@ -12,13 +12,28 @@ import (
 	"strings"
 
 	skycoinweb "github.com/skycoin/skycoin/cmd/skycoin-web/commands"
+	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
+// RootCmd is the `skywire app skycoin` command group. skycoin-web mounts under
+// it as `skywire app skycoin web`, matching the other visor apps under
+// `skywire app <name>` (skychat, skysocks, vpn, …). The name is left
+// unhyphenated ("skycoin web", not "skycoin-web") so future skycoin apps —
+// `skywire app skycoin daemon`, `skywire app skycoin explorer` — can hang off
+// the same group without a rename.
+var RootCmd = &cobra.Command{
+	Use:   "skycoin",
+	Short: "skycoin apps",
+}
+
 func init() {
 	launcher.RegisterApp(skyenv.SkycoinWebName, RunSkycoinWeb)
+	// Mount the vendored skycoin-web command as the `web` subcommand.
+	skycoinweb.RootCmd.Use = "web"
+	RootCmd.AddCommand(skycoinweb.RootCmd)
 }
 
 // RunSkycoinWeb runs the vendored skycoin-web thin-client wallet server
