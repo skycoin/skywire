@@ -202,6 +202,11 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	if r.URL.RawQuery != "" {
 		path += "?" + r.URL.RawQuery
 	}
+	// Server-side request log — the native parity of the wasm shim's [wallet]
+	// skywireLog lines and of the standalone `skywire skycoin web` proxy logs.
+	// Lets a native-HV operator see what wallet traffic is crossing the mesh
+	// (visible at -sl debug) even before a wallet is unlocked.
+	hv.logger.WithField("backend", backend).Debugf("[wallet] node %s %s", r.Method, path)
 	var body []byte
 	if r.Body != nil {
 		body, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20)) //nolint:errcheck
@@ -229,9 +234,11 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 			Body:   body,
 		})
 		if err != nil {
+			hv.logger.WithError(err).Warnf("[wallet] node clearnet unreachable: %s", backend)
 			http.Error(w, "node unreachable: "+err.Error(), http.StatusBadGateway)
 			return
 		}
+		hv.logger.Debugf("[wallet] node %s %s → %d", r.Method, path, resp.StatusCode)
 		walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
 		return
 	}
@@ -262,9 +269,11 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 		Body:   body,
 	})
 	if err != nil {
+		hv.logger.WithError(err).Warnf("[wallet] node dmsg unreachable: %s", backend)
 		http.Error(w, "node unreachable over dmsg: "+err.Error(), http.StatusBadGateway)
 		return
 	}
+	hv.logger.Debugf("[wallet] node %s %s → %d", r.Method, path, resp.StatusCode)
 	walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
 }
 
