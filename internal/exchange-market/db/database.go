@@ -134,10 +134,9 @@ func (d *Database) ensureColumn(table, column, ddl string) error {
 // InitDefaultConfig initializes default market configuration if not already present.
 func (d *Database) InitDefaultConfig() error {
 	defaults := map[string]string{
-		"wallet_sky":              "",   // Market wallet for SKY escrow
-		"sky_fullnode_url":        "",   // SKY fullnode API base URL (native SKY verification)
-		"sky_wallet_id":           "",   // SKY hot wallet id on the node (for spending/escrow payouts)
-		"sky_wallet_password":     "",   // password for the SKY hot wallet (empty if unencrypted)
+		"wallet_sky":              "",   // Market escrow address (must be the sky_wallet_seed's first address)
+		"sky_fullnode_url":        "",   // SKY fullnode API base URL (native SKY verification + broadcast)
+		"sky_wallet_seed":         "",   // Escrow hot wallet seed; spends (delivery/refund) are signed locally
 		"fee_rate_sch_per_sky":    "1",  // Commission: Coin Hours (SCH) per SKY sold (1 = one hour's worth)
 		"freeze_violations_limit": "3",  // Number of violations before ban
 		"ban_duration_days":       "7",  // Ban duration in days

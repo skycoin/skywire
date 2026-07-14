@@ -111,10 +111,9 @@
           <input name="wallet_sky" placeholder="market SKY wallet address">
           <label>SKY fullnode URL</label>
           <input name="sky_fullnode_url" placeholder="http://127.0.0.1:6420">
-          <div class="grid">
-            <div><label>SKY hot wallet id</label><input name="sky_wallet_id" placeholder="wallet .wlt filename"></div>
-            <div><label>SKY wallet password</label><input name="sky_wallet_password" type="password" placeholder="blank if unencrypted"></div>
-          </div>
+          <label>SKY escrow wallet seed</label>
+          <input name="sky_wallet_seed" type="password" placeholder="deterministic wallet seed (signs payouts locally)">
+          <div class="hint">Its first address must equal the escrow address above. Spends are built and signed locally — the seed never leaves this process.</div>
         </div>
 
         <div class="panel">
@@ -168,7 +167,7 @@
   <script>
     const $ = (s) => document.querySelector(s);
     const CONFIG_FIELDS = [
-      'wallet_sky','sky_fullnode_url','sky_wallet_id','sky_wallet_password',
+      'wallet_sky','sky_fullnode_url','sky_wallet_seed',
       'freeze_violations_limit','ban_duration_days','listing_expiry_minutes',
       'order_expiry_minutes','return_delay_hours','cleanup_days','fee_rate_sch_per_sky'
     ];
