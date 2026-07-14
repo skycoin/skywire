@@ -53,11 +53,6 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // wallet window uses, so there is one config implementation. On Apply it
   // postMessages {type:'skywire-wallet-config'} and we reload the wallet iframe.
   configUrl: SafeResourceUrl | null = null;
-  private onConfigMessage = (ev: MessageEvent) => {
-    if (ev?.data && ev.data.type === 'skywire-wallet-config') {
-      this.reloadWallet();
-    }
-  };
   // Last node PK we built the iframe URL for. NodeComponent.currentNode
   // emits on every polling refresh; rebuilding the SafeResourceUrl on
   // every tick reloads the iframe and tears down whatever the wallet
@@ -91,6 +86,16 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   ) {
     super();
   }
+
+  // Reloads the wallet iframe when the embedded /wallet/config page applies a
+  // change (its Apply postMessage). An arrow-fn property so `this` stays bound
+  // across add/removeEventListener. Declared with the methods (after the
+  // constructor) so member-ordering is satisfied.
+  private onConfigMessage = (ev: MessageEvent) => {
+    if (ev?.data && ev.data.type === 'skywire-wallet-config') {
+      this.reloadWallet();
+    }
+  };
 
   ngOnInit() {
     // The config UI lives in the embedded /wallet/config page (same origin, so
