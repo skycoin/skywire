@@ -212,3 +212,13 @@ func (d *Database) SellCoinWallet(symbol string) (string, error) {
 	_, _, wallet, _, _, err := d.SellCoinConfig(symbol)
 	return wallet, err
 }
+
+// IsPaymentAvailable reports whether currency may be used as a listing's payment
+// currency: either an enabled external explorer coin (BTC/LTC/…) or an enabled
+// sell coin (a fibercoin the buyer pays peer-to-peer, verified on its own node).
+func (d *Database) IsPaymentAvailable(currency string) (bool, error) {
+	if ok, err := d.IsCurrencyAvailable(currency); err != nil || ok {
+		return ok, err
+	}
+	return d.IsSellCoinAvailable(currency)
+}

@@ -197,14 +197,14 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	if r.Amount > maxAmount || r.Price > maxPrice {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount or price is too large")
 	}
-	// Normalize to each asset's on-chain precision. Skycoin-family coins round to 3
-	// decimals (the network's spendable precision) so the seller can deposit, and
-	// the market can later deliver, the exact amount. Re-check positivity: a value
-	// below half a unit rounds to zero.
+	// Normalize the sell-coin amount to Skycoin-family on-chain precision (3 dp),
+	// the network's spendable precision, so the seller can deposit and the market
+	// can later deliver the exact amount. (Price is normalized below, once we know
+	// whether the payment currency is a fibercoin or an external coin.) Re-check
+	// positivity: a value below half a unit rounds to zero.
 	r.Amount = roundToDecimals(r.Amount, skyOnChainDecimals)
-	r.Price = roundToDecimals(r.Price, paymentDecimals)
-	if r.Amount <= 0 || r.Price <= 0 {
-		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount or price is too small to represent")
+	if r.Amount <= 0 {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount is too small to represent")
 	}
 
 	// Enforce the operator's trade-size bounds (0 = unset).
@@ -233,13 +233,34 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 		return protocol.ErrorResponse(req.ID, protocol.CodeCurrencyUnavailable, "sell coin not available at this market: "+sellCoin)
 	}
 
-	// The chosen payment currency must be enabled at this market.
-	avail, err := s.db.IsCurrencyAvailable(r.PaymentCurrency)
+	// Resolve the payment currency. It can be an external explorer coin (BTC/LTC/…)
+	// or a fibercoin (incl. SKY) that the buyer pays peer-to-peer on its own chain.
+	payCur := strings.ToUpper(strings.TrimSpace(r.PaymentCurrency))
+	if payCur == sellCoin {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "sell coin and payment currency must differ")
+	}
+	payOK, err := s.db.IsPaymentAvailable(payCur)
 	if err != nil {
 		return s.internal(req.ID, "create_listing.currency", err)
 	}
-	if !avail {
-		return protocol.ErrorResponse(req.ID, protocol.CodeCurrencyUnavailable, "payment currency not available at this market: "+r.PaymentCurrency)
+	if !payOK {
+		return protocol.ErrorResponse(req.ID, protocol.CodeCurrencyUnavailable, "payment currency not available at this market: "+payCur)
+	}
+	// A fibercoin payment is a FIXED on-chain amount at 3-dp precision; an external
+	// coin uses 8-dp (and later a unique non-round amount). Normalize the price to
+	// whichever applies, then re-check positivity.
+	isFiberPay, err := s.db.IsSellCoinAvailable(payCur)
+	if err != nil {
+		return s.internal(req.ID, "create_listing.fiberpay", err)
+	}
+	payDec := paymentDecimals
+	if isFiberPay {
+		payDec = skyOnChainDecimals
+	}
+	r.PaymentCurrency = payCur
+	r.Price = roundToDecimals(r.Price, payDec)
+	if r.Price <= 0 {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "price is too small to represent")
 	}
 
 	// The deposit target is the escrow wallet of the chosen sell coin.
@@ -365,17 +386,45 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 		return protocol.ErrorResponse(req.ID, protocol.CodeProductUnavailable, "this product is no longer available")
 	}
 
-	// Allocate a unique non-round payment amount to the seller's wallet and
-	// insert the order atomically, so no two pending orders to that wallet share
-	// an amount. Roll back the freeze on any failure.
-	s.allocMu.Lock()
-	expected, err := allocUniqueAmount(product.Price, paymentDecimals, func(a float64) (bool, error) {
-		return s.db.OrderPaymentAmountExists(sellerWallet, product.PaymentCurrency, a, paymentTol)
-	})
+	// Determine the exact amount the buyer must pay. For a FIBERCOIN payment the
+	// buyer transfers a FIXED amount on that coin's chain; it is verified by sender
+	// + window on the coin's node, so no unique non-round amount is needed (a fixed
+	// 100 FIBER1, not 100.002). For an external explorer coin we allocate a unique
+	// non-round amount so payments to a shared address are individually
+	// identifiable. Either way we hold allocMu across the check and the insert.
+	isFiberPay, err := s.db.IsSellCoinAvailable(product.PaymentCurrency)
 	if err != nil {
-		s.allocMu.Unlock()
 		s.unfreeze(product.ID)
-		return s.internal(req.ID, "buy.alloc", err)
+		return s.internal(req.ID, "buy.fiberpay", err)
+	}
+	s.allocMu.Lock()
+	var expected float64
+	if isFiberPay {
+		expected = roundToDecimals(product.Price, skyOnChainDecimals)
+		// A single buyer can't have two identical fixed payments to the same seller
+		// in the same coin — the sender no longer disambiguates them. Different
+		// buyers paying the same amount are fine (the sender tells them apart).
+		dup, derr := s.db.BuyerHasPendingPayment(pk, sellerWallet, product.PaymentCurrency, expected, 0.5e-3)
+		if derr != nil {
+			s.allocMu.Unlock()
+			s.unfreeze(product.ID)
+			return s.internal(req.ID, "buy.dupcheck", derr)
+		}
+		if dup {
+			s.allocMu.Unlock()
+			s.unfreeze(product.ID)
+			return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
+				"you already have an identical pending payment to this seller; complete it first")
+		}
+	} else {
+		expected, err = allocUniqueAmount(product.Price, paymentDecimals, func(a float64) (bool, error) {
+			return s.db.OrderPaymentAmountExists(sellerWallet, product.PaymentCurrency, a, paymentTol)
+		})
+		if err != nil {
+			s.allocMu.Unlock()
+			s.unfreeze(product.ID)
+			return s.internal(req.ID, "buy.alloc", err)
+		}
 	}
 	order := &db.Order{
 		ID:                    uuid.NewString(),
