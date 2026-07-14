@@ -927,14 +927,16 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   /**
-   * Returns an array of {type, count} entries for transport types on the given node.
-   * Types are displayed uppercase.
+   * Returns an array of {type, count, incoming, outgoing} entries for
+   * transport types on the given node. Direction is from the node's
+   * perspective: outgoing = this visor dialed it (transport.initiator),
+   * incoming = it accepted an inbound dial. Types are displayed uppercase.
    */
-  getTransportCounts(node: Node): {type: string, count: number}[] {
+  getTransportCounts(node: Node): {type: string, count: number, incoming: number, outgoing: number}[] {
     if (!node.transports || node.transports.length === 0) {
       return [];
     }
-    const counts: {[key: string]: number} = {};
+    const counts: {[key: string]: {count: number, incoming: number, outgoing: number}} = {};
     node.transports.forEach(t => {
       const tp = (t.type || 'unknown').toUpperCase();
       // Skip the "?" placeholder type emitted by sub-hypervisors that
@@ -947,10 +949,43 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       if (tp === '?') {
         return;
       }
-      counts[tp] = (counts[tp] || 0) + 1;
+      if (!counts[tp]) {
+        counts[tp] = {count: 0, incoming: 0, outgoing: 0};
+      }
+      counts[tp].count++;
+      if (t.initiator) {
+        counts[tp].outgoing++;
+      } else {
+        counts[tp].incoming++;
+      }
     });
 
-    return Object.keys(counts).sort().map(k => ({type: k, count: counts[k]}));
+    return Object.keys(counts).sort().map(k => ({
+      type: k, count: counts[k].count, incoming: counts[k].incoming, outgoing: counts[k].outgoing,
+    }));
+  }
+
+  /**
+   * Returns the total incoming/outgoing transport counts for a node,
+   * summed across all (non-placeholder) types. Used for the Total line
+   * in the Transports column.
+   */
+  getTransportTotals(node: Node): {incoming: number, outgoing: number} {
+    let incoming = 0;
+    let outgoing = 0;
+    if (node.transports) {
+      node.transports.forEach(t => {
+        if ((t.type || '').toUpperCase() === '?') {
+          return;
+        }
+        if (t.initiator) {
+          outgoing++;
+        } else {
+          incoming++;
+        }
+      });
+    }
+    return {incoming, outgoing};
   }
 
   /**
