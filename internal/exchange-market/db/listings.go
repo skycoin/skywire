@@ -264,6 +264,34 @@ func (d *Database) DeleteOldPendingListings(age time.Duration) (int64, error) {
 	return n, nil
 }
 
+// OutstandingEscrowSKY returns the total SKY the market should currently be
+// holding in its escrow wallet: the amount for every product still awaiting
+// delivery (active or frozen) plus the deposit for every terminal listing whose
+// SKY arrived on-chain (confirmed_at set) but has not yet been refunded. Delivered
+// ('sold' products) and already-refunded listings are excluded — their SKY has
+// left escrow. Used by the escrow-audit job to detect drift from the on-chain
+// balance.
+func (d *Database) OutstandingEscrowSKY() (float64, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	var total float64
+	err := d.db.QueryRow(`
+		SELECT
+		  COALESCE((SELECT SUM(amount_sky) FROM products
+		            WHERE status IN ('active','frozen')), 0)
+		+ COALESCE((SELECT SUM(expected_amount_sky) FROM pending_listings
+		            WHERE status IN ('expired','canceled','cancelled')
+		              AND returned_at IS NULL
+		              AND closed_at IS NOT NULL
+		              AND confirmed_at IS NOT NULL), 0)
+	`).Scan(&total)
+	if err != nil {
+		return 0, fmt.Errorf("failed to sum outstanding escrow: %w", err)
+	}
+	return total, nil
+}
+
 // SellerHasPendingListing reports whether the seller already has a listing that
 // is still awaiting its SKY deposit (status 'pending' and not yet expired). A
 // deposit is identified by the seller's SKY address within the listing's window,

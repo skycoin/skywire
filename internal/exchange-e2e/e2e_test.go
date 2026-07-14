@@ -74,6 +74,8 @@ func (c *scriptChain) SendSKY(addr string, amt float64) (string, error) {
 	return "send-tx", nil
 }
 
+func (c *scriptChain) EscrowBalance(string) (float64, error) { return 0, nil }
+
 func (c *scriptChain) armDeposit() { c.mu.Lock(); c.deposit = true; c.mu.Unlock() }
 func (c *scriptChain) armPayment(n int) {
 	c.mu.Lock()
