@@ -257,27 +257,49 @@ var tpCmd = &cobra.Command{
 			transports, err := rpcClient.Transports(filterTypes, nil, false)
 			internal.Catch(cmd.Flags(), err)
 
-			byType := make(map[string]int)
+			// Direction is from the local visor's perspective: a transport is
+			// "outgoing" when this visor dialed it (Initiator) and "incoming"
+			// when it accepted the remote's dial. Both edges are counted per
+			// type plus grand totals, and unique remote visors.
+			byType := make(map[string]*typeStat)
 			uniqueVisors := make(map[cipher.PubKey]struct{})
+			var totalIn, totalOut int
 			for _, tp := range transports {
-				byType[string(tp.Type)]++
+				ts := byType[string(tp.Type)]
+				if ts == nil {
+					ts = &typeStat{}
+					byType[string(tp.Type)] = ts
+				}
+				ts.Total++
+				if tp.Initiator {
+					ts.Outgoing++
+					totalOut++
+				} else {
+					ts.Incoming++
+					totalIn++
+				}
 				uniqueVisors[tp.Remote] = struct{}{}
 			}
 
-			type statsOutput struct {
-				Total        int            `json:"total"`
-				UniqueVisors int            `json:"unique_visors"`
-				ByType       map[string]int `json:"by_type"`
-			}
 			stats := statsOutput{
 				Total:        len(transports),
+				Incoming:     totalIn,
+				Outgoing:     totalOut,
 				UniqueVisors: len(uniqueVisors),
 				ByType:       byType,
 			}
 
+			// in=green (inbound), out=cyan (outbound); fixed-width padding is
+			// applied INSIDE the color call so the SGR escapes stay zero-width
+			// and the columns line up.
+			inC := func(n int) string { return pterm.Green(fmt.Sprintf("%-7d", n)) }
+			outC := func(n int) string { return pterm.Cyan(fmt.Sprintf("%-7d", n)) }
+
 			var b strings.Builder
-			fmt.Fprintf(&b, "Total transports:  %d\n", stats.Total)
-			fmt.Fprintf(&b, "Unique visors:     %d\n", stats.UniqueVisors)
+			fmt.Fprintf(&b, "Total transports:  %d  (%s in, %s out)\n",
+				stats.Total, pterm.Green(fmt.Sprint(totalIn)), pterm.Cyan(fmt.Sprint(totalOut)))
+			fmt.Fprintf(&b, "Unique visors:     %d\n\n", stats.UniqueVisors)
+			fmt.Fprintf(&b, "  %-10s %-7s %s%s\n", "type", "total", pterm.Green("in     "), pterm.Cyan("out"))
 			// Sort type names for consistent output
 			typeNames := make([]string, 0, len(byType))
 			for t := range byType {
@@ -285,8 +307,10 @@ var tpCmd = &cobra.Command{
 			}
 			sort.Strings(typeNames)
 			for _, t := range typeNames {
-				fmt.Fprintf(&b, "  %-10s %d\n", t+":", byType[t])
+				ts := byType[t]
+				fmt.Fprintf(&b, "  %-10s %-7d %s%s\n", t, ts.Total, inC(ts.Incoming), outC(ts.Outgoing))
 			}
+			fmt.Fprintf(&b, "  %-10s %-7d %s%s\n", "total", stats.Total, inC(totalIn), outC(totalOut))
 
 			internal.PrintOutput(cmd.Flags(), stats, b.String())
 			return
@@ -359,6 +383,23 @@ var tpCmd = &cobra.Command{
 
 		PrintTransportsWithBandwidth(cmd.Flags(), bwByTpID, inactiveTransports, transports...)
 	},
+}
+
+// typeStat holds the per-transport-type count breakdown for `tp -s`:
+// total, plus incoming (we accepted) vs outgoing (we dialed).
+type typeStat struct {
+	Total    int `json:"total"`
+	Incoming int `json:"incoming"`
+	Outgoing int `json:"outgoing"`
+}
+
+// statsOutput is the JSON/text payload for `tp -s`.
+type statsOutput struct {
+	Total        int                  `json:"total"`
+	Incoming     int                  `json:"incoming"`
+	Outgoing     int                  `json:"outgoing"`
+	UniqueVisors int                  `json:"unique_visors"`
+	ByType       map[string]*typeStat `json:"by_type"`
 }
 
 // inactiveTransport represents a transport that is no longer active but has bandwidth history
@@ -474,7 +515,13 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		if tp == nil {
 			continue
 		}
-		tpMode := "regular"
+		// The mode column doubles as the direction indicator: "out" when
+		// this visor dialed the transport, "in" when it accepted an
+		// inbound dial. Setup transports override to "setup".
+		tpMode := "out"
+		if !tp.Initiator {
+			tpMode = "in"
+		}
 		if tp.IsSetup {
 			tpMode = "setup"
 		}
@@ -716,7 +763,13 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		if tp == nil {
 			continue
 		}
-		tpMode := "regular"
+		// The mode column doubles as the direction indicator: "out" when
+		// this visor dialed the transport, "in" when it accepted an
+		// inbound dial. Setup transports override to "setup".
+		tpMode := "out"
+		if !tp.Initiator {
+			tpMode = "in"
+		}
 		if tp.IsSetup {
 			tpMode = "setup"
 		}
@@ -917,7 +970,13 @@ func renderTransportListLive(rpcClient visor.API) (string, error) {
 		if tp == nil {
 			continue
 		}
-		tpMode := "regular"
+		// The mode column doubles as the direction indicator: "out" when
+		// this visor dialed the transport, "in" when it accepted an
+		// inbound dial. Setup transports override to "setup".
+		tpMode := "out"
+		if !tp.Initiator {
+			tpMode = "in"
+		}
 		if tp.IsSetup {
 			tpMode = "setup"
 		}
