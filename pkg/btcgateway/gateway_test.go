@@ -71,7 +71,7 @@ func TestFeeShape(t *testing.T) {
 		SatPerByte int64 `json:"sat_per_byte"`
 		Blocks     int   `json:"blocks"`
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	_ = json.Unmarshal(w.Body.Bytes(), &resp) //nolint
 	if resp.SatPerByte != 12 || resp.Blocks != 3 {
 		t.Fatalf("fee resp = %+v, want {12, 3}", resp)
 	}
