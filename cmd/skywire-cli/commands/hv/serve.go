@@ -89,31 +89,39 @@ func walletDmsgFetchShim() string {
 		`init=init||{};` +
 		`var v=window.parent&&window.parent.skywireVisor;` +
 		`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
+		// Every node/BTC request + its outcome is logged to the shared skywireLog
+		// (parent frame) with a [wallet] prefix, so the wallet config page's live
+		// #plog panel — and the browser console — show what's crossing the mesh,
+		// mirroring the resolving-proxy browser (browse.js). Visible even at the
+		// seed-entry screen, where there's no wallet to query yet.
+		`var m=init.method||"GET",pth=p(url)+q(url),t0=Date.now();` +
+		`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
+		`function done(tag){return function(r){wlog(tag+" → "+((r&&r.status)||"?")+" ("+(Date.now()-t0)+"ms)");return mkResp(r);};}` +
+		`function fail(tag){return function(e){wlog(tag+" ✗ "+String((e&&e.message)||e));return jr(502,{error:String(e)});};}` +
 		// BTC: the wallet does keys+signing itself; only chain queries go over the
 		// mesh, through the in-tab electrum gateway (skywireVisor.btcFetch), which
 		// dials the ssl:// electrum via skysocks-lite (upstream-proxy exit).
 		`if(btc){` +
 		`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
 		`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
-		`return Promise.resolve(v.btcFetch(back,init.method||"GET",p(url)+q(url),init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`var btag="btc "+m+" "+pth;wlog(btag);` +
+		`return Promise.resolve(v.btcFetch(back,m,pth,init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(done(btag)).catch(fail(btag));` +
 		`}` +
 		// COIN node API: routed exactly like the iframe browser (browse.js). A dmsg
 		// host (pk:port / pk.dmsg / name.pk.dmsg / alias) goes through the dmsg
 		// resolving proxy (fetchDmsg). A clearnet http(s):// node (not .dmsg) goes
 		// through skysocks-client-lite (fetchClearnet) via the SAME upstream-proxy
-		// exit the browser uses (skywire-upstream-proxy) — IP-anonymous. Requests are
-		// logged to the shared skywireLog so they show in the browser's log panel.
+		// exit the browser uses (skywire-upstream-proxy) — IP-anonymous.
 		`var node=ls("skywire-coin-node")||"` + coinNodeDefault() + `";` +
-		`var m=init.method||"GET",pth=p(url)+q(url),ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
-		`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
+		`var ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
 		`if(/^https?:\/\//i.test(node)&&!/\.dmsg\b/i.test(node)){` +
 		`if(!v.fetchClearnet)return Promise.resolve(jr(503,{error:"skysocks clearnet gateway not available"}));` +
 		`var up=ls("skywire-upstream-proxy");if(!up)return Promise.resolve(jr(502,{error:"clearnet coin node needs a skysocks exit — set an upstream proxy"}));` +
-		`var full=node.replace(/\/+$/,"")+pth;wlog(m+" "+full+" via skysocks "+up.slice(0,8));` +
-		`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`var full=node.replace(/\/+$/,"")+pth,ctag="node "+m+" "+full+" via skysocks "+up.slice(0,8);wlog(ctag);` +
+		`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(done(ctag)).catch(fail(ctag));` +
 		`}` +
-		`var host=node.replace(/^\w+:\/\//,"");wlog(m+" dmsg://"+host+pth);` +
-		`return Promise.resolve(v.fetchDmsg(host,m,pth,init.body||null,hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`var host=node.replace(/^\w+:\/\//,""),dtag="node "+m+" dmsg://"+host+pth;wlog(dtag);` +
+		`return Promise.resolve(v.fetchDmsg(host,m,pth,init.body||null,hdrs)).then(done(dtag)).catch(fail(dtag));` +
 		`};` +
 		`})();</script>`
 }
