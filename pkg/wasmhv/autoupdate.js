@@ -30,6 +30,23 @@
 
   var notifying = false;
 
+  // The wasm runs in a SharedWorker that stays alive across a tab's
+  // location.reload() (it dies only when the LAST tab disconnects), so a plain
+  // reload reconnects to the SAME stale runtime — the new wasm never loads.
+  // Before reloading, tell the worker to self.close() so the post-reload page
+  // boots a FRESH worker that fetches the new wasm-visor.wasm. (The dedicated-
+  // Worker fallback already dies on unload, so the message is a no-op there.)
+  function reloadFresh() {
+    try {
+      if (typeof SharedWorker !== 'undefined') {
+        var w = new SharedWorker('worker.js');
+        if (w.port.start) { w.port.start(); }
+        w.port.postMessage({ t: 'shutdown' });
+      }
+    } catch (e) { /* fall through to a plain reload */ }
+    setTimeout(function () { location.reload(); }, 200);
+  }
+
   function toast(latest) {
     if (notifying) { return; }
     notifying = true;
@@ -46,9 +63,9 @@
       secs -= 1;
       var c = document.getElementById('su-c');
       if (c) { c.textContent = String(secs); }
-      if (secs <= 0) { clearInterval(t); location.reload(); }
+      if (secs <= 0) { clearInterval(t); reloadFresh(); }
     }, 1000);
-    document.getElementById('su-now').onclick = function () { clearInterval(t); location.reload(); };
+    document.getElementById('su-now').onclick = function () { clearInterval(t); reloadFresh(); };
     document.getElementById('su-keep').onclick = function () {
       clearInterval(t); setEnabled(false); box.remove(); notifying = false;
       console.log('[autoupdate] disabled — staying on ' + booted + ' (re-enable: skywireAutoUpdate.enable())');
@@ -68,4 +85,18 @@
   }
 
   setInterval(check, POLL_MS);
+
+  // Background tabs get their setInterval heavily throttled (and frozen entirely
+  // when discarded), so a never-focused tab may miss the poll for a long time.
+  // Re-check the moment the tab becomes visible again: an unfocused tab then
+  // updates as soon as you return to it, rather than only on the next throttled
+  // tick. Also check right after a reconnect (pageshow, incl. bfcache restore).
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') { check(false); }
+  });
+  window.addEventListener('pageshow', function () { check(false); });
+
+  // First check shortly after boot (don't wait a full POLL_MS to notice a build
+  // that landed while this tab was loading).
+  setTimeout(function () { check(false); }, 3000);
 })();
