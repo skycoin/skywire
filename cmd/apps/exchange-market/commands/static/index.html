@@ -78,9 +78,10 @@
     .empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
     .tab { display: none; }
     .tab.active { display: block; }
-    .cur-row { display: grid; grid-template-columns: 70px 150px 1fr 1fr auto; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+    .cur-row { display: grid; grid-template-columns: auto 55px 1fr 1fr auto; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
     .cur-code { font-weight: 600; }
-    .cur-row select, .cur-row input { width: 100%; }
+    .cur-row select, .cur-row input:not([type=checkbox]) { width: 100%; }
+    .cur-toggle { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; font-size: 0.85rem; }
     @media (max-width: 640px) { .cur-row { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
@@ -117,9 +118,9 @@
         </div>
 
         <div class="panel">
-          <h2>Payment currencies <span class="hint">(pick an explorer per coin to accept it)</span></h2>
+          <h2>Trade coins <span class="hint">(tick a coin to accept it for trades; untick to disable)</span></h2>
           <div id="currency-rows"><div class="empty">Loading…</div></div>
-          <div class="hint" style="margin-top:.5rem">A coin becomes available to buyers/sellers once you select an explorer for it. Leave the provider blank to disable a coin. "Base URL" and "API key" are optional overrides.</div>
+          <div class="hint" style="margin-top:.5rem">Enable a coin to accept it. BTC and LTC have a built-in explorer; other coins need an Esplora-compatible explorer URL. Unticking disables a coin without losing its saved URL/key.</div>
         </div>
 
         <div class="panel">
@@ -130,6 +131,9 @@
             <div><label>Listing expiry (minutes)</label><input name="listing_expiry_minutes" type="number" min="1"></div>
             <div><label>Order expiry (minutes)</label><input name="order_expiry_minutes" type="number" min="1"></div>
             <div><label>Cleanup after (days)</label><input name="cleanup_days" type="number" min="1"></div>
+            <div><label>Confirmations required</label><input name="confirmations_required" type="number" min="1"></div>
+            <div><label>Min trade (SKY, 0 = none)</label><input name="min_trade_sky" type="number" min="0" step="0.001"></div>
+            <div><label>Max trade (SKY, 0 = no cap)</label><input name="max_trade_sky" type="number" min="0" step="0.001"></div>
             <div><label>Commission rate (% of SKY)</label><input name="commission_rate_percent" type="number" min="0" step="0.01"></div>
             <div><label>Commission min (SKY)</label><input name="commission_min_sky" type="number" min="0" step="0.001"></div>
             <div><label>Commission max (SKY, 0 = no cap)</label><input name="commission_max_sky" type="number" min="0" step="0.001"></div>
@@ -170,7 +174,8 @@
     const CONFIG_FIELDS = [
       'wallet_sky','sky_fullnode_url','sky_wallet_seed',
       'freeze_violations_limit','ban_duration_days','listing_expiry_minutes',
-      'order_expiry_minutes','cleanup_days',
+      'order_expiry_minutes','cleanup_days','confirmations_required',
+      'min_trade_sky','max_trade_sky',
       'commission_rate_percent','commission_min_sky','commission_max_sky'
     ];
 
@@ -206,17 +211,18 @@
       currencyList = d.currencies || [];
       const rows = currencyList.map((c) => {
         const key = esc(c.code);
-        const opts = ['<option value="">— disabled —</option>']
-          .concat((c.providers || []).map((p) =>
-            '<option value="' + esc(p) + '"' + (c.provider === p ? ' selected' : '') + '>' + esc(p) + '</option>'));
-        const disabled = (c.providers || []).length === 0 ? ' disabled' : '';
-        return '<div class="cur-row" data-coin="' + key + '">' +
+        const provider = (c.providers || [])[0] || '';
+        const noAdapter = !provider;
+        const urlPlaceholder = c.default_url
+          ? 'explorer URL (default: ' + esc(c.default_url) + ')'
+          : 'explorer URL (required)';
+        return '<div class="cur-row" data-coin="' + key + '" data-provider="' + esc(provider) + '">' +
+          '<label class="cur-toggle"><input type="checkbox" class="cur-enabled"' +
+            (c.available ? ' checked' : '') + (noAdapter ? ' disabled' : '') + '> Accept</label>' +
           '<span class="cur-code">' + key + '</span>' +
-          '<select class="cur-provider"' + disabled + '>' + opts.join('') +
-          '</select>' +
-          '<input class="cur-url" placeholder="base URL (optional)" value="' + esc(c.url || '') + '">' +
+          '<input class="cur-url" placeholder="' + urlPlaceholder + '" value="' + esc(c.url || '') + '">' +
           '<input class="cur-key" placeholder="API key (optional)" value="' + esc(c.key || '') + '">' +
-          (disabled ? '<span class="hint">no adapter yet</span>' : '') +
+          (noAdapter ? '<span class="hint">no adapter</span>' : '') +
           '</div>';
       }).join('');
       $('#currency-rows').innerHTML = rows || '<div class="empty">No supported currencies.</div>';
@@ -234,7 +240,10 @@
       // Collect each coin's explorer config (provider/url/key).
       document.querySelectorAll('.cur-row').forEach((row) => {
         const coin = row.dataset.coin.toLowerCase();
-        body['explorer_' + coin + '_provider'] = row.querySelector('.cur-provider').value;
+        const enabled = row.querySelector('.cur-enabled').checked;
+        // Enabling a coin sets its provider; disabling clears it (URL/key are kept
+        // so re-enabling remembers them).
+        body['explorer_' + coin + '_provider'] = enabled ? (row.dataset.provider || '') : '';
         body['explorer_' + coin + '_url'] = row.querySelector('.cur-url').value.trim();
         body['explorer_' + coin + '_key'] = row.querySelector('.cur-key').value.trim();
       });

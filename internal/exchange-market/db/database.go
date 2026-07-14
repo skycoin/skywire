@@ -140,6 +140,9 @@ func (d *Database) InitDefaultConfig() error {
 		"commission_rate_percent": "0.5",   // Commission: percent of SKY sold (0.5 = 0.5%)
 		"commission_min_sky":      "0.001", // Minimum SKY commission per sale (floor)
 		"commission_max_sky":      "0",     // Maximum SKY commission per sale (0 = no cap)
+		"confirmations_required":  "2",     // Blockchain confirmations before a trade completes
+		"min_trade_sky":           "0",     // Minimum SKY a listing may sell (0 = no minimum)
+		"max_trade_sky":           "0",     // Maximum SKY a listing may sell (0 = no cap beyond the safety ceiling)
 		"freeze_violations_limit": "3",     // Number of violations before ban
 		"ban_duration_days":       "7",     // Ban duration in days
 		"listing_expiry_minutes":  "15",    // Minutes before pending listing expires

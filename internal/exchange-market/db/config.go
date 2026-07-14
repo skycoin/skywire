@@ -205,6 +205,24 @@ func (d *Database) GetOrderExpiryMinutes() (int, error) {
 	return d.GetConfigInt("order_expiry_minutes")
 }
 
+// GetConfirmationsRequired returns the blockchain confirmation depth a payment
+// must reach before a trade completes (default 2).
+func (d *Database) GetConfirmationsRequired() (int, error) {
+	return d.GetConfigInt("confirmations_required")
+}
+
+// GetMinTradeSKY returns the minimum SKY amount a listing may sell (0 = no
+// minimum beyond the round-to-zero check).
+func (d *Database) GetMinTradeSKY() (float64, error) {
+	return d.GetConfigFloat("min_trade_sky")
+}
+
+// GetMaxTradeSKY returns the maximum SKY amount a listing may sell (0 = no cap
+// beyond the built-in float-safety ceiling).
+func (d *Database) GetMaxTradeSKY() (float64, error) {
+	return d.GetConfigFloat("max_trade_sky")
+}
+
 // GetCleanupDays returns how many days after completion orders are deleted.
 func (d *Database) GetCleanupDays() (int, error) {
 	return d.GetConfigInt("cleanup_days")

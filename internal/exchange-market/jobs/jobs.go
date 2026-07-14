@@ -70,6 +70,16 @@ func NewRunner(database *db.Database, chain Chain, log logrus.FieldLogger) *Runn
 	return &Runner{db: database, chain: chain, log: log, confs: RequiredConfirmations}
 }
 
+// requiredConfirmations returns the operator-configured confirmation threshold,
+// falling back to the built-in default when unset or invalid. Read per tick so a
+// change takes effect without a restart.
+func (r *Runner) requiredConfirmations() int {
+	if c, err := r.db.GetConfirmationsRequired(); err == nil && c > 0 {
+		return c
+	}
+	return r.confs
+}
+
 // Run starts every background job on its own interval and blocks until ctx is
 // canceled. Intervals follow exchange-design.md §7.8.
 func (r *Runner) Run(ctx context.Context) {
@@ -214,7 +224,7 @@ func (r *Runner) RunEscrowCheck() error {
 		if err := r.db.SetOrderConfirmations(o.ID, confs); err != nil {
 			r.log.WithError(err).Warnf("escrow-check: failed to update confirmations for %s", o.ID)
 		}
-		if confs < r.confs {
+		if confs < r.requiredConfirmations() {
 			continue // not enough confirmations yet
 		}
 		if o.Status != "confirmed" {

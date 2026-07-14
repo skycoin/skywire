@@ -54,11 +54,21 @@ type providerFactory struct {
 // (blockcypher, etherscan, trongrid, 3xpl, …) are added here.
 var registry = map[string]providerFactory{
 	"esplora": {
-		covers: map[string]bool{"BTC": true, "LTC": true},
+		// The Esplora adapter can verify any UTXO coin exposed by an Esplora-
+		// compatible API. BTC/LTC ship with a default public endpoint; BCH/DOGE/
+		// DASH are covered too but need the operator to supply an explorer URL
+		// (they have no built-in default), and stay disabled until enabled.
+		covers: map[string]bool{"BTC": true, "LTC": true, "BCH": true, "DOGE": true, "DASH": true},
 		build: func(currency, baseURL, _ string, hc *http.Client) Explorer {
 			return newEsplora(currency, baseURL, hc)
 		},
 	},
+}
+
+// DefaultExplorerURL returns the built-in Esplora endpoint for a currency, or ""
+// if it has none (the operator must configure a URL to enable it).
+func DefaultExplorerURL(currency string) string {
+	return esploraDefaultBase[currency]
 }
 
 // ProvidersFor returns the explorer provider names that can verify currency, so
