@@ -129,9 +129,10 @@
             <div><label>Ban duration (days)</label><input name="ban_duration_days" type="number" min="1"></div>
             <div><label>Listing expiry (minutes)</label><input name="listing_expiry_minutes" type="number" min="1"></div>
             <div><label>Order expiry (minutes)</label><input name="order_expiry_minutes" type="number" min="1"></div>
-            <div><label>Return delay (hours)</label><input name="return_delay_hours" type="number" min="0"></div>
             <div><label>Cleanup after (days)</label><input name="cleanup_days" type="number" min="1"></div>
-            <div><label>Fee rate (SCH per SKY)</label><input name="fee_rate_sch_per_sky"></div>
+            <div><label>Commission rate (% of SKY)</label><input name="commission_rate_percent" type="number" min="0" step="0.01"></div>
+            <div><label>Commission min (SKY)</label><input name="commission_min_sky" type="number" min="0" step="0.001"></div>
+            <div><label>Commission max (SKY, 0 = no cap)</label><input name="commission_max_sky" type="number" min="0" step="0.001"></div>
           </div>
         </div>
 
@@ -169,7 +170,8 @@
     const CONFIG_FIELDS = [
       'wallet_sky','sky_fullnode_url','sky_wallet_seed',
       'freeze_violations_limit','ban_duration_days','listing_expiry_minutes',
-      'order_expiry_minutes','return_delay_hours','cleanup_days','fee_rate_sch_per_sky'
+      'order_expiry_minutes','cleanup_days',
+      'commission_rate_percent','commission_min_sky','commission_max_sky'
     ];
 
     function esc(s) {
@@ -265,7 +267,7 @@
       const rows = (d.orders || []).map((o) =>
         '<tr><td><code>' + esc(shorten(o.id)) + '</code></td><td><code>' + esc(shorten(o.buyer_pubkey)) +
         '</code></td><td>' + esc(o.amount_sky) + ' SKY</td><td>' + esc(o.price) + ' ' + esc(o.payment_currency) +
-        '</td><td>' + badge(o.status) + '</td><td>' + esc(o.confirmations) + '</td><td>' + esc(o.commission_sch || 0) + ' SCH</td><td>' + fmt(o.expires_at) + '</td></tr>').join('');
+        '</td><td>' + badge(o.status) + '</td><td>' + esc(o.confirmations) + '</td><td>' + esc(o.commission_sky || 0) + ' SKY</td><td>' + fmt(o.expires_at) + '</td></tr>').join('');
       $('#orders-body').innerHTML = rows
         ? '<table><thead><tr><th>ID</th><th>Buyer</th><th>Amount</th><th>Price</th><th>Status</th><th>Conf.</th><th>Commission</th><th>Expires</th></tr></thead><tbody>' + rows + '</tbody></table>'
         : '<div class="empty">No orders.</div>';
