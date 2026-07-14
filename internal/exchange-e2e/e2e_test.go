@@ -138,6 +138,14 @@ func TestExchangeTradeOverDmsg(t *testing.T) {
 	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
 		t.Fatal(err)
 	}
+	// Disable the commission so the expected deposit equals the listed amount,
+	// keeping the end-to-end amount assertions simple.
+	if err := database.SetConfig("commission_rate_percent", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("commission_min_sky", "0"); err != nil {
+		t.Fatal(err)
+	}
 
 	srv := server.New(database, nil, protocol.Port(marketPort))
 	lis, err := dmsgMarket.Listen(marketPort)

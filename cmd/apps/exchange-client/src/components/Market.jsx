@@ -72,7 +72,9 @@ function Market() {
         payment_currency: newListing.payment_currency,
       })
       flash(
-        `Listing created. Transfer exactly ${resp.expected_amount_sky} SKY to the market wallet ${resp.market_wallet} within 15 minutes.`
+        `Listing created. Transfer exactly ${resp.expected_amount_sky} SKY ` +
+          `(${resp.amount_sky} amount + ${resp.commission_sky} commission) ` +
+          `to the market wallet ${resp.market_wallet} within 15 minutes.`
       )
       setShowCreateListing(false)
       setNewListing({ amount_sky: '', price: '', payment_currency: currencies[0] || '' })

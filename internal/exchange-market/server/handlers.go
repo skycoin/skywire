@@ -234,11 +234,21 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
 			"you already have a pending listing; complete, cancel, or wait for it to expire before creating another")
 	}
+
+	// The market commission (SKY) is paid by the seller on top of the amount:
+	// the seller deposits amount + commission, the buyer receives amount, and the
+	// market retains the commission. So the expected deposit is amount+commission.
+	rate, _ := s.db.GetCommissionRatePercent() //nolint:errcheck
+	minC, _ := s.db.GetCommissionMinSKY()      //nolint:errcheck
+	maxC, _ := s.db.GetCommissionMaxSKY()      //nolint:errcheck
+	commission := jobs.CommissionSKY(r.AmountSKY, rate, minC, maxC)
+	expected := roundToDecimals(r.AmountSKY+commission, skyOnChainDecimals)
+
 	listing := &db.PendingListing{
 		ID:                uuid.NewString(),
 		SellerPubKey:      pk,
 		AmountSKY:         r.AmountSKY,
-		ExpectedAmountSKY: r.AmountSKY, // exact round amount — no non-round delta
+		ExpectedAmountSKY: expected, // amount + SKY commission (the deposit)
 		Price:             r.Price,
 		PaymentCurrency:   r.PaymentCurrency,
 		Status:            "pending",
@@ -250,6 +260,8 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 
 	return success(req.ID, protocol.CreateListingResponse{
 		ListingID:         listing.ID,
+		AmountSKY:         listing.AmountSKY,
+		CommissionSKY:     commission,
 		ExpectedAmountSKY: listing.ExpectedAmountSKY,
 		MarketWallet:      marketWallet,
 		ExpiresAt:         listing.ExpiresAt.Format(time.RFC3339),
@@ -407,7 +419,7 @@ func (s *Server) handleCancelListing(pk string, req protocol.Envelope) protocol.
 		if err := s.db.UpdatePendingListingStatus(listing.ID, "canceled", listing.TxHash); err != nil {
 			return s.internal(req.ID, "cancel.update", err)
 		}
-		return success(req.ID, protocol.MessageData{Message: "Offer canceled. Your SKY will be returned within 1 hour of the original deposit."})
+		return success(req.ID, protocol.MessageData{Message: "Offer canceled. Your SKY will be returned shortly."})
 
 	default:
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "listing can no longer be canceled")
