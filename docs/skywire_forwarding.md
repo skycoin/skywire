@@ -105,34 +105,29 @@ port-80 HTTP reverse-proxy**, so a single site needs nothing but the one
 `serve add` command. The visor forwards port-80 HTTP straight to your local
 app. Good for a single dashboard, API, or static site.
 
-### With a reverse proxy (Caddy / nginx / Traefik) — many sites, vhosts, TLS
+### Many sites, HTTPS, per-PK auth → "websites over skywire"
 
-For **more than one site**, path-based routing, or a backend that dispatches
-by `Host` header, run a normal reverse proxy on the host and point the
-visor's port-80 forward at it with `--preserve-host`:
+For **more than one site**, `Host`/path routing, HTTPS, or a backend that needs
+the caller's identity, run a normal reverse proxy (Caddy / nginx) on the host
+and forward the visor's port 80 to it with `--preserve-host` so it sees the
+vhost the visitor asked for:
 
 ```bash
-# Caddy (or nginx/traefik) is listening on 127.0.0.1:80 and vhost-routes
-# several local apps. Forward the visor's port 80 to it, Host header intact:
 skywire cli serve add 80 --to 127.0.0.1:80 --preserve-host --label "sites"
-# (legacy equivalent: skywire cli skynet port add 80 --proxy-addr 127.0.0.1:80 --preserve-host)
 ```
 
-`--preserve-host` keeps the **original** `Host` header instead of rewriting it
-to the `--to` target, so Caddy sees the vhost the visitor asked for. Combined
-with the resolver's subdomain rewrite — a request to
-`name.<base32-pk>.dmsg` arrives at Caddy as `Host: name` — **one visor can
-serve many named sites** over the mesh, exactly like a clearnet reverse proxy.
+That's a whole topic of its own — **websites over skywire** — covered in depth
+elsewhere so it isn't re-explained here:
 
-> **Worked example — `node.skycoin.com`.** A single visor serves its whole
-> stack this way: Caddy vhost-routes `/api` to a local skycoin node (`:6420`),
-> the block explorer to `:8081`, and the blog to a proxied `skycoin.github.io`,
-> all behind one `serve add 80 … --preserve-host`. The wallet reaches its
-> node at `node.skycoin.com.<base32-pk>.dmsg` through this same forward.
+- **[PK-aware websites over skynet / dmsg](guides/skynet-website-auth.md)** —
+  the Caddy config, serving on skynet + clearnet at once, `inject_pk`, and the
+  trust boundary. (`node.skycoin.com` serves its whole stack — node API,
+  explorer, blog — from one visor this way.)
+- **[Resolver TLS mode](skynet-tls.md)** — HTTPS for `.dmsg`/`.skynet` browser
+  requests, and the base32 hostname format.
 
-Use a reverse proxy when you need TLS termination behind the mesh, many
-Host-routed apps on one PK, per-path backends, or auth/rewrite middleware;
-use the built-in proxy when you just have one HTTP app.
+Rule of thumb: **one HTTP app → the built-in proxy** above; **many sites /
+HTTPS / auth → a reverse proxy** and those two guides.
 
 ## Access Control
 
