@@ -56,22 +56,15 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <button id="ms" title="Point at a remote skycoin-web server over dmsg.">Remote wallet service</button>
 </div>
 <div id="browser">
-<div class="hint">Wallets are created + stored in <b>this browser</b>. The <b>coin node</b> each coin queries is set in the wallet's own <b>Settings → Nodes</b> (per coin — enter a mesh node as <span class="mono">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span>, or a clearnet URL). This panel keeps the Bitcoin electrum + skysocks-exit settings below.</div>
+<div class="hint">Wallets are created + stored in <b>this browser</b>. Each coin's <b>node</b> — and the <b>Bitcoin electrum server</b> — are set in the wallet's own <b>Settings → Nodes</b> (per coin: a mesh node as <span class="mono">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span>, a clearnet URL, or an <span class="mono">ssl://</span> electrum for Bitcoin). This panel is skywire's side of it: how those backend queries reach the clearnet — the <b>skysocks exit</b> — plus a live <b>request log</b>.</div>
 <div class="sec">
-<div class="hint"><b>Bitcoin</b> (optional): an <span class="mono">ssl://host:port</span> electrum server, reached over the mesh by the visor's BTC gateway. Keys + signing stay in this browser; only chain queries cross.</div>
-<div class="row"><label>btc</label><input id="btc" list="btclist" spellcheck="false" placeholder="pick or type an ssl:// electrum server"></div>
-<datalist id="btclist">
-<option value="ssl://electrum.blockstream.info:50002"></option>
-<option value="ssl://fortress.qtornado.com:50002"></option>
-<option value="ssl://electrum.emzy.de:50002"></option>
-<option value="ssl://electrum.bitaroo.net:50002"></option>
-<option value="ssl://bitcoin.lu.ke:50002"></option>
-<option value="ssl://electrum.jochen-hoenicke.de:50006"></option>
-</datalist>
-<div class="hint"><b>Skysocks exit</b> <span id="proxyreq"></span>: the visor PK whose skysocks-server relays the clearnet connection — the BTC electrum egress AND the iframe browser share this exit. <span id="proxynote"></span></div>
+<div class="hint"><b>Skysocks exit</b> <span id="proxyreq"></span>: the visor PK whose skysocks-server relays the clearnet connection — the coin/electrum egress AND the iframe browser share this exit. <span id="proxynote"></span></div>
 <div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex)"><button class="add" id="psrv" title="list skysocks-server PKs from service discovery">servers ▾</button><button class="add" id="prnd" title="pick a random skysocks server from service discovery">🎲 random</button></div>
 <div class="row" id="pselrow" style="display:none"><label></label><select id="psel"></select></div>
-<pre id="plog" class="plog" title="live: resolving proxy (dmsg) + skysocks-lite (clearnet)"></pre>
+</div>
+<div class="sec">
+<div class="hint"><b>Request log</b> — node / BTC / skysocks / resolving-proxy traffic crossing the mesh, the same live view as the iframe browser's ⚙ proxy log. <button class="add" id="pverb" title="stream the visor's detailed [skysocks-lite] / [resolve-proxy] lines here">🐞 verbose: off</button></div>
+<pre id="plog" class="plog on" title="live: resolving proxy (dmsg) + skysocks-lite (clearnet)"></pre>
 </div>
 </div>
 <div id="service" style="display:none">
@@ -89,11 +82,11 @@ function $(id){return document.getElementById(id);}
 // isWasm is passed by the embedder via ?wasm=1 (BTC egress needs an exit there).
 var isWasm=/[?&]wasm=1/.test(location.search);
 $("proxyreq").textContent=isWasm?"(required)":"(optional)";
-$("proxynote").textContent=isWasm?"The browser can't reach the clearnet itself, so this is required for BTC.":"Empty = this visor does the egress itself (self). Set one to route BTC through another visor for IP privacy.";
+$("proxynote").textContent=isWasm?"The browser can't reach the clearnet itself, so this is required for the Bitcoin electrum and any clearnet coin node.":"Empty = this visor does the egress itself (self). Set one to route clearnet queries through another visor for IP privacy.";
 var mode=ls(K.mode,"browser");
 function setMode(m){mode=m;$("mb").classList.toggle("on",m==="browser");$("ms").classList.toggle("on",m==="service");
 $("browser").style.display=m==="browser"?"":"none";$("service").style.display=m==="service"?"":"none";}
-$("btc").value=ls(K.btc,"");$("proxy").value=ls(K.proxy,"")||ls("skywire-upstream-proxy","");$("svc").value=ls(K.svc,"");
+$("proxy").value=ls(K.proxy,"")||ls("skywire-upstream-proxy","");$("svc").value=ls(K.svc,"");
 setMode(mode);
 $("mb").onclick=function(){setMode("browser");};$("ms").onclick=function(){setMode("service");};
 // Skysocks exit: SD-populated dropdown + live proxy/resolving-proxy log — the
@@ -116,14 +109,17 @@ $("prnd").onclick=function(){fetchProxies(function(list){if(!list.length){plog("
 var s=list[Math.floor(Math.random()*list.length)];var pk=String(s.address).split(":")[0];
 $("proxy").value=pk;plog("● 🎲 random exit → "+pk.slice(0,8)+"…"+((s.geo&&s.geo.country)?" · "+s.geo.country:"")+" (Apply to save)");});};
 $("psel").onchange=function(){if(this.value){$("proxy").value=this.value;plog("● exit set → "+this.value.slice(0,8)+"… (Apply to save)");}};
+// 🐞 verbose: stream the visor's own [skysocks-lite]/[resolve-proxy] lines into
+// the log — the same toggle the iframe browser's ⚙ proxy panel exposes.
+var pv=false;$("pverb").onclick=function(){var v=visor();pv=!pv;$("pverb").textContent="🐞 verbose: "+(pv?"on":"off");try{if(v&&v.proxyVerbose)v.proxyVerbose(pv);}catch(e){}plog("● verbose "+(pv?"on — streaming [skysocks-lite] / [resolve-proxy]":"off"));};
 $("apply").onclick=function(){var e=$("err");e.style.display="none";e.textContent="";
 if(mode==="service"){var s=($("svc").value||"").trim();if(!s){e.textContent="Enter the wallet service address.";e.style.display="";return;}
 set(K.mode,"service");set(K.svc,s);set(K.prim,s);}
 else{set(K.mode,"browser");
-// Coin node config moved to skycoin-web's Settings → Nodes; clear any legacy
-// panel-set node so that page (or the deployment mesh default) is authoritative.
-set(K.nodes,"");set(K.prim,"");
-set(K.btc,($("btc").value||"").trim());
+// Coin node AND Bitcoin electrum config moved to skycoin-web's Settings → Nodes;
+// clear any legacy panel-set node/electrum so that page (or the deployment mesh
+// default) is authoritative. This panel only owns the skysocks exit now.
+set(K.nodes,"");set(K.prim,"");set(K.btc,"");
 var pxy=($("proxy").value||"").trim();set(K.proxy,pxy);set("skywire-upstream-proxy",pxy);}
 try{parent.postMessage({type:"skywire-wallet-config"},"*");}catch(_){}
 };

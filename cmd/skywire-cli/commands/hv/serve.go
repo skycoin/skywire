@@ -108,9 +108,18 @@ func walletDmsgFetchShim() string {
 		// BTC: the wallet does keys+signing itself; only chain queries go over the
 		// mesh, through the in-tab electrum gateway (skywireVisor.btcFetch), which
 		// dials the ssl:// electrum via skysocks-lite (upstream-proxy exit).
+		//
+		// The electrum server is whatever skycoin-web ADDRESSED the request to:
+		// the Bitcoin coin's node URL in Settings → Node is an ssl://host:port, so
+		// ApiService emits ssl://host:port/api/v1/btc/… — we take the ssl:// origin
+		// as the backend (skycoin-web's Nodes GUI is authoritative). A same-origin
+		// /v1/btc/… (the raw health probe, or an unset node) falls back to the
+		// legacy config-panel key.
 		`if(btc){` +
 		`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
-		`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
+		`var _bu;try{_bu=new URL(url,location.href);}catch(e){}` +
+		`var back=(_bu&&_bu.protocol&&_bu.protocol!=="http:"&&_bu.protocol!=="https:")?(_bu.protocol+"//"+_bu.host):ls("skywire-btc-backend");` +
+		`if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
 		`var btag="btc "+m+" "+pth;wlog(btag);` +
 		`return Promise.resolve(v.btcFetch(back,m,pth,init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(done(btag)).catch(fail(btag));` +
 		`}` +

@@ -117,9 +117,13 @@ const walletNodeShim = `<script>(function(){` +
 	`var target;` +
 	`if(mb){` +
 	// Normalize any /v1/btc/ path (bare or /api/v1/btc/) to /wallet/v1/btc/… so
-	// the server routes it to the in-process electrum gateway, not the node.
+	// the server routes it to the in-process electrum gateway, not the node. The
+	// electrum server is whatever skycoin-web addressed the request to — the
+	// Bitcoin coin's node URL in Settings → Node is an ssl://host:port, so its
+	// origin travels in X-Skywire-Btc-Backend (its Nodes GUI is authoritative; a
+	// same-origin /v1/btc path falls back to the legacy config-panel key).
 	`var tail=p.slice(p.indexOf("/v1/btc/"));target=location.origin+"/wallet"+tail+searchOf(url);` +
-	`var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
+	`var b=hostOf(url)||ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
 	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}` +
 	`}else{` +
 	// Node API: skycoin-web addresses a custom node (Settings → Nodes /
