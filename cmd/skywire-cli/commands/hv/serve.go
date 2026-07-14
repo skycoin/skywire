@@ -27,6 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/wasmhv"
@@ -179,11 +180,17 @@ page never asks anyone to type a secret key.`,
 			cmd.PrintErrln("read index.html:", err)
 			os.Exit(1)
 		}
-		// wasmVer fingerprints the embedded wasm so the page can detect a newer
-		// build (after the skywire binary updates) and self-reload — see
-		// autoupdate.js. Short SHA-256 prefix is plenty to spot a content change.
-		sum := sha256.Sum256(wasm)
-		wasmVer := hex.EncodeToString(sum[:])[:16]
+		// wasmVer fingerprints the WHOLE served build so the page detects ANY newer
+		// deploy and self-reloads (see autoupdate.js): the wasm blob, the Angular
+		// index (it references the content-hashed UI bundle, so a UI-only change
+		// moves it), AND the binary build version (so a plain version bump moves it
+		// even when the wasm blob is byte-identical — the case that left connected
+		// tabs stuck on an old build: /wasm-version used to hash only the wasm).
+		vh := sha256.New()
+		vh.Write(wasm)
+		vh.Write(indexB)
+		vh.Write([]byte(buildinfo.Version()))
+		wasmVer := hex.EncodeToString(vh.Sum(nil))[:16]
 		index := injectBoot(indexB, wasmVer, serveHarness)
 
 		mux := http.NewServeMux()
