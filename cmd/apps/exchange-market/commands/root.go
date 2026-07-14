@@ -139,26 +139,14 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 	go serveUI(ctx, appCl, database, uiAddr)
 
 	// Start the background jobs (escrow/listing checks, expiry, cleanup, bans).
-	// When a SKY fullnode URL is configured, use the real Skycoin backend (SKY
-	// deposit verification + delivery); external-coin payment verification is a
-	// no-op until a provider is wired in. Otherwise stay fully no-op.
-	var chainBackend jobs.Chain = jobs.NoopChain{}
-	if nodeURL, _ := database.GetConfig("sky_fullnode_url"); strings.TrimSpace(nodeURL) != "" { //nolint
-		seed, _ := database.GetConfig("sky_wallet_seed") //nolint
-		walletSky, _ := database.GetConfig("wallet_sky") //nolint
-		confs := jobs.RequiredConfirmations
-		if c, err := database.GetConfirmationsRequired(); err == nil && c > 0 {
-			confs = c
-		}
-		chainBackend = chain.New(chain.Config{
-			SkyNodeURL:    nodeURL,
-			SkySeed:       seed,
-			SkyWallet:     walletSky,
-			Confirmations: confs,
-		}, database)
-		appCl.LogInfo("Chain backend: Skycoin node at %s (external payments via configured explorers)", nodeURL)
+	// The chain backend reads its per-sell-coin escrow config and per-currency
+	// explorer config from the DB, so operator changes take effect without a
+	// restart. Coins with no fullnode URL yet simply never confirm.
+	chainBackend := chain.New(database)
+	if coins, _ := database.AvailableSellCoins(); len(coins) > 0 { //nolint
+		appCl.LogInfo("Chain backend ready — sell coins: %s (external payments via configured explorers)", strings.Join(coins, ", "))
 	} else {
-		appCl.LogInfo("Chain backend: none configured (set sky_fullnode_url to enable SKY verification)")
+		appCl.LogInfo("Chain backend ready — no sell coins enabled yet (add one in the operator UI)")
 	}
 	go jobs.NewRunner(database, chainBackend, appCl.Log()).Run(ctx)
 

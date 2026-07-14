@@ -104,7 +104,7 @@ func TestTradeRoundTrip(t *testing.T) {
 
 	// A currency without a configured explorer must be rejected.
 	rejected, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 10, Price: 2, PaymentCurrency: "LTC",
+		Amount: 10, Price: 2, PaymentCurrency: "LTC",
 	})
 	if err != nil {
 		t.Fatalf("create_listing(LTC) transport error: %v", err)
@@ -115,17 +115,17 @@ func TestTradeRoundTrip(t *testing.T) {
 
 	var listing protocol.CreateListingResponse
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC",
+		Amount: 10, Price: 2, PaymentCurrency: "BTC",
 	}, &listing)
 	// The seller deposits the exact round amount (identified by sender + window).
-	if listing.ExpectedAmountSKY != 10 || listing.MarketWallet != "sky-market-wallet" {
+	if listing.ExpectedAmount != 10 || listing.MarketWallet != "sky-market-wallet" {
 		t.Fatalf("unexpected listing response: %+v", listing)
 	}
 
 	// The Listing Checker job (not part of this phase) would normally promote a
 	// confirmed listing into products. Simulate that so we can exercise buying.
 	activeProduct := &db.Product{
-		ID: "prod-1", SellerPubKey: sellerPK, AmountSKY: 10, Price: 2,
+		ID: "prod-1", SellerPubKey: sellerPK, Amount: 10, Price: 2,
 		PaymentCurrency: "BTC", Status: "active",
 	}
 	if err := database.CreateProduct(activeProduct); err != nil {
@@ -167,6 +167,72 @@ func TestTradeRoundTrip(t *testing.T) {
 	}
 }
 
+// TestCreateListing_SellCoin verifies the sell coin is validated and routed to
+// the right escrow wallet: an unknown/disabled coin is rejected, and an enabled
+// fibercoin lists against its own escrow address.
+func TestCreateListing_SellCoin(t *testing.T) {
+	database := newTestDB(t)
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	zeroCommission(t, database)
+
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
+
+	// get_currencies advertises SKY as a sell coin (seeded, enabled by default).
+	var cur protocol.GetCurrenciesResponse
+	bindSuccess(t, seller, protocol.TypeGetCurrencies, nil, &cur)
+	if !slices.Contains(cur.SellCoins, "SKY") {
+		t.Fatalf("sell coins = %v, want SKY present", cur.SellCoins)
+	}
+
+	// An unknown sell coin is rejected.
+	rej, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{
+		SellCoin: "NOPE", Amount: 10, Price: 2, PaymentCurrency: "BTC",
+	})
+	if err != nil {
+		t.Fatalf("transport: %v", err)
+	}
+	if !rej.IsError() || errCode(t, rej) != protocol.CodeCurrencyUnavailable {
+		t.Fatalf("unknown sell coin = %+v, want CURRENCY_UNAVAILABLE", rej)
+	}
+
+	// Add and enable a fibercoin with its own escrow wallet.
+	if err := database.UpsertSellCoin(&db.SellCoin{
+		Symbol: "MDL", Name: "Mobile", NodeURL: "http://mdl:6420",
+		WalletSeed: "mdl-seed", WalletAddr: "MDL-escrow", Confirmations: 1, Enabled: true,
+	}); err != nil {
+		t.Fatalf("add MDL: %v", err)
+	}
+
+	var listing protocol.CreateListingResponse
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
+		SellCoin: "MDL", Amount: 10, Price: 2, PaymentCurrency: "BTC",
+	}, &listing)
+	if listing.SellCoin != "MDL" || listing.MarketWallet != "MDL-escrow" {
+		t.Fatalf("MDL listing routed wrong: %+v", listing)
+	}
+
+	// Disabling MDL makes further MDL listings unavailable.
+	if err := database.SetSellCoinEnabled("MDL", false); err != nil {
+		t.Fatal(err)
+	}
+	rej2, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{
+		SellCoin: "MDL", Amount: 10, Price: 2, PaymentCurrency: "BTC",
+	})
+	if err != nil {
+		t.Fatalf("transport: %v", err)
+	}
+	if !rej2.IsError() || errCode(t, rej2) != protocol.CodeCurrencyUnavailable {
+		t.Fatalf("disabled sell coin = %+v, want CURRENCY_UNAVAILABLE", rej2)
+	}
+}
+
 // TestOnePendingListingPerSeller verifies a seller sends the exact round deposit
 // amount and can only have one pending listing at a time — a second is rejected
 // while the first is still awaiting its deposit. This keeps a single deposit from
@@ -186,10 +252,10 @@ func TestOnePendingListingPerSeller(t *testing.T) {
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 
 	var a protocol.CreateListingResponse
-	req := protocol.CreateListingRequest{AmountSKY: 10, Price: 2, PaymentCurrency: "BTC"}
+	req := protocol.CreateListingRequest{Amount: 10, Price: 2, PaymentCurrency: "BTC"}
 	bindSuccess(t, seller, protocol.TypeCreateListing, req, &a)
-	if a.ExpectedAmountSKY != 10 {
-		t.Fatalf("deposit amount = %v, want the exact round amount 10", a.ExpectedAmountSKY)
+	if a.ExpectedAmount != 10 {
+		t.Fatalf("deposit amount = %v, want the exact round amount 10", a.ExpectedAmount)
 	}
 
 	// A second pending listing from the same seller is rejected.
@@ -255,7 +321,7 @@ func TestTradeSizeBounds(t *testing.T) {
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 
 	for _, amt := range []float64{4, 101} { // below min, above max
-		resp, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{AmountSKY: amt, Price: 2, PaymentCurrency: "BTC"})
+		resp, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{Amount: amt, Price: 2, PaymentCurrency: "BTC"})
 		if err != nil {
 			t.Fatalf("create_listing(%v) transport: %v", amt, err)
 		}
@@ -266,9 +332,9 @@ func TestTradeSizeBounds(t *testing.T) {
 
 	// An in-bounds amount is accepted.
 	var ok protocol.CreateListingResponse
-	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{AmountSKY: 50, Price: 2, PaymentCurrency: "BTC"}, &ok)
-	if ok.ExpectedAmountSKY != 50 {
-		t.Fatalf("in-bounds listing deposit = %v, want 50", ok.ExpectedAmountSKY)
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{Amount: 50, Price: 2, PaymentCurrency: "BTC"}, &ok)
+	if ok.ExpectedAmount != 50 {
+		t.Fatalf("in-bounds listing deposit = %v, want 50", ok.ExpectedAmount)
 	}
 }
 
@@ -289,10 +355,10 @@ func TestListingCommission(t *testing.T) {
 	// 0.5% of 100 = 0.5 → seller deposits 100.5, buyer will receive 100.
 	var big protocol.CreateListingResponse
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 100, Price: 2, PaymentCurrency: "BTC",
+		Amount: 100, Price: 2, PaymentCurrency: "BTC",
 	}, &big)
-	if math.Abs(big.ExpectedAmountSKY-100.5) > 1e-9 {
-		t.Fatalf("deposit = %v, want amount+commission = 100.5", big.ExpectedAmountSKY)
+	if math.Abs(big.ExpectedAmount-100.5) > 1e-9 {
+		t.Fatalf("deposit = %v, want amount+commission = 100.5", big.ExpectedAmount)
 	}
 }
 
@@ -312,19 +378,19 @@ func TestCreateListingPrecision(t *testing.T) {
 	seller := dialTestServer(t, database, sellerPK)
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 
-	// A high-precision AmountSKY is rounded to 3 decimals; the deposit is that
+	// A high-precision Amount is rounded to 3 decimals; the deposit is that
 	// exact round amount (no non-round delta).
 	var l protocol.CreateListingResponse
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 10.123456789, Price: 2, PaymentCurrency: "BTC",
+		Amount: 10.123456789, Price: 2, PaymentCurrency: "BTC",
 	}, &l)
-	if math.Abs(l.ExpectedAmountSKY-10.123) > 1e-9 {
-		t.Fatalf("deposit %v, want normalized to 3 decimals (10.123)", l.ExpectedAmountSKY)
+	if math.Abs(l.ExpectedAmount-10.123) > 1e-9 {
+		t.Fatalf("deposit %v, want normalized to 3 decimals (10.123)", l.ExpectedAmount)
 	}
 
 	// An amount above the safe float range is rejected.
 	tooBig, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 1e10, Price: 2, PaymentCurrency: "BTC",
+		Amount: 1e10, Price: 2, PaymentCurrency: "BTC",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -335,7 +401,7 @@ func TestCreateListingPrecision(t *testing.T) {
 
 	// An amount that rounds to zero at SKY precision is rejected.
 	tooSmall, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 1e-9, Price: 2, PaymentCurrency: "BTC",
+		Amount: 1e-9, Price: 2, PaymentCurrency: "BTC",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -370,7 +436,7 @@ func TestGetListings(t *testing.T) {
 
 	var listing protocol.CreateListingResponse
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC",
+		Amount: 10, Price: 2, PaymentCurrency: "BTC",
 	}, &listing)
 
 	// The seller sees the pending listing with the deposit amount + wallet.
@@ -380,7 +446,7 @@ func TestGetListings(t *testing.T) {
 		t.Fatalf("get_listings = %+v, want one pending listing", mine.Listings)
 	}
 	l := mine.Listings[0]
-	if l.Status != "pending" || l.ExpectedAmountSKY != listing.ExpectedAmountSKY || mine.MarketWallet != "sky-market-wallet" {
+	if l.Status != "pending" || l.ExpectedAmount != listing.ExpectedAmount || mine.MarketWallet != "sky-market-wallet" {
 		t.Fatalf("listing view = %+v (wallet %q), want pending with the deposit amount", l, mine.MarketWallet)
 	}
 
@@ -419,7 +485,7 @@ func TestBuyerCancelBlocksRebuy(t *testing.T) {
 	seller := dialTestServer(t, database, sellerPK)
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 	if err := database.CreateProduct(&db.Product{
-		ID: "prod-1", SellerPubKey: sellerPK, AmountSKY: 10, Price: 2, PaymentCurrency: "BTC", Status: "active",
+		ID: "prod-1", SellerPubKey: sellerPK, Amount: 10, Price: 2, PaymentCurrency: "BTC", Status: "active",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -480,7 +546,7 @@ func TestSellerCancelConfirmedOffer(t *testing.T) {
 
 	var listing protocol.CreateListingResponse
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC",
+		Amount: 10, Price: 2, PaymentCurrency: "BTC",
 	}, &listing)
 
 	// Simulate the Listing Checker promoting the confirmed deposit into a product.
@@ -489,7 +555,7 @@ func TestSellerCancelConfirmedOffer(t *testing.T) {
 	}
 	if err := database.CreateProduct(&db.Product{
 		ID: "prod-1", ListingID: listing.ListingID, SellerPubKey: sellerPK,
-		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC", Status: "active",
+		Amount: 10, Price: 2, PaymentCurrency: "BTC", Status: "active",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -506,14 +572,14 @@ func TestSellerCancelConfirmedOffer(t *testing.T) {
 	// A second, frozen offer cannot be canceled.
 	var listing2 protocol.CreateListingResponse
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 5, Price: 1, PaymentCurrency: "BTC",
+		Amount: 5, Price: 1, PaymentCurrency: "BTC",
 	}, &listing2)
 	if err := database.UpdatePendingListingStatus(listing2.ListingID, "confirmed", "dep-tx-2"); err != nil {
 		t.Fatal(err)
 	}
 	if err := database.CreateProduct(&db.Product{
 		ID: "prod-2", ListingID: listing2.ListingID, SellerPubKey: sellerPK,
-		AmountSKY: 5, Price: 1, PaymentCurrency: "BTC", Status: "active",
+		Amount: 5, Price: 1, PaymentCurrency: "BTC", Status: "active",
 	}); err != nil {
 		t.Fatal(err)
 	}
