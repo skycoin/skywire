@@ -5,25 +5,31 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
-// TestDepositConfirmed verifies the SKY deposit check matches an output of the
-// expected amount with enough confirmations, and rejects otherwise.
+// TestDepositConfirmed verifies the SKY deposit check matches an exact-amount
+// deposit that is sufficiently confirmed, sent from the seller's address, and
+// within the listing window — and rejects on amount, sender, or time mismatch.
 func TestDepositConfirmed(t *testing.T) {
 	const wallet = "2sky...market"
+	const seller = "2seller...addr"
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/v1/transactions" {
 			http.NotFound(w, r)
 			return
 		}
-		// One confirmed tx paying 10.001234 SKY to the market wallet, 3 confs.
+		// One confirmed tx from the seller paying exactly 10 SKY to the market
+		// wallet at block time 1000, 3 confs.
 		resp := []map[string]any{
 			{
 				"status": map[string]any{"confirmed": true, "height": 3, "block_seq": 100},
 				"txn": map[string]any{
-					"txid":    "tx-good",
-					"outputs": []map[string]any{{"dst": wallet, "coins": "10.001234"}},
+					"txid":      "tx-good",
+					"timestamp": 1000,
+					"inputs":    []map[string]any{{"owner": seller}},
+					"outputs":   []map[string]any{{"dst": wallet, "coins": "10.000000"}},
 				},
 			},
 		}
@@ -32,9 +38,10 @@ func TestDepositConfirmed(t *testing.T) {
 	defer srv.Close()
 
 	node := NewSkyNode(srv.URL, "", "", 2, srv.Client())
+	nb, na := time.Unix(500, 0), time.Unix(2000, 0) // window covers block time 1000
 
-	// Exact match with sufficient confirmations.
-	ok, txid, err := node.DepositConfirmed(wallet, 10.001234)
+	// Exact amount, right sender, within window.
+	ok, txid, err := node.DepositConfirmed(wallet, seller, 10.0, nb, na)
 	if err != nil {
 		t.Fatalf("DepositConfirmed: %v", err)
 	}
@@ -42,30 +49,42 @@ func TestDepositConfirmed(t *testing.T) {
 		t.Fatalf("expected confirmed deposit tx-good, got ok=%v txid=%q", ok, txid)
 	}
 
-	// Different amount → not matched.
-	ok, _, err = node.DepositConfirmed(wallet, 10.0)
-	if err != nil {
-		t.Fatalf("DepositConfirmed(mismatch): %v", err)
-	}
-	if ok {
+	// Wrong amount → not matched.
+	if ok, _, _ := node.DepositConfirmed(wallet, seller, 11.0, nb, na); ok { //nolint
 		t.Fatal("expected no match for a different amount")
+	}
+
+	// Wrong sender → not matched.
+	if ok, _, _ := node.DepositConfirmed(wallet, "2someone...else", 10.0, nb, na); ok { //nolint
+		t.Fatal("expected no match for a different sender")
+	}
+
+	// Deposit predates the window (anti-replay of an old transaction) → no match.
+	if ok, _, _ := node.DepositConfirmed(wallet, seller, 10.0, time.Unix(1500, 0), time.Unix(2000, 0)); ok { //nolint
+		t.Fatal("expected no match for a deposit before the listing window")
 	}
 }
 
 // TestDepositBelowConfirmations rejects a deposit that has too few confirmations.
 func TestDepositBelowConfirmations(t *testing.T) {
 	const wallet = "2sky...market"
+	const seller = "2seller...addr"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		resp := []map[string]any{{
 			"status": map[string]any{"confirmed": true, "height": 1, "block_seq": 100},
-			"txn":    map[string]any{"txid": "tx-shallow", "outputs": []map[string]any{{"dst": wallet, "coins": "5.000000"}}},
+			"txn": map[string]any{
+				"txid":      "tx-shallow",
+				"timestamp": 1000,
+				"inputs":    []map[string]any{{"owner": seller}},
+				"outputs":   []map[string]any{{"dst": wallet, "coins": "5.000000"}},
+			},
 		}}
 		_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
 	}))
 	defer srv.Close()
 
 	node := NewSkyNode(srv.URL, "", "", 2, srv.Client()) // needs 2, tx has 1
-	ok, _, err := node.DepositConfirmed(wallet, 5.0)
+	ok, _, err := node.DepositConfirmed(wallet, seller, 5.0, time.Unix(500, 0), time.Unix(2000, 0))
 	if err != nil {
 		t.Fatalf("DepositConfirmed: %v", err)
 	}
@@ -88,7 +107,7 @@ func TestSendSKYNoWallet(t *testing.T) {
 // TestNoExplorer confirms the default explorer never confirms a payment.
 func TestNoExplorer(t *testing.T) {
 	c := New(Config{}, nil)
-	confs, _, err := c.PaymentConfirmations("BTC", "addr", 1.0)
+	confs, _, err := c.PaymentConfirmations("BTC", "addr", "", 1.0, time.Unix(0, 0), time.Now())
 	if err != nil || confs != 0 {
 		t.Fatalf("noExplorer should report 0 confirmations, got confs=%d err=%v", confs, err)
 	}

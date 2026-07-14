@@ -55,13 +55,13 @@ type sendCall struct {
 	amt  float64
 }
 
-func (c *scriptChain) DepositConfirmed(string, float64) (bool, string, error) {
+func (c *scriptChain) DepositConfirmed(string, string, float64, time.Time, time.Time) (bool, string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.deposit, "dep-tx", nil
 }
 
-func (c *scriptChain) PaymentConfirmations(string, string, float64) (int, string, error) {
+func (c *scriptChain) PaymentConfirmations(string, string, string, float64, time.Time, time.Time) (int, string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.confs, "pay-tx", nil
@@ -168,7 +168,8 @@ func TestExchangeTradeOverDmsg(t *testing.T) {
 	bindOK(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
 		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC",
 	}, &listing)
-	if listing.ExpectedAmountSKY <= 10 || listing.MarketWallet != "sky-market-wallet" {
+	// The seller deposits the exact round amount (identified by sender + window).
+	if listing.ExpectedAmountSKY != 10 || listing.MarketWallet != "sky-market-wallet" {
 		t.Fatalf("unexpected listing response: %+v", listing)
 	}
 

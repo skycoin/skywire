@@ -54,8 +54,12 @@ func TestLiveSkyDepositConfirmed(t *testing.T) {
 					t.Skip("no low-history address found among recent outputs to match against")
 				}
 
-				// Our client must detect this exact payment to this address.
-				ok, txid, derr := node.DepositConfirmed(o.Dst, amount)
+				// Our client must detect this exact payment to this address. This
+				// test matches arbitrary on-chain payments by amount only, so the
+				// sender is left empty and the time window is wide open.
+				anySender := ""
+				wideOpen, farFuture := time.Unix(0, 0), time.Now().Add(24*time.Hour)
+				ok, txid, derr := node.DepositConfirmed(o.Dst, anySender, amount, wideOpen, farFuture)
 				if derr != nil {
 					continue // busy address (response too large) or transient — try next
 				}
@@ -65,7 +69,7 @@ func TestLiveSkyDepositConfirmed(t *testing.T) {
 				t.Logf("detected %.6f SKY to %s (tx %s) via the public node", amount, o.Dst, txid)
 
 				// No false positive on an amount that address never received.
-				bad, _, berr := node.DepositConfirmed(o.Dst, amount+987654.321)
+				bad, _, berr := node.DepositConfirmed(o.Dst, anySender, amount+987654.321, wideOpen, farFuture)
 				if berr != nil {
 					t.Fatalf("negative-check request failed: %v", berr)
 				}

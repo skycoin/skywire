@@ -38,13 +38,13 @@ func New(cfg Config, store ExplorerConfigStore) *Chain {
 }
 
 // DepositConfirmed implements jobs.Chain.
-func (c *Chain) DepositConfirmed(marketWallet string, amountSKY float64) (bool, string, error) {
-	return c.sky.DepositConfirmed(marketWallet, amountSKY)
+func (c *Chain) DepositConfirmed(marketWallet, senderAddr string, amountSKY float64, notBefore, notAfter time.Time) (bool, string, error) {
+	return c.sky.DepositConfirmed(marketWallet, senderAddr, amountSKY, notBefore, notAfter)
 }
 
 // PaymentConfirmations implements jobs.Chain.
-func (c *Chain) PaymentConfirmations(currency, addr string, expectedAmount float64) (int, string, error) {
-	return c.exp.PaymentConfirmations(currency, addr, expectedAmount)
+func (c *Chain) PaymentConfirmations(currency, addr, senderAddr string, expectedAmount float64, notBefore, notAfter time.Time) (int, string, error) {
+	return c.exp.PaymentConfirmations(currency, addr, senderAddr, expectedAmount, notBefore, notAfter)
 }
 
 // SendSKY implements jobs.Chain.

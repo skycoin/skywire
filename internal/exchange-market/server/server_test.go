@@ -104,7 +104,8 @@ func TestTradeRoundTrip(t *testing.T) {
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
 		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC",
 	}, &listing)
-	if listing.ExpectedAmountSKY <= 10 || listing.MarketWallet != "sky-market-wallet" {
+	// The seller deposits the exact round amount (identified by sender + window).
+	if listing.ExpectedAmountSKY != 10 || listing.MarketWallet != "sky-market-wallet" {
 		t.Fatalf("unexpected listing response: %+v", listing)
 	}
 
@@ -153,10 +154,11 @@ func TestTradeRoundTrip(t *testing.T) {
 	}
 }
 
-// TestUniqueDepositAmounts verifies two listings of the same SKY amount get
-// distinct non-round deposit amounts (uniqueness guarantee to the shared market
-// wallet), so a deposit can only match one listing.
-func TestUniqueDepositAmounts(t *testing.T) {
+// TestOnePendingListingPerSeller verifies a seller sends the exact round deposit
+// amount and can only have one pending listing at a time — a second is rejected
+// while the first is still awaiting its deposit. This keeps a single deposit from
+// the seller's address unambiguous within one listing window.
+func TestOnePendingListingPerSeller(t *testing.T) {
 	database := newTestDB(t)
 	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
 		t.Fatal(err)
@@ -169,16 +171,20 @@ func TestUniqueDepositAmounts(t *testing.T) {
 	seller := dialTestServer(t, database, sellerPK)
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 
-	var a, b protocol.CreateListingResponse
+	var a protocol.CreateListingResponse
 	req := protocol.CreateListingRequest{AmountSKY: 10, Price: 2, PaymentCurrency: "BTC"}
 	bindSuccess(t, seller, protocol.TypeCreateListing, req, &a)
-	bindSuccess(t, seller, protocol.TypeCreateListing, req, &b)
-
-	if a.ExpectedAmountSKY == b.ExpectedAmountSKY {
-		t.Fatalf("two listings got the same deposit amount %v — not unique", a.ExpectedAmountSKY)
+	if a.ExpectedAmountSKY != 10 {
+		t.Fatalf("deposit amount = %v, want the exact round amount 10", a.ExpectedAmountSKY)
 	}
-	if a.ExpectedAmountSKY <= 10 || b.ExpectedAmountSKY <= 10 {
-		t.Fatalf("deposit amounts should be non-round above base: %v, %v", a.ExpectedAmountSKY, b.ExpectedAmountSKY)
+
+	// A second pending listing from the same seller is rejected.
+	second, err := seller.Do(protocol.TypeCreateListing, req)
+	if err != nil {
+		t.Fatalf("second create transport error: %v", err)
+	}
+	if !second.IsError() || errCode(t, second) != protocol.CodeInvalidRequest {
+		t.Fatalf("second listing = %+v, want INVALID_REQUEST (one pending listing per seller)", second)
 	}
 }
 
@@ -213,9 +219,9 @@ func TestRegisterRejectsBadWallet(t *testing.T) {
 	mustSuccess(t, c, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 }
 
-// TestCreateListingPrecision verifies amounts are normalized to SKY's on-chain
-// precision (sub-droplet input yields a whole-droplet deposit) and that out-of-
-// range amounts are rejected.
+// TestCreateListingPrecision verifies SKY amounts are normalized to the network's
+// 3-decimal precision (so the seller can deposit the exact amount) and that out-
+// of-range amounts are rejected.
 func TestCreateListingPrecision(t *testing.T) {
 	database := newTestDB(t)
 	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
@@ -228,17 +234,14 @@ func TestCreateListingPrecision(t *testing.T) {
 	seller := dialTestServer(t, database, sellerPK)
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 
-	// A sub-droplet AmountSKY (9 dp) is normalized: the deposit is a whole number
-	// of droplets, equal to the 6-dp base (10.123457) plus a <= 0.001 delta.
+	// A high-precision AmountSKY is rounded to 3 decimals; the deposit is that
+	// exact round amount (no non-round delta).
 	var l protocol.CreateListingResponse
 	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
 		AmountSKY: 10.123456789, Price: 2, PaymentCurrency: "BTC",
 	}, &l)
-	if scaled := l.ExpectedAmountSKY * 1e6; math.Abs(scaled-math.Round(scaled)) > 1e-6 {
-		t.Fatalf("deposit %v is not a whole number of droplets", l.ExpectedAmountSKY)
-	}
-	if l.ExpectedAmountSKY <= 10.123457 || l.ExpectedAmountSKY > 10.123457+0.001+1e-9 {
-		t.Fatalf("deposit %v outside the normalized band [10.123458, 10.124457]", l.ExpectedAmountSKY)
+	if math.Abs(l.ExpectedAmountSKY-10.123) > 1e-9 {
+		t.Fatalf("deposit %v, want normalized to 3 decimals (10.123)", l.ExpectedAmountSKY)
 	}
 
 	// An amount above the safe float range is rejected.

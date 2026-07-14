@@ -16,19 +16,19 @@ import (
 	"github.com/skycoin/skywire/internal/exchange-market/walletaddr"
 )
 
-// Decimal precision per asset. SKY uses 6 (droplets); the supported external
-// payment coins (BTC/BCH/LTC/DOGE/DASH) use 8.
+// Decimal precision per asset. SKY droplets are 1e-6, but the Skycoin network
+// only accepts transaction amounts to 3 decimals (MaxDropletPrecision), so
+// on-chain SKY amounts (deposits, deliveries, refunds) are rounded to 3. The
+// supported external payment coins (BTC/BCH/LTC/DOGE/DASH) use 8.
 const (
-	skyDecimals     = 6
-	paymentDecimals = 8
+	skyOnChainDecimals = 3
+	paymentDecimals    = 8
 )
 
-// Amount-collision tolerances: half the smallest unit of each asset, so two
-// amounts are "the same" only if they round to the same on-chain value.
-const (
-	skyTol     = 0.5e-6
-	paymentTol = 0.5e-8
-)
+// paymentTol is the amount-collision tolerance for external payment coins: half
+// their smallest unit, so two amounts are "the same" only if they round to the
+// same on-chain value.
+const paymentTol = 0.5e-8
 
 // Upper bounds on request amounts. Beyond these, base*10^decimals would exceed
 // float64's exact-integer range (2^53 ≈ 9e15), so nonRound's small delta would
@@ -56,7 +56,7 @@ var errNoUniqueAmount = errors.New("could not allocate a unique payment amount")
 // pending (per the exists check), retrying on collision. The caller must hold a
 // lock spanning this call and the subsequent insert so the chosen amount can't
 // be taken by a concurrent allocation.
-func allocUniqueAmount(base float64, decimals int, exists func(float64) (bool, error)) (float64, error) {
+func allocUniqueAmount(base float64, decimals int, exists func(float64) (bool, error)) (float64, error) { //nolint
 	for i := 0; i < 100; i++ {
 		amt := nonRound(base, decimals)
 		dup, err := exists(amt)
@@ -182,10 +182,11 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	if r.AmountSKY > maxAmountSKY || r.Price > maxPrice {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky or price is too large")
 	}
-	// Normalize to each asset's on-chain precision so the escrow deposit and the
-	// later delivery reconcile exactly and no sub-unit dust is stored. Re-check
-	// positivity: a value below half a unit rounds to zero.
-	r.AmountSKY = roundToDecimals(r.AmountSKY, skyDecimals)
+	// Normalize to each asset's on-chain precision. SKY rounds to 3 decimals (the
+	// network's spendable precision) so the seller can deposit, and the market can
+	// later deliver, the exact amount. Re-check positivity: a value below half a
+	// unit rounds to zero.
+	r.AmountSKY = roundToDecimals(r.AmountSKY, skyOnChainDecimals)
 	r.Price = roundToDecimals(r.Price, paymentDecimals)
 	if r.AmountSKY <= 0 || r.Price <= 0 {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky or price is too small to represent")
@@ -217,29 +218,33 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 
 	expiry := s.listingExpiry()
 
-	// Allocate a unique non-round deposit amount and insert atomically, so no two
-	// pending listings share an amount to the (shared) market wallet.
+	// The seller sends the exact round amount; the deposit is identified by their
+	// registered SKY address (the tx sender) within this listing's window. That
+	// only works if the seller has no other pending listing whose window overlaps
+	// — otherwise a single deposit from that address is ambiguous. So allow one
+	// pending listing per seller at a time. Hold allocMu across the check and the
+	// insert so two concurrent requests can't both pass.
 	s.allocMu.Lock()
-	expected, err := allocUniqueAmount(r.AmountSKY, skyDecimals, func(a float64) (bool, error) {
-		return s.db.PendingListingAmountExists(a, skyTol)
-	})
+	defer s.allocMu.Unlock()
+	hasPending, err := s.db.SellerHasPendingListing(pk)
 	if err != nil {
-		s.allocMu.Unlock()
-		return s.internal(req.ID, "create_listing.alloc", err)
+		return s.internal(req.ID, "create_listing.pending_check", err)
+	}
+	if hasPending {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
+			"you already have a pending listing; complete, cancel, or wait for it to expire before creating another")
 	}
 	listing := &db.PendingListing{
 		ID:                uuid.NewString(),
 		SellerPubKey:      pk,
 		AmountSKY:         r.AmountSKY,
-		ExpectedAmountSKY: expected,
+		ExpectedAmountSKY: r.AmountSKY, // exact round amount — no non-round delta
 		Price:             r.Price,
 		PaymentCurrency:   r.PaymentCurrency,
 		Status:            "pending",
 		ExpiresAt:         time.Now().UTC().Add(expiry),
 	}
-	err = s.db.CreatePendingListing(listing)
-	s.allocMu.Unlock()
-	if err != nil {
+	if err := s.db.CreatePendingListing(listing); err != nil {
 		return s.internal(req.ID, "create_listing", err)
 	}
 
