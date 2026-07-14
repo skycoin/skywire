@@ -86,6 +86,7 @@ func (d *Database) Migrate() error {
 		createFreezeViolationsTable,
 		createBansTable,
 		createMarketConfigTable,
+		createSellCoinsTable,
 	}
 
 	for _, migration := range migrations {
@@ -111,10 +112,17 @@ func (d *Database) Migrate() error {
 	if err := d.ensureColumn("products", "listing_id", "TEXT"); err != nil {
 		return err
 	}
-	// orders.commission_sky records the SKY commission the market retained on a
-	// completed sale (clamp(amount_sky * rate%, min, cap)).
+	// orders.commission_sky records the sell-coin commission the market retained
+	// on a completed sale (clamp(amount * rate%, min, cap)).
 	if err := d.ensureColumn("orders", "commission_sky", "REAL DEFAULT 0"); err != nil {
 		return err
+	}
+	// sell_coin records which Skycoin-family coin (SKY or a fibercoin) a listing/
+	// product/order trades. Pre-fibercoin rows default to SKY.
+	for _, t := range []string{"pending_listings", "products", "orders"} {
+		if err := d.ensureColumn(t, "sell_coin", "TEXT NOT NULL DEFAULT 'SKY'"); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -157,12 +165,24 @@ func (d *Database) InitDefaultConfig() error {
 
 	for key, value := range defaults {
 		_, err := d.db.Exec(`
-			INSERT OR IGNORE INTO market_config (key, value, updated_at) 
+			INSERT OR IGNORE INTO market_config (key, value, updated_at)
 			VALUES (?, ?, ?)
 		`, key, value, time.Now().UTC())
 		if err != nil {
 			return fmt.Errorf("failed to init config key %s: %w", key, err)
 		}
+	}
+
+	// Seed SKY as the default sell coin. Its escrow fields are left empty here;
+	// SellCoinConfig("SKY") bridges the legacy sky_fullnode_url/sky_wallet_seed/
+	// wallet_sky keys so an operator's existing single-coin config keeps working.
+	// The row is editable and removable like any other sell coin.
+	_, err := d.db.Exec(`
+		INSERT OR IGNORE INTO sell_coins (symbol, name, confirmations, enabled, updated_at)
+		VALUES ('SKY', 'Skycoin', 1, 1, ?)
+	`, time.Now().UTC())
+	if err != nil {
+		return fmt.Errorf("failed to seed default sell coin: %w", err)
 	}
 
 	return nil
@@ -290,5 +310,22 @@ CREATE TABLE IF NOT EXISTS market_config (
     key        TEXT PRIMARY KEY,
     value      TEXT NOT NULL,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+`
+
+// sell_coins holds every Skycoin-family coin the market accepts on the sell side
+// (SKY plus any operator-added fibercoins), each with its own fullnode + escrow
+// hot wallet. SKY is seeded as a default row (see seedDefaultSellCoin) but is
+// otherwise an ordinary, editable/removable row — nothing about it is special.
+const createSellCoinsTable = `
+CREATE TABLE IF NOT EXISTS sell_coins (
+    symbol        TEXT PRIMARY KEY,
+    name          TEXT NOT NULL DEFAULT '',
+    node_url      TEXT NOT NULL DEFAULT '',
+    wallet_seed   TEXT NOT NULL DEFAULT '',
+    wallet_addr   TEXT NOT NULL DEFAULT '',
+    confirmations INTEGER NOT NULL DEFAULT 1,
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 `

@@ -38,8 +38,8 @@ const paymentTol = 0.5e-8
 // base*10^decimals ≤ 1e15 and sit far above any real trade (SKY total supply is
 // ~1e8; a payment-coin price of 1e7 is already absurd).
 const (
-	maxAmountSKY = 1e9
-	maxPrice     = 1e7
+	maxAmount = 1e9
+	maxPrice  = 1e7
 )
 
 // roundToDecimals rounds v to an asset's on-chain precision (SKY 6, payment coin
@@ -148,7 +148,14 @@ func (s *Server) handleGetCurrencies(req protocol.Envelope) protocol.Envelope {
 	if cur == nil {
 		cur = []string{}
 	}
-	return success(req.ID, protocol.GetCurrenciesResponse{Currencies: cur})
+	sell, err := s.db.AvailableSellCoins()
+	if err != nil {
+		return s.internal(req.ID, "get_currencies.sellcoins", err)
+	}
+	if sell == nil {
+		sell = []string{}
+	}
+	return success(req.ID, protocol.GetCurrenciesResponse{Currencies: cur, SellCoins: sell})
 }
 
 // handleGetProducts returns all active products.
@@ -162,7 +169,8 @@ func (s *Server) handleGetProducts(req protocol.Envelope) protocol.Envelope {
 		views = append(views, protocol.ProductView{
 			ID:              p.ID,
 			SellerPubKey:    p.SellerPubKey,
-			AmountSKY:       p.AmountSKY,
+			SellCoin:        p.SellCoin,
+			Amount:          p.Amount,
 			Price:           p.Price,
 			PaymentCurrency: p.PaymentCurrency,
 			CreatedAt:       p.CreatedAt.Format(time.RFC3339),
@@ -178,30 +186,35 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	if err := req.Bind(&r); err != nil {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "invalid listing payload")
 	}
-	if r.AmountSKY <= 0 || r.Price <= 0 {
-		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky and price must be positive")
+	// Default the sell coin to SKY when the client omits it (backward compatible).
+	sellCoin := strings.ToUpper(strings.TrimSpace(r.SellCoin))
+	if sellCoin == "" {
+		sellCoin = "SKY"
 	}
-	if r.AmountSKY > maxAmountSKY || r.Price > maxPrice {
-		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky or price is too large")
+	if r.Amount <= 0 || r.Price <= 0 {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount and price must be positive")
 	}
-	// Normalize to each asset's on-chain precision. SKY rounds to 3 decimals (the
-	// network's spendable precision) so the seller can deposit, and the market can
-	// later deliver, the exact amount. Re-check positivity: a value below half a
-	// unit rounds to zero.
-	r.AmountSKY = roundToDecimals(r.AmountSKY, skyOnChainDecimals)
+	if r.Amount > maxAmount || r.Price > maxPrice {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount or price is too large")
+	}
+	// Normalize to each asset's on-chain precision. Skycoin-family coins round to 3
+	// decimals (the network's spendable precision) so the seller can deposit, and
+	// the market can later deliver, the exact amount. Re-check positivity: a value
+	// below half a unit rounds to zero.
+	r.Amount = roundToDecimals(r.Amount, skyOnChainDecimals)
 	r.Price = roundToDecimals(r.Price, paymentDecimals)
-	if r.AmountSKY <= 0 || r.Price <= 0 {
-		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky or price is too small to represent")
+	if r.Amount <= 0 || r.Price <= 0 {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount or price is too small to represent")
 	}
 
 	// Enforce the operator's trade-size bounds (0 = unset).
-	if minSKY, err := s.db.GetMinTradeSKY(); err == nil && minSKY > 0 && r.AmountSKY < minSKY {
+	if minTrade, err := s.db.GetMinTradeSKY(); err == nil && minTrade > 0 && r.Amount < minTrade {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
-			fmt.Sprintf("amount_sky is below the minimum trade size of %s SKY", strconv.FormatFloat(minSKY, 'f', -1, 64)))
+			fmt.Sprintf("amount is below the minimum trade size of %s", strconv.FormatFloat(minTrade, 'f', -1, 64)))
 	}
-	if maxSKY, err := s.db.GetMaxTradeSKY(); err == nil && maxSKY > 0 && r.AmountSKY > maxSKY {
+	if maxTrade, err := s.db.GetMaxTradeSKY(); err == nil && maxTrade > 0 && r.Amount > maxTrade {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
-			fmt.Sprintf("amount_sky is above the maximum trade size of %s SKY", strconv.FormatFloat(maxSKY, 'f', -1, 64)))
+			fmt.Sprintf("amount is above the maximum trade size of %s", strconv.FormatFloat(maxTrade, 'f', -1, 64)))
 	}
 
 	// The seller must be registered (wallet addresses on file).
@@ -209,6 +222,15 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 		return s.internal(req.ID, "create_listing.get_user", err)
 	} else if u == nil {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "register your wallets first")
+	}
+
+	// The chosen sell coin must be enabled at this market.
+	sellOK, err := s.db.IsSellCoinAvailable(sellCoin)
+	if err != nil {
+		return s.internal(req.ID, "create_listing.sellcoin", err)
+	}
+	if !sellOK {
+		return protocol.ErrorResponse(req.ID, protocol.CodeCurrencyUnavailable, "sell coin not available at this market: "+sellCoin)
 	}
 
 	// The chosen payment currency must be enabled at this market.
@@ -220,12 +242,13 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 		return protocol.ErrorResponse(req.ID, protocol.CodeCurrencyUnavailable, "payment currency not available at this market: "+r.PaymentCurrency)
 	}
 
-	marketWallet, err := s.db.GetMarketWallet()
+	// The deposit target is the escrow wallet of the chosen sell coin.
+	marketWallet, err := s.db.SellCoinWallet(sellCoin)
 	if err != nil {
 		return s.internal(req.ID, "create_listing.wallet", err)
 	}
 	if marketWallet == "" {
-		return protocol.ErrorResponse(req.ID, protocol.CodeInternalError, "market wallet not configured")
+		return protocol.ErrorResponse(req.ID, protocol.CodeInternalError, "escrow wallet not configured for "+sellCoin)
 	}
 
 	expiry := s.listingExpiry()
@@ -247,36 +270,39 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 			"you already have a pending listing; complete, cancel, or wait for it to expire before creating another")
 	}
 
-	// The market commission (SKY) is paid by the seller on top of the amount:
-	// the seller deposits amount + commission, the buyer receives amount, and the
-	// market retains the commission. So the expected deposit is amount+commission.
+	// The market commission (in the sell coin) is paid by the seller on top of the
+	// amount: the seller deposits amount + commission, the buyer receives amount,
+	// and the market retains the commission. So the expected deposit is
+	// amount+commission.
 	rate, _ := s.db.GetCommissionRatePercent() //nolint:errcheck
 	minC, _ := s.db.GetCommissionMinSKY()      //nolint:errcheck
 	maxC, _ := s.db.GetCommissionMaxSKY()      //nolint:errcheck
-	commission := jobs.CommissionSKY(r.AmountSKY, rate, minC, maxC)
-	expected := roundToDecimals(r.AmountSKY+commission, skyOnChainDecimals)
+	commission := jobs.Commission(r.Amount, rate, minC, maxC)
+	expected := roundToDecimals(r.Amount+commission, skyOnChainDecimals)
 
 	listing := &db.PendingListing{
-		ID:                uuid.NewString(),
-		SellerPubKey:      pk,
-		AmountSKY:         r.AmountSKY,
-		ExpectedAmountSKY: expected, // amount + SKY commission (the deposit)
-		Price:             r.Price,
-		PaymentCurrency:   r.PaymentCurrency,
-		Status:            "pending",
-		ExpiresAt:         time.Now().UTC().Add(expiry),
+		ID:              uuid.NewString(),
+		SellerPubKey:    pk,
+		SellCoin:        sellCoin,
+		Amount:          r.Amount,
+		ExpectedAmount:  expected, // amount + commission (the deposit)
+		Price:           r.Price,
+		PaymentCurrency: r.PaymentCurrency,
+		Status:          "pending",
+		ExpiresAt:       time.Now().UTC().Add(expiry),
 	}
 	if err := s.db.CreatePendingListing(listing); err != nil {
 		return s.internal(req.ID, "create_listing", err)
 	}
 
 	return success(req.ID, protocol.CreateListingResponse{
-		ListingID:         listing.ID,
-		AmountSKY:         listing.AmountSKY,
-		CommissionSKY:     commission,
-		ExpectedAmountSKY: listing.ExpectedAmountSKY,
-		MarketWallet:      marketWallet,
-		ExpiresAt:         listing.ExpiresAt.Format(time.RFC3339),
+		ListingID:      listing.ID,
+		SellCoin:       listing.SellCoin,
+		Amount:         listing.Amount,
+		Commission:     commission,
+		ExpectedAmount: listing.ExpectedAmount,
+		MarketWallet:   marketWallet,
+		ExpiresAt:      listing.ExpiresAt.Format(time.RFC3339),
 	})
 }
 
@@ -355,7 +381,8 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 		ID:                    uuid.NewString(),
 		ProductID:             product.ID,
 		BuyerPubKey:           pk,
-		AmountSKY:             product.AmountSKY,
+		SellCoin:              product.SellCoin,
+		Amount:                product.Amount,
 		Price:                 product.Price,
 		PaymentCurrency:       product.PaymentCurrency,
 		ExpectedPaymentAmount: expected,
@@ -372,7 +399,8 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 
 	return success(req.ID, protocol.BuyProductResponse{
 		OrderID:               order.ID,
-		AmountSKY:             order.AmountSKY,
+		SellCoin:              order.SellCoin,
+		Amount:                order.Amount,
 		Price:                 order.Price,
 		PaymentCurrency:       order.PaymentCurrency,
 		ExpectedPaymentAmount: order.ExpectedPaymentAmount,
@@ -506,22 +534,22 @@ func (s *Server) handleGetListings(pk string, req protocol.Envelope) protocol.En
 	if err != nil {
 		return s.internal(req.ID, "get_listings", err)
 	}
-	wallet, err := s.db.GetMarketWallet()
-	if err != nil {
-		return s.internal(req.ID, "get_listings.wallet", err)
-	}
+	wallet, _ := s.db.SellCoinWallet("SKY") //nolint:errcheck //SKY default for back-compat
 	views := make([]protocol.ListingView, 0, len(listings))
 	for _, l := range listings {
+		coinWallet, _ := s.db.SellCoinWallet(l.SellCoin) //nolint:errcheck
 		v := protocol.ListingView{
-			ID:                l.ID,
-			AmountSKY:         l.AmountSKY,
-			ExpectedAmountSKY: l.ExpectedAmountSKY,
-			Price:             l.Price,
-			PaymentCurrency:   l.PaymentCurrency,
-			Status:            l.Status,
-			ExpiresAt:         l.ExpiresAt.Format(time.RFC3339),
-			CreatedAt:         l.CreatedAt.Format(time.RFC3339),
-			TxHash:            l.TxHash,
+			ID:              l.ID,
+			SellCoin:        l.SellCoin,
+			Amount:          l.Amount,
+			ExpectedAmount:  l.ExpectedAmount,
+			Price:           l.Price,
+			PaymentCurrency: l.PaymentCurrency,
+			Status:          l.Status,
+			MarketWallet:    coinWallet,
+			ExpiresAt:       l.ExpiresAt.Format(time.RFC3339),
+			CreatedAt:       l.CreatedAt.Format(time.RFC3339),
+			TxHash:          l.TxHash,
 		}
 		if l.ConfirmedAt != nil {
 			v.ConfirmedAt = l.ConfirmedAt.Format(time.RFC3339)
@@ -569,7 +597,8 @@ func orderView(o *db.Order, kind string) protocol.OrderView {
 		ID:              o.ID,
 		Type:            kind,
 		ProductID:       o.ProductID,
-		AmountSKY:       o.AmountSKY,
+		SellCoin:        o.SellCoin,
+		Amount:          o.Amount,
 		Price:           o.Price,
 		PaymentCurrency: o.PaymentCurrency,
 		Status:          o.Status,

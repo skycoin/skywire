@@ -69,8 +69,6 @@ func (d *Database) GetUserWallet(pubkey, currency string) (string, error) {
 	}
 
 	switch currency {
-	case "SKY":
-		return user.WalletSKY, nil
 	case "BTC":
 		return user.WalletBTC, nil
 	case "BCH":
@@ -82,6 +80,9 @@ func (d *Database) GetUserWallet(pubkey, currency string) (string, error) {
 	case "USDT_TRC20":
 		return user.WalletUSDT_TRC20, nil
 	default:
-		return "", fmt.Errorf("unsupported currency: %s", currency)
+		// SKY and every Skycoin fibercoin share the one registered Skycoin-family
+		// address, so any sell-coin symbol resolves to it. This is where a seller
+		// receives refunds and a buyer receives the purchased coin.
+		return user.WalletSKY, nil
 	}
 }

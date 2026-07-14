@@ -17,12 +17,13 @@ var ErrNoChain = errors.New("no blockchain backend configured")
 // configured URLs) is provided in a later phase; jobs are written against this
 // interface so they are testable and the backend is swappable.
 type Chain interface {
-	// DepositConfirmed reports whether the market wallet received a settled SKY
-	// deposit of amountSKY sent FROM senderAddr (the seller's registered SKY
-	// address) within [notBefore, notAfter] (the listing's deposit window). The
-	// sender + window disambiguate a shared escrow wallet and block replay of an
-	// old transaction. Used by the Listing Checker to promote a pending listing.
-	DepositConfirmed(marketWallet, senderAddr string, amountSKY float64, notBefore, notAfter time.Time) (confirmed bool, txHash string, err error)
+	// DepositConfirmed reports whether the market wallet received a settled
+	// deposit of the sell coin (amount) sent FROM senderAddr (the seller's
+	// registered Skycoin-family address) within [notBefore, notAfter] (the
+	// listing's deposit window). coin selects which fibercoin's escrow node to
+	// query. The sender + window disambiguate a shared escrow wallet and block
+	// replay of an old transaction. Used by the Listing Checker.
+	DepositConfirmed(coin, marketWallet, senderAddr string, amount float64, notBefore, notAfter time.Time) (confirmed bool, txHash string, err error)
 
 	// PaymentConfirmations returns how many confirmations a payment of
 	// expectedAmount in currency to addr currently has (0 if not observed). Only a
@@ -32,14 +33,14 @@ type Chain interface {
 	// Escrow Checker to track a buyer's payment to the seller.
 	PaymentConfirmations(currency, addr, senderAddr string, expectedAmount float64, notBefore, notAfter time.Time) (confirmations int, txHash string, err error)
 
-	// SendSKY transfers amountSKY of SKY from the market wallet to addr and
-	// returns the transaction hash. Used to deliver SKY to a buyer on a
-	// completed trade and to return escrow to a seller.
-	SendSKY(toAddr string, amountSKY float64) (txHash string, err error)
+	// SendCoin transfers amount of the sell coin from the market wallet to addr
+	// and returns the transaction hash. Used to deliver the purchased coin to a
+	// buyer on a completed trade and to return escrow to a seller.
+	SendCoin(coin, toAddr string, amount float64) (txHash string, err error)
 
-	// EscrowBalance returns the live spendable SKY balance of the escrow wallet.
-	// Used by the escrow-audit job to detect drift from the market's DB view.
-	EscrowBalance(addr string) (coinsSKY float64, err error)
+	// EscrowBalance returns the live spendable balance of the sell coin's escrow
+	// wallet. Used by the escrow-audit job to detect drift from the DB view.
+	EscrowBalance(coin, addr string) (coins float64, err error)
 }
 
 // NoopChain is the default Chain used until a real backend is configured. It
@@ -48,7 +49,7 @@ type Chain interface {
 type NoopChain struct{}
 
 // DepositConfirmed always reports not-confirmed.
-func (NoopChain) DepositConfirmed(string, string, float64, time.Time, time.Time) (bool, string, error) {
+func (NoopChain) DepositConfirmed(string, string, string, float64, time.Time, time.Time) (bool, string, error) {
 	return false, "", nil
 }
 
@@ -57,12 +58,12 @@ func (NoopChain) PaymentConfirmations(string, string, string, float64, time.Time
 	return 0, "", nil
 }
 
-// SendSKY always fails: there is no backend to send from.
-func (NoopChain) SendSKY(string, float64) (string, error) {
+// SendCoin always fails: there is no backend to send from.
+func (NoopChain) SendCoin(string, string, float64) (string, error) {
 	return "", ErrNoChain
 }
 
 // EscrowBalance always fails: there is no backend to read from.
-func (NoopChain) EscrowBalance(string) (float64, error) {
+func (NoopChain) EscrowBalance(string, string) (float64, error) {
 	return 0, ErrNoChain
 }

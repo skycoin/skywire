@@ -9,7 +9,8 @@ import (
 	"time"
 )
 
-// fakeStore is an ExplorerConfigStore returning a fixed config for one currency.
+// fakeStore is a chain.Store returning a fixed explorer config for one currency.
+// SellCoinConfig is unused by these explorer tests (returns disabled).
 type fakeStore struct {
 	currency, provider, url, key string
 }
@@ -19,6 +20,10 @@ func (f fakeStore) ExplorerConfig(currency string) (string, string, string, erro
 		return f.provider, f.url, f.key, nil
 	}
 	return "", "", "", nil
+}
+
+func (f fakeStore) SellCoinConfig(string) (string, string, string, int, bool, error) {
+	return "", "", "", 0, false, nil
 }
 
 func TestProvidersFor(t *testing.T) {
@@ -69,7 +74,7 @@ func TestEsploraPaymentConfirmations(t *testing.T) {
 	defer srv.Close()
 
 	// Route BTC to an esplora adapter pointed at the mock server.
-	c := New(Config{}, fakeStore{currency: "BTC", provider: "esplora", url: srv.URL})
+	c := New(fakeStore{currency: "BTC", provider: "esplora", url: srv.URL})
 	c.exp.(*router).hc = srv.Client()
 
 	// Window [500, 2000] covers the payment's block time (1000); buyer corroborates.
@@ -96,7 +101,7 @@ func TestEsploraPaymentConfirmations(t *testing.T) {
 // TestRouterUnconfiguredCurrency returns 0 confirmations (not an error) when the
 // currency has no explorer configured.
 func TestRouterUnconfiguredCurrency(t *testing.T) {
-	c := New(Config{}, fakeStore{}) // store returns empty provider for everything
+	c := New(fakeStore{}) // store returns empty provider for everything
 	confs, _, err := c.PaymentConfirmations("BTC", "addr", "", 1.0, time.Unix(0, 0), time.Now())
 	if err != nil || confs != 0 {
 		t.Fatalf("unconfigured currency should be 0/nil, got confs=%d err=%v", confs, err)

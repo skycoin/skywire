@@ -5,12 +5,14 @@ function Market() {
   const [showCreateListing, setShowCreateListing] = useState(false)
   const [products, setProducts] = useState([])
   const [currencies, setCurrencies] = useState([])
+  const [sellCoins, setSellCoins] = useState([])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
 
   const [newListing, setNewListing] = useState({
-    amount_sky: '',
+    sell_coin: '',
+    amount: '',
     price: '',
     payment_currency: '',
   })
@@ -31,8 +33,14 @@ function Market() {
       .getCurrencies()
       .then((d) => {
         const list = d.currencies || []
+        const coins = d.sell_coins || []
         setCurrencies(list)
-        setNewListing((prev) => ({ ...prev, payment_currency: prev.payment_currency || list[0] || '' }))
+        setSellCoins(coins)
+        setNewListing((prev) => ({
+          ...prev,
+          payment_currency: prev.payment_currency || list[0] || '',
+          sell_coin: prev.sell_coin || coins[0] || '',
+        }))
       })
       .catch(() => {})
     loadProducts()
@@ -51,7 +59,7 @@ function Market() {
     try {
       const order = await api.buyProduct(product.id)
       flash(
-        `Order placed. Pay exactly ${order.expected_payment_amount} ${order.payment_currency} to ${order.seller_wallet} before ${new Date(order.expires_at).toLocaleTimeString()}.`
+        `Order placed for ${order.amount} ${order.sell_coin}. Pay exactly ${order.expected_payment_amount} ${order.payment_currency} to ${order.seller_wallet} before ${new Date(order.expires_at).toLocaleTimeString()}.`
       )
       loadProducts()
     } catch (e) {
@@ -67,17 +75,18 @@ function Market() {
     setBusy(true)
     try {
       const resp = await api.createListing({
-        amount_sky: parseFloat(newListing.amount_sky),
+        sell_coin: newListing.sell_coin,
+        amount: parseFloat(newListing.amount),
         price: parseFloat(newListing.price),
         payment_currency: newListing.payment_currency,
       })
       flash(
-        `Listing created. Transfer exactly ${resp.expected_amount_sky} SKY ` +
-          `(${resp.amount_sky} amount + ${resp.commission_sky} commission) ` +
+        `Listing created. Transfer exactly ${resp.expected_amount} ${resp.sell_coin} ` +
+          `(${resp.amount} amount + ${resp.commission} commission) ` +
           `to the market wallet ${resp.market_wallet} within 15 minutes.`
       )
       setShowCreateListing(false)
-      setNewListing({ amount_sky: '', price: '', payment_currency: currencies[0] || '' })
+      setNewListing({ sell_coin: sellCoins[0] || '', amount: '', price: '', payment_currency: currencies[0] || '' })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -105,20 +114,34 @@ function Market() {
           <h4>Create New Sell Order</h4>
           <form onSubmit={handleCreateListing}>
             <div className="row mb-3">
-              <div className="col-md-4">
-                <label className="form-label">SKY Amount</label>
+              <div className="col-md-3">
+                <label className="form-label">Sell Coin</label>
+                <select
+                  className="form-select"
+                  value={newListing.sell_coin}
+                  onChange={(e) => setNewListing({ ...newListing, sell_coin: e.target.value })}
+                  required
+                >
+                  {sellCoins.length === 0 && <option value="">No sell coins enabled</option>}
+                  {sellCoins.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-3">
+                <label className="form-label">Amount</label>
                 <input
                   type="number"
                   className="form-control"
                   placeholder="e.g. 10"
-                  value={newListing.amount_sky}
-                  onChange={(e) => setNewListing({ ...newListing, amount_sky: e.target.value })}
+                  value={newListing.amount}
+                  onChange={(e) => setNewListing({ ...newListing, amount: e.target.value })}
                   required
                   step="0.0001"
                   min="0"
                 />
               </div>
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <label className="form-label">Price</label>
                 <input
                   type="number"
@@ -131,7 +154,7 @@ function Market() {
                   min="0"
                 />
               </div>
-              <div className="col-md-4">
+              <div className="col-md-3">
                 <label className="form-label">Payment Currency</label>
                 <select
                   className="form-select"
@@ -146,12 +169,12 @@ function Market() {
                 </select>
               </div>
             </div>
-            <button type="submit" className="btn btn-connect" disabled={busy || currencies.length === 0}>
+            <button type="submit" className="btn btn-connect" disabled={busy || currencies.length === 0 || sellCoins.length === 0}>
               Create Sell Order
             </button>
           </form>
           <small className="text-muted mt-2 d-block">
-            After creating the order, you have 15 minutes to transfer SKY to the market wallet.
+            After creating the order, you have 15 minutes to transfer the sell coin to the market wallet.
           </small>
         </div>
       )}
@@ -165,7 +188,7 @@ function Market() {
             <div key={product.id} className="col-md-6 col-lg-4 mb-3">
               <div className="card product-card">
                 <div className="product-amount mb-2">
-                  <strong>{product.amount_sky} SKY</strong>
+                  <strong>{product.amount} {product.sell_coin}</strong>
                 </div>
                 <div className="product-price mb-2">
                   {product.price} {product.payment_currency}

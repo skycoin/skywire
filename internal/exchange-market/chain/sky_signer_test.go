@@ -60,7 +60,7 @@ func TestSendSKY_DisabledWithoutSeed(t *testing.T) {
 	if n.EscrowAddress() != "" {
 		t.Fatalf("expected no escrow address without seed, got %q", n.EscrowAddress())
 	}
-	if _, err := n.SendSKY(deriveAddr(t, "buyer"), 1.0); err == nil {
+	if _, err := n.SendCoin(deriveAddr(t, "buyer"), 1.0); err == nil {
 		t.Fatal("expected SendSKY to fail with no seed configured")
 	}
 }
@@ -119,7 +119,7 @@ func TestSendSKY_RejectsBadPrecision(t *testing.T) {
 	seed := "market escrow hot wallet seed three"
 	n := NewSkyNode("http://node.invalid", seed, "", 2, nil)
 	// 1.0001 SKY has 4 decimals; mainnet allows at most 3 (MaxDropletPrecision).
-	_, err := n.SendSKY(deriveAddr(t, "buyer"), 1.0001)
+	_, err := n.SendCoin(deriveAddr(t, "buyer"), 1.0001)
 	if err == nil || !strings.Contains(err.Error(), "precision") {
 		t.Fatalf("expected precision error, got %v", err)
 	}

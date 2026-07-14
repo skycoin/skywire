@@ -100,9 +100,6 @@ func TestLiveExchangeTrade(t *testing.T) {
 			t.Fatalf("set %s: %v", k, err)
 		}
 	}
-	set("sky_fullnode_url", nodeURL)
-	set("sky_wallet_seed", seed)
-	set("wallet_sky", escrow)
 	set("explorer_ltc_provider", "esplora") // litecoinspace default endpoint
 	set("confirmations_required", strconv.Itoa(confs))
 	// Wide windows so the manual deposit/payment (and their confirmations) always
@@ -110,9 +107,15 @@ func TestLiveExchangeTrade(t *testing.T) {
 	set("listing_expiry_minutes", "180")
 	set("order_expiry_minutes", "180")
 
-	chainBackend := chain.New(chain.Config{
-		SkyNodeURL: nodeURL, SkySeed: seed, SkyWallet: escrow, Confirmations: confs,
-	}, database)
+	// Configure SKY as the sell coin: its own fullnode + escrow hot wallet.
+	if err := database.UpsertSellCoin(&db.SellCoin{
+		Symbol: "SKY", Name: "Skycoin", NodeURL: nodeURL,
+		WalletSeed: seed, WalletAddr: escrow, Confirmations: confs, Enabled: true,
+	}); err != nil {
+		t.Fatalf("configure SKY sell coin: %v", err)
+	}
+
+	chainBackend := chain.New(database)
 	if got := chainBackend; got == nil {
 		t.Fatal("nil chain backend")
 	}
@@ -140,7 +143,7 @@ func TestLiveExchangeTrade(t *testing.T) {
 	mustOK(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: sellerSKY, WalletLTC: sellerLTC})
 	var listing protocol.CreateListingResponse
 	bindOK(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: amount, Price: price, PaymentCurrency: cur,
+		Amount: amount, Price: price, PaymentCurrency: cur,
 	}, &listing)
 
 	t.Logf("\n\n==================== ACTION 1 — DEPOSIT SKY ====================\n"+
@@ -150,7 +153,7 @@ func TestLiveExchangeTrade(t *testing.T) {
 		"  (send from the seller SKY address above, so the sender matches)\n"+
 		"  Waiting for the deposit to confirm on-chain...\n"+
 		"================================================================\n",
-		listing.ExpectedAmountSKY, listing.AmountSKY, listing.CommissionSKY, sellerSKY, escrow)
+		listing.ExpectedAmount, listing.Amount, listing.Commission, sellerSKY, escrow)
 
 	pollUntil(t, 25*time.Minute, 15*time.Second, "SKY deposit", func() bool {
 		if err := runner.RunListingCheck(); err != nil {
@@ -207,9 +210,9 @@ func TestLiveExchangeTrade(t *testing.T) {
 		"  LTC payment tx = %s\n"+
 		"  %.3f SKY delivered to the buyer (%s); ~%.3f SKY commission retained in escrow.\n"+
 		"=======================================================\n",
-		st.Status, st.Confirmations, st.PaymentTxHash, listing.AmountSKY, buyerSKY, listing.CommissionSKY)
+		st.Status, st.Confirmations, st.PaymentTxHash, listing.Amount, buyerSKY, listing.Commission)
 
-	if bal, err := chainBackend.EscrowBalance(escrow); err == nil {
+	if bal, err := chainBackend.EscrowBalance("SKY", escrow); err == nil {
 		t.Logf("  escrow balance now: %.6f SKY", bal)
 	}
 }
