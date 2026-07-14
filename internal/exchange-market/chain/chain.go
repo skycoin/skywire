@@ -10,8 +10,8 @@ import (
 // ExplorerConfigStore (the DB), not from here.
 type Config struct {
 	SkyNodeURL    string // sky_fullnode_url
-	SkyWalletID   string // sky_wallet_id
-	SkyWalletPass string // sky_wallet_password
+	SkySeed       string // sky_wallet_seed (escrow hot wallet seed; spends are signed locally)
+	SkyWallet     string // wallet_sky (escrow address; cross-checked against the seed)
 	Confirmations int    // required confirmation depth (design: 2)
 }
 
@@ -32,7 +32,7 @@ func New(cfg Config, store ExplorerConfigStore) *Chain {
 		exp = newRouter(store, hc)
 	}
 	return &Chain{
-		sky: NewSkyNode(cfg.SkyNodeURL, cfg.SkyWalletID, cfg.SkyWalletPass, cfg.Confirmations, hc),
+		sky: NewSkyNode(cfg.SkyNodeURL, cfg.SkySeed, cfg.SkyWallet, cfg.Confirmations, hc),
 		exp: exp,
 	}
 }

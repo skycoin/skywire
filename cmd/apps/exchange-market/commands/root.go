@@ -144,12 +144,12 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 	// no-op until a provider is wired in. Otherwise stay fully no-op.
 	var chainBackend jobs.Chain = jobs.NoopChain{}
 	if nodeURL, _ := database.GetConfig("sky_fullnode_url"); strings.TrimSpace(nodeURL) != "" { //nolint
-		walletID, _ := database.GetConfig("sky_wallet_id")         //nolint
-		walletPass, _ := database.GetConfig("sky_wallet_password") //nolint
+		seed, _ := database.GetConfig("sky_wallet_seed") //nolint
+		walletSky, _ := database.GetConfig("wallet_sky") //nolint
 		chainBackend = chain.New(chain.Config{
 			SkyNodeURL:    nodeURL,
-			SkyWalletID:   walletID,
-			SkyWalletPass: walletPass,
+			SkySeed:       seed,
+			SkyWallet:     walletSky,
 			Confirmations: jobs.RequiredConfirmations,
 		}, database)
 		appCl.LogInfo("Chain backend: Skycoin node at %s (external payments via configured explorers)", nodeURL)
