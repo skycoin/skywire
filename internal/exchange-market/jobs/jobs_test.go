@@ -1,6 +1,7 @@
 package jobs_test
 
 import (
+	"math"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 type fakeChain struct {
 	deposit bool
 	confs   int
+	balance float64
 	sends   []sendCall
 }
 
@@ -30,6 +32,9 @@ func (f *fakeChain) PaymentConfirmations(string, string, string, float64, time.T
 func (f *fakeChain) SendSKY(addr string, amt float64) (string, error) {
 	f.sends = append(f.sends, sendCall{addr, amt})
 	return "send-tx", nil
+}
+func (f *fakeChain) EscrowBalance(string) (float64, error) {
+	return f.balance, nil
 }
 
 func newDB(t *testing.T) *db.Database {
@@ -415,5 +420,73 @@ func TestCleanup(t *testing.T) {
 	}
 	if o, _ := d.GetOrder("o1"); o != nil { //nolint
 		t.Fatalf("completed order should have been cleaned up, got %+v", o)
+	}
+}
+
+// TestEscrowAudit sums the market's outstanding SKY obligations (products
+// awaiting delivery + confirmed deposits awaiting refund) and confirms the audit
+// runs cleanly whether the on-chain balance covers them or falls short.
+func TestEscrowAudit(t *testing.T) {
+	d := newDB(t)
+	if err := d.SetConfig("wallet_sky", "market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	mustUser(t, d, "03seller", "sky-seller")
+
+	// Active (10) + frozen (5) products are SKY awaiting delivery.
+	if err := d.CreateProduct(&db.Product{ID: "p-active", SellerPubKey: "03seller", AmountSKY: 10, Price: 1, PaymentCurrency: "BTC", Status: "active"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.CreateProduct(&db.Product{ID: "p-frozen", SellerPubKey: "03seller", AmountSKY: 5, Price: 1, PaymentCurrency: "BTC", Status: "active"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.FreezeProduct("p-frozen", "03buyer"); err != nil {
+		t.Fatal(err)
+	}
+	// A sold product (7) has already been delivered — excluded.
+	if err := d.CreateProduct(&db.Product{ID: "p-sold", SellerPubKey: "03seller", AmountSKY: 7, Price: 1, PaymentCurrency: "BTC", Status: "sold"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// A canceled listing whose deposit arrived (confirmed) but isn't refunded: +3.
+	if err := d.CreatePendingListing(&db.PendingListing{ID: "l-refund", SellerPubKey: "03seller", AmountSKY: 3, ExpectedAmountSKY: 3, Price: 1, PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdatePendingListingStatus("l-refund", "confirmed", "dep-tx"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdatePendingListingStatus("l-refund", "canceled", "dep-tx"); err != nil {
+		t.Fatal(err)
+	}
+	// An expired listing whose deposit never arrived (confirmed_at NULL) — excluded.
+	if err := d.CreatePendingListing(&db.PendingListing{ID: "l-nodep", SellerPubKey: "03seller", AmountSKY: 99, ExpectedAmountSKY: 99, Price: 1, PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(-time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.UpdatePendingListingStatus("l-nodep", "expired", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// Expected outstanding obligations: 10 + 5 + 3 = 18.
+	got, err := d.OutstandingEscrowSKY()
+	if err != nil {
+		t.Fatalf("OutstandingEscrowSKY: %v", err)
+	}
+	if math.Abs(got-18) > 1e-9 {
+		t.Fatalf("OutstandingEscrowSKY = %v, want 18", got)
+	}
+
+	// Healthy (balance covers obligations), shortfall (balance below), and no
+	// backend all complete without error.
+	for _, tc := range []struct {
+		name  string
+		chain jobs.Chain
+	}{
+		{"healthy", &fakeChain{balance: 20}},
+		{"shortfall", &fakeChain{balance: 1}},
+		{"no-backend", jobs.NoopChain{}},
+	} {
+		if err := jobs.NewRunner(d, tc.chain, nil).RunEscrowAudit(); err != nil {
+			t.Fatalf("RunEscrowAudit(%s): %v", tc.name, err)
+		}
 	}
 }
