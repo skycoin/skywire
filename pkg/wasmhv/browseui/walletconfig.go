@@ -1,10 +1,13 @@
 // pkg/wasmhv/browseui/walletconfig.go — the ONE wallet config panel.
 //
-// The wallet's backend config (storage mode, coin nodes, BTC electrum server,
+// The wallet's TRANSPORT/backend config (storage mode, BTC electrum server,
 // skysocks exit) is a set of localStorage keys read by the /wallet/ fetch shim
 // (native: hypervisor_handlers_wallet.go; wasm: serve.go) and the in-tab BTC
-// gateway. It used to be reimplemented twice — once in browse.js (the ☰ wallet
-// window) and once in the Angular wallet tab. This is the single implementation:
+// gateway. Per-coin NODE selection now lives in skycoin-web's own Settings →
+// Nodes (customNodeUrls); the shim honors it, so this panel no longer duplicates
+// it (see the node-config convergence). It used to be reimplemented twice — once
+// in browse.js (the ☰ wallet window) and once in the Angular wallet tab. This is
+// the single implementation:
 // a self-contained page served at /wallet/config that BOTH surfaces embed in an
 // <iframe>. Same origin as /wallet/, so it reads+writes the same localStorage,
 // and on Apply it posts {type:"skywire-wallet-config"} to its parent so the
@@ -53,9 +56,7 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <button id="ms" title="Point at a remote skycoin-web server over dmsg.">Remote wallet service</button>
 </div>
 <div id="browser">
-<div class="hint">Wallets are created + stored in <b>this browser</b>. Configure the coin node(s) it queries over dmsg — the first is the default; add one per fibercoin. A <span class="mono">&lt;pk&gt;:&lt;port&gt;</span> dmsg node is dialed directly; an <span class="mono">http(s)://</span>/<span class="mono">.dmsg</span> URL goes via the resolving proxy.</div>
-<div id="nodes"></div>
-<button class="add" id="addnode">+ Add coin node</button>
+<div class="hint">Wallets are created + stored in <b>this browser</b>. The <b>coin node</b> each coin queries is set in the wallet's own <b>Settings → Nodes</b> (per coin — enter a mesh node as <span class="mono">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span>, or a clearnet URL). This panel keeps the Bitcoin electrum + skysocks-exit settings below.</div>
 <div class="sec">
 <div class="hint"><b>Bitcoin</b> (optional): an <span class="mono">ssl://host:port</span> electrum server, reached over the mesh by the visor's BTC gateway. Keys + signing stay in this browser; only chain queries cross.</div>
 <div class="row"><label>btc</label><input id="btc" list="btclist" spellcheck="false" placeholder="pick or type an ssl:// electrum server"></div>
@@ -90,23 +91,11 @@ var isWasm=/[?&]wasm=1/.test(location.search);
 $("proxyreq").textContent=isWasm?"(required)":"(optional)";
 $("proxynote").textContent=isWasm?"The browser can't reach the clearnet itself, so this is required for BTC.":"Empty = this visor does the egress itself (self). Set one to route BTC through another visor for IP privacy.";
 var mode=ls(K.mode,"browser");
-var nodes;try{nodes=JSON.parse(ls(K.nodes,"")||"null");}catch(e){nodes=null;}
-if(!nodes||!nodes.length){var p=ls(K.prim,"");nodes=p?[p]:[""];}
-function renderNodes(){var box=$("nodes");box.innerHTML="";nodes.forEach(function(n,i){
-var r=document.createElement("div");r.className="row";
-var l=document.createElement("label");l.textContent="coin "+i;
-var inp=document.createElement("input");inp.spellcheck=false;inp.value=n||"";
-inp.placeholder=(i===0?"039a6d1e…:6420 or node.skycoin.com.<pk>.dmsg:6420  (blank = node.skycoin.com)":"039a6d1e…:6420");
-inp.oninput=function(){nodes[i]=inp.value;};
-r.appendChild(l);r.appendChild(inp);
-if(nodes.length>1){var rm=document.createElement("button");rm.className="rm";rm.textContent="✕";rm.title="remove";rm.onclick=function(){nodes.splice(i,1);renderNodes();};r.appendChild(rm);}
-box.appendChild(r);});}
 function setMode(m){mode=m;$("mb").classList.toggle("on",m==="browser");$("ms").classList.toggle("on",m==="service");
 $("browser").style.display=m==="browser"?"":"none";$("service").style.display=m==="service"?"":"none";}
 $("btc").value=ls(K.btc,"");$("proxy").value=ls(K.proxy,"")||ls("skywire-upstream-proxy","");$("svc").value=ls(K.svc,"");
-renderNodes();setMode(mode);
+setMode(mode);
 $("mb").onclick=function(){setMode("browser");};$("ms").onclick=function(){setMode("service");};
-$("addnode").onclick=function(){nodes.push("");renderNodes();};
 // Skysocks exit: SD-populated dropdown + live proxy/resolving-proxy log — the
 // same machinery the iframe browser (browse.js) exposes, applied to the wallet.
 function visor(){try{return parent&&parent.skywireVisor;}catch(e){return null;}}
@@ -130,8 +119,10 @@ $("psel").onchange=function(){if(this.value){$("proxy").value=this.value;plog("�
 $("apply").onclick=function(){var e=$("err");e.style.display="none";e.textContent="";
 if(mode==="service"){var s=($("svc").value||"").trim();if(!s){e.textContent="Enter the wallet service address.";e.style.display="";return;}
 set(K.mode,"service");set(K.svc,s);set(K.prim,s);}
-else{var clean=nodes.map(function(n){return(n||"").trim();}).filter(function(n,i){return n||i===0;});if(!clean.length)clean=[""];nodes=clean;
-set(K.mode,"browser");set(K.nodes,JSON.stringify(clean));set(K.prim,clean[0]||"");
+else{set(K.mode,"browser");
+// Coin node config moved to skycoin-web's Settings → Nodes; clear any legacy
+// panel-set node so that page (or the deployment mesh default) is authoritative.
+set(K.nodes,"");set(K.prim,"");
 set(K.btc,($("btc").value||"").trim());
 var pxy=($("proxy").value||"").trim();set(K.proxy,pxy);set("skywire-upstream-proxy",pxy);}
 try{parent.postMessage({type:"skywire-wallet-config"},"*");}catch(_){}

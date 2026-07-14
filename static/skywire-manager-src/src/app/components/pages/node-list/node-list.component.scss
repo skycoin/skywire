@@ -47,22 +47,45 @@
   width: 10%;
 }
 
-// Transport direction indicators in the Transports column: incoming
-// (accepted an inbound dial) vs outgoing (this visor dialed out).
-// Bright tones for legibility on the app's DARK row background
-// (#1f2533); #4caf50 matches the existing status-green used elsewhere
-// in this stylesheet, and #42a5f5 is a light blue with comparable
-// contrast (both ~6:1 on the dark background).
-.tp-in {
-  color: #4caf50; // green — incoming
-  font-weight: 500;
-  margin-left: 2px;
-}
+// Per-type transport counts in the Transports column, laid out as a 4-column
+// grid (type · count · incoming · outgoing) so the numbers line up vertically
+// across rows regardless of type-name width — a small aligned table inside the
+// node-list table. Direction colors are bright for legibility on the app's DARK
+// row background (#1f2533): #4caf50 matches the existing status-green in this
+// stylesheet, #42a5f5 is a light blue with comparable contrast (~6:1).
+.tp-counts {
+  display: inline-grid;
+  grid-template-columns: auto auto auto auto;
+  column-gap: 6px;
+  row-gap: 1px;
+  font-size: 0.85em;
+  line-height: 1.35;
+  text-align: right; // numeric columns right-aligned so digits stack
 
-.tp-out {
-  color: #42a5f5; // light blue — outgoing
-  font-weight: 500;
-  margin-left: 2px;
+  .tp-type {
+    text-align: left;
+  }
+
+  .tp-count {
+    opacity: 0.85;
+  }
+
+  .tp-in {
+    color: #4caf50; // green — incoming
+    font-weight: 500;
+  }
+
+  .tp-out {
+    color: #42a5f5; // light blue — outgoing
+    font-weight: 500;
+  }
+
+  // The Total row: a hairline separator above it so it reads as a summary.
+  .tp-total {
+    padding-top: 2px;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    font-weight: 600;
+  }
 }
 
 .key-column {

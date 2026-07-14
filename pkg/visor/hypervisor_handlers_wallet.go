@@ -103,16 +103,35 @@ const walletNodeShim = `<script>(function(){` +
 	`window.fetch=function(input,init){` +
 	`var url=(typeof input==="string")?input:(input&&input.url)||"";` +
 	`var p=pathOf(url);` +
-	`var mn=/^\/(wallet\/)?api\/v[12]\//.exec(p);` +
-	`var mb=/^\/(wallet\/)?v1\/btc\//.exec(p);` +
+	`function searchOf(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
+	`function hostOf(u){try{var x=new URL(u,location.href);return (x.host&&x.host!==location.host)?(x.protocol+"//"+x.host):"";}catch(e){return "";}}` +
+	// BTC = any path containing /v1/btc/ — the raw /v1/btc/health probe AND
+	// skycoin-web's apiService form /api/v1/btc/{balance,history,send} (which
+	// also matches the node regex, so BTC is classified FIRST and wins). No
+	// skycoin node endpoint contains /v1/btc/.
+	`var mb=/\/v1\/btc\//.test(p);` +
+	`var mn=!mb&&/^\/(wallet\/)?api\/v[12]\//.test(p);` +
 	`if(!mn&&!mb){return rf(input,init);}` +
-	`var pre=(mn&&mn[1])||(mb&&mb[1]);` +
-	`var target=pre?url:url.replace(p,"/wallet"+p);` +
 	`init=init||{};` +
 	`var h=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
-	`if(mn){var n=ls("skywire-coin-node");if(n){h.set("X-Skywire-Coin-Node",n);}}` +
-	`else{var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
-	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}}` +
+	`var target;` +
+	`if(mb){` +
+	// Normalize any /v1/btc/ path (bare or /api/v1/btc/) to /wallet/v1/btc/… so
+	// the server routes it to the in-process electrum gateway, not the node.
+	`var tail=p.slice(p.indexOf("/v1/btc/"));target=location.origin+"/wallet"+tail+searchOf(url);` +
+	`var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
+	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}` +
+	`}else{` +
+	// Node API: skycoin-web addresses a custom node (Settings → Nodes /
+	// customNodeUrls) with an ABSOLUTE url — strip the host, keep the /api path +
+	// query, and re-point at /wallet/api here; the chosen node travels in
+	// X-Skywire-Coin-Node so walletNodeProxy dials it (its Nodes GUI is
+	// authoritative; a same-origin/relative /api path falls back to the legacy
+	// config-panel key, else the deployment mesh default).
+	`var mnx=/^\/(wallet\/)?api\/v[12]\//.exec(p);var pre=mnx&&mnx[1];` +
+	`target=pre?url:(location.origin+"/wallet"+p+searchOf(url));` +
+	`var nn=hostOf(url)||ls("skywire-coin-node");if(nn){h.set("X-Skywire-Coin-Node",nn);}` +
+	`}` +
 	`init.headers=h;return rf(target,init);` +
 	`};})();</script>`
 
@@ -202,6 +221,11 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 	if r.URL.RawQuery != "" {
 		path += "?" + r.URL.RawQuery
 	}
+	// Server-side request log — the native parity of the wasm shim's [wallet]
+	// skywireLog lines and of the standalone `skywire skycoin web` proxy logs.
+	// Lets a native-HV operator see what wallet traffic is crossing the mesh
+	// (visible at -sl debug) even before a wallet is unlocked.
+	hv.logger.WithField("backend", backend).Debugf("[wallet] node %s %s", r.Method, path)
 	var body []byte
 	if r.Body != nil {
 		body, _ = io.ReadAll(io.LimitReader(r.Body, 1<<20)) //nolint:errcheck
@@ -229,9 +253,11 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 			Body:   body,
 		})
 		if err != nil {
+			hv.logger.WithError(err).Warnf("[wallet] node clearnet unreachable: %s", backend)
 			http.Error(w, "node unreachable: "+err.Error(), http.StatusBadGateway)
 			return
 		}
+		hv.logger.Debugf("[wallet] node %s %s → %d", r.Method, path, resp.StatusCode)
 		walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
 		return
 	}
@@ -262,9 +288,11 @@ func (hv *Hypervisor) walletNodeProxy(w http.ResponseWriter, r *http.Request, re
 		Body:   body,
 	})
 	if err != nil {
+		hv.logger.WithError(err).Warnf("[wallet] node dmsg unreachable: %s", backend)
 		http.Error(w, "node unreachable over dmsg: "+err.Error(), http.StatusBadGateway)
 		return
 	}
+	hv.logger.Debugf("[wallet] node %s %s → %d", r.Method, path, resp.StatusCode)
 	walletWriteResp(w, resp.StatusCode, resp.Header, resp.Body)
 }
 
