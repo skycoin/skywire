@@ -146,11 +146,15 @@ func RunExchangeMarket(ctx context.Context, args []string) error {
 	if nodeURL, _ := database.GetConfig("sky_fullnode_url"); strings.TrimSpace(nodeURL) != "" { //nolint
 		seed, _ := database.GetConfig("sky_wallet_seed") //nolint
 		walletSky, _ := database.GetConfig("wallet_sky") //nolint
+		confs := jobs.RequiredConfirmations
+		if c, err := database.GetConfirmationsRequired(); err == nil && c > 0 {
+			confs = c
+		}
 		chainBackend = chain.New(chain.Config{
 			SkyNodeURL:    nodeURL,
 			SkySeed:       seed,
 			SkyWallet:     walletSky,
-			Confirmations: jobs.RequiredConfirmations,
+			Confirmations: confs,
 		}, database)
 		appCl.LogInfo("Chain backend: Skycoin node at %s (external payments via configured explorers)", nodeURL)
 	} else {

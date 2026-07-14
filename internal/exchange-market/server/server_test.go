@@ -233,6 +233,45 @@ func TestRegisterRejectsBadWallet(t *testing.T) {
 	mustSuccess(t, c, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 }
 
+// TestTradeSizeBounds verifies the operator's min/max trade-size limits are
+// enforced on create_listing.
+func TestTradeSizeBounds(t *testing.T) {
+	database := newTestDB(t)
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	zeroCommission(t, database)
+	if err := database.SetConfig("min_trade_sky", "5"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("max_trade_sky", "100"); err != nil {
+		t.Fatal(err)
+	}
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
+
+	for _, amt := range []float64{4, 101} { // below min, above max
+		resp, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{AmountSKY: amt, Price: 2, PaymentCurrency: "BTC"})
+		if err != nil {
+			t.Fatalf("create_listing(%v) transport: %v", amt, err)
+		}
+		if !resp.IsError() || errCode(t, resp) != protocol.CodeInvalidRequest {
+			t.Fatalf("create_listing(%v) = %+v, want INVALID_REQUEST (out of bounds)", amt, resp)
+		}
+	}
+
+	// An in-bounds amount is accepted.
+	var ok protocol.CreateListingResponse
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{AmountSKY: 50, Price: 2, PaymentCurrency: "BTC"}, &ok)
+	if ok.ExpectedAmountSKY != 50 {
+		t.Fatalf("in-bounds listing deposit = %v, want 50", ok.ExpectedAmountSKY)
+	}
+}
+
 // TestListingCommission verifies the SKY commission is folded into the seller's
 // expected deposit (amount + commission) at the default 0.5% rate and its floor.
 func TestListingCommission(t *testing.T) {

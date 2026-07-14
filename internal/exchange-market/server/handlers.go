@@ -4,7 +4,9 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -190,6 +192,16 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	r.Price = roundToDecimals(r.Price, paymentDecimals)
 	if r.AmountSKY <= 0 || r.Price <= 0 {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "amount_sky or price is too small to represent")
+	}
+
+	// Enforce the operator's trade-size bounds (0 = unset).
+	if minSKY, err := s.db.GetMinTradeSKY(); err == nil && minSKY > 0 && r.AmountSKY < minSKY {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
+			fmt.Sprintf("amount_sky is below the minimum trade size of %s SKY", strconv.FormatFloat(minSKY, 'f', -1, 64)))
+	}
+	if maxSKY, err := s.db.GetMaxTradeSKY(); err == nil && maxSKY > 0 && r.AmountSKY > maxSKY {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
+			fmt.Sprintf("amount_sky is above the maximum trade size of %s SKY", strconv.FormatFloat(maxSKY, 'f', -1, 64)))
 	}
 
 	// The seller must be registered (wallet addresses on file).
@@ -534,11 +546,15 @@ func (s *Server) handleGetOrderStatus(pk string, req protocol.Envelope) protocol
 		return protocol.ErrorResponse(req.ID, protocol.CodeOrderNotFound, "order not found")
 	}
 
+	requiredConfs := jobs.RequiredConfirmations
+	if c, err := s.db.GetConfirmationsRequired(); err == nil && c > 0 {
+		requiredConfs = c
+	}
 	resp := protocol.GetOrderStatusResponse{
 		OrderID:               order.ID,
 		Status:                order.Status,
 		Confirmations:         order.Confirmations,
-		RequiredConfirmations: jobs.RequiredConfirmations,
+		RequiredConfirmations: requiredConfs,
 		PaymentTxHash:         order.PaymentTxHash,
 	}
 	if order.PaidAt != nil {
