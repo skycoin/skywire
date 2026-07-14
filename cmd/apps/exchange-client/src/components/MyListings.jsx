@@ -6,7 +6,6 @@ import { api } from '../api'
 // detected on-chain; the listing is now a purchasable product on the market).
 function MyListings() {
   const [listings, setListings] = useState([])
-  const [marketWallet, setMarketWallet] = useState('')
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busyId, setBusyId] = useState('')
@@ -15,7 +14,6 @@ function MyListings() {
     try {
       const data = await api.getListings()
       setListings(data.listings || [])
-      setMarketWallet(data.market_wallet || '')
       setError('')
     } catch (e) {
       setError(e.message)
@@ -35,7 +33,7 @@ function MyListings() {
     const msg =
       l.status === 'pending'
         ? 'Cancel this listing?'
-        : 'Cancel this offer? Your escrowed SKY will be returned shortly after cancellation.'
+        : `Cancel this offer? Your escrowed ${l.sell_coin || 'coin'} will be returned shortly after cancellation.`
     if (!window.confirm(msg)) return
     setBusyId(l.id)
     setError('')
@@ -97,6 +95,7 @@ function MyListings() {
             <thead>
               <tr>
                 <th>ID</th>
+                <th>Coin</th>
                 <th>Amount</th>
                 <th>Price</th>
                 <th>Deposit</th>
@@ -110,15 +109,16 @@ function MyListings() {
               {listings.map((l) => (
                 <tr key={l.id}>
                   <td><code>{shorten(l.id)}</code></td>
-                  <td>{l.amount_sky} SKY</td>
+                  <td>{l.sell_coin}</td>
+                  <td>{l.amount} {l.sell_coin}</td>
                   <td>{l.price} {l.payment_currency}</td>
                   <td>
                     {l.status === 'pending' ? (
-                      <span title={marketWallet ? `to ${marketWallet}` : undefined}>
-                        <strong>{l.expected_amount_sky}</strong> SKY
-                        {l.expected_amount_sky > l.amount_sky && (
+                      <span title={l.market_wallet ? `to ${l.market_wallet}` : undefined}>
+                        <strong>{l.expected_amount}</strong> {l.sell_coin}
+                        {l.expected_amount > l.amount && (
                           <div className="small text-muted">
-                            {l.amount_sky} + {(l.expected_amount_sky - l.amount_sky).toFixed(3)} fee
+                            {l.amount} + {(l.expected_amount - l.amount).toFixed(3)} fee
                           </div>
                         )}
                       </span>
@@ -153,10 +153,10 @@ function MyListings() {
         </div>
       )}
 
-      {marketWallet && listings.some((l) => l.status === 'pending') && (
+      {listings.some((l) => l.status === 'pending') && (
         <div className="alert alert-info mt-3">
-          For each pending listing, transfer the exact deposit amount shown to the market
-          wallet <code>{marketWallet}</code> before it expires.
+          For each pending listing, transfer the exact deposit amount to that coin's escrow
+          wallet (hover the Deposit amount to see the address) before it expires.
         </div>
       )}
     </div>

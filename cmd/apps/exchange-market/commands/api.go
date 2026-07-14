@@ -216,6 +216,111 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 		mWriteJSON(w, http.StatusOK, map[string]any{"currencies": out})
 	})
 
+	// GET  /api/sellcoins — every configured sell coin (SKY + fibercoins), with
+	//                       escrow config (seed masked). POST — add/edit one.
+	mux.HandleFunc("/api/sellcoins", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			coins, err := database.ListSellCoins()
+			if err != nil {
+				mWriteError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			// Report whether a seed is set without ever exposing it.
+			type coinView struct {
+				*db.SellCoin
+				HasSeed bool `json:"has_seed"`
+			}
+			out := make([]coinView, 0, len(coins))
+			for _, c := range coins {
+				out = append(out, coinView{SellCoin: c, HasSeed: strings.TrimSpace(c.WalletSeed) != ""})
+			}
+			mWriteJSON(w, http.StatusOK, map[string]any{"sellcoins": out})
+		case http.MethodPost:
+			var req struct {
+				Symbol        string `json:"symbol"`
+				Name          string `json:"name"`
+				NodeURL       string `json:"node_url"`
+				WalletSeed    string `json:"wallet_seed"`
+				WalletAddr    string `json:"wallet_addr"`
+				Confirmations int    `json:"confirmations"`
+				Enabled       bool   `json:"enabled"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				mWriteError(w, http.StatusBadRequest, "invalid sell-coin payload")
+				return
+			}
+			if strings.TrimSpace(req.Symbol) == "" {
+				mWriteError(w, http.StatusBadRequest, "symbol is required")
+				return
+			}
+			sc := &db.SellCoin{
+				Symbol:        req.Symbol,
+				Name:          req.Name,
+				NodeURL:       req.NodeURL,
+				WalletSeed:    req.WalletSeed,
+				WalletAddr:    req.WalletAddr,
+				Confirmations: req.Confirmations,
+				Enabled:       req.Enabled,
+			}
+			// A blank seed on edit preserves the stored one (the UI never re-shows it),
+			// so saving other fields can't accidentally wipe the escrow seed.
+			if strings.TrimSpace(req.WalletSeed) == "" {
+				if existing, err := database.GetSellCoin(req.Symbol); err == nil && existing != nil {
+					sc.WalletSeed = existing.WalletSeed
+				}
+			}
+			if err := database.UpsertSellCoin(sc); err != nil {
+				mWriteError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			mWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+		default:
+			mWriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+		}
+	})
+
+	// POST /api/sellcoins/delete — remove a sell coin by {symbol}.
+	mux.HandleFunc("/api/sellcoins/delete", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			mWriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		var req struct {
+			Symbol string `json:"symbol"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Symbol) == "" {
+			mWriteError(w, http.StatusBadRequest, "symbol is required")
+			return
+		}
+		if err := database.DeleteSellCoin(req.Symbol); err != nil {
+			mWriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		mWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	})
+
+	// POST /api/sellcoins/enable — toggle availability via {symbol, enabled}.
+	mux.HandleFunc("/api/sellcoins/enable", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			mWriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		var req struct {
+			Symbol  string `json:"symbol"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Symbol) == "" {
+			mWriteError(w, http.StatusBadRequest, "symbol is required")
+			return
+		}
+		if err := database.SetSellCoinEnabled(req.Symbol, req.Enabled); err != nil {
+			mWriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		mWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	})
+
 	// GET /api/bans — currently active (temporary) bans.
 	mux.HandleFunc("/api/bans", func(w http.ResponseWriter, r *http.Request) {
 		bans, err := database.GetActiveBans()

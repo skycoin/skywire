@@ -122,9 +122,9 @@ func (s *SkyNode) EscrowAddress() string {
 
 // SkyBalance is a spendable-balance snapshot for a SKY address.
 type SkyBalance struct {
-	CoinsSKY float64 // spendable coins in SKY
-	Hours    uint64  // spendable coin-hours
-	Outputs  int     // number of spendable unspent outputs
+	Coins   float64 // spendable coins in SKY
+	Hours   uint64  // spendable coin-hours
+	Outputs int     // number of spendable unspent outputs
 }
 
 // Balance reports the live spendable balance of addr (confirmed outputs not
@@ -148,7 +148,7 @@ func (s *SkyNode) Balance(addr string) (SkyBalance, error) {
 	if err != nil {
 		return SkyBalance{}, fmt.Errorf("sky balance: parse coins: %w", err)
 	}
-	return SkyBalance{CoinsSKY: coins, Hours: bal.Hours, Outputs: len(spendable)}, nil
+	return SkyBalance{Coins: coins, Hours: bal.Hours, Outputs: len(spendable)}, nil
 }
 
 // txnStatus mirrors Skycoin's transaction status. In Skycoin, Height is the
@@ -243,10 +243,10 @@ func hasOwner(inputs []txnInput, addr string) bool {
 	return false
 }
 
-// SendSKY spends amountSKY from the market's escrow wallet to toAddr and returns
+// SendCoin spends amountSKY from the market's escrow wallet to toAddr and returns
 // the broadcast transaction id. The transaction is built and signed locally, then
 // injected into the network via the node.
-func (s *SkyNode) SendSKY(toAddr string, amountSKY float64) (string, error) {
+func (s *SkyNode) SendCoin(toAddr string, amountSKY float64) (string, error) {
 	txn, cl, err := s.prepareSpend(toAddr, amountSKY)
 	if err != nil {
 		return "", err
@@ -260,7 +260,7 @@ func (s *SkyNode) SendSKY(toAddr string, amountSKY float64) (string, error) {
 }
 
 // prepareSpend validates the request, reads the escrow wallet's live outputs from
-// the node, and builds + locally signs the spend transaction — everything SendSKY
+// the node, and builds + locally signs the spend transaction — everything SendCoin
 // does except broadcasting. It returns the finished transaction and the node
 // client to inject it with, so a caller can dry-run (build + sign, inspect) before
 // committing to a broadcast.

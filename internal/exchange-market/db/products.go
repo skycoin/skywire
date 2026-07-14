@@ -12,12 +12,16 @@ func (d *Database) CreateProduct(product *Product) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	if product.SellCoin == "" {
+		product.SellCoin = "SKY"
+	}
+
 	product.CreatedAt = time.Now().UTC()
 
 	_, err := d.db.Exec(`
-		INSERT INTO products (id, listing_id, seller_pubkey, amount_sky, price, payment_currency, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, product.ID, nullIfEmpty(product.ListingID), product.SellerPubKey, product.AmountSKY, product.Price,
+		INSERT INTO products (id, listing_id, seller_pubkey, sell_coin, amount_sky, price, payment_currency, status, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, product.ID, nullIfEmpty(product.ListingID), product.SellerPubKey, product.SellCoin, product.Amount, product.Price,
 		product.PaymentCurrency, product.Status, product.CreatedAt)
 
 	if err != nil {
@@ -45,10 +49,10 @@ func (d *Database) GetProductByListingID(listingID string) (*Product, error) {
 
 	product := &Product{}
 	err := d.db.QueryRow(`
-		SELECT id, COALESCE(listing_id, '') AS listing_id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
+		SELECT id, COALESCE(listing_id, '') AS listing_id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
 		FROM products
 		WHERE listing_id = ?
-	`, listingID).Scan(&product.ID, &product.ListingID, &product.SellerPubKey, &product.AmountSKY, &product.Price,
+	`, listingID).Scan(&product.ID, &product.ListingID, &product.SellerPubKey, &product.SellCoin, &product.Amount, &product.Price,
 		&product.PaymentCurrency, &product.Status, &product.CreatedAt,
 		&product.FrozenAt, &product.FrozenBy, &product.SoldAt)
 
@@ -69,10 +73,10 @@ func (d *Database) GetProduct(id string) (*Product, error) {
 
 	product := &Product{}
 	err := d.db.QueryRow(`
-		SELECT id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
+		SELECT id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
 		FROM products
 		WHERE id = ?
-	`, id).Scan(&product.ID, &product.SellerPubKey, &product.AmountSKY, &product.Price,
+	`, id).Scan(&product.ID, &product.SellerPubKey, &product.SellCoin, &product.Amount, &product.Price,
 		&product.PaymentCurrency, &product.Status, &product.CreatedAt,
 		&product.FrozenAt, &product.FrozenBy, &product.SoldAt)
 
@@ -92,7 +96,7 @@ func (d *Database) GetActiveProducts() ([]*Product, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
+		SELECT id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
 		FROM products
 		WHERE status = 'active'
 		ORDER BY created_at DESC
@@ -105,7 +109,7 @@ func (d *Database) GetActiveProducts() ([]*Product, error) {
 	var products []*Product
 	for rows.Next() {
 		product := &Product{}
-		err := rows.Scan(&product.ID, &product.SellerPubKey, &product.AmountSKY, &product.Price,
+		err := rows.Scan(&product.ID, &product.SellerPubKey, &product.SellCoin, &product.Amount, &product.Price,
 			&product.PaymentCurrency, &product.Status, &product.CreatedAt,
 			&product.FrozenAt, &product.FrozenBy, &product.SoldAt)
 		if err != nil {
@@ -207,7 +211,7 @@ func (d *Database) GetAllProducts() ([]*Product, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
+		SELECT id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, status, created_at, frozen_at, COALESCE(frozen_by, '') AS frozen_by, sold_at
 		FROM products
 		ORDER BY created_at DESC
 	`)
@@ -219,7 +223,7 @@ func (d *Database) GetAllProducts() ([]*Product, error) {
 	var products []*Product
 	for rows.Next() {
 		product := &Product{}
-		err := rows.Scan(&product.ID, &product.SellerPubKey, &product.AmountSKY, &product.Price,
+		err := rows.Scan(&product.ID, &product.SellerPubKey, &product.SellCoin, &product.Amount, &product.Price,
 			&product.PaymentCurrency, &product.Status, &product.CreatedAt,
 			&product.FrozenAt, &product.FrozenBy, &product.SoldAt)
 		if err != nil {

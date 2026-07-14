@@ -65,17 +65,18 @@ function Settings({ marketPubKey }) {
       <div className="card">
         <h4>Wallet Addresses</h4>
         <p className="text-muted">
-          Your <strong>SKY</strong> address receives purchased SKY (and any refunds). To sell,
-          add the <strong>BTC</strong> or <strong>LTC</strong> address you want buyers to pay.
-          The market validates each address, so double-check for typos.
+          Your <strong>Skycoin</strong> address receives every purchased sell coin — SKY and any
+          fibercoin (they share the Skycoin address format) — plus any refunds. To sell, add the
+          <strong> BTC</strong> or <strong>LTC</strong> address you want buyers to pay. The market
+          validates each address, so double-check for typos.
         </p>
 
         <div className="mb-3">
-          <label className="form-label">SKY <span className="text-danger">*</span></label>
+          <label className="form-label">Skycoin address <span className="text-danger">*</span></label>
           <input
             type="text"
             className="form-control"
-            placeholder="SKY wallet address"
+            placeholder="Skycoin-family address (receives SKY and all fibercoins)"
             value={wallets.SKY}
             onChange={(e) => handleWalletChange('SKY', e.target.value)}
           />

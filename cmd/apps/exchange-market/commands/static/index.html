@@ -82,6 +82,9 @@
     .cur-code { font-weight: 600; }
     .cur-row select, .cur-row input:not([type=checkbox]) { width: 100%; }
     .cur-toggle { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; font-size: 0.85rem; }
+    .sc-row { border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; }
+    .sc-row input[readonly] { opacity: 0.7; }
+    button.sc-del { background: transparent; color: var(--sky-white); border: 1px solid #dc3545; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; }
     @media (max-width: 640px) { .cur-row { grid-template-columns: 1fr 1fr; } }
   </style>
 </head>
@@ -105,20 +108,26 @@
     <!-- Configuration -->
     <section id="tab-config" class="tab active">
       <div id="config-msg"></div>
+
+      <div class="panel">
+        <h2>Sell coins <span class="hint">(SKY and any Skycoin fibercoins you accept on the sell side — add, edit, enable/disable, delete)</span></h2>
+        <div id="sellcoin-rows"><div class="empty">Loading…</div></div>
+        <div class="hint" style="margin-top:.75rem">Each sell coin has its own fullnode URL and escrow hot wallet (seed + address; the seed's first address must equal the escrow address). Spends are built and signed locally — seeds never leave this process. Untick <em>Enabled</em> to stop accepting a coin without deleting it.</div>
+        <h3 style="font-size:.9rem;margin:1.1rem 0 .25rem;color:var(--muted)">Add a sell coin</h3>
+        <div class="grid" id="sellcoin-add">
+          <div><label>Symbol</label><input name="symbol" placeholder="e.g. MDL"></div>
+          <div><label>Name</label><input name="name" placeholder="e.g. Mobile Wallet"></div>
+          <div><label>Fullnode URL</label><input name="node_url" placeholder="http://host:6420"></div>
+          <div><label>Escrow wallet address</label><input name="wallet_addr" placeholder="deposit / escrow address"></div>
+          <div><label>Escrow wallet seed</label><input name="wallet_seed" type="password" placeholder="deterministic seed"></div>
+          <div><label>Confirmations</label><input name="confirmations" type="number" min="1" value="1"></div>
+        </div>
+        <button type="button" class="primary" id="sellcoin-add-btn">Add sell coin</button>
+      </div>
+
       <form id="config-form">
         <div class="panel">
-          <h2>Escrow &amp; SKY node</h2>
-          <label>Market SKY wallet (escrow)</label>
-          <input name="wallet_sky" placeholder="market SKY wallet address">
-          <label>SKY fullnode URL</label>
-          <input name="sky_fullnode_url" placeholder="http://127.0.0.1:6420">
-          <label>SKY escrow wallet seed</label>
-          <input name="sky_wallet_seed" type="password" placeholder="deterministic wallet seed (signs payouts locally)">
-          <div class="hint">Its first address must equal the escrow address above. Spends are built and signed locally — the seed never leaves this process.</div>
-        </div>
-
-        <div class="panel">
-          <h2>Trade coins <span class="hint">(tick a coin to accept it for trades; untick to disable)</span></h2>
+          <h2>Payment coins <span class="hint">(tick a coin to accept it as buyer payment; untick to disable)</span></h2>
           <div id="currency-rows"><div class="empty">Loading…</div></div>
           <div class="hint" style="margin-top:.5rem">Enable a coin to accept it. BTC and LTC have a built-in explorer; other coins need an Esplora-compatible explorer URL. Unticking disables a coin without losing its saved URL/key.</div>
         </div>
@@ -131,12 +140,12 @@
             <div><label>Listing expiry (minutes)</label><input name="listing_expiry_minutes" type="number" min="1"></div>
             <div><label>Order expiry (minutes)</label><input name="order_expiry_minutes" type="number" min="1"></div>
             <div><label>Cleanup after (days)</label><input name="cleanup_days" type="number" min="1"></div>
-            <div><label>Confirmations required</label><input name="confirmations_required" type="number" min="1"></div>
-            <div><label>Min trade (SKY, 0 = none)</label><input name="min_trade_sky" type="number" min="0" step="0.001"></div>
-            <div><label>Max trade (SKY, 0 = no cap)</label><input name="max_trade_sky" type="number" min="0" step="0.001"></div>
-            <div><label>Commission rate (% of SKY)</label><input name="commission_rate_percent" type="number" min="0" step="0.01"></div>
-            <div><label>Commission min (SKY)</label><input name="commission_min_sky" type="number" min="0" step="0.001"></div>
-            <div><label>Commission max (SKY, 0 = no cap)</label><input name="commission_max_sky" type="number" min="0" step="0.001"></div>
+            <div><label>Payment confirmations required</label><input name="confirmations_required" type="number" min="1"></div>
+            <div><label>Min trade (sell-coin units, 0 = none)</label><input name="min_trade_sky" type="number" min="0" step="0.001"></div>
+            <div><label>Max trade (sell-coin units, 0 = no cap)</label><input name="max_trade_sky" type="number" min="0" step="0.001"></div>
+            <div><label>Commission rate (% of amount)</label><input name="commission_rate_percent" type="number" min="0" step="0.01"></div>
+            <div><label>Commission min (sell-coin units)</label><input name="commission_min_sky" type="number" min="0" step="0.001"></div>
+            <div><label>Commission max (0 = no cap)</label><input name="commission_max_sky" type="number" min="0" step="0.001"></div>
           </div>
         </div>
 
@@ -172,7 +181,6 @@
   <script>
     const $ = (s) => document.querySelector(s);
     const CONFIG_FIELDS = [
-      'wallet_sky','sky_fullnode_url','sky_wallet_seed',
       'freeze_violations_limit','ban_duration_days','listing_expiry_minutes',
       'order_expiry_minutes','cleanup_days','confirmations_required',
       'min_trade_sky','max_trade_sky',
@@ -188,6 +196,10 @@
     function fmt(t) { return t ? new Date(t).toLocaleString() : '-'; }
 
     async function getJSON(url) { const r = await fetch(url); return r.json(); }
+    async function postJSON(url, body) {
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      return r.json();
+    }
 
     // Tabs
     let current = 'config';
@@ -227,9 +239,68 @@
       }).join('');
       $('#currency-rows').innerHTML = rows || '<div class="empty">No supported currencies.</div>';
     }
+    // Sell coins (SKY + fibercoins) — full CRUD against /api/sellcoins.
+    async function loadSellCoins() {
+      const d = await getJSON('/api/sellcoins');
+      const coins = d.sellcoins || [];
+      const rows = coins.map((c) => {
+        const sym = esc(c.symbol);
+        const seedPlaceholder = c.has_seed ? '(seed set — leave blank to keep)' : 'deterministic seed';
+        return '<div class="sc-row" data-symbol="' + sym + '">' +
+          '<div class="grid">' +
+            '<div><label>Symbol</label><input class="sc-symbol" value="' + sym + '" readonly></div>' +
+            '<div><label>Name</label><input class="sc-name" value="' + esc(c.name || '') + '"></div>' +
+            '<div><label>Fullnode URL</label><input class="sc-node" value="' + esc(c.node_url || '') + '" placeholder="http://host:6420"></div>' +
+            '<div><label>Escrow wallet address</label><input class="sc-addr" value="' + esc(c.wallet_addr || '') + '"></div>' +
+            '<div><label>Escrow wallet seed</label><input class="sc-seed" type="password" placeholder="' + seedPlaceholder + '"></div>' +
+            '<div><label>Confirmations</label><input class="sc-confs" type="number" min="1" value="' + esc(c.confirmations || 1) + '"></div>' +
+            '<div><label class="cur-toggle"><input type="checkbox" class="sc-enabled"' + (c.enabled ? ' checked' : '') + '> Enabled</label></div>' +
+          '</div>' +
+          '<div style="margin-top:.5rem"><button type="button" class="primary sc-save">Save</button>' +
+          '<button type="button" class="sc-del" style="margin-left:.5rem">Delete</button></div>' +
+        '</div>';
+      }).join('');
+      $('#sellcoin-rows').innerHTML = rows || '<div class="empty">No sell coins. Add one below.</div>';
+      document.querySelectorAll('.sc-row').forEach((row) => {
+        row.querySelector('.sc-save').onclick = () => saveSellCoin({
+          symbol: row.dataset.symbol,
+          name: row.querySelector('.sc-name').value.trim(),
+          node_url: row.querySelector('.sc-node').value.trim(),
+          wallet_addr: row.querySelector('.sc-addr').value.trim(),
+          wallet_seed: row.querySelector('.sc-seed').value,
+          confirmations: parseInt(row.querySelector('.sc-confs').value, 10) || 1,
+          enabled: row.querySelector('.sc-enabled').checked,
+        });
+        row.querySelector('.sc-del').onclick = () => {
+          if (confirm('Delete sell coin ' + row.dataset.symbol + '? In-flight trades using it may fail to settle.'))
+            postJSON('/api/sellcoins/delete', { symbol: row.dataset.symbol }).then(afterSellCoinWrite);
+        };
+      });
+    }
+    function saveSellCoin(body) { postJSON('/api/sellcoins', body).then(afterSellCoinWrite); }
+    async function afterSellCoinWrite(res) {
+      if (res && res.error) { $('#config-msg').innerHTML = '<div class="msg err">' + esc(res.error) + '</div>'; }
+      else { $('#config-msg').innerHTML = '<div class="msg ok">Sell coins updated.</div>'; }
+      await loadSellCoins();
+      setTimeout(() => { $('#config-msg').innerHTML = ''; }, 5000);
+    }
+    $('#sellcoin-add-btn').onclick = () => {
+      const g = $('#sellcoin-add');
+      const val = (n) => g.querySelector('[name="' + n + '"]').value;
+      const symbol = val('symbol').trim();
+      if (!symbol) { $('#config-msg').innerHTML = '<div class="msg err">Symbol is required.</div>'; return; }
+      saveSellCoin({
+        symbol, name: val('name').trim(), node_url: val('node_url').trim(),
+        wallet_addr: val('wallet_addr').trim(), wallet_seed: val('wallet_seed'),
+        confirmations: parseInt(val('confirmations'), 10) || 1, enabled: true,
+      });
+      g.querySelectorAll('input').forEach((i) => { if (i.type !== 'number') i.value = ''; });
+    };
+
     async function loadConfig() {
       const cfg = await getJSON('/api/config');
       CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) el.value = cfg[k] || ''; });
+      await loadSellCoins();
       await loadCurrencies();
     }
     $('#config-form').onsubmit = async (e) => {
@@ -264,7 +335,7 @@
       const d = await getJSON('/api/products');
       const rows = (d.products || []).map((p) =>
         '<tr><td><code>' + esc(shorten(p.id)) + '</code></td><td><code>' + esc(shorten(p.seller_pubkey)) +
-        '</code></td><td>' + esc(p.amount_sky) + ' SKY</td><td>' + esc(p.price) + ' ' + esc(p.payment_currency) +
+        '</code></td><td>' + esc(p.amount) + ' ' + esc(p.sell_coin || 'SKY') + '</td><td>' + esc(p.price) + ' ' + esc(p.payment_currency) +
         '</td><td>' + badge(p.status) + '</td><td>' + fmt(p.created_at) + '</td></tr>').join('');
       $('#products-body').innerHTML = rows
         ? '<table><thead><tr><th>ID</th><th>Seller</th><th>Amount</th><th>Price</th><th>Status</th><th>Created</th></tr></thead><tbody>' + rows + '</tbody></table>'
@@ -275,8 +346,8 @@
       const d = await getJSON('/api/orders');
       const rows = (d.orders || []).map((o) =>
         '<tr><td><code>' + esc(shorten(o.id)) + '</code></td><td><code>' + esc(shorten(o.buyer_pubkey)) +
-        '</code></td><td>' + esc(o.amount_sky) + ' SKY</td><td>' + esc(o.price) + ' ' + esc(o.payment_currency) +
-        '</td><td>' + badge(o.status) + '</td><td>' + esc(o.confirmations) + '</td><td>' + esc(o.commission_sky || 0) + ' SKY</td><td>' + fmt(o.expires_at) + '</td></tr>').join('');
+        '</code></td><td>' + esc(o.amount) + ' ' + esc(o.sell_coin || 'SKY') + '</td><td>' + esc(o.price) + ' ' + esc(o.payment_currency) +
+        '</td><td>' + badge(o.status) + '</td><td>' + esc(o.confirmations) + '</td><td>' + esc(o.commission || 0) + ' ' + esc(o.sell_coin || 'SKY') + '</td><td>' + fmt(o.expires_at) + '</td></tr>').join('');
       $('#orders-body').innerHTML = rows
         ? '<table><thead><tr><th>ID</th><th>Buyer</th><th>Amount</th><th>Price</th><th>Status</th><th>Conf.</th><th>Commission</th><th>Expires</th></tr></thead><tbody>' + rows + '</tbody></table>'
         : '<div class="empty">No orders.</div>';

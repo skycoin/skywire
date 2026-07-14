@@ -12,12 +12,16 @@ func (d *Database) CreatePendingListing(listing *PendingListing) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	if listing.SellCoin == "" {
+		listing.SellCoin = "SKY"
+	}
+
 	listing.CreatedAt = time.Now().UTC()
 
 	_, err := d.db.Exec(`
-		INSERT INTO pending_listings (id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, listing.ID, listing.SellerPubKey, listing.AmountSKY, listing.ExpectedAmountSKY,
+		INSERT INTO pending_listings (id, seller_pubkey, sell_coin, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, listing.ID, listing.SellerPubKey, listing.SellCoin, listing.Amount, listing.ExpectedAmount,
 		listing.Price, listing.PaymentCurrency, listing.Status, listing.ExpiresAt, listing.CreatedAt)
 
 	if err != nil {
@@ -34,10 +38,10 @@ func (d *Database) GetPendingListing(id string) (*PendingListing, error) {
 
 	listing := &PendingListing{}
 	err := d.db.QueryRow(`
-		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash, closed_at, returned_at, COALESCE(return_tx_hash, '') AS return_tx_hash
+		SELECT id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash, closed_at, returned_at, COALESCE(return_tx_hash, '') AS return_tx_hash
 		FROM pending_listings
 		WHERE id = ?
-	`, id).Scan(&listing.ID, &listing.SellerPubKey, &listing.AmountSKY, &listing.ExpectedAmountSKY,
+	`, id).Scan(&listing.ID, &listing.SellerPubKey, &listing.SellCoin, &listing.Amount, &listing.ExpectedAmount,
 		&listing.Price, &listing.PaymentCurrency, &listing.Status, &listing.ExpiresAt,
 		&listing.CreatedAt, &listing.ConfirmedAt, &listing.TxHash,
 		&listing.ClosedAt, &listing.ReturnedAt, &listing.ReturnTxHash)
@@ -93,7 +97,7 @@ func (d *Database) GetExpiredPendingListings() ([]*PendingListing, error) {
 
 	now := time.Now().UTC()
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
+		SELECT id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
 		FROM pending_listings
 		WHERE status = 'pending' AND expires_at <= ?
 	`, now)
@@ -105,7 +109,7 @@ func (d *Database) GetExpiredPendingListings() ([]*PendingListing, error) {
 	var listings []*PendingListing
 	for rows.Next() {
 		listing := &PendingListing{}
-		err := rows.Scan(&listing.ID, &listing.SellerPubKey, &listing.AmountSKY, &listing.ExpectedAmountSKY,
+		err := rows.Scan(&listing.ID, &listing.SellerPubKey, &listing.SellCoin, &listing.Amount, &listing.ExpectedAmount,
 			&listing.Price, &listing.PaymentCurrency, &listing.Status, &listing.ExpiresAt,
 			&listing.CreatedAt, &listing.ConfirmedAt, &listing.TxHash)
 		if err != nil {
@@ -123,7 +127,7 @@ func (d *Database) GetSellerPendingListings(sellerPubKey string) ([]*PendingList
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
+		SELECT id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
 		FROM pending_listings
 		WHERE seller_pubkey = ? AND status IN ('pending', 'confirmed')
 		ORDER BY created_at DESC
@@ -136,7 +140,7 @@ func (d *Database) GetSellerPendingListings(sellerPubKey string) ([]*PendingList
 	var listings []*PendingListing
 	for rows.Next() {
 		listing := &PendingListing{}
-		err := rows.Scan(&listing.ID, &listing.SellerPubKey, &listing.AmountSKY, &listing.ExpectedAmountSKY,
+		err := rows.Scan(&listing.ID, &listing.SellerPubKey, &listing.SellCoin, &listing.Amount, &listing.ExpectedAmount,
 			&listing.Price, &listing.PaymentCurrency, &listing.Status, &listing.ExpiresAt,
 			&listing.CreatedAt, &listing.ConfirmedAt, &listing.TxHash)
 		if err != nil {
@@ -156,7 +160,7 @@ func (d *Database) GetPendingListings() ([]*PendingListing, error) {
 
 	now := time.Now().UTC()
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
+		SELECT id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
 		FROM pending_listings
 		WHERE status = 'pending' AND expires_at > ?
 		ORDER BY created_at ASC
@@ -169,7 +173,7 @@ func (d *Database) GetPendingListings() ([]*PendingListing, error) {
 	var listings []*PendingListing
 	for rows.Next() {
 		listing := &PendingListing{}
-		if err := rows.Scan(&listing.ID, &listing.SellerPubKey, &listing.AmountSKY, &listing.ExpectedAmountSKY,
+		if err := rows.Scan(&listing.ID, &listing.SellerPubKey, &listing.SellCoin, &listing.Amount, &listing.ExpectedAmount,
 			&listing.Price, &listing.PaymentCurrency, &listing.Status, &listing.ExpiresAt,
 			&listing.CreatedAt, &listing.ConfirmedAt, &listing.TxHash); err != nil {
 			return nil, fmt.Errorf("failed to scan pending listing: %w", err)
@@ -193,7 +197,7 @@ func (d *Database) GetReturnableListings() ([]*PendingListing, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, seller_pubkey, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
+		SELECT id, seller_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, expected_amount_sky, price, payment_currency, status, expires_at, created_at, confirmed_at, COALESCE(tx_hash, '') AS tx_hash
 		FROM pending_listings
 		WHERE status IN ('expired', 'canceled', 'cancelled')
 		  AND returned_at IS NULL
@@ -208,7 +212,7 @@ func (d *Database) GetReturnableListings() ([]*PendingListing, error) {
 	var listings []*PendingListing
 	for rows.Next() {
 		listing := &PendingListing{}
-		if err := rows.Scan(&listing.ID, &listing.SellerPubKey, &listing.AmountSKY, &listing.ExpectedAmountSKY,
+		if err := rows.Scan(&listing.ID, &listing.SellerPubKey, &listing.SellCoin, &listing.Amount, &listing.ExpectedAmount,
 			&listing.Price, &listing.PaymentCurrency, &listing.Status, &listing.ExpiresAt,
 			&listing.CreatedAt, &listing.ConfirmedAt, &listing.TxHash); err != nil {
 			return nil, fmt.Errorf("failed to scan returnable listing: %w", err)
@@ -259,14 +263,13 @@ func (d *Database) DeleteOldPendingListings(age time.Duration) (int64, error) {
 	return n, nil
 }
 
-// OutstandingEscrowSKY returns the total SKY the market should currently be
-// holding in its escrow wallet: the amount for every product still awaiting
-// delivery (active or frozen) plus the deposit for every terminal listing whose
-// SKY arrived on-chain (confirmed_at set) but has not yet been refunded. Delivered
-// ('sold' products) and already-refunded listings are excluded — their SKY has
-// left escrow. Used by the escrow-audit job to detect drift from the on-chain
-// balance.
-func (d *Database) OutstandingEscrowSKY() (float64, error) {
+// OutstandingEscrow returns the total of a single sell coin the market should
+// currently be holding in that coin's escrow wallet: the amount for every product
+// still awaiting delivery (active or frozen) plus the deposit for every terminal
+// listing whose coin arrived on-chain (confirmed_at set) but has not yet been
+// refunded. Delivered ('sold' products) and already-refunded listings are
+// excluded — their coin has left escrow. Used by the per-coin escrow-audit job.
+func (d *Database) OutstandingEscrow(coin string) (float64, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -274,13 +277,14 @@ func (d *Database) OutstandingEscrowSKY() (float64, error) {
 	err := d.db.QueryRow(`
 		SELECT
 		  COALESCE((SELECT SUM(amount_sky) FROM products
-		            WHERE status IN ('active','frozen')), 0)
+		            WHERE status IN ('active','frozen') AND sell_coin = ?), 0)
 		+ COALESCE((SELECT SUM(expected_amount_sky) FROM pending_listings
 		            WHERE status IN ('expired','canceled','cancelled')
 		              AND returned_at IS NULL
 		              AND closed_at IS NOT NULL
-		              AND confirmed_at IS NOT NULL), 0)
-	`).Scan(&total)
+		              AND confirmed_at IS NOT NULL
+		              AND sell_coin = ?), 0)
+	`, coin, coin).Scan(&total)
 	if err != nil {
 		return 0, fmt.Errorf("failed to sum outstanding escrow: %w", err)
 	}

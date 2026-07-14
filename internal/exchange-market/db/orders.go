@@ -12,12 +12,16 @@ func (d *Database) CreateOrder(order *Order) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
+	if order.SellCoin == "" {
+		order.SellCoin = "SKY"
+	}
+
 	order.CreatedAt = time.Now().UTC()
 
 	_, err := d.db.Exec(`
-		INSERT INTO orders (id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, order.ID, order.ProductID, order.BuyerPubKey, order.AmountSKY, order.Price,
+		INSERT INTO orders (id, product_id, buyer_pubkey, sell_coin, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, order.ID, order.ProductID, order.BuyerPubKey, order.SellCoin, order.Amount, order.Price,
 		order.PaymentCurrency, order.ExpectedPaymentAmount, order.SellerWallet,
 		order.Status, order.ExpiresAt, order.CreatedAt)
 
@@ -35,10 +39,10 @@ func (d *Database) GetOrder(id string) (*Order, error) {
 
 	order := &Order{}
 	err := d.db.QueryRow(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE id = ?
-	`, id).Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+	`, id).Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.SellCoin, &order.Amount, &order.Price,
 		&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 		&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
 		&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt)
@@ -59,7 +63,7 @@ func (d *Database) GetBuyerOrders(buyerPubKey string) ([]*Order, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE buyer_pubkey = ?
 		ORDER BY created_at DESC
@@ -72,7 +76,7 @@ func (d *Database) GetBuyerOrders(buyerPubKey string) ([]*Order, error) {
 	var orders []*Order
 	for rows.Next() {
 		order := &Order{}
-		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.SellCoin, &order.Amount, &order.Price,
 			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
 			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt)
@@ -91,7 +95,7 @@ func (d *Database) GetSellerOrders(sellerPubKey string) ([]*Order, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT o.id, o.product_id, o.buyer_pubkey, o.amount_sky, o.price, o.payment_currency, o.expected_payment_amount, o.seller_wallet, o.status, o.expires_at, o.created_at, o.paid_at, COALESCE(o.payment_tx_hash, '') AS payment_tx_hash, o.confirmations, o.completed_at
+		SELECT o.id, o.product_id, o.buyer_pubkey, COALESCE(o.sell_coin, 'SKY') AS sell_coin, o.amount_sky, o.price, o.payment_currency, o.expected_payment_amount, o.seller_wallet, o.status, o.expires_at, o.created_at, o.paid_at, COALESCE(o.payment_tx_hash, '') AS payment_tx_hash, o.confirmations, o.completed_at
 		FROM orders o
 		INNER JOIN products p ON o.product_id = p.id
 		WHERE p.seller_pubkey = ?
@@ -105,7 +109,7 @@ func (d *Database) GetSellerOrders(sellerPubKey string) ([]*Order, error) {
 	var orders []*Order
 	for rows.Next() {
 		order := &Order{}
-		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.SellCoin, &order.Amount, &order.Price,
 			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
 			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt)
@@ -272,7 +276,7 @@ func (d *Database) GetExpiredOrders() ([]*Order, error) {
 
 	now := time.Now().UTC()
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE status = 'pending_payment' AND expires_at <= ?
 	`, now)
@@ -284,7 +288,7 @@ func (d *Database) GetExpiredOrders() ([]*Order, error) {
 	var orders []*Order
 	for rows.Next() {
 		order := &Order{}
-		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.SellCoin, &order.Amount, &order.Price,
 			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
 			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt)
@@ -303,7 +307,7 @@ func (d *Database) GetPendingPaymentOrders() ([]*Order, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE status = 'pending_payment' AND expires_at > ?
 		ORDER BY created_at ASC
@@ -316,7 +320,7 @@ func (d *Database) GetPendingPaymentOrders() ([]*Order, error) {
 	var orders []*Order
 	for rows.Next() {
 		order := &Order{}
-		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.SellCoin, &order.Amount, &order.Price,
 			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
 			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt)
@@ -336,7 +340,7 @@ func (d *Database) GetCompletedOrdersOlderThan(age time.Duration) ([]*Order, err
 
 	cutoff := time.Now().UTC().Add(-age)
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE status = 'completed' AND completed_at <= ?
 	`, cutoff)
@@ -348,7 +352,7 @@ func (d *Database) GetCompletedOrdersOlderThan(age time.Duration) ([]*Order, err
 	var orders []*Order
 	for rows.Next() {
 		order := &Order{}
-		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.SellCoin, &order.Amount, &order.Price,
 			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
 			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt)
@@ -381,7 +385,7 @@ func (d *Database) GetAllOrders() ([]*Order, error) {
 	defer d.mu.RUnlock()
 
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at, commission_sky
+		SELECT id, product_id, buyer_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at, commission_sky
 		FROM orders
 		ORDER BY created_at DESC
 	`)
@@ -393,10 +397,10 @@ func (d *Database) GetAllOrders() ([]*Order, error) {
 	var orders []*Order
 	for rows.Next() {
 		order := &Order{}
-		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+		err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.SellCoin, &order.Amount, &order.Price,
 			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
-			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt, &order.CommissionSKY)
+			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt, &order.Commission)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan order: %w", err)
 		}
@@ -443,7 +447,7 @@ func (d *Database) GetInFlightOrders() ([]*Order, error) {
 
 	now := time.Now().UTC()
 	rows, err := d.db.Query(`
-		SELECT id, product_id, buyer_pubkey, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
+		SELECT id, product_id, buyer_pubkey, COALESCE(sell_coin, 'SKY') AS sell_coin, amount_sky, price, payment_currency, expected_payment_amount, seller_wallet, status, expires_at, created_at, paid_at, COALESCE(payment_tx_hash, '') AS payment_tx_hash, confirmations, completed_at
 		FROM orders
 		WHERE status IN ('paid', 'confirmed')
 		   OR (status = 'pending_payment' AND expires_at > ?)
@@ -457,7 +461,7 @@ func (d *Database) GetInFlightOrders() ([]*Order, error) {
 	var orders []*Order
 	for rows.Next() {
 		order := &Order{}
-		if err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.AmountSKY, &order.Price,
+		if err := rows.Scan(&order.ID, &order.ProductID, &order.BuyerPubKey, &order.SellCoin, &order.Amount, &order.Price,
 			&order.PaymentCurrency, &order.ExpectedPaymentAmount, &order.SellerWallet,
 			&order.Status, &order.ExpiresAt, &order.CreatedAt, &order.PaidAt,
 			&order.PaymentTxHash, &order.Confirmations, &order.CompletedAt); err != nil {

@@ -55,7 +55,7 @@ type sendCall struct {
 	amt  float64
 }
 
-func (c *scriptChain) DepositConfirmed(string, string, float64, time.Time, time.Time) (bool, string, error) {
+func (c *scriptChain) DepositConfirmed(string, string, string, float64, time.Time, time.Time) (bool, string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.deposit, "dep-tx", nil
@@ -67,14 +67,14 @@ func (c *scriptChain) PaymentConfirmations(string, string, string, float64, time
 	return c.confs, "pay-tx", nil
 }
 
-func (c *scriptChain) SendSKY(addr string, amt float64) (string, error) {
+func (c *scriptChain) SendCoin(_ /*coin*/, addr string, amt float64) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.sends = append(c.sends, sendCall{addr, amt})
 	return "send-tx", nil
 }
 
-func (c *scriptChain) EscrowBalance(string) (float64, error) { return 0, nil }
+func (c *scriptChain) EscrowBalance(string, string) (float64, error) { return 0, nil }
 
 func (c *scriptChain) armDeposit() { c.mu.Lock(); c.deposit = true; c.mu.Unlock() }
 func (c *scriptChain) armPayment(n int) {
@@ -176,10 +176,10 @@ func TestExchangeTradeOverDmsg(t *testing.T) {
 
 	var listing protocol.CreateListingResponse
 	bindOK(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
-		AmountSKY: 10, Price: 2, PaymentCurrency: "BTC",
+		Amount: 10, Price: 2, PaymentCurrency: "BTC",
 	}, &listing)
 	// The seller deposits the exact round amount (identified by sender + window).
-	if listing.ExpectedAmountSKY != 10 || listing.MarketWallet != "sky-market-wallet" {
+	if listing.ExpectedAmount != 10 || listing.MarketWallet != "sky-market-wallet" {
 		t.Fatalf("unexpected listing response: %+v", listing)
 	}
 
@@ -205,7 +205,7 @@ func TestExchangeTradeOverDmsg(t *testing.T) {
 
 	var products protocol.GetProductsResponse
 	bindOK(t, buyer, protocol.TypeGetProducts, nil, &products)
-	if len(products.Products) != 1 || products.Products[0].AmountSKY != 10 {
+	if len(products.Products) != 1 || products.Products[0].Amount != 10 {
 		t.Fatalf("get_products = %+v, want the one listed product", products.Products)
 	}
 	productID := products.Products[0].ID
