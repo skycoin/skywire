@@ -54,8 +54,20 @@ func (c *Chain) DepositConfirmed(coin, marketWallet, senderAddr string, amount f
 	return n.DepositConfirmed(marketWallet, senderAddr, amount, notBefore, notAfter)
 }
 
-// PaymentConfirmations implements jobs.Chain.
+// PaymentConfirmations implements jobs.Chain. When currency is an enabled sell
+// coin (a fibercoin, incl. SKY), the payment is a peer-to-peer transfer on that
+// coin's own chain: it is verified via the coin's fullnode by sender + window +
+// FIXED amount (addr is the seller's receive address), so no unique non-round
+// amount is needed. Otherwise it is an external UTXO coin verified via its
+// explorer (unique amount + window + soft sender).
 func (c *Chain) PaymentConfirmations(currency, addr, senderAddr string, expectedAmount float64, notBefore, notAfter time.Time) (int, string, error) {
+	if c.sky != nil && c.sky.enabled(currency) {
+		n, err := c.sky.node(currency)
+		if err != nil {
+			return 0, "", err
+		}
+		return n.DepositConfirmations(addr, senderAddr, expectedAmount, notBefore, notAfter)
+	}
 	return c.exp.PaymentConfirmations(currency, addr, senderAddr, expectedAmount, notBefore, notAfter)
 }
 
@@ -103,6 +115,14 @@ type skyRouter struct {
 
 func newSkyRouter(store SellCoinConfigStore, hc *http.Client) *skyRouter {
 	return &skyRouter{store: store, hc: hc, cache: make(map[string]*SkyNode)}
+}
+
+// enabled reports whether symbol is a configured, enabled sell coin — i.e. a
+// fibercoin the market can verify on its own node (used to decide whether a
+// payment currency is a fibercoin or an external explorer coin).
+func (r *skyRouter) enabled(symbol string) bool {
+	_, _, _, _, enabled, err := r.store.SellCoinConfig(symbol)
+	return err == nil && enabled
 }
 
 func (r *skyRouter) node(symbol string) (*SkyNode, error) {

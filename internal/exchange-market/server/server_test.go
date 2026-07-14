@@ -233,6 +233,68 @@ func TestCreateListing_SellCoin(t *testing.T) {
 	}
 }
 
+// TestFiberPayment verifies a fibercoin↔fibercoin trade: a SKY listing priced in
+// another fibercoin (FIB) charges the buyer a FIXED amount (no unique non-round
+// amount), and a coin cannot be traded for itself.
+func TestFiberPayment(t *testing.T) {
+	database := newTestDB(t)
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	zeroCommission(t, database)
+	// Add FIB as a second sell coin (enabling it as a fibercoin payment option).
+	if err := database.UpsertSellCoin(&db.SellCoin{
+		Symbol: "FIB", Name: "Fiber", NodeURL: "http://fib:6420",
+		WalletSeed: "fib-seed", WalletAddr: "FIB-escrow", Confirmations: 1, Enabled: true,
+	}); err != nil {
+		t.Fatalf("add FIB: %v", err)
+	}
+
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	const buyerPK = "0322222222222222222222222222222222222222222222222222222222222222bb"
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller})
+
+	// A coin can't be traded for itself.
+	self, err := seller.Do(protocol.TypeCreateListing, protocol.CreateListingRequest{
+		SellCoin: "SKY", Amount: 10, Price: 100, PaymentCurrency: "SKY",
+	})
+	if err != nil {
+		t.Fatalf("transport: %v", err)
+	}
+	if !self.IsError() || errCode(t, self) != protocol.CodeInvalidRequest {
+		t.Fatalf("SKY/SKY listing = %+v, want INVALID_REQUEST", self)
+	}
+
+	// List SKY priced in FIB.
+	var listing protocol.CreateListingResponse
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
+		SellCoin: "SKY", Amount: 10, Price: 100, PaymentCurrency: "FIB",
+	}, &listing)
+	if listing.SellCoin != "SKY" || listing.MarketWallet != "sky-market-wallet" || listing.ExpectedAmount != 10 {
+		t.Fatalf("unexpected SKY/FIB listing: %+v", listing)
+	}
+
+	// Simulate the confirmed product (the Listing Checker would create it).
+	if err := database.CreateProduct(&db.Product{
+		ID: "prod-fib", SellerPubKey: sellerPK, SellCoin: "SKY", Amount: 10, Price: 100,
+		PaymentCurrency: "FIB", Status: "active",
+	}); err != nil {
+		t.Fatalf("seed product: %v", err)
+	}
+
+	buyer := dialTestServer(t, database, buyerPK)
+	mustSuccess(t, buyer, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skyBuyer})
+
+	var buy protocol.BuyProductResponse
+	bindSuccess(t, buyer, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-fib"}, &buy)
+	// FIXED amount — exactly the price, not a non-round 100.00x. Paid to the
+	// seller's shared Skycoin-family address.
+	if buy.PaymentCurrency != "FIB" || buy.ExpectedPaymentAmount != 100 || buy.SellerWallet != skySeller {
+		t.Fatalf("fiber buy = %+v, want fixed 100 FIB to %s", buy, skySeller)
+	}
+}
+
 // TestOnePendingListingPerSeller verifies a seller sends the exact round deposit
 // amount and can only have one pending listing at a time — a second is rejected
 // while the first is still awaiting its deposit. This keeps a single deposit from

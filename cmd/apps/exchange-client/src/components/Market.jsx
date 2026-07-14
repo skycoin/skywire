@@ -36,11 +36,16 @@ function Market() {
         const coins = d.sell_coins || []
         setCurrencies(list)
         setSellCoins(coins)
-        setNewListing((prev) => ({
-          ...prev,
-          payment_currency: prev.payment_currency || list[0] || '',
-          sell_coin: prev.sell_coin || coins[0] || '',
-        }))
+        setNewListing((prev) => {
+          const sell = prev.sell_coin || coins[0] || ''
+          // Payment can be an external coin OR another fibercoin (not the one being sold).
+          const payOpts = [...new Set([...list, ...coins.filter((c) => c !== sell)])]
+          return {
+            ...prev,
+            sell_coin: sell,
+            payment_currency: prev.payment_currency || payOpts[0] || '',
+          }
+        })
       })
       .catch(() => {})
     loadProducts()
@@ -94,6 +99,10 @@ function Market() {
     }
   }
 
+  // Payment options = external explorer coins plus any other fibercoin (you can't
+  // pay in the coin you're selling).
+  const paymentOptions = [...new Set([...currencies, ...sellCoins.filter((c) => c !== newListing.sell_coin)])]
+
   return (
     <div>
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -119,7 +128,12 @@ function Market() {
                 <select
                   className="form-select"
                   value={newListing.sell_coin}
-                  onChange={(e) => setNewListing({ ...newListing, sell_coin: e.target.value })}
+                  onChange={(e) => {
+                    const sell = e.target.value
+                    // Can't pay in the coin being sold — drop that payment choice if it collides.
+                    const pay = newListing.payment_currency === sell ? '' : newListing.payment_currency
+                    setNewListing({ ...newListing, sell_coin: sell, payment_currency: pay })
+                  }}
                   required
                 >
                   {sellCoins.length === 0 && <option value="">No sell coins enabled</option>}
@@ -162,14 +176,14 @@ function Market() {
                   onChange={(e) => setNewListing({ ...newListing, payment_currency: e.target.value })}
                   required
                 >
-                  {currencies.length === 0 && <option value="">No currencies enabled</option>}
-                  {currencies.map((c) => (
+                  {paymentOptions.length === 0 && <option value="">No currencies enabled</option>}
+                  {paymentOptions.map((c) => (
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
               </div>
             </div>
-            <button type="submit" className="btn btn-connect" disabled={busy || currencies.length === 0 || sellCoins.length === 0}>
+            <button type="submit" className="btn btn-connect" disabled={busy || paymentOptions.length === 0 || sellCoins.length === 0}>
               Create Sell Order
             </button>
           </form>
