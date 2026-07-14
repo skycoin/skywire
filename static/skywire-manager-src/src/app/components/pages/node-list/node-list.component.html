@@ -356,17 +356,21 @@
                   </td>
                   <td>
                     @if (node.transports && node.transports.length > 0) {
-                      @for (entry of getTransportCounts(node); track entry.type) {
-                        <div style="font-size: 0.85em;">{{ entry.type }}: {{ entry.count }}
+                      @let totals = getTransportTotals(node);
+                      <div class="tp-counts">
+                        @for (entry of getTransportCounts(node); track entry.type) {
+                          <span class="tp-type">{{ entry.type }}</span>
+                          <span class="tp-count">{{ entry.count }}</span>
                           <span class="tp-in" title="incoming">{{ entry.incoming }}&#8595;</span>
                           <span class="tp-out" title="outgoing">{{ entry.outgoing }}&#8593;</span>
-                        </div>
-                      }
-                      @let totals = getTransportTotals(node);
-                      <div style="font-size: 0.85em;">Total: {{ node.transports.length }}
+                        }
+                        <span class="tp-type tp-total">Total</span>
+                        <span class="tp-count tp-total">{{ node.transports.length }}</span>
                         @if (totals.incoming + totals.outgoing > 0) {
-                          <span class="tp-in" title="incoming">{{ totals.incoming }}&#8595;</span>
-                          <span class="tp-out" title="outgoing">{{ totals.outgoing }}&#8593;</span>
+                          <span class="tp-in tp-total" title="incoming">{{ totals.incoming }}&#8595;</span>
+                          <span class="tp-out tp-total" title="outgoing">{{ totals.outgoing }}&#8593;</span>
+                        } @else {
+                          <span class="tp-total"></span><span class="tp-total"></span>
                         }
                       </div>
                     }
@@ -687,17 +691,21 @@
                         </td>
                         <td>
                           @if (node.transports && node.transports.length > 0) {
-                            @for (entry of getTransportCounts(node); track entry.type) {
-                              <div style="font-size: 0.85em;">{{ entry.type }}: {{ entry.count }}
+                            @let totals = getTransportTotals(node);
+                            <div class="tp-counts">
+                              @for (entry of getTransportCounts(node); track entry.type) {
+                                <span class="tp-type">{{ entry.type }}</span>
+                                <span class="tp-count">{{ entry.count }}</span>
                                 <span class="tp-in" title="incoming">{{ entry.incoming }}&#8595;</span>
                                 <span class="tp-out" title="outgoing">{{ entry.outgoing }}&#8593;</span>
-                              </div>
-                            }
-                            @let totals = getTransportTotals(node);
-                            <div style="font-size: 0.85em;">Total: {{ node.transports.length }}
+                              }
+                              <span class="tp-type tp-total">Total</span>
+                              <span class="tp-count tp-total">{{ node.transports.length }}</span>
                               @if (totals.incoming + totals.outgoing > 0) {
-                                <span class="tp-in" title="incoming">{{ totals.incoming }}&#8595;</span>
-                                <span class="tp-out" title="outgoing">{{ totals.outgoing }}&#8593;</span>
+                                <span class="tp-in tp-total" title="incoming">{{ totals.incoming }}&#8595;</span>
+                                <span class="tp-out tp-total" title="outgoing">{{ totals.outgoing }}&#8593;</span>
+                              } @else {
+                                <span class="tp-total"></span><span class="tp-total"></span>
                               }
                             </div>
                           }

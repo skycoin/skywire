@@ -24,6 +24,7 @@ func (mockBackend) ListUnspent([]string) ([]btc.UTXO, error)       { return []bt
 func (mockBackend) GetHistory([]string) ([]btc.Transaction, error) { return []btc.Transaction{}, nil }
 func (mockBackend) BroadcastTransaction(string) (string, error)    { return "deadbeef", nil }
 func (mockBackend) EstimateFee(int) (int64, error)                 { return 12, nil }
+func (mockBackend) Health() (int, error)                           { return 850000, nil }
 func (mockBackend) Close() error                                   { return nil }
 
 func newTestGateway() *Gateway {
@@ -32,7 +33,7 @@ func newTestGateway() *Gateway {
 	return g
 }
 
-func do(g *Gateway, method, target string) *httptest.ResponseRecorder {
+func do(g *Gateway, method, target string) *httptest.ResponseRecorder { //nolint:unparam // generic test helper; method varies for send (POST) vs the GET endpoints
 	r := httptest.NewRequest(method, target, nil)
 	r.Header.Set("X-Skywire-Btc-Backend", "mock")
 	w := httptest.NewRecorder()
@@ -71,9 +72,23 @@ func TestFeeShape(t *testing.T) {
 		SatPerByte int64 `json:"sat_per_byte"`
 		Blocks     int   `json:"blocks"`
 	}
-	_ = json.Unmarshal(w.Body.Bytes(), &resp) //nolint
+	_ = json.Unmarshal(w.Body.Bytes(), &resp) //nolint:errcheck // test asserts the parsed fields below
 	if resp.SatPerByte != 12 || resp.Blocks != 3 {
 		t.Fatalf("fee resp = %+v, want {12, 3}", resp)
+	}
+}
+
+func TestHealthShape(t *testing.T) {
+	w := do(newTestGateway(), http.MethodGet, "/v1/btc/health")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	var resp struct {
+		TipHeight int `json:"tip_height"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &resp) //nolint:errcheck // test asserts the parsed field below
+	if resp.TipHeight != 850000 {
+		t.Fatalf("tip_height = %d, want 850000", resp.TipHeight)
 	}
 }
 
