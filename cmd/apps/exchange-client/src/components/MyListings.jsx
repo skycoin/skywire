@@ -30,12 +30,12 @@ function MyListings() {
 
   // The seller can cancel their offer while it is pending (no deposit yet) or
   // confirmed (an active product), as long as no buyer has selected it. A
-  // confirmed offer's escrowed SKY is returned within 1 hour of the deposit.
+  // confirmed offer's escrowed SKY is returned shortly after cancellation.
   const cancelListing = async (l) => {
     const msg =
       l.status === 'pending'
         ? 'Cancel this listing?'
-        : 'Cancel this offer? Your escrowed SKY will be returned within 1 hour of the original deposit.'
+        : 'Cancel this offer? Your escrowed SKY will be returned shortly after cancellation.'
     if (!window.confirm(msg)) return
     setBusyId(l.id)
     setError('')
@@ -116,6 +116,11 @@ function MyListings() {
                     {l.status === 'pending' ? (
                       <span title={marketWallet ? `to ${marketWallet}` : undefined}>
                         <strong>{l.expected_amount_sky}</strong> SKY
+                        {l.expected_amount_sky > l.amount_sky && (
+                          <div className="small text-muted">
+                            {l.amount_sky} + {(l.expected_amount_sky - l.amount_sky).toFixed(3)} fee
+                          </div>
+                        )}
                       </span>
                     ) : (
                       <span className="text-muted">received</span>

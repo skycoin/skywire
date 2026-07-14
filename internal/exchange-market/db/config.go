@@ -205,18 +205,25 @@ func (d *Database) GetOrderExpiryMinutes() (int, error) {
 	return d.GetConfigInt("order_expiry_minutes")
 }
 
-// GetReturnDelayHours returns how many hours to wait before returning SKY to seller.
-func (d *Database) GetReturnDelayHours() (int, error) {
-	return d.GetConfigInt("return_delay_hours")
-}
-
 // GetCleanupDays returns how many days after completion orders are deleted.
 func (d *Database) GetCleanupDays() (int, error) {
 	return d.GetConfigInt("cleanup_days")
 }
 
-// GetFeeRateSchPerSky returns the commission rate in Coin Hours (SCH) charged
-// per SKY sold. Default 1 (one hour's worth of coin hours per SKY).
-func (d *Database) GetFeeRateSchPerSky() (float64, error) {
-	return d.GetConfigFloat("fee_rate_sch_per_sky")
+// GetCommissionRatePercent returns the market commission rate as a percent of the
+// SKY sold (default 0.5 = 0.5%).
+func (d *Database) GetCommissionRatePercent() (float64, error) {
+	return d.GetConfigFloat("commission_rate_percent")
+}
+
+// GetCommissionMinSKY returns the minimum SKY commission per sale (floor), so
+// tiny trades still pay something (default 0.001).
+func (d *Database) GetCommissionMinSKY() (float64, error) {
+	return d.GetConfigFloat("commission_min_sky")
+}
+
+// GetCommissionMaxSKY returns the maximum SKY commission per sale (cap). Zero (or
+// negative) means no cap.
+func (d *Database) GetCommissionMaxSKY() (float64, error) {
+	return d.GetConfigFloat("commission_max_sky")
 }

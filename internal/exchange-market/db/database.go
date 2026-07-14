@@ -111,9 +111,9 @@ func (d *Database) Migrate() error {
 	if err := d.ensureColumn("products", "listing_id", "TEXT"); err != nil {
 		return err
 	}
-	// orders.commission_sch records the Coin Hours commission booked on a
-	// completed sale (floor(amount_sky * fee_rate)).
-	if err := d.ensureColumn("orders", "commission_sch", "INTEGER DEFAULT 0"); err != nil {
+	// orders.commission_sky records the SKY commission the market retained on a
+	// completed sale (clamp(amount_sky * rate%, min, cap)).
+	if err := d.ensureColumn("orders", "commission_sky", "REAL DEFAULT 0"); err != nil {
 		return err
 	}
 
@@ -134,16 +134,17 @@ func (d *Database) ensureColumn(table, column, ddl string) error {
 // InitDefaultConfig initializes default market configuration if not already present.
 func (d *Database) InitDefaultConfig() error {
 	defaults := map[string]string{
-		"wallet_sky":              "",   // Market escrow address (must be the sky_wallet_seed's first address)
-		"sky_fullnode_url":        "",   // SKY fullnode API base URL (native SKY verification + broadcast)
-		"sky_wallet_seed":         "",   // Escrow hot wallet seed; spends (delivery/refund) are signed locally
-		"fee_rate_sch_per_sky":    "1",  // Commission: Coin Hours (SCH) per SKY sold (1 = one hour's worth)
-		"freeze_violations_limit": "3",  // Number of violations before ban
-		"ban_duration_days":       "7",  // Ban duration in days
-		"listing_expiry_minutes":  "15", // Minutes before pending listing expires
-		"order_expiry_minutes":    "15", // Minutes before pending order expires
-		"return_delay_hours":      "1",  // Hours before returning SKY to seller
-		"cleanup_days":            "3",  // Days after which completed orders are deleted
+		"wallet_sky":              "",      // Market escrow address (must be the sky_wallet_seed's first address)
+		"sky_fullnode_url":        "",      // SKY fullnode API base URL (native SKY verification + broadcast)
+		"sky_wallet_seed":         "",      // Escrow hot wallet seed; spends (delivery/refund) are signed locally
+		"commission_rate_percent": "0.5",   // Commission: percent of SKY sold (0.5 = 0.5%)
+		"commission_min_sky":      "0.001", // Minimum SKY commission per sale (floor)
+		"commission_max_sky":      "0",     // Maximum SKY commission per sale (0 = no cap)
+		"freeze_violations_limit": "3",     // Number of violations before ban
+		"ban_duration_days":       "7",     // Ban duration in days
+		"listing_expiry_minutes":  "15",    // Minutes before pending listing expires
+		"order_expiry_minutes":    "15",    // Minutes before pending order expires
+		"cleanup_days":            "3",     // Days after which completed orders are deleted
 	}
 	// Per-coin explorer config keys are created on demand when the operator
 	// configures a coin (see db.ExplorerConfig); they are not seeded here.
@@ -244,7 +245,7 @@ CREATE TABLE IF NOT EXISTS orders (
     payment_tx_hash         TEXT,
     confirmations           INTEGER DEFAULT 0,
     completed_at            DATETIME,
-    commission_sch          INTEGER DEFAULT 0,
+    commission_sky          REAL DEFAULT 0,
     FOREIGN KEY (product_id) REFERENCES products(id),
     FOREIGN KEY (buyer_pubkey) REFERENCES users(pubkey)
 );
