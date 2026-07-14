@@ -36,6 +36,10 @@ type Chain interface {
 	// returns the transaction hash. Used to deliver SKY to a buyer on a
 	// completed trade and to return escrow to a seller.
 	SendSKY(toAddr string, amountSKY float64) (txHash string, err error)
+
+	// EscrowBalance returns the live spendable SKY balance of the escrow wallet.
+	// Used by the escrow-audit job to detect drift from the market's DB view.
+	EscrowBalance(addr string) (coinsSKY float64, err error)
 }
 
 // NoopChain is the default Chain used until a real backend is configured. It
@@ -56,4 +60,9 @@ func (NoopChain) PaymentConfirmations(string, string, string, float64, time.Time
 // SendSKY always fails: there is no backend to send from.
 func (NoopChain) SendSKY(string, float64) (string, error) {
 	return "", ErrNoChain
+}
+
+// EscrowBalance always fails: there is no backend to read from.
+func (NoopChain) EscrowBalance(string) (float64, error) {
+	return 0, ErrNoChain
 }

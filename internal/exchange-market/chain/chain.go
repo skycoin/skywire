@@ -51,3 +51,13 @@ func (c *Chain) PaymentConfirmations(currency, addr, senderAddr string, expected
 func (c *Chain) SendSKY(toAddr string, amountSKY float64) (string, error) {
 	return c.sky.SendSKY(toAddr, amountSKY)
 }
+
+// EscrowBalance implements jobs.Chain: the live spendable SKY balance of the
+// escrow wallet, for the escrow-audit consistency check.
+func (c *Chain) EscrowBalance(addr string) (float64, error) {
+	b, err := c.sky.Balance(addr)
+	if err != nil {
+		return 0, err
+	}
+	return b.CoinsSKY, nil
+}
