@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"errors"
 	"math"
 	"time"
 
@@ -68,6 +69,7 @@ func (r *Runner) Run(ctx context.Context) {
 	go r.loop(ctx, 30*time.Second, "listing-check", r.RunListingCheck)
 	go r.loop(ctx, 30*time.Second, "escrow-check", r.RunEscrowCheck)
 	go r.loop(ctx, time.Minute, "return-scheduler", r.RunReturnScheduler)
+	go r.loop(ctx, 5*time.Minute, "escrow-audit", r.RunEscrowAudit)
 	go r.loop(ctx, time.Minute, "ban-manager", r.RunBanManager)
 	go r.loop(ctx, time.Hour, "cleanup", r.RunCleanup)
 	<-ctx.Done()
@@ -295,6 +297,44 @@ func (r *Runner) RunReturnScheduler() error {
 		if err := r.db.MarkListingReturned(l.ID, txHash); err != nil {
 			r.log.WithError(err).Warnf("return-scheduler: failed to record refund for listing %s", l.ID)
 		}
+	}
+	return nil
+}
+
+// RunEscrowAudit cross-checks the escrow wallet's live on-chain SKY balance
+// against the market's DB view of what it should be holding (products awaiting
+// delivery + deposits awaiting refund). A shortfall — on-chain below outstanding
+// obligations — means a delivery or refund could fail and is logged as an error;
+// otherwise the healthy state (with any headroom) is logged. It only reads, never
+// moves funds. Skipped when no chain backend is configured.
+func (r *Runner) RunEscrowAudit() error {
+	marketWallet, err := r.db.GetMarketWallet()
+	if err != nil {
+		return err
+	}
+	if marketWallet == "" {
+		return nil // escrow wallet not configured yet
+	}
+	onChain, err := r.chain.EscrowBalance(marketWallet)
+	if err != nil {
+		if errors.Is(err, ErrNoChain) {
+			return nil // no backend configured — nothing to audit against
+		}
+		return err
+	}
+	expected, err := r.db.OutstandingEscrowSKY()
+	if err != nil {
+		return err
+	}
+	// Tolerance of half a milli-SKY (below the network's 0.001 precision) absorbs
+	// float rounding without masking a real deficit.
+	const tol = 0.0005
+	if onChain+tol < expected {
+		r.log.Errorf("escrow-audit: SHORTFALL — on-chain balance %.6f SKY is below outstanding obligations %.6f SKY (deficit %.6f); deliveries or refunds may fail",
+			onChain, expected, expected-onChain)
+	} else {
+		r.log.Infof("escrow-audit: healthy — on-chain %.6f SKY covers %.6f SKY of obligations (headroom %.6f)",
+			onChain, expected, onChain-expected)
 	}
 	return nil
 }
