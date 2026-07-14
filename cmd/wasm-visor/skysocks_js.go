@@ -111,7 +111,10 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	// exits (and different windows) establish in parallel.
 	t0 := time.Now()
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] connecting to exit %s — setting up route…", winID, serverPK.Hex()[:8]))
-	dctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	// 18s cap: a reachable exit's route sets up in a few seconds; a dead/unroutable
+	// one (common when picking a random SD exit) should FAIL FAST so the caller can
+	// try another, not hang ~45s. Runs off skysocksMu so exits establish in parallel.
+	dctx, cancel := context.WithTimeout(ctx, 18*time.Second)
 	defer cancel()
 	// Optimized routing for the browsing proxy: request a small mux (2 parallel
 	// routes) for throughput + mid-browse resilience — if one route degrades the
