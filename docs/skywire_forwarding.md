@@ -3,6 +3,20 @@
 Expose local TCP ports over the Skywire network (skynet and/or DMSG).
 Remote visors can connect via skynet routes or DMSG.
 
+This is the generic recipe for running **any** app over skynet/dmsg — no
+public IP, no DNS, no CA. Two halves:
+
+1. **Far end** — the host running the app forwards its port (`serve add`),
+   making it reachable at `<base32-pk>.dmsg` / `.skynet`. For HTTP you can
+   forward straight to the app (built-in reverse-proxy) or via a real reverse
+   proxy like Caddy for multiple vhosted sites — [see below](#hosting-a-website).
+2. **Near end** — the client reaches it with `skywire cli got`, or points a
+   browser at the [resolving proxy](#reaching-a-served-app) and visits the
+   `.dmsg` / `.skynet` hostname.
+
+As long as the far end has forwarded the port, the near end just needs the
+resolving proxy and the hostname.
+
 The CLI tree lives under `skywire cli serve`. The legacy
 `skywire cli skynet port {add,ls,rm}` commands still work but are
 deprecated.
@@ -84,6 +98,42 @@ always reachable — the website only replaces unmatched routes.
 > serve it on its native port (e.g. `serve add 8085 --to 8085`) and let
 > clients connect over `.skynet:8085` / `.dmsg:8085` directly.
 
+### Without a reverse proxy — one app, no extra software
+
+The example above is the zero-dependency path: the visor has a **built-in
+port-80 HTTP reverse-proxy**, so a single site needs nothing but the one
+`serve add` command. The visor forwards port-80 HTTP straight to your local
+app. Good for a single dashboard, API, or static site.
+
+### With a reverse proxy (Caddy / nginx / Traefik) — many sites, vhosts, TLS
+
+For **more than one site**, path-based routing, or a backend that dispatches
+by `Host` header, run a normal reverse proxy on the host and point the
+visor's port-80 forward at it with `--preserve-host`:
+
+```bash
+# Caddy (or nginx/traefik) is listening on 127.0.0.1:80 and vhost-routes
+# several local apps. Forward the visor's port 80 to it, Host header intact:
+skywire cli serve add 80 --to 127.0.0.1:80 --preserve-host --label "sites"
+# (legacy equivalent: skywire cli skynet port add 80 --proxy-addr 127.0.0.1:80 --preserve-host)
+```
+
+`--preserve-host` keeps the **original** `Host` header instead of rewriting it
+to the `--to` target, so Caddy sees the vhost the visitor asked for. Combined
+with the resolver's subdomain rewrite — a request to
+`name.<base32-pk>.dmsg` arrives at Caddy as `Host: name` — **one visor can
+serve many named sites** over the mesh, exactly like a clearnet reverse proxy.
+
+> **Worked example — `node.skycoin.com`.** A single visor serves its whole
+> stack this way: Caddy vhost-routes `/api` to a local skycoin node (`:6420`),
+> the block explorer to `:8081`, and the blog to a proxied `skycoin.github.io`,
+> all behind one `serve add 80 … --preserve-host`. The wallet reaches its
+> node at `node.skycoin.com.<base32-pk>.dmsg` through this same forward.
+
+Use a reverse proxy when you need TLS termination behind the mesh, many
+Host-routed apps on one PK, per-path backends, or auth/rewrite middleware;
+use the built-in proxy when you just have one HTTP app.
+
 ## Access Control
 
 Served ports support a PK whitelist. When set, only visors with listed
@@ -95,7 +145,13 @@ Port 80 has three tiers of access control:
 - `/node-info`, `/visor.log`, `/debug/pprof` — survey whitelist
 - Website (everything else) — the served port's `--whitelist`
 
-## Making HTTP Requests Over Skynet / DMSG
+## Reaching a Served App
+
+Once a port is served, any peer visor can reach it. There's nothing
+app-specific about this — it's the same for a website, an API, a database,
+or SSH.
+
+### From the CLI
 
 `skywire cli got` is a unified HTTP client that speaks `http://`,
 `https://`, `skynet://` and `dmsg://`. The skywire schemes are
@@ -108,6 +164,36 @@ skywire cli got dmsg://<public-key>:<port>/path
 skywire cli got req POST skynet://<public-key>/endpoint -D '{"key":"val"}'
 skywire cli got dl skynet://<public-key>/large-file -o output.file
 ```
+
+### From a browser (or any app) — the resolving proxy
+
+Run the resolving proxy and point the browser (or any SOCKS-aware app) at
+it; then use a **readable mesh hostname** and browse `.dmsg` / `.skynet`
+domains directly — no IP, no DNS, no CA:
+
+```bash
+# A resolving SOCKS5 proxy that dials <pk>.dmsg / <pk>.skynet over the mesh.
+skywire dmsg web
+
+# Point the browser at it, e.g. socks5h://127.0.0.1:<port>  (socks5h so the
+# PROXY resolves the hostname — the browser must not try to). Then visit:
+#   http://<base32-pk>.dmsg/            (a bare visor)
+#   http://<name>.<base32-pk>.dmsg/     (a vhost behind a reverse proxy)
+```
+
+The `<base32-pk>` label is the DNS-safe form of a visor's public key:
+
+```bash
+skywire cli visor pk dnslabel <hex-pk>
+# → aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc
+# so node.skycoin.com is reachable at
+#   node.skycoin.com.aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc.dmsg
+```
+
+The wasm-visor's built-in iframe browser does this in-tab (see
+[the skynet browser](skynet-browser.md)); a native desktop browser uses the
+standalone resolving proxy above. For HTTPS over the mesh, see
+[Resolver TLS mode](skynet-tls.md).
 
 ## Persistence
 
