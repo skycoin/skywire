@@ -112,7 +112,16 @@ func walletDmsgFetchShim() string {
 		// resolving proxy (fetchDmsg). A clearnet http(s):// node (not .dmsg) goes
 		// through skysocks-client-lite (fetchClearnet) via the SAME upstream-proxy
 		// exit the browser uses (skywire-upstream-proxy) — IP-anonymous.
-		`var node=ls("skywire-coin-node")||"` + coinNodeDefault() + `";` +
+		//
+		// The node is whatever skycoin-web ADDRESSED the request to: its Settings →
+		// Nodes page (customNodeUrls) makes the fetch URL absolute, so that page is
+		// the authoritative source for node selection and the shim HONORS it. A
+		// relative/same-origin /api path means the coin is on its default; then fall
+		// back to the legacy wallet-config-panel key (skywire-coin-node), else the
+		// deployment mesh node. (Enter a mesh node in Settings → Nodes as
+		// http://<host>.dmsg to route it over dmsg.)
+		`var _u;try{_u=new URL(url,location.href);}catch(e){_u=null;}` +
+		`var node=(_u&&_u.host&&_u.host!==location.host)?(_u.protocol+"//"+_u.host):(ls("skywire-coin-node")||"` + coinNodeDefault() + `");` +
 		`var ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
 		`if(/^https?:\/\//i.test(node)&&!/\.dmsg\b/i.test(node)){` +
 		`if(!v.fetchClearnet)return Promise.resolve(jr(503,{error:"skysocks clearnet gateway not available"}));` +
