@@ -60,6 +60,10 @@ type ManagedTransportConfig struct {
 	// QueueDeletion, when set, defers TPD deregistration to the manager's batch
 	// deletion loop instead of making an HTTP call per transport close.
 	QueueDeletion func(id uuid.UUID)
+	// IsInitiator records whether this visor originated the transport (dialed
+	// out) rather than accepting an inbound dial. Used only for reporting
+	// (outgoing vs incoming counts); the transport itself is bidirectional.
+	IsInitiator bool
 }
 
 // ManagedTransport manages a direct line of communication between two visor nodes.
@@ -68,11 +72,12 @@ type ManagedTransportConfig struct {
 type ManagedTransport struct {
 	log *logging.Logger
 
-	rPK        cipher.PubKey
-	Entry      Entry
-	LogEntry   *LogEntry
-	logMx      sync.Mutex
-	logUpdates uint32
+	rPK         cipher.PubKey
+	Entry       Entry
+	LogEntry    *LogEntry
+	logMx       sync.Mutex
+	logUpdates  uint32
+	isInitiator bool // we dialed out (outgoing) vs accepted an inbound dial (incoming)
 
 	dc DiscoveryClient
 	ls LogStore
@@ -180,9 +185,14 @@ func NewManagedTransport(conf ManagedTransportConfig) *ManagedTransport {
 		done:          make(chan struct{}),
 		timeout:       conf.InactiveTimeout,
 		queueDeletion: conf.QueueDeletion,
+		isInitiator:   conf.IsInitiator,
 	}
 	return mt
 }
+
+// IsInitiator reports whether this visor originated the transport (dialed
+// out, "outgoing") rather than accepting an inbound dial ("incoming").
+func (mt *ManagedTransport) IsInitiator() bool { return mt.isInitiator }
 
 // GetLatency returns the average inter-visor ping latency in milliseconds.
 // For backwards compatibility, returns the average latency.

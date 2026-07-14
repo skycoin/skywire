@@ -892,6 +892,7 @@ func (tm *Manager) acceptTransport(ctx context.Context, lis network.Listener) er
 			ebc:            tm.ebc,
 			mlog:           tm.factory.MLogger,
 			QueueDeletion:  tm.queueDeletion,
+			IsInitiator:    false, // remote dialed us — incoming transport
 		})
 		tm.cascadeHandlerMu.RLock()
 		mTp.cascadeHandler = tm.cascadeHandler
@@ -1150,6 +1151,7 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 		TransportLabel: label,
 		mlog:           tm.factory.MLogger,
 		QueueDeletion:  tm.queueDeletion,
+		IsInitiator:    true, // we are dialing out — outgoing transport
 	})
 	tm.cascadeHandlerMu.RLock()
 	mTp.cascadeHandler = tm.cascadeHandler

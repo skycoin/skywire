@@ -75,6 +75,11 @@ type TransportSummary struct {
 	// ping/pong (or RSN-fallback for old peers). Zero means no
 	// measurement yet. Populated from tp.GetLatency().
 	LatencyMS float64 `json:"latency_ms,omitempty"`
+	// Initiator is true when this visor dialed out to establish the
+	// transport (outgoing); false when it accepted an inbound dial
+	// (incoming). The transport is bidirectional — this records only
+	// who originated it, for in/out reporting.
+	Initiator bool `json:"initiator"`
 }
 type TransportLogEntry struct {
 	TpID      uuid.UUID `json:"tp_id"`
@@ -92,6 +97,7 @@ func newTransportSummary(tm *transport.Manager, tp *transport.ManagedTransport, 
 		IsSetup:   isSetup,
 		Label:     tp.Entry.Label,
 		LatencyMS: tp.GetLatency(),
+		Initiator: tp.IsInitiator(),
 	}
 	if includeLogs {
 		summary.Log = tp.LogEntry
