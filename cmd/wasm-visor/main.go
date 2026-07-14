@@ -1021,11 +1021,12 @@ func (tpController) AddTransport(remote cipher.PubKey, tpType string, _ time.Dur
 		return nil, fmt.Errorf("save transport: %w", err)
 	}
 	return &wasmhv.TransportSummary{
-		ID:     tp.Entry.ID,
-		Local:  selfPK,
-		Remote: remote,
-		Type:   tpType,
-		Label:  string(transport.LabelUser),
+		ID:        tp.Entry.ID,
+		Local:     selfPK,
+		Remote:    remote,
+		Type:      tpType,
+		Label:     string(transport.LabelUser),
+		Initiator: tp.IsInitiator(),
 	}, nil
 }
 
@@ -1044,11 +1045,12 @@ func (visorSelf) SelfTransports() []*wasmhv.TransportSummary {
 	}
 	tpM.WalkTransports(func(mt *transport.ManagedTransport) bool {
 		out = append(out, &wasmhv.TransportSummary{
-			ID:     mt.Entry.ID,
-			Local:  selfPK,
-			Remote: mt.Remote(),
-			Type:   string(mt.Type()),
-			Label:  string(mt.Entry.Label),
+			ID:        mt.Entry.ID,
+			Local:     selfPK,
+			Remote:    mt.Remote(),
+			Type:      string(mt.Type()),
+			Label:     string(mt.Entry.Label),
+			Initiator: mt.IsInitiator(),
 		})
 		return true
 	})
