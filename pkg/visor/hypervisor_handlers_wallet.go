@@ -105,23 +105,33 @@ const walletNodeShim = `<script>(function(){` +
 	`var p=pathOf(url);` +
 	`function searchOf(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
 	`function hostOf(u){try{var x=new URL(u,location.href);return (x.host&&x.host!==location.host)?(x.protocol+"//"+x.host):"";}catch(e){return "";}}` +
-	`var mn=/^\/(wallet\/)?api\/v[12]\//.exec(p);` +
-	`var mb=/^\/(wallet\/)?v1\/btc\//.exec(p);` +
+	// BTC = any path containing /v1/btc/ — the raw /v1/btc/health probe AND
+	// skycoin-web's apiService form /api/v1/btc/{balance,history,send} (which
+	// also matches the node regex, so BTC is classified FIRST and wins). No
+	// skycoin node endpoint contains /v1/btc/.
+	`var mb=/\/v1\/btc\//.test(p);` +
+	`var mn=!mb&&/^\/(wallet\/)?api\/v[12]\//.test(p);` +
 	`if(!mn&&!mb){return rf(input,init);}` +
-	`var pre=(mn&&mn[1])||(mb&&mb[1]);` +
-	// Always route to this handler same-origin. skycoin-web addresses a custom
-	// node (Settings → Nodes / customNodeUrls) with an ABSOLUTE url — strip the
-	// host, keep the /api path + query, and re-point at /wallet/api here; the
-	// chosen node travels in X-Skywire-Coin-Node so walletNodeProxy dials it.
-	`var target=pre?url:(location.origin+"/wallet"+p+searchOf(url));` +
 	`init=init||{};` +
 	`var h=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
-	// Node = whatever skycoin-web addressed (its Nodes GUI is authoritative);
-	// a same-origin/relative /api path falls back to the legacy config-panel key,
-	// else walletNodeProxy uses the deployment mesh default.
-	`if(mn){var nn=hostOf(url)||ls("skywire-coin-node");if(nn){h.set("X-Skywire-Coin-Node",nn);}}` +
-	`else{var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
-	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}}` +
+	`var target;` +
+	`if(mb){` +
+	// Normalize any /v1/btc/ path (bare or /api/v1/btc/) to /wallet/v1/btc/… so
+	// the server routes it to the in-process electrum gateway, not the node.
+	`var tail=p.slice(p.indexOf("/v1/btc/"));target=location.origin+"/wallet"+tail+searchOf(url);` +
+	`var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
+	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}` +
+	`}else{` +
+	// Node API: skycoin-web addresses a custom node (Settings → Nodes /
+	// customNodeUrls) with an ABSOLUTE url — strip the host, keep the /api path +
+	// query, and re-point at /wallet/api here; the chosen node travels in
+	// X-Skywire-Coin-Node so walletNodeProxy dials it (its Nodes GUI is
+	// authoritative; a same-origin/relative /api path falls back to the legacy
+	// config-panel key, else the deployment mesh default).
+	`var mnx=/^\/(wallet\/)?api\/v[12]\//.exec(p);var pre=mnx&&mnx[1];` +
+	`target=pre?url:(location.origin+"/wallet"+p+searchOf(url));` +
+	`var nn=hostOf(url)||ls("skywire-coin-node");if(nn){h.set("X-Skywire-Coin-Node",nn);}` +
+	`}` +
 	`init.headers=h;return rf(target,init);` +
 	`};})();</script>`
 

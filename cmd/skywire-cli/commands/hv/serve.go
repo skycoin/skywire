@@ -75,7 +75,13 @@ func walletDmsgFetchShim() string {
 		`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
 		`function q(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
 		`function isCoin(u){return /^\/api\/v[12]\//.test(p(u));}` +
-		`function isBtc(u){return /^\/(wallet\/)?v1\/btc\//.test(p(u));}` +
+		// BTC is any path containing /v1/btc/ — this catches BOTH the raw
+		// /v1/btc/health (node-health probe) AND skycoin-web's apiService form
+		// /api/v1/btc/{balance,history,send} (which also matches isCoin, but the
+		// BTC branch is checked first). No skycoin node endpoint contains
+		// /v1/btc/, and the gateway normalizes on that substring, so passing the
+		// full path through to btcFetch works either way.
+		`function isBtc(u){return /\/v1\/btc\//.test(p(u));}` +
 		`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
 		// The wallet POSTs balance/transactions as x-www-form-urlencoded; forward the
 		// request Content-Type so fetchDmsg/fetchClearnet don't mislabel the body as
