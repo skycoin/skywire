@@ -181,56 +181,79 @@ type verboseTxn struct {
 	} `json:"txn"`
 }
 
-// DepositConfirmed reports whether marketWallet received a confirmed SKY deposit
-// of amountSKY (exact, within a droplet) that (a) has at least the required
-// confirmations, (b) was sent FROM senderAddr — the seller's registered SKY
-// address — and (c) was made within [notBefore, notAfter], the listing's deposit
-// window. Matching by exact amount would be ambiguous on a shared escrow wallet
-// (two sellers can list the same round amount); the sender address disambiguates,
-// and the time window blocks replay of an old, unrelated transaction. Returns the
-// funding transaction id on success.
+// matchDeposit finds a confirmed transaction that paid exactly amount to
+// dstWallet, was sent FROM senderAddr, and was made within [notBefore, notAfter],
+// returning that transaction's confirmation depth (its Height) and id — or (0, "")
+// if none matches. Matching by exact amount alone would be ambiguous on a shared
+// wallet (two parties can send the same round amount); the sender address
+// disambiguates, and the time window blocks replay of an old transaction. This is
+// the shared core of both sell-coin deposit verification and fibercoin payment
+// verification, so both can rely on a FIXED (non-unique) amount.
 //
 // If senderAddr is empty the sender check is skipped (amount + window only); the
 // jobs always supply it, so in practice the sender is always enforced.
-func (s *SkyNode) DepositConfirmed(marketWallet, senderAddr string, amountSKY float64, notBefore, notAfter time.Time) (bool, string, error) {
+func (s *SkyNode) matchDeposit(dstWallet, senderAddr string, amount float64, notBefore, notAfter time.Time) (int, string, error) {
 	q := url.Values{}
-	q.Set("addrs", marketWallet)
+	q.Set("addrs", dstWallet)
 	q.Set("confirmed", "1")
 	q.Set("verbose", "1")
 
 	var txns []verboseTxn
 	if err := s.getJSON("/api/v1/transactions?"+q.Encode(), &txns); err != nil {
-		return false, "", err
+		return 0, "", err
 	}
 	nb, na := notBefore.Unix(), notAfter.Unix()
 	for _, t := range txns {
-		if !t.Status.Confirmed || int(t.Status.Height) < s.confs { //nolint
+		if !t.Status.Confirmed {
 			continue
 		}
-		// Deposit must fall inside the listing's window: not before it was created
-		// (blocks reusing an old transaction) and not after it expired (+grace,
-		// applied by the caller for confirmation lag).
+		// Must fall inside the window: not before it opened (blocks reusing an old
+		// transaction) and not after it closed (+grace, applied by the caller).
 		if t.Txn.Timestamp < nb || t.Txn.Timestamp > na {
 			continue
 		}
-		// Deposit must originate from the seller's registered SKY address.
+		// Must originate from the expected sender's registered address.
 		if senderAddr != "" && !hasOwner(t.Txn.Inputs, senderAddr) {
 			continue
 		}
 		for _, o := range t.Txn.Outputs {
-			if o.Dst != marketWallet {
+			if o.Dst != dstWallet {
 				continue
 			}
 			coins, err := strconv.ParseFloat(o.Coins, 64)
 			if err != nil {
 				continue
 			}
-			if math.Abs(coins-amountSKY) <= skyEpsilon {
-				return true, t.Txn.TxID, nil
+			if math.Abs(coins-amount) <= skyEpsilon {
+				return int(t.Status.Height), t.Txn.TxID, nil //nolint
 			}
 		}
 	}
+	return 0, "", nil
+}
+
+// DepositConfirmed reports whether marketWallet received a deposit of amountSKY
+// (exact, within a droplet) from senderAddr within the window that has reached at
+// least the node's required confirmation depth. Used by the Listing Checker to
+// promote a seller's sell-coin deposit. Returns the funding transaction id.
+func (s *SkyNode) DepositConfirmed(marketWallet, senderAddr string, amountSKY float64, notBefore, notAfter time.Time) (bool, string, error) {
+	confs, txid, err := s.matchDeposit(marketWallet, senderAddr, amountSKY, notBefore, notAfter)
+	if err != nil {
+		return false, "", err
+	}
+	if confs >= s.confs {
+		return true, txid, nil
+	}
 	return false, "", nil
+}
+
+// DepositConfirmations returns the live confirmation depth (0 if not yet observed)
+// of a payment of exactly amount sent to dstWallet from senderAddr within the
+// window, plus its transaction id. Used to verify a buyer's FIBERCOIN payment to a
+// seller: the sender + window let the amount be fixed (no unique non-round amount),
+// and the caller applies the market's confirmation threshold.
+func (s *SkyNode) DepositConfirmations(dstWallet, senderAddr string, amount float64, notBefore, notAfter time.Time) (int, string, error) {
+	return s.matchDeposit(dstWallet, senderAddr, amount, notBefore, notAfter)
 }
 
 // hasOwner reports whether any input was funded by addr.

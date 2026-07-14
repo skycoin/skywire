@@ -65,6 +65,62 @@ func TestDepositConfirmed(t *testing.T) {
 	}
 }
 
+// fibStore routes one fibercoin symbol to a node URL and disables everything
+// else, satisfying chain.Store for the fibercoin-payment routing test.
+type fibStore struct {
+	symbol, nodeURL string
+}
+
+func (f fibStore) ExplorerConfig(string) (string, string, string, error) { return "", "", "", nil }
+func (f fibStore) SellCoinConfig(sym string) (string, string, string, int, bool, error) {
+	if sym == f.symbol {
+		return f.nodeURL, "", "", 1, true, nil
+	}
+	return "", "", "", 0, false, nil
+}
+
+// TestFiberPaymentRouting: a payment in an enabled sell coin is verified on that
+// coin's node by sender + window + FIXED amount, returning the live confirmation
+// count — no unique non-round amount involved.
+func TestFiberPaymentRouting(t *testing.T) {
+	const seller = "2seller...recv"
+	const buyer = "2buyer...addr"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		// Buyer paid the seller EXACTLY 100 FIB (a fixed, round amount) at time 1000.
+		resp := []map[string]any{{
+			"status": map[string]any{"confirmed": true, "height": 4, "block_seq": 200},
+			"txn": map[string]any{
+				"txid":      "pay-tx",
+				"timestamp": 1000,
+				"inputs":    []map[string]any{{"owner": buyer}},
+				"outputs":   []map[string]any{{"dst": seller, "coins": "100.000000"}},
+			},
+		}}
+		_ = json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	}))
+	defer srv.Close()
+
+	c := New(fibStore{symbol: "FIB", nodeURL: srv.URL})
+	c.sky.hc = srv.Client()
+	nb, na := time.Unix(500, 0), time.Unix(2000, 0)
+
+	confs, txid, err := c.PaymentConfirmations("FIB", seller, buyer, 100.0, nb, na)
+	if err != nil {
+		t.Fatalf("PaymentConfirmations(FIB): %v", err)
+	}
+	if confs != 4 || txid != "pay-tx" {
+		t.Fatalf("fiber payment = (%d,%q), want (4,pay-tx)", confs, txid)
+	}
+	// Wrong buyer (sender) → no match, even though the fixed amount is identical.
+	if confs, _, _ := c.PaymentConfirmations("FIB", seller, "2other...buyer", 100.0, nb, na); confs != 0 { //nolint
+		t.Fatalf("expected 0 confs for a different sender, got %d", confs)
+	}
+	// An unconfigured currency falls through to the (empty) explorer → 0.
+	if confs, _, _ := c.PaymentConfirmations("BTC", seller, buyer, 100.0, nb, na); confs != 0 { //nolint
+		t.Fatalf("expected 0 confs for a non-fiber unconfigured currency, got %d", confs)
+	}
+}
+
 // TestDepositBelowConfirmations rejects a deposit that has too few confirmations.
 func TestDepositBelowConfirmations(t *testing.T) {
 	const wallet = "2sky...market"
