@@ -27,22 +27,26 @@ const WalletConfigHTML = `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 :root{color-scheme:dark}
-body{margin:0;background:#15131c;color:#e8e8f0;font:12px/1.45 -apple-system,system-ui,monospace}
-.wrap{padding:.7em .8em;display:flex;flex-direction:column;gap:.6em}
-h1{font-size:12px;font-weight:600;margin:0;opacity:.75;letter-spacing:.3px;text-transform:uppercase}
-.modes{display:flex;gap:.4em}
-.modes button{flex:1;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:4px;padding:.5em;cursor:pointer;font:inherit}
+*{box-sizing:border-box}
+body{margin:0;background:#15131c;color:#e8e8f0;font:13.5px/1.55 -apple-system,system-ui,sans-serif}
+.wrap{max-width:760px;margin:0 auto;padding:1.3em 1.5em;display:flex;flex-direction:column;gap:1.05em}
+h1{font-size:13px;font-weight:600;margin:0;opacity:.75;letter-spacing:.3px;text-transform:uppercase}
+.modes{display:flex;gap:.6em}
+.modes button{flex:1;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:6px;padding:.75em;cursor:pointer;font:inherit}
 .modes button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.18)}
-.row{display:flex;gap:.4em;align-items:center}
-.row label{opacity:.72;min-width:4.5em;text-align:right;white-space:nowrap}
-.row input{flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.4em .5em;font:inherit}
+.row{display:flex;gap:.65em;align-items:center}
+.row label{opacity:.72;min-width:5.5em;text-align:right;white-space:nowrap}
+.row input{flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:5px;padding:.6em .75em;font:inherit}
 .row input:focus{outline:none;border-color:#6f4bd8}
-.hint{opacity:.72;line-height:1.4}.hint b{color:#e8e8f0}.mono{font-family:monospace;opacity:.85}
-button.add{align-self:flex-start;background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;cursor:pointer;font:inherit;padding:.35em .6em}
-button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inherit;padding:.2em .5em}button.rm:hover{color:#f7768e}
-.apply{align-self:flex-end;background:#6f4bd8;color:#fff;border:0;border-radius:4px;padding:.5em 1.2em;cursor:pointer;font:inherit}
+.hint{opacity:.72;line-height:1.5}.hint b{color:#e8e8f0}.mono{font-family:monospace;opacity:.85}
+button.add{align-self:flex-start;background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:5px;cursor:pointer;font:inherit;padding:.55em .9em}
+button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inherit;padding:.35em .6em}button.rm:hover{color:#f7768e}
+.apply{align-self:flex-end;background:#6f4bd8;color:#fff;border:0;border-radius:6px;padding:.7em 1.6em;cursor:pointer;font:inherit;font-weight:600}
 .err{color:#f7768e;display:none}
-.sec{border-top:1px solid #2a2342;padding-top:.6em;display:flex;flex-direction:column;gap:.5em}
+.sec{border-top:1px solid #2a2342;padding-top:1em;display:flex;flex-direction:column;gap:.7em}
+.row select{flex:1;min-width:0;background:#0d0b13;color:#e8e8f0;border:1px solid #3a3352;border-radius:5px;padding:.55em;font:inherit}
+.plog{display:none;margin:.2em 0 0;height:130px;overflow:auto;background:#0e0c14;color:#a9b1d6;border:1px solid #2a2342;border-radius:5px;padding:.55em;font:11px/1.5 monospace;white-space:pre-wrap;word-break:break-all}
+.plog.on{display:block}
 </style></head><body><div class="wrap">
 <div class="modes">
 <button id="mb" title="Wallets stored in this browser; pick the coin node it queries.">Browser wallets</button>
@@ -63,8 +67,10 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <option value="ssl://bitcoin.lu.ke:50002"></option>
 <option value="ssl://electrum.jochen-hoenicke.de:50006"></option>
 </datalist>
-<div class="hint"><b>Skysocks exit</b> <span id="proxyreq"></span>: the visor PK whose skysocks-server relays the BTC electrum connection to the clearnet. <span id="proxynote"></span></div>
-<div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex)"></div>
+<div class="hint"><b>Skysocks exit</b> <span id="proxyreq"></span>: the visor PK whose skysocks-server relays the clearnet connection — the BTC electrum egress AND the iframe browser share this exit. <span id="proxynote"></span></div>
+<div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex)"><button class="add" id="psrv" title="list skysocks-server PKs from service discovery">servers ▾</button><button class="add" id="prnd" title="pick a random skysocks server from service discovery">🎲 random</button></div>
+<div class="row" id="pselrow" style="display:none"><label></label><select id="psel"></select></div>
+<pre id="plog" class="plog" title="live: resolving proxy (dmsg) + skysocks-lite (clearnet)"></pre>
 </div>
 </div>
 <div id="service" style="display:none">
@@ -97,16 +103,37 @@ if(nodes.length>1){var rm=document.createElement("button");rm.className="rm";rm.
 box.appendChild(r);});}
 function setMode(m){mode=m;$("mb").classList.toggle("on",m==="browser");$("ms").classList.toggle("on",m==="service");
 $("browser").style.display=m==="browser"?"":"none";$("service").style.display=m==="service"?"":"none";}
-$("btc").value=ls(K.btc,"");$("proxy").value=ls(K.proxy,"");$("svc").value=ls(K.svc,"");
+$("btc").value=ls(K.btc,"");$("proxy").value=ls(K.proxy,"")||ls("skywire-upstream-proxy","");$("svc").value=ls(K.svc,"");
 renderNodes();setMode(mode);
 $("mb").onclick=function(){setMode("browser");};$("ms").onclick=function(){setMode("service");};
 $("addnode").onclick=function(){nodes.push("");renderNodes();};
+// Skysocks exit: SD-populated dropdown + live proxy/resolving-proxy log — the
+// same machinery the iframe browser (browse.js) exposes, applied to the wallet.
+function visor(){try{return parent&&parent.skywireVisor;}catch(e){return null;}}
+var plogBuf=[];
+function plog(s){var t="";try{t=new Date().toTimeString().slice(0,8);}catch(e){}plogBuf.push(t+"  "+s);if(plogBuf.length>300)plogBuf.shift();var el=$("plog");if(el){el.classList.add("on");el.textContent=plogBuf.join("\n");el.scrollTop=el.scrollHeight;}}
+try{var LG=parent&&parent.skywireLog;if(LG&&LG.subscribe){LG.subscribe(function(lvl,args){var m=[].map.call(args||[],String).join(" ");if(/\[wallet\]|skysocks|resolve-proxy|electrum|dmsg:\/\//i.test(m))plog(m.slice(0,220));});plog("● attached to visor log");}}catch(e){}
+function fetchProxies(cb){var v=visor();if(!v||!v.fetchDmsg){plog("● no in-tab visor here — open the wallet in the browser-tab (wasm) visor to list servers");return;}
+plog("● fetching skysocks servers from service discovery…");
+Promise.resolve(v.fetchDmsg("sd.dmsg","GET","/api/services?type=proxy",null)).then(function(r){
+var list=[];try{list=JSON.parse((r&&typeof r.body==="string")?r.body:new TextDecoder().decode(r.body))||[];}catch(e){}
+cb(list.filter(function(s){return /^[0-9a-f]{66}$/i.test(String(s.address||"").split(":")[0]);}));
+}).catch(function(e){plog("● SD fetch failed: "+String((e&&e.message)||e));});}
+$("psrv").onclick=function(){fetchProxies(function(list){
+var sel=$("psel");sel.innerHTML='<option value="">— '+list.length+' skysocks servers — pick one —</option>';
+list.forEach(function(s){var pk=String(s.address).split(":")[0];var geo=(s.geo&&s.geo.country)?" · "+s.geo.country:"";var o=document.createElement("option");o.value=pk;o.textContent=pk.slice(0,8)+"…"+geo+(s.version?" · "+s.version:"");sel.appendChild(o);});
+$("pselrow").style.display="";plog("● "+list.length+" skysocks server(s) from SD — pick one to set the exit");});};
+$("prnd").onclick=function(){fetchProxies(function(list){if(!list.length){plog("● no skysocks servers found");return;}
+var s=list[Math.floor(Math.random()*list.length)];var pk=String(s.address).split(":")[0];
+$("proxy").value=pk;plog("● 🎲 random exit → "+pk.slice(0,8)+"…"+((s.geo&&s.geo.country)?" · "+s.geo.country:"")+" (Apply to save)");});};
+$("psel").onchange=function(){if(this.value){$("proxy").value=this.value;plog("● exit set → "+this.value.slice(0,8)+"… (Apply to save)");}};
 $("apply").onclick=function(){var e=$("err");e.style.display="none";e.textContent="";
 if(mode==="service"){var s=($("svc").value||"").trim();if(!s){e.textContent="Enter the wallet service address.";e.style.display="";return;}
 set(K.mode,"service");set(K.svc,s);set(K.prim,s);}
 else{var clean=nodes.map(function(n){return(n||"").trim();}).filter(function(n,i){return n||i===0;});if(!clean.length)clean=[""];nodes=clean;
 set(K.mode,"browser");set(K.nodes,JSON.stringify(clean));set(K.prim,clean[0]||"");
-set(K.btc,($("btc").value||"").trim());set(K.proxy,($("proxy").value||"").trim());}
+set(K.btc,($("btc").value||"").trim());
+var pxy=($("proxy").value||"").trim();set(K.proxy,pxy);set("skywire-upstream-proxy",pxy);}
 try{parent.postMessage({type:"skywire-wallet-config"},"*");}catch(_){}
 };
 })();</script></body></html>`

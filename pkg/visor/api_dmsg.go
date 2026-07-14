@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -760,9 +761,16 @@ func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set headers
-	for k, v := range req.Header {
-		httpReq.Header.Set(k, v)
+	// Set headers. A "Host" header is special: Go sends req.Host (not a header)
+	// as the on-wire Host, and the transport dials req.URL.Host (the dmsg pk:port),
+	// so put the caller's vhost on req.Host — it reaches the backend as the Host
+	// header (for Caddy/nginx vhost routing) without affecting which pk we dial.
+	for k, val := range req.Header {
+		if strings.EqualFold(k, "Host") {
+			httpReq.Host = val
+			continue
+		}
+		httpReq.Header.Set(k, val)
 	}
 
 	// Perform request
@@ -802,8 +810,10 @@ type dmsgHTTPTransport struct {
 }
 
 func (t *dmsgHTTPTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Dial from the URL host (the dmsg pk:port), NOT req.Host — a caller may set
+	// req.Host to a vhost name (Caddy/nginx routing) that isn't a dmsg address.
 	var hostAddr dmsg.Addr
-	if err := hostAddr.Set(req.Host); err != nil {
+	if err := hostAddr.Set(req.URL.Host); err != nil {
 		return nil, fmt.Errorf("invalid host address: %w", err)
 	}
 	if hostAddr.Port == 0 {

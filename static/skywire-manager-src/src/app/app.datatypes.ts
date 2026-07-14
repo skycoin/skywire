@@ -89,6 +89,11 @@ export interface Transport {
   // the visor's TransportSummary.latency_ms field. 0/undefined =
   // no measurement yet (e.g., dmsg or freshly added transport).
   latencyMs?: number;
+  // Direction from this visor's perspective: true when this visor dialed
+  // out to establish the transport (outgoing), false when it accepted an
+  // inbound dial (incoming). From TransportSummary.initiator; undefined on
+  // legacy visors that don't report it (treated as incoming).
+  initiator?: boolean;
 
   // Calculated internally
   isPersistent?: boolean;
