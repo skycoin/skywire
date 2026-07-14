@@ -47,6 +47,24 @@
   width: 10%;
 }
 
+// Transport direction indicators in the Transports column: incoming
+// (accepted an inbound dial) vs outgoing (this visor dialed out).
+// Bright tones for legibility on the app's DARK row background
+// (#1f2533); #4caf50 matches the existing status-green used elsewhere
+// in this stylesheet, and #42a5f5 is a light blue with comparable
+// contrast (both ~6:1 on the dark background).
+.tp-in {
+  color: #4caf50; // green — incoming
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+.tp-out {
+  color: #42a5f5; // light blue — outgoing
+  font-weight: 500;
+  margin-left: 2px;
+}
+
 .key-column {
   width: 25%;
 }

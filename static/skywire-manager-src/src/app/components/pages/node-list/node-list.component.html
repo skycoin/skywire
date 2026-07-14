@@ -357,9 +357,18 @@
                   <td>
                     @if (node.transports && node.transports.length > 0) {
                       @for (entry of getTransportCounts(node); track entry.type) {
-                        <div style="font-size: 0.85em;">{{ entry.type }}: {{ entry.count }}</div>
+                        <div style="font-size: 0.85em;">{{ entry.type }}: {{ entry.count }}
+                          <span class="tp-in" title="incoming">{{ entry.incoming }}&#8595;</span>
+                          <span class="tp-out" title="outgoing">{{ entry.outgoing }}&#8593;</span>
+                        </div>
                       }
-                      <div style="font-size: 0.85em;">Total: {{ node.transports.length }}</div>
+                      @let totals = getTransportTotals(node);
+                      <div style="font-size: 0.85em;">Total: {{ node.transports.length }}
+                        @if (totals.incoming + totals.outgoing > 0) {
+                          <span class="tp-in" title="incoming">{{ totals.incoming }}&#8595;</span>
+                          <span class="tp-out" title="outgoing">{{ totals.outgoing }}&#8593;</span>
+                        }
+                      </div>
                     }
                     @if (node.transports && node.transports.length === 0) {
                       <span style="font-size: 0.85em;">Total: 0</span>
@@ -679,9 +688,18 @@
                         <td>
                           @if (node.transports && node.transports.length > 0) {
                             @for (entry of getTransportCounts(node); track entry.type) {
-                              <div style="font-size: 0.85em;">{{ entry.type }}: {{ entry.count }}</div>
+                              <div style="font-size: 0.85em;">{{ entry.type }}: {{ entry.count }}
+                                <span class="tp-in" title="incoming">{{ entry.incoming }}&#8595;</span>
+                                <span class="tp-out" title="outgoing">{{ entry.outgoing }}&#8593;</span>
+                              </div>
                             }
-                            <div style="font-size: 0.85em;">Total: {{ node.transports.length }}</div>
+                            @let totals = getTransportTotals(node);
+                            <div style="font-size: 0.85em;">Total: {{ node.transports.length }}
+                              @if (totals.incoming + totals.outgoing > 0) {
+                                <span class="tp-in" title="incoming">{{ totals.incoming }}&#8595;</span>
+                                <span class="tp-out" title="outgoing">{{ totals.outgoing }}&#8593;</span>
+                              }
+                            </div>
                           }
                           @if (node.transports && node.transports.length === 0) {
                             <span style="font-size: 0.85em;">Total: 0</span>
