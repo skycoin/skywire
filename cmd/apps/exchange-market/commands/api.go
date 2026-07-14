@@ -29,6 +29,9 @@ var editableConfigKeys = map[string]bool{
 	"commission_rate_percent": true,
 	"commission_min_sky":      true,
 	"commission_max_sky":      true,
+	"confirmations_required":  true,
+	"min_trade_sky":           true,
+	"max_trade_sky":           true,
 	"freeze_violations_limit": true,
 	"ban_duration_days":       true,
 	"listing_expiry_minutes":  true,
@@ -49,6 +52,34 @@ func validateConfigKey(key, value string) error {
 	}
 	if field == "provider" && strings.TrimSpace(value) != "" && !chain.SupportsProvider(coin, value) {
 		return fmt.Errorf("explorer provider %q does not support %s", value, coin)
+	}
+	return nil
+}
+
+// validateExplorerEnable rejects enabling a coin (setting a non-empty provider)
+// when no explorer URL is available — neither a built-in default, a URL in this
+// same update, nor one already stored. Such a coin could never verify a payment,
+// so enabling it would be a silent misconfiguration.
+func validateExplorerEnable(updates map[string]string, database *db.Database) error {
+	for k, v := range updates {
+		coin, field, ok := parseExplorerKey(k)
+		if !ok || field != "provider" || strings.TrimSpace(v) == "" {
+			continue
+		}
+		if chain.DefaultExplorerURL(coin) != "" {
+			continue // has a built-in endpoint
+		}
+		if u, ok := updates["explorer_"+strings.ToLower(coin)+"_url"]; ok && strings.TrimSpace(u) != "" {
+			continue // a URL is being set in this same request
+		}
+		_, storedURL, _, err := database.ExplorerConfig(coin)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(storedURL) != "" {
+			continue // a URL was configured earlier
+		}
+		return fmt.Errorf("enable %s: set an explorer URL first (it has no built-in default)", coin)
 	}
 	return nil
 }
@@ -104,6 +135,10 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 					return
 				}
 			}
+			if err := validateExplorerEnable(updates, database); err != nil {
+				mWriteError(w, http.StatusBadRequest, err.Error())
+				return
+			}
 			for k, v := range updates {
 				if err := database.SetConfig(k, v); err != nil {
 					mWriteError(w, http.StatusInternalServerError, err.Error())
@@ -149,12 +184,13 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 			return
 		}
 		type coinCfg struct {
-			Code      string   `json:"code"`
-			Providers []string `json:"providers"`
-			Provider  string   `json:"provider"`
-			URL       string   `json:"url"`
-			Key       string   `json:"key"`
-			Available bool     `json:"available"`
+			Code       string   `json:"code"`
+			Providers  []string `json:"providers"`
+			Provider   string   `json:"provider"`
+			URL        string   `json:"url"`
+			Key        string   `json:"key"`
+			DefaultURL string   `json:"default_url"` // built-in explorer endpoint, if any
+			Available  bool     `json:"available"`   // enabled (a provider is configured)
 		}
 		out := make([]coinCfg, 0, len(protocol.PaymentCurrencies))
 		for _, c := range protocol.PaymentCurrencies {
@@ -168,12 +204,13 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 				providers = []string{}
 			}
 			out = append(out, coinCfg{
-				Code:      c,
-				Providers: providers,
-				Provider:  provider,
-				URL:       url,
-				Key:       key,
-				Available: strings.TrimSpace(provider) != "",
+				Code:       c,
+				Providers:  providers,
+				Provider:   provider,
+				URL:        url,
+				Key:        key,
+				DefaultURL: chain.DefaultExplorerURL(c),
+				Available:  strings.TrimSpace(provider) != "",
 			})
 		}
 		mWriteJSON(w, http.StatusOK, map[string]any{"currencies": out})
