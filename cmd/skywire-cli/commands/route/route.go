@@ -4,6 +4,7 @@ package cliroute
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -71,16 +72,22 @@ Assumes the local visor public key as an argument if only one argument is given`
 		if frAddr == "" {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Route Finder URL not specified"))
 		}
+		// Prefer to route the RF query through a running visor's dmsg
+		// client (the DmsgHTTP RPC): the CLI's own http.Client can't speak
+		// the dmsg:// scheme the route finder is addressed by, and having
+		// the visor make the request is the natural design — it already
+		// holds a dmsg-capable client. Fall back to a direct http(s) query
+		// only when no visor is reachable (works for clearnet RF addrs).
+		rpcClient, rpcErr := clirpc.Client(cmd.Flags())
+
 		//assume the local public key as the first argument if only 1 argument is given ; resize args array to 2 and move the first argument to the second one
 		if len(args) == 1 {
-			rpcClient, err := clirpc.Client(cmd.Flags())
-			if err == nil {
-				overview, err := rpcClient.Overview()
-				if err == nil {
+			if rpcErr == nil {
+				if overview, err := rpcClient.Overview(); err == nil {
 					pk = overview.PubKey.String()
 				}
 			}
-			if err != nil {
+			if pk == "" {
 				//visor is not running, try to get pk from config
 				_, err := os.Stat(skyenv.SkywirePath + "/" + skyenv.ConfigJSON)
 				if err == nil {
@@ -103,26 +110,83 @@ Assumes the local visor public key as an argument if only one argument is given`
 			args = append(args[:1], args[0:]...)
 			copy(args, []string{pk})
 		}
-		rfc := rfclient.NewHTTP(frAddr, timeout, &http.Client{}, nil)
 		internal.Catch(cmd.Flags(), srcPK.Set(args[0]))
 		internal.Catch(cmd.Flags(), dstPK.Set(args[1]))
 		forward := [2]cipher.PubKey{srcPK, dstPK}
 		backward := [2]cipher.PubKey{dstPK, srcPK}
-		ctx := context.Background()
-		routes, err := rfc.FindRoutes(ctx, []routing.PathEdges{forward, backward},
-			&rfclient.RouteOptions{MinHops: frMinHops, MaxHops: frMaxHops})
+		edges := []routing.PathEdges{forward, backward}
+		opts := &rfclient.RouteOptions{MinHops: frMinHops, MaxHops: frMaxHops}
+
+		var routes map[routing.PathEdges][][]routing.Hop
+		var err error
+		if rpcErr == nil {
+			routes, err = findRoutesViaVisor(rpcClient, frAddr, edges, opts)
+		} else {
+			// No running visor: query the RF directly. This only succeeds
+			// if --addr is a clearnet http(s):// route finder.
+			rfc := rfclient.NewHTTP(frAddr, timeout, &http.Client{}, nil)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			routes, err = rfc.FindRoutes(ctx, edges, opts)
+		}
 		internal.Catch(cmd.Flags(), err)
-		output := fmt.Sprintf("forward: %v\n reverse: %v", routes[forward][0], routes[backward][0])
+
+		firstHop := func(paths [][]routing.Hop) []routing.Hop {
+			if len(paths) == 0 {
+				return nil
+			}
+			return paths[0]
+		}
+		fwd := firstHop(routes[forward])
+		rev := firstHop(routes[backward])
+		output := fmt.Sprintf("forward: %v\n reverse: %v", fwd, rev)
 		outputJSON := struct {
 			Forward []routing.Hop `json:"forward"`
 			Reverse []routing.Hop `json:"reverse"`
 		}{
-			Forward: routes[forward][0],
-			Reverse: routes[backward][0],
+			Forward: fwd,
+			Reverse: rev,
 		}
 		internal.PrintOutput(cmd.Flags(), outputJSON, output)
 	},
 }
+
+// findRoutesViaVisor queries the route finder through a running visor's
+// dmsg client (the DmsgHTTP RPC) instead of dialing dmsg from the CLI.
+// rfAddr may be a dmsg:// or http(s):// route-finder address; the visor
+// resolves and dials it. The response is decoded exactly as rfclient's
+// direct HTTP path does (PathEdges keys unmarshal from their "pk:pk" text).
+func findRoutesViaVisor(rpcClient visor.API, rfAddr string, edges []routing.PathEdges, opts *rfclient.RouteOptions) (map[routing.PathEdges][][]routing.Hop, error) {
+	body, err := json.Marshal(&rfclient.FindRoutesRequest{Edges: edges, Opts: opts})
+	if err != nil {
+		return nil, err
+	}
+	resp, err := rpcClient.DmsgHTTP(visor.DmsgHTTPRequest{
+		URL:    strings.TrimSuffix(rfAddr, "/") + "/routes",
+		Method: http.MethodPost,
+		Header: map[string]string{"Content-Type": "application/json"},
+		Body:   body,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		return nil, rfclient.ErrTransportNotFound
+	}
+	if resp.StatusCode != http.StatusOK {
+		var apiErr rfclient.HTTPResponse
+		if e := json.Unmarshal(resp.Body, &apiErr); e == nil && apiErr.Error != nil && apiErr.Error.Message != "" {
+			return nil, fmt.Errorf("route finder error: %s (status %d)", apiErr.Error.Message, resp.StatusCode)
+		}
+		return nil, fmt.Errorf("route finder error: %s (status %d)", http.StatusText(resp.StatusCode), resp.StatusCode)
+	}
+	var paths map[routing.PathEdges][][]routing.Hop
+	if err := json.Unmarshal(resp.Body, &paths); err != nil {
+		return nil, err
+	}
+	return paths, nil
+}
+
 var (
 	nrID        string
 	ntpID       string

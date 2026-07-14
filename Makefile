@@ -86,6 +86,14 @@ BUILDTAGINFO := -X $(PROJECT_BASE)/pkg/visor.BuildTag=$(BUILDTAG)
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAGINFO)
 INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 
+# The wasm-visor imports skywire's OWN pkg/buildinfo (not skywire-utilities), so
+# it needs its own -X targets. Stamped explicitly (+ -buildvcs=false in the build)
+# so the embedded blob carries a CLEAN version from a possibly-uncommitted tree
+# instead of Go's VCS "+dirty" stamp — and is deterministic (same source → same
+# blob), which matters for the committed pkg/wasmhv/wasmbin blob.
+WASM_BUILDINFO_PATH := $(PROJECT_BASE)/pkg/buildinfo
+WASM_BUILDINFO := -X $(WASM_BUILDINFO_PATH).version=$(VERSION) -X $(WASM_BUILDINFO_PATH).commit=$(COMMIT) -X $(WASM_BUILDINFO_PATH).date=$(DATE)
+
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
 BUILD_OPTS_RACE?="-race"
@@ -283,7 +291,7 @@ tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+a
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
 	mkdir -p ./build/wasm-visor-go
-	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
+	GOOS=js GOARCH=wasm go build -buildvcs=false -ldflags="$(WASM_BUILDINFO) -s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/

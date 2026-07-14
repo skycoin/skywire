@@ -184,6 +184,7 @@ return {
                 recv: transport.log ? transport.log.recv : 0,
                 sent: transport.log ? transport.log.sent : 0,
                 latencyMs: transport.latency_ms || 0,
+                initiator: transport.initiator,
               });
             });
           }
@@ -407,6 +408,7 @@ return {
             recv: transport.log ? transport.log.recv : 0,
             sent: transport.log ? transport.log.sent : 0,
             latencyMs: transport.latency_ms || 0,
+            initiator: transport.initiator,
           });
         });
       }
