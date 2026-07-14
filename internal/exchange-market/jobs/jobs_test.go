@@ -23,17 +23,17 @@ type sendCall struct {
 	amt  float64
 }
 
-func (f *fakeChain) DepositConfirmed(string, string, float64, time.Time, time.Time) (bool, string, error) {
+func (f *fakeChain) DepositConfirmed(string, string, string, float64, time.Time, time.Time) (bool, string, error) {
 	return f.deposit, "deposit-tx", nil
 }
 func (f *fakeChain) PaymentConfirmations(string, string, string, float64, time.Time, time.Time) (int, string, error) {
 	return f.confs, "pay-tx", nil
 }
-func (f *fakeChain) SendSKY(addr string, amt float64) (string, error) {
+func (f *fakeChain) SendCoin(_ /*coin*/, addr string, amt float64) (string, error) {
 	f.sends = append(f.sends, sendCall{addr, amt})
 	return "send-tx", nil
 }
-func (f *fakeChain) EscrowBalance(string) (float64, error) {
+func (f *fakeChain) EscrowBalance(string, string) (float64, error) {
 	return f.balance, nil
 }
 
@@ -72,7 +72,7 @@ func TestExpiry(t *testing.T) {
 
 	// Overdue pending listing.
 	if err := d.CreatePendingListing(&db.PendingListing{
-		ID: "l1", SellerPubKey: seller, AmountSKY: 5, ExpectedAmountSKY: 5.01, Price: 1,
+		ID: "l1", SellerPubKey: seller, Amount: 5, ExpectedAmount: 5.01, Price: 1,
 		PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(-time.Minute),
 	}); err != nil {
 		t.Fatal(err)
@@ -80,7 +80,7 @@ func TestExpiry(t *testing.T) {
 
 	// Active product, frozen by the buyer, with an overdue order.
 	if err := d.CreateProduct(&db.Product{
-		ID: "p1", SellerPubKey: seller, AmountSKY: 5, Price: 1, PaymentCurrency: "BTC", Status: "active",
+		ID: "p1", SellerPubKey: seller, Amount: 5, Price: 1, PaymentCurrency: "BTC", Status: "active",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := d.CreateOrder(&db.Order{
-		ID: "o1", ProductID: "p1", BuyerPubKey: buyer, AmountSKY: 5, Price: 1,
+		ID: "o1", ProductID: "p1", BuyerPubKey: buyer, Amount: 5, Price: 1,
 		PaymentCurrency: "BTC", ExpectedPaymentAmount: 1.01, SellerWallet: "bc1-seller",
 		Status: "pending_payment", ExpiresAt: time.Now().UTC().Add(-time.Minute),
 	}); err != nil {
@@ -125,7 +125,7 @@ func TestListingCheck(t *testing.T) {
 	}
 	mustUser(t, d, "03seller", "sky-seller")
 	if err := d.CreatePendingListing(&db.PendingListing{
-		ID: "l1", SellerPubKey: "03seller", AmountSKY: 10, ExpectedAmountSKY: 10.02, Price: 2,
+		ID: "l1", SellerPubKey: "03seller", Amount: 10, ExpectedAmount: 10.02, Price: 2,
 		PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(time.Hour),
 	}); err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ func TestListingCheck(t *testing.T) {
 		t.Fatalf("listing status = %q, want confirmed", listing.Status)
 	}
 	products, _ := d.GetActiveProducts() //nolint
-	if len(products) != 1 || products[0].AmountSKY != 10 {
+	if len(products) != 1 || products[0].Amount != 10 {
 		t.Fatalf("expected one active product from the listing, got %+v", products)
 	}
 }
@@ -153,12 +153,12 @@ func TestEscrowCheck(t *testing.T) {
 	mustUser(t, d, "03seller", "sky-seller")
 	mustUser(t, d, "03buyer", "sky-buyer")
 	if err := d.CreateProduct(&db.Product{
-		ID: "p1", SellerPubKey: "03seller", AmountSKY: 7, Price: 2, PaymentCurrency: "BTC", Status: "frozen",
+		ID: "p1", SellerPubKey: "03seller", Amount: 7, Price: 2, PaymentCurrency: "BTC", Status: "frozen",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.CreateOrder(&db.Order{
-		ID: "o1", ProductID: "p1", BuyerPubKey: "03buyer", AmountSKY: 7, Price: 2,
+		ID: "o1", ProductID: "p1", BuyerPubKey: "03buyer", Amount: 7, Price: 2,
 		PaymentCurrency: "BTC", ExpectedPaymentAmount: 2.01, SellerWallet: "bc1-seller",
 		Status: "pending_payment", ExpiresAt: time.Now().UTC().Add(time.Hour),
 	}); err != nil {
@@ -184,7 +184,7 @@ func TestEscrowCheck(t *testing.T) {
 	}
 	// Commission booked at the default 0.5%: 0.5% of 7 = 0.035 SKY.
 	all, _ := d.GetAllOrders() //nolint
-	if len(all) != 1 || math.Abs(all[0].CommissionSKY-0.035) > 1e-9 {
+	if len(all) != 1 || math.Abs(all[0].Commission-0.035) > 1e-9 {
 		t.Fatalf("commission = %v, want 0.035 SKY on the completed order", all)
 	}
 }
@@ -206,8 +206,8 @@ func TestCommissionSKY(t *testing.T) {
 		{-5, 0.5, 0.001, 0, 0},        // guard against negatives
 	}
 	for _, c := range cases {
-		if got := jobs.CommissionSKY(c.amount, c.rate, c.min, c.cap); math.Abs(got-c.want) > 1e-9 {
-			t.Errorf("CommissionSKY(%v, %v, %v, %v) = %v, want %v", c.amount, c.rate, c.min, c.cap, got, c.want)
+		if got := jobs.Commission(c.amount, c.rate, c.min, c.cap); math.Abs(got-c.want) > 1e-9 {
+			t.Errorf("Commission(%v, %v, %v, %v) = %v, want %v", c.amount, c.rate, c.min, c.cap, got, c.want)
 		}
 	}
 }
@@ -219,12 +219,12 @@ func TestEscrowCheckNoopDefers(t *testing.T) {
 	mustUser(t, d, "03seller", "sky-seller")
 	mustUser(t, d, "03buyer", "sky-buyer")
 	if err := d.CreateProduct(&db.Product{
-		ID: "p1", SellerPubKey: "03seller", AmountSKY: 7, Price: 2, PaymentCurrency: "BTC", Status: "frozen",
+		ID: "p1", SellerPubKey: "03seller", Amount: 7, Price: 2, PaymentCurrency: "BTC", Status: "frozen",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.CreateOrder(&db.Order{
-		ID: "o1", ProductID: "p1", BuyerPubKey: "03buyer", AmountSKY: 7, Price: 2,
+		ID: "o1", ProductID: "p1", BuyerPubKey: "03buyer", Amount: 7, Price: 2,
 		PaymentCurrency: "BTC", ExpectedPaymentAmount: 2.01, SellerWallet: "bc1-seller",
 		Status: "pending_payment", ExpiresAt: time.Now().UTC().Add(time.Hour),
 	}); err != nil {
@@ -260,7 +260,7 @@ func TestReturnScheduler(t *testing.T) {
 
 	// A listing the seller deposited for, then canceled.
 	if err := d.CreatePendingListing(&db.PendingListing{
-		ID: "l1", SellerPubKey: "03seller", AmountSKY: 5, ExpectedAmountSKY: 5.013, Price: 1,
+		ID: "l1", SellerPubKey: "03seller", Amount: 5, ExpectedAmount: 5.013, Price: 1,
 		PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(time.Hour),
 	}); err != nil {
 		t.Fatal(err)
@@ -306,7 +306,7 @@ func TestReturnSchedulerNoDeposit(t *testing.T) {
 	}
 	mustUser(t, d, "03seller", "sky-seller")
 	if err := d.CreatePendingListing(&db.PendingListing{
-		ID: "l1", SellerPubKey: "03seller", AmountSKY: 5, ExpectedAmountSKY: 5.013, Price: 1,
+		ID: "l1", SellerPubKey: "03seller", Amount: 5, ExpectedAmount: 5.013, Price: 1,
 		PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(time.Hour),
 	}); err != nil {
 		t.Fatal(err)
@@ -338,12 +338,12 @@ func TestBanManager(t *testing.T) {
 
 	// A product + order to satisfy the freeze_violations foreign keys.
 	if err := d.CreateProduct(&db.Product{
-		ID: "p1", SellerPubKey: "03seller", AmountSKY: 1, Price: 1, PaymentCurrency: "BTC", Status: "active",
+		ID: "p1", SellerPubKey: "03seller", Amount: 1, Price: 1, PaymentCurrency: "BTC", Status: "active",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.CreateOrder(&db.Order{
-		ID: "o1", ProductID: "p1", BuyerPubKey: "03offender", AmountSKY: 1, Price: 1,
+		ID: "o1", ProductID: "p1", BuyerPubKey: "03offender", Amount: 1, Price: 1,
 		PaymentCurrency: "BTC", ExpectedPaymentAmount: 1.01, SellerWallet: "w",
 		Status: "expired", ExpiresAt: time.Now().UTC(),
 	}); err != nil {
@@ -385,12 +385,12 @@ func TestCleanup(t *testing.T) {
 	mustUser(t, d, "03seller", "sky")
 	mustUser(t, d, "03buyer", "sky")
 	if err := d.CreateProduct(&db.Product{
-		ID: "p1", SellerPubKey: "03seller", AmountSKY: 1, Price: 1, PaymentCurrency: "BTC", Status: "sold",
+		ID: "p1", SellerPubKey: "03seller", Amount: 1, Price: 1, PaymentCurrency: "BTC", Status: "sold",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.CreateOrder(&db.Order{
-		ID: "o1", ProductID: "p1", BuyerPubKey: "03buyer", AmountSKY: 1, Price: 1,
+		ID: "o1", ProductID: "p1", BuyerPubKey: "03buyer", Amount: 1, Price: 1,
 		PaymentCurrency: "BTC", ExpectedPaymentAmount: 1.01, SellerWallet: "w",
 		Status: "completed", ExpiresAt: time.Now().UTC(),
 	}); err != nil {
@@ -421,22 +421,22 @@ func TestEscrowAudit(t *testing.T) {
 	mustUser(t, d, "03seller", "sky-seller")
 
 	// Active (10) + frozen (5) products are SKY awaiting delivery.
-	if err := d.CreateProduct(&db.Product{ID: "p-active", SellerPubKey: "03seller", AmountSKY: 10, Price: 1, PaymentCurrency: "BTC", Status: "active"}); err != nil {
+	if err := d.CreateProduct(&db.Product{ID: "p-active", SellerPubKey: "03seller", Amount: 10, Price: 1, PaymentCurrency: "BTC", Status: "active"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.CreateProduct(&db.Product{ID: "p-frozen", SellerPubKey: "03seller", AmountSKY: 5, Price: 1, PaymentCurrency: "BTC", Status: "active"}); err != nil {
+	if err := d.CreateProduct(&db.Product{ID: "p-frozen", SellerPubKey: "03seller", Amount: 5, Price: 1, PaymentCurrency: "BTC", Status: "active"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.FreezeProduct("p-frozen", "03buyer"); err != nil {
 		t.Fatal(err)
 	}
 	// A sold product (7) has already been delivered — excluded.
-	if err := d.CreateProduct(&db.Product{ID: "p-sold", SellerPubKey: "03seller", AmountSKY: 7, Price: 1, PaymentCurrency: "BTC", Status: "sold"}); err != nil {
+	if err := d.CreateProduct(&db.Product{ID: "p-sold", SellerPubKey: "03seller", Amount: 7, Price: 1, PaymentCurrency: "BTC", Status: "sold"}); err != nil {
 		t.Fatal(err)
 	}
 
 	// A canceled listing whose deposit arrived (confirmed) but isn't refunded: +3.
-	if err := d.CreatePendingListing(&db.PendingListing{ID: "l-refund", SellerPubKey: "03seller", AmountSKY: 3, ExpectedAmountSKY: 3, Price: 1, PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(time.Hour)}); err != nil {
+	if err := d.CreatePendingListing(&db.PendingListing{ID: "l-refund", SellerPubKey: "03seller", Amount: 3, ExpectedAmount: 3, Price: 1, PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(time.Hour)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.UpdatePendingListingStatus("l-refund", "confirmed", "dep-tx"); err != nil {
@@ -446,7 +446,7 @@ func TestEscrowAudit(t *testing.T) {
 		t.Fatal(err)
 	}
 	// An expired listing whose deposit never arrived (confirmed_at NULL) — excluded.
-	if err := d.CreatePendingListing(&db.PendingListing{ID: "l-nodep", SellerPubKey: "03seller", AmountSKY: 99, ExpectedAmountSKY: 99, Price: 1, PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(-time.Minute)}); err != nil {
+	if err := d.CreatePendingListing(&db.PendingListing{ID: "l-nodep", SellerPubKey: "03seller", Amount: 99, ExpectedAmount: 99, Price: 1, PaymentCurrency: "BTC", Status: "pending", ExpiresAt: time.Now().UTC().Add(-time.Minute)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.UpdatePendingListingStatus("l-nodep", "expired", ""); err != nil {
@@ -454,12 +454,12 @@ func TestEscrowAudit(t *testing.T) {
 	}
 
 	// Expected outstanding obligations: 10 + 5 + 3 = 18.
-	got, err := d.OutstandingEscrowSKY()
+	got, err := d.OutstandingEscrow("SKY")
 	if err != nil {
-		t.Fatalf("OutstandingEscrowSKY: %v", err)
+		t.Fatalf("OutstandingEscrow: %v", err)
 	}
 	if math.Abs(got-18) > 1e-9 {
-		t.Fatalf("OutstandingEscrowSKY = %v, want 18", got)
+		t.Fatalf("OutstandingEscrow = %v, want 18", got)
 	}
 
 	// Healthy (balance covers obligations), shortfall (balance below), and no

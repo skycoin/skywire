@@ -191,19 +191,22 @@ type MessageData struct {
 	Message string `json:"message"`
 }
 
-// GetCurrenciesResponse lists the payment currencies this market currently
-// accepts — i.e. the ones whose blockchain explorer the market operator has
-// configured. A currency absent from this list cannot be used to create a
-// listing or buy a product; the client hides it accordingly.
+// GetCurrenciesResponse lists what this market currently accepts: the payment
+// currencies whose blockchain explorer the operator has configured (Currencies),
+// and the sell coins (SKY and any enabled fibercoins) a seller may list
+// (SellCoins). A value absent from these lists cannot be used to create a listing
+// or buy a product; the client hides it accordingly.
 type GetCurrenciesResponse struct {
 	Currencies []string `json:"currencies"`
+	SellCoins  []string `json:"sell_coins"`
 }
 
 // ProductView is a product as presented to clients (no internal freeze fields).
 type ProductView struct {
 	ID              string  `json:"id"`
 	SellerPubKey    string  `json:"seller_pubkey"`
-	AmountSKY       float64 `json:"amount_sky"`
+	SellCoin        string  `json:"sell_coin"`
+	Amount          float64 `json:"amount"`
 	Price           float64 `json:"price"`
 	PaymentCurrency string  `json:"payment_currency"`
 	CreatedAt       string  `json:"created_at"`
@@ -214,23 +217,26 @@ type GetProductsResponse struct {
 	Products []ProductView `json:"products"`
 }
 
-// CreateListingRequest creates a sell order.
+// CreateListingRequest creates a sell order. SellCoin selects which Skycoin-family
+// coin is being sold (defaults to SKY if empty).
 type CreateListingRequest struct {
-	AmountSKY       float64 `json:"amount_sky"`
+	SellCoin        string  `json:"sell_coin"`
+	Amount          float64 `json:"amount"`
 	Price           float64 `json:"price"`
 	PaymentCurrency string  `json:"payment_currency"`
 }
 
-// CreateListingResponse tells the seller how much SKY to deposit, broken down as
-// the listed amount plus the market commission. ExpectedAmountSKY = AmountSKY +
-// CommissionSKY is the exact amount to transfer to the market wallet.
+// CreateListingResponse tells the seller how much of the sell coin to deposit,
+// broken down as the listed amount plus the market commission. ExpectedAmount =
+// Amount + Commission is the exact amount to transfer to the market wallet.
 type CreateListingResponse struct {
-	ListingID         string  `json:"listing_id"`
-	AmountSKY         float64 `json:"amount_sky"`          // the amount the buyer will receive
-	CommissionSKY     float64 `json:"commission_sky"`      // the market's commission
-	ExpectedAmountSKY float64 `json:"expected_amount_sky"` // amount + commission = the deposit
-	MarketWallet      string  `json:"market_wallet"`
-	ExpiresAt         string  `json:"expires_at"`
+	ListingID      string  `json:"listing_id"`
+	SellCoin       string  `json:"sell_coin"`
+	Amount         float64 `json:"amount"`          // the amount the buyer will receive
+	Commission     float64 `json:"commission"`      // the market's commission
+	ExpectedAmount float64 `json:"expected_amount"` // amount + commission = the deposit
+	MarketWallet   string  `json:"market_wallet"`
+	ExpiresAt      string  `json:"expires_at"`
 }
 
 // BuyProductRequest freezes and buys a product.
@@ -241,7 +247,8 @@ type BuyProductRequest struct {
 // BuyProductResponse tells the buyer the non-round amount to pay.
 type BuyProductResponse struct {
 	OrderID               string  `json:"order_id"`
-	AmountSKY             float64 `json:"amount_sky"`
+	SellCoin              string  `json:"sell_coin"`
+	Amount                float64 `json:"amount"`
 	Price                 float64 `json:"price"`
 	PaymentCurrency       string  `json:"payment_currency"`
 	ExpectedPaymentAmount float64 `json:"expected_payment_amount"`
@@ -269,7 +276,8 @@ type OrderView struct {
 	ID              string  `json:"id"`
 	Type            string  `json:"type"` // "buy" or "sell"
 	ProductID       string  `json:"product_id"`
-	AmountSKY       float64 `json:"amount_sky"`
+	SellCoin        string  `json:"sell_coin"`
+	Amount          float64 `json:"amount"`
 	Price           float64 `json:"price"`
 	PaymentCurrency string  `json:"payment_currency"`
 	Status          string  `json:"status"`
@@ -286,20 +294,23 @@ type GetOrdersResponse struct {
 // for live lifecycle tracking: pending (awaiting the SKY deposit) -> confirmed
 // (deposit detected on-chain; the listing is now a purchasable product).
 type ListingView struct {
-	ID                string  `json:"id"`
-	AmountSKY         float64 `json:"amount_sky"`
-	ExpectedAmountSKY float64 `json:"expected_amount_sky"`
-	Price             float64 `json:"price"`
-	PaymentCurrency   string  `json:"payment_currency"`
-	Status            string  `json:"status"`
-	ExpiresAt         string  `json:"expires_at"`
-	CreatedAt         string  `json:"created_at"`
-	ConfirmedAt       string  `json:"confirmed_at,omitempty"`
-	TxHash            string  `json:"tx_hash,omitempty"`
+	ID              string  `json:"id"`
+	SellCoin        string  `json:"sell_coin"`
+	Amount          float64 `json:"amount"`
+	ExpectedAmount  float64 `json:"expected_amount"`
+	Price           float64 `json:"price"`
+	PaymentCurrency string  `json:"payment_currency"`
+	Status          string  `json:"status"`
+	MarketWallet    string  `json:"market_wallet"` // escrow deposit address for this listing's sell coin
+	ExpiresAt       string  `json:"expires_at"`
+	CreatedAt       string  `json:"created_at"`
+	ConfirmedAt     string  `json:"confirmed_at,omitempty"`
+	TxHash          string  `json:"tx_hash,omitempty"`
 }
 
 // GetListingsResponse is the reply to TypeGetListings: the caller's own pending
-// listings plus the market wallet address the deposit must be sent to.
+// listings. Each listing carries the escrow deposit address for its sell coin;
+// MarketWallet is the SKY default, kept for backward compatibility.
 type GetListingsResponse struct {
 	Listings     []ListingView `json:"listings"`
 	MarketWallet string        `json:"market_wallet"`

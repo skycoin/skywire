@@ -173,7 +173,7 @@ function Orders() {
                 <tr key={order.id}>
                   <td><code>{shorten(order.id)}</code></td>
                   <td>{getTypeBadge(order.type)}</td>
-                  <td>{order.amount_sky} SKY</td>
+                  <td>{order.amount} {order.sell_coin}</td>
                   <td>{order.price} {order.payment_currency}</td>
                   <td>{getStatusBadge(liveStatus(order))}</td>
                   <td>{renderProgress(order)}</td>

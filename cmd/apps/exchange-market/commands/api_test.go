@@ -96,7 +96,7 @@ func TestOperatorMonitoring(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := database.CreateProduct(&db.Product{
-		ID: "p1", SellerPubKey: "03seller", AmountSKY: 5, Price: 1, PaymentCurrency: "BTC", Status: "active",
+		ID: "p1", SellerPubKey: "03seller", Amount: 5, Price: 1, PaymentCurrency: "BTC", Status: "active",
 	}); err != nil {
 		t.Fatal(err)
 	}

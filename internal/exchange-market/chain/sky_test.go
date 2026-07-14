@@ -99,14 +99,14 @@ func TestDepositBelowConfirmations(t *testing.T) {
 // TestSendSKYNoWallet errors clearly when no escrow seed is configured.
 func TestSendSKYNoWallet(t *testing.T) {
 	node := NewSkyNode("http://127.0.0.1:1", "", "", 2, nil)
-	if _, err := node.SendSKY("addr", 1); err == nil {
+	if _, err := node.SendCoin("addr", 1); err == nil {
 		t.Fatal("expected an error when no escrow seed is configured")
 	}
 }
 
 // TestNoExplorer confirms the default explorer never confirms a payment.
 func TestNoExplorer(t *testing.T) {
-	c := New(Config{}, nil)
+	c := New(nil)
 	confs, _, err := c.PaymentConfirmations("BTC", "addr", "", 1.0, time.Unix(0, 0), time.Now())
 	if err != nil || confs != 0 {
 		t.Fatalf("noExplorer should report 0 confirmations, got confs=%d err=%v", confs, err)

@@ -16,23 +16,24 @@ type User struct {
 	UpdatedAt        time.Time `json:"updated_at" db:"updated_at"`
 }
 
-// PendingListing represents a sell order that is waiting for the seller
-// to transfer SKY tokens to the market wallet.
+// PendingListing represents a sell order that is waiting for the seller to
+// transfer the sell coin (SKY or another Skycoin fibercoin) to the market wallet.
 type PendingListing struct {
-	ID                string     `json:"id" db:"id"`
-	SellerPubKey      string     `json:"seller_pubkey" db:"seller_pubkey"`
-	AmountSKY         float64    `json:"amount_sky" db:"amount_sky"`
-	ExpectedAmountSKY float64    `json:"expected_amount_sky" db:"expected_amount_sky"`
-	Price             float64    `json:"price" db:"price"`
-	PaymentCurrency   string     `json:"payment_currency" db:"payment_currency"`
-	Status            string     `json:"status" db:"status"` // pending, confirmed, expired, canceled, returned
-	ExpiresAt         time.Time  `json:"expires_at" db:"expires_at"`
-	CreatedAt         time.Time  `json:"created_at" db:"created_at"`
-	ConfirmedAt       *time.Time `json:"confirmed_at,omitempty" db:"confirmed_at"`
-	TxHash            string     `json:"tx_hash,omitempty" db:"tx_hash"`
-	ClosedAt          *time.Time `json:"closed_at,omitempty" db:"closed_at"`     // when it went terminal (expired/canceled)
-	ReturnedAt        *time.Time `json:"returned_at,omitempty" db:"returned_at"` // when escrowed SKY was refunded
-	ReturnTxHash      string     `json:"return_tx_hash,omitempty" db:"return_tx_hash"`
+	ID              string     `json:"id" db:"id"`
+	SellerPubKey    string     `json:"seller_pubkey" db:"seller_pubkey"`
+	SellCoin        string     `json:"sell_coin" db:"sell_coin"` // fibercoin symbol being sold (SKY, ...)
+	Amount          float64    `json:"amount" db:"amount_sky"`
+	ExpectedAmount  float64    `json:"expected_amount" db:"expected_amount_sky"`
+	Price           float64    `json:"price" db:"price"`
+	PaymentCurrency string     `json:"payment_currency" db:"payment_currency"`
+	Status          string     `json:"status" db:"status"` // pending, confirmed, expired, canceled, returned
+	ExpiresAt       time.Time  `json:"expires_at" db:"expires_at"`
+	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
+	ConfirmedAt     *time.Time `json:"confirmed_at,omitempty" db:"confirmed_at"`
+	TxHash          string     `json:"tx_hash,omitempty" db:"tx_hash"`
+	ClosedAt        *time.Time `json:"closed_at,omitempty" db:"closed_at"`     // when it went terminal (expired/canceled)
+	ReturnedAt      *time.Time `json:"returned_at,omitempty" db:"returned_at"` // when escrowed coin was refunded
+	ReturnTxHash    string     `json:"return_tx_hash,omitempty" db:"return_tx_hash"`
 }
 
 // Product represents an active product (sell order) available for purchase.
@@ -40,7 +41,8 @@ type Product struct {
 	ID              string     `json:"id" db:"id"`
 	ListingID       string     `json:"listing_id,omitempty" db:"listing_id"` // the pending_listing it was promoted from
 	SellerPubKey    string     `json:"seller_pubkey" db:"seller_pubkey"`
-	AmountSKY       float64    `json:"amount_sky" db:"amount_sky"`
+	SellCoin        string     `json:"sell_coin" db:"sell_coin"`
+	Amount          float64    `json:"amount" db:"amount_sky"`
 	Price           float64    `json:"price" db:"price"`
 	PaymentCurrency string     `json:"payment_currency" db:"payment_currency"`
 	Status          string     `json:"status" db:"status"` // active, frozen, sold, expired, canceled
@@ -55,7 +57,8 @@ type Order struct {
 	ID                    string     `json:"id" db:"id"`
 	ProductID             string     `json:"product_id" db:"product_id"`
 	BuyerPubKey           string     `json:"buyer_pubkey" db:"buyer_pubkey"`
-	AmountSKY             float64    `json:"amount_sky" db:"amount_sky"`
+	SellCoin              string     `json:"sell_coin" db:"sell_coin"`
+	Amount                float64    `json:"amount" db:"amount_sky"`
 	Price                 float64    `json:"price" db:"price"`
 	PaymentCurrency       string     `json:"payment_currency" db:"payment_currency"`
 	ExpectedPaymentAmount float64    `json:"expected_payment_amount" db:"expected_payment_amount"`
@@ -67,7 +70,21 @@ type Order struct {
 	PaymentTxHash         string     `json:"payment_tx_hash,omitempty" db:"payment_tx_hash"`
 	Confirmations         int        `json:"confirmations" db:"confirmations"`
 	CompletedAt           *time.Time `json:"completed_at,omitempty" db:"completed_at"`
-	CommissionSKY         float64    `json:"commission_sky" db:"commission_sky"` // SKY commission the market retained on a completed sale
+	Commission            float64    `json:"commission" db:"commission_sky"` // sell-coin commission retained on a completed sale
+}
+
+// SellCoin is a Skycoin-family coin (SKY or a fibercoin) the market accepts on
+// the sell side. Each has its own fullnode + escrow hot wallet. Deposits,
+// deliveries and refunds for a listing use the escrow config of its SellCoin.
+type SellCoin struct {
+	Symbol        string    `json:"symbol" db:"symbol"` // ticker, e.g. "SKY", "MDL"
+	Name          string    `json:"name" db:"name"`     // display name, e.g. "Skycoin"
+	NodeURL       string    `json:"node_url" db:"node_url"`
+	WalletSeed    string    `json:"-" db:"wallet_seed"` // escrow hot-wallet seed (never serialized)
+	WalletAddr    string    `json:"wallet_addr" db:"wallet_addr"`
+	Confirmations int       `json:"confirmations" db:"confirmations"`
+	Enabled       bool      `json:"enabled" db:"enabled"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
 }
 
 // FreezeViolation records a freeze that did not result in a completed purchase.

@@ -28,12 +28,12 @@ const depositConfirmGrace = 10 * time.Minute
 // replay of an old payment of a recycled amount.
 const paymentConfirmGrace = 2 * time.Hour
 
-// CommissionSKY returns the market's SKY commission for a sale of amountSKY:
+// Commission returns the market's SKY commission for a sale of amountSKY:
 // ratePercent% of the amount, rounded UP to the network's 3-decimal precision,
 // then clamped to [minSKY, maxSKY] (maxSKY <= 0 means no cap). The seller pays it
 // by depositing amountSKY + commission into escrow; the market delivers amountSKY
 // to the buyer and retains the commission.
-func CommissionSKY(amountSKY, ratePercent, minSKY, maxSKY float64) float64 {
+func Commission(amountSKY, ratePercent, minSKY, maxSKY float64) float64 {
 	if amountSKY <= 0 {
 		return 0
 	}
@@ -145,27 +145,26 @@ func (r *Runner) RunExpiry() error {
 // RunListingCheck promotes pending listings whose SKY deposit has settled in the
 // market wallet into active products (exchange-design.md §7.8/2).
 func (r *Runner) RunListingCheck() error {
-	marketWallet, err := r.db.GetMarketWallet()
-	if err != nil {
-		return err
-	}
-	if marketWallet == "" {
-		return nil // escrow wallet not configured yet
-	}
 	listings, err := r.db.GetPendingListings()
 	if err != nil {
 		return err
 	}
 	for _, l := range listings {
-		// The deposit is identified by the seller's registered SKY address (the
-		// tx sender) within the listing's window — not by a fiddly non-round
-		// amount. Without a SKY address on file the deposit can't be verified.
-		sellerSKY, err := r.db.GetUserWallet(l.SellerPubKey, "SKY")
-		if err != nil || sellerSKY == "" {
-			r.log.Warnf("listing-check: seller %s has no SKY wallet; cannot verify deposit for listing %s", l.SellerPubKey, l.ID)
+		// Each listing's escrow wallet is the deposit address of its sell coin.
+		marketWallet, err := r.db.SellCoinWallet(l.SellCoin)
+		if err != nil || marketWallet == "" {
+			r.log.Warnf("listing-check: sell coin %s has no escrow wallet configured; skipping listing %s", l.SellCoin, l.ID)
 			continue
 		}
-		confirmed, txHash, err := r.chain.DepositConfirmed(marketWallet, sellerSKY, l.ExpectedAmountSKY, l.CreatedAt, l.ExpiresAt.Add(depositConfirmGrace))
+		// The deposit is identified by the seller's registered Skycoin-family
+		// address (the tx sender) within the listing's window — not by a fiddly
+		// non-round amount. Without an address on file the deposit can't be verified.
+		sellerAddr, err := r.db.GetUserWallet(l.SellerPubKey, l.SellCoin)
+		if err != nil || sellerAddr == "" {
+			r.log.Warnf("listing-check: seller %s has no sell-coin wallet; cannot verify deposit for listing %s", l.SellerPubKey, l.ID)
+			continue
+		}
+		confirmed, txHash, err := r.chain.DepositConfirmed(l.SellCoin, marketWallet, sellerAddr, l.ExpectedAmount, l.CreatedAt, l.ExpiresAt.Add(depositConfirmGrace))
 		if err != nil {
 			r.log.WithError(err).Warnf("listing-check: deposit check failed for %s", l.ID)
 			continue
@@ -181,7 +180,8 @@ func (r *Runner) RunListingCheck() error {
 			ID:              uuid.NewString(),
 			ListingID:       l.ID,
 			SellerPubKey:    l.SellerPubKey,
-			AmountSKY:       l.AmountSKY,
+			SellCoin:        l.SellCoin,
+			Amount:          l.Amount,
 			Price:           l.Price,
 			PaymentCurrency: l.PaymentCurrency,
 			Status:          "active",
@@ -233,27 +233,27 @@ func (r *Runner) RunEscrowCheck() error {
 				continue
 			}
 		}
-		buyerSKY, err := r.db.GetUserWallet(o.BuyerPubKey, "SKY")
-		if err != nil || buyerSKY == "" {
-			r.log.Warnf("escrow-check: buyer %s has no SKY wallet; deferring delivery", o.BuyerPubKey)
+		buyerAddr, err := r.db.GetUserWallet(o.BuyerPubKey, o.SellCoin)
+		if err != nil || buyerAddr == "" {
+			r.log.Warnf("escrow-check: buyer %s has no sell-coin wallet; deferring delivery", o.BuyerPubKey)
 			continue
 		}
-		if _, err := r.chain.SendSKY(buyerSKY, o.AmountSKY); err != nil {
+		if _, err := r.chain.SendCoin(o.SellCoin, buyerAddr, o.Amount); err != nil {
 			// e.g. NoopChain (no backend) — leave the order 'confirmed' for a retry.
-			r.log.WithError(err).Warnf("escrow-check: SKY delivery deferred for order %s", o.ID)
+			r.log.WithError(err).Warnf("escrow-check: %s delivery deferred for order %s", o.SellCoin, o.ID)
 			continue
 		}
 		if err := r.db.MarkOrderCompleted(o.ID); err != nil {
 			r.log.WithError(err).Warnf("escrow-check: failed to complete order %s", o.ID)
 			continue
 		}
-		// Book the SKY commission retained on the completed sale (for reporting;
+		// Book the sell-coin commission retained on the completed sale (for reporting;
 		// it was physically collected as amount+commission at deposit and only the
 		// amount was delivered). Recompute from the current config.
 		rate, _ := r.db.GetCommissionRatePercent() //nolint:errcheck
 		minC, _ := r.db.GetCommissionMinSKY()      //nolint:errcheck
 		maxC, _ := r.db.GetCommissionMaxSKY()      //nolint:errcheck
-		if c := CommissionSKY(o.AmountSKY, rate, minC, maxC); c > 0 {
+		if c := Commission(o.Amount, rate, minC, maxC); c > 0 {
 			if err := r.db.SetOrderCommission(o.ID, c); err != nil {
 				r.log.WithError(err).Warnf("escrow-check: failed to record commission for order %s", o.ID)
 			}
@@ -273,28 +273,26 @@ func (r *Runner) RunEscrowCheck() error {
 // retried next tick. The refund is recorded so it happens at most once
 // (design §7.8/4).
 func (r *Runner) RunReturnScheduler() error {
-	marketWallet, err := r.db.GetMarketWallet()
-	if err != nil {
-		return err
-	}
-	if marketWallet == "" {
-		return nil // escrow wallet not configured yet
-	}
 	listings, err := r.db.GetReturnableListings()
 	if err != nil {
 		return err
 	}
 	for _, l := range listings {
-		sellerSKY, err := r.db.GetUserWallet(l.SellerPubKey, "SKY")
-		if err != nil || sellerSKY == "" {
-			r.log.Warnf("return-scheduler: seller %s has no SKY wallet; deferring refund of listing %s", l.SellerPubKey, l.ID)
+		marketWallet, err := r.db.SellCoinWallet(l.SellCoin)
+		if err != nil || marketWallet == "" {
+			r.log.Warnf("return-scheduler: sell coin %s has no escrow wallet; deferring refund of listing %s", l.SellCoin, l.ID)
 			continue
 		}
-		// Only refund SKY that actually arrived in the market wallet, from this
+		sellerAddr, err := r.db.GetUserWallet(l.SellerPubKey, l.SellCoin)
+		if err != nil || sellerAddr == "" {
+			r.log.Warnf("return-scheduler: seller %s has no sell-coin wallet; deferring refund of listing %s", l.SellerPubKey, l.ID)
+			continue
+		}
+		// Only refund coin that actually arrived in the market wallet, from this
 		// seller, within the listing's deposit window. Without this on-chain check
 		// a seller could create-and-cancel listings to drain the escrow wallet for
 		// deposits they never made.
-		confirmed, _, err := r.chain.DepositConfirmed(marketWallet, sellerSKY, l.ExpectedAmountSKY, l.CreatedAt, l.ExpiresAt.Add(depositConfirmGrace))
+		confirmed, _, err := r.chain.DepositConfirmed(l.SellCoin, marketWallet, sellerAddr, l.ExpectedAmount, l.CreatedAt, l.ExpiresAt.Add(depositConfirmGrace))
 		if err != nil {
 			r.log.WithError(err).Warnf("return-scheduler: deposit check failed for listing %s", l.ID)
 			continue
@@ -302,10 +300,10 @@ func (r *Runner) RunReturnScheduler() error {
 		if !confirmed {
 			continue // nothing escrowed for this listing
 		}
-		txHash, err := r.chain.SendSKY(sellerSKY, l.ExpectedAmountSKY)
+		txHash, err := r.chain.SendCoin(l.SellCoin, sellerAddr, l.ExpectedAmount)
 		if err != nil {
 			// e.g. NoopChain (no backend) — leave it and retry next tick.
-			r.log.WithError(err).Warnf("return-scheduler: SKY refund deferred for listing %s", l.ID)
+			r.log.WithError(err).Warnf("return-scheduler: %s refund deferred for listing %s", l.SellCoin, l.ID)
 			continue
 		}
 		if err := r.db.MarkListingReturned(l.ID, txHash); err != nil {
@@ -322,33 +320,37 @@ func (r *Runner) RunReturnScheduler() error {
 // otherwise the healthy state (with any headroom) is logged. It only reads, never
 // moves funds. Skipped when no chain backend is configured.
 func (r *Runner) RunEscrowAudit() error {
-	marketWallet, err := r.db.GetMarketWallet()
+	coins, err := r.db.AvailableSellCoins()
 	if err != nil {
 		return err
 	}
-	if marketWallet == "" {
-		return nil // escrow wallet not configured yet
-	}
-	onChain, err := r.chain.EscrowBalance(marketWallet)
-	if err != nil {
-		if errors.Is(err, ErrNoChain) {
-			return nil // no backend configured — nothing to audit against
-		}
-		return err
-	}
-	expected, err := r.db.OutstandingEscrowSKY()
-	if err != nil {
-		return err
-	}
-	// Tolerance of half a milli-SKY (below the network's 0.001 precision) absorbs
+	// Tolerance of half a milli-coin (below the network's 0.001 precision) absorbs
 	// float rounding without masking a real deficit.
 	const tol = 0.0005
-	if onChain+tol < expected {
-		r.log.Errorf("escrow-audit: SHORTFALL — on-chain balance %.6f SKY is below outstanding obligations %.6f SKY (deficit %.6f); deliveries or refunds may fail",
-			onChain, expected, expected-onChain)
-	} else {
-		r.log.Infof("escrow-audit: healthy — on-chain %.6f SKY covers %.6f SKY of obligations (headroom %.6f)",
-			onChain, expected, onChain-expected)
+	for _, coin := range coins {
+		marketWallet, err := r.db.SellCoinWallet(coin)
+		if err != nil || marketWallet == "" {
+			continue // coin not fully configured yet — nothing to audit
+		}
+		onChain, err := r.chain.EscrowBalance(coin, marketWallet)
+		if err != nil {
+			if errors.Is(err, ErrNoChain) {
+				continue // no backend configured — nothing to audit against
+			}
+			r.log.WithError(err).Warnf("escrow-audit: failed to read %s escrow balance", coin)
+			continue
+		}
+		expected, err := r.db.OutstandingEscrow(coin)
+		if err != nil {
+			return err
+		}
+		if onChain+tol < expected {
+			r.log.Errorf("escrow-audit: SHORTFALL — on-chain %s balance %.6f is below outstanding obligations %.6f (deficit %.6f); deliveries or refunds may fail",
+				coin, onChain, expected, expected-onChain)
+		} else {
+			r.log.Infof("escrow-audit: %s healthy — on-chain %.6f covers %.6f of obligations (headroom %.6f)",
+				coin, onChain, expected, onChain-expected)
+		}
 	}
 	return nil
 }
