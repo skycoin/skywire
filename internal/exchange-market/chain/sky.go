@@ -120,6 +120,37 @@ func (s *SkyNode) EscrowAddress() string {
 	return s.signer.addr.String()
 }
 
+// SkyBalance is a spendable-balance snapshot for a SKY address.
+type SkyBalance struct {
+	CoinsSKY float64 // spendable coins in SKY
+	Hours    uint64  // spendable coin-hours
+	Outputs  int     // number of spendable unspent outputs
+}
+
+// Balance reports the live spendable balance of addr (confirmed outputs not
+// already being spent by an unconfirmed transaction), read from the node.
+func (s *SkyNode) Balance(addr string) (SkyBalance, error) {
+	cl := skyapi.NewClient(s.baseURL)
+	summary, err := cl.OutputsForAddresses([]string{addr})
+	if err != nil {
+		return SkyBalance{}, fmt.Errorf("sky balance: fetch outputs: %w", err)
+	}
+	spendable := summary.SpendableOutputs()
+	bal, err := spendable.Balance()
+	if err != nil {
+		return SkyBalance{}, fmt.Errorf("sky balance: sum outputs: %w", err)
+	}
+	coinsStr, err := droplet.ToString(bal.Coins)
+	if err != nil {
+		return SkyBalance{}, fmt.Errorf("sky balance: format coins: %w", err)
+	}
+	coins, err := strconv.ParseFloat(coinsStr, 64)
+	if err != nil {
+		return SkyBalance{}, fmt.Errorf("sky balance: parse coins: %w", err)
+	}
+	return SkyBalance{CoinsSKY: coins, Hours: bal.Hours, Outputs: len(spendable)}, nil
+}
+
 // txnStatus mirrors Skycoin's transaction status. In Skycoin, Height is the
 // number of confirmations once Confirmed is true (headSeq - blockSeq + 1).
 type txnStatus struct {
@@ -179,30 +210,48 @@ func (s *SkyNode) DepositConfirmed(marketWallet string, amountSKY float64) (bool
 // the broadcast transaction id. The transaction is built and signed locally, then
 // injected into the network via the node.
 func (s *SkyNode) SendSKY(toAddr string, amountSKY float64) (string, error) {
+	txn, cl, err := s.prepareSpend(toAddr, amountSKY)
+	if err != nil {
+		return "", err
+	}
+	// Broadcast the finished, fully-signed transaction.
+	txid, err := cl.InjectTransaction(txn)
+	if err != nil {
+		return "", fmt.Errorf("sky spend: broadcast: %w", err)
+	}
+	return txid, nil
+}
+
+// prepareSpend validates the request, reads the escrow wallet's live outputs from
+// the node, and builds + locally signs the spend transaction — everything SendSKY
+// does except broadcasting. It returns the finished transaction and the node
+// client to inject it with, so a caller can dry-run (build + sign, inspect) before
+// committing to a broadcast.
+func (s *SkyNode) prepareSpend(toAddr string, amountSKY float64) (*coin.Transaction, *skyapi.Client, error) {
 	if s.signer == nil {
 		if s.spendErr != nil {
-			return "", s.spendErr
+			return nil, nil, s.spendErr
 		}
-		return "", errors.New("sky spend: escrow signer not initialized")
+		return nil, nil, errors.New("sky spend: escrow signer not initialized")
 	}
 
 	dst, err := cipher.DecodeBase58Address(toAddr)
 	if err != nil {
-		return "", fmt.Errorf("sky spend: invalid destination address %q: %w", toAddr, err)
+		return nil, nil, fmt.Errorf("sky spend: invalid destination address %q: %w", toAddr, err)
 	}
 
 	coins, err := droplet.FromString(formatSKY(amountSKY))
 	if err != nil {
-		return "", fmt.Errorf("sky spend: invalid amount %v: %w", amountSKY, err)
+		return nil, nil, fmt.Errorf("sky spend: invalid amount %v: %w", amountSKY, err)
 	}
 	if coins == 0 {
-		return "", errors.New("sky spend: amount must be positive")
+		return nil, nil, errors.New("sky spend: amount must be positive")
 	}
 	// The network rejects outputs with more decimal places than allowed
 	// (MaxDropletPrecision, 3 on mainnet). Fail fast with a clear message rather
 	// than building a transaction the node will reject.
 	if err := params.DropletPrecisionCheck(params.UserVerifyTxn.MaxDropletPrecision, coins); err != nil {
-		return "", fmt.Errorf("sky spend: amount %s SKY exceeds allowed precision (max %d decimals): %w",
+		return nil, nil, fmt.Errorf("sky spend: amount %s SKY exceeds allowed precision (max %d decimals): %w",
 			formatSKY(amountSKY), params.UserVerifyTxn.MaxDropletPrecision, err)
 	}
 
@@ -211,21 +260,15 @@ func (s *SkyNode) SendSKY(toAddr string, amountSKY float64) (string, error) {
 	// Read the escrow wallet's spendable outputs from the node.
 	summary, err := cl.OutputsForAddresses([]string{s.signer.addr.String()})
 	if err != nil {
-		return "", fmt.Errorf("sky spend: fetch outputs: %w", err)
+		return nil, nil, fmt.Errorf("sky spend: fetch outputs: %w", err)
 	}
 	spendable := summary.SpendableOutputs()
 
 	txn, err := s.buildSignedTxn(dst, coins, spendable, summary.Head.Time)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
-
-	// Broadcast the finished, fully-signed transaction.
-	txid, err := cl.InjectTransaction(txn)
-	if err != nil {
-		return "", fmt.Errorf("sky spend: broadcast: %w", err)
-	}
-	return txid, nil
+	return txn, cl, nil
 }
 
 // buildSignedTxn builds and locally signs a transaction sending coins droplets to
