@@ -67,7 +67,7 @@ type Order struct {
 	PaymentTxHash         string     `json:"payment_tx_hash,omitempty" db:"payment_tx_hash"`
 	Confirmations         int        `json:"confirmations" db:"confirmations"`
 	CompletedAt           *time.Time `json:"completed_at,omitempty" db:"completed_at"`
-	CommissionSCH         int64      `json:"commission_sch" db:"commission_sch"` // Coin Hours booked on a completed sale
+	CommissionSKY         float64    `json:"commission_sky" db:"commission_sky"` // SKY commission the market retained on a completed sale
 }
 
 // FreezeViolation records a freeze that did not result in a completed purchase.

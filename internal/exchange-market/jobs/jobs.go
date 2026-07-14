@@ -28,18 +28,26 @@ const depositConfirmGrace = 10 * time.Minute
 // replay of an old payment of a recycled amount.
 const paymentConfirmGrace = 2 * time.Hour
 
-// CommissionSCH returns the Coin Hours (SCH) commission for a sale of amountSKY
-// at rateSchPerSky SCH per SKY (design §2: "one hour's worth of coin hours" =
-// rate 1). Coin Hours are whole numbers, so the result is floored — a sub-1-SKY
-// trade at the default rate books 0. The commission is booked for accounting;
-// it is actually retained as the coin hours the escrowed SKY accrued to the
-// market wallet (realized via the delivery tx's hours_selection, once a real
-// node is wired in).
-func CommissionSCH(amountSKY, rateSchPerSky float64) int64 {
-	if amountSKY <= 0 || rateSchPerSky <= 0 {
+// CommissionSKY returns the market's SKY commission for a sale of amountSKY:
+// ratePercent% of the amount, rounded UP to the network's 3-decimal precision,
+// then clamped to [minSKY, maxSKY] (maxSKY <= 0 means no cap). The seller pays it
+// by depositing amountSKY + commission into escrow; the market delivers amountSKY
+// to the buyer and retains the commission.
+func CommissionSKY(amountSKY, ratePercent, minSKY, maxSKY float64) float64 {
+	if amountSKY <= 0 {
 		return 0
 	}
-	return int64(math.Floor(amountSKY * rateSchPerSky))
+	// Percentage of the amount, rounded up to 3 decimals so we never undercharge
+	// and the result is a valid on-chain amount.
+	c := math.Ceil(amountSKY*ratePercent/100*1000) / 1000
+	if c < minSKY {
+		c = minSKY
+	}
+	if maxSKY > 0 && c > maxSKY {
+		c = maxSKY
+	}
+	// The floor/cap come from operator config; snap to 3 decimals to stay valid.
+	return math.Round(c*1000) / 1000
 }
 
 // Runner owns and schedules the market's background jobs.
@@ -229,13 +237,14 @@ func (r *Runner) RunEscrowCheck() error {
 			r.log.WithError(err).Warnf("escrow-check: failed to complete order %s", o.ID)
 			continue
 		}
-		// Book the Coin Hours commission on the completed sale.
-		rate, err := r.db.GetFeeRateSchPerSky()
-		if err != nil {
-			rate = 1 // fall back to one hour's worth per SKY
-		}
-		if sch := CommissionSCH(o.AmountSKY, rate); sch > 0 {
-			if err := r.db.SetOrderCommission(o.ID, sch); err != nil {
+		// Book the SKY commission retained on the completed sale (for reporting;
+		// it was physically collected as amount+commission at deposit and only the
+		// amount was delivered). Recompute from the current config.
+		rate, _ := r.db.GetCommissionRatePercent() //nolint:errcheck
+		minC, _ := r.db.GetCommissionMinSKY()      //nolint:errcheck
+		maxC, _ := r.db.GetCommissionMaxSKY()      //nolint:errcheck
+		if c := CommissionSKY(o.AmountSKY, rate, minC, maxC); c > 0 {
+			if err := r.db.SetOrderCommission(o.ID, c); err != nil {
 				r.log.WithError(err).Warnf("escrow-check: failed to record commission for order %s", o.ID)
 			}
 		}
@@ -246,13 +255,13 @@ func (r *Runner) RunEscrowCheck() error {
 	return nil
 }
 
-// RunReturnScheduler refunds escrowed SKY to sellers whose offer was canceled
-// or expired after they had already deposited into the market wallet. The
-// return_delay_hours window is measured from when the SKY was deposited (not
-// from the cancel), so a deposit older than the window is refunded on the next
-// tick while a fresh one waits out the remainder (GetReturnableListings applies
-// the cutoff). A refund is only sent once the deposit is still verifiable
-// on-chain, then it is recorded so it happens at most once (design §7.8/4).
+// RunReturnScheduler refunds escrowed SKY to sellers whose offer was canceled or
+// expired after they had already deposited into the market wallet. Refunds are
+// immediate — as soon as a listing goes terminal it is eligible. A refund is only
+// sent once the deposit is still verifiable on-chain; if the escrow can't yet
+// fund the refund transaction (coin-hours still accruing) SendSKY fails and it is
+// retried next tick. The refund is recorded so it happens at most once
+// (design §7.8/4).
 func (r *Runner) RunReturnScheduler() error {
 	marketWallet, err := r.db.GetMarketWallet()
 	if err != nil {
@@ -261,12 +270,7 @@ func (r *Runner) RunReturnScheduler() error {
 	if marketWallet == "" {
 		return nil // escrow wallet not configured yet
 	}
-	delayHours, err := r.db.GetReturnDelayHours()
-	if err != nil {
-		return err
-	}
-	cutoff := time.Now().UTC().Add(-time.Duration(delayHours) * time.Hour)
-	listings, err := r.db.GetReturnableListings(cutoff)
+	listings, err := r.db.GetReturnableListings()
 	if err != nil {
 		return err
 	}

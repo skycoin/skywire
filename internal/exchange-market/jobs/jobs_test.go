@@ -182,31 +182,32 @@ func TestEscrowCheck(t *testing.T) {
 	if len(chain.sends) != 1 || chain.sends[0].addr != "sky-buyer" || chain.sends[0].amt != 7 {
 		t.Fatalf("SendSKY calls = %+v, want one send of 7 to sky-buyer", chain.sends)
 	}
-	// Commission booked at the default 1 SCH/SKY: floor(7 * 1) = 7 SCH.
+	// Commission booked at the default 0.5%: 0.5% of 7 = 0.035 SKY.
 	all, _ := d.GetAllOrders() //nolint
-	if len(all) != 1 || all[0].CommissionSCH != 7 {
-		t.Fatalf("commission = %v, want 7 SCH on the completed order", all)
+	if len(all) != 1 || math.Abs(all[0].CommissionSKY-0.035) > 1e-9 {
+		t.Fatalf("commission = %v, want 0.035 SKY on the completed order", all)
 	}
 }
 
-// TestCommissionSCH covers the commission formula: floor(amount_sky * rate),
-// with sub-1-SKY (default rate) and a disabled rate booking zero.
-func TestCommissionSCH(t *testing.T) {
+// TestCommissionSKY covers the SKY commission: rate% of the amount, rounded up
+// to 3 decimals, clamped to [min, cap] (cap 0 = none).
+func TestCommissionSKY(t *testing.T) {
 	cases := []struct {
-		amount, rate float64
-		want         int64
+		amount, rate, min, cap, want float64
 	}{
-		{10, 1, 10},   // 10 SKY at 1 SCH/SKY
-		{10.9, 1, 10}, // floored to whole coin hours
-		{100, 2, 200}, // operator raised the rate to 2 hours' worth
-		{0.5, 1, 0},   // sub-1-SKY books nothing at the default rate
-		{10, 0, 0},    // commission disabled
-		{0, 1, 0},     // no amount
-		{-5, 1, 0},    // guard against negatives
+		{100, 0.5, 0.001, 0, 0.5},     // 0.5% of 100
+		{10, 0.5, 0.001, 0, 0.05},     // 0.5% of 10
+		{1, 0.5, 0.001, 0, 0.005},     // 0.5% of 1
+		{0.1, 0.5, 0.001, 0, 0.001},   // 0.5% = 0.0005 -> floor 0.001
+		{100000, 0.5, 0.001, 50, 50},  // 0.5% = 500 -> capped at 50
+		{33.33, 0.5, 0.001, 0, 0.167}, // 0.166650 -> rounds up to 0.167
+		{10, 0, 0, 0, 0},              // rate 0 -> nothing (no floor)
+		{0, 0.5, 0.001, 0, 0},         // no amount -> 0 (not floored)
+		{-5, 0.5, 0.001, 0, 0},        // guard against negatives
 	}
 	for _, c := range cases {
-		if got := jobs.CommissionSCH(c.amount, c.rate); got != c.want {
-			t.Errorf("CommissionSCH(%v, %v) = %d, want %d", c.amount, c.rate, got, c.want)
+		if got := jobs.CommissionSKY(c.amount, c.rate, c.min, c.cap); math.Abs(got-c.want) > 1e-9 {
+			t.Errorf("CommissionSKY(%v, %v, %v, %v) = %v, want %v", c.amount, c.rate, c.min, c.cap, got, c.want)
 		}
 	}
 }
@@ -249,7 +250,7 @@ func (noopButConfirmed) PaymentConfirmations(string, string, string, float64, ti
 }
 
 // TestReturnScheduler refunds escrowed SKY for a canceled listing whose deposit
-// landed, once the refund delay has elapsed, and records the refund exactly once.
+// landed — immediately (no delay) — and records the refund exactly once.
 func TestReturnScheduler(t *testing.T) {
 	d := newDB(t)
 	if err := d.SetConfig("wallet_sky", "market-wallet"); err != nil {
@@ -271,18 +272,7 @@ func TestReturnScheduler(t *testing.T) {
 	chain := &fakeChain{deposit: true}
 	r := jobs.NewRunner(d, chain, nil)
 
-	// closed_at is "now", so with the default 1h delay nothing is due yet.
-	if err := r.RunReturnScheduler(); err != nil {
-		t.Fatalf("RunReturnScheduler (not due): %v", err)
-	}
-	if len(chain.sends) != 0 {
-		t.Fatalf("no refund should be due before the delay, got %+v", chain.sends)
-	}
-
-	// Drop the delay to 0 so the refund is due immediately.
-	if err := d.SetConfig("return_delay_hours", "0"); err != nil {
-		t.Fatal(err)
-	}
+	// The refund is due immediately once the listing is canceled.
 	if err := r.RunReturnScheduler(); err != nil {
 		t.Fatalf("RunReturnScheduler (due): %v", err)
 	}
@@ -312,9 +302,6 @@ func TestReturnScheduler(t *testing.T) {
 func TestReturnSchedulerNoDeposit(t *testing.T) {
 	d := newDB(t)
 	if err := d.SetConfig("wallet_sky", "market-wallet"); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.SetConfig("return_delay_hours", "0"); err != nil {
 		t.Fatal(err)
 	}
 	mustUser(t, d, "03seller", "sky-seller")

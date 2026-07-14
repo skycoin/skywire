@@ -46,6 +46,18 @@ func newTestDB(t *testing.T) *db.Database {
 	return database
 }
 
+// zeroCommission disables the SKY commission so a listing's expected deposit
+// equals its amount, keeping tests that aren't about commission simple.
+func zeroCommission(t *testing.T, database *db.Database) {
+	t.Helper()
+	if err := database.SetConfig("commission_rate_percent", "0"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("commission_min_sky", "0"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // dialTestServer wires a client Conn to a Server.Serve loop over net.Pipe,
 // authenticating the client as buyerPK.
 func dialTestServer(t *testing.T, database *db.Database, buyerPK string) *market.Conn {
@@ -74,6 +86,7 @@ func TestTradeRoundTrip(t *testing.T) {
 	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
 		t.Fatal(err)
 	}
+	zeroCommission(t, database)
 
 	// --- seller registers and lists a product ---
 	seller := dialTestServer(t, database, sellerPK)
@@ -166,6 +179,7 @@ func TestOnePendingListingPerSeller(t *testing.T) {
 	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
 		t.Fatal(err)
 	}
+	zeroCommission(t, database)
 
 	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
 	seller := dialTestServer(t, database, sellerPK)
@@ -219,6 +233,30 @@ func TestRegisterRejectsBadWallet(t *testing.T) {
 	mustSuccess(t, c, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
 }
 
+// TestListingCommission verifies the SKY commission is folded into the seller's
+// expected deposit (amount + commission) at the default 0.5% rate and its floor.
+func TestListingCommission(t *testing.T) {
+	database := newTestDB(t) // default commission: 0.5%, min 0.001, no cap
+	if err := database.SetConfig("explorer_btc_provider", "esplora"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
+	seller := dialTestServer(t, database, sellerPK)
+	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
+
+	// 0.5% of 100 = 0.5 → seller deposits 100.5, buyer will receive 100.
+	var big protocol.CreateListingResponse
+	bindSuccess(t, seller, protocol.TypeCreateListing, protocol.CreateListingRequest{
+		AmountSKY: 100, Price: 2, PaymentCurrency: "BTC",
+	}, &big)
+	if math.Abs(big.ExpectedAmountSKY-100.5) > 1e-9 {
+		t.Fatalf("deposit = %v, want amount+commission = 100.5", big.ExpectedAmountSKY)
+	}
+}
+
 // TestCreateListingPrecision verifies SKY amounts are normalized to the network's
 // 3-decimal precision (so the seller can deposit the exact amount) and that out-
 // of-range amounts are rejected.
@@ -230,6 +268,7 @@ func TestCreateListingPrecision(t *testing.T) {
 	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
 		t.Fatal(err)
 	}
+	zeroCommission(t, database)
 	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
 	seller := dialTestServer(t, database, sellerPK)
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{WalletSKY: skySeller, WalletBTC: btcSeller})
@@ -283,6 +322,7 @@ func TestGetListings(t *testing.T) {
 	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
 		t.Fatal(err)
 	}
+	zeroCommission(t, database)
 
 	seller := dialTestServer(t, database, sellerPK)
 	mustSuccess(t, seller, protocol.TypeRegister, protocol.RegisterRequest{
@@ -391,6 +431,7 @@ func TestSellerCancelConfirmedOffer(t *testing.T) {
 	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
 		t.Fatal(err)
 	}
+	zeroCommission(t, database)
 
 	const sellerPK = "0311111111111111111111111111111111111111111111111111111111111111aa"
 	const buyerPK = "0322222222222222222222222222222222222222222222222222222222222222bb"

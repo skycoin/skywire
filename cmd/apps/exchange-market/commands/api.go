@@ -26,12 +26,13 @@ var editableConfigKeys = map[string]bool{
 	"wallet_sky":              true,
 	"sky_fullnode_url":        true,
 	"sky_wallet_seed":         true,
-	"fee_rate_sch_per_sky":    true,
+	"commission_rate_percent": true,
+	"commission_min_sky":      true,
+	"commission_max_sky":      true,
 	"freeze_violations_limit": true,
 	"ban_duration_days":       true,
 	"listing_expiry_minutes":  true,
 	"order_expiry_minutes":    true,
-	"return_delay_hours":      true,
 	"cleanup_days":            true,
 }
 

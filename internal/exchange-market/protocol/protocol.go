@@ -221,10 +221,14 @@ type CreateListingRequest struct {
 	PaymentCurrency string  `json:"payment_currency"`
 }
 
-// CreateListingResponse tells the seller the non-round amount to deposit.
+// CreateListingResponse tells the seller how much SKY to deposit, broken down as
+// the listed amount plus the market commission. ExpectedAmountSKY = AmountSKY +
+// CommissionSKY is the exact amount to transfer to the market wallet.
 type CreateListingResponse struct {
 	ListingID         string  `json:"listing_id"`
-	ExpectedAmountSKY float64 `json:"expected_amount_sky"`
+	AmountSKY         float64 `json:"amount_sky"`          // the amount the buyer will receive
+	CommissionSKY     float64 `json:"commission_sky"`      // the market's commission
+	ExpectedAmountSKY float64 `json:"expected_amount_sky"` // amount + commission = the deposit
 	MarketWallet      string  `json:"market_wallet"`
 	ExpiresAt         string  `json:"expires_at"`
 }
