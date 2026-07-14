@@ -476,6 +476,28 @@ func (d *Database) GetInFlightOrders() ([]*Order, error) {
 	return orders, nil
 }
 
+// BuyerHasPendingPayment reports whether the given buyer already has a pending
+// payment of ~amount (within tol) to the same seller wallet in the same currency.
+// Fibercoin payments use a FIXED amount, so two payments of the same amount from
+// the SAME buyer to the same seller would be ambiguous (the sender no longer
+// disambiguates them); the buy handler uses this to reject the second one. Across
+// different buyers the same fixed amount is fine — the sender tells them apart.
+func (d *Database) BuyerHasPendingPayment(buyerPubKey, sellerWallet, currency string, amount, tol float64) (bool, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	var n int
+	err := d.db.QueryRow(`
+		SELECT COUNT(*) FROM orders
+		WHERE status = 'pending_payment' AND buyer_pubkey = ? AND seller_wallet = ? AND payment_currency = ?
+		  AND ABS(expected_payment_amount - ?) < ?
+	`, buyerPubKey, sellerWallet, currency, amount, tol).Scan(&n)
+	if err != nil {
+		return false, fmt.Errorf("failed to check buyer pending payment: %w", err)
+	}
+	return n > 0, nil
+}
+
 // OrderPaymentAmountExists reports whether an order awaiting payment already
 // expects a payment within tol of amount to the same seller wallet in the same
 // currency. Used to keep every pending payment's non-round amount unique per
