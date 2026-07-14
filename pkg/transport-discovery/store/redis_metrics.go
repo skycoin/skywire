@@ -16,6 +16,52 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
+// transportDailyBandwidth returns a transport's true daily throughput in
+// bytes (both directions) from its daily bandwidth hash.
+//
+// Each edge of a transport reports the FULL transport throughput
+// independently — a managed transport counts both the bytes it sends and
+// the bytes it receives (pkg/transport/managed_transport.go logSent/logRecv).
+// So edge A's (sent+recv) ≈ edge B's (sent+recv) ≈ the real bytes that
+// crossed the wire. Summing both reporters (as the legacy combined
+// "bandwidth" field does) double-counts. We instead take the MAX across
+// reporters of (sent+recv): exact for a single-reporter transport, and the
+// most-complete single observation when both edges report. Falls back to the
+// legacy combined field only for old redis data lacking per-reporter fields.
+func transportDailyBandwidth(result map[string]string) uint64 {
+	perReporter := make(map[string]uint64)
+	for k, v := range result {
+		var suffix string
+		switch {
+		case strings.HasSuffix(k, ":sent"):
+			suffix = ":sent"
+		case strings.HasSuffix(k, ":recv"):
+			suffix = ":recv"
+		default:
+			continue
+		}
+		var n uint64
+		fmt.Sscanf(v, "%d", &n) //nolint:errcheck,gosec
+		perReporter[strings.TrimSuffix(k, suffix)] += n
+	}
+	if len(perReporter) > 0 {
+		var best uint64
+		for _, total := range perReporter {
+			if total > best {
+				best = total
+			}
+		}
+		return best
+	}
+	// Legacy fallback: the combined field may double-count two-edge
+	// transports written before per-reporter accounting existed.
+	var bw uint64
+	if val, ok := result["bandwidth"]; ok {
+		fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
+	}
+	return bw
+}
+
 // getP2PTransportCounts returns a map of visor PK hex → count of p2p transports
 // (stcpr, sudph). A visor is considered online when it has 2+ p2p transports,
 // indicating genuine peer-to-peer network participation (not just dmsg
@@ -75,11 +121,9 @@ func (s *redisStore) getBandwidthFromHash(ctx context.Context, key, transportID,
 		PeriodKey:   periodKey,
 	}
 
-	if val, ok := result["bandwidth"]; ok {
-		if _, err := fmt.Sscanf(val, "%d", &agg.Bandwidth); err != nil {
-			return BandwidthAggregation{}, fmt.Errorf("failed to parse bandwidth value %q: %w", val, err)
-		}
-	}
+	// De-double-counted total: both edges report the full throughput, so
+	// take the max across reporters rather than the summed combined field.
+	agg.Bandwidth = transportDailyBandwidth(result)
 	if val, ok := result["updated_at"]; ok {
 		if _, err := fmt.Sscanf(val, "%d", &agg.UpdatedAt); err != nil {
 			return BandwidthAggregation{}, fmt.Errorf("failed to parse updated_at value %q: %w", val, err)
@@ -159,10 +203,7 @@ func (s *redisStore) GetNetworkMetrics(ctx context.Context, query MetricsQuery) 
 			continue
 		}
 
-		var bw uint64
-		if val, ok := result["bandwidth"]; ok {
-			fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
-		}
+		bw := transportDailyBandwidth(result)
 		if bw == 0 {
 			continue
 		}
@@ -298,18 +339,28 @@ func (s *redisStore) GetVisorAggregateMetrics(ctx context.Context, pks []cipher.
 				dailyAgg.Date = bwCmds[d].dateStr
 				bwResult, err := bwCmds[d].cmd.Result()
 				if err == nil && len(bwResult) > 0 {
-					var bw uint64
+					var bw, sent, recv uint64
 					if val, ok := bwResult["bandwidth"]; ok {
 						fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
 					}
-					if bw > 0 {
+					if val, ok := bwResult["sent"]; ok {
+						fmt.Sscanf(val, "%d", &sent) //nolint:errcheck,gosec
+					}
+					if val, ok := bwResult["recv"]; ok {
+						fmt.Sscanf(val, "%d", &recv) //nolint:errcheck,gosec
+					}
+					// Legacy rows have only the combined field; split evenly.
+					if sent == 0 && recv == 0 && bw > 0 {
+						sent, recv = bw/2, bw/2
+					}
+					if total := sent + recv; total > 0 {
 						dailyAgg.Bandwidth = &VisorBandwidthAggregate{
-							Sent:  bw / 2,
-							Recv:  bw / 2,
-							Total: bw,
+							Sent:  sent,
+							Recv:  recv,
+							Total: total,
 						}
-						totalSent += bw / 2
-						totalRecv += bw / 2
+						totalSent += sent
+						totalRecv += recv
 					}
 				}
 			} else {
