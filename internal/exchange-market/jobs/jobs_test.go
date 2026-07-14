@@ -21,10 +21,10 @@ type sendCall struct {
 	amt  float64
 }
 
-func (f *fakeChain) DepositConfirmed(string, float64) (bool, string, error) {
+func (f *fakeChain) DepositConfirmed(string, string, float64, time.Time, time.Time) (bool, string, error) {
 	return f.deposit, "deposit-tx", nil
 }
-func (f *fakeChain) PaymentConfirmations(string, string, float64) (int, string, error) {
+func (f *fakeChain) PaymentConfirmations(string, string, string, float64, time.Time, time.Time) (int, string, error) {
 	return f.confs, "pay-tx", nil
 }
 func (f *fakeChain) SendSKY(addr string, amt float64) (string, error) {
@@ -239,7 +239,7 @@ func TestEscrowCheckNoopDefers(t *testing.T) {
 // noopButConfirmed confirms payment but cannot send (like a misconfigured chain).
 type noopButConfirmed struct{ jobs.NoopChain }
 
-func (noopButConfirmed) PaymentConfirmations(string, string, float64) (int, string, error) {
+func (noopButConfirmed) PaymentConfirmations(string, string, string, float64, time.Time, time.Time) (int, string, error) {
 	return 2, "pay-tx", nil
 }
 

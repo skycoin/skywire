@@ -15,6 +15,18 @@ import (
 // reach before a trade completes (exchange-design.md §3).
 const RequiredConfirmations = 2
 
+// depositConfirmGrace widens a listing's deposit window on the upper end so a
+// deposit the seller sent just before expiry, but which only got mined into a
+// block shortly after, is still credited. The lower bound (listing creation) is
+// exact — it blocks replay of an older, unrelated transaction.
+const depositConfirmGrace = 10 * time.Minute
+
+// paymentConfirmGrace is the equivalent for buyer payments. BTC/LTC block and
+// confirmation times are far slower and more variable than SKY's, so the upper
+// bound is generous; the lower bound (order creation) is what actually blocks
+// replay of an old payment of a recycled amount.
+const paymentConfirmGrace = 2 * time.Hour
+
 // CommissionSCH returns the Coin Hours (SCH) commission for a sale of amountSKY
 // at rateSchPerSky SCH per SKY (design §2: "one hour's worth of coin hours" =
 // rate 1). Coin Hours are whole numbers, so the result is floored — a sub-1-SKY
@@ -125,7 +137,15 @@ func (r *Runner) RunListingCheck() error {
 		return err
 	}
 	for _, l := range listings {
-		confirmed, txHash, err := r.chain.DepositConfirmed(marketWallet, l.ExpectedAmountSKY)
+		// The deposit is identified by the seller's registered SKY address (the
+		// tx sender) within the listing's window — not by a fiddly non-round
+		// amount. Without a SKY address on file the deposit can't be verified.
+		sellerSKY, err := r.db.GetUserWallet(l.SellerPubKey, "SKY")
+		if err != nil || sellerSKY == "" {
+			r.log.Warnf("listing-check: seller %s has no SKY wallet; cannot verify deposit for listing %s", l.SellerPubKey, l.ID)
+			continue
+		}
+		confirmed, txHash, err := r.chain.DepositConfirmed(marketWallet, sellerSKY, l.ExpectedAmountSKY, l.CreatedAt, l.ExpiresAt.Add(depositConfirmGrace))
 		if err != nil {
 			r.log.WithError(err).Warnf("listing-check: deposit check failed for %s", l.ID)
 			continue
@@ -162,7 +182,12 @@ func (r *Runner) RunEscrowCheck() error {
 		return err
 	}
 	for _, o := range orders {
-		confs, txHash, err := r.chain.PaymentConfirmations(o.PaymentCurrency, o.SellerWallet, o.ExpectedPaymentAmount)
+		// The buyer's registered payment address (may be empty) is a soft
+		// corroborating signal. The payment must land within the order's window
+		// (created .. expiry + grace), which blocks replay of an old payment of a
+		// recycled unique amount.
+		buyerPay, _ := r.db.GetUserWallet(o.BuyerPubKey, o.PaymentCurrency) //nolint:errcheck
+		confs, txHash, err := r.chain.PaymentConfirmations(o.PaymentCurrency, o.SellerWallet, buyerPay, o.ExpectedPaymentAmount, o.CreatedAt, o.ExpiresAt.Add(paymentConfirmGrace))
 		if err != nil {
 			r.log.WithError(err).Warnf("escrow-check: payment check failed for order %s", o.ID)
 			continue
@@ -244,21 +269,22 @@ func (r *Runner) RunReturnScheduler() error {
 		return err
 	}
 	for _, l := range listings {
-		// Only refund SKY that actually arrived in the market wallet. Without
-		// this on-chain check a seller could create-and-cancel listings to
-		// drain the escrow wallet for deposits they never made.
-		confirmed, _, err := r.chain.DepositConfirmed(marketWallet, l.ExpectedAmountSKY)
+		sellerSKY, err := r.db.GetUserWallet(l.SellerPubKey, "SKY")
+		if err != nil || sellerSKY == "" {
+			r.log.Warnf("return-scheduler: seller %s has no SKY wallet; deferring refund of listing %s", l.SellerPubKey, l.ID)
+			continue
+		}
+		// Only refund SKY that actually arrived in the market wallet, from this
+		// seller, within the listing's deposit window. Without this on-chain check
+		// a seller could create-and-cancel listings to drain the escrow wallet for
+		// deposits they never made.
+		confirmed, _, err := r.chain.DepositConfirmed(marketWallet, sellerSKY, l.ExpectedAmountSKY, l.CreatedAt, l.ExpiresAt.Add(depositConfirmGrace))
 		if err != nil {
 			r.log.WithError(err).Warnf("return-scheduler: deposit check failed for listing %s", l.ID)
 			continue
 		}
 		if !confirmed {
 			continue // nothing escrowed for this listing
-		}
-		sellerSKY, err := r.db.GetUserWallet(l.SellerPubKey, "SKY")
-		if err != nil || sellerSKY == "" {
-			r.log.Warnf("return-scheduler: seller %s has no SKY wallet; deferring refund of listing %s", l.SellerPubKey, l.ID)
-			continue
 		}
 		txHash, err := r.chain.SendSKY(sellerSKY, l.ExpectedAmountSKY)
 		if err != nil {
