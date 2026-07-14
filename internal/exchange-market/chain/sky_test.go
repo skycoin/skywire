@@ -74,46 +74,14 @@ func TestDepositBelowConfirmations(t *testing.T) {
 	}
 }
 
-// TestSendSKY drives the csrf -> wallet/transaction -> injectTransaction flow.
-func TestSendSKY(t *testing.T) {
-	var injected map[string]string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/v1/csrf":
-			_ = json.NewEncoder(w).Encode(map[string]string{"csrf_token": "tok123"}) //nolint:errcheck
-		case "/api/v1/wallet/transaction":
-			if r.Header.Get("X-CSRF-Token") != "tok123" {
-				http.Error(w, "missing csrf", http.StatusForbidden)
-				return
-			}
-			_ = json.NewEncoder(w).Encode(map[string]string{"encoded_transaction": "deadbeef"}) //nolint:errcheck
-		case "/api/v1/injectTransaction":
-			_ = json.NewDecoder(r.Body).Decode(&injected)  //nolint:errcheck
-			_ = json.NewEncoder(w).Encode("injected-txid") //nolint:errcheck
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
+// Note: the SKY spend path (local build + sign + inject) is covered end-to-end in
+// sky_signer_test.go. TestSendSKYNoWallet here only asserts the no-seed guard.
 
-	node := NewSkyNode(srv.URL, "market.wlt", "", 2, srv.Client())
-	txid, err := node.SendSKY("2buyer...addr", 3.5)
-	if err != nil {
-		t.Fatalf("SendSKY: %v", err)
-	}
-	if txid != "injected-txid" {
-		t.Fatalf("txid = %q, want injected-txid", txid)
-	}
-	if injected["rawtx"] != "deadbeef" {
-		t.Fatalf("injected rawtx = %q, want deadbeef", injected["rawtx"])
-	}
-}
-
-// TestSendSKYNoWallet errors clearly when no wallet is configured.
+// TestSendSKYNoWallet errors clearly when no escrow seed is configured.
 func TestSendSKYNoWallet(t *testing.T) {
 	node := NewSkyNode("http://127.0.0.1:1", "", "", 2, nil)
 	if _, err := node.SendSKY("addr", 1); err == nil {
-		t.Fatal("expected an error when no wallet_id is configured")
+		t.Fatal("expected an error when no escrow seed is configured")
 	}
 }
 

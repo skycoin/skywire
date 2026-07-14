@@ -1,12 +1,18 @@
-// Package chain implements the real blockchain backend behind jobs.Chain: a
-// Skycoin fullnode client for SKY deposit verification and spending, plus a
-// pluggable Explorer seam for external-coin payment verification. It is swapped
-// in for jobs.NoopChain once the operator configures a SKY node URL. External
-// payment verification stays a no-op until a provider is implemented.
+// Package chain: sky.go implements the Skycoin fullnode client used for SKY
+// deposit verification and for spending SKY out of the market's escrow wallet.
+//
+// Spending is done with LOCAL signing: the node we talk to has its wallet API
+// disabled (the correct security posture — the market never hands its seed to a
+// remote node). We read the escrow wallet's unspent outputs via the node's READ
+// API, build and sign the transaction in-process from the operator-configured
+// seed (vendored skycoin src/coin + src/cipher + src/transaction), and broadcast
+// the finished transaction via the node's TXN API (/injectTransaction). None of
+// the signing ever leaves this process.
 package chain
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -15,6 +21,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/shopspring/decimal"
+
+	skyapi "github.com/skycoin/skycoin/src/api"
+	"github.com/skycoin/skycoin/src/cipher"
+	"github.com/skycoin/skycoin/src/coin"
+	"github.com/skycoin/skycoin/src/params"
+	"github.com/skycoin/skycoin/src/readable"
+	"github.com/skycoin/skycoin/src/transaction"
+	"github.com/skycoin/skycoin/src/util/droplet"
 )
 
 // skyEpsilon is half a droplet (SKY has 6 decimal places); amounts within this
@@ -28,30 +44,80 @@ const skyEpsilon = 0.0000005
 const maxNodeResponse = 32 << 20
 
 // SkyNode talks to a Skycoin fullnode's REST API (default port 6420). It
-// verifies incoming SKY deposits and spends SKY from a hot wallet on the node.
+// verifies incoming SKY deposits and spends SKY from the market's escrow wallet,
+// signing every spend locally from the configured seed.
 type SkyNode struct {
-	baseURL  string
-	walletID string
-	password string
-	confs    int
-	hc       *http.Client
+	baseURL string
+	confs   int
+	hc      *http.Client
+
+	// signer is the escrow hot wallet derived from the operator seed. It is nil
+	// when no seed is configured or the seed does not match the configured
+	// escrow address; in that case spendErr explains why spending is disabled.
+	signer   *skySigner
+	spendErr error
+}
+
+// skySigner is the market's single-address escrow wallet: the first address of a
+// standard Skycoin deterministic wallet derived from the operator's seed, plus
+// its secret key for signing spends. Deposits and change both live at this one
+// address, so it is the sole funding source for deliveries and refunds.
+type skySigner struct {
+	addr   cipher.Address
+	secKey cipher.SecKey
+}
+
+// newSigner derives the escrow wallet from seed. If wantAddr is non-empty it must
+// equal the seed-derived address (a guard against a seed/wallet_sky mismatch that
+// would otherwise silently spend from the wrong wallet).
+func newSigner(seed, wantAddr string) (*skySigner, error) {
+	_, seckeys := cipher.MustGenerateDeterministicKeyPairsSeed([]byte(seed), 1)
+	sk := seckeys[0]
+	addr, err := cipher.AddressFromSecKey(sk)
+	if err != nil {
+		return nil, fmt.Errorf("derive escrow address: %w", err)
+	}
+	if w := strings.TrimSpace(wantAddr); w != "" && w != addr.String() {
+		return nil, fmt.Errorf("seed-derived address %s does not match configured wallet_sky %s", addr, w)
+	}
+	return &skySigner{addr: addr, secKey: sk}, nil
 }
 
 // NewSkyNode builds a SkyNode client. confs is the required confirmation depth.
-func NewSkyNode(baseURL, walletID, password string, confs int, hc *http.Client) *SkyNode {
+// seed is the escrow wallet seed (empty disables spending); walletAddr, if set,
+// is the configured wallet_sky the seed is checked against.
+func NewSkyNode(baseURL, seed, walletAddr string, confs int, hc *http.Client) *SkyNode {
 	if hc == nil {
 		hc = &http.Client{Timeout: 20 * time.Second}
 	}
 	if confs <= 0 {
 		confs = 1
 	}
-	return &SkyNode{
-		baseURL:  strings.TrimRight(baseURL, "/"),
-		walletID: walletID,
-		password: password,
-		confs:    confs,
-		hc:       hc,
+	n := &SkyNode{
+		baseURL: strings.TrimRight(baseURL, "/"),
+		confs:   confs,
+		hc:      hc,
 	}
+	if strings.TrimSpace(seed) == "" {
+		n.spendErr = errors.New("sky spend: no escrow wallet seed configured (set sky_wallet_seed)")
+		return n
+	}
+	signer, err := newSigner(seed, walletAddr)
+	if err != nil {
+		n.spendErr = fmt.Errorf("sky spend: %w", err)
+		return n
+	}
+	n.signer = signer
+	return n
+}
+
+// EscrowAddress returns the seed-derived escrow address, or "" if no valid seed
+// is configured. Useful for cross-checking against the configured wallet_sky.
+func (s *SkyNode) EscrowAddress() string {
+	if s.signer == nil {
+		return ""
+	}
+	return s.signer.addr.String()
 }
 
 // txnStatus mirrors Skycoin's transaction status. In Skycoin, Height is the
@@ -109,100 +175,117 @@ func (s *SkyNode) DepositConfirmed(marketWallet string, amountSKY float64) (bool
 	return false, "", nil
 }
 
-// createTxnResp is the response of POST /api/v1/wallet/transaction.
-type createTxnResp struct {
-	EncodedTransaction string `json:"encoded_transaction"`
-}
-
-// SendSKY spends amountSKY from the market's hot wallet to toAddr and returns
-// the broadcast transaction id.
+// SendSKY spends amountSKY from the market's escrow wallet to toAddr and returns
+// the broadcast transaction id. The transaction is built and signed locally, then
+// injected into the network via the node.
 func (s *SkyNode) SendSKY(toAddr string, amountSKY float64) (string, error) {
-	if s.walletID == "" {
-		return "", fmt.Errorf("sky spend: no wallet_id configured")
+	if s.signer == nil {
+		if s.spendErr != nil {
+			return "", s.spendErr
+		}
+		return "", errors.New("sky spend: escrow signer not initialized")
 	}
-	csrf, err := s.csrfToken()
+
+	dst, err := cipher.DecodeBase58Address(toAddr)
+	if err != nil {
+		return "", fmt.Errorf("sky spend: invalid destination address %q: %w", toAddr, err)
+	}
+
+	coins, err := droplet.FromString(formatSKY(amountSKY))
+	if err != nil {
+		return "", fmt.Errorf("sky spend: invalid amount %v: %w", amountSKY, err)
+	}
+	if coins == 0 {
+		return "", errors.New("sky spend: amount must be positive")
+	}
+	// The network rejects outputs with more decimal places than allowed
+	// (MaxDropletPrecision, 3 on mainnet). Fail fast with a clear message rather
+	// than building a transaction the node will reject.
+	if err := params.DropletPrecisionCheck(params.UserVerifyTxn.MaxDropletPrecision, coins); err != nil {
+		return "", fmt.Errorf("sky spend: amount %s SKY exceeds allowed precision (max %d decimals): %w",
+			formatSKY(amountSKY), params.UserVerifyTxn.MaxDropletPrecision, err)
+	}
+
+	cl := skyapi.NewClient(s.baseURL)
+
+	// Read the escrow wallet's spendable outputs from the node.
+	summary, err := cl.OutputsForAddresses([]string{s.signer.addr.String()})
+	if err != nil {
+		return "", fmt.Errorf("sky spend: fetch outputs: %w", err)
+	}
+	spendable := summary.SpendableOutputs()
+
+	txn, err := s.buildSignedTxn(dst, coins, spendable, summary.Head.Time)
 	if err != nil {
 		return "", err
 	}
 
-	// Build + sign the transaction from the wallet.
-	createReq := map[string]any{
-		"wallet_id": s.walletID,
-		"hours_selection": map[string]any{
-			"type":         "auto",
-			"mode":         "share",
-			"share_factor": "0.5",
-		},
-		"to": []map[string]string{
-			{"address": toAddr, "coins": formatSKY(amountSKY)},
-		},
-	}
-	if s.password != "" {
-		createReq["password"] = s.password
-	}
-	var created createTxnResp
-	if err := s.postJSON("/api/v1/wallet/transaction", csrf, createReq, &created); err != nil {
-		return "", fmt.Errorf("sky spend: create txn: %w", err)
-	}
-	if created.EncodedTransaction == "" {
-		return "", fmt.Errorf("sky spend: node returned an empty transaction")
-	}
-
-	// Broadcast it.
-	var txid string
-	if err := s.postJSON("/api/v1/injectTransaction", csrf, map[string]string{"rawtx": created.EncodedTransaction}, &txid); err != nil {
-		return "", fmt.Errorf("sky spend: inject txn: %w", err)
+	// Broadcast the finished, fully-signed transaction.
+	txid, err := cl.InjectTransaction(txn)
+	if err != nil {
+		return "", fmt.Errorf("sky spend: broadcast: %w", err)
 	}
 	return txid, nil
 }
 
-// csrfToken fetches a CSRF token. If the node has CSRF disabled (404) it returns
-// an empty token, which is fine — the POST simply omits the header.
-func (s *SkyNode) csrfToken() (string, error) {
-	req, err := http.NewRequest(http.MethodGet, s.baseURL+"/api/v1/csrf", nil)
+// buildSignedTxn builds and locally signs a transaction sending coins droplets to
+// dst, funded from spendable (the escrow wallet's outputs), with change and
+// leftover coin-hours returning to the escrow address. It is pure (no network)
+// so it can be unit-tested offline.
+func (s *SkyNode) buildSignedTxn(dst cipher.Address, coins uint64, spendable readable.UnspentOutputs, headTime uint64) (*coin.Transaction, error) {
+	uxArr, err := spendable.ToUxArray()
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("sky spend: parse outputs: %w", err)
 	}
-	resp, err := s.hc.Do(req)
+	if len(uxArr) == 0 {
+		return nil, errors.New("sky spend: escrow wallet has no spendable outputs")
+	}
+	auxs := coin.NewAddressUxOuts(uxArr)
+
+	// Change (coins + leftover hours) returns to the escrow address. share_factor
+	// 0.5 splits the post-burn hours between the recipient and escrow change so
+	// the buyer receives usable coin-hours with their SKY.
+	changeAddr := s.signer.addr
+	half := decimal.New(5, -1) // 0.5
+	p := transaction.Params{
+		HoursSelection: transaction.HoursSelection{
+			Type:        transaction.HoursSelectionTypeAuto,
+			Mode:        transaction.HoursSelectionModeShare,
+			ShareFactor: &half,
+		},
+		To:            []coin.TransactionOutput{{Address: dst, Coins: coins, Hours: 0}},
+		ChangeAddress: &changeAddr,
+	}
+
+	txn, inputs, err := transaction.Create(p, auxs, headTime)
 	if err != nil {
-		return "", fmt.Errorf("sky csrf: %w", err)
+		return nil, fmt.Errorf("sky spend: build txn: %w", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck
-	if resp.StatusCode == http.StatusNotFound {
-		return "", nil // CSRF disabled on this node
+
+	// Sign every input with the escrow secret key, in input order. All inputs
+	// must belong to the escrow address (single-address wallet); anything else is
+	// a bug in output selection and must not be signed.
+	keys := make([]cipher.SecKey, len(inputs))
+	for i, in := range inputs {
+		if in.Address != s.signer.addr {
+			return nil, fmt.Errorf("sky spend: input %d belongs to %s, not escrow wallet %s", i, in.Address, s.signer.addr)
+		}
+		keys[i] = s.signer.secKey
 	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("sky csrf: status %d", resp.StatusCode)
+	txn.SignInputs(keys)
+	if err := txn.UpdateHeader(); err != nil {
+		return nil, fmt.Errorf("sky spend: finalize txn: %w", err)
 	}
-	var out struct {
-		Token string `json:"csrf_token"`
+	if !txn.IsFullySigned() {
+		return nil, errors.New("sky spend: transaction is not fully signed")
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", fmt.Errorf("sky csrf: decode: %w", err)
-	}
-	return out.Token, nil
+	return txn, nil
 }
 
 func (s *SkyNode) getJSON(path string, out any) error {
 	req, err := http.NewRequest(http.MethodGet, s.baseURL+path, nil)
 	if err != nil {
 		return err
-	}
-	return s.do(req, out)
-}
-
-func (s *SkyNode) postJSON(path, csrf string, body, out any) error {
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest(http.MethodPost, s.baseURL+path, strings.NewReader(string(buf)))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if csrf != "" {
-		req.Header.Set("X-CSRF-Token", csrf)
 	}
 	return s.do(req, out)
 }
