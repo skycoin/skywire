@@ -175,6 +175,12 @@ type Aggregator struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	done   chan struct{}
+
+	// nudge triggers an immediate reconcile out of band from the
+	// ReconcileInterval ticker. Buffered(1) so bursts of connects
+	// coalesce into a single pending reconcile (which is idempotent
+	// and walks the full conn set anyway).
+	nudge chan struct{}
 }
 
 // New constructs an Aggregator. Sets up a CXO Node, enables DMSG so
@@ -229,6 +235,24 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 		conf:    conf,
 		log:     conf.Logger,
 		done:    make(chan struct{}),
+		nudge:   make(chan struct{}, 1),
+	}
+	// Subscribe to a visor's feed the moment it dials in, rather than
+	// waiting up to ReconcileInterval (30s) for the next poll. A fresh
+	// visor (notably a browser wasm-visor) that AnnounceTo's the TPD and
+	// then registers a transport is otherwise invisible to the shared
+	// redis edge-index — and thus to the route-finder — for up to a full
+	// reconcile period, so `route find <fresh-visor> <exit>` 404s
+	// ("transport not found") until the poll catches up. The conn's
+	// handshake completes (peerID set) before OnConnect fires, so the
+	// nudged reconcile can subscribe immediately; it stays idempotent via
+	// alreadySubscribed, and the periodic ticker remains the safety net.
+	cxoNode.Config().OnConnect = func(_ *node.Conn) error {
+		select {
+		case a.nudge <- struct{}{}:
+		default:
+		}
+		return nil
 	}
 	// Wire all three Root-lifecycle callbacks. Together they make the
 	// CXO replication chain observable from tpd's logs:
@@ -310,6 +334,10 @@ func (a *Aggregator) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			a.reconcile()
+		case <-a.nudge:
+			// A visor just connected (OnConnect). Subscribe now instead
+			// of waiting for the next tick. reconcile() is idempotent.
 			a.reconcile()
 		}
 	}
