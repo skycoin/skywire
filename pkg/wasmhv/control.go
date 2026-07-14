@@ -112,6 +112,10 @@ type TransportSummary struct {
 	IsSetup   bool               `json:"is_setup"`
 	Label     string             `json:"label"`
 	LatencyMS float64            `json:"latency_ms,omitempty"`
+	// Initiator is true when this visor dialed out to establish the transport
+	// (outgoing); false when it accepted an inbound dial (incoming). A wasm
+	// visor only ever dials — except webrtc, which it can also accept.
+	Initiator bool `json:"initiator"`
 }
 
 // transportsIn mirrors visor.TransportsIn (the Transports RPC argument).
