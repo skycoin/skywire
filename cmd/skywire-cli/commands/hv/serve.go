@@ -69,6 +69,14 @@ func coinNodeDefault() string {
 	return "https://node.skycoin.com.aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc.dmsg"
 }
 
+// btcElectrumDefault is the ssl:// electrum server the bundled wallet's Bitcoin
+// coin uses out of the box. In the multicoin model the electrum is server-side
+// config (like the skycoin node), so the visor holds it; a user can override via
+// localStorage['skywire-btc-backend'] or the Bitcoin coin in Settings → Node.
+func btcElectrumDefault() string {
+	return "ssl://electrum.blockstream.info:50002"
+}
+
 func walletDmsgFetchShim() string {
 	return `<script>(function(){` +
 		`var rf=window.fetch?window.fetch.bind(window):null;` +
@@ -91,7 +99,17 @@ func walletDmsgFetchShim() string {
 		`function mkResp(r){var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});}` +
 		`window.fetch=function(input,init){` +
 		`var url=(typeof input==="string")?input:(input&&input.url);` +
-		`var coin=isCoin(url),btc=isBtc(url);` +
+		`var pth0=p(url);` +
+		// The visor IS the skycoin-web server (the "server = visor" role): serve the
+		// multicoin coin list, and route each coin's /coin/<index>/* to its backend
+		// (a fiber node over dmsg, or the in-tab BTC electrum gateway) — mirroring
+		// cmd/skycoin-web's discoverCoins + /coin/<index> proxy. Config-driven from
+		// the deployment (coin node + electrum default); a user override in
+		// Settings → Node makes the URL absolute and is honored below.
+		`if(pth0==="/api/v1/coins")return Promise.resolve(jr(200,[{id:0,nodeUrl:"/coin/0",coinName:"Skycoin",coinSymbol:"SKY",hoursName:"Coin Hours",priceTickerId:"sky-skycoin",priceTickerSource:"coinpaprika",coinExplorer:"https://explorer.skycoin.com",coinType:"skycoin",serverWallets:false},{id:1,nodeUrl:"/coin/1",coinName:"Bitcoin",coinSymbol:"BTC",hoursName:"",priceTickerId:"btc-bitcoin",priceTickerSource:"coinpaprika",coinExplorer:"https://blockchair.com/bitcoin",coinType:"bitcoin",serverWallets:false}]));` +
+		`var mc=/^\/coin\/(\d+)(\/[\s\S]*)?$/.exec(pth0);` +
+		`var ci=mc?+mc[1]:-1,inner=mc?(mc[2]||"/"):pth0;` +
+		`var btc=(ci>=0)?(ci===1):isBtc(url),coin=(ci>=0)?(ci!==1):isCoin(url);` +
 		`if(!coin&&!btc)return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
 		`init=init||{};` +
 		`var v=window.parent&&window.parent.skywireVisor;` +
@@ -101,7 +119,7 @@ func walletDmsgFetchShim() string {
 		// #plog panel — and the browser console — show what's crossing the mesh,
 		// mirroring the resolving-proxy browser (browse.js). Visible even at the
 		// seed-entry screen, where there's no wallet to query yet.
-		`var m=init.method||"GET",pth=p(url)+q(url),t0=Date.now();` +
+		`var m=init.method||"GET",pth=inner+q(url),t0=Date.now();` +
 		`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
 		`function done(tag){return function(r){wlog(tag+" → "+((r&&r.status)||"?")+" ("+(Date.now()-t0)+"ms)");return mkResp(r);};}` +
 		`function fail(tag){return function(e){wlog(tag+" ✗ "+String((e&&e.message)||e));return jr(502,{error:String(e)});};}` +
@@ -118,8 +136,7 @@ func walletDmsgFetchShim() string {
 		`if(btc){` +
 		`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
 		`var _bu;try{_bu=new URL(url,location.href);}catch(e){}` +
-		`var back=(_bu&&_bu.protocol&&_bu.protocol!=="http:"&&_bu.protocol!=="https:")?(_bu.protocol+"//"+_bu.host):ls("skywire-btc-backend");` +
-		`if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
+		`var back=(_bu&&_bu.protocol&&_bu.protocol!=="http:"&&_bu.protocol!=="https:")?(_bu.protocol+"//"+_bu.host):(ls("skywire-btc-backend")||"` + btcElectrumDefault() + `");` +
 		`var btag="btc "+m+" "+pth;wlog(btag);` +
 		`return Promise.resolve(v.btcFetch(back,m,pth,init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(done(btag)).catch(fail(btag));` +
 		`}` +

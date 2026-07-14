@@ -1,0 +1,45 @@
+<!doctype html><html><head><meta charset="utf-8"><title>wallet-proto (Gap A)</title></head>
+<body style="font:14px monospace;background:#15131c;color:#e8e8f0;padding:1em">
+<h3>skycoin-web Gap A — wallet.Service in wasm, IndexedDB-backed virtual dir</h3>
+<div id="out">booting…</div>
+<script src="wasm_exec.js"></script>
+<script>
+// IndexedDB persistence for the virtual fs store. The store is a Map(path -> {dir,mode,data:Uint8Array});
+// we persist it as one record in IDB (simple + sufficient for small .wlt files).
+const IDB_DB = 'walletproto', IDB_STORE = 'wfs', IDB_KEY = 'store';
+function idbOpen(){return new Promise((res,rej)=>{const r=indexedDB.open(IDB_DB,1);r.onupgradeneeded=()=>r.result.createObjectStore(IDB_STORE);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);});}
+async function idbLoad(){const db=await idbOpen();return new Promise((res)=>{const tx=db.transaction(IDB_STORE,'readonly').objectStore(IDB_STORE).get(IDB_KEY);tx.onsuccess=()=>res(tx.result||{});tx.onerror=()=>res({});});}
+async function idbSave(obj){const db=await idbOpen();return new Promise((res)=>{const tx=db.transaction(IDB_STORE,'readwrite').objectStore(IDB_STORE).put(obj,IDB_KEY);tx.onsuccess=()=>res();tx.onerror=()=>res();});}
+
+function log(s){document.getElementById('out').textContent += '\n'+s;}
+
+(async () => {
+  // 1) preload the persisted store from IndexedDB BEFORE the fs shim inits
+  const seed = await idbLoad();
+  globalThis.__wfsSeed = seed;
+  globalThis.__wfsPersist = {
+    load(store){ // called synchronously by the shim at init — populate from the preloaded seed
+      for (const [k,v] of Object.entries(globalThis.__wfsSeed||{}))
+        store.set(k, { dir:v.dir, mode:v.mode, data:v.data?Uint8Array.from(atob(v.data),c=>c.charCodeAt(0)):null });
+    },
+    save(store){ // async fire-and-forget on fsync
+      const obj={}; for(const [k,v] of store) obj[k]={dir:v.dir,mode:v.mode,data:v.data?btoa(String.fromCharCode(...v.data)):null};
+      idbSave(obj);
+    },
+  };
+  // 2) load the fs shim (reads __wfsPersist.load)
+  await new Promise((res)=>{const s=document.createElement('script');s.src='wallet-fs-shim.js';s.onload=res;document.head.appendChild(s);});
+  // 3) run the Go wasm (arrayBuffer instantiate — robust to .wasm MIME type)
+  const go = new Go();
+  const buf = await (await fetch('wallet-proto.wasm')).arrayBuffer();
+  const r = await WebAssembly.instantiate(buf, go.importObject);
+  go.run(r.instance);
+  await new Promise(res=>setTimeout(res,150));
+  document.getElementById('out').textContent = 'ready';
+  // expose for CDP-driven testing
+  window.protoCreate = () => window.walletProtoRun('/wallets');
+  window.protoList = () => window.walletProtoList('/wallets');
+  window.__protoReady = true;
+  log('booted — call protoCreate() / protoList()');
+})().catch(e => { document.getElementById('out').textContent = 'BOOT ERROR: ' + (e && e.stack || e); });
+</script></body></html>
