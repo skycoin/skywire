@@ -27,6 +27,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/wasmhv"
@@ -74,7 +75,13 @@ func walletDmsgFetchShim() string {
 		`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
 		`function q(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
 		`function isCoin(u){return /^\/api\/v[12]\//.test(p(u));}` +
-		`function isBtc(u){return /^\/(wallet\/)?v1\/btc\//.test(p(u));}` +
+		// BTC is any path containing /v1/btc/ — this catches BOTH the raw
+		// /v1/btc/health (node-health probe) AND skycoin-web's apiService form
+		// /api/v1/btc/{balance,history,send} (which also matches isCoin, but the
+		// BTC branch is checked first). No skycoin node endpoint contains
+		// /v1/btc/, and the gateway normalizes on that substring, so passing the
+		// full path through to btcFetch works either way.
+		`function isBtc(u){return /\/v1\/btc\//.test(p(u));}` +
 		`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
 		// The wallet POSTs balance/transactions as x-www-form-urlencoded; forward the
 		// request Content-Type so fetchDmsg/fetchClearnet don't mislabel the body as
@@ -89,31 +96,48 @@ func walletDmsgFetchShim() string {
 		`init=init||{};` +
 		`var v=window.parent&&window.parent.skywireVisor;` +
 		`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
+		// Every node/BTC request + its outcome is logged to the shared skywireLog
+		// (parent frame) with a [wallet] prefix, so the wallet config page's live
+		// #plog panel — and the browser console — show what's crossing the mesh,
+		// mirroring the resolving-proxy browser (browse.js). Visible even at the
+		// seed-entry screen, where there's no wallet to query yet.
+		`var m=init.method||"GET",pth=p(url)+q(url),t0=Date.now();` +
+		`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
+		`function done(tag){return function(r){wlog(tag+" → "+((r&&r.status)||"?")+" ("+(Date.now()-t0)+"ms)");return mkResp(r);};}` +
+		`function fail(tag){return function(e){wlog(tag+" ✗ "+String((e&&e.message)||e));return jr(502,{error:String(e)});};}` +
 		// BTC: the wallet does keys+signing itself; only chain queries go over the
 		// mesh, through the in-tab electrum gateway (skywireVisor.btcFetch), which
 		// dials the ssl:// electrum via skysocks-lite (upstream-proxy exit).
 		`if(btc){` +
 		`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
 		`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
-		`return Promise.resolve(v.btcFetch(back,init.method||"GET",p(url)+q(url),init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`var btag="btc "+m+" "+pth;wlog(btag);` +
+		`return Promise.resolve(v.btcFetch(back,m,pth,init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(done(btag)).catch(fail(btag));` +
 		`}` +
 		// COIN node API: routed exactly like the iframe browser (browse.js). A dmsg
 		// host (pk:port / pk.dmsg / name.pk.dmsg / alias) goes through the dmsg
 		// resolving proxy (fetchDmsg). A clearnet http(s):// node (not .dmsg) goes
 		// through skysocks-client-lite (fetchClearnet) via the SAME upstream-proxy
-		// exit the browser uses (skywire-upstream-proxy) — IP-anonymous. Requests are
-		// logged to the shared skywireLog so they show in the browser's log panel.
-		`var node=ls("skywire-coin-node")||"` + coinNodeDefault() + `";` +
-		`var m=init.method||"GET",pth=p(url)+q(url),ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
-		`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
+		// exit the browser uses (skywire-upstream-proxy) — IP-anonymous.
+		//
+		// The node is whatever skycoin-web ADDRESSED the request to: its Settings →
+		// Nodes page (customNodeUrls) makes the fetch URL absolute, so that page is
+		// the authoritative source for node selection and the shim HONORS it. A
+		// relative/same-origin /api path means the coin is on its default; then fall
+		// back to the legacy wallet-config-panel key (skywire-coin-node), else the
+		// deployment mesh node. (Enter a mesh node in Settings → Nodes as
+		// http://<host>.dmsg to route it over dmsg.)
+		`var _u;try{_u=new URL(url,location.href);}catch(e){_u=null;}` +
+		`var node=(_u&&_u.host&&_u.host!==location.host)?(_u.protocol+"//"+_u.host):(ls("skywire-coin-node")||"` + coinNodeDefault() + `");` +
+		`var ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
 		`if(/^https?:\/\//i.test(node)&&!/\.dmsg\b/i.test(node)){` +
 		`if(!v.fetchClearnet)return Promise.resolve(jr(503,{error:"skysocks clearnet gateway not available"}));` +
 		`var up=ls("skywire-upstream-proxy");if(!up)return Promise.resolve(jr(502,{error:"clearnet coin node needs a skysocks exit — set an upstream proxy"}));` +
-		`var full=node.replace(/\/+$/,"")+pth;wlog(m+" "+full+" via skysocks "+up.slice(0,8));` +
-		`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`var full=node.replace(/\/+$/,"")+pth,ctag="node "+m+" "+full+" via skysocks "+up.slice(0,8);wlog(ctag);` +
+		`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(done(ctag)).catch(fail(ctag));` +
 		`}` +
-		`var host=node.replace(/^\w+:\/\//,"");wlog(m+" dmsg://"+host+pth);` +
-		`return Promise.resolve(v.fetchDmsg(host,m,pth,init.body||null,hdrs)).then(mkResp).catch(function(e){return jr(502,{error:String(e)});});` +
+		`var host=node.replace(/^\w+:\/\//,""),dtag="node "+m+" dmsg://"+host+pth;wlog(dtag);` +
+		`return Promise.resolve(v.fetchDmsg(host,m,pth,init.body||null,hdrs)).then(done(dtag)).catch(fail(dtag));` +
 		`};` +
 		`})();</script>`
 }
@@ -162,11 +186,17 @@ page never asks anyone to type a secret key.`,
 			cmd.PrintErrln("read index.html:", err)
 			os.Exit(1)
 		}
-		// wasmVer fingerprints the embedded wasm so the page can detect a newer
-		// build (after the skywire binary updates) and self-reload — see
-		// autoupdate.js. Short SHA-256 prefix is plenty to spot a content change.
-		sum := sha256.Sum256(wasm)
-		wasmVer := hex.EncodeToString(sum[:])[:16]
+		// wasmVer fingerprints the WHOLE served build so the page detects ANY newer
+		// deploy and self-reloads (see autoupdate.js): the wasm blob, the Angular
+		// index (it references the content-hashed UI bundle, so a UI-only change
+		// moves it), AND the binary build version (so a plain version bump moves it
+		// even when the wasm blob is byte-identical — the case that left connected
+		// tabs stuck on an old build: /wasm-version used to hash only the wasm).
+		vh := sha256.New()
+		vh.Write(wasm)
+		vh.Write(indexB)
+		vh.Write([]byte(buildinfo.Version()))
+		wasmVer := hex.EncodeToString(vh.Sum(nil))[:16]
 		index := injectBoot(indexB, wasmVer, serveHarness)
 
 		mux := http.NewServeMux()

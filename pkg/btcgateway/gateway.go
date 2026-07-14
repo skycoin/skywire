@@ -93,6 +93,8 @@ func (g *Gateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		g.history(w, r, b)
 	case path == "/v1/btc/fee" && r.Method == http.MethodGet:
 		g.fee(w, r, b)
+	case path == "/v1/btc/health" && r.Method == http.MethodGet:
+		g.health(w, r, b)
 	case path == "/v1/btc/send" && r.Method == http.MethodPost:
 		g.send(w, r, b)
 	default:
@@ -165,6 +167,20 @@ func (g *Gateway) fee(w http.ResponseWriter, r *http.Request, b btc.Backend) {
 		return
 	}
 	writeJSON(w, map[string]interface{}{"sat_per_byte": spb, "blocks": blocks})
+}
+
+// health reports whether the configured Electrum backend is reachable and, if
+// so, its current chain tip height. It is the BTC parallel to the skycoin
+// node's /api/v1/health: the wallet's node-status indicator and coin-availability
+// gating call it (without needing a wallet or address). A dead backend yields
+// 502 so callers can treat non-200 as "unavailable".
+func (g *Gateway) health(w http.ResponseWriter, _ *http.Request, b btc.Backend) {
+	height, err := b.Health()
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "electrum unreachable: "+err.Error())
+		return
+	}
+	writeJSON(w, map[string]interface{}{"tip_height": height})
 }
 
 // send broadcasts a client-signed raw transaction — the in-browser wallet signs
