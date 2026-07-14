@@ -264,20 +264,22 @@ func (d *Database) DeleteOldPendingListings(age time.Duration) (int64, error) {
 	return n, nil
 }
 
-// PendingListingAmountExists reports whether a still-pending listing already
-// expects a SKY deposit within tol of amount. Used to keep every pending
-// deposit's non-round amount unique to the (single) market wallet.
-func (d *Database) PendingListingAmountExists(amount, tol float64) (bool, error) {
+// SellerHasPendingListing reports whether the seller already has a listing that
+// is still awaiting its SKY deposit (status 'pending' and not yet expired). A
+// deposit is identified by the seller's SKY address within the listing's window,
+// so two concurrently-pending listings from one seller would be ambiguous; the
+// create-listing handler uses this to allow only one pending listing per seller.
+func (d *Database) SellerHasPendingListing(sellerPubKey string) (bool, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
 	var n int
 	err := d.db.QueryRow(`
 		SELECT COUNT(*) FROM pending_listings
-		WHERE status = 'pending' AND ABS(expected_amount_sky - ?) < ?
-	`, amount, tol).Scan(&n)
+		WHERE seller_pubkey = ? AND status = 'pending' AND expires_at > ?
+	`, sellerPubKey, time.Now().UTC()).Scan(&n)
 	if err != nil {
-		return false, fmt.Errorf("failed to check pending listing amount: %w", err)
+		return false, fmt.Errorf("failed to check seller pending listing: %w", err)
 	}
 	return n > 0, nil
 }
