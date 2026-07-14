@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"slices"
 	"testing"
+	"time"
 )
 
 // fakeStore is an ExplorerConfigStore returning a fixed config for one currency.
@@ -43,9 +44,10 @@ func TestEsploraPaymentConfirmations(t *testing.T) {
 			_, _ = w.Write([]byte("800010")) //nolint:errcheck
 		case "/api/address/" + addr + "/txs":
 			txs := []map[string]any{
-				{ // pays exactly 0.05000000 to addr, confirmed at height 800000 => 11 confs
+				{ // pays exactly 0.05 to addr from the buyer, confirmed at height 800000 (11 confs), block time 1000
 					"txid":   "tx-pay",
-					"status": map[string]any{"confirmed": true, "block_height": 800000},
+					"status": map[string]any{"confirmed": true, "block_height": 800000, "block_time": 1000},
+					"vin":    []map[string]any{{"prevout": map[string]any{"scriptpubkey_address": "bc1qbuyer"}}},
 					"vout": []map[string]any{
 						{"scriptpubkey_address": addr, "value": 5000000},
 						{"scriptpubkey_address": "other", "value": 999},
@@ -63,7 +65,9 @@ func TestEsploraPaymentConfirmations(t *testing.T) {
 	c := New(Config{}, fakeStore{currency: "BTC", provider: "esplora", url: srv.URL})
 	c.exp.(*router).hc = srv.Client()
 
-	confs, txid, err := c.PaymentConfirmations("BTC", addr, 0.05)
+	// Window [500, 2000] covers the payment's block time (1000); buyer corroborates.
+	nb, na := time.Unix(500, 0), time.Unix(2000, 0)
+	confs, txid, err := c.PaymentConfirmations("BTC", addr, "bc1qbuyer", 0.05, nb, na)
 	if err != nil {
 		t.Fatalf("PaymentConfirmations: %v", err)
 	}
@@ -72,12 +76,13 @@ func TestEsploraPaymentConfirmations(t *testing.T) {
 	}
 
 	// A different amount is not matched.
-	confs, _, err = c.PaymentConfirmations("BTC", addr, 0.04)
-	if err != nil {
-		t.Fatalf("PaymentConfirmations(mismatch): %v", err)
+	if confs, _, err := c.PaymentConfirmations("BTC", addr, "bc1qbuyer", 0.04, nb, na); err != nil || confs != 0 {
+		t.Fatalf("expected no match for a different amount, got confs=%d err=%v", confs, err)
 	}
-	if confs != 0 {
-		t.Fatalf("expected no match for a different amount, got %d confs", confs)
+
+	// A payment confirmed before the window (anti-replay) is not matched.
+	if confs, _, err := c.PaymentConfirmations("BTC", addr, "bc1qbuyer", 0.05, time.Unix(1500, 0), time.Unix(2000, 0)); err != nil || confs != 0 {
+		t.Fatalf("expected no match for a payment before the window, got confs=%d err=%v", confs, err)
 	}
 }
 
@@ -85,7 +90,7 @@ func TestEsploraPaymentConfirmations(t *testing.T) {
 // currency has no explorer configured.
 func TestRouterUnconfiguredCurrency(t *testing.T) {
 	c := New(Config{}, fakeStore{}) // store returns empty provider for everything
-	confs, _, err := c.PaymentConfirmations("BTC", "addr", 1.0)
+	confs, _, err := c.PaymentConfirmations("BTC", "addr", "", 1.0, time.Unix(0, 0), time.Now())
 	if err != nil || confs != 0 {
 		t.Fatalf("unconfigured currency should be 0/nil, got confs=%d err=%v", confs, err)
 	}

@@ -117,7 +117,11 @@ func TestLiveEsplora(t *testing.T) {
 			}
 
 			// (a) shape + (b) positive match: the adapter must confirm this payment.
-			confs, txid, err := e.PaymentConfirmations(tc.currency, addr, wantAmount)
+			// This test matches an arbitrary real payment by amount only, so the
+			// sender is left empty and the window is wide open.
+			anySender := ""
+			wideOpen, farFuture := time.Unix(0, 0), time.Now().Add(24*time.Hour)
+			confs, txid, err := e.PaymentConfirmations(tc.currency, addr, anySender, wantAmount, wideOpen, farFuture)
 			if err != nil {
 				t.Fatalf("PaymentConfirmations(%s, %s, %.8f): %v", tc.currency, addr, wantAmount, err)
 			}
@@ -129,7 +133,7 @@ func TestLiveEsplora(t *testing.T) {
 
 			// A clearly-impossible amount must not match (no false positive, and
 			// proves the full parse path ran without error).
-			confs, _, err = e.PaymentConfirmations(tc.currency, addr, 987654.32109876)
+			confs, _, err = e.PaymentConfirmations(tc.currency, addr, anySender, 987654.32109876, wideOpen, farFuture)
 			if err != nil {
 				t.Fatalf("PaymentConfirmations(no-match): %v", err)
 			}

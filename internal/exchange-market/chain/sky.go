@@ -164,19 +164,35 @@ type txnOutput struct {
 	Coins string `json:"coins"`
 }
 
+// txnInput is one input of a verbose transaction; Owner is the address that
+// funded (sent) the input — i.e. the depositor.
+type txnInput struct {
+	Owner string `json:"owner"`
+}
+
 // verboseTxn is one element of GET /api/v1/transactions?verbose=1.
 type verboseTxn struct {
 	Status txnStatus `json:"status"`
 	Txn    struct {
-		TxID    string      `json:"txid"`
-		Outputs []txnOutput `json:"outputs"`
+		TxID      string      `json:"txid"`
+		Timestamp int64       `json:"timestamp"`
+		Inputs    []txnInput  `json:"inputs"`
+		Outputs   []txnOutput `json:"outputs"`
 	} `json:"txn"`
 }
 
-// DepositConfirmed reports whether marketWallet has received a confirmed SKY
-// output of amountSKY (within a droplet) with at least the required
-// confirmations. Returns the funding transaction id on success.
-func (s *SkyNode) DepositConfirmed(marketWallet string, amountSKY float64) (bool, string, error) {
+// DepositConfirmed reports whether marketWallet received a confirmed SKY deposit
+// of amountSKY (exact, within a droplet) that (a) has at least the required
+// confirmations, (b) was sent FROM senderAddr — the seller's registered SKY
+// address — and (c) was made within [notBefore, notAfter], the listing's deposit
+// window. Matching by exact amount would be ambiguous on a shared escrow wallet
+// (two sellers can list the same round amount); the sender address disambiguates,
+// and the time window blocks replay of an old, unrelated transaction. Returns the
+// funding transaction id on success.
+//
+// If senderAddr is empty the sender check is skipped (amount + window only); the
+// jobs always supply it, so in practice the sender is always enforced.
+func (s *SkyNode) DepositConfirmed(marketWallet, senderAddr string, amountSKY float64, notBefore, notAfter time.Time) (bool, string, error) {
 	q := url.Values{}
 	q.Set("addrs", marketWallet)
 	q.Set("confirmed", "1")
@@ -186,8 +202,19 @@ func (s *SkyNode) DepositConfirmed(marketWallet string, amountSKY float64) (bool
 	if err := s.getJSON("/api/v1/transactions?"+q.Encode(), &txns); err != nil {
 		return false, "", err
 	}
+	nb, na := notBefore.Unix(), notAfter.Unix()
 	for _, t := range txns {
 		if !t.Status.Confirmed || int(t.Status.Height) < s.confs { //nolint
+			continue
+		}
+		// Deposit must fall inside the listing's window: not before it was created
+		// (blocks reusing an old transaction) and not after it expired (+grace,
+		// applied by the caller for confirmation lag).
+		if t.Txn.Timestamp < nb || t.Txn.Timestamp > na {
+			continue
+		}
+		// Deposit must originate from the seller's registered SKY address.
+		if senderAddr != "" && !hasOwner(t.Txn.Inputs, senderAddr) {
 			continue
 		}
 		for _, o := range t.Txn.Outputs {
@@ -204,6 +231,16 @@ func (s *SkyNode) DepositConfirmed(marketWallet string, amountSKY float64) (bool
 		}
 	}
 	return false, "", nil
+}
+
+// hasOwner reports whether any input was funded by addr.
+func hasOwner(inputs []txnInput, addr string) bool {
+	for _, in := range inputs {
+		if in.Owner == addr {
+			return true
+		}
+	}
+	return false
 }
 
 // SendSKY spends amountSKY from the market's escrow wallet to toAddr and returns

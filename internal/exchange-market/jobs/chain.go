@@ -3,7 +3,10 @@
 // cleanup and ban enforcement.
 package jobs
 
-import "errors"
+import (
+	"errors"
+	"time"
+)
 
 // ErrNoChain is returned by NoopChain for any operation that needs a real
 // blockchain/explorer backend.
@@ -14,15 +17,20 @@ var ErrNoChain = errors.New("no blockchain backend configured")
 // configured URLs) is provided in a later phase; jobs are written against this
 // interface so they are testable and the backend is swappable.
 type Chain interface {
-	// DepositConfirmed reports whether the market wallet has received a SKY
-	// deposit of amountSKY with enough confirmations to be considered settled.
-	// Used by the Listing Checker to promote a pending listing into a product.
-	DepositConfirmed(marketWallet string, amountSKY float64) (confirmed bool, txHash string, err error)
+	// DepositConfirmed reports whether the market wallet received a settled SKY
+	// deposit of amountSKY sent FROM senderAddr (the seller's registered SKY
+	// address) within [notBefore, notAfter] (the listing's deposit window). The
+	// sender + window disambiguate a shared escrow wallet and block replay of an
+	// old transaction. Used by the Listing Checker to promote a pending listing.
+	DepositConfirmed(marketWallet, senderAddr string, amountSKY float64, notBefore, notAfter time.Time) (confirmed bool, txHash string, err error)
 
 	// PaymentConfirmations returns how many confirmations a payment of
-	// expectedAmount in currency to addr currently has (0 if not observed).
-	// Used by the Escrow Checker to track a buyer's payment to the seller.
-	PaymentConfirmations(currency, addr string, expectedAmount float64) (confirmations int, txHash string, err error)
+	// expectedAmount in currency to addr currently has (0 if not observed). Only a
+	// payment within [notBefore, notAfter] — the order's window — counts (blocks
+	// replay of an old payment of a recycled amount); senderAddr, the buyer's
+	// registered payment address, is a soft corroborating signal. Used by the
+	// Escrow Checker to track a buyer's payment to the seller.
+	PaymentConfirmations(currency, addr, senderAddr string, expectedAmount float64, notBefore, notAfter time.Time) (confirmations int, txHash string, err error)
 
 	// SendSKY transfers amountSKY of SKY from the market wallet to addr and
 	// returns the transaction hash. Used to deliver SKY to a buyer on a
@@ -36,12 +44,12 @@ type Chain interface {
 type NoopChain struct{}
 
 // DepositConfirmed always reports not-confirmed.
-func (NoopChain) DepositConfirmed(string, float64) (bool, string, error) {
+func (NoopChain) DepositConfirmed(string, string, float64, time.Time, time.Time) (bool, string, error) {
 	return false, "", nil
 }
 
 // PaymentConfirmations always reports zero confirmations.
-func (NoopChain) PaymentConfirmations(string, string, float64) (int, string, error) {
+func (NoopChain) PaymentConfirmations(string, string, string, float64, time.Time, time.Time) (int, string, error) {
 	return 0, "", nil
 }
 
