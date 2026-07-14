@@ -724,6 +724,7 @@
       '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
       '<button id="sb-proxy-list-btn" title="pick a public skysocks server from service discovery" style="cursor:pointer">⌄ servers</button>' +
+      '<button id="sb-proxy-rnd" title="pick a random skysocks server from service discovery" style="cursor:pointer">🎲 random</button>' +
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
       '<button id="sb-proxy-stop" title="stop this window\'s skysocks-lite: release its route + session (re-establishes on the next clearnet request)" style="cursor:pointer">■ stop</button>' +
       '<button id="sb-proxy-dbg" title="stream the wasm visor\'s own detailed [skysocks-lite]/[resolve-proxy] lines to the visor-log window too" style="cursor:pointer">🐞 verbose: off</button>' +
@@ -892,6 +893,18 @@
       }).catch(function (e) { plog("● SD fetch failed: " + String((e && e.message) || e)); });
     };
     $("sb-proxy-list").onchange = function () { if (this.value) { $("sb-proxy-pk").value = this.value; saveProxy(); } };
+    $("sb-proxy-rnd").onclick = function () {
+      plog("● 🎲 fetching skysocks servers to pick a random exit…");
+      Promise.resolve(fdmsg("sd.dmsg", "GET", "/api/services?type=proxy", null)).then(function (r) {
+        var list = [];
+        try { list = JSON.parse(new TextDecoder().decode(r.body)) || []; } catch (e) {}
+        var pks = list.map(function (s) { return String(s.address || "").split(":")[0]; }).filter(function (pk) { return /^[0-9a-f]{66}$/i.test(pk); });
+        if (!pks.length) { plog("● no skysocks servers found"); return; }
+        var pk = pks[Math.floor(Math.random() * pks.length)];
+        $("sb-proxy-pk").value = pk; saveProxy();
+        plog("● 🎲 random exit → " + pk.slice(0, 8) + "… (of " + pks.length + ")");
+      }).catch(function (e) { plog("● SD fetch failed: " + String((e && e.message) || e)); });
+    };
     // Stop this window's skysocks-lite: release its route + session. The wasm emits
     // a "stopped — released N route/session(s)" line via the per-window hook when a
     // session was active; this immediate line covers the no-active-session case.
@@ -1833,7 +1846,7 @@
         '.sww-bar button{background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .65em;cursor:pointer;font:inherit;line-height:1}' +
         '.sww-bar button:hover{background:#3a3352;color:#fff}.sww-bar button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.2)}' +
         '.sww-served{font-size:.92em;padding:.15em .6em;border-radius:999px;background:rgba(74,222,128,.18);color:#4ade80}' +
-        '#sww-cfg{display:none;border:0;border-bottom:1px solid #2a2342;width:100%;height:48%;min-height:0;background:#15131c}' +
+        '#sww-cfg{display:none;border:0;border-bottom:1px solid #2a2342;width:100%;height:62%;min-height:0;background:#15131c}' +
         '#sww-cfg.open{display:block}' +
         '</style>' +
         '<div class="sww-bar">' +

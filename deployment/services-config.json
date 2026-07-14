@@ -119,7 +119,7 @@
     ],
     "dns_server": "1.1.1.1",
     "geoip": "http://ip.skycoin.com",
-    "skycoin_node_dmsg": "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:6420",
+    "skycoin_node_dmsg": "https://node.skycoin.com.aong2hr4en7v6bnxr3az5hzruad7qsbv27xr5ajioyicfaor3n2mc.dmsg",
     "skycoin_explorer_dmsg": "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:8081",
     "skycoin_blog_dmsg": "dmsg://039a6d1e3c237f5f05b78ec19e9f31a007f84835d7ef1e812876102281d1db74c1:8082",
     "survey_whitelist": [
