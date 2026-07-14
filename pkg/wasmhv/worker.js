@@ -280,6 +280,14 @@
         if (!bootParams) { bootParams = { sk: m.sk, seedpk: m.seedpk, seedws: m.seedws, disc: m.disc }; tryBoot(); }
         // If already booted, this tab was told 'up' on connect; nothing more to do.
         return;
+      case 'shutdown':
+        // Auto-update path: the SharedWorker holds the booted wasm and survives a
+        // tab's location.reload(), so a plain reload would reconnect to THIS stale
+        // runtime. self.close() terminates the worker; the reloading tab then boots
+        // a fresh SharedWorker that fetches the new wasm-visor.wasm. Kills the visor
+        // for every connected tab by design — they're all updating to the new build.
+        try { self.close(); } catch (e) { /* not a SharedWorker (dedicated fallback) */ }
+        return;
       case 'vis':
         port._vis = m.state;
         // We do NOT hand off the agent role on visibility change alone: the live
