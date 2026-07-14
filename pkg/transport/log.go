@@ -63,10 +63,12 @@ func (le *LogEntry) AddSent(n uint64) {
 	atomic.AddUint64(le.SentBytes, n)
 }
 
-// Reset resets LogEntry.
+// Reset resets LogEntry. Uses atomic stores rather than subtracting a
+// non-atomically-read current value, which could race with a concurrent
+// AddSent/AddRecv and under/over-shoot (or wrap uint64).
 func (le *LogEntry) Reset() {
-	atomic.AddUint64(le.SentBytes, -*le.SentBytes)
-	atomic.AddUint64(le.RecvBytes, -*le.RecvBytes)
+	atomic.StoreUint64(le.SentBytes, 0)
+	atomic.StoreUint64(le.RecvBytes, 0)
 }
 
 // MarshalJSON implements json.Marshaller

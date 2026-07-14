@@ -95,10 +95,14 @@ func (v *Visor) browseHomePage(host string) *SkynetHTTPResponse {
 // resolved via the same alias map the dmsgweb/skynetweb resolving proxy uses.
 // The reserved "home" label is handled earlier by browseHomePage (synthetic
 // directory), not here.
-func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, uint16, error) {
+// resolveBrowseHost resolves a browse/coin host to (pk, port, vhost). vhost is
+// the readable name in a "<name>.<pk>.dmsg" form (e.g. "node.skycoin.com"),
+// empty for a bare pk — callers that HTTP-over-dmsg to a vhost-routing backend
+// (Caddy/nginx) MUST send it as the Host header, or the backend can't route.
+func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, uint16, string, error) {
 	host = browseStripHost(host)
 	if host == "" {
-		return cipher.PubKey{}, 0, fmt.Errorf("empty host")
+		return cipher.PubKey{}, 0, "", fmt.Errorf("empty host")
 	}
 	port := uint16(80)
 	if reqPort != 0 {
@@ -124,23 +128,23 @@ func (v *Visor) resolveBrowseHost(host string, reqPort uint16) (cipher.PubKey, u
 	// bare hex PK, optionally with :port (handled above).
 	var pk cipher.PubKey
 	if err := pk.Set(hp); err == nil {
-		return pk, port, nil
+		return pk, port, "", nil
 	}
-	// alias.dmsg / <pk>.dmsg / alias.skynet
+	// alias.dmsg / <pk>.dmsg / <name>.<pk>.dmsg / alias.skynet
 	aliases := v.browseAliases()
 	for _, suffix := range []string{".dmsg", ".skynet"} {
 		if strings.HasSuffix(lower, suffix) {
-			_, _, dest, p, err := skynetweb.ParseResolverHost(host, suffix, aliases)
+			vhost, _, dest, p, err := skynetweb.ParseResolverHost(host, suffix, aliases)
 			if err != nil {
-				return cipher.PubKey{}, 0, err
+				return cipher.PubKey{}, 0, "", err
 			}
 			if reqPort == 0 && p != 0 {
 				port = p
 			}
-			return dest, port, nil
+			return dest, port, vhost, nil
 		}
 	}
-	return cipher.PubKey{}, 0, fmt.Errorf("cannot resolve %q (use a pk, <pk>.dmsg, or alias.dmsg)", host)
+	return cipher.PubKey{}, 0, "", fmt.Errorf("cannot resolve %q (use a pk, <pk>.dmsg, or alias.dmsg)", host)
 }
 
 // BrowseFetch performs the request over skynet and/or dmsg per Scheme, returning
@@ -151,7 +155,7 @@ func (v *Visor) BrowseFetch(req BrowseFetchRequest) (*SkynetHTTPResponse, error)
 	if resp := v.browseHomePage(req.Host); resp != nil {
 		return resp, nil
 	}
-	pk, port, err := v.resolveBrowseHost(req.Host, req.Port)
+	pk, port, _, err := v.resolveBrowseHost(req.Host, req.Port)
 	if err != nil {
 		return nil, fmt.Errorf("resolve %q: %w", req.Host, err)
 	}

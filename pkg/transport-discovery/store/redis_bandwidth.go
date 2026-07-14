@@ -122,6 +122,11 @@ func (s *redisStore) UpdateBandwidth(ctx context.Context, transportID string,
 		pipe.Expire(ctx, s.visorAllKey(), 400*24*time.Hour)
 
 		vDaily := s.visorBandwidthDailyKey(reporterHex, now)
+		// Keep sent/recv separate so the per-visor directional split is real
+		// rather than a fabricated bw/2 (this reporter's transports; not
+		// double-counted since only the reporter writes its own visor key).
+		pipe.HIncrBy(ctx, vDaily, "sent", int64(deltaSent))  //nolint:gosec
+		pipe.HIncrBy(ctx, vDaily, "recv", int64(deltaRecv))  //nolint:gosec
 		pipe.HIncrBy(ctx, vDaily, "bandwidth", int64(delta)) //nolint:gosec
 		pipe.HSet(ctx, vDaily, "updated_at", now.Unix())
 		pipe.Expire(ctx, vDaily, 35*24*time.Hour)
@@ -263,10 +268,7 @@ func (s *redisStore) GetVisorBandwidth(ctx context.Context, pk cipher.PubKey,
 		if err != nil || len(result) == 0 {
 			continue
 		}
-		var bw uint64
-		if val, ok := result["bandwidth"]; ok {
-			fmt.Sscanf(val, "%d", &bw) //nolint:errcheck,gosec
-		}
+		bw := transportDailyBandwidth(result)
 		if bw == 0 {
 			continue
 		}
