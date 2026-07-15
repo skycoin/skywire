@@ -225,6 +225,16 @@ func (d *Database) GetMarketWallet() (string, error) {
 	return d.GetConfig("wallet_sky")
 }
 
+// GetMarketName returns the operator-set display name for this market, or an
+// empty string if none is set.
+func (d *Database) GetMarketName() string {
+	name, err := d.GetConfig("market_name")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(name)
+}
+
 // GetFreezeViolationsLimit returns the number of violations before a user is banned.
 func (d *Database) GetFreezeViolationsLimit() (int, error) {
 	return d.GetConfigInt("freeze_violations_limit")

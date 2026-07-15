@@ -205,6 +205,10 @@ type MessageData struct {
 type GetCurrenciesResponse struct {
 	Currencies []string `json:"currencies"`
 	SellCoins  []string `json:"sell_coins"`
+	// MarketName is the operator-set display name for this market (may be empty).
+	// The client already calls get_currencies on connect, so the name rides along
+	// here — no extra round-trip — to be shown in the client and its recent list.
+	MarketName string `json:"market_name,omitempty"`
 }
 
 // ProductView is a product as presented to clients (no internal freeze fields).

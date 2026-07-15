@@ -143,6 +143,7 @@ func (d *Database) ensureColumn(table, column, ddl string) error {
 // InitDefaultConfig initializes default market configuration if not already present.
 func (d *Database) InitDefaultConfig() error {
 	defaults := map[string]string{
+		"market_name":             "",      // Operator-set display name for this market (shown in the client)
 		"wallet_sky":              "",      // Market escrow address (must be the sky_wallet_seed's first address)
 		"sky_fullnode_url":        "",      // SKY fullnode API base URL (native SKY verification + broadcast)
 		"sky_wallet_seed":         "",      // Escrow hot wallet seed; spends (delivery/refund) are signed locally
