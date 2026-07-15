@@ -176,14 +176,20 @@ type ErrorData struct {
 }
 
 // RegisterRequest registers/updates the caller's wallet addresses. The user is
-// identified by the connection's public key, not by any field here.
+// identified by the connection's public key, not by any field here. WalletSKY is
+// the Skycoin-family address that receives SKY and every fibercoin. Wallets holds
+// per-currency payout addresses for external payment coins (BTC, LTC, and any
+// operator-added custom coin), keyed by symbol — this is what lets the market
+// accept arbitrary payment coins. The fixed WalletBTC/… fields are retained for
+// backward compatibility; a value in Wallets takes precedence.
 type RegisterRequest struct {
-	WalletSKY       string `json:"wallet_sky"`
-	WalletBTC       string `json:"wallet_btc,omitempty"`
-	WalletBCH       string `json:"wallet_bch,omitempty"`
-	WalletLTC       string `json:"wallet_ltc,omitempty"`
-	WalletUSDTERC20 string `json:"wallet_usdt_erc20,omitempty"`
-	WalletUSDTTRC20 string `json:"wallet_usdt_trc20,omitempty"`
+	WalletSKY       string            `json:"wallet_sky"`
+	WalletBTC       string            `json:"wallet_btc,omitempty"`
+	WalletBCH       string            `json:"wallet_bch,omitempty"`
+	WalletLTC       string            `json:"wallet_ltc,omitempty"`
+	WalletUSDTERC20 string            `json:"wallet_usdt_erc20,omitempty"`
+	WalletUSDTTRC20 string            `json:"wallet_usdt_trc20,omitempty"`
+	Wallets         map[string]string `json:"wallets,omitempty"`
 }
 
 // MessageData is a simple human-readable message payload (generic success).
