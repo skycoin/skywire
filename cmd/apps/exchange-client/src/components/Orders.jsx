@@ -145,7 +145,7 @@ function Orders() {
 
   return (
     <div>
-      <h2 className="mb-4">My Orders</h2>
+      <div className="page-head"><h2>My Orders</h2></div>
 
       {notice && <div className="alert alert-info">{notice}</div>}
       {error && <div className="alert alert-danger">{error}</div>}
@@ -153,8 +153,8 @@ function Orders() {
       {orders.length === 0 ? (
         <div className="alert alert-secondary">You don't have any orders yet.</div>
       ) : (
-        <div className="table-responsive">
-          <table className="table table-dark table-hover align-middle">
+        <div className="panel table-wrap">
+          <table className="table table-hover align-middle">
             <thead>
               <tr>
                 <th>ID</th>
