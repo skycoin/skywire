@@ -31,7 +31,7 @@ function ConnectGate({ defaultPubKey, onConnected }) {
         setError(data.error || 'Failed to connect to the market.')
         return
       }
-      onConnected(data.market_pk || pk)
+      onConnected(data.market_pk || pk, data.market_name || '')
     } catch (err) {
       setError('Failed to reach the market: ' + err.message)
     } finally {
@@ -93,7 +93,10 @@ function ConnectGate({ defaultPubKey, onConnected }) {
                     disabled={connecting}
                     title={`Connect to ${m.pk}`}
                   >
-                    <code className="recent-pk">{shortenPk(m.pk)}</code>
+                    <span className="recent-main">
+                      {m.name && <span className="recent-name">{m.name}</span>}
+                      <code className="recent-pk">{shortenPk(m.pk)}</code>
+                    </span>
                     <span className="recent-time">{timeAgo(m.ts)}</span>
                   </button>
                   <button

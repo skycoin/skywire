@@ -1,4 +1,4 @@
-function Header({ isConnected, marketPubKey, onDisconnect }) {
+function Header({ isConnected, marketPubKey, marketName, onDisconnect }) {
   return (
     <header className="header">
       <div className="brand">
@@ -10,6 +10,8 @@ function Header({ isConnected, marketPubKey, onDisconnect }) {
           <span className={`status-dot ${isConnected ? 'connected' : ''}`} />
           <span className="status-text">{isConnected ? 'Connected' : 'Disconnected'}</span>
         </div>
+
+        {marketName && <span className="market-name" title={marketPubKey}>{marketName}</span>}
 
         {marketPubKey && (
           <span className="market-pubkey" title={marketPubKey}>

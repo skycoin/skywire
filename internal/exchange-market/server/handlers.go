@@ -164,7 +164,11 @@ func (s *Server) handleGetCurrencies(req protocol.Envelope) protocol.Envelope {
 	if sell == nil {
 		sell = []string{}
 	}
-	return success(req.ID, protocol.GetCurrenciesResponse{Currencies: cur, SellCoins: sell})
+	return success(req.ID, protocol.GetCurrenciesResponse{
+		Currencies: cur,
+		SellCoins:  sell,
+		MarketName: s.db.GetMarketName(),
+	})
 }
 
 // handleGetProducts returns all active products.
