@@ -232,10 +232,10 @@ func (d *Database) MarkOrderCanceled(orderID string) error {
 	return nil
 }
 
-// BuyerBlockedFromProduct reports whether the buyer has a prior order for this
-// product that was canceled or expired. Such a buyer may not buy that same
-// product again (design: a buyer who backs out cannot retry the same offer).
-func (d *Database) BuyerBlockedFromProduct(buyerPubKey, productID string) (bool, error) {
+// CountBuyerProductCancels returns how many orders this buyer has canceled or
+// let expire for this product. Cleared blocks ('cancelled_cleared', set when the
+// operator unblocks a buyer) are not counted.
+func (d *Database) CountBuyerProductCancels(buyerPubKey, productID string) (int, error) {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
@@ -246,9 +246,71 @@ func (d *Database) BuyerBlockedFromProduct(buyerPubKey, productID string) (bool,
 		  AND status IN ('canceled', 'cancelled', 'expired')
 	`, buyerPubKey, productID).Scan(&n)
 	if err != nil {
-		return false, fmt.Errorf("failed to check buyer block: %w", err)
+		return 0, fmt.Errorf("failed to count buyer cancels: %w", err)
 	}
-	return n > 0, nil
+	return n, nil
+}
+
+// BuyerBlockedFromProduct reports whether the buyer has reached the cancel limit
+// for this product — i.e. has canceled or let expire at least `limit` orders for
+// it — and so may not buy that same product again until the operator clears it.
+func (d *Database) BuyerBlockedFromProduct(buyerPubKey, productID string, limit int) (bool, error) {
+	n, err := d.CountBuyerProductCancels(buyerPubKey, productID)
+	if err != nil {
+		return false, err
+	}
+	return n >= limit, nil
+}
+
+// ListBuyerProductBlocks returns every (buyer, product) pair that has reached the
+// given cancel limit, so the operator can review and clear them. Ordered by the
+// most cancellations first.
+func (d *Database) ListBuyerProductBlocks(limit int) ([]*BuyerProductBlock, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`
+		SELECT buyer_pubkey, product_id, COUNT(*) AS cancels
+		FROM orders
+		WHERE status IN ('canceled', 'cancelled', 'expired')
+		GROUP BY buyer_pubkey, product_id
+		HAVING cancels >= ?
+		ORDER BY cancels DESC
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list buyer blocks: %w", err)
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var blocks []*BuyerProductBlock
+	for rows.Next() {
+		b := &BuyerProductBlock{}
+		if err := rows.Scan(&b.BuyerPubKey, &b.ProductID, &b.Cancels); err != nil {
+			return nil, fmt.Errorf("failed to scan buyer block: %w", err)
+		}
+		blocks = append(blocks, b)
+	}
+	return blocks, rows.Err()
+}
+
+// ClearBuyerProductBlock lifts a buyer's block for one product by marking their
+// canceled/expired orders for it as 'cancelled_cleared', which no longer counts
+// toward the cancel limit. Returns the number of orders cleared.
+func (d *Database) ClearBuyerProductBlock(buyerPubKey, productID string) (int64, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	res, err := d.db.Exec(`
+		UPDATE orders
+		SET status = 'cancelled_cleared'
+		WHERE buyer_pubkey = ? AND product_id = ?
+		  AND status IN ('canceled', 'cancelled', 'expired')
+	`, buyerPubKey, productID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to clear buyer block: %w", err)
+	}
+	n, _ := res.RowsAffected() //nolint:errcheck
+	return n, nil
 }
 
 // MarkOrderExpired marks an order as expired.

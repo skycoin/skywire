@@ -235,6 +235,22 @@ func (d *Database) GetBanDurationDays() (int, error) {
 	return d.GetConfigInt("ban_duration_days")
 }
 
+// BuyCancelLimitFloor is the smallest per-product buy-cancel limit allowed: a
+// buyer always gets at least this many cancellations before being blocked.
+const BuyCancelLimitFloor = 2
+
+// GetBuyCancelLimit returns how many times a buyer may cancel (or let expire) an
+// order for the same product before being blocked from re-buying it. It never
+// returns less than BuyCancelLimitFloor, so a misconfiguration can't ban a buyer
+// on their first cancellation.
+func (d *Database) GetBuyCancelLimit() int {
+	n, err := d.GetConfigInt("buy_cancel_limit")
+	if err != nil || n < BuyCancelLimitFloor {
+		return BuyCancelLimitFloor
+	}
+	return n
+}
+
 // GetListingExpiryMinutes returns how many minutes a pending listing is valid for.
 func (d *Database) GetListingExpiryMinutes() (int, error) {
 	return d.GetConfigInt("listing_expiry_minutes")

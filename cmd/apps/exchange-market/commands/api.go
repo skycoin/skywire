@@ -34,6 +34,7 @@ var editableConfigKeys = map[string]bool{
 	"max_trade_sky":           true,
 	"freeze_violations_limit": true,
 	"ban_duration_days":       true,
+	"buy_cancel_limit":        true,
 	"listing_expiry_minutes":  true,
 	"order_expiry_minutes":    true,
 	"cleanup_days":            true,
@@ -371,6 +372,62 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 			return
 		}
 		mWriteJSON(w, http.StatusOK, map[string]any{"bans": bans})
+	})
+
+	// POST /api/bans/unban — lift a temporary (freeze-violation) ban via {pubkey}.
+	mux.HandleFunc("/api/bans/unban", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			mWriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		var req struct {
+			PubKey string `json:"pubkey"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.PubKey) == "" {
+			mWriteError(w, http.StatusBadRequest, "pubkey is required")
+			return
+		}
+		if err := database.DeleteBan(strings.TrimSpace(req.PubKey)); err != nil {
+			mWriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		mWriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	})
+
+	// GET /api/blocks — buyers blocked from re-buying a product (buy-cancel limit
+	// reached). Includes the current limit so the UI can explain the rule.
+	mux.HandleFunc("/api/blocks", func(w http.ResponseWriter, r *http.Request) {
+		limit := database.GetBuyCancelLimit()
+		blocks, err := database.ListBuyerProductBlocks(limit)
+		if err != nil {
+			mWriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		mWriteJSON(w, http.StatusOK, map[string]any{"blocks": blocks, "limit": limit})
+	})
+
+	// POST /api/blocks/clear — clear a buyer's block for one product so they can
+	// buy it again, via {pubkey, product_id}.
+	mux.HandleFunc("/api/blocks/clear", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			mWriteError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		var req struct {
+			PubKey    string `json:"pubkey"`
+			ProductID string `json:"product_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil ||
+			strings.TrimSpace(req.PubKey) == "" || strings.TrimSpace(req.ProductID) == "" {
+			mWriteError(w, http.StatusBadRequest, "pubkey and product_id are required")
+			return
+		}
+		cleared, err := database.ClearBuyerProductBlock(strings.TrimSpace(req.PubKey), strings.TrimSpace(req.ProductID))
+		if err != nil {
+			mWriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		mWriteJSON(w, http.StatusOK, map[string]any{"ok": true, "cleared": cleared})
 	})
 }
 

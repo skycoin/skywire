@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
+import CopyButton from './CopyButton'
 
 // Fallback confirmation threshold for the "n/N" progress display. The market
 // reports its own value in each order-status (required_confirmations); this is
@@ -76,28 +77,47 @@ function Orders() {
 
   const canCancel = (order) => order.type === 'buy' && liveStatus(order) === 'pending_payment'
 
+  // Themed status badges (all white text — no dark text on the dark UI).
   const getStatusBadge = (status) => {
     const statusMap = {
-      pending_payment: { label: 'Pending Payment', class: 'bg-warning text-dark' },
-      paid: { label: 'Paid', class: 'bg-info' },
-      confirmed: { label: 'Confirmed', class: 'bg-info' },
-      active: { label: 'Active', class: 'bg-success' },
-      completed: { label: 'Completed', class: 'bg-success' },
-      cancelled: { label: 'Cancelled', class: 'bg-danger' },
-      canceled: { label: 'Cancelled', class: 'bg-danger' },
-      expired: { label: 'Expired', class: 'bg-secondary' },
-      pending: { label: 'Pending', class: 'bg-warning text-dark' },
+      pending_payment: { label: 'Pending Payment', class: 'pending_payment' },
+      paid: { label: 'Paid', class: 'paid' },
+      confirmed: { label: 'Confirmed', class: 'confirmed' },
+      active: { label: 'Active', class: 'active' },
+      completed: { label: 'Completed', class: 'completed' },
+      cancelled: { label: 'Cancelled', class: 'cancelled' },
+      canceled: { label: 'Cancelled', class: 'canceled' },
+      expired: { label: 'Expired', class: 'expired' },
+      pending: { label: 'Pending', class: 'pending' },
     }
-    const info = statusMap[status] || { label: status, class: 'bg-secondary' }
+    const info = statusMap[status] || { label: status, class: 'disabled' }
     return <span className={`badge ${info.class}`}>{info.label}</span>
   }
 
   const getTypeBadge = (type) =>
     type === 'buy' ? (
-      <span className="badge bg-primary">Buy</span>
+      <span className="badge buy">Buy</span>
     ) : (
-      <span className="badge bg-info">Sell</span>
+      <span className="badge sell">Sell</span>
     )
+
+  // For the buyer's pending order: exactly how much to pay and to which wallet.
+  // Shown inline (with a copy button) so the payment target is never lost.
+  const renderPay = (order) => {
+    const status = liveStatus(order)
+    if (order.type !== 'buy' || status !== 'pending_payment' || !order.seller_wallet) {
+      return <span className="text-muted">—</span>
+    }
+    return (
+      <div>
+        <div><strong>{order.expected_payment_amount}</strong> {order.payment_currency}</div>
+        <div className="copy-row mt-1">
+          <code className="addr-box addr-sm" title={order.seller_wallet}>{order.seller_wallet}</code>
+          <CopyButton text={order.seller_wallet} label="Copy" />
+        </div>
+      </div>
+    )
+  }
 
   // Live view of an order: prefer the polled status over the list snapshot.
   const liveStatus = (order) => statuses[order.id]?.status || order.status
@@ -161,6 +181,7 @@ function Orders() {
                 <th>Type</th>
                 <th>Amount</th>
                 <th>Price</th>
+                <th>Pay to (seller wallet)</th>
                 <th>Status</th>
                 <th>Progress</th>
                 <th>Payment Tx</th>
@@ -175,6 +196,7 @@ function Orders() {
                   <td>{getTypeBadge(order.type)}</td>
                   <td>{order.amount} {order.sell_coin}</td>
                   <td>{order.price} {order.payment_currency}</td>
+                  <td>{renderPay(order)}</td>
                   <td>{getStatusBadge(liveStatus(order))}</td>
                   <td>{renderProgress(order)}</td>
                   <td>{renderTx(order)}</td>

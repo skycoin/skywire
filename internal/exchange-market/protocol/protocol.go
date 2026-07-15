@@ -277,18 +277,22 @@ type CancelOrderRequest struct {
 	OrderID string `json:"order_id"`
 }
 
-// OrderView is an order as presented to clients.
+// OrderView is an order as presented to clients. For a buyer's pending order,
+// ExpectedPaymentAmount and SellerWallet tell the buyer exactly how much to pay
+// and where — so the client can show this persistently, not just in a toast.
 type OrderView struct {
-	ID              string  `json:"id"`
-	Type            string  `json:"type"` // "buy" or "sell"
-	ProductID       string  `json:"product_id"`
-	SellCoin        string  `json:"sell_coin"`
-	Amount          float64 `json:"amount"`
-	Price           float64 `json:"price"`
-	PaymentCurrency string  `json:"payment_currency"`
-	Status          string  `json:"status"`
-	ExpiresAt       string  `json:"expires_at"`
-	CreatedAt       string  `json:"created_at"`
+	ID                    string  `json:"id"`
+	Type                  string  `json:"type"` // "buy" or "sell"
+	ProductID             string  `json:"product_id"`
+	SellCoin              string  `json:"sell_coin"`
+	Amount                float64 `json:"amount"`
+	Price                 float64 `json:"price"`
+	PaymentCurrency       string  `json:"payment_currency"`
+	ExpectedPaymentAmount float64 `json:"expected_payment_amount,omitempty"` // exact amount the buyer must pay
+	SellerWallet          string  `json:"seller_wallet,omitempty"`           // where the buyer sends payment
+	Status                string  `json:"status"`
+	ExpiresAt             string  `json:"expires_at"`
+	CreatedAt             string  `json:"created_at"`
 }
 
 // GetOrdersResponse is the reply to TypeGetOrders.
