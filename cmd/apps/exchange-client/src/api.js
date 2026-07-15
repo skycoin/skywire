@@ -47,6 +47,37 @@ export function hasSavedWallets() {
   return !!(w && w.SKY)
 }
 
+// Copy text to the clipboard, with a fallback for non-secure (plain http)
+// contexts where navigator.clipboard is unavailable — the app is served over
+// http on the visor, so the modern API is often missing. Returns true on
+// success. Callers can surface their own "copied" feedback.
+export async function copyToClipboard(text) {
+  if (!text) return false
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // fall through to the legacy execCommand path
+  }
+  try {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.position = 'fixed'
+    ta.style.top = '-1000px'
+    ta.style.opacity = '0'
+    document.body.appendChild(ta)
+    ta.focus()
+    ta.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(ta)
+    return ok
+  } catch {
+    return false
+  }
+}
+
 export const api = {
   getConfig: () => request('GET', '/api/config'),
   getStatus: () => request('GET', '/api/status'),
