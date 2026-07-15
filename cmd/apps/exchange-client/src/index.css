@@ -64,6 +64,15 @@ code { color: var(--sky-blue); }
 .status-dot { width: 10px; height: 10px; border-radius: 50%; background-color: #dc3545; }
 .status-dot.connected { background-color: #28a745; }
 
+.market-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--sky-white);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .market-pubkey {
   font-family: 'Courier New', monospace;
   font-size: 0.8rem;
@@ -299,6 +308,8 @@ code { color: var(--sky-blue); }
 }
 .recent-connect:hover:not(:disabled) { border-color: var(--sky-blue); background: rgba(2, 115, 255, 0.12); }
 .recent-connect:disabled { cursor: default; opacity: 0.7; }
+.recent-main { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.recent-name { color: var(--sky-white); font-weight: 600; font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-pk { color: var(--sky-blue); font-family: 'Courier New', monospace; font-size: 0.85rem; }
 .recent-time { color: var(--muted); font-size: 0.72rem; white-space: nowrap; }
 .recent-del {

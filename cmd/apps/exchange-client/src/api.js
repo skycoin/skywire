@@ -62,11 +62,15 @@ export function loadMarketHistory() {
   }
 }
 
-export function addMarketToHistory(pk) {
+export function addMarketToHistory(pk, name) {
   const key = (pk || '').trim()
   if (!key) return loadMarketHistory()
-  const rest = loadMarketHistory().filter((m) => m.pk !== key)
-  const next = [{ pk: key, ts: Date.now() }, ...rest].slice(0, MARKETS_MAX)
+  const existing = loadMarketHistory()
+  const prev = existing.find((m) => m.pk === key)
+  const rest = existing.filter((m) => m.pk !== key)
+  // Keep a previously-learned name if this call doesn't carry one.
+  const nm = (name || '').trim() || (prev && prev.name) || ''
+  const next = [{ pk: key, name: nm, ts: Date.now() }, ...rest].slice(0, MARKETS_MAX)
   try {
     localStorage.setItem(MARKETS_KEY, JSON.stringify(next))
   } catch {

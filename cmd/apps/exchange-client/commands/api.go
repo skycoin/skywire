@@ -33,6 +33,7 @@ type session struct {
 	mu   sync.Mutex
 	conn *market.Conn
 	pk   string // public key of the currently connected market ("" if none)
+	name string // operator-set display name of the connected market ("" if none/unset)
 }
 
 func newSession(dialer market.Dialer, defaultPK string, marketPort protocol.Port) *session {
@@ -44,45 +45,48 @@ func newSession(dialer market.Dialer, defaultPK string, marketPort protocol.Port
 
 // connect dials the market at pkHex over dmsg and performs a lightweight
 // handshake (get_currencies) to confirm the link. On success it replaces any
-// existing connection and returns the market's available payment currencies.
-func (s *session) connect(pkHex string) ([]string, error) {
+// existing connection and returns the market's available payment currencies and
+// its operator-set display name (may be empty).
+func (s *session) connect(pkHex string) ([]string, string, error) {
 	pkHex = strings.TrimSpace(pkHex)
 	if pkHex == "" {
-		return nil, errors.New("market public key is required")
+		return nil, "", errors.New("market public key is required")
 	}
 	var pk cipher.PubKey
 	if err := pk.UnmarshalText([]byte(pkHex)); err != nil {
-		return nil, errors.New("invalid market public key")
+		return nil, "", errors.New("invalid market public key")
 	}
 
 	conn, err := market.Dial(s.dialer, pk, s.marketPort)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	resp, err := conn.Do(protocol.TypeGetCurrencies, nil)
 	if err != nil {
 		_ = conn.Close() //nolint:errcheck
-		return nil, err
+		return nil, "", err
 	}
 	if resp.IsError() {
 		_ = conn.Close() //nolint:errcheck
 		var e protocol.ErrorData
 		_ = resp.Bind(&e) //nolint:errcheck
-		return nil, errors.New("market rejected connection: " + e.Message)
+		return nil, "", errors.New("market rejected connection: " + e.Message)
 	}
 	var currencies protocol.GetCurrenciesResponse
 	_ = resp.Bind(&currencies) //nolint:errcheck
 
+	name := strings.TrimSpace(currencies.MarketName)
 	s.mu.Lock()
 	if s.conn != nil {
 		_ = s.conn.Close() //nolint:errcheck
 	}
 	s.conn = conn
 	s.pk = pkHex
+	s.name = name
 	s.mu.Unlock()
 
-	return currencies.Currencies, nil
+	return currencies.Currencies, name, nil
 }
 
 // disconnect closes the current market connection, if any.
@@ -93,16 +97,17 @@ func (s *session) disconnect() {
 		_ = s.conn.Close() //nolint:errcheck
 		s.conn = nil
 		s.pk = ""
+		s.name = ""
 	}
 }
 
 // close releases resources on shutdown.
 func (s *session) close() { s.disconnect() }
 
-func (s *session) status() (connected bool, pk string) {
+func (s *session) status() (connected bool, pk, name string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.conn != nil, s.pk
+	return s.conn != nil, s.pk, s.name
 }
 
 // do forwards one request to the connected market and returns its response
@@ -134,8 +139,8 @@ func registerAPI(mux *http.ServeMux, sess *session) {
 			writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		connected, pk := sess.status()
-		writeJSON(w, http.StatusOK, map[string]any{"connected": connected, "market_pk": pk})
+		connected, pk, name := sess.status()
+		writeJSON(w, http.StatusOK, map[string]any{"connected": connected, "market_pk": pk, "market_name": name})
 	})
 
 	// POST /api/connect {market_pk} — dial the market and confirm the link.
@@ -152,15 +157,16 @@ func registerAPI(mux *http.ServeMux, sess *session) {
 		if strings.TrimSpace(pk) == "" {
 			pk = sess.defaultPK
 		}
-		currencies, err := sess.connect(pk)
+		currencies, name, err := sess.connect(pk)
 		if err != nil {
 			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
-			"connected":  true,
-			"market_pk":  strings.TrimSpace(pk),
-			"currencies": currencies,
+			"connected":   true,
+			"market_pk":   strings.TrimSpace(pk),
+			"market_name": name,
+			"currencies":  currencies,
 		})
 	})
 

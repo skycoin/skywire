@@ -20,6 +20,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('market')
   const [isConnected, setIsConnected] = useState(false)
   const [marketPubKey, setMarketPubKey] = useState('')
+  const [marketName, setMarketName] = useState('')
   const [defaultPubKey, setDefaultPubKey] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -43,7 +44,8 @@ function App() {
         if (status.connected) {
           setIsConnected(true)
           setMarketPubKey(status.market_pk || '')
-          if (status.market_pk) addMarketToHistory(status.market_pk)
+          setMarketName(status.market_name || '')
+          if (status.market_pk) addMarketToHistory(status.market_pk, status.market_name)
         }
       } catch (e) {
         console.error('init failed', e)
@@ -64,10 +66,16 @@ function App() {
       setSellCoins(sc)
       setCurrencies(cur)
       setReady(sc.length > 0)
+      // The market name rides along on get_currencies; keep it fresh and remember
+      // it against the connected key in the recent-markets list.
+      if (d.market_name) {
+        setMarketName(d.market_name)
+        if (marketPubKey) addMarketToHistory(marketPubKey, d.market_name)
+      }
     } catch {
       // Leave readiness unknown on a transient error.
     }
-  }, [])
+  }, [marketPubKey])
 
   useEffect(() => {
     if (!isConnected) return undefined
@@ -76,9 +84,10 @@ function App() {
     return () => clearInterval(id)
   }, [isConnected, refreshReadiness])
 
-  function handleConnected(pk) {
-    addMarketToHistory(pk)
+  function handleConnected(pk, name) {
+    addMarketToHistory(pk, name)
     setMarketPubKey(pk)
+    setMarketName(name || '')
     setIsConnected(true)
     setReady(null)
   }
@@ -91,6 +100,7 @@ function App() {
     }
     setIsConnected(false)
     setMarketPubKey('')
+    setMarketName('')
     setReady(null)
   }
 
@@ -110,7 +120,7 @@ function App() {
 
   return (
     <div className="app-container">
-      <Header isConnected={isConnected} marketPubKey={marketPubKey} onDisconnect={handleDisconnect} />
+      <Header isConnected={isConnected} marketPubKey={marketPubKey} marketName={marketName} onDisconnect={handleDisconnect} />
 
       <div className="tabbar">
         <div className="tabbar-inner">

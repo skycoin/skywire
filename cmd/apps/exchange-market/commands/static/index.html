@@ -151,6 +151,12 @@
       <!-- Rules -->
       <form id="config-form">
         <div class="panel">
+          <h2>Market identity</h2>
+          <div class="grid">
+            <div><label>Market name (shown to clients)</label><input name="market_name" type="text" maxlength="60" placeholder="e.g. Alice's SKY Exchange"></div>
+          </div>
+        </div>
+        <div class="panel">
           <h2>Rules</h2>
           <div class="grid">
             <div><label>Freeze violations before ban</label><input name="freeze_violations_limit" type="number" min="1"></div>
@@ -217,6 +223,7 @@
   <script>
     const $ = (s) => document.querySelector(s);
     const CONFIG_FIELDS = [
+      'market_name',
       'freeze_violations_limit','ban_duration_days','buy_cancel_limit','listing_expiry_minutes',
       'order_expiry_minutes','cleanup_days','confirmations_required',
       'min_trade_sky','max_trade_sky',
