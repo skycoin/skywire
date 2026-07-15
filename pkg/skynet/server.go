@@ -24,7 +24,7 @@ type Server struct {
 	mu         sync.RWMutex
 	listener   net.Listener
 	closeCh    chan struct{}
-	closeOnce  sync.Once
+	closed     bool // guarded by mu; gates activeConn.Add against Close's Wait
 	activeConn sync.WaitGroup
 }
 
@@ -41,6 +41,10 @@ func NewServer(log logrus.FieldLogger) *Server {
 // Serve starts the server on the given listener
 func (s *Server) Serve(lis net.Listener) error {
 	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil
+	}
 	s.listener = lis
 	s.mu.Unlock()
 
@@ -60,7 +64,19 @@ func (s *Server) Serve(lis net.Listener) error {
 			}
 		}
 
+		// Register the connection under mu, gated on !closed, so the Add is
+		// ordered against Close's close(closeCh)+Wait. Without this, an Accept
+		// that returns concurrently with Close could Add to activeConn after
+		// Wait already observed zero — an Add-after-Wait data race.
+		s.mu.Lock()
+		if s.closed {
+			s.mu.Unlock()
+			_ = conn.Close() //nolint:errcheck,gosec
+			return nil
+		}
 		s.activeConn.Add(1)
+		s.mu.Unlock()
+
 		go func(c net.Conn) {
 			defer s.activeConn.Done()
 			s.handleConn(c)
@@ -249,21 +265,26 @@ func (s *Server) Whitelist() []cipher.PubKey {
 	return pks
 }
 
-// Close stops the server
+// Close stops the server. It is idempotent and safe to call concurrently with
+// Serve: setting closed + closing closeCh + closing the listener all happen
+// under mu, so Serve stops registering new connections before Wait runs.
 func (s *Server) Close() error {
-	var err error
-	s.closeOnce.Do(func() {
-		close(s.closeCh)
-
-		s.mu.Lock()
-		if s.listener != nil {
-			if cErr := s.listener.Close(); cErr != nil {
-				err = cErr
-			}
-		}
+	s.mu.Lock()
+	if s.closed {
 		s.mu.Unlock()
+		return nil
+	}
+	s.closed = true
+	close(s.closeCh)
+	var err error
+	if s.listener != nil {
+		if cErr := s.listener.Close(); cErr != nil {
+			err = cErr
+		}
+	}
+	s.mu.Unlock()
 
-		s.activeConn.Wait()
-	})
+	// Wait outside the lock: handleConn takes mu (RLock) while serving.
+	s.activeConn.Wait()
 	return err
 }
