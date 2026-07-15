@@ -21,6 +21,32 @@ async function request(method, url, body) {
   return data
 }
 
+// Wallet addresses are stored locally as a convenience so the Settings form is
+// pre-filled and the app can prompt first-time users to register. The market
+// remains the source of truth; this is only a UX hint.
+const WALLETS_KEY = 'exchange:wallets'
+
+export function loadWallets() {
+  try {
+    return JSON.parse(localStorage.getItem(WALLETS_KEY)) || {}
+  } catch {
+    return {}
+  }
+}
+
+export function saveWallets(w) {
+  try {
+    localStorage.setItem(WALLETS_KEY, JSON.stringify(w))
+  } catch {
+    // ignore storage errors (private mode, etc.)
+  }
+}
+
+export function hasSavedWallets() {
+  const w = loadWallets()
+  return !!(w && w.SKY)
+}
+
 export const api = {
   getConfig: () => request('GET', '/api/config'),
   getStatus: () => request('GET', '/api/status'),

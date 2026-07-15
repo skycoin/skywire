@@ -1,11 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
 
-function Market() {
+function Market({ registered, marketReady, sellCoins = [], currencies = [], onNeedRegister }) {
   const [showCreateListing, setShowCreateListing] = useState(false)
   const [products, setProducts] = useState([])
-  const [currencies, setCurrencies] = useState([])
-  const [sellCoins, setSellCoins] = useState([])
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
@@ -27,51 +25,57 @@ function Market() {
     }
   }, [])
 
-  // Load currencies once, products on an interval (simple polling).
   useEffect(() => {
-    api
-      .getCurrencies()
-      .then((d) => {
-        const list = d.currencies || []
-        const coins = d.sell_coins || []
-        setCurrencies(list)
-        setSellCoins(coins)
-        setNewListing((prev) => {
-          const sell = prev.sell_coin || coins[0] || ''
-          // Payment can be an external coin OR another fibercoin (not the one being sold).
-          const payOpts = [...new Set([...list, ...coins.filter((c) => c !== sell)])]
-          return {
-            ...prev,
-            sell_coin: sell,
-            payment_currency: prev.payment_currency || payOpts[0] || '',
-          }
-        })
-      })
-      .catch(() => {})
     loadProducts()
     const id = setInterval(loadProducts, 5000)
     return () => clearInterval(id)
   }, [loadProducts])
 
+  // Seed sensible defaults for the create form once the coin lists arrive.
+  useEffect(() => {
+    setNewListing((prev) => {
+      const sell = prev.sell_coin || sellCoins[0] || ''
+      const payOpts = [...new Set([...currencies, ...sellCoins.filter((c) => c !== sell)])]
+      return {
+        ...prev,
+        sell_coin: sell,
+        payment_currency: prev.payment_currency || payOpts[0] || '',
+      }
+    })
+  }, [sellCoins, currencies])
+
   const flash = (msg) => {
     setNotice(msg)
-    setTimeout(() => setNotice(''), 8000)
+    setTimeout(() => setNotice(''), 9000)
+  }
+
+  // Surface the market's "register first" as an actionable prompt, not a dead end.
+  const handleErr = (e) => {
+    if (/register/i.test(e.message) && onNeedRegister) onNeedRegister()
+    setError(e.message)
   }
 
   const handleBuy = async (product) => {
+    if (!registered) return onNeedRegister && onNeedRegister()
     setError('')
     setBusy(true)
     try {
       const order = await api.buyProduct(product.id)
       flash(
-        `Order placed for ${order.amount} ${order.sell_coin}. Pay exactly ${order.expected_payment_amount} ${order.payment_currency} to ${order.seller_wallet} before ${new Date(order.expires_at).toLocaleTimeString()}.`
+        `Order placed for ${order.amount} ${order.sell_coin}. Pay exactly ${order.expected_payment_amount} ` +
+          `${order.payment_currency} to ${order.seller_wallet} before ${new Date(order.expires_at).toLocaleTimeString()}.`
       )
       loadProducts()
     } catch (e) {
-      setError(e.message)
+      handleErr(e)
     } finally {
       setBusy(false)
     }
+  }
+
+  const openCreate = () => {
+    if (!registered) return onNeedRegister && onNeedRegister()
+    setShowCreateListing((v) => !v)
   }
 
   const handleCreateListing = async (e) => {
@@ -87,13 +91,12 @@ function Market() {
       })
       flash(
         `Listing created. Transfer exactly ${resp.expected_amount} ${resp.sell_coin} ` +
-          `(${resp.amount} amount + ${resp.commission} commission) ` +
-          `to the market wallet ${resp.market_wallet} within 15 minutes.`
+          `(${resp.amount} amount + ${resp.commission} commission) to ${resp.market_wallet} within 15 minutes.`
       )
       setShowCreateListing(false)
-      setNewListing({ sell_coin: sellCoins[0] || '', amount: '', price: '', payment_currency: currencies[0] || '' })
+      setNewListing({ sell_coin: sellCoins[0] || '', amount: '', price: '', payment_currency: '' })
     } catch (err) {
-      setError(err.message)
+      handleErr(err)
     } finally {
       setBusy(false)
     }
@@ -102,15 +105,13 @@ function Market() {
   // Payment options = external explorer coins plus any other fibercoin (you can't
   // pay in the coin you're selling).
   const paymentOptions = [...new Set([...currencies, ...sellCoins.filter((c) => c !== newListing.sell_coin)])]
+  const canSell = sellCoins.length > 0
 
   return (
     <div>
-      <div className="d-flex justify-content-between align-items-center mb-4">
+      <div className="page-head">
         <h2>Market</h2>
-        <button
-          className="btn btn-connect"
-          onClick={() => setShowCreateListing(!showCreateListing)}
-        >
+        <button className="btn btn-connect" onClick={openCreate} disabled={!canSell}>
           {showCreateListing ? 'Cancel' : '+ New Sell Order'}
         </button>
       </div>
@@ -141,7 +142,6 @@ function Market() {
                 value={newListing.sell_coin}
                 onChange={(e) => {
                   const sell = e.target.value
-                  // Can't pay in the coin being sold — drop that payment choice if it collides.
                   const pay = newListing.payment_currency === sell ? '' : newListing.payment_currency
                   setNewListing({ ...newListing, sell_coin: sell, payment_currency: pay })
                 }}
@@ -157,8 +157,7 @@ function Market() {
 
             <div className="trade-arrow">↓</div>
 
-            {/* "You receive" leg — the price + currency the buyer pays you. Price
-                sits next to the currency it's denominated in. */}
+            {/* "You get" leg — price sits next to the currency it's denominated in. */}
             <div className="trade-leg">
               <span className="leg-label">You get</span>
               <input
@@ -192,7 +191,7 @@ function Market() {
                   Sell <strong>{newListing.amount} {newListing.sell_coin}</strong> for{' '}
                   <strong>{newListing.price} {newListing.payment_currency}</strong>. After creating this
                   order you have 15 minutes to deposit the {newListing.sell_coin} (amount + a small
-                  commission) to the market escrow; the buyer's payment goes straight to your wallet.
+                  commission) to the market escrow; the buyer’s payment goes straight to your wallet.
                 </>
               ) : (
                 <>Set what you sell and what you want for it. Payment can be an external coin (BTC/LTC) or another fibercoin.</>
@@ -210,27 +209,29 @@ function Market() {
         </div>
       )}
 
-      <h4 className="mb-3">Available Products</h4>
+      <h4 className="section-title">Available products</h4>
       {products.length === 0 ? (
-        <div className="alert alert-secondary">No products available for sale.</div>
+        <div className="alert alert-secondary">
+          {marketReady === false
+            ? 'This market has no coins configured yet.'
+            : 'No products available right now.'}
+        </div>
       ) : (
-        <div className="row">
+        <div className="card-grid">
           {products.map((product) => (
-            <div key={product.id} className="col-md-6 col-lg-4 mb-3">
-              <div className="card product-card">
-                <div className="product-amount mb-2">
-                  <strong>{product.amount} {product.sell_coin}</strong>
-                </div>
-                <div className="product-price mb-2">
-                  {product.price} {product.payment_currency}
-                </div>
-                <div className="text-muted small mb-3">
-                  Seller: <code>{shorten(product.seller_pubkey)}</code>
-                </div>
-                <button className="btn btn-connect w-100" disabled={busy} onClick={() => handleBuy(product)}>
-                  Buy
-                </button>
+            <div key={product.id} className="card product-card">
+              <div className="product-amount">
+                <strong>{product.amount} {product.sell_coin}</strong>
               </div>
+              <div className="product-price">
+                {product.price} {product.payment_currency}
+              </div>
+              <div className="text-muted small product-seller">
+                Seller <code>{shorten(product.seller_pubkey)}</code>
+              </div>
+              <button className="btn btn-connect w-100" disabled={busy} onClick={() => handleBuy(product)}>
+                Buy
+              </button>
             </div>
           ))}
         </div>

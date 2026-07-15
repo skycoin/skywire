@@ -156,8 +156,13 @@ func (d *Database) InitDefaultConfig() error {
 		"listing_expiry_minutes":  "15",    // Minutes before pending listing expires
 		"order_expiry_minutes":    "15",    // Minutes before pending order expires
 		"cleanup_days":            "3",     // Days after which completed orders are deleted
+		// BTC and LTC are enabled as payment coins out of the box: the Esplora
+		// adapter ships a default public endpoint for each, so no operator URL is
+		// needed. Others (BCH/DOGE/DASH) stay off until the operator adds them.
+		"explorer_btc_provider": "esplora",
+		"explorer_ltc_provider": "esplora",
 	}
-	// Per-coin explorer config keys are created on demand when the operator
+	// Other per-coin explorer config keys are created on demand when the operator
 	// configures a coin (see db.ExplorerConfig); they are not seeded here.
 
 	d.mu.Lock()
@@ -173,13 +178,15 @@ func (d *Database) InitDefaultConfig() error {
 		}
 	}
 
-	// Seed SKY as the default sell coin. Its escrow fields are left empty here;
-	// SellCoinConfig("SKY") bridges the legacy sky_fullnode_url/sky_wallet_seed/
-	// wallet_sky keys so an operator's existing single-coin config keeps working.
-	// The row is editable and removable like any other sell coin.
+	// Seed SKY as the default sell coin, left DISABLED with empty escrow fields: a
+	// sell coin can only be enabled once it has a node URL, escrow seed and escrow
+	// address, so the operator supplies the escrow wallet before turning SKY on.
+	// SellCoinConfig("SKY") defaults the node URL to the public fullnode
+	// (https://node.skycoin.com) and bridges the legacy sky_* keys, so leaving the
+	// row node empty keeps a pre-fibercoin operator's sky_fullnode_url in effect.
 	_, err := d.db.Exec(`
 		INSERT OR IGNORE INTO sell_coins (symbol, name, confirmations, enabled, updated_at)
-		VALUES ('SKY', 'Skycoin', 1, 1, ?)
+		VALUES ('SKY', 'Skycoin', 1, 0, ?)
 	`, time.Now().UTC())
 	if err != nil {
 		return fmt.Errorf("failed to seed default sell coin: %w", err)
