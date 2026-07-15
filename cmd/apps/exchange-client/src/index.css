@@ -15,6 +15,11 @@
   --bs-body-bg: var(--sky-navy);
   --bs-body-color: var(--sky-white);
   --bs-border-color: var(--border);
+  /* Bootstrap 5.3 tables/emphasis derive their text color from
+     --bs-emphasis-color, which defaults to black in the light theme. Force it
+     white so table cells aren't black-on-dark (only flipping white on hover). */
+  --bs-emphasis-color: var(--sky-white);
+  --bs-emphasis-color-rgb: 255, 255, 255;
   color-scheme: dark;
 }
 
@@ -176,7 +181,8 @@ code { color: var(--sky-blue); }
 .badge { padding: 0.35rem 0.7rem; font-weight: 600; border-radius: 20px; font-size: 0.72rem; }
 
 /* Tables */
-.table { color: var(--sky-white); }
+.table { --bs-table-color: var(--sky-white); color: var(--sky-white); }
+.table > :not(caption) > * > * { color: var(--sky-white); }
 .table.table-dark { --bs-table-bg: transparent; }
 .table > :not(caption) > * > * { border-bottom-color: var(--border); }
 .table thead th { color: var(--muted); font-weight: 600; border-bottom-color: var(--border); }
