@@ -1,24 +1,24 @@
 function Header({ isConnected, marketPubKey, onDisconnect }) {
   return (
     <header className="header">
-      <div className="status-bar">
+      <div className="brand">
+        Skywire <span>Exchange</span>
+      </div>
+
+      <div className="header-right">
         <div className="status-indicator">
-          <div className={`status-dot ${isConnected ? 'connected' : ''}`}></div>
-          <span className="fw-bold">
-            {isConnected ? 'Connected to Market' : 'Disconnected'}
-          </span>
+          <span className={`status-dot ${isConnected ? 'connected' : ''}`} />
+          <span className="status-text">{isConnected ? 'Connected' : 'Disconnected'}</span>
         </div>
 
         {marketPubKey && (
-          <div className="market-pubkey">
-            <small>Market Public Key:</small>
-            <br />
-            <code>{marketPubKey}</code>
-          </div>
+          <span className="market-pubkey" title={marketPubKey}>
+            {marketPubKey.slice(0, 8)}…{marketPubKey.slice(-6)}
+          </span>
         )}
 
         {isConnected && (
-          <button className="btn btn-sm btn-outline-light" onClick={onDisconnect}>
+          <button className="btn btn-outline-light btn-sm" onClick={onDisconnect}>
             Disconnect
           </button>
         )}

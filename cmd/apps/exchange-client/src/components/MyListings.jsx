@@ -80,7 +80,7 @@ function MyListings() {
 
   return (
     <div>
-      <h2 className="mb-4">My Listings</h2>
+      <div className="page-head"><h2>My Listings</h2></div>
 
       {notice && <div className="alert alert-info">{notice}</div>}
       {error && <div className="alert alert-danger">{error}</div>}
@@ -90,8 +90,8 @@ function MyListings() {
           You have no active sell listings. Create one from the Market tab.
         </div>
       ) : (
-        <div className="table-responsive">
-          <table className="table table-dark table-hover align-middle">
+        <div className="panel table-wrap">
+          <table className="table table-hover align-middle">
             <thead>
               <tr>
                 <th>ID</th>

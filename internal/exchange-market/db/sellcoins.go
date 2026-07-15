@@ -151,16 +151,20 @@ func (d *Database) SetSellCoinEnabled(symbol string, enabled bool) error {
 	return nil
 }
 
-// IsSellCoinAvailable reports whether symbol is a configured, enabled sell coin.
+// IsSellCoinAvailable reports whether symbol is an enabled sell coin with a
+// complete escrow config (node + seed + address). An enabled-but-incomplete coin
+// is never treated as available, so a trade can't be created against a coin that
+// could not settle.
 func (d *Database) IsSellCoinAvailable(symbol string) (bool, error) {
-	sc, err := d.GetSellCoin(symbol)
+	nodeURL, seed, wallet, _, enabled, err := d.SellCoinConfig(symbol)
 	if err != nil {
 		return false, err
 	}
-	return sc != nil && sc.Enabled, nil
+	return enabled && SellCoinComplete(nodeURL, seed, wallet), nil
 }
 
-// AvailableSellCoins returns the symbols of enabled sell coins, SKY first.
+// AvailableSellCoins returns the symbols of enabled, fully-configured sell coins,
+// SKY first.
 func (d *Database) AvailableSellCoins() ([]string, error) {
 	coins, err := d.ListSellCoins()
 	if err != nil {
@@ -168,7 +172,14 @@ func (d *Database) AvailableSellCoins() ([]string, error) {
 	}
 	var out []string
 	for _, c := range coins {
-		if c.Enabled {
+		if !c.Enabled {
+			continue
+		}
+		nodeURL, seed, wallet, _, _, err := d.SellCoinConfig(c.Symbol)
+		if err != nil {
+			return nil, err
+		}
+		if SellCoinComplete(nodeURL, seed, wallet) {
 			out = append(out, c.Symbol)
 		}
 	}
@@ -199,11 +210,24 @@ func (d *Database) SellCoinConfig(symbol string) (nodeURL, seed, wallet string, 
 		if wallet == "" {
 			wallet, _ = d.configOrEmpty("wallet_sky") //nolint:errcheck
 		}
+		if strings.TrimSpace(nodeURL) == "" {
+			nodeURL = "https://node.skycoin.com" // public Skycoin fullnode default
+		}
 	}
 	if confs < 1 {
 		confs = 1
 	}
 	return nodeURL, seed, wallet, confs, enabled, nil
+}
+
+// SellCoinComplete reports whether a sell coin has everything it needs to settle
+// trades: a fullnode URL, an escrow seed and an escrow address. A coin missing
+// any of these can be saved as a draft but must not be enabled — it could never
+// verify a deposit or sign a delivery/refund.
+func SellCoinComplete(nodeURL, seed, wallet string) bool {
+	return strings.TrimSpace(nodeURL) != "" &&
+		strings.TrimSpace(seed) != "" &&
+		strings.TrimSpace(wallet) != ""
 }
 
 // SellCoinWallet returns the escrow (deposit) address for symbol — where sellers
