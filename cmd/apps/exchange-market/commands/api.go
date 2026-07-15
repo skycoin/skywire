@@ -270,6 +270,20 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 					sc.WalletSeed = existing.WalletSeed
 				}
 			}
+			// A coin can be saved as a draft, but it can only be ENABLED once it has
+			// everything needed to settle: fullnode URL, escrow seed and escrow
+			// address (SKY defaults to the public fullnode).
+			if sc.Enabled {
+				node := strings.TrimSpace(sc.NodeURL)
+				if node == "" && strings.EqualFold(sc.Symbol, "SKY") {
+					node = "https://node.skycoin.com"
+				}
+				if !db.SellCoinComplete(node, sc.WalletSeed, sc.WalletAddr) {
+					mWriteError(w, http.StatusBadRequest,
+						"to enable a sell coin, set its fullnode URL, escrow wallet address and escrow seed (save it disabled to keep a draft)")
+					return
+				}
+			}
 			if err := database.UpsertSellCoin(sc); err != nil {
 				mWriteError(w, http.StatusInternalServerError, err.Error())
 				return
@@ -313,6 +327,19 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Symbol) == "" {
 			mWriteError(w, http.StatusBadRequest, "symbol is required")
 			return
+		}
+		// Enabling requires a complete escrow config (node + seed + address).
+		if req.Enabled {
+			node, seed, wallet, _, _, err := database.SellCoinConfig(req.Symbol)
+			if err != nil {
+				mWriteError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			if !db.SellCoinComplete(node, seed, wallet) {
+				mWriteError(w, http.StatusBadRequest,
+					"cannot enable "+strings.ToUpper(strings.TrimSpace(req.Symbol))+": set its fullnode URL, escrow wallet address and escrow seed first")
+				return
+			}
 		}
 		if err := database.SetSellCoinEnabled(req.Symbol, req.Enabled); err != nil {
 			mWriteError(w, http.StatusInternalServerError, err.Error())

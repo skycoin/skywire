@@ -43,6 +43,25 @@ func newTestDB(t *testing.T) *db.Database {
 	if err := database.InitDefaultConfig(); err != nil {
 		t.Fatalf("init config: %v", err)
 	}
+	// Start from a clean payment-coin slate so each test enables exactly what it
+	// needs (InitDefaultConfig now enables BTC + LTC out of the box).
+	for _, k := range []string{"explorer_btc_provider", "explorer_ltc_provider"} {
+		if err := database.SetConfig(k, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Make SKY a complete, enabled sell coin: the seeded row is disabled with no
+	// escrow seed, and availability now requires node + seed + address. Set the
+	// legacy escrow keys (SellCoinConfig bridges them for SKY) and enable it.
+	if err := database.SetConfig("sky_wallet_seed", "test escrow seed words for the market"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetConfig("wallet_sky", "sky-market-wallet"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.SetSellCoinEnabled("SKY", true); err != nil {
+		t.Fatal(err)
+	}
 	return database
 }
 

@@ -1,20 +1,37 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Header from './components/Header'
 import Market from './components/Market'
 import MyListings from './components/MyListings'
 import Orders from './components/Orders'
+import History from './components/History'
 import Settings from './components/Settings'
 import ConnectGate from './components/ConnectGate'
+import { api, hasSavedWallets } from './api'
+
+const TABS = [
+  { id: 'market', label: 'Market' },
+  { id: 'orders', label: 'My Orders' },
+  { id: 'listings', label: 'My Listings' },
+  { id: 'history', label: 'History' },
+  { id: 'settings', label: 'Settings' },
+]
 
 function App() {
   const [activeTab, setActiveTab] = useState('market')
   const [isConnected, setIsConnected] = useState(false)
   const [marketPubKey, setMarketPubKey] = useState('')
-  // defaultPubKey is the --market-pk value; used to pre-fill the connect input.
   const [defaultPubKey, setDefaultPubKey] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // On load, read the configured default market key and current status.
+  // registered is a UX hint (the market is the source of truth): true once the
+  // user has saved wallet addresses at least once on this device.
+  const [registered, setRegistered] = useState(hasSavedWallets())
+  // ready reflects whether the connected market is actually accepting trades —
+  // i.e. it has at least one enabled, fully-configured sell coin.
+  const [ready, setReady] = useState(null) // null = unknown yet
+  const [sellCoins, setSellCoins] = useState([])
+  const [currencies, setCurrencies] = useState([])
+
   useEffect(() => {
     async function init() {
       try {
@@ -28,7 +45,6 @@ function App() {
           setMarketPubKey(status.market_pk || '')
         }
       } catch (e) {
-        // Leave the gate visible; the user can still try to connect.
         console.error('init failed', e)
       } finally {
         setLoading(false)
@@ -37,9 +53,32 @@ function App() {
     init()
   }, [])
 
+  // Poll the market's readiness (available sell coins / payment currencies) while
+  // connected, so the UI can tell the user when a market has nothing configured.
+  const refreshReadiness = useCallback(async () => {
+    try {
+      const d = await api.getCurrencies()
+      const sc = d.sell_coins || []
+      const cur = d.currencies || []
+      setSellCoins(sc)
+      setCurrencies(cur)
+      setReady(sc.length > 0)
+    } catch {
+      // Leave readiness unknown on a transient error.
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isConnected) return undefined
+    refreshReadiness()
+    const id = setInterval(refreshReadiness, 8000)
+    return () => clearInterval(id)
+  }, [isConnected, refreshReadiness])
+
   function handleConnected(pk) {
     setMarketPubKey(pk)
     setIsConnected(true)
+    setReady(null)
   }
 
   async function handleDisconnect() {
@@ -50,6 +89,7 @@ function App() {
     }
     setIsConnected(false)
     setMarketPubKey('')
+    setReady(null)
   }
 
   if (loading) {
@@ -60,61 +100,64 @@ function App() {
     )
   }
 
-  // First step: the connection gate. The app is only shown once connected.
   if (!isConnected) {
     return <ConnectGate defaultPubKey={defaultPubKey} onConnected={handleConnected} />
   }
 
+  const goToSettings = () => setActiveTab('settings')
+
   return (
     <div className="app-container">
-      <Header
-        isConnected={isConnected}
-        marketPubKey={marketPubKey}
-        onDisconnect={handleDisconnect}
-      />
+      <Header isConnected={isConnected} marketPubKey={marketPubKey} onDisconnect={handleDisconnect} />
 
-      <div className="container-fluid">
-        <ul className="nav nav-tabs mt-3">
-          <li className="nav-item">
+      <div className="tabbar">
+        <div className="tabbar-inner">
+          {TABS.map((t) => (
             <button
-              className={`nav-link ${activeTab === 'market' ? 'active' : ''}`}
-              onClick={() => setActiveTab('market')}
+              key={t.id}
+              className={`tab-link ${activeTab === t.id ? 'active' : ''}`}
+              onClick={() => setActiveTab(t.id)}
             >
-              Market
+              {t.label}
             </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === 'listings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('listings')}
-            >
-              My Listings
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === 'orders' ? 'active' : ''}`}
-              onClick={() => setActiveTab('orders')}
-            >
-              My Orders
-            </button>
-          </li>
-          <li className="nav-item">
-            <button
-              className={`nav-link ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}
-            >
-              Settings
-            </button>
-          </li>
-        </ul>
+          ))}
+        </div>
       </div>
 
       <div className="content">
-        {activeTab === 'market' && <Market />}
-        {activeTab === 'listings' && <MyListings />}
+        {/* Onboarding: prompt to set wallet addresses before trading. */}
+        {!registered && activeTab !== 'settings' && (
+          <div className="banner banner-info">
+            <span>
+              <strong>Set your wallet addresses first.</strong> You need a Skycoin address (and a
+              BTC/LTC payout address to sell) before you can trade.
+            </span>
+            <button className="btn btn-sm" onClick={goToSettings}>Open Settings</button>
+          </div>
+        )}
+        {/* Market readiness: nothing to trade until the operator configures a coin. */}
+        {ready === false && (activeTab === 'market' || activeTab === 'listings') && (
+          <div className="banner banner-warn">
+            This market isn’t accepting trades yet — the operator hasn’t enabled any sell coin.
+            Check back later.
+          </div>
+        )}
+
+        {activeTab === 'market' && (
+          <Market
+            registered={registered}
+            marketReady={ready}
+            sellCoins={sellCoins}
+            currencies={currencies}
+            onNeedRegister={goToSettings}
+          />
+        )}
         {activeTab === 'orders' && <Orders />}
-        {activeTab === 'settings' && <Settings marketPubKey={marketPubKey} />}
+        {activeTab === 'listings' && <MyListings onNeedRegister={goToSettings} />}
+        {activeTab === 'history' && <History />}
+        {activeTab === 'settings' && (
+          <Settings marketPubKey={marketPubKey} onRegistered={() => setRegistered(true)} />
+        )}
       </div>
     </div>
   )

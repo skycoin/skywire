@@ -21,21 +21,41 @@ func newSellCoinDB(t *testing.T) *Database {
 	return d
 }
 
-// TestSellCoinDefaultSKY: InitDefaultConfig seeds an enabled SKY row.
+// TestSellCoinDefaultSKY: InitDefaultConfig seeds a DISABLED SKY row pre-filled
+// with the public fullnode; it is unavailable until the operator adds the escrow
+// seed + address and enables it.
 func TestSellCoinDefaultSKY(t *testing.T) {
 	d := newSellCoinDB(t)
 	sky, err := d.GetSellCoin("sky") // case-insensitive
 	if err != nil {
 		t.Fatalf("GetSellCoin: %v", err)
 	}
-	if sky == nil || sky.Symbol != "SKY" || !sky.Enabled {
-		t.Fatalf("default SKY sell coin missing or disabled: %+v", sky)
+	if sky == nil || sky.Symbol != "SKY" {
+		t.Fatalf("default SKY sell coin missing: %+v", sky)
 	}
-	avail, err := d.AvailableSellCoins()
-	if err != nil {
-		t.Fatalf("AvailableSellCoins: %v", err)
+	if sky.Enabled {
+		t.Fatalf("default SKY row should be disabled until configured: %+v", sky)
 	}
-	if len(avail) != 1 || avail[0] != "SKY" {
+	// The effective node defaults to the public fullnode even though the row is
+	// empty (so a pre-fibercoin sky_fullnode_url can still override it).
+	if node, _, _, _, _, _ := d.SellCoinConfig("SKY"); node != "https://node.skycoin.com" { //nolint:errcheck
+		t.Fatalf("default SKY node = %q, want the public fullnode", node)
+	}
+	// Not available yet: disabled and no escrow seed/address.
+	if avail, err := d.AvailableSellCoins(); err != nil || len(avail) != 0 {
+		t.Fatalf("AvailableSellCoins = %v, %v; want none until SKY is configured", avail, err)
+	}
+	// Configure escrow + enable -> now available.
+	if err := d.SetConfig("sky_wallet_seed", "seed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetConfig("wallet_sky", "SKYaddr"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetSellCoinEnabled("SKY", true); err != nil {
+		t.Fatal(err)
+	}
+	if avail, _ := d.AvailableSellCoins(); len(avail) != 1 || avail[0] != "SKY" { //nolint:errcheck
 		t.Fatalf("AvailableSellCoins = %v, want [SKY]", avail)
 	}
 }
@@ -53,6 +73,11 @@ func TestSellCoinLegacyBridge(t *testing.T) {
 			t.Fatalf("set %s: %v", k, err)
 		}
 	}
+	// The seeded SKY row is disabled by default; enable it (now complete via the
+	// legacy keys) so the bridge reports it enabled.
+	if err := d.SetSellCoinEnabled("SKY", true); err != nil {
+		t.Fatal(err)
+	}
 	url, seed, wallet, confs, enabled, err := d.SellCoinConfig("SKY")
 	if err != nil {
 		t.Fatalf("SellCoinConfig: %v", err)
@@ -68,6 +93,18 @@ func TestSellCoinLegacyBridge(t *testing.T) {
 // TestSellCoinCRUD covers add/edit/enable/disable/delete of a fibercoin.
 func TestSellCoinCRUD(t *testing.T) {
 	d := newSellCoinDB(t)
+
+	// Configure + enable the seeded SKY row so it counts as available alongside
+	// the fibercoin added below.
+	if err := d.SetConfig("sky_wallet_seed", "sky seed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetConfig("wallet_sky", "SKYaddr"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetSellCoinEnabled("SKY", true); err != nil {
+		t.Fatal(err)
+	}
 
 	// Add a fibercoin (lower-case symbol is normalized to upper-case).
 	if err := d.UpsertSellCoin(&SellCoin{
