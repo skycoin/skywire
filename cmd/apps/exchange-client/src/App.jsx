@@ -6,7 +6,7 @@ import Orders from './components/Orders'
 import History from './components/History'
 import Settings from './components/Settings'
 import ConnectGate from './components/ConnectGate'
-import { api, hasSavedWallets } from './api'
+import { api, hasSavedWallets, addMarketToHistory } from './api'
 
 const TABS = [
   { id: 'market', label: 'Market' },
@@ -43,6 +43,7 @@ function App() {
         if (status.connected) {
           setIsConnected(true)
           setMarketPubKey(status.market_pk || '')
+          if (status.market_pk) addMarketToHistory(status.market_pk)
         }
       } catch (e) {
         console.error('init failed', e)
@@ -76,6 +77,7 @@ function App() {
   }, [isConnected, refreshReadiness])
 
   function handleConnected(pk) {
+    addMarketToHistory(pk)
     setMarketPubKey(pk)
     setIsConnected(true)
     setReady(null)
