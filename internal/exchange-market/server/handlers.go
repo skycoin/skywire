@@ -106,34 +106,43 @@ func (s *Server) handleRegister(pk string, req protocol.Envelope) protocol.Envel
 	if strings.TrimSpace(r.WalletSKY) == "" {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "wallet_sky is required")
 	}
-	// Phase 1 trades SKY (the seller receives SKY refunds; the buyer receives
-	// the purchased SKY) for BTC or LTC (the seller's payout address). Validate
-	// those addresses so a typo is rejected here rather than surfacing later as a
-	// failed payout. SKY is required (checked above); BTC/LTC are optional and
-	// only validated when present.
+	// Collect the per-currency payout addresses: the fixed fields plus the dynamic
+	// Wallets map (which may carry arbitrary operator-added coins). A value in
+	// Wallets overrides a fixed field for the same coin.
+	payouts := map[string]string{}
 	for _, w := range []struct{ currency, addr string }{
-		{"SKY", r.WalletSKY},
-		{"BTC", r.WalletBTC},
-		{"LTC", r.WalletLTC},
+		{"BTC", r.WalletBTC}, {"BCH", r.WalletBCH}, {"LTC", r.WalletLTC},
+		{"USDT_ERC20", r.WalletUSDTERC20}, {"USDT_TRC20", r.WalletUSDTTRC20},
 	} {
-		if strings.TrimSpace(w.addr) == "" {
-			continue
-		}
-		if err := walletaddr.Validate(w.currency, w.addr); err != nil {
-			return protocol.ErrorResponse(req.ID, protocol.CodeInvalidWallet, "invalid "+w.currency+" wallet address")
+		if a := strings.TrimSpace(w.addr); a != "" {
+			payouts[w.currency] = a
 		}
 	}
-	u := &db.User{
-		PubKey:           pk,
-		WalletSKY:        r.WalletSKY,
-		WalletBTC:        r.WalletBTC,
-		WalletBCH:        r.WalletBCH,
-		WalletLTC:        r.WalletLTC,
-		WalletUSDT_ERC20: r.WalletUSDTERC20,
-		WalletUSDT_TRC20: r.WalletUSDTTRC20,
+	for cur, addr := range r.Wallets {
+		if a := strings.TrimSpace(addr); a != "" {
+			payouts[strings.ToUpper(strings.TrimSpace(cur))] = a
+		}
 	}
+	// Validate the Skycoin address and any payout address for a coin we know how
+	// to check (SKY/BTC/LTC). walletaddr.Validate accepts a custom coin it has no
+	// validator for, so a typo there is the operator/seller's responsibility.
+	if err := walletaddr.Validate("SKY", r.WalletSKY); err != nil {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidWallet, "invalid SKY wallet address")
+	}
+	for cur, addr := range payouts {
+		if err := walletaddr.Validate(cur, addr); err != nil {
+			return protocol.ErrorResponse(req.ID, protocol.CodeInvalidWallet, "invalid "+cur+" wallet address")
+		}
+	}
+
+	u := &db.User{PubKey: pk, WalletSKY: r.WalletSKY}
 	if err := s.db.CreateUser(u); err != nil {
 		return s.internal(req.ID, "register", err)
+	}
+	for cur, addr := range payouts {
+		if err := s.db.SetUserWallet(pk, cur, addr); err != nil {
+			return s.internal(req.ID, "register.wallet", err)
+		}
 	}
 	return success(req.ID, protocol.MessageData{Message: "User registered successfully"})
 }
@@ -261,6 +270,16 @@ func (s *Server) handleCreateListing(pk string, req protocol.Envelope) protocol.
 	r.Price = roundToDecimals(r.Price, payDec)
 	if r.Price <= 0 {
 		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest, "price is too small to represent")
+	}
+
+	// The seller must have a payout address for the payment coin, or the buyer's
+	// payment would have nowhere to go. (A fibercoin payment resolves to the
+	// seller's Skycoin address, which is always set.)
+	if payout, err := s.db.GetUserWallet(pk, payCur); err != nil {
+		return s.internal(req.ID, "create_listing.payout", err)
+	} else if strings.TrimSpace(payout) == "" {
+		return protocol.ErrorResponse(req.ID, protocol.CodeInvalidRequest,
+			"add a "+payCur+" payout address in Settings before selling for "+payCur)
 	}
 
 	// The deposit target is the escrow wallet of the chosen sell coin.

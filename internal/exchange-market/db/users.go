@@ -4,6 +4,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -58,8 +59,26 @@ func (d *Database) GetUser(pubkey string) (*User, error) {
 	return user, nil
 }
 
-// GetUserWallet returns the wallet address for a specific currency for a user.
+// GetUserWallet returns a user's address for a currency. SKY and every Skycoin
+// fibercoin resolve to the user's single Skycoin-family address (they share the
+// format) — that's where a buyer receives the purchased coin and a seller
+// receives refunds. Every other (external) payment coin has its own payout
+// address in user_wallets, so arbitrary operator-added coins are supported.
 func (d *Database) GetUserWallet(pubkey, currency string) (string, error) {
+	cur := strings.ToUpper(strings.TrimSpace(currency))
+
+	if cur != "SKY" {
+		// A configured sell coin (fibercoin) also resolves to the Skycoin address.
+		sc, err := d.GetSellCoin(cur)
+		if err != nil {
+			return "", err
+		}
+		if sc == nil {
+			// External payment coin: per-currency payout address.
+			return d.getUserPayout(pubkey, cur)
+		}
+	}
+
 	user, err := d.GetUser(pubkey)
 	if err != nil {
 		return "", err
@@ -67,22 +86,71 @@ func (d *Database) GetUserWallet(pubkey, currency string) (string, error) {
 	if user == nil {
 		return "", fmt.Errorf("user not found: %s", pubkey)
 	}
+	return user.WalletSKY, nil
+}
 
-	switch currency {
-	case "BTC":
-		return user.WalletBTC, nil
-	case "BCH":
-		return user.WalletBCH, nil
-	case "LTC":
-		return user.WalletLTC, nil
-	case "USDT_ERC20":
-		return user.WalletUSDT_ERC20, nil
-	case "USDT_TRC20":
-		return user.WalletUSDT_TRC20, nil
-	default:
-		// SKY and every Skycoin fibercoin share the one registered Skycoin-family
-		// address, so any sell-coin symbol resolves to it. This is where a seller
-		// receives refunds and a buyer receives the purchased coin.
-		return user.WalletSKY, nil
+// getUserPayout returns the user's payout address for an external payment coin.
+// It prefers the per-currency user_wallets entry and falls back to the legacy
+// fixed columns for the built-in coins, so existing BTC/LTC registrations keep
+// working unchanged.
+func (d *Database) getUserPayout(pubkey, currency string) (string, error) {
+	cur := strings.ToUpper(strings.TrimSpace(currency))
+
+	d.mu.RLock()
+	var addr string
+	err := d.db.QueryRow(`SELECT address FROM user_wallets WHERE pubkey = ? AND currency = ?`, pubkey, cur).Scan(&addr)
+	d.mu.RUnlock()
+	if err == nil {
+		return addr, nil
 	}
+	if err != sql.ErrNoRows {
+		return "", fmt.Errorf("failed to get payout wallet: %w", err)
+	}
+
+	// Back-compat: the built-in coins still have fixed columns on the users row.
+	u, err := d.GetUser(pubkey)
+	if err != nil || u == nil {
+		return "", err
+	}
+	switch cur {
+	case "BTC":
+		return u.WalletBTC, nil
+	case "BCH":
+		return u.WalletBCH, nil
+	case "LTC":
+		return u.WalletLTC, nil
+	case "USDT_ERC20":
+		return u.WalletUSDT_ERC20, nil
+	case "USDT_TRC20":
+		return u.WalletUSDT_TRC20, nil
+	}
+	return "", nil
+}
+
+// SetUserWallet stores (or, for an empty address, clears) a user's external
+// payout address for a currency.
+func (d *Database) SetUserWallet(pubkey, currency, address string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	cur := strings.ToUpper(strings.TrimSpace(currency))
+	addr := strings.TrimSpace(address)
+	if cur == "" {
+		return fmt.Errorf("currency is required")
+	}
+	if addr == "" {
+		_, err := d.db.Exec(`DELETE FROM user_wallets WHERE pubkey = ? AND currency = ?`, pubkey, cur)
+		if err != nil {
+			return fmt.Errorf("failed to clear payout wallet: %w", err)
+		}
+		return nil
+	}
+	_, err := d.db.Exec(`
+		INSERT INTO user_wallets (pubkey, currency, address) VALUES (?, ?, ?)
+		ON CONFLICT(pubkey, currency) DO UPDATE SET address = excluded.address
+	`, pubkey, cur, addr)
+	if err != nil {
+		return fmt.Errorf("failed to set payout wallet: %w", err)
+	}
+	return nil
 }

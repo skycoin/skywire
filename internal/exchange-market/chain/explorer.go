@@ -44,21 +44,28 @@ type ExplorerConfigStore interface {
 }
 
 // providerFactory describes an explorer adapter: which currencies it can verify
-// and how to build one from the operator's per-coin config.
+// and how to build one from the operator's per-coin config. A nil `only` set
+// means the adapter is universal (it can verify any coin the operator points it
+// at with a URL).
 type providerFactory struct {
-	covers map[string]bool
-	build  func(currency, baseURL, apiKey string, hc *http.Client) Explorer
+	only  map[string]bool // nil => universal
+	build func(currency, baseURL, apiKey string, hc *http.Client) Explorer
+}
+
+// supports reports whether the adapter can verify currency.
+func (f providerFactory) supports(currency string) bool {
+	return f.only == nil || f.only[currency]
 }
 
 // registry of available explorer adapters, keyed by provider name. New providers
 // (blockcypher, etherscan, trongrid, 3xpl, …) are added here.
 var registry = map[string]providerFactory{
 	"esplora": {
-		// The Esplora adapter can verify any UTXO coin exposed by an Esplora-
-		// compatible API. BTC/LTC ship with a default public endpoint; BCH/DOGE/
-		// DASH are covered too but need the operator to supply an explorer URL
-		// (they have no built-in default), and stay disabled until enabled.
-		covers: map[string]bool{"BTC": true, "LTC": true, "BCH": true, "DOGE": true, "DASH": true},
+		// The Esplora adapter is universal: it can verify ANY UTXO coin exposed by
+		// an Esplora-compatible API. BTC/LTC ship with a default public endpoint;
+		// every other coin (BCH/DOGE/DASH and any custom coin) just needs the
+		// operator to supply an explorer URL.
+		only: nil,
 		build: func(currency, baseURL, _ string, hc *http.Client) Explorer {
 			return newEsplora(currency, baseURL, hc)
 		},
@@ -76,7 +83,7 @@ func DefaultExplorerURL(currency string) string {
 func ProvidersFor(currency string) []string {
 	var out []string
 	for name, f := range registry {
-		if f.covers[currency] {
+		if f.supports(currency) {
 			out = append(out, name)
 		}
 	}
@@ -88,7 +95,7 @@ func ProvidersFor(currency string) []string {
 // validate operator config before saving).
 func SupportsProvider(currency, provider string) bool {
 	f, ok := registry[provider]
-	return ok && f.covers[currency]
+	return ok && f.supports(currency)
 }
 
 // router dispatches each currency to its configured adapter, caching built
@@ -116,7 +123,7 @@ func (r *router) PaymentConfirmations(currency, addr, senderAddr string, amount 
 		return 0, "", nil // currency not configured => never confirms
 	}
 	f, ok := registry[provider]
-	if !ok || !f.covers[currency] {
+	if !ok || !f.supports(currency) {
 		return 0, "", fmt.Errorf("no %q explorer adapter for %s", provider, currency)
 	}
 
