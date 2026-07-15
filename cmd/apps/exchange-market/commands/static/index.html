@@ -353,25 +353,20 @@
     }
     function openPaymentModal(c) {
       const editing = !!c;
-      let symbolField;
-      if (editing) {
-        symbolField = field('Coin', '<input id="m-symbol" value="' + esc(c.code) + '" readonly>');
-      } else {
-        const addable = currencyCache.filter((x) => !x.available && (x.providers || []).length);
-        if (!addable.length) { flash('All supported payment coins are already added.', true); return; }
-        symbolField = field('Coin', '<select id="m-symbol">' +
-          addable.map((x) => '<option value="' + esc(x.code) + '">' + esc(x.code) +
-            (x.default_url ? ' (built-in explorer)' : '') + '</option>').join('') + '</select>');
-      }
+      // Add: free-text symbol for ANY coin (Esplora is universal). Edit: locked.
+      const symbolField = editing
+        ? field('Coin symbol', '<input id="m-symbol" value="' + esc(c.code) + '" readonly>')
+        : field('Coin symbol', '<input id="m-symbol" placeholder="e.g. GRS, ZEC, any UTXO coin">');
       const body = '<div class="grid">' + symbolField +
-        field('Explorer URL', '<input id="m-url" value="' + esc(editing ? (c.url || '') : '') + '" placeholder="Esplora URL (blank = built-in if available)">') +
+        field('Explorer URL', '<input id="m-url" value="' + esc(editing ? (c.url || '') : '') + '" placeholder="Esplora-compatible URL (BTC/LTC have a built-in default)">') +
         field('API key (optional)', '<input id="m-key" value="' + esc(editing ? (c.key || '') : '') + '">') +
-        '</div>';
+        '</div>' +
+        '<div class="hint" style="margin-top:.5rem">Any UTXO coin works as long as you point it at an Esplora-compatible explorer URL. BTC and LTC have a built-in explorer, so their URL can be left blank.</div>';
       openModal(editing ? 'Edit payment coin — ' + esc(c.code) : 'Add payment coin', body, async () => {
         const code = $('#m-symbol').value.trim().toUpperCase();
+        if (!code) { flash('Coin symbol is required.', true); return false; }
         const meta = currencyCache.find((x) => x.code === code) || {};
-        const provider = (meta.providers || [])[0] || '';
-        if (!provider) { flash('No explorer adapter supports ' + code + '.', true); return false; }
+        const provider = (meta.providers || [])[0] || 'esplora';
         const url = $('#m-url').value.trim();
         if (!meta.default_url && !url) { flash(code + ' has no built-in explorer — an explorer URL is required.', true); return false; }
         const p = 'explorer_' + code.toLowerCase() + '_';

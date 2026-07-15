@@ -1,37 +1,53 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, loadWallets, saveWallets } from '../api'
 
-// Settings is where a user registers the wallet addresses the market delivers to
-// and pays out from. A Skycoin address is required (it receives every purchased
-// sell coin — SKY and any fibercoin — plus refunds). To sell for BTC/LTC, add the
-// matching payout address. Values are remembered locally and pre-filled here.
+// Settings is where a user registers the addresses the market uses for them: the
+// required Skycoin address (receives every purchased sell coin + refunds) and a
+// payout address for each payment coin the market accepts — including any custom
+// coin the operator added. Values are remembered locally and pre-filled here.
 function Settings({ marketPubKey, onRegistered }) {
   const saved = loadWallets()
-  const [wallets, setWallets] = useState({
-    SKY: saved.SKY || '',
-    BTC: saved.BTC || '',
-    LTC: saved.LTC || '',
-  })
+  const [sky, setSky] = useState(saved.SKY || '')
+  const [payouts, setPayouts] = useState({})
+  const [currencies, setCurrencies] = useState([])
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState(null)
 
-  const setField = (currency, value) => setWallets((w) => ({ ...w, [currency]: value }))
+  useEffect(() => {
+    api
+      .getCurrencies()
+      .then((d) => {
+        const cur = d.currencies || []
+        setCurrencies(cur)
+        setPayouts(() => {
+          const init = {}
+          cur.forEach((c) => {
+            init[c] = saved[c] || ''
+          })
+          return init
+        })
+      })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const setPayout = (cur, val) => setPayouts((p) => ({ ...p, [cur]: val }))
 
   const handleSave = async () => {
     setMessage(null)
-    if (!wallets.SKY.trim()) {
+    if (!sky.trim()) {
       setMessage({ type: 'danger', text: 'A Skycoin address is required.' })
       return
     }
+    const wallets = {}
+    Object.entries(payouts).forEach(([cur, addr]) => {
+      if (addr.trim()) wallets[cur] = addr.trim()
+    })
     setSaving(true)
     try {
-      await api.register({
-        wallet_sky: wallets.SKY.trim(),
-        wallet_btc: wallets.BTC.trim(),
-        wallet_ltc: wallets.LTC.trim(),
-      })
-      saveWallets({ SKY: wallets.SKY.trim(), BTC: wallets.BTC.trim(), LTC: wallets.LTC.trim() })
-      setMessage({ type: 'success', text: 'Wallet addresses saved. You can now trade.' })
+      await api.register({ wallet_sky: sky.trim(), wallets })
+      saveWallets({ SKY: sky.trim(), ...wallets })
+      setMessage({ type: 'success', text: 'Addresses saved. You can now trade.' })
       if (onRegistered) onRegistered()
     } catch (e) {
       setMessage({ type: 'danger', text: e.message })
@@ -49,10 +65,9 @@ function Settings({ marketPubKey, onRegistered }) {
       <div className="panel">
         <h4 className="panel-title">Your wallet addresses</h4>
         <p className="text-muted mb-3">
-          Register the addresses the market uses for you. Your <strong>Skycoin</strong> address
-          receives every purchased sell coin (SKY and any fibercoin share the format) and any refund.
-          Add a <strong>BTC</strong> or <strong>LTC</strong> payout address if you want to sell for
-          those. Each address is validated by the market.
+          Your <strong>Skycoin</strong> address receives every purchased sell coin (SKY and any
+          fibercoin share the format) and any refund. To <strong>sell</strong>, add a payout address
+          for each payment coin you’ll accept — that’s where buyers pay you directly.
         </p>
 
         <div className="field-grid">
@@ -62,31 +77,26 @@ function Settings({ marketPubKey, onRegistered }) {
               type="text"
               className="form-control"
               placeholder="Skycoin-family address (receives SKY + all fibercoins)"
-              value={wallets.SKY}
-              onChange={(e) => setField('SKY', e.target.value)}
+              value={sky}
+              onChange={(e) => setSky(e.target.value)}
             />
           </div>
-          <div>
-            <label className="form-label">BTC payout address</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Bitcoin address (for selling)"
-              value={wallets.BTC}
-              onChange={(e) => setField('BTC', e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="form-label">LTC payout address</label>
-            <input
-              type="text"
-              className="form-control"
-              placeholder="Litecoin address (for selling)"
-              value={wallets.LTC}
-              onChange={(e) => setField('LTC', e.target.value)}
-            />
-          </div>
+          {currencies.map((cur) => (
+            <div key={cur}>
+              <label className="form-label">{cur} payout address</label>
+              <input
+                type="text"
+                className="form-control"
+                placeholder={`${cur} address (to be paid when selling for ${cur})`}
+                value={payouts[cur] || ''}
+                onChange={(e) => setPayout(cur, e.target.value)}
+              />
+            </div>
+          ))}
         </div>
+        {currencies.length === 0 && (
+          <div className="hint mt-2">This market has no external payment coins enabled yet.</div>
+        )}
 
         {message && <div className={`alert alert-${message.type} mt-3 mb-0`}>{message.text}</div>}
 
