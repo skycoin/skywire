@@ -47,6 +47,53 @@ export function hasSavedWallets() {
   return !!(w && w.SKY)
 }
 
+// Recent markets: a local, most-recent-first list of market public keys this
+// client has connected to, so the user can rejoin from a list instead of
+// re-typing the key. Purely a local convenience; the market is never contacted.
+const MARKETS_KEY = 'exchange:markets'
+const MARKETS_MAX = 12
+
+export function loadMarketHistory() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(MARKETS_KEY))
+    return Array.isArray(arr) ? arr.filter((m) => m && m.pk) : []
+  } catch {
+    return []
+  }
+}
+
+export function addMarketToHistory(pk) {
+  const key = (pk || '').trim()
+  if (!key) return loadMarketHistory()
+  const rest = loadMarketHistory().filter((m) => m.pk !== key)
+  const next = [{ pk: key, ts: Date.now() }, ...rest].slice(0, MARKETS_MAX)
+  try {
+    localStorage.setItem(MARKETS_KEY, JSON.stringify(next))
+  } catch {
+    // ignore storage errors (private mode, quota)
+  }
+  return next
+}
+
+export function removeMarketFromHistory(pk) {
+  const next = loadMarketHistory().filter((m) => m.pk !== pk)
+  try {
+    localStorage.setItem(MARKETS_KEY, JSON.stringify(next))
+  } catch {
+    // ignore storage errors
+  }
+  return next
+}
+
+export function clearMarketHistory() {
+  try {
+    localStorage.removeItem(MARKETS_KEY)
+  } catch {
+    // ignore storage errors
+  }
+  return []
+}
+
 // Copy text to the clipboard, with a fallback for non-secure (plain http)
 // contexts where navigator.clipboard is unavailable — the app is served over
 // http on the visor, so the modern API is often missing. Returns true on
