@@ -267,7 +267,38 @@
 
     // Market public key
     getJSON('/api/info').then((d) => { $('#market-pk').textContent = d.public_key || 'unknown'; });
-    $('#copy-pk').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('#market-pk').textContent);
+
+    // Copy helper with a fallback for non-secure (plain http) contexts, where
+    // navigator.clipboard is unavailable — the operator UI is served over http.
+    async function copyText(text) {
+      if (!text) return false;
+      try {
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (e) { /* fall through to legacy path */ }
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.top = '-1000px';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+      } catch (e) { return false; }
+    }
+    $('#copy-pk').onclick = async () => {
+      const btn = $('#copy-pk');
+      const ok = await copyText($('#market-pk').textContent);
+      const prev = btn.textContent;
+      btn.textContent = ok ? 'copied ✓' : 'failed';
+      setTimeout(() => { btn.textContent = prev; }, 1500);
+    };
 
     // --- Sell coins (SKY + fibercoins): list + add/edit modal, enable/disable, delete ---
     let sellCoinCache = [];
