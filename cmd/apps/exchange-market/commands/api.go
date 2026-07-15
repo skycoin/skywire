@@ -23,6 +23,7 @@ import (
 // UI may change. Per-coin explorer keys (explorer_<coin>_{provider,url,key}) are
 // validated dynamically in validateConfigKey.
 var editableConfigKeys = map[string]bool{
+	"market_name":             true,
 	"wallet_sky":              true,
 	"sky_fullnode_url":        true,
 	"sky_wallet_seed":         true,
