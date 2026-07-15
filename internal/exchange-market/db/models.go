@@ -73,6 +73,14 @@ type Order struct {
 	Commission            float64    `json:"commission" db:"commission_sky"` // sell-coin commission retained on a completed sale
 }
 
+// BuyerProductBlock is a buyer who has reached the per-product buy-cancel limit
+// and can no longer re-buy that product until the operator clears the block.
+type BuyerProductBlock struct {
+	BuyerPubKey string `json:"buyer_pubkey" db:"buyer_pubkey"`
+	ProductID   string `json:"product_id" db:"product_id"`
+	Cancels     int    `json:"cancels" db:"cancels"`
+}
+
 // SellCoin is a Skycoin-family coin (SKY or a fibercoin) the market accepts on
 // the sell side. Each has its own fullnode + escrow hot wallet. Deposits,
 // deliveries and refunds for a listing use the escrow config of its SellCoin.
