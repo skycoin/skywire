@@ -4,6 +4,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -53,12 +54,10 @@ func (d *Database) ExplorerConfig(currency string) (provider, baseURL, apiKey st
 	return provider, baseURL, apiKey, nil
 }
 
-// IsCurrencyAvailable reports whether currency is supported and has an explorer
-// provider configured.
+// IsCurrencyAvailable reports whether currency has an explorer provider
+// configured. Any coin symbol is allowed — the Esplora adapter is universal — so
+// availability is purely "has the operator configured an explorer for it".
 func (d *Database) IsCurrencyAvailable(currency string) (bool, error) {
-	if !protocol.IsSupportedCurrency(currency) {
-		return false, nil
-	}
 	provider, _, _, err := d.ExplorerConfig(currency)
 	if err != nil {
 		return false, err
@@ -66,20 +65,61 @@ func (d *Database) IsCurrencyAvailable(currency string) (bool, error) {
 	return strings.TrimSpace(provider) != "", nil
 }
 
-// AvailableCurrencies returns the supported currencies that have an explorer
-// configured, in canonical display order.
-func (d *Database) AvailableCurrencies() ([]string, error) {
+// ConfiguredPaymentCurrencies returns the symbols of every coin that has an
+// explorer provider configured (built-in BTC/LTC or any operator-added coin),
+// extracted from the explorer_<coin>_provider config keys.
+func (d *Database) ConfiguredPaymentCurrencies() ([]string, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
+	rows, err := d.db.Query(`
+		SELECT key FROM market_config
+		WHERE key LIKE 'explorer\_%\_provider' ESCAPE '\' AND TRIM(value) <> ''
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list configured currencies: %w", err)
+	}
+	defer rows.Close() //nolint
+
 	var out []string
-	for _, c := range protocol.PaymentCurrencies {
-		ok, err := d.IsCurrencyAvailable(c)
-		if err != nil {
-			return nil, err
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("failed to scan currency key: %w", err)
 		}
-		if ok {
-			out = append(out, c)
+		coin := strings.TrimSuffix(strings.TrimPrefix(key, "explorer_"), "_provider")
+		if coin != "" {
+			out = append(out, strings.ToUpper(coin))
 		}
 	}
-	return out, nil
+	return out, rows.Err()
+}
+
+// AvailableCurrencies returns the payment currencies that have an explorer
+// configured — the canonical coins first (in display order), then any custom
+// coins alphabetically.
+func (d *Database) AvailableCurrencies() ([]string, error) {
+	configured, err := d.ConfiguredPaymentCurrencies()
+	if err != nil {
+		return nil, err
+	}
+	set := make(map[string]bool, len(configured))
+	for _, c := range configured {
+		set[c] = true
+	}
+	var out []string
+	for _, c := range protocol.PaymentCurrencies {
+		if set[c] {
+			out = append(out, c)
+			delete(set, c)
+		}
+	}
+	rest := make([]string, 0, len(set))
+	for c := range set {
+		rest = append(rest, c)
+	}
+	slices.Sort(rest)
+	return append(out, rest...), nil
 }
 
 // GetConfig retrieves a configuration value by key.

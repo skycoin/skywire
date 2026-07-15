@@ -27,8 +27,9 @@ func (f fakeStore) SellCoinConfig(string) (string, string, string, int, bool, er
 }
 
 func TestProvidersFor(t *testing.T) {
-	// Every supported UTXO coin is covered by the esplora adapter.
-	for _, c := range []string{"BTC", "LTC", "BCH", "DOGE", "DASH"} {
+	// The esplora adapter is universal: it covers the built-in coins and any
+	// operator-added custom coin (the operator supplies the explorer URL).
+	for _, c := range []string{"BTC", "LTC", "BCH", "DOGE", "DASH", "GRS", "ZEC"} {
 		if got := ProvidersFor(c); !slices.Contains(got, "esplora") {
 			t.Fatalf("ProvidersFor(%s) = %v, want esplora present", c, got)
 		}
@@ -36,12 +37,9 @@ func TestProvidersFor(t *testing.T) {
 			t.Fatalf("SupportsProvider(%s, esplora) = false, want true", c)
 		}
 	}
-	// A coin with no adapter has no providers.
-	if got := ProvidersFor("XMR"); len(got) != 0 {
-		t.Fatalf("ProvidersFor(XMR) = %v, want none (no adapter)", got)
-	}
-	if SupportsProvider("XMR", "esplora") {
-		t.Fatal("esplora must not claim to support XMR")
+	// An unknown provider name is still rejected.
+	if SupportsProvider("BTC", "bogus") {
+		t.Fatal("unknown provider must not be supported")
 	}
 }
 

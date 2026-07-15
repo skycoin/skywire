@@ -40,14 +40,14 @@ var editableConfigKeys = map[string]bool{
 }
 
 // validateConfigKey allows a fixed whitelisted key, or a per-coin explorer key
-// for a supported currency. For a provider assignment it also checks the chosen
-// provider actually covers that coin.
+// for ANY coin symbol (the operator may add arbitrary payment coins). For a
+// provider assignment it checks the chosen provider can actually verify that coin.
 func validateConfigKey(key, value string) error {
 	if editableConfigKeys[key] {
 		return nil
 	}
 	coin, field, ok := parseExplorerKey(key)
-	if !ok || !protocol.IsSupportedCurrency(coin) {
+	if !ok {
 		return fmt.Errorf("unknown or read-only config key: %s", key)
 	}
 	if field == "provider" && strings.TrimSpace(value) != "" && !chain.SupportsProvider(coin, value) {
@@ -192,8 +192,23 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 			DefaultURL string   `json:"default_url"` // built-in explorer endpoint, if any
 			Available  bool     `json:"available"`   // enabled (a provider is configured)
 		}
-		out := make([]coinCfg, 0, len(protocol.PaymentCurrencies))
-		for _, c := range protocol.PaymentCurrencies {
+		// The canonical coins (so their built-in defaults are always offered),
+		// plus any custom coin the operator has already configured.
+		coins := append([]string{}, protocol.PaymentCurrencies...)
+		seen := map[string]bool{}
+		for _, c := range coins {
+			seen[c] = true
+		}
+		if configured, err := database.ConfiguredPaymentCurrencies(); err == nil {
+			for _, c := range configured {
+				if !seen[c] {
+					coins = append(coins, c)
+					seen[c] = true
+				}
+			}
+		}
+		out := make([]coinCfg, 0, len(coins))
+		for _, c := range coins {
 			provider, url, key, err := database.ExplorerConfig(c)
 			if err != nil {
 				mWriteError(w, http.StatusInternalServerError, err.Error())

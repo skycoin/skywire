@@ -87,6 +87,7 @@ func (d *Database) Migrate() error {
 		createBansTable,
 		createMarketConfigTable,
 		createSellCoinsTable,
+		createUserWalletsTable,
 	}
 
 	for _, migration := range migrations {
@@ -324,6 +325,19 @@ CREATE TABLE IF NOT EXISTS market_config (
 // (SKY plus any operator-added fibercoins), each with its own fullnode + escrow
 // hot wallet. SKY is seeded as a default row (see seedDefaultSellCoin) but is
 // otherwise an ordinary, editable/removable row — nothing about it is special.
+// user_wallets holds a user's per-currency payout address for external payment
+// coins (BTC, LTC, and any operator-added custom coin). A user's Skycoin-family
+// address (for receiving SKY and every fibercoin) lives on the users row; only
+// external payout addresses are per-currency and therefore dynamic.
+const createUserWalletsTable = `
+CREATE TABLE IF NOT EXISTS user_wallets (
+    pubkey   TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    address  TEXT NOT NULL,
+    PRIMARY KEY (pubkey, currency)
+);
+`
+
 const createSellCoinsTable = `
 CREATE TABLE IF NOT EXISTS sell_coins (
     symbol        TEXT PRIMARY KEY,
