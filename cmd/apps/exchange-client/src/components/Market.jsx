@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
+import CopyButton from './CopyButton'
 
 function Market({ registered, marketReady, sellCoins = [], currencies = [], onNeedRegister }) {
   const [showCreateListing, setShowCreateListing] = useState(false)
@@ -7,6 +8,9 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
+  // Deposit instructions from the last created listing. Kept until the user
+  // dismisses it (never auto-hidden) so they don't lose the escrow address.
+  const [deposit, setDeposit] = useState(null)
 
   const [newListing, setNewListing] = useState({
     sell_coin: '',
@@ -89,10 +93,16 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
         price: parseFloat(newListing.price),
         payment_currency: newListing.payment_currency,
       })
-      flash(
-        `Listing created. Transfer exactly ${resp.expected_amount} ${resp.sell_coin} ` +
-          `(${resp.amount} amount + ${resp.commission} commission) to ${resp.market_wallet} within 15 minutes.`
-      )
+      // Persist the deposit instructions on-screen (with a copy button) instead
+      // of a toast the user can miss — this is the address they must fund.
+      setDeposit({
+        sell_coin: resp.sell_coin,
+        amount: resp.amount,
+        commission: resp.commission,
+        expected_amount: resp.expected_amount,
+        market_wallet: resp.market_wallet,
+        expires_at: resp.expires_at,
+      })
       setShowCreateListing(false)
       setNewListing({ sell_coin: sellCoins[0] || '', amount: '', price: '', payment_currency: '' })
     } catch (err) {
@@ -118,6 +128,28 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
 
       {notice && <div className="alert alert-info">{notice}</div>}
       {error && <div className="alert alert-danger">{error}</div>}
+
+      {deposit && (
+        <div className="panel deposit-box">
+          <div className="deposit-head">
+            <h4 className="panel-title mb-0">Fund your sell order</h4>
+            <button type="button" className="deposit-close" onClick={() => setDeposit(null)} aria-label="Dismiss">✕</button>
+          </div>
+          <p className="mb-2">
+            Send exactly <strong>{deposit.expected_amount} {deposit.sell_coin}</strong>{' '}
+            ({deposit.amount} + {deposit.commission} commission) to this escrow address
+            {deposit.expires_at ? <> before <strong>{new Date(deposit.expires_at).toLocaleTimeString()}</strong></> : ' within 15 minutes'}:
+          </p>
+          <div className="copy-row">
+            <code className="addr-box">{deposit.market_wallet}</code>
+            <CopyButton text={deposit.market_wallet} label="Copy address" />
+          </div>
+          <p className="hint mt-2 mb-0">
+            You can find this again anytime under <strong>My Listings</strong>. The offer becomes a
+            purchasable product once the deposit is confirmed on-chain.
+          </p>
+        </div>
+      )}
 
       {showCreateListing && (
         <div className="panel trade-builder mb-4">

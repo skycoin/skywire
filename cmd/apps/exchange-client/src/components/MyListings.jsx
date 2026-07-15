@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
+import CopyButton from './CopyButton'
 
 // MyListings shows the seller their own pending sell listings and tracks each
 // one's lifecycle live: pending (awaiting the SKY deposit) -> confirmed (deposit
@@ -99,6 +100,7 @@ function MyListings() {
                 <th>Amount</th>
                 <th>Price</th>
                 <th>Deposit</th>
+                <th>Send to (escrow address)</th>
                 <th>Lifecycle</th>
                 <th>Deposit Tx</th>
                 <th>Expires</th>
@@ -114,7 +116,7 @@ function MyListings() {
                   <td>{l.price} {l.payment_currency}</td>
                   <td>
                     {l.status === 'pending' ? (
-                      <span title={l.market_wallet ? `to ${l.market_wallet}` : undefined}>
+                      <span>
                         <strong>{l.expected_amount}</strong> {l.sell_coin}
                         {l.expected_amount > l.amount && (
                           <div className="small text-muted">
@@ -124,6 +126,16 @@ function MyListings() {
                       </span>
                     ) : (
                       <span className="text-muted">received</span>
+                    )}
+                  </td>
+                  <td>
+                    {l.status === 'pending' && l.market_wallet ? (
+                      <div className="copy-row">
+                        <code className="addr-box addr-sm" title={l.market_wallet}>{l.market_wallet}</code>
+                        <CopyButton text={l.market_wallet} label="Copy" />
+                      </div>
+                    ) : (
+                      <span className="text-muted">—</span>
                     )}
                   </td>
                   <td>{renderLifecycle(l.status)}</td>
@@ -155,8 +167,9 @@ function MyListings() {
 
       {listings.some((l) => l.status === 'pending') && (
         <div className="alert alert-info mt-3">
-          For each pending listing, transfer the exact deposit amount to that coin's escrow
-          wallet (hover the Deposit amount to see the address) before it expires.
+          For each pending listing, transfer the exact <strong>Deposit</strong> amount to the
+          <strong> Send to</strong> escrow address before it expires. The offer becomes a
+          purchasable product once the deposit is confirmed on-chain.
         </div>
       )}
     </div>

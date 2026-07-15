@@ -8,10 +8,19 @@
   --panel: rgba(255, 255, 255, 0.04);
   --border: rgba(2, 115, 255, 0.35);
   --muted: rgba(255, 255, 255, 0.6);
+
+  /* Drive Bootstrap's own theme tokens so every Bootstrap component (body,
+     cards, modals, dropdown option menus) inherits the dark navy palette
+     instead of Bootstrap's default light theme. */
+  --bs-body-bg: var(--sky-navy);
+  --bs-body-color: var(--sky-white);
+  --bs-border-color: var(--border);
+  color-scheme: dark;
 }
 
-body {
+html, body {
   margin: 0;
+  min-height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
@@ -20,6 +29,7 @@ body {
   background-color: var(--sky-navy);
   color: var(--sky-white);
 }
+#root { min-height: 100vh; background-color: var(--sky-navy); }
 
 .text-muted { color: var(--muted) !important; }
 code { color: var(--sky-blue); }
@@ -217,6 +227,34 @@ code { color: var(--sky-blue); }
 
 /* Scrollable table container */
 .table-wrap { overflow-x: auto; }
+
+/* Deposit instructions (post-create) + copyable escrow address */
+.deposit-box { border-color: var(--sky-blue); background: rgba(2, 115, 255, 0.08); }
+.deposit-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.5rem; }
+.deposit-close {
+  background: transparent; border: none; color: var(--muted);
+  font-size: 1rem; line-height: 1; cursor: pointer; padding: 0.15rem 0.4rem; border-radius: 4px;
+}
+.deposit-close:hover { color: var(--sky-white); background: rgba(255, 255, 255, 0.08); }
+.copy-row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.addr-box {
+  display: inline-block;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  font-family: 'Courier New', monospace;
+  color: var(--sky-blue);
+  word-break: break-all;
+}
+.addr-box.addr-sm {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.45rem;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Small button (banner CTA) */
 .btn.btn-sm {
