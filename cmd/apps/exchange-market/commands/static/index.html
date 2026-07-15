@@ -44,48 +44,67 @@
       border-bottom: 2px solid transparent;
     }
     nav button.active { color: var(--sky-white); border-bottom-color: var(--sky-blue); }
-    main { padding: 1.5rem; max-width: 1100px; }
+    /* Full-width responsive content: fills the viewport (minus padding) up to a
+       generous cap, instead of a narrow fixed column. */
+    main { padding: 1.5rem; width: 100%; max-width: 1600px; margin: 0 auto; }
     .panel {
       background: var(--panel); border: 1px solid var(--border);
       border-radius: 8px; padding: 1.25rem; margin-bottom: 1.25rem;
     }
     .panel h2 { margin-top: 0; font-size: 1rem; color: var(--sky-blue); }
+    .panel-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
+    .panel-head h2 { margin: 0; }
     label { display: block; font-size: 0.85rem; margin: 0.75rem 0 0.25rem; }
     .hint { font-size: 0.75rem; color: var(--muted); margin-top: 0.15rem; }
-    input {
+    input, select {
       width: 100%; padding: 0.5rem 0.65rem; border-radius: 6px;
       border: 1px solid var(--border); background: rgba(0,0,0,0.25);
       color: var(--sky-white); font-family: 'Courier New', monospace; font-size: 0.85rem;
     }
+    input[readonly] { opacity: 0.6; }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.5rem 1rem; }
     button.primary {
       background: var(--sky-blue); color: var(--sky-white); border: none;
-      padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer; margin-top: 1rem;
+      padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 600; cursor: pointer;
     }
     button.primary:disabled { opacity: 0.5; cursor: default; }
+    .btn {
+      background: transparent; color: var(--sky-white); border: 1px solid var(--border);
+      padding: 0.35rem 0.75rem; border-radius: 6px; cursor: pointer; font-size: 0.8rem;
+    }
+    .btn:hover { border-color: var(--sky-blue); }
+    .btn.danger { border-color: #dc3545; }
+    .btn.danger:hover { border-color: #dc3545; background: rgba(220,53,69,0.15); }
     table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
     th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); }
     th { color: var(--muted); font-weight: 600; }
     td code { color: var(--sky-blue); }
-    .badge { padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.72rem; background: rgba(255,255,255,0.12); }
-    .badge.active, .badge.completed { background: #1e7e34; }
+    .badge { padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.72rem; background: rgba(255,255,255,0.12); white-space: nowrap; }
+    .badge.active, .badge.completed, .badge.enabled { background: #1e7e34; }
     .badge.frozen, .badge.pending_payment, .badge.pending { background: #b8860b; }
     .badge.sold { background: #0257c4; }
-    .badge.expired, .badge.cancelled { background: #6c757d; }
+    .badge.expired, .badge.cancelled, .badge.disabled { background: #6c757d; }
     .msg { padding: 0.6rem 0.85rem; border-radius: 6px; margin-bottom: 1rem; font-size: 0.85rem; }
     .msg.ok { background: rgba(30,126,52,0.25); border: 1px solid #1e7e34; }
     .msg.err { background: rgba(220,53,69,0.25); border: 1px solid #dc3545; }
-    .empty { color: var(--muted); font-size: 0.9rem; padding: 0.5rem 0; }
+    .empty { color: var(--muted); font-size: 0.9rem; padding: 0.75rem 0; }
     .tab { display: none; }
     .tab.active { display: block; }
-    .cur-row { display: grid; grid-template-columns: auto 55px 1fr 1fr auto; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
-    .cur-code { font-weight: 600; }
-    .cur-row select, .cur-row input:not([type=checkbox]) { width: 100%; }
-    .cur-toggle { display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; font-size: 0.85rem; }
-    .sc-row { border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem; margin-bottom: 0.75rem; }
-    .sc-row input[readonly] { opacity: 0.7; }
-    button.sc-del { background: transparent; color: var(--sky-white); border: 1px solid #dc3545; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; }
-    @media (max-width: 640px) { .cur-row { grid-template-columns: 1fr 1fr; } }
+    /* Coin list item (sell + payment coins) */
+    .coin-item {
+      display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+      border: 1px solid var(--border); border-radius: 6px; padding: 0.6rem 0.85rem; margin-bottom: 0.5rem;
+    }
+    .coin-item .sym { font-weight: 600; font-size: 0.95rem; }
+    .coin-item .meta { color: var(--muted); font-size: 0.78rem; font-family: 'Courier New', monospace; word-break: break-all; flex: 1 1 200px; }
+    .coin-item .actions { display: flex; gap: 0.4rem; margin-left: auto; flex-wrap: wrap; }
+    .toggle { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; font-size: 0.85rem; }
+    /* Modal */
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 50; }
+    .modal-overlay[hidden] { display: none; }
+    .modal { background: var(--sky-navy); border: 1px solid var(--sky-blue); border-radius: 10px; padding: 1.25rem; width: 100%; max-width: 620px; max-height: 90vh; overflow: auto; }
+    .modal h2 { margin-top: 0; color: var(--sky-blue); font-size: 1.05rem; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; }
   </style>
 </head>
 <body>
@@ -109,29 +128,28 @@
     <section id="tab-config" class="tab active">
       <div id="config-msg"></div>
 
+      <!-- Sell coins -->
       <div class="panel">
-        <h2>Sell coins <span class="hint">(SKY and any Skycoin fibercoins you accept on the sell side — add, edit, enable/disable, delete)</span></h2>
-        <div id="sellcoin-rows"><div class="empty">Loading…</div></div>
-        <div class="hint" style="margin-top:.75rem">Each sell coin has its own fullnode URL and escrow hot wallet (seed + address; the seed's first address must equal the escrow address). Spends are built and signed locally — seeds never leave this process. Untick <em>Enabled</em> to stop accepting a coin without deleting it.</div>
-        <h3 style="font-size:.9rem;margin:1.1rem 0 .25rem;color:var(--muted)">Add a sell coin</h3>
-        <div class="grid" id="sellcoin-add">
-          <div><label>Symbol</label><input name="symbol" placeholder="e.g. MDL"></div>
-          <div><label>Name</label><input name="name" placeholder="e.g. Mobile Wallet"></div>
-          <div><label>Fullnode URL</label><input name="node_url" placeholder="http://host:6420"></div>
-          <div><label>Escrow wallet address</label><input name="wallet_addr" placeholder="deposit / escrow address"></div>
-          <div><label>Escrow wallet seed</label><input name="wallet_seed" type="password" placeholder="deterministic seed"></div>
-          <div><label>Confirmations</label><input name="confirmations" type="number" min="1" value="1"></div>
+        <div class="panel-head">
+          <h2>Sell coins</h2>
+          <button type="button" class="primary" id="sellcoin-add-btn">+ Add sell coin</button>
         </div>
-        <button type="button" class="primary" id="sellcoin-add-btn">Add sell coin</button>
+        <div class="hint">SKY and any Skycoin fibercoins you accept on the sell side. Each has its own fullnode + escrow hot wallet (seed + address); spends are signed locally and the seed never leaves this process.</div>
+        <div id="sellcoin-rows" style="margin-top:.85rem"><div class="empty">Loading…</div></div>
       </div>
 
-      <form id="config-form">
-        <div class="panel">
-          <h2>Payment coins <span class="hint">(tick a coin to accept it as buyer payment; untick to disable)</span></h2>
-          <div id="currency-rows"><div class="empty">Loading…</div></div>
-          <div class="hint" style="margin-top:.5rem">Enable a coin to accept it. BTC and LTC have a built-in explorer; other coins need an Esplora-compatible explorer URL. Unticking disables a coin without losing its saved URL/key.</div>
+      <!-- Payment coins -->
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Payment coins</h2>
+          <button type="button" class="primary" id="payment-add-btn">+ Add payment coin</button>
         </div>
+        <div class="hint">Coins a buyer may pay with, verified via a block explorer. BTC and LTC have a built-in explorer; other coins need an Esplora-compatible URL. (A sell coin can also be paid with another sell coin — that needs no explorer and is handled automatically.)</div>
+        <div id="currency-rows" style="margin-top:.85rem"><div class="empty">Loading…</div></div>
+      </div>
 
+      <!-- Rules -->
+      <form id="config-form">
         <div class="panel">
           <h2>Rules</h2>
           <div class="grid">
@@ -148,8 +166,7 @@
             <div><label>Commission max (0 = no cap)</label><input name="commission_max_sky" type="number" min="0" step="0.001"></div>
           </div>
         </div>
-
-        <button type="submit" class="primary" id="save-btn">Save configuration</button>
+        <button type="submit" class="primary" id="save-btn">Save rules</button>
       </form>
     </section>
 
@@ -178,6 +195,18 @@
     </section>
   </main>
 
+  <!-- Shared add/edit modal -->
+  <div class="modal-overlay" id="modal" hidden>
+    <div class="modal">
+      <h2 id="modal-title"></h2>
+      <div id="modal-body"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="modal-cancel">Cancel</button>
+        <button type="button" class="primary" id="modal-save">Save</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const $ = (s) => document.querySelector(s);
     const CONFIG_FIELDS = [
@@ -194,12 +223,36 @@
     function shorten(s) { s = String(s || ''); return s.length > 16 ? s.slice(0, 10) + '…' + s.slice(-4) : s; }
     function badge(status) { return '<span class="badge ' + esc(status) + '">' + esc(status) + '</span>'; }
     function fmt(t) { return t ? new Date(t).toLocaleString() : '-'; }
+    function field(label, inputHTML) { return '<div><label>' + esc(label) + '</label>' + inputHTML + '</div>'; }
+    function flash(msg, isErr) {
+      $('#config-msg').innerHTML = '<div class="msg ' + (isErr ? 'err' : 'ok') + '">' + esc(msg) + '</div>';
+      setTimeout(() => { $('#config-msg').innerHTML = ''; }, 4000);
+    }
 
     async function getJSON(url) { const r = await fetch(url); return r.json(); }
     async function postJSON(url, body) {
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       return r.json();
     }
+
+    // --- Modal framework ---
+    const modal = $('#modal');
+    let modalSave = null;
+    function openModal(title, bodyHTML, onSave) {
+      $('#modal-title').textContent = title;
+      $('#modal-body').innerHTML = bodyHTML;
+      modalSave = onSave;
+      modal.hidden = false;
+    }
+    function closeModal() { modal.hidden = true; modalSave = null; }
+    $('#modal-cancel').onclick = closeModal;
+    $('#modal-save').onclick = async () => {
+      if (!modalSave) return;
+      const btn = $('#modal-save'); btn.disabled = true;
+      try { if ((await modalSave()) !== false) closeModal(); }
+      finally { btn.disabled = false; }
+    };
+    modal.onclick = (e) => { if (e.target === modal) closeModal(); };
 
     // Tabs
     let current = 'config';
@@ -216,87 +269,134 @@
     getJSON('/api/info').then((d) => { $('#market-pk').textContent = d.public_key || 'unknown'; });
     $('#copy-pk').onclick = () => navigator.clipboard && navigator.clipboard.writeText($('#market-pk').textContent);
 
-    // Config
-    let currencyList = [];
-    async function loadCurrencies() {
-      const d = await getJSON('/api/currencies');
-      currencyList = d.currencies || [];
-      const rows = currencyList.map((c) => {
-        const key = esc(c.code);
-        const provider = (c.providers || [])[0] || '';
-        const noAdapter = !provider;
-        const urlPlaceholder = c.default_url
-          ? 'explorer URL (default: ' + esc(c.default_url) + ')'
-          : 'explorer URL (required)';
-        return '<div class="cur-row" data-coin="' + key + '" data-provider="' + esc(provider) + '">' +
-          '<label class="cur-toggle"><input type="checkbox" class="cur-enabled"' +
-            (c.available ? ' checked' : '') + (noAdapter ? ' disabled' : '') + '> Accept</label>' +
-          '<span class="cur-code">' + key + '</span>' +
-          '<input class="cur-url" placeholder="' + urlPlaceholder + '" value="' + esc(c.url || '') + '">' +
-          '<input class="cur-key" placeholder="API key (optional)" value="' + esc(c.key || '') + '">' +
-          (noAdapter ? '<span class="hint">no adapter</span>' : '') +
-          '</div>';
-      }).join('');
-      $('#currency-rows').innerHTML = rows || '<div class="empty">No supported currencies.</div>';
-    }
-    // Sell coins (SKY + fibercoins) — full CRUD against /api/sellcoins.
+    // --- Sell coins (SKY + fibercoins): list + add/edit modal, enable/disable, delete ---
+    let sellCoinCache = [];
     async function loadSellCoins() {
       const d = await getJSON('/api/sellcoins');
-      const coins = d.sellcoins || [];
-      const rows = coins.map((c) => {
-        const sym = esc(c.symbol);
-        const seedPlaceholder = c.has_seed ? '(seed set — leave blank to keep)' : 'deterministic seed';
-        return '<div class="sc-row" data-symbol="' + sym + '">' +
-          '<div class="grid">' +
-            '<div><label>Symbol</label><input class="sc-symbol" value="' + sym + '" readonly></div>' +
-            '<div><label>Name</label><input class="sc-name" value="' + esc(c.name || '') + '"></div>' +
-            '<div><label>Fullnode URL</label><input class="sc-node" value="' + esc(c.node_url || '') + '" placeholder="http://host:6420"></div>' +
-            '<div><label>Escrow wallet address</label><input class="sc-addr" value="' + esc(c.wallet_addr || '') + '"></div>' +
-            '<div><label>Escrow wallet seed</label><input class="sc-seed" type="password" placeholder="' + seedPlaceholder + '"></div>' +
-            '<div><label>Confirmations</label><input class="sc-confs" type="number" min="1" value="' + esc(c.confirmations || 1) + '"></div>' +
-            '<div><label class="cur-toggle"><input type="checkbox" class="sc-enabled"' + (c.enabled ? ' checked' : '') + '> Enabled</label></div>' +
-          '</div>' +
-          '<div style="margin-top:.5rem"><button type="button" class="primary sc-save">Save</button>' +
-          '<button type="button" class="sc-del" style="margin-left:.5rem">Delete</button></div>' +
-        '</div>';
-      }).join('');
-      $('#sellcoin-rows').innerHTML = rows || '<div class="empty">No sell coins. Add one below.</div>';
-      document.querySelectorAll('.sc-row').forEach((row) => {
-        row.querySelector('.sc-save').onclick = () => saveSellCoin({
-          symbol: row.dataset.symbol,
-          name: row.querySelector('.sc-name').value.trim(),
-          node_url: row.querySelector('.sc-node').value.trim(),
-          wallet_addr: row.querySelector('.sc-addr').value.trim(),
-          wallet_seed: row.querySelector('.sc-seed').value,
-          confirmations: parseInt(row.querySelector('.sc-confs').value, 10) || 1,
-          enabled: row.querySelector('.sc-enabled').checked,
-        });
-        row.querySelector('.sc-del').onclick = () => {
-          if (confirm('Delete sell coin ' + row.dataset.symbol + '? In-flight trades using it may fail to settle.'))
-            postJSON('/api/sellcoins/delete', { symbol: row.dataset.symbol }).then(afterSellCoinWrite);
+      sellCoinCache = d.sellcoins || [];
+      $('#sellcoin-rows').innerHTML = sellCoinCache.length ? sellCoinCache.map((c) =>
+        '<div class="coin-item" data-sym="' + esc(c.symbol) + '">' +
+          '<span class="sym">' + esc(c.symbol) + (c.name ? ' · ' + esc(c.name) : '') + '</span>' +
+          badge(c.enabled ? 'enabled' : 'disabled') +
+          '<span class="meta">' + esc(c.node_url || '(no fullnode URL)') + (c.has_seed ? ' · seed set' : ' · no seed') + '</span>' +
+          '<span class="actions">' +
+            '<button class="btn" data-act="toggle">' + (c.enabled ? 'Disable' : 'Enable') + '</button>' +
+            '<button class="btn" data-act="edit">Edit</button>' +
+            '<button class="btn danger" data-act="del">Delete</button>' +
+          '</span></div>').join('') : '<div class="empty">No sell coins yet. Click “+ Add sell coin”.</div>';
+      $('#sellcoin-rows').querySelectorAll('.coin-item').forEach((row) => {
+        const coin = sellCoinCache.find((c) => c.symbol === row.dataset.sym);
+        row.querySelector('[data-act=toggle]').onclick = async () => {
+          const res = await postJSON('/api/sellcoins/enable', { symbol: coin.symbol, enabled: !coin.enabled });
+          if (res && res.error) { flash(res.error, true); return; }
+          await loadSellCoins(); flash('Sell coin ' + (coin.enabled ? 'disabled' : 'enabled') + '.');
+        };
+        row.querySelector('[data-act=edit]').onclick = () => openSellCoinModal(coin);
+        row.querySelector('[data-act=del]').onclick = () => {
+          if (!confirm('Delete sell coin ' + coin.symbol + '? In-flight trades using it may fail to settle.')) return;
+          postJSON('/api/sellcoins/delete', { symbol: coin.symbol }).then(async (res) => {
+            if (res && res.error) { flash(res.error, true); return; }
+            await loadSellCoins(); flash('Sell coin removed.');
+          });
         };
       });
     }
-    function saveSellCoin(body) { postJSON('/api/sellcoins', body).then(afterSellCoinWrite); }
-    async function afterSellCoinWrite(res) {
-      if (res && res.error) { $('#config-msg').innerHTML = '<div class="msg err">' + esc(res.error) + '</div>'; }
-      else { $('#config-msg').innerHTML = '<div class="msg ok">Sell coins updated.</div>'; }
-      await loadSellCoins();
-      setTimeout(() => { $('#config-msg').innerHTML = ''; }, 5000);
-    }
-    $('#sellcoin-add-btn').onclick = () => {
-      const g = $('#sellcoin-add');
-      const val = (n) => g.querySelector('[name="' + n + '"]').value;
-      const symbol = val('symbol').trim();
-      if (!symbol) { $('#config-msg').innerHTML = '<div class="msg err">Symbol is required.</div>'; return; }
-      saveSellCoin({
-        symbol, name: val('name').trim(), node_url: val('node_url').trim(),
-        wallet_addr: val('wallet_addr').trim(), wallet_seed: val('wallet_seed'),
-        confirmations: parseInt(val('confirmations'), 10) || 1, enabled: true,
+    function openSellCoinModal(c) {
+      const editing = !!c;
+      c = c || {};
+      const seedPh = c.has_seed ? '(seed set — leave blank to keep)' : 'deterministic seed';
+      const checked = (editing ? c.enabled : true) ? ' checked' : '';
+      const body = '<div class="grid">' +
+        field('Symbol', '<input id="m-symbol" value="' + esc(c.symbol || '') + '" ' + (editing ? 'readonly' : 'placeholder="e.g. MDL"') + '>') +
+        field('Name', '<input id="m-name" value="' + esc(c.name || '') + '" placeholder="e.g. Mobile Wallet">') +
+        field('Fullnode URL', '<input id="m-node" value="' + esc(c.node_url || '') + '" placeholder="http://host:6420">') +
+        field('Escrow wallet address', '<input id="m-addr" value="' + esc(c.wallet_addr || '') + '" placeholder="deposit / escrow address">') +
+        field('Escrow wallet seed', '<input id="m-seed" type="password" placeholder="' + seedPh + '">') +
+        field('Confirmations', '<input id="m-confs" type="number" min="1" value="' + esc(c.confirmations || 1) + '">') +
+        '</div>' +
+        '<label class="toggle" style="margin-top:.85rem"><input type="checkbox" id="m-enabled"' + checked + '> Enabled (accept this coin for sell listings)</label>';
+      openModal(editing ? 'Edit sell coin — ' + esc(c.symbol) : 'Add sell coin', body, async () => {
+        const symbol = $('#m-symbol').value.trim();
+        if (!symbol) { flash('Symbol is required.', true); return false; }
+        const res = await postJSON('/api/sellcoins', {
+          symbol, name: $('#m-name').value.trim(), node_url: $('#m-node').value.trim(),
+          wallet_addr: $('#m-addr').value.trim(), wallet_seed: $('#m-seed').value,
+          confirmations: parseInt($('#m-confs').value, 10) || 1, enabled: $('#m-enabled').checked,
+        });
+        if (res && res.error) { flash(res.error, true); return false; }
+        await loadSellCoins(); flash('Sell coin saved.'); return true;
       });
-      g.querySelectorAll('input').forEach((i) => { if (i.type !== 'number') i.value = ''; });
-    };
+    }
+    $('#sellcoin-add-btn').onclick = () => openSellCoinModal(null);
 
+    // --- Payment coins (external explorer coins): list + add/edit modal, delete ---
+    let currencyCache = [];
+    async function loadCurrencies() {
+      const d = await getJSON('/api/currencies');
+      currencyCache = d.currencies || [];
+      const added = currencyCache.filter((c) => c.available);
+      $('#currency-rows').innerHTML = added.length ? added.map((c) => {
+        const meta = c.url ? c.url : (c.default_url ? 'built-in: ' + c.default_url : '(no URL)');
+        return '<div class="coin-item" data-sym="' + esc(c.code) + '">' +
+          '<span class="sym">' + esc(c.code) + '</span>' +
+          '<span class="meta">' + esc(c.provider || '') + ' · ' + esc(meta) + '</span>' +
+          '<span class="actions">' +
+            '<button class="btn" data-act="edit">Edit</button>' +
+            '<button class="btn danger" data-act="del">Delete</button>' +
+          '</span></div>';
+      }).join('') : '<div class="empty">No payment coins yet. Click “+ Add payment coin”.</div>';
+      $('#currency-rows').querySelectorAll('.coin-item').forEach((row) => {
+        const c = currencyCache.find((x) => x.code === row.dataset.sym);
+        row.querySelector('[data-act=edit]').onclick = () => openPaymentModal(c);
+        row.querySelector('[data-act=del]').onclick = () => deletePayment(c.code);
+      });
+    }
+    function openPaymentModal(c) {
+      const editing = !!c;
+      let symbolField;
+      if (editing) {
+        symbolField = field('Coin', '<input id="m-symbol" value="' + esc(c.code) + '" readonly>');
+      } else {
+        const addable = currencyCache.filter((x) => !x.available && (x.providers || []).length);
+        if (!addable.length) { flash('All supported payment coins are already added.', true); return; }
+        symbolField = field('Coin', '<select id="m-symbol">' +
+          addable.map((x) => '<option value="' + esc(x.code) + '">' + esc(x.code) +
+            (x.default_url ? ' (built-in explorer)' : '') + '</option>').join('') + '</select>');
+      }
+      const body = '<div class="grid">' + symbolField +
+        field('Explorer URL', '<input id="m-url" value="' + esc(editing ? (c.url || '') : '') + '" placeholder="Esplora URL (blank = built-in if available)">') +
+        field('API key (optional)', '<input id="m-key" value="' + esc(editing ? (c.key || '') : '') + '">') +
+        '</div>';
+      openModal(editing ? 'Edit payment coin — ' + esc(c.code) : 'Add payment coin', body, async () => {
+        const code = $('#m-symbol').value.trim().toUpperCase();
+        const meta = currencyCache.find((x) => x.code === code) || {};
+        const provider = (meta.providers || [])[0] || '';
+        if (!provider) { flash('No explorer adapter supports ' + code + '.', true); return false; }
+        const url = $('#m-url').value.trim();
+        if (!meta.default_url && !url) { flash(code + ' has no built-in explorer — an explorer URL is required.', true); return false; }
+        const p = 'explorer_' + code.toLowerCase() + '_';
+        const payload = {};
+        payload[p + 'provider'] = provider;
+        payload[p + 'url'] = url;
+        payload[p + 'key'] = $('#m-key').value.trim();
+        const res = await postJSON('/api/config', payload);
+        if (res && res.error) { flash(res.error, true); return false; }
+        await loadCurrencies(); flash('Payment coin saved.'); return true;
+      });
+    }
+    function deletePayment(code) {
+      if (!confirm('Delete payment coin ' + code + '?')) return;
+      const p = 'explorer_' + code.toLowerCase() + '_';
+      const payload = {};
+      payload[p + 'provider'] = ''; payload[p + 'url'] = ''; payload[p + 'key'] = '';
+      postJSON('/api/config', payload).then(async (res) => {
+        if (res && res.error) { flash(res.error, true); return; }
+        await loadCurrencies(); flash('Payment coin removed.');
+      });
+    }
+    $('#payment-add-btn').onclick = () => openPaymentModal(null);
+
+    // --- Rules config ---
     async function loadConfig() {
       const cfg = await getJSON('/api/config');
       CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) el.value = cfg[k] || ''; });
@@ -308,26 +408,15 @@
       const btn = $('#save-btn'); btn.disabled = true;
       const body = {};
       CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) body[k] = el.value.trim(); });
-      // Collect each coin's explorer config (provider/url/key).
-      document.querySelectorAll('.cur-row').forEach((row) => {
-        const coin = row.dataset.coin.toLowerCase();
-        const enabled = row.querySelector('.cur-enabled').checked;
-        // Enabling a coin sets its provider; disabling clears it (URL/key are kept
-        // so re-enabling remembers them).
-        body['explorer_' + coin + '_provider'] = enabled ? (row.dataset.provider || '') : '';
-        body['explorer_' + coin + '_url'] = row.querySelector('.cur-url').value.trim();
-        body['explorer_' + coin + '_key'] = row.querySelector('.cur-key').value.trim();
-      });
       try {
         const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'save failed');
-        $('#config-msg').innerHTML = '<div class="msg ok">Configuration saved.</div>';
+        flash('Rules saved.');
       } catch (err) {
-        $('#config-msg').innerHTML = '<div class="msg err">' + esc(err.message) + '</div>';
+        flash(err.message, true);
       } finally {
         btn.disabled = false;
-        setTimeout(() => { $('#config-msg').innerHTML = ''; }, 5000);
       }
     };
 
@@ -371,6 +460,7 @@
     }
 
     loadConfig();
+    // Auto-refresh monitoring tabs only (never clobber a config form being edited).
     setInterval(() => { if (current !== 'config') refresh(); }, 5000);
   </script>
 </body>

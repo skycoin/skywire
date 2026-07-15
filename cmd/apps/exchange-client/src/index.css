@@ -1,7 +1,13 @@
+/* Client theme — matches the operator dashboard (cmd/apps/exchange-market
+   static/index.html): same navy/blue palette, panels, muted text, pill badges,
+   monospace inputs. */
 :root {
   --sky-navy: #101F34;
   --sky-white: #FFFFFF;
   --sky-blue: #0273FF;
+  --panel: rgba(255, 255, 255, 0.04);
+  --border: rgba(2, 115, 255, 0.35);
+  --muted: rgba(255, 255, 255, 0.6);
 }
 
 body {
@@ -15,6 +21,9 @@ body {
   color: var(--sky-white);
 }
 
+.text-muted { color: var(--muted) !important; }
+code { color: var(--sky-blue); }
+
 .app-container {
   min-height: 100vh;
   display: flex;
@@ -24,7 +33,7 @@ body {
 .header {
   background-color: var(--sky-navy);
   border-bottom: 2px solid var(--sky-blue);
-  padding: 1rem;
+  padding: 1rem 1.5rem;
 }
 
 .status-bar {
@@ -35,153 +44,150 @@ body {
   gap: 1rem;
 }
 
-.status-indicator {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.status-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: #dc3545;
-}
-
-.status-dot.connected {
-  background-color: #28a745;
-}
+.status-indicator { display: flex; align-items: center; gap: 0.5rem; }
+.status-dot { width: 12px; height: 12px; border-radius: 50%; background-color: #dc3545; }
+.status-dot.connected { background-color: #28a745; }
 
 .market-pubkey {
   font-family: 'Courier New', monospace;
   font-size: 0.875rem;
   color: var(--sky-blue);
+  word-break: break-all;
 }
 
-.nav-tabs {
-  border-bottom: 2px solid var(--sky-navy);
-}
-
+/* Tabs */
+.container-fluid { padding: 0 1.5rem; }
+.nav-tabs { border-bottom: 1px solid var(--border); }
 .nav-tabs .nav-link {
+  color: var(--muted);
+  background-color: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.75rem 1.1rem;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.nav-tabs .nav-link:hover { color: var(--sky-white); border-bottom-color: var(--border); }
+.nav-tabs .nav-link.active {
   color: var(--sky-white);
   background-color: transparent;
   border: none;
-  padding: 0.75rem 1.5rem;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.nav-tabs .nav-link:hover {
-  color: var(--sky-blue);
-  border: none;
   border-bottom: 2px solid var(--sky-blue);
-}
-
-.nav-tabs .nav-link.active {
-  color: var(--sky-blue);
-  background-color: transparent;
-  border: none;
-  border-bottom: 3px solid var(--sky-blue);
   font-weight: 600;
 }
 
-.content {
-  flex: 1;
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-}
+.content { flex: 1; padding: 1.5rem; max-width: 1400px; margin: 0 auto; width: 100%; }
+.content h2 { font-size: 1.4rem; }
 
-.card {
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(2, 115, 255, 0.2);
+/* Panels / cards */
+.panel, .card {
+  background-color: var(--panel);
+  border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1rem;
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
 }
+.panel-title { color: var(--sky-blue); margin-top: 0; font-size: 1.05rem; }
+.card.product-card { transition: border-color 0.2s ease, background-color 0.2s ease; }
+.card.product-card:hover { border-color: var(--sky-blue); background-color: rgba(255, 255, 255, 0.07); }
 
-.card:hover {
-  border-color: var(--sky-blue);
-  background-color: rgba(255, 255, 255, 0.08);
-  transition: all 0.3s ease;
-}
-
-.btn-primary {
+/* Buttons */
+.btn-primary, .btn-connect {
   background-color: var(--sky-blue);
   border-color: var(--sky-blue);
   color: var(--sky-white);
+  font-weight: 600;
 }
-
-.btn-primary:hover {
+.btn-primary:hover, .btn-connect:hover:not(:disabled) {
   background-color: #0259cc;
   border-color: #0259cc;
+  color: var(--sky-white);
 }
-
-.form-control, .form-select {
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(2, 115, 255, 0.3);
+.btn-outline-light, .btn-outline-secondary {
+  border-color: var(--border);
+  color: var(--sky-white);
+}
+.btn-outline-light:hover, .btn-outline-secondary:hover {
+  border-color: var(--sky-blue);
+  background-color: rgba(2, 115, 255, 0.12);
   color: var(--sky-white);
 }
 
+/* Inputs */
+.form-control, .form-select {
+  background-color: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  color: var(--sky-white);
+  font-family: 'Courier New', monospace;
+}
 .form-control:focus, .form-select:focus {
-  background-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(0, 0, 0, 0.3);
   border-color: var(--sky-blue);
   color: var(--sky-white);
-  box-shadow: 0 0 0 0.2rem rgba(2, 115, 255, 0.25);
+  box-shadow: 0 0 0 0.2rem rgba(2, 115, 255, 0.2);
 }
+.form-control::placeholder { color: rgba(255, 255, 255, 0.4); }
+.form-select option { background-color: var(--sky-navy); }
+.form-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.25rem; }
 
-.form-control::placeholder {
-  color: rgba(255, 255, 255, 0.5);
+/* Trade builder (create sell order) — "You sell → You receive" */
+.trade-builder .trade-leg {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: rgba(0, 0, 0, 0.22);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
 }
-
-.product-card {
-  cursor: pointer;
+.trade-leg .leg-label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex: 0 0 84px;
 }
-
-.product-price {
-  font-size: 1.5rem;
+.trade-leg .leg-amount {
+  flex: 1 1 140px;
+  font-size: 1.35rem;
   font-weight: 700;
-  color: var(--sky-blue);
+  background: transparent;
+  border: none;
+  padding-left: 0;
 }
+.trade-leg .leg-amount:focus { background: transparent; box-shadow: none; }
+.trade-leg .leg-coin { flex: 0 0 140px; font-weight: 600; }
+.trade-arrow { text-align: center; color: var(--sky-blue); font-size: 1.1rem; margin: 0.35rem 0; }
+.trade-summary { color: var(--muted); font-size: 0.85rem; margin: 1rem 0 0.25rem; }
+.trade-summary strong { color: var(--sky-white); }
 
-.product-amount {
-  font-size: 1.1rem;
-  color: var(--sky-white);
-}
+/* Product cards */
+.product-price { font-size: 1.5rem; font-weight: 700; color: var(--sky-blue); }
+.product-amount { font-size: 1.1rem; color: var(--sky-white); }
 
-.badge {
-  padding: 0.5rem 1rem;
-  font-weight: 500;
-}
+/* Badges (pills) */
+.badge { padding: 0.35rem 0.7rem; font-weight: 600; border-radius: 20px; font-size: 0.72rem; }
 
-.alert-info {
-  background-color: rgba(2, 115, 255, 0.1);
-  border: 1px solid var(--sky-blue);
-  color: var(--sky-white);
-}
+/* Tables */
+.table { color: var(--sky-white); }
+.table.table-dark { --bs-table-bg: transparent; }
+.table > :not(caption) > * > * { border-bottom-color: var(--border); }
+.table thead th { color: var(--muted); font-weight: 600; border-bottom-color: var(--border); }
+.table-hover > tbody > tr:hover > * { background-color: rgba(2, 115, 255, 0.08); color: var(--sky-white); }
+.progress { background-color: rgba(255, 255, 255, 0.1); }
 
-.alert-warning {
-  background-color: rgba(255, 193, 7, 0.1);
-  border: 1px solid #ffc107;
-  color: var(--sky-white);
-}
-
-.alert-danger {
-  background-color: rgba(220, 53, 69, 0.1);
-  border: 1px solid #dc3545;
-  color: var(--sky-white);
-}
-
-.alert-success {
-  background-color: rgba(40, 167, 69, 0.1);
-  border: 1px solid #28a745;
-  color: var(--sky-white);
-}
+/* Alerts */
+.alert { border-radius: 6px; }
+.alert-info { background-color: rgba(2, 115, 255, 0.12); border: 1px solid var(--sky-blue); color: var(--sky-white); }
+.alert-warning { background-color: rgba(255, 193, 7, 0.12); border: 1px solid #ffc107; color: var(--sky-white); }
+.alert-danger { background-color: rgba(220, 53, 69, 0.12); border: 1px solid #dc3545; color: var(--sky-white); }
+.alert-success { background-color: rgba(40, 167, 69, 0.12); border: 1px solid #28a745; color: var(--sky-white); }
+.alert-secondary { background-color: var(--panel); border: 1px solid var(--border); color: var(--muted); }
 
 /* Connection gate */
 .connect-card {
-  background-color: rgba(255, 255, 255, 0.04);
+  background-color: var(--panel);
   border: 1px solid var(--sky-blue);
   border-radius: 10px;
   padding: 2rem;
@@ -189,20 +195,4 @@ body {
   max-width: 480px;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
-
-.connect-card .form-control {
-  font-family: 'Courier New', monospace;
-}
-
-.btn-connect {
-  background-color: var(--sky-blue);
-  border-color: var(--sky-blue);
-  color: var(--sky-white);
-  font-weight: 600;
-}
-
-.btn-connect:hover:not(:disabled) {
-  background-color: #0257c4;
-  border-color: #0257c4;
-  color: var(--sky-white);
-}
+.connect-card .form-control { font-family: 'Courier New', monospace; }
