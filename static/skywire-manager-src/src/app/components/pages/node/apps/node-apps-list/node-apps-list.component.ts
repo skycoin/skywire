@@ -315,6 +315,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
           }
         }
       }
+
       return 'http://' + url + ':' + port;
     } else if (!this.isOfficialApp(app.name)) {
       // Try to get the URL arg. If found, return the URL.
