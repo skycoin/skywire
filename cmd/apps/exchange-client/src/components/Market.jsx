@@ -111,7 +111,7 @@ function Market() {
           className="btn btn-connect"
           onClick={() => setShowCreateListing(!showCreateListing)}
         >
-          {showCreateListing ? 'Cancel' : '+ Create Sell Order'}
+          {showCreateListing ? 'Cancel' : '+ New Sell Order'}
         </button>
       </div>
 
@@ -119,77 +119,94 @@ function Market() {
       {error && <div className="alert alert-danger">{error}</div>}
 
       {showCreateListing && (
-        <div className="card mb-4">
-          <h4>Create New Sell Order</h4>
+        <div className="panel trade-builder mb-4">
+          <h4 className="panel-title">New sell order</h4>
           <form onSubmit={handleCreateListing}>
-            <div className="row mb-3">
-              <div className="col-md-3">
-                <label className="form-label">Sell Coin</label>
-                <select
-                  className="form-select"
-                  value={newListing.sell_coin}
-                  onChange={(e) => {
-                    const sell = e.target.value
-                    // Can't pay in the coin being sold — drop that payment choice if it collides.
-                    const pay = newListing.payment_currency === sell ? '' : newListing.payment_currency
-                    setNewListing({ ...newListing, sell_coin: sell, payment_currency: pay })
-                  }}
-                  required
-                >
-                  {sellCoins.length === 0 && <option value="">No sell coins enabled</option>}
-                  {sellCoins.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="col-md-3">
-                <label className="form-label">Amount</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  placeholder="e.g. 10"
-                  value={newListing.amount}
-                  onChange={(e) => setNewListing({ ...newListing, amount: e.target.value })}
-                  required
-                  step="0.0001"
-                  min="0"
-                />
-              </div>
-              <div className="col-md-3">
-                <label className="form-label">Price</label>
-                <input
-                  type="number"
-                  className="form-control"
-                  placeholder="e.g. 2.00"
-                  value={newListing.price}
-                  onChange={(e) => setNewListing({ ...newListing, price: e.target.value })}
-                  required
-                  step="0.0001"
-                  min="0"
-                />
-              </div>
-              <div className="col-md-3">
-                <label className="form-label">Payment Currency</label>
-                <select
-                  className="form-select"
-                  value={newListing.payment_currency}
-                  onChange={(e) => setNewListing({ ...newListing, payment_currency: e.target.value })}
-                  required
-                >
-                  {paymentOptions.length === 0 && <option value="">No currencies enabled</option>}
-                  {paymentOptions.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
-              </div>
+            {/* "You sell" leg — the coin + amount you give up. */}
+            <div className="trade-leg">
+              <span className="leg-label">You sell</span>
+              <input
+                type="number"
+                className="form-control leg-amount"
+                placeholder="0.00"
+                value={newListing.amount}
+                onChange={(e) => setNewListing({ ...newListing, amount: e.target.value })}
+                required
+                step="0.0001"
+                min="0"
+                aria-label="amount to sell"
+              />
+              <select
+                className="form-select leg-coin"
+                value={newListing.sell_coin}
+                onChange={(e) => {
+                  const sell = e.target.value
+                  // Can't pay in the coin being sold — drop that payment choice if it collides.
+                  const pay = newListing.payment_currency === sell ? '' : newListing.payment_currency
+                  setNewListing({ ...newListing, sell_coin: sell, payment_currency: pay })
+                }}
+                required
+                aria-label="sell coin"
+              >
+                {sellCoins.length === 0 && <option value="">No sell coins</option>}
+                {sellCoins.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
             </div>
-            <button type="submit" className="btn btn-connect" disabled={busy || paymentOptions.length === 0 || sellCoins.length === 0}>
-              Create Sell Order
+
+            <div className="trade-arrow">↓</div>
+
+            {/* "You receive" leg — the price + currency the buyer pays you. Price
+                sits next to the currency it's denominated in. */}
+            <div className="trade-leg">
+              <span className="leg-label">You get</span>
+              <input
+                type="number"
+                className="form-control leg-amount"
+                placeholder="0.00"
+                value={newListing.price}
+                onChange={(e) => setNewListing({ ...newListing, price: e.target.value })}
+                required
+                step="0.0001"
+                min="0"
+                aria-label="price"
+              />
+              <select
+                className="form-select leg-coin"
+                value={newListing.payment_currency}
+                onChange={(e) => setNewListing({ ...newListing, payment_currency: e.target.value })}
+                required
+                aria-label="payment currency"
+              >
+                {paymentOptions.length === 0 && <option value="">No currencies</option>}
+                {paymentOptions.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="trade-summary">
+              {newListing.amount && newListing.price && newListing.sell_coin && newListing.payment_currency ? (
+                <>
+                  Sell <strong>{newListing.amount} {newListing.sell_coin}</strong> for{' '}
+                  <strong>{newListing.price} {newListing.payment_currency}</strong>. After creating this
+                  order you have 15 minutes to deposit the {newListing.sell_coin} (amount + a small
+                  commission) to the market escrow; the buyer's payment goes straight to your wallet.
+                </>
+              ) : (
+                <>Set what you sell and what you want for it. Payment can be an external coin (BTC/LTC) or another fibercoin.</>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-connect"
+              disabled={busy || paymentOptions.length === 0 || sellCoins.length === 0}
+            >
+              Create sell order
             </button>
           </form>
-          <small className="text-muted mt-2 d-block">
-            After creating the order, you have 15 minutes to transfer the sell coin to the market wallet.
-          </small>
         </div>
       )}
 
