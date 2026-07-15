@@ -380,9 +380,9 @@ func (s *Server) handleBuyProduct(pk string, req protocol.Envelope) protocol.Env
 		return protocol.ErrorResponse(req.ID, protocol.CodeProductUnavailable, "this product is no longer available")
 	}
 
-	// A buyer who previously canceled (or let expire) an order for this product
-	// may not buy it again.
-	blocked, err := s.db.BuyerBlockedFromProduct(pk, product.ID)
+	// A buyer who has canceled (or let expire) at least buy_cancel_limit orders
+	// for this product may not buy it again until the operator clears the block.
+	blocked, err := s.db.BuyerBlockedFromProduct(pk, product.ID, s.db.GetBuyCancelLimit())
 	if err != nil {
 		return s.internal(req.ID, "buy.block_check", err)
 	}
@@ -568,7 +568,20 @@ func (s *Server) handleCancelOrder(pk string, req protocol.Envelope) protocol.En
 	if err := s.db.CreateFreezeViolation(order.BuyerPubKey, order.ID); err != nil {
 		s.log.WithError(err).Errorf("exchange-market: failed to record freeze violation for %s", order.BuyerPubKey)
 	}
-	return success(req.ID, protocol.MessageData{Message: "Order canceled. You cannot buy this product again."})
+
+	// Tell the buyer where they stand against the per-product cancel limit.
+	limit := s.db.GetBuyCancelLimit()
+	msg := "Order canceled."
+	if n, err := s.db.CountBuyerProductCancels(order.BuyerPubKey, order.ProductID); err == nil {
+		if n >= limit {
+			msg = "Order canceled. You can no longer buy this product (cancellation limit reached)."
+		} else if remaining := limit - n; remaining == 1 {
+			msg = "Order canceled. You can buy this product one more time before you're blocked from it."
+		} else {
+			msg = fmt.Sprintf("Order canceled. You can buy this product %d more times before you're blocked from it.", remaining)
+		}
+	}
+	return success(req.ID, protocol.MessageData{Message: msg})
 }
 
 // handleGetOrders returns the caller's buy and sell orders.
@@ -662,16 +675,18 @@ func (s *Server) handleGetOrderStatus(pk string, req protocol.Envelope) protocol
 // orderView projects a db.Order into the client-facing view with a buy/sell tag.
 func orderView(o *db.Order, kind string) protocol.OrderView {
 	return protocol.OrderView{
-		ID:              o.ID,
-		Type:            kind,
-		ProductID:       o.ProductID,
-		SellCoin:        o.SellCoin,
-		Amount:          o.Amount,
-		Price:           o.Price,
-		PaymentCurrency: o.PaymentCurrency,
-		Status:          o.Status,
-		ExpiresAt:       o.ExpiresAt.Format(time.RFC3339),
-		CreatedAt:       o.CreatedAt.Format(time.RFC3339),
+		ID:                    o.ID,
+		Type:                  kind,
+		ProductID:             o.ProductID,
+		SellCoin:              o.SellCoin,
+		Amount:                o.Amount,
+		Price:                 o.Price,
+		PaymentCurrency:       o.PaymentCurrency,
+		ExpectedPaymentAmount: o.ExpectedPaymentAmount,
+		SellerWallet:          o.SellerWallet,
+		Status:                o.Status,
+		ExpiresAt:             o.ExpiresAt.Format(time.RFC3339),
+		CreatedAt:             o.CreatedAt.Format(time.RFC3339),
 	}
 }
 

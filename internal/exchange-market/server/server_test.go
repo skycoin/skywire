@@ -587,13 +587,39 @@ func TestBuyerCancelBlocksRebuy(t *testing.T) {
 		t.Fatalf("violations after cancel = %d, want 1", n)
 	}
 
-	// The same buyer may not buy it again.
+	// With the default buy-cancel limit of 2, one cancel does not block the buyer:
+	// they can still buy the released product a second time.
+	var buyAgain protocol.BuyProductResponse
+	bindSuccess(t, buyer, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"}, &buyAgain)
+	// Cancel again — this reaches the limit (2 cancels for this product).
+	mustSuccess(t, buyer, protocol.TypeCancelOrder, protocol.CancelOrderRequest{OrderID: buyAgain.OrderID})
+	if p, _ := database.GetProduct("prod-1"); p == nil || p.Status != "active" { //nolint
+		t.Fatalf("product after second cancel = %+v, want active", p)
+	}
+
+	// Now the same buyer is blocked from buying it again.
 	reb, err := buyer.Do(protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"})
 	if err != nil {
 		t.Fatalf("rebuy transport error: %v", err)
 	}
 	if !reb.IsError() || errCode(t, reb) != protocol.CodeBuyerBlocked {
 		t.Fatalf("rebuy = %+v, want BUYER_BLOCKED", reb)
+	}
+
+	// The operator clears the block; the buyer can buy the product again.
+	if _, err := database.ClearBuyerProductBlock(buyerPK, "prod-1"); err != nil {
+		t.Fatalf("clear block: %v", err)
+	}
+	var buyAfterClear protocol.BuyProductResponse
+	bindSuccess(t, buyer, protocol.TypeBuyProduct, protocol.BuyProductRequest{ProductID: "prod-1"}, &buyAfterClear)
+	if buyAfterClear.OrderID == "" {
+		t.Fatal("buyer should be able to buy again after the operator clears the block")
+	}
+	// Reset for the "different buyer" check below: cancel and clear so the product
+	// is active and unblocked again.
+	mustSuccess(t, buyer, protocol.TypeCancelOrder, protocol.CancelOrderRequest{OrderID: buyAfterClear.OrderID})
+	if _, err := database.ClearBuyerProductBlock(buyerPK, "prod-1"); err != nil {
+		t.Fatalf("clear block (reset): %v", err)
 	}
 
 	// A different buyer still can.

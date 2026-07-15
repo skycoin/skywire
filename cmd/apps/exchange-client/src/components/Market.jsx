@@ -6,11 +6,13 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
   const [showCreateListing, setShowCreateListing] = useState(false)
   const [products, setProducts] = useState([])
   const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
   // Deposit instructions from the last created listing. Kept until the user
   // dismisses it (never auto-hidden) so they don't lose the escrow address.
   const [deposit, setDeposit] = useState(null)
+  // Payment instructions from the last buy. Kept until dismissed so the buyer
+  // never loses how much to pay and to which seller wallet.
+  const [payment, setPayment] = useState(null)
 
   const [newListing, setNewListing] = useState({
     sell_coin: '',
@@ -48,11 +50,6 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
     })
   }, [sellCoins, currencies])
 
-  const flash = (msg) => {
-    setNotice(msg)
-    setTimeout(() => setNotice(''), 9000)
-  }
-
   // Surface the market's "register first" as an actionable prompt, not a dead end.
   const handleErr = (e) => {
     if (/register/i.test(e.message) && onNeedRegister) onNeedRegister()
@@ -65,10 +62,16 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
     setBusy(true)
     try {
       const order = await api.buyProduct(product.id)
-      flash(
-        `Order placed for ${order.amount} ${order.sell_coin}. Pay exactly ${order.expected_payment_amount} ` +
-          `${order.payment_currency} to ${order.seller_wallet} before ${new Date(order.expires_at).toLocaleTimeString()}.`
-      )
+      // Persist the payment instructions on-screen (with a copy button) instead
+      // of a toast the buyer can miss — this is where they send their payment.
+      setPayment({
+        amount: order.amount,
+        sell_coin: order.sell_coin,
+        expected_payment_amount: order.expected_payment_amount,
+        payment_currency: order.payment_currency,
+        seller_wallet: order.seller_wallet,
+        expires_at: order.expires_at,
+      })
       loadProducts()
     } catch (e) {
       handleErr(e)
@@ -126,7 +129,6 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
         </button>
       </div>
 
-      {notice && <div className="alert alert-info">{notice}</div>}
       {error && <div className="alert alert-danger">{error}</div>}
 
       {deposit && (
@@ -147,6 +149,28 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
           <p className="hint mt-2 mb-0">
             You can find this again anytime under <strong>My Listings</strong>. The offer becomes a
             purchasable product once the deposit is confirmed on-chain.
+          </p>
+        </div>
+      )}
+
+      {payment && (
+        <div className="panel deposit-box">
+          <div className="deposit-head">
+            <h4 className="panel-title mb-0">Pay the seller to complete your purchase</h4>
+            <button type="button" className="deposit-close" onClick={() => setPayment(null)} aria-label="Dismiss">✕</button>
+          </div>
+          <p className="mb-2">
+            You are buying <strong>{payment.amount} {payment.sell_coin}</strong>. Pay exactly{' '}
+            <strong>{payment.expected_payment_amount} {payment.payment_currency}</strong> to this seller wallet
+            {payment.expires_at ? <> before <strong>{new Date(payment.expires_at).toLocaleTimeString()}</strong></> : ''}:
+          </p>
+          <div className="copy-row">
+            <code className="addr-box">{payment.seller_wallet}</code>
+            <CopyButton text={payment.seller_wallet} label="Copy address" />
+          </div>
+          <p className="hint mt-2 mb-0">
+            You can find this again anytime under <strong>My Orders</strong>. Pay the exact amount so the
+            market can match your payment; the {payment.sell_coin} is released to you after confirmation.
           </p>
         </div>
       )}

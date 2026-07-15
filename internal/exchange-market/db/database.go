@@ -154,6 +154,7 @@ func (d *Database) InitDefaultConfig() error {
 		"max_trade_sky":           "0",     // Maximum SKY a listing may sell (0 = no cap beyond the safety ceiling)
 		"freeze_violations_limit": "3",     // Number of violations before ban
 		"ban_duration_days":       "7",     // Ban duration in days
+		"buy_cancel_limit":        "2",     // Per-product buy cancellations allowed before a buyer is blocked from re-buying it (min 2)
 		"listing_expiry_minutes":  "15",    // Minutes before pending listing expires
 		"order_expiry_minutes":    "15",    // Minutes before pending order expires
 		"cleanup_days":            "3",     // Days after which completed orders are deleted
