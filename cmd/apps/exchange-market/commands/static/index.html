@@ -155,6 +155,7 @@
           <div class="grid">
             <div><label>Freeze violations before ban</label><input name="freeze_violations_limit" type="number" min="1"></div>
             <div><label>Ban duration (days)</label><input name="ban_duration_days" type="number" min="1"></div>
+            <div><label>Buy cancels before product block (min 2)</label><input name="buy_cancel_limit" type="number" min="2"></div>
             <div><label>Listing expiry (minutes)</label><input name="listing_expiry_minutes" type="number" min="1"></div>
             <div><label>Order expiry (minutes)</label><input name="order_expiry_minutes" type="number" min="1"></div>
             <div><label>Cleanup after (days)</label><input name="cleanup_days" type="number" min="1"></div>
@@ -190,7 +191,13 @@
     <section id="tab-bans" class="tab">
       <div class="panel">
         <h2>Temporarily banned users</h2>
+        <p class="hint">Users banned for repeated freeze violations. Unban to let them trade again immediately.</p>
         <div id="bans-body"><div class="empty">Loading…</div></div>
+      </div>
+      <div class="panel">
+        <h2>Blocked from re-buying a product</h2>
+        <p class="hint" id="blocks-hint">Buyers who reached the buy-cancel limit for a product. Clear a block to let them buy that product again.</p>
+        <div id="blocks-body"><div class="empty">Loading…</div></div>
       </div>
     </section>
   </main>
@@ -210,7 +217,7 @@
   <script>
     const $ = (s) => document.querySelector(s);
     const CONFIG_FIELDS = [
-      'freeze_violations_limit','ban_duration_days','listing_expiry_minutes',
+      'freeze_violations_limit','ban_duration_days','buy_cancel_limit','listing_expiry_minutes',
       'order_expiry_minutes','cleanup_days','confirmations_required',
       'min_trade_sky','max_trade_sky',
       'commission_rate_percent','commission_min_sky','commission_max_sky'
@@ -471,18 +478,51 @@
     async function loadBans() {
       const d = await getJSON('/api/bans');
       const rows = (d.bans || []).map((b) =>
-        '<tr><td><code>' + esc(shorten(b.pubkey)) + '</code></td><td>' + esc(b.violations) +
-        '</td><td>' + fmt(b.ban_until) + '</td></tr>').join('');
+        '<tr data-pk="' + esc(b.pubkey) + '"><td><code title="' + esc(b.pubkey) + '">' + esc(shorten(b.pubkey)) + '</code></td><td>' + esc(b.violations) +
+        '</td><td>' + fmt(b.ban_until) + '</td><td><button class="btn" data-act="unban">Unban</button></td></tr>').join('');
       $('#bans-body').innerHTML = rows
-        ? '<table><thead><tr><th>Public Key</th><th>Violations</th><th>Banned Until</th></tr></thead><tbody>' + rows + '</tbody></table>'
+        ? '<table><thead><tr><th>Public Key</th><th>Violations</th><th>Banned Until</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
         : '<div class="empty">No banned users.</div>';
+      $('#bans-body').querySelectorAll('tr[data-pk]').forEach((row) => {
+        row.querySelector('[data-act=unban]').onclick = async () => {
+          if (!confirm('Unban this user? They will be able to trade again immediately.')) return;
+          const res = await postJSON('/api/bans/unban', { pubkey: row.dataset.pk });
+          if (res && res.error) { flash(res.error, true); return; }
+          await loadBans(); flash('User unbanned.');
+        };
+      });
+    }
+
+    async function loadBlocks() {
+      const d = await getJSON('/api/blocks');
+      if (typeof d.limit === 'number') {
+        $('#blocks-hint').textContent =
+          'Buyers who canceled ' + d.limit + ' or more orders for a product are blocked from re-buying it. Clear a block to let them buy that product again.';
+      }
+      const rows = (d.blocks || []).map((b) =>
+        '<tr data-pk="' + esc(b.buyer_pubkey) + '" data-pid="' + esc(b.product_id) + '">' +
+        '<td><code title="' + esc(b.buyer_pubkey) + '">' + esc(shorten(b.buyer_pubkey)) + '</code></td>' +
+        '<td><code title="' + esc(b.product_id) + '">' + esc(shorten(b.product_id)) + '</code></td>' +
+        '<td>' + esc(b.cancels) + '</td>' +
+        '<td><button class="btn" data-act="clear">Clear block</button></td></tr>').join('');
+      $('#blocks-body').innerHTML = rows
+        ? '<table><thead><tr><th>Buyer</th><th>Product</th><th>Cancels</th><th></th></tr></thead><tbody>' + rows + '</tbody></table>'
+        : '<div class="empty">No blocked buyers.</div>';
+      $('#blocks-body').querySelectorAll('tr[data-pk]').forEach((row) => {
+        row.querySelector('[data-act=clear]').onclick = async () => {
+          if (!confirm("Clear this buyer's block for this product? They will be able to buy it again.")) return;
+          const res = await postJSON('/api/blocks/clear', { pubkey: row.dataset.pk, product_id: row.dataset.pid });
+          if (res && res.error) { flash(res.error, true); return; }
+          await loadBlocks(); flash('Block cleared.');
+        };
+      });
     }
 
     function refresh() {
       if (current === 'config') loadConfig();
       else if (current === 'products') loadProducts();
       else if (current === 'orders') loadOrders();
-      else if (current === 'bans') loadBans();
+      else if (current === 'bans') { loadBans(); loadBlocks(); }
     }
 
     loadConfig();
