@@ -120,6 +120,28 @@ func RunExchangeClient(ctx context.Context, args []string) error {
 	appCl.LogInfo("Exchange client UI available at http://%s", uiAddr)
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 
+	// Keep asserting "Running" while the client is up. Unlike the market (which
+	// listens) or other client apps (which hold a session), the exchange client
+	// has no persistent skywire connection while idle — it only dials a market on
+	// demand — so the visor can't infer "running" from a connection summary. The
+	// visor also writes a one-time "Starting" right after launching the app (see
+	// the hypervisor start handler); because this app reports Running very early,
+	// that late write can overwrite it and leave the app stuck showing
+	// "connecting" (orange) in the manager UI. A light periodic re-assert keeps the
+	// status correct and self-heals any such overwrite.
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
+			}
+		}
+	}()
+
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, os.Interrupt)
 
@@ -129,6 +151,9 @@ func RunExchangeClient(ctx context.Context, args []string) error {
 	case <-ctx.Done():
 		appCl.LogInfo("Context canceled, shutting down...")
 	}
+	// Stop the Running heartbeat before reporting Stopped so it can't re-assert
+	// Running afterwards.
+	cancel()
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 	return nil
 }
