@@ -9,7 +9,7 @@ import (
 // working wasm-visor).
 func TestEmbeddedGet(t *testing.T) {
 	if !Embedded() {
-		t.Fatal("wasm-visor binary not embedded (is pkg/wasmhv/wasmbin/wasm-visor.wasm.gz committed?)")
+		t.Fatal("wasm-visor binary not embedded (is pkg/wasmhv/wasmbin/wasmgo/wasm-visor.wasm.gz committed?)")
 	}
 	b, err := Get()
 	if err != nil {

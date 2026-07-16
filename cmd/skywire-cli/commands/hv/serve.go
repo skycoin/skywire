@@ -210,7 +210,10 @@ page never asks anyone to type a secret key.`,
 		// The wasm-visor bootstrap files hv-boot.js fetches by name (resolved against
 		// <base href="/">). These are NOT in the Angular FS, so serve them explicitly.
 		serveBytes("/wasm-visor.wasm", "application/wasm", wasm)
-		serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
+		// wasm_exec.js MUST match the embedded wasm's toolchain (Go vs TinyGo
+		// loaders differ — TinyGo's provides the WASI shims its module imports),
+		// so take it from wasmbin alongside the blob, not a fixed copy.
+		serveBytes("/wasm_exec.js", "text/javascript", wasmbin.WasmExecJS())
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 		// worker.js hosts the wasm runtime off the main thread; hv-boot.js loads it
 		// by name (new Worker('worker.js')) and proxies skywireVisor over postMessage.

@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wallet prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wasm-visor-tinygo embed-wallet prune-wasm-embed-history
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
@@ -302,9 +302,15 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor-go/
 	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"
 
-embed-wasm-visor: wasm-visor ## Update the COMMITTED embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasm-visor.wasm.gz) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
-	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasm-visor.wasm.gz
-	@echo "updated pkg/wasmhv/wasmbin/wasm-visor.wasm.gz — review with 'git status', commit intentionally (it's a ~8MB blob)."
+embed-wasm-visor: wasm-visor ## Update the COMMITTED std-Go embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmgo/) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
+	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasmgo/wasm-visor.wasm.gz
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmgo/wasm_exec.js
+	@echo "updated pkg/wasmhv/wasmbin/wasmgo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~9.5MB blob)."
+
+embed-wasm-visor-tinygo: tinygo-wasm-visor ## Update the COMMITTED TinyGo embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmtinygo/) — needs the 0magnet/tinygo fork (set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>). Pairs the TinyGo wasm with TinyGo's wasm_exec.js.
+	gzip -9 -n -c ./build/wasm-visor/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasmtinygo/wasm-visor.wasm.gz
+	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmtinygo/wasm_exec.js
+	@echo "updated pkg/wasmhv/wasmbin/wasmtinygo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~2.9MB blob)."
 
 embed-wallet: ## Sync the vendored skycoin-web wallet dist into the embedded PWA tree (pkg/visor/static/wallet). Run after re-vendoring skycoin, then `git add` + commit it (~11MB). The wallet loads same-origin in the wasm-visor PWA; only its node API traffic crosses dmsg. Source (relative asset paths) lives upstream in skycoin/skycoin — the base href is rewritten to /wallet/ at serve time.
 	rm -rf ./pkg/visor/static/wallet
