@@ -276,14 +276,20 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
 	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
 
-tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+appserver) + dev harness into build/wasm-visor — TinyGo (~2.2MB, NO crypto/tls → no https clearnet)
+# TINYGO points at the TinyGo binary. The FULL wasm-visor (net/http + crypto/tls)
+# needs the fork at github.com/0magnet/tinygo (v0.42.0-skycoin.1+, LLVM 22) — its
+# net/http-on-js support is what unblocks the browser visor. Build the fork with
+# `go build -tags llvm22 -o build/tinygo .` and point TINYGO at it + export
+# TINYGOROOT=<fork checkout>. Stock upstream TinyGo cannot compile this target.
+TINYGO ?= tinygo
+tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+appserver, net/http+crypto/tls, route origination) into build/wasm-visor — TinyGo FORK (~7MB / ~2.9MB gzip vs 43MB/9.5MB std-Go). Needs the 0magnet/tinygo fork; set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>
 	mkdir -p ./build/wasm-visor
-	tinygo build -target wasm -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
-	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
+	$(TINYGO) build -target wasm -no-debug -opt=z -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
+	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor/
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor/
-	@echo "built ./build/wasm-visor (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
+	@echo "built ./build/wasm-visor (TinyGo fork) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
 	mkdir -p ./build/wasm-visor-go
