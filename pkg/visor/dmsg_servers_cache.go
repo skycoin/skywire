@@ -1,4 +1,4 @@
-// Package visor pkg/visor/dmsg_servers_cache.go
+// Package visor pkg/visor/dmsg_servers_cache.go c3-vis-core
 //
 // DmsgServersCache persists dmsg-server discovery entries (the
 // "static" PK plus the live `server.address` and metadata) to a JSON

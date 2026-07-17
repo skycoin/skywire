@@ -1,4 +1,4 @@
-// Package router pkg/router/dial_hook.go — operator-programmable
+// Package router pkg/router/dial_hook.go c2-net-routing
 // routing policy integration point. The router calls a configured
 // DialHook before each DialRoutes invocation; the hook can adjust
 // the per-dial knobs (MuxRoutes, MinHops) or refuse the dial.

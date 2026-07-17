@@ -1,4 +1,4 @@
-// Package main cmd/sw-env/sw-env.go
+// Package main cmd/svc/sw-env/sw-env.go c0-com-env
 package main
 
 import (

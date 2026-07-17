@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skysocks-client/skysocks-client.go
+// Package commands cmd/apps/skysocks-client/commands/skysocks-client.go c4-app-proxy
 package commands
 
 import (

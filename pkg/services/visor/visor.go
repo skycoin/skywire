@@ -1,4 +1,4 @@
-// Package visor pkg/services/visor/visor.go
+// Package visor pkg/services/visor/visor.go c2-vis-appsvc
 //
 // skywire-visor as a pkg/services.Service. Lets `skywire svc run`
 // host a visor alongside the deployment services (or alongside

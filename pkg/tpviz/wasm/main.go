@@ -1,5 +1,6 @@
 //go:build js && wasm
 
+// Package main pkg/tpviz/wasm/main.go c4-app-rewards
 package main
 
 import (

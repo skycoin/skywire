@@ -5,6 +5,7 @@
 // lines across Read boundaries) and forgiving of trailing whitespace
 // + blank lines between events.
 
+// Package treeprobe pkg/util/treeprobe/parser.go c0-com-util
 package treeprobe
 
 import (

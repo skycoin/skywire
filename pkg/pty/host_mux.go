@@ -1,4 +1,4 @@
-// Package pty pkg/pty/host_mux.go
+// Package pty pkg/pty/host_mux.go c3-vis-pty
 package pty
 
 import (

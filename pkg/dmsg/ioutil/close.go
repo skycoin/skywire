@@ -1,4 +1,4 @@
-// Package ioutil pkg/ioutil/close.go
+// Package ioutil pkg/dmsg/ioutil/close.go c1-net-dmsg
 package ioutil
 
 import (

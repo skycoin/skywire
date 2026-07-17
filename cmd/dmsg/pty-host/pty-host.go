@@ -1,4 +1,4 @@
-// Package main cmd/dmsgpty-host/dmsgpty-host.go
+// Package main cmd/dmsg/pty-host/pty-host.go c1-net-dmsg
 package main
 
 import (

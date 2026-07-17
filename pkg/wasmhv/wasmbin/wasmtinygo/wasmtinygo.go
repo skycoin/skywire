@@ -1,4 +1,4 @@
-// Package wasmtinygo carries the TinyGo-compiled wasm-visor (gzipped) and its
+// Package wasmtinygo pkg/wasmhv/wasmbin/wasmtinygo/wasmtinygo.go c3-vis-wasm
 // matching wasm_exec.js. It is the embed library selected for TinyGo builds
 // (see ../select_tinygo.go). The TinyGo wasm-visor is ~2.9 MB gzip vs ~9.5 MB
 // for standard Go, and its wasm_exec.js provides the WASI

@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — in-process file transfer for the browser visor.
+// Package main cmd/wasm-visor/filexfer_js.go c3-vis-wasm
 //
 // This is the wasm counterpart of the native skychat app's file sharing
 // (cmd/apps/skychat/filexfer.go). It reuses the SAME pkg/skychat/xfer primitive

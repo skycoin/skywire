@@ -1,4 +1,4 @@
-// Package tcpproxy pkg/tcpproxy/tcpproxy.go
+// Package tcpproxy pkg/tcpproxy/http.go c2-net-transport
 package tcpproxy
 
 import (

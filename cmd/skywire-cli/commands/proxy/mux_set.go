@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/proxy/mux_set.go
+// Package skysocksc cmd/skywire-cli/commands/proxy/mux_set.go c4-vis-cli
 //
 // mux-set reconciles an active proxy session's mux legs to a target
 // leg-set in one shot, instead of hand-driving mux-add / mux-rm. It's

@@ -1,4 +1,4 @@
-// Package stats — pkg/visor/stats/schema.go: persisted record types.
+// Package stats pkg/visor/stats/schema.go c3-vis-core
 package stats
 
 import (

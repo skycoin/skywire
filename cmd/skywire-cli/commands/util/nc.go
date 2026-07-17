@@ -1,4 +1,4 @@
-// Package cliutil cmd/skywire-cli/commands/util/nc.go: `skywire cli
+// Package cliutil cmd/skywire-cli/commands/util/nc.go c4-vis-cli
 // util nc` — a pure-Go netcat clone. Plain TCP / UDP over the
 // kernel's stack; nothing in here touches a skywire transport. Lives
 // under `util` for the same reason `serve` does: it's a developer

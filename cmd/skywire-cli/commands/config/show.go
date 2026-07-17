@@ -1,4 +1,4 @@
-// Package cliconfig cmd/skywire-cli/commands/config/show.go
+// Package cliconfig cmd/skywire-cli/commands/config/show.go c4-vis-cli
 package cliconfig
 
 import (

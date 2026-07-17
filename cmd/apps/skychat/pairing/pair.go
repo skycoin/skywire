@@ -1,4 +1,4 @@
-// Package pairing — cmd/apps/skychat/pairing/pair.go: a single chat
+// Package pairing cmd/apps/skychat/pairing/pair.go c4-app-chat
 // pair's runtime state.
 //
 // One CXO node per pair side, listening on the deterministic pair

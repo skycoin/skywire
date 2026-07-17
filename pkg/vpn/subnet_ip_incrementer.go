@@ -1,4 +1,4 @@
-// Package vpn internal/vpn/subnet_ip_incrementer.go
+// Package vpn pkg/vpn/subnet_ip_incrementer.go c4-app-vpn
 package vpn
 
 import (

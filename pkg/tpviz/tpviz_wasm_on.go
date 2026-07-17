@@ -1,5 +1,6 @@
 //go:build tpvizwasm
 
+// Package tpviz pkg/tpviz/tpviz_wasm_on.go c4-app-rewards
 package tpviz
 
 import "embed"

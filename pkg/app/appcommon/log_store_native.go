@@ -1,6 +1,6 @@
 //go:build !tinygo && !js
 
-// Package appcommon pkg/app/appcommon/log_store_native.go
+// Package appcommon pkg/app/appcommon/log_store_native.go c2-vis-appsvc
 //
 // The bbolt-backed LogStore. bbolt does not compile on the TinyGo js/wasm
 // target, so this file is native-only; the in-memory TinyGo store lives in

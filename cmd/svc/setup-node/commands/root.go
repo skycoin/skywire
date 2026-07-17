@@ -1,4 +1,4 @@
-// Package commands root.go
+// Package commands cmd/svc/setup-node/commands/root.go c2-net-routing
 package commands
 
 import (

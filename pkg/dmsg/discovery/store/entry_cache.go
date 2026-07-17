@@ -1,3 +1,4 @@
+// Package store pkg/dmsg/discovery/store/entry_cache.go c1-net-dmsg
 package store
 
 import (

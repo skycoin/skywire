@@ -1,3 +1,4 @@
+// Package store pkg/transport-discovery/store/edge_entries_cache.go c4-net-discovery
 package store
 
 import (

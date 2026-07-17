@@ -1,4 +1,4 @@
-// Package commands cmd/version/commands/root.go
+// Package commands cmd/version/commands/root.go c4-vis-cli
 package commands
 
 import (

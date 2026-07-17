@@ -1,4 +1,4 @@
-// Package visorinit initializes the visor
+// Package visorinit pkg/visor/visorinit/module.go c3-vis-core
 package visorinit
 
 import (

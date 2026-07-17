@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_runtime_config.go
+// Package visor pkg/visor/api_runtime_config.go c3-vis-core
 //
 // Whole-config replacement for the visor's on-disk config file.
 // Companion to GetRuntimeConfig: lets the hvui round-trip the

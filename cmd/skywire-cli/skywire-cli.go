@@ -1,4 +1,4 @@
-// Package main skywire-cli.go
+// Package main cmd/skywire-cli/skywire-cli.go c4-vis-cli
 package main
 
 import (

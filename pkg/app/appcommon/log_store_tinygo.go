@@ -1,6 +1,6 @@
 //go:build tinygo || js
 
-// Package appcommon pkg/app/appcommon/log_store_tinygo.go
+// Package appcommon pkg/app/appcommon/log_store_tinygo.go c2-vis-appsvc
 //
 // In-memory LogStore for the TinyGo js/wasm target, where bbolt (the native
 // backing store in log_store_native.go) does not compile. App log history is

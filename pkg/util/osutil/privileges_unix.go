@@ -1,6 +1,7 @@
 //go:build !windows
 // +build !windows
 
+// Package osutil pkg/util/osutil/privileges_unix.go c0-com-util
 package osutil
 
 import (

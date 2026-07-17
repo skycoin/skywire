@@ -1,4 +1,4 @@
-// Package pty pkg/pty/cli.go
+// Package pty pkg/pty/cli.go c3-vis-pty
 package pty
 
 import (

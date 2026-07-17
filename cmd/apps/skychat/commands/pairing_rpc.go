@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/pairing_rpc.go
+// Package commands cmd/apps/skychat/commands/pairing_rpc.go c4-app-chat
 //
 // Auto-reconnect wrapper for the visor RPC client used by the pairing
 // subsystem (and group-feed introspection).

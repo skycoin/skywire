@@ -1,6 +1,6 @@
 //go:build !withoutgotop
 
-// Package cligotop cmd/skywire-cli/commands/gotop/grpcdevice.go
+// Package cligotop cmd/skywire-cli/commands/gotop/grpcdevice.go c4-vis-cli
 package cligotop
 
 import (

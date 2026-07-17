@@ -1,6 +1,6 @@
 //go:build tinygo && js && wasm
 
-// Package network pkg/transport/network/ws_browser.go
+// Package network pkg/transport/network/ws_browser.go c2-net-transport
 //
 // Browser WS-transport DIAL: a browser visor dials a peer visor's WebSocket
 // transport endpoint via the browser-native WebSocket API. coder/websocket

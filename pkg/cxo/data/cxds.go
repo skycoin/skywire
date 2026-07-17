@@ -1,3 +1,4 @@
+// Package data pkg/cxo/data/cxds.go c2-net-cxo
 package data
 
 import (

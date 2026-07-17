@@ -1,4 +1,4 @@
-// Package commands cmd/network-monitor/commands/root.go
+// Package commands cmd/svc/network-monitor/commands/root.go c2-net-monitor
 package commands
 
 import (

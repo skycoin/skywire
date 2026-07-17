@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/provider.go — Provider
+// Package policy pkg/router/policy/provider.go c2-net-routing
 // interface for the data the stdlib (geo, transports, peers)
 // surfaces to policy scripts. The Evaluator caches Provider
 // results per-visor-uptime so even a script that queries the

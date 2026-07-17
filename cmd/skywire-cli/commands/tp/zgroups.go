@@ -1,4 +1,4 @@
-// Package clitp cmd/skywire-cli/commands/tp/zgroups.go
+// Package clitp cmd/skywire-cli/commands/tp/zgroups.go c4-vis-cli
 //
 // Groups the 13 subcommands of `skywire cli tp` so the help output
 // renders as discoverable sections. See clivisor/zgroups.go for why

@@ -1,4 +1,4 @@
-// Package logging pkg/logging/formatter.go
+// Package logging pkg/logging/formatter.go c0-com-log
 package logging
 
 import (

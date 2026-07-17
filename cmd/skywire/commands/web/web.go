@@ -1,4 +1,4 @@
-// Package web pkg/cmd/skywire/commands/web — `skywire web` command.
+// Package web cmd/skywire/commands/web/web.go c4-vis-cli
 //
 // Serves a browser-based UI for the entire skywire CLI tree. The
 // page is a TinyGo-compiled WASM bundle (see ./wasm/main.go); the

@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/proxy/mux_ops.go
+// Package skysocksc cmd/skywire-cli/commands/proxy/mux_ops.go c4-vis-cli
 //
 // Runtime mux reconfiguration commands. The visor exposes
 // AddMuxRoute / RemoveMuxRoute / SetMuxMode RPCs already; these

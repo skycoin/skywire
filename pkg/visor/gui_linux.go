@@ -1,6 +1,7 @@
 //go:build linux && !withoutsystray
 // +build linux,!withoutsystray
 
+// Package visor pkg/visor/gui_linux.go c3-vis-core
 package visor
 
 import (

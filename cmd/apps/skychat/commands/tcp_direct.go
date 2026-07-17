@@ -1,4 +1,4 @@
-// Package commands — cmd/apps/skychat/commands/tcp_direct.go:
+// Package commands cmd/apps/skychat/commands/tcp_direct.go c4-app-chat
 // chat-app's noise-TCP entry points, the reliability-floor transport
 // described in #2706. Same noise-XK primitive dmsgpty uses, applied
 // to chat frames so agents can reach each other when dmsg-disc /

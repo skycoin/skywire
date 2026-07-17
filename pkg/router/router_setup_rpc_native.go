@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package router pkg/router/router_setup_rpc_native.go
+// Package router pkg/router/router_setup_rpc_native.go c2-net-routing
 package router
 
 import "github.com/skycoin/skywire/pkg/logging"

@@ -1,4 +1,4 @@
-// Package cliutil cmd/skywire-cli/commands/util/foreach.go: `cli util
+// Package cliutil cmd/skywire-cli/commands/util/foreach.go c4-vis-cli
 // foreach` — run a templated shell command against a list of public
 // keys (or arbitrary tokens) in parallel and print collated output
 // with per-target headers.

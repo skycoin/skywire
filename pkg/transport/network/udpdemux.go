@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/udpdemux.go
+// Package network pkg/transport/network/udpdemux.go c2-net-transport
 //
 // udpDemux multiplexes ONE UDP socket across the UDP-based transport protocols
 // (QUIC, sudph/KCP, WebRTC/ICE), so a visor can listen for all of them on a

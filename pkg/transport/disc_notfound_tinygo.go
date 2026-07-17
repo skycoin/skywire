@@ -1,5 +1,6 @@
 //go:build tinygo
 
+// Package transport pkg/transport/disc_notfound_tinygo.go c2-net-transport
 package transport
 
 // isDiscNotFound is the TinyGo stub. The native build matches a discovery 404 via

@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/legacy_flag_alias.go: pflag NormalizeFunc
+// Package cmdutil pkg/cmdutil/legacy_flag_alias.go c0-com-util
 // shared by every svc command that has been through a flag-rename. Maps
 // historical flag spellings to their current canonical kebab-case form
 // so any compose.yaml / systemd unit / shell wrapper that still passes

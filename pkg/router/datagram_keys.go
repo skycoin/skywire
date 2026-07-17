@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_keys.go: derivation of the
+// Package router pkg/router/datagram_keys.go c2-net-routing
 // faithful-UDP per-datagram AEAD master key from a route's Noise
 // session. Stage 4b of #2607.
 //

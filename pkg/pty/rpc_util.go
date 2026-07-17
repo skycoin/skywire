@@ -1,4 +1,4 @@
-// Package pty pkg/pty/rpc_util.go
+// Package pty pkg/pty/rpc_util.go c3-vis-pty
 package pty
 
 import (
