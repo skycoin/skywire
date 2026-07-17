@@ -95,7 +95,7 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr, wsURL string) error {
 	if err != nil {
 		return err
 	}
-	dmsgLis := &proxyproto.Listener{Listener: dmsgLn}
+	dmsgLis := &proxyproto.Listener{Listener: dmsgLn, ConnPolicy: optionalProxyHeader}
 	go func(l net.Listener, address, ws string) {
 		var serr error
 		if ws != "" {
@@ -133,7 +133,7 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr, wsURL string) error {
 		dmsgLis.Close() //nolint:errcheck,gosec
 		return err
 	}
-	lis := &proxyproto.Listener{Listener: ln}
+	lis := &proxyproto.Listener{Listener: ln, ConnPolicy: optionalProxyHeader}
 	srv := &http.Server{
 		ReadTimeout:       3 * time.Second,
 		WriteTimeout:      3 * time.Second,
@@ -301,4 +301,14 @@ func calculateThroughput(
 		}
 	}
 	return newDecValues, newEncValues, average
+}
+
+// optionalProxyHeader restores go-proxyproto's pre-v0.15 lenient default (USE):
+// honor a PROXY header when an upstream proxy sends one, but ALSO accept
+// connections that arrive without one (direct dmsg clients doing a Noise
+// handshake, health checks). v0.15 changed the zero-value default to REQUIRE,
+// which rejects every header-less connection with ErrNoProxyProtocol — that
+// silently broke the client-facing dmsg listener fleet-wide.
+func optionalProxyHeader(proxyproto.ConnPolicyOptions) (proxyproto.Policy, error) {
+	return proxyproto.USE, nil
 }
