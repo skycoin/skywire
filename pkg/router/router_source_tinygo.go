@@ -1,4 +1,4 @@
-//go:build tinygo
+//go:build tinygo && !(js && wasm)
 
 // Package router pkg/router/router_source_tinygo.go
 //
