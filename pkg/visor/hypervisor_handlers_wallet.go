@@ -19,6 +19,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 
 	"github.com/skycoin/skywire/pkg/btcgateway"
+	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
 
@@ -105,31 +107,32 @@ const walletNodeShim = `<script>(function(){` +
 	`var p=pathOf(url);` +
 	`function searchOf(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
 	`function hostOf(u){try{var x=new URL(u,location.href);return (x.host&&x.host!==location.host)?(x.protocol+"//"+x.host):"";}catch(e){return "";}}` +
-	// BTC = any path containing /v1/btc/ — the raw /v1/btc/health probe AND
-	// skycoin-web's apiService form /api/v1/btc/{balance,history,send} (which
-	// also matches the node regex, so BTC is classified FIRST and wins). No
-	// skycoin node endpoint contains /v1/btc/.
-	`var mb=/\/v1\/btc\//.test(p);` +
-	`var mn=!mb&&/^\/(wallet\/)?api\/v[12]\//.test(p);` +
-	`if(!mn&&!mb){return rf(input,init);}` +
+	// Coin list: coin.service fetches /api/v1/coins raw (no coin prefix). Serve it
+	// from the visor registry (/wallet/coins), not a node.
+	`if(/\/api\/v1\/coins$/.test(p)){return rf(location.origin+"/wallet/coins",init);}` +
+	// Per-coin API: api.service prefixes every request with the coin's nodeUrl =
+	// "/coin/<index>". Re-point at the mounted proxy (/wallet/coin/<index>/…).
+	`var mc=/\/coin\/(\d+)\//.exec(p);` +
+	// Legacy: a bare /api/v[12]/ with no /coin/ prefix (pre-registry build /
+	// fallback coin) → the default coin 0.
+	`var ml=!mc&&/^\/(wallet\/)?api\/v[12]\//.test(p);` +
+	`if(!mc&&!ml){return rf(input,init);}` +
 	`init=init||{};` +
 	`var h=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
 	`var target;` +
-	`if(mb){` +
-	// Normalize any /v1/btc/ path (bare or /api/v1/btc/) to /wallet/v1/btc/… so
-	// the server routes it to the in-process electrum gateway, not the node.
-	`var tail=p.slice(p.indexOf("/v1/btc/"));target=location.origin+"/wallet"+tail+searchOf(url);` +
+	`if(mc){` +
+	`var tail=p.slice(p.indexOf("/coin/"));target=location.origin+"/wallet"+tail+searchOf(url);` +
+	`}else{` +
+	`var bare=p.replace(/^\/(wallet\/)?/,"");target=location.origin+"/wallet/coin/0/"+bare+searchOf(url);` +
+	`}` +
+	// Tag the backend selection by path. BTC (any /v1/btc/) carries the operator's
+	// electrum backend + optional skysocks exit; a skycoin-style node carries the
+	// chosen node (absolute host from Settings → Nodes, else the config-panel key,
+	// else the deployment default) — walletCoinProxy / walletNodeProxy use these.
+	`if(/\/v1\/btc\//.test(p)){` +
 	`var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
 	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}` +
 	`}else{` +
-	// Node API: skycoin-web addresses a custom node (Settings → Nodes /
-	// customNodeUrls) with an ABSOLUTE url — strip the host, keep the /api path +
-	// query, and re-point at /wallet/api here; the chosen node travels in
-	// X-Skywire-Coin-Node so walletNodeProxy dials it (its Nodes GUI is
-	// authoritative; a same-origin/relative /api path falls back to the legacy
-	// config-panel key, else the deployment mesh default).
-	`var mnx=/^\/(wallet\/)?api\/v[12]\//.exec(p);var pre=mnx&&mnx[1];` +
-	`target=pre?url:(location.origin+"/wallet"+p+searchOf(url));` +
 	`var nn=hostOf(url)||ls("skywire-coin-node");if(nn){h.set("X-Skywire-Coin-Node",nn);}` +
 	`}` +
 	`init.headers=h;return rf(target,init);` +
@@ -155,21 +158,27 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 			_, _ = w.Write([]byte(browseui.WalletConfigHTML)) //nolint:errcheck
 			return
 		}
-		// Node API (/wallet/api/v1|v2/*) → proxy to the node over dmsg. The
-		// wallet's crypto is client-side; only these calls cross the mesh.
-		if strings.HasPrefix(rest, "api/v1/") || strings.HasPrefix(rest, "api/v2/") {
-			hv.walletNodeProxy(w, r, rest)
+		// Coin registry (/wallet/coins) → the list skycoin-web's coin.service
+		// fetches from /api/v1/coins. Each coin's nodeUrl is a /coin/<index>
+		// prefix this handler proxies below.
+		if rest == "coins" {
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(coins.JSON()) //nolint:errcheck
 			return
 		}
-		// BTC API (/wallet/v1/btc/*) → the in-process electrum gateway. The
-		// browser derives + signs BTC itself; only chain queries come here. The
-		// electrum server (X-Skywire-Btc-Backend) is reached either directly on
-		// the clearnet (self-egress, the default) or — when the operator sets a
-		// skysocks exit (X-Skywire-Btc-Proxy) — routed through that visor for IP
-		// privacy. Both headers are set by the shim from localStorage.
-		if strings.HasPrefix(rest, "v1/btc/") {
-			r.URL.Path = "/" + rest
-			hv.nativeBtcGateway(r.Header.Get("X-Skywire-Btc-Proxy")).ServeHTTP(w, r)
+		// Per-coin API (/wallet/coin/<index>/*) → route to that coin's backend:
+		// a skycoin-style node over dmsg, or the in-visor BTC electrum gateway.
+		if strings.HasPrefix(rest, "coin/") {
+			hv.walletCoinProxy(w, r, strings.TrimPrefix(rest, "coin/"))
+			return
+		}
+		// Legacy: a bare node-API call (/wallet/api/v1|v2/*) with no /coin/ prefix
+		// → the default coin (skycoin, index 0), so an un-migrated wallet build
+		// still reaches the node. The wallet's crypto is client-side; only these
+		// calls cross the mesh.
+		if strings.HasPrefix(rest, "api/v1/") || strings.HasPrefix(rest, "api/v2/") {
+			hv.walletNodeProxy(w, r, rest)
 			return
 		}
 		if fsErr != nil {
@@ -186,6 +195,46 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 		r.URL.Path = "/wallet/" + rest
 		fileServer.ServeHTTP(w, r)
 	}
+}
+
+// walletCoinProxy routes a per-coin API call (/wallet/coin/<index>/<path>) to
+// the coin's backend. rest is "<index>/<path…>". Skycoin-style coins go to the
+// dmsg node proxy; bitcoin coins go to the in-visor electrum gateway. This is
+// the server-proxy half of skycoin-web's /coin/<index> multicoin model — see
+// docs/design/skycoin-web-multicoin-wallets.md.
+func (hv *Hypervisor) walletCoinProxy(w http.ResponseWriter, r *http.Request, rest string) {
+	idxStr, path := rest, ""
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		idxStr, path = rest[:i], rest[i+1:]
+	}
+	idx, err := strconv.Atoi(idxStr)
+	if err != nil {
+		http.Error(w, "invalid coin index", http.StatusBadRequest)
+		return
+	}
+	coin, ok := coins.ByIndex(idx)
+	if !ok {
+		http.Error(w, "unknown coin", http.StatusNotFound)
+		return
+	}
+	if coin.IsBitcoin() {
+		// The browser derives + signs BTC itself; only chain queries come here,
+		// to the in-process electrum gateway. Normalize the path to /v1/btc/… (the
+		// wallet addresses it as coin/<index>/api/v1/btc/…). The backend electrum
+		// server (X-Skywire-Btc-Backend) is reached on the clearnet by default, or
+		// via a skysocks exit (X-Skywire-Btc-Proxy) for IP privacy — headers set
+		// by the shim from localStorage.
+		if i := strings.Index(path, "v1/btc/"); i >= 0 {
+			r.URL.Path = "/" + path[i:]
+		} else {
+			r.URL.Path = "/" + path
+		}
+		hv.nativeBtcGateway(r.Header.Get("X-Skywire-Btc-Proxy")).ServeHTTP(w, r)
+		return
+	}
+	// Skycoin-style node: proxy the remaining api/v1|v2 path to the coin's node
+	// over dmsg (X-Skywire-Coin-Node selects it; empty = deployment default).
+	hv.walletNodeProxy(w, r, path)
 }
 
 // serveWalletIndex serves the embedded wallet index.html with its <base href>
