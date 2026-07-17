@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/client_dial.go
+// Package dmsg pkg/dmsg/dmsg/client_dial.go c1-net-dmsg
 package dmsg
 
 import (

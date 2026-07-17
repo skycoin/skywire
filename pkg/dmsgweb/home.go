@@ -1,3 +1,4 @@
+// Package dmsgweb pkg/dmsgweb/home.go c4-app-web
 package dmsgweb
 
 import (

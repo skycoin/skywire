@@ -1,6 +1,6 @@
 //go:build js
 
-// Package skyenv pkg/skyenv/skyenv_js.go
+// Package skyenv pkg/skyenv/skyenv_js.go c0-com-env
 //
 // js/wasm build of pkg/skyenv. Path constants are stubbed to
 // empty/sentinel values — the browser doesn't have filesystem

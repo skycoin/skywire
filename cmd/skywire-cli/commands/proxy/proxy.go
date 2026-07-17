@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/skysocksc/skysocks.go
+// Package skysocksc cmd/skywire-cli/commands/proxy/proxy.go c4-vis-cli
 package skysocksc
 
 import (

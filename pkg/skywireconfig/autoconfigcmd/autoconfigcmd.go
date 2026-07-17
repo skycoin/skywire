@@ -1,4 +1,4 @@
-// Package autoconfigcmd builds the cobra.Command for `skywire
+// Package autoconfigcmd pkg/skywireconfig/autoconfigcmd/autoconfigcmd.go c3-vis-core
 // autoconfig` as a freestanding factory. The CLI binary in
 // cmd/skywire/commands wires the returned command into the root
 // hierarchy and attaches its RunE; external consumers — TinyGo/Go

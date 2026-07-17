@@ -1,4 +1,4 @@
-// Package netutil pkg/netutil/net.go
+// Package netutil pkg/netutil/net.go c0-com-util
 //
 // The TinyGo-safe (pure) helpers. Network-interface enumeration + the
 // ipinfo.io HTTP probe live in net_native.go (//go:build !tinygo); their

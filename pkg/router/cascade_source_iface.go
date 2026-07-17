@@ -1,4 +1,4 @@
-// Package router pkg/router/cascade_source_iface.go
+// Package router pkg/router/cascade_source_iface.go c2-net-routing
 package router
 
 import "github.com/skycoin/skywire/pkg/routing"

@@ -1,3 +1,4 @@
+// Package node pkg/cxo/node/conn.go c2-net-cxo
 package node
 
 import (

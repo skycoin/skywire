@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/entity_common.go
+// Package dmsg pkg/dmsg/dmsg/entity_common.go c1-net-dmsg
 package dmsg
 
 import (

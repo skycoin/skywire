@@ -1,4 +1,4 @@
-// Package ctlbridge is the operator control bridge for the wasm-visor harness.
+// Package ctlbridge pkg/wasmhv/ctlbridge/ctlbridge.go c3-vis-wasm
 //
 // It lets an EXTERNAL operator (curl, or `skywire cli`) drive the in-browser
 // wasm-visor tab(s) without anyone clicking: each tab connects back over SSE

@@ -1,4 +1,4 @@
-// Package setupmetrics — in-process aggregated stats for route setup
+// Package setupmetrics pkg/router/setupmetrics/stats.go c2-net-routing
 // requests. Complements victoria_metrics.go (which publishes Prometheus
 // gauges for external scrape) with a structured snapshot the visor can
 // expose over RPC and the CLI can pretty-print for quick triage.

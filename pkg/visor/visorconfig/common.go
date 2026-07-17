@@ -1,4 +1,4 @@
-// Package visorconfig defines the visor's config
+// Package visorconfig pkg/visor/visorconfig/common.go c3-vis-core
 package visorconfig
 
 import (

@@ -1,4 +1,4 @@
-// Package skychat — events.go: `skywire cli skychat events`, a structured
+// Package skychat cmd/skywire-cli/commands/skychat/events.go c4-vis-cli
 // NDJSON stream of chat events from the chat app's GET /events SSE endpoint.
 //
 // Replaces fragile `tail -F | awk | grep` log monitors (which broke under

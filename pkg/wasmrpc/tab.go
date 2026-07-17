@@ -1,3 +1,4 @@
+// Package wasmrpc pkg/wasmrpc/tab.go c3-vis-wasm
 package wasmrpc
 
 import (

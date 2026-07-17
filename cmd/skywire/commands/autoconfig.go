@@ -1,4 +1,4 @@
-// Package commands cmd/skywire/commands/autoconfig.go
+// Package commands cmd/skywire/commands/autoconfig.go c4-vis-cli
 //
 // `skywire autoconfig` is the single entry point operators use to
 // (re)generate the visor config and (re)start the service. The shape

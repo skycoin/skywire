@@ -1,3 +1,4 @@
+// Package config pkg/serviceconfig/external_services.go c4-net-discovery
 package config
 
 import (

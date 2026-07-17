@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_skychat.go
+// Package visor pkg/visor/hypervisor_handlers_skychat.go c3-vis-core
 //
 // Hypervisor HTTP routes for skychat: password get/set/clear and a
 // reverse proxy to the local skychat HTTP server. The proxy is

@@ -1,5 +1,6 @@
 //go:build !js
 
+// Package cxds pkg/cxo/data/cxds/drive.go c2-net-cxo
 // The bbolt-backed on-disk CXDS. Excluded from js/wasm (bbolt uses arch-specific
 // consts + mmap and does not build there); the js build gets stub constructors in
 // drive_js.go and uses NewMemoryCXDS via skyobject's InMemoryDB path instead.

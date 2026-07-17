@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/sendfile.go
+// Package cliskychat cmd/skywire-cli/commands/skychat/sendfile.go c4-vis-cli
 //
 // `skywire-cli skychat send-file` sends a local file to a peer (1:1) or to the
 // active CXO group, via the running skychat app's HTTP API (POST /send-file).

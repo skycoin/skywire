@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_browse.go — serve the shared
+// Package visor pkg/visor/hypervisor_handlers_browse.go c3-vis-core
 // browse.js virtual-browser engine in the NATIVE hypervisor UI (the same one the
 // wasm-visor runs), backed by /api/browse/* instead of the wasm JS hooks.
 package visor

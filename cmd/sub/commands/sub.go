@@ -1,4 +1,4 @@
-// Package commands cmd/sub/commands/sub.go
+// Package commands cmd/sub/commands/sub.go c2-net-transport
 //
 // Standalone (dmsg-only) UDP→dmsg bridge ("sub" — sky UDP bridge).
 // Wraps UDP datagrams in length-prefixed frames, ferries them over

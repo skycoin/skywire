@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package visorconfig pkg/visor/visorconfig/types_native.go
+// Package visorconfig pkg/visor/visorconfig/types_native.go c3-vis-core
 //
 // Duration's JSON codec methods. Tagged off the WASM build because
 // json.Marshal / json.Unmarshal pull the reflect runtime helpers

@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/errors.go
+// Package dmsg pkg/dmsg/dmsg/errors.go c1-net-dmsg
 package dmsg
 
 import (

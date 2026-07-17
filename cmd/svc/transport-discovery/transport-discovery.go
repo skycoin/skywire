@@ -1,4 +1,4 @@
-// Package main cmd/transport-discovery/transport-discovery.go
+// Package main cmd/svc/transport-discovery/transport-discovery.go c4-net-discovery
 package main
 
 import (

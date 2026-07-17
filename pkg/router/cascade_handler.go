@@ -1,4 +1,4 @@
-// Package router pkg/router/cascade_handler.go
+// Package router pkg/router/cascade_handler.go c2-net-routing
 //
 // CascadeHandler processes cascade protocol messages on a visor.
 // It handles CascadeSetupPacket and CascadeAckPacket arriving on

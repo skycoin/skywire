@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/skychat.go
+// Package commands cmd/apps/skychat/commands/skychat.go c4-app-chat
 package commands
 
 import (

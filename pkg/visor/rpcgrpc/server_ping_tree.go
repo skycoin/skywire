@@ -1,4 +1,4 @@
-// Package rpcgrpc — pkg/visor/rpcgrpc/server_ping_tree.go: server-side
+// Package rpcgrpc pkg/visor/rpcgrpc/server_ping_tree.go c3-vis-core
 // implementation of the StreamPingTree gRPC RPC. Replaces the
 // client-side BFS in cmd/skywire-cli/commands/visor/ping/tree.go,
 // giving the visor direct access to per-transport latency data and

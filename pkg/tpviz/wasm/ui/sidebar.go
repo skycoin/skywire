@@ -1,5 +1,6 @@
 //go:build js && wasm
 
+// Package ui pkg/tpviz/wasm/ui/sidebar.go c4-app-rewards
 package ui
 
 import (

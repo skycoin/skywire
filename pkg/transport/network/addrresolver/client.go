@@ -1,4 +1,4 @@
-// Package addrresolver implements address resolver client
+// Package addrresolver pkg/transport/network/addrresolver/client.go c2-net-transport
 package addrresolver
 
 import (

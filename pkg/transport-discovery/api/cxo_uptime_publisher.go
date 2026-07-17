@@ -1,4 +1,4 @@
-// Package api pkg/transport-discovery/api/cxo_uptime_publisher.go
+// Package api pkg/transport-discovery/api/cxo_uptime_publisher.go c4-net-discovery
 //
 // CXO publisher for the network-wide visor-uptime aggregate. Mirrors
 // MetricsCXOPublisher (cxo_metrics_publisher.go) but produces the

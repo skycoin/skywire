@@ -1,6 +1,7 @@
 //go:build windows && !withoutsystray
 // +build windows,!withoutsystray
 
+// Package visor pkg/visor/gui_windows.go c3-vis-core
 package visor
 
 import (

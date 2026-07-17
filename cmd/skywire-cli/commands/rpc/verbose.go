@@ -1,4 +1,4 @@
-// Package clirpc cmd/skywire-cli/commands/rpc/verbose.go
+// Package clirpc cmd/skywire-cli/commands/rpc/verbose.go c4-vis-cli
 //
 // Verbose log-streaming helper for cli commands that block on a
 // visor-side RPC and want to surface what the visor is doing in

@@ -1,4 +1,4 @@
-// Package setup setup transports
+// Package setup pkg/transport/setup/rpc.go c2-net-transport
 package setup
 
 import (

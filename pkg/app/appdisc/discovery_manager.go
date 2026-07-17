@@ -1,4 +1,4 @@
-// Package appdisc updates app discovery
+// Package appdisc pkg/app/appdisc/discovery_manager.go c2-vis-appsvc
 package appdisc
 
 // Updater updates the associated app discovery

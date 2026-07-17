@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_routing_policies.go — read-side
+// Package visor pkg/visor/api_routing_policies.go c3-vis-core
 // surface for the hypervisor UI's routing-policy panel. Walks
 // the router's installed DialHook (when it's a *policy.Hook)
 // and projects its visor-wide default + per-app overrides into

@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/proxies.go
+// Package clivisor cmd/skywire-cli/commands/visor/proxies.go c4-vis-cli
 //
 // `skywire cli visor proxies` — status command for the visor-hosted
 // resolving proxies (dmsgweb, skynetweb). Two subcommands:

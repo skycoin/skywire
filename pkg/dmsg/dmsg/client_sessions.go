@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/client_sessions.go
+// Package dmsg pkg/dmsg/dmsg/client_sessions.go c1-net-dmsg
 package dmsg
 
 import (

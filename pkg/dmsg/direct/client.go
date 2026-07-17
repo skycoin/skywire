@@ -1,4 +1,4 @@
-// Package direct pkg/direct/client.go
+// Package direct pkg/dmsg/direct/client.go c1-net-dmsg
 package direct
 
 import (

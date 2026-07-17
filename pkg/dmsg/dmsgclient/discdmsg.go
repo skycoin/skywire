@@ -1,4 +1,4 @@
-// Package dmsgclient pkg/dmsg/dmsgclient/discdmsg.go
+// Package dmsgclient pkg/dmsg/dmsgclient/discdmsg.go c1-net-dmsg
 package dmsgclient
 
 import (

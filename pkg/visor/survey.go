@@ -1,4 +1,4 @@
-// Package visor pkg/visor/survey.go
+// Package visor pkg/visor/survey.go c3-vis-core
 package visor
 
 import (

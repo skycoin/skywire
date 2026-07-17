@@ -1,4 +1,4 @@
-// Package msg represents node messages
+// Package msg pkg/cxo/node/msg/msg.go c2-net-cxo
 package msg
 
 import (

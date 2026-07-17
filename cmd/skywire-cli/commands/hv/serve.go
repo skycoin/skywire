@@ -1,4 +1,4 @@
-// Package clihv cmd/skywire-cli/commands/hv/serve.go
+// Package clihv cmd/skywire-cli/commands/hv/serve.go c4-vis-cli
 package clihv
 
 import (

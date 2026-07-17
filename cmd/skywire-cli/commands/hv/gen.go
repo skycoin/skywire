@@ -1,4 +1,4 @@
-// Package clihv cmd/skywire-cli/commands/hv/gen.go
+// Package clihv cmd/skywire-cli/commands/hv/gen.go c4-vis-cli
 package clihv
 
 import (

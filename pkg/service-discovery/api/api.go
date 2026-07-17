@@ -1,4 +1,4 @@
-// Package api pkg/service-disocvery/api/api.go
+// Package api pkg/service-discovery/api/api.go c4-net-discovery
 package api
 
 import (

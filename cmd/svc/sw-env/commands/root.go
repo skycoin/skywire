@@ -1,4 +1,4 @@
-// Package commands cmd/sw-env/commands/root.go
+// Package commands cmd/svc/sw-env/commands/root.go c0-com-env
 package commands
 
 import (

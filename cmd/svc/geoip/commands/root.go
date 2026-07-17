@@ -1,4 +1,4 @@
-// Package commands cmd/route-finder/commands/geoip.go
+// Package commands cmd/svc/geoip/commands/root.go c0-com-util
 package commands
 
 import (

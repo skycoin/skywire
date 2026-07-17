@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package genvisor pkg/skywireconfig/genvisor/genvisor_native.go
+// Package genvisor pkg/skywireconfig/genvisor/genvisor_native.go c3-vis-core
 //
 // Non-WASM implementation of MustMarshalJSON — uses
 // encoding/json.MarshalIndent. Build-tag-gated because

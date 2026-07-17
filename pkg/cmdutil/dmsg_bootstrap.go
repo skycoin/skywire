@@ -1,4 +1,4 @@
-// Package cmdutil pkg/skywire-utilities/pkg/cmdutil/dmsg_bootstrap.go
+// Package cmdutil pkg/cmdutil/dmsg_bootstrap.go c0-com-util
 package cmdutil
 
 import (

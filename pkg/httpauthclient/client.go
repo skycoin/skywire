@@ -1,6 +1,6 @@
 //go:build !tinygo || (js && wasm)
 
-// Package httpauthclient http authorizatioon
+// Package httpauthclient pkg/httpauthclient/client.go c0-com-http
 package httpauthclient
 
 import (

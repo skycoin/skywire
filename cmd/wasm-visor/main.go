@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — cmd/wasm-visor: a browser/wasm skywire visor assembled from
+// Package main cmd/wasm-visor/main.go c3-vis-wasm
 // the TinyGo-ported subsystems (dmsg client + transport.Manager + edge router +
 // in-process app server), bypassing the 45k-LOC pkg/visor daemon (which serves
 // an HTTP API surface a browser leaf does not need).

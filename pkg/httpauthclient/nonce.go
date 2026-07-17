@@ -1,4 +1,4 @@
-// Package httpauthclient internal/httpauth/nonce.go
+// Package httpauthclient pkg/httpauthclient/nonce.go c0-com-http
 package httpauthclient
 
 import (

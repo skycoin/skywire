@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/errors.go
+// Package appnet pkg/app/appnet/errors.go c2-vis-appsvc
 package appnet
 
 import (

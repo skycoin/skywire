@@ -1,4 +1,4 @@
-// Package uptimestats is a small HTTP client for the discovery-
+// Package uptimestats pkg/uptimestats/client.go c2-net-discovery
 // integrated uptime endpoints exposed by the service-discovery,
 // transport-discovery, and dmsg-discovery services.
 //

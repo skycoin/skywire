@@ -1,4 +1,4 @@
-// Package stats — pkg/visor/stats/tracker.go: sampler orchestrator.
+// Package stats pkg/visor/stats/tracker.go c3-vis-core
 //
 // The Tracker owns the periodic sampling loop, holds the in-memory
 // day-start baselines for per-transport bandwidth deltas, and exposes

@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package httputil pkg/httputil/json_native.go
+// Package httputil pkg/httputil/json_native.go c0-com-http
 //
 // Native builds use jsoniter.ConfigFastest for the package-wide `json` codec.
 // It relies on github.com/modern-go/reflect2, whose unsafe reflection

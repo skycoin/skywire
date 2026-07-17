@@ -1,3 +1,4 @@
+// Package registry pkg/cxo/skyobject/registry/split_refs.go c2-net-cxo
 package registry
 
 import (
