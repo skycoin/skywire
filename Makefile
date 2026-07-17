@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wallet prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wasm-visor-tinygo embed-wallet prune-wasm-embed-history
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
@@ -276,14 +276,20 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 	cp ./cmd/dmsg-wasm/index.html ./build/dmsg-wasm/
 	@echo "built ./build/dmsg-wasm (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go' then open http://localhost:8085/"
 
-tinygo-wasm-visor: ## Build the browser WASM visor edge (dmsg+transport+router+appserver) + dev harness into build/wasm-visor — TinyGo (~2.2MB, NO crypto/tls → no https clearnet)
+# TINYGO points at the TinyGo binary. The FULL wasm-visor (net/http + crypto/tls)
+# needs the fork at github.com/0magnet/tinygo (v0.42.0-skycoin.1+, LLVM 22) — its
+# net/http-on-js support is what unblocks the browser visor. Build the fork with
+# `go build -tags llvm22 -o build/tinygo .` and point TINYGO at it + export
+# TINYGOROOT=<fork checkout>. Stock upstream TinyGo cannot compile this target.
+TINYGO ?= tinygo
+tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+appserver, net/http+crypto/tls, route origination) into build/wasm-visor — TinyGo FORK (~7MB / ~2.9MB gzip vs 43MB/9.5MB std-Go). Needs the 0magnet/tinygo fork; set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>
 	mkdir -p ./build/wasm-visor
-	tinygo build -target wasm -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
-	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
+	$(TINYGO) build -target wasm -no-debug -opt=z -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
+	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor/
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor/
-	@echo "built ./build/wasm-visor (TinyGo) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
+	@echo "built ./build/wasm-visor (TinyGo fork) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
 	mkdir -p ./build/wasm-visor-go
@@ -296,9 +302,15 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor-go/
 	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"
 
-embed-wasm-visor: wasm-visor ## Update the COMMITTED embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasm-visor.wasm.gz) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
-	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasm-visor.wasm.gz
-	@echo "updated pkg/wasmhv/wasmbin/wasm-visor.wasm.gz — review with 'git status', commit intentionally (it's a ~8MB blob)."
+embed-wasm-visor: wasm-visor ## Update the COMMITTED std-Go embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmgo/) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
+	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasmgo/wasm-visor.wasm.gz
+	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmgo/wasm_exec.js
+	@echo "updated pkg/wasmhv/wasmbin/wasmgo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~9.5MB blob)."
+
+embed-wasm-visor-tinygo: tinygo-wasm-visor ## Update the COMMITTED TinyGo embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmtinygo/) — needs the 0magnet/tinygo fork (set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>). Pairs the TinyGo wasm with TinyGo's wasm_exec.js.
+	gzip -9 -n -c ./build/wasm-visor/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasmtinygo/wasm-visor.wasm.gz
+	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmtinygo/wasm_exec.js
+	@echo "updated pkg/wasmhv/wasmbin/wasmtinygo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~2.9MB blob)."
 
 embed-wallet: ## Sync the vendored skycoin-web wallet dist into the embedded PWA tree (pkg/visor/static/wallet). Run after re-vendoring skycoin, then `git add` + commit it (~11MB). The wallet loads same-origin in the wasm-visor PWA; only its node API traffic crosses dmsg. Source (relative asset paths) lives upstream in skycoin/skycoin — the base href is rewritten to /wallet/ at serve time.
 	rm -rf ./pkg/visor/static/wallet

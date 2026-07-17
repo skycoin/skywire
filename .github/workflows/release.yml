@@ -455,6 +455,70 @@ jobs:
           }
           gh release upload "${{ github.ref_name }}" @files --repo ${{ github.repository }} --clobber
 
+  # TinyGo build of the full browser wasm-visor, compiled with the fork
+  # (github.com/0magnet/tinygo) whose net/http-on-js support is what makes the
+  # visor compile. Produces a ~7 MB / ~2.9 MB-gzip blob (vs ~43 MB / ~9.5 MB for
+  # standard Go js/wasm). Uploaded as a distinct "-wasm-visor-tinygo" archive.
+  wasm-visor-tinygo:
+    needs: create-release
+    runs-on: ubuntu-latest
+    env:
+      TINYGO_REPO: https://github.com/0magnet/tinygo.git
+      TINYGO_BRANCH: develop
+    steps:
+      - name: Checkout skywire
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false
+
+      - name: Install LLVM 22 (apt.llvm.org)
+        run: |
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22
+          sudo apt-get install -y llvm-22-dev libclang-22-dev clang-22 lld-22
+
+      - name: Build the TinyGo fork
+        run: |
+          git clone --branch "${TINYGO_BRANCH}" --recurse-submodules --depth 1 \
+            "${TINYGO_REPO}" "${GITHUB_WORKSPACE}/tinygo-fork"
+          cd "${GITHUB_WORKSPACE}/tinygo-fork"
+          go build -tags llvm22 -o "${GITHUB_WORKSPACE}/tinygo-fork/build/tinygo" .
+          ./build/tinygo version
+
+      - name: Build the wasm-visor with the TinyGo fork
+        env:
+          TINYGOROOT: ${{ github.workspace }}/tinygo-fork
+        run: |
+          make tinygo-wasm-visor TINYGO="${GITHUB_WORKSPACE}/tinygo-fork/build/tinygo"
+          ls -la build/wasm-visor/
+          # sanity: the module must start with the wasm magic
+          test "$(head -c4 build/wasm-visor/wasm-visor.wasm | xxd -p)" = "0061736d"
+
+      - name: Create archive
+        run: |
+          ARCHIVE_NAME="skywire-${{ github.ref_name }}-wasm-visor-tinygo"
+          mkdir -p dist
+          gzip -9 -n -c build/wasm-visor/wasm-visor.wasm > "build/wasm-visor/wasm-visor.wasm.gz"
+          tar -C build/wasm-visor -czvf "dist/${ARCHIVE_NAME}.tar.gz" .
+          sha256sum "dist/${ARCHIVE_NAME}.tar.gz" > "dist/${ARCHIVE_NAME}.tar.gz.sha256"
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "${{ github.ref_name }}" \
+            dist/skywire-${{ github.ref_name }}-wasm-visor-tinygo.tar.gz \
+            dist/skywire-${{ github.ref_name }}-wasm-visor-tinygo.tar.gz.sha256 \
+            --repo ${{ github.repository }} \
+            --clobber
+
   docker:
     runs-on: ubuntu-latest
     steps:
