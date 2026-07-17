@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
 // Package router pkg/router/setup_rpc_gateway.go
 package router
