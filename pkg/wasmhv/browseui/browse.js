@@ -1072,7 +1072,9 @@
     if (doc.getElementById("skywire-tour")) { return; }
     var steps = [
       { title: "This is not a normal web page",
-        body: "You're running a full <b>Skywire visor</b> — a routing peer on an encrypted peer-to-peer mesh — entirely inside this browser tab. No install, no account, and no central server. A 60-second tour of what that means." },
+        body: "You're running a full <b>Skywire visor</b> — a live routing peer on an encrypted, peer-to-peer mesh — right here in this browser tab. No install, no account, no central server, no one in the middle. Here's a 60-second tour of what that means.",
+        disc: { summary: "Open-source, no warranty — your keys are yours",
+          details: "Skywire and the Skycoin wallet are experimental, open-source software, provided as-is and without warranty. You run this visor yourself and hold your own keys and coins; no one else can access or recover them. Understand the risks before relying on it or storing value." } },
       { sel: "#tb-menu", title: "Your apps",
         body: "Everything opens from here: a browser for the mesh, encrypted 1:1 chat, a live log, a command console, and your visor's cryptographic identity." },
       { sel: "app-top-bar", title: "The network, live",
@@ -1119,6 +1121,11 @@
         '<b style="color:#9d7cff;font-size:14px">' + s.title + '</b><span style="flex:1"></span>' +
         '<span style="opacity:.55;font-size:11px">' + (i + 1) + " / " + steps.length + '</span></div>' +
         '<div style="margin-bottom:.9em">' + s.body + '</div>' +
+        (s.disc ?
+          '<details style="margin:-.35em 0 .85em;border-top:1px solid #2a2342;padding-top:.6em">' +
+          '<summary style="cursor:pointer;color:#8b93a7;font-size:11.5px;outline:none">' + s.disc.summary + '</summary>' +
+          '<div style="margin-top:.5em;color:#9aa0ad;font-size:11.5px">' + s.disc.details + '</div>' +
+          '</details>' : '') +
         '<div style="display:flex;gap:.5em;align-items:center">' +
         '<button id="tour-skip" style="cursor:pointer;background:transparent;color:#8b93a7;border:0">skip</button>' +
         '<span style="flex:1"></span>' +
