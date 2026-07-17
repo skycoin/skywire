@@ -750,7 +750,6 @@ func (c *httpClient) delBindSTCPR(ctx context.Context) error {
 // Handshake type is used to decouple client from handshake and network packages
 type Handshake func(net.Conn) (net.Conn, error)
 
-
 // serveSUDPHConn runs the read / heartbeat / re-register loops on arConn
 // until any of them errors (connection dead) or the client is closed.
 // Returns once all three loops have exited.
