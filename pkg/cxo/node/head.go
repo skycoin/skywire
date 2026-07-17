@@ -72,9 +72,28 @@ func (n *nodeHead) delConn(c *Conn) {
 // (api)
 func (n *nodeHead) receivedRoot(cr connRoot) {
 
-	select {
-	case n.rrq <- cr:
-	case <-n.closeq:
+	// Breaks the feeds↔head cyclic deadlock. This runs on the single nodeFeeds
+	// event-loop goroutine (handleReceivedRoot → nodeFeed.receivedRoot → here),
+	// which is ALSO the sole drainer of nodeFeeds.brorq. n.rrq is unbuffered and
+	// drained by this head's handle() loop — but that loop can itself be parked
+	// sending to brorq (handle → createFiller → broadcastRoot), and broadcastRoot
+	// only unblocks when the feeds loop drains brorq. So a bare `n.rrq <- cr`
+	// here deadlocks: we wait for the head loop to read rrq while the head loop
+	// waits for us to read brorq. Keep draining brorq while we wait to hand off,
+	// so the head loop can make progress and drain rrq. handleBroadcastRoot is
+	// non-blocking (fire-and-forget per-subscriber fan-out — see
+	// nodeFeed.broadcastRoot), and we're on the loop goroutine so touching fs
+	// state is safe.
+	fs := n.n.fs
+	for {
+		select {
+		case n.rrq <- cr:
+			return
+		case <-n.closeq:
+			return
+		case bcr := <-fs.brorq:
+			fs.handleBroadcastRoot(bcr)
+		}
 	}
 
 }
