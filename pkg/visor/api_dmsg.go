@@ -639,12 +639,13 @@ func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
 	out := &DmsgClientSessions{}
 
 	if v.dmsgC != nil {
-		servers := dmsgClientServerPKs(v.dmsgC)
+		servers, sessions := dmsgClientServerSessions(v.dmsgC)
 		out.Main = &DmsgClientSessionInfo{
-			PK:      v.conf.PK,
-			Role:    "main",
-			Count:   len(servers),
-			Servers: servers,
+			PK:       v.conf.PK,
+			Role:     "main",
+			Count:    len(servers),
+			Servers:  servers,
+			Sessions: sessions,
 		}
 	}
 
@@ -654,39 +655,49 @@ func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
 	v.initLock.Unlock()
 
 	if rsn != nil && rsn.DmsgClient() != nil {
-		servers := dmsgClientServerPKs(rsn.DmsgClient())
+		servers, sessions := dmsgClientServerSessions(rsn.DmsgClient())
 		out.RouteSetup = &DmsgClientSessionInfo{
-			PK:      rsn.PK(),
-			Role:    "route_setup",
-			Count:   len(servers),
-			Servers: servers,
+			PK:       rsn.PK(),
+			Role:     "route_setup",
+			Count:    len(servers),
+			Servers:  servers,
+			Sessions: sessions,
 		}
 	}
 	if tps != nil && tps.DmsgClient() != nil {
-		servers := dmsgClientServerPKs(tps.DmsgClient())
+		servers, sessions := dmsgClientServerSessions(tps.DmsgClient())
 		out.TransportSetup = &DmsgClientSessionInfo{
-			PK:      tps.PK(),
-			Role:    "transport_setup",
-			Count:   len(servers),
-			Servers: servers,
+			PK:       tps.PK(),
+			Role:     "transport_setup",
+			Count:    len(servers),
+			Servers:  servers,
+			Sessions: sessions,
 		}
 	}
 	return out, nil
 }
 
-// dmsgClientServerPKs returns the PKs of the dmsg servers the given client
-// currently has an active session with. Sorted by PK for stable output.
-func dmsgClientServerPKs(c *dmsg.Client) []cipher.PubKey {
-	strs := c.ConnectedServersPK()
-	out := make([]cipher.PubKey, 0, len(strs))
-	for _, s := range strs {
-		var pk cipher.PubKey
-		if err := pk.Set(s); err == nil {
-			out = append(out, pk)
-		}
+// dmsgClientServerSessions returns the dmsg servers the given client currently
+// has an active session with, both as bare PKs (Servers, kept for existing
+// consumers) and enriched with the protocol each was reached over (Sessions).
+// Both slices are sorted by server PK for stable output.
+func dmsgClientServerSessions(c *dmsg.Client) ([]cipher.PubKey, []DmsgServerSession) {
+	all := c.AllSessions()
+	sessions := make([]DmsgServerSession, 0, len(all))
+	for _, s := range all {
+		sessions = append(sessions, DmsgServerSession{
+			PK:       s.RemotePK(),
+			Carrier:  s.Carrier(),
+			Protocol: s.Protocol(),
+			Address:  s.CarrierAddr(),
+		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].String() < out[j].String() })
-	return out
+	sort.Slice(sessions, func(i, j int) bool { return sessions[i].PK.String() < sessions[j].PK.String() })
+	pks := make([]cipher.PubKey, len(sessions))
+	for i, s := range sessions {
+		pks[i] = s.PK
+	}
+	return pks, sessions
 }
 
 // DmsgProbe checks whether a remote PK is reachable on a given dmsg port
