@@ -92,7 +92,7 @@ github.com/alecthomas/chroma/lexers/x
 github.com/alecthomas/chroma/lexers/y
 github.com/alecthomas/chroma/lexers/z
 github.com/alecthomas/chroma/styles
-# github.com/anatol/smart.go v0.0.0-20260427185427-04c4679efd4e
+# github.com/anatol/smart.go v0.0.0-20260706181715-5cd61760b880
 ## explicit; go 1.26
 github.com/anatol/smart.go
 # github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5
@@ -387,14 +387,14 @@ github.com/gin-gonic/gin/render
 github.com/gizak/termui/v3
 github.com/gizak/termui/v3/drawille
 github.com/gizak/termui/v3/widgets
-# github.com/go-chi/chi/v5 v5.3.0
+# github.com/go-chi/chi/v5 v5.3.1
 ## explicit; go 1.23
 github.com/go-chi/chi/v5
 github.com/go-chi/chi/v5/middleware
 # github.com/go-chi/cors v1.2.2
 ## explicit; go 1.14
 github.com/go-chi/cors
-# github.com/go-chi/httprate v0.15.0
+# github.com/go-chi/httprate v0.16.0
 ## explicit; go 1.23.0
 github.com/go-chi/httprate
 # github.com/go-echarts/go-echarts/v2 v2.7.2
@@ -553,7 +553,7 @@ github.com/jackc/puddle/v2/internal/genstack
 # github.com/james-barrow/golang-ipc v1.2.4
 ## explicit; go 1.15
 github.com/james-barrow/golang-ipc
-# github.com/jaypipes/ghw v0.24.0
+# github.com/jaypipes/ghw v0.25.0
 ## explicit; go 1.21
 github.com/jaypipes/ghw
 github.com/jaypipes/ghw/internal/config
@@ -578,12 +578,13 @@ github.com/jaypipes/ghw/pkg/topology
 github.com/jaypipes/ghw/pkg/unitutil
 github.com/jaypipes/ghw/pkg/usb
 github.com/jaypipes/ghw/pkg/util
+github.com/jaypipes/ghw/pkg/watchdog
 # github.com/jaypipes/pcidb v1.1.1
 ## explicit; go 1.21
 github.com/jaypipes/pcidb
 github.com/jaypipes/pcidb/internal
 github.com/jaypipes/pcidb/types
-# github.com/jfreymuth/pulse v0.1.1
+# github.com/jfreymuth/pulse v0.1.2
 ## explicit; go 1.12
 github.com/jfreymuth/pulse
 github.com/jfreymuth/pulse/proto
@@ -611,8 +612,8 @@ github.com/kr/pretty
 # github.com/kr/text v0.2.0
 ## explicit
 github.com/kr/text
-# github.com/kyokomi/emoji/v2 v2.2.13
-## explicit; go 1.14
+# github.com/kyokomi/emoji/v2 v2.2.14
+## explicit; go 1.21
 github.com/kyokomi/emoji/v2
 # github.com/leodido/go-urn v1.4.0
 ## explicit; go 1.18
@@ -642,8 +643,8 @@ github.com/lufia/plan9stats
 # github.com/mattn/go-colorable v0.1.15
 ## explicit; go 1.18
 github.com/mattn/go-colorable
-# github.com/mattn/go-isatty v0.0.22
-## explicit; go 1.21
+# github.com/mattn/go-isatty v0.0.23
+## explicit; go 1.20
 github.com/mattn/go-isatty
 # github.com/mattn/go-localereader v0.0.1
 ## explicit
@@ -722,7 +723,7 @@ github.com/pgavlin/femto/runtime
 # github.com/pion/datachannel v1.6.2
 ## explicit; go 1.24.0
 github.com/pion/datachannel
-# github.com/pion/dtls/v3 v3.1.4
+# github.com/pion/dtls/v3 v3.1.5
 ## explicit; go 1.24.0
 github.com/pion/dtls/v3
 github.com/pion/dtls/v3/internal/ciphersuite
@@ -746,7 +747,7 @@ github.com/pion/dtls/v3/pkg/protocol/alert
 github.com/pion/dtls/v3/pkg/protocol/extension
 github.com/pion/dtls/v3/pkg/protocol/handshake
 github.com/pion/dtls/v3/pkg/protocol/recordlayer
-# github.com/pion/ice/v4 v4.2.7
+# github.com/pion/ice/v4 v4.3.0
 ## explicit; go 1.24.0
 github.com/pion/ice/v4
 github.com/pion/ice/v4/internal/atomic
@@ -785,7 +786,7 @@ github.com/pion/rtp
 github.com/pion/rtp/codecs
 github.com/pion/rtp/codecs/av1/obu
 github.com/pion/rtp/codecs/vp9
-# github.com/pion/sctp v1.10.3
+# github.com/pion/sctp v1.11.0
 ## explicit; go 1.24.0
 github.com/pion/sctp
 # github.com/pion/sdp/v3 v3.0.19
@@ -826,14 +827,14 @@ github.com/pion/webrtc/v4/internal/mux
 github.com/pion/webrtc/v4/internal/util
 github.com/pion/webrtc/v4/pkg/media
 github.com/pion/webrtc/v4/pkg/rtcerr
-# github.com/pires/go-proxyproto v0.14.0
+# github.com/pires/go-proxyproto v0.15.0
 ## explicit; go 1.25.0
 github.com/pires/go-proxyproto
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/pkg/sftp v1.13.10
-## explicit; go 1.23.0
+# github.com/pkg/sftp v1.13.11
+## explicit; go 1.25.0
 github.com/pkg/sftp
 github.com/pkg/sftp/internal/encoding/ssh/filexfer
 github.com/pkg/sftp/internal/encoding/ssh/filexfer/openssh
@@ -871,7 +872,7 @@ github.com/quic-go/quic-go/qlog
 github.com/quic-go/quic-go/qlogwriter
 github.com/quic-go/quic-go/qlogwriter/jsontext
 github.com/quic-go/quic-go/quicvarint
-# github.com/quic-go/webtransport-go v0.11.0
+# github.com/quic-go/webtransport-go v0.11.1
 ## explicit; go 1.25.0
 github.com/quic-go/webtransport-go
 # github.com/rivo/tview v0.42.0
@@ -1164,7 +1165,7 @@ github.com/xtaci/smux
 # github.com/xxxserxxx/lingo/v2 v2.0.1
 ## explicit; go 1.16
 github.com/xxxserxxx/lingo/v2
-# github.com/yuin/goldmark v1.8.2
+# github.com/yuin/goldmark v1.8.4
 ## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
@@ -1234,7 +1235,7 @@ go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
 go.opentelemetry.io/otel/trace/internal/telemetry
 go.opentelemetry.io/otel/trace/noop
-# go.starlark.net v0.0.0-20260630144053-529d8e869a14
+# go.starlark.net v0.0.0-20260708150628-5395d018f003
 ## explicit; go 1.25.0
 go.starlark.net/internal/compile
 go.starlark.net/internal/spell
@@ -1275,7 +1276,7 @@ golang.org/x/crypto/twofish
 golang.org/x/crypto/xtea
 # golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90
 ## explicit; go 1.25.0
-# golang.org/x/image v0.43.0
+# golang.org/x/image v0.44.0
 ## explicit; go 1.25.0
 golang.org/x/image/bmp
 golang.org/x/image/ccitt
@@ -1357,10 +1358,10 @@ golang.zx2c4.com/wireguard/rwcancel
 golang.zx2c4.com/wireguard/tun
 # google.golang.org/genproto/googleapis/api v0.0.0-20260414002931-afd174a4e478
 ## explicit; go 1.25.0
-# google.golang.org/genproto/googleapis/rpc v0.0.0-20260630182238-925bb5da69e7
+# google.golang.org/genproto/googleapis/rpc v0.0.0-20260715232425-e75dac1f907d
 ## explicit; go 1.25.0
 google.golang.org/genproto/googleapis/rpc/status
-# google.golang.org/grpc v1.82.0
+# google.golang.org/grpc v1.82.1
 ## explicit; go 1.25.0
 google.golang.org/grpc
 google.golang.org/grpc/attributes
