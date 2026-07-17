@@ -14,6 +14,9 @@ atomicgo.dev/schedule
 fyne.io/systray
 fyne.io/systray/internal/generated/menu
 fyne.io/systray/internal/generated/notifier
+# github.com/0magnet/coloredcobra v1.0.2
+## explicit; go 1.15
+github.com/0magnet/coloredcobra
 # github.com/ActiveState/termtest/conpty v0.5.0
 ## explicit; go 1.12
 github.com/ActiveState/termtest/conpty
@@ -918,7 +921,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.6-0.20260714181712-16104d93f6b8
+# github.com/skycoin/skycoin v0.28.6-0.20260716045641-e77e8ab50df3
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -961,6 +964,7 @@ github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params
 github.com/skycoin/skycoin/src/readable
 github.com/skycoin/skycoin/src/skycoin
+github.com/skycoin/skycoin/src/skycoin-lite/wasm-go
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo
 github.com/skycoin/skycoin/src/skycoin-web/src/gui
 github.com/skycoin/skycoin/src/transaction

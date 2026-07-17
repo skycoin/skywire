@@ -1,3 +1,5 @@
+//go:build !(js && wasm)
+
 // Package voice pkg/skychat/voice/codec_opus.go c2-app-chat
 //
 // Opus codec — ~24 kbit/s versus the PCM passthrough's ~1.5 Mbit/s for the same

@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
 // router_dial.go contains route dialing and route finding logic.
 package router

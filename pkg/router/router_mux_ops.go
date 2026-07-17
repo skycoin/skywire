@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
 // router_mux_ops.go contains mux route operations on the router.
 package router

@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
 // Package noise pkg/noise/rpcdialer.go
 //

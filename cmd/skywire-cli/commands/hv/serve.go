@@ -40,6 +40,7 @@ var (
 	serveHarness  bool
 	serveTLS      bool
 	servePassword string
+	serveVariant  string
 )
 
 // walletDmsgFetchShim is injected into the bundled skycoin-web wallet's index
@@ -147,6 +148,7 @@ func init() {
 	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
 	serveCmd.Flags().BoolVar(&serveTLS, "tls", false, "serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts")
 	serveCmd.Flags().StringVar(&servePassword, "password", "", "gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear")
+	serveCmd.Flags().StringVarP(&serveVariant, "variant", "W", "", "which embedded wasm-visor to serve: 'go' (larger, full crypto/tls+net/http) or 'tinygo' (~4x smaller — better for the PWA, with the documented TinyGo feature gaps). Empty = the build default. A standard-Go build embeds both; a TinyGo build has only 'tinygo'")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -171,11 +173,22 @@ page never asks anyone to type a secret key.`,
 			cmd.PrintErrln("no embedded wasm-visor: rebuild skywire after `make embed-wasm-visor`")
 			os.Exit(1)
 		}
-		wasm, err := wasmbin.Get()
+		// Pick which embedded wasm-visor to serve. Empty flag = the build's
+		// default (Go for a standard build, TinyGo for a TinyGo build).
+		variant := wasmbin.Default()
+		if serveVariant != "" {
+			variant = wasmbin.Variant(serveVariant)
+			if !wasmbin.Has(variant) {
+				cmd.PrintErrf("wasm-visor variant %q is not embedded in this build (available: %v)\n", serveVariant, wasmbin.Available())
+				os.Exit(1)
+			}
+		}
+		wasm, err := wasmbin.GetVariant(variant)
 		if err != nil {
 			cmd.PrintErrln("embedded wasm-visor:", err)
 			os.Exit(1)
 		}
+		cmd.Printf("serving %q wasm-visor (%.1f MB); available: %v\n", variant, float64(len(wasm))/1024/1024, wasmbin.Available())
 		uiFS, err := visor.HypervisorUIFS()
 		if err != nil {
 			cmd.PrintErrln("hypervisor UI assets:", err)
@@ -210,7 +223,10 @@ page never asks anyone to type a secret key.`,
 		// The wasm-visor bootstrap files hv-boot.js fetches by name (resolved against
 		// <base href="/">). These are NOT in the Angular FS, so serve them explicitly.
 		serveBytes("/wasm-visor.wasm", "application/wasm", wasm)
-		serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
+		// wasm_exec.js MUST match the embedded wasm's toolchain (Go vs TinyGo
+		// loaders differ — TinyGo's provides the WASI shims its module imports),
+		// so take it from wasmbin alongside the blob, not a fixed copy.
+		serveBytes("/wasm_exec.js", "text/javascript", wasmbin.WasmExecJSVariant(variant))
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 		// worker.js hosts the wasm runtime off the main thread; hv-boot.js loads it
 		// by name (new Worker('worker.js')) and proxies skywireVisor over postMessage.

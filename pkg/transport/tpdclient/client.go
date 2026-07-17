@@ -1,4 +1,4 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
 // Package tpdclient implements transport discovery client
 package tpdclient
