@@ -1,4 +1,4 @@
-// Package networkmonitor pkg/networkmonitor/networkmonitor.go
+// Package networkmonitor pkg/networkmonitor/networkmonitor.go c2-net-monitor
 package networkmonitor
 
 // WhitelistPKs store whitelisted keys of network monitor

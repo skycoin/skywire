@@ -1,4 +1,4 @@
-// Package clirpc root.go
+// Package clirpc cmd/skywire-cli/commands/rpc/root.go c4-vis-cli
 package clirpc
 
 import (

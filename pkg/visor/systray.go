@@ -1,7 +1,7 @@
 //go:build !withoutsystray
 // +build !withoutsystray
 
-// Package visor pkg/visor/systray.go
+// Package visor pkg/visor/systray.go c3-vis-core
 package visor
 
 import (

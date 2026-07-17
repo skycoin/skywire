@@ -1,4 +1,4 @@
-// Package rfclient implements client for route finder.
+// Package rfclient pkg/rfclient/types.go c2-net-routing
 package rfclient
 
 import (

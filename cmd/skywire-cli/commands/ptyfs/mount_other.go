@@ -1,6 +1,6 @@
 //go:build !linux
 
-// Package cliptyfs cmd/skywire-cli/commands/ptyfs/mount_other.go —
+// Package cliptyfs cmd/skywire-cli/commands/ptyfs/mount_other.go c4-vis-cli
 // non-Linux stub. The ptyfs subsystem itself is cross-platform
 // (server-side compiles everywhere), but the FUSE client only ships
 // on Linux today. macOS/Windows would need separate platform code

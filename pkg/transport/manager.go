@@ -1,4 +1,4 @@
-// Package transport pkg/transport/manager.go
+// Package transport pkg/transport/manager.go c2-net-transport
 package transport
 
 import (

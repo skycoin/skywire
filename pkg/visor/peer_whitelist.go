@@ -1,4 +1,4 @@
-// Package visor pkg/visor/peer_whitelist.go
+// Package visor pkg/visor/peer_whitelist.go c3-vis-core
 //
 // peerWhitelist is the visor's single source of truth for "which peer
 // PKs may manage this visor". Every management surface consults it

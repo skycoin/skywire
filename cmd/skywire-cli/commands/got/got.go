@@ -1,4 +1,4 @@
-// Package cligot cmd/skywire-cli/commands/got/got.go
+// Package cligot cmd/skywire-cli/commands/got/got.go c4-vis-cli
 package cligot
 
 import (

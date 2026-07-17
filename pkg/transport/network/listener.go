@@ -1,4 +1,4 @@
-// Package network pkg/transport/network/listener.go
+// Package network pkg/transport/network/listener.go c2-net-transport
 package network
 
 import (

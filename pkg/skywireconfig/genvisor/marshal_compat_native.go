@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package genvisor pkg/skywireconfig/genvisor/marshal_compat_native.go
+// Package genvisor pkg/skywireconfig/genvisor/marshal_compat_native.go c3-vis-core
 //
 // Native-build copy of the hand-rolled marshaler in marshal_js.go,
 // with every symbol renamed to a `Native` suffix to avoid colliding

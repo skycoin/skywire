@@ -1,4 +1,4 @@
-// Package clicache provides a single-file bbolt-backed cache that
+// Package clicache pkg/clicache/clicache.go c4-vis-cli
 // `skywire cli` commands use to memoize deployment-service fetches
 // (SD `/api/services`, TPD `/all-transports`, UT `/uptimes`, etc.)
 // for the CLI's --cfa minutes-old window.

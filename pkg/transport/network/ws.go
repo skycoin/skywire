@@ -1,4 +1,4 @@
-// Package network pkg/transport/network/ws.go
+// Package network pkg/transport/network/ws.go c2-net-transport
 //
 // WS is a first-class skywire transport type: a direct visor-to-visor link over
 // a WebSocket, with the peer's wss:// endpoint resolved from a PK table (like

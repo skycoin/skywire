@@ -1,3 +1,4 @@
+// Package wasmhv pkg/wasmhv/generate.go c3-vis-wasm
 package wasmhv
 
 import (

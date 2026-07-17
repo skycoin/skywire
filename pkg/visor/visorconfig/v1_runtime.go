@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/v1_runtime.go
+// Package visorconfig pkg/visor/visorconfig/v1_runtime.go c3-vis-core
 //
 // Non-WASM half of V1's mutator surface. Every method here takes a
 // *launcher.AppLauncher (the running app launcher whose ResetConfig

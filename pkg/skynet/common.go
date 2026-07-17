@@ -1,4 +1,4 @@
-// Package skynet internal/skynet/common.go
+// Package skynet pkg/skynet/common.go c2-app-skynet
 package skynet
 
 // MaxRequestSize limits incoming request bodies to prevent memory exhaustion.

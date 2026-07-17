@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/auth.go
+// Package commands cmd/apps/skychat/commands/auth.go c4-app-chat
 //
 // HTTP basic-auth gate for skychat. Off by default; on when a
 // password file is configured and non-empty.

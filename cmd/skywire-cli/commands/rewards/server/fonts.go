@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/fonts.go
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/fonts.go c4-vis-cli
 package clirewardsserver
 
 // Embedded mononoki font data as base64

@@ -1,4 +1,4 @@
-// Package dmsgdisc pkg/services/dmsgdisc/dmsgdisc.go
+// Package dmsgdisc pkg/services/dmsgdisc/dmsgdisc.go c2-vis-appsvc
 //
 // dmsg-discovery as a pkg/services.Service. Both the standalone
 // cobra command (`skywire dmsg disc`) and the multi-service

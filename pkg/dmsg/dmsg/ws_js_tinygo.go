@@ -1,6 +1,6 @@
 //go:build tinygo && js && wasm
 
-// Package dmsg pkg/dmsg/dmsg/ws_js_tinygo.go: dmsg-over-WebSocket CLIENT dial for
+// Package dmsg pkg/dmsg/dmsg/ws_js_tinygo.go c1-net-dmsg
 // the TinyGo browser target.
 //
 // coder/websocket (used by ws.go on every other target) pulls net/http through

@@ -1,4 +1,4 @@
-// Package stcp skywire-tcp
+// Package stcp pkg/transport/network/stcp/pktable.go c2-net-transport
 package stcp
 
 import (

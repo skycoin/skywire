@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package dmsg pkg/dmsg/dmsg/ws_server.go: dmsg-over-WebSocket SERVER side.
+// Package dmsg pkg/dmsg/dmsg/ws_server.go c1-net-dmsg
 //
 // Split out of ws.go behind //go:build !tinygo: ServeWS runs an http.Server
 // (net/http), which is broken on the TinyGo js target. The CLIENT dial path

@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_network.go c3-vis-core
 // api_network.go contains network connection, port forwarding, and module reinitialization API methods.
 package visor
 

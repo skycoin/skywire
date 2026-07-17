@@ -1,4 +1,4 @@
-// Package genvisor provides Generate — a single entry point that
+// Package genvisor pkg/skywireconfig/genvisor/genvisor.go c3-vis-core
 // composes a fresh visor configuration (pkg/visor/visorconfig.V1)
 // from a small Options struct plus the deployment-default services
 // embedded in pkg/skycoin/skywire/deployment (deployment.Prod /

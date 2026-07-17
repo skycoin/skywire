@@ -1,4 +1,4 @@
-// Package visor pkg/visor/policy_provider.go — visor-backed
+// Package visor pkg/visor/policy_provider.go c3-vis-core
 // implementation of pkg/router/policy.Provider. Surfaces the
 // visor's transport-tracker state, embedded geoip database,
 // service-discovery snapshot, operator-configured trust list,

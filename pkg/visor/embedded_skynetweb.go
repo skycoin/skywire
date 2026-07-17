@@ -1,4 +1,4 @@
-// Package visor pkg/visor/embedded_skynetweb.go
+// Package visor pkg/visor/embedded_skynetweb.go c3-vis-core
 //
 // EmbeddedSkynetWeb hosts the `.skynet` resolving proxy inside the
 // visor. Mirrors EmbeddedDmsgWeb's lifecycle (Start/Stop + Stats)

@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/sessions.go
+// Package clidmsg cmd/skywire-cli/commands/dmsg/sessions.go c4-vis-cli
 package clidmsg
 
 import (

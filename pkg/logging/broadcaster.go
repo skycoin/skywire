@@ -1,4 +1,4 @@
-// Package logging pkg/logging/broadcaster.go
+// Package logging pkg/logging/broadcaster.go c0-com-log
 package logging
 
 import (

@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_apps.go c3-vis-core
 // api_apps.go contains app management API methods.
 package visor
 

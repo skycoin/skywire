@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/pair.go
+// Package clivisor cmd/skywire-cli/commands/visor/pair.go c4-vis-cli
 //
 // `skywire cli visor pair` — drive the visor's chat-pair feed
 // manager from the CLI. Handy for testing the pairing pipeline

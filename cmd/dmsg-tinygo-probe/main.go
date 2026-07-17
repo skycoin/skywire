@@ -1,3 +1,4 @@
+// Package main cmd/dmsg-tinygo-probe/main.go c1-net-dmsg
 // Command dmsg-tinygo-probe is a minimal build-check that the dmsg client core
 // compiles under TinyGo (IoT / embedded targets). It constructs a dmsg.Client
 // and exits — it does not dial (a real IoT build supplies its own transport and

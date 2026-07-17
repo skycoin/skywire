@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/invite.go: encode + decode
+// Package group cmd/apps/skychat/group/invite.go c4-app-chat
 // the invite payload an owner hands to a prospective member.
 //
 // Invite-link grammar:

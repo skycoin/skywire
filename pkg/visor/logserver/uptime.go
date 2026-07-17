@@ -1,4 +1,4 @@
-// Package logserver — pkg/visor/logserver/uptime.go: gin shim for the
+// Package logserver pkg/visor/logserver/uptime.go c3-vis-core
 // pkg/serviceuptime HTTP handlers. Wires /uptime/* onto the visor's
 // existing logserver router so a CLI client can render the visor's
 // session history without going through the unix-socket RPC.

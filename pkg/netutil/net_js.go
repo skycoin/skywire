@@ -1,6 +1,6 @@
 //go:build js
 
-// Package netutil pkg/netutil/net_js.go
+// Package netutil pkg/netutil/net_js.go c0-com-util
 //
 // js/wasm build of pkg/netutil. The browser has no concept of
 // "default network interface" — the WASM runtime can't enumerate

@@ -1,4 +1,4 @@
-// Package clisvc cmd/skywire-cli/commands/svc/health.go
+// Package clisvc cmd/skywire-cli/commands/svc/health.go c4-vis-cli
 package clisvc
 
 import (

@@ -1,4 +1,4 @@
-// Package metrics pkg/dmsg/metrics/empty.go
+// Package metrics pkg/dmsg/dmsg/metrics/empty.go c1-net-dmsg
 package metrics
 
 // NewEmpty constructs new empty metrics.

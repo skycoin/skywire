@@ -1,4 +1,4 @@
-// Package main cmd/apps/vpn-router/vpn-router.go
+// Package main cmd/apps/vpn-router/vpn-router.go c4-app-vpn
 package main
 
 import (

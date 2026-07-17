@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/session.go: runtime
+// Package group cmd/apps/skychat/group/session.go c4-app-chat
 // lifecycle for one live group, parallel to pairing.Pair.
 //
 // One Session per (group, role) pair on each visor:

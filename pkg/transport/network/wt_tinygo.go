@@ -1,6 +1,6 @@
 //go:build tinygo && !(js && wasm)
 
-// Package network pkg/transport/network/wt_tinygo.go
+// Package network pkg/transport/network/wt_tinygo.go c2-net-transport
 //
 // TinyGo (non-browser/embedded) WT-transport stubs. A browser is handled by
 // wt_browser.go (js && wasm, either toolchain), which provides its own Start +

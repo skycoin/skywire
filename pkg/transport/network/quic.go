@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/quic.go: a QUIC-based skywire
+// Package network pkg/transport/network/quic.go c2-net-transport
 // transport. Mirrors the sudph/stcpr structure (AR-resolved, UDP-based)
 // but rides quic-go instead of KCP: the connection is secured by the
 // skywire-PK-bound TLS identity (quic_identity.go, option A), one QUIC

@@ -1,4 +1,4 @@
-// Package cxoaggregator runs a CXO node on the Transport Discovery
+// Package cxoaggregator pkg/transport-discovery/cxoaggregator/aggregator.go c4-net-discovery
 // that subscribes to per-visor TreeStore feeds and mirrors received
 // telemetry into the TPD's redis store.
 //

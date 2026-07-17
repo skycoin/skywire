@@ -1,4 +1,4 @@
-// Package got provides a concurrent HTTP download library with range request support.
+// Package got pkg/got/chunk.go c0-com-util
 // Based on github.com/melbahja/got, adapted and improved for skywire.
 package got
 

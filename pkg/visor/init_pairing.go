@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_pairing.go
+// Package visor pkg/visor/init_pairing.go c3-vis-core
 //
 // Init wiring for the chat-pair feed manager. Mirrors initStats and
 // initCXOUserFeeds: depends on dmsgC, opens its own bbolt store under

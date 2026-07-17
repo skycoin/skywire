@@ -1,4 +1,4 @@
-// Package appcommon pkg/app/appcommon/hello.go
+// Package appcommon pkg/app/appcommon/hello.go c2-vis-appsvc
 package appcommon
 
 import (

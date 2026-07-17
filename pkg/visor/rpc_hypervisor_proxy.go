@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_hypervisor_proxy.go
+// Package visor pkg/visor/rpc_hypervisor_proxy.go c3-vis-core
 //
 // RPC methods that proxy through the hypervisor's DMSG connections
 // to remote visors. These enable CLI/TUI access to remote visor data

@@ -1,5 +1,6 @@
 //go:build !tinygo
 
+// Package network pkg/transport/network/tcp_tune_native.go c2-net-transport
 package network
 
 import (

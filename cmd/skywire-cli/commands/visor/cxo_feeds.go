@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/cxo_feeds.go
+// Package clivisor cmd/skywire-cli/commands/visor/cxo_feeds.go c4-vis-cli
 //
 // `skywire cli visor cxo` — surface for the user-publishable CXO
 // TreeStore feeds. Each feed is its own DMSG listener under the

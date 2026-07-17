@@ -1,4 +1,4 @@
-// Package clisshd cmd/skywire-cli/commands/sshd/sshd.go — `skywire cli
+// Package clisshd cmd/skywire-cli/commands/sshd/sshd.go c4-vis-cli
 // sshd`, the OpenSSH-equivalent server over skywire identity. Thin
 // wrapper around pty.Host's direct-TCP entry point (PR #2559)
 // with sensible defaults for the standalone-daemon shape:

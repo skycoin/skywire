@@ -1,6 +1,6 @@
 //go:build !windows
 
-// Package pty pkg/pty/exec_unix.go
+// Package pty pkg/pty/exec_unix.go c3-vis-pty
 //
 // Unix-side platform helpers for the Exec gateway path. Splits out
 // the SysProcAttr setup (Setsid for process-group kill) and the

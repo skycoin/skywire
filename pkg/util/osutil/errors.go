@@ -1,4 +1,4 @@
-// Package osutil handles errors
+// Package osutil pkg/util/osutil/errors.go c0-com-util
 package osutil
 
 // ErrorWithStderr is an error raised by the external process.

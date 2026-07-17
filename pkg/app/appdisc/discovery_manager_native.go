@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package appdisc pkg/app/appdisc/discovery_manager_native.go
+// Package appdisc pkg/app/appdisc/discovery_manager_native.go c2-vis-appsvc
 //
 // The service-discovery-backed updaters. servicedisc.HTTPClient pulls net/http,
 // which does not compile on the TinyGo js/wasm target, so the serviceUpdater

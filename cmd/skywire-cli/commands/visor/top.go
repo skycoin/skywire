@@ -1,7 +1,7 @@
 //go:build ignore
 // +build ignore
 
-// Package clivisor cmd/skywire-cli/commands/visor/info.go
+// Package clivisor cmd/skywire-cli/commands/visor/top.go c4-vis-cli
 package clivisor
 
 import (

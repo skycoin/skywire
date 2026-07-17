@@ -1,6 +1,6 @@
 //go:build !tinygo && !(js && wasm)
 
-// Package dmsg pkg/dmsg/dmsg/wt.go: dmsg-over-WebTransport.
+// Package dmsg pkg/dmsg/dmsg/wt.go c1-net-dmsg
 //
 // Build tag: WebTransport pulls in quic-go + webtransport-go, neither of which
 // compiles under TinyGo (quic-go needs crypto/tls.QUICEncryptionLevel). It is a

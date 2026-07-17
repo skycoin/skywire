@@ -1,4 +1,4 @@
-// Package clirg cmd/skywire-cli/commands/rg/rg.go
+// Package clirg cmd/skywire-cli/commands/rg/rg.go c4-vis-cli
 package clirg
 
 import (

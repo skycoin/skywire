@@ -1,3 +1,4 @@
+// Package tests pkg/cxo/data/tests/cxds.go c2-net-cxo
 package tests
 
 import (

@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — the extra SelfProvider read-views the HV-UI node page needs from a
+// Package main cmd/wasm-visor/selfprovider_js.go c3-vis-wasm
 // browser visor (dmsg sessions, router settings, runtime config, runtime logs). Each
 // returns pre-marshaled JSON matching the native hypervisor's shape so the Angular UI
 // renders instead of erroring ("Failed to fetch dmsg sessions" / "subroute not

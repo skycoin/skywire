@@ -1,4 +1,4 @@
-// Package pty pkg/pty/cli_tcp.go — direct-TCP client
+// Package pty pkg/pty/cli_tcp.go c3-vis-pty
 // for the dmsgpty service. Counterpart to host_tcp.go: dials a raw
 // TCP listener exposed by the remote visor's pty.Host, runs an
 // XK noise handshake pinning the remote PK, and drives the same

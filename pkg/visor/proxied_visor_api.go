@@ -1,4 +1,4 @@
-// Package visor pkg/visor/proxied_visor_api.go
+// Package visor pkg/visor/proxied_visor_api.go c3-vis-core
 //
 // proxiedVisorAPI lets the hypervisor's HTTP layer talk to a visor
 // that isn't directly connected to it — instead reaching it through

@@ -1,3 +1,4 @@
+// Package armetrics pkg/address-resolver/metrics/victoria_metrics.go c4-net-discovery
 package armetrics
 
 import (

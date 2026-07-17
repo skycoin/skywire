@@ -1,4 +1,4 @@
-// Package dmsgcurl pkg/dmsgcurl/flags.go
+// Package dmsgcurl pkg/dmsg/dmsgcurl/flags.go c1-net-dmsg
 package dmsgcurl
 
 import (

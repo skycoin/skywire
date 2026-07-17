@@ -1,4 +1,4 @@
-// Package dmsghttp pkg/dmsg/dmsghttp/recursion_guard.go
+// Package dmsghttp pkg/dmsg/dmsghttp/recursion_guard.go c1-net-dmsg
 //
 // Recursion guard for dmsg-over-HTTP transports.
 //

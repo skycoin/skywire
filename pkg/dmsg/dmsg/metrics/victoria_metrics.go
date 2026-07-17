@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package metrics pkg/dmsg/metrics/victoria_metrics.go
+// Package metrics pkg/dmsg/dmsg/metrics/victoria_metrics.go c1-net-dmsg
 //
 // The VictoriaMetrics-backed Metrics impl pulls third_party/VictoriaMetrics
 // (runtime.MemStats fields TinyGo doesn't expose) + pkg/metricsutil, so it is

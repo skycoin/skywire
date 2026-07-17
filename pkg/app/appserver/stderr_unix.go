@@ -1,6 +1,7 @@
 //go:build !windows
 // +build !windows
 
+// Package appserver pkg/app/appserver/stderr_unix.go c2-vis-appsvc
 package appserver
 
 func getIgnoreErrs() []string {

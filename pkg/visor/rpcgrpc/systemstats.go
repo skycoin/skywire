@@ -1,4 +1,4 @@
-// Package rpcgrpc provides gRPC streaming services for the visor
+// Package rpcgrpc pkg/visor/rpcgrpc/systemstats.go c3-vis-core
 package rpcgrpc
 
 import (

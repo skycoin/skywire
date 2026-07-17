@@ -1,4 +1,4 @@
-// Package skynet srv.go
+// Package skynet cmd/skywire-cli/commands/skynet/srv.go c4-vis-cli
 package skynet
 
 import (

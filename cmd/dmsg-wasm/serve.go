@@ -1,5 +1,6 @@
 //go:build ignore
 
+// Package main cmd/dmsg-wasm/serve.go c1-net-dmsg
 // serve.go — static file server + control bridge for the dmsg-wasm harness.
 //
 // Beyond serving the page, it lets an EXTERNAL operator (curl) drive the browser

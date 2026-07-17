@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/single_reward.go
+// Package clilog cmd/skywire-cli/commands/log/single_reward.go c4-vis-cli
 //
 // `cli log reward <pk>` — fetch the remote visor's /reward.txt
 // file over dmsghttp. Only exists when the operator has set a

@@ -1,3 +1,4 @@
+// Package node pkg/cxo/node/errors.go c2-net-cxo
 package node
 
 import (

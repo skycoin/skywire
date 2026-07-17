@@ -1,4 +1,4 @@
-// Package dmsgdisc pkg/services/dmsgdisc/config.go
+// Package dmsgdisc pkg/services/dmsgdisc/config.go c2-vis-appsvc
 //
 // JSON schema for dmsg-discovery as both a standalone-service config
 // file (cmd/dmsg/dmsg-discovery -c path) AND a service block in a

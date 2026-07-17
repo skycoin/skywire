@@ -1,4 +1,4 @@
-// Package message is the single source of truth for skychat's peer-to-peer wire
+// Package message pkg/skychat/message/message.go c4-app-chat
 // format: length-prefixed frames and the chat-msg/chat-ack envelope.
 //
 // Before this package the same framing (a 4-byte big-endian length followed by

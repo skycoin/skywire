@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_host_stats.go
+// Package visor pkg/visor/api_host_stats.go c3-vis-core
 //
 // HostStats — psutil-style resource snapshot of the host the visor
 // is running on. Backs the hypervisor UI's "Resource Monitor"

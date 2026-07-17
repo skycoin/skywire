@@ -1,4 +1,4 @@
-// Package api pkg/transport-discovery/api/cxo_all_transports_publisher.go
+// Package api pkg/transport-discovery/api/cxo_all_transports_publisher.go c4-net-discovery
 //
 // CXO publisher for the network-wide all-transports snapshot. On a
 // fixed cadence (default 60s) the publisher reads the store's

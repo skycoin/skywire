@@ -1,4 +1,4 @@
-// Package appcommon pkg/app/appcommon/proc_config.go
+// Package appcommon pkg/app/appcommon/proc_config.go c2-vis-appsvc
 package appcommon
 
 import (

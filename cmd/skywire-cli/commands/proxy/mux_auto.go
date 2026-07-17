@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/proxy/mux_auto.go
+// Package skysocksc cmd/skywire-cli/commands/proxy/mux_auto.go c4-vis-cli
 //
 // mux-auto is the adaptive control loop — the "adaptive" leg of the
 // observable -> manual -> adaptive arc. It reads the live mux-info signals

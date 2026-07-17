@@ -1,4 +1,4 @@
-// Package commands cmd/dmsgpty-cli/commands/whitelist.go
+// Package commands cmd/dmsg/pty-cli/commands/whitelist.go c1-net-dmsg
 package commands
 
 import (

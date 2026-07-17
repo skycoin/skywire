@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/keyfile.go
+// Package cmdutil pkg/cmdutil/keyfile.go c0-com-util
 package cmdutil
 
 import (

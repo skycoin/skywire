@@ -1,3 +1,4 @@
+// Package store pkg/uptime-tracker/store/visors_response.go c4-net-discovery
 package store
 
 import (

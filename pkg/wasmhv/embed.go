@@ -1,3 +1,4 @@
+// Package wasmhv pkg/wasmhv/embed.go c3-vis-wasm
 package wasmhv
 
 import (

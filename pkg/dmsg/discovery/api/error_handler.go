@@ -1,4 +1,4 @@
-// Package api pkg/discovery/api/error_handler.go
+// Package api pkg/dmsg/discovery/api/error_handler.go c1-net-dmsg
 package api
 
 import (

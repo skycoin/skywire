@@ -1,4 +1,4 @@
-// Package pty pkg/pty/exec_gateway.go
+// Package pty pkg/pty/exec_gateway.go c3-vis-pty
 //
 // Non-interactive command execution over the existing dmsgpty trust
 // model. Operators can already spawn a remote shell via `cli dmsg pty

@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package dmsgclient pkg/dmsgclient/cli_fallback.go
+// Package dmsgclient pkg/dmsg/dmsgclient/cli_fallback.go c1-net-dmsg
 //
 // net/http-using dmsg bootstrap helpers — excluded from TinyGo builds (net/http
 // is broken on the js target). The net/http-free fallbackDiscClient that these

@@ -1,4 +1,4 @@
-// Package cligot got_skywire.go — skynet:// and dmsg:// URL handling.
+// Package cligot cmd/skywire-cli/commands/got/got_skywire.go c4-vis-cli
 //
 // `got` accepts http(s) URLs natively (chunked downloads, SOCKS5
 // proxy support) and additionally accepts skynet://<pk>:<port>/path

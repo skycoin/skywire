@@ -1,4 +1,4 @@
-// Package ping cmd/skywire-cli/commands/visor/ping/root.go
+// Package ping cmd/skywire-cli/commands/visor/ping/root.go c4-vis-cli
 package ping
 
 import (

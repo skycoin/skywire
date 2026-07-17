@@ -1,3 +1,4 @@
+// Package visor pkg/visor/init_apps.go c3-vis-core
 // init_apps.go contains app launcher and CLI initialization logic.
 package visor
 

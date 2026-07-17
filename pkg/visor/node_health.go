@@ -1,4 +1,4 @@
-// Package visor pkg/visor/node_health.go
+// Package visor pkg/visor/node_health.go c3-vis-core
 package visor
 
 import (

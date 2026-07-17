@@ -1,4 +1,4 @@
-// Package climail cmd/skywire-cli/commands/mail/mail.go
+// Package climail cmd/skywire-cli/commands/mail/mail.go c4-vis-cli
 //
 // `skywire cli mail` — runtime control surface for the visor's
 // in-process SMTP→skywire bridge (pkg/visor/embedded_skymail_bridge.go).

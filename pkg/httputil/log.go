@@ -1,4 +1,4 @@
-// Package httputil pkg/httputil/log.go
+// Package httputil pkg/httputil/log.go c0-com-http
 package httputil
 
 import (

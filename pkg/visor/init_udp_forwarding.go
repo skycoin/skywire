@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_udp_forwarding.go: server side of
+// Package visor pkg/visor/init_udp_forwarding.go c3-vis-core
 // faithful-UDP port forwarding (#2607 stage-4c). The dial/client side
 // lives in appnet (DialPacket). This is the accept side: for every
 // forwarded port marked UDP, the visor registers datagram intent with

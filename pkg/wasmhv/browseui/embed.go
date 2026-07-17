@@ -1,4 +1,4 @@
-// Package browseui embeds the HV-UI mini-desktop bundle — the shared
+// Package browseui pkg/wasmhv/browseui/embed.go c3-vis-wasm
 // dmsg/clearnet virtual-browser engine plus its window manager — in a
 // dependency-free leaf package, so BOTH the wasm-visor (pkg/wasmhv) and the
 // native hypervisor UI (pkg/visor) can use it without an import cycle

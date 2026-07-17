@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_dmsg.go c3-vis-core
 // api_dmsg.go contains DMSG ping, bandwidth, and HTTP API methods.
 package visor
 

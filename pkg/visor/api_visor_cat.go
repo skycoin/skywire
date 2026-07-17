@@ -1,4 +1,4 @@
-// Package visor api_visor_cat.go — VisorCat RPC method.
+// Package visor pkg/visor/api_visor_cat.go c3-vis-core
 //
 // VisorCat bridges a remote dmsg / skynet stream to a 127.0.0.1
 // loopback TCP listener inside the visor process. The CLI dials that

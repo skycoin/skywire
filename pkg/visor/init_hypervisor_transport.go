@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_hypervisor_transport.go
+// Package visor pkg/visor/init_hypervisor_transport.go c3-vis-core
 //
 // Visor → hypervisor transport auto-upgrade.
 //

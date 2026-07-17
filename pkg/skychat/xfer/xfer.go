@@ -1,4 +1,4 @@
-// Package xfer pkg/skychat/xfer/xfer.go c2-app-chat
+// Package xfer pkg/skychat/xfer/xfer.go c4-app-chat
 //
 // xfer is skychat's file-transfer primitive: it moves one file over a single
 // skywire stream (a dmsg stream or a skynet route — the caller supplies the

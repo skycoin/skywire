@@ -1,4 +1,4 @@
-// Package app pkg/app/client.go
+// Package app pkg/app/client.go c2-vis-appsvc
 package app
 
 import (

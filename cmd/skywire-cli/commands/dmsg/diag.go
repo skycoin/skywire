@@ -1,4 +1,4 @@
-// Package clidmsg diag.go — DMSG runtime diagnostics CLI commands
+// Package clidmsg cmd/skywire-cli/commands/dmsg/diag.go c4-vis-cli
 package clidmsg
 
 import (

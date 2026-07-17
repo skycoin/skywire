@@ -1,4 +1,4 @@
-// Package wasm pkg/router/policy/wasm/abi.go — JSON wire format
+// Package wasm pkg/router/policy/wasm/abi.go c2-net-routing
 // for the WASM-host ABI. Operators writing TinyGo / Go-WASM
 // policies get the same input shape (RoutingContext + candidates
 // list) and return the same RouteSpec; the host side serializes

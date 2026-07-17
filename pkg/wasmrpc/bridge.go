@@ -1,4 +1,4 @@
-// Package wasmrpc bridges a browser wasm-visor's net/rpc server to local
+// Package wasmrpc pkg/wasmrpc/bridge.go c3-vis-wasm
 // `skywire cli` clients.
 //
 // A wasm-visor runs in a browser tab and cannot open a TCP listener, so the

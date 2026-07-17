@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/uptime.go: renders
+// Package clivisor cmd/skywire-cli/commands/visor/uptime.go c4-vis-cli
 // the visor's own session-history (started_at, last_seen, version per
 // process incarnation) recorded by pkg/serviceuptime. Pulls data via
 // the visor RPC's UptimeHistory method, so works whether or not the

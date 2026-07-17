@@ -1,4 +1,4 @@
-// Package commands cmd/smb/commands/smb.go
+// Package commands cmd/smb/commands/smb.go c4-app-mail
 //
 // Standalone SMTP→dmsg bridge ("smb") — no visor dependency. The
 // binary creates its own dmsg.Client (either with a provided

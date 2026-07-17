@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/single_visor_log.go
+// Package clilog cmd/skywire-cli/commands/log/single_visor_log.go c4-vis-cli
 //
 // `cli log file <pk>` — stream a single visor's /visor.log over
 // dmsghttp. Requires the remote visor to have been started with

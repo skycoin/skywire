@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_network_view.go
+// Package visor pkg/visor/api_network_view.go c3-vis-core
 //
 // NetworkView — server-side combination of service-discovery,
 // transport-discovery, and uptime-tracker data into a per-PK

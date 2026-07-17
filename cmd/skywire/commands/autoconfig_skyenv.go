@@ -1,4 +1,4 @@
-// Package commands cmd/skywire/commands/autoconfig_skyenv.go
+// Package commands cmd/skywire/commands/autoconfig_skyenv.go c4-vis-cli
 //
 // updateSkyenvFile applies a list of key/value edits to a bash-style
 // env file (e.g. /etc/skywire.conf). For each edit:

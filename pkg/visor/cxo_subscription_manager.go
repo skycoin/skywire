@@ -1,4 +1,4 @@
-// Package visor pkg/visor/cxo_subscription_manager.go
+// Package visor pkg/visor/cxo_subscription_manager.go c3-vis-core
 //
 // Thin visor-side shim over the reusable pkg/cxo/cxosub cycle-based
 // CXO sync manager. The implementation lives in cxosub, decoupled

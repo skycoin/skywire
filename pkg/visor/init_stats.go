@@ -1,4 +1,4 @@
-// Package visor — pkg/visor/init_stats.go: wires the local telemetry
+// Package visor pkg/visor/init_stats.go c3-vis-core
 // store into the visor lifecycle.
 //
 // initStats opens the bbolt store, builds the pull-style probes

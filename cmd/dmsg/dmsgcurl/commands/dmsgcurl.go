@@ -1,4 +1,4 @@
-// Package commands cmd/dmsgcurl/commands
+// Package commands cmd/dmsg/dmsgcurl/commands/dmsgcurl.go c1-net-dmsg
 package commands
 
 import (

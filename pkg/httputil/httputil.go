@@ -1,4 +1,4 @@
-// Package httputil pkg/httputil/httputil.go
+// Package httputil pkg/httputil/httputil.go c0-com-http
 package httputil
 
 import (

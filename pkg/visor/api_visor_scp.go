@@ -1,4 +1,4 @@
-// Package visor api_visor_scp.go — VisorSCP RPC method.
+// Package visor pkg/visor/api_visor_scp.go c3-vis-core
 //
 // VisorSCP performs a dmsgscp-protocol file transfer from inside
 // the visor process. The visor has both transports plumbed

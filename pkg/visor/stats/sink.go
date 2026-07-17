@@ -1,4 +1,4 @@
-// Package stats — pkg/visor/stats/sink.go: Sink interface + helpers
+// Package stats pkg/visor/stats/sink.go c3-vis-core
 // for mirroring telemetry into an external destination, typically a
 // CXO publisher.
 //

@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package disc pkg/dmsg/disc/interface_tinygo.go
+// Package disc pkg/dmsg/disc/interface_tinygo.go c1-net-dmsg
 //
 // TinyGo build of the package-wide `json` codec. The native build uses
 // jsoniter.ConfigFastest (interface_native.go); under TinyGo we use the

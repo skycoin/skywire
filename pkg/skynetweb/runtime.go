@@ -1,4 +1,4 @@
-// Package skynetweb is the `.skynet` counterpart to pkg/dmsgweb:
+// Package skynetweb pkg/skynetweb/runtime.go c4-app-skynet
 // a localhost SOCKS5 proxy that resolves `<pk>.skynet[:<port>]`
 // hostnames by dialing the remote visor's skynet server over the
 // skywire routing mesh and performing the skynet client handshake.

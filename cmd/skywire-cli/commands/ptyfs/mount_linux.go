@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package cliptyfs cmd/skywire-cli/commands/ptyfs/mount_linux.go —
+// Package cliptyfs cmd/skywire-cli/commands/ptyfs/mount_linux.go c4-vis-cli
 // FUSE mount + unmount for the ptyfs subsystem. Maps each FUSE op
 // onto the matching github.com/pkg/sftp call.
 //

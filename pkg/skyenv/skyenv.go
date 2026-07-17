@@ -1,4 +1,4 @@
-// Package skyenv defines variables and constants
+// Package skyenv pkg/skyenv/skyenv.go c0-com-env
 package skyenv
 
 import (

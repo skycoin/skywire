@@ -1,4 +1,4 @@
-// Package appserver pkg/app/appserver/errors.go
+// Package appserver pkg/app/appserver/errors.go c2-vis-appsvc
 package appserver
 
 // netErr implements `net.Error` to properly

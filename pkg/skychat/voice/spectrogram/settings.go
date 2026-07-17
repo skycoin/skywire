@@ -1,3 +1,4 @@
+// Package spectrogram pkg/skychat/voice/spectrogram/settings.go c4-app-chat
 package spectrogram
 
 import "sync"

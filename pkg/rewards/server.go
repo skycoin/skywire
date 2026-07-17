@@ -1,3 +1,4 @@
+// Package rewards pkg/rewards/server.go c4-app-rewards
 package rewards
 
 import (

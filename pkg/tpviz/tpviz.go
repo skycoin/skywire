@@ -1,4 +1,4 @@
-// Package tpviz provides a web-based transport discovery visualizer
+// Package tpviz pkg/tpviz/tpviz.go c4-app-rewards
 package tpviz
 
 import (

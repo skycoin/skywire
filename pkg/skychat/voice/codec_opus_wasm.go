@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package voice pkg/skychat/voice/codec_opus_wasm.go
+// Package voice pkg/skychat/voice/codec_opus_wasm.go c4-app-chat
 //
 // Browser build: no pure-Go Opus. github.com/thesyncim/gopus ships ~200 KB of
 // static CELT lookup tables (celt.pulseCacheLookup50 et al.) as package-level

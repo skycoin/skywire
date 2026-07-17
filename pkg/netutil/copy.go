@@ -1,4 +1,4 @@
-// Package netutil pkg/netutil/copy.go
+// Package netutil pkg/netutil/copy.go c0-com-util
 package netutil
 
 import (

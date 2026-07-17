@@ -1,4 +1,4 @@
-// Package clidmsgpty cmd/skywire-cli/commands/dmsgpty/root.go
+// Package clidmsgpty cmd/skywire-cli/commands/dmsgpty/root.go c4-vis-cli
 package clidmsgpty
 
 import (

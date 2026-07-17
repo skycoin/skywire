@@ -1,3 +1,4 @@
+// Package node pkg/cxo/node/swarm.go c2-net-cxo
 package node
 
 import (

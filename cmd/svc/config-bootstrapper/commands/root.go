@@ -1,4 +1,4 @@
-// Package commands cmd/config-bootstrapper/commands/root.go
+// Package commands cmd/svc/config-bootstrapper/commands/root.go c4-net-discovery
 package commands
 
 import (

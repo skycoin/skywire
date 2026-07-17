@@ -1,4 +1,4 @@
-// Package clisurvey cmd/skywire-cli/commands/survey/root.go
+// Package clisurvey cmd/skywire-cli/commands/survey/root.go c4-vis-cli
 package clisurvey
 
 import (

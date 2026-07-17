@@ -1,4 +1,4 @@
-// Package main — in-tab BTC gateway: the wasm twin of the native HV BTC gateway
+// Package main cmd/wasm-visor/btc_js.go c3-vis-wasm
 // (pkg/btcgateway). The browser skycoin-web wallet does BTC key derivation, tx
 // building and signing itself (skycoin-lite WASM); it only needs chain data.
 // This runs the electrum→HTTP gateway inside the tab, dialing a clearnet ssl://

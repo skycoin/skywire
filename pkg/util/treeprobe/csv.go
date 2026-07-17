@@ -6,6 +6,7 @@
 // Synth's directive: one CSV consumable by the harness assertion
 // stage (Beta's #2726 mux-probe-assert and successors).
 
+// Package treeprobe pkg/util/treeprobe/csv.go c0-com-util
 package treeprobe
 
 import (

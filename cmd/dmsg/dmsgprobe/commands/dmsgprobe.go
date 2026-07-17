@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/dmsgprobe/commands
+// Package commands cmd/dmsg/dmsgprobe/commands/dmsgprobe.go c1-net-dmsg
 package commands
 
 import (

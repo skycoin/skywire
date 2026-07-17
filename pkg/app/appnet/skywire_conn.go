@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/skywire_conn.go
+// Package appnet pkg/app/appnet/skywire_conn.go c2-vis-appsvc
 package appnet
 
 import (

@@ -1,4 +1,4 @@
-// Package spec is the WASM-clean schema half of pkg/transport/network.
+// Package spec pkg/transport/network/spec/spec.go c2-net-transport
 // Currently holds STCPConfig (the visor-side Skywire-TCP configuration
 // stanza) — a pure-data type that pkg/visor/visorconfig.V1 embeds.
 //

@@ -1,7 +1,7 @@
 //go:build !windows && !tinygo && !js
 // +build !windows,!tinygo,!js
 
-// Package appserver pkg/app/appserver/proc_credential_unix.go
+// Package appserver pkg/app/appserver/proc_credential_unix.go c2-vis-appsvc
 //
 // Sets the cmd's credentials (UID/GID) before exec on POSIX systems.
 // Looked up from the system's user database via os/user; the spawned

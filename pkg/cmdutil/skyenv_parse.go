@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/skyenv_parse.go
+// Package cmdutil pkg/cmdutil/skyenv_parse.go c0-com-util
 //
 // Native-Go parser for the SKYENV config file (/etc/skywire.conf on
 // Linux, %ProgramData%\Skywire\skywire.conf on Windows). Replaces the

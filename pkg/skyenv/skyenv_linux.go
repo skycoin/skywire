@@ -1,7 +1,7 @@
 //go:build linux
 // +build linux
 
-// Package skyenv defines variables and constants
+// Package skyenv pkg/skyenv/skyenv_linux.go c0-com-env
 package skyenv
 
 const (
