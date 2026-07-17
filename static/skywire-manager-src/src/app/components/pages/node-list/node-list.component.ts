@@ -985,7 +985,8 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
         }
       });
     }
-    return {incoming, outgoing};
+
+    return {incoming: incoming, outgoing: outgoing};
   }
 
   /**

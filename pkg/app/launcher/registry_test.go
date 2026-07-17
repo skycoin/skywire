@@ -36,8 +36,8 @@ func TestHTTPHandlerRegistry(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/status", nil)
 	h.ServeHTTP(rec, req)
 	res := rec.Result()
-	body, _ := io.ReadAll(res.Body)
-	_ = res.Body.Close() //nolint:errcheck
+	body, _ := io.ReadAll(res.Body) //nolint:errcheck // test read; error not material
+	_ = res.Body.Close()            //nolint:errcheck
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", res.StatusCode)
 	}
