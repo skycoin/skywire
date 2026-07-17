@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"sync"
+	"time"
 
 	"github.com/jfreymuth/pulse/proto"
 )
@@ -19,8 +20,9 @@ type Client struct {
 	playback map[uint32]*PlaybackStream
 	record   map[uint32]*RecordStream
 
-	server string
-	props  proto.PropList
+	server  string
+	props   proto.PropList
+	timeout time.Duration
 }
 
 // NewClient connects to the server.
@@ -45,7 +47,18 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		return nil, err
 	}
 
+	if c.timeout != 0 {
+		c.c.SetTimeout(c.timeout)
+	}
+
 	err = c.c.Request(&proto.SetClientName{Props: c.props}, &proto.SetClientNameReply{})
+	if err != nil {
+		c.conn.Close()
+		return nil, err
+	}
+
+	// Listen for changes to the sink input, which includes changes in volume.
+	err = c.c.Request(&proto.Subscribe{Mask: proto.SubscriptionMaskSinkInput}, nil)
 	if err != nil {
 		c.conn.Close()
 		return nil, err
@@ -73,7 +86,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 			c.mu.Lock()
 			stream, ok := c.playback[msg.StreamIndex]
 			c.mu.Unlock()
-			if ok && stream.state == running && !stream.underflow {
+			if ok && stream.state.is(running) && !stream.underflow {
 				stream.started <- true
 			}
 		case *proto.Underflow:
@@ -81,7 +94,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 			stream, ok := c.playback[msg.StreamIndex]
 			c.mu.Unlock()
 			if ok {
-				if stream.state == running {
+				if stream.state.is(running) {
 					stream.underflow = true
 				}
 			}
@@ -90,7 +103,7 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 			for _, p := range c.playback {
 				close(p.request)
 				p.err = ErrConnectionClosed
-				p.state = serverLost
+				p.state.set(serverLost)
 			}
 			for _, r := range c.record {
 				r.err = ErrConnectionClosed
@@ -100,6 +113,33 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 			c.record = make(map[uint32]*RecordStream)
 			c.mu.Unlock()
 			c.conn.Close()
+		case *proto.SubscribeEvent:
+			if msg.Event&proto.EventFacilityMask == proto.EventSinkSinkInput {
+				// Something about the sink input changed, but we don't know
+				// what exactly. Signal this to the playback stream.
+				var stream *PlaybackStream
+				c.mu.Lock()
+				for _, v := range c.playback {
+					if msg.Index == v.createReply.SinkInputIndex {
+						stream = v
+					}
+				}
+				c.mu.Unlock()
+				if stream != nil {
+					stream.eventsLock.Lock()
+					if stream.events != nil {
+						// Do a non-blocking send.
+						// Because subscribeEvent is a buffered channel and
+						// because the channel has no contents (just signals),
+						// no message will be lost due to races.
+						select {
+						case stream.events <- struct{}{}:
+						default:
+						}
+					}
+					stream.eventsLock.Unlock()
+				}
+			}
 		default:
 			//fmt.Printf("%#v\n", msg)
 		}
@@ -134,6 +174,14 @@ func ClientApplicationIconName(name string) ClientOption {
 // https://www.freedesktop.org/wiki/Software/PulseAudio/Documentation/User/ServerStrings/
 func ClientServerString(s string) ClientOption {
 	return func(c *Client) { c.server = s }
+}
+
+// ClientTimeout sets the timeout of requests to the specified duration.
+// If d is 0, the default value (1 s) will be used.
+func ClientTimeout(d time.Duration) ClientOption {
+	return func(c *Client) {
+		c.timeout = d
+	}
 }
 
 // RawRequest can be used to send arbitrary requests.

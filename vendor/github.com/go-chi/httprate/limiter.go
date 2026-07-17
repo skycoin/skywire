@@ -1,9 +1,9 @@
 package httprate
 
 import (
-	"fmt"
 	"math"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -37,6 +37,11 @@ func NewRateLimiter(requestLimit int, windowLength time.Duration, options ...Opt
 	}
 
 	if rl.limitCounter == nil {
+		// Align windows to this limiter's start instant, not the wall clock, so resets
+		// spread out instead of all snapping to the same instant (e.g. the exact second).
+		// Safe only in-process; custom counters (e.g. Redis) stay wall-clock-aligned.
+		start := time.Now().UTC()
+		rl.windowOffset = start.Sub(start.Truncate(windowLength))
 		rl.limitCounter = NewLocalLimitCounter(windowLength)
 	} else {
 		rl.limitCounter.Config(requestLimit, windowLength)
@@ -56,6 +61,7 @@ func NewRateLimiter(requestLimit int, windowLength time.Duration, options ...Opt
 type RateLimiter struct {
 	requestLimit  int
 	windowLength  time.Duration
+	windowOffset  time.Duration
 	keyFn         KeyFunc
 	limitCounter  LimitCounter
 	onRateLimited http.HandlerFunc
@@ -69,15 +75,15 @@ type RateLimiter struct {
 // it increments the request count and returns false. This method does not send an HTTP response,
 // so the caller must handle the response themselves or use the RespondOnLimit() method instead.
 func (l *RateLimiter) OnLimit(w http.ResponseWriter, r *http.Request, key string) bool {
-	currentWindow := time.Now().UTC().Truncate(l.windowLength)
+	currentWindow := l.currentWindow(time.Now().UTC())
 	ctx := r.Context()
 
 	limit := l.requestLimit
 	if val := getRequestLimit(ctx); val > 0 {
 		limit = val
 	}
-	setHeader(w, l.headers.Limit, fmt.Sprintf("%d", limit))
-	setHeader(w, l.headers.Reset, fmt.Sprintf("%d", currentWindow.Add(l.windowLength).Unix()))
+	setHeader(w, l.headers.Limit, strconv.Itoa(limit))
+	setHeader(w, l.headers.Reset, strconv.FormatInt(currentWindow.Add(l.windowLength).Unix(), 10))
 
 	l.mu.Lock()
 	_, rateFloat, err := l.calculateRate(key, limit)
@@ -90,14 +96,14 @@ func (l *RateLimiter) OnLimit(w http.ResponseWriter, r *http.Request, key string
 
 	increment := getIncrement(r.Context())
 	if increment > 1 {
-		setHeader(w, l.headers.Increment, fmt.Sprintf("%d", increment))
+		setHeader(w, l.headers.Increment, strconv.Itoa(increment))
 	}
 
 	if rate+increment > limit {
-		setHeader(w, l.headers.Remaining, fmt.Sprintf("%d", limit-rate))
+		setHeader(w, l.headers.Remaining, strconv.Itoa(limit-rate))
 
 		l.mu.Unlock()
-		setHeader(w, l.headers.RetryAfter, fmt.Sprintf("%d", int(l.windowLength.Seconds()))) // RFC 6585
+		setHeader(w, l.headers.RetryAfter, strconv.Itoa(int(l.windowLength.Seconds()))) // RFC 6585
 		return true
 	}
 
@@ -109,7 +115,7 @@ func (l *RateLimiter) OnLimit(w http.ResponseWriter, r *http.Request, key string
 	}
 	l.mu.Unlock()
 
-	setHeader(w, l.headers.Remaining, fmt.Sprintf("%d", limit-rate-increment))
+	setHeader(w, l.headers.Remaining, strconv.Itoa(limit-rate-increment))
 	return false
 }
 
@@ -149,9 +155,16 @@ func (l *RateLimiter) Handler(next http.Handler) http.Handler {
 	})
 }
 
+// currentWindow returns the start of the rate-limit window containing t, aligned
+// to windowOffset rather than the wall clock. When windowOffset is zero this is a
+// plain truncation. The result is always in (t-windowLength, t].
+func (l *RateLimiter) currentWindow(t time.Time) time.Time {
+	return t.Add(-l.windowOffset).Truncate(l.windowLength).Add(l.windowOffset)
+}
+
 func (l *RateLimiter) calculateRate(key string, requestLimit int) (bool, float64, error) {
 	now := time.Now().UTC()
-	currentWindow := now.Truncate(l.windowLength)
+	currentWindow := l.currentWindow(now)
 	previousWindow := currentWindow.Add(-l.windowLength)
 
 	currCount, prevCount, err := l.limitCounter.Get(key, currentWindow, previousWindow)
