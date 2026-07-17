@@ -34,6 +34,13 @@ type SessionCommon struct {
 	// wss converge to WebTransport: see Client.UpgradeBrowserSessions.
 	carrier string
 
+	// carrierAddr is the endpoint the carrier actually dialed: host:port for
+	// tcp/quic, the ws(s):// URL for ws, the https:// URL for WebTransport.
+	// Empty for accepted (server-side) sessions. Together with carrier it
+	// tells you the exact protocol a client used to reach its dmsg server
+	// (and, for ws, whether it was plain ws:// or secured wss://).
+	carrierAddr string
+
 	netConn net.Conn // underlying net.Conn (TCP connection to the dmsg server)
 	// ys      *yamux.Session
 	// ss      *smux.Session
@@ -237,6 +244,20 @@ func (sc *SessionCommon) LocalPK() cipher.PubKey { return sc.entity.pk }
 
 // RemotePK returns the remote public key of the session.
 func (sc *SessionCommon) RemotePK() cipher.PubKey { return sc.rPK }
+
+// Carrier reports how this client session's byte pipe to the dmsg server was
+// dialed: one of CarrierTCP / CarrierWS / CarrierWT / CarrierQUIC. It is empty
+// for accepted (server-side) sessions. Use Protocol for a human-readable label
+// that also distinguishes ws from wss.
+func (sc *SessionCommon) Carrier() string { return sc.carrier }
+
+// CarrierAddr reports the endpoint this session's carrier dialed. Empty for
+// accepted (server-side) sessions.
+func (sc *SessionCommon) CarrierAddr() string { return sc.carrierAddr }
+
+// Protocol renders a human-readable label for the protocol this session used
+// to reach its dmsg server, distinguishing plain ws:// from secured wss://.
+func (sc *SessionCommon) Protocol() string { return ProtocolLabel(sc.carrier, sc.carrierAddr) }
 
 // LocalTCPAddr returns the local address of the underlying TCP connection.
 func (sc *SessionCommon) LocalTCPAddr() net.Addr { return sc.netConn.LocalAddr() }

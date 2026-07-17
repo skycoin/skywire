@@ -60,8 +60,16 @@ func printDmsgSessions(result *visor.DmsgClientSessions) {
 		}
 		fmt.Printf("%s (%s)\n", info.Role, info.PK)
 		fmt.Printf("  Connected sessions: %d\n", info.Count)
-		for _, s := range info.Servers {
-			fmt.Printf("    %s\n", s)
+		// Prefer the enriched session list (server PK + the protocol it was
+		// reached over); fall back to bare PKs for older visors.
+		if len(info.Sessions) > 0 {
+			for _, s := range info.Sessions {
+				fmt.Printf("    %s  %s\n", s.PK, s.Protocol)
+			}
+		} else {
+			for _, s := range info.Servers {
+				fmt.Printf("    %s\n", s)
+			}
 		}
 		fmt.Println()
 	}
