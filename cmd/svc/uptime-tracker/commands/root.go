@@ -1,4 +1,4 @@
-// Package commands cmd/uptime-tracker/commands/root.go
+// Package commands cmd/svc/uptime-tracker/commands/root.go c4-net-discovery
 package commands
 
 import (

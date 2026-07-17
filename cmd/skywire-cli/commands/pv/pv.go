@@ -1,4 +1,4 @@
-// Package pv cmd/skywire-cli/commands/pv/pv.go
+// Package pv cmd/skywire-cli/commands/pv/pv.go c4-vis-cli
 package pv
 
 import (

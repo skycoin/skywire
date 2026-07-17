@@ -1,6 +1,6 @@
 //go:build tinygo && !(js && wasm)
 
-// Package network pkg/transport/network/wt_tinygo_nows.go
+// Package network pkg/transport/network/wt_tinygo_nows.go c2-net-transport
 //
 // WT dial stub for non-browser TinyGo targets (e.g. wasip1, bare-metal). There
 // is no browser WebTransport API here and webtransport-go (quic-go) is excluded,

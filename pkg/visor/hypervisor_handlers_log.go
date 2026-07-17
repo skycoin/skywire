@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_log.go — /api/log Server-Sent
+// Package visor pkg/visor/hypervisor_handlers_log.go c3-vis-core
 // Events stream of the local visor's live log, so the HV-UI log window can show
 // the NATIVE visor's server-side log (the wasm visor logs to the browser console
 // and is captured there directly; the native visor's log lives server-side).

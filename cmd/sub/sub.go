@@ -1,4 +1,4 @@
-// Package main cmd/sub/sub.go
+// Package main cmd/sub/sub.go c2-net-transport
 //
 // Standalone (dmsg-only) UDP→dmsg bridge ("sub"). Length-prefixed
 // UDP datagrams ferried over a dmsg stream. Plan B for

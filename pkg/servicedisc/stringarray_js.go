@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package servicedisc pkg/servicedisc/stringarray_js.go
+// Package servicedisc pkg/servicedisc/stringarray_js.go c2-net-discovery
 //
 // Browser build: LocalIPs is a plain []string. The Postgres-backed
 // pq.StringArray (stringarray_native.go) is only needed by the service

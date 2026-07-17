@@ -1,4 +1,4 @@
-// Package pathutil pkg/util/pathutil/util.go
+// Package pathutil pkg/util/pathutil/util.go c0-com-util
 package pathutil
 
 import (

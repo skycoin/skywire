@@ -1,4 +1,4 @@
-// Package clicompletion generate completion script
+// Package clicompletion cmd/skywire-cli/commands/completion/completion.go c4-vis-cli
 package clicompletion
 
 import (

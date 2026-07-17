@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_hypervisors.go c3-vis-core
 package visor
 
 import (

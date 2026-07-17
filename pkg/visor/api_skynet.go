@@ -1,4 +1,4 @@
-// Package visor api_skynet.go — SkynetHTTP RPC method
+// Package visor pkg/visor/api_skynet.go c3-vis-core
 package visor
 
 import (

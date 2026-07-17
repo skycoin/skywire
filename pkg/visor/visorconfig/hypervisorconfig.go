@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/hypergo
+// Package visorconfig pkg/visor/visorconfig/hypervisorconfig.go c3-vis-core
 //
 // The CookieConfig.SameSite() method (which returns http.SameSite)
 // is the only net/http user in this file; it's moved to

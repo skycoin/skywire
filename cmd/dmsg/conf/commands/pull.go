@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg/conf/commands/pull.go
+// Package commands cmd/dmsg/conf/commands/pull.go c1-net-dmsg
 package commands
 
 import (

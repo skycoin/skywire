@@ -1,4 +1,4 @@
-// Package cmdutil provides shared command utilities for dmsg services.
+// Package cmdutil pkg/dmsg/cmdutil/pprof.go c1-net-dmsg
 package cmdutil
 
 import (

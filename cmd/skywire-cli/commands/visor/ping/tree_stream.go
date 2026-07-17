@@ -1,4 +1,4 @@
-// Package ping — cmd/skywire-cli/commands/visor/ping/tree_stream.go:
+// Package ping cmd/skywire-cli/commands/visor/ping/tree_stream.go c4-vis-cli
 // thin gRPC client for the StreamPingTree RPC. The visor does the
 // BFS server-side and pushes PingTreeEvents over the stream; this
 // command renders each event either as a human-readable row

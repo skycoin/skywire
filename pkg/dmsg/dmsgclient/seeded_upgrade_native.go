@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package dmsgclient pkg/dmsg/dmsgclient/seeded_upgrade_native.go
+// Package dmsgclient pkg/dmsg/dmsgclient/seeded_upgrade_native.go c1-net-dmsg
 package dmsgclient
 
 import (

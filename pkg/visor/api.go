@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api.go
+// Package visor pkg/visor/api.go c3-vis-core
 package visor
 
 import (

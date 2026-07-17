@@ -1,3 +1,4 @@
+// Package armetrics pkg/address-resolver/metrics/metrics.go c4-net-discovery
 package armetrics
 
 // Metrics collects metrics for metrics tracking system.

@@ -1,5 +1,6 @@
 //go:build tinygo && !(js && wasm)
 
+// Package transport pkg/transport/manager_ar_tinygo.go c2-net-transport
 package transport
 
 // ARClient returns the address resolver client as an untyped value. Under TinyGo

@@ -1,4 +1,4 @@
-// Package launcher pkg/app/launcher/registry.go
+// Package launcher pkg/app/launcher/registry.go c2-vis-appsvc
 package launcher
 
 import (

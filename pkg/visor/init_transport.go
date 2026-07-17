@@ -1,3 +1,4 @@
+// Package visor pkg/visor/init_transport.go c3-vis-core
 // init_transport.go contains transport initialization logic.
 package visor
 

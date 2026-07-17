@@ -1,4 +1,4 @@
-// Package dmsgcurl pkg/dmsgcurl/dmsgcurl.go
+// Package dmsgcurl pkg/dmsg/dmsgcurl/dmsgcurl.go c1-net-dmsg
 package dmsgcurl
 
 import (

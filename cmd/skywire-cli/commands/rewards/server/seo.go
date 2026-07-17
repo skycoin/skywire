@@ -1,4 +1,4 @@
-// Package clirewardsserver seo.go — SEO enrichment for per-date reward
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/seo.go c4-vis-cli
 // pages.
 //
 // Crawlers index per-page metadata better when the title + description

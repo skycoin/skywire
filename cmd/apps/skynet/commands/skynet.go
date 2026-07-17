@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skynet/commands/skynet.go
+// Package commands cmd/apps/skynet/commands/skynet.go c4-app-skynet
 package commands
 
 import (

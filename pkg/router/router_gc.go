@@ -1,3 +1,4 @@
+// Package router pkg/router/router_gc.go c2-net-routing
 // router_gc.go contains garbage collection for routing rules.
 package router
 

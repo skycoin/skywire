@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_proxies.go
+// Package visor pkg/visor/api_proxies.go c3-vis-core
 //
 // Runtime status + live enable/disable for the in-process resolving
 // proxies (dmsgweb, skynetweb). Hypervisor UI reads EmbeddedProxies

@@ -1,5 +1,6 @@
 //go:build js
 
+// Package idxdb pkg/cxo/data/idxdb/drive_js.go c2-net-cxo
 // js/wasm stubs for the on-disk (bbolt) index DB. bbolt does not build under
 // js/wasm, so the disk implementation lives in drive.go (//go:build !js). A wasm
 // visor uses the in-memory index (NewMemeoryDB) via skyobject's InMemoryDB path,

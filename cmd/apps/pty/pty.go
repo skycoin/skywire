@@ -1,4 +1,4 @@
-// Package main cmd/apps/pty/pty.go — standalone binary entry point
+// Package main cmd/apps/pty/pty.go c3-vis-pty
 // for `skywire app pty`. Mostly a courtesy: the main use of this
 // command tree is via the unified `skywire` binary's `app pty`
 // subcommand, mounted from cmd/skywire/commands/root.go.

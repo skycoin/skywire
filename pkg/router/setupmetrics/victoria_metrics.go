@@ -1,4 +1,4 @@
-// Package setupmetrics pkg/router/setupmetrics/victoria_metrics.go
+// Package setupmetrics pkg/router/setupmetrics/victoria_metrics.go c2-net-routing
 package setupmetrics
 
 import (

@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/commands/pairing.go
+// Package commands cmd/apps/skychat/commands/pairing.go c4-app-chat
 //
 // Pair-feed integration: HTTP endpoints, structured-message handshake
 // over the legacy direct path, and the inbound-poll bridge into the

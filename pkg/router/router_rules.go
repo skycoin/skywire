@@ -1,3 +1,4 @@
+// Package router pkg/router/router_rules.go c2-net-routing
 // router_rules.go contains rule and route group management logic.
 package router
 

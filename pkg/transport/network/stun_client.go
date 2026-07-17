@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/stun_client.go
+// Package network pkg/transport/network/stun_client.go c2-net-transport
 package network
 
 import (

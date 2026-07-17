@@ -1,4 +1,4 @@
-// Package presets pkg/router/policy/presets — curated routing-policy programs
+// Package presets pkg/router/policy/presets/presets.go c2-net-routing
 // embedded in the skywire binary, selectable by name without writing or
 // compiling a policy file. A config value of the form "preset:<name>" resolves
 // to one of these (see pkg/router/policy/loader.go), so a remote visor runs the

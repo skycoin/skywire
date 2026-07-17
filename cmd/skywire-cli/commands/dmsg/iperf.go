@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/iperf.go: `skywire
+// Package clidmsg cmd/skywire-cli/commands/dmsg/iperf.go c4-vis-cli
 // cli dmsg iperf <pk>:<port>` and `skywire cli dmsg iperf listen
 // <port>` — bulk throughput measurement over a dmsg stream.
 //

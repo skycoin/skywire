@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/cat.go: the
+// Package clidmsg cmd/skywire-cli/commands/dmsg/cat.go c4-vis-cli
 // `skywire cli dmsg cat` and `skywire cli dmsg cat listen`
 // subcommands. Splice stdio with a remote peer over either dmsg or
 // the skywire router.

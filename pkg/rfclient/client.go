@@ -1,6 +1,6 @@
 //go:build !tinygo || (js && wasm)
 
-// Package rfclient implements client for route finder.
+// Package rfclient pkg/rfclient/client.go c2-net-routing
 //
 // This file holds the net/http-backed implementation (NewHTTP) and is
 // native-only; the net/http-free interface and types live in types.go so

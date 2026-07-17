@@ -1,3 +1,4 @@
+// Package log pkg/cxo/node/log/log.go c2-net-cxo
 package log
 
 import (

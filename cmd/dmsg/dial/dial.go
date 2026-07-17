@@ -1,3 +1,4 @@
+// Package main cmd/dmsg/dial/dial.go c1-net-dmsg
 // package main cmd/dial/dial.go
 package main
 

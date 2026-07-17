@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package disc pkg/dmsg/disc/interface_native.go
+// Package disc pkg/dmsg/disc/interface_native.go c1-net-dmsg
 //
 // Package-wide `json` codec (jsoniter.ConfigFastest). Build-tag-
 // gated off the WASM path: jsoniter pulls encoding/json which

@@ -1,4 +1,4 @@
-// Package appevent broadcaster.go
+// Package appevent pkg/app/appevent/broadcaster.go c2-vis-appsvc
 package appevent
 
 import (

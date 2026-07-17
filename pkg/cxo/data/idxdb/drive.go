@@ -1,5 +1,6 @@
 //go:build !js
 
+// Package idxdb pkg/cxo/data/idxdb/drive.go c2-net-cxo
 // The bbolt-backed on-disk index DB. Excluded from js/wasm (bbolt does not build
 // there); the js build gets stub constructors in drive_js.go and uses
 // NewMemeoryDB via skyobject's InMemoryDB path instead.

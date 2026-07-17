@@ -1,5 +1,6 @@
 //go:build js && wasm && tinygo
 
+// Package main cmd/dmsg-wasm/fetch_tinygo.go c1-net-dmsg
 package main
 
 import (

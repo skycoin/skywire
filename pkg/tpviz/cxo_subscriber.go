@@ -1,4 +1,4 @@
-// Package tpviz pkg/tpviz/cxo_subscriber.go
+// Package tpviz pkg/tpviz/cxo_subscriber.go c4-app-rewards
 //
 // Optional integration with the visor's on-demand CXO subscription
 // manager. When the hypervisor wires one in via SetCXOSubMgr,

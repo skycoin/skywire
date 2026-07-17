@@ -1,4 +1,4 @@
-// Package pty pkg/pty/sftp_client.go — client-side helpers for the
+// Package pty pkg/pty/sftp_client.go c3-vis-pty
 // dmsgpty sftp subsystem.
 //
 // Two surfaces: DialSftpTCP for the direct-TCP path (same noise-XK

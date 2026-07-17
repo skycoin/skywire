@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_setup.go: route-setup-side
+// Package router pkg/router/datagram_setup.go c2-net-routing
 // construction of the faithful-UDP DatagramRouteGroup sibling. Stage
 // 4b of #2607.
 //

@@ -1,6 +1,6 @@
 //go:build !(js && wasm)
 
-// Package servicedisc pkg/servicedisc/stringarray_native.go
+// Package servicedisc pkg/servicedisc/stringarray_native.go c2-net-discovery
 //
 // On server/native builds LocalIPs is backed by pq.StringArray so the
 // service-discovery store can persist it into a Postgres text[] column

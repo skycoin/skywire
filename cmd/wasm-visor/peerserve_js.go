@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — peer-interface parity for the browser visor.
+// Package main cmd/wasm-visor/peerserve_js.go c3-vis-wasm
 //
 // A native visor automatically serves a handful of dmsg "peer interfaces" so
 // other visors / hypervisors / the CLI can reach, health-check, latency-probe,

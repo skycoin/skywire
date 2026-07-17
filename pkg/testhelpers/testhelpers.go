@@ -1,4 +1,4 @@
-// Package testhelpers provides helpers for testing.
+// Package testhelpers pkg/testhelpers/testhelpers.go c0-com-util
 package testhelpers
 
 import (

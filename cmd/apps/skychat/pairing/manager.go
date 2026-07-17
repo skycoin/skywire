@@ -1,4 +1,4 @@
-// Package pairing — cmd/apps/skychat/pairing/manager.go: orchestrates
+// Package pairing cmd/apps/skychat/pairing/manager.go c4-app-chat
 // a visor's collection of chat pairs.
 //
 // The Manager owns the bbolt Store and a map[cipher.PubKey]*Pair of

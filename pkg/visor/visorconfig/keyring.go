@@ -1,3 +1,4 @@
+// Package visorconfig pkg/visor/visorconfig/keyring.go c3-vis-core
 package visorconfig
 
 import (

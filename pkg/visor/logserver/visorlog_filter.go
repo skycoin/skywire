@@ -1,4 +1,4 @@
-// Package logserver pkg/visor/logserver/visorlog_filter.go — server-side
+// Package logserver pkg/visor/logserver/visorlog_filter.go c3-vis-core
 // filtering for the /visor.log endpoint.
 //
 // /visor.log is logrus-formatted text on disk; over dmsg/skynet the wire is

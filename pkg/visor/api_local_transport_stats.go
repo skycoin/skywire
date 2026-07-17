@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_local_transport_stats.go
+// Package visor pkg/visor/api_local_transport_stats.go c3-vis-core
 //
 // Local transport-bandwidth read API. The visor's stats tracker
 // (pkg/visor/stats) already keeps a bbolt-backed rollup of every

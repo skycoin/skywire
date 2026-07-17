@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/zgroups.go
+// Package clivisor cmd/skywire-cli/commands/visor/zgroups.go c4-vis-cli
 //
 // Groups the 17 subcommands of `skywire cli visor` so the help output
 // renders as discoverable sections instead of a flat wall. Filename

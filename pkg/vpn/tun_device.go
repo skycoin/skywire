@@ -1,4 +1,4 @@
-// Package vpn internal/vpn/tun_device.go
+// Package vpn pkg/vpn/tun_device.go c4-app-vpn
 package vpn
 
 import (

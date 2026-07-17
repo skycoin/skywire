@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package httputil pkg/httputil/json_tinygo.go
+// Package httputil pkg/httputil/json_tinygo.go c0-com-http
 //
 // TinyGo build of the package-wide `json` codec. The native build uses
 // jsoniter.ConfigFastest (json_native.go), which drags in

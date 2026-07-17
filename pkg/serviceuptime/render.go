@@ -1,4 +1,4 @@
-// Package serviceuptime — pkg/serviceuptime/render.go: shared text
+// Package serviceuptime pkg/serviceuptime/render.go c2-net-discovery
 // renderer for the CLI. Both `skywire cli visor uptime` and
 // `skywire cli svc <name> uptime` go through here so the output is
 // uniform across a deployment.

@@ -1,4 +1,4 @@
-// Package stun pkg/services/stun/stun.go
+// Package stun pkg/services/stun/stun.go c2-vis-appsvc
 //
 // stun-server as a pkg/services.Service. Implements RFC 3489 NAT
 // discovery; requires two distinct IPs for full NAT-type detection

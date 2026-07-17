@@ -1,4 +1,4 @@
-// Package httputil pkg/httputil/error.go
+// Package httputil pkg/httputil/error.go c0-com-http
 package httputil
 
 import (

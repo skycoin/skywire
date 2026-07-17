@@ -1,4 +1,4 @@
-// Package commands cmd/skywire-services/commands/services.go
+// Package commands cmd/svc/skywire-services/commands/root.go c4-net-discovery
 package commands
 
 import (

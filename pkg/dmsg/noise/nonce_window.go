@@ -1,4 +1,4 @@
-// Package noise pkg/noise/nonce_window.go
+// Package noise pkg/dmsg/noise/nonce_window.go c1-net-dmsg
 package noise
 
 import (

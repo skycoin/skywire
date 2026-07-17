@@ -1,4 +1,4 @@
-// Package visor pkg/visor/config_refresh.go
+// Package visor pkg/visor/config_refresh.go c3-vis-core
 package visor
 
 import (

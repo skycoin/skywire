@@ -1,4 +1,4 @@
-// Package pty pkg/pty/ui_dialer.go
+// Package pty pkg/pty/ui_dialer.go c3-vis-pty
 package pty
 
 import (

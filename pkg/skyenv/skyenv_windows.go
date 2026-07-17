@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-// Package skyenv defines variables and constants
+// Package skyenv pkg/skyenv/skyenv_windows.go c0-com-env
 package skyenv
 
 const (

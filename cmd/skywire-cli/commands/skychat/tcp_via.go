@@ -1,4 +1,4 @@
-// Package cliskychat — tcp_via.go: noise-TCP direct send path for
+// Package cliskychat cmd/skywire-cli/commands/skychat/tcp_via.go c4-vis-cli
 // `cli skychat send --via tcp://<pk>@host:port`. Mirrors the
 // dmsgpty `--via tcp://` pattern: dial the remote chat-app's
 // --tcp-listen port, run noise XK with the remote's PK pinned,

@@ -1,4 +1,4 @@
-// Package app pkg/app/conn.go
+// Package app pkg/app/conn.go c2-vis-appsvc
 package app
 
 import (

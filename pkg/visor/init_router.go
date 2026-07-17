@@ -1,3 +1,4 @@
+// Package visor pkg/visor/init_router.go c3-vis-core
 // init_router.go contains router initialization logic.
 package visor
 

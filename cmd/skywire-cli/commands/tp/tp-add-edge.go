@@ -1,4 +1,4 @@
-// Package clitp cmd/skywire-cli/commands/tp/tp-add-edge.go
+// Package clitp cmd/skywire-cli/commands/tp/tp-add-edge.go c4-vis-cli
 package clitp
 
 import (

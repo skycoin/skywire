@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_transport_proxy.go
+// Package visor pkg/visor/rpc_transport_proxy.go c3-vis-core
 //
 // TransportRPCProxy enables CLI access to a remote visor's RPC through
 // the local visor's transport. The CLI connects to the local visor

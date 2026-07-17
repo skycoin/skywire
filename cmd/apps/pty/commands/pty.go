@@ -1,4 +1,4 @@
-// Package commands cmd/apps/pty/commands/pty.go — the unified
+// Package commands cmd/apps/pty/commands/pty.go c3-vis-pty
 // `skywire app pty <mode>` command tree.
 //
 // The pty (pseudoterminal) subsystem has four operational modes:

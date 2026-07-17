@@ -1,3 +1,4 @@
+// Package visorcore pkg/visor/visorcore/autoconnect.go c3-vis-core
 package visorcore
 
 import (

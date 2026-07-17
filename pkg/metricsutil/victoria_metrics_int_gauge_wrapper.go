@@ -1,4 +1,4 @@
-// Package metricsutil pkg/metricsutil/victoria_metrics_int_gauge_wrapper.go
+// Package metricsutil pkg/metricsutil/victoria_metrics_int_gauge_wrapper.go c0-com-util
 package metricsutil
 
 import (

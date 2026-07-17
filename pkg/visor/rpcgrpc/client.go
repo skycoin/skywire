@@ -1,3 +1,4 @@
+// Package rpcgrpc pkg/visor/rpcgrpc/client.go c3-vis-core
 package rpcgrpc
 
 import (

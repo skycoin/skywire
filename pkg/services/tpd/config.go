@@ -1,4 +1,4 @@
-// Package tpd pkg/services/tpd/config.go
+// Package tpd pkg/services/tpd/config.go c2-vis-appsvc
 //
 // JSON schema for transport-discovery as both a standalone config
 // file (cmd/svc/transport-discovery -c path) AND a service block in

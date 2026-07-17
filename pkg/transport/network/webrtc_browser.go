@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package network pkg/transport/network/webrtc_browser.go
+// Package network pkg/transport/network/webrtc_browser.go c2-net-transport
 //
 // Browser WebRTC carrier: dial/accept a direct DataChannel via the browser-native
 // RTCPeerConnection (syscall/js), signaling over the same dmsg-backed signalConn

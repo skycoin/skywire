@@ -1,4 +1,4 @@
-// Package visor pkg/visor/group.go
+// Package visor pkg/visor/group.go c3-vis-core
 //
 // Visor-level wrapper around the cmd/apps/skychat/group package.
 // Mirrors pkg/visor/pairing.go in shape: owns one group.Manager

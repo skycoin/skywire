@@ -1,4 +1,4 @@
-// Package policy implements operator-programmable routing policy
+// Package policy pkg/router/policy/types.go c2-net-routing
 // for the visor's per-dial route selection. See RFC #2882
 // (docs/routing_policy_rfc.md) for the design.
 //

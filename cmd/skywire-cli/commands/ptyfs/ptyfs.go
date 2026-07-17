@@ -1,4 +1,4 @@
-// Package cliptyfs cmd/skywire-cli/commands/ptyfs/ptyfs.go —
+// Package cliptyfs cmd/skywire-cli/commands/ptyfs/ptyfs.go c4-vis-cli
 // `skywire cli pty fs`: mount a peer visor's filesystem over the
 // skywire pty subsystem. Like the sshfs tool, but there is no SSH —
 // the transport is a noise-XK connection keyed to public keys.

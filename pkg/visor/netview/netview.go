@@ -1,4 +1,4 @@
-// Package netview builds the network-view table (SD service-discovery + TPD
+// Package netview pkg/visor/netview/netview.go c3-vis-core
 // all-transports + UT uptimes aggregated per-PK), shared by the native visor
 // (pkg/visor) and the wasm-visor (cmd/wasm-visor). It is a dependency-free leaf
 // (only encoding/json + strings + time) so the wasm-visor can import it —

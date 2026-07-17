@@ -1,4 +1,4 @@
-// Package noise — pkg/dmsg/noise/pqhybrid.go
+// Package noise pkg/dmsg/noise/pqhybrid.go c1-net-dmsg
 //
 // Self-contained post-quantum hybrid key-agreement layer (ML-KEM-768) that
 // composes with the classical Noise_KK handshake. See

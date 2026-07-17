@@ -1,4 +1,4 @@
-// Package deprecated pkg/transport/deprecated/deprecated.go
+// Package deprecated pkg/transport/deprecated/deprecated.go c2-net-transport
 package deprecated
 
 import (

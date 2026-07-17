@@ -1,4 +1,4 @@
-// Package main cmd/dmsg-socks5/dmsg-socks5.go
+// Package main cmd/dmsg/dmsg-socks5/dmsg-socks5.go c1-net-dmsg
 package main
 
 import (

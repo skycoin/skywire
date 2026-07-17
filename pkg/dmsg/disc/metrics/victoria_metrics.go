@@ -1,4 +1,4 @@
-// Package metrics pkg/disc/metrics/victoria_metrics.go
+// Package metrics pkg/dmsg/disc/metrics/victoria_metrics.go c1-net-dmsg
 package metrics
 
 import (

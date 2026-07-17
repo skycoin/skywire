@@ -1,4 +1,4 @@
-// Package ping — cmd/skywire-cli/commands/visor/ping/mux_bandwidth_tui.go:
+// Package ping cmd/skywire-cli/commands/visor/ping/mux_bandwidth_tui.go c4-vis-cli
 // Bubble Tea TUI consumer of the StreamMuxBandwidth gRPC RPC.
 //
 // Operator-visible: `cli visor ping mux-bw-tui <pk>` runs the same

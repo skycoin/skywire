@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package network pkg/transport/network/wt_browser.go
+// Package network pkg/transport/network/wt_browser.go c2-net-transport
 //
 // Browser WT-transport DIAL: a browser visor dials a peer visor's WebTransport
 // endpoint via the browser-native WebTransport API, pinning the peer's

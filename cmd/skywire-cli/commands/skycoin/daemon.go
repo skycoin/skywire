@@ -1,3 +1,4 @@
+// Package cliskycoin cmd/skywire-cli/commands/skycoin/daemon.go c4-vis-cli
 package cliskycoin
 
 import (

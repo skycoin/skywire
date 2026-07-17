@@ -1,3 +1,4 @@
+// Package router pkg/router/router_packet.go c2-net-routing
 // router_packet.go contains all packet handling logic.
 package router
 

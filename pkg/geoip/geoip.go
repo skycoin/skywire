@@ -1,4 +1,4 @@
-// Package geoip embeds the MaxMind GeoLite2-City database and exposes
+// Package geoip pkg/geoip/geoip.go c0-com-util
 // a lookup function. Used by the visor (for service-discovery
 // geolocation tagging without an HTTP round-trip to the geoip service)
 // and by `cmd/svc/geoip` (the standalone HTTP geoip service).

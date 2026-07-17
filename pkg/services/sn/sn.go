@@ -1,4 +1,4 @@
-// Package sn pkg/services/sn/sn.go
+// Package sn pkg/services/sn/sn.go c2-vis-appsvc
 //
 // setup-node as a pkg/services.Service. Listens on dmsg port 36 for
 // route-setup RPC requests; optionally builds a transport manager

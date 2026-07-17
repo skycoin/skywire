@@ -1,4 +1,4 @@
-// Package visor pkg/visor/cxo_user_feeds.go
+// Package visor pkg/visor/cxo_user_feeds.go c3-vis-core
 //
 // CXO user-feed registry. Each visor publishes one always-on system
 // feed (the telemetry feed wired up by initStats on

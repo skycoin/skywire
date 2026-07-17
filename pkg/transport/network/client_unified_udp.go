@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/client_unified_udp.go
+// Package network pkg/transport/network/client_unified_udp.go c2-net-transport
 //
 // The unified transport port (UDP side): bind ONE master UDP socket and route the
 // UDP transport types (QUIC + sudph) over it via a udpDemux, so they share a

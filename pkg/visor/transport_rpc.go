@@ -1,4 +1,4 @@
-// Package visor pkg/visor/transport_rpc.go
+// Package visor pkg/visor/transport_rpc.go c3-vis-core
 //
 // TransportRPC serves the visor's RPC interface over skywire transports
 // using VisorRPCPacket (route ID 0) virtual streams. This allows remote

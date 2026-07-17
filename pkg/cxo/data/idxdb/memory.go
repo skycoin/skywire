@@ -1,3 +1,4 @@
+// Package idxdb pkg/cxo/data/idxdb/memory.go c2-net-cxo
 package idxdb
 
 import (

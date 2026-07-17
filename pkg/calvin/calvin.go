@@ -7,6 +7,7 @@ go run pkg/skywire-utilities/calvin/cmd/calvin@develop convert text to ascii art
 └─┘└─┘┘└┘ └┘ └─┘┴└─ ┴    ┴ └─┘┴ └─ ┴    ┴ └─┘  ┴ ┴└─┘└─┘┴┴  ┴ ┴┴└─ ┴   └  └─┘┘└┘ ┴
 */
 
+// Package calvin pkg/calvin/calvin.go c0-com-util
 package calvin
 
 import (

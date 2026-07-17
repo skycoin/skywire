@@ -1,4 +1,4 @@
-// Package commands cmd/dial/commands/dial.go
+// Package commands cmd/dmsg/dial/commands/dial.go c1-net-dmsg
 package commands
 
 import (

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/embedded_route_setup.go
+// Package visor pkg/visor/embedded_route_setup.go c3-vis-core
 package visor
 
 import (

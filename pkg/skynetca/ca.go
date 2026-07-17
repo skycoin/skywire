@@ -1,4 +1,4 @@
-// Package skynetca implements a locally-installed certificate
+// Package skynetca pkg/skynetca/ca.go c4-app-skynet
 // authority used by the skywire resolver to terminate TLS for
 // `*.skynet` and `*.dmsg` hostnames in the visitor's browser.
 //

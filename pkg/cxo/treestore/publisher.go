@@ -1,4 +1,4 @@
-// Package treestore — pkg/cxo/treestore/publisher.go: hierarchical
+// Package treestore pkg/cxo/treestore/publisher.go c2-net-cxo
 // CXO publisher.
 //
 // The publisher maintains an in-memory tree of named entries. Each

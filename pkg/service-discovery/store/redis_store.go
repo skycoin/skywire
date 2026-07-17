@@ -1,4 +1,4 @@
-// Package store pkg/service-discovery/store/redis_store.go
+// Package store pkg/service-discovery/store/redis_store.go c4-net-discovery
 package store
 
 import (

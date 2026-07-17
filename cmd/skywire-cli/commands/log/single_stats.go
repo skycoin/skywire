@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/single_stats.go
+// Package clilog cmd/skywire-cli/commands/log/single_stats.go c4-vis-cli
 //
 // `cli log stats <pk> [path]` — fetch the remote visor's
 // /stats[/path] endpoint over dmsghttp. Stats is a typed

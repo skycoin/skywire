@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/const.go
+// Package dmsg pkg/dmsg/dmsg/const.go c1-net-dmsg
 package dmsg
 
 import (

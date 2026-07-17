@@ -1,4 +1,4 @@
-// Package transport provides CXO transport adapters.
+// Package transport pkg/cxo/node/transport/dmsg.go c2-net-cxo
 // dmsg.go implements a CXO transport factory over DMSG connections,
 // allowing CXO nodes to communicate via skywire's DMSG network
 // instead of raw TCP.

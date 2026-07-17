@@ -1,4 +1,4 @@
-// Package handshake handles handhakes
+// Package handshake pkg/transport/network/handshake/handshake.go c2-net-transport
 package handshake
 
 import (

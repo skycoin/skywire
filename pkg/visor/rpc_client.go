@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_client.go
+// Package visor pkg/visor/rpc_client.go c3-vis-core
 package visor
 
 import (

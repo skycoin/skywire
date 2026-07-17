@@ -31,6 +31,7 @@
 // GetAllTransports round-trip — at which point this cache becomes a
 // thin adapter over the CXO-backed store.
 
+// Package router pkg/router/tpd_cache.go c2-net-routing
 package router
 
 import (

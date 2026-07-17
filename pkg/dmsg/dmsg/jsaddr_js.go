@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package dmsg pkg/dmsg/dmsg/jsaddr_js.go: tiny net.Addr / net.Error helpers
+// Package dmsg pkg/dmsg/dmsg/jsaddr_js.go c1-net-dmsg
 // shared by the browser WebSocket (ws_js_tinygo.go, tinygo only) and WebTransport
 // (wt_js_tinygo.go, all js/wasm) carrier adapters. Lives in a js&&wasm file so
 // std-Go js/wasm — which uses coder/websocket for the dmsg WS session but still

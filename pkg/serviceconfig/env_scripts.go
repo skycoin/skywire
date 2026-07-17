@@ -1,3 +1,4 @@
+// Package config pkg/serviceconfig/env_scripts.go c4-net-discovery
 package config
 
 // EnvScripts is a collection of environment scripts

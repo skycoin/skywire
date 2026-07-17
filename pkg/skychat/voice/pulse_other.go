@@ -1,6 +1,6 @@
 //go:build !linux && !(js && wasm) && (!voiceaudio || (!windows && !darwin))
 
-// Package voice pkg/skychat/voice/pulse_other.go c2-app-chat
+// Package voice pkg/skychat/voice/pulse_other.go c4-app-chat
 //
 // Audio stub for platforms without a native backend: everything that isn't Linux
 // (pure-Go PulseAudio), isn't a Windows/macOS `voiceaudio` build (cgo malgo,

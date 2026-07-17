@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — in-browser public autoconnect over WS.
+// Package main cmd/wasm-visor/autoconnect_js.go c3-vis-wasm
 //
 // A browser leaf can't accept inbound transports, but it CAN dial out. To join
 // the mesh (so routes can form) it periodically fetches the public-visor list

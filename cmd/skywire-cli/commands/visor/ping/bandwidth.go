@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/bandwidth.go
+// Package clivisor cmd/skywire-cli/commands/visor/ping/bandwidth.go c4-vis-cli
 package ping
 
 import (

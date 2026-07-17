@@ -1,4 +1,4 @@
-// Package network pkg/transport/network/webrtc.go
+// Package network pkg/transport/network/webrtc.go c2-net-transport
 //
 // WEBRTC is a first-class skywire transport type: a direct visor-to-visor link
 // over a WebRTC DataChannel (DTLS+SCTP, NAT-traversed via ICE). Unlike WS/WT

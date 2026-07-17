@@ -1,4 +1,4 @@
-// Package pairing — cmd/apps/skychat/pairing/crypto.go: end-to-end
+// Package pairing cmd/apps/skychat/pairing/crypto.go c4-app-chat
 // body encryption for chat-pair feeds.
 //
 // Threat model: the pair feed lives at a publicly-known DMSG port

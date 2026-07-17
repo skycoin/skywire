@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_all_transports.go
+// Package visor pkg/visor/api_all_transports.go c3-vis-core
 //
 // Reader-side helper for the TPD all-transports CXO snapshot. The
 // publisher lives in pkg/transport-discovery/api/cxo_all_transports_publisher.go

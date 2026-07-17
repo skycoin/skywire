@@ -1,6 +1,6 @@
 //go:build js
 
-// Package genvisor pkg/skywireconfig/genvisor/marshal_js.go
+// Package genvisor pkg/skywireconfig/genvisor/marshal_js.go c3-vis-core
 //
 // Hand-rolled streaming JSON serializer for visorconfig.V1. Lives
 // in the js build-tag because the WASM-clean path can't use

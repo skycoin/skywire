@@ -1,3 +1,4 @@
+// Package store pkg/transport-discovery/store/redis_metrics.go c4-net-discovery
 package store
 
 import (

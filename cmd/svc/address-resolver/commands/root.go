@@ -1,4 +1,4 @@
-// Package commands cmd/address-resolver/commands/root.go
+// Package commands cmd/svc/address-resolver/commands/root.go c4-net-discovery
 package commands
 
 import (

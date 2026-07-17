@@ -1,6 +1,6 @@
 //go:build !tinygo && !js
 
-// Package appserver pkg/app/appserver/proc_external_native.go
+// Package appserver pkg/app/appserver/proc_external_native.go c2-vis-appsvc
 //
 // External (OS-subprocess) launch path for a Proc. It uses os/exec and the
 // james-barrow/golang-ipc Windows IPC server, neither of which compiles on the

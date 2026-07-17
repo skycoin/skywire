@@ -1,4 +1,4 @@
-// Package transport pkg/transport/log.go
+// Package transport pkg/transport/log.go c2-net-transport
 //
 // Per-transport bandwidth counters that the manager exposes to the rest
 // of the visor. The store is in-memory only — historical (per-day)

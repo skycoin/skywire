@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_wallet.go — the HV-served skycoin
+// Package visor pkg/visor/hypervisor_handlers_wallet.go c3-vis-core
 // wallet ("wallet HV-served" mode, docs/design/gui-app-serving-modes.md).
 //
 // The native hypervisor serves the embedded skycoin-web static bundle at

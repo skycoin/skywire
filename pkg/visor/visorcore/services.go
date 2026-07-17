@@ -1,4 +1,4 @@
-// Package visorcore holds the platform-neutral visor assembly shared by the
+// Package visorcore pkg/visor/visorcore/services.go c3-vis-core
 // native visor (pkg/visor) and the browser wasm-visor (cmd/wasm-visor), so the
 // two stop diverging on how a visor is wired from its subsystems. It must stay
 // LEAN — it may import pkg/dmsg, pkg/transport, pkg/router, pkg/app/appserver,

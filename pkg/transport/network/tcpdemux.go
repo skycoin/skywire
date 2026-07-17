@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/tcpdemux.go
+// Package network pkg/transport/network/tcpdemux.go c2-net-transport
 //
 // tcpDemux multiplexes ONE TCP listener across the TCP transport types — WS (an
 // HTTP/1.1 WebSocket upgrade) and stcpr (a raw skywire handshake) — so a visor

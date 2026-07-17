@@ -1,4 +1,4 @@
-// Package cliutil cmd/skywire-cli/commands/util/util.go
+// Package cliutil cmd/skywire-cli/commands/util/util.go c4-vis-cli
 package cliutil
 
 import (

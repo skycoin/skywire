@@ -1,4 +1,4 @@
-// Package visor pkg/visor/ping.go
+// Package visor pkg/visor/ping.go c3-vis-core
 package visor
 
 import (

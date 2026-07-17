@@ -1,3 +1,4 @@
+// Package store pkg/address-resolver/store/redis_store.go c4-net-discovery
 package store
 
 import (

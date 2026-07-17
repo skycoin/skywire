@@ -1,4 +1,4 @@
-// Package transport pkg/transport/discovery.go
+// Package transport pkg/transport/discovery.go c2-net-transport
 package transport
 
 import (

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_reachability.go
+// Package visor pkg/visor/hypervisor_handlers_reachability.go c3-vis-core
 //
 // HTTP handlers for the per-visor Reachability tab: skywire-route
 // ping (DialPing + Ping + StopPing), dmsg ping (DialDmsgPing +

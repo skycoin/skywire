@@ -1,4 +1,4 @@
-// Package node — connmap.go: sharded address- and pubkey-keyed
+// Package node pkg/cxo/node/connmap.go c2-net-cxo
 // connection maps. Replaces the single Node.mx-guarded pendConns +
 // addrToConn + pkToConn triple.
 //

@@ -1,4 +1,4 @@
-// Package cliresolver cmd/skywire-cli/commands/resolver/ca.go
+// Package cliresolver cmd/skywire-cli/commands/resolver/ca.go c4-vis-cli
 //
 // `skywire cli resolver ca {gen|install|uninstall|path|fingerprint}`
 // — local certificate authority lifecycle for the resolver's

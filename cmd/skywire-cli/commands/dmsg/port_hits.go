@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/port_hits.go
+// Package clidmsg cmd/skywire-cli/commands/dmsg/port_hits.go c4-vis-cli
 package clidmsg
 
 import (

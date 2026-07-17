@@ -1,4 +1,4 @@
-// Package disc pkg/disc/entry.go
+// Package disc pkg/dmsg/disc/entry.go c1-net-dmsg
 package disc
 
 import (

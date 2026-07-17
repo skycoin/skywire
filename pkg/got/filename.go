@@ -1,3 +1,4 @@
+// Package got pkg/got/filename.go c0-com-util
 package got
 
 import (

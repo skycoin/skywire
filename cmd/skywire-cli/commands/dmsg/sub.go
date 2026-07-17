@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/sub.go
+// Package clidmsg cmd/skywire-cli/commands/dmsg/sub.go c4-vis-cli
 //
 // Registers the standalone UDP→dmsg bridge as the `sub` subcommand
 // of `skywire dmsg`, so a single skywire binary can launch it

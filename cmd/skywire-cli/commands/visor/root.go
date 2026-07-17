@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/root.go
+// Package clivisor cmd/skywire-cli/commands/visor/root.go c4-vis-cli
 package clivisor
 
 import (

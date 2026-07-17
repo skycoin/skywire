@@ -1,4 +1,4 @@
-// Package visor pkg/visor/skynet_first_dialer.go
+// Package visor pkg/visor/skynet_first_dialer.go c3-vis-core
 //
 // SkynetFirstUIDialer wraps a dmsg-based dmsgpty UIDialer and tries
 // to reach the peer over the skywire router first. The visor's

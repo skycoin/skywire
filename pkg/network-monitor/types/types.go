@@ -1,4 +1,4 @@
-// Package nm internal/nm/types.go
+// Package nm pkg/network-monitor/types/types.go c2-net-monitor
 package nm
 
 import (

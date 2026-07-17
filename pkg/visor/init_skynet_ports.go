@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_skynet_ports.go
+// Package visor pkg/visor/init_skynet_ports.go c3-vis-core
 //
 // Auto-registers the visor's localhost service ports for skynet
 // forwarding so they're accessible via .skynet URLs (or any skynet
