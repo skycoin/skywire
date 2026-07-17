@@ -304,6 +304,12 @@ embed-wallet: ## Sync the vendored skycoin-web wallet dist into the embedded PWA
 	rm -rf ./pkg/visor/static/wallet
 	mkdir -p ./pkg/visor/static/wallet
 	cp -a ./vendor/github.com/skycoin/skycoin/src/skycoin-web/src/gui/dist/. ./pkg/visor/static/wallet/
+	@# Normalize modes: cp -a preserves the vendored source's permission bits, and
+	@# some assets (e.g. skycoin-lite.wasm) carry a 755 exec bit that then shows as
+	@# a spurious mode-only change vs the committed 644 tree. Force 644/755 so a
+	@# re-embed only diffs on real content (the content-hashed chunk renames).
+	find ./pkg/visor/static/wallet -type f -exec chmod 0644 {} +
+	find ./pkg/visor/static/wallet -type d -exec chmod 0755 {} +
 	@echo "synced pkg/visor/static/wallet from the vendored skycoin-web dist — review with 'git status', commit intentionally (~11MB)."
 
 prune-wasm-embed-history: ## Drop OLD embedded wasm-visor blobs from git history, keeping only the current one (reclaims ~9MB per past update). REWRITES HISTORY — needs git-filter-repo; run on a fresh clone, then force-push. See scripts/prune-wasm-embed-history.sh for the full warning.
