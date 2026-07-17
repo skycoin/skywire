@@ -205,6 +205,11 @@ const (
 	// VPNClientPort over dmsg
 	VPNClientPort uint16 = 43
 
+	// VPNRouterName is the name of the vpn router (gateway / WiFi-AP) app. It is a
+	// LOCAL companion to vpn-client with no dmsg port of its own: it aggregates
+	// downstream LAN/WiFi clients and NATs them into the tunnel vpn-client owns.
+	VPNRouterName = "vpn-router"
+
 	// ExampleServerName is the name of the example server app
 	ExampleServerName = "example-server-app"
 
