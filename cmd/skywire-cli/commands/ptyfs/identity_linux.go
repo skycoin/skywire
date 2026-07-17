@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package cliptyfs cmd/skywire-cli/commands/ptyfs/identity_linux.go —
+// Package cliptyfs cmd/skywire-cli/commands/ptyfs/identity_linux.go c4-vis-cli
 // destination parsing + identity loading helpers used by the linux
 // mount path. Gated to linux because the only consumer is
 // mount_linux.go; non-linux builds get stub subcommands that don't

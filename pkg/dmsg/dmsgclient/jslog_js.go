@@ -1,5 +1,6 @@
 //go:build js && wasm
 
+// Package dmsgclient pkg/dmsg/dmsgclient/jslog_js.go c1-net-dmsg
 package dmsgclient
 
 import (

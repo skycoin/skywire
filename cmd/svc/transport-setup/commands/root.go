@@ -1,4 +1,4 @@
-// Package commands cmd/transport-setup/commands/root.go
+// Package commands cmd/svc/transport-setup/commands/root.go c2-net-transport
 package commands
 
 import (

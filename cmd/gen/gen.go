@@ -1,4 +1,4 @@
-// Package main cmd/gen/gen.go
+// Package main cmd/gen/gen.go c4-vis-cli
 package main
 
 import (

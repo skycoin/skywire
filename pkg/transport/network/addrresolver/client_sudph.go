@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package addrresolver pkg/transport/network/addrresolver/client_sudph.go
+// Package addrresolver pkg/transport/network/addrresolver/client_sudph.go c2-net-transport
 //
 // SUDPH (UDP hole-punching) is the only part of the AR client that pulls in
 // github.com/AudriusButkevicius/pfilter (and, transitively, quic-go) and

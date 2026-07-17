@@ -1,5 +1,6 @@
 //go:build tinygo
 
+// Package wasmbin pkg/wasmhv/wasmbin/select_tinygo.go c3-vis-wasm
 package wasmbin
 
 import "github.com/skycoin/skywire/pkg/wasmhv/wasmbin/wasmtinygo"

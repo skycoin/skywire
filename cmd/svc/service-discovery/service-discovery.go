@@ -1,4 +1,4 @@
-// Package commands cmd/service-discovery/service-discovery.go
+// Package commands cmd/svc/service-discovery/service-discovery.go c4-net-discovery
 package main
 
 import (

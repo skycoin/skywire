@@ -1,4 +1,4 @@
-// Package visor pkg/visor/embedded_tps.go
+// Package visor pkg/visor/embedded_tps.go c3-vis-core
 package visor
 
 import (

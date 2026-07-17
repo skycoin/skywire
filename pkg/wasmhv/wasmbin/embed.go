@@ -1,4 +1,4 @@
-// Package wasmbin carries the compiled wasm-visor binary (gzipped) inside the
+// Package wasmbin pkg/wasmhv/wasmbin/embed.go c3-vis-wasm
 // skywire binary, so `cli hv gen` — and the visor serving the HV UI — produce a
 // browser visor with NO external --wasm file, including from a plain
 // `go install`.

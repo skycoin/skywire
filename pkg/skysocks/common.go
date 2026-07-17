@@ -1,4 +1,4 @@
-// Package skysocks internal/skysocks/common.go
+// Package skysocks pkg/skysocks/common.go c4-app-proxy
 package skysocks
 
 import (

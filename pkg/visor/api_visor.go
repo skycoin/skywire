@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_visor.go c3-vis-core
 // api_visor.go contains visor lifecycle and status API methods.
 package visor
 

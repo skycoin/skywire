@@ -1,4 +1,4 @@
-// Package network pkg/transport/network/wt.go
+// Package network pkg/transport/network/wt.go c2-net-transport
 //
 // WT is a first-class skywire transport type: a direct visor-to-visor link over
 // WebTransport (HTTP/3 over QUIC), with the peer's https:// endpoint and pinned

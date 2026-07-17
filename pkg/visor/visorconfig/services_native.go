@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package visorconfig pkg/visor/visorconfig/services_native.go
+// Package visorconfig pkg/visor/visorconfig/services_native.go c3-vis-core
 //
 // Native (non-WASM) implementation of Fetch, the HTTP helper that
 // retrieves a Services payload from a conf-service endpoint. Lives

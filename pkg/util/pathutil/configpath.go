@@ -1,4 +1,4 @@
-// Package pathutil installation and config file paths
+// Package pathutil pkg/util/pathutil/configpath.go c0-com-util
 package pathutil
 
 import (

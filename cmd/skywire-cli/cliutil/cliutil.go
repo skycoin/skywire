@@ -1,4 +1,4 @@
-// Package cliutil contains functions used by different skywire-cli subcommands
+// Package cliutil cmd/skywire-cli/cliutil/cliutil.go c4-vis-cli
 package cliutil
 
 import (

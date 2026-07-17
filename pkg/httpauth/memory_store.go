@@ -1,4 +1,4 @@
-// Package httpauth pkg/httpauth/memory_store.go
+// Package httpauth pkg/httpauth/memory_store.go c0-com-http
 package httpauth
 
 import (

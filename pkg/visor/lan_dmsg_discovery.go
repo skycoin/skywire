@@ -1,4 +1,4 @@
-// Package visor pkg/visor/lan_dmsg_discovery.go
+// Package visor pkg/visor/lan_dmsg_discovery.go c3-vis-core
 // Auto-discovery of LAN DMSG servers from hypervisors.
 package visor
 

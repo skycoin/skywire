@@ -1,4 +1,4 @@
-// Package main cmd/smb/smb.go
+// Package main cmd/smb/smb.go c4-app-mail
 //
 // Standalone (dmsg-only) SMTP→dmsg bridge ("smb"). Speaks SMTP on
 // a local TCP port, dials peers via its own dmsg.Client, and does

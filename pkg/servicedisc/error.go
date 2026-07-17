@@ -1,4 +1,4 @@
-// Package servicedisc pkg/servicedisc/error.go
+// Package servicedisc pkg/servicedisc/error.go c2-net-discovery
 package servicedisc
 
 import (

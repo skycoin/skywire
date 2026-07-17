@@ -1,3 +1,4 @@
+// Package statutil pkg/cxo/skyobject/statutil/statutil.go c2-net-cxo
 package statutil
 
 import (

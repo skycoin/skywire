@@ -1,3 +1,4 @@
+// Package main cmd/treeprobe/main.go c2-net-cxo
 // Command treeprobe consumes an NDJSON event stream from
 // `cli visor ping tree-stream` on stdin and writes CSV rows to
 // stdout, one per (level, parent_pk, remote_pk) cell. Also writes

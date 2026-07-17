@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/verbose.go
+// Package cliskychat cmd/skywire-cli/commands/skychat/verbose.go c4-vis-cli
 //
 // statusCounters: minimal snapshot of the chat-app's /status counter
 // surface used by `cli skychat send --verbose` to compute pre/post

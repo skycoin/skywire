@@ -1,4 +1,4 @@
-// Package visor pkg/visor/embedded_skymail_bridge.go
+// Package visor pkg/visor/embedded_skymail_bridge.go c3-vis-core
 //
 // EmbeddedSkymailBridge wraps the pkg/skymailbridge SMTP server so it
 // can be hosted directly inside the visor process — the SMTP-side

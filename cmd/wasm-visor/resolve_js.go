@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — in-tab resolver-alias resolution for fetchDmsg / the browse
+// Package main cmd/wasm-visor/resolve_js.go c3-vis-wasm
 // overlay, so a browser visor resolves home.dmsg + named aliases (tpd, rf,
 // dmsg0, …) + <pk>.dmsg exactly like the native socks5 resolving proxy.
 package main

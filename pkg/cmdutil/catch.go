@@ -1,4 +1,4 @@
-// Package cmdutil pkg/cmdutil/catch.go
+// Package cmdutil pkg/cmdutil/catch.go c0-com-util
 package cmdutil
 
 import (

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init.go
+// Package visor pkg/visor/init.go c3-vis-core
 //
 // This file is the "table of contents" for visor initialization. It declares all
 // init modules, registers them with their dependencies, and provides the shared

@@ -1,4 +1,4 @@
-// Package logging pkg/logging/logger.go
+// Package logging pkg/logging/logger.go c0-com-log
 package logging
 
 import (

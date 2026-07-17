@@ -1,4 +1,4 @@
-// Package stats — pkg/visor/stats/store.go: bbolt-backed Store.
+// Package stats pkg/visor/stats/store.go c3-vis-core
 package stats
 
 import (

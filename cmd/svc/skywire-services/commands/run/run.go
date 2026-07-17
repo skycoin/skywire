@@ -1,4 +1,4 @@
-// Package run cmd/svc/skywire-services/commands/run/run.go
+// Package run cmd/svc/skywire-services/commands/run/run.go c4-net-discovery
 //
 // Implements `skywire svc run --config services.json` — the
 // multi-service-in-one-process supervisor. Each service block in the

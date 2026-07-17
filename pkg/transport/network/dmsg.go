@@ -1,4 +1,4 @@
-// Package network pkg/transport/network/dmsg.go
+// Package network pkg/transport/network/dmsg.go c2-net-transport
 package network
 
 import (

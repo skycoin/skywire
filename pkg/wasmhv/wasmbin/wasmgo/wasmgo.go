@@ -1,4 +1,4 @@
-// Package wasmgo carries the STANDARD-Go-compiled wasm-visor (gzipped) and its
+// Package wasmgo pkg/wasmhv/wasmbin/wasmgo/wasmgo.go c3-vis-wasm
 // matching wasm_exec.js. It is the embed library selected for non-TinyGo builds
 // (see ../select_go.go). A wasm binary and its wasm_exec.js are toolchain-
 // specific — the Go and TinyGo loaders differ (TinyGo's provides the WASI /

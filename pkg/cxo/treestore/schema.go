@@ -1,4 +1,4 @@
-// Package treestore provides a hierarchical, prefix-routable
+// Package treestore pkg/cxo/treestore/schema.go c2-net-cxo
 // key-value store published over CXO. Unlike the flat
 // pkg/cxo/node/kv.go (which jams the entire map as JSON into a
 // single Root.Descriptor field and re-broadcasts the whole thing on

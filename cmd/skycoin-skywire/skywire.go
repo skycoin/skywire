@@ -1,4 +1,4 @@
-// Package main cmd/skycoin-skywire/skywire.go
+// Package main cmd/skycoin-skywire/skywire.go c4-vis-cli
 /*
 skywire + skycoin
 */

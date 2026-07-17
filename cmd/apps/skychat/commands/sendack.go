@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/sendack.go
+// Package commands cmd/apps/skychat/commands/sendack.go c4-app-chat
 //
 // chat-msg / chat-ack envelope: opt-in peer-receipt acknowledgment.
 //

@@ -1,4 +1,4 @@
-// Package commands cmd/route-finder/commands/root.go
+// Package commands cmd/svc/route-finder/commands/root.go c2-net-routing
 package commands
 
 import (

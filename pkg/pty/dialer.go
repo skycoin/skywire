@@ -1,4 +1,4 @@
-// Package pty pkg/pty/dialer.go
+// Package pty pkg/pty/dialer.go c3-vis-pty
 //
 // StreamDialer abstracts the outbound dial that Host uses to proxy
 // CLI requests to a remote dmsgpty endpoint. Pre-refactor, Host

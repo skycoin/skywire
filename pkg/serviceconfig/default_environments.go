@@ -1,4 +1,4 @@
-// Package config internal/config/default_environments.go
+// Package config pkg/serviceconfig/default_environments.go c4-net-discovery
 package config
 
 import (

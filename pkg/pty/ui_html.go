@@ -1,4 +1,4 @@
-// Package pty pkg/pty/ui_html.go
+// Package pty pkg/pty/ui_html.go c3-vis-pty
 package pty
 
 import (

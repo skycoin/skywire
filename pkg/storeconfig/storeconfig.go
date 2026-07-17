@@ -1,4 +1,4 @@
-// Package storeconfig pkg/storeconfig/storeconfig.go
+// Package storeconfig pkg/storeconfig/storeconfig.go c2-net-cxo
 package storeconfig
 
 import (

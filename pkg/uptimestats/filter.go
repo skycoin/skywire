@@ -1,4 +1,4 @@
-// Package uptimestats pkg/uptimestats/filter.go
+// Package uptimestats pkg/uptimestats/filter.go c2-net-discovery
 //
 // Filter / stats helpers shared by the CLI consumers. Kept here rather
 // than in each per-service CLI package so the hypervisor RPC layer can

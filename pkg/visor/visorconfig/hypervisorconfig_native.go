@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package visorconfig pkg/visor/visorconfig/hypervisorconfig_native.go
+// Package visorconfig pkg/visor/visorconfig/hypervisorconfig_native.go c3-vis-core
 //
 // Native (non-WASM) implementations for HypervisorConfig methods
 // that touch disk or pull net/http / encoding/json. Kept off the

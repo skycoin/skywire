@@ -1,4 +1,4 @@
-// Package cliroute cmd/skywire-cli/commands/route/trace.go:
+// Package cliroute cmd/skywire-cli/commands/route/trace.go c4-vis-cli
 // `skywire cli route trace <pk>` — per-hop latency printout for the
 // route to a destination visor. Equivalent to Unix traceroute,
 // scoped to the skywire route-finder graph.

@@ -1,6 +1,6 @@
 //go:build windows
 
-// Package pty pkg/pty/exec_windows.go
+// Package pty pkg/pty/exec_windows.go c3-vis-pty
 //
 // Windows-side platform helpers for the Exec gateway path. Windows
 // has no Setsid analog in syscall.SysProcAttr that maps cleanly to

@@ -1,4 +1,4 @@
-// Package main cmd/version/version.go
+// Package main cmd/version/version.go c4-vis-cli
 package main
 
 import (

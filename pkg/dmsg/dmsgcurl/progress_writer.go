@@ -1,4 +1,4 @@
-// Package dmsgcurl pkg/dmsgcurl/progress_writer.go
+// Package dmsgcurl pkg/dmsg/dmsgcurl/progress_writer.go c1-net-dmsg
 package dmsgcurl
 
 import (

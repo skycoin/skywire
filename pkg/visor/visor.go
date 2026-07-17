@@ -1,4 +1,4 @@
-// Package visor implements skywire visor.
+// Package visor pkg/visor/visor.go c3-vis-core
 package visor
 
 import (

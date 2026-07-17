@@ -1,4 +1,4 @@
-// Package commands cmd/transport-discovery/root.go
+// Package commands cmd/svc/transport-discovery/commands/root.go c4-net-discovery
 //
 // Cobra entry point for the standalone `skywire svc tpd` binary.
 // All run logic lives in pkg/services/tpd — this file is just the

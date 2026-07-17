@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/type.go
+// Package appnet pkg/app/appnet/type.go c2-vis-appsvc
 package appnet
 
 // Type represents the network type.

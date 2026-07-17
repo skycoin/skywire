@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/ws_native.go
+// Package network pkg/transport/network/ws_native.go c2-net-transport
 //
 // Native WS-transport carrier: dial via coder/websocket, and accept by running
 // a WebSocket HTTP server fronted as a net.Listener so the shared

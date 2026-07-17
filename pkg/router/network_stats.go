@@ -1,4 +1,4 @@
-// Package router pkg/router/network_stats.go
+// Package router pkg/router/network_stats.go c2-net-routing
 package router
 
 import (

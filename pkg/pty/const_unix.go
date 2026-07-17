@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-// Package pty pkg/pty/const_unix.go
+// Package pty pkg/pty/const_unix.go c3-vis-pty
 package pty
 
 import (

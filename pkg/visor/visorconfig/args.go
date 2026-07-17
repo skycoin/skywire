@@ -1,4 +1,4 @@
-// Package visorconfig — args.go
+// Package visorconfig pkg/visor/visorconfig/args.go c3-vis-core
 //
 // Renders the per-app Args slice as a single shell-like string in
 // the on-disk config file. The hand-edit experience is the goal:

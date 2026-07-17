@@ -1,4 +1,4 @@
-// Package logging pkg/logging/stdlog.go
+// Package logging pkg/logging/stdlog.go c0-com-log
 //
 // Adapter that lets third-party libraries which only accept a stdlib
 // *log.Logger (e.g. armon/go-socks5's Config.Logger) funnel their output

@@ -1,4 +1,4 @@
-// Package skyroute holds and reuses multihop skynet routes so that short-lived
+// Package skyroute pkg/skyroute/pool.go c2-net-routing
 // connections — browser SOCKS5 requests through the resolving proxy, skysocks-lite
 // fetches, skychat messages — don't each pay a fresh route setup.
 //

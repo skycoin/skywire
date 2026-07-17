@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_rsn.go
+// Package visor pkg/visor/hypervisor_handlers_rsn.go c3-vis-core
 //
 // Per-RSN remote stats fetch for the hvui's Services Health page.
 // Mirrors `skywire-cli route rsn-remote-stats` — for every RSN PK
