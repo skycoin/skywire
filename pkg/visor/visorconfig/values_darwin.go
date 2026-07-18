@@ -1,6 +1,7 @@
 //go:build darwin
 // +build darwin
 
+// Package visorconfig pkg/visor/visorconfig/values_darwin.go c3-vis-core
 package visorconfig
 
 import (

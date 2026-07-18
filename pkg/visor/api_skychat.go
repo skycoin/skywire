@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_skychat.go
+// Package visor pkg/visor/api_skychat.go c3-vis-core
 //
 // Skychat support — password management + reverse proxy.
 //

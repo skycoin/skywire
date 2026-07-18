@@ -1,4 +1,4 @@
-// Package cipher implements common golang encoding interfaces for
+// Package cipher pkg/cipher/cipher.go c0-com-crypto
 // github.com/skycoin/skycoin/src/cipher
 package cipher
 

@@ -1,4 +1,4 @@
-// Package ping — cmd/skywire-cli/commands/visor/ping/mux_bandwidth.go:
+// Package ping cmd/skywire-cli/commands/visor/ping/mux_bandwidth.go c4-vis-cli
 // CLI consumer for the StreamMuxBandwidth gRPC RPC.
 //
 // Operator-visible: `cli visor ping mux-bw <pk>` runs the

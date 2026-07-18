@@ -1,4 +1,4 @@
-// Package skyudpbridge is the protocol core for the skywire UDP
+// Package skyudpbridge pkg/skyudpbridge/skyudpbridge.go c2-net-transport
 // bridge ("sub"): length-prefixed UDP datagrams ferried over a
 // reliable skywire byte-stream (dmsg or skywire-routing). Plan B
 // of the UDP-over-skynet split (Plan A — true packet-level UDP at

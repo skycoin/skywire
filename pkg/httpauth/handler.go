@@ -1,4 +1,4 @@
-// Package httpauth pkg/httpauth/handler.go
+// Package httpauth pkg/httpauth/handler.go c0-com-http
 package httpauth
 
 import (

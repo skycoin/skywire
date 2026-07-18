@@ -1,4 +1,4 @@
-// Package skyquic provides the skywire-PK-bound QUIC TLS identity (#2607,
+// Package skyquic pkg/skyquic/identity.go c1-net-transport
 // option A), shared by the skynet QUIC transport (pkg/transport/network) and
 // dmsg-over-QUIC (pkg/dmsg). It lives in its own package — depending only on
 // crypto/* and pkg/cipher — because pkg/transport/network imports pkg/dmsg/dmsg

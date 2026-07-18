@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — WebRTC DataChannel p2p transport for the browser dmsg client.
+// Package main cmd/dmsg-wasm/webrtc_js.go c1-net-dmsg
 //
 // This is the genuinely peer-to-peer transport: WebRTC's DTLS+SCTP DataChannel
 // is a direct, encrypted pipe between two browsers (or a browser and a native

@@ -1,4 +1,4 @@
-// Package commands cmd/skywire/commands/app_delegate.go — shared
+// Package commands cmd/skywire/commands/app_delegate.go c4-vis-cli
 // delegating-wrapper helper for `skywire app <pair> {serve,client}`
 // command trees (skysocks_pair.go, vpn_pair.go, skynet_pair.go).
 //

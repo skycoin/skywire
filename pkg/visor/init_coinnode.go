@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_coinnode.go
+// Package visor pkg/visor/init_coinnode.go c3-vis-core
 //
 // Brings up fibercoin node discovery (servicedisc.ServiceTypeCoin). For each
 // v.conf.CoinNodes entry the visor:

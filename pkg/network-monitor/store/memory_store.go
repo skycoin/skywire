@@ -1,4 +1,4 @@
-// Package store pkg/network-monitor/store/memory_store.go
+// Package store pkg/network-monitor/store/memory_store.go c2-net-monitor
 package store
 
 import (

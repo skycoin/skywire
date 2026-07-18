@@ -1,4 +1,4 @@
-// Package clijq cmd/skywire-cli/commands/jq/jq.go
+// Package clijq cmd/skywire-cli/commands/jq/jq.go c4-vis-cli
 package clijq
 
 import (

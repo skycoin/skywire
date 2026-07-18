@@ -1,6 +1,6 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
-// Package disc pkg/disc/http_message.go
+// Package disc pkg/dmsg/disc/http_message.go c1-net-dmsg
 //
 // HTTP-response message types used by the discovery service's HTTP
 // API. Build-tag-gated alongside client.go to keep net/http out of

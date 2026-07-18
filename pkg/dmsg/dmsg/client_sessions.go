@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/client_sessions.go
+// Package dmsg pkg/dmsg/dmsg/client_sessions.go c1-net-dmsg
 package dmsg
 
 import (
@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/hashicorp/yamux"
 	"github.com/xtaci/smux"
@@ -209,6 +210,40 @@ func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
 	return CarrierTCP, entry.Server.Address
 }
 
+// ProtocolLabel renders a human-readable label for the protocol a client used
+// to reach a dmsg server, given the carrier it dialed and that carrier's
+// endpoint address. Every dmsg carrier is Noise-encrypted end to end above the
+// byte pipe; the label names the underlying transport, and for the WebSocket
+// carrier it distinguishes plain ws:// from TLS-secured wss:// by the endpoint
+// scheme. An empty carrier (an accepted, server-side session) renders as
+// "accepted".
+func ProtocolLabel(carrier, addr string) string {
+	switch carrier {
+	case CarrierTCP:
+		return "tcp"
+	case CarrierWS:
+		if isSecureURL(addr) {
+			return "wss"
+		}
+		return "ws"
+	case CarrierWT:
+		return "webtransport"
+	case CarrierQUIC:
+		return "quic"
+	case "":
+		return "accepted"
+	default:
+		return carrier
+	}
+}
+
+// isSecureURL reports whether addr is a TLS-secured websocket / https endpoint
+// (wss:// or https://), used to distinguish wss from plain ws.
+func isSecureURL(addr string) bool {
+	a := strings.ToLower(strings.TrimSpace(addr))
+	return strings.HasPrefix(a, "wss://") || strings.HasPrefix(a, "https://")
+}
+
 func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs ClientSession, err error) {
 	ce.log.WithField("remote_pk", entry.Static).Debug("Dialing session...")
 
@@ -355,7 +390,10 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	// identity-checked so it cannot evict this live replacement.
 	// Record the carrier actually used (after any WT→WS / *→TCP fallback above)
 	// so Client.UpgradeBrowserSessions can later converge wss → WebTransport.
+	// carrierAddr is the endpoint that carrier dialed, so callers can tell the
+	// exact protocol used to reach this server (and ws:// from wss://).
 	dSes.carrier = network
+	dSes.carrierAddr = dialAddr
 
 	ce.sessionsMx.Lock()
 	if ce.closed {

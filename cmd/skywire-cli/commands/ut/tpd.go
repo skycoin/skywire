@@ -1,4 +1,4 @@
-// Package cliut cmd/skywire-cli/ut/tpd.go
+// Package cliut cmd/skywire-cli/commands/ut/tpd.go c4-vis-cli
 //
 // `skywire cli ut tpd` — visor uptime from the transport-discovery
 // integrated endpoint. Earlier this command used a hand-rolled JQ

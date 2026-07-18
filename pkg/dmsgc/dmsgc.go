@@ -1,4 +1,4 @@
-// Package dmsgc dmsg config and client. Operational half of the
+// Package dmsgc pkg/dmsgc/dmsgc.go c1-net-dmsg
 // dmsg configuration surface: the wire-format types and their JSON
 // methods live in pkg/dmsgc/spec (WASM-clean), and pkg/dmsgc here
 // aliases them so existing callers keep working unchanged while

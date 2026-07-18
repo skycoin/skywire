@@ -1,3 +1,4 @@
+// Package main pkg/calvin/cmd/calvin/calvin.go c0-com-util
 // package main pkg/skywire-utilities/pkg/calvin/cmd/calvin/calvin.go
 package main
 

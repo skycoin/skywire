@@ -1,4 +1,4 @@
-// Package main cmd/gojq/gojq.go
+// Package main cmd/util/gojq/gojq.go c4-vis-cli
 package main
 
 import (

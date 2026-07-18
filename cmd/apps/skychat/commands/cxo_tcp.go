@@ -1,4 +1,4 @@
-// Package commands — cxo_tcp.go: CXO-backed messaging over the CXO
+// Package commands cmd/apps/skychat/commands/cxo_tcp.go c4-app-chat
 // node's NATIVE TCP transport (no dmsg). Opt-in via --cxo; works in
 // --standalone. Outbound /message is published to our own CXO feed;
 // each --cxo-peer feed is subscribed and surfaced on the SSE stream,

@@ -1,4 +1,4 @@
-// Package climdisc root.go
+// Package climdisc cmd/skywire-cli/commands/mdisc/root.go c4-vis-cli
 package climdisc
 
 import (

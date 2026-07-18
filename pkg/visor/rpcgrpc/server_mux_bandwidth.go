@@ -1,4 +1,4 @@
-// Package rpcgrpc — pkg/visor/rpcgrpc/server_mux_bandwidth.go:
+// Package rpcgrpc pkg/visor/rpcgrpc/server_mux_bandwidth.go c3-vis-core
 // server-side implementation of the StreamMuxBandwidth gRPC RPC.
 //
 // Test the operator's hypothesis: bandwidth aggregated across N

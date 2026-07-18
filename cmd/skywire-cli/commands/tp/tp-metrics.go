@@ -1,4 +1,4 @@
-// Package clitp cmd/skywire-cli/commands/tp/tp-metrics.go
+// Package clitp cmd/skywire-cli/commands/tp/tp-metrics.go c4-vis-cli
 package clitp
 
 import (

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor.go
+// Package visor pkg/visor/hypervisor.go c3-vis-core
 package visor
 
 import (

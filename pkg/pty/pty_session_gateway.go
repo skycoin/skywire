@@ -1,4 +1,4 @@
-// Package pty pkg/pty/pty_session_gateway.go
+// Package pty pkg/pty/pty_session_gateway.go c3-vis-pty
 //
 // sessionPtyGateway is the persistent-session variant of LocalPtyGateway. The
 // classic gateway owns a *Pty directly and the host kills it when the serving

@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/loader.go — turn a config-
+// Package policy pkg/router/policy/loader.go c2-net-routing
 // field value (`"@/etc/skywire/policies/global.star"` or an
 // inline string) into a live Evaluator, with file-watcher
 // hot-reload so editing the file doesn't require a visor restart.

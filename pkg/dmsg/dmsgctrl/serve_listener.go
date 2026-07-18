@@ -1,4 +1,4 @@
-// Package dmsgctrl pkg/dmsgctrl/serve_listener.go
+// Package dmsgctrl pkg/dmsg/dmsgctrl/serve_listener.go c1-net-dmsg
 package dmsgctrl
 
 import (

@@ -1,4 +1,4 @@
-// Package treeprobe consumes the NDJSON event stream emitted by
+// Package treeprobe pkg/util/treeprobe/event.go c0-com-util
 // `cli visor ping tree-stream`, aggregates ping/latency/jitter
 // metrics per (level, parent_pk, remote_pk) tuple, joins against
 // TPD's per-transport bandwidth + latency snapshot, and emits a

@@ -1,4 +1,4 @@
-// Package cliserve cmd/skywire-cli/commands/serve/serve_port.go
+// Package cliserve cmd/skywire-cli/commands/serve/serve.go c4-vis-cli
 //
 // `skywire cli serve` — register a localhost port to be served on the
 // network over .skynet / .dmsg. Replaces the older `skywire cli

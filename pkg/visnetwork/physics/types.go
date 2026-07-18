@@ -1,4 +1,4 @@
-// Package physics implements vis-network compatible physics simulation
+// Package physics pkg/visnetwork/physics/types.go c4-app-rewards
 // for force-directed graph layouts. This is a Go port of the vis-network
 // JavaScript physics engine.
 package physics

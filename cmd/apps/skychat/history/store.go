@@ -1,4 +1,4 @@
-// Package history bolt-backed skychat persistence.
+// Package history cmd/apps/skychat/history/store.go c4-app-chat
 package history
 
 import (

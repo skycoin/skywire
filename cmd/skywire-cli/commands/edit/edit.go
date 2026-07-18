@@ -1,4 +1,4 @@
-// Package cliedit cmd/skywire-cli/commands/edit/edit.go
+// Package cliedit cmd/skywire-cli/commands/edit/edit.go c4-vis-cli
 package cliedit
 
 import (

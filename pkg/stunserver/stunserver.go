@@ -1,4 +1,4 @@
-// Package stunserver implements a STUN server supporting RFC 3489 NAT discovery.
+// Package stunserver pkg/stunserver/stunserver.go c2-net-transport
 // It provides the 4-socket (2 IPs x 2 ports) UDP listener required by the
 // go-stun client's 3-test NAT type detection algorithm.
 package stunserver

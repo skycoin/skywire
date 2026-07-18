@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_clientlog.go — sink for
+// Package visor pkg/visor/hypervisor_handlers_clientlog.go c3-vis-core
 // browser-side error reports from the hypervisor UI.
 //
 // The hvui installs a global error reporter (a window.onerror /

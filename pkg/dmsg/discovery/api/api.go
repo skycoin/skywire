@@ -1,4 +1,4 @@
-// Package api pkg/discovery/api/api.go
+// Package api pkg/dmsg/discovery/api/api.go c1-net-dmsg
 package api
 
 import (

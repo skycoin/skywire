@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_disc_proxy.go
+// Package visor pkg/visor/hypervisor_handlers_disc_proxy.go c3-vis-core
 //
 // Hypervisor-hosted dmsg-discovery proxy.
 //

@@ -1,4 +1,4 @@
-// Package logging pkg/logging/ringbuffer.go
+// Package logging pkg/logging/ringbuffer.go c0-com-log
 package logging
 
 import (

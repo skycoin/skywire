@@ -1,4 +1,4 @@
-// Package config cmd/dmsg-server/commands/cofnig/root.go
+// Package config cmd/dmsg/dmsg-server/commands/config/root.go c1-net-dmsg
 package config
 
 import (

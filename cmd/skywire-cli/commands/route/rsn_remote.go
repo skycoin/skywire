@@ -1,4 +1,4 @@
-// Package cliroute cmd/skywire-cli/commands/route/rsn_remote.go
+// Package cliroute cmd/skywire-cli/commands/route/rsn_remote.go c4-vis-cli
 package cliroute
 
 import (

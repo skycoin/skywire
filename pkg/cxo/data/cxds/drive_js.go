@@ -1,5 +1,6 @@
 //go:build js
 
+// Package cxds pkg/cxo/data/cxds/drive_js.go c2-net-cxo
 // js/wasm stubs for the on-disk (bbolt) CXDS. bbolt does not build under js/wasm
 // (arch-specific consts + mmap), so the disk implementation lives in drive.go
 // (//go:build !js). A wasm visor uses the in-memory CXDS (NewMemoryCXDS) via

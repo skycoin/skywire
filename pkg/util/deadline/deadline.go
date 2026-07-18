@@ -1,4 +1,5 @@
 /*Package deadline Copied from https://golang.org/src/net/pipe.go with some changes.*/
+// Package deadline pkg/util/deadline/deadline.go c0-com-util
 package deadline
 
 import (

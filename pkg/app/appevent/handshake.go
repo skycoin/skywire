@@ -1,4 +1,4 @@
-// Package appevent pkg/app/appevent/handshake.go
+// Package appevent pkg/app/appevent/handshake.go c2-vis-appsvc
 package appevent
 
 import (

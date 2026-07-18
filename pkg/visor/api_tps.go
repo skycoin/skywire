@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_tps.go c3-vis-core
 // api_tps.go contains embedded Transport Setup Node (TPS) API methods.
 package visor
 

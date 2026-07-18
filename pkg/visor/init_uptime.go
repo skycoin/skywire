@@ -1,4 +1,4 @@
-// Package visor — pkg/visor/init_uptime.go: glue for the
+// Package visor pkg/visor/init_uptime.go c3-vis-core
 // service-self uptime recorder. The recorder itself is constructed
 // in run() (so a panic during NewVisor still leaves a session row);
 // this file owns the wireup that connects an existing recorder to

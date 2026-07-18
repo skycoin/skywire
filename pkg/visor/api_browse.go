@@ -1,4 +1,4 @@
-// Package visor api_browse.go — HTTP fetch endpoints backing the in-HV-UI
+// Package visor pkg/visor/api_browse.go c3-vis-core
 // virtual browser (the native analog of the wasm-visor's skywireVisor.fetchDmsg
 // / fetchClearnet). The same browse.js engine runs in the native hypervisor UI;
 // instead of the wasm JS hooks it calls these over /api/browse/*.

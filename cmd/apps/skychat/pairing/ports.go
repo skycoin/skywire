@@ -1,4 +1,4 @@
-// Package pairing — cmd/apps/skychat/pairing/ports.go: deterministic
+// Package pairing cmd/apps/skychat/pairing/ports.go c4-app-chat
 // DMSG port allocation for chat-pair feeds.
 //
 // Each unordered pair of visor public keys (Alice, Bob) maps to a

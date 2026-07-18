@@ -1,4 +1,4 @@
-// Package api pkg/address-resolver/api.go
+// Package api pkg/address-resolver/api/api.go c4-net-discovery
 package api
 
 import (

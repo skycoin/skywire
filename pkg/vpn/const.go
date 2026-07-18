@@ -1,4 +1,4 @@
-// Package vpn internal/vpn/const.go
+// Package vpn pkg/vpn/const.go c4-app-vpn
 package vpn
 
 const (

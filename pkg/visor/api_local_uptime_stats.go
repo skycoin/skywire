@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_local_uptime_stats.go
+// Package visor pkg/visor/api_local_uptime_stats.go c3-vis-core
 //
 // Local tier-uptime read API. The visor's stats tracker
 // (pkg/visor/stats) keeps a 288-slot-per-day bitmap per tier

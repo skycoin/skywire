@@ -1,6 +1,6 @@
 //go:build js
 
-// Package buildinfo pkg/buildinfo/buildinfo_js.go
+// Package buildinfo pkg/buildinfo/buildinfo_js.go c0-com-util
 //
 // js/wasm init() — skips the ldflags-injected `golist` parse path
 // (which would need encoding/json). The install-page WASM doesn't

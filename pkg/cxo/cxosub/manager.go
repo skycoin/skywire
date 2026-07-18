@@ -1,4 +1,4 @@
-// Package cxosub pkg/cxo/cxosub/manager.go
+// Package cxosub pkg/cxo/cxosub/manager.go c2-net-cxo
 //
 // Cycle-based on-demand CXO sync manager.
 //

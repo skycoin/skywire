@@ -1,4 +1,4 @@
-// Package clireward cmd/skywire-cli/reward/rules.go
+// Package clireward cmd/skywire-cli/commands/reward/rules.go c4-vis-cli
 package clireward
 
 import (

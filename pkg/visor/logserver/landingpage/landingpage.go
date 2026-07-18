@@ -1,4 +1,4 @@
-// Package landingpage renders the visor landing page shown over dmsg/skynet at
+// Package landingpage pkg/visor/logserver/landingpage/landingpage.go c3-vis-core
 // http://<pk>.dmsg/ (and skywire.dmsg → the visor's own PK).
 //
 // It is deliberately dependency-free (only html + strings) so BOTH the native

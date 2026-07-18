@@ -1,4 +1,4 @@
-// Package visor pkg/visor/cxo_transport_discovery.go
+// Package visor pkg/visor/cxo_transport_discovery.go c3-vis-core
 //
 // CXO-aware wrapper around the visor's transport.DiscoveryClient. The
 // only override is GetAllTransports — the network-wide snapshot used

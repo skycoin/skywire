@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/packet.go: UDP / datagram app API.
+// Package appnet pkg/app/appnet/packet.go c2-vis-appsvc
 // Stage 5 of #2607.
 //
 // Apps that want UDP semantics over skywire (faithful loss, no

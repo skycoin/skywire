@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — the browser visor's in-process app registry, surfaced through
+// Package main cmd/wasm-visor/apps_js.go c3-vis-wasm
 // the SAME hypervisor Apps tab as a native visor (pkg/wasmhv.SelfProvider's
 // SelfApps + StartApp/StopApp/SetAutoStart). A tab has no child processes, so
 // "start/stop" toggles the in-tab AppFunc/route rather than spawning a

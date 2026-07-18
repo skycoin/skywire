@@ -1,4 +1,4 @@
-// Package buildinfo pkg/skywire-utilities/pkg/buildinfo/buildinfo.go
+// Package buildinfo pkg/buildinfo/buildinfo.go c0-com-util
 //
 // The encoding/json-using init() that parses ldflags-injected
 // `go list -m -json` output lives in buildinfo_native.go (!js).

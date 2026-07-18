@@ -47,3 +47,28 @@ func TestPickCarrier(t *testing.T) {
 		})
 	}
 }
+
+// TestProtocolLabel locks the human-readable protocol labeling — notably that
+// the WebSocket carrier reports wss vs ws by the endpoint scheme, and that an
+// empty carrier (an accepted server-side session) reports "accepted".
+func TestProtocolLabel(t *testing.T) {
+	cases := []struct {
+		carrier string
+		addr    string
+		want    string
+	}{
+		{CarrierTCP, "1.2.3.4:8081", "tcp"},
+		{CarrierWS, "ws://1.2.3.4:8083/dmsg", "ws"},
+		{CarrierWS, "wss://dmsg.example.com/dmsg", "wss"},
+		{CarrierWS, "https://dmsg.example.com/dmsg", "wss"},
+		{CarrierWS, "WSS://UPPER.example.com/dmsg", "wss"},
+		{CarrierWT, "https://1.2.3.4:8084/dmsg", "webtransport"},
+		{CarrierQUIC, "1.2.3.4:8085", "quic"},
+		{"", "", "accepted"},
+	}
+	for _, c := range cases {
+		if got := ProtocolLabel(c.carrier, c.addr); got != c.want {
+			t.Fatalf("ProtocolLabel(%q,%q) = %q, want %q", c.carrier, c.addr, got, c.want)
+		}
+	}
+}

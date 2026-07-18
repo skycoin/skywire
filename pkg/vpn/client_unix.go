@@ -1,6 +1,7 @@
 //go:build !windows
 // +build !windows
 
+// Package vpn pkg/vpn/client_unix.go c4-app-vpn
 package vpn
 
 import (

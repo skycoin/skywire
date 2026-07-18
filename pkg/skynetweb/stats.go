@@ -1,4 +1,4 @@
-// Package skynetweb pkg/skynetweb/stats.go
+// Package skynetweb pkg/skynetweb/stats.go c4-app-skynet
 //
 // Mirror of pkg/dmsgweb/stats.go. Structurally identical so the UI
 // layer can treat both resolvers' stats uniformly. See dmsgweb/stats.go

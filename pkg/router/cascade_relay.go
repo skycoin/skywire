@@ -1,4 +1,4 @@
-// Package router pkg/router/cascade_relay.go
+// Package router pkg/router/cascade_relay.go c2-net-routing
 //
 // RSN relay: allows visors to reach the Route Setup Node through
 // transport neighbors that have a direct "setup"-labeled transport

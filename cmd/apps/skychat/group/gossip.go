@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/gossip.go: typed mutation
+// Package group cmd/apps/skychat/group/gossip.go c4-app-chat
 // envelopes for cross-visor admin/roster gossip per the RFC at
 // docs/skychat_group_gossip_rfc.md (#2636 issue, #2656 PR).
 //

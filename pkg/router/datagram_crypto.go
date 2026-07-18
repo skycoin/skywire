@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_crypto.go: per-datagram AEAD
+// Package router pkg/router/datagram_crypto.go c2-net-routing
 // for DatagramRouteGroup. Stage 3 of #2607.
 //
 // Stream Noise (what RouteGroup uses) generates a continuous

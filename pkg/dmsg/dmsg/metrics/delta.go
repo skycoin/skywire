@@ -1,4 +1,4 @@
-// Package metrics pkg/dmsg/metrics/delta.go
+// Package metrics pkg/dmsg/dmsg/metrics/delta.go c1-net-dmsg
 package metrics
 
 // DeltaType represents a change in metrics gauge.

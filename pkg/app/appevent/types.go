@@ -1,4 +1,4 @@
-// Package appevent pkg/app/appevent/types.go
+// Package appevent pkg/app/appevent/types.go c2-vis-appsvc
 package appevent
 
 // TCPDial represents a dial event.

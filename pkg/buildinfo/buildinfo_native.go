@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package buildinfo pkg/buildinfo/buildinfo_native.go
+// Package buildinfo pkg/buildinfo/buildinfo_native.go c0-com-util
 //
 // Native init() that parses the ldflags-injected `go list -m -json`
 // output via encoding/json. Build-tag-gated off the WASM path —

@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package disc pkg/disc/testing.go
+// Package disc pkg/dmsg/disc/testing.go c1-net-dmsg
 //
 // Mock APIClient for tests. Build-tag-gated because it imports
 // net/http (for status-code constants). See interface.go for the

@@ -1,6 +1,6 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
-// Package router pkg/router/map.go
+// Package router pkg/router/map.go c2-net-routing
 package router
 
 import (

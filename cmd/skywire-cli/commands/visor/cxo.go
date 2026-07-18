@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/cxo.go: operator
+// Package clivisor cmd/skywire-cli/commands/visor/cxo.go c4-vis-cli
 // introspection for the visor's lazy-on-demand CXO subscription
 // manager. Three subcommands:
 //

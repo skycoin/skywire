@@ -1,4 +1,4 @@
-// Package visor pkg/visor/service_registry.go
+// Package visor pkg/visor/service_registry.go c3-vis-core
 //
 // ServiceRegistry maps port numbers to connection handlers so the
 // sky-forwarding server (and future transports) can dispatch incoming

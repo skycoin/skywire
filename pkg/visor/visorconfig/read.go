@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package visorconfig pkg/visor/visorconfig/read.go
+// Package visorconfig pkg/visor/visorconfig/read.go c3-vis-core
 //
 // Reader / ReadFile / ReadRaw load a V1 config from disk or an
 // io.Reader. All three pull encoding/json and os.ReadFile, neither

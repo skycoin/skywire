@@ -1,6 +1,6 @@
 //go:build tinygo && !(js && wasm)
 
-// Package network pkg/transport/network/ws_tinygo_nows.go
+// Package network pkg/transport/network/ws_tinygo_nows.go c2-net-transport
 //
 // WS dial stub for non-browser TinyGo targets (e.g. wasip1, bare-metal). There
 // is no browser WebSocket API here and coder/websocket (net/http) is excluded,

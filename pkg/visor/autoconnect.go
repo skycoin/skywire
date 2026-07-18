@@ -1,4 +1,4 @@
-// Package visor pkg/visor/autoconnect.go
+// Package visor pkg/visor/autoconnect.go c3-vis-core
 package visor
 
 import (

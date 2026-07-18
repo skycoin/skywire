@@ -1,4 +1,4 @@
-// Package tpviz pkg/tpviz/cxo_standalone.go
+// Package tpviz pkg/tpviz/cxo_standalone.go c4-app-rewards
 //
 // Standalone CXO wiring. When tp-viz runs OUTSIDE a visor (the reward
 // server serving theskywirenetwork.net over dmsg), it has no visor to

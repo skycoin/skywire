@@ -1,4 +1,4 @@
-// Package pty pkg/pty/pty_session_registry.go
+// Package pty pkg/pty/pty_session_registry.go c3-vis-pty
 //
 // sessionRegistry tracks live ptySessions by id so the host side of the pty can
 // survive a dropped stream: when a client's connection tears down the gateway

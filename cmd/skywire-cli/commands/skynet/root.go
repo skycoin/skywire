@@ -1,4 +1,4 @@
-// Package skynet cmd/skywire-cli/commands/skynet/root.go
+// Package skynet cmd/skywire-cli/commands/skynet/root.go c4-vis-cli
 package skynet
 
 import (

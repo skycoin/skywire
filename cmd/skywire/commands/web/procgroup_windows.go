@@ -1,5 +1,6 @@
 //go:build windows
 
+// Package web cmd/skywire/commands/web/procgroup_windows.go c4-vis-cli
 package web
 
 import (

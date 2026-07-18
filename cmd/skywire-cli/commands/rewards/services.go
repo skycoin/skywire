@@ -1,7 +1,7 @@
 //go:build !windows
 // +build !windows
 
-// Package clirewards cmd/skywire-cli/commands/rewards/services.go
+// Package clirewards cmd/skywire-cli/commands/rewards/services.go c4-vis-cli
 package clirewards
 
 import (

@@ -1,4 +1,4 @@
-// Package clihv cmd/skywire-cli/commands/hv/serve.go
+// Package clihv cmd/skywire-cli/commands/hv/serve.go c4-vis-cli
 package clihv
 
 import (
@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv"
 	"github.com/skycoin/skywire/pkg/wasmhv/ctlbridge"
 	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
@@ -40,6 +41,7 @@ var (
 	serveHarness  bool
 	serveTLS      bool
 	servePassword string
+	serveVariant  string
 )
 
 // walletDmsgFetchShim is injected into the bundled skycoin-web wallet's index
@@ -72,16 +74,20 @@ func coinNodeDefault() string {
 func walletDmsgFetchShim() string {
 	return `<script>(function(){` +
 		`var rf=window.fetch?window.fetch.bind(window):null;` +
+		// The coin registry (same source of truth as the native visor's
+		// pkg/wallet/coins). skycoin-web's coin.service fetches /api/v1/coins;
+		// each coin's nodeUrl is a "/coin/<index>" prefix this shim routes.
+		`var COINS=` + string(coins.JSON()) + `;` +
 		`function p(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
 		`function q(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
-		`function isCoin(u){return /^\/api\/v[12]\//.test(p(u));}` +
-		// BTC is any path containing /v1/btc/ — this catches BOTH the raw
-		// /v1/btc/health (node-health probe) AND skycoin-web's apiService form
-		// /api/v1/btc/{balance,history,send} (which also matches isCoin, but the
-		// BTC branch is checked first). No skycoin node endpoint contains
-		// /v1/btc/, and the gateway normalizes on that substring, so passing the
-		// full path through to btcFetch works either way.
-		`function isBtc(u){return /\/v1\/btc\//.test(p(u));}` +
+		// A wallet request is either a "/coin/<index>/…" per-coin call or a bare
+		// "/api/v[12]/…" (pre-registry / fallback → the default coin 0). mc[2] is
+		// the node-relative path after the /coin/<index> prefix.
+		`function coinMatch(pth){return /^\/coin\/(\d+)(\/[^?]*)?/.exec(pth);}` +
+		// BTC is any path containing /v1/btc/ (the wallet addresses bitcoin as
+		// /coin/1/api/v1/btc/…). The in-tab electrum gateway normalizes on that
+		// substring, so routing by it is robust to custom node overrides too.
+		`function isBtc(pth){return /\/v1\/btc\//.test(pth);}` +
 		`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
 		// The wallet POSTs balance/transactions as x-www-form-urlencoded; forward the
 		// request Content-Type so fetchDmsg/fetchClearnet don't mislabel the body as
@@ -91,8 +97,14 @@ func walletDmsgFetchShim() string {
 		`function mkResp(r){var b=(r&&typeof r.body==="string")?r.body:(r&&r.body?new TextDecoder().decode(r.body):"");return new Response(b,{status:(r&&r.status)||502,headers:{"Content-Type":"application/json"}});}` +
 		`window.fetch=function(input,init){` +
 		`var url=(typeof input==="string")?input:(input&&input.url);` +
-		`var coin=isCoin(url),btc=isBtc(url);` +
-		`if(!coin&&!btc)return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
+		`var pn=p(url);` +
+		// Coin list → served in-tab from the registry (no node round-trip).
+		`if(/\/api\/v1\/coins$/.test(pn)){return Promise.resolve(new Response(JSON.stringify(COINS),{status:200,headers:{"Content-Type":"application/json"}}));}` +
+		`var mc=coinMatch(pn);` +
+		`var coin=!!mc||/^\/api\/v[12]\//.test(pn);` +
+		`if(!coin)return rf?rf(input,init):Promise.reject(new Error("no fetch"));` +
+		// Node-relative path: strip the /coin/<index> prefix if present.
+		`var rel=mc?(mc[2]||"/"):pn;var btc=isBtc(pn);` +
 		`init=init||{};` +
 		`var v=window.parent&&window.parent.skywireVisor;` +
 		`if(!v||!v.fetchDmsg)return Promise.resolve(jr(503,{error:"skywire visor not ready"}));` +
@@ -101,7 +113,7 @@ func walletDmsgFetchShim() string {
 		// #plog panel — and the browser console — show what's crossing the mesh,
 		// mirroring the resolving-proxy browser (browse.js). Visible even at the
 		// seed-entry screen, where there's no wallet to query yet.
-		`var m=init.method||"GET",pth=p(url)+q(url),t0=Date.now();` +
+		`var m=init.method||"GET",pth=rel+q(url),t0=Date.now();` +
 		`function wlog(s){try{var L=window.parent&&window.parent.skywireLog;if(L&&L.emit)L.emit("info",["[wallet] "+s]);}catch(e){}}` +
 		`function done(tag){return function(r){wlog(tag+" → "+((r&&r.status)||"?")+" ("+(Date.now()-t0)+"ms)");return mkResp(r);};}` +
 		`function fail(tag){return function(e){wlog(tag+" ✗ "+String((e&&e.message)||e));return jr(502,{error:String(e)});};}` +
@@ -147,6 +159,7 @@ func init() {
 	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
 	serveCmd.Flags().BoolVar(&serveTLS, "tls", false, "serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts")
 	serveCmd.Flags().StringVar(&servePassword, "password", "", "gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear")
+	serveCmd.Flags().StringVarP(&serveVariant, "variant", "W", "", "which embedded wasm-visor to serve: 'go' (larger, full crypto/tls+net/http) or 'tinygo' (~4x smaller — better for the PWA, with the documented TinyGo feature gaps). Empty = the build default. A standard-Go build embeds both; a TinyGo build has only 'tinygo'")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -171,11 +184,22 @@ page never asks anyone to type a secret key.`,
 			cmd.PrintErrln("no embedded wasm-visor: rebuild skywire after `make embed-wasm-visor`")
 			os.Exit(1)
 		}
-		wasm, err := wasmbin.Get()
+		// Pick which embedded wasm-visor to serve. Empty flag = the build's
+		// default (Go for a standard build, TinyGo for a TinyGo build).
+		variant := wasmbin.Default()
+		if serveVariant != "" {
+			variant = wasmbin.Variant(serveVariant)
+			if !wasmbin.Has(variant) {
+				cmd.PrintErrf("wasm-visor variant %q is not embedded in this build (available: %v)\n", serveVariant, wasmbin.Available())
+				os.Exit(1)
+			}
+		}
+		wasm, err := wasmbin.GetVariant(variant)
 		if err != nil {
 			cmd.PrintErrln("embedded wasm-visor:", err)
 			os.Exit(1)
 		}
+		cmd.Printf("serving %q wasm-visor (%.1f MB); available: %v\n", variant, float64(len(wasm))/1024/1024, wasmbin.Available())
 		uiFS, err := visor.HypervisorUIFS()
 		if err != nil {
 			cmd.PrintErrln("hypervisor UI assets:", err)
@@ -210,7 +234,10 @@ page never asks anyone to type a secret key.`,
 		// The wasm-visor bootstrap files hv-boot.js fetches by name (resolved against
 		// <base href="/">). These are NOT in the Angular FS, so serve them explicitly.
 		serveBytes("/wasm-visor.wasm", "application/wasm", wasm)
-		serveBytes("/wasm_exec.js", "text/javascript", wasmhv.WasmExecJS)
+		// wasm_exec.js MUST match the embedded wasm's toolchain (Go vs TinyGo
+		// loaders differ — TinyGo's provides the WASI shims its module imports),
+		// so take it from wasmbin alongside the blob, not a fixed copy.
+		serveBytes("/wasm_exec.js", "text/javascript", wasmbin.WasmExecJSVariant(variant))
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 		// worker.js hosts the wasm runtime off the main thread; hv-boot.js loads it
 		// by name (new Worker('worker.js')) and proxies skywireVisor over postMessage.

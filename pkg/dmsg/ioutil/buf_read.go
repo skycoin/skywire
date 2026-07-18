@@ -1,4 +1,4 @@
-// Package ioutil pkg/ioutil/buf_read.go
+// Package ioutil pkg/dmsg/ioutil/buf_read.go c1-net-dmsg
 package ioutil
 
 import (

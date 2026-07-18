@@ -1,4 +1,4 @@
-// Package btcgateway serves the skycoin-web wallet's /v1/btc/* endpoints by
+// Package btcgateway pkg/btcgateway/gateway.go c4-app-wallet
 // translating them to an Electrum backend, so a Skywire visor can provide the
 // in-browser BTC wallet its chain data (balance / utxos / history / fee /
 // broadcast). The wallet keeps keys, address derivation and signing entirely

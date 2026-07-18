@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/hook.go — adapter that turns
+// Package policy pkg/router/policy/hook.go c2-net-routing
 // a Loader (the operator's Starlark policy file) into a
 // router.DialHook the router can invoke per dial.
 //

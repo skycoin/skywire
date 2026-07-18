@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/quic_iface.go
+// Package dmsg pkg/dmsg/dmsg/quic_iface.go c1-net-dmsg
 package dmsg
 
 import (

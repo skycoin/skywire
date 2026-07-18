@@ -1,5 +1,6 @@
 //go:build !linux && !android
 
+// Package network pkg/transport/network/tcp_usertimeout_other.go c2-net-transport
 package network
 
 import (

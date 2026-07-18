@@ -1,4 +1,4 @@
-// Package api pkg/transport-setup/api/rpc_gateway.go
+// Package api pkg/transport-setup/api/rpc_gateway.go c2-net-transport
 package api
 
 import (

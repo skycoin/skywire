@@ -1,4 +1,4 @@
-// Package skynet internal/skynet/server.go
+// Package skynet pkg/skynet/server.go c2-app-skynet
 package skynet
 
 import (

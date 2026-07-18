@@ -1,4 +1,4 @@
-// Package skysocksc cmd/skywire-cli/commands/proxy/mux_info.go
+// Package skysocksc cmd/skywire-cli/commands/proxy/mux_info.go c4-vis-cli
 package skysocksc
 
 import (

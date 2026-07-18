@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/escape.go:
+// Package cliskychat cmd/skywire-cli/commands/skychat/escape.go c4-vis-cli
 // helpers for keeping `skychat listen` and `skychat group listen`
 // output strictly one-line-per-message.
 //

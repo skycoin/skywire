@@ -1,4 +1,4 @@
-// Package skymailbridge is the protocol core for the skywire email
+// Package skymailbridge pkg/skymailbridge/server.go c4-app-mail
 // bridge: a minimal SMTP server-side state machine that parses
 // inbound envelopes, extracts a peer PubKey from the recipient
 // domain's pre-suffix DNS label, dials the peer via a transport-

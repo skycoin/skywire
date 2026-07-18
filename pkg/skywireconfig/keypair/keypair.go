@@ -1,4 +1,4 @@
-// Package keypair is a thin, WASM-safe wrapper around
+// Package keypair pkg/skywireconfig/keypair/keypair.go c3-vis-core
 // pkg/cipher.GenerateKeyPair. It exists so external consumers
 // (TinyGo WASM, doc generators) that need to spin up a fresh visor
 // identity don't have to import the full cipher package surface or

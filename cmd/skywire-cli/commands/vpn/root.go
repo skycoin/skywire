@@ -1,4 +1,4 @@
-// Package clivpn root.go
+// Package clivpn cmd/skywire-cli/commands/vpn/root.go c4-vis-cli
 package clivpn
 
 import (

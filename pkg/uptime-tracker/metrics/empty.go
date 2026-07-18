@@ -1,4 +1,4 @@
-// Package utmetrics internal/utmetrics/empty.go
+// Package utmetrics pkg/uptime-tracker/metrics/empty.go c4-net-discovery
 package utmetrics
 
 // NewEmpty constructs new empty metrics.

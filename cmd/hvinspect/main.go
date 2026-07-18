@@ -1,3 +1,4 @@
+// Package main cmd/hvinspect/main.go c4-vis-cli
 // hvinspect — headless inspector for the Skywire hypervisor UI (wasm-visor
 // harness and the native HV UI). Drives the installed Brave via chromedp (pure
 // Go, no cgo) to capture, for any hash route:

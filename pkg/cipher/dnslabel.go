@@ -1,4 +1,4 @@
-// Package cipher — DNS-label encoding for PubKey.
+// Package cipher pkg/cipher/dnslabel.go c0-com-crypto
 //
 // Skynet URLs of the form `<subdomain>.<pk>.skynet` need to fit each
 // component into a DNS label. The hex form is 66 chars (33 bytes × 2),

@@ -1,4 +1,4 @@
-// Package history provides optional persistence for skychat messages.
+// Package history cmd/apps/skychat/history/history.go c4-app-chat
 //
 // By default skychat is entirely ephemeral — messages pass through and are not
 // stored anywhere. The history package adds an opt-in BoltDB-backed store with

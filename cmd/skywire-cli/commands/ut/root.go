@@ -1,4 +1,4 @@
-// Package cliut cmd/skywire-cli/ut/root.go
+// Package cliut cmd/skywire-cli/commands/ut/root.go c4-vis-cli
 package cliut
 
 import (

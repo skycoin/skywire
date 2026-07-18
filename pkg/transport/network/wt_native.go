@@ -1,6 +1,6 @@
 //go:build !tinygo && !(js && wasm)
 
-// Package network pkg/transport/network/wt_native.go
+// Package network pkg/transport/network/wt_native.go c2-net-transport
 //
 // Native WT-transport carrier: dial via webtransport-go (pinning the server's
 // self-signed cert by SHA-256, the browser serverCertificateHashes model), and

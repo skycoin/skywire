@@ -1,6 +1,6 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
-// Package noise pkg/noise/rpcdialer.go
+// Package noise pkg/dmsg/noise/rpcdialer.go c1-net-dmsg
 //
 // RPCClientDialer is split out of net.go behind //go:build !tinygo because it
 // imports net/rpc, which transitively pulls net/http — broken on the TinyGo js

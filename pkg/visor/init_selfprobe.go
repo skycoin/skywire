@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_selfprobe.go
+// Package visor pkg/visor/init_selfprobe.go c3-vis-core
 package visor
 
 import (

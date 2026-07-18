@@ -1,3 +1,4 @@
+// Package store pkg/uptime-tracker/store/uptime_response.go c4-net-discovery
 package store
 
 import (

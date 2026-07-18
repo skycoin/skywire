@@ -1,4 +1,4 @@
-// Package clipty cmd/skywire-cli/commands/pty/root.go — `skywire cli pty`,
+// Package clipty cmd/skywire-cli/commands/pty/root.go c4-vis-cli
 // the unified namespace for the skywire pty subsystem: a remote shell and a
 // remote-filesystem mount, plus the host (server) side, all keyed by public
 // key over a noise-XK connection (no SSH involved).

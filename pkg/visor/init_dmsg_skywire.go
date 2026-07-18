@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_dmsg_skywire.go — phase 3 wiring of
+// Package visor pkg/visor/init_dmsg_skywire.go c3-vis-core
 // the dmsgpty Host over skynet routes.
 //
 // Lives in pkg/visor (not pkg/dmsg/dmsgpty) because pkg/app/appnet

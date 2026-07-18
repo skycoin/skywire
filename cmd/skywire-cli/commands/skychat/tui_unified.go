@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/tui_unified.go
+// Package cliskychat cmd/skywire-cli/commands/skychat/tui_unified.go c4-vis-cli
 //
 // Unified bubbletea TUI: a picker view that lists every conversation
 // the local visor knows about (1:1 peers + group memberships) and lets

@@ -1,4 +1,4 @@
-// Package utclient implements uptime tracker client
+// Package utclient pkg/utclient/client.go c2-net-discovery
 package utclient
 
 import (

@@ -1,4 +1,4 @@
-// Package serviceuptime — pkg/serviceuptime/api.go: HTTP handlers
+// Package serviceuptime pkg/serviceuptime/api.go c2-net-discovery
 // that surface the Recorder's history. Exported as plain
 // http.HandlerFunc so callers can wrap with chi (services) or gin
 // (the visor's logserver) without dragging either framework into

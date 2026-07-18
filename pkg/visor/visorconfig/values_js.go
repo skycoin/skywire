@@ -1,6 +1,6 @@
 //go:build js
 
-// Package visorconfig pkg/visor/visorconfig/values_js.go
+// Package visorconfig pkg/visor/visorconfig/values_js.go c3-vis-core
 //
 // js/wasm counterpart to the platform-gated values_{linux,darwin,
 // windows}.go files. The browser doesn't have a host filesystem or

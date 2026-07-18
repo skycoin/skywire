@@ -1,4 +1,4 @@
-// Package commands pkg/skywire-utilities/pkg/calvin/cmd/calvin/commands/root.go
+// Package commands pkg/calvin/cmd/calvin/commands/root.go c0-com-util
 package commands
 
 import (

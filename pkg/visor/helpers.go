@@ -1,4 +1,4 @@
-// Package visor pkg/visor/helpers.go
+// Package visor pkg/visor/helpers.go c3-vis-core
 // Common helper functions to reduce code duplication across the visor package.
 package visor
 

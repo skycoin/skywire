@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/dmsghttp_client.go
+// Package clilog cmd/skywire-cli/commands/log/dmsghttp_client.go c4-vis-cli
 //
 // Shared dmsg-bootstrap + http-client helper for the per-visor
 // survey-whitelist endpoints. Pre-fix, every subcommand that

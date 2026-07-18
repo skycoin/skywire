@@ -1,5 +1,6 @@
 //go:build js && wasm
 
+// Package main cmd/wasm-visor/group_js.go c3-vis-wasm
 // cmd/wasm-visor/group_js.go: in-browser federated GROUP chat. The wasm visor
 // runs the same group.Manager the native visor does (roster, signing, gossip,
 // per-member CXO feeds), over its dmsg client, with an IN-MEMORY store + CXO tree

@@ -1,3 +1,4 @@
+// Package sdmetrics pkg/service-discovery/metrics/victoria_metrics.go c4-net-discovery
 package sdmetrics
 
 import (

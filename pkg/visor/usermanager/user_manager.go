@@ -1,4 +1,4 @@
-// Package usermanager pkg/visor/usermanager/user_manager.go
+// Package usermanager pkg/visor/usermanager/user_manager.go c3-vis-core
 package usermanager
 
 import (

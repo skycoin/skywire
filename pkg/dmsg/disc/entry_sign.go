@@ -1,4 +1,4 @@
-// Package disc pkg/dmsg/disc/entry_sign.go
+// Package disc pkg/dmsg/disc/entry_sign.go c1-net-dmsg
 //
 // Sign + VerifySignature use the package-wide `json` codec on the Entry to
 // produce the canonical signed payload. They build on all targets: the codec is

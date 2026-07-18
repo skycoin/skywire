@@ -1,4 +1,4 @@
-// Package store pkg/discovery/store/testing.go
+// Package store pkg/dmsg/discovery/store/testing.go c1-net-dmsg
 package store
 
 import (

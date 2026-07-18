@@ -1,4 +1,4 @@
-// Package services pkg/services/services.go
+// Package services pkg/services/services.go c2-vis-appsvc
 //
 // Multi-service-in-one-process runner for Skywire deployment services.
 // Each service registers a Factory that decodes its block from a

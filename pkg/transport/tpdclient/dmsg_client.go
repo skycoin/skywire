@@ -1,4 +1,4 @@
-// Package tpdclient pkg/transport/tpdclient/dmsg_client.go
+// Package tpdclient pkg/transport/tpdclient/dmsg_client.go c2-net-transport
 //
 // A transport-discovery client that speaks to the TPD over DMSG instead of
 // net/http, so it compiles and runs on the TinyGo js/wasm target (a browser

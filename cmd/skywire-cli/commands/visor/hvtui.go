@@ -1,4 +1,4 @@
-// Package clivisor hvtui.go — hypervisor TUI
+// Package clivisor cmd/skywire-cli/commands/visor/hvtui.go c4-vis-cli
 package clivisor
 
 import (

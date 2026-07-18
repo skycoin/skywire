@@ -1,4 +1,4 @@
-// Package pty pkg/pty/exec_pool.go
+// Package pty pkg/pty/exec_pool.go c3-vis-pty
 //
 // Session reuse for one-shot remote Exec. Establishing a dmsgpty session
 // (dial + noise + the RPC writeRequest/readResponse handshake + the

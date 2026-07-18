@@ -1,4 +1,4 @@
-// Package main cmd/edit/edit.go
+// Package main cmd/util/edit/edit.go c4-vis-cli
 package main
 
 import (

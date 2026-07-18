@@ -1,3 +1,4 @@
+// Package main cmd/dmsg/dmsgprobe/dmsgprobe.go c1-net-dmsg
 // package main cmd/dmsg/dmsgprobe/dmsgprobe.go
 package main
 

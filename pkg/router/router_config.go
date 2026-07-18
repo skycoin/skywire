@@ -1,3 +1,4 @@
+// Package router pkg/router/router_config.go c2-net-routing
 // router_config.go contains setters, config methods, and Close.
 package router
 

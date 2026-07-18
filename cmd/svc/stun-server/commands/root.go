@@ -1,4 +1,4 @@
-// Package commands cmd/stun-server/commands/root.go
+// Package commands cmd/svc/stun-server/commands/root.go c2-net-transport
 package commands
 
 import (

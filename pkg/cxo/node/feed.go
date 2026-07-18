@@ -1,3 +1,4 @@
+// Package node pkg/cxo/node/feed.go c2-net-cxo
 package node
 
 import (
@@ -72,7 +73,29 @@ func (n *nodeFeed) receivedRoot(cr connRoot) {
 
 			var tormh = n.hs[torm]
 
-			tormh.errq <- ErrMaxHeadsLimit
+			// Hand the evicted head its error while draining brorq — same
+			// feeds↔head deadlock avoidance as nodeHead.receivedRoot. This runs
+			// on the nodeFeeds event-loop goroutine (handleReceivedRoot →
+			// nodeFeed.receivedRoot → here), the sole drainer of brorq; a bare
+			// `tormh.errq <- ...` would deadlock if tormh's handle loop is parked
+			// sending to brorq (broadcastRoot). handleBroadcastRoot is
+			// non-blocking and same-goroutine-safe. Once the error is delivered
+			// (or the head/node is closing), close() waits for the head loop to
+			// drain it and exit.
+			fs := n.fs
+		evict:
+			for {
+				select {
+				case tormh.errq <- ErrMaxHeadsLimit:
+					break evict
+				case <-tormh.closeq:
+					break evict
+				case bcr := <-fs.brorq:
+					fs.handleBroadcastRoot(bcr)
+				case <-fs.closeq:
+					break evict
+				}
+			}
 			tormh.close() // wait
 
 			delete(n.hs, torm) // remove

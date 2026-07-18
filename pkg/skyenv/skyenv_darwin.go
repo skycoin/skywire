@@ -1,7 +1,7 @@
 //go:build darwin
 // +build darwin
 
-// Package skyenv defines variables and constants
+// Package skyenv pkg/skyenv/skyenv_darwin.go c0-com-env
 package skyenv
 
 const (

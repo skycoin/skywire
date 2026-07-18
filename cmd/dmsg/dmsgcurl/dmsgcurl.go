@@ -1,3 +1,4 @@
+// Package main cmd/dmsg/dmsgcurl/dmsgcurl.go c1-net-dmsg
 // package main cmd/dmsgcurl/dmsgcurl.go
 package main
 

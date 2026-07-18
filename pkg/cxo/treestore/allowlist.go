@@ -1,4 +1,4 @@
-// Package treestore — pkg/cxo/treestore/allowlist.go: subscriber
+// Package treestore pkg/cxo/treestore/allowlist.go c2-net-cxo
 // access control for Publisher.
 //
 // A publisher with an empty allowlist accepts subscribe requests from

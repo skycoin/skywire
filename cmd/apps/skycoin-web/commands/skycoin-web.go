@@ -1,4 +1,4 @@
-// Package commands registers the skycoin-web thin-client wallet as an
+// Package commands cmd/apps/skycoin-web/commands/skycoin-web.go c4-app-wallet
 // internal skywire launcher app. Running it in-process (rather than as a
 // raw external `skywire skycoin web` subprocess) is what lets the SAME
 // launch path serve it on the host-native visor and, unchanged, on the

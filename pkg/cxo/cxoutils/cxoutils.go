@@ -1,4 +1,4 @@
-// Package cxoutils implements common utilities for
+// Package cxoutils pkg/cxo/cxoutils/cxoutils.go c2-net-cxo
 // CXO, that can be used, or can be not used by
 // end-user. The package implements methods to
 // remove old Root objects and to remove ownerless

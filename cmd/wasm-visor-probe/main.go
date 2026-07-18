@@ -1,5 +1,6 @@
 //go:build js && wasm
 
+// Package main cmd/wasm-visor-probe/main.go c3-vis-wasm
 // Command wasm-visor-probe measures how much of the visor stack compiles under
 // TinyGo for the browser. It is a BUILD-ONLY frontier probe — not a runnable
 // visor. `tinygo build -target wasm ./cmd/wasm-visor-probe` succeeding means the

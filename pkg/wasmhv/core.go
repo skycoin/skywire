@@ -1,4 +1,4 @@
-// Package wasmhv is a minimal, wasm-compilable hypervisor "core": it accepts
+// Package wasmhv pkg/wasmhv/core.go c3-vis-wasm
 // visor dials over dmsg (port 46, like a normal hypervisor), runs the gob RPC
 // client against each dialed-in visor, and serves the hypervisor's Angular /api
 // surface. It deliberately does NOT import pkg/visor (which doesn't compile to

@@ -1,4 +1,4 @@
-// Package store pkg/transport-discovery/store/memory_store.go
+// Package store pkg/transport-discovery/store/memory_store.go c4-net-discovery
 package store
 
 import (

@@ -1,4 +1,4 @@
-// Package spec is the WASM-clean schema half of pkg/transport.
+// Package spec pkg/transport/spec/spec.go c2-net-transport
 // Currently holds PersistentTransports — the wire-format entry the
 // visor stores per pinned transport peer. pkg/visor/visorconfig.V1
 // embeds a `[]PersistentTransports`, so this type living in a leaf

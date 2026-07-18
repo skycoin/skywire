@@ -1,6 +1,7 @@
 /*
 Package logging provides application logging utilities
 */
+// Package logging pkg/logging/logging.go c0-com-log
 package logging
 
 import (

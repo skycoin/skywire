@@ -1,4 +1,4 @@
-// Package store pkg/discovery/store/storer.go
+// Package store pkg/dmsg/discovery/store/storer.go c1-net-dmsg
 package store
 
 import (

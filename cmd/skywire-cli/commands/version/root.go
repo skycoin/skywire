@@ -1,4 +1,4 @@
-// Package cliversion cmd/skywire-cli/commands/version/root.go
+// Package cliversion cmd/skywire-cli/commands/version/root.go c4-vis-cli
 //
 // `skywire cli version` reports the local build (version/commit/date) and,
 // unless --local is given, resolves the latest available version and the
