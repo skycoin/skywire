@@ -1,4 +1,4 @@
-// Package dmsgweb pkg/dmsgweb/stats.go
+// Package dmsgweb pkg/dmsgweb/stats.go c4-app-web
 //
 // Stats collects per-resolver request counters and surfaces them to
 // consumers via Snapshot(). Intentionally lightweight — atomic

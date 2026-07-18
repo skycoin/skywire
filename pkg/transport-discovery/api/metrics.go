@@ -1,4 +1,4 @@
-// Package api pkg/transport-discovery/metrics.go
+// Package api pkg/transport-discovery/api/metrics.go c4-net-discovery
 package api
 
 import (

@@ -1,4 +1,4 @@
-// Package svcendpoints is a data-only leaf package describing the notable
+// Package svcendpoints pkg/skyenv/svcendpoints/svcendpoints.go c0-com-env
 // PUBLIC HTTP endpoints each deployment service exposes. It carries no
 // behavior and no heavy imports — just a static manifest — so the resolving
 // proxy's home page (pkg/dmsgweb) can render a per-service endpoint directory

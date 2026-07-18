@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/smb.go
+// Package clidmsg cmd/skywire-cli/commands/dmsg/smb.go c4-vis-cli
 //
 // Registers the standalone (dmsg-only) SMTP→dmsg bridge as the `smb`
 // subcommand of `skywire dmsg`, so a single skywire binary can launch

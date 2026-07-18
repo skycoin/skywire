@@ -1,4 +1,4 @@
-// Package dmsgscp pkg/dmsg/dmsgscp/const.go: shared constants for the
+// Package dmsgscp pkg/dmsg/dmsgscp/const.go c1-net-dmsg
 // scp-over-dmsg utility — wire-protocol framing bytes, default
 // dmsg port, and the configurable safety caps the host enforces on
 // every transfer.

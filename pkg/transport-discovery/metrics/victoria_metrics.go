@@ -1,3 +1,4 @@
+// Package tpdiscmetrics pkg/transport-discovery/metrics/victoria_metrics.go c4-net-discovery
 package tpdiscmetrics
 
 import (

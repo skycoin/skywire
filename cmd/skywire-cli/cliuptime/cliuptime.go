@@ -1,4 +1,4 @@
-// Package cliuptime provides reusable cobra subcommands for querying
+// Package cliuptime cmd/skywire-cli/cliuptime/cliuptime.go c4-vis-cli
 // the discovery-integrated /uptimes endpoints. Each consumer CLI
 // (skywire cli ut {sd,mdisc,tpd}) wires it in with a per-service
 // default URL; filter semantics and output shapes are identical.

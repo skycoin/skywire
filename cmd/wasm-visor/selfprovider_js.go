@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — the extra SelfProvider read-views the HV-UI node page needs from a
+// Package main cmd/wasm-visor/selfprovider_js.go c3-vis-wasm
 // browser visor (dmsg sessions, router settings, runtime config, runtime logs). Each
 // returns pre-marshaled JSON matching the native hypervisor's shape so the Angular UI
 // renders instead of erroring ("Failed to fetch dmsg sessions" / "subroute not
@@ -89,15 +89,27 @@ func (s visorSelf) SelfDmsgSessions() []byte {
 		return nil
 	}
 	servers := []cipher.PubKey{}
+	sessions := []map[string]interface{}{}
 	for _, cs := range dmsgC.AllSessions() {
 		servers = append(servers, cs.RemotePK())
+		// Mirror the native DmsgServerSession shape so the shared Angular UI —
+		// and the wasm-visor onboarding tour — can show which protocol
+		// (tcp/ws/wss/webtransport/quic) this browser edge reached each dmsg
+		// server over. A browser edge dials ws/wss or WebTransport, never tcp.
+		sessions = append(sessions, map[string]interface{}{
+			"pk":       cs.RemotePK(),
+			"carrier":  cs.Carrier(),
+			"protocol": cs.Protocol(),
+			"address":  cs.CarrierAddr(),
+		})
 	}
 	out := map[string]interface{}{
 		"main": map[string]interface{}{
-			"pk":      selfPK,
-			"role":    "main",
-			"count":   len(servers),
-			"servers": servers,
+			"pk":       selfPK,
+			"role":     "main",
+			"count":    len(servers),
+			"servers":  servers,
+			"sessions": sessions,
 		},
 	}
 	b, err := json.Marshal(out)

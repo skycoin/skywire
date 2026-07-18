@@ -1,3 +1,4 @@
+// Package visor pkg/visor/init_dmsg.go c3-vis-core
 // init_dmsg.go contains DMSG initialization logic.
 package visor
 

@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg-discovery/commands/examples.go
+// Package commands cmd/dmsg/dmsg-discovery/commands/examples.go c1-net-dmsg
 package commands
 
 import (

@@ -1,3 +1,4 @@
+// Package commands cmd/dmsg/dmsgcurl/commands/errors.go c1-net-dmsg
 package commands
 
 var errorCode = map[string]int{

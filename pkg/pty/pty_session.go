@@ -1,4 +1,4 @@
-// Package pty pkg/pty/pty_session.go
+// Package pty pkg/pty/pty_session.go c3-vis-pty
 //
 // ptySession is the host-side persistence primitive for detach/reattach pty
 // sessions (Option B, phase 1). A single pump goroutine is the ONLY reader of

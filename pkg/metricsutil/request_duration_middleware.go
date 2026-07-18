@@ -1,4 +1,4 @@
-// Package metricsutil pkg/metricsutil/request_duration_middleware.go
+// Package metricsutil pkg/metricsutil/request_duration_middleware.go c0-com-util
 
 package metricsutil
 

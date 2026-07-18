@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/connect_all.go
+// Package clidmsg cmd/skywire-cli/commands/dmsg/connect_all.go c4-vis-cli
 package clidmsg
 
 import (

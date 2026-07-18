@@ -1,4 +1,4 @@
-// Package main provides a simple HTTP server for e2e testing
+// Package main internal/dmsg-e2e/testserver/main.go c1-net-dmsg
 
 package main
 

@@ -1,4 +1,4 @@
-// Package clitp cmd/skywire-cli/commands/tp/tp-uptime.go
+// Package clitp cmd/skywire-cli/commands/tp/tp-uptime.go c4-vis-cli
 //
 // `skywire cli tp uptime` — queries the transport-level uptime endpoints
 // exposed by transport-discovery. Caching mirrors the pattern used by

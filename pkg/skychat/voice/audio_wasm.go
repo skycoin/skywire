@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package voice pkg/skychat/voice/audio_wasm.go c2-app-chat
+// Package voice pkg/skychat/voice/audio_wasm.go c4-app-chat
 //
 // Browser audio backend for the wasm visor. getUserMedia + AudioContext are
 // main-thread-only, but the visor runs in a Web Worker, so the WebAudio graph

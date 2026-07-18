@@ -1,6 +1,6 @@
 //go:build !withoutgotop
 
-// Package cligotop cmd/skywire-cli/commands/gotop/root.go
+// Package cligotop cmd/skywire-cli/commands/gotop/root.go c4-vis-cli
 package cligotop
 
 import (

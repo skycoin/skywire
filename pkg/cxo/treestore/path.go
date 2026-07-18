@@ -1,4 +1,4 @@
-// Package treestore — pkg/cxo/treestore/path.go: path parsing.
+// Package treestore pkg/cxo/treestore/path.go c2-net-cxo
 //
 // Paths are slash-separated strings. The empty string addresses the
 // root. Segments must be non-empty and must not contain '/'. We

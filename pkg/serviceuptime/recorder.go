@@ -1,4 +1,4 @@
-// Package serviceuptime — pkg/serviceuptime/recorder.go: long-running
+// Package serviceuptime pkg/serviceuptime/recorder.go c2-net-discovery
 // recorder that turns "this process is alive" into bbolt rows.
 //
 // Lifecycle:

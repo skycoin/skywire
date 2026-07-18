@@ -1,4 +1,4 @@
-// Package group — receive-side roster/admin reconciler.
+// Package group cmd/apps/skychat/group/roster_reconcile.go c4-app-chat
 //
 // PublishRosterMutation/PublishAdminMutation write signed roster/<seq> and
 // admin/<seq> leaves onto the issuer's feed, but before this file NOTHING read

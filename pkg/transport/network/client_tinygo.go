@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package network pkg/transport/network/client_tinygo.go
+// Package network pkg/transport/network/client_tinygo.go c2-net-transport
 //
 // TinyGo stub for the address-resolver-backed carriers. STCPR/SUDPH/QUIC ride
 // the AR (net/http) + raw UDP/TCP (and quic-go/kcp), none of which compile or run

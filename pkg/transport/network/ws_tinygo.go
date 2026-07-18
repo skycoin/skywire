@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package network pkg/transport/network/ws_tinygo.go
+// Package network pkg/transport/network/ws_tinygo.go c2-net-transport
 //
 // TinyGo WS-transport: the SERVE side. A browser (or any TinyGo target) cannot
 // run the WebSocket HTTP server a WS transport listener needs, so Start fails

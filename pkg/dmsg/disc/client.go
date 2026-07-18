@@ -1,6 +1,6 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
-// Package disc pkg/disc/client.go
+// Package disc pkg/dmsg/disc/client.go c1-net-dmsg
 //
 // HTTP-based APIClient. Build-tag-gated to keep net/http out of the
 // js/wasm build graph; the EntryReader/EntryWriter/APIClient
@@ -240,7 +240,15 @@ func (c *httpClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *Entr
 	sequence := entry.Sequence + 1
 	entry.Timestamp = time.Now().UnixNano()
 
-	for {
+	// Bound the read-modify-write retry on sequence conflict. Each iteration is a
+	// POST plus (on conflict) a GET — and over dmsg each of those is a fresh
+	// stream with a full Noise handshake, expensive on the discovery. A tight,
+	// unbounded retry loop under contention (many peers racing the same entry, or
+	// a busy server re-registering on every session change) turns one update into
+	// a handshake storm that GC-thrashes the discovery. Cap the attempts and back
+	// off between them.
+	backoff := putEntryConflictBaseBackoff
+	for attempt := 0; ; attempt++ {
 		entry.Sequence = sequence
 		err := entry.Sign(sk)
 		if err != nil {
@@ -253,6 +261,9 @@ func (c *httpClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *Entr
 		if err != ErrValidationWrongSequence {
 			return err
 		}
+		if attempt >= putEntryMaxConflictRetries {
+			return fmt.Errorf("put entry: gave up after %d sequence-conflict retries: %w", attempt, err)
+		}
 		rE, entryErr := c.Entry(ctx, entry.Static)
 		if entryErr != nil {
 			return entryErr
@@ -262,8 +273,26 @@ func (c *httpClient) PutEntry(ctx context.Context, sk cipher.SecKey, entry *Entr
 			return nil
 		}
 		sequence = rE.Sequence + 1
+		select {
+		case <-time.After(backoff):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		if backoff < putEntryConflictMaxBackoff {
+			backoff *= 2
+		}
 	}
 }
+
+const (
+	// putEntryMaxConflictRetries bounds PutEntry's sequence-conflict retry loop
+	// so a persistently-contended entry can't spin out a handshake storm.
+	putEntryMaxConflictRetries = 5
+	// putEntryConflictBaseBackoff / putEntryConflictMaxBackoff bound the
+	// exponential backoff between sequence-conflict retries.
+	putEntryConflictBaseBackoff = 100 * time.Millisecond
+	putEntryConflictMaxBackoff  = 2 * time.Second
+)
 
 // AvailableServers returns list of available servers.
 func (c *httpClient) AvailableServers(ctx context.Context) ([]*Entry, error) {

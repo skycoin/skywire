@@ -1,4 +1,4 @@
-// Package httputil pkg/httputil/dmsghttp.go
+// Package httputil pkg/httputil/dmsghttp.go c0-com-http
 package httputil
 
 // DMSGHTTPConf is struct of /dmsghttp endpoint of config bootstrap

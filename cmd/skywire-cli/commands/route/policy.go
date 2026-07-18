@@ -1,4 +1,4 @@
-// Package cliroute cmd/skywire-cli/commands/route/policy.go —
+// Package cliroute cmd/skywire-cli/commands/route/policy.go c4-vis-cli
 // operator tooling for the skylark routing-policy DSL
 // (RFC #2882). `skywire cli route policy test` previews what a
 // script would decide for a synthetic dial; `bench` runs the

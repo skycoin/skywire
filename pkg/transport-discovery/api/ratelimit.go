@@ -1,4 +1,4 @@
-// Package api pkg/transport-discovery/ratelimit.go
+// Package api pkg/transport-discovery/api/ratelimit.go c4-net-discovery
 package api
 
 import (

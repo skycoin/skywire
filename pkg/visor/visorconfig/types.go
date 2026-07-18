@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/types.go
+// Package visorconfig pkg/visor/visorconfig/types.go c3-vis-core
 //
 // The Duration type's MarshalJSON / UnmarshalJSON live in
 // types_native.go under //go:build !js because encoding/json

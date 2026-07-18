@@ -1,4 +1,4 @@
-// Package visor pkg/visor/memlimit.go
+// Package visor pkg/visor/memlimit.go c3-vis-core
 package visor
 
 import (

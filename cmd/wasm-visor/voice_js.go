@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — 1:1 voice calls for the browser visor.
+// Package main cmd/wasm-visor/voice_js.go c3-vis-wasm
 //
 // Wires pkg/skychat/voice into the wasm visor over the SAME app.Client the
 // browser skychat already uses: signaling (invite/accept/decline/hangup) on

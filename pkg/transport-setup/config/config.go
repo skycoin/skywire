@@ -1,4 +1,4 @@
-// Package config pkg/transport-setup/config/config.go
+// Package config pkg/transport-setup/config/config.go c2-net-transport
 package config
 
 import (

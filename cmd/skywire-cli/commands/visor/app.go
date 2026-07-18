@@ -1,4 +1,4 @@
-// Package clivisor app.go
+// Package clivisor cmd/skywire-cli/commands/visor/app.go c4-vis-cli
 package clivisor
 
 import (

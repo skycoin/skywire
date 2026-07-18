@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package dmsg pkg/dmsg/tcpnodelay_tinygo.go
+// Package dmsg pkg/dmsg/dmsg/tcpnodelay_tinygo.go c1-net-dmsg
 package dmsg
 
 import (

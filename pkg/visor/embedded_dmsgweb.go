@@ -1,4 +1,4 @@
-// Package visor pkg/visor/embedded_dmsgweb.go
+// Package visor pkg/visor/embedded_dmsgweb.go c3-vis-core
 //
 // EmbeddedDmsgWeb is the in-process version of the `skywire dmsg web`
 // utility. It runs a localhost SOCKS5 proxy + HTTP bridge that

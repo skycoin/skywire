@@ -1,4 +1,4 @@
-// Package pg internal/pg/lib.go
+// Package pg pkg/pg/lib.go c0-com-util
 package pg
 
 import (

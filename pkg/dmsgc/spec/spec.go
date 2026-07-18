@@ -1,4 +1,4 @@
-// Package spec is the WASM-clean schema half of pkg/dmsgc. The types
+// Package spec pkg/dmsgc/spec/spec.go c1-net-dmsg
 // and methods here describe the visor's dmsg-subsystem configuration
 // at the wire (JSON) layer only — no dmsg client construction, no
 // network I/O, no transitive pull on operational packages.

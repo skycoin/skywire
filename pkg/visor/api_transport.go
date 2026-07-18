@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_transport.go c3-vis-core
 // api_transport.go contains transport management API methods.
 package visor
 

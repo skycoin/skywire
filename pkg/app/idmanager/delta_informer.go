@@ -1,4 +1,4 @@
-// Package idmanager delta_informer.go
+// Package idmanager pkg/app/idmanager/delta_informer.go c2-vis-appsvc
 package idmanager
 
 // DeltaInformer informs when there has been a change to the id-manager.

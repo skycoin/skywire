@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — in-tab skysocks CLIENT: fetch CLEARNET content through a remote
+// Package main cmd/wasm-visor/skysocks_js.go c3-vis-wasm
 // skysocks-server over a skywire route, so a browser tab can browse the clearnet
 // IP-anonymously (the exit does the egress).
 //

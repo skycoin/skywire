@@ -1,4 +1,4 @@
-// Package router pkg/router/cascade_ack_registry.go
+// Package router pkg/router/cascade_ack_registry.go c2-net-routing
 //
 // ackRegistry is the shared correlation table that maps a cascade
 // sessionID to the goroutine waiting for that session's CascadeAck.

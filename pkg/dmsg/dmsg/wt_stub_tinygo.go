@@ -1,6 +1,6 @@
 //go:build tinygo && !(js && wasm)
 
-// Package dmsg pkg/dmsg/dmsg/wt_stub_tinygo.go
+// Package dmsg pkg/dmsg/dmsg/wt_stub_tinygo.go c1-net-dmsg
 //
 // dmsg-over-WebTransport stub for the NON-browser TinyGo (IoT) target. quic-go +
 // webtransport-go don't compile under TinyGo, and an IoT client has no browser

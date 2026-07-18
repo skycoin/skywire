@@ -1,4 +1,4 @@
-// Package spectrogram pkg/skychat/voice/spectrogram/spectrogram.go c2-app-chat
+// Package spectrogram pkg/skychat/voice/spectrogram/spectrogram.go c4-app-chat
 //
 // Spectrogram DSP core — computes an FFT magnitude spectrum from PCM audio and
 // maps magnitudes to colors, for visualizing skychat voice audio (sent/received)

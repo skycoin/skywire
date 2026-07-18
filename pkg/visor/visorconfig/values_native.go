@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package visorconfig pkg/visor/visorconfig/values_native.go
+// Package visorconfig pkg/visor/visorconfig/values_native.go c3-vis-core
 //
 // Native (non-WASM) implementations of helpers that need to shell
 // out or touch the host filesystem in ways that don't make sense in

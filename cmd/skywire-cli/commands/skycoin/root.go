@@ -1,4 +1,4 @@
-// Package cliskycoin provides convenience commands for managing
+// Package cliskycoin cmd/skywire-cli/commands/skycoin/root.go c4-vis-cli
 // skycoin-daemon and skycoin-web instances on a running visor. The
 // underlying primitives — AddApp, SetAppEnv, SetAutoStart, StartApp,
 // StopApp — are exposed as `skywire cli visor app *` subcommands;

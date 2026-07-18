@@ -1,4 +1,4 @@
-// Package stats provides the visor's local telemetry store.
+// Package stats pkg/visor/stats/bitmap.go c3-vis-core
 //
 // pkg/visor/stats/bitmap.go: 288-bit-per-day uptime bitmap helpers.
 //

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_lan_dmsg.go
+// Package visor pkg/visor/init_lan_dmsg.go c3-vis-core
 package visor
 
 import (

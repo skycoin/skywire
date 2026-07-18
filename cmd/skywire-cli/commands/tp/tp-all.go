@@ -1,4 +1,4 @@
-// Package clitp tp-all.go — list all transports from DHT or transport discovery
+// Package clitp cmd/skywire-cli/commands/tp/tp-all.go c4-vis-cli
 package clitp
 
 import (

@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/config_compat.go —
+// Package visorconfig pkg/visor/visorconfig/config_compat.go c3-vis-core
 // backward-compat JSON unmarshaling for renamed config keys.
 //
 // V1.Pty (canonical) corresponds to operator-config-json's "pty"

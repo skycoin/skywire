@@ -1,3 +1,4 @@
+// Package node pkg/cxo/node/feeds.go c2-net-cxo
 package node
 
 import (
@@ -464,8 +465,19 @@ func (n *nodeFeeds) handleDelConn(c *Conn) {
 // (api)
 func (n *nodeFeeds) receivedRoot(c *Conn, r *registry.Root) {
 
+	// receivedRoot runs synchronously on the connection's receiveMsg
+	// goroutine. n.rrq is drained by the single nodeFeeds event loop; if that
+	// loop stalls (e.g. the feeds↔head pipeline backs up), this send blocks.
+	// Guarding ONLY on n.closeq (node shutdown) means a connection that closes
+	// while parked here never unblocks — receiveMsg never returns, its Conn's
+	// run() stays in await.Wait(), and the whole Conn (≈5 goroutines + buffers)
+	// leaks. On a busy transport-discovery that leak reached thousands of
+	// goroutines / multi-GB RSS → OOM. Also select on c.closeq so a closing
+	// connection's receiveMsg unblocks and the Conn is reaped even while the
+	// node-level pipeline is stalled.
 	select {
 	case n.rrq <- connRoot{c, r}:
+	case <-c.closeq:
 	case <-n.closeq:
 	}
 

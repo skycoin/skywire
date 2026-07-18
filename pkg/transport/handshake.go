@@ -1,4 +1,4 @@
-// Package transport pkg/transport/handshake.go
+// Package transport pkg/transport/handshake.go c2-net-transport
 package transport
 
 import (

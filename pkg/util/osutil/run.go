@@ -1,4 +1,4 @@
-// Package osutil pkg/util/osutil/run.go
+// Package osutil pkg/util/osutil/run.go c0-com-util
 package osutil
 
 import (
