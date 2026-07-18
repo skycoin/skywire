@@ -141,13 +141,20 @@ func (n *nodeFeed) broadcastRoot(cr connRoot) {
 	// observe individual sub-side completions. sendRoot is fire-and-
 	// forget by design — errors translate to a Close that the
 	// conn's run() loop reaps.
+	// Encode the root message body ONCE and share it across every subscriber.
+	// Pre-fix each conn re-ran r.Encode() + msg.Root.Encode() on the (large)
+	// all-transports root, then buffered its own copy — O(rootSize * subs) CPU
+	// and RSS that ballooned the transport-discovery CXO node to multi-GB. Now
+	// the body is a single immutable buffer; each conn adds only its 8-byte head.
+	body := encodeRootBody(cr.r)
+
 	for c := range n.cs {
 
 		if c == cr.c {
 			continue
 		}
 
-		go c.sendRoot(cr.r) //nolint:errcheck
+		go c.sendSharedBody(c.nextSeq(), 0, body) //nolint:errcheck
 	}
 
 }
