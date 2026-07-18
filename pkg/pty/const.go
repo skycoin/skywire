@@ -1,4 +1,4 @@
-// Package pty pkg/pty/const.go
+// Package pty pkg/pty/const.go c3-vis-pty
 package pty
 
 // Constants related to pty.

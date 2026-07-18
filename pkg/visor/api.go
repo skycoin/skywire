@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api.go
+// Package visor pkg/visor/api.go c3-vis-core
 package visor
 
 import (
@@ -788,6 +788,23 @@ type DmsgClientSessionInfo struct {
 	Role    string          `json:"role"` // "main" | "route_setup" | "transport_setup"
 	Count   int             `json:"count"`
 	Servers []cipher.PubKey `json:"servers"`
+	// Sessions carries the same servers plus the protocol each one was reached
+	// over (tcp / ws / wss / webtransport / quic). Parallel to Servers, sorted
+	// the same way, so existing Servers consumers keep working.
+	Sessions []DmsgServerSession `json:"sessions,omitempty"`
+}
+
+// DmsgServerSession is one active dmsg-server session and the protocol the
+// local client used to reach it.
+type DmsgServerSession struct {
+	PK cipher.PubKey `json:"pk"`
+	// Carrier is the raw dmsg carrier: tcp | ws | wt | quic.
+	Carrier string `json:"carrier"`
+	// Protocol is a human-readable label distinguishing ws from wss:
+	// tcp | ws | wss | webtransport | quic.
+	Protocol string `json:"protocol"`
+	// Address is the endpoint the carrier dialed (host:port or ws(s)://…).
+	Address string `json:"address,omitempty"`
 }
 
 // DmsgHTTPRequest represents an HTTP request to be made over dmsg

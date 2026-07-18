@@ -1,4 +1,4 @@
-// Package main cmd/address-resolver/address-resolver.go
+// Package main cmd/svc/address-resolver/address-resolver.go c4-net-discovery
 package main
 
 import (

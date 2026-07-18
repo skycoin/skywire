@@ -1,4 +1,4 @@
-// Package clidmsgpty hvdmsg.go
+// Package clidmsgpty cmd/skywire-cli/commands/dmsgpty/hvdmsg.go c4-vis-cli
 package clidmsgpty
 
 import (

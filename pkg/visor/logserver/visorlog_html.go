@@ -1,4 +1,4 @@
-// Package logserver pkg/visor/logserver/visorlog_html.go — terminal-style
+// Package logserver pkg/visor/logserver/visorlog_html.go c3-vis-core
 // HTML rendering for the /skywire.log (and /visor.log alias) endpoint.
 //
 // The on-disk log is logrus-formatted plain text (DisableColors:true), e.g.

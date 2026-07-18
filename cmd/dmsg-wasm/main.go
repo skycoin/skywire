@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — WASM browser dmsg client.
+// Package main cmd/dmsg-wasm/main.go c1-net-dmsg
 //
 // A standard-Go js/wasm build of the dmsg client (NOT TinyGo — the client
 // pulls logrus + encoding/gob via the RPC paths, which need full reflection).

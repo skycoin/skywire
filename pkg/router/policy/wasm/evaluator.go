@@ -1,4 +1,4 @@
-// Package wasm pkg/router/policy/wasm/evaluator.go — wazero-
+// Package wasm pkg/router/policy/wasm/evaluator.go c2-net-routing
 // backed Evaluator that satisfies the same shape as the
 // Starlark Evaluator. The router-side Loader can plug either in.
 //

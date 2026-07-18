@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/reward.go
+// Package clivisor cmd/skywire-cli/commands/visor/reward.go c4-vis-cli
 package clivisor
 
 import (

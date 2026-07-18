@@ -1,4 +1,4 @@
-// Package packetfilter internal/packetfilter/address-filter.go
+// Package packetfilter pkg/transport/network/packetfilter/address-filter.go c2-net-transport
 package packetfilter
 
 import (

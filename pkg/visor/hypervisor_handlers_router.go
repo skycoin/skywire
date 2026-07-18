@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_router.go
+// Package visor pkg/visor/hypervisor_handlers_router.go c3-vis-core
 //
 // Hypervisor HTTP handlers for the unified visor-wide router-knobs
 // resource at GET/PUT /visors/{pk}/router-settings. Backs the

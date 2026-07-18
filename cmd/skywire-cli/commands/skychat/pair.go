@@ -1,4 +1,4 @@
-// Package cliskychat — cmd/skywire-cli/commands/skychat/pair.go:
+// Package cliskychat cmd/skywire-cli/commands/skychat/pair.go c4-vis-cli
 // CLI surface for the CXO-backed 1:1 chat path (test-matrix row 1c).
 //
 // Distinguishes from `cli skychat send`: that one POSTs /message

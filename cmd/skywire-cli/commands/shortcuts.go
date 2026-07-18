@@ -1,4 +1,4 @@
-// Package commands cmd/skywire-cli/commands/shortcuts.go
+// Package commands cmd/skywire-cli/commands/shortcuts.go c4-vis-cli
 //
 // Top-level convenience commands. The verbs typed most often
 // (pk / status / halt) live at the root so they don't need the

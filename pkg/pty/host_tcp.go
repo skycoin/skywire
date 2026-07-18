@@ -1,4 +1,4 @@
-// Package pty pkg/pty/host_tcp.go — direct-TCP entry
+// Package pty pkg/pty/host_tcp.go c3-vis-pty
 // point for the dmsgpty / dmsgscp / dmsgcat protocols, with an XK
 // noise handshake gating the dmsgpty whitelist.
 //

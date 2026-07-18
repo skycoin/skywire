@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/sudph.go
+// Package network pkg/transport/network/sudph.go c2-net-transport
 package network
 
 import (
@@ -105,7 +105,10 @@ func (c *sudphClient) listen() (net.Listener, error) {
 	c.sudphVisorsConn = c.filter.NewConn(visorsConnPriority, nil)
 	c.filter.Start()
 	c.log.Debug("Binding")
-	addrCh, err := c.ar.BindSUDPH(c.filter, c.makeBindHandshake())
+	// BindSUDPH lives on the SUDPHBinder extension (not the base APIClient) so
+	// the pfilter-typed method stays out of the browser build; every real AR
+	// client implements it on native.
+	addrCh, err := c.ar.(addrresolver.SUDPHBinder).BindSUDPH(c.filter, c.makeBindHandshake())
 	if err != nil {
 		// BindSUDPH may fail when the AR has no UDP target (dmsg-only AR
 		// without a published udp_address). Release the listener so we

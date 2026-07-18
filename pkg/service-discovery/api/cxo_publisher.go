@@ -1,4 +1,4 @@
-// Package api pkg/service-discovery/api/cxo_publisher.go
+// Package api pkg/service-discovery/api/cxo_publisher.go c4-net-discovery
 //
 // CXO publisher for service-discovery's services tree.
 //

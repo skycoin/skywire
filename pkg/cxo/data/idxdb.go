@@ -1,3 +1,4 @@
+// Package data pkg/cxo/data/idxdb.go c2-net-cxo
 package data
 
 import (

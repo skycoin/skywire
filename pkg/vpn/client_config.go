@@ -1,4 +1,4 @@
-// Package vpn internal/vpn/client_config.go
+// Package vpn pkg/vpn/client_config.go c4-app-vpn
 package vpn
 
 import "github.com/skycoin/skywire/pkg/cipher"

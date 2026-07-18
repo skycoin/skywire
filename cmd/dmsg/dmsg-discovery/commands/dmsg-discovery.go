@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg-discovery/commands/dmsg-discovery.go
+// Package commands cmd/dmsg/dmsg-discovery/commands/dmsg-discovery.go c1-net-dmsg
 //
 // Cobra entry point for the standalone `skywire dmsg disc` binary.
 // All the actual run logic lives in pkg/services/dmsgdisc — this file

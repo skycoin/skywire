@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package visorconfig — args_native.go
+// Package visorconfig pkg/visor/visorconfig/args_native.go c3-vis-core
 //
 // encoding/json-using halves of args.go. Build-tag-gated off the
 // WASM path because encoding/json's reflect-based marshaller drags

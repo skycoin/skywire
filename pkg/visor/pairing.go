@@ -1,4 +1,4 @@
-// Package visor pkg/visor/pairing.go
+// Package visor pkg/visor/pairing.go c3-vis-core
 //
 // Visor-level wrapper around the cmd/apps/skychat/pairing package.
 //

@@ -1,3 +1,4 @@
+// Package main cmd/dmsg/dmsg-server/dmsg-server.go c1-net-dmsg
 // package main cmd/dmsg-server/dmsg-server.go
 package main
 

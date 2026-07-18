@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/single_pprof.go
+// Package clilog cmd/skywire-cli/commands/log/single_pprof.go c4-vis-cli
 //
 // `cli log pprof <pk> <profile>` — fetch one of the remote visor's
 // pprof profiles over dmsghttp and emit the raw bytes to stdout.

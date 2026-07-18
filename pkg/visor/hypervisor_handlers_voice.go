@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_voice.go
+// Package visor pkg/visor/hypervisor_handlers_voice.go c3-vis-core
 //
 // Hypervisor HTTP routes for skychat VOICE calls — the native-visor
 // counterpart to the wasm visor's skychatVoice* JS hooks. These thin

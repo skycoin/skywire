@@ -1,6 +1,10 @@
 package pulse
 
-import "github.com/jfreymuth/pulse/proto"
+import (
+	"sync"
+
+	"github.com/jfreymuth/pulse/proto"
+)
 
 // A PlaybackStream is used for playing audio.
 // When creating a stream, the user must provide a callback that will be used to buffer audio data.
@@ -8,14 +12,16 @@ type PlaybackStream struct {
 	c *Client
 
 	index     uint32
-	state     streamState
+	state     *stateMachine
 	underflow bool
 	err       error
 
-	front, back []byte
-	requested   int
-	request     chan int
-	started     chan bool
+	request chan int
+	started chan bool
+
+	events        chan struct{}
+	eventsLock    sync.Mutex
+	volumeChanges chan proto.ChannelVolumes
 
 	r Reader
 
@@ -62,13 +68,19 @@ func (c *Client) NewPlayback(r Reader, opts ...PlaybackOption) (*PlaybackStream,
 		p.createRequest.ChannelVolumes = cvol
 	}
 
+	// Listen for changes in the sink input if the application wants to be
+	// notified of volume changes.
+	if p.volumeChanges != nil {
+		p.events = make(chan struct{}, 1)
+		go p.handleEvents(p.events)
+	}
+
 	err := c.c.Request(&p.createRequest, &p.createReply)
 	if err != nil {
 		return nil, err
 	}
 	p.index = p.createReply.StreamIndex
-	p.front = make([]byte, p.createReply.BufferMaxLength)
-	p.back = make([]byte, p.createReply.BufferMaxLength)
+	p.state = newStateMachine()
 	p.request = make(chan int)
 	p.started = make(chan bool)
 	c.mu.Lock()
@@ -79,39 +91,106 @@ func (c *Client) NewPlayback(r Reader, opts ...PlaybackOption) (*PlaybackStream,
 }
 
 func (p *PlaybackStream) run() {
-	for n := range p.request {
-		if p.state != running {
+	requested := 0
+	front := make([]byte, p.createReply.BufferMaxLength)
+	back := make([]byte, p.createReply.BufferMaxLength)
+
+	for bufferLength := range p.request {
+		if !p.state.is(running) {
 			continue
 		}
-		p.requested += n
-		for p.requested > 0 {
-			n, err := p.r.Read(p.front[:p.requested])
-			if n > 0 {
-				p.c.c.Send(p.index, p.front[:n])
-				p.requested -= n
-				p.front, p.back = p.back, p.front
-			}
+		requested += bufferLength
+		for requested > 0 {
+			readCount, err := p.r.Read(front[:requested])
 			if err != nil {
 				if err != EndOfData {
 					p.err = err
 				}
-				p.state = idle
+				p.state.set(idle)
 				break
 			}
+			if readCount > 0 {
+				p.c.c.Send(p.index, front[:readCount])
+				requested -= readCount
+				front, back = back, front
+			}
+
 			select {
-			case n = <-p.request:
-				p.requested += n
+			case nextBufferLength := <-p.request:
+				requested += nextBufferLength
 			default:
 			}
 		}
 	}
 }
 
+// Handle events for this playback stream in a goroutine.
+// Event notifications are received through the events channel.
+func (p *PlaybackStream) handleEvents(events chan struct{}) {
+	volume := make(proto.ChannelVolumes, len(p.createRequest.ChannelMap))
+
+	for range events {
+		// We got an event that something about our sink input changed, so read
+		// the sink input information.
+		reply := proto.GetSinkInputInfoReply{}
+		err := p.c.c.Request(&proto.GetSinkInputInfo{
+			SinkInputIndex: p.createReply.SinkInputIndex,
+		}, &reply)
+		if err != nil {
+			if p.Closed() {
+				// Most likely this error is caused by the stream getting
+				// closed. So exit the goroutine.
+				break
+			}
+			// This should not normally happen.
+			panic(err)
+		}
+
+		// Check whether the volume changed, and if so, report it to the
+		// application.
+		volumeChanged := false
+		for i, val := range reply.ChannelVolumes {
+			if volume[i] != val {
+				volume[i] = val
+				volumeChanged = true
+			}
+		}
+		if volumeChanged {
+			volumeToSend := append(proto.ChannelVolumes(nil), volume...) // copy volume
+
+			// Drop last volume change, if not received by the application.
+			// This way, if p.volumeChanges is a buffered channel, some updates
+			// might get lost when the receiver is slow but it will always
+			// receive the latest volume eventually.
+			select {
+			case <-p.volumeChanges:
+				// Dropped, so there was something in the buffered channel.
+			default:
+				// Not dropped, so if the channel is buffered, it should have
+				// room now.
+			}
+
+			// Send the new volume.
+			select {
+			case p.volumeChanges <- volumeToSend:
+				// Succeeded in sending!
+			default:
+				// Somehow couldn't send the new volume value. Perhaps the
+				// channel is unbuffered, and the receiving goroutine is doing
+				// other things? There's not much we can do about it here.
+			}
+		}
+	}
+
+	// Playback stream was closed, so close the volume changes channel.
+	close(p.volumeChanges)
+}
+
 // Start starts playing audio.
 func (p *PlaybackStream) Start() {
-	if p.state == idle {
+	if p.state.is(idle) {
 		p.c.c.Request(&proto.FlushPlaybackStream{StreamIndex: p.index}, nil)
-		p.state = running
+		p.state.set(running)
 		p.err = nil
 		p.request <- int(p.createReply.BufferTargetLength)
 		p.underflow = false
@@ -123,24 +202,24 @@ func (p *PlaybackStream) Start() {
 // Stop stops playing audio; the callback will no longer be called.
 // If the buffer size/latency is large, audio may continue to play for some time after the call to Stop.
 func (p *PlaybackStream) Stop() {
-	if p.state == running || p.state == paused {
-		p.state = idle
+	if p.state.is(running, paused) {
+		p.state.set(idle)
 	}
 }
 
 // Pause stops playing audio immediately.
 func (p *PlaybackStream) Pause() {
-	if p.state == running {
+	if p.state.is(running) {
 		p.c.c.Request(&proto.CorkPlaybackStream{StreamIndex: p.index, Corked: true}, nil)
-		p.state = paused
+		p.state.set(paused)
 	}
 }
 
 // Resume resumes a paused stream.
 func (p *PlaybackStream) Resume() {
-	if p.state == paused {
+	if p.state.is(paused) {
 		p.c.c.Request(&proto.CorkPlaybackStream{StreamIndex: p.index, Corked: false}, nil)
-		p.state = running
+		p.state.set(running)
 		p.underflow = false
 	}
 }
@@ -148,28 +227,69 @@ func (p *PlaybackStream) Resume() {
 // Drain waits until the playback has ended.
 // Drain does not return when the stream is paused.
 func (p *PlaybackStream) Drain() {
-	if p.state == running {
+	if p.state.is(running) {
 		p.c.c.Request(&proto.DrainPlaybackStream{StreamIndex: p.index}, nil)
 	}
+}
+
+// Volume returns the volume of each channel in the playback.
+func (p *PlaybackStream) Volume() (proto.ChannelVolumes, error) {
+	reply := proto.GetSinkInputInfoReply{}
+	err := p.c.c.Request(&proto.GetSinkInputInfo{
+		SinkInputIndex: p.createReply.SinkInputIndex,
+	}, &reply)
+	if err != nil {
+		return nil, err
+	}
+	return reply.ChannelVolumes, nil
+}
+
+// SetVolume changes the volume of each channel in the playback.
+//
+// Do not set the volume when opening a playback stream, PulseAudio will pick an
+// appropriate volume for the stream automatically (and may save it for next
+// time). In particular, don't set it to 100% because depending on the
+// configuration this could actually set the volume to the maximum volume the
+// hardware is capable of which is usually way too loud. Instead, only change
+// the volume as a direct result of user input.
+//
+// If you use this API, you should also query the volume on startup and listen
+// for playback volume changes from the system mixer (many desktops allow users
+// to change application volume from the system tray). That way, you can keep
+// the volume slider in the application synchronized with the system volume
+// mixer.
+func (p *PlaybackStream) SetVolume(volumes proto.ChannelVolumes) error {
+	return p.c.c.Request(&proto.SetSinkInputVolume{
+		SinkInputIndex: p.createReply.SinkInputIndex,
+		ChannelVolumes: volumes,
+	}, nil)
 }
 
 // Close closes the stream.
 func (p *PlaybackStream) Close() {
 	if !p.Closed() {
 		p.c.c.Request(&proto.DeletePlaybackStream{StreamIndex: p.index}, nil)
-		p.state = closed
+		p.state.set(closed)
 		close(p.request)
+
 		p.c.mu.Lock()
 		delete(p.c.playback, p.index)
 		p.c.mu.Unlock()
+
+		p.eventsLock.Lock()
+		if p.events != nil {
+			close(p.events)
+			p.events = nil
+		}
+		p.eventsLock.Unlock()
 	}
 }
 
 // Closed returns wether the stream was closed.
-func (p *PlaybackStream) Closed() bool { return p.state == closed || p.state == serverLost }
+func (p *PlaybackStream) Closed() bool { return p.state.is(closed, serverLost) }
 
 // Running returns wether the stream is currently playing.
-func (p *PlaybackStream) Running() bool { return p.state == running }
+func (p *PlaybackStream) Running() bool { return p.state.is(running) }
 
 // Underflow returns true if any underflows happend since the last call to Start or Resume.
 // Underflows usually happen because the latency/buffer size is too low or because the callback
@@ -289,6 +409,19 @@ func PlaybackMediaName(name string) PlaybackOption {
 func PlaybackMediaIconName(name string) PlaybackOption {
 	return func(p *PlaybackStream) {
 		p.createRequest.Properties["media.icon_name"] = proto.PropListString(name)
+	}
+}
+
+// PlaybackVolumeChanges sets a channel to receive volume changes on.
+// These changes can come either from changing the volume directly (through
+// SetVolume) or from the system volume mixer.
+//
+// The channel should be buffered (1 element is sufficient) to avoid losing
+// volume changes due to race conditions or a slow receiver. It will be closed
+// when the playback is closed.
+func PlaybackVolumeChanges(changes chan proto.ChannelVolumes) PlaybackOption {
+	return func(p *PlaybackStream) {
+		p.volumeChanges = changes
 	}
 }
 

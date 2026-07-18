@@ -1,4 +1,4 @@
-// Package api pkg/transport-discovery/api/cxo_metrics_publisher.go
+// Package api pkg/transport-discovery/api/cxo_metrics_publisher.go c4-net-discovery
 //
 // CXO publisher for the network-wide transport-metrics aggregate.
 // On a fixed cadence (default 60s) the publisher recomputes the

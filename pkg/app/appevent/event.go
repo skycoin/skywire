@@ -1,4 +1,4 @@
-// Package appevent pkg/app/appevent/event.go
+// Package appevent pkg/app/appevent/event.go c2-vis-appsvc
 package appevent
 
 import (

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_tpd_uptime_subscriber.go
+// Package visor pkg/visor/api_tpd_uptime_subscriber.go c3-vis-core
 //
 // Reader-side helper for TPD's network-wide visor-uptime feed. The
 // CXO subscription lives in the unified CXOSubscriptionManager (see

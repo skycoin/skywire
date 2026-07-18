@@ -1,6 +1,6 @@
 //go:build js
 
-// Package visorconfig pkg/visor/visorconfig/common_js.go
+// Package visorconfig pkg/visor/visorconfig/common_js.go c3-vis-core
 //
 // js/wasm stub for Common.flush. The real implementation lives in
 // common_native.go (encoding/json + os.WriteFile, neither

@@ -1,4 +1,4 @@
-// Package xfer pkg/skychat/xfer/manager.go c2-app-chat
+// Package xfer pkg/skychat/xfer/manager.go c4-app-chat
 package xfer
 
 import (

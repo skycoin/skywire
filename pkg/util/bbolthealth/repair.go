@@ -1,4 +1,4 @@
-// Package bbolthealth — pkg/util/bbolthealth/repair.go: integrity-check
+// Package bbolthealth pkg/util/bbolthealth/repair.go c0-com-util
 // helper for bbolt files. Used by visor subsystems whose bbolt stores
 // hold rebuildable data (telemetry, content-addressed CXO leaves, etc.)
 // where automatic recover-by-deletion is preferred over a panic at

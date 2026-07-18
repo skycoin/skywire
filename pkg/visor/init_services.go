@@ -1,3 +1,4 @@
+// Package visor pkg/visor/init_services.go c3-vis-core
 // init_services.go contains service initialization logic: health tracking, uptime, survey,
 // forwarding connections, ping listeners, and the UI server.
 package visor

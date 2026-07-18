@@ -1,4 +1,4 @@
-// Package idmanager pkg/app/idmanager/manager.go
+// Package idmanager pkg/app/idmanager/manager.go c2-vis-appsvc
 package idmanager
 
 import (

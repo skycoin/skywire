@@ -1,3 +1,4 @@
+// Package main cmd/dmsg/dmsghttp/dmsghttp.go c1-net-dmsg
 // package main cmd/dmsg-discovery/dmsg-discovery.go
 package main
 

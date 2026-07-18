@@ -1,4 +1,4 @@
-// Package transport defines transport related entities and management
+// Package transport pkg/transport/transport.go c2-net-transport
 // operations.
 package transport
 

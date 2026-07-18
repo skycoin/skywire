@@ -1,5 +1,6 @@
 //go:build js && wasm
 
+// Package dmsg pkg/dmsg/dmsg/httpsguard_js.go c1-net-dmsg
 package dmsg
 
 import (

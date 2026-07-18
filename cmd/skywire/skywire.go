@@ -2,6 +2,7 @@
 cmd/skywire/skywire.go
 skywire
 */
+// Package main cmd/skywire/skywire.go c4-vis-cli
 package main
 
 import (

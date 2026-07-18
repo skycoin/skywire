@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/doctor.go: `cli
+// Package clivisor cmd/skywire-cli/commands/visor/doctor.go c4-vis-cli
 // visor doctor` rolls a healthy-or-not verdict + the underlying
 // signals into one command. Today an operator answers "is this
 // visor healthy?" by running five commands (visor info, tp ls, rg

@@ -1,4 +1,4 @@
-// Package cliconfig cmd/skywire-cli/commands/config/envfiles.go
+// Package cliconfig cmd/skywire-cli/commands/config/envfiles.go c4-vis-cli
 package cliconfig
 
 const envfileLinux = `#

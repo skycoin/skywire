@@ -1,4 +1,4 @@
-// Package servicedisc pkg/servicedisc/client.go
+// Package servicedisc pkg/servicedisc/client.go c2-net-discovery
 package servicedisc
 
 import (

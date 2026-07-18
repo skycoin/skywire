@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/networker.go
+// Package appnet pkg/app/appnet/networker.go c2-vis-appsvc
 package appnet
 
 import (

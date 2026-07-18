@@ -1,4 +1,4 @@
-// Package serviceuptime — pkg/serviceuptime/store.go: bbolt-backed
+// Package serviceuptime pkg/serviceuptime/store.go c2-net-discovery
 // persistence for a service's own uptime / version history.
 //
 // On-disk layout:

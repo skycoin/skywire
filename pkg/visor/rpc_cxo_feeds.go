@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_cxo_feeds.go
+// Package visor pkg/visor/rpc_cxo_feeds.go c3-vis-core
 //
 // RPC adapter for the CXO user-feed registry. The handlers are thin
 // wrappers over Visor.RegisterCXOFeed / UnregisterCXOFeed /

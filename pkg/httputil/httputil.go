@@ -1,4 +1,4 @@
-// Package httputil pkg/httputil/httputil.go
+// Package httputil pkg/httputil/httputil.go c0-com-http
 package httputil
 
 import (
@@ -13,13 +13,10 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5/middleware"
-	jsoniter "github.com/json-iterator/go"
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/logging"
 )
-
-var json = jsoniter.ConfigFastest
 
 var log = logging.MustGetLogger("httputil")
 

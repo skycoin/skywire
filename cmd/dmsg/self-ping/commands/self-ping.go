@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg-commands/self-ping/commands/self-ping.go
+// Package commands cmd/dmsg/self-ping/commands/self-ping.go c1-net-dmsg
 package commands
 
 import (

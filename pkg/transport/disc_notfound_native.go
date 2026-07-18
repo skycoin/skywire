@@ -1,5 +1,6 @@
 //go:build !tinygo
 
+// Package transport pkg/transport/disc_notfound_native.go c2-net-transport
 package transport
 
 import (

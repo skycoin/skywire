@@ -1,4 +1,4 @@
-// Package main cmd/conf/conf.go
+// Package main cmd/svc/conf/conf.go c4-net-discovery
 package main
 
 import (

@@ -1,5 +1,6 @@
 //go:build tinygo
 
+// Package gobrpc pkg/gobrpc/gobrpc_tinygo.go c0-com-http
 // On the TinyGo js/wasm target net/rpc is unavailable (it pulls net/http,
 // which does not compile there), so pkg/gobrpc aliases to the dependency-free
 // gobimpl reimplementation, which speaks the identical gob wire protocol. See

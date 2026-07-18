@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/quic_identity.go: thin wrappers over
+// Package network pkg/transport/network/quic_identity.go c2-net-transport
 // pkg/skyquic, which holds the skywire-PK-bound QUIC TLS identity (#2607,
 // option A). The implementation moved to its own package so dmsg-over-QUIC can
 // reuse it without an import cycle (pkg/transport/network imports pkg/dmsg/dmsg).

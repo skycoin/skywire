@@ -1,6 +1,6 @@
 //go:build tinygo || js
 
-// Package appserver pkg/app/appserver/proc_external_tinygo.go
+// Package appserver pkg/app/appserver/proc_external_tinygo.go c2-vis-appsvc
 //
 // TinyGo (browser/wasm) stubs for the external (OS-subprocess) app launch path.
 // A browser visor runs apps in-process (appcommon.RunModeInternal) — it cannot

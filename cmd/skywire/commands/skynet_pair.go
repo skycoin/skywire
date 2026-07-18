@@ -1,4 +1,4 @@
-// Package commands cmd/skywire/commands/skynet_pair.go — unified
+// Package commands cmd/skywire/commands/skynet_pair.go c4-vis-cli
 // `skywire app skynet {srv,client}` parent that thin-wraps the
 // existing skynet-srv / skynet-client RootCmds.
 //

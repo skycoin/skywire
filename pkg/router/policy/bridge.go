@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/bridge.go — translates Go
+// Package policy pkg/router/policy/bridge.go c2-net-routing
 // RoutingContext / Candidate / RouteSpec to and from Starlark
 // values, and assembles the pre-declared module set the policy
 // script sees on load.

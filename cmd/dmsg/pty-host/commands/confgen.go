@@ -1,4 +1,4 @@
-// Package commands cmd/dmsgpty-host/commands/confgen.go
+// Package commands cmd/dmsg/pty-host/commands/confgen.go c1-net-dmsg
 package commands
 
 import (

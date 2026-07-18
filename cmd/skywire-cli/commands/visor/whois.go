@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/whois.go: `cli
+// Package clivisor cmd/skywire-cli/commands/visor/whois.go c4-vis-cli
 // visor whois <pk>` — single-PK rollup combining transport-discovery,
 // uptime-tracker, and service-discovery state into one report.
 //

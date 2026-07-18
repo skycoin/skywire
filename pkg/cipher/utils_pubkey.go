@@ -1,4 +1,4 @@
-// Package cipher pkg/cipher/ustils_pubkey.go
+// Package cipher pkg/cipher/utils_pubkey.go c0-com-crypto
 package cipher
 
 // SamePubKeys returns true when the provided public key slices have the same keys.

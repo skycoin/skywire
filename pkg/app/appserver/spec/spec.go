@@ -1,4 +1,4 @@
-// Package spec is the WASM-clean schema half of pkg/app/appserver.
+// Package spec pkg/app/appserver/spec/spec.go c2-vis-appsvc
 // Holds the AppConfig wire-format type that pkg/visor/visorconfig.V1's
 // Launcher.Apps field embeds. Splitting it out of pkg/app/appserver
 // keeps V1 importable from GOOS=js consumers without dragging in

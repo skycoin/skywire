@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/evaluator.go — Starlark
+// Package policy pkg/router/policy/evaluator.go c2-net-routing
 // evaluator for routing policy scripts. See RFC #2882.
 package policy
 

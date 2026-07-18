@@ -1,4 +1,4 @@
-// Package dmsg pkg/dmsg/entity_common.go
+// Package dmsg pkg/dmsg/dmsg/entity_common.go c1-net-dmsg
 package dmsg
 
 import (
@@ -638,6 +638,16 @@ func (c *EntityCommon) updateServerEntryLoop(ctx context.Context, addr, addrV6 s
 				}
 			}
 		serverUpdate:
+			// Coalesce rapid session-churn nudges. AvailableSessions is a soft
+			// capacity hint that doesn't need per-session freshness, and
+			// re-registering on every change is a POST (a full Noise handshake)
+			// per change on the discovery — under churn that snowballs into a
+			// handshake storm. If we registered within entryUpdateMinInterval,
+			// skip: the periodic timer (or a later nudge past the interval)
+			// publishes the change within at most updateInterval.
+			if c.updatedWithin(entryUpdateMinInterval) {
+				continue
+			}
 			err := c.updateServerEntry(ctx, addr, addrV6, maxSessions, authPassphrase)
 			if err != nil {
 				c.log.WithError(err).Warn("Failed to update discovery entry (nudge).")
@@ -856,6 +866,20 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 // while shrinking the stale-entry window by 80 %.
 const entryUpdateDebounce = 1 * time.Second
 
+// entryUpdateMinInterval is the minimum spacing between nudge-driven SERVER
+// entry re-registrations. A busy dmsg-server's AvailableSessions (= maxSessions
+// − live sessions) changes on every client connect/disconnect, and each change
+// nudges a re-registration — a POST to the discovery over a fresh dmsg stream
+// with a full Noise (secp256k1 + PQ) handshake. Under heavy session churn that
+// snowballs into a handshake storm that GC-thrashes the discovery. AvailableSessions
+// is only a soft capacity hint for weighted server selection, so coalescing
+// churn-driven updates to at most one per this interval (the periodic
+// updateInterval still refreshes it, and a change still publishes within
+// updateInterval) cuts the load by an order of magnitude with no meaningful loss
+// of freshness. The client entry loop needs no equivalent: it already skips
+// updates when its delegated-server set is unchanged (SamePubKeys guard).
+const entryUpdateMinInterval = 10 * time.Second
+
 // entryUpdateAttemptTimeout bounds a single updateClientEntry call so a
 // stuck PUT (e.g. dmsg-HTTP stream-dial that the underlying transport never
 // errors out of) doesn't hang the loop forever. Without this, a service
@@ -1035,6 +1059,12 @@ func (c *EntityCommon) updateIsDue() (lastUpdate time.Time, isDue bool) {
 	lastUpdate = time.Unix(0, atomic.LoadInt64(&c.lastUpdate))
 	isDue = time.Since(lastUpdate) >= c.updateInterval
 	return lastUpdate, isDue
+}
+
+// updatedWithin reports whether the last discovery-entry update happened within
+// the given duration — used to coalesce rapid nudge-driven re-registrations.
+func (c *EntityCommon) updatedWithin(d time.Duration) bool {
+	return time.Since(time.Unix(0, atomic.LoadInt64(&c.lastUpdate))) < d
 }
 
 // nudgeEntryUpdate signals the update loop that a session changed and

@@ -1,4 +1,4 @@
-// Package visor pkg/visor/policy_loader.go — extension-dispatch
+// Package visor pkg/visor/policy_loader.go c3-vis-core
 // for routing-policy backends. A single config field
 // (`routing.policy_per_dial`, per-app `routing_policy`, or the
 // runtime `app start --routing-policy <path>` flag) accepts

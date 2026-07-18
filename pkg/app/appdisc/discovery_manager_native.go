@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package appdisc pkg/app/appdisc/discovery_manager_native.go
+// Package appdisc pkg/app/appdisc/discovery_manager_native.go c2-vis-appsvc
 //
 // The service-discovery-backed updaters. servicedisc.HTTPClient pulls net/http,
 // which does not compile on the TinyGo js/wasm target, so the serviceUpdater
@@ -55,17 +55,23 @@ func (u *serviceUpdater) Start() {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:gosec // cancel is stored in u.cancel and called in Stop()
 	u.cancel = cancel
 
-	// Best-effort initial registration. A failure here used to return
-	// early without starting the heartbeat loop, permanently disabling
-	// re-registration for the rest of the visor's lifetime — which
-	// turned a single transient SD failure (probe timeout, SD restart,
-	// dmsg flake) into "this visor never appears in service-discovery
-	// until it is restarted." Always start the heartbeat: it retries
-	// every ServiceDiscUpdateInterval (90s), which is exactly the
-	// recovery mechanism callers expect.
-	if err := u.client.Register(ctx); err != nil {
-		u.log.WithError(err).Warn("Initial service discovery registration failed; will retry via heartbeat")
-	}
+	// Best-effort initial registration — MUST run in the background. client.Register
+	// retries internally (netutil.Retrier with backoff), so when the SD is slow or
+	// unreachable (dmsg flake, SD restart, a dmsg-server rejecting connections) a
+	// synchronous call here blocks Start() for minutes. Start() runs on the visor
+	// INIT path (initPublicVisor), so that block stalls every init module ordered
+	// after public_visor — including the hypervisor, which then never comes up
+	// ("hypervisor configured but not initialized yet"). Firing it in a goroutine
+	// keeps init non-blocking; the heartbeat loop below is the real recovery
+	// mechanism anyway (retries every ServiceDiscUpdateInterval, 90s), and a
+	// failure here no longer disables re-registration.
+	u.wg.Add(1)
+	go func() {
+		defer u.wg.Done()
+		if err := u.client.Register(ctx); err != nil {
+			u.log.WithError(err).Warn("Initial service discovery registration failed; will retry via heartbeat")
+		}
+	}()
 
 	u.wg.Add(1)
 	go u.heartbeatLoop(ctx)

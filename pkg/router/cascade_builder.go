@@ -1,4 +1,4 @@
-// Package router pkg/router/cascade_builder.go
+// Package router pkg/router/cascade_builder.go c2-net-routing
 //
 // CascadeBuilder constructs nested cascade messages for the RSN.
 // It builds the Russian-doll structure from last hop to first, signs

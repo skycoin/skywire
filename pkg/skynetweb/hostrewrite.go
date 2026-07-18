@@ -1,4 +1,4 @@
-// Package skynetweb pkg/skynetweb/hostrewrite.go
+// Package skynetweb pkg/skynetweb/hostrewrite.go c4-app-skynet
 //
 // HTTP/1.1 Host-header rewriter for the resolver SOCKS5 dial path.
 //

@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_ping.go c3-vis-core
 // api_ping.go contains ping, bandwidth test, and visor test API methods.
 package visor
 

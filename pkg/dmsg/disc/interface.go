@@ -1,4 +1,4 @@
-// Package disc — pkg/dmsg/disc/interface.go
+// Package disc pkg/dmsg/disc/interface.go c1-net-dmsg
 //
 // Holds the cross-build interface definitions (EntryReader,
 // EntryWriter, APIClient) that callers depend on for type-checking

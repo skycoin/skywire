@@ -1,4 +1,4 @@
-// Package router pkg/router/datagram_route_group.go: faithful-UDP-
+// Package router pkg/router/datagram_route_group.go c2-net-routing
 // over-skynet sibling to RouteGroup. Stage 2 of #2607.
 //
 // While RouteGroup is net.Conn-shaped (Read/Write, sequenced

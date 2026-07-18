@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-// Package pty pkg/pty/cli_windows.go
+// Package pty pkg/pty/cli_windows.go c3-vis-pty
 package pty
 
 import (

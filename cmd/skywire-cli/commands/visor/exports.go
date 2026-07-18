@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/exports.go
+// Package clivisor cmd/skywire-cli/commands/visor/exports.go c4-vis-cli
 //
 // Exposes visor subcommand handlers so the top-level shortcuts
 // (cli pk, cli status, cli halt) can delegate Run without sharing

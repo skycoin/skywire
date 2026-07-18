@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_fetch_cxo.go
+// Package visor pkg/visor/api_fetch_cxo.go c3-vis-core
 //
 // FetchCXO routes a (feed, path) pair to the matching lazy-on-demand
 // CXO subscriber and returns the cached payload — or a miss reason

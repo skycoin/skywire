@@ -1,4 +1,4 @@
-// Package visor pkg/visor/api_tpd_metrics_subscriber.go
+// Package visor pkg/visor/api_tpd_metrics_subscriber.go c3-vis-core
 //
 // Reader-side helper for TPD's network-wide transport metrics feed.
 // The CXO subscription lives in the unified CXOSubscriptionManager

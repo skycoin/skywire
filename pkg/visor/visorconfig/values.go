@@ -1,4 +1,4 @@
-// Package visorconfig defines variables and constants for different operating systems
+// Package visorconfig pkg/visor/visorconfig/values.go c3-vis-core
 package visorconfig
 
 import (

@@ -1,4 +1,4 @@
-// Package transport pkg/transport/errors.go
+// Package transport pkg/transport/errors.go c2-net-transport
 package transport
 
 import (

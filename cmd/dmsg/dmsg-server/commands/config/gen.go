@@ -1,4 +1,4 @@
-// Package config cmd/dmsg-server/commands/cofnig/gen.go
+// Package config cmd/dmsg/dmsg-server/commands/config/gen.go c1-net-dmsg
 package config
 
 import (

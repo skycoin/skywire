@@ -1,4 +1,4 @@
-// Package httpauth pkg/httpauth/nonce-storer.go
+// Package httpauth pkg/httpauth/nonce-storer.go c0-com-http
 package httpauth
 
 import (

@@ -1,4 +1,4 @@
-// Package dmsgclient pkg/dmsg/dmsgclient/seeded.go
+// Package dmsgclient pkg/dmsg/dmsgclient/seeded.go c1-net-dmsg
 package dmsgclient
 
 import (

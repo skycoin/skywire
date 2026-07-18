@@ -1,4 +1,4 @@
-// Package clisvc ar_check.go — check if a key exists in the address resolver
+// Package clisvc cmd/skywire-cli/commands/svc/ar_check.go c4-vis-cli
 package clisvc
 
 import (

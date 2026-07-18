@@ -1,4 +1,4 @@
-// Package commands cmd/skywire-cli/commands/root.go
+// Package commands cmd/skywire-cli/commands/root.go c4-vis-cli
 package commands
 
 import (

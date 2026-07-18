@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/log.go
+// Package clilog cmd/skywire-cli/commands/log/tplogs.go c4-vis-cli
 package clilog
 
 import (

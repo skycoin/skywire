@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/chat.go: standalone
+// Package clidmsg cmd/skywire-cli/commands/dmsg/chat.go c4-vis-cli
 // dmsg-only chat. Run when the local visor is down (or absent) so
 // operators can still reach a support channel.
 //

@@ -1,2 +1,2 @@
-// Package appcommon contains common facilities implementing skywire apps.
+// Package appcommon pkg/app/appcommon/doc.go c2-vis-appsvc
 package appcommon

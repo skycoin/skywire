@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/curl.go
+// Package clidmsg cmd/skywire-cli/commands/dmsg/curl.go c4-vis-cli
 package clidmsg
 
 import (

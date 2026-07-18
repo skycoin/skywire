@@ -1,4 +1,4 @@
-// Package cliut cmd/skywire-cli/ut/mdisc.go
+// Package cliut cmd/skywire-cli/commands/ut/mdisc.go c4-vis-cli
 //
 // `skywire cli ut mdisc` — visor uptime as reported by the
 // dmsg-discovery integrated endpoint. Uptime data is derived from

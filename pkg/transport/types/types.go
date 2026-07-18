@@ -1,4 +1,4 @@
-// Package tptypes pkg/transport/types/types.go
+// Package tptypes pkg/transport/types/types.go c2-net-transport
 package tptypes
 
 // Type is a type of network. Type affects the way connection is established

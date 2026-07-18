@@ -1,4 +1,4 @@
-// Package rewards provides the reward system UI as a mountable HTTP
+// Package rewards pkg/rewards/config.go c4-app-rewards
 // handler. It can be used standalone (via the CLI) or embedded in the
 // visor's port 80 gin router for integrated DMSG/skynet access.
 package rewards

@@ -1,4 +1,4 @@
-// Package appdisc pkg/app/appdisc/factory.go
+// Package appdisc pkg/app/appdisc/factory.go c2-vis-appsvc
 package appdisc
 
 import (

@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package visorconfig pkg/visor/visorconfig/parse.go
+// Package visorconfig pkg/visor/visorconfig/parse.go c3-vis-core
 //
 // Parse wraps Reader (from read.go, also !js-tagged) and adds
 // version-compat checking via blang/semver. Both deps (encoding/

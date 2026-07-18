@@ -1,3 +1,4 @@
+// Package tptypes pkg/transport/types/preference.go c2-net-transport
 package tptypes
 
 import (

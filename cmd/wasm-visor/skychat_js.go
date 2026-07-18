@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — in-process skychat for the browser visor.
+// Package main cmd/wasm-visor/skychat_js.go c3-vis-wasm
 //
 // A native visor runs skychat as a subprocess that serves an HTTP UI and chats
 // over routes. A browser can't fork a subprocess, so this is a minimal in-process

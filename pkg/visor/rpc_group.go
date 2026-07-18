@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_group.go
+// Package visor pkg/visor/rpc_group.go c3-vis-core
 //
 // RPC adapter for the chat-group feed manager. Thin wrappers over
 // the Visor methods in group.go. Mirrors rpc_pairing.go shape.

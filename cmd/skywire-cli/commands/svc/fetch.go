@@ -1,4 +1,4 @@
-// Package clisvc cmd/skywire-cli/commands/svc/fetch.go
+// Package clisvc cmd/skywire-cli/commands/svc/fetch.go c4-vis-cli
 package clisvc
 
 import (

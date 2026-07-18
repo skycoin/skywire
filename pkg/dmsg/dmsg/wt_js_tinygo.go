@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package dmsg pkg/dmsg/dmsg/wt_js_tinygo.go: dmsg-over-WebTransport CLIENT dial
+// Package dmsg pkg/dmsg/dmsg/wt_js_tinygo.go c1-net-dmsg
 // for the TinyGo browser target.
 //
 // wt.go (the native WebTransport carrier) pulls quic-go + webtransport-go, which

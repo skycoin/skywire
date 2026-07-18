@@ -1,4 +1,4 @@
-// Package noise pkg/noise/noise.go
+// Package noise pkg/dmsg/noise/noise.go c1-net-dmsg
 package noise
 
 import (

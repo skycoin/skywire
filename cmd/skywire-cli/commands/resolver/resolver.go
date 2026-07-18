@@ -1,4 +1,4 @@
-// Package cliresolver cmd/skywire-cli/commands/resolver/resolver.go
+// Package cliresolver cmd/skywire-cli/commands/resolver/resolver.go c4-vis-cli
 //
 // `skywire cli resolver` — surface for the embedded `.dmsg` and
 // `.skynet` resolving SOCKS5 proxies that live inside the visor.

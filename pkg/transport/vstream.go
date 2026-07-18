@@ -1,4 +1,4 @@
-// Package transport pkg/transport/vstream.go
+// Package transport pkg/transport/vstream.go c2-net-transport
 //
 // VStream provides virtual bidirectional streams over route ID 0 transport
 // packets. Used by the cascade RPC relay and DHT transport layer to multiplex

@@ -1,4 +1,4 @@
-// Package appnet pkg/app/appnet/addr.go
+// Package appnet pkg/app/appnet/addr.go c2-vis-appsvc
 package appnet
 
 import (

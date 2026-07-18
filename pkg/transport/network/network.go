@@ -1,4 +1,4 @@
-// Package network pkg/transport/network/network.go
+// Package network pkg/transport/network/network.go c2-net-transport
 package network
 
 import (

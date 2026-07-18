@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package dmsg pkg/dmsg/quic_stub.go
+// Package dmsg pkg/dmsg/dmsg/quic_stub.go c1-net-dmsg
 //
 // TinyGo build stubs for the transports that don't compile under TinyGo:
 //

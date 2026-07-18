@@ -1,4 +1,4 @@
-// Package visor pkg/visor/init_group.go
+// Package visor pkg/visor/init_group.go c3-vis-core
 //
 // Init wiring for the chat-group feed manager. Parallel to
 // init_pairing.go — same shape, same best-effort failure

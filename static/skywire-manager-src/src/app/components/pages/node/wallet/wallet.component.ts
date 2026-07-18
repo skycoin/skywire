@@ -84,13 +84,11 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     private appsService: AppsService,
     private snackbar: SnackbarService,
   ) {
-    super();
-  }
+ super();
+}
 
-  // Reloads the wallet iframe when the embedded /wallet/config page applies a
-  // change (its Apply postMessage). An arrow-fn property so `this` stays bound
-  // across add/removeEventListener. Declared with the methods (after the
-  // constructor) so member-ordering is satisfied.
+  // Reload the wallet iframe when its config page posts a change. Declared here
+  // (a method-like arrow field) after the data fields to satisfy member-ordering.
   private onConfigMessage = (ev: MessageEvent) => {
     if (ev?.data && ev.data.type === 'skywire-wallet-config') {
       this.reloadWallet();

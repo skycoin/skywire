@@ -1,4 +1,4 @@
-// Package logserver contains api's for the logserver
+// Package logserver pkg/visor/logserver/api.go c3-vis-core
 package logserver
 
 import (

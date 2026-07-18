@@ -1,4 +1,4 @@
-// Package visor pkg/visor/dual_listen.go
+// Package visor pkg/visor/dual_listen.go c3-vis-core
 //
 // Parity helpers: every port the visor binds on dmsg is also bound
 // on the skywire router (appnet.TypeSkynet) at the same port

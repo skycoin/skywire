@@ -1,4 +1,4 @@
-// Package ioutil pkg/ioutil/logging.go
+// Package ioutil pkg/dmsg/ioutil/logging.go c1-net-dmsg
 package ioutil
 
 import (

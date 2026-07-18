@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package appdisc pkg/app/appdisc/factory_tinygo.go
+// Package appdisc pkg/app/appdisc/factory_tinygo.go c2-vis-appsvc
 //
 // TinyGo (browser/wasm) Factory updater constructors. Service discovery is an
 // HTTP (servicedisc → net/http) concern that does not compile here and that a

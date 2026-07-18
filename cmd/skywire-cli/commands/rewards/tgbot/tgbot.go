@@ -1,4 +1,4 @@
-// Package clirewardstgbot cmd/skywire-cli/commands/rewards/tgbot/tgbot.go
+// Package clirewardstgbot cmd/skywire-cli/commands/rewards/tgbot/tgbot.go c4-vis-cli
 package clirewardstgbot
 
 import (

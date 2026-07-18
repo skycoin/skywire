@@ -1,4 +1,4 @@
-// Package treestore — pkg/cxo/treestore/subscriber.go: hierarchical
+// Package treestore pkg/cxo/treestore/subscriber.go c2-net-cxo
 // CXO subscriber.
 //
 // The subscriber maintains a private CXO Node, dials the publisher

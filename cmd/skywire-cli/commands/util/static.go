@@ -1,4 +1,4 @@
-// Package cliutil cmd/skywire-cli/commands/util/static.go
+// Package cliutil cmd/skywire-cli/commands/util/static.go c4-vis-cli
 //
 // `skywire cli util serve` — a small static-file HTTP server for
 // pairing with `cli serve add 80 --to <addr>`. Lives under `util`

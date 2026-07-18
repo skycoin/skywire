@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-// Package cmdutil pkg/cmdutil/signal_windows.go
+// Package cmdutil pkg/cmdutil/signal_windows.go c0-com-util
 package cmdutil
 
 import (

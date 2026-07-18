@@ -1,3 +1,4 @@
+// Package visor pkg/visor/rpc_client_mock.go c3-vis-core
 // rpc_client_mock.go contains the mock RPC client for testing.
 package visor
 

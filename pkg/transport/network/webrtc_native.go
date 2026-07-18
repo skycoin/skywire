@@ -1,6 +1,6 @@
 //go:build !tinygo && !(js && wasm)
 
-// Package network pkg/transport/network/webrtc_native.go
+// Package network pkg/transport/network/webrtc_native.go c2-net-transport
 //
 // Native WebRTC carrier via pion: dial (offerer) and accept (answerer) a direct
 // DataChannel, negotiated over a dmsg signaling stream, adapted to a net.Conn.

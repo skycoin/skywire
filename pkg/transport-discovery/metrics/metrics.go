@@ -1,3 +1,4 @@
+// Package tpdiscmetrics pkg/transport-discovery/metrics/metrics.go c4-net-discovery
 package tpdiscmetrics
 
 import (

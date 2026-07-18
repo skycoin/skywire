@@ -1,4 +1,4 @@
-// Package setupmetrics metrics of setup
+// Package setupmetrics pkg/router/setupmetrics/empty.go c2-net-routing
 package setupmetrics
 
 import (

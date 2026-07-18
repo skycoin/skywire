@@ -1,4 +1,4 @@
-// Package cipherutil works with public keys
+// Package cipherutil pkg/util/cipherutil/cipherutil.go c0-com-util
 package cipherutil
 
 import "github.com/skycoin/skywire/pkg/cipher"

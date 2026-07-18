@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package netutil pkg/netutil/net_tinygo.go
+// Package netutil pkg/netutil/net_tinygo.go c0-com-util
 //
 // TinyGo stubs for the network-interface-enumeration + HTTP-probe helpers in
 // net_native.go. TinyGo's net.Interface has no Addrs() and net/http doesn't

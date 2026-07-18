@@ -1,4 +1,4 @@
-// Package skynet port.go — CLI commands for managing forwarded ports
+// Package skynet cmd/skywire-cli/commands/skynet/port.go c4-vis-cli
 package skynet
 
 import (

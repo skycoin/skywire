@@ -1,4 +1,4 @@
-// Package visor pkg/visor/embedded_resolver_tls.go
+// Package visor pkg/visor/embedded_resolver_tls.go c3-vis-core
 //
 // Helpers shared by EmbeddedDmsgWeb and EmbeddedSkynetWeb to wire
 // optional TLS MITM mode onto their underlying runtime configs.

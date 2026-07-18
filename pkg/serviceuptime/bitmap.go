@@ -1,4 +1,4 @@
-// Package serviceuptime — pkg/serviceuptime/bitmap.go: 288-bit-per-day
+// Package serviceuptime pkg/serviceuptime/bitmap.go c2-net-discovery
 // uptime bitmap helpers, bit-identical to pkg/visor/stats/bitmap.go
 // and pkg/transport-discovery/store/redis_uptime.go's timeline format.
 //

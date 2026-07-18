@@ -1,4 +1,4 @@
-// Package services pkg/services/run.go
+// Package services pkg/services/run.go c2-vis-appsvc
 //
 // errgroup-style supervisor for a parsed services.File. Brought into
 // its own file so the registry primitives in services.go stay small

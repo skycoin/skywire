@@ -1,4 +1,4 @@
-// Package pty pkg/pty/sftp_subsystem.go — server-side sftp subsystem
+// Package pty pkg/pty/sftp_subsystem.go c3-vis-pty
 // that rides the same noise-protected stream and whitelist auth as the
 // pty subsystem, dispatched by SftpURI.
 //

@@ -1,4 +1,4 @@
-// Package armetrics internal/armetrics/empty.go
+// Package armetrics pkg/address-resolver/metrics/empty.go c4-net-discovery
 package armetrics
 
 // NewEmpty constructs new empty metrics.

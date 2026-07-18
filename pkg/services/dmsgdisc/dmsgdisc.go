@@ -1,4 +1,4 @@
-// Package dmsgdisc pkg/services/dmsgdisc/dmsgdisc.go
+// Package dmsgdisc pkg/services/dmsgdisc/dmsgdisc.go c2-vis-appsvc
 //
 // dmsg-discovery as a pkg/services.Service. Both the standalone
 // cobra command (`skywire dmsg disc`) and the multi-service
@@ -462,7 +462,16 @@ func listenAndServe(addr string, handler http.Handler) error {
 	if err != nil {
 		return err
 	}
-	proxyListener := &proxyproto.Listener{Listener: ln}
+	proxyListener := &proxyproto.Listener{Listener: ln, ConnPolicy: optionalProxyHeader}
 	defer proxyListener.Close() //nolint:errcheck
 	return srv.Serve(proxyListener)
+}
+
+// optionalProxyHeader restores go-proxyproto's pre-v0.15 lenient default (USE):
+// honor a PROXY header when an upstream proxy sends one, but ALSO accept
+// connections that arrive without one (direct clients, health checks, dmsg
+// Noise handshakes). v0.15 changed the zero-value default to REQUIRE, which
+// rejects every header-less connection with ErrNoProxyProtocol.
+func optionalProxyHeader(proxyproto.ConnPolicyOptions) (proxyproto.Policy, error) {
+	return proxyproto.USE, nil
 }

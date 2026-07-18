@@ -1,4 +1,4 @@
-// Package flags pkg/flags/helpall.go
+// Package flags pkg/flags/helpall.go c0-com-util
 //
 // InstallHelp replaces cobra's default (auto-generated) help subcommand
 // with a flag-aware version that consolidates three previously-separate

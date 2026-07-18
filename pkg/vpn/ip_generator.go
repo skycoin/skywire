@@ -1,4 +1,4 @@
-// Package vpn internal/vpn/ip_generator.go
+// Package vpn pkg/vpn/ip_generator.go c4-app-vpn
 package vpn
 
 import (

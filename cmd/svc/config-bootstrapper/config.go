@@ -1,4 +1,4 @@
-// Package main cmd/config-bootstrapper/config.go
+// Package main cmd/svc/config-bootstrapper/config.go c4-net-discovery
 package main
 
 import (

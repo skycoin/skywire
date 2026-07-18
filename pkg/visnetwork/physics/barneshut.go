@@ -1,3 +1,4 @@
+// Package physics pkg/visnetwork/physics/barneshut.go c4-app-rewards
 package physics
 
 import (

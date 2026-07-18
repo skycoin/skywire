@@ -1,3 +1,4 @@
+// Package registry pkg/cxo/skyobject/registry/ref.go c2-net-cxo
 package registry
 
 import (

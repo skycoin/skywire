@@ -1,4 +1,4 @@
-// Package policy pkg/router/policy/distribution.go — parses the
+// Package policy pkg/router/policy/distribution.go c2-net-routing
 // Starlark-emitted RouteSpec.Distribution descriptor into the
 // router-domain DistributionConfig the route group's selector
 // consumes. Keeps the parser in the policy package so pkg/router

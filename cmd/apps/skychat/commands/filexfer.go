@@ -1,4 +1,4 @@
-// Package commands cmd/apps/skychat/filexfer.go
+// Package commands cmd/apps/skychat/commands/filexfer.go c4-app-chat
 //
 // File sharing for skychat (Telegram-style: a file is a message in the
 // conversation). The bytes ride pkg/skychat/xfer over a skywire stream (skynet

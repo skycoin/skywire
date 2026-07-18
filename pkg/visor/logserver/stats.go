@@ -1,4 +1,4 @@
-// Package logserver — pkg/visor/logserver/stats.go: handlers for the
+// Package logserver pkg/visor/logserver/stats.go c3-vis-core
 // /stats/* endpoints that expose the visor's local telemetry store.
 //
 // These routes are mounted under the existing authRoute group, so the

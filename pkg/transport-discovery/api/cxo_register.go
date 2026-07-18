@@ -1,4 +1,4 @@
-// Package api pkg/transport-discovery/api/cxo_register.go
+// Package api pkg/transport-discovery/api/cxo_register.go c4-net-discovery
 //
 // CXO-driven register / deregister entry points. The visor publishes
 // transports/<uuid>/entry and transports/<uuid>/tombstone leaves on

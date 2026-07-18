@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/chat.go:
+// Package cliskychat cmd/skywire-cli/commands/skychat/chat.go c4-vis-cli
 // interactive bubbletea split-pane chat against the local skychat
 // app's HTTP/SSE interface.
 //

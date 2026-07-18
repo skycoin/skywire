@@ -1,4 +1,4 @@
-// Package servicedisc pkg/servicedisc/query.go
+// Package servicedisc pkg/servicedisc/query.go c2-net-discovery
 package servicedisc
 
 import (

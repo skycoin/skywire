@@ -16,6 +16,7 @@
 // async persistence tier — IndexedDB, not localStorage, for the quota headroom
 // and native binary storage).
 
+// Package group cmd/apps/skychat/group/store_memory.go c4-app-chat
 package group
 
 import (

@@ -1,6 +1,6 @@
 //go:build !js
 
-// Package visorconfig pkg/visor/visorconfig/common_native.go
+// Package visorconfig pkg/visor/visorconfig/common_native.go c3-vis-core
 //
 // Native (non-WASM) implementation of Common.flush — writes a
 // JSON-encoded config back to its on-disk path. encoding/json

@@ -1,4 +1,4 @@
-// Package visorconfig pkg/visor/visorconfig/services.go
+// Package visorconfig pkg/visor/visorconfig/services.go c3-vis-core
 //
 // Services + EnvServices are TYPE ALIASES to the deployment package
 // rather than independent struct definitions. Reason: the visorconfig

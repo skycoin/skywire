@@ -1,4 +1,4 @@
-// Package dmsgweb implements a browser-facing resolving proxy for
+// Package dmsgweb pkg/dmsgweb/runtime.go c4-app-web
 // `.dmsg` (and other configurable) domain suffixes. It exposes:
 //
 //   - a SOCKS5 proxy that intercepts hosts ending in the configured

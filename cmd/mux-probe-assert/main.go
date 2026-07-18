@@ -1,3 +1,4 @@
+// Package main cmd/mux-probe-assert/main.go c2-net-routing
 // Command mux-probe-assert consumes the tally emitted by
 // ci_scripts/mux-route-probe.sh and enforces pass/fail thresholds
 // against a recorded baseline. Designed to be piped:

@@ -1,4 +1,4 @@
-// Package clireward cmd/skywire-cli/commands/reward/root.go
+// Package clireward cmd/skywire-cli/commands/reward/root.go c4-vis-cli
 package clireward
 
 import (

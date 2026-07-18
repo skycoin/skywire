@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — TinyGo WASM client for `skywire web`.
+// Package main cmd/skywire/commands/web/wasm/main.go c4-vis-cli
 //
 // Renders a single shell-like prompt: `skywire $ <input>`. As the
 // operator types, the WASM client parses the line into command path

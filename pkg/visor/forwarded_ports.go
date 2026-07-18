@@ -1,4 +1,4 @@
-// Package visor pkg/visor/forwarded_ports.go
+// Package visor pkg/visor/forwarded_ports.go c3-vis-core
 //
 // ForwardedPorts manages the set of ports that are accessible over
 // skynet and/or DMSG, with per-port metadata (label, description,

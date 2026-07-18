@@ -1,4 +1,4 @@
-// Package commands cmd/skywire/commands/vpn_pair.go — unified
+// Package commands cmd/skywire/commands/vpn_pair.go c4-vis-cli
 // `skywire app vpn {serve,client}` parent that thin-wraps the
 // existing vpn-server / vpn-client RootCmds.
 //

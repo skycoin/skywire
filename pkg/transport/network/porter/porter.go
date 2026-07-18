@@ -1,4 +1,4 @@
-// Package porter handles ports
+// Package porter pkg/transport/network/porter/porter.go c2-net-transport
 package porter
 
 import (

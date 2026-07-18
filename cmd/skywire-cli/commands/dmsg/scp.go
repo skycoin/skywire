@@ -1,4 +1,4 @@
-// Package clidmsg cmd/skywire-cli/commands/dmsg/scp.go: the
+// Package clidmsg cmd/skywire-cli/commands/dmsg/scp.go c4-vis-cli
 // `skywire cli dmsg scp` subcommand. Drives the dmsgscp client
 // against either a peer's dmsgscp Host or the local visor's
 // (loopback over its own dmsg PK).

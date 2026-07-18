@@ -1,4 +1,4 @@
-// Package visor pkg/visor/udp_client_forward.go: client side of
+// Package visor pkg/visor/udp_client_forward.go c3-vis-core
 // faithful-UDP port forwarding (#2607 stage-4d). The server side
 // (init_udp_forwarding.go) bridges inbound datagram routes to a local
 // service; this is the mirror: it dials a remote forwarded_ports.udp

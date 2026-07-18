@@ -1,4 +1,4 @@
-// Package ping cmd/skywire-cli/commands/visor/ping/tree.go: the
+// Package ping cmd/skywire-cli/commands/visor/ping/tree.go c4-vis-cli
 // interactive Bubble Tea TUI for `cli visor ping tree`.
 //
 // History: this command used to host a ~2300-line client-side BFS

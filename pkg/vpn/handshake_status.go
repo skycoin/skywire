@@ -1,4 +1,4 @@
-// Package vpn internal/vpn/handshake_status.go
+// Package vpn pkg/vpn/handshake_status.go c4-app-vpn
 package vpn
 
 import (

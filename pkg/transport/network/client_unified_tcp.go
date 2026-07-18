@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/client_unified_tcp.go
+// Package network pkg/transport/network/client_unified_tcp.go c2-net-transport
 //
 // The unified transport port (TCP side): bind ONE master TCP listener and route
 // the TCP transport types (stcpr raw + WS HTTP-upgrade) over it via a tcpDemux

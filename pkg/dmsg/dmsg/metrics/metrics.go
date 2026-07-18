@@ -1,4 +1,4 @@
-// Package metrics pkg/dmsg/metrics/metrics.go
+// Package metrics pkg/dmsg/dmsg/metrics/metrics.go c1-net-dmsg
 package metrics
 
 // Metrics collects metrics for metrics tracking system.

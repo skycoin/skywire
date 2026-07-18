@@ -1,4 +1,4 @@
-// Package skysocks internal/skysocks/server.go
+// Package skysocks pkg/skysocks/server.go c4-app-proxy
 package skysocks
 
 import (

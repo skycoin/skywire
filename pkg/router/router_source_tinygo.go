@@ -1,6 +1,6 @@
-//go:build tinygo
+//go:build tinygo && !(js && wasm)
 
-// Package router pkg/router/router_source_tinygo.go
+// Package router pkg/router/router_source_tinygo.go c2-net-routing
 //
 // TinyGo (browser/wasm) stubs for the route-SOURCE side of the router.
 //

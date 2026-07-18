@@ -1,4 +1,4 @@
-// Package visor pkg/visor/udp_bridge.go: bidirectional pump that
+// Package visor pkg/visor/udp_bridge.go c3-vis-core
 // bridges a local UDP socket to a peer-side DatagramRouteGroup.
 // Stage 4 of #2607 — together with the `udp` flag on ForwardedPort
 // (forwarded_ports.go), this is the user-facing "port-forward UDP

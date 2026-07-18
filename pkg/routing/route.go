@@ -1,4 +1,4 @@
-// Package routing defines routing related entities and management
+// Package routing pkg/routing/route.go c1-net-routing
 // operations.
 package routing
 

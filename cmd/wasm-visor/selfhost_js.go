@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — in-browser self-hosting: serve content over dmsg from the tab.
+// Package main cmd/wasm-visor/selfhost_js.go c3-vis-wasm
 //
 // The pairing half of fetchDmsg/browsing: a wasm-visor can HOST a small site
 // (HTML/CSS/...) addressed by its PK, served over dmsg with a minimal net/http-

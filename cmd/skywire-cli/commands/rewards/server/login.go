@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/login.go
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/login.go c4-vis-cli
 package clirewardsserver
 
 import (

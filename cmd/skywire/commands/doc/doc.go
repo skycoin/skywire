@@ -1,4 +1,4 @@
-// Package doc cmd/skywire/commands/doc/doc.go: hidden `skywire doc`
+// Package doc cmd/skywire/commands/doc/doc.go c4-vis-cli
 // subcommand that walks the cobra tree rooted at the umbrella `skywire`
 // binary and emits one markdown page per command under docs/skywire/
 // mirroring the cobra command hierarchy.
