@@ -192,6 +192,25 @@ func TestNewServiceUpdater_DefaultInterval(t *testing.T) {
 	}
 }
 
+// waitPostsQuiet blocks until no register POST has been observed for a whole
+// `quiet` window and returns the settled count. Callers use it after Pause() to
+// let an already-in-flight registration land before they start measuring; if
+// POSTs keep arriving the pause is not holding, so failing to go quiet is
+// itself the assertion.
+func waitPostsQuiet(t *testing.T, quiet time.Duration) int64 {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		n := sdPostN.Load()
+		time.Sleep(quiet)
+		if sdPostN.Load() == n {
+			return n
+		}
+	}
+	t.Fatalf("register POSTs never went quiet within %v of Pause", quiet)
+	return 0
+}
+
 // --- serviceUpdater lifecycle (against the live fake SD) ---
 
 func TestServiceUpdater_StartStop(t *testing.T) {
@@ -233,8 +252,13 @@ func TestServiceUpdater_PauseResume(t *testing.T) {
 	}
 	u.Pause() // idempotent: second call is a no-op
 
+	// Start() fires its initial registration in a goroutine, so a POST can
+	// still be on the wire when Pause() flips the flag. Wait for the counter
+	// to settle before snapshotting — sampling it while that registration is
+	// in flight miscounts it as a paused heartbeat.
+	postsAfterPause := waitPostsQuiet(t, 100*time.Millisecond)
+
 	// While paused, heartbeat ticks must not POST; give the loop time to skip.
-	postsAfterPause := sdPostN.Load()
 	time.Sleep(60 * time.Millisecond)
 	if got := sdPostN.Load(); got != postsAfterPause {
 		t.Errorf("paused updater sent %d heartbeats, want 0", got-postsAfterPause)
