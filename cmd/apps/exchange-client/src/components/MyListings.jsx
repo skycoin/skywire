@@ -50,13 +50,11 @@ function MyListings() {
     }
   }
 
-  // The three lifecycle steps, with the current one highlighted.
+  // The three lifecycle steps, with the current one highlighted. A confirmed
+  // listing is already live on the market, so its reached step is "Listed as
+  // product" (index 2), not "Confirmed".
   const steps = ['pending', 'confirmed', 'product']
-  const stepIndex = (status) => {
-    if (status === 'pending') return 0
-    if (status === 'confirmed') return 1 // deposit seen -> product created
-    return 2
-  }
+  const stepIndex = (status) => (status === 'pending' ? 0 : 2)
 
   const renderLifecycle = (status) => {
     const active = stepIndex(status)
@@ -77,6 +75,26 @@ function MyListings() {
         ))}
       </div>
     )
+  }
+
+  // Once a buyer selects a confirmed listing's product, the seller is committed;
+  // surface that state (and it stops being cancelable).
+  const productStateBadge = (l) => {
+    if (l.status !== 'confirmed' || !l.product_status || l.product_status === 'active') return null
+    const map = {
+      frozen: { label: 'Buyer selected — awaiting payment', cls: 'pending' },
+      sold: { label: 'Sold', cls: 'completed' },
+      cancelled: { label: 'Cancelled', cls: 'cancelled' },
+    }
+    const info = map[l.product_status] || { label: l.product_status, cls: 'disabled' }
+    return <span className={`badge ${info.cls}`}>{info.label}</span>
+  }
+
+  // What to show in the Actions column when a listing can't be canceled.
+  const actionNote = (l) => {
+    if (l.status === 'confirmed' && l.product_status === 'frozen') return 'Buyer paying…'
+    if (l.status === 'confirmed' && l.product_status === 'sold') return 'Sold'
+    return '—'
   }
 
   return (
@@ -138,7 +156,12 @@ function MyListings() {
                       <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td>{renderLifecycle(l.status)}</td>
+                  <td>
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      {renderLifecycle(l.status)}
+                      {productStateBadge(l)}
+                    </div>
+                  </td>
                   <td>{l.tx_hash ? <code title={l.tx_hash}>{shorten(l.tx_hash)}</code> : <span className="text-muted">—</span>}</td>
                   <td>
                     {l.status === 'pending' && l.expires_at
@@ -146,7 +169,7 @@ function MyListings() {
                       : '-'}
                   </td>
                   <td>
-                    {l.status === 'pending' || l.status === 'confirmed' ? (
+                    {l.cancelable ? (
                       <button
                         className="btn btn-sm btn-outline-danger"
                         disabled={busyId === l.id}
@@ -155,7 +178,7 @@ function MyListings() {
                         {busyId === l.id ? 'Canceling…' : 'Cancel'}
                       </button>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="text-muted">{actionNote(l)}</span>
                     )}
                   </td>
                 </tr>

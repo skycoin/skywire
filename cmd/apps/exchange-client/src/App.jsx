@@ -166,7 +166,7 @@ function App() {
         )}
         {activeTab === 'orders' && <Orders />}
         {activeTab === 'listings' && <MyListings onNeedRegister={goToSettings} />}
-        {activeTab === 'history' && <History />}
+        {activeTab === 'history' && <History marketPubKey={marketPubKey} marketName={marketName} />}
         {activeTab === 'settings' && (
           <Settings marketPubKey={marketPubKey} onRegistered={() => setRegistered(true)} />
         )}
