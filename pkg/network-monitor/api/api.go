@@ -1,4 +1,4 @@
-// Package api pkg/network-monitor/api.go
+// Package api pkg/network-monitor/api/api.go c2-net-monitor
 package api
 
 import (

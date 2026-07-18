@@ -1,4 +1,4 @@
-// Package api pkg/uptime-tracker/api/api.go
+// Package api pkg/uptime-tracker/api/api.go c4-net-discovery
 package api
 
 import (
@@ -38,6 +38,17 @@ const (
 	rateLimiterRequests = 5
 	rateLimiterWindow   = 1 * time.Minute
 )
+
+// keyByRemoteAddr keys the rate limiter off the TCP peer address (r.RemoteAddr),
+// canonicalizing IPv6 to its /64. It is the explicit, non-deprecated equivalent
+// of httprate.KeyByIP (which was deprecated to make the trust model explicit).
+func keyByRemoteAddr(r *http.Request) (string, error) {
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ip = r.RemoteAddr
+	}
+	return httprate.CanonicalizeIP(ip), nil
+}
 
 // API register all the API endpoints.
 // It implements a net/http.Handler.
@@ -127,8 +138,13 @@ func New(log logrus.FieldLogger, s store.Store, nonceStore httpauth.NonceStore, 
 		})
 
 		r.Group(func(r chi.Router) {
-			// request rate limited group
-			r.Use(httprate.LimitByIP(rateLimiterRequests, rateLimiterWindow))
+			// request rate limited group, keyed per TCP peer (r.RemoteAddr).
+			// Explicit form of the now-deprecated httprate.LimitByIP wrapper
+			// (identical behavior): LimitByIP/KeyByIP were deprecated to force
+			// callers to state a trust model, since behind a reverse proxy
+			// RemoteAddr is the proxy's address. We keep the prior per-RemoteAddr
+			// keying — see keyByRemoteAddr.
+			r.Use(httprate.LimitBy(rateLimiterRequests, rateLimiterWindow, keyByRemoteAddr))
 
 			r.Get("/visors", api.handleVisors)
 			r.Get("/uptimes", api.handleUptimes)

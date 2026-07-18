@@ -1,4 +1,4 @@
-// Package visor pkg/visor/rpc_bridge.go
+// Package visor pkg/visor/rpc_bridge.go c3-vis-core
 //
 // TCP→{dmsg,skynet} bridge for the CLI's `--via <scheme>://<pk>`
 // flow. Multiplexed onto the visor's existing CLI RPC port

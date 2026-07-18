@@ -1,4 +1,4 @@
-// Package commands cmd/skywire/commands/root.go
+// Package commands cmd/skywire/commands/root.go c4-vis-cli
 package commands
 
 import (
@@ -17,6 +17,7 @@ import (
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
 	ss "github.com/skycoin/skywire/cmd/apps/skysocks/commands"
 	vpnc "github.com/skycoin/skywire/cmd/apps/vpn-client/commands"
+	vpnr "github.com/skycoin/skywire/cmd/apps/vpn-router/commands"
 	vpns "github.com/skycoin/skywire/cmd/apps/vpn-server/commands"
 	cxo "github.com/skycoin/skywire/cmd/cxo/commands"
 	dmsg "github.com/skycoin/skywire/cmd/dmsg/dmsg/commands"
@@ -40,6 +41,7 @@ func init() {
 	appsCmd.AddCommand(
 		vpns.RootCmd,
 		vpnc.RootCmd,
+		vpnr.RootCmd,
 		ssc.RootCmd,
 		ss.RootCmd,
 		sc.RootCmd,
@@ -107,6 +109,8 @@ func init() {
 	vpns.RootCmd.Hidden = true
 	vpnc.RootCmd.Use = "vpn-client"
 	vpnc.RootCmd.Hidden = true
+	vpnr.RootCmd.Use = "vpn-router"
+	vpnr.RootCmd.Hidden = true
 	// skysocks pair (server + client) is collapsed under
 	// `skywire app skysocks {serve,client}`. The legacy direct
 	// invocations stay mounted but Hidden so operator scripts

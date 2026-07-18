@@ -1,4 +1,4 @@
-// Package vpn internal/vpn/env.go
+// Package vpn pkg/vpn/env.go c4-app-vpn
 package vpn
 
 import (

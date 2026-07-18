@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/group.go:
+// Package cliskychat cmd/skywire-cli/commands/skychat/group.go c4-vis-cli
 // operator-facing CLI for D1 group chat. Thin wrappers over the
 // visor's GroupX RPC methods.
 //

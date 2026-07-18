@@ -1,4 +1,4 @@
-// Package dmsgscp pkg/dmsg/dmsgscp/host.go: the listening side of
+// Package dmsgscp pkg/dmsg/dmsgscp/host.go c1-net-dmsg
 // scp-over-dmsg. Host accepts dmsg streams on its configured port,
 // authorizes the remote PK against an injected Whitelist, reads the
 // first line to discover the role the caller wants the host to play

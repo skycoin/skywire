@@ -1,4 +1,4 @@
-// Package services pkg/services/duration.go
+// Package services pkg/services/duration.go c2-vis-appsvc
 //
 // Duration is a time.Duration wrapper that JSON-marshals as a Go
 // duration string ("2m", "30s", "100ms") and unmarshals from either

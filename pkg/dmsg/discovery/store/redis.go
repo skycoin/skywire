@@ -1,4 +1,4 @@
-// Package store pkg/discovery/store/redis.go
+// Package store pkg/dmsg/discovery/store/redis.go c1-net-dmsg
 package store
 
 import (

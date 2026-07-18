@@ -1,4 +1,4 @@
-// Package dmsgclient pkg/dmsg/dmsgclient/fallback_disc.go
+// Package dmsgclient pkg/dmsg/dmsgclient/fallback_disc.go c1-net-dmsg
 //
 // The fallbackDiscClient is net/http-FREE (it only composes other
 // disc.APIClient values), so it lives here untagged — usable from both the

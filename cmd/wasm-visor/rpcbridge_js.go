@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — RPC bridge client: serve this tab's visor RPC to `skywire cli`.
+// Package main cmd/wasm-visor/rpcbridge_js.go c3-vis-wasm
 //
 // A browser tab can't open a TCP listener, so it dials the host bridge over a
 // WebSocket; the host (cmd/dmsg-wasm/serve.go) fronts it with a local

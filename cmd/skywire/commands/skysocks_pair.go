@@ -1,4 +1,4 @@
-// Package commands cmd/skywire/commands/skysocks_pair.go — unified
+// Package commands cmd/skywire/commands/skysocks_pair.go c4-vis-cli
 // `skywire app skysocks {serve,client}` parent that thin-wraps the
 // existing skysocks / skysocks-client RootCmds.
 //

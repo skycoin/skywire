@@ -1,4 +1,4 @@
-// Package clitps cmd/skywire-cli/commands/tps/tps.go
+// Package clitps cmd/skywire-cli/commands/tps/tps.go c4-vis-cli
 package clitps
 
 import (

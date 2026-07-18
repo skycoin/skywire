@@ -1,4 +1,4 @@
-// Package visor pkg/visor/hypervisor_handlers_group.go
+// Package visor pkg/visor/hypervisor_handlers_group.go c3-vis-core
 //
 // Hypervisor HTTP routes for skychat GROUP chat — the native-visor
 // counterpart to the wasm visor's skychatGroup* JS hooks. These thin

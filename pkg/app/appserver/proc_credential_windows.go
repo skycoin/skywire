@@ -1,7 +1,7 @@
 //go:build windows
 // +build windows
 
-// Package appserver pkg/app/appserver/proc_credential_windows.go
+// Package appserver pkg/app/appserver/proc_credential_windows.go c2-vis-appsvc
 //
 // POSIX-style setuid before exec doesn't translate to Windows. The
 // closest Windows equivalent is CreateProcessAsUser, which needs a

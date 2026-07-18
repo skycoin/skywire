@@ -1,4 +1,4 @@
-// Package main cmd/conf/conf.go
+// Package main cmd/dmsg/conf/conf.go c1-net-dmsg
 package main
 
 import (

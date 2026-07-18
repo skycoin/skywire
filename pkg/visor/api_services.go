@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_services.go c3-vis-core
 // api_services.go contains service discovery, health, and configuration API methods.
 package visor
 

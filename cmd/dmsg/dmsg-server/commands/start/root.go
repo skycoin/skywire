@@ -1,4 +1,4 @@
-// Package start cmd/dmsg-server/commands/start/root.go
+// Package start cmd/dmsg/dmsg-server/commands/start/root.go c1-net-dmsg
 //
 // Cobra entry point for `skywire dmsg server start`. Parses flags
 // and the JSON config file into a dmsgsrv.Config, then hands off to

@@ -14,7 +14,7 @@ import (
 func NewLocalLimitCounter(windowLength time.Duration) *localCounter {
 	return &localCounter{
 		windowLength:     windowLength,
-		latestWindow:     time.Now().UTC().Truncate(windowLength),
+		latestWindow:     time.Now().UTC(),
 		latestCounters:   make(map[uint64]int),
 		previousCounters: make(map[uint64]int),
 	}
@@ -92,7 +92,5 @@ func (c *localCounter) evict(currentWindow time.Time) {
 }
 
 func limitCounterKey(key string) uint64 {
-	h := xxh3.New()
-	h.WriteString(key)
-	return h.Sum64()
+	return xxh3.HashString(key)
 }

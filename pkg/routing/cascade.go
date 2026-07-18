@@ -1,4 +1,4 @@
-// Package routing pkg/routing/cascade.go
+// Package routing pkg/routing/cascade.go c1-net-routing
 //
 // CascadeSetup and CascadeAck define the wire format for the cascade
 // route setup protocol. Messages are nested (Russian-doll style) so

@@ -1,3 +1,4 @@
+// Package visor pkg/visor/api_routing.go c3-vis-core
 // api_routing.go contains routing rule and route group API methods.
 package visor
 

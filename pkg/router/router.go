@@ -1,4 +1,4 @@
-// Package router implements package router for skywire visor.
+// Package router pkg/router/router.go c2-net-routing
 package router
 
 import (

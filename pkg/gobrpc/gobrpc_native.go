@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package gobrpc is a minimal, build-tagged stand-in for net/rpc's
+// Package gobrpc pkg/gobrpc/gobrpc_native.go c0-com-http
 // default (gob) codec.
 //
 // On every NON-TinyGo build this file makes the package a thin set of

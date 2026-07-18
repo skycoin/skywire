@@ -1,6 +1,6 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
-// Package disc — fallback discovery client.
+// Package disc pkg/dmsg/disc/fallback.go c1-net-dmsg
 //
 // Build-tag-gated off the WASM path because it imports pkg/logging
 // (which wraps logrus, which transitively pulls encoding/json).

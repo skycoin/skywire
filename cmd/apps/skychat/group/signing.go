@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/signing.go: leaf-level
+// Package group cmd/apps/skychat/group/signing.go c4-app-chat
 // signatures for chat messages. Each Message published to a group
 // feed is signed by the SenderPK so admin-aggregator republishes
 // are tamper-evident: a non-admin subscriber consuming a leaf via

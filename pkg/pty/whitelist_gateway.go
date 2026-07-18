@@ -1,4 +1,4 @@
-// Package pty pkg/pty/whitelist_gateway.go
+// Package pty pkg/pty/whitelist_gateway.go c3-vis-pty
 package pty
 
 import (

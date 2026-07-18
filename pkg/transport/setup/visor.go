@@ -1,4 +1,4 @@
-// Package setup pkg/transport/setup/visor.go
+// Package setup pkg/transport/setup/visor.go c2-net-transport
 package setup
 
 import (

@@ -1,4 +1,4 @@
-// Package wasm pkg/router/policy/wasm/loader.go — file-backed
+// Package wasm pkg/router/policy/wasm/loader.go c2-net-routing
 // loader for a WASM routing-policy module. Mirrors the shape of
 // pkg/router/policy.Loader (Decide / OnLegChange / Source /
 // IsActive / Close / Watch) so the router-side wiring code in

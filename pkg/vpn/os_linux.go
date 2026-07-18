@@ -1,6 +1,7 @@
 //go:build linux
 // +build linux
 
+// Package vpn pkg/vpn/os_linux.go c4-app-vpn
 package vpn
 
 import (

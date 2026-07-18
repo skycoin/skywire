@@ -1,4 +1,4 @@
-// Package cliroute cmd/skywire-cli/commands/route/rsn_stats.go
+// Package cliroute cmd/skywire-cli/commands/route/rsn_stats.go c4-vis-cli
 package cliroute
 
 import (

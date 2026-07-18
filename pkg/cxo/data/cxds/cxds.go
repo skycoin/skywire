@@ -1,4 +1,4 @@
-// Package cxds implements cxo/data.CXDS
+// Package cxds pkg/cxo/data/cxds/cxds.go c2-net-cxo
 // interface. E.g. the package provides data
 // store for CXO. The data store is key value
 // store, in which the key is SHA256 hash of

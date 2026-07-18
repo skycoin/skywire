@@ -1,3 +1,4 @@
+// Package skyobject pkg/cxo/skyobject/pack.go c2-net-cxo
 package skyobject
 
 import (

@@ -1,6 +1,6 @@
 //go:build tinygo
 
-// Package disc pkg/dmsg/disc/interface_tinygo.go
+// Package disc pkg/dmsg/disc/interface_tinygo.go c1-net-dmsg
 //
 // TinyGo build of the package-wide `json` codec. The native build uses
 // jsoniter.ConfigFastest (interface_native.go); under TinyGo we use the
@@ -14,6 +14,7 @@ package disc
 
 import (
 	stdjson "encoding/json"
+	"io"
 )
 
 var json = jsonCodec{}
@@ -22,3 +23,5 @@ type jsonCodec struct{}
 
 func (jsonCodec) Marshal(v interface{}) ([]byte, error)   { return stdjson.Marshal(v) }
 func (jsonCodec) Unmarshal(b []byte, v interface{}) error { return stdjson.Unmarshal(b, v) }
+func (jsonCodec) NewDecoder(r io.Reader) *stdjson.Decoder { return stdjson.NewDecoder(r) }
+func (jsonCodec) NewEncoder(w io.Writer) *stdjson.Encoder { return stdjson.NewEncoder(w) }

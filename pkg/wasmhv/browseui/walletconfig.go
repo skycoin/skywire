@@ -1,3 +1,4 @@
+// Package browseui pkg/wasmhv/browseui/walletconfig.go c3-vis-wasm
 // pkg/wasmhv/browseui/walletconfig.go — the ONE wallet config panel.
 //
 // The wallet's TRANSPORT/backend config (storage mode, BTC electrum server,

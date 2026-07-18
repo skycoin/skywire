@@ -1,4 +1,4 @@
-// Package clirewards cmd/skywire-cli/commands/rewards/runday.go
+// Package clirewards cmd/skywire-cli/commands/rewards/runday.go c4-vis-cli
 //
 // runday.go provides the in-process orchestration of the full hourly reward
 // cycle, replacing the bash pipeline that was previously emitted by

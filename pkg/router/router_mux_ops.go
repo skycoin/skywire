@@ -1,5 +1,6 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
+// Package router pkg/router/router_mux_ops.go c2-net-routing
 // router_mux_ops.go contains mux route operations on the router.
 package router
 

@@ -1,6 +1,6 @@
 //go:build !(tinygo && js && wasm)
 
-// Package dmsg pkg/dmsg/dmsg/ws.go: dmsg-over-WebSocket.
+// Package dmsg pkg/dmsg/dmsg/ws.go c1-net-dmsg
 //
 // A WebSocket connection is a bidirectional, ordered, reliable byte pipe over
 // HTTP(S) — exactly what dmsg's session layer wants. coder/websocket's NetConn

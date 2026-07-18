@@ -1,4 +1,4 @@
-// Package clivisor cmd/skywire-cli/commands/visor/goroutines.go:
+// Package clivisor cmd/skywire-cli/commands/visor/goroutines.go c4-vis-cli
 // fetches and summarizes the visor's pprof goroutine dump. Replaces
 // the manual `curl + awk + grep` ritual for diagnosing visor hangs
 // (RPC timing out, transport.Manager deadlocks, syncMu pile-ups,

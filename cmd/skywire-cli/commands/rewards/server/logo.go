@@ -1,4 +1,4 @@
-// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/logo.go
+// Package clirewardsserver cmd/skywire-cli/commands/rewards/server/logo.go c4-vis-cli
 package clirewardsserver
 
 const skycoinlogohtml = `<table border="0" cellpadding="0" cellspacing="0" summary="[libcaca canvas export]">

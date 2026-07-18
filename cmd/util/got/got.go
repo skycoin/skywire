@@ -1,4 +1,4 @@
-// Package main cmd/got/got.go
+// Package main cmd/util/got/got.go c4-vis-cli
 package main
 
 import (

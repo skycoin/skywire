@@ -1,6 +1,6 @@
 //go:build linux || (voiceaudio && (windows || darwin)) || (js && wasm)
 
-// Package voice pkg/skychat/voice/audio_ring.go c2-app-chat
+// Package voice pkg/skychat/voice/audio_ring.go c4-app-chat
 //
 // sampleRing is the bounded int16 FIFO shared by all audio backends: the pure-Go
 // PulseAudio backend on Linux, the cgo malgo backend on Windows/macOS, and the

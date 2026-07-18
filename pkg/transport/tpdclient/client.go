@@ -1,6 +1,6 @@
-//go:build !tinygo
+//go:build !tinygo || (js && wasm)
 
-// Package tpdclient implements transport discovery client
+// Package tpdclient pkg/transport/tpdclient/client.go c2-net-transport
 package tpdclient
 
 import (

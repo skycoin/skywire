@@ -1,4 +1,4 @@
-// Package commands cmd/dmsg-server/commands/root.go
+// Package commands cmd/dmsg/dmsg-server/commands/root.go c1-net-dmsg
 package commands
 
 import (

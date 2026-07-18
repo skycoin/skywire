@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main — in-browser CXO telemetry. A native visor reports each transport's
+// Package main cmd/wasm-visor/telemetry_js.go c3-vis-wasm
 // bandwidth + latency to TPD by publishing a CXO TreeStore feed that TPD's
 // cxo-aggregator subscribes to (pkg/visor/init_stats.go). A browser tab has no
 // filesystem, so it can't use the native bbolt-backed stats.Store — but the CXO

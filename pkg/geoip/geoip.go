@@ -1,25 +1,49 @@
-// Package geoip embeds the MaxMind GeoLite2-City database and exposes
+// Package geoip pkg/geoip/geoip.go c0-com-util
 // a lookup function. Used by the visor (for service-discovery
 // geolocation tagging without an HTTP round-trip to the geoip service)
 // and by `cmd/svc/geoip` (the standalone HTTP geoip service).
 package geoip
 
 import (
+	"bytes"
+	"compress/gzip"
 	_ "embed"
 	"errors"
 	"fmt"
+	"io"
 	"net/netip"
+	"sync"
 
 	"github.com/oschwald/geoip2-golang/v2"
 )
 
-//go:embed GeoLite2-City.mmdb
-var embedded []byte
+// The GeoLite2-City database is committed gzipped (~30 MB vs ~62 MB raw) to keep
+// the embedding binaries — every visor and dmsg-server — that much smaller. It
+// is decompressed once, lazily, on first EmbeddedDB() call and cached.
+//
+//go:embed GeoLite2-City.mmdb.gz
+var embeddedGz []byte
 
-// EmbeddedDB returns the raw bytes of the embedded GeoLite2-City database.
+var (
+	embeddedOnce sync.Once
+	embedded     []byte
+)
+
+// EmbeddedDB returns the raw bytes of the embedded GeoLite2-City database,
+// decompressed from the committed gzip on first call and cached thereafter.
 // The standalone geoip service uses this when no external `--db` path is
-// configured; the visor uses this for in-process lookups.
+// configured; the visor uses this for in-process lookups. Returns nil only if
+// the committed blob fails to decompress (build/repo corruption), which callers
+// surface as "database not initialized".
 func EmbeddedDB() []byte {
+	embeddedOnce.Do(func() {
+		zr, err := gzip.NewReader(bytes.NewReader(embeddedGz))
+		if err != nil {
+			return
+		}
+		defer zr.Close() //nolint:errcheck
+		embedded, _ = io.ReadAll(zr)
+	})
 	return embedded
 }
 

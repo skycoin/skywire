@@ -1,6 +1,6 @@
 //go:build !tinygo
 
-// Package network pkg/transport/network/client_resolved.go
+// Package network pkg/transport/network/client_resolved.go c2-net-transport
 //
 // The address-resolver-backed carrier machinery (stcpr/sudph/quic), split out of
 // client.go behind //go:build !tinygo. It imports pkg/.../addrresolver (net/http

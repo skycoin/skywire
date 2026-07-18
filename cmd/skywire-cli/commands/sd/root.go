@@ -1,4 +1,4 @@
-// Package clisd root.go
+// Package clisd cmd/skywire-cli/commands/sd/root.go c4-vis-cli
 package clisd
 
 import (

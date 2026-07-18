@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/root.go
+// Package cliskychat cmd/skywire-cli/commands/skychat/root.go c4-vis-cli
 package cliskychat
 
 import (

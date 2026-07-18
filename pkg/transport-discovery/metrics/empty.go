@@ -1,4 +1,4 @@
-// Package tpdiscmetrics internal/tpdiscmetrics/empty.go
+// Package tpdiscmetrics pkg/transport-discovery/metrics/empty.go c4-net-discovery
 package tpdiscmetrics
 
 import (

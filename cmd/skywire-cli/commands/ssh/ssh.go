@@ -1,4 +1,4 @@
-// Package clissh cmd/skywire-cli/commands/ssh/ssh.go — `skywire cli pty shell`,
+// Package clissh cmd/skywire-cli/commands/ssh/ssh.go c4-vis-cli
 // the OpenSSH-equivalent client over skywire identity.
 //
 // Maps onto the existing pty.CLI direct-TCP path (PR #2559/#2560):

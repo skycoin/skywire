@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/single_node_info.go
+// Package clilog cmd/skywire-cli/commands/log/single_node_info.go c4-vis-cli
 //
 // `cli log info <pk>` — fetch a single visor's /node-info JSON over
 // dmsghttp. Distinct from the bulk-collection mode at the `cli log`

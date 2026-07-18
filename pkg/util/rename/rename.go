@@ -1,4 +1,4 @@
-// Package rename rename.go
+// Package rename pkg/util/rename/rename.go c0-com-util
 package rename
 
 import (

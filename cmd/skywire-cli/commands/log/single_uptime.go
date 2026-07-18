@@ -1,4 +1,4 @@
-// Package clilog cmd/skywire-cli/commands/log/single_uptime.go
+// Package clilog cmd/skywire-cli/commands/log/single_uptime.go c4-vis-cli
 //
 // `cli log uptime <pk> [path]` — fetch the remote visor's
 // /uptime[/path] endpoint over dmsghttp. Like /stats this is a

@@ -1,4 +1,4 @@
-// Package cliut cmd/skywire-cli/ut/sd.go
+// Package cliut cmd/skywire-cli/commands/ut/sd.go c4-vis-cli
 //
 // `skywire cli ut sd` — visor uptime as reported by the
 // service-discovery integrated endpoint. Populated by the heartbeats

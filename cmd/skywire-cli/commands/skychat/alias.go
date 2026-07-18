@@ -1,4 +1,4 @@
-// Package cliskychat cmd/skywire-cli/commands/skychat/alias.go
+// Package cliskychat cmd/skywire-cli/commands/skychat/alias.go c4-vis-cli
 //
 // Local PK addressbook for skychat. 66-hex PKs are brittle to type
 // and to remember; this lets operators alias them by short name and

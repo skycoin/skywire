@@ -1,4 +1,4 @@
-// Package logstore logstore.go
+// Package logstore pkg/visor/logstore/logstore.go c3-vis-core
 package logstore
 
 import (

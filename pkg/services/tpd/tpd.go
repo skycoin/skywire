@@ -1,4 +1,4 @@
-// Package tpd pkg/services/tpd/tpd.go
+// Package tpd pkg/services/tpd/tpd.go c2-vis-appsvc
 //
 // transport-discovery as a pkg/services.Service. The standalone
 // `skywire svc tpd` cobra command and the multi-service supervisor
