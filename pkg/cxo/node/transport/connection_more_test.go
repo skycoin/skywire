@@ -41,7 +41,7 @@ func TestConnectionWrite(t *testing.T) {
 	defer c.Close()
 	defer b.Close() //nolint:errcheck
 
-	c.GetChanOut() <- []byte("hello")
+	c.GetChanOut() <- Frame{Body: []byte("hello")}
 
 	done := make(chan []byte, 1)
 	go func() {
