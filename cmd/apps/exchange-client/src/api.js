@@ -98,6 +98,66 @@ export function clearMarketHistory() {
   return []
 }
 
+// Trade history is kept locally because the market deletes finished orders after
+// its cleanup window (cleanup_days, default 3). We accumulate every terminal
+// order we ever see into localStorage, keyed by order id, so the user's history
+// persists on this device even after the market has purged it.
+const HISTORY_KEY = 'exchange:history'
+
+export function loadTradeHistory() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(HISTORY_KEY))
+    return Array.isArray(arr) ? arr.filter((o) => o && o.id) : []
+  } catch {
+    return []
+  }
+}
+
+// mergeTradeHistory folds the given terminal orders into the local store (adding
+// new ones, refreshing known ones), tagging each with the market it came from,
+// and returns the merged list. Orders already recorded but no longer returned by
+// the market (purged) are kept.
+export function mergeTradeHistory(orders, marketPK, marketName) {
+  const byId = new Map(loadTradeHistory().map((o) => [o.id, o]))
+  for (const o of orders || []) {
+    if (!o || !o.id) continue
+    const prev = byId.get(o.id) || {}
+    byId.set(o.id, {
+      ...prev,
+      ...o,
+      market_pk: marketPK || prev.market_pk || '',
+      market_name: marketName || prev.market_name || '',
+      saved_at: prev.saved_at || Date.now(),
+    })
+  }
+  const next = [...byId.values()]
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+  } catch {
+    // ignore storage errors
+  }
+  return next
+}
+
+export function removeTradeHistoryItem(id) {
+  const next = loadTradeHistory().filter((o) => o.id !== id)
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(next))
+  } catch {
+    // ignore storage errors
+  }
+  return next
+}
+
+export function clearTradeHistory() {
+  try {
+    localStorage.removeItem(HISTORY_KEY)
+  } catch {
+    // ignore storage errors
+  }
+  return []
+}
+
 // Copy text to the clipboard, with a fallback for non-secure (plain http)
 // contexts where navigator.clipboard is unavailable — the app is served over
 // http on the visor, so the modern API is often missing. Returns true on
