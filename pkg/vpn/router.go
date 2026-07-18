@@ -173,7 +173,7 @@ func (c RouterConfig) validate() error {
 }
 
 // prefixLen returns the subnet's CIDR prefix length (e.g. 24).
-func (c RouterConfig) prefixLen() int {
+func (c RouterConfig) prefixLen() int { //nolint
 	if c.Subnet == nil {
 		return 0
 	}
