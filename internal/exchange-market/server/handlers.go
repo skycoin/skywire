@@ -639,6 +639,22 @@ func (s *Server) handleGetListings(pk string, req protocol.Envelope) protocol.En
 		if l.ConfirmedAt != nil {
 			v.ConfirmedAt = l.ConfirmedAt.Format(time.RFC3339)
 		}
+		// A pending listing (no deposit yet) is always cancelable. A confirmed
+		// one is only cancelable while its product is still active — once a buyer
+		// freezes/buys it the seller is committed, so surface that to the client
+		// instead of showing a Cancel button that the market would reject.
+		switch l.Status {
+		case "pending":
+			v.Cancelable = true
+		case "confirmed":
+			if product, err := s.db.GetProductByListingID(l.ID); err == nil && product != nil {
+				v.ProductStatus = product.Status
+				v.Cancelable = product.Status == "active"
+			} else {
+				// No product row yet (just confirmed) — treat as still cancelable.
+				v.Cancelable = true
+			}
+		}
 		views = append(views, v)
 	}
 	return success(req.ID, protocol.GetListingsResponse{Listings: views, MarketWallet: wallet})

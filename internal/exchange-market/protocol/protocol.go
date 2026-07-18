@@ -320,6 +320,14 @@ type ListingView struct {
 	CreatedAt       string  `json:"created_at"`
 	ConfirmedAt     string  `json:"confirmed_at,omitempty"`
 	TxHash          string  `json:"tx_hash,omitempty"`
+	// ProductStatus is the state of the product this listing became, once
+	// confirmed: "active" (still on the market), "frozen" (a buyer has selected
+	// it and is paying), or "sold". Empty while the listing is still pending.
+	ProductStatus string `json:"product_status,omitempty"`
+	// Cancelable reflects whether the seller may still cancel this listing right
+	// now: true while pending, or confirmed with the product still active. Once a
+	// buyer selects the product it can no longer be canceled.
+	Cancelable bool `json:"cancelable"`
 }
 
 // GetListingsResponse is the reply to TypeGetListings: the caller's own pending
