@@ -63,7 +63,7 @@ type Conn struct {
 	// ConnectPK, fresh dial replaces the dead Conn.
 	lastActivityNs atomic.Int64
 
-	sendq chan<- []byte // channel from transport.Connection
+	sendq chan<- transport.Frame // channel from transport.Connection
 
 	// # stat
 	//
@@ -363,6 +363,20 @@ func (c *Conn) sendRoot(r *registry.Root) {
 	})
 }
 
+// encodeRootBody encodes the msg.Root wire body for r ONCE, so a broadcast can
+// hand the same immutable []byte to every subscriber via sendSharedBody instead
+// of re-running the (expensive) r.Encode() + msg.Root.Encode() per connection.
+// It is exactly the body sendRoot builds per-conn; only the 8-byte header differs.
+func encodeRootBody(r *registry.Root) []byte {
+	return (&msg.Root{
+		Feed:  r.Pub,
+		Nonce: r.Nonce,
+		Seq:   r.Seq,
+		Value: r.Encode(),
+		Sig:   r.Sig,
+	}).Encode()
+}
+
 // send last Root to peer
 func (c *Conn) sendLastRoot(pk cipher.PubKey) {
 
@@ -547,19 +561,20 @@ func (c *Conn) nextSeq() uint32 {
 	return atomic.AddUint32(&c.seq, 1)
 }
 
-func (c *Conn) encodeMsg(seq, rseq uint32, m msg.Msg) (raw []byte) {
+// msgHead builds the 8-byte per-message header (seq + rseq).
+func msgHead(seq, rseq uint32) []byte {
+	head := make([]byte, 8)
+	binary.LittleEndian.PutUint32(head, seq)
+	binary.LittleEndian.PutUint32(head[4:], rseq)
+	return head
+}
 
-	var em = m.Encode()
-
-	raw = make([]byte, 8, 8+len(em))
-
-	binary.LittleEndian.PutUint32(raw, seq)
-	binary.LittleEndian.PutUint32(raw[4:], rseq)
-
-	raw = append(raw, em...)
-
-	return
-
+// encodeMsg builds the outbound frame for m: the per-conn Head plus the encoded
+// Body. Kept as a split Frame (rather than one concatenated buffer) so a
+// broadcast can encode the Body once and share it across every subscriber — see
+// transport.Frame and sendSharedBody.
+func (c *Conn) encodeMsg(seq, rseq uint32, m msg.Msg) transport.Frame {
+	return transport.Frame{Head: msgHead(seq, rseq), Body: m.Encode()}
 }
 
 // sendMsgQueueTimeout is the max time sendMsg will wait to enqueue a
@@ -586,18 +601,31 @@ const sendMsgQueueTimeout = 5 * time.Second
 
 func (c *Conn) sendMsg(seq, rseq uint32, m msg.Msg) error {
 	c.n.Debugf(MsgSendPin, "[%s] send %d %T", c.String(), rseq, m)
+	return c.sendFrame(c.encodeMsg(seq, rseq, m))
+}
 
+// sendSharedBody queues a frame whose Body is a caller-owned, immutable []byte
+// that MAY be shared across connections — the broadcast fast path: encode the
+// (large) message body once, then hand every subscriber the same Body with only
+// its own per-conn Head. The transport writes Body without copying, so N
+// subscribers cost one Body allocation, not N.
+func (c *Conn) sendSharedBody(seq, rseq uint32, body []byte) error {
+	return c.sendFrame(transport.Frame{Head: msgHead(seq, rseq), Body: body})
+}
+
+// sendFrame enqueues an already-built frame onto the per-conn send queue,
+// bounding the wait so one stuck subscriber can't stall a broadcast (see
+// sendMsgQueueTimeout).
+func (c *Conn) sendFrame(f transport.Frame) error {
 	select {
 	case <-c.closeq:
 		return ErrClosed
 	default:
 	}
 
-	encoded := c.encodeMsg(seq, rseq, m)
-
 	// Fast path: buffer has room, enqueue immediately.
 	select {
-	case c.sendq <- encoded:
+	case c.sendq <- f:
 		return nil
 	default:
 	}
@@ -606,7 +634,7 @@ func (c *Conn) sendMsg(seq, rseq uint32, m msg.Msg) error {
 	// doesn't stall the publisher's broadcastRoot iteration. closeq
 	// is also selected so a concurrent Close unblocks us cleanly.
 	select {
-	case c.sendq <- encoded:
+	case c.sendq <- f:
 		return nil
 	case <-c.closeq:
 		return ErrClosed
