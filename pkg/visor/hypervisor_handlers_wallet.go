@@ -99,44 +99,45 @@ func walletNodeDefault() string {
 // (pkg/btcgateway) reaches it — keys + signing stay in the browser, only chain
 // queries cross. Same localStorage keys as the wasm shim + the config panel.
 const walletNodeShim = `<script>(function(){` +
-	`var rf=window.fetch?window.fetch.bind(window):null;if(!rf){return;}` +
 	`function ls(k){try{return localStorage.getItem(k)||"";}catch(e){return "";}}` +
 	`function pathOf(u){try{return new URL(u,location.href).pathname;}catch(e){return String(u);}}` +
-	`window.fetch=function(input,init){` +
-	`var url=(typeof input==="string")?input:(input&&input.url)||"";` +
-	`var p=pathOf(url);` +
 	`function searchOf(u){try{return new URL(u,location.href).search;}catch(e){return "";}}` +
 	`function hostOf(u){try{var x=new URL(u,location.href);return (x.host&&x.host!==location.host)?(x.protocol+"//"+x.host):"";}catch(e){return "";}}` +
-	// Coin list: coin.service fetches /api/v1/coins raw (no coin prefix). Serve it
-	// from the visor registry (/wallet/coins), not a node.
-	`if(/\/api\/v1\/coins$/.test(p)){return rf(location.origin+"/wallet/coins",init);}` +
-	// Per-coin API: api.service prefixes every request with the coin's nodeUrl =
-	// "/coin/<index>". Re-point at the mounted proxy (/wallet/coin/<index>/…).
-	`var mc=/\/coin\/(\d+)\//.exec(p);` +
-	// Legacy: a bare /api/v[12]/ with no /coin/ prefix (pre-registry build /
-	// fallback coin) → the default coin 0.
-	`var ml=!mc&&/^\/(wallet\/)?api\/v[12]\//.test(p);` +
-	`if(!mc&&!ml){return rf(input,init);}` +
-	`init=init||{};` +
-	`var h=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
-	`var target;` +
-	`if(mc){` +
-	`var tail=p.slice(p.indexOf("/coin/"));target=location.origin+"/wallet"+tail+searchOf(url);` +
-	`}else{` +
-	`var bare=p.replace(/^\/(wallet\/)?/,"");target=location.origin+"/wallet/coin/0/"+bare+searchOf(url);` +
-	`}` +
-	// Tag the backend selection by path. BTC (any /v1/btc/) carries the operator's
-	// electrum backend + optional skysocks exit; a skycoin-style node carries the
-	// chosen node (absolute host from Settings → Nodes, else the config-panel key,
-	// else the deployment default) — walletCoinProxy / walletNodeProxy use these.
-	`if(/\/v1\/btc\//.test(p)){` +
-	`var b=ls("skywire-btc-backend");if(b){h.set("X-Skywire-Btc-Backend",b);}` +
-	`var xp=ls("skywire-btc-proxy");if(xp){h.set("X-Skywire-Btc-Proxy",xp);}` +
-	`}else{` +
-	`var nn=hostOf(url)||ls("skywire-coin-node");if(nn){h.set("X-Skywire-Coin-Node",nn);}` +
-	`}` +
-	`init.headers=h;return rf(target,init);` +
-	`};})();</script>`
+	// rw computes the rewritten same-origin target + backend-selection headers for a
+	// wallet node-API URL, or returns null to pass the request through unchanged. It
+	// is shared by the fetch AND XMLHttpRequest overrides below: skycoin-web's
+	// Angular HttpClient issues every call (coins list, node health, balances) over
+	// XHR, so a fetch-only shim would 404 the SPA's absolute /api/... paths (they
+	// resolve to the origin root, missing this /wallet/ handler) — which left the
+	// native HV-served wallet with no coins, no coin/type selectors, and empty
+	// settings pages. Covering XHR is what actually makes the native wallet work.
+	`function rw(url){var p=pathOf(url);` +
+	// Coin list: coin.service fetches /api/v1/coins raw → the visor registry.
+	`if(/\/api\/v1\/coins$/.test(p)){return {t:location.origin+"/wallet/coins",h:{}};}` +
+	// Per-coin API (nodeUrl prefix "/coin/<index>") → the mounted proxy; a bare
+	// /api/v[12]/ with no /coin/ prefix (fallback coin) → coin 0.
+	`var mc=/\/coin\/(\d+)\//.exec(p);var ml=!mc&&/^\/(wallet\/)?api\/v[12]\//.test(p);` +
+	`if(!mc&&!ml){return null;}var target;` +
+	`if(mc){var tail=p.slice(p.indexOf("/coin/"));target=location.origin+"/wallet"+tail+searchOf(url);}` +
+	`else{var bare=p.replace(/^\/(wallet\/)?/,"");target=location.origin+"/wallet/coin/0/"+bare+searchOf(url);}` +
+	// Tag the backend selection by path: BTC carries electrum backend + skysocks
+	// exit; a skycoin-style node carries the chosen node host.
+	`var h={};` +
+	`if(/\/v1\/btc\//.test(p)){var b=ls("skywire-btc-backend");if(b){h["X-Skywire-Btc-Backend"]=b;}var xp=ls("skywire-btc-proxy");if(xp){h["X-Skywire-Btc-Proxy"]=xp;}}` +
+	`else{var nn=hostOf(url)||ls("skywire-coin-node");if(nn){h["X-Skywire-Coin-Node"]=nn;}}` +
+	`return {t:target,h:h};}` +
+	// fetch override.
+	`var rf=window.fetch?window.fetch.bind(window):null;` +
+	`if(rf){window.fetch=function(input,init){` +
+	`var url=(typeof input==="string")?input:(input&&input.url)||"";var r=rw(url);if(!r){return rf(input,init);}` +
+	`init=init||{};var hd=new Headers((init&&init.headers)||(typeof input!=="string"&&input&&input.headers)||undefined);` +
+	`for(var k in r.h){hd.set(k,r.h[k]);}init.headers=hd;return rf(r.t,init);};}` +
+	// XMLHttpRequest override (Angular HttpClient): rewrite the URL in open(), then
+	// apply the backend headers in send() (setRequestHeader must run after open()).
+	`var XO=XMLHttpRequest.prototype.open,XS=XMLHttpRequest.prototype.send;` +
+	`XMLHttpRequest.prototype.open=function(m,url){try{var r=rw(url);if(r){this.__sky=r;arguments[1]=r.t;}}catch(e){}return XO.apply(this,arguments);};` +
+	`XMLHttpRequest.prototype.send=function(b){if(this.__sky){var h=this.__sky.h;for(var k in h){try{this.setRequestHeader(k,h[k]);}catch(e){}}}return XS.apply(this,arguments);};` +
+	`})();</script>`
 
 // walletHandler serves /wallet/* : node API calls are proxied to the skycoin
 // node over dmsg; everything else is the embedded static wallet bundle (the
