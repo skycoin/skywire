@@ -271,6 +271,37 @@ code { color: var(--sky-blue); }
   white-space: nowrap;
 }
 
+/* QR code: small trigger next to an address, full-size code in a modal. */
+.btn.btn-sm.qr-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0.3rem 0.45rem; line-height: 1;
+}
+.qr-backdrop {
+  position: fixed; inset: 0; z-index: 1050;
+  display: flex; align-items: center; justify-content: center; padding: 1rem;
+  background: rgba(0, 0, 0, 0.65);
+}
+.qr-modal {
+  background: var(--sky-navy);
+  border: 1px solid var(--sky-blue);
+  border-radius: 10px;
+  padding: 1.25rem;
+  width: 100%; max-width: 360px;
+  max-height: 90vh; overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.qr-amount { color: var(--muted); }
+/* The code itself stays dark-on-white in this dark theme — inverted QR codes
+   are unreliable for phone scanners. */
+.qr-canvas {
+  display: flex; justify-content: center;
+  background: #fff; border-radius: 8px; padding: 0.75rem;
+}
+.qr-toggle { margin-top: 0.75rem; font-size: 0.82rem; color: var(--muted); }
+.qr-addr { margin-top: 0.75rem; }
+.qr-addr .addr-box { display: block; font-size: 0.78rem; }
+.qr-actions { margin-top: 0.5rem; }
+
 /* Small button (banner CTA) */
 .btn.btn-sm {
   background: var(--sky-blue); color: #fff; border: none;

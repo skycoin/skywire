@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
 import CopyButton from './CopyButton'
+import QrButton from './QrButton'
 
 // Fallback confirmation threshold for the "n/N" progress display. The market
 // reports its own value in each order-status (required_confirmations); this is
@@ -114,6 +115,13 @@ function Orders() {
         <div className="copy-row mt-1">
           <code className="addr-box addr-sm" title={order.seller_wallet}>{order.seller_wallet}</code>
           <CopyButton text={order.seller_wallet} label="Copy" />
+          <QrButton
+            address={order.seller_wallet}
+            amount={order.expected_payment_amount}
+            coin={order.payment_currency}
+            title="Pay the seller"
+            hint="Pay the exact amount so the market can match your payment."
+          />
         </div>
       </div>
     )
