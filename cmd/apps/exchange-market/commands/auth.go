@@ -28,15 +28,34 @@ const (
 	// otpLen is the number of characters in a generated code — short enough to
 	// read off a dashboard and retype, which is the whole ergonomic point.
 	//
-	// Five characters of otpAlphabet is only ~25 bits, so entropy alone does NOT
-	// make this safe; two controls below do. Do not shorten it further without
-	// revisiting them: at four characters the space is ~1M, which a few hundred
-	// parallel source addresses would exhaust in hours.
+	// WARNING — the code space here is SMALL. Five digits is 100_000 codes, about
+	// 16.6 bits. Entropy does not make this safe on its own; the rate limiters
+	// below are the only thing that does, so treat them as load-bearing and do
+	// not loosen them. For reference, at the sustained global budget
+	// (globalLoginRefill, one attempt per 6s ≈ 14_400/day) an attacker who keeps
+	// guessing works through the whole space in roughly a week. If this gate ever
+	// guards more value, lengthen the code before touching anything else: each
+	// extra digit multiplies the attacker's work by 10, and 8 digits (~26.6 bits)
+	// restores the margin the previous 5-character alphanumeric code had.
 	otpLen = 5
 
-	// otpAlphabet excludes I/O/0/1 — the operator retypes these by eye from a
-	// dashboard, so ambiguous glyphs cost more than the lost entropy.
-	otpAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	// otpAlphabet is digits only: the operator retypes the code by eye from a
+	// dashboard, and digits remove glyph ambiguity outright (no I/O vs 1/0) while
+	// letting phones offer a numeric keypad. The trade is steep — dropping from a
+	// 32-symbol alphabet to 10 shrinks the space 335x at the same length — and is
+	// accepted deliberately in favor of entry ergonomics. See otpLen above.
+	otpAlphabet = "0123456789"
+
+	// tokenAlphabet is used for session tokens, which are generated, stored, and
+	// replayed by the browser and never read or typed by a person. It is kept
+	// separate from otpAlphabet on purpose: the readability constraints that
+	// shrink the OTP alphabet buy nothing here, and sharing one alphabet meant an
+	// ergonomic change to the OTP silently weakened tokens too.
+	tokenAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+
+	// tokenLen gives ~190 bits over tokenAlphabet — far past guessing, and the
+	// reason session tokens need no rotation or rate limiting of their own.
+	tokenLen = 32
 
 	// sessionTTL bounds how long a logged-in page may keep calling the API
 	// before it must be re-authenticated with a fresh code.
@@ -51,15 +70,28 @@ const (
 
 	// globalLoginBurst / globalLoginRefill cap login attempts across ALL source
 	// addresses. The per-IP limiter alone is useless against an attacker with a
-	// botnet or an IPv6 range, which is exactly the threat a 25-bit code faces.
+	// botnet or an IPv6 range, which is exactly the threat a ~16.6-bit code faces.
 	globalLoginBurst  = 10
 	globalLoginRefill = 6 * time.Second
 
-	// otpFailureRotate replaces the code after this many failed attempts, so a
-	// brute-force search can never converge: the target moves long before any
-	// meaningful fraction of the space is explored. The operator just re-reads
-	// the new code from the hypervisor app list.
-	otpFailureRotate = 10
+	// otpFailureRotate replaces the code after this many failed attempts. It is 1:
+	// a single wrong guess burns the code. That is the strongest form of this
+	// control and matters most now that otpLen is only ~16.6 bits — it denies an
+	// attacker the ability to ENUMERATE. Walking 00000, 00001, 00002 … is
+	// guaranteed to succeed within the space and takes half of it on average;
+	// rotating every failure makes each guess independent, so there is no
+	// guarantee at any number of attempts and the expected work doubles.
+	//
+	// Be clear about the size of that win: it is a factor of ~2, not a rescue. It
+	// does NOT make a five-digit code strong, because it does not change the
+	// per-guess probability of 1/100_000. The rate limiters remain the control
+	// that actually bounds an attacker.
+	//
+	// Cost, accepted deliberately: one typo sends the operator back to the
+	// hypervisor app list for a fresh code, and an attacker who spends his budget
+	// on wrong guesses keeps the code churning, which is a denial-of-service
+	// against login. Both are bounded by the global limiter (one attempt per 6s).
+	otpFailureRotate = 1
 )
 
 // authGate owns the market's current OTP and the set of live page sessions.
@@ -97,7 +129,7 @@ func newAuthGate(publish func(otp string)) (*authGate, error) {
 // rotate replaces the current OTP and publishes the replacement. Callers must
 // not hold g.mu.
 func (g *authGate) rotate() error {
-	otp, err := randomCode(otpLen)
+	otp, err := randomCode(otpAlphabet, otpLen)
 	if err != nil {
 		return err
 	}
@@ -115,8 +147,9 @@ func (g *authGate) rotate() error {
 // login consumes the current OTP and returns a session token. The OTP is
 // rotated on success, so a code works exactly once.
 func (g *authGate) login(otp string) (string, bool) {
-	// Normalize the way an operator retypes it: codes are displayed uppercase,
-	// and browsers happily contribute stray whitespace.
+	// Normalize the way an operator retypes it: browsers happily contribute stray
+	// whitespace. ToUpper is a no-op for the all-digit alphabet but is kept so a
+	// future alphabet change cannot silently reintroduce case sensitivity.
 	otp = strings.ToUpper(strings.TrimSpace(otp))
 
 	g.mu.Lock()
@@ -141,7 +174,7 @@ func (g *authGate) login(otp string) (string, bool) {
 	}
 	g.mu.Unlock()
 
-	token, err := randomCode(32)
+	token, err := randomCode(tokenAlphabet, tokenLen)
 	if err != nil {
 		return "", false
 	}
@@ -216,18 +249,19 @@ func (g *authGate) currentOTP() string {
 	return g.otp
 }
 
-// randomCode returns n characters drawn uniformly from otpAlphabet using the
-// CSPRNG. Rejection is unnecessary because len(otpAlphabet) is a power of two,
-// but crypto/rand.Int is used anyway so the alphabet can change safely.
-func randomCode(n int) (string, error) {
-	max := big.NewInt(int64(len(otpAlphabet)))
+// randomCode returns n characters drawn uniformly from alphabet using the
+// CSPRNG. Neither alphabet in use has a power-of-two size, so a naive modulo
+// would bias the draw; crypto/rand.Int rejection-samples internally and stays
+// uniform for any alphabet size.
+func randomCode(alphabet string, n int) (string, error) {
+	max := big.NewInt(int64(len(alphabet)))
 	b := make([]byte, n)
 	for i := range b {
 		idx, err := rand.Int(rand.Reader, max)
 		if err != nil {
 			return "", err
 		}
-		b[i] = otpAlphabet[idx.Int64()]
+		b[i] = alphabet[idx.Int64()]
 	}
 
 	return string(b), nil
@@ -281,7 +315,12 @@ func (g *authGate) loginHandler() http.HandlerFunc {
 
 		token, ok := g.login(req.OTP)
 		if !ok {
-			mWriteError(w, http.StatusUnauthorized, "invalid or expired OTP")
+			// Say that the code is gone, not just wrong: the failure itself rotated
+			// it, so an operator who retries what they just typed — or what is still
+			// on their screen — cannot succeed. This leaks nothing; that a wrong
+			// guess burns the code is documented behavior, not a secret.
+			mWriteError(w, http.StatusUnauthorized,
+				"invalid OTP — the code has been replaced, re-read it in the hypervisor app list")
 			return
 		}
 
