@@ -141,20 +141,44 @@ func (n *nodeFeed) broadcastRoot(cr connRoot) {
 	// observe individual sub-side completions. sendRoot is fire-and-
 	// forget by design — errors translate to a Close that the
 	// conn's run() loop reaps.
-	// Encode the root message body ONCE and share it across every subscriber.
-	// Pre-fix each conn re-ran r.Encode() + msg.Root.Encode() on the (large)
-	// all-transports root, then buffered its own copy — O(rootSize * subs) CPU
-	// and RSS that ballooned the transport-discovery CXO node to multi-GB. Now
-	// the body is a single immutable buffer; each conn adds only its 8-byte head.
-	body := encodeRootBody(cr.r)
-
+	//
+	// The root message body is encoded ONCE and shared across every
+	// subscriber. Before that, each conn re-ran r.Encode() +
+	// msg.Root.Encode() on the (large) all-transports root and buffered its
+	// own copy — O(rootSize * subs) CPU and RSS that ballooned the
+	// transport-discovery CXO node to multi-GB. Now the body is a single
+	// immutable buffer and each conn adds only its 8-byte head.
+	//
+	// CRITICAL: the encode must NOT run on this goroutine. We are on the
+	// single nodeFeeds event loop (handleBroadcastRoot), which is the sole
+	// drainer of the UNBUFFERED brorq channel — so while we encode, every
+	// producer calling nodeFeeds.broadcastRoot is blocked. A first cut did
+	// encode here and the result was visible in production: 87 goroutines
+	// parked on that send, the feeds<->head filler pipeline backing up
+	// behind a multi-MB encode. Snapshot the subscriber set here (n.cs is
+	// actor-owned, so it can only be read on this goroutine — that part is
+	// cheap) and hand the encode plus the fan-out to a goroutine.
+	if len(n.cs) == 0 {
+		return
+	}
+	conns := make([]*Conn, 0, len(n.cs))
 	for c := range n.cs {
-
 		if c == cr.c {
 			continue
 		}
-
-		go c.sendSharedBody(c.nextSeq(), 0, body) //nolint:errcheck
+		conns = append(conns, c)
 	}
+	if len(conns) == 0 {
+		return
+	}
+
+	r := cr.r
+	go func() {
+		body := encodeRootBody(r)
+		for _, c := range conns {
+			// nextSeq is atomic, so it is safe off the event loop.
+			go c.sendSharedBody(c.nextSeq(), 0, body) //nolint:errcheck
+		}
+	}()
 
 }
