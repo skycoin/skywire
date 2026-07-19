@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -95,10 +96,12 @@ func TestHTTPRoundTripWireCompat(t *testing.T) {
 // over dmsg, a full noise + PQ handshake).
 func TestHTTPRoundTripKeepAliveReuse(t *testing.T) {
 	var served int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		served++
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"n":`+r.URL.Path[1:]+`}`)
+		// Echo the server-side counter (never request input) so the assertions
+		// below prove both requests reached the server in order over one conn.
+		_, _ = io.WriteString(w, `{"n":`+strconv.Itoa(served)+`}`) //nolint:errcheck
 	}))
 	defer srv.Close()
 	host := strings.TrimPrefix(srv.URL, "http://")
@@ -129,7 +132,7 @@ func TestHTTPRoundTripKeepAliveReuse(t *testing.T) {
 func TestHTTPRoundTripNotReusableOnClose(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Connection", "close")
-		_, _ = io.WriteString(w, "bye")
+		_, _ = io.WriteString(w, "bye") //nolint:errcheck
 	}))
 	defer srv.Close()
 	host := strings.TrimPrefix(srv.URL, "http://")
