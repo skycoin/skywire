@@ -243,8 +243,19 @@ func TestServiceUpdater_Heartbeat(t *testing.T) {
 func TestServiceUpdater_PauseResume(t *testing.T) {
 	ml := testLog()
 	u := newServiceUpdater(&ml, liveClient(), 15*time.Millisecond)
+	beforeStart := sdPostN.Load()
 	u.Start()
 	defer u.Stop()
+
+	// Start() fires the initial client.Register in a goroutine (it must not block
+	// the visor init path), so its POST lands at an arbitrary point. Wait for it
+	// before sampling the counter below — otherwise it can arrive during the
+	// paused window and be miscounted as a heartbeat, failing the test spuriously.
+	// This asserts nothing about pause; it only pins down the starting count.
+	regDeadline := time.Now().Add(2 * time.Second)
+	for sdPostN.Load() == beforeStart && time.Now().Before(regDeadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
 
 	u.Pause()
 	if !u.paused.Load() {

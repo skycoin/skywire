@@ -49,29 +49,17 @@ func NewDmsgDiscClient(dmsgC *dmsg.Client, discDmsgAddr string, log *logging.Log
 	return &dmsgDiscClient{dmsgC: dmsgC, discPK: discPK, log: log}, nil
 }
 
-// do dials a fresh stream to the discovery and runs one HTTP/1.1 round-trip,
-// bounded by ctx (the stream is closed on cancellation so a blocked read/write
-// unblocks).
+// do runs one HTTP/1.1 round-trip against the discovery over a pooled
+// keep-alive stream, bounded by ctx (the stream is closed on cancellation so a
+// blocked read/write unblocks).
+//
+// Pooling matters most here: the discovery is polled on a fixed cadence by
+// every client (entry re-POST plus dial-path lookups), and dialing a fresh
+// stream each time made the discovery pay a full noise + PQ handshake per call
+// — the handshake storm that dominated its CPU. See fetchPooled.
 func (c *dmsgDiscClient) do(ctx context.Context, method, path string, reqBody []byte) (httpResult, error) {
-	stream, err := c.dmsgC.DialStream(ctx, dmsg.Addr{PK: c.discPK, Port: dmsg.DefaultDmsgHTTPPort})
-	if err != nil {
-		return httpResult{}, err
-	}
-	defer stream.Close() //nolint:errcheck
-
-	done := make(chan struct{})
-	defer close(done)
-	if ctx.Done() != nil {
-		go func() {
-			select {
-			case <-ctx.Done():
-				stream.Close() //nolint:errcheck,gosec
-			case <-done:
-			}
-		}()
-	}
-
-	return httpRoundTrip(stream, method, c.discPK.Hex(), path, nil, reqBody)
+	addr := dmsg.Addr{PK: c.discPK, Port: dmsg.DefaultDmsgHTTPPort}
+	return fetchPooled(ctx, c.dmsgC, addr, method, c.discPK.Hex(), path, nil, reqBody)
 }
 
 // discMessage mirrors disc.HTTPMessage's `message` field (disc.HTTPMessage

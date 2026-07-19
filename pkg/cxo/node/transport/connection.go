@@ -9,6 +9,21 @@ import (
 	"time"
 )
 
+// Frame is one outbound message split into a small per-message Head (the
+// 8-byte seq/rseq the CXO Conn prepends) and a Body (the encoded message).
+// Splitting them lets a broadcast encode the (potentially large) Body ONCE and
+// share that immutable []byte across every subscriber connection — each conn
+// supplies only its own tiny Head. On the wire the frame is identical to the
+// old single-buffer form: [4-byte length][Head][Body]. Sharing the Body is what
+// turns a fan-out of an N-MB feed to M subscribers from O(N*M) memory + encode
+// CPU (one encoded+buffered copy per conn) into O(N + M). See
+// docs — the transport-discovery CXO node ballooned to multi-GB RSS re-encoding
+// the all-transports feed once per subscriber.
+type Frame struct {
+	Head []byte
+	Body []byte
+}
+
 // Connection wraps a net.Conn with channel-based message I/O.
 // Messages are length-prefixed (4 bytes, big-endian).
 type Connection struct {
@@ -19,7 +34,7 @@ type Connection struct {
 	closed bool
 
 	in   chan []byte
-	out  chan []byte
+	out  chan Frame
 	done chan struct{}
 }
 
@@ -28,7 +43,7 @@ func newConnection(conn net.Conn, isTCP bool) *Connection {
 		conn:  conn,
 		isTCP: isTCP,
 		in:    make(chan []byte, 256),
-		out:   make(chan []byte, 256),
+		out:   make(chan Frame, 256),
 		done:  make(chan struct{}),
 	}
 	go c.readLoop()
@@ -80,7 +95,7 @@ func (c *Connection) Close() {
 }
 
 // GetChanOut returns the send channel.
-func (c *Connection) GetChanOut() chan<- []byte {
+func (c *Connection) GetChanOut() chan<- Frame {
 	return c.out
 }
 
@@ -128,19 +143,26 @@ func (c *Connection) writeLoop() {
 	// underlying conn.Close inside Close). Close is idempotent.
 	defer c.Close()
 
-	header := make([]byte, 4)
 	for {
 		select {
-		case data, ok := <-c.out:
+		case f, ok := <-c.out:
 			if !ok {
 				return
 			}
-			binary.BigEndian.PutUint32(header, uint32(len(data))) //nolint:gosec
-			if _, err := c.conn.Write(header); err != nil {
+			// One small prefix write (4-byte length + Head) then the Body.
+			// The Body is written from its own (possibly shared) backing
+			// array with no copy — the whole point of the Frame split. Wire
+			// bytes are identical to the old [length][Head||Body] form.
+			prefix := make([]byte, 4+len(f.Head))
+			binary.BigEndian.PutUint32(prefix, uint32(len(f.Head)+len(f.Body))) //nolint:gosec
+			copy(prefix[4:], f.Head)
+			if _, err := c.conn.Write(prefix); err != nil {
 				return
 			}
-			if _, err := c.conn.Write(data); err != nil {
-				return
+			if len(f.Body) > 0 {
+				if _, err := c.conn.Write(f.Body); err != nil {
+					return
+				}
 			}
 		case <-c.done:
 			return
