@@ -137,20 +137,21 @@
     <form id="login-form" autocomplete="off">
       <h2>Operator login</h2>
       <p class="login-hint">
-        Enter the one-time code shown for <strong>exchange-market</strong> in your
-        hypervisor's app list. Each code works once — after logging in, a new one
-        is generated, and reloading this page will require it.
+        Enter the 5-digit one-time code shown for <strong>exchange-market</strong>
+        in your hypervisor's app list. Each code works once — after logging in, a
+        new one is generated, and reloading this page will require it. A wrong
+        code also replaces it, so check the app list again after a failed attempt.
       </p>
       <input
         id="login-otp"
         name="otp"
         type="text"
-        inputmode="latin"
-        autocapitalize="characters"
+        inputmode="numeric"
+        pattern="[0-9]*"
         autocomplete="off"
         spellcheck="false"
-        maxlength="8"
-        placeholder="XXXXX"
+        maxlength="5"
+        placeholder="00000"
         aria-label="One-time code"
         required />
       <div id="login-msg"></div>
