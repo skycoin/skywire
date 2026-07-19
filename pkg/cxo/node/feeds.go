@@ -381,8 +381,26 @@ func (n *nodeFeeds) handleDelConnFeed(cf connFeed) {
 // (bubbling api)
 func (n *nodeFeeds) broadcastRoot(cr connRoot) {
 
+	// Same hazard receivedRoot documents, on the broadcast side: n.brorq is
+	// drained by the single nodeFeeds event loop, so when that loop backs up
+	// (the feeds↔head filler pipeline congesting) this send parks. Guarding
+	// ONLY on n.closeq means a connection that closes while parked here never
+	// unblocks, stranding the goroutine — and with it the originating Conn —
+	// until node shutdown. Production dumps on transport-discovery showed 87
+	// goroutines parked on this exact send.
+	//
+	// cr.c is nil for locally-published roots (node.go publishes with no
+	// originating connection). A nil channel blocks forever in select, which is
+	// exactly the wanted behaviour there: it degrades to the original
+	// two-way select rather than firing spuriously.
+	var connClosed <-chan struct{}
+	if cr.c != nil {
+		connClosed = cr.c.closeq
+	}
+
 	select {
 	case n.brorq <- cr:
+	case <-connClosed:
 	case <-n.closeq:
 	}
 
