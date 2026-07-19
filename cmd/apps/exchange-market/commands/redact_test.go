@@ -37,7 +37,7 @@ func TestIsSecretConfigKey(t *testing.T) {
 
 func TestRedactConfig_NeverEmitsSecretValues(t *testing.T) {
 	const seed = "correct horse battery staple escrow seed"
-	const apiKey = "sk_live_supersecretkey"
+	const apiKey = "sk_live_supersecretkey" //nolint
 
 	cfg := map[string]string{
 		"market_name":        "Test Market",
