@@ -58,10 +58,10 @@ STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
 GO_BUILDER_VERSION=v1.24
 MANAGER_UI_BUILT_DIR=pkg/visor/static
-# exchange-client trading UI: Vite builds straight into the Go embed dir
+# skydex-client trading UI: Vite builds straight into the Go embed dir
 # (commands/static, per its vite.config.js), so there is no separate copy step.
-EXCHANGE_UI_DIR = cmd/apps/exchange-client
-EXCHANGE_UI_EMBED_DIR = cmd/apps/exchange-client/commands/static
+SKYDEX_UI_DIR = cmd/apps/skydex-client
+SKYDEX_UI_EMBED_DIR = cmd/apps/skydex-client/commands/static
 DOCKER_OPTS?=GO111MODULE=on GOOS=linux
 DOCKER_NETWORK?=SKYWIRE
 DOCKER_COMPOSE_FILE:=./docker/docker-compose.yml
@@ -577,22 +577,22 @@ build-ui-windows: install-deps-ui ## Builds the UI on windows
 	powershell 'New-Item -Path ${MANAGER_UI_BUILT_DIR} -ItemType Directory'
 	powershell 'Copy-Item -Recurse ${MANAGER_UI_DIR}\dist\* ${MANAGER_UI_BUILT_DIR}'
 
-# exchange-client trading UI (React/Vite, embedded via //go:embed static)
-install-deps-exchange-ui: ## Install the exchange-client UI dependencies
-	cd $(EXCHANGE_UI_DIR) && npm ci
+# skydex-client trading UI (React/Vite, embedded via //go:embed static)
+install-deps-skydex-ui: ## Install the skydex-client UI dependencies
+	cd $(SKYDEX_UI_DIR) && npm ci
 
-build-exchange-ui: install-deps-exchange-ui ## Build the exchange-client UI into the Go embed (commands/static)
-	cd $(EXCHANGE_UI_DIR) && npm run build
+build-skydex-ui: install-deps-skydex-ui ## Build the skydex-client UI into the Go embed (commands/static)
+	cd $(SKYDEX_UI_DIR) && npm run build
 
-check-exchange-ui: install-deps-exchange-ui ## Fail if the committed exchange-client UI embed is stale vs a fresh build
-	cd $(EXCHANGE_UI_DIR) && npm run build
-	@git diff --quiet -- $(EXCHANGE_UI_EMBED_DIR) || { \
-		echo "ERROR: the committed exchange-client UI embed is stale."; \
-		echo "Run 'make build-exchange-ui' and commit $(EXCHANGE_UI_EMBED_DIR)."; \
-		git --no-pager diff --stat -- $(EXCHANGE_UI_EMBED_DIR); \
+check-skydex-ui: install-deps-skydex-ui ## Fail if the committed skydex-client UI embed is stale vs a fresh build
+	cd $(SKYDEX_UI_DIR) && npm run build
+	@git diff --quiet -- $(SKYDEX_UI_EMBED_DIR) || { \
+		echo "ERROR: the committed skydex-client UI embed is stale."; \
+		echo "Run 'make build-skydex-ui' and commit $(SKYDEX_UI_EMBED_DIR)."; \
+		git --no-pager diff --stat -- $(SKYDEX_UI_EMBED_DIR); \
 		exit 1; \
 	}
-	@echo "exchange-client UI embed is up to date."
+	@echo "skydex-client UI embed is up to date."
 
 installer: mac-installer ## Builds MacOS installer for skywire-visor
 

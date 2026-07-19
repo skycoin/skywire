@@ -45,7 +45,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   // etc.) match by prefix in isOfficialApp() below.
   private readonly officialAppsList = new Set<string>([
     'skychat', 'skysocks', 'skysocks-client', 'vpn-client', 'vpn-server',
-    'skycoin-daemon', 'skycoin-web', 'exchange-market', 'exchange-client',
+    'skycoin-daemon', 'skycoin-web', 'skydex-market', 'skydex-client',
   ]);
 
   @Input() nodePK: string;
@@ -287,15 +287,15 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     } else if (app.name.toLocaleLowerCase() === 'vpn-client' && this.nodePK) {
       return location.origin + '/#/vpn/' + this.nodePK + '/status';
     } else if (
-      (app.name.toLocaleLowerCase() === 'exchange-market' ||
-        app.name.toLocaleLowerCase() === 'exchange-client') &&
+      (app.name.toLocaleLowerCase() === 'skydex-market' ||
+        app.name.toLocaleLowerCase() === 'skydex-client') &&
       this.nodeIp && app.status !== 0 && app.status !== 2
     ) {
       // The exchange apps each serve an embedded web UI over HTTP: the market's
       // operator dashboard (default :8050) and the client's trading UI (default
       // :8051). Both bind all interfaces by default, so they're reachable at the
       // node's IP. Honour an explicit --addr/-addr host:port arg when present.
-      let port = app.name.toLocaleLowerCase() === 'exchange-market' ? '8050' : '8051';
+      let port = app.name.toLocaleLowerCase() === 'skydex-market' ? '8050' : '8051';
       let url = this.nodeIp;
       if (app.args) {
         for (let i = 0; i < app.args.length; i++) {
