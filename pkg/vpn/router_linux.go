@@ -274,3 +274,17 @@ func (r *Router) teardown() {
 		_ = os.RemoveAll(r.confDir) //nolint:errcheck // temp conf dir, best-effort
 	}
 }
+
+// prefixLen returns the subnet's CIDR prefix length (e.g. 24).
+//
+// Lives here rather than in router.go because it is only referenced from
+// this linux-only file. In router.go (which builds on every platform) it
+// is dead code on darwin/windows, where the `unused` linter fails the
+// build — which it did, on every PR.
+func (c RouterConfig) prefixLen() int {
+	if c.Subnet == nil {
+		return 0
+	}
+	ones, _ := c.Subnet.Mask.Size()
+	return ones
+}
