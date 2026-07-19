@@ -105,9 +105,59 @@
     .modal { background: var(--sky-navy); border: 1px solid var(--sky-blue); border-radius: 10px; padding: 1.25rem; width: 100%; max-width: 620px; max-height: 90vh; overflow: auto; }
     .modal h2 { margin-top: 0; color: var(--sky-blue); font-size: 1.05rem; }
     .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1.25rem; }
+    /* Login gate. z-index above the modal layer so nothing can render over it. */
+    #login-overlay {
+      position: fixed; inset: 0; background: var(--sky-navy);
+      display: flex; align-items: center; justify-content: center; padding: 1rem; z-index: 100;
+    }
+    #login-overlay[hidden] { display: none; }
+    #login-form {
+      background: rgba(255,255,255,0.04); border: 1px solid var(--sky-blue);
+      border-radius: 10px; padding: 1.5rem; width: 100%; max-width: 400px;
+    }
+    #login-form h2 { margin-top: 0; color: var(--sky-blue); font-size: 1.05rem; }
+    .login-hint { color: var(--muted); font-size: 0.82rem; line-height: 1.5; }
+    #login-otp {
+      width: 100%; margin-top: 0.5rem; padding: 0.7rem 0.85rem;
+      background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--sky-white); font-family: 'Courier New', monospace;
+      font-size: 1.35rem; letter-spacing: 4px; text-align: center; text-transform: uppercase;
+    }
+    #login-btn { width: 100%; margin-top: 0.85rem; padding: 0.6rem; }
+    #login-msg:not(:empty) {
+      margin-top: 0.75rem; font-size: 0.85rem; color: #ff6b6b;
+      border: 1px solid rgba(255,107,107,0.4); border-radius: 6px; padding: 0.5rem 0.65rem;
+    }
   </style>
 </head>
 <body>
+  <!-- Login gate. Covers the panel until an OTP is exchanged for a token.
+       Deliberately not dismissible: there is nothing to see behind it. -->
+  <div id="login-overlay">
+    <form id="login-form" autocomplete="off">
+      <h2>Operator login</h2>
+      <p class="login-hint">
+        Enter the one-time code shown for <strong>exchange-market</strong> in your
+        hypervisor's app list. Each code works once — after logging in, a new one
+        is generated, and reloading this page will require it.
+      </p>
+      <input
+        id="login-otp"
+        name="otp"
+        type="text"
+        inputmode="latin"
+        autocapitalize="characters"
+        autocomplete="off"
+        spellcheck="false"
+        maxlength="8"
+        placeholder="XXXXX"
+        aria-label="One-time code"
+        required />
+      <div id="login-msg"></div>
+      <button type="submit" class="primary" id="login-btn">Log in</button>
+    </form>
+  </div>
+
   <header>
     <h1>Exchange <span>Market</span> — Operator</h1>
     <div class="pk">
@@ -243,11 +293,78 @@
       setTimeout(() => { $('#config-msg').innerHTML = ''; }, 4000);
     }
 
-    async function getJSON(url) { const r = await fetch(url); return r.json(); }
+    // --- Auth ---
+    // The session token lives in this variable and nowhere else: no cookie, no
+    // localStorage, no sessionStorage. That is the point — with no ambient
+    // credential a hostile page cannot make the browser replay it, so CSRF is
+    // structurally impossible. The cost is that a reload logs you out and needs
+    // a fresh OTP from the hypervisor app list.
+    let authToken = null;
+    let pollTimer = null;
+
+    function showLogin(msg) {
+      authToken = null;
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      $('#login-msg').textContent = msg || '';
+      $('#login-overlay').hidden = false;
+      $('#login-otp').value = '';
+      $('#login-otp').focus();
+    }
+
+    // authFetch attaches the bearer token and funnels every 401 back to the
+    // login gate, so an expired session can't leave the page silently broken.
+    async function authFetch(url, opts) {
+      opts = opts || {};
+      const headers = Object.assign({}, opts.headers);
+      if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
+      const r = await fetch(url, Object.assign({}, opts, { headers }));
+      if (r.status === 401) {
+        showLogin('Session expired. Enter a new code from the hypervisor app list.');
+        throw new Error('unauthorized');
+      }
+      return r;
+    }
+
+    async function getJSON(url) { const r = await authFetch(url); return r.json(); }
     async function postJSON(url, body) {
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const r = await authFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
       return r.json();
     }
+
+    $('#login-form').onsubmit = async (e) => {
+      e.preventDefault();
+      const btn = $('#login-btn');
+      const otp = $('#login-otp').value.trim();
+      if (!otp) return;
+      btn.disabled = true;
+      $('#login-msg').textContent = '';
+      try {
+        // Not authFetch: a 401 here means a bad code, not an expired session.
+        const r = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ otp }),
+        });
+        const data = await r.json();
+        if (!r.ok || !data.token) {
+          $('#login-msg').textContent = (data && data.error) || 'Login failed.';
+          $('#login-otp').value = '';
+          $('#login-otp').focus();
+          return;
+        }
+        authToken = data.token;
+        $('#login-overlay').hidden = true;
+        start();
+      } catch (err) {
+        $('#login-msg').textContent = 'Could not reach the market.';
+      } finally {
+        btn.disabled = false;
+      }
+    };
 
     // --- Modal framework ---
     const modal = $('#modal');
@@ -279,8 +396,11 @@
       };
     });
 
-    // Market public key
-    getJSON('/api/info').then((d) => { $('#market-pk').textContent = d.public_key || 'unknown'; });
+    // Market public key. Loaded by start(), not at parse time — before login
+    // there is no token and the request would just 401.
+    function loadInfo() {
+      return getJSON('/api/info').then((d) => { $('#market-pk').textContent = d.public_key || 'unknown'; });
+    }
 
     // Copy helper with a fallback for non-secure (plain http) contexts, where
     // navigator.clipboard is unavailable — the operator UI is served over http.
@@ -404,7 +524,10 @@
         : field('Coin symbol', '<input id="m-symbol" placeholder="e.g. GRS, ZEC, any UTXO coin">');
       const body = '<div class="grid">' + symbolField +
         field('Explorer URL', '<input id="m-url" value="' + esc(editing ? (c.url || '') : '') + '" placeholder="Esplora-compatible URL (BTC/LTC have a built-in default)">') +
-        field('API key (optional)', '<input id="m-key" value="' + esc(editing ? (c.key || '') : '') + '">') +
+        // Write-only: the server never returns a stored key, so this starts
+        // blank and blank means "keep the existing one".
+        field('API key (optional)', '<input id="m-key" value="" placeholder="' +
+          (editing && c.has_key ? 'stored — leave blank to keep' : 'none set') + '">') +
         '</div>' +
         '<div class="hint" style="margin-top:.5rem">Any UTXO coin works as long as you point it at an Esplora-compatible explorer URL. BTC and LTC have a built-in explorer, so their URL can be left blank.</div>';
       openModal(editing ? 'Edit payment coin — ' + esc(c.code) : 'Add payment coin', body, async () => {
@@ -438,7 +561,10 @@
 
     // --- Rules config ---
     async function loadConfig() {
-      const cfg = await getJSON('/api/config');
+      // Response is { config, secrets_set } — secret values are blanked server
+      // side and reported only as booleans.
+      const data = await getJSON('/api/config');
+      const cfg = (data && data.config) || {};
       CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) el.value = cfg[k] || ''; });
       await loadSellCoins();
       await loadCurrencies();
@@ -449,7 +575,7 @@
       const body = {};
       CONFIG_FIELDS.forEach((k) => { const el = document.querySelector('[name="' + k + '"]'); if (el) body[k] = el.value.trim(); });
       try {
-        const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        const res = await authFetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'save failed');
         flash('Rules saved.');
@@ -526,15 +652,26 @@
     }
 
     function refresh() {
-      if (current === 'config') loadConfig();
-      else if (current === 'products') loadProducts();
-      else if (current === 'orders') loadOrders();
-      else if (current === 'bans') { loadBans(); loadBlocks(); }
+      // Swallow rejections: authFetch already redirects to the login gate on
+      // 401, and an unhandled rejection inside setInterval helps nobody.
+      const quiet = (p) => { if (p && p.catch) p.catch(() => {}); };
+      if (current === 'config') quiet(loadConfig());
+      else if (current === 'products') quiet(loadProducts());
+      else if (current === 'orders') quiet(loadOrders());
+      else if (current === 'bans') { quiet(loadBans()); quiet(loadBlocks()); }
     }
 
-    loadConfig();
-    // Auto-refresh monitoring tabs only (never clobber a config form being edited).
-    setInterval(() => { if (current !== 'config') refresh(); }, 5000);
+    // start runs only after a successful login — nothing hits the API before
+    // there is a token, so the panel never renders half-loaded behind the gate.
+    function start() {
+      loadInfo().catch(() => {});
+      loadConfig().catch(() => {});
+      // Auto-refresh monitoring tabs only (never clobber a config form being edited).
+      if (pollTimer) clearInterval(pollTimer);
+      pollTimer = setInterval(() => { if (current !== 'config') refresh(); }, 5000);
+    }
+
+    showLogin();
   </script>
 </body>
 </html>

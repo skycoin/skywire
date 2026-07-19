@@ -70,6 +70,9 @@ type Proc struct {
 	statusMx sync.RWMutex
 	status   string
 
+	otpMx sync.RWMutex
+	otp   string
+
 	connDuration   int64
 	connDurationMu sync.RWMutex
 
@@ -468,6 +471,24 @@ func (p *Proc) DetailedStatus() string {
 	defer p.statusMx.RUnlock()
 
 	return p.status
+}
+
+// SetOTP sets the proc's current one-time code. Apps that gate their own UI
+// publish it here so an operator can read it from the (authenticated)
+// hypervisor app list. Deliberately not logged — app logs are retrievable over
+// the API and may be shipped off-box.
+func (p *Proc) SetOTP(otp string) {
+	p.otpMx.Lock()
+	defer p.otpMx.Unlock()
+	p.otp = otp
+}
+
+// OTP gets the proc's current one-time code.
+func (p *Proc) OTP() string {
+	p.otpMx.RLock()
+	defer p.otpMx.RUnlock()
+
+	return p.otp
 }
 
 // SetError sets proc's detailed status error.
