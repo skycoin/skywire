@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
 import CopyButton from './CopyButton'
+import QrButton from './QrButton'
 
 function Market({ registered, marketReady, sellCoins = [], currencies = [], onNeedRegister }) {
   const [showCreateListing, setShowCreateListing] = useState(false)
@@ -145,6 +146,13 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
           <div className="copy-row">
             <code className="addr-box">{deposit.market_wallet}</code>
             <CopyButton text={deposit.market_wallet} label="Copy address" />
+            <QrButton
+              address={deposit.market_wallet}
+              amount={deposit.expected_amount}
+              coin={deposit.sell_coin}
+              title="Fund your sell order"
+              hint="This is the market escrow address, not the buyer's."
+            />
           </div>
           <p className="hint mt-2 mb-0">
             You can find this again anytime under <strong>My Listings</strong>. The offer becomes a
@@ -167,6 +175,13 @@ function Market({ registered, marketReady, sellCoins = [], currencies = [], onNe
           <div className="copy-row">
             <code className="addr-box">{payment.seller_wallet}</code>
             <CopyButton text={payment.seller_wallet} label="Copy address" />
+            <QrButton
+              address={payment.seller_wallet}
+              amount={payment.expected_payment_amount}
+              coin={payment.payment_currency}
+              title="Pay the seller"
+              hint="Pay the exact amount so the market can match your payment."
+            />
           </div>
           <p className="hint mt-2 mb-0">
             You can find this again anytime under <strong>My Orders</strong>. Pay the exact amount so the
