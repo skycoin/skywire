@@ -11,6 +11,17 @@
   margin-right: 10px;
 }
 
+// One-time code published by apps that gate their own UI. Monospace with
+// generous letter-spacing because the operator reads it off-screen and retypes
+// it into the app's login.
+.app-otp {
+  font-family: 'Courier New', Courier, monospace;
+  font-weight: bold;
+  letter-spacing: 1px;
+  user-select: all;
+  white-space: nowrap;
+}
+
 .skychat-link {
   color: $white;
   text-decoration: none;

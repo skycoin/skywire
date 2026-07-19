@@ -306,6 +306,24 @@ func (_m *MockRPCIngressClient) SetError(appErr string) error {
 	return r0
 }
 
+// SetOTP provides a mock function with given fields: otp
+func (_m *MockRPCIngressClient) SetOTP(otp string) error {
+	ret := _m.Called(otp)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetOTP")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(string) error); ok {
+		r0 = rf(otp)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // SetReadDeadline provides a mock function with given fields: connID, d
 func (_m *MockRPCIngressClient) SetReadDeadline(connID uint16, d time.Time) error {
 	ret := _m.Called(connID, d)

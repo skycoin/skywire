@@ -58,9 +58,69 @@ go build -o exchange-market
 ./exchange-market
 ```
 
+## Operator UI authentication
+
+The operator panel (`--addr`, default `:8050`) is gated by a **single-use one-time
+code**. The market mints the code itself and publishes it to the visor, where it
+appears on the `exchange-market` row of the hypervisor's app list.
+
+To log in:
+
+1. Open the hypervisor and find `exchange-market` in the app list.
+2. Copy the 5-character code from the **OTP** column.
+3. Enter it on the market's login screen.
+
+Each code works exactly once. A successful login mints and publishes a
+replacement, so reloading the page requires a fresh code — nothing is kept in a
+cookie, local storage, or session storage. The code also rotates after 10 failed
+attempts, and login attempts are rate limited both per source IP and globally.
+
+### Why a one-time code rather than a password
+
+skychat and the hypervisor authenticate with a long-lived password stored as an
+unstretched salted SHA-256 hash, with no rate limiting on login. That is a
+reasonable trade for those surfaces; it is a poor one here, because this panel
+can write the escrow hot-wallet seed. The one-time code avoids three properties
+that made a password the wrong fit:
+
+- **Nothing reusable crosses the wire.** A captured password grants permanent,
+  silent access. A captured code is almost always already dead.
+- **There is no credential at rest to crack.** No password hash exists to leak,
+  so hash strength is moot. The code lives in memory and rotates on use and on
+  repeated failure, so a brute-force search cannot converge.
+- **No stored secret means no ambient credential.** The browser holds its session
+  token in memory only, so a hostile page cannot make the browser replay it —
+  CSRF is structurally impossible rather than something to defend against.
+
+It also reuses a trust boundary that already exists. The hypervisor app list is
+behind hypervisor auth, so the market gets an out-of-band channel for free
+instead of introducing a second credential store to manage, rotate, and back up.
+
+### Secrets are write-only
+
+`sky_wallet_seed`, every `explorer_<coin>_key`, and each sell coin's
+`wallet_seed` can be set through the operator API but are never returned by it.
+`GET /api/config` reports only whether each is configured (`secrets_set`), and
+submitting a blank value keeps the stored one rather than clearing it.
+
+### Deployment caveats
+
+- **The OTP inherits the hypervisor's authentication.** Anyone who can read the
+  app list can log into the market. `enable_auth` is on by default; running the
+  hypervisor without it makes this panel effectively public.
+- **Plain HTTP is not sufficient on an untrusted network.** The session token is
+  sent on every request, so anyone on the path can capture and replay it for the
+  life of the session. Put a TLS-terminating proxy in front, or reach the panel
+  over an SSH tunnel:
+
+  ```bash
+  ssh -L 8050:127.0.0.1:8050 user@server   # then browse http://localhost:8050
+  ```
+
 ## Security
 
 - All data automatically deleted after 3 days for privacy
 - Single session per public key
 - Escrow protects both buyers and sellers
 - Automatic token return after 1 hour on cancellation/failure
+- Operator UI gated by a single-use OTP (see above); escrow seeds are write-only

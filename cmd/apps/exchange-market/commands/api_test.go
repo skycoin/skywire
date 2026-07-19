@@ -42,9 +42,19 @@ func newTestOperatorServer(t *testing.T) (*httptest.Server, *db.Database) {
 func TestOperatorConfigReadWrite(t *testing.T) {
 	ts, _ := newTestOperatorServer(t)
 
-	// GET returns the seeded defaults.
-	var cfg map[string]string
-	getJSONInto(t, ts.URL+"/api/config", &cfg)
+	// GET returns the seeded defaults. Response is {config, secrets_set} —
+	// secret values are blanked server side (see redactConfig).
+	readConfig := func() map[string]string {
+		t.Helper()
+		var resp struct {
+			Config     map[string]string `json:"config"`
+			SecretsSet map[string]bool   `json:"secrets_set"`
+		}
+		getJSONInto(t, ts.URL+"/api/config", &resp)
+		return resp.Config
+	}
+
+	cfg := readConfig()
 	if _, ok := cfg["sky_fullnode_url"]; !ok {
 		t.Fatalf("config missing sky_fullnode_url: %v", cfg)
 	}
@@ -59,7 +69,7 @@ func TestOperatorConfigReadWrite(t *testing.T) {
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("POST config = %d, want 200", res.StatusCode)
 	}
-	getJSONInto(t, ts.URL+"/api/config", &cfg)
+	cfg = readConfig()
 	if cfg["explorer_btc_provider"] != "esplora" || cfg["wallet_sky"] != "sky-w" {
 		t.Fatalf("config not persisted: %v", cfg)
 	}
@@ -156,14 +166,26 @@ func TestServeUIServesHTMLAndAPI(t *testing.T) {
 		t.Fatalf("index.html not served (got %d bytes)", len(body))
 	}
 
-	// The API is mounted alongside the HTML.
+	// The API is mounted alongside the HTML, but behind the OTP gate: the
+	// login page must be reachable while everything else is refused.
 	res, err := http.Get(base + "/api/config") //nolint:noctx
 	if err != nil {
 		t.Fatalf("GET /api/config: %v", err)
 	}
 	res.Body.Close() //nolint
-	if res.StatusCode != http.StatusOK {
-		t.Fatalf("/api/config = %d, want 200", res.StatusCode)
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("/api/config without a token = %d, want 401", res.StatusCode)
+	}
+
+	// A wrong OTP is refused, so the gate isn't merely decorative.
+	res, err = http.Post(base+"/api/login", "application/json", //nolint:noctx
+		bytes.NewReader([]byte(`{"otp":"NOPENOPE"}`)))
+	if err != nil {
+		t.Fatalf("POST /api/login: %v", err)
+	}
+	res.Body.Close() //nolint
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("login with a wrong OTP = %d, want 401", res.StatusCode)
 	}
 }
 

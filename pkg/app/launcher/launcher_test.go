@@ -300,6 +300,20 @@ func TestAppState(t *testing.T) {
 		require.Equal(t, "app", state.Name)
 	})
 
+	t.Run("otp is carried from the proc into AppState", func(t *testing.T) {
+		proc := &appserver.Proc{}
+		proc.SetOTP("K7M2QX")
+
+		pm := &appserver.MockProcManager{}
+		pm.On("ErrorByName", "app").Return("", false)
+		pm.On("ProcByName", "app").Return(proc, true)
+
+		l := newTestLauncher(t, pm, appserver.AppConfig{Name: "app"})
+		state, ok := l.AppState("app")
+		require.True(t, ok)
+		require.Equal(t, "K7M2QX", state.OTP)
+	})
+
 	t.Run("errored from saved error with no proc", func(t *testing.T) {
 		pm := &appserver.MockProcManager{}
 		pm.On("ErrorByName", "app").Return("boom", true)
