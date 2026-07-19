@@ -1,11 +1,13 @@
 package dmsgclient
 
 import (
+	"bufio"
 	"encoding/json"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -51,12 +53,12 @@ func TestHTTPRoundTripWireCompat(t *testing.T) {
 	defer srv.Close()
 	host := strings.TrimPrefix(srv.URL, "http://")
 
-	// roundTrip dials a fresh conn (Connection: close ⇒ one request per conn).
+	// roundTrip dials a fresh conn and runs one request over it.
 	roundTrip := func(method, path string, body []byte) httpResult {
 		conn, err := net.Dial("tcp", host)
 		require.NoError(t, err)
 		defer conn.Close() //nolint:errcheck
-		res, err := httpRoundTrip(conn, method, host, path, nil, body)
+		res, err := httpRoundTrip(conn, bufio.NewReader(conn), method, host, path, nil, body)
 		require.NoError(t, err)
 		return res
 	}
@@ -85,4 +87,61 @@ func TestHTTPRoundTripWireCompat(t *testing.T) {
 	res = roundTrip("GET", "/fail", nil)
 	require.Equal(t, 500, res.status)
 	require.Equal(t, disc.ErrValidationWrongSequence, errFromBody(res.body))
+}
+
+// TestHTTPRoundTripKeepAliveReuse verifies that two sequential requests can run
+// over ONE connection — the property the stream pool depends on. Pre-keep-alive
+// the client sent `Connection: close`, so the server tore the connection down
+// after the first response and every subsequent request paid a fresh dial (and,
+// over dmsg, a full noise + PQ handshake).
+func TestHTTPRoundTripKeepAliveReuse(t *testing.T) {
+	var served int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		served++
+		w.Header().Set("Content-Type", "application/json")
+		// Echo the server-side counter (never request input) so the assertions
+		// below prove both requests reached the server in order over one conn.
+		_, _ = io.WriteString(w, `{"n":`+strconv.Itoa(served)+`}`) //nolint:errcheck
+	}))
+	defer srv.Close()
+	host := strings.TrimPrefix(srv.URL, "http://")
+
+	conn, err := net.Dial("tcp", host)
+	require.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+	br := bufio.NewReader(conn)
+
+	// Both round-trips share one conn and one reader.
+	res1, err := httpRoundTrip(conn, br, "GET", host, "/1", nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, 200, res1.status)
+	require.JSONEq(t, `{"n":1}`, string(res1.body))
+	require.True(t, res1.reusable, "framed response must be poolable")
+
+	res2, err := httpRoundTrip(conn, br, "GET", host, "/2", nil, nil)
+	require.NoError(t, err)
+	require.Equal(t, 200, res2.status)
+	require.JSONEq(t, `{"n":2}`, string(res2.body))
+	require.True(t, res2.reusable)
+
+	require.Equal(t, 2, served, "both requests should have been served")
+}
+
+// TestHTTPRoundTripNotReusableOnClose verifies we do NOT pool a stream the peer
+// asked to close — pooling it would hand the next request a dead stream.
+func TestHTTPRoundTripNotReusableOnClose(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Connection", "close")
+		_, _ = io.WriteString(w, "bye") //nolint:errcheck
+	}))
+	defer srv.Close()
+	host := strings.TrimPrefix(srv.URL, "http://")
+
+	conn, err := net.Dial("tcp", host)
+	require.NoError(t, err)
+	defer conn.Close() //nolint:errcheck
+
+	res, err := httpRoundTrip(conn, bufio.NewReader(conn), "GET", host, "/", nil, nil)
+	require.NoError(t, err)
+	require.False(t, res.reusable, "Connection: close must not be pooled")
 }
