@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { api } from '../api'
 import CopyButton from './CopyButton'
+import QrButton from './QrButton'
 
 // MyListings shows the seller their own pending sell listings and tracks each
 // one's lifecycle live: pending (awaiting the SKY deposit) -> confirmed (deposit
@@ -151,6 +152,13 @@ function MyListings() {
                       <div className="copy-row">
                         <code className="addr-box addr-sm" title={l.market_wallet}>{l.market_wallet}</code>
                         <CopyButton text={l.market_wallet} label="Copy" />
+                        <QrButton
+                          address={l.market_wallet}
+                          amount={l.expected_amount}
+                          coin={l.sell_coin}
+                          title="Fund your sell order"
+                          hint="This is the market escrow address, not the buyer's."
+                        />
                       </div>
                     ) : (
                       <span className="text-muted">—</span>
