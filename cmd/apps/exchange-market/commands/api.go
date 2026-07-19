@@ -41,6 +41,40 @@ var editableConfigKeys = map[string]bool{
 	"cleanup_days":            true,
 }
 
+// isSecretConfigKey reports whether a market_config key holds a credential that
+// must never leave the process.
+//
+// sky_wallet_seed is the escrow hot-wallet signing key; explorer_<coin>_key is a
+// third-party API key. Both are settable by the operator but neither is ever
+// readable back — the same discipline db.SellCoin applies to its per-coin
+// wallet_seed via `json:"-"`.
+func isSecretConfigKey(key string) bool {
+	if key == "sky_wallet_seed" {
+		return true
+	}
+	_, field, ok := parseExplorerKey(key)
+
+	return ok && field == "key"
+}
+
+// redactConfig copies cfg, replacing every secret value with the empty string
+// and reporting separately which secrets are set. The UI renders those as
+// "configured" without ever receiving the value, and submits blank to keep it.
+func redactConfig(cfg map[string]string) map[string]any {
+	values := make(map[string]string, len(cfg))
+	set := make(map[string]bool)
+	for k, v := range cfg {
+		if isSecretConfigKey(k) {
+			values[k] = ""
+			set[k] = strings.TrimSpace(v) != ""
+			continue
+		}
+		values[k] = v
+	}
+
+	return map[string]any{"config": values, "secrets_set": set}
+}
+
 // validateConfigKey allows a fixed whitelisted key, or a per-coin explorer key
 // for ANY coin symbol (the operator may add arbitrary payment coins). For a
 // provider assignment it checks the chosen provider can actually verify that coin.
@@ -124,7 +158,7 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 				mWriteError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			mWriteJSON(w, http.StatusOK, cfg)
+			mWriteJSON(w, http.StatusOK, redactConfig(cfg))
 		case http.MethodPost:
 			var updates map[string]string
 			if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
@@ -135,6 +169,14 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 				if err := validateConfigKey(k, v); err != nil {
 					mWriteError(w, http.StatusBadRequest, err.Error())
 					return
+				}
+			}
+			// Secrets are write-only: the UI can never read them back, so it
+			// submits blank to mean "keep what's stored". Without this, every
+			// config save would wipe the escrow seed.
+			for k, v := range updates {
+				if isSecretConfigKey(k) && strings.TrimSpace(v) == "" {
+					delete(updates, k)
 				}
 			}
 			if err := validateExplorerEnable(updates, database); err != nil {
@@ -152,7 +194,8 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 				mWriteError(w, http.StatusInternalServerError, err.Error())
 				return
 			}
-			mWriteJSON(w, http.StatusOK, cfg)
+			// Redacted here too — the POST response echoes the whole config.
+			mWriteJSON(w, http.StatusOK, redactConfig(cfg))
 		default:
 			mWriteError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
@@ -186,13 +229,15 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 			return
 		}
 		type coinCfg struct {
-			Code       string   `json:"code"`
-			Providers  []string `json:"providers"`
-			Provider   string   `json:"provider"`
-			URL        string   `json:"url"`
-			Key        string   `json:"key"`
-			DefaultURL string   `json:"default_url"` // built-in explorer endpoint, if any
-			Available  bool     `json:"available"`   // enabled (a provider is configured)
+			Code      string   `json:"code"`
+			Providers []string `json:"providers"`
+			Provider  string   `json:"provider"`
+			URL       string   `json:"url"`
+			// HasKey replaces the explorer API key itself: the operator sets it
+			// but never reads it back, mirroring has_seed on /api/sellcoins.
+			HasKey     bool   `json:"has_key"`
+			DefaultURL string `json:"default_url"` // built-in explorer endpoint, if any
+			Available  bool   `json:"available"`   // enabled (a provider is configured)
 		}
 		// The canonical coins (so their built-in defaults are always offered),
 		// plus any custom coin the operator has already configured.
@@ -225,7 +270,7 @@ func registerOperatorAPI(mux *http.ServeMux, database *db.Database, appCl *app.C
 				Providers:  providers,
 				Provider:   provider,
 				URL:        url,
-				Key:        key,
+				HasKey:     strings.TrimSpace(key) != "",
 				DefaultURL: chain.DefaultExplorerURL(c),
 				Available:  strings.TrimSpace(provider) != "",
 			})

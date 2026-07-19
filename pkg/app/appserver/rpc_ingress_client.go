@@ -16,6 +16,7 @@ import (
 // RPCIngressClient describes RPC interface to communicate with the server.
 type RPCIngressClient interface {
 	SetDetailedStatus(status string) error
+	SetOTP(otp string) error
 	SetConnectionDuration(dur int64) error
 	SetError(appErr string) error
 	SetAppPort(appPort routing.Port) error
@@ -57,6 +58,11 @@ func NewRPCIngressClient(rpc *rpc.Client, procKey appcommon.ProcKey) RPCIngressC
 // SetDetailedStatus sets detailed status of an app.
 func (c *rpcIngressClient) SetDetailedStatus(status string) error {
 	return c.rpc.Call(c.formatMethod("SetDetailedStatus"), &status, nil)
+}
+
+// SetOTP sets the current one-time code of an app that gates its own UI.
+func (c *rpcIngressClient) SetOTP(otp string) error {
+	return c.rpc.Call(c.formatMethod("SetOTP"), &otp, nil)
 }
 
 // SetConnectionDuration sets the connection duration for an app

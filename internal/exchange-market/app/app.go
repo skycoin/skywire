@@ -67,6 +67,15 @@ func (c *Client) SetStatusOrLog(status appserver.AppDetailedStatus) {
 	}
 }
 
+// SetOTPOrLog publishes the operator-panel one-time code to the visor, where
+// it surfaces on the hypervisor's app list. Nil-safe like the helpers above so
+// the market still runs standalone (no visor), just without a published code.
+func (c *Client) SetOTPOrLog(otp string) {
+	if c.Client != nil {
+		c.Client.SetOTPOrLog(otp)
+	}
+}
+
 // WorkDir returns the working directory for this app as provided by the visor.
 func (c *Client) WorkDir() string {
 	if c.Client != nil {

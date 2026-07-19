@@ -957,6 +957,8 @@
       "state": "State",
       "state-tooltip": "Current state",
       "auto-start": "Auto start",
+      "otp": "OTP",
+      "otp-tooltip": "One-time code for logging into this app's own web UI. It is replaced after each successful login.",
       "empty-official": "This visor doesn't have any official applications.",
       "empty-user": "This visor doesn't have any user applications.",
       "empty-with-filter": "No app matches the selected filtering criteria.",
