@@ -172,15 +172,6 @@ func (c RouterConfig) validate() error {
 	return nil
 }
 
-// prefixLen returns the subnet's CIDR prefix length (e.g. 24).
-func (c RouterConfig) prefixLen() int { //nolint
-	if c.Subnet == nil {
-		return 0
-	}
-	ones, _ := c.Subnet.Mask.Size()
-	return ones
-}
-
 // DnsmasqConf renders the dnsmasq configuration for the downstream subnet
 // (DHCP pool + the router as gateway/DNS). It is pure (no I/O) so it can be
 // unit-tested and reviewed.
