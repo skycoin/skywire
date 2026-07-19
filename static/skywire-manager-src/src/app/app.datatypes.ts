@@ -78,7 +78,7 @@ export interface Application {
   args: any[];
   /**
    * One-time code published by apps that gate their own web UI (currently
-   * exchange-market). The operator reads it here and types it into that app's
+   * skydex-market). The operator reads it here and types it into that app's
    * login. Absent for apps that don't publish one.
    */
   otp?: string;
