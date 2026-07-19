@@ -67,13 +67,28 @@ appears on the `exchange-market` row of the hypervisor's app list.
 To log in:
 
 1. Open the hypervisor and find `exchange-market` in the app list.
-2. Copy the 5-character code from the **OTP** column.
+2. Copy the 5-digit code from the **OTP** column.
 3. Enter it on the market's login screen.
 
 Each code works exactly once. A successful login mints and publishes a
 replacement, so reloading the page requires a fresh code — nothing is kept in a
-cookie, local storage, or session storage. The code also rotates after 10 failed
-attempts, and login attempts are rate limited both per source IP and globally.
+cookie, local storage, or session storage.
+
+**Any wrong entry also burns the code.** A single failed attempt mints and
+publishes a replacement, so after a typo you must return to the hypervisor app
+list and read the new code. This is deliberate: the code is only five digits
+(100,000 combinations), and rotating on every failure denies an attacker the
+ability to work through that space in order. Login attempts are additionally
+rate limited per source IP and globally.
+
+> **Operator note.** Because a five-digit space is small, the global rate limiter
+> is the control that actually bounds an attacker — at its current setting the
+> whole space costs roughly a week of uninterrupted guessing. If this market
+> holds meaningful value, raise `otpLen` (each extra digit multiplies the
+> attacker's work by ten) or slow `globalLoginRefill`; both are invisible to a
+> single operator. A side effect of rotate-on-failure is that anyone able to
+> reach the login endpoint can keep the code churning, which is a nuisance-level
+> denial of service against operator login.
 
 ### Why a one-time code rather than a password
 

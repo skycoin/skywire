@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestGate(t *testing.T) (*authGate, *[]string) {
@@ -34,9 +35,13 @@ func TestAuthGate_PublishesOTPOnStart(t *testing.T) {
 	if len(g.currentOTP()) != otpLen {
 		t.Fatalf("OTP length = %d, want %d", len(g.currentOTP()), otpLen)
 	}
-	// Ambiguous glyphs would be misread off a dashboard.
-	if strings.ContainsAny(g.currentOTP(), "IO01") {
-		t.Fatalf("OTP %q contains an ambiguous character", g.currentOTP())
+	// The alphabet is all digits, so 0 and 1 are legitimate here — there are no
+	// letters left for them to be confused with, which is part of why the
+	// alphabet is numeric. Assert membership instead of banning glyphs.
+	for _, c := range g.currentOTP() {
+		if !strings.ContainsRune(otpAlphabet, c) {
+			t.Fatalf("OTP %q contains %q, outside otpAlphabet %q", g.currentOTP(), c, otpAlphabet)
+		}
 	}
 }
 
@@ -57,29 +62,52 @@ func TestAuthGate_OTPIsSingleUse(t *testing.T) {
 	if g.currentOTP() == otp {
 		t.Fatal("OTP was not rotated after use")
 	}
-	if len(*published) != 2 {
-		t.Fatalf("expected the replacement OTP to be published, got %d publishes", len(*published))
+	// Three publishes: the initial code, the replacement minted by the successful
+	// login, and a third from the rejected replay above — under
+	// otpFailureRotate == 1 a wrong guess burns the live code as well.
+	if len(*published) != 3 {
+		t.Fatalf("expected 3 publishes (initial, post-login, post-failed-replay), got %d", len(*published))
 	}
-	if (*published)[1] != g.currentOTP() {
+	if (*published)[len(*published)-1] != g.currentOTP() {
 		t.Fatal("published replacement does not match current OTP")
 	}
 }
 
+// wrongCode returns a well-formed code guaranteed not to equal cur, by stepping
+// its first character one place through otpAlphabet. Negative tests need this:
+// with a five-digit numeric alphabet a hardcoded guess would collide with the
+// live code once in 100_000 runs, which is exactly the kind of rare CI flake
+// that gets dismissed as noise.
+func wrongCode(cur string) string {
+	b := []byte(cur)
+	i := strings.IndexByte(otpAlphabet, b[0])
+	b[0] = otpAlphabet[(i+1)%len(otpAlphabet)]
+
+	return string(b)
+}
+
 func TestAuthGate_LoginRejectsWrongOTP(t *testing.T) {
 	g, _ := newTestGate(t)
-	otp := g.currentOTP()
 
-	for _, bad := range []string{"", "WRONG", strings.Repeat("A", otpLen), otp + "X"} {
-		if _, ok := g.login(bad); ok {
-			t.Fatalf("login accepted invalid OTP %q", bad)
+	// Every wrong guess burns the live code (otpFailureRotate == 1), so re-read it
+	// each iteration instead of assuming it survived the previous attempt. The
+	// literals below cannot collide with a real code — none of them is five
+	// digits — so only the last case needs wrongCode.
+	bad := []string{"", "WRONG", strings.Repeat("A", otpLen), g.currentOTP() + "X"}
+	for _, b := range append(bad, wrongCode(g.currentOTP())) {
+		before := g.currentOTP()
+		if _, ok := g.login(b); ok {
+			t.Fatalf("login accepted invalid OTP %q", b)
+		}
+		// The point of the change: a single wrong guess must move the target, so
+		// an attacker can never enumerate the space.
+		if g.currentOTP() == before {
+			t.Fatalf("wrong OTP %q did not burn the code", b)
 		}
 	}
 
-	// A rejected attempt must not burn the real code.
-	if g.currentOTP() != otp {
-		t.Fatal("failed login rotated the OTP")
-	}
-	if _, ok := g.login(otp); !ok {
+	// The operator is not locked out — the code current at this moment still works.
+	if _, ok := g.login(g.currentOTP()); !ok {
 		t.Fatal("valid OTP stopped working after failed attempts")
 	}
 }
@@ -310,11 +338,10 @@ func TestAuthGate_RotatesOTPAfterRepeatedFailures(t *testing.T) {
 func TestAuthGate_FailureCountResetsOnRotation(t *testing.T) {
 	g, _ := newTestGate(t)
 
-	// A few failures, then a legitimate login — the counter must not carry over
-	// and rotate the operator's fresh code out from under them.
-	for range otpFailureRotate - 1 {
-		g.login("AAAAA") //nolint:errcheck
-	}
+	// A failure rotates the code and must leave the counter clean, so the
+	// operator's freshly published replacement is not rotated out from under them
+	// by carried-over state. "AAAAA" is guaranteed wrong against a digit alphabet.
+	g.login("AAAAA") //nolint:errcheck
 	if _, ok := g.login(g.currentOTP()); !ok {
 		t.Fatal("valid login failed")
 	}
@@ -352,10 +379,43 @@ func TestOTPLengthIsReadableButGuarded(t *testing.T) {
 	if len(g.currentOTP()) != otpLen {
 		t.Fatalf("OTP length = %d, want %d", len(g.currentOTP()), otpLen)
 	}
-	// A short code is only defensible alongside rotation-on-failure; if someone
-	// shortens it further without that, this is the tripwire.
-	if otpLen < 5 && otpFailureRotate > 10 {
-		t.Fatal("otpLen below 5 needs a tighter otpFailureRotate to stay safe")
+	for _, c := range g.currentOTP() {
+		if !strings.ContainsRune(otpAlphabet, c) {
+			t.Fatalf("OTP contains %q, which is outside otpAlphabet %q", c, otpAlphabet)
+		}
+	}
+
+	// The code space is deliberately small (10^5) for typing ergonomics, which
+	// only holds up because two controls compensate. Pin both, so shrinking the
+	// space further or loosening a control trips here rather than in production.
+	space := 1
+	for range otpLen {
+		space *= len(otpAlphabet)
+	}
+
+	// Enumeration defense: below ~1e6 the space is walkable, so every wrong guess
+	// must burn the code and force the attacker to guess independently.
+	if space < 1_000_000 && otpFailureRotate != 1 {
+		t.Fatalf("code space %d needs otpFailureRotate == 1, got %d", space, otpFailureRotate)
+	}
+
+	// Rate defense: the global limiter is what actually bounds an attacker, since
+	// per-IP budget is multiplied away by anyone with several addresses.
+	//
+	// This is a REGRESSION GUARD, not a statement that the current margin is
+	// comfortable. As configured — 10^5 codes, one attempt per 6s — sustained
+	// global guessing covers the whole space in about 7 days, so a determined
+	// attacker is a realistic threat and this floor is set just below today's
+	// value to catch anything that makes it worse. To buy real headroom, either
+	// lengthen otpLen (each digit is a 10x multiplier) or slow globalLoginRefill
+	// (5m would put the space beyond a year); both are invisible to a single
+	// operator, who is covered by globalLoginBurst.
+	const floorDays = 6.0
+
+	perDay := float64(24*time.Hour) / float64(globalLoginRefill)
+	if days := float64(space) / perDay; days < floorDays {
+		t.Fatalf("sustained global guessing exhausts the %d-code space in %.1f days "+
+			"(floor %.0f); lengthen otpLen or slow globalLoginRefill", space, days, floorDays)
 	}
 }
 
