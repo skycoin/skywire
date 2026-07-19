@@ -127,7 +127,7 @@ func TestAuthGate_RequireAuthMiddleware(t *testing.T) {
 
 	protected := g.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(`{"ok":true}`)) //nolint
 	}))
 
 	// No credential at all.
@@ -235,7 +235,7 @@ func TestServeUIRouting_LoginIsReachableButRestIsGated(t *testing.T) {
 
 	apiMux := http.NewServeMux()
 	apiMux.HandleFunc("/api/config", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte(`{"secret":"present"}`))
+		_, _ = w.Write([]byte(`{"secret":"present"}`)) //nolint
 	})
 
 	mux := http.NewServeMux()
@@ -287,7 +287,7 @@ func TestAuthGate_RotatesOTPAfterRepeatedFailures(t *testing.T) {
 	original := g.currentOTP()
 
 	// Drive failures directly, bypassing the rate limiter (which is exercised
-	// separately) so this test isolates the rotation behaviour.
+	// separately) so this test isolates the rotation behavior.
 	for range otpFailureRotate {
 		if _, ok := g.login("AAAAA"); ok {
 			t.Fatal("a junk code was accepted")

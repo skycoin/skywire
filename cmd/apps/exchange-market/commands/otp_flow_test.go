@@ -143,7 +143,7 @@ func TestOTPFlow_EndToEnd(t *testing.T) {
 	// 7. Saving config with a blank seed must not wipe the stored one — the UI
 	// can never read it back, so blank has to mean "keep".
 	upd, _ := json.Marshal(map[string]string{"sky_wallet_seed": "", "market_name": "Renamed"}) //nolint
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/config", bytes.NewReader(upd))     //nolint:noctx
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/config", bytes.NewReader(upd))     //nolint:noctx,errcheck
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
 	res, err := http.DefaultClient.Do(req)
