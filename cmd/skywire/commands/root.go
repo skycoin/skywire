@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	xc "github.com/skycoin/skywire/cmd/apps/exchange-client/commands"
-	xm "github.com/skycoin/skywire/cmd/apps/exchange-market/commands"
+	xc "github.com/skycoin/skywire/cmd/apps/skydex-client/commands"
+	xm "github.com/skycoin/skywire/cmd/apps/skydex-market/commands"
 	pty "github.com/skycoin/skywire/cmd/apps/pty/commands"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	scw "github.com/skycoin/skywire/cmd/apps/skycoin-web/commands" // registers skycoin-web as an internal launcher app + `skywire app skycoin web`
