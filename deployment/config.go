@@ -161,7 +161,18 @@ func pkFromDmsgURL(raw string) cipher.PubKey {
 // An unknown discovery yields nil (the server keeps an empty list), never a
 // mismatched set from a different deployment.
 func EmbeddedServersForDiscoveryDmsg(discoveryDmsgURL string) []*disc.Entry {
-	want := pkFromDmsgURL(discoveryDmsgURL)
+	return EmbeddedServersForDiscoveryPK(pkFromDmsgURL(discoveryDmsgURL))
+}
+
+// EmbeddedServersForDiscoveryPK is EmbeddedServersForDiscoveryDmsg keyed by an
+// already-parsed discovery public key, for callers that resolved the PK before
+// reaching here. The zero key matches nothing.
+//
+// The coupling this enforces is the whole point: embedded servers are only ever
+// handed out for the discovery they were published alongside. A caller holding a
+// private or test deployment's discovery gets nil rather than the production
+// fleet, so no deployment silently dials servers belonging to another one.
+func EmbeddedServersForDiscoveryPK(want cipher.PubKey) []*disc.Entry {
 	if (want == cipher.PubKey{}) {
 		return nil
 	}
