@@ -958,7 +958,7 @@
       "state-tooltip": "Current state",
       "auto-start": "Auto start",
       "otp": "OTP",
-      "otp-tooltip": "One-time code for logging into this app's own web UI. It is replaced after each successful login.",
+      "otp-tooltip": "One-time code for logging into this app's own web UI. It is replaced after every login attempt, successful or not \u2014 re-read it here after a failed entry.",
       "empty-official": "This visor doesn't have any official applications.",
       "empty-user": "This visor doesn't have any user applications.",
       "empty-with-filter": "No app matches the selected filtering criteria.",
