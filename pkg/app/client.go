@@ -89,6 +89,14 @@ func (c *Client) SetDetailedStatus(status string) error {
 	return c.rpcC.SetDetailedStatus(status)
 }
 
+// SetOTP publishes the app's current one-time code within the visor, where it
+// surfaces on the (auth-gated) hypervisor app list. Apps that gate their own
+// web UI use this so an operator can read the code out-of-band instead of the
+// app needing a password of its own.
+func (c *Client) SetOTP(otp string) error {
+	return c.rpcC.SetOTP(otp)
+}
+
 // SetConnectionDuration sets the detailed app connection duration within the visor.
 func (c *Client) SetConnectionDuration(dur int64) error {
 	return c.rpcC.SetConnectionDuration(dur)
@@ -117,6 +125,18 @@ func (c *Client) SetStatusOrLog(status appserver.AppDetailedStatus) {
 	}
 	if err := c.SetDetailedStatus(string(status)); err != nil {
 		c.Log().Errorf("Failed to set status %v: %v", status, err)
+	}
+}
+
+// SetOTPOrLog publishes the app's one-time code, logging (without the code
+// itself) if the visor can't be reached. Best-effort and nil-safe like
+// SetStatusOrLog, so apps running standalone don't have to guard call sites.
+func (c *Client) SetOTPOrLog(otp string) {
+	if c == nil {
+		return
+	}
+	if err := c.SetOTP(otp); err != nil {
+		c.Log().Errorf("Failed to publish OTP: %v", err)
 	}
 }
 

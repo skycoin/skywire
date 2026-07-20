@@ -200,6 +200,7 @@ return {
                 status: app.status,
                 detailedStatus: app.detailed_status,
                 args: app.args,
+                otp: app.otp,
               });
             });
           }
@@ -607,6 +608,7 @@ return {
               autostart: app.auto_start,
               detailedStatus: app.detailed_status,
               args: app.args,
+              otp: app.otp,
             });
           });
         }

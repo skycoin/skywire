@@ -87,6 +87,19 @@ func (r *RPCIngressGateway) SetDetailedStatus(status *string, _ *struct{}) (err 
 	return nil
 }
 
+// SetOTP sets the current one-time code of an app that gates its own UI.
+//
+// Unlike its sibling calls, the value is deliberately withheld from
+// rpcutil.LogCall (nil input) — it is a live credential, and app logs are
+// retrievable over the hypervisor API.
+func (r *RPCIngressGateway) SetOTP(otp *string, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetOTP", nil)(nil, &err)
+
+	r.proc.SetOTP(*otp)
+
+	return nil
+}
+
 // SetConnectionDuration sets the connection duration of an app (vpn-client in this instance)
 func (r *RPCIngressGateway) SetConnectionDuration(dur int64, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetConnectionDuration", dur)(nil, &err)

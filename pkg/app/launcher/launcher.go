@@ -184,6 +184,10 @@ func (l *AppLauncher) AppState(name string) (*appserver.AppState, bool) {
 	if proc, ok := l.procM.ProcByName(ac.Name); ok {
 		procStatus := proc.DetailedStatus()
 		connSummary := proc.ConnectionsSummary()
+		// Runtime-only, and independent of the status branching below: an app
+		// publishes this so an operator can read it from the hypervisor app
+		// list to log into that app's own UI.
+		state.OTP = proc.OTP()
 		if connSummary != nil {
 			state.Status = appserver.AppStatusRunning
 			state.DetailedStatus = procStatus

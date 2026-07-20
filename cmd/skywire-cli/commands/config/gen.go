@@ -1757,6 +1757,23 @@ func configureApps(log *logging.Logger) {
 				Port:      routing.Port(skyenv.VPNServerPort),
 				Args:      []string{"app", "vpn-server"},
 			},
+			{
+				Name:      skyenv.SkydexMarketName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkydexMarketPort),
+				Args:      []string{"app", "skydex-market", "--addr", skyenv.SkydexMarketAddr},
+			},
+			{
+				Name:      skyenv.SkydexClientName,
+				Binary:    "skywire",
+				AutoStart: false,
+				Port:      routing.Port(skyenv.SkydexClientPort),
+				// --market-port is sourced from the same constant as the market
+				// app's routing Port above, so the client always dials where the
+				// market listens (single source of truth).
+				Args: []string{"app", "skydex-client", "--addr", skyenv.SkydexClientAddr, "--market-port", strconv.Itoa(int(skyenv.SkydexMarketPort))},
+			},
 		}
 		// Skycoin daemon — full node, syncs the chain locally. May
 		// emit one entry (legacy single-instance) or N (one per
@@ -1829,6 +1846,20 @@ func configureApps(log *logging.Logger) {
 				AutoStart: isVpnServerEnable,
 				Args:      []string{},
 				Port:      routing.Port(skyenv.VPNServerPort),
+			},
+			{
+				Name:      skyenv.SkydexMarketName,
+				AutoStart: false,
+				Args:      []string{"--addr", skyenv.SkydexMarketAddr},
+				Port:      routing.Port(skyenv.SkydexMarketPort),
+			},
+			{
+				Name:      skyenv.SkydexClientName,
+				AutoStart: false,
+				// --market-port from the same constant as the market's routing Port,
+				// so the client always dials where the market listens.
+				Args: []string{"--addr", skyenv.SkydexClientAddr, "--market-port", strconv.Itoa(int(skyenv.SkydexMarketPort))},
+				Port: routing.Port(skyenv.SkydexClientPort),
 			},
 			{
 				// skycoin-web thin-client wallet as an INTERNAL app — Binary
