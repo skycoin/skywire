@@ -57,6 +57,12 @@ type AppState struct {
 	AppConfig
 	Status         AppStatus `json:"status"`
 	DetailedStatus string    `json:"detailed_status"`
+	// OTP is an app-published one-time code an operator reads out-of-band to
+	// authenticate to that app's own UI (skydex-market's operator panel is
+	// the first user). It is runtime-only — deliberately on AppState rather
+	// than AppConfig so it is never persisted to the visor config — and
+	// reaches the hypervisor app list, which is behind hypervisor auth.
+	OTP string `json:"otp,omitempty"`
 }
 
 // AppDetailedStatus is a app's detailed status.

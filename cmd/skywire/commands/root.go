@@ -10,6 +10,8 @@ import (
 	pty "github.com/skycoin/skywire/cmd/apps/pty/commands"
 	sc "github.com/skycoin/skywire/cmd/apps/skychat/commands"
 	scw "github.com/skycoin/skywire/cmd/apps/skycoin-web/commands" // registers skycoin-web as an internal launcher app + `skywire app skycoin web`
+	xc "github.com/skycoin/skywire/cmd/apps/skydex-client/commands"
+	xm "github.com/skycoin/skywire/cmd/apps/skydex-market/commands"
 	snc "github.com/skycoin/skywire/cmd/apps/skynet-client/commands"
 	sn "github.com/skycoin/skywire/cmd/apps/skynet/commands"
 	ssc "github.com/skycoin/skywire/cmd/apps/skysocks-client/commands"
@@ -45,6 +47,8 @@ func init() {
 		sc.RootCmd,
 		sn.RootCmd,
 		snc.RootCmd,
+		xm.RootCmd,
+		xc.RootCmd,
 		pty.RootCmd,
 		scw.RootCmd,
 		skysocksPairCmd,

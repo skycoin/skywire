@@ -103,6 +103,11 @@
             <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
           }
         </th>
+        <!-- Not sortable: the OTP is transient runtime state, not an attribute
+             worth ordering the list by. -->
+        <th [matTooltip]="'apps.apps-list.otp-tooltip' | translate">
+          {{ 'apps.apps-list.otp' | translate }}
+        </th>
         <th class="sortable-column" (click)="dataSorter.changeSortingOrder(autoStartSortData)">
           {{ 'apps.apps-list.auto-start' | translate }}
           @if (dataSorter.currentSortingColumn === autoStartSortData) {
@@ -137,6 +142,13 @@
           </td>
           <td>
             {{ app.port }}
+          </td>
+          <td>
+            @if (app.otp) {
+              <span class="app-otp" [matTooltip]="'apps.apps-list.otp-tooltip' | translate">{{ app.otp }}</span>
+            } @else {
+              <span class="text-muted">-</span>
+            }
           </td>
           <td>
             <button
@@ -191,7 +203,7 @@
         </tr>
         @if (isExpanded(app.name)) {
           <tr class="settings-row">
-            <td colspan="6">
+            <td colspan="7">
               <app-app-settings
                 [app]="app"
                 (saved)="onSettingsSaved(app.name)"
@@ -252,6 +264,12 @@
                   {{ getSmallScreenStateTextVar(app) | translate:{error: app.detailedStatus ? app.detailedStatus : ''} }}
                 </span>
               </div>
+              @if (app.otp) {
+                <div class="list-row">
+                  <span class="title">{{ 'apps.apps-list.otp' | translate }}</span>:
+                  <span class="app-otp">{{ app.otp }}</span>
+                </div>
+              }
               <div class="list-row">
                 <span class="title">{{ 'apps.apps-list.auto-start' | translate }}</span>:
                 <span [class]="(app.autostart ? 'green-clear-text' : 'red-clear-text') + ' title'">
