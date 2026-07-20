@@ -259,6 +259,30 @@ const (
 	// SkycoinWebPort — same routing-port note as SkycoinDaemonPort.
 	SkycoinWebPort uint16 = 61
 
+	// SkydexMarketName is the name of the decentralized-exchange market app.
+	SkydexMarketName = "skydex-market"
+
+	// SkydexMarketPort is the market's app routing port. Clients dial the
+	// market's public key on this port over dmsg to speak the exchange protocol.
+	// 8050 (not a small well-known port) avoids collision with the dmsg service
+	// ports (49–56) and existing app ports.
+	SkydexMarketPort uint16 = 8050
+
+	// SkydexMarketAddr is the address the market serves its operator UI on
+	// (config + monitoring). Port matches SkydexMarketPort for symmetry.
+	SkydexMarketAddr = ":8050"
+
+	// SkydexClientName is the name of the decentralized-exchange client app.
+	SkydexClientName = "skydex-client"
+
+	// SkydexClientPort is the client's app routing port (source port for its
+	// dmsg dials to the market).
+	SkydexClientPort uint16 = 8051
+
+	// SkydexClientAddr is the address the client serves its trading UI
+	// (single-page app) on. Port matches SkydexClientPort for symmetry.
+	SkydexClientAddr = ":8051"
+
 	// RPC constants.
 
 	// RPCAddr for skywire-cli to access skywire-visor. Also hosts

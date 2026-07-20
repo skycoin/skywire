@@ -68,13 +68,36 @@ func (u *serviceUpdater) Start() {
 	u.wg.Add(1)
 	go func() {
 		defer u.wg.Done()
-		if err := u.client.Register(ctx); err != nil {
+		if err := u.register(ctx); err != nil {
 			u.log.WithError(err).Warn("Initial service discovery registration failed; will retry via heartbeat")
 		}
 	}()
 
 	u.wg.Add(1)
 	go u.heartbeatLoop(ctx)
+}
+
+// register publishes the SD entry unless the updater is paused, re-checking the
+// flag once the call returns. Because Register retries internally it can still
+// be running when Pause() lands, and a late success would silently undo Pause's
+// DeleteEntry — leaving the visor published while the heartbeat loop (correctly)
+// skips it, so nothing ever removes the entry again. Deleting what we just
+// published restores the drained state.
+func (u *serviceUpdater) register(ctx context.Context) error {
+	if u.paused.Load() {
+		return nil
+	}
+	if err := u.client.Register(ctx); err != nil {
+		return err
+	}
+	if u.paused.Load() {
+		dctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := u.client.DeleteEntry(dctx); err != nil {
+			u.log.WithError(err).Warn("Failed to delete service entry registered during pause")
+		}
+	}
+	return nil
 }
 
 func (u *serviceUpdater) heartbeatLoop(ctx context.Context) {
@@ -94,7 +117,7 @@ func (u *serviceUpdater) heartbeatLoop(ctx context.Context) {
 				// for now. Stay alive so Resume can flip us back.
 				continue
 			}
-			if err := u.client.Register(ctx); err != nil {
+			if err := u.register(ctx); err != nil {
 				u.log.WithError(err).Warn("Failed to send heartbeat to service discovery")
 			} else {
 				u.log.Debug("Service discovery heartbeat sent successfully")
