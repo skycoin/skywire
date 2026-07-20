@@ -237,6 +237,7 @@ type resolvedConfig struct {
 	skywireUser string // owner for PKGENV paths; empty = no chown
 	configPath  string // resolved skywire.json path
 	useUserUnit bool   // true = `systemctl --user`, false = system unit
+	noRestart   bool   // --no-restart: apply config but skip the service restart (pty-safe)
 }
 
 // autoconfigCmd is constructed in init() via the autoconfigcmd factory
@@ -462,6 +463,7 @@ func defaultSkyenvPath() string {
 // the legacy PKGENV-on-root behavior when the file is silent.
 func resolveConfig() resolvedConfig {
 	r := resolvedConfig{}
+	r.noRestart = autoconfigVals.NoRestart
 	r.skyenvPath = os.Getenv("SKYENV")
 	if r.skyenvPath == "" {
 		candidate := defaultSkyenvPath()
@@ -653,6 +655,21 @@ func restartOrPrompt(r resolvedConfig) {
 	if runtime.GOOS == "windows" {
 		msg2(fmt.Sprintf("Start skywire on Windows with (admin PowerShell):\n\t%sskywire visor -c %q%s",
 			colorRed, r.configPath, colorReset))
+		return
+	}
+
+	// pty-safe path: the operator asked us NOT to restart. This is for
+	// updating over the visor's own dmsgpty, where a `systemctl restart
+	// skywire` would tear down the pty session (and this very process)
+	// mid-restart. Config is already written; the operator applies it
+	// out-of-band, decoupled from the session, as the LAST step.
+	if r.noRestart {
+		startCmd := "systemctl start --no-block skywire-autoconfig.service"
+		if r.useUserUnit {
+			startCmd = "systemctl --user start --no-block skywire-autoconfig.service"
+		}
+		msg2(fmt.Sprintf("Config applied WITHOUT restarting skywire (--no-restart).\n\tApply it as your LAST command (safe over dmsgpty):\n\t%s%s%s",
+			colorRed, startCmd, colorReset))
 		return
 	}
 

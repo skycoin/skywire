@@ -39,6 +39,16 @@ type V1 struct {
 	// persistence; expected to grow as the chat surface evolves.
 	Skychat *Skychat `json:"skychat,omitempty"`
 
+	// Wallet configures the skycoin-web wallet: whether to serve the
+	// frontend, and — the one axis the operator actually chooses — where
+	// keys live (browser | disk | remote). One block covers the native
+	// visor, `hv serve` and the wasm visor; what varies is which custody
+	// modes a given build can realize, which V1.WalletCustody() clamps.
+	// Nil (a config predating this block) serves the wallet with browser
+	// custody, i.e. existing behavior. See
+	// docs/design/skycoin-web-wallet-architecture.md.
+	Wallet *WalletConfig `json:"wallet,omitempty"`
+
 	// CoinNodes lists fibercoin nodes (see servicedisc.ServiceTypeCoin)
 	// this visor forwards over dmsg and advertises in service discovery,
 	// so a browser/thin-client wallet can discover and reach a node for

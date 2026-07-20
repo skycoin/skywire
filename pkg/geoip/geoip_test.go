@@ -2,10 +2,38 @@ package geoip
 
 import (
 	_ "embed"
+	"sync"
 	"testing"
 
 	"github.com/oschwald/geoip2-golang/v2"
 )
+
+// TestOpenEmbedded_FirstCall reproduces the #3500 regression: OpenEmbedded()
+// must work even when it is the FIRST geoip call, i.e. before anything has
+// called EmbeddedDB() to trigger the lazy gzip decompress. The pre-existing
+// TestOpenEmbedded passed only because TestEmbeddedDB ran earlier in the same
+// process and primed the sync.Once. Reset the package state so this test
+// exercises the cold path a fresh visor hits — where the bug dropped every
+// visor's country code from the node list.
+func TestOpenEmbedded_FirstCall(t *testing.T) {
+	// Reset the lazy-decompress state so OpenEmbedded is genuinely first.
+	embeddedOnce = sync.Once{}
+	embedded = nil
+
+	db, err := OpenEmbedded()
+	if err != nil {
+		t.Fatalf("OpenEmbedded as first call: %v", err)
+	}
+	defer db.Close() //nolint:errcheck,gosec
+
+	res, err := Lookup(db, "8.8.8.8")
+	if err != nil {
+		t.Fatalf("Lookup after cold OpenEmbedded: %v", err)
+	}
+	if res.CountryCode == "" {
+		t.Fatal("empty CountryCode — embedded DB was not decompressed before OpenEmbedded (the v1.3.85 node-list regression)")
+	}
+}
 
 // nonCityDB is a minimal GeoLite2-ASN database (a valid MaxMind DB that is
 // not a City database). Opening it succeeds, but Lookup's db.City() call

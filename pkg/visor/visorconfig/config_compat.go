@@ -48,8 +48,9 @@ type v1JSON struct {
 	UptimeTracker *UptimeTracker       `json:"uptime_tracker,omitempty"`
 	Launcher      *Launcher            `json:"launcher"`
 
-	Stats   *Stats   `json:"stats,omitempty"`
-	Skychat *Skychat `json:"skychat,omitempty"`
+	Stats   *Stats        `json:"stats,omitempty"`
+	Skychat *Skychat      `json:"skychat,omitempty"`
+	Wallet  *WalletConfig `json:"wallet,omitempty"`
 
 	CoinNodes []CoinNodeConfig `json:"coin_nodes,omitempty"`
 
@@ -111,6 +112,7 @@ func (v *V1) UnmarshalJSON(data []byte) error {
 	v.Launcher = mirror.Launcher
 	v.Stats = mirror.Stats
 	v.Skychat = mirror.Skychat
+	v.Wallet = mirror.Wallet
 	v.CoinNodes = mirror.CoinNodes
 	v.SurveyWhitelist = mirror.SurveyWhitelist
 	v.UserSurveyWhitelist = mirror.UserSurveyWhitelist

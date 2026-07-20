@@ -39,6 +39,16 @@ var allFlags = []string{
 	"skycoinweb", "no-skycoinweb", "skycoinwebaddr", "skycoinwebnodes", "skycoinwebwallet", "skycoinwebuser",
 	// Visor runtime
 	"binpath", "loglvl", "timeout", "regtimeout",
+	// Runtime behavior (no .conf effect, like --verbose)
+	"no-restart",
+}
+
+// behaviorOnlyFlags have no skywire.conf effect — they change how a
+// single autoconfig invocation behaves, not the persisted config, so
+// they are exempt from the EnvMap coverage assertion below.
+var behaviorOnlyFlags = map[string]bool{
+	"verbose":    true,
+	"no-restart": true,
 }
 
 // negationPairs enumerates every positive/negation flag pair. The
@@ -134,16 +144,18 @@ func TestNew_BindingsTrackValues(t *testing.T) {
 func TestEnvMap_Coverage(t *testing.T) {
 	m := EnvMap()
 	for _, name := range allFlags {
-		if name == "verbose" {
+		if behaviorOnlyFlags[name] {
 			continue
 		}
 		if _, ok := m[name]; !ok {
 			t.Errorf("envMap missing entry for --%s", name)
 		}
 	}
-	// --verbose must NOT be in envMap (display-only flag).
-	if _, ok := m["verbose"]; ok {
-		t.Errorf("envMap should NOT have --verbose entry; that flag has no .conf effect")
+	// Behavior-only flags must NOT be in envMap (no .conf effect).
+	for name := range behaviorOnlyFlags {
+		if _, ok := m[name]; ok {
+			t.Errorf("envMap should NOT have --%s entry; that flag has no .conf effect", name)
+		}
 	}
 	// And every envMap key should be a registered flag.
 	cmd := New(&Values{})
