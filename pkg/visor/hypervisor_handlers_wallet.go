@@ -25,10 +25,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/skycoin/skywire/pkg/btcgateway"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
-
-	"github.com/skycoin/skywire/pkg/btcgateway"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv/browseui"
 )
