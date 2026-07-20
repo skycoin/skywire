@@ -98,6 +98,17 @@ const envfileLinux = `#
 #--	Start the hypervisor interface for this visor
 #ISHYPERVISOR=true
 
+#--	Hypervisor web-UI listen address (host:port). Default ':8000' = all
+#	interfaces (reachable on the LAN at http://<this-host-ip>:8000).
+#	Use '127.0.0.1:8000' to restrict the UI to localhost, or pin a
+#	specific LAN IP, e.g. '192.168.0.2:8000'.
+#HVHTTPADDR=':8000'
+
+#--	Expose an unauthenticated GET /api/pk on the hypervisor (returns this
+#	visor's public key). Off by default; skybian / Arch-ARM image builds
+#	set it so a freshly-imaged board can be discovered on the LAN.
+#ENABLEPKENDPOINT=true
+
 #--	Embedded LAN/WAN DMSG server is always on whenever ISHYPERVISOR=true.
 #	Managed visors relay through this hypervisor instead of public DMSG
 #	servers. The two knobs below control the WAN-reachability path; see
@@ -146,6 +157,22 @@ const envfileLinux = `#
 #--	Skychat pair-RPC channel to visor (required for group chat).
 #--	Default: true. Set to false to disable group-chat plumbing.
 #SKYCHATPAIR=false
+
+#--	Autostart the dmsgweb SOCKS bridge (browse dmsg sites over a local
+#	SOCKS5 proxy). Off by default.
+#DMSGWEB=false
+
+#--	dmsgweb upstream address the bridge listens on (host:port)
+#DMSGWEBUPSTREAM=':8082'
+
+#--	Autostart the skynetweb bridge (serve/reach skynet sites). Off by default.
+#SKYNETWEB=false
+
+#--	skynetweb upstream address the bridge listens on (host:port)
+#SKYNETWEBUPSTREAM=':8083'
+
+#--	Autostart the skymail bridge (SMTP <-> skywire mail gateway). Off by default.
+#SKYMAILBRIDGE=false
 
 #--	Whitelist public keys for the proxy server (empty = allow all)
 #PROXYSERVERWL=('')
@@ -199,6 +226,14 @@ const envfileLinux = `#
 #	for chain ownership across upgrades.
 #SKYCOIND_USER='youruser'
 
+#--	Run multiple skycoin daemon instances (one per fibercoin chain),
+#	comma-separated instance names. Empty = the single default daemon.
+#	Each instance takes its own fiber.toml / API-sets / port set.
+#SKYCOIND_INSTANCES=('skycoin' 'mdl')
+
+#--	Extra flags passed verbatim to each skycoin daemon invocation.
+#SKYCOIND_FLAGS='-launch-browser=false'
+
 #--	Autostart skycoin-web thin-client wallet
 #SKYCOINWEB=true
 
@@ -248,9 +283,6 @@ const envfileLinux = `#
 #--	CLI RPC address (default localhost:3435)
 #	Use 0.0.0.0:3435 for Docker/remote access
 #CLIADDR='localhost:3435'
-
-#--	Hypervisor HTTP address (default :8000)
-#HVHTTPADDR=':8000'
 
 #--	STUN servers for NAT traversal
 #STUNSERVERS=('')
@@ -400,6 +432,11 @@ const envfileWindows = `#
 #--	Start the hypervisor interface for this visor
 #$ISHYPERVISOR=$true
 
+#--	Hypervisor web-UI listen address (host:port). Default ':8000' = all
+#	interfaces (reachable on the LAN at http://<this-host-ip>:8000).
+#	Use '127.0.0.1:8000' for localhost-only, or pin a LAN IP.
+#$HVHTTPADDR=':8000'
+
 ### Rewards #############################################################
 
 #--	Skycoin reward address or xpub key
@@ -453,8 +490,6 @@ const envfileWindows = `#
 
 ### Advanced Tuning #####################################################
 
-#--	Hypervisor HTTP address (default :8000)
-#$HVHTTPADDR=':8000'
 
 #--	STUN servers for NAT traversal
 #$STUNSERVERS=@('')
