@@ -74,6 +74,29 @@ type Options struct {
 	// transport-discovery, route-finder, etc.). Mirrors the
 	// `--testenv` flag in cli config gen.
 	TestEnv bool
+
+	// WalletCustody, when non-empty, sets V1.Wallet.Custody — where the
+	// skycoin-web wallet keeps keys (browser | disk | remote; see the
+	// visorconfig.WalletCustody* constants). Empty leaves the wallet block
+	// unset, which means "serve the wallet, browser custody" — today's
+	// behavior. The value is NOT clamped here: a config generated for a
+	// native visor may legitimately say "disk", and V1.WalletCustody()
+	// does the per-build clamping at read time.
+	WalletCustody string
+
+	// WalletDir sets V1.Wallet.Dir — the disk-custody wallet directory. It
+	// is a seed-wallet store (one dir, N seed files), not one dir per coin.
+	// Ignored unless WalletCustody is "disk".
+	WalletDir string
+
+	// WalletRemotePK sets V1.Wallet.RemotePK — the visor whose skycoin-web
+	// server holds the wallets. Ignored unless WalletCustody is "remote".
+	WalletRemotePK string
+
+	// NoWallet disables serving the wallet frontend entirely
+	// (V1.Wallet.Serve=false). Distinct from custody: this is the feature
+	// on/off switch.
+	NoWallet bool
 }
 
 // Generate composes a fresh visorconfig.V1 from opts + the
@@ -116,6 +139,19 @@ func Generate(opts Options) (*visorconfig.V1, error) {
 
 	if opts.RewardAddress != "" {
 		conf.RewardAddress = opts.RewardAddress
+	}
+
+	// Emit a wallet block only when the operator actually asked for
+	// something. Writing one unconditionally would add noise to every
+	// generated config and, worse, pin today's defaults into the file so a
+	// later change to those defaults wouldn't reach existing configs.
+	if opts.NoWallet || opts.WalletCustody != "" {
+		conf.Wallet = &visorconfig.WalletConfig{
+			Serve:    !opts.NoWallet,
+			Custody:  opts.WalletCustody,
+			Dir:      opts.WalletDir,
+			RemotePK: opts.WalletRemotePK,
+		}
 	}
 
 	conf.IsPublic = opts.IsPublic

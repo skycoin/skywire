@@ -143,6 +143,10 @@ func init() {
 	}
 	genConfigCmd.Flags().StringVarP(&output, "out", "o", scriptExecString("${OUTPUT}"), msg+"")
 	genConfigCmd.Flags().BoolVarP(&isHide, "hide", "w", false, "suppress config output to terminal")
+	genConfigCmd.Flags().StringVar(&walletCustody, "wallet-custody", "", "where the skycoin-web wallet keeps keys: browser|disk|remote")
+	genConfigCmd.Flags().StringVar(&walletDir, "wallet-dir", "", "wallet dir for --wallet-custody=disk (a seed-wallet store, not per-coin)")
+	genConfigCmd.Flags().StringVar(&walletRemotePK, "wallet-remote", "", "visor PK holding the wallets, for --wallet-custody=remote")
+	genConfigCmd.Flags().BoolVar(&noWallet, "no-wallet", false, "do not serve the skycoin-web wallet frontend")
 	gHiddenFlags = append(gHiddenFlags, "hide")
 	genConfigCmd.Flags().BoolVarP(&isEnvs, "envs", "q", false, "show the conf template (reflects flags passed)")
 	genConfigCmd.Flags().StringVarP(&envfileOut, "envout", "Q", "", "write conf template to file (reflects flags passed)")
@@ -1264,6 +1268,27 @@ func configureLauncher(log *logging.Logger) {
 		conf.Transport.Discovery = dmsgConf.TransportDiscovery
 		conf.Routing.RouteFinder = dmsgConf.RouteFinder
 		conf.Launcher.ServiceDisc = dmsgConf.ServiceDiscovery
+	}
+
+	// Configure the skycoin-web wallet. Only emit a block when the operator
+	// asked for something — an unconditional block would add noise to every
+	// generated config AND freeze today's defaults into the file, so a later
+	// change to those defaults would not reach existing configs.
+	if noWallet || walletCustody != "" {
+		switch walletCustody {
+		case "", visorconfig.WalletCustodyBrowser, visorconfig.WalletCustodyDisk, visorconfig.WalletCustodyRemote:
+		default:
+			log.Fatalf("invalid --wallet-custody %q: want browser, disk or remote", walletCustody)
+		}
+		if walletCustody == visorconfig.WalletCustodyRemote && walletRemotePK == "" {
+			log.Fatal("--wallet-custody=remote requires --wallet-remote <visor-pk>")
+		}
+		conf.Wallet = &visorconfig.WalletConfig{
+			Serve:    !noWallet,
+			Custody:  walletCustody,
+			Dir:      walletDir,
+			RemotePK: walletRemotePK,
+		}
 	}
 
 	// Configure public visor
