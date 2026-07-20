@@ -106,6 +106,13 @@ func Lookup(db *geoip2.Reader, ipStr string) (*Result, error) {
 
 // OpenEmbedded returns a *geoip2.Reader backed by the embedded database.
 // Reuse the reader — it's safe for concurrent use.
+//
+// It calls EmbeddedDB() (not the bare `embedded` var) so the lazy gzip
+// decompress is guaranteed to have run: since #3500 the DB is decompressed
+// only inside EmbeddedDB()'s sync.Once, and a caller that reached
+// OpenEmbedded() first would otherwise get OpenBytes(nil) → no database →
+// empty geoip results (the regression that dropped every visor's country
+// code from the node list on v1.3.85).
 func OpenEmbedded() (*geoip2.Reader, error) {
-	return geoip2.OpenBytes(embedded)
+	return geoip2.OpenBytes(EmbeddedDB())
 }
