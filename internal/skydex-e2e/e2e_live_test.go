@@ -21,11 +21,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/internal/skydex-market/chain"
-	"github.com/skycoin/skywire/internal/skydex-market/db"
-	"github.com/skycoin/skywire/internal/skydex-market/jobs"
-	"github.com/skycoin/skywire/internal/skydex-market/protocol"
-	"github.com/skycoin/skywire/internal/skydex-market/server"
+	"github.com/skycoin/skycoin/src/skydex/chain"
+	"github.com/skycoin/skycoin/src/skydex/db"
+	"github.com/skycoin/skycoin/src/skydex/jobs"
+	"github.com/skycoin/skycoin/src/skydex/protocol"
+	"github.com/skycoin/skycoin/src/skydex/server"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"

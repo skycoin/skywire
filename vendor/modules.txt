@@ -938,7 +938,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.6-0.20260718000522-26b081dda792
+# github.com/skycoin/skycoin v0.28.6-0.20260720010916-a8217688ad6b
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -946,6 +946,8 @@ github.com/skycoin/skycoin/cmd/skycoin-cli/commands
 github.com/skycoin/skycoin/cmd/skycoin-wallet/commands
 github.com/skycoin/skycoin/cmd/skycoin-web/commands
 github.com/skycoin/skycoin/cmd/skycoin/commands
+github.com/skycoin/skycoin/cmd/skydex-client/commands
+github.com/skycoin/skycoin/cmd/skydex-market/commands
 github.com/skycoin/skycoin/config
 github.com/skycoin/skycoin/explorer
 github.com/skycoin/skycoin/src/api
@@ -984,6 +986,14 @@ github.com/skycoin/skycoin/src/skycoin
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-go
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo
 github.com/skycoin/skycoin/src/skycoin-web/src/gui
+github.com/skycoin/skycoin/src/skydex/chain
+github.com/skycoin/skycoin/src/skydex/db
+github.com/skycoin/skycoin/src/skydex/jobs
+github.com/skycoin/skycoin/src/skydex/market
+github.com/skycoin/skycoin/src/skydex/message
+github.com/skycoin/skycoin/src/skydex/protocol
+github.com/skycoin/skycoin/src/skydex/server
+github.com/skycoin/skycoin/src/skydex/walletaddr
 github.com/skycoin/skycoin/src/transaction
 github.com/skycoin/skycoin/src/util/apputil
 github.com/skycoin/skycoin/src/util/buildinfo

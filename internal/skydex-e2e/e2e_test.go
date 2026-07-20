@@ -18,11 +18,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/internal/skydex-client/market"
-	"github.com/skycoin/skywire/internal/skydex-market/db"
-	"github.com/skycoin/skywire/internal/skydex-market/jobs"
-	"github.com/skycoin/skywire/internal/skydex-market/protocol"
-	"github.com/skycoin/skywire/internal/skydex-market/server"
+	"github.com/skycoin/skycoin/src/skydex/db"
+	"github.com/skycoin/skycoin/src/skydex/jobs"
+	"github.com/skycoin/skycoin/src/skydex/market"
+	"github.com/skycoin/skycoin/src/skydex/protocol"
+	"github.com/skycoin/skycoin/src/skydex/server"
+
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsgtest"
@@ -155,7 +156,7 @@ func TestSkydexTradeOverDmsg(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	srv := server.New(database, nil, protocol.Port(marketPort))
+	srv := server.New(database, nil, marketPort)
 	lis, err := dmsgMarket.Listen(marketPort)
 	if err != nil {
 		t.Fatalf("market Listen: %v", err)
