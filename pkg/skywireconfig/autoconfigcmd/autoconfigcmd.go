@@ -197,6 +197,18 @@ type Values struct {
 	LogLevel        string // LOGLVL
 	ShutdownTimeout string // SHUTDOWNTIMEOUT
 	RegTimeout      string // REGTIMEOUT
+
+	// --- Runtime behavior (NOT written to skywire.conf) ---
+	// NoRestart generates/writes the config but skips the
+	// systemctl restart of skywire.service at the end. This is the
+	// pty-safe update path: when the operator is connected over the
+	// visor's own dmsgpty, restarting skywire.service kills that pty
+	// session (and any in-flight apt/autoconfig process with it). With
+	// --no-restart the config is applied without the restart; the
+	// operator then triggers the restart out-of-band as the LAST step
+	// via `systemctl start --no-block skywire-autoconfig.service`,
+	// which runs decoupled from the session.
+	NoRestart bool
 }
 
 // New returns a freshly-constructed autoconfig cobra command with
@@ -322,12 +334,16 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().StringVar(&v.ShutdownTimeout, "timeout", "", "graceful shutdown timeout (e.g. 10s) — writes SHUTDOWNTIMEOUT in skywire.conf")
 	cmd.Flags().StringVar(&v.RegTimeout, "regtimeout", "", "public visor registration timeout (e.g. 10m) — writes REGTIMEOUT in skywire.conf")
 
+	// Runtime behavior — not written to skywire.conf.
+	cmd.Flags().BoolVar(&v.NoRestart, "no-restart", false, "apply config but do NOT restart skywire.service — pty-safe update path (then run: systemctl start --no-block skywire-autoconfig.service as the last step)")
+
 	return cmd
 }
 
 // EnvMap returns the flag → SKYENV-var mapping. Keys are CLI flag
 // long names (without leading "--"). Flags absent from the map
-// (currently only --verbose) have no .conf-file effect.
+// (--verbose and --no-restart) have no .conf-file effect — they only
+// affect this run's behavior, not the persisted configuration.
 //
 // A fresh map is returned each call so callers can mutate it
 // without affecting the package-level data.
