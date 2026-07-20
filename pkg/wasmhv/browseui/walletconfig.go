@@ -19,11 +19,17 @@ package browseui
 // by both the native HV and the wasm `hv serve`). Keys, all read by the shims +
 // the BTC gateway:
 //
-//	skywire-wallet-mode     browser | service
+//	skywire-wallet-mode     browser | disk | service   (custody: browser | disk | remote)
 //	skywire-coin-nodes      JSON array of coin-node addresses (first = default)
 //	skywire-coin-node       the effective node the shim reads (mirrors nodes[0]
 //	                        or the service address)
 //	skywire-wallet-service  remote skycoin-web server (service mode)
+//	skywire-wallet-dir      disk-custody seed-wallet store path (disk mode).
+//	                        The disk option is only offered when the embedder
+//	                        signals capability via ?disk=1 (a native visor with
+//	                        a filesystem + skycoin-web backend); the served PWA
+//	                        and browser-tab wasm visor never send it. Realizing
+//	                        disk custody in the backend is Stage 3 of the design.
 //	skywire-btc-backend     ssl:// electrum server
 //	skywire-btc-proxy       skysocks exit PK for the BTC electrum egress
 //	                        (required on wasm; optional on native = self-egress)
@@ -52,9 +58,11 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 .plog{display:none;margin:.2em 0 0;height:130px;overflow:auto;background:#0e0c14;color:#a9b1d6;border:1px solid #2a2342;border-radius:5px;padding:.55em;font:11px/1.5 monospace;white-space:pre-wrap;word-break:break-all}
 .plog.on{display:block}
 </style></head><body><div class="wrap">
+<h1>Wallet storage</h1>
 <div class="modes">
-<button id="mb" title="Wallets stored in this browser; pick the coin node it queries.">Browser wallets</button>
-<button id="ms" title="Point at a remote skycoin-web server over dmsg.">Remote wallet service</button>
+<button id="mb" title="Keys + wallet files stay in this browser. The host never sees them.">Browser</button>
+<button id="md" style="display:none" title="Wallet files on this host's filesystem, served by the visor's skycoin-web backend. The host holds the keys.">This host (disk)</button>
+<button id="ms" title="Point at another visor's skycoin-web server over dmsg.">Remote</button>
 </div>
 <div id="browser">
 <div class="hint">Wallets are created + stored in <b>this browser</b>. The <b>coin node</b> each coin queries is set in the wallet's own <b>Settings → Nodes</b> (per coin — enter a mesh node as <span class="mono">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span>, or a clearnet URL). This panel keeps the Bitcoin electrum + skysocks-exit settings below.</div>
@@ -75,6 +83,11 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <pre id="plog" class="plog" title="live: resolving proxy (dmsg) + skysocks-lite (clearnet)"></pre>
 </div>
 </div>
+<div id="disk" style="display:none">
+<div class="hint" style="color:#ffb454"><b>⚠ This flips the trust model.</b> With disk storage the wallet files live on <b>this host's filesystem</b> and the visor's skycoin-web backend holds your keys — unlike Browser, where keys never leave your browser. Only use disk on a machine you control.</div>
+<div class="row"><label>dir</label><input id="dir" spellcheck="false" placeholder="~/.skycoin/wallets (seed-wallet store — one dir, many seed files)"></div>
+<div class="hint">A <b>seed-wallet store</b>: one directory holding N seed files, <i>not</i> one dir per coin (a bip44 seed already spans several chains). Empty = the backend default.</div>
+</div>
 <div id="service" style="display:none">
 <div class="hint">Point at a remote <b>skycoin-web server</b> over dmsg. Wallets live on that server; all wallet + node API route to it.</div>
 <div class="row"><label>service</label><input id="svc" spellcheck="false" placeholder="03d1d78e…:8002"></div>
@@ -83,20 +96,29 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <button class="apply" id="apply">Apply</button>
 </div>
 <script>(function(){
-var K={mode:"skywire-wallet-mode",nodes:"skywire-coin-nodes",prim:"skywire-coin-node",svc:"skywire-wallet-service",btc:"skywire-btc-backend",proxy:"skywire-btc-proxy"};
+var K={mode:"skywire-wallet-mode",nodes:"skywire-coin-nodes",prim:"skywire-coin-node",svc:"skywire-wallet-service",btc:"skywire-btc-backend",proxy:"skywire-btc-proxy",dir:"skywire-wallet-dir"};
 function ls(k,d){try{return localStorage.getItem(k)||d;}catch(e){return d;}}
 function set(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 function $(id){return document.getElementById(id);}
 // isWasm is passed by the embedder via ?wasm=1 (BTC egress needs an exit there).
 var isWasm=/[?&]wasm=1/.test(location.search);
+// diskCapable: the embedder passes ?disk=1 ONLY when this context can realize
+// disk custody — a native visor with a filesystem + the skycoin-web backend.
+// A served PWA (hv serve) and the browser-tab wasm visor have no per-visor FS,
+// so they never send it and the disk option stays hidden (capability gating —
+// see WalletCustodyOptions in visorconfig).
+var diskCapable=/[?&]disk=1/.test(location.search);
+if(diskCapable)$("md").style.display="";
 $("proxyreq").textContent=isWasm?"(required)":"(optional)";
 $("proxynote").textContent=isWasm?"The browser can't reach the clearnet itself, so this is required for BTC.":"Empty = this visor does the egress itself (self). Set one to route BTC through another visor for IP privacy.";
 var mode=ls(K.mode,"browser");
-function setMode(m){mode=m;$("mb").classList.toggle("on",m==="browser");$("ms").classList.toggle("on",m==="service");
-$("browser").style.display=m==="browser"?"":"none";$("service").style.display=m==="service"?"":"none";}
-$("btc").value=ls(K.btc,"");$("proxy").value=ls(K.proxy,"")||ls("skywire-upstream-proxy","");$("svc").value=ls(K.svc,"");
+if(mode==="disk"&&!diskCapable)mode="browser"; // clamp a disk config opened in a non-disk context
+function setMode(m){mode=m;
+$("mb").classList.toggle("on",m==="browser");$("md").classList.toggle("on",m==="disk");$("ms").classList.toggle("on",m==="service");
+$("browser").style.display=m==="browser"?"":"none";$("disk").style.display=m==="disk"?"":"none";$("service").style.display=m==="service"?"":"none";}
+$("btc").value=ls(K.btc,"");$("proxy").value=ls(K.proxy,"")||ls("skywire-upstream-proxy","");$("svc").value=ls(K.svc,"");$("dir").value=ls(K.dir,"");
 setMode(mode);
-$("mb").onclick=function(){setMode("browser");};$("ms").onclick=function(){setMode("service");};
+$("mb").onclick=function(){setMode("browser");};$("md").onclick=function(){setMode("disk");};$("ms").onclick=function(){setMode("service");};
 // Skysocks exit: SD-populated dropdown + live proxy/resolving-proxy log — the
 // same machinery the iframe browser (browse.js) exposes, applied to the wallet.
 function visor(){try{return parent&&parent.skywireVisor;}catch(e){return null;}}
@@ -120,6 +142,7 @@ $("psel").onchange=function(){if(this.value){$("proxy").value=this.value;plog("�
 $("apply").onclick=function(){var e=$("err");e.style.display="none";e.textContent="";
 if(mode==="service"){var s=($("svc").value||"").trim();if(!s){e.textContent="Enter the wallet service address.";e.style.display="";return;}
 set(K.mode,"service");set(K.svc,s);set(K.prim,s);}
+else if(mode==="disk"){set(K.mode,"disk");set(K.dir,($("dir").value||"").trim());}
 else{set(K.mode,"browser");
 // Coin node config moved to skycoin-web's Settings → Nodes; clear any legacy
 // panel-set node so that page (or the deployment mesh default) is authoritative.
