@@ -42,6 +42,7 @@ var (
 	serveTLS      bool
 	servePassword string
 	serveVariant  string
+	serveWallet   bool
 )
 
 // walletDmsgFetchShim is injected into the bundled skycoin-web wallet's index
@@ -160,6 +161,7 @@ func init() {
 	serveCmd.Flags().BoolVar(&serveTLS, "tls", false, "serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts")
 	serveCmd.Flags().StringVar(&servePassword, "password", "", "gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear")
 	serveCmd.Flags().StringVarP(&serveVariant, "variant", "W", "", "which embedded wasm-visor to serve: 'go' (larger, full crypto/tls+net/http) or 'tinygo' (~4x smaller — better for the PWA, with the documented TinyGo feature gaps). Empty = the build default. A standard-Go build embeds both; a TinyGo build has only 'tinygo'")
+	serveCmd.Flags().BoolVar(&serveWallet, "wallet", true, "serve the bundled skycoin-web wallet at /wallet/ (custody stays browser-side — the host never sees keys). --wallet=false serves a wallet-less PWA")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -291,7 +293,7 @@ page never asks anyone to type a secret key.`,
 		// vendored dist ships <base href="/"> (skycoin's own root deployment);
 		// rewrite it to /wallet/ so the wallet's relative asset paths resolve under
 		// this mount. Only registered when the wallet is actually embedded.
-		if walletIndex, werr := fs.ReadFile(uiFS, "wallet/index.html"); werr == nil {
+		if walletIndex, werr := fs.ReadFile(uiFS, "wallet/index.html"); werr == nil && serveWallet {
 			// Rewrite the base href AND inject the dmsg fetch shim right after it,
 			// so the shim runs before the wallet's own scripts. The shim overrides
 			// window.fetch (the wallet uses Angular's fetch backend) to route the
