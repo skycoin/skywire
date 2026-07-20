@@ -59,6 +59,10 @@ var (
 	servicesConfig             servicesConf
 	isForce                    bool
 	isHide                     bool
+	walletCustody              string
+	walletDir                  string
+	walletRemotePK             string
+	noWallet                   bool
 	isAll                      bool
 	isOutUnset                 bool
 	ver                        string
