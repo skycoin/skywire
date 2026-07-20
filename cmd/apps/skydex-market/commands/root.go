@@ -1,22 +1,30 @@
 // Package commands cmd/apps/skydex-market/commands/root.go
+//
+// This is the thin skywire wrapper around the SkyDEX market engine, which lives
+// in the skycoin repo (github.com/skycoin/skycoin/cmd/skydex-market/commands and
+// src/skydex/*) and carries no skywire dependency. The wrapper's only job is to
+// supply the skywire transport: it Listens on appnet.TypeDmsg via the visor,
+// injects each client's authenticated dmsg public key as its identity, and hands
+// the listener to the engine's Run. The engine does everything else (SQLite
+// store, matching/escrow, jobs, operator UI). This mirrors how skywire wraps
+// skycoin-web.
 package commands
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
-	"strings"
-	"time"
 
+	"github.com/sirupsen/logrus"
+	skydexmarket "github.com/skycoin/skycoin/cmd/skydex-market/commands"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/internal/skydex-market/app"
-	"github.com/skycoin/skywire/internal/skydex-market/chain"
-	"github.com/skycoin/skywire/internal/skydex-market/db"
-	"github.com/skycoin/skywire/internal/skydex-market/jobs"
-	"github.com/skycoin/skywire/internal/skydex-market/server"
+	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -26,7 +34,7 @@ import (
 )
 
 var (
-	// dbPath is the path to the SQLite database file
+	// dbPath is the path to the SQLite database file.
 	dbPath string
 	// port is the routing port the market listens on (dmsg). 0 = use the
 	// visor-assigned routing port.
@@ -42,7 +50,7 @@ func init() {
 	RootCmd.Flags().StringVar(&uiAddr, "addr", skyenv.SkydexMarketAddr, "address to serve the operator UI on")
 }
 
-// RootCmd is the root command for skydex-market
+// RootCmd is the root command for skydex-market.
 var RootCmd = &cobra.Command{
 	Use:                   "skydex-market",
 	Short:                 "SkyDEX - Market (Skywire decentralized exchange backend)",
@@ -53,8 +61,7 @@ var RootCmd = &cobra.Command{
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
 	Run: func(_ *cobra.Command, args []string) {
-		ctx := context.Background()
-		if err := RunSkydexMarket(ctx, args); err != nil {
+		if err := RunSkydexMarket(context.Background(), args); err != nil {
 			log.Fatal(err)
 		}
 	},
@@ -67,9 +74,18 @@ func Execute() {
 	}
 }
 
-// RunSkydexMarket runs the skydex-market app logic.
+// appHost adapts the visor app client to the engine's Host: it supplies the
+// logger, publishes the operator OTP to the visor app list, and reports the
+// market's own identity (the visor public key).
+type appHost struct{ appCl *app.Client }
+
+func (h appHost) Log() logrus.FieldLogger { return h.appCl.Log() }
+func (h appHost) PublishOTP(otp string)   { h.appCl.SetOTPOrLog(otp) }
+func (h appHost) PubKey() string          { return h.appCl.VisorPubKey() }
+
+// RunSkydexMarket runs the skydex-market app: it wires the visor's appnet dmsg
+// transport to the skycoin exchange engine.
 func RunSkydexMarket(ctx context.Context, args []string) error {
-	// Parse flags when called via internal launcher
 	if len(args) > 0 {
 		fs := pflag.NewFlagSet("skydex-market", pflag.ContinueOnError)
 		fs.StringVar(&dbPath, "db", "", "path to SQLite database file")
@@ -80,41 +96,14 @@ func RunSkydexMarket(ctx context.Context, args []string) error {
 		}
 	}
 
-	// Wrap context with cancel to allow graceful shutdown
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Initialize app client (connects to visor)
 	appCl := app.NewClient()
 	defer appCl.Close()
 
 	appCl.LogInfo("Build info: %s", buildinfo.Version())
-	appCl.LogInfo("Successfully started skydex-market.")
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusStarting)
-
-	// Initialize database
-	database, err := db.New(dbPath, appCl.WorkDir())
-	if err != nil {
-		appCl.SetErrorOrLog(err)
-		return err
-	}
-	defer database.Close() //nolint
-
-	appCl.LogInfo("Database initialized successfully at: %s", database.Path())
-
-	// Run database migrations
-	if err := database.Migrate(); err != nil {
-		appCl.SetErrorOrLog(err)
-		return err
-	}
-	appCl.LogInfo("Database migrations completed.")
-
-	// Initialize default market config if not exists
-	if err := database.InitDefaultConfig(); err != nil {
-		appCl.SetErrorOrLog(err)
-		return err
-	}
-	appCl.LogInfo("Market configuration initialized.")
 
 	// Resolve the dmsg listen port: default to the visor-assigned routing port,
 	// overridden by --port when set (mirrors vpn-client / skychat).
@@ -124,52 +113,52 @@ func RunSkydexMarket(ctx context.Context, args []string) error {
 		appCl.Client.SetAppPortOrLog(listenPort)
 	}
 
-	// Start the dmsg transport server. The market Listens on appnet.TypeDmsg
-	// via the visor; clients Dial the market's public key on the same port.
-	srv := server.New(database, appCl.Log(), listenPort)
-	go func() {
-		if err := srv.ListenAndServe(ctx, appCl); err != nil {
-			appCl.LogError("dmsg server stopped: %v", err)
-			appCl.SetErrorOrLog(err)
-			cancel()
-		}
-	}()
-
-	// Serve the operator UI (config + monitoring) on the localhost address.
-	go serveUI(ctx, appCl, database, uiAddr)
-
-	// Start the background jobs (escrow/listing checks, expiry, cleanup, bans).
-	// The chain backend reads its per-sell-coin escrow config and per-currency
-	// explorer config from the DB, so operator changes take effect without a
-	// restart. Coins with no fullnode URL yet simply never confirm.
-	chainBackend := chain.New(database)
-	if coins, _ := database.AvailableSellCoins(); len(coins) > 0 { //nolint
-		appCl.LogInfo("Chain backend ready — sell coins: %s (external payments via configured explorers)", strings.Join(coins, ", "))
-	} else {
-		appCl.LogInfo("Chain backend ready — no sell coins enabled yet (add one in the operator UI)")
+	// Listen on appnet.TypeDmsg via the visor; clients Dial the market's public
+	// key on the same port. The listener is a plain net.Listener as far as the
+	// transport-agnostic engine is concerned.
+	lis, err := appCl.Listen(appnet.TypeDmsg, listenPort)
+	if err != nil {
+		appCl.SetErrorOrLog(err)
+		return err
 	}
-	go jobs.NewRunner(database, chainBackend, appCl.Log()).Run(ctx)
 
-	appCl.LogInfo("SkyDEX - Market is ready and waiting for client connections.")
-	appCl.LogInfo("Operator UI available at http://%s", uiAddr)
-	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
+	// Over skywire the authenticated identity is the client's dmsg public key,
+	// carried on the accepted connection's appnet.Addr — never trusted from the
+	// payload.
+	identify := func(conn net.Conn) (string, error) {
+		raddr, ok := conn.RemoteAddr().(appnet.Addr)
+		if !ok {
+			return "", fmt.Errorf("rejecting conn with non-appnet remote addr %v", conn.RemoteAddr())
+		}
+		return raddr.PubKey.Hex(), nil
+	}
 
-	// Handle shutdown signals
+	cfg := skydexmarket.Config{
+		DBPath:  dbPath,
+		WorkDir: appCl.WorkDir(),
+		UIAddr:  uiAddr,
+		OnReady: func() { appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning) },
+	}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- skydexmarket.Run(ctx, cfg, lis, identify, appHost{appCl}) }()
+
 	termCh := make(chan os.Signal, 1)
 	signal.Notify(termCh, os.Interrupt)
-
-	// Give the app a moment to stabilize before declaring ready
-	time.Sleep(100 * time.Millisecond)
 
 	select {
 	case <-termCh:
 		appCl.LogInfo("Received interrupt signal, shutting down gracefully...")
-		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
-		cancel()
+	case err := <-errCh:
+		if err != nil {
+			appCl.LogError("skydex-market engine stopped: %v", err)
+			appCl.SetErrorOrLog(err)
+		}
 	case <-ctx.Done():
 		appCl.LogInfo("Context canceled, shutting down...")
-		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 	}
+	cancel()
+	appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
 
 	return nil
 }
