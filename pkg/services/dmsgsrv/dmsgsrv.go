@@ -595,8 +595,17 @@ func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver
 			addServer(e)
 		}
 	}
-	for i := range dmsg.Prod.DmsgServers {
-		addServer(&dmsg.Prod.DmsgServers[i])
+	// Seed the binary's embedded server set, but ONLY for a discovery this server
+	// actually serves. This used to add deployment.Prod's entire fleet
+	// unconditionally, which meant a private or e2e deployment — whose discovery
+	// is its own — opened sessions to the public production servers on every
+	// start. Those dials sit on the cold-start path, so on a slow host they
+	// competed with the registration this function exists to enable, and they
+	// sent traffic outside the deployment besides.
+	for _, pk := range discPKs {
+		for _, e := range deployment.EmbeddedServersForDiscoveryPK(pk) {
+			addServer(e)
+		}
 	}
 
 	// Resolve self (transit identity) + every discovery PK locally. Giving

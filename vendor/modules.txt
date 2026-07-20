@@ -295,6 +295,9 @@ github.com/droundy/goopt
 # github.com/dunglas/httpsfv v1.1.0
 ## explicit; go 1.14
 github.com/dunglas/httpsfv
+# github.com/dustin/go-humanize v1.0.1
+## explicit; go 1.16
+github.com/dustin/go-humanize
 # github.com/elazarl/goproxy v1.8.4
 ## explicit; go 1.23.0
 github.com/elazarl/goproxy
@@ -484,6 +487,8 @@ github.com/gomarkdown/markdown
 github.com/gomarkdown/markdown/ast
 github.com/gomarkdown/markdown/html
 github.com/gomarkdown/markdown/parser
+# github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad
+## explicit; go 1.22
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
@@ -511,6 +516,11 @@ github.com/hanwen/go-fuse/v2/splice
 # github.com/hashicorp/go-version v1.9.0
 ## explicit
 github.com/hashicorp/go-version
+# github.com/hashicorp/golang-lru/v2 v2.0.7
+## explicit; go 1.18
+github.com/hashicorp/golang-lru/v2
+github.com/hashicorp/golang-lru/v2/internal
+github.com/hashicorp/golang-lru/v2/simplelru
 # github.com/hashicorp/yamux v0.1.2
 ## explicit; go 1.20
 github.com/hashicorp/yamux
@@ -683,6 +693,9 @@ github.com/muesli/cancelreader
 # github.com/muesli/termenv v0.16.0
 ## explicit; go 1.17
 github.com/muesli/termenv
+# github.com/ncruces/go-strftime v0.1.9
+## explicit; go 1.17
+github.com/ncruces/go-strftime
 # github.com/nsf/termbox-go v1.1.1
 ## explicit; go 1.15
 github.com/nsf/termbox-go
@@ -875,6 +888,9 @@ github.com/quic-go/quic-go/quicvarint
 # github.com/quic-go/webtransport-go v0.11.1
 ## explicit; go 1.25.0
 github.com/quic-go/webtransport-go
+# github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec
+## explicit; go 1.12
+github.com/remyoudompheng/bigfft
 # github.com/rivo/tview v0.42.0
 ## explicit; go 1.18
 github.com/rivo/tview
@@ -922,7 +938,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.6-0.20260718000522-26b081dda792
+# github.com/skycoin/skycoin v0.28.6-0.20260720010916-a8217688ad6b
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -930,6 +946,8 @@ github.com/skycoin/skycoin/cmd/skycoin-cli/commands
 github.com/skycoin/skycoin/cmd/skycoin-wallet/commands
 github.com/skycoin/skycoin/cmd/skycoin-web/commands
 github.com/skycoin/skycoin/cmd/skycoin/commands
+github.com/skycoin/skycoin/cmd/skydex-client/commands
+github.com/skycoin/skycoin/cmd/skydex-market/commands
 github.com/skycoin/skycoin/config
 github.com/skycoin/skycoin/explorer
 github.com/skycoin/skycoin/src/api
@@ -968,6 +986,14 @@ github.com/skycoin/skycoin/src/skycoin
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-go
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo
 github.com/skycoin/skycoin/src/skycoin-web/src/gui
+github.com/skycoin/skycoin/src/skydex/chain
+github.com/skycoin/skycoin/src/skydex/db
+github.com/skycoin/skycoin/src/skydex/jobs
+github.com/skycoin/skycoin/src/skydex/market
+github.com/skycoin/skycoin/src/skydex/message
+github.com/skycoin/skycoin/src/skydex/protocol
+github.com/skycoin/skycoin/src/skydex/server
+github.com/skycoin/skycoin/src/skydex/walletaddr
 github.com/skycoin/skycoin/src/transaction
 github.com/skycoin/skycoin/src/util/apputil
 github.com/skycoin/skycoin/src/util/buildinfo
@@ -1493,6 +1519,53 @@ gorm.io/gorm/utils
 # howett.net/plist v1.0.2-0.20250314012144-ee69052608d9
 ## explicit; go 1.12
 howett.net/plist
+# modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6
+## explicit; go 1.20
+modernc.org/gc/v3
+# modernc.org/libc v1.55.3
+## explicit; go 1.20
+modernc.org/libc
+modernc.org/libc/errno
+modernc.org/libc/fcntl
+modernc.org/libc/fts
+modernc.org/libc/grp
+modernc.org/libc/honnef.co/go/netdb
+modernc.org/libc/langinfo
+modernc.org/libc/limits
+modernc.org/libc/netdb
+modernc.org/libc/netinet/in
+modernc.org/libc/poll
+modernc.org/libc/pthread
+modernc.org/libc/pwd
+modernc.org/libc/signal
+modernc.org/libc/stdio
+modernc.org/libc/stdlib
+modernc.org/libc/sys/socket
+modernc.org/libc/sys/stat
+modernc.org/libc/sys/types
+modernc.org/libc/termios
+modernc.org/libc/time
+modernc.org/libc/unistd
+modernc.org/libc/utime
+modernc.org/libc/uuid
+modernc.org/libc/uuid/uuid
+modernc.org/libc/wctype
+# modernc.org/mathutil v1.6.0
+## explicit; go 1.18
+modernc.org/mathutil
+# modernc.org/memory v1.8.0
+## explicit; go 1.18
+modernc.org/memory
+# modernc.org/sqlite v1.34.0
+## explicit; go 1.20
+modernc.org/sqlite
+modernc.org/sqlite/lib
+# modernc.org/strutil v1.2.0
+## explicit; go 1.18
+modernc.org/strutil
+# modernc.org/token v1.1.0
+## explicit
+modernc.org/token
 # mvdan.cc/sh/v3 v3.13.1
 ## explicit; go 1.25.0
 mvdan.cc/sh/v3/expand
