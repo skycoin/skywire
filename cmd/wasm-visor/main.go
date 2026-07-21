@@ -204,13 +204,25 @@ func jsBoot(_ js.Value, args []js.Value) interface{} {
 func jsStatus(js.Value, []js.Value) interface{} {
 	st := map[string]interface{}{
 		"pk": "", "booted": false,
-		"dmsg": false, "tpManager": false, "router": false, "procManager": false,
+		"dmsg": false, "dmsg_sessions": 0, "dmsg_connected": false,
+		"tpManager": false, "router": false, "procManager": false,
 		"hypervisor": false, "transports": 0, "routes": 0,
 	}
 	if !selfPK.Null() {
 		st["pk"] = selfPK.Hex()
 	}
 	st["dmsg"] = dmsgC != nil
+	// dmsg_sessions / dmsg_connected: the UI's connecting overlay (browse.js
+	// dmsgUp / updateConnecting) keys off these — they existed on the native
+	// status shape (pkg/wasmhv/core.go) but jsStatus never populated them, so
+	// the deep-link "Connecting to the mesh…" splash spun the full timeout and
+	// showed "dmsg sessions: 0" even on an already-connected shared visor.
+	// dmsg=true only means the client EXISTS; connectivity is having a session.
+	if dmsgC != nil {
+		n := len(dmsgC.AllSessions())
+		st["dmsg_sessions"] = n
+		st["dmsg_connected"] = n > 0
+	}
 	st["tpManager"] = tpM != nil
 	st["router"] = rtr != nil
 	st["procManager"] = procM != nil
