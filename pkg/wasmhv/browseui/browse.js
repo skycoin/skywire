@@ -260,7 +260,14 @@
         return (globalThis.skywireVisor && globalThis.skywireVisor.status && globalThis.skywireVisor.status()) || {};
       }).catch(function () { return {}; });
     }
-    function dmsgUp(st) { return !!(st && (st.dmsg_connected || (st.dmsg_sessions | 0) > 0)); }
+    // dmsg is "up" when there's a live session. Prefer the explicit fields
+    // (dmsg_connected / dmsg_sessions), but also treat "dmsg client exists AND
+    // has transports" as connected: transports run over dmsg sessions, so
+    // having them means dmsg is up. This fallback matters for an already-booted
+    // shared visor whose status() (older wasm blobs) reports dmsg+transports but
+    // not the session count — without it the deep-link "Connecting…" overlay
+    // spun the full timeout on an already-connected visor.
+    function dmsgUp(st) { return !!(st && (st.dmsg_connected || (st.dmsg_sessions | 0) > 0 || (st.dmsg && (st.transports | 0) > 0))); }
 
     // --- live connection journey ------------------------------------------
     // A dmsg/skynet connection is a multi-step, adaptive process, not a single
@@ -1977,7 +1984,7 @@
       (function poll() {
         Promise.resolve().then(function () { return self.skywireVisor && self.skywireVisor.status(); })
           .then(function (st) {
-            if ((st && (st.dmsg_connected || (st.dmsg_sessions | 0) > 0)) || tries > 40) { cb(); }
+            if ((st && (st.dmsg_connected || (st.dmsg_sessions | 0) > 0 || (st.dmsg && (st.transports | 0) > 0))) || tries > 40) { cb(); }
             else { tries++; setTimeout(poll, 500); }
           }).catch(function () { if (tries > 40) { cb(); } else { tries++; setTimeout(poll, 500); } });
       })();
