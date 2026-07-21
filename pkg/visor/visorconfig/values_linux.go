@@ -5,6 +5,7 @@
 package visorconfig
 
 import (
+	"os"
 	"os/user"
 	"runtime"
 	"strings"
@@ -80,8 +81,22 @@ func SystemSurvey() (Survey, error) {
 	return s, nil
 }
 
-// IsRoot checks for root permissions
+// IsRoot checks for root permissions.
+//
+// It resolves the effective UID FIRST (0 == root), which never needs a passwd
+// lookup. On a static (musl) build running under a UID with no /etc/passwd
+// entry, user.Current() returns (nil, err); the previous code ignored the error
+// and dereferenced the nil user, panicking in this package's init() — which
+// crashed EVERY skywire command on such hosts (seen on the prod hv-serve unit,
+// crash-looping v1.3.86). Geteuid is both safer and the canonical root test.
 func IsRoot() bool {
-	userLvl, _ := user.Current() //nolint:errcheck
-	return userLvl.Username == "root"
+	if os.Geteuid() == 0 {
+		return true
+	}
+	// Non-zero euid: still honor a username match for the rare setup where
+	// "root" is a non-zero uid, but guard the nil user.
+	if u, err := user.Current(); err == nil && u != nil {
+		return u.Username == "root"
+	}
+	return false
 }
