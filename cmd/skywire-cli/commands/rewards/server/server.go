@@ -1624,15 +1624,24 @@ func buildRouter() *gin.Engine {
 				Share  float64 `json:"share"`
 				Amount float64 `json:"amount"`
 			}
+			// Bandwidth-mode shares.csv has 11 columns where col4 is
+			// "Bandwidth (bytes)" and col5 is "Total Reward SKY"; legacy-mode has
+			// 10 columns with the SKY amount in col4. Detect from the header so
+			// this doesn't return the byte count as the SKY amount (which showed
+			// comically-high rewards in the hypervisor UI). Mirrors the HTML page.
+			skyCol := 4
+			if len(lines) > 0 && strings.Contains(lines[0], "Bandwidth (bytes)") {
+				skyCol = 5
+			}
 			var results []visorReward
 			for i, line := range lines {
 				if i == 0 {
 					continue // skip header
 				}
-				pkStr, _ := script.Echo(line).Column(2).String()    //nolint:errcheck,gosec
-				shareStr, _ := script.Echo(line).Column(3).String() //nolint:errcheck,gosec
-				skyStr, _ := script.Echo(line).Column(4).String()   //nolint:errcheck,gosec
-				pkStr = strings.TrimSpace(pkStr)
+				pkStr, _ := script.Echo(line).Column(2).String()       //nolint:errcheck,gosec
+				shareStr, _ := script.Echo(line).Column(3).String()    //nolint:errcheck,gosec
+				skyStr, _ := script.Echo(line).Column(skyCol).String() //nolint:errcheck,gosec
+				pkStr = strings.TrimRight(strings.TrimSpace(pkStr), ",")
 				share, _ := strconv.ParseFloat(strings.TrimRight(strings.TrimSpace(shareStr), ","), 64) //nolint:errcheck
 				sky, _ := strconv.ParseFloat(strings.TrimRight(strings.TrimSpace(skyStr), ","), 64)     //nolint:errcheck
 				if pkStr != "" {
@@ -1680,6 +1689,12 @@ func buildRouter() *gin.Engine {
 					txid = strings.TrimSpace(txidBytes)
 					sent = txid != ""
 				}
+				// Bandwidth-mode shares.csv: col4 is bandwidth bytes, col5 the SKY
+				// amount. Detect from the header (see the /hist/:date/json endpoint).
+				skyCol := 4
+				if len(lines) > 0 && strings.Contains(lines[0], "Bandwidth (bytes)") {
+					skyCol = 5
+				}
 				found := false
 				for j, line := range lines {
 					if j == 0 {
@@ -1689,7 +1704,7 @@ func buildRouter() *gin.Engine {
 					pkStr = strings.TrimRight(strings.TrimSpace(pkStr), ",")
 					if pkStr == pk {
 						shareStr, _ := script.Echo(line).Column(3).String()                                     //nolint:errcheck,gosec
-						skyStr, _ := script.Echo(line).Column(4).String()                                       //nolint:errcheck,gosec
+						skyStr, _ := script.Echo(line).Column(skyCol).String()                                  //nolint:errcheck,gosec
 						share, _ := strconv.ParseFloat(strings.TrimRight(strings.TrimSpace(shareStr), ","), 64) //nolint:errcheck
 						sky, _ := strconv.ParseFloat(strings.TrimRight(strings.TrimSpace(skyStr), ","), 64)     //nolint:errcheck
 						history = append(history, dayReward{Date: date, Amount: sky, Share: share, Sent: sent, Txid: txid})
