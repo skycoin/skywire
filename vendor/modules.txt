@@ -104,6 +104,9 @@ github.com/atotto/clipboard
 # github.com/aymanbagabas/go-osc52/v2 v2.0.1
 ## explicit; go 1.16
 github.com/aymanbagabas/go-osc52/v2
+# github.com/beorn7/perks v1.0.1
+## explicit; go 1.11
+github.com/beorn7/perks/quantile
 # github.com/bitfield/script v0.24.3
 ## explicit; go 1.25.0
 github.com/bitfield/script
@@ -481,14 +484,28 @@ github.com/goccy/go-yaml/token
 github.com/godbus/dbus/v5
 github.com/godbus/dbus/v5/introspect
 github.com/godbus/dbus/v5/prop
+# github.com/golang/protobuf v1.5.4
+## explicit; go 1.17
+github.com/golang/protobuf/proto
+github.com/golang/protobuf/ptypes
+github.com/golang/protobuf/ptypes/any
+github.com/golang/protobuf/ptypes/duration
+github.com/golang/protobuf/ptypes/timestamp
 # github.com/gomarkdown/markdown v0.0.0-20260614204949-e08cff860f76
 ## explicit; go 1.12
 github.com/gomarkdown/markdown
 github.com/gomarkdown/markdown/ast
 github.com/gomarkdown/markdown/html
 github.com/gomarkdown/markdown/parser
+# github.com/google/gopacket v1.1.19
+## explicit; go 1.12
+github.com/google/gopacket
+github.com/google/gopacket/layers
 # github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad
 ## explicit; go 1.22
+# github.com/google/renameio v1.0.1
+## explicit; go 1.13
+github.com/google/renameio
 # github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
@@ -527,6 +544,14 @@ github.com/hashicorp/yamux
 # github.com/inconshreveable/mousetrap v1.1.0
 ## explicit; go 1.18
 github.com/inconshreveable/mousetrap
+# github.com/insomniacslk/dhcp v0.0.0-20260719225207-c76316d4aa82
+## explicit; go 1.23.0
+github.com/insomniacslk/dhcp/dhcpv4
+github.com/insomniacslk/dhcp/dhcpv6
+github.com/insomniacslk/dhcp/dhcpv6/client6
+github.com/insomniacslk/dhcp/iana
+github.com/insomniacslk/dhcp/interfaces
+github.com/insomniacslk/dhcp/rfc1035label
 # github.com/itchyny/gojq v0.12.19
 ## explicit; go 1.24.0
 github.com/itchyny/gojq
@@ -604,6 +629,9 @@ github.com/jinzhu/inflection
 # github.com/jinzhu/now v1.1.5
 ## explicit; go 1.12
 github.com/jinzhu/now
+# github.com/josharian/native v1.1.0
+## explicit; go 1.13
+github.com/josharian/native
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
@@ -622,6 +650,10 @@ github.com/kr/pretty
 # github.com/kr/text v0.2.0
 ## explicit
 github.com/kr/text
+# github.com/krolaw/dhcp4 v0.0.0-20190909130307-a50d88189771
+## explicit
+github.com/krolaw/dhcp4
+github.com/krolaw/dhcp4/conn
 # github.com/kyokomi/emoji/v2 v2.2.14
 ## explicit; go 1.21
 github.com/kyokomi/emoji/v2
@@ -662,9 +694,21 @@ github.com/mattn/go-localereader
 # github.com/mattn/go-runewidth v0.0.24
 ## explicit; go 1.20
 github.com/mattn/go-runewidth
+# github.com/matttproud/golang_protobuf_extensions v1.0.1
+## explicit
+github.com/matttproud/golang_protobuf_extensions/pbutil
+# github.com/mdlayher/packet v1.1.2
+## explicit; go 1.20
+github.com/mdlayher/packet
+# github.com/mdlayher/socket v0.6.1
+## explicit; go 1.25.0
+github.com/mdlayher/socket
 # github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d
 ## explicit
 github.com/mgutz/ansi
+# github.com/miekg/dns v1.1.41
+## explicit; go 1.13
+github.com/miekg/dns
 # github.com/mitchellh/go-wordwrap v1.0.1
 ## explicit; go 1.14
 github.com/mitchellh/go-wordwrap
@@ -733,6 +777,13 @@ github.com/peterh/liner
 ## explicit; go 1.12
 github.com/pgavlin/femto
 github.com/pgavlin/femto/runtime
+# github.com/pierrec/lz4/v4 v4.1.14
+## explicit; go 1.14
+github.com/pierrec/lz4/v4
+github.com/pierrec/lz4/v4/internal/lz4block
+github.com/pierrec/lz4/v4/internal/lz4errors
+github.com/pierrec/lz4/v4/internal/lz4stream
+github.com/pierrec/lz4/v4/internal/xxh32
 # github.com/pion/datachannel v1.6.2
 ## explicit; go 1.24.0
 github.com/pion/datachannel
@@ -857,6 +908,24 @@ github.com/pmezard/go-difflib/difflib
 # github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55
 ## explicit; go 1.14
 github.com/power-devops/perfstat
+# github.com/prometheus/client_golang v1.11.1
+## explicit; go 1.13
+github.com/prometheus/client_golang/prometheus
+github.com/prometheus/client_golang/prometheus/internal
+github.com/prometheus/client_golang/prometheus/promhttp
+# github.com/prometheus/client_model v0.2.0
+## explicit; go 1.9
+github.com/prometheus/client_model/go
+# github.com/prometheus/common v0.26.0
+## explicit; go 1.11
+github.com/prometheus/common/expfmt
+github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
+github.com/prometheus/common/model
+# github.com/prometheus/procfs v0.6.0
+## explicit; go 1.13
+github.com/prometheus/procfs
+github.com/prometheus/procfs/internal/fs
+github.com/prometheus/procfs/internal/util
 # github.com/pterm/pterm v0.12.83
 ## explicit; go 1.24.0
 github.com/pterm/pterm
@@ -1165,6 +1234,10 @@ github.com/twitchyliquid64/golang-asm/objabi
 github.com/twitchyliquid64/golang-asm/src
 github.com/twitchyliquid64/golang-asm/sys
 github.com/twitchyliquid64/golang-asm/unsafeheader
+# github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923
+## explicit; go 1.16
+github.com/u-root/uio/rand
+github.com/u-root/uio/uio
 # github.com/ugorji/go/codec v1.3.1
 ## explicit; go 1.21
 github.com/ugorji/go/codec
@@ -1462,6 +1535,7 @@ google.golang.org/protobuf/internal/descfmt
 google.golang.org/protobuf/internal/descopts
 google.golang.org/protobuf/internal/detrand
 google.golang.org/protobuf/internal/editiondefaults
+google.golang.org/protobuf/internal/editionssupport
 google.golang.org/protobuf/internal/encoding/defval
 google.golang.org/protobuf/internal/encoding/json
 google.golang.org/protobuf/internal/encoding/messageset
@@ -1481,10 +1555,13 @@ google.golang.org/protobuf/internal/strs
 google.golang.org/protobuf/internal/version
 google.golang.org/protobuf/proto
 google.golang.org/protobuf/protoadapt
+google.golang.org/protobuf/reflect/protodesc
 google.golang.org/protobuf/reflect/protoreflect
 google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
+google.golang.org/protobuf/types/descriptorpb
+google.golang.org/protobuf/types/gofeaturespb
 google.golang.org/protobuf/types/known/anypb
 google.golang.org/protobuf/types/known/durationpb
 google.golang.org/protobuf/types/known/timestamppb

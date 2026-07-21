@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
+	"github.com/skycoin/skywire/pkg/vpnrouter"
 )
 
 // Router orchestrates the downstream interface, the DHCP/DNS + optional WiFi AP
@@ -97,10 +98,15 @@ func (r *Router) setup(ctx context.Context) error {
 		}
 	}
 
-	// 3. DHCP + DNS for the downstream subnet.
-	if err := r.startDnsmasq(ctx); err != nil {
-		return err
-	}
+	// 3. DHCP + DNS for the downstream subnet — an embedded, pure-Go engine
+	// (vendored router7 dhcp4d + dns), replacing the external dnsmasq the app
+	// used to shell out to. StartLAN blocks until ctx is cancelled, so run it
+	// in the background; a startup error surfaces via the log.
+	go func() {
+		if err := vpnrouter.StartLAN(ctx, r.cfg.LANInterface, r.confDir); err != nil && ctx.Err() == nil {
+			r.log.WithError(err).Error("embedded DHCP/DNS server exited")
+		}
+	}()
 
 	// 4. Wait for the vpn-client tunnel, then forward + NAT into it.
 	tun, err := r.awaitTUN(ctx)
@@ -137,19 +143,6 @@ func (r *Router) startHostapd(ctx context.Context) error {
 		return fmt.Errorf("write hostapd.conf: %w", err)
 	}
 	return r.startDaemon(ctx, "hostapd", confPath)
-}
-
-func (r *Router) startDnsmasq(ctx context.Context) error {
-	if _, err := exec.LookPath("dnsmasq"); err != nil {
-		return fmt.Errorf("dnsmasq not found — install it (DHCP/DNS for clients): %w", err)
-	}
-	confPath := filepath.Join(r.confDir, "dnsmasq.conf")
-	if err := os.WriteFile(confPath, []byte(r.cfg.DnsmasqConf()), 0o600); err != nil {
-		return fmt.Errorf("write dnsmasq.conf: %w", err)
-	}
-	// --keep-in-foreground: dnsmasq daemonizes by default; keep it a child so
-	// ctx cancellation reaps it. --conf-file=<ours> ignores system config.
-	return r.startDaemon(ctx, "dnsmasq", "--keep-in-foreground", "--conf-file="+confPath)
 }
 
 // startDaemon launches a long-running child bound to ctx (killed on cancel) and

@@ -72,22 +72,6 @@ func TestDefaultsFromSubnet(t *testing.T) {
 	}
 }
 
-func TestDnsmasqConf(t *testing.T) {
-	gw, subnet := mustCIDR(t, "192.168.42.1/24")
-	c := RouterConfig{LANInterface: "wlan0", Gateway: gw, Subnet: subnet}
-	conf := c.DnsmasqConf()
-	for _, want := range []string{
-		"interface=wlan0",
-		"dhcp-range=192.168.42.10,192.168.42.254,12h",
-		"dhcp-option=option:router,192.168.42.1",
-		"dhcp-option=option:dns-server,192.168.42.1",
-	} {
-		if !strings.Contains(conf, want) {
-			t.Errorf("dnsmasq.conf missing %q\n---\n%s", want, conf)
-		}
-	}
-}
-
 func TestHostapdConf(t *testing.T) {
 	w := WiFiConfig{SSID: "SkywireVPN", Passphrase: "supersecret", Band: "5", Channel: 0, CountryCode: "DE"}
 	conf := w.HostapdConf("wlan0")

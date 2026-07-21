@@ -57,6 +57,10 @@ linters:
     paths:
       - vendor/
       - third_party/
+      # Vendored router7 DHCP/DNS engine (Apache-2.0, rtr7/router7) — kept
+      # verbatim for upstream re-sync, not held to skywire's linter. Our own
+      # wrapper (pkg/vpnrouter/lan.go) is NOT excluded.
+      - pkg/vpnrouter/router7/
       - cmd/skywire-cli/commands/gotop
       - builtin$
       - examples$
