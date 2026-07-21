@@ -275,6 +275,8 @@ func init() {
 	genConfigCmd.Flags().StringVar(&binPath, "binpath", scriptExecString("${BINPATH}"), "set bin_path for visor native apps")
 	gHiddenFlags = append(gHiddenFlags, "binpath")
 	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-true}"), "autostart vpn server")
+	genConfigCmd.Flags().BoolVar(&isVpnRouterEnable, "servevpnrouter", scriptExecBool("${VPNROUTER:-false}"), "autostart the vpn router (LAN/WiFi gateway that NATs into the vpn-client tunnel; needs --vpnrouter-lan-ifc)")
+	genConfigCmd.Flags().StringVar(&vpnRouterLanIfc, "vpnrouter-lan-ifc", scriptExecString("${VPNROUTERLANIFC}"), "downstream LAN/WiFi interface the vpn router serves (e.g. eth1 or wlan0)")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 
 	// VPN flags
@@ -1758,6 +1760,16 @@ func configureApps(log *logging.Logger) {
 				Args:      []string{"app", "vpn-server"},
 			},
 			{
+				// Local LAN/WiFi gateway that NATs downstream clients into the
+				// vpn-client tunnel. Off by default; enabled via --servevpnrouter
+				// (VPNROUTER) and needs a downstream interface (--vpnrouter-lan-ifc).
+				Name:      skyenv.VPNRouterName,
+				Binary:    "skywire",
+				AutoStart: isVpnRouterEnable,
+				Port:      routing.Port(skyenv.VPNRouterPort),
+				Args:      []string{"app", "vpn-router", "--lan-ifc", vpnRouterLanIfc},
+			},
+			{
 				Name:      skyenv.SkydexMarketName,
 				Binary:    "skywire",
 				AutoStart: false,
@@ -1846,6 +1858,15 @@ func configureApps(log *logging.Logger) {
 				AutoStart: isVpnServerEnable,
 				Args:      []string{},
 				Port:      routing.Port(skyenv.VPNServerPort),
+			},
+			{
+				// Local LAN/WiFi gateway that NATs downstream clients into the
+				// vpn-client tunnel. Off by default; enabled via --servevpnrouter
+				// (VPNROUTER) with a downstream interface (--vpnrouter-lan-ifc).
+				Name:      skyenv.VPNRouterName,
+				AutoStart: isVpnRouterEnable,
+				Args:      []string{"--lan-ifc", vpnRouterLanIfc},
+				Port:      routing.Port(skyenv.VPNRouterPort),
 			},
 			{
 				Name:      skyenv.SkydexMarketName,

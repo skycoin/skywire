@@ -47,6 +47,8 @@ var (
 	isDmsgHTTP                 bool
 	minDmsgSess                int
 	isVpnServerEnable          bool
+	isVpnRouterEnable          bool
+	vpnRouterLanIfc            string
 	isDisableAuth              bool
 	isEnableAuth               bool
 	isEnablePKEndpoint         bool
