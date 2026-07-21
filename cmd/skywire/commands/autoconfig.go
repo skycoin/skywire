@@ -177,6 +177,8 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 
 	// VPN server
 	addBool("VPNSERVER", "vpnserver", "no-vpnserver", autoconfigVals.VpnServer, autoconfigVals.NoVpnServer)
+	addSoloBool("VPNROUTER", "vpnrouter", autoconfigVals.VpnRouter)
+	addString("VPNROUTERLANIFC", "vpnrouter-lan-ifc", autoconfigVals.VpnRouterLanIfc)
 	addString("VPNKS", "killsw", autoconfigVals.VpnKillSw)
 	addString("ADDVPNPK", "addvpn", autoconfigVals.AddVpn)
 	addArray("VPNSERVERWL", "vpnwl", autoconfigVals.VpnWl)

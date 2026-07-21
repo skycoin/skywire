@@ -24,7 +24,7 @@ var allFlags = []string{
 	// Route calculation
 	"calculate-routes",
 	// VPN server
-	"vpnserver", "no-vpnserver", "killsw", "addvpn", "vpnwl", "secure", "netifc",
+	"vpnserver", "no-vpnserver", "vpnrouter", "vpnrouter-lan-ifc", "killsw", "addvpn", "vpnwl", "secure", "netifc",
 	// Proxy
 	"proxyserver", "no-proxyserver", "proxyclientpk", "startproxyclient", "proxywl",
 	// SOCKS5 web bridges
