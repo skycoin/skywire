@@ -29,7 +29,7 @@ import (
 // are handed addresses starting at gateway+1 and given the gateway as their
 // router and DNS server. LAN hostnames resolve from the live DHCP leases, which
 // persist under permDir/dhcp4d/leases.json across restarts. Blocks until ctx is
-// cancelled or a server exits with an error. Requires CAP_NET_* / root.
+// canceled or a server exits with an error. Requires CAP_NET_* / root.
 func StartLAN(ctx context.Context, ifaceName, permDir string) error {
 	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
@@ -39,7 +39,7 @@ func StartLAN(ctx context.Context, ifaceName, permDir string) error {
 	if err != nil {
 		return fmt.Errorf("lan interface %q has no IPv4 (assign the gateway address first): %w", ifaceName, err)
 	}
-	if err := os.MkdirAll(filepath.Join(permDir, "dhcp4d"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(permDir, "dhcp4d"), 0o750); err != nil {
 		return fmt.Errorf("state dir: %w", err)
 	}
 	leasesPath := filepath.Join(permDir, "dhcp4d", "leases.json")
@@ -52,7 +52,7 @@ func StartLAN(ctx context.Context, ifaceName, permDir string) error {
 
 	// Load persisted leases into both the DHCP handler (so clients keep their
 	// address across a restart) and the DNS server (so their hostnames resolve).
-	if b, rerr := os.ReadFile(leasesPath); rerr == nil {
+	if b, rerr := os.ReadFile(leasesPath); rerr == nil { //nolint:gosec // leasesPath is our own state path
 		var persisted []*dhcp4d.Lease
 		if json.Unmarshal(b, &persisted) == nil {
 			handler.SetLeases(persisted)
@@ -75,13 +75,13 @@ func StartLAN(ctx context.Context, ifaceName, permDir string) error {
 		return fmt.Errorf("dhcp listener on %q: %w", ifaceName, err)
 	}
 	go func() { errc <- krolaw.Serve(dc, handler) }()
-	go func() { <-ctx.Done(); _ = dc.Close() }()
+	go func() { <-ctx.Done(); _ = dc.Close() }() //nolint:errcheck // best-effort close on shutdown
 
 	// DNS: UDP + TCP :53 bound to the gateway address, served by the router7 mux.
 	for _, network := range []string{"udp", "tcp"} {
 		s := &miekgdns.Server{Addr: serverIP.String() + ":53", Net: network, Handler: dnsSrv.Mux}
 		go func() { errc <- s.ListenAndServe() }()
-		go func() { <-ctx.Done(); _ = s.Shutdown() }()
+		go func() { <-ctx.Done(); _ = s.Shutdown() }() //nolint:errcheck // best-effort shutdown
 	}
 
 	select {
