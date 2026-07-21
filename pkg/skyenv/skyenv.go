@@ -210,6 +210,11 @@ const (
 	// downstream LAN/WiFi clients and NATs them into the tunnel vpn-client owns.
 	VPNRouterName = "vpn-router"
 
+	// VPNRouterPort is a nominal launcher port for the vpn-router app. The app
+	// serves no dmsg endpoint (it's a local gateway), but every launcher
+	// AppConfig carries a port; this keeps it unique from the others.
+	VPNRouterPort uint16 = 62
+
 	// ExampleServerName is the name of the example server app
 	ExampleServerName = "example-server-app"
 

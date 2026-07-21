@@ -139,6 +139,14 @@ const envfileLinux = `#
 #--	Autostart vpn server for this visor
 #VPNSERVER=false
 
+#--	Autostart the vpn-router: a LAN/WiFi gateway that NATs downstream
+#	clients into the vpn-client tunnel. Needs VPNROUTERLANIFC (the
+#	downstream interface). Requires root + the vpn-client running.
+#VPNROUTER=false
+
+#--	Downstream LAN/WiFi interface the vpn-router serves (e.g. eth1 or wlan0)
+#VPNROUTERLANIFC='eth1'
+
 #--	Set server public key for proxy client to connect to
 #PROXYCLIENTPK=''
 
