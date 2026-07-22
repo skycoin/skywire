@@ -172,6 +172,21 @@ const envfileLinux = `#
 #VPNROUTERCHANNEL=0
 #VPNROUTERCOUNTRY='US'
 
+#--	Mesh gateway: additionally let downstream clients reach mesh services by
+#	name — resolve *.dmsg / *.skynet to a synthetic IP and transparently proxy
+#	the connection over the mesh (no SOCKS, no per-device setup). The dest port
+#	is the mesh routing port. VPNROUTERMESHGWCIDR is the synthetic-IP pool
+#	(default 100.64.0.0/16; change only if it collides with your LAN).
+#VPNROUTERMESHGW=false
+#VPNROUTERMESHGWCIDR='100.64.0.0/16'
+
+#--	Mesh gateway HTTPS: TLS-MITM connections to *.dmsg / *.skynet on :443 —
+#	the gateway terminates TLS with a self-generated CA (persisted under
+#	<local>/mesh-gateway-ca/) and bridges plaintext to the mesh service, so
+#	browsers get a secure context. LAN clients must install that CA as trusted;
+#	its path + fingerprint are logged on first start.
+#VPNROUTERMESHTLS=false
+
 #--	Set server public key for proxy client to connect to
 #PROXYCLIENTPK=''
 
