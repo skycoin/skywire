@@ -138,6 +138,18 @@ func (r *Router) startHostapd(ctx context.Context) error {
 	if _, err := exec.LookPath("hostapd"); err != nil {
 		return fmt.Errorf("hostapd not found — install it for the WiFi-out variant: %w", err)
 	}
+	// Realtek SDIO radios (rtl8723bs on the original skyminer Orange Pi boards,
+	// and relatives) have a firmware power-save bug that makes hostapd AP mode
+	// flap (AP-ENABLED→DISABLED, stations deauth'd) unless the interface's
+	// power management is off. Disabling it at runtime is the single most
+	// effective stability fix; it's best-effort (non-Realtek radios don't need
+	// it and `iw` may be absent, so a failure here is only logged). The
+	// persistent counterpart — `options rtl8723bs rtw_power_mgnt=0
+	// rtw_ips_mode=0` in /etc/modprobe.d — is documented in the router setup
+	// guide for boards that reset PM on link-up.
+	if err := osutil.RunElevated("iw", "dev", r.cfg.LANInterface, "set", "power_save", "off"); err != nil {
+		r.log.WithError(err).Debugf("could not disable power_save on %s (harmless on non-Realtek radios)", r.cfg.LANInterface)
+	}
 	confPath := filepath.Join(r.confDir, "hostapd.conf")
 	if err := os.WriteFile(confPath, []byte(r.cfg.WiFi.HostapdConf(r.cfg.LANInterface)), 0o600); err != nil {
 		return fmt.Errorf("write hostapd.conf: %w", err)
