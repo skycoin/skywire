@@ -6,12 +6,16 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/app"
+	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/app/launcher"
 	"github.com/skycoin/skywire/pkg/buildinfo"
@@ -99,6 +103,18 @@ func RunVPNRouter(ctx context.Context, args []string) error {
 		}
 	}
 
+	// Standalone mode: when the app is not launched by a visor (no
+	// PROC_CONFIG in the environment), run the router as a plain daemon
+	// rather than fatally requiring the visor's app-server. The router's
+	// job — serve DHCP/DNS on the downstream interface and NAT into a tun
+	// the vpn-client (or any tunnel) provides — needs no visor coupling,
+	// so this is a first-class way to run it: on a host OS, for testing,
+	// or wherever the mesh tunnel is managed separately. app-server status
+	// reporting is simply skipped (there's nothing to report to).
+	if _, launched := os.LookupEnv(appcommon.EnvProcConfig); !launched {
+		return runStandalone(ctx)
+	}
+
 	appCl := app.NewClient(nil)
 	defer appCl.Close()
 	logger := appCl.Log()
@@ -135,6 +151,29 @@ func RunVPNRouter(ctx context.Context, args []string) error {
 		return err
 	}
 	return nil
+}
+
+// runStandalone runs the router without any visor app-server coupling: build
+// config from flags, construct the Router, and Run until a signal (or ctx)
+// cancels. Used when the binary is invoked directly (no PROC_CONFIG), e.g. for
+// on-host operation or hardware testing.
+func runStandalone(ctx context.Context) error {
+	logger := logrus.New()
+	logger.SetOutput(os.Stderr)
+
+	cfg, err := buildRouterConfig()
+	if err != nil {
+		return fmt.Errorf("invalid vpn-router configuration: %w", err)
+	}
+	router, err := vpn.NewRouter(cfg, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create vpn-router: %w", err)
+	}
+
+	sigCtx, stop := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	logger.Info("vpn-router running standalone (no visor app-server; status reporting disabled)")
+	return router.Run(sigCtx)
 }
 
 // buildRouterConfig turns the parsed flags into a vpn.RouterConfig.

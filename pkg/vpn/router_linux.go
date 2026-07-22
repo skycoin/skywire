@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -35,7 +36,14 @@ type Router struct {
 	prevForwarding string
 	masquerading   bool
 	forwardRules   [][]string // iptables argv sets we added to the FORWARD chain
+	policyRouting  bool       // true once the LAN→tun policy route+rule are installed
 }
+
+// lanPolicyTable is the dedicated routing table the router uses to send
+// downstream-LAN traffic through the tunnel. A high, fixed id keeps it clear of
+// the main/local/default tables and of typical per-link tables; the router owns
+// it exclusively and flushes it on teardown.
+const lanPolicyTable = 142
 
 // NewRouter validates cfg and returns a Router ready to Run. It does not touch
 // any system state.
@@ -100,7 +108,7 @@ func (r *Router) setup(ctx context.Context) error {
 
 	// 3. DHCP + DNS for the downstream subnet — an embedded, pure-Go engine
 	// (vendored router7 dhcp4d + dns), replacing the external dnsmasq the app
-	// used to shell out to. StartLAN blocks until ctx is cancelled, so run it
+	// used to shell out to. StartLAN blocks until ctx is canceled, so run it
 	// in the background; a startup error surfaces via the log.
 	go func() {
 		if err := vpnrouter.StartLAN(ctx, r.cfg.LANInterface, r.confDir); err != nil && ctx.Err() == nil {
@@ -230,11 +238,56 @@ func (r *Router) setupNAT() error {
 		r.forwardRules = append(r.forwardRules, rule)
 	}
 	r.log.Infof("NAT: %s → %s (masquerade)", r.cfg.LANInterface, r.tunIfc)
+
+	if err := r.setupPolicyRouting(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// setupPolicyRouting sends downstream-LAN traffic through the tunnel without
+// touching the router's own default route.
+//
+// This is the difference between a VPN *client* and a VPN *router*: a client
+// can point the whole host's default route at the tun, but a router MUST keep
+// its own uplink — the mesh transport carrying the tunnel to the vpn-server
+// rides that uplink, so redirecting the host default through the tun would cut
+// the tunnel's own carrier. Instead we install a dedicated table with a
+// default route out the tun and an `ip rule` matching only the LAN subnet as
+// source, so forwarded client packets egress via the VPN while everything the
+// router originates (dmsg/skywire included) keeps the main table.
+func (r *Router) setupPolicyRouting() error {
+	table := strconv.Itoa(lanPolicyTable)
+	subnet := r.cfg.Subnet.String()
+
+	// default route via the tun device in our private table.
+	if err := osutil.RunElevated("ip", "route", "replace", "default", "dev", r.tunIfc, "table", table); err != nil {
+		return fmt.Errorf("policy route (default dev %s table %s): %w", r.tunIfc, table, err)
+	}
+	// match LAN-sourced traffic into that table. Delete any stale copy first so
+	// a restart doesn't stack duplicate rules.
+	_ = osutil.RunElevated("ip", "rule", "del", "from", subnet, "lookup", table) //nolint:errcheck // best-effort cleanup of a stale rule
+	if err := osutil.RunElevated("ip", "rule", "add", "from", subnet, "lookup", table); err != nil {
+		return fmt.Errorf("policy rule (from %s lookup %s): %w", subnet, table, err)
+	}
+	r.policyRouting = true
+	r.log.Infof("policy routing: %s → %s (table %s); router uplink unchanged", subnet, r.tunIfc, table)
 	return nil
 }
 
 // teardown reverses setup, best-effort (logs but does not abort on errors).
 func (r *Router) teardown() {
+	// Remove the LAN→tun policy route+rule.
+	if r.policyRouting {
+		table := strconv.Itoa(lanPolicyTable)
+		subnet := r.cfg.Subnet.String()
+		if err := osutil.RunElevated("ip", "rule", "del", "from", subnet, "lookup", table); err != nil {
+			r.log.WithError(err).Warn("teardown: remove policy rule")
+		}
+		if err := osutil.RunElevated("ip", "route", "flush", "table", table); err != nil {
+			r.log.WithError(err).Warn("teardown: flush policy table")
+		}
+	}
 	// Remove the FORWARD rules we added (-D mirrors each -A).
 	for _, rule := range r.forwardRules {
 		del := append([]string{"-D"}, rule[1:]...)
