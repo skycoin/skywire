@@ -108,7 +108,7 @@ func (r *Router) setup(ctx context.Context) error {
 
 	// 3. DHCP + DNS for the downstream subnet — an embedded, pure-Go engine
 	// (vendored router7 dhcp4d + dns), replacing the external dnsmasq the app
-	// used to shell out to. StartLAN blocks until ctx is cancelled, so run it
+	// used to shell out to. StartLAN blocks until ctx is canceled, so run it
 	// in the background; a startup error surfaces via the log.
 	go func() {
 		if err := vpnrouter.StartLAN(ctx, r.cfg.LANInterface, r.confDir); err != nil && ctx.Err() == nil {
