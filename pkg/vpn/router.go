@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"net"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetca"
+	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
 // A Router turns a visor into a VPN gateway: it aggregates downstream LAN/WiFi
@@ -66,7 +70,33 @@ type RouterConfig struct {
 	// WiFi, when non-nil, additionally runs hostapd to create a WiFi AP on
 	// LANInterface. Nil = ethernet-out (no AP).
 	WiFi *WiFiConfig
+
+	// MeshDial, when non-nil, enables the MESH GATEWAY: the router's DNS answers
+	// *.dmsg / *.skynet with synthetic IPs, and a transparent proxy dials those
+	// targets over the mesh via this func — so any downstream client can reach
+	// dmsg/skynet services by name. The vpn-router app supplies a dialer backed
+	// by its app.Client. Nil = mesh gateway off. See pkg/vpnrouter/meshgw.
+	MeshDial meshgw.MeshDial
+
+	// MeshGatewayCIDR is the private range the mesh gateway leases synthetic IPs
+	// from. Empty defaults to defaultMeshGatewayCIDR. Ignored when MeshDial nil.
+	MeshGatewayCIDR string
+
+	// MeshAliases maps friendly names to destination PKs, so a client can reach
+	// `http://<alias>.dmsg` instead of the raw `<pk-label>.dmsg`. May be nil.
+	// Ignored when MeshDial nil.
+	MeshAliases map[string]cipher.PubKey
+
+	// MeshTLSMinter, when non-nil (and MeshDial set), enables TLS-MITM for the
+	// mesh gateway: HTTPS to *.dmsg / *.skynet is terminated with a leaf minted
+	// here and bridged to the plain-HTTP mesh upstream, so browsers get a secure
+	// context. LAN clients must trust the minter's CA. Ignored when MeshDial nil.
+	MeshTLSMinter skynetca.LeafMinter
 }
+
+// defaultMeshGatewayCIDR is the synthetic-IP pool for the mesh gateway — a slice
+// of shared/CGNAT space unlikely to collide with a downstream LAN.
+const defaultMeshGatewayCIDR = "100.64.0.0/16"
 
 // WiFiConfig configures the hostapd access point for the WiFi-out variant.
 type WiFiConfig struct {
@@ -130,6 +160,9 @@ func (c RouterConfig) withDefaults() RouterConfig {
 		if c.DHCPEnd == nil {
 			c.DHCPEnd = nthHost(c.Subnet, 254)
 		}
+	}
+	if c.MeshDial != nil && c.MeshGatewayCIDR == "" {
+		c.MeshGatewayCIDR = defaultMeshGatewayCIDR
 	}
 	return c
 }

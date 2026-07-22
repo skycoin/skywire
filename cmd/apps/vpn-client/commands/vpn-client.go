@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"syscall"
@@ -39,7 +40,17 @@ var (
 	appPort     uint16
 	muxRoutes   int
 	minHops     int
+	meshGateway bool
+	meshGWCIDR  string
+	meshTLS     bool
+	meshCACert  string
+	meshCAKey   string
+	meshAliases []string
 )
+
+// defaultMeshCADir is where the client mesh gateway persists its self-generated
+// CA so the host only needs to trust it once (survives restarts).
+var defaultMeshCADir = filepath.Join(skyenv.PackageConfig().LocalPath, "mesh-gateway-ca")
 
 func init() {
 	launcher.RegisterApp("vpn-client", RunVPNClient)
@@ -51,6 +62,12 @@ func init() {
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().IntVar(&muxRoutes, "mux", 0, "dial the server over this many parallel (multiplexed) routes")
 	RootCmd.Flags().IntVar(&minHops, "min-hops", 0, "force the route through at least this many intermediate visors")
+	RootCmd.Flags().BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway: resolve *.dmsg / *.skynet on this host and proxy them over the mesh (opt-in; Linux only)")
+	RootCmd.Flags().StringVar(&meshGWCIDR, "mesh-gateway-cidr", "", "mesh-gateway synthetic-IP pool (empty = 100.64.0.0/16)")
+	RootCmd.Flags().BoolVar(&meshTLS, "mesh-gateway-tls", false, "mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet with a self-generated CA (host must trust it)")
+	RootCmd.Flags().StringVar(&meshCACert, "mesh-gateway-ca", "", "mesh-gateway CA cert path (empty = <local>/mesh-gateway-ca/ca.pem; generated if absent)")
+	RootCmd.Flags().StringVar(&meshCAKey, "mesh-gateway-ca-key", "", "mesh-gateway CA key path (empty = <local>/mesh-gateway-ca/ca.key)")
+	RootCmd.Flags().StringArrayVar(&meshAliases, "mesh-alias", nil, "mesh-gateway friendly name → PK, as name=<pk> (repeatable); reach http://<name>.dmsg")
 }
 
 // RootCmd is the root command for skywire-cli
@@ -98,6 +115,12 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.IntVar(&muxRoutes, "mux", 0, "multiplexed route count")
 		fs.IntVar(&minHops, "min-hops", 0, "minimum hops")
+		fs.BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway")
+		fs.StringVar(&meshGWCIDR, "mesh-gateway-cidr", "", "mesh-gateway synthetic-IP pool")
+		fs.BoolVar(&meshTLS, "mesh-gateway-tls", false, "mesh-gateway TLS-MITM")
+		fs.StringVar(&meshCACert, "mesh-gateway-ca", "", "mesh-gateway CA cert path")
+		fs.StringVar(&meshCAKey, "mesh-gateway-ca-key", "", "mesh-gateway CA key path")
+		fs.StringArrayVar(&meshAliases, "mesh-alias", nil, "mesh-gateway alias name=<pk>")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -223,6 +246,30 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		DNSAddr:    dnsAddress,
 		MuxRoutes:  muxRoutes,
 		MinHops:    minHops,
+	}
+
+	if meshGateway {
+		vpnClientCfg.MeshGateway = true
+		vpnClientCfg.MeshGatewayCIDR = meshGWCIDR
+		vpnClientCfg.MeshDial = vpn.MeshDialer(appCl)
+		if len(meshAliases) > 0 {
+			aliases, aerr := vpn.ParseMeshAliases(meshAliases)
+			if aerr != nil {
+				logger.WithError(aerr).Error("invalid --mesh-alias")
+				setAppErr(appCl, logger, aerr)
+				return aerr
+			}
+			vpnClientCfg.MeshAliases = aliases
+		}
+		if meshTLS {
+			minter, merr := vpn.LoadOrCreateMeshCA(meshCACert, meshCAKey, defaultMeshCADir)
+			if merr != nil {
+				logger.WithError(merr).Error("mesh gateway CA")
+				setAppErr(appCl, logger, merr)
+				return merr
+			}
+			vpnClientCfg.MeshTLSMinter = minter
+		}
 	}
 
 	vpnClient, err := vpn.NewClient(vpnClientCfg, appCl)
