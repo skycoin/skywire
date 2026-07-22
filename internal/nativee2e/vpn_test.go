@@ -23,6 +23,16 @@ import (
 // Runs on Linux, macOS and Windows. Needs privileges: root on unix, and on
 // Windows an elevated (admin) process — the GitHub windows runner already is —
 // plus wintun.dll alongside the binary, which the e2e-windows CI job provisions.
+//
+// Regression guard for the port-44 collision (#3544): visor B (the vpn-server
+// host) carries a dmsgpty whitelist in its testdata config, which activates the
+// visor-RPC skynet mirror — the same condition every hypervisor-connected fleet
+// board has. That mirror reserves skynet port 44 at init, and vpn-server also
+// listens on skynet 44 (VPNServerPort). Before #3544 (which moved
+// DmsgVisorRPCPort off 44) that made vpn-server fail "port already bound" on its
+// first Listen, so this test — which requires vpn-server to actually serve —
+// would fail. Without the whitelist the mirror stays off, :44 is free, and the
+// collision is invisible: exactly why CI missed it originally.
 func TestVPNClient(t *testing.T) {
 	if !elevated() {
 		t.Skip("vpn-client + vpn-server need root/admin (TUN devices + NAT); skipping")
