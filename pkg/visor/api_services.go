@@ -584,7 +584,7 @@ func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error
 		}
 		return v.dmsgPty.ExecRemoteVia(ctx, pty.NewDmsgDialer(v.dmsgC), args.RemotePK, args.RemotePort, &req)
 	case "skynet":
-		return v.dmsgPty.ExecRemoteVia(ctx, skywireDialer{}, args.RemotePK, args.RemotePort, &req)
+		return v.dmsgPty.ExecRemoteVia(ctx, skywireDialer{ensureTransport: v.ensureFastTransport}, args.RemotePK, args.RemotePort, &req)
 	default:
 		return nil, fmt.Errorf("dmsgpty: unknown scheme %q (want \"\", \"dmsg\", or \"skynet\")", args.Scheme)
 	}

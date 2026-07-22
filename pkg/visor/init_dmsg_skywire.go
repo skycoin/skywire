@@ -42,13 +42,34 @@ import (
 // adapter just returns a "no skywire networker" error in the
 // pre-init window and the MultiDialer falls through to dmsg —
 // matching the behavior we'd want anyway.
-type skywireDialer struct{}
+//
+// ensureTransport, when set, is called before the skynet dial to
+// auto-establish a fast (stcpr→sudph) direct transport to the peer
+// if none exists — so skynet has a real route to dial over instead
+// of failing and dropping the caller to the raw-dmsg relay fallback.
+// This is the crux of pty/scp/fs stability: a co-located peer gets a
+// direct stcpr transport (zero dmsg-server relay), matching what an
+// operator would otherwise do by hand with `tp add --type stcpr`. It
+// is best-effort: a failure (peer not directly reachable, or a
+// standalone dmsgpty-host that isn't a visor and can't peer a
+// transport) is non-fatal — the skynet dial then fails on "no route"
+// and the MultiDialer falls through to dmsg as before.
+type skywireDialer struct {
+	ensureTransport func(cipher.PubKey) error
+}
 
 // DialStream resolves the skynet networker on every call and dials
 // pk:port over it. Failure surfaces a wrapped error so the
 // MultiDialer's joined-error output identifies skynet as the
 // strategy that failed.
-func (skywireDialer) DialStream(ctx context.Context, pk cipher.PubKey, port uint16) (net.Conn, error) {
+func (d skywireDialer) DialStream(ctx context.Context, pk cipher.PubKey, port uint16) (net.Conn, error) {
+	// Best-effort: ensure a direct transport exists so skynet can
+	// route over it. Errors are intentionally swallowed — see the
+	// type doc; the dial below (and the MultiDialer's dmsg fallback)
+	// still runs.
+	if d.ensureTransport != nil {
+		_ = d.ensureTransport(pk) //nolint:errcheck // best-effort; skynet dial + dmsg fallback handle the miss
+	}
 	n, err := appnet.ResolveNetworker(appnet.TypeSkynet)
 	if err != nil {
 		return nil, fmt.Errorf("skywire: networker unavailable: %w", err)
@@ -171,9 +192,14 @@ func startSkywirePtyListener(ctx context.Context, pty *pty.Host, localPK cipher.
 //
 // Future strategies (stcpr, sudpr, direct-TCP) prepend or splice in
 // here without revisiting any other call site.
-func buildDmsgptyDialer(dmsgC *dmsg.Client) pty.StreamDialer {
+//
+// ensureTransport is the visor's ensureFastTransport (or nil in
+// contexts without a transport manager, e.g. tests): threaded into
+// the skynet strategy so it auto-establishes a direct transport
+// before dialing.
+func buildDmsgptyDialer(dmsgC *dmsg.Client, ensureTransport func(cipher.PubKey) error) pty.StreamDialer {
 	return pty.MultiDialer{
-		skywireDialer{},
+		skywireDialer{ensureTransport: ensureTransport},
 		pty.NewDmsgDialer(dmsgC),
 	}
 }
