@@ -76,13 +76,13 @@
       {
         "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
         "server": {
-          "address": "139.162.173.101:30082"
+          "address": "45.79.124.73:30082"
         }
       },
       {
         "static": "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
         "server": {
-          "address": "139.162.173.101:30083"
+          "address": "172.105.110.46:30083"
         }
       }
     ],
@@ -173,13 +173,13 @@
       {
         "static": "02a2d4c346dabd165fd555dfdba4a7f4d18786fe7e055e562397cd5102bdd7f8dd",
         "server": {
-          "address": "139.162.173.101:30082"
+          "address": "45.79.124.73:30082"
         }
       },
       {
         "static": "03717576ada5b1744e395c66c2bb11cea73b0e23d0dcd54422139b1a7f12e962c4",
         "server": {
-          "address": "139.162.173.101:30083"
+          "address": "172.105.110.46:30083"
         }
       },
       {
