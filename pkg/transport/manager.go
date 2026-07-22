@@ -1211,21 +1211,36 @@ func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubK
 	return mTp, nil
 }
 
-// STCPRRemoteAddrs gets remote IPs for all known STCPR transports.
-func (tm *Manager) STCPRRemoteAddrs() []string {
+// TransportRemoteAddrs gets remote IPs for all non-DMSG transports (stcpr,
+// sudph, stcp, quic, …).
+//
+// Used only to seed the vpn-client's direct-route exemptions. Every one of
+// these peer IPs MUST bypass the tunnel: routing an established transport's
+// remote IP into the TUN severs that transport — and if the transport carries
+// the vpn's own path to the vpn-server, it severs the tunnel itself (the
+// client stops receiving the ServerHello → NO-CARRIER). Previously this
+// returned STCPR only, so a visor whose path to the server ran over sudph (or
+// any non-stcpr type) had that peer tunneled and the VPN silently failed.
+//
+// DMSG is deliberately excluded: it relays through dmsg servers and has no
+// single routable peer IP, and its servers are exempted separately via
+// DirectRoutesEnvConfig.DmsgServers.
+func (tm *Manager) TransportRemoteAddrs() []string {
 	var addrs []string
 
 	tm.mx.RLock()
 	defer tm.mx.RUnlock()
 
 	for _, tp := range tm.tps {
+		if tp.Entry.Type == types.DMSG {
+			continue
+		}
 		// Use getTransport() (locks transportMx) rather than reading
 		// tp.transport directly: close() can nil it between the nil-check and
 		// the deref — a data race and a nil-deref crash.
 		netTp := tp.getTransport()
 		if netTp != nil {
-			remoteRaw := netTp.RemoteRawAddr().String()
-			if tp.Entry.Type == types.STCPR && remoteRaw != "" {
+			if remoteRaw := netTp.RemoteRawAddr().String(); remoteRaw != "" {
 				addrs = append(addrs, remoteRaw)
 			}
 		}

@@ -91,7 +91,7 @@ func (v *Visor) StartAppWithMode(appName, launcherMode string) error {
 		if v.tpM == nil {
 			return ErrTrpMangerNotAvailable
 		}
-		maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
+		maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.TransportRemoteAddrs())
 		envs, err = maker()
 		if err != nil {
 			return err
@@ -468,7 +468,7 @@ func (v *Visor) StartVPNClientWithMode(pk cipher.PubKey, launcherMode string) er
 			// unlike the api method `StartApp` where `nil` is passed in `v.appL.StartApp` as args
 			// but the args are set in the config
 			v.conf.Launcher.Apps[index].Args = []string{"app", "vpn-client", "--srv", pk.Hex()}
-			maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.STCPRRemoteAddrs())
+			maker := vpnEnvMaker(v.conf, v.dmsgC, v.dmsgDC, v.tpM.TransportRemoteAddrs())
 			envs, err = maker()
 			if err != nil {
 				return err
