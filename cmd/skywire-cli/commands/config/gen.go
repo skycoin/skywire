@@ -277,6 +277,14 @@ func init() {
 	genConfigCmd.Flags().BoolVarP(&isVpnServerEnable, "servevpn", "v", scriptExecBool("${VPNSERVER:-true}"), "autostart vpn server")
 	genConfigCmd.Flags().BoolVar(&isVpnRouterEnable, "servevpnrouter", scriptExecBool("${VPNROUTER:-false}"), "autostart the vpn router (LAN/WiFi gateway that NATs into the vpn-client tunnel; needs --vpnrouter-lan-ifc)")
 	genConfigCmd.Flags().StringVar(&vpnRouterLanIfc, "vpnrouter-lan-ifc", scriptExecString("${VPNROUTERLANIFC}"), "downstream LAN/WiFi interface the vpn router serves (e.g. eth1 or wlan0)")
+	genConfigCmd.Flags().StringVar(&vpnRouterSubnet, "vpnrouter-subnet", scriptExecString("${VPNROUTERSUBNET}"), "vpn router gateway+subnet as <gateway-ip>/<prefix> (default 192.168.42.1/24)")
+	genConfigCmd.Flags().BoolVar(&vpnRouterWifi, "vpnrouter-wifi", scriptExecBool("${VPNROUTERWIFI:-false}"), "vpn router WiFi-out: run hostapd (AP) on the downstream interface")
+	genConfigCmd.Flags().StringVar(&vpnRouterSSID, "vpnrouter-ssid", scriptExecString("${VPNROUTERSSID}"), "vpn router WiFi SSID (with --vpnrouter-wifi)")
+	genConfigCmd.Flags().StringVar(&vpnRouterPassphrase, "vpnrouter-passphrase", scriptExecString("${VPNROUTERPASSPHRASE}"), "vpn router WiFi WPA2 passphrase, 8–63 chars (with --vpnrouter-wifi)")
+	genConfigCmd.Flags().StringVar(&vpnRouterBand, "vpnrouter-band", scriptExecString("${VPNROUTERBAND}"), "vpn router WiFi band: 2.4 or 5 (default 2.4)")
+	genConfigCmd.Flags().IntVar(&vpnRouterChannel, "vpnrouter-channel", scriptExecInt("${VPNROUTERCHANNEL:-0}"), "vpn router WiFi channel (0 = default for the band)")
+	genConfigCmd.Flags().StringVar(&vpnRouterCountry, "vpnrouter-country", scriptExecString("${VPNROUTERCOUNTRY}"), "vpn router WiFi regulatory country code (default US)")
+	genConfigCmd.Flags().BoolVar(&vpnRouterOpenWiFi, "vpnrouter-open", scriptExecBool("${VPNROUTEROPEN:-false}"), "vpn router WiFi: allow an open (passphrase-less) network")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 
 	// VPN flags
@@ -1767,7 +1775,7 @@ func configureApps(log *logging.Logger) {
 				Binary:    "skywire",
 				AutoStart: isVpnRouterEnable,
 				Port:      routing.Port(skyenv.VPNRouterPort),
-				Args:      []string{"app", "vpn-router", "--lan-ifc", vpnRouterLanIfc},
+				Args:      vpnRouterArgs([]string{"app", "vpn-router"}),
 			},
 			{
 				Name:      skyenv.SkydexMarketName,
@@ -1865,7 +1873,7 @@ func configureApps(log *logging.Logger) {
 				// (VPNROUTER) with a downstream interface (--vpnrouter-lan-ifc).
 				Name:      skyenv.VPNRouterName,
 				AutoStart: isVpnRouterEnable,
-				Args:      []string{"--lan-ifc", vpnRouterLanIfc},
+				Args:      vpnRouterArgs(nil),
 				Port:      routing.Port(skyenv.VPNRouterPort),
 			},
 			{
