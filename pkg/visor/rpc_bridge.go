@@ -13,7 +13,7 @@
 //	1 byte  — scheme: 0 = dmsg, 1 = skynet
 //	33 bytes — target visor PK
 //	2 bytes — little-endian uint16. Dmsg port for scheme=0
-//	          (typically DmsgVisorRPCPort = 44). Ignored for
+//	          (typically DmsgVisorRPCPort = 57). Ignored for
 //	          scheme=1.
 //
 // Total: 42 bytes.
