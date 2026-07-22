@@ -19,6 +19,7 @@ import (
 	"github.com/krolaw/dhcp4/conn"
 	miekgdns "github.com/miekg/dns"
 
+	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 	"github.com/skycoin/skywire/pkg/vpnrouter/router7/dhcp4d"
 	"github.com/skycoin/skywire/pkg/vpnrouter/router7/dns"
 )
@@ -30,7 +31,12 @@ import (
 // router and DNS server. LAN hostnames resolve from the live DHCP leases, which
 // persist under permDir/dhcp4d/leases.json across restarts. Blocks until ctx is
 // canceled or a server exits with an error. Requires CAP_NET_* / root.
-func StartLAN(ctx context.Context, ifaceName, permDir string) error {
+//
+// When gw is non-nil the MESH GATEWAY is layered on: gw's `.dmsg` / `.skynet`
+// zone handlers are registered on the DNS mux so clients resolve mesh names to
+// synthetic IPs (the transparent proxy that dials them is started separately by
+// the caller). gw nil = plain LAN DNS only.
+func StartLAN(ctx context.Context, ifaceName, permDir string, gw *meshgw.Gateway) error {
 	iface, err := net.InterfaceByName(ifaceName)
 	if err != nil {
 		return fmt.Errorf("lan interface %q: %w", ifaceName, err)
@@ -49,6 +55,9 @@ func StartLAN(ctx context.Context, ifaceName, permDir string) error {
 		return fmt.Errorf("dhcp handler: %w", err)
 	}
 	dnsSrv := dns.NewServer(serverIP.String()+":53", "lan")
+	if gw != nil {
+		gw.InstallDNS(dnsSrv.Mux)
+	}
 
 	// Load persisted leases into both the DHCP handler (so clients keep their
 	// address across a restart) and the DNS server (so their hostnames resolve).

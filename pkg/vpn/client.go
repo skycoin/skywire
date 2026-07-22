@@ -16,6 +16,7 @@ import (
 	"time"
 
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
@@ -145,6 +146,18 @@ func (c *Client) Serve() error {
 	defer func() {
 		c.removeDirectRoutes()
 	}()
+
+	// Optional mesh gateway: let the host resolve *.dmsg / *.skynet by name and
+	// proxy those over the mesh (bypassing the tunnel). Opt-in; Linux-only.
+	if c.cfg.MeshGateway {
+		meshGW, err := startMeshClientGateway(context.Background(), c.cfg, logrus.StandardLogger())
+		if err != nil {
+			// Non-fatal: the VPN still works, just without mesh-name resolution.
+			fmt.Printf("mesh gateway disabled: %v\n", err)
+		} else {
+			defer meshGW.stop()
+		}
+	}
 
 	// we call this preliminary, so it will be called on app stop
 	defer func() {
