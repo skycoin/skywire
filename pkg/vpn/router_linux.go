@@ -288,25 +288,32 @@ func (r *Router) setupNAT() error {
 // its own uplink — the mesh transport carrying the tunnel to the vpn-server
 // rides that uplink, so redirecting the host default through the tun would cut
 // the tunnel's own carrier. Instead we install a dedicated table with a
-// default route out the tun and an `ip rule` matching only the LAN subnet as
-// source, so forwarded client packets egress via the VPN while everything the
-// router originates (dmsg/skywire included) keeps the main table.
+// default route out the tun and an `ip rule` matching traffic FORWARDED IN from
+// the downstream interface, so client packets egress via the VPN while
+// everything the router originates (dmsg/skywire included) keeps the main table.
+//
+// The rule matches by input interface (`iif <lan>`), NOT by source subnet: the
+// gateway's own IP is IN the LAN subnet, so a `from <subnet>` rule also caught
+// the router's replies to clients (DNS answers, ICMP replies, source =
+// gateway IP) and shoved them out the tun, black-holing every local service and
+// gateway response. `iif <lan>` only matches packets forwarded in from the
+// downstream — locally-generated router traffic has no iif and stays on main.
 func (r *Router) setupPolicyRouting() error {
 	table := strconv.Itoa(lanPolicyTable)
-	subnet := r.cfg.Subnet.String()
+	lan := r.cfg.LANInterface
 
 	// default route via the tun device in our private table.
 	if err := osutil.RunElevated("ip", "route", "replace", "default", "dev", r.tunIfc, "table", table); err != nil {
 		return fmt.Errorf("policy route (default dev %s table %s): %w", r.tunIfc, table, err)
 	}
-	// match LAN-sourced traffic into that table. Delete any stale copy first so
-	// a restart doesn't stack duplicate rules.
-	_ = osutil.RunElevated("ip", "rule", "del", "from", subnet, "lookup", table) //nolint:errcheck // best-effort cleanup of a stale rule
-	if err := osutil.RunElevated("ip", "rule", "add", "from", subnet, "lookup", table); err != nil {
-		return fmt.Errorf("policy rule (from %s lookup %s): %w", subnet, table, err)
+	// route traffic forwarded in from the LAN interface into that table. Delete
+	// any stale copy first so a restart doesn't stack duplicate rules.
+	_ = osutil.RunElevated("ip", "rule", "del", "iif", lan, "lookup", table) //nolint:errcheck // best-effort cleanup of a stale rule
+	if err := osutil.RunElevated("ip", "rule", "add", "iif", lan, "lookup", table); err != nil {
+		return fmt.Errorf("policy rule (iif %s lookup %s): %w", lan, table, err)
 	}
 	r.policyRouting = true
-	r.log.Infof("policy routing: %s → %s (table %s); router uplink unchanged", subnet, r.tunIfc, table)
+	r.log.Infof("policy routing: iif %s → %s (table %s); router uplink + local services unchanged", lan, r.tunIfc, table)
 	return nil
 }
 
@@ -321,8 +328,7 @@ func (r *Router) teardown() {
 	// Remove the LAN→tun policy route+rule.
 	if r.policyRouting {
 		table := strconv.Itoa(lanPolicyTable)
-		subnet := r.cfg.Subnet.String()
-		if err := osutil.RunElevated("ip", "rule", "del", "from", subnet, "lookup", table); err != nil {
+		if err := osutil.RunElevated("ip", "rule", "del", "iif", r.cfg.LANInterface, "lookup", table); err != nil {
 			r.log.WithError(err).Warn("teardown: remove policy rule")
 		}
 		if err := osutil.RunElevated("ip", "route", "flush", "table", table); err != nil {
