@@ -154,6 +154,9 @@ Full knob list (config-gen flag → env var):
 | `--vpnrouter-band` | `VPNROUTERBAND` | `2.4` or `5` |
 | `--vpnrouter-channel` | `VPNROUTERCHANNEL` | channel (0 = default) |
 | `--vpnrouter-country` | `VPNROUTERCOUNTRY` | regulatory country code |
+| `--vpnrouter-mesh-gateway` | `VPNROUTERMESHGW` | resolve `.dmsg`/`.skynet` for clients (see below) |
+| `--vpnrouter-mesh-gateway-cidr` | `VPNROUTERMESHGWCIDR` | synthetic-IP pool (default `100.64.0.0/16`) |
+| `--vpnrouter-mesh-gateway-tls` | `VPNROUTERMESHTLS` | TLS-MITM HTTPS to mesh names |
 
 The app also accepts `--tun-ifc` (which tunnel to NAT into; default = first
 `tun*`), and `--dhcp-start` / `--dhcp-end` / `--dns` / `--lease` for the DHCP
@@ -222,6 +225,55 @@ curl https://api.ipify.org      # your public IP == the vpn-server's IP
     `skycoin.com` — are **exempted** from the tunnel by design, so an IP check
     against `ip.skycoin.com` shows your *real* IP. Use a neutral service (e.g.
     `api.ipify.org`) to see the VPN exit IP.
+
+---
+
+## Mesh gateway — reach `.dmsg` / `.skynet` by name
+
+The router can also let downstream clients reach mesh services **by name** —
+`curl http://<pk>.dmsg`, or open `http://<pk>.skynet` in a browser — with no
+per-device setup and no SOCKS proxy. Enable it with `VPNROUTERMESHGW=true`
+(`--vpnrouter-mesh-gateway`).
+
+A `.dmsg` / `.skynet` name is not an ordinary hostname: it encodes a **public
+key**, and the destination is a **routing port reachable only over the mesh** —
+often there is no externally-listening TCP port and no IP to route to. So the
+gateway can't just NAT it. It works in two halves:
+
+1. **DNS** — the router's resolver answers `*.dmsg` / `*.skynet` with a leased
+   **synthetic IP** from a private pool (`VPNROUTERMESHGWCIDR`, default
+   `100.64.0.0/16`).
+2. **Transparent proxy** — an `iptables` REDIRECT sends TCP aimed at that pool to
+   a local proxy, which recovers the original destination (the synthetic IP → the
+   PK; the **original port is the mesh routing port**), dials it over the mesh,
+   and splices the streams.
+
+The mesh path **bypasses the VPN tunnel** — mesh services are reached directly
+over the visor's own transports, not through the exit server.
+
+**Names.** By default a client uses the raw key label, e.g.
+`http://<pk-in-dns-label-form>.dmsg`. Friendly aliases are configurable on the
+app (`--mesh-alias name=<pk>`, repeatable) so `http://<name>.dmsg` works.
+
+**HTTPS.** Set `VPNROUTERMESHTLS=true` (`--vpnrouter-mesh-gateway-tls`) to reach
+mesh sites over `https://`. The router terminates TLS with a leaf it mints on the
+fly from a **self-generated CA**, persisted under `<local>/mesh-gateway-ca/`. Its
+path + fingerprint are logged on first start; install that CA as **trusted** on
+the LAN clients that need HTTPS, or browsers will (correctly) warn.
+
+```bash
+# from a downstream client, with the mesh gateway enabled:
+curl http://<pk-label>.dmsg/            # plaintext, works out of the box
+curl --cacert mesh-gateway-ca.pem https://<pk-label>.dmsg/   # after trusting the CA
+```
+
+!!! note "Same capability on a single machine"
+
+    The `vpn-client` carries the same mesh gateway (`--mesh-gateway`, opt-in,
+    Linux only) for a host with no downstream clients: it runs a loopback
+    resolver and intercepts the host's own traffic via the `OUTPUT` chain instead
+    of serving a LAN. It is off by default because hijacking a personal machine's
+    DNS is more intrusive than doing so on a dedicated router.
 
 ---
 
