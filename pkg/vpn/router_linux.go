@@ -37,6 +37,17 @@ type Router struct {
 	masquerading   bool
 	forwardRules   [][]string // iptables argv sets we added to the FORWARD chain
 	policyRouting  bool       // true once the LAN→tun policy route+rule are installed
+	mssClamped     bool       // true once the TCPMSS clamp rule is installed
+}
+
+// mssClampRule is the mangle-table rule that clamps forwarded TCP SYNs' MSS to
+// the path MTU. Shared by setup + teardown ("-A" vs "-D") via mssClampArgs.
+func (r *Router) mssClampArgs(op string) []string {
+	return []string{
+		"-t", "mangle", op, "FORWARD", "-o", r.tunIfc,
+		"-p", "tcp", "-m", "tcp", "--tcp-flags", "SYN,RST", "SYN",
+		"-j", "TCPMSS", "--clamp-mss-to-pmtu",
+	}
 }
 
 // lanPolicyTable is the dedicated routing table the router uses to send
@@ -251,6 +262,18 @@ func (r *Router) setupNAT() error {
 	}
 	r.log.Infof("NAT: %s → %s (masquerade)", r.cfg.LANInterface, r.tunIfc)
 
+	// Clamp forwarded TCP MSS to the path MTU. The mesh tunnel's usable MTU is
+	// below the LAN's 1500, so without this a downstream client's full-size
+	// segments black-hole (PMTU discovery is unreliable across NAT) — TCP
+	// stalls while ping works. Clamping lets clients auto-negotiate a fitting
+	// MSS with no per-client MTU tweaks.
+	if err := osutil.RunElevated("iptables", r.mssClampArgs("-A")...); err != nil {
+		// Non-fatal: forwarding still works; large-segment flows may stall.
+		r.log.WithError(err).Warn("could not install TCPMSS clamp (large downstream TCP flows may stall)")
+	} else {
+		r.mssClamped = true
+	}
+
 	if err := r.setupPolicyRouting(); err != nil {
 		return err
 	}
@@ -289,6 +312,12 @@ func (r *Router) setupPolicyRouting() error {
 
 // teardown reverses setup, best-effort (logs but does not abort on errors).
 func (r *Router) teardown() {
+	// Remove the TCPMSS clamp.
+	if r.mssClamped {
+		if err := osutil.RunElevated("iptables", r.mssClampArgs("-D")...); err != nil {
+			r.log.WithError(err).Warn("teardown: remove TCPMSS clamp")
+		}
+	}
 	// Remove the LAN→tun policy route+rule.
 	if r.policyRouting {
 		table := strconv.Itoa(lanPolicyTable)
