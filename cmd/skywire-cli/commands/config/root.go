@@ -61,6 +61,7 @@ var (
 	vpnRouterOpenWiFi          bool
 	vpnRouterMeshGW            bool
 	vpnRouterMeshGWCIDR        string
+	vpnRouterMeshTLS           bool
 	isDisableAuth              bool
 	isEnableAuth               bool
 	isEnablePKEndpoint         bool
@@ -249,6 +250,9 @@ func vpnRouterArgs(prefix []string) []string {
 		args = append(args, "--mesh-gateway")
 		if vpnRouterMeshGWCIDR != "" {
 			args = append(args, "--mesh-gateway-cidr", vpnRouterMeshGWCIDR)
+		}
+		if vpnRouterMeshTLS {
+			args = append(args, "--mesh-gateway-tls")
 		}
 	}
 	return args

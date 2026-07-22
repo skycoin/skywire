@@ -30,6 +30,7 @@ package meshgw
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -40,6 +41,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
@@ -61,10 +63,33 @@ type Gateway struct {
 	aliases map[string]cipher.PubKey // optional friendly-name → PK
 	log     logrus.FieldLogger
 
+	// TLS-MITM (optional): when minter is non-nil, connections whose original
+	// destination port is tlsPort are TLS-terminated here — the gateway presents
+	// a leaf minted for the client's SNI and bridges plaintext to the plain-HTTP
+	// mesh upstream. LAN clients must trust minter's CA. See EnableTLSMITM.
+	minter  skynetca.LeafMinter
+	tlsPort uint16
+
 	mu    sync.Mutex
 	pool  *ipPool
 	byIP  map[[4]byte]target // synthetic IP → mesh target
 	byKey map[string][4]byte // "<scheme>|<pk>" → synthetic IP (stable reuse)
+}
+
+// EnableTLSMITM turns on TLS termination for connections whose original
+// destination port is tlsPort (default 443 when 0). The gateway answers the
+// client's TLS handshake with a leaf minted by minter for the requested SNI
+// (falling back to `<pk-label>.<scheme>` when no SNI is sent), and splices
+// plaintext to the plain-HTTP mesh upstream — the dmsg/skynet counterpart of
+// dmsgweb's browser MITM. LAN clients must trust minter's CA, whose name
+// constraints must permit `.dmsg`/`.skynet` (skynetca.DefaultPermittedDomains
+// does). Call before ServeTransparent.
+func (g *Gateway) EnableTLSMITM(minter skynetca.LeafMinter, tlsPort uint16) {
+	if tlsPort == 0 {
+		tlsPort = 443
+	}
+	g.minter = minter
+	g.tlsPort = tlsPort
 }
 
 // New builds a Gateway that leases synthetic IPs from cidr (e.g.
@@ -185,7 +210,39 @@ func (g *Gateway) handleConn(ctx context.Context, conn net.Conn) {
 		return
 	}
 	defer mesh.Close() //nolint:errcheck // best-effort
+
+	// HTTPS: terminate the client's TLS with a minted leaf and bridge plaintext
+	// to the plain-HTTP mesh upstream (same model as dmsgweb's browser MITM).
+	if g.minter != nil && origPort == g.tlsPort {
+		g.spliceTLS(conn, mesh, t)
+		return
+	}
 	splice(conn, mesh)
+}
+
+// spliceTLS TLS-terminates the LAN client's connection — minting a leaf for the
+// client's SNI (or `<pk-label>.<scheme>` when none is offered) — and splices the
+// decrypted stream to the plain-HTTP mesh upstream.
+func (g *Gateway) spliceTLS(client, mesh net.Conn, t target) {
+	fallback := t.dest.DNSLabel() + "." + t.scheme
+	cfg := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+			name := strings.ToLower(hello.ServerName)
+			if name == "" {
+				name = fallback
+			}
+			crt, err := g.minter.For(name)
+			// An SNI the CA won't sign (e.g. an alias outside its name
+			// constraints) falls back to the destination's own PK label.
+			if err != nil && name != fallback {
+				crt, err = g.minter.For(fallback)
+			}
+			return crt, err
+		},
+	}
+	// tls.Server is lazy; the handshake runs on the first splice IO.
+	splice(tls.Server(client, cfg), mesh)
 }
 
 // splice copies bytes both ways until either side closes.

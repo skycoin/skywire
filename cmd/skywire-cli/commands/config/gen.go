@@ -287,6 +287,7 @@ func init() {
 	genConfigCmd.Flags().BoolVar(&vpnRouterOpenWiFi, "vpnrouter-open", scriptExecBool("${VPNROUTEROPEN:-false}"), "vpn router WiFi: allow an open (passphrase-less) network")
 	genConfigCmd.Flags().BoolVar(&vpnRouterMeshGW, "vpnrouter-mesh-gateway", scriptExecBool("${VPNROUTERMESHGW:-false}"), "vpn router: also act as a mesh gateway (resolve *.dmsg / *.skynet for clients)")
 	genConfigCmd.Flags().StringVar(&vpnRouterMeshGWCIDR, "vpnrouter-mesh-gateway-cidr", scriptExecString("${VPNROUTERMESHGWCIDR}"), "vpn router mesh-gateway synthetic-IP pool (default 100.64.0.0/16)")
+	genConfigCmd.Flags().BoolVar(&vpnRouterMeshTLS, "vpnrouter-mesh-gateway-tls", scriptExecBool("${VPNROUTERMESHTLS:-false}"), "vpn router mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet (clients must trust the generated CA)")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 
 	// VPN flags

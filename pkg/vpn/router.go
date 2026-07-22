@@ -6,6 +6,8 @@ import (
 	"net"
 	"strings"
 
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
@@ -79,6 +81,17 @@ type RouterConfig struct {
 	// MeshGatewayCIDR is the private range the mesh gateway leases synthetic IPs
 	// from. Empty defaults to defaultMeshGatewayCIDR. Ignored when MeshDial nil.
 	MeshGatewayCIDR string
+
+	// MeshAliases maps friendly names to destination PKs, so a client can reach
+	// `http://<alias>.dmsg` instead of the raw `<pk-label>.dmsg`. May be nil.
+	// Ignored when MeshDial nil.
+	MeshAliases map[string]cipher.PubKey
+
+	// MeshTLSMinter, when non-nil (and MeshDial set), enables TLS-MITM for the
+	// mesh gateway: HTTPS to *.dmsg / *.skynet is terminated with a leaf minted
+	// here and bridged to the plain-HTTP mesh upstream, so browsers get a secure
+	// context. LAN clients must trust the minter's CA. Ignored when MeshDial nil.
+	MeshTLSMinter skynetca.LeafMinter
 }
 
 // defaultMeshGatewayCIDR is the synthetic-IP pool for the mesh gateway — a slice

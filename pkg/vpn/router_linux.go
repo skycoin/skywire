@@ -346,9 +346,13 @@ func (r *Router) setupPolicyRouting() error {
 // iif), staying on the main table. Mesh services are reached over the visor's
 // transports directly, not through the exit server.
 func (r *Router) setupMeshGateway(ctx context.Context) error {
-	gw, err := meshgw.New(r.cfg.MeshDial, r.cfg.MeshGatewayCIDR, nil, r.log)
+	gw, err := meshgw.New(r.cfg.MeshDial, r.cfg.MeshGatewayCIDR, r.cfg.MeshAliases, r.log)
 	if err != nil {
 		return fmt.Errorf("mesh gateway: %w", err)
+	}
+	if r.cfg.MeshTLSMinter != nil {
+		gw.EnableTLSMITM(r.cfg.MeshTLSMinter, 443)
+		r.log.Info("mesh gateway: TLS-MITM on (HTTPS to *.dmsg/*.skynet; clients must trust the CA)")
 	}
 	r.meshGW = gw
 

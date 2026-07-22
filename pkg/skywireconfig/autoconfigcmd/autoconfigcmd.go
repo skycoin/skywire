@@ -155,6 +155,7 @@ type Values struct {
 	VpnRouterOpenWiFi   bool   // VPNROUTEROPEN
 	VpnRouterMeshGW     bool   // VPNROUTERMESHGW
 	VpnRouterMeshGWCIDR string // VPNROUTERMESHGWCIDR
+	VpnRouterMeshTLS    bool   // VPNROUTERMESHTLS
 	VpnKillSw           string // VPNKS
 	AddVpn              string // ADDVPNPK
 	VpnWl               string // VPNSERVERWL (comma-separated)
@@ -303,6 +304,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.VpnRouterOpenWiFi, "vpnrouter-open", false, "vpn-router WiFi open network (no passphrase) — writes VPNROUTEROPEN=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.VpnRouterMeshGW, "vpnrouter-mesh-gateway", false, "vpn-router mesh gateway (resolve *.dmsg / *.skynet for clients) — writes VPNROUTERMESHGW=true in skywire.conf")
 	cmd.Flags().StringVar(&v.VpnRouterMeshGWCIDR, "vpnrouter-mesh-gateway-cidr", "", "vpn-router mesh-gateway synthetic-IP pool — writes VPNROUTERMESHGWCIDR in skywire.conf")
+	cmd.Flags().BoolVar(&v.VpnRouterMeshTLS, "vpnrouter-mesh-gateway-tls", false, "vpn-router mesh gateway TLS-MITM for HTTPS to *.dmsg/*.skynet — writes VPNROUTERMESHTLS=true in skywire.conf")
 	cmd.Flags().StringVar(&v.VpnKillSw, "killsw", "", "vpn client killswitch — writes VPNKS in skywire.conf")
 	cmd.Flags().StringVar(&v.AddVpn, "addvpn", "", "vpn server public key for vpn client — writes ADDVPNPK in skywire.conf")
 	cmd.Flags().StringVar(&v.VpnWl, "vpnwl", "", "vpn server whitelist PKs, comma-separated (empty = allow all) — writes VPNSERVERWL in skywire.conf")
@@ -444,6 +446,7 @@ var envMap = map[string]EnvMapping{
 	"vpnrouter-open":              {Key: "VPNROUTEROPEN", Format: EnvFormatBool},
 	"vpnrouter-mesh-gateway":      {Key: "VPNROUTERMESHGW", Format: EnvFormatBool},
 	"vpnrouter-mesh-gateway-cidr": {Key: "VPNROUTERMESHGWCIDR", Format: EnvFormatString},
+	"vpnrouter-mesh-gateway-tls":  {Key: "VPNROUTERMESHTLS", Format: EnvFormatBool},
 	"killsw":                      {Key: "VPNKS", Format: EnvFormatString},
 	"addvpn":                      {Key: "ADDVPNPK", Format: EnvFormatString},
 	"vpnwl":                       {Key: "VPNSERVERWL", Format: EnvFormatBashArray},

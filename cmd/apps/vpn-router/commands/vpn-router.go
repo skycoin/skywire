@@ -8,6 +8,8 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -24,6 +26,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/skynetca"
 	"github.com/skycoin/skywire/pkg/vpn"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
@@ -45,8 +48,16 @@ var (
 	openWiFi    bool
 	meshGateway bool
 	meshGWCIDR  string
+	meshTLS     bool
+	meshCACert  string
+	meshCAKey   string
+	meshAliases []string
 	appPort     uint16
 )
+
+// defaultMeshCADir is where the mesh gateway persists its self-generated CA so
+// LAN clients only need to trust it once (survives restarts).
+var defaultMeshCADir = filepath.Join(skyenv.PackageConfig().LocalPath, "mesh-gateway-ca")
 
 // registerFlags declares the router flags on a pflag.FlagSet. Both the cobra
 // RootCmd and the internal-launcher parse path use it, so a flag is never
@@ -68,6 +79,10 @@ func registerFlags(fs *pflag.FlagSet) {
 	fs.BoolVar(&openWiFi, "open", false, "allow an open (passphrase-less) WiFi network")
 	fs.BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway: resolve *.dmsg / *.skynet for downstream clients and proxy them over the mesh (visor-launched only)")
 	fs.StringVar(&meshGWCIDR, "mesh-gateway-cidr", "", "synthetic-IP pool the mesh gateway leases from (empty = 100.64.0.0/16)")
+	fs.BoolVar(&meshTLS, "mesh-gateway-tls", false, "mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet with a self-generated CA (LAN clients must trust it)")
+	fs.StringVar(&meshCACert, "mesh-gateway-ca", "", "mesh-gateway CA cert path (empty = <local>/mesh-gateway-ca/ca.pem; generated if absent)")
+	fs.StringVar(&meshCAKey, "mesh-gateway-ca-key", "", "mesh-gateway CA key path (empty = <local>/mesh-gateway-ca/ca.key)")
+	fs.StringArrayVar(&meshAliases, "mesh-alias", nil, "mesh-gateway friendly name → PK, as name=<pk> (repeatable); reach http://<name>.dmsg")
 	fs.Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
@@ -244,8 +259,68 @@ func buildRouterConfig(dialer meshgw.MeshDial) (vpn.RouterConfig, error) {
 		}
 		cfg.MeshDial = dialer
 		cfg.MeshGatewayCIDR = meshGWCIDR
+		if len(meshAliases) > 0 {
+			aliases, err := parseMeshAliases(meshAliases)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.MeshAliases = aliases
+		}
+		if meshTLS {
+			minter, err := loadOrCreateMeshCA(meshCACert, meshCAKey)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.MeshTLSMinter = minter
+		}
 	}
 	return cfg, nil
+}
+
+// parseMeshAliases turns repeated `name=<pk>` flags into a friendly-name → PK map.
+func parseMeshAliases(in []string) (map[string]cipher.PubKey, error) {
+	m := make(map[string]cipher.PubKey, len(in))
+	for _, kv := range in {
+		name, pkStr, ok := strings.Cut(kv, "=")
+		if !ok || name == "" || pkStr == "" {
+			return nil, fmt.Errorf("invalid --mesh-alias %q (want name=<pk>)", kv)
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(pkStr); err != nil {
+			return nil, fmt.Errorf("invalid pk in --mesh-alias %q: %w", kv, err)
+		}
+		m[strings.ToLower(name)] = pk
+	}
+	return m, nil
+}
+
+// loadOrCreateMeshCA loads the mesh-gateway CA from certPath/keyPath, generating
+// and persisting a fresh one (permitting .dmsg/.skynet) if absent. Empty paths
+// default under defaultMeshCADir. It prints the cert path + fingerprint so the
+// operator can install it as trusted on LAN clients.
+func loadOrCreateMeshCA(certPath, keyPath string) (skynetca.LeafMinter, error) {
+	if certPath == "" {
+		certPath = filepath.Join(defaultMeshCADir, "ca.pem")
+	}
+	if keyPath == "" {
+		keyPath = filepath.Join(defaultMeshCADir, "ca.key")
+	}
+	ca, key, err := skynetca.LoadCA(certPath, keyPath)
+	if err != nil {
+		ca, key, err = skynetca.GenerateCA(skynetca.CAOptions{CommonName: "Skywire VPN-Router Mesh Gateway CA"})
+		if err != nil {
+			return nil, fmt.Errorf("generate mesh gateway CA: %w", err)
+		}
+		if mkErr := os.MkdirAll(filepath.Dir(certPath), 0o750); mkErr != nil {
+			return nil, fmt.Errorf("mesh gateway CA dir: %w", mkErr)
+		}
+		if saveErr := skynetca.SaveCA(ca, key, certPath, keyPath); saveErr != nil {
+			return nil, fmt.Errorf("save mesh gateway CA: %w", saveErr)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "mesh gateway TLS CA: %s (fingerprint %s) — install as trusted on LAN clients for HTTPS to *.dmsg/*.skynet\n",
+		certPath, skynetca.Fingerprint(ca))
+	return skynetca.NewMinter(ca, key, skynetca.LeafOptions{}), nil
 }
 
 func setAppErr(appCl *app.Client, logg logrus.FieldLogger, err error) {

@@ -2,11 +2,20 @@
 package meshgw
 
 import (
+	"bufio"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skynetca"
 )
 
 func nilDial(context.Context, string, cipher.PubKey, uint16) (net.Conn, error) { return nil, nil }
@@ -77,5 +86,71 @@ func TestResolveRejectsGarbage(t *testing.T) {
 	}
 	if _, err := g.resolve("dmsg", "not-a-pk.dmsg"); err == nil {
 		t.Fatal("expected error for a non-PK, non-alias name")
+	}
+}
+
+// TestTLSMITMEndToEnd proves the HTTPS path: a client speaking TLS to
+// <pk>.dmsg gets a leaf minted by the gateway's CA, and the decrypted request
+// is bridged to a plain-HTTP mesh upstream — the reply comes back over TLS.
+func TestTLSMITMEndToEnd(t *testing.T) {
+	// Plain-HTTP "mesh service" (stands in for a dmsg-reachable HTTP server).
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "hello-mesh") //nolint:errcheck // test handler
+	}))
+	defer up.Close()
+
+	ca, caKey, err := skynetca.GenerateCA(skynetca.CAOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	g, err := New(nilDial, "100.64.0.0/16", nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.EnableTLSMITM(skynetca.NewMinter(ca, caKey, skynetca.LeafOptions{}), 443)
+
+	pk, _ := cipher.GenerateKeyPair()
+
+	// Upstream leg: a plain TCP conn to the HTTP server (the "mesh dial" result).
+	meshConn, err := net.Dial("tcp", strings.TrimPrefix(up.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Client leg: an in-memory pipe; the gateway TLS-terminates its end.
+	clientConn, gwConn := net.Pipe()
+	go g.spliceTLS(gwConn, meshConn, target{scheme: "dmsg", dest: pk})
+
+	pool := x509.NewCertPool()
+	pool.AddCert(ca)
+	host := pk.DNSLabel() + ".dmsg"
+	tlsClient := tls.Client(clientConn, &tls.Config{RootCAs: pool, ServerName: host})
+	if err := tlsClient.SetDeadline(time.Now().Add(10 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	req, err := http.NewRequest(http.MethodGet, "https://"+host+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := req.Write(tlsClient); err != nil {
+		t.Fatalf("write request: %v", err)
+	}
+	resp, err := http.ReadResponse(bufio.NewReader(tlsClient), req)
+	if err != nil {
+		t.Fatalf("read response: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck // test cleanup
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "hello-mesh" {
+		t.Fatalf("body = %q; want hello-mesh", body)
+	}
+	// The leaf the client validated must chain to our CA for the requested host.
+	peers := tlsClient.ConnectionState().PeerCertificates
+	if len(peers) == 0 || len(peers[0].DNSNames) == 0 || peers[0].DNSNames[0] != host {
+		t.Fatalf("leaf SAN = %v; want %s", peers, host)
 	}
 }
