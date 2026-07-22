@@ -144,8 +144,33 @@ const envfileLinux = `#
 #	downstream interface). Requires root + the vpn-client running.
 #VPNROUTER=false
 
-#--	Downstream LAN/WiFi interface the vpn-router serves (e.g. eth1 or wlan0)
+#--	Downstream interface the vpn-router serves. Ethernet-out: a second/USB
+#	NIC (e.g. eth1). WiFi-out: the wireless interface (e.g. wlan0) — also set
+#	VPNROUTERWIFI=true. The visor's own uplink (that reaches the vpn-server
+#	over the mesh) must be a DIFFERENT interface.
 #VPNROUTERLANIFC='eth1'
+
+#--	vpn-router gateway + downstream subnet, as <gateway-ip>/<prefix>
+#	(default 192.168.42.1/24)
+#VPNROUTERSUBNET='192.168.42.1/24'
+
+#--	WiFi-out: run hostapd (an access point) on VPNROUTERLANIFC so wireless
+#	clients associate and are routed through the VPN. Leave false for the
+#	ethernet-out variant. (rtl8723bs on the original skyminer boards can be
+#	unstable in AP mode — a USB WiFi dongle is the robust option.)
+#VPNROUTERWIFI=false
+
+#--	WiFi SSID / WPA2 passphrase (8–63 chars) for the WiFi-out variant.
+#	Set VPNROUTEROPEN=true for a passphrase-less open network instead.
+#VPNROUTERSSID='skywire-vpn'
+#VPNROUTERPASSPHRASE=''
+#VPNROUTEROPEN=false
+
+#--	WiFi band ('2.4' or '5'), channel (0 = default for the band), and
+#	regulatory country code for the WiFi-out variant.
+#VPNROUTERBAND='2.4'
+#VPNROUTERCHANNEL=0
+#VPNROUTERCOUNTRY='US'
 
 #--	Set server public key for proxy client to connect to
 #PROXYCLIENTPK=''
