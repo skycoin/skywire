@@ -141,15 +141,23 @@ type Values struct {
 	CalculateRoutes bool // CALCULATEROUTES
 
 	// --- VPN server feature ---
-	VpnServer       bool
-	NoVpnServer     bool
-	VpnRouter       bool   // VPNROUTER
-	VpnRouterLanIfc string // VPNROUTERLANIFC
-	VpnKillSw       string // VPNKS
-	AddVpn          string // ADDVPNPK
-	VpnWl           string // VPNSERVERWL (comma-separated)
-	VpnSecure       string // VPNSEVERSECURE (sic — typo retained for compat with config gen's env-var name)
-	VpnNetIfc       string // VPNSEVERNETIFC (sic — same)
+	VpnServer           bool
+	NoVpnServer         bool
+	VpnRouter           bool   // VPNROUTER
+	VpnRouterLanIfc     string // VPNROUTERLANIFC
+	VpnRouterSubnet     string // VPNROUTERSUBNET
+	VpnRouterWifi       bool   // VPNROUTERWIFI
+	VpnRouterSSID       string // VPNROUTERSSID
+	VpnRouterPassphrase string // VPNROUTERPASSPHRASE
+	VpnRouterBand       string // VPNROUTERBAND
+	VpnRouterChannel    int    // VPNROUTERCHANNEL
+	VpnRouterCountry    string // VPNROUTERCOUNTRY
+	VpnRouterOpenWiFi   bool   // VPNROUTEROPEN
+	VpnKillSw           string // VPNKS
+	AddVpn              string // ADDVPNPK
+	VpnWl               string // VPNSERVERWL (comma-separated)
+	VpnSecure           string // VPNSEVERSECURE (sic — typo retained for compat with config gen's env-var name)
+	VpnNetIfc           string // VPNSEVERNETIFC (sic — same)
 
 	// --- Proxy feature ---
 	ProxyServer   bool
@@ -283,6 +291,14 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.NoVpnServer, "no-vpnserver", false, "do not autostart vpn-server — writes VPNSERVER=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.VpnRouter, "vpnrouter", false, "autostart the vpn-router LAN/WiFi gateway — writes VPNROUTER=true in skywire.conf")
 	cmd.Flags().StringVar(&v.VpnRouterLanIfc, "vpnrouter-lan-ifc", "", "downstream LAN/WiFi interface the vpn-router serves — writes VPNROUTERLANIFC in skywire.conf")
+	cmd.Flags().StringVar(&v.VpnRouterSubnet, "vpnrouter-subnet", "", "vpn-router gateway+subnet <gateway-ip>/<prefix> — writes VPNROUTERSUBNET in skywire.conf")
+	cmd.Flags().BoolVar(&v.VpnRouterWifi, "vpnrouter-wifi", false, "vpn-router WiFi-out (run hostapd on the downstream interface) — writes VPNROUTERWIFI=true in skywire.conf")
+	cmd.Flags().StringVar(&v.VpnRouterSSID, "vpnrouter-ssid", "", "vpn-router WiFi SSID — writes VPNROUTERSSID in skywire.conf")
+	cmd.Flags().StringVar(&v.VpnRouterPassphrase, "vpnrouter-passphrase", "", "vpn-router WiFi WPA2 passphrase — writes VPNROUTERPASSPHRASE in skywire.conf")
+	cmd.Flags().StringVar(&v.VpnRouterBand, "vpnrouter-band", "", "vpn-router WiFi band 2.4 or 5 — writes VPNROUTERBAND in skywire.conf")
+	cmd.Flags().IntVar(&v.VpnRouterChannel, "vpnrouter-channel", 0, "vpn-router WiFi channel (0 = default for the band) — writes VPNROUTERCHANNEL in skywire.conf")
+	cmd.Flags().StringVar(&v.VpnRouterCountry, "vpnrouter-country", "", "vpn-router WiFi country code — writes VPNROUTERCOUNTRY in skywire.conf")
+	cmd.Flags().BoolVar(&v.VpnRouterOpenWiFi, "vpnrouter-open", false, "vpn-router WiFi open network (no passphrase) — writes VPNROUTEROPEN=true in skywire.conf")
 	cmd.Flags().StringVar(&v.VpnKillSw, "killsw", "", "vpn client killswitch — writes VPNKS in skywire.conf")
 	cmd.Flags().StringVar(&v.AddVpn, "addvpn", "", "vpn server public key for vpn client — writes ADDVPNPK in skywire.conf")
 	cmd.Flags().StringVar(&v.VpnWl, "vpnwl", "", "vpn server whitelist PKs, comma-separated (empty = allow all) — writes VPNSERVERWL in skywire.conf")
@@ -410,15 +426,23 @@ var envMap = map[string]EnvMapping{
 	"calculate-routes": {Key: "CALCULATEROUTES", Format: EnvFormatBool},
 
 	// VPN server
-	"vpnserver":         {Key: "VPNSERVER", Format: EnvFormatBool},
-	"no-vpnserver":      {Key: "VPNSERVER", Format: EnvFormatBool, Negate: true},
-	"vpnrouter":         {Key: "VPNROUTER", Format: EnvFormatBool},
-	"vpnrouter-lan-ifc": {Key: "VPNROUTERLANIFC", Format: EnvFormatString},
-	"killsw":            {Key: "VPNKS", Format: EnvFormatString},
-	"addvpn":            {Key: "ADDVPNPK", Format: EnvFormatString},
-	"vpnwl":             {Key: "VPNSERVERWL", Format: EnvFormatBashArray},
-	"secure":            {Key: "VPNSEVERSECURE", Format: EnvFormatString},
-	"netifc":            {Key: "VPNSEVERNETIFC", Format: EnvFormatString},
+	"vpnserver":            {Key: "VPNSERVER", Format: EnvFormatBool},
+	"no-vpnserver":         {Key: "VPNSERVER", Format: EnvFormatBool, Negate: true},
+	"vpnrouter":            {Key: "VPNROUTER", Format: EnvFormatBool},
+	"vpnrouter-lan-ifc":    {Key: "VPNROUTERLANIFC", Format: EnvFormatString},
+	"vpnrouter-subnet":     {Key: "VPNROUTERSUBNET", Format: EnvFormatString},
+	"vpnrouter-wifi":       {Key: "VPNROUTERWIFI", Format: EnvFormatBool},
+	"vpnrouter-ssid":       {Key: "VPNROUTERSSID", Format: EnvFormatString},
+	"vpnrouter-passphrase": {Key: "VPNROUTERPASSPHRASE", Format: EnvFormatString},
+	"vpnrouter-band":       {Key: "VPNROUTERBAND", Format: EnvFormatString},
+	"vpnrouter-channel":    {Key: "VPNROUTERCHANNEL", Format: EnvFormatInt},
+	"vpnrouter-country":    {Key: "VPNROUTERCOUNTRY", Format: EnvFormatString},
+	"vpnrouter-open":       {Key: "VPNROUTEROPEN", Format: EnvFormatBool},
+	"killsw":               {Key: "VPNKS", Format: EnvFormatString},
+	"addvpn":               {Key: "ADDVPNPK", Format: EnvFormatString},
+	"vpnwl":                {Key: "VPNSERVERWL", Format: EnvFormatBashArray},
+	"secure":               {Key: "VPNSEVERSECURE", Format: EnvFormatString},
+	"netifc":               {Key: "VPNSEVERNETIFC", Format: EnvFormatString},
 
 	// Proxy
 	"proxyserver":      {Key: "PROXYSERVER", Format: EnvFormatBool},
