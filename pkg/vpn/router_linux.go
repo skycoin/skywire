@@ -19,6 +19,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
 	"github.com/skycoin/skywire/pkg/vpnrouter"
+	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
 // Router orchestrates the downstream interface, the DHCP/DNS + optional WiFi AP
@@ -31,6 +32,11 @@ type Router struct {
 	confDir string
 	daemons []*exec.Cmd
 	tunIfc  string
+
+	// mesh gateway (optional; nil cfg.MeshDial = off).
+	meshGW       *meshgw.Gateway
+	meshProxy    net.Listener
+	meshRedirect []string // the nat/PREROUTING REDIRECT argv we added (nil = none)
 
 	// state captured for restoration on teardown.
 	prevForwarding string
@@ -117,17 +123,27 @@ func (r *Router) setup(ctx context.Context) error {
 		}
 	}
 
-	// 3. DHCP + DNS for the downstream subnet — an embedded, pure-Go engine
+	// 3. Mesh gateway (optional): build it before StartLAN so its `.dmsg` /
+	// `.skynet` DNS handlers are registered on the LAN resolver's mux, and start
+	// its transparent proxy + REDIRECT so resolved synthetic IPs actually dial.
+	if r.cfg.MeshDial != nil {
+		if err := r.setupMeshGateway(ctx); err != nil {
+			return err
+		}
+	}
+
+	// 4. DHCP + DNS for the downstream subnet — an embedded, pure-Go engine
 	// (vendored router7 dhcp4d + dns), replacing the external dnsmasq the app
 	// used to shell out to. StartLAN blocks until ctx is canceled, so run it
-	// in the background; a startup error surfaces via the log.
+	// in the background; a startup error surfaces via the log. r.meshGW (nil when
+	// the mesh gateway is off) layers the mesh-name zones onto the resolver.
 	go func() {
-		if err := vpnrouter.StartLAN(ctx, r.cfg.LANInterface, r.confDir); err != nil && ctx.Err() == nil {
+		if err := vpnrouter.StartLAN(ctx, r.cfg.LANInterface, r.confDir, r.meshGW); err != nil && ctx.Err() == nil {
 			r.log.WithError(err).Error("embedded DHCP/DNS server exited")
 		}
 	}()
 
-	// 4. Wait for the vpn-client tunnel, then forward + NAT into it.
+	// 5. Wait for the vpn-client tunnel, then forward + NAT into it.
 	tun, err := r.awaitTUN(ctx)
 	if err != nil {
 		return err
@@ -317,8 +333,66 @@ func (r *Router) setupPolicyRouting() error {
 	return nil
 }
 
+// setupMeshGateway turns the router into a full mesh gateway: it builds the
+// meshgw.Gateway (DNS zones + synthetic-IP pool), starts its transparent proxy
+// bound to the downstream gateway address on an ephemeral port, and installs a
+// nat/PREROUTING REDIRECT so downstream TCP aimed at the synthetic pool lands on
+// that proxy — which reads the original destination, maps the synthetic IP back
+// to a (scheme, pubkey), and dials it over the mesh via cfg.MeshDial.
+//
+// Note the mesh path deliberately bypasses the VPN tunnel: the REDIRECT fires in
+// PREROUTING before any routing decision, so pool traffic never reaches the
+// LAN→tun policy route; and the proxy's own mesh dials originate locally (no
+// iif), staying on the main table. Mesh services are reached over the visor's
+// transports directly, not through the exit server.
+func (r *Router) setupMeshGateway(ctx context.Context) error {
+	gw, err := meshgw.New(r.cfg.MeshDial, r.cfg.MeshGatewayCIDR, nil, r.log)
+	if err != nil {
+		return fmt.Errorf("mesh gateway: %w", err)
+	}
+	r.meshGW = gw
+
+	// Transparent proxy on the gateway address, ephemeral port (no fixed-port
+	// collision; the REDIRECT rule below is pinned to whatever we get).
+	lis, err := net.Listen("tcp", net.JoinHostPort(r.cfg.Gateway.String(), "0"))
+	if err != nil {
+		return fmt.Errorf("mesh gateway proxy listen: %w", err)
+	}
+	r.meshProxy = lis
+	port := lis.Addr().(*net.TCPAddr).Port
+	go func() {
+		if err := gw.ServeTransparent(ctx, lis); err != nil && ctx.Err() == nil {
+			r.log.WithError(err).Error("mesh gateway transparent proxy exited")
+		}
+	}()
+
+	rule := []string{
+		"-t", "nat", "-A", "PREROUTING",
+		"-i", r.cfg.LANInterface,
+		"-d", gw.PoolCIDR().String(),
+		"-p", "tcp",
+		"-j", "REDIRECT", "--to-ports", strconv.Itoa(port),
+	}
+	if err := osutil.RunElevated("iptables", rule...); err != nil {
+		return fmt.Errorf("mesh gateway REDIRECT: %w", err)
+	}
+	r.meshRedirect = rule
+	r.log.Infof("mesh gateway: *.dmsg / *.skynet → synthetic %s → proxy :%d (dials over mesh)", gw.PoolCIDR().String(), port)
+	return nil
+}
+
 // teardown reverses setup, best-effort (logs but does not abort on errors).
 func (r *Router) teardown() {
+	// Remove the mesh-gateway REDIRECT and stop its proxy.
+	if r.meshRedirect != nil {
+		del := append([]string{"-t", "nat", "-D"}, r.meshRedirect[3:]...)
+		if err := osutil.RunElevated("iptables", del...); err != nil {
+			r.log.WithError(err).Warn("teardown: remove mesh gateway REDIRECT")
+		}
+	}
+	if r.meshProxy != nil {
+		_ = r.meshProxy.Close() //nolint:errcheck // best-effort close on shutdown
+	}
 	// Remove the TCPMSS clamp.
 	if r.mssClamped {
 		if err := osutil.RunElevated("iptables", r.mssClampArgs("-D")...); err != nil {

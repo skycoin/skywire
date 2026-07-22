@@ -172,6 +172,14 @@ const envfileLinux = `#
 #VPNROUTERCHANNEL=0
 #VPNROUTERCOUNTRY='US'
 
+#--	Mesh gateway: additionally let downstream clients reach mesh services by
+#	name — resolve *.dmsg / *.skynet to a synthetic IP and transparently proxy
+#	the connection over the mesh (no SOCKS, no per-device setup). The dest port
+#	is the mesh routing port. VPNROUTERMESHGWCIDR is the synthetic-IP pool
+#	(default 100.64.0.0/16; change only if it collides with your LAN).
+#VPNROUTERMESHGW=false
+#VPNROUTERMESHGWCIDR='100.64.0.0/16'
+
 #--	Set server public key for proxy client to connect to
 #PROXYCLIENTPK=''
 

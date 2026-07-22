@@ -285,6 +285,8 @@ func init() {
 	genConfigCmd.Flags().IntVar(&vpnRouterChannel, "vpnrouter-channel", scriptExecInt("${VPNROUTERCHANNEL:-0}"), "vpn router WiFi channel (0 = default for the band)")
 	genConfigCmd.Flags().StringVar(&vpnRouterCountry, "vpnrouter-country", scriptExecString("${VPNROUTERCOUNTRY}"), "vpn router WiFi regulatory country code (default US)")
 	genConfigCmd.Flags().BoolVar(&vpnRouterOpenWiFi, "vpnrouter-open", scriptExecBool("${VPNROUTEROPEN:-false}"), "vpn router WiFi: allow an open (passphrase-less) network")
+	genConfigCmd.Flags().BoolVar(&vpnRouterMeshGW, "vpnrouter-mesh-gateway", scriptExecBool("${VPNROUTERMESHGW:-false}"), "vpn router: also act as a mesh gateway (resolve *.dmsg / *.skynet for clients)")
+	genConfigCmd.Flags().StringVar(&vpnRouterMeshGWCIDR, "vpnrouter-mesh-gateway-cidr", scriptExecString("${VPNROUTERMESHGWCIDR}"), "vpn router mesh-gateway synthetic-IP pool (default 100.64.0.0/16)")
 	gHiddenFlags = append(gHiddenFlags, "servevpn")
 
 	// VPN flags
