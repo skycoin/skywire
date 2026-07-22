@@ -73,7 +73,7 @@ func TestBuildDmsgptyDialer_SkywireFirstDmsgFallback(t *testing.T) {
 	// fallback. Swapping the order would silently regress to
 	// dmsg-only behavior for every call where skywire would
 	// succeed.
-	chain, ok := buildDmsgptyDialer(nil).(pty.MultiDialer)
+	chain, ok := buildDmsgptyDialer(nil, nil).(pty.MultiDialer)
 	if !ok {
 		t.Fatalf("buildDmsgptyDialer: got %T, want pty.MultiDialer", chain)
 	}
