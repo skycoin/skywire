@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 	"time"
 
@@ -1239,14 +1240,32 @@ func (tm *Manager) TransportRemoteAddrs() []string {
 		// tp.transport directly: close() can nil it between the nil-check and
 		// the deref — a data race and a nil-deref crash.
 		netTp := tp.getTransport()
-		if netTp != nil {
-			if remoteRaw := netTp.RemoteRawAddr().String(); remoteRaw != "" {
-				addrs = append(addrs, remoteRaw)
-			}
+		if netTp == nil {
+			continue
+		}
+		remoteRaw := netTp.RemoteRawAddr().String()
+		// Only emit addresses whose host is a routable IP. The vpn-client
+		// resolves each of these (vpn.ParseIP → net.LookupIP for non-IPs), so a
+		// non-IP raw address — e.g. webrtc's "webrtc-datachannel(<pk>)" — makes
+		// the client's whole startup fail "no such host". Those transports have
+		// no IP the tunnel could route anyway, so skipping them is correct as
+		// well as safe.
+		if remoteRaw != "" && hostIsIP(remoteRaw) {
+			addrs = append(addrs, remoteRaw)
 		}
 	}
 
 	return addrs
+}
+
+// hostIsIP reports whether raw's host component is a literal IP (accepting an
+// optional :port), i.e. something vpn.ParseIP can resolve without a DNS lookup.
+func hostIsIP(raw string) bool {
+	host := raw
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return net.ParseIP(host) != nil
 }
 
 // DeleteTransport deregisters the Transport of Transport ID in transport discovery and deletes it locally.
