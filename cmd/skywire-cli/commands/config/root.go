@@ -2,6 +2,8 @@
 package cliconfig
 
 import (
+	"strconv"
+
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/deployment"
@@ -49,6 +51,14 @@ var (
 	isVpnServerEnable          bool
 	isVpnRouterEnable          bool
 	vpnRouterLanIfc            string
+	vpnRouterSubnet            string
+	vpnRouterWifi              bool
+	vpnRouterSSID              string
+	vpnRouterPassphrase        string
+	vpnRouterBand              string
+	vpnRouterChannel           int
+	vpnRouterCountry           string
+	vpnRouterOpenWiFi          bool
 	isDisableAuth              bool
 	isEnableAuth               bool
 	isEnablePKEndpoint         bool
@@ -197,3 +207,41 @@ func scriptExecBool(s string) bool     { return cmdutil.SkyenvBool(s, skyenvfile
 func scriptExecArray(s string) string  { return cmdutil.SkyenvArray(s, skyenvfile) }
 func scriptExecInt(s string) int       { return cmdutil.SkyenvInt(s, skyenvfile) }
 func parseDefault(s string) string     { return cmdutil.SkyenvDefault(s) } //nolint:unused
+
+// vpnRouterArgs builds the vpn-router launcher args from the config-gen knobs,
+// so every supported topology — ethernet-out or WiFi-out (hostapd AP), with an
+// optional custom subnet — is configurable via skywire.conf / `config gen`,
+// not just the downstream interface. prefix is the invocation prefix
+// (["app","vpn-router"] for the external app entry, nil for the internal one).
+// Empty knobs are omitted so the app's own defaults apply.
+func vpnRouterArgs(prefix []string) []string {
+	args := append([]string{}, prefix...)
+	if vpnRouterLanIfc != "" {
+		args = append(args, "--lan-ifc", vpnRouterLanIfc)
+	}
+	if vpnRouterSubnet != "" {
+		args = append(args, "--subnet", vpnRouterSubnet)
+	}
+	if vpnRouterWifi {
+		args = append(args, "--wifi")
+		if vpnRouterSSID != "" {
+			args = append(args, "--ssid", vpnRouterSSID)
+		}
+		if vpnRouterPassphrase != "" {
+			args = append(args, "--passphrase", vpnRouterPassphrase)
+		}
+		if vpnRouterBand != "" {
+			args = append(args, "--band", vpnRouterBand)
+		}
+		if vpnRouterChannel != 0 {
+			args = append(args, "--channel", strconv.Itoa(vpnRouterChannel))
+		}
+		if vpnRouterCountry != "" {
+			args = append(args, "--country", vpnRouterCountry)
+		}
+		if vpnRouterOpenWiFi {
+			args = append(args, "--open")
+		}
+	}
+	return args
+}
