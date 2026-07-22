@@ -85,6 +85,7 @@ nav:
       - VPN:
           - vpn/README.md
           - vpn/client.md
+          - vpn/router.md
   - Specs: specs/index.md
   - Glossary: glossary.md
   - Rewards: rewards/index.md

@@ -49,6 +49,8 @@ Leave `args` empty for an open (no-auth) server.
 ## See also
 
 - [VPN client](client.md) — tunnel a machine's traffic through a VPN server.
+- [VPN router](router.md) — turn a board into a WiFi/ethernet VPN gateway for
+  the devices behind it.
 - [SOCKS5 proxy](../skysocks/README.md) — per-application proxying as a
   lighter alternative.
 - [Command reference: `skywire cli vpn`](../skywire/README.md)
