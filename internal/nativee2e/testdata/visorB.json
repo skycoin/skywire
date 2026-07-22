@@ -92,5 +92,13 @@
   "is_public": false,
   "geoip": "",
   "persistent_transports": null,
-  "memory_limit": "auto"
+  "memory_limit": "auto",
+  "dmsgpty": {
+    "dmsg_port": 22,
+    "cli_network": "unix",
+    "cli_address": "/tmp/dmsgptyB.sock",
+    "whitelist": [
+      "030a4fff35f74dfeeff2ee9466cf597a1d9aecca665b118d4eb5f795d11f77ed1f"
+    ]
+  }
 }
