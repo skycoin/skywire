@@ -862,7 +862,7 @@ func initDmsgpty(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// the chain here rather than at NewHost preserves backward
 	// compat for every other NewHost caller (cmd/dmsg/pty-host,
 	// sshd CLI, tests).
-	host := pty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC))
+	host := pty.NewHostWithDialer(dmsgC, wl, buildDmsgptyDialer(dmsgC, v.ensureFastTransport))
 	// Opt-in persistent pty sessions: an interactive shell survives a dropped
 	// stream and a reconnecting client (the web terminal / `cli pty`) reattaches
 	// by id. Default TTL (0 → host default). The GC sweeper is started in the
