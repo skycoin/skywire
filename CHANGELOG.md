@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.88
+
+16 PRs on top of v1.3.87. Headline: the **VPN router** graduates from prototype to a fully configurable, documented feature, and a new **mesh gateway** lets ordinary devices reach `.dmsg` / `.skynet` services by name.
+
+-   **VPN router — turn a visor into a VPN gateway for LAN/WiFi clients.** A visor with the `vpn-router` app aggregates downstream clients on a wired NIC or a WiFi AP and NATs their traffic into the mesh-VPN tunnel the `vpn-client` maintains. This release makes it real and operable end to end: it's **enableable from `config gen` / autoconfig / `skywire.conf`** (#3534); the external `dnsmasq` dependency is replaced by an **embedded pure-Go DHCP + DNS engine** (vendored router7) so the router has no runtime deps (#3536); a **standalone run mode + LAN-through-tunnel policy routing** lets it run without visor coupling and routes only forwarded-in client traffic through the tun — matching by input interface, not source subnet, so the router's own uplink and local services are untouched (#3542, #3551); forwarded **TCP MSS is clamped to the path MTU** so large flows don't black-hole across the tunnel (#3549); the **WiFi-out variant** disables power-save before `hostapd` for rtl8723bs AP stability (#3543); **every uplink×downstream topology is configurable** (ethernet-out / WiFi-out, subnet, SSID/band/channel/country) (#3550); and a **complete VPN-router guide** documents all three deployment modes plus the real-world hardware measures (#3552).
+-   **Mesh gateway — reach `.dmsg` / `.skynet` services by name (#3553).** The vpn-router (and, opt-in, the vpn-client host itself) answers `*.dmsg` / `*.skynet` DNS with a synthetic IP and transparently proxies those connections over the mesh — no per-device config, no SOCKS. A `.dmsg` name encodes a public key and a mesh routing port (often no externally-listening TCP port at all), so it can't be NAT'd: instead DNS leases a synthetic IP, an `iptables` REDIRECT sends pool-bound TCP to a local proxy, and the proxy reads `SO_ORIGINAL_DST` (the original port **is** the routing port) and dials it over the mesh — bypassing the tunnel. HTTPS works via on-the-fly **TLS-MITM** with a self-generated CA, and friendly **aliases** map names to keys. Validated end-to-end against real Linux netfilter.
+-   **VPN reliability fixes — the VPN works again.** `DmsgVisorRPCPort` is moved off **44**, which collided with the `vpn-server` port and broke server startup (#3544, re-embedded wasm-visor #3545, e2e guard #3547); and the tunnel-exemption logic now **exempts every transport peer's IP** (not just stcpr), so a VPN client no longer tears down a pre-existing transport when it starts — with an IP-routable-only guard to avoid a regression on non-IP (webrtc) peers (#3546, #3548).
+-   **dmsgpty** (#3541): auto-establish a direct transport before the skynet pty dial, so `cli dmsg pty` over skynet doesn't fail waiting on a route.
+-   **Deployment** (#3554): split dmsg servers 2 and 3 onto new hosts (server migration).
+
+-   separate two dsmg-server 2 and 3 to new servers  [#3554](https://github.com/skycoin/skywire/pull/3554)
+-   feat(vpn): mesh gateway for .dmsg/.skynet — vpn-router + vpn-client  [#3553](https://github.com/skycoin/skywire/pull/3553)
+-   docs(vpn): complete VPN-router guide (all modes + real-world measures)  [#3552](https://github.com/skycoin/skywire/pull/3552)
+-   fix(vpnrouter): policy-route by input interface, not source subnet  [#3551](https://github.com/skycoin/skywire/pull/3551)
+-   feat(vpnrouter): configure all router variants (ethernet/WiFi) + setup doc  [#3550](https://github.com/skycoin/skywire/pull/3550)
+-   fix(vpnrouter): clamp forwarded TCP MSS to the path MTU  [#3549](https://github.com/skycoin/skywire/pull/3549)
+-   fix(vpn): only exempt transport peers with a routable IP (regression from #3546)  [#3548](https://github.com/skycoin/skywire/pull/3548)
+-   test(e2e): guard the port-44 vpn-server collision (#3544)  [#3547](https://github.com/skycoin/skywire/pull/3547)
+-   fix(vpn): exempt ALL transport peer IPs from the tunnel, not just stcpr  [#3546](https://github.com/skycoin/skywire/pull/3546)
+-   chore(wasm): re-embed wasm-visor after the skyenv port-44 fix (#3544)  [#3545](https://github.com/skycoin/skywire/pull/3545)
+-   fix(skyenv): move DmsgVisorRPCPort off 44 (collided with vpn-server)  [#3544](https://github.com/skycoin/skywire/pull/3544)
+-   fix(vpnrouter): disable Wi-Fi power-save before hostapd (rtl8723bs AP stability)  [#3543](https://github.com/skycoin/skywire/pull/3543)
+-   feat(vpnrouter): standalone run mode + LAN-through-tunnel policy routing  [#3542](https://github.com/skycoin/skywire/pull/3542)
+-   fix(dmsgpty): auto-establish a direct transport before the skynet pty dial  [#3541](https://github.com/skycoin/skywire/pull/3541)
+-   feat(vpnrouter): replace dnsmasq with an embedded pure-Go DHCP+DNS engine (router7)  [#3536](https://github.com/skycoin/skywire/pull/3536)
+-   feat(vpn-router): enableable via config-gen + autoconfig + skywire.conf  [#3534](https://github.com/skycoin/skywire/pull/3534)
+
 ## 1.3.79
 
 3 PRs on top of v1.3.78. Headline items:
