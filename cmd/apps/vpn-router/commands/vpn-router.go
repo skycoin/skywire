@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/sirupsen/logrus"
@@ -23,25 +24,36 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/vpn"
+	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
 
 var (
-	lanIfc     string
-	tunIfc     string
-	subnetCIDR string
-	dhcpStart  string
-	dhcpEnd    string
-	dnsAddr    string
-	leaseTime  string
-	wifi       bool
-	ssid       string
-	passphrase string
-	band       string
-	channel    int
-	country    string
-	openWiFi   bool
-	appPort    uint16
+	lanIfc      string
+	tunIfc      string
+	subnetCIDR  string
+	dhcpStart   string
+	dhcpEnd     string
+	dnsAddr     string
+	leaseTime   string
+	wifi        bool
+	ssid        string
+	passphrase  string
+	band        string
+	channel     int
+	country     string
+	openWiFi    bool
+	meshGateway bool
+	meshGWCIDR  string
+	meshTLS     bool
+	meshCACert  string
+	meshCAKey   string
+	meshAliases []string
+	appPort     uint16
 )
+
+// defaultMeshCADir is where the mesh gateway persists its self-generated CA so
+// LAN clients only need to trust it once (survives restarts).
+var defaultMeshCADir = filepath.Join(skyenv.PackageConfig().LocalPath, "mesh-gateway-ca")
 
 // registerFlags declares the router flags on a pflag.FlagSet. Both the cobra
 // RootCmd and the internal-launcher parse path use it, so a flag is never
@@ -61,6 +73,12 @@ func registerFlags(fs *pflag.FlagSet) {
 	fs.IntVar(&channel, "channel", 0, "WiFi channel (0 = default for the band)")
 	fs.StringVar(&country, "country", "US", "WiFi regulatory country code (with --wifi)")
 	fs.BoolVar(&openWiFi, "open", false, "allow an open (passphrase-less) WiFi network")
+	fs.BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway: resolve *.dmsg / *.skynet for downstream clients and proxy them over the mesh (visor-launched only)")
+	fs.StringVar(&meshGWCIDR, "mesh-gateway-cidr", "", "synthetic-IP pool the mesh gateway leases from (empty = 100.64.0.0/16)")
+	fs.BoolVar(&meshTLS, "mesh-gateway-tls", false, "mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet with a self-generated CA (LAN clients must trust it)")
+	fs.StringVar(&meshCACert, "mesh-gateway-ca", "", "mesh-gateway CA cert path (empty = <local>/mesh-gateway-ca/ca.pem; generated if absent)")
+	fs.StringVar(&meshCAKey, "mesh-gateway-ca-key", "", "mesh-gateway CA key path (empty = <local>/mesh-gateway-ca/ca.key)")
+	fs.StringArrayVar(&meshAliases, "mesh-alias", nil, "mesh-gateway friendly name → PK, as name=<pk> (repeatable); reach http://<name>.dmsg")
 	fs.Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 }
 
@@ -128,7 +146,7 @@ func RunVPNRouter(ctx context.Context, args []string) error {
 	bi := buildinfo.Get()
 	logger.Infof("Version %q built on %q against commit %q", bi.Version, bi.Date, bi.Commit)
 
-	cfg, err := buildRouterConfig()
+	cfg, err := buildRouterConfig(vpn.MeshDialer(appCl))
 	if err != nil {
 		logger.WithError(err).Error("invalid vpn-router configuration")
 		setAppErr(appCl, logger, err)
@@ -161,7 +179,9 @@ func runStandalone(ctx context.Context) error {
 	logger := logrus.New()
 	logger.SetOutput(os.Stderr)
 
-	cfg, err := buildRouterConfig()
+	// Standalone has no visor app-server, so no mesh dialer (nil). buildRouterConfig
+	// rejects --mesh-gateway here with a clear error.
+	cfg, err := buildRouterConfig(nil)
 	if err != nil {
 		return fmt.Errorf("invalid vpn-router configuration: %w", err)
 	}
@@ -176,8 +196,10 @@ func runStandalone(ctx context.Context) error {
 	return router.Run(sigCtx)
 }
 
-// buildRouterConfig turns the parsed flags into a vpn.RouterConfig.
-func buildRouterConfig() (vpn.RouterConfig, error) {
+// buildRouterConfig turns the parsed flags into a vpn.RouterConfig. dialer backs
+// the mesh gateway when --mesh-gateway is set; it is nil in standalone mode (no
+// visor app-server), where the mesh gateway cannot run.
+func buildRouterConfig(dialer meshgw.MeshDial) (vpn.RouterConfig, error) {
 	gw, subnet, err := net.ParseCIDR(subnetCIDR)
 	if err != nil {
 		return vpn.RouterConfig{}, fmt.Errorf("invalid --subnet %q (want <gateway-ip>/<prefix>, e.g. 192.168.42.1/24): %w", subnetCIDR, err)
@@ -212,6 +234,27 @@ func buildRouterConfig() (vpn.RouterConfig, error) {
 			Channel:     channel,
 			CountryCode: country,
 			AllowOpen:   openWiFi,
+		}
+	}
+	if meshGateway {
+		if dialer == nil {
+			return cfg, fmt.Errorf("--mesh-gateway needs the visor app-server to dial the mesh; it cannot run in standalone mode")
+		}
+		cfg.MeshDial = dialer
+		cfg.MeshGatewayCIDR = meshGWCIDR
+		if len(meshAliases) > 0 {
+			aliases, err := vpn.ParseMeshAliases(meshAliases)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.MeshAliases = aliases
+		}
+		if meshTLS {
+			minter, err := vpn.LoadOrCreateMeshCA(meshCACert, meshCAKey, defaultMeshCADir)
+			if err != nil {
+				return cfg, err
+			}
+			cfg.MeshTLSMinter = minter
 		}
 	}
 	return cfg, nil
