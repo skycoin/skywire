@@ -35,7 +35,7 @@ var (
 	UseDC = false
 
 	// DmsgServerAddr specifies a specific dmsg server to connect through.
-	// Format: pk@ip:port (e.g., 02a2d4c3...@139.162.173.101:30082)
+	// Format: pk@ip:port (e.g., 02a2d4c3...@45.79.124.73:30082)
 	DmsgServerAddr string
 )
 
