@@ -25,7 +25,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/hashicorp/go-version v1.9.0
-	github.com/hashicorp/yamux v0.1.2
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/jaypipes/ghw v0.25.0
@@ -48,7 +47,6 @@ require (
 	github.com/toqueteos/webbrowser v1.2.1
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/yuin/goldmark v1.8.4
-	go.etcd.io/bbolt v1.5.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
@@ -74,8 +72,10 @@ require (
 	github.com/gen2brain/malgo v0.11.25
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/google/gopacket v1.1.19
+	github.com/google/nftables v0.3.0
 	github.com/google/renameio v1.0.1
 	github.com/hanwen/go-fuse/v2 v2.10.1
+	github.com/hashicorp/yamux v0.1.2
 	github.com/insomniacslk/dhcp v0.0.0-20260719225207-c76316d4aa82
 	github.com/itchyny/gojq v0.12.19
 	github.com/jfreymuth/pulse v0.1.2
@@ -95,7 +95,9 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/thesyncim/gopus v0.1.1
+	github.com/vishvananda/netlink v1.3.1
 	github.com/xxxserxxx/lingo/v2 v2.0.1
+	go.etcd.io/bbolt v1.5.0
 	go.starlark.net v0.0.0-20260708150628-5395d018f003
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.82.1
@@ -119,7 +121,6 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/nftables v0.3.0 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/josharian/native v1.1.0 // indirect
@@ -157,7 +158,6 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
-	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/zyedidia/micro v1.4.1 // indirect
