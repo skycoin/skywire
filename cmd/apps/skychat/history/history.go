@@ -45,6 +45,13 @@ type Message struct {
 	FileSize   int64  `json:"file_size,omitempty"`
 	FileStatus string `json:"file_status,omitempty"`
 	FileURL    string `json:"file_url,omitempty"`
+
+	// Reply reference — set only when this message quotes another (a
+	// {"skychat_reply":...} body). Populated at serve time from the stored
+	// envelope; the browser renders these as a quote block above the bubble.
+	ReplyToSender  string `json:"reply_to_sender,omitempty"`
+	ReplyToTS      string `json:"reply_to_ts,omitempty"`
+	ReplyToPreview string `json:"reply_to_preview,omitempty"`
 }
 
 // GroupMessage is a single group-chat message record. Mirrors Message

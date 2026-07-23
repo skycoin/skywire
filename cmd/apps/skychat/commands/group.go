@@ -156,6 +156,9 @@ func startGroupPoller(parent context.Context) {
 				if meta, ok := parseGroupFileText(m.Text); ok {
 					envelope["message"] = "📎 " + meta.Name
 					enrichGroupFileRow(envelope, meta)
+				} else if rmeta, ok := parseReplyText(m.Text); ok {
+					envelope["message"] = rmeta.Text
+					enrichReplyRow(envelope, rmeta)
 				}
 				body, mErr := json.Marshal(envelope)
 				if mErr != nil {
@@ -424,6 +427,9 @@ func groupItemHandler() http.HandlerFunc {
 				if meta, ok := parseGroupFileText(m.Text); ok {
 					row["text"] = "📎 " + meta.Name
 					enrichGroupFileRow(row, meta)
+				} else if rmeta, ok := parseReplyText(m.Text); ok {
+					row["text"] = rmeta.Text
+					enrichReplyRow(row, rmeta)
 				}
 				out = append(out, row)
 			}

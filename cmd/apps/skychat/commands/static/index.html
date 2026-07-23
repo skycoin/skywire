@@ -462,11 +462,97 @@
       border-bottom-left-radius: 4px;
     }
 
+    .message-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .message-row.sent .message-meta { flex-direction: row-reverse; }
+
     .message-time {
       font-size: 10px;
       color: var(--text-muted);
-      margin-top: 4px;
       padding: 0 4px;
+    }
+
+    /* Reply affordance (appears on hover), quote block, compose chip */
+    .reply-link {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .message-row:hover .reply-link { opacity: 1; }
+    .reply-link:hover { color: var(--text-primary); text-decoration: underline; }
+
+    .reply-quote {
+      border-left: 3px solid var(--msg-sent);
+      padding: 3px 8px;
+      margin-bottom: 6px;
+      background: rgba(127, 127, 127, 0.15);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1.3;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .reply-quote-who { font-weight: 600; font-size: 11px; color: var(--msg-sent); }
+    .reply-quote-text {
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .message-row.sent .reply-quote {
+      background: rgba(255, 255, 255, 0.18);
+      border-left-color: rgba(255, 255, 255, 0.6);
+    }
+    .message-row.sent .reply-quote-who,
+    .message-row.sent .reply-quote-text { color: rgba(255, 255, 255, 0.9); }
+
+    .reply-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin: 0 12px 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--msg-sent);
+      border-radius: 8px;
+    }
+    .reply-chip-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+    .reply-chip-who { font-size: 11px; font-weight: 600; color: var(--msg-sent); }
+    .reply-chip-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .reply-chip-x {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .reply-chip-x:hover { color: var(--text-primary); }
+
+    .message-row.reply-highlight .message-bubble { animation: replyFlash 1.5s ease-out; }
+    @keyframes replyFlash {
+      0% { box-shadow: 0 0 0 3px var(--msg-sent); }
+      100% { box-shadow: 0 0 0 0 transparent; }
     }
 
     .date-divider {
@@ -1051,6 +1137,8 @@
 
     <ul id="messages" class="messages-container hidden"></ul>
 
+    <div id="replyChip" class="reply-chip hidden"></div>
+
     <form id="msgForm" class="message-form hidden" autocomplete="off" onsubmit="app.sendMessage(this); return false;">
       <select id="networkSelect" class="network-select" title="Network type">
         <option value="skynet">Skynet</option>
@@ -1134,6 +1222,7 @@
         this.groups = [];
         this.group = null;   // active group id (null when a DM is selected)
         this.myPK = null;    // this visor's PK, for group self-echo dedup
+        this.replyTo = null; // {sender, ts, preview} when composing a reply, else null
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -1215,11 +1304,20 @@
             ? `<div class="msg-sender">${this.escapeHtml(this.shortPk(msg.sender || msg.from))}</div>` : '';
           const bubbleClass = 'message-bubble' + (msg.file ? ' media' : '');
           const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(msg.text);
+          const quoteHtml = msg.reply ? this._renderQuote(msg.reply) : '';
+          // Row identity (data-*) lets a later reply quote this message and
+          // scroll back to it. senderAttr is 'me' for our own messages, else the
+          // author PK; preview is the snippet a reply embeds.
+          const senderAttr = msg.from === 'me' ? 'me' : (msg.sender || msg.from || '');
+          const tsIso = (msg.ts instanceof Date && !isNaN(msg.ts)) ? msg.ts.toISOString() : '';
           msgArea.insertAdjacentHTML('beforeend', `
-            <div class="message-row ${rowClass}">
+            <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}">
               ${senderLabel}
-              <div class="${bubbleClass}">${bubbleInner}</div>
-              <div class="message-time">${time}</div>
+              <div class="${bubbleClass}">${quoteHtml}${bubbleInner}</div>
+              <div class="message-meta">
+                <button class="reply-link" onclick="app.startReply(this)" title="Reply">&#x21A9; Reply</button>
+                <span class="message-time">${time}</span>
+              </div>
             </div>`);
 
           if (wasAtBottom) {
@@ -1241,6 +1339,103 @@
         return String(s == null ? '' : s)
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      // ---- Replies ---------------------------------------------------
+
+      // _msgPreview builds a short, single-line snippet of a message, embedded
+      // in a reply so the quote renders even for a reader who lacks the parent.
+      _msgPreview(msg) {
+        if (msg.file) return '📎 ' + ((msg.file.name) || 'file');
+        return String(msg.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      }
+
+      // _renderQuote draws the quoted-parent block shown above a reply bubble.
+      // Clicking it scrolls to the parent (data-* read from the DOM, no interp).
+      _renderQuote(reply) {
+        const isMine = reply.sender && (reply.sender === this.myPK || reply.sender === 'me');
+        const who = isMine ? 'You' : (reply.sender ? this.shortPk(reply.sender) : 'message');
+        const preview = this.escapeHtml(String(reply.preview || '').slice(0, 120)) || '&nbsp;';
+        return `<div class="reply-quote" data-target-ts="${this.escapeAttr(reply.ts || '')}" onclick="app.scrollToMessage(this.dataset.targetTs)" title="Go to message">
+            <span class="reply-quote-who">${this.escapeHtml(who)}</span>
+            <span class="reply-quote-text">${preview}</span>
+          </div>`;
+      }
+
+      // replyFromSSE builds a reply descriptor from the additive reply_to_*
+      // fields on an SSE envelope (DM or group), or null when absent.
+      replyFromSSE(data) {
+        if (!data || (!data.reply_to_ts && !data.reply_to_preview && !data.reply_to_sender)) return null;
+        return {
+          sender: data.reply_to_sender ? String(data.reply_to_sender).toLowerCase() : '',
+          ts: data.reply_to_ts || '',
+          preview: data.reply_to_preview || '',
+        };
+      }
+
+      // startReply arms the composer to quote the message the clicked button
+      // belongs to (its row carries data-ts/sender/preview).
+      startReply(btn) {
+        const row = btn.closest ? btn.closest('.message-row') : null;
+        if (!row) return;
+        this.replyTo = {
+          sender: row.dataset.sender || '',
+          ts: row.dataset.ts || '',
+          preview: row.dataset.preview || '',
+        };
+        this._renderReplyChip();
+        document.getElementById('msgField').focus();
+      }
+
+      cancelReply() {
+        this.replyTo = null;
+        this._renderReplyChip();
+      }
+
+      _renderReplyChip() {
+        const chip = document.getElementById('replyChip');
+        if (!this.replyTo) { chip.classList.add('hidden'); chip.innerHTML = ''; return; }
+        const r = this.replyTo;
+        const isMine = r.sender && (r.sender === this.myPK || r.sender === 'me');
+        const who = isMine ? 'You' : (r.sender ? this.shortPk(r.sender) : 'message');
+        chip.innerHTML = `
+          <div class="reply-chip-body">
+            <span class="reply-chip-who">Replying to ${this.escapeHtml(who)}</span>
+            <span class="reply-chip-text">${this.escapeHtml(String(r.preview || '').slice(0, 120))}</span>
+          </div>
+          <button class="reply-chip-x" onclick="app.cancelReply()" title="Cancel reply">&times;</button>`;
+        chip.classList.remove('hidden');
+      }
+
+      // _encodeReply wraps the typed text in a {"skychat_reply":...} envelope the
+      // server's read boundaries unwrap into text + reply_to_* fields.
+      _encodeReply(text) {
+        const r = this.replyTo;
+        const toSender = r.sender === 'me' ? (this.myPK || '') : r.sender;
+        return JSON.stringify({
+          skychat_reply: {
+            to_sender: toSender,
+            to_ts: r.ts,
+            to_preview: String(r.preview || '').slice(0, 120),
+            text,
+          },
+        });
+      }
+
+      // scrollToMessage jumps to and briefly highlights the message with the
+      // given timestamp, if it's currently loaded (best-effort — the quote
+      // always renders regardless).
+      scrollToMessage(tsIso) {
+        if (!tsIso) return;
+        const rows = document.querySelectorAll('#messages .message-row');
+        for (const r of rows) {
+          if (r.dataset.ts === tsIso) {
+            r.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            r.classList.add('reply-highlight');
+            setTimeout(() => r.classList.remove('reply-highlight'), 1600);
+            return;
+          }
+        }
       }
 
       // fileFromSSE extracts the additive file_* fields from a legacy /sse
@@ -1420,6 +1615,7 @@
             text: data.message,
             viaPair: data.channel === 'pair',
             file: this.fileFromSSE(data),
+            reply: this.replyFromSSE(data),
           };
           this.addMsgToList(data.sender, message);
 
@@ -1515,6 +1711,14 @@
                   from: m.outgoing ? null : (m.from || m.peer),
                 };
               }
+              // A persisted reply carries reply_to_* metadata; rebuild the quote.
+              if (m.reply_to_ts || m.reply_to_preview || m.reply_to_sender) {
+                entry.reply = {
+                  sender: (m.reply_to_sender || '').toLowerCase(),
+                  ts: m.reply_to_ts || '',
+                  preview: m.reply_to_preview || '',
+                };
+              }
               withDates.push(entry);
             });
             this.messages[pk] = withDates;
@@ -1543,6 +1747,7 @@
 
       selectRecipient(pk) {
         if (this.recipient === pk && !this.group) return;
+        this.cancelReply(); // a reply armed in another thread must not follow
         this.group = null;
         document.getElementById('groupHeader').classList.add('hidden');
         document.getElementById('networkSelect').classList.remove('hidden');
@@ -1842,6 +2047,12 @@
         const destination = this.recipient;
         const network = document.getElementById('networkSelect').value;
 
+        // A reply wraps the text in a {"skychat_reply":...} envelope on the
+        // wire; the optimistic bubble keeps the reply descriptor + clean text.
+        const replyMeta = this.replyTo ? { ...this.replyTo } : null;
+        const wireText = replyMeta ? this._encodeReply(msg) : msg;
+        this.cancelReply();
+
         // CXO routes through /pair/<pk>/message instead of /message —
         // a paired publisher must already exist (handled by Pair button
         // / pair-invite handshake). Falls back to legacy if pairing
@@ -1849,10 +2060,10 @@
         let url, body;
         if (network === 'cxo') {
           url = `/pair/${destination}/message`;
-          body = JSON.stringify({ text: msg });
+          body = JSON.stringify({ text: wireText });
         } else {
           url = '/message';
-          body = JSON.stringify({ recipient: destination, message: msg, network: network });
+          body = JSON.stringify({ recipient: destination, message: wireText, network: network });
         }
 
         fetch(url, {
@@ -1862,7 +2073,7 @@
         })
           .then(res => {
             if (res.ok) {
-              const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo' };
+              const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo', reply: replyMeta };
               this.addMsgToList(destination, message);
               msgField.value = '';
 
@@ -1912,6 +2123,7 @@
           group: isGroup || undefined,
           sender: isGroup ? this.myPK : undefined,
         };
+        this.cancelReply(); // file replies aren't supported — drop any armed quote
         this.addMsgToList(destination, message, { group: isGroup });
         const msgArea = document.getElementById('messages');
         msgArea.scrollTop = msgArea.scrollHeight;
@@ -2046,6 +2258,7 @@
       }
 
       selectGroup(id) {
+        this.cancelReply(); // a reply armed in another thread must not follow
         this.group = id;
         this.recipient = null;
         if (!this.messages[id]) this.messages[id] = [];
@@ -2109,7 +2322,12 @@
                 url: m.file_url || null,
                 from: senderIsMe ? null : sender,
               } : null;
-              withDates.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file });
+              const reply = (m.reply_to_ts || m.reply_to_preview || m.reply_to_sender) ? {
+                sender: (m.reply_to_sender || '').toLowerCase(),
+                ts: m.reply_to_ts || '',
+                preview: m.reply_to_preview || '',
+              } : null;
+              withDates.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file, reply });
             });
             this.messages[id] = withDates;
             this.messagesQuantity[id] = msgs.length;
@@ -2125,14 +2343,19 @@
 
       sendGroupMessage(text) {
         const gid = this.group;
+        // A reply wraps the body in a {"skychat_reply":...} envelope; the
+        // optimistic bubble keeps the reply descriptor + clean text.
+        const replyMeta = this.replyTo ? { ...this.replyTo } : null;
+        const wireText = replyMeta ? this._encodeReply(text) : text;
+        this.cancelReply();
         fetch(`/group/${gid}/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text })
+          body: JSON.stringify({ text: wireText })
         })
           .then(res => {
             if (res.ok) {
-              this.addMsgToList(gid, { ts: new Date(), from: 'me', text, group: true, sender: this.myPK }, { group: true });
+              this.addMsgToList(gid, { ts: new Date(), from: 'me', text, group: true, sender: this.myPK, reply: replyMeta }, { group: true });
               const el = document.getElementById('messages');
               el.scrollTop = el.scrollHeight;
             } else {
@@ -2154,7 +2377,11 @@
         // DM file event, so fileFromSSE builds the descriptor (its .from = the
         // sender, which powers the re-request link when the bytes aren't held).
         const file = this.fileFromSSE(data);
-        this.addMsgToList(gid, { ts: new Date(), from: sender, text: data.message, group: true, sender, file }, { group: true });
+        const reply = this.replyFromSSE(data);
+        // Use the feed timestamp (shared by all members) so a reply's scroll-to
+        // resolves the same parent everywhere; fall back to now if absent.
+        const ts = data.ts ? new Date(data.ts) : new Date();
+        this.addMsgToList(gid, { ts, from: sender, text: data.message, group: true, sender, file, reply }, { group: true });
         if (!this.groups.find(g => g.id === gid)) this.syncGroups();
       }
 

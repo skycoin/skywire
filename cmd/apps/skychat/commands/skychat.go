@@ -593,6 +593,13 @@ func renderLegacySSE(ev chatEvent) string {
 	if ev.To != "" {
 		m["to"] = ev.To
 	}
+	// A quoted reply rides the body as a {"skychat_reply":...} envelope; unwrap
+	// it to the plain text + additive reply_to_* fields (raw consumers still see
+	// the reply's text as the message).
+	if meta, ok := parseReplyText(ev.Text); ok {
+		m["message"] = meta.Text
+		enrichReplyRow(m, meta)
+	}
 	if ev.FileID != "" {
 		m["file_id"] = ev.FileID
 		m["file_name"] = ev.FileName
@@ -1743,6 +1750,13 @@ func historyHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Surface quoted-reply metadata: a reply is stored raw as a
+	// {"skychat_reply":...} body; rewrite each in place to the clean text +
+	// reply_to_* fields the browser renders on reload.
+	for i := range msgs {
+		enrichReplyMessage(&msgs[i])
 	}
 
 	w.Header().Set("Content-Type", "application/json")
