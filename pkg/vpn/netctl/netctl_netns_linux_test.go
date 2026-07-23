@@ -15,10 +15,55 @@ package netctl
 
 import (
 	"net"
+	"os/exec"
 	"testing"
 
 	"github.com/vishvananda/netlink"
 )
+
+// TestNetctlRealTUN runs the vpn-client/router's netctl SetupTUN sequence against
+// a REAL tun device (POINTOPOINT — the actual interface type the vpn apps use,
+// distinct from the dummy in TestNetctlNetns), on the real kernel in a netns.
+func TestNetctlRealTUN(t *testing.T) {
+	if err := LinkUp("lo"); err != nil {
+		t.Skipf("not in a writable net namespace (run under `unshare -rn`): %v", err)
+	}
+	const tun = "nctltun0"
+	if out, err := exec.Command("ip", "tuntap", "add", "dev", tun, "mode", "tun").CombinedOutput(); err != nil { //nolint:gosec // test-controlled
+		t.Skipf("cannot create tun (need /dev/net/tun + netns): %v\n%s", err, out)
+	}
+
+	// vpn-client SetupTUN: assign IP, MTU, bring up.
+	if err := AddrAdd(tun, "10.7.0.2/24"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetMTU(tun, 1420); err != nil {
+		t.Fatal(err)
+	}
+	if err := LinkUp(tun); err != nil {
+		t.Fatal(err)
+	}
+	// client AddRoute: a route via the tun's on-link gateway.
+	if err := RouteAddViaGateway("10.7.0.50/32", "10.7.0.1"); err != nil {
+		t.Fatalf("route via tun gateway: %v", err)
+	}
+	if !hasRoute(t, "10.7.0.50") {
+		t.Fatal("route via tun gateway not installed")
+	}
+	// router path: default route out the tun in a policy table + iif rule.
+	if err := ReplaceDefaultRouteDev(tun, 142); err != nil {
+		t.Fatalf("default route out tun: %v", err)
+	}
+	if tableRouteCount(t, 142) == 0 {
+		t.Fatal("no default route out tun in table 142")
+	}
+	if err := AddRuleIif(tun, 142); err != nil {
+		t.Fatalf("iif rule: %v", err)
+	}
+	if !hasRule(t, tun, 142) {
+		t.Fatal("iif rule for tun not installed")
+	}
+}
 
 func TestNetctlNetns(t *testing.T) {
 	// A private netns starts with lo down and nothing else. If we can't bring lo
