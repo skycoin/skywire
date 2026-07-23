@@ -36,6 +36,15 @@ type Message struct {
 	Text string `json:"text"`
 	// Timestamp is the server-side receive or send time in UTC.
 	Timestamp time.Time `json:"timestamp"`
+
+	// File attachment metadata — set only for file messages (Telegram-style
+	// "a file is a message"). FileURL is the /files/<name> path for received
+	// files so the UI can re-render the thumbnail from history; empty for
+	// sent files (the sender keeps no served copy).
+	FileName   string `json:"file_name,omitempty"`
+	FileSize   int64  `json:"file_size,omitempty"`
+	FileStatus string `json:"file_status,omitempty"`
+	FileURL    string `json:"file_url,omitempty"`
 }
 
 // GroupMessage is a single group-chat message record. Mirrors Message

@@ -17,6 +17,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
+
+	"github.com/skycoin/skywire/cmd/apps/skychat/history"
 )
 
 func TestRenderLegacySSE_FileFields(t *testing.T) {
@@ -164,5 +167,43 @@ func TestMediaContentType(t *testing.T) {
 		if got := mediaContentType(name); got != want {
 			t.Errorf("mediaContentType(%q) = %q, want %q", name, got, want)
 		}
+	}
+}
+
+// TestHistoryHandler_EmitsFileFields confirms a persisted file message
+// surfaces its file_* metadata through the /history JSON, so a fresh
+// browser can re-render the media (thumbnail/player) from history.
+func TestHistoryHandler_EmitsFileFields(t *testing.T) {
+	st, err := history.NewBoltStore(filepath.Join(t.TempDir(), "hist.db"), history.DefaultLimits())
+	if err != nil {
+		t.Fatalf("NewBoltStore: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() }) //nolint:errcheck
+	if err := st.Append(history.Message{
+		Peer: "peerpk", From: "peerpk", Text: "📎 pic.png",
+		FileName: "pic.png", FileSize: 10, FileStatus: "received", FileURL: "/files/pic.png",
+		Timestamp: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	prev := historyStore
+	historyStore = st
+	t.Cleanup(func() { historyStore = prev })
+
+	rec := httptest.NewRecorder()
+	historyHandler(rec, httptest.NewRequest(http.MethodGet, "/history?limit=10", nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%q", rec.Code, rec.Body.String())
+	}
+	var msgs []map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &msgs); err != nil {
+		t.Fatalf("decode /history: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("want 1 message, got %d", len(msgs))
+	}
+	if msgs[0]["file_name"] != "pic.png" || msgs[0]["file_url"] != "/files/pic.png" || msgs[0]["file_status"] != "received" {
+		t.Errorf("/history did not emit file fields: %v", msgs[0])
 	}
 }

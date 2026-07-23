@@ -1103,6 +1103,36 @@
         return n.toFixed(1) + ' ' + units[i];
       }
 
+      // makeThumbDataURL downscales an image File to a small JPEG data URL
+      // (≤ maxDim on the long side). Used to give a locally-sent image a
+      // persistent preview: unlike an object URL, a data URL survives a
+      // reload from localStorage. Resolves null on any failure (e.g. a
+      // non-decodable image or a tainted canvas).
+      makeThumbDataURL(file, maxDim) {
+        return new Promise((resolve) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+              const w = Math.max(1, Math.round(img.width * scale));
+              const h = Math.max(1, Math.round(img.height * scale));
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              resolve(canvas.toDataURL('image/jpeg', 0.7));
+            } catch (e) {
+              resolve(null);
+            } finally {
+              URL.revokeObjectURL(url);
+            }
+          };
+          img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+          img.src = url;
+        });
+      }
+
       // renderFile builds the inner HTML of a media/file bubble: an inline
       // image when the file is an image with a source URL, otherwise a
       // compact file card with a download link (received files) to
@@ -1278,11 +1308,22 @@
                 withDates.push({ date: ts });
                 lastDay = day;
               }
-              withDates.push({
+              const entry = {
                 ts: ts,
                 from: m.outgoing ? 'me' : (m.from || m.peer),
                 text: m.text,
-              });
+              };
+              // A persisted file message carries file_* metadata; rebuild the
+              // file descriptor so history re-renders the thumbnail/player.
+              if (m.file_name) {
+                entry.file = {
+                  name: m.file_name,
+                  size: m.file_size || 0,
+                  status: m.file_status || '',
+                  url: m.file_url || null,
+                };
+              }
+              withDates.push(entry);
             });
             this.messages[pk] = withDates;
             this.messagesQuantity[pk] = msgs.length;
@@ -1665,6 +1706,19 @@
         const msgArea = document.getElementById('messages');
         msgArea.scrollTop = msgArea.scrollHeight;
         input.value = '';
+
+        // For images, swap the ephemeral blob preview for a persistent
+        // data-URL thumbnail so the sent image still shows after a reload.
+        // The live bubble already rendered from the blob; this only affects
+        // what gets persisted to localStorage.
+        if (this.isImageFile(message.file)) {
+          this.makeThumbDataURL(file, 320).then(dataUrl => {
+            if (!dataUrl) return;
+            message.file.url = dataUrl;
+            message.file.local = false; // data URL persists — don't strip on save
+            this.saveChat(destination);
+          });
+        }
 
         fetch('/send-file', { method: 'POST', body: form })
           .then(res => {

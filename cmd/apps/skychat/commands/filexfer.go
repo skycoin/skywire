@@ -31,6 +31,7 @@ import (
 
 	"github.com/disintegration/imaging"
 
+	"github.com/skycoin/skywire/cmd/apps/skychat/history"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -188,6 +189,30 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 	if hub != nil {
 		hub.publishEvent(ev)
 	}
+
+	// Persist DM file events so they survive a cache wipe and reappear on a
+	// fresh browser via /history (group files live in the group bucket and
+	// are skipped here). Best-effort — a persistence failure never blocks
+	// delivery.
+	if offer.Group == "" {
+		msg := history.Message{
+			Peer:       peer.Hex(),
+			Outgoing:   dir == xfer.Outgoing,
+			Text:       ev.Text,
+			Timestamp:  time.Now().UTC(),
+			FileName:   offer.Name,
+			FileSize:   offer.Size,
+			FileStatus: ev.FileStatus,
+		}
+		if dir == xfer.Incoming {
+			msg.From = peer.Hex()
+			if ev.FilePath != "" {
+				msg.FileURL = "/files/" + filepath.Base(ev.FilePath)
+			}
+		}
+		persistMessage(msg)
+	}
+
 	if err != nil {
 		appLog("skychat: file %s %s <-> %s: %v", dir, offer.Name, peer, err)
 	} else {
