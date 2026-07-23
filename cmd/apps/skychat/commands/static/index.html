@@ -1025,6 +1025,11 @@
 
     .group-list { list-style: none; }
 
+    /* A pinned conversation is rendered in #pinnedList; its copy in the normal
+       list is hidden so it isn't shown twice. */
+    li.pin-dup { display: none; }
+    .icon-btn.pinned-active { color: var(--msg-sent); border-color: var(--msg-sent); }
+
     .group-item {
       display: flex;
       align-items: center;
@@ -1096,6 +1101,10 @@
         <button type="submit" class="btn btn-icon" title="Add contact">+</button>
       </form>
     </div>
+    <div id="pinnedSection" class="groups-section hidden">
+      <div class="groups-header"><span>Pinned</span></div>
+      <ul id="pinnedList" class="recipient-list"></ul>
+    </div>
     <div id="invitesSection" class="invites-section hidden">
       <div class="invites-header">Pending Pair Invites</div>
       <div id="invitesList"></div>
@@ -1120,6 +1129,7 @@
         <div class="chat-header-pk" id="headerPk">-</div>
       </div>
       <div class="chat-header-actions">
+        <button id="dmPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
         <button id="pairToggleBtn" class="icon-btn hidden" onclick="app.togglePair()" title="Pair / unpair via CXO">&#x29B5;</button>
         <button class="icon-btn" onclick="app.copyPk()" title="Copy public key">&#x2398;</button>
         <button class="icon-btn" onclick="app.openSettings()" title="Contact settings">&#x2699;</button>
@@ -1143,6 +1153,7 @@
         </div>
       </div>
       <div class="chat-header-actions">
+        <button id="groupPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
         <button class="icon-btn" onclick="app.showGroupInvite()" title="Copy invite link">&#x1F517;</button>
         <button class="icon-btn" onclick="app.leaveGroup()" title="Leave group">&#x21AA;</button>
         <button class="icon-btn danger" onclick="app.deleteGroup()" title="Delete group (owner only)" aria-label="Delete group">
@@ -1255,6 +1266,7 @@
         // keys, filtered out on every group render/reload (groups reload from
         // visor history, so a local hide needs to survive here, not in the cache).
         this.hiddenGroup = new Set(this._loadHiddenGroup());
+        this.pinned = localStorage.getItem('skychat_pinned') || null; // "dm:<pk>" | "grp:<gid>" | null
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -1263,6 +1275,7 @@
         this.syncHistoryPeers();
         this.syncMyPK();
         this.syncGroups();
+        this.renderPinned();
       }
 
       showToast(message, type = 'success') {
@@ -1303,6 +1316,7 @@
         document.getElementById('recipients').appendChild(li);
 
         this.updateUnreadBadges();
+        this._syncPinHide(this._pinParts()); // hide this item's copy if it's the pinned one
       }
 
       _showMessage(msg) {
@@ -1924,6 +1938,8 @@
         this.saveSeenList();
         this.updateUnreadBadges();
         this.refreshPairControls();
+        this.renderPinned();
+        this._updatePinButtons();
       }
 
       // refreshPairControls toggles the pair button + the CXO option
@@ -2396,6 +2412,109 @@
             </div>`;
           list.appendChild(li);
         });
+        this.renderPinned();
+      }
+
+      // ---- Pin (one conversation, DM or group, on top) ---------------
+
+      _pinParts() {
+        if (!this.pinned) return [null, null];
+        const i = this.pinned.indexOf(':');
+        return [this.pinned.slice(0, i), this.pinned.slice(i + 1)];
+      }
+      _currentPinKey() {
+        if (this.group) return 'grp:' + this.group;
+        if (this.recipient) return 'dm:' + this.recipient;
+        return null;
+      }
+
+      // togglePin pins (or unpins) the open conversation to the top slot.
+      togglePin() {
+        const key = this._currentPinKey();
+        if (!key) return;
+        this.pinned = (this.pinned === key) ? null : key;
+        if (this.pinned) localStorage.setItem('skychat_pinned', this.pinned);
+        else localStorage.removeItem('skychat_pinned');
+        this.renderPinned();
+        this._updatePinButtons();
+      }
+
+      // renderPinned draws the single pinned conversation in the top slot,
+      // reusing the normal item markup so it looks and clicks natively, then
+      // hides its duplicate in the regular list.
+      renderPinned() {
+        const section = document.getElementById('pinnedSection');
+        const list = document.getElementById('pinnedList');
+        list.innerHTML = '';
+        const [type, id] = this._pinParts();
+        let rendered = false;
+        if (type === 'grp') {
+          const g = this.groups.find(x => x.id === id);
+          if (g) {
+            const li = document.createElement('li');
+            li.innerHTML = `
+              <div class="group-item ${id === this.group ? 'active' : ''}" data-gid="${id}" onclick="app.selectGroup('${id}')">
+                <div class="group-avatar-sm">📌</div>
+                <div class="recipient-info">
+                  <div class="recipient-pk">${this.escapeHtml(g.name || g.id)}</div>
+                  <div class="recipient-preview">${this.escapeHtml(g.role || 'member')} · ${(g.members || []).length} members</div>
+                </div>
+              </div>`;
+            list.appendChild(li);
+            rendered = true;
+          }
+        } else if (type === 'dm') {
+          const r = id;
+          const image = localStorage.getItem(`i_${r}`) || 'p.png';
+          const shortPk = r.substring(0, 8) + '...' + r.substring(r.length - 8);
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div class="recipient-item ${r === this.recipient && !this.group ? 'active' : ''}" data-pk="${r}" onclick="app.selectRecipient('${r}')">
+              <img class="recipient-avatar" src="${image}" />
+              <div class="recipient-info">
+                <div class="recipient-pk">📌 ${shortPk}</div>
+                <div class="recipient-preview">Pinned</div>
+              </div>
+            </div>`;
+          list.appendChild(li);
+          rendered = true;
+        }
+        section.classList.toggle('hidden', !rendered);
+        this._syncPinHide(rendered ? [type, id] : [null, null]);
+      }
+
+      // _syncPinHide hides the pinned item's duplicate in the normal list (or
+      // clears the hide when nothing is pinned / the pin isn't loaded yet).
+      _syncPinHide(parts) {
+        document.querySelectorAll('li.pin-dup').forEach(el => el.classList.remove('pin-dup'));
+        const [type, id] = parts || [null, null];
+        if (!type) return;
+        const sel = type === 'grp'
+          ? `#groups .group-item[data-gid="${window.CSS && CSS.escape ? CSS.escape(id) : id}"]`
+          : `#recipients .recipient-item[data-pk="${window.CSS && CSS.escape ? CSS.escape(id) : id}"]`;
+        const node = document.querySelector(sel);
+        if (node && node.closest('li')) node.closest('li').classList.add('pin-dup');
+      }
+
+      // _unpinIf clears the pin when its conversation is deleted/left.
+      _unpinIf(key) {
+        if (this.pinned === key) {
+          this.pinned = null;
+          localStorage.removeItem('skychat_pinned');
+          this.renderPinned();
+          this._updatePinButtons();
+        }
+      }
+
+      _updatePinButtons() {
+        const key = this._currentPinKey();
+        const active = !!key && key === this.pinned;
+        ['dmPinBtn', 'groupPinBtn'].forEach(bid => {
+          const b = document.getElementById(bid);
+          if (!b) return;
+          b.classList.toggle('pinned-active', active);
+          b.title = active ? 'Unpin from top' : 'Pin to top';
+        });
       }
 
       selectGroup(id) {
@@ -2430,6 +2549,8 @@
         document.getElementById('msgField').focus();
 
         this.loadGroupHistory(id);
+        this.renderPinned();
+        this._updatePinButtons();
       }
 
       // loadGroupHistory backfills persisted messages when the local buffer is
@@ -2666,6 +2787,7 @@
 
       _removeGroup(gid) {
         this.groups = this.groups.filter(g => g.id !== gid);
+        this._unpinIf('grp:' + gid);
         this.renderGroups();
         if (this.group === gid) {
           this.group = null;
@@ -2735,6 +2857,7 @@
 
         const pk = this.recipient;
         this.recipients = this.recipients.filter(v => v !== pk);
+        this._unpinIf('dm:' + pk);
         delete this.messages[pk];
         delete this.messagesQuantity[pk];
         delete this.messagesSeen[pk];
