@@ -43,6 +43,7 @@ import (
 	skycipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cxo/cxoutils"
 	"github.com/skycoin/skywire/pkg/cxo/node"
 	cxotransport "github.com/skycoin/skywire/pkg/cxo/node/transport"
 	"github.com/skycoin/skywire/pkg/cxo/skyobject"
@@ -152,6 +153,14 @@ type Config struct {
 	// the remote PK's feed. Defaults to 30s — small enough that a
 	// fresh visor conn doesn't wait too long to see updates flow.
 	ReconcileInterval time.Duration
+	// CleanupInterval is how often the aggregator prunes superseded
+	// Roots (keeping only the latest per feed) and sweeps the freed
+	// objects from its CXO store. Without this the in-memory store
+	// accumulates every Root every visor ever published — the store
+	// is ephemeral (redis is authoritative), so only the newest Root
+	// per feed matters. Defaults to 2m. Mirrors the treestore
+	// Publisher's runCleanup, which the aggregator's node lacked.
+	CleanupInterval time.Duration
 	// Logger overrides the default tagged logger.
 	Logger *logging.Logger
 	// InMemoryDB / DataDir control the aggregator's CXO storage.
@@ -189,6 +198,9 @@ type Aggregator struct {
 func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	if conf.ReconcileInterval <= 0 {
 		conf.ReconcileInterval = 30 * time.Second
+	}
+	if conf.CleanupInterval <= 0 {
+		conf.CleanupInterval = 2 * time.Minute
 	}
 	if conf.Logger == nil {
 		conf.Logger = logging.MustGetLogger("tpd-cxo-aggregator")
@@ -327,6 +339,8 @@ func (a *Aggregator) loop(ctx context.Context) {
 	defer close(a.done)
 	t := time.NewTicker(a.conf.ReconcileInterval)
 	defer t.Stop()
+	ct := time.NewTicker(a.conf.CleanupInterval)
+	defer ct.Stop()
 
 	a.reconcile()
 	for {
@@ -335,11 +349,32 @@ func (a *Aggregator) loop(ctx context.Context) {
 			return
 		case <-t.C:
 			a.reconcile()
+		case <-ct.C:
+			a.cleanup()
 		case <-a.nudge:
 			// A visor just connected (OnConnect). Subscribe now instead
 			// of waiting for the next tick. reconcile() is idempotent.
 			a.reconcile()
 		}
+	}
+}
+
+// cleanup prunes superseded Roots (keeping only the latest per feed)
+// and sweeps the now-ownerless objects from the aggregator's CXO
+// store. TPD's authoritative store is redis and each Root is
+// dispatched on fill, so only the newest Root per feed is needed;
+// without this the in-memory store grows without bound as every
+// visor republishes on each transport change. Same primitives the
+// treestore Publisher's runCleanup uses (keepLast=1) — the
+// aggregator's receive-side node just never had a cleanup loop.
+func (a *Aggregator) cleanup() {
+	c := a.cxoNode.Container()
+	if err := cxoutils.RemoveRootObjects(c, 1); err != nil {
+		a.log.WithError(err).Debug("CXO aggregator: RemoveRootObjects failed; will retry next tick")
+		return
+	}
+	if err := cxoutils.RemoveObjects(c); err != nil {
+		a.log.WithError(err).Debug("CXO aggregator: RemoveObjects failed; will retry next tick")
 	}
 }
 
