@@ -93,6 +93,55 @@ the canonical group feed; members subscribe and (post-#2539)
 publish their own per-member feed. See `cmd/apps/skychat/group/`
 for the implementation.
 
+The browser UI mirrors this with a Groups sidebar (create/join
+modals, per-sender message labels), backed by an HTTP proxy to the
+visor's group RPC — `GET/POST /group`, `POST /group/join`, and
+`/group/<id>/{invite,send,leave,history}`. It needs the visor RPC
+connection (`--pair-enable`); without it the Groups section stays
+hidden and the UI is DM-only. Group text is decrypted by the visor
+for private groups, so the browser never handles keys.
+
+## Media & files (browser UI)
+
+The browser UI can attach and render media inline — the CLI stays
+text-only. Click 📎 to send a file to the open conversation (DM or
+group); received images / video / audio render in place.
+
+- **Images** show a downscaled thumbnail (`GET /thumb/<name>`,
+  ~4–5× smaller than the original) and open full-size in an in-app
+  lightbox on click.
+- **Video / audio** play in native `<video>` / `<audio>` players;
+  `GET /files/<name>` sets an explicit media Content-Type and
+  supports Range requests, so seeking works.
+- **Other files** render as a download card.
+
+Sent and received media survive a cache wipe / fresh device: DM
+file events persist to `/history`, and both sender and receiver
+keep an id-named served copy under the downloads dir, so previews
+re-render anywhere the visor is reachable. Every peer-supplied name
+and URL is attribute-escaped before it reaches the DOM.
+
+### File backfill (re-request)
+
+Transfers are point-to-point, so a peer that missed a file (offline
+at send time, a pruned local copy, or a brand-new device) can ask
+the original sender to re-send it. Received file bubbles carry a
+**re-request** link: it POSTs `/request-file {pk,file_id,file_name}`,
+the holder locates the bytes by id and re-sends preserving the
+original id + name, and the requester auto-accepts (it asked). When
+the bytes land, the existing bubble is patched in place rather than
+duplicated.
+
+### Group files
+
+Group files ride the feed as a small reference
+(`{"skychat_file":{id,name,size}}`), not as bytes — so nothing is
+fanned out and the feed stays cheap. Every member, including future
+joiners, pulls the bytes on demand via the same file-backfill
+request routed to the message's sender. A member who doesn't hold a
+file yet sees a card with a re-request link; once the bytes arrive
+the bubble is patched in place (an image becomes inline).
+
 ## Message history
 
 When persistence is enabled, the chat-app stores every inbound and
@@ -217,10 +266,13 @@ frames, since #2504).
 ## Architecture
 
 - HTTP server on `--addr` serves the browser UI, `/status`, `/sse`
-  (listener stream), `/message` (send), `/history`, and pair-control
-  endpoints when pairing is on.
+  (listener stream), `/message` (send), `/history`, the file
+  endpoints (`/send-file`, `/files/`, `/thumb/`, `/request-file`),
+  and — when pairing is on — the pair-control and `/group` endpoints.
 - DM messages are length-prefixed framed connections (4-byte
   big-endian length + payload, max 64 KiB per frame).
+- File transfers run over a dedicated port (`pkg/skychat/xfer`); the
+  bytes never ride the group feed — only a small file reference does.
 - Group messages are published over CXO TreeStore feeds.
 - The app talks to the visor via `pkg/app` — it does NOT speak
   directly to dmsg or the router; everything routes through the
@@ -229,6 +281,9 @@ frames, since #2504).
 See:
 
 - `commands/skychat.go` — main app + framed-conn protocol
+- `commands/filexfer.go` — file send / serve / thumbnails
+- `commands/filebackfill.go` — file re-request / re-send
+- `commands/group.go` — browser group-chat HTTP proxy + SSE bridge
 - `group/` — group chat (TreeStore-backed)
 - `history/` — SQLite persistence layer
 - `pairing/` — per-pair CXO encryption (see also

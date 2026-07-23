@@ -1967,19 +1967,37 @@
           .catch(() => {});
       }
 
-      // syncGroups pulls the joined-group list from the visor. 404/503 means
-      // group support is off (visor without --pair-enable / grouping disabled);
-      // the Groups section stays hidden and the UI is DM-only.
-      syncGroups() {
+      // syncGroups pulls the joined-group list from the visor and reveals the
+      // Groups section. The visor RPC is dialed in the background, so it may not
+      // be up the instant the page loads: a 503 (or a transient network error)
+      // means "still connecting" and is retried with backoff rather than hiding
+      // the section for good. Only a 404 — the /group route isn't registered,
+      // i.e. skychat was started without --pair-enable — is terminal, leaving
+      // the UI DM-only.
+      syncGroups(attempt = 0) {
         fetch('/group')
-          .then(res => (res.status === 404 || res.status === 503) ? null : (res.ok ? res.json() : null))
-          .then(groups => {
-            if (!groups) return;
+          .then(res => {
+            if (res.status === 404) return { off: true };
+            if (!res.ok) return { retry: true }; // 503 etc. — RPC warming up
+            return res.json().then(groups => ({ groups }));
+          })
+          .then(r => {
+            if (r.off) return;
+            if (r.retry) { this._retryGroups(attempt); return; }
             document.getElementById('groupsSection').classList.remove('hidden');
-            this.groups = groups;
+            this.groups = r.groups || [];
             this.renderGroups();
           })
-          .catch(e => console.debug('skychat groups sync skipped:', e.message));
+          .catch(() => this._retryGroups(attempt));
+      }
+
+      // _retryGroups re-attempts syncGroups while the visor RPC is still coming
+      // up (503 / network error). Backs off 1s→5s and caps the attempts so a
+      // genuinely RPC-less visor doesn't spin forever — the section just stays
+      // hidden and the UI is DM-only.
+      _retryGroups(attempt) {
+        if (attempt >= 15) return;
+        setTimeout(() => this.syncGroups(attempt + 1), Math.min(5000, 1000 * (attempt + 1)));
       }
 
       renderGroups() {
