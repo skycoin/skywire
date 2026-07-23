@@ -573,6 +573,14 @@ func (h *sseHub) publishEvent(ev chatEvent) {
 // renderLegacySSE renders a chatEvent into the historical /sse JSON shape
 // {sender, message, network, dir, id, len, [to]} so existing /sse consumers
 // (incl. `cli skychat listen`) are unaffected by the richer /events schema.
+//
+// File attachments are surfaced additively: when the event carries file_*
+// fields (a Telegram-style "a file is a message" event from the xfer
+// manager), they are appended to the same JSON object. This is a
+// backward-compatible extension — line-based consumers like `cli skychat
+// listen` ignore the unknown keys, while the browser UI renders the media
+// inline. file_url, present only on received ("in") files, is the ready-made
+// download path under /files/ so the UI needn't reconstruct the saved name.
 func renderLegacySSE(ev chatEvent) string {
 	m := map[string]interface{}{
 		"sender":  ev.From,
@@ -584,6 +592,18 @@ func renderLegacySSE(ev chatEvent) string {
 	}
 	if ev.To != "" {
 		m["to"] = ev.To
+	}
+	if ev.FileID != "" {
+		m["file_id"] = ev.FileID
+		m["file_name"] = ev.FileName
+		m["file_size"] = ev.FileSize
+		m["file_status"] = ev.FileStatus
+		// A saved local path (set on inbound files once the transfer
+		// verifies) becomes the /files/<name> download URL the UI can
+		// render directly. Empty on the sender's own "out" event.
+		if ev.FilePath != "" {
+			m["file_url"] = "/files/" + filepath.Base(ev.FilePath)
+		}
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -925,6 +945,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
+	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
 	registerPairHTTPHandlers(ctx, mux)
 
 	// Portless-internal mode: no TCP port. Publish the mux to the visor's

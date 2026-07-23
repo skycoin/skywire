@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
 	"io"
 	"mime"
 	"net"
@@ -27,6 +28,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/disintegration/imaging"
 
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -482,4 +485,58 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v) //nolint:errcheck
+}
+
+// thumbMaxDim bounds the longest side of a generated thumbnail. 640px is
+// crisp for an in-chat preview on hi-dpi displays while keeping the JPEG
+// small (tens of KB) — so the browser fetches a lightweight thumbnail
+// instead of decoding the full-resolution original for every preview.
+const thumbMaxDim = 640
+
+// makeThumbnail decodes the image at srcPath and returns a copy scaled to
+// fit within maxDim×maxDim (aspect preserved). Returns an error for a
+// missing file or an undecodable/non-image payload — the caller surfaces
+// that so the UI can fall back to the full file.
+func makeThumbnail(srcPath string, maxDim int) (image.Image, error) {
+	img, err := imaging.Open(srcPath)
+	if err != nil {
+		return nil, err
+	}
+	return imaging.Fit(img, maxDim, maxDim, imaging.Lanczos), nil
+}
+
+// thumbnailHandler serves GET /thumb/<name>: a downscaled JPEG of a received
+// image from the downloads dir. On any decode failure (a non-image file, or
+// a format the decoder can't handle) it returns 415 so the UI's <img>
+// onerror falls back to the full file at /files/<name>. The name is
+// sanitized to a base name rooted in the downloads dir (no traversal), the
+// same guard downloadFileHandler uses.
+func thumbnailHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+	name := safeFileName(strings.TrimPrefix(r.URL.Path, "/thumb/"), "")
+	if name == "" {
+		http.Error(w, "no file", http.StatusBadRequest)
+		return
+	}
+	dir, err := downloadsDir()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// name is a sanitized base name, so the join stays inside downloadsDir.
+	thumb, err := makeThumbnail(filepath.Join(dir, name), thumbMaxDim)
+	if err != nil {
+		http.Error(w, "not a decodable image", http.StatusUnsupportedMediaType)
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	if err := imaging.Encode(w, thumb, imaging.JPEG); err != nil {
+		// Headers/body may be partially written by now; a log line is all
+		// we can do (the client will see a truncated image and can retry).
+		appLog("skychat: thumbnail encode %q: %v", name, err)
+	}
 }

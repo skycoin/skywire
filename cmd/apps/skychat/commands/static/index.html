@@ -575,6 +575,115 @@
       transform: scale(0.98);
     }
 
+    /* Media & file attachments */
+    .attach-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .attach-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .message-bubble.media {
+      padding: 6px;
+      max-width: 320px;
+    }
+
+    .media-image {
+      display: block;
+      max-width: 100%;
+      max-height: 320px;
+      border-radius: 12px;
+      cursor: pointer;
+      object-fit: cover;
+    }
+
+    .media-caption {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin: 6px 4px 2px;
+      word-break: break-all;
+    }
+
+    .file-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 180px;
+      max-width: 300px;
+    }
+
+    .file-card .file-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .file-card .file-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-card .file-name {
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-card .file-sub {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .file-card .file-dl {
+      flex-shrink: 0;
+      color: inherit;
+      text-decoration: none;
+      font-size: 18px;
+      opacity: 0.8;
+    }
+
+    .file-card .file-dl:hover {
+      opacity: 1;
+    }
+
+    /* Image lightbox — click a chat thumbnail to view it full size */
+    .lightbox-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.92);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      cursor: zoom-out;
+      padding: 24px;
+    }
+
+    .lightbox-overlay.visible {
+      display: flex;
+    }
+
+    .lightbox-img {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 8px;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+    }
+
     /* Toast Notifications */
     .toast-container {
       position: fixed;
@@ -792,6 +901,10 @@
         <option value="dmsg">DMSG</option>
         <option value="cxo" id="cxoNetworkOption" class="hidden">CXO (paired)</option>
       </select>
+      <label class="attach-btn" title="Attach a file">
+        &#x1F4CE;
+        <input type="file" id="fileField" style="display:none" onchange="app.sendFile()" />
+      </label>
       <input id="msgField" class="message-input" type="text" placeholder="Type a message..." />
       <button type="submit" class="send-btn">Send</button>
     </form>
@@ -816,6 +929,11 @@
 
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Image Lightbox -->
+  <div id="lightbox" class="lightbox-overlay" onclick="app.closeLightbox()">
+    <img id="lightboxImg" class="lightbox-img" src="" alt="" />
+  </div>
 
   <script>
     class Chat {
@@ -898,9 +1016,11 @@
           const msgArea = document.getElementById('messages');
           const wasAtBottom = (msgArea.scrollHeight - msgArea.scrollTop) <= msgArea.clientHeight + 50;
 
+          const bubbleClass = 'message-bubble' + (msg.file ? ' media' : '');
+          const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(msg.text);
           msgArea.innerHTML += `
             <div class="message-row ${rowClass}">
-              <div class="message-bubble">${this.escapeHtml(msg.text)}</div>
+              <div class="${bubbleClass}">${bubbleInner}</div>
               <div class="message-time">${time}</div>
             </div>`;
 
@@ -914,6 +1034,95 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      // escapeAttr escapes a value for safe interpolation inside an HTML
+      // attribute. escapeHtml leaves quotes intact, which is unsafe for a
+      // src/href built from a peer-supplied file name.
+      escapeAttr(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      // fileFromSSE extracts the additive file_* fields from a legacy /sse
+      // envelope into a compact descriptor, or null for a plain message.
+      fileFromSSE(data) {
+        if (!data || !data.file_id) return null;
+        return {
+          id: data.file_id,
+          name: data.file_name || 'file',
+          size: data.file_size || 0,
+          status: data.file_status || '',
+          url: data.file_url || null,
+        };
+      }
+
+      isImageFile(file) {
+        return /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test((file && file.name) || '');
+      }
+
+      humanSize(n) {
+        n = Number(n) || 0;
+        if (n < 1024) return n + ' B';
+        const units = ['KB', 'MB', 'GB', 'TB'];
+        let i = -1;
+        do { n /= 1024; i++; } while (n >= 1024 && i < units.length - 1);
+        return n.toFixed(1) + ' ' + units[i];
+      }
+
+      // renderFile builds the inner HTML of a media/file bubble: an inline
+      // image when the file is an image with a source URL, otherwise a
+      // compact file card with a download link (received files) to
+      // /files/<name>. Every peer-supplied value is escaped.
+      renderFile(file) {
+        const name = this.escapeHtml(file.name || 'file');
+        const nameAttr = this.escapeAttr(file.name || 'file');
+        const urlAttr = file.url ? this.escapeAttr(file.url) : '';
+        const sizeStr = this.humanSize(file.size || 0);
+        if (this.isImageFile(file) && urlAttr) {
+          // src is a lightweight server-side thumbnail (received files);
+          // data-full is the full-resolution image the lightbox opens. If the
+          // thumbnailer can't decode this file, the <img> onerror falls back
+          // to the full image. Locally-sent files have no /files/ URL, so they
+          // preview straight from their own object URL.
+          const full = urlAttr;
+          let thumb = full;
+          if (!file.local && file.url && file.url.indexOf('/files/') === 0) {
+            thumb = this.escapeAttr('/thumb/' + file.url.slice('/files/'.length));
+          }
+          return `<img class="media-image" src="${thumb}" data-full="${full}" alt="${nameAttr}"
+              loading="lazy" onclick="app.openLightbox(this.dataset.full)"
+              onerror="this.onerror=null;this.src=this.dataset.full" />
+            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}</div>`;
+        }
+        const sub = file.status === 'failed' ? 'transfer failed' : sizeStr;
+        const dl = urlAttr
+          ? `<a class="file-dl" href="${urlAttr}" download title="Download">&#x2B07;</a>`
+          : '';
+        return `<div class="file-card">
+            <div class="file-icon">&#x1F4CE;</div>
+            <div class="file-meta">
+              <div class="file-name">${name}</div>
+              <div class="file-sub">${this.escapeHtml(sub)}</div>
+            </div>
+            ${dl}
+          </div>`;
+      }
+
+      // openLightbox shows an image full-size in an in-app overlay (rather
+      // than opening a new browser tab). src comes from the clicked image's
+      // data-full attribute, i.e. the DOM value — no interpolation, so no
+      // injection surface.
+      openLightbox(src) {
+        if (!src) return;
+        document.getElementById('lightboxImg').src = src;
+        document.getElementById('lightbox').classList.add('visible');
+      }
+
+      closeLightbox() {
+        document.getElementById('lightbox').classList.remove('visible');
+        document.getElementById('lightboxImg').src = '';
       }
 
       _sseSubscribe() {
@@ -944,6 +1153,7 @@
             from: this.processPk(data.sender),
             text: data.message,
             viaPair: data.channel === 'pair',
+            file: this.fileFromSSE(data),
           };
           this.addMsgToList(data.sender, message);
 
@@ -1379,6 +1589,55 @@
           .catch(e => this.showToast(e.message, 'error'));
       }
 
+      // sendFile uploads the picked file to /send-file (multipart) for the
+      // current recipient and optimistically renders it in the thread. The
+      // matching "out" SSE event mirrors it to other listeners; the local
+      // object-URL gives an instant image preview (dropped from localStorage
+      // on save so a dead blob URL isn't rehydrated after reload).
+      sendFile() {
+        const input = document.getElementById('fileField');
+        if (!input.files || !input.files.length) return;
+        if (!this.recipient) {
+          this.showToast('Select a contact first.', 'error');
+          input.value = '';
+          return;
+        }
+        const file = input.files[0];
+        const destination = this.recipient;
+
+        const form = new FormData();
+        form.append('pk', destination);
+        form.append('file', file);
+
+        const localUrl = URL.createObjectURL(file);
+        const message = {
+          ts: new Date(),
+          from: 'me',
+          text: '📎 ' + file.name,
+          file: { name: file.name, size: file.size, status: 'sending', url: localUrl, local: true },
+        };
+        this.addMsgToList(destination, message);
+        const msgArea = document.getElementById('messages');
+        msgArea.scrollTop = msgArea.scrollHeight;
+        input.value = '';
+
+        fetch('/send-file', { method: 'POST', body: form })
+          .then(res => {
+            if (res.ok) {
+              message.file.status = 'sent';
+              this.showToast('File sent.');
+            } else {
+              message.file.status = 'failed';
+              res.text().then(t => this.showToast(`File send failed: ${t}`, 'error'));
+            }
+            this.saveChat(destination);
+          })
+          .catch(e => {
+            message.file.status = 'failed';
+            this.showToast(e.message, 'error');
+          });
+      }
+
       processPk(pk) {
         return pk.toLowerCase();
       }
@@ -1524,9 +1783,17 @@
       }
 
       saveChat(pk) {
-        if (this.messages[pk]) {
-          localStorage.setItem(`c_${pk}`, JSON.stringify(this.messages[pk]));
-        }
+        if (!this.messages[pk]) return;
+        // Object-URL previews for locally-sent files don't survive a reload,
+        // so strip them before persisting — a received file keeps its
+        // /files/ URL. Prevents a broken image after reload.
+        const serializable = this.messages[pk].map(m => {
+          if (m.file && m.file.local && m.file.url) {
+            return Object.assign({}, m, { file: Object.assign({}, m.file, { url: null }) });
+          }
+          return m;
+        });
+        localStorage.setItem(`c_${pk}`, JSON.stringify(serializable));
       }
 
       saveSeenList() {
@@ -1581,7 +1848,7 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') app.closeSettings();
+      if (e.key === 'Escape') { app.closeSettings(); app.closeLightbox(); }
     });
   </script>
 </body>
