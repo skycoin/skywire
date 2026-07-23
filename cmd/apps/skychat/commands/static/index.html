@@ -555,6 +555,33 @@
       100% { box-shadow: 0 0 0 0 transparent; }
     }
 
+    .msg-menu-btn { font-size: 13px; }
+    .msg-menu {
+      position: fixed;
+      z-index: 1000;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      min-width: 160px;
+    }
+    .msg-menu button {
+      background: none;
+      border: none;
+      text-align: left;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+    .msg-menu button:hover { background: var(--bg-hover); }
+    .msg-menu button.danger { color: var(--accent-red); }
+    .msg-menu button.danger:hover { background: rgba(239, 68, 68, 0.1); }
+
     .date-divider {
       display: flex;
       align-items: center;
@@ -1223,6 +1250,11 @@
         this.group = null;   // active group id (null when a DM is selected)
         this.myPK = null;    // this visor's PK, for group self-echo dedup
         this.replyTo = null; // {sender, ts, preview} when composing a reply, else null
+        this._mid = 0;       // per-render message id, for identifying a clicked bubble locally
+        // Group messages "deleted for me": a persisted set of "<gid>:<ts_nano>"
+        // keys, filtered out on every group render/reload (groups reload from
+        // visor history, so a local hide needs to survive here, not in the cache).
+        this.hiddenGroup = new Set(this._loadHiddenGroup());
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -1306,16 +1338,19 @@
           const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(msg.text);
           const quoteHtml = msg.reply ? this._renderQuote(msg.reply) : '';
           // Row identity (data-*) lets a later reply quote this message and
-          // scroll back to it. senderAttr is 'me' for our own messages, else the
-          // author PK; preview is the snippet a reply embeds.
+          // scroll back to it, and lets the menu act on it. senderAttr is 'me'
+          // for our own messages, else the author PK; mid identifies the bubble
+          // locally; ts_nano (groups) is the exact delete/reply target.
           const senderAttr = msg.from === 'me' ? 'me' : (msg.sender || msg.from || '');
           const tsIso = (msg.ts instanceof Date && !isNaN(msg.ts)) ? msg.ts.toISOString() : '';
+          if (msg.mid == null) msg.mid = ++this._mid;
           msgArea.insertAdjacentHTML('beforeend', `
-            <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}">
+            <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}" data-mid="${msg.mid}" data-tsnano="${this.escapeAttr(msg.tsNano != null ? String(msg.tsNano) : '')}">
               ${senderLabel}
               <div class="${bubbleClass}">${quoteHtml}${bubbleInner}</div>
               <div class="message-meta">
                 <button class="reply-link" onclick="app.startReply(this)" title="Reply">&#x21A9; Reply</button>
+                <button class="reply-link msg-menu-btn" onclick="app.openMsgMenu(this)" title="More">&#x22EF;</button>
                 <span class="message-time">${time}</span>
               </div>
             </div>`);
@@ -1435,6 +1470,108 @@
             setTimeout(() => r.classList.remove('reply-highlight'), 1600);
             return;
           }
+        }
+      }
+
+      // ---- Deleting messages ----------------------------------------
+
+      _loadHiddenGroup() {
+        try { return JSON.parse(localStorage.getItem('skychat_hidden_group') || '[]'); }
+        catch (e) { return []; }
+      }
+      _saveHiddenGroup() {
+        localStorage.setItem('skychat_hidden_group', JSON.stringify([...this.hiddenGroup]));
+      }
+      _groupHideKey(gid, tsNano) { return gid + ':' + tsNano; }
+      _isGroupHidden(gid, tsNano) {
+        return !!tsNano && this.hiddenGroup.has(this._groupHideKey(gid, tsNano));
+      }
+
+      // openMsgMenu shows the per-message actions (reply/delete). "Delete for
+      // me" is always available (local-only); "Delete for everyone" only on our
+      // own GROUP messages — it's sender-scoped on the feed, and DM has no
+      // shared message id to target across the two visors (a follow-up).
+      openMsgMenu(btn) {
+        this.closeMsgMenu();
+        const row = btn.closest('.message-row');
+        if (!row) return;
+        const isOwn = row.dataset.sender === 'me' || (this.myPK && row.dataset.sender === this.myPK);
+        const canDeleteAll = !!this.group && isOwn && !!row.dataset.tsnano;
+        const menu = document.createElement('div');
+        menu.className = 'msg-menu';
+        menu.id = 'msgMenu';
+        menu.dataset.mid = row.dataset.mid || '';
+        menu.dataset.tsnano = row.dataset.tsnano || '';
+        let html = `<button onclick="app.deleteForMe()">Delete for me</button>`;
+        if (canDeleteAll) {
+          html += `<button class="danger" onclick="app.deleteForAll()">Delete for everyone</button>`;
+        }
+        menu.innerHTML = html;
+        document.body.appendChild(menu);
+        const r = btn.getBoundingClientRect();
+        menu.style.top = (r.bottom + 4) + 'px';
+        menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, Math.max(8, r.left)) + 'px';
+        setTimeout(() => {
+          this._menuOutside = (e) => { if (!menu.contains(e.target)) this.closeMsgMenu(); };
+          document.addEventListener('click', this._menuOutside);
+        }, 0);
+      }
+      closeMsgMenu() {
+        const m = document.getElementById('msgMenu');
+        if (m) m.remove();
+        if (this._menuOutside) { document.removeEventListener('click', this._menuOutside); this._menuOutside = null; }
+      }
+
+      // deleteForMe removes the message from this device only. DM threads are
+      // localStorage-cached, so dropping it from the cache persists the hide;
+      // groups reload from visor history, so the ts_nano key is remembered in
+      // hiddenGroup and filtered on reload.
+      deleteForMe() {
+        const menu = document.getElementById('msgMenu');
+        if (!menu) return;
+        const mid = menu.dataset.mid, tsNano = menu.dataset.tsnano;
+        const key = this.activeKey();
+        this.closeMsgMenu();
+        if (!key || !this.messages[key]) return;
+        this.messages[key] = this.messages[key].filter(m => String(m.mid) !== String(mid));
+        if (this.group) {
+          if (tsNano) { this.hiddenGroup.add(this._groupHideKey(this.group, tsNano)); this._saveHiddenGroup(); }
+        } else {
+          this.saveChat(key);
+        }
+        this._rerenderActive();
+      }
+
+      // deleteForAll removes a GROUP message we authored for everyone: it drops
+      // it locally, then asks the visor to publish a tombstone (propagates live +
+      // to future joiners) and prune the leaf (erases the bytes).
+      deleteForAll() {
+        const menu = document.getElementById('msgMenu');
+        if (!menu || !this.group) return;
+        const mid = menu.dataset.mid, tsNano = menu.dataset.tsnano, gid = this.group;
+        this.closeMsgMenu();
+        if (!tsNano) { this.showToast('Message not yet confirmed — try again in a moment.', 'error'); return; }
+        // Optimistic local removal (+ remember, so a late echo can't re-add it).
+        this.messages[gid] = (this.messages[gid] || []).filter(m => String(m.mid) !== String(mid));
+        this.hiddenGroup.add(this._groupHideKey(gid, tsNano)); this._saveHiddenGroup();
+        this._rerenderActive();
+        fetch(`/group/${gid}/message?ts=${encodeURIComponent(tsNano)}`, { method: 'DELETE' })
+          .then(res => { if (!res.ok) res.text().then(t => this.showToast(`Delete failed: ${t}`, 'error')); })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      // handleGroupDelete applies a delete tombstone (channel="group-delete"):
+      // remove the message at deleted_ts_nano authored by deleted_by. The
+      // tombstone is signed by its author, so this can only hide that author's
+      // own messages.
+      handleGroupDelete(data) {
+        const gid = data.group_id, tsNano = data.deleted_ts_nano, by = String(data.deleted_by || '').toLowerCase();
+        if (!gid || !tsNano) return;
+        this.hiddenGroup.add(this._groupHideKey(gid, String(tsNano))); this._saveHiddenGroup();
+        const list = this.messages[gid];
+        if (list) {
+          this.messages[gid] = list.filter(m => !(String(m.tsNano) === String(tsNano) && (m.sender || '') === by));
+          if (this.group === gid) this._rerenderActive();
         }
       }
 
@@ -1601,6 +1738,10 @@
           }
           if (data.channel === 'group') {
             this.handleGroupSSE(data);
+            return;
+          }
+          if (data.channel === 'group-delete') {
+            this.handleGroupDelete(data);
             return;
           }
           // A backfill re-send we requested has arrived — patch the existing
@@ -2305,6 +2446,10 @@
             const withDates = [];
             let lastDay = null;
             msgs.forEach(m => {
+              const tsNano = m.ts_nano != null ? m.ts_nano : null;
+              // Skip messages this device deleted-for-me (groups reload from
+              // history, so the local hide lives in hiddenGroup, not the cache).
+              if (this._isGroupHidden(id, tsNano != null ? String(tsNano) : '')) return;
               const ts = new Date(m.ts);
               const day = ts.toDateString();
               if (day !== lastDay) { withDates.push({ date: ts }); lastDay = day; }
@@ -2327,7 +2472,7 @@
                 ts: m.reply_to_ts || '',
                 preview: m.reply_to_preview || '',
               } : null;
-              withDates.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file, reply });
+              withDates.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file, reply, tsNano });
             });
             this.messages[id] = withDates;
             this.messagesQuantity[id] = msgs.length;
@@ -2372,7 +2517,22 @@
         const gid = data.group_id;
         if (!gid) return;
         const sender = String(data.sender || '').toLowerCase();
-        if (this.myPK && sender === this.myPK) return;
+        const tsNano = data.ts_nano != null ? data.ts_nano : null;
+        if (this.myPK && sender === this.myPK) {
+          // Our own message echoed back by the poll — we already showed it
+          // optimistically, but the echo carries the feed's ts_nano (the exact
+          // delete/reply id). Backfill it onto the matching pending bubble so
+          // "delete for everyone" works before any reload.
+          if (tsNano != null) {
+            const list = this.messages[gid] || [];
+            for (let i = list.length - 1; i >= 0; i--) {
+              const m = list[i];
+              if (m.from === 'me' && m.tsNano == null && m.text === data.message) { m.tsNano = tsNano; break; }
+            }
+          }
+          return;
+        }
+        if (this._isGroupHidden(gid, tsNano != null ? String(tsNano) : '')) return; // hidden-for-me
         // A group file reference carries the same additive file_* fields as a
         // DM file event, so fileFromSSE builds the descriptor (its .from = the
         // sender, which powers the re-request link when the bytes aren't held).
@@ -2381,7 +2541,7 @@
         // Use the feed timestamp (shared by all members) so a reply's scroll-to
         // resolves the same parent everywhere; fall back to now if absent.
         const ts = data.ts ? new Date(data.ts) : new Date();
-        this.addMsgToList(gid, { ts, from: sender, text: data.message, group: true, sender, file, reply }, { group: true });
+        this.addMsgToList(gid, { ts, from: sender, text: data.message, group: true, sender, file, reply, tsNano }, { group: true });
         if (!this.groups.find(g => g.id === gid)) this.syncGroups();
       }
 

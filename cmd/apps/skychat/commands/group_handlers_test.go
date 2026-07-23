@@ -22,8 +22,10 @@ type groupAPI struct {
 	created visor.GroupCreateArgs
 	joined  visor.GroupJoinArgs
 	sent    []visor.GroupSendArgs
+	unsent  []visor.GroupUnsendArgs
 	deleted []string
 	left    []string
+	history []visor.GroupMessage // returned by GroupHistory when non-nil
 }
 
 func (a *groupAPI) GroupList() ([]visor.GroupInfo, error) { return a.groups, nil }
@@ -39,10 +41,20 @@ func (a *groupAPI) GroupGet(id string) (visor.GroupInfo, error) {
 	return visor.GroupInfo{ID: id, Name: "g"}, nil
 }
 func (a *groupAPI) GroupInvite(string) (string, error)        { return "skychat:invite:reemit", nil }
-func (a *groupAPI) GroupSend(args visor.GroupSendArgs) error  { a.sent = append(a.sent, args); return nil }
-func (a *groupAPI) GroupLeave(id string) error                { a.left = append(a.left, id); return nil }
-func (a *groupAPI) GroupDelete(id string) error               { a.deleted = append(a.deleted, id); return nil }
+func (a *groupAPI) GroupSend(args visor.GroupSendArgs) error { a.sent = append(a.sent, args); return nil }
+func (a *groupAPI) GroupUnsend(args visor.GroupUnsendArgs) error {
+	a.unsent = append(a.unsent, args)
+	return nil
+}
+func (a *groupAPI) GroupLeave(id string) error { a.left = append(a.left, id); return nil }
+func (a *groupAPI) GroupDelete(id string) error {
+	a.deleted = append(a.deleted, id)
+	return nil
+}
 func (a *groupAPI) GroupHistory(id string, _ int) ([]visor.GroupMessage, error) {
+	if a.history != nil {
+		return a.history, nil
+	}
 	return []visor.GroupMessage{{GroupID: id, Text: "old", TS: time.Now().UTC()}}, nil
 }
 

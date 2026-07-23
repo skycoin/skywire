@@ -76,6 +76,39 @@ func enrichGroupFileRow(row map[string]any, meta groupFileMeta) {
 	}
 }
 
+// groupDeleteMeta is a delete tombstone published on the group feed to hide a
+// message for everyone. It references the target by its exact UnixNano
+// timestamp — the same value GroupUnsend prunes by, and the identity carried in
+// ts_nano on each delivered message. The tombstone's own feed leaf is signed by
+// the deleter, so its authenticated sender IS the only account whose messages it
+// can hide (readers accept a tombstone only against a message by the same
+// author) — you can delete only your own messages for everyone.
+type groupDeleteMeta struct {
+	ToTSNano int64 `json:"to_ts_nano"`
+}
+
+type groupDeleteEnvelope struct {
+	Delete *groupDeleteMeta `json:"skychat_delete"`
+}
+
+func encodeGroupDeleteText(m groupDeleteMeta) (string, error) {
+	b, err := json.Marshal(groupDeleteEnvelope{Delete: &m})
+	return string(b), err
+}
+
+// parseGroupDeleteText detects a delete tombstone in a group message body.
+func parseGroupDeleteText(text string) (groupDeleteMeta, bool) {
+	t := strings.TrimSpace(text)
+	if len(t) == 0 || t[0] != '{' || !strings.Contains(t, "skychat_delete") {
+		return groupDeleteMeta{}, false
+	}
+	var env groupDeleteEnvelope
+	if err := json.Unmarshal([]byte(t), &env); err != nil || env.Delete == nil || env.Delete.ToTSNano == 0 {
+		return groupDeleteMeta{}, false
+	}
+	return *env.Delete, true
+}
+
 // sendFileToVisorGroup publishes a file to a visor-managed group: it keeps a
 // served copy (id-named, so re-requests can find it) and publishes a file
 // reference on the group feed. The bytes are NOT fanned out — every member
@@ -146,12 +179,28 @@ func startGroupPoller(parent context.Context) {
 				if m.TS.After(since) {
 					since = m.TS
 				}
+				// A delete tombstone hides a message for everyone. It's authored
+				// (signed) by the deleter, so deleted_by is authentic — a reader
+				// applies it only to a message by that same author. Surfaced as a
+				// control event, never rendered as a chat line.
+				if dmeta, ok := parseGroupDeleteText(m.Text); ok {
+					if body, e := json.Marshal(map[string]any{
+						"channel":         "group-delete",
+						"group_id":        m.GroupID,
+						"deleted_by":      m.SenderPK.Hex(),
+						"deleted_ts_nano": dmeta.ToTSNano,
+					}); e == nil {
+						hub.broadcast(string(body))
+					}
+					continue
+				}
 				envelope := map[string]any{
 					"sender":   m.SenderPK.Hex(),
 					"message":  m.Text,
 					"channel":  "group",
 					"group_id": m.GroupID,
 					"ts":       m.TS.Format(time.RFC3339Nano),
+					"ts_nano":  m.TS.UnixNano(),
 				}
 				if meta, ok := parseGroupFileText(m.Text); ok {
 					envelope["message"] = "📎 " + meta.Name
@@ -391,6 +440,37 @@ func groupItemHandler() http.HandlerFunc {
 			}
 			w.WriteHeader(http.StatusNoContent)
 
+		case action == "message" && r.Method == http.MethodDelete:
+			// "Delete for everyone": publish a durable tombstone (so live
+			// members, offline-then-back members, and future joiners all hide
+			// it) AND prune our own leaf so the bytes are erased. Both GroupSend
+			// and GroupUnsend are sender-scoped, so this only affects messages we
+			// authored. The tombstone is the backstop if the prune can't run.
+			tsNano, perr := strconv.ParseInt(r.URL.Query().Get("ts"), 10, 64)
+			if perr != nil || tsNano == 0 {
+				http.Error(w, "ts (unixnano) required", http.StatusBadRequest)
+				return
+			}
+			tomb, terr := encodeGroupDeleteText(groupDeleteMeta{ToTSNano: tsNano})
+			if terr != nil {
+				http.Error(w, terr.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := pairRPCCall("GroupSend", func(c visor.API) error {
+				return c.GroupSend(visor.GroupSendArgs{ID: id, Text: tomb})
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// Best-effort byte erasure — a failure here is non-fatal; the
+			// tombstone already hides the message everywhere.
+			if err := pairRPCCall("GroupUnsend", func(c visor.API) error {
+				return c.GroupUnsend(visor.GroupUnsendArgs{ID: id, TS: tsNano})
+			}); err != nil {
+				appLog("Group: unsend prune failed (tombstone still applies): %v", err)
+			}
+			w.WriteHeader(http.StatusNoContent)
+
 		case action == "leave" && r.Method == http.MethodPost:
 			if err := pairRPCCall("GroupLeave", func(c visor.API) error { return c.GroupLeave(id) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -414,15 +494,36 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			// Enrich file-reference messages with file_* fields so the UI
-			// renders them as media (mirroring the SSE poller).
+			// First pass: collect delete tombstones (keyed by author + target
+			// ts_nano) so a reloading client / new joiner sees deletes applied
+			// even if the pruned original still lingers on the feed.
+			type delKey struct {
+				sender string
+				ts     int64
+			}
+			deleted := make(map[delKey]bool)
+			for _, m := range msgs {
+				if dmeta, ok := parseGroupDeleteText(m.Text); ok {
+					deleted[delKey{m.SenderPK.Hex(), dmeta.ToTSNano}] = true
+				}
+			}
+			// Second pass: emit chat rows, skipping tombstones and any message
+			// its own author deleted for everyone. Enrich file/reply bodies +
+			// carry ts_nano (the exact delete/reply identity).
 			out := make([]map[string]any, 0, len(msgs))
 			for _, m := range msgs {
+				if _, ok := parseGroupDeleteText(m.Text); ok {
+					continue
+				}
+				if deleted[delKey{m.SenderPK.Hex(), m.TS.UnixNano()}] {
+					continue
+				}
 				row := map[string]any{
 					"group_id":  m.GroupID,
 					"sender_pk": m.SenderPK.Hex(),
 					"text":      m.Text,
 					"ts":        m.TS,
+					"ts_nano":   m.TS.UnixNano(),
 				}
 				if meta, ok := parseGroupFileText(m.Text); ok {
 					row["text"] = "📎 " + meta.Name
