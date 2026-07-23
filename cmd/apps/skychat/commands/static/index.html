@@ -684,6 +684,30 @@
       box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
     }
 
+    /* Inline video & audio players */
+    .media-video {
+      display: block;
+      max-width: 100%;
+      max-height: 360px;
+      border-radius: 12px;
+      background: #000;
+    }
+
+    .media-audio {
+      display: block;
+      width: 260px;
+      max-width: 100%;
+    }
+
+    .media-caption .media-dl {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+
+    .media-caption .media-dl:hover {
+      text-decoration: underline;
+    }
+
     /* Toast Notifications */
     .toast-container {
       position: fixed;
@@ -1062,6 +1086,14 @@
         return /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test((file && file.name) || '');
       }
 
+      isVideoFile(file) {
+        return /\.(mp4|m4v|webm|ogv|mov|mkv)$/i.test((file && file.name) || '');
+      }
+
+      isAudioFile(file) {
+        return /\.(mp3|ogg|oga|opus|wav|m4a|aac|flac|weba)$/i.test((file && file.name) || '');
+      }
+
       humanSize(n) {
         n = Number(n) || 0;
         if (n < 1024) return n + ' B';
@@ -1095,6 +1127,19 @@
               loading="lazy" onclick="app.openLightbox(this.dataset.full)"
               onerror="this.onerror=null;this.src=this.dataset.full" />
             <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}</div>`;
+        }
+        if ((this.isVideoFile(file) || this.isAudioFile(file)) && urlAttr) {
+          // Native inline player (browser handles its own preview/controls;
+          // /files/ supports Range so seeking works). No poster for video —
+          // that would need server-side frame extraction (ffmpeg). A download
+          // link is offered on received media so it can always be saved.
+          const isVideo = this.isVideoFile(file);
+          const tag = isVideo ? 'video' : 'audio';
+          const cls = isVideo ? 'media-video' : 'media-audio';
+          const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
+            ? ` · <a class="media-dl" href="${urlAttr}" download>download</a>` : '';
+          return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"></${tag}>
+            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${dl}</div>`;
         }
         const sub = file.status === 'failed' ? 'transfer failed' : sizeStr;
         const dl = urlAttr

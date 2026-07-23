@@ -141,3 +141,28 @@ func TestThumbnailHandler_RejectsNonGet(t *testing.T) {
 		t.Errorf("POST /thumb: code=%d, want 405", rec.Code)
 	}
 }
+
+func TestMediaContentType(t *testing.T) {
+	cases := map[string]string{
+		"clip.mp4":   "video/mp4",
+		"movie.MOV":  "video/quicktime", // case-insensitive
+		"v.webm":     "video/webm",
+		"a.ogv":      "video/ogg",
+		"song.mp3":   "audio/mpeg",
+		"sound.ogg":  "audio/ogg",
+		"voice.m4a":  "audio/mp4",
+		"track.flac": "audio/flac",
+		"rec.opus":   "audio/opus",
+		"s.wav":      "audio/wav",
+		// Non-media / unknown → empty (falls through to ServeFile's sniffing).
+		"photo.png":   "",
+		"doc.pdf":     "",
+		"archive.zip": "",
+		"noext":       "",
+	}
+	for name, want := range cases {
+		if got := mediaContentType(name); got != want {
+			t.Errorf("mediaContentType(%q) = %q, want %q", name, got, want)
+		}
+	}
+}

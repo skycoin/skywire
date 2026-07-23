@@ -458,9 +458,45 @@ func resolveUploadOrPath(r *http.Request) (path string, cleanup func(), name str
 	return p, nil, filepath.Base(p), nil
 }
 
+// mediaContentType maps a media file extension to its MIME type, or "" for
+// anything not a recognized audio/video type. Used to set an explicit
+// Content-Type before serving so the UI's <video>/<audio> elements play
+// reliably — http.ServeFile otherwise depends on the host's mime.types,
+// which is inconsistent across OSes and often missing webm/ogg/m4a/etc.
+func mediaContentType(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".webm":
+		return "video/webm"
+	case ".ogv":
+		return "video/ogg"
+	case ".mov":
+		return "video/quicktime"
+	case ".mkv":
+		return "video/x-matroska"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".ogg", ".oga":
+		return "audio/ogg"
+	case ".opus":
+		return "audio/opus"
+	case ".wav":
+		return "audio/wav"
+	case ".m4a", ".aac":
+		return "audio/mp4"
+	case ".flac":
+		return "audio/flac"
+	case ".weba":
+		return "audio/webm"
+	}
+	return ""
+}
+
 // downloadFileHandler serves GET /files/<name> from the downloads dir so a UI can
 // fetch a received file. The name is sanitized to a base name rooted in the
-// downloads dir (no traversal).
+// downloads dir (no traversal). http.ServeFile honors HTTP Range requests, so
+// <video>/<audio> streaming + seeking work without extra handling.
 func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "GET only", http.StatusMethodNotAllowed)
@@ -476,6 +512,12 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	// Set an explicit media Content-Type when we recognize the extension;
+	// http.ServeFile keeps a Content-Type already on the header rather than
+	// re-sniffing, so this wins for audio/video the host's mime table misses.
+	if ct := mediaContentType(name); ct != "" {
+		w.Header().Set("Content-Type", ct)
 	}
 	// name is a sanitized base name (safeFileName strips separators + traversal),
 	// so the join stays rooted in the downloads dir.
