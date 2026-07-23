@@ -216,7 +216,19 @@ func groupRootHandler() http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			writeJSON(w, groups)
+			// Hide groups the user has left or the owner revoked. GroupList
+			// deliberately keeps terminal records (Leave/Delete only flip the
+			// status, they don't purge — the CLI can still audit them), but for
+			// the browser a deleted/left group must disappear, not reappear on
+			// the next sync.
+			active := make([]visor.GroupInfo, 0, len(groups))
+			for _, g := range groups {
+				if g.Status == group.StatusLeft || g.Status == group.StatusRevoked {
+					continue
+				}
+				active = append(active, g)
+			}
+			writeJSON(w, active)
 
 		case http.MethodPost:
 			var body struct {
