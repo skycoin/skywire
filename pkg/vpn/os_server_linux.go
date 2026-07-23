@@ -5,19 +5,18 @@
 package vpn
 
 import (
-	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/skycoin/skywire/pkg/util/osutil"
+	"github.com/skycoin/skywire/pkg/vpn/netctl"
 )
 
 const (
-	getIPv4ForwardingCMD           = "sysctl net.ipv4.ip_forward"
-	getIPv6ForwardingCMD           = "sysctl net.ipv6.conf.all.forwarding"
-	setIPv4ForwardingCMDFmt        = "sysctl -w net.ipv4.ip_forward=%s"
-	setIPv6ForwardingCMDFmt        = "sysctl -w net.ipv6.conf.all.forwarding=%s"
 	getIPTablesForwardPolicyCMD    = "iptables -L | grep \"Chain FORWARD\" | tr -d '()' | awk '{print $4}'"
 	setIPTablesForwardPolicyCMDFmt = "iptables --policy FORWARD %s"
 	enableIPMasqueradingCMDFmt     = "iptables -t nat -A POSTROUTING -o %s -j MASQUERADE"
@@ -64,38 +63,35 @@ func BlockIPToLocalNetwork(src, _ net.IP) error {
 	return osutil.RunElevated("sh", "-c", cmd)
 }
 
-// GetIPv4ForwardingValue gets current value of IPv4 forwarding.
+// GetIPv4ForwardingValue gets current value of IPv4 forwarding (via /proc — no
+// sysctl binary needed).
 func GetIPv4ForwardingValue() (string, error) {
-	return getIPForwardingValue(getIPv4ForwardingCMD)
+	return netctl.GetIPv4Forwarding()
 }
 
-// GetIPv6ForwardingValue gets current value of IPv6 forwarding.
+// GetIPv6ForwardingValue gets current value of IPv6 forwarding (via /proc).
 func GetIPv6ForwardingValue() (string, error) {
-	return getIPForwardingValue(getIPv6ForwardingCMD)
+	return netctl.GetIPv6Forwarding()
 }
 
-// SetIPv4ForwardingValue sets `val` value of IPv4 forwarding.
+// SetIPv4ForwardingValue sets `val` value of IPv4 forwarding (via /proc).
 func SetIPv4ForwardingValue(val string) error {
-	cmd := fmt.Sprintf(setIPv4ForwardingCMDFmt, val)
-	outBytes, err := osutil.RunElevatedWithResult("sh", "-c", cmd)
-	if err != nil {
+	if err := netctl.SetIPv4Forwarding(val); err != nil {
+		if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) {
+			return errPermissionDenied
+		}
 		return err
-	}
-	if len(outBytes) == 0 {
-		return errPermissionDenied
 	}
 	return nil
 }
 
-// SetIPv6ForwardingValue sets `val` value of IPv6 forwarding.
+// SetIPv6ForwardingValue sets `val` value of IPv6 forwarding (via /proc).
 func SetIPv6ForwardingValue(val string) error {
-	cmd := fmt.Sprintf(setIPv6ForwardingCMDFmt, val)
-	outBytes, err := osutil.RunElevatedWithResult("sh", "-c", cmd)
-	if err != nil {
+	if err := netctl.SetIPv6Forwarding(val); err != nil {
+		if errors.Is(err, unix.EPERM) || errors.Is(err, unix.EACCES) {
+			return errPermissionDenied
+		}
 		return err
-	}
-	if len(outBytes) == 0 {
-		return errPermissionDenied
 	}
 	return nil
 }
@@ -120,29 +116,4 @@ func EnableIPMasquerading(ifcName string) error {
 func DisableIPMasquerading(ifcName string) error {
 	cmd := fmt.Sprintf(disableIPMasqueradingCMDFmt, ifcName)
 	return osutil.RunElevated("sh", "-c", cmd)
-}
-
-func getIPForwardingValue(cmd string) (string, error) {
-	outBytes, err := osutil.RunWithResult("sh", "-c", cmd)
-	if err != nil {
-		return "", err
-	}
-
-	val, err := parseIPForwardingOutput(outBytes)
-	if err != nil {
-		return "", fmt.Errorf("error parsing output of command %s: %w", cmd, err)
-	}
-
-	return val, nil
-}
-
-func parseIPForwardingOutput(output []byte) (string, error) {
-	output = bytes.TrimRight(output, "\n")
-
-	outTokens := bytes.Split(output, []byte{'='})
-	if len(outTokens) != 2 {
-		return "", fmt.Errorf("invalid output: %s", output)
-	}
-
-	return string(bytes.Trim(outTokens[1], " ")), nil
 }
