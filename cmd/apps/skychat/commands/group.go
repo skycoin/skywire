@@ -17,14 +17,94 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/xfer"
 	"github.com/skycoin/skywire/pkg/visor"
 )
+
+// groupFileMeta is the file reference published on a group feed (as the message
+// text) so every member — including future joiners — sees the file and can pull
+// its bytes on demand via the file-backfill request. The bytes never ride the
+// CXO feed; only this small reference does.
+type groupFileMeta struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Size int64  `json:"size"`
+}
+
+type groupFileEnvelope struct {
+	File *groupFileMeta `json:"skychat_file"`
+}
+
+// encodeGroupFileText renders a file reference as the group message body.
+func encodeGroupFileText(m groupFileMeta) (string, error) {
+	b, err := json.Marshal(groupFileEnvelope{File: &m})
+	return string(b), err
+}
+
+// parseGroupFileText detects a file-reference envelope in a group message body.
+// A cheap prefix + substring gate avoids running the JSON parser on ordinary
+// chat text.
+func parseGroupFileText(text string) (groupFileMeta, bool) {
+	t := strings.TrimSpace(text)
+	if len(t) == 0 || t[0] != '{' || !strings.Contains(t, "skychat_file") {
+		return groupFileMeta{}, false
+	}
+	var env groupFileEnvelope
+	if err := json.Unmarshal([]byte(t), &env); err != nil || env.File == nil || env.File.ID == "" {
+		return groupFileMeta{}, false
+	}
+	return *env.File, true
+}
+
+// enrichGroupFileRow adds the file_* fields (+ a /files/ URL when the bytes are
+// already held locally) to a group-message map for a file-reference message.
+// Shared by the SSE poller and the /group/<id>/history response.
+func enrichGroupFileRow(row map[string]any, meta groupFileMeta) {
+	row["file_id"] = meta.ID
+	row["file_name"] = meta.Name
+	row["file_size"] = meta.Size
+	if p, ok := findFileByID(meta.ID, meta.Name); ok {
+		row["file_url"] = "/files/" + filepath.Base(p)
+	}
+}
+
+// sendFileToVisorGroup publishes a file to a visor-managed group: it keeps a
+// served copy (id-named, so re-requests can find it) and publishes a file
+// reference on the group feed. The bytes are NOT fanned out — every member
+// pulls them on demand via the file-backfill request, which reaches even
+// members who were offline at send time and future joiners. Returns the file
+// id + the sender-side /files/ URL for an optimistic UI render.
+func sendFileToVisorGroup(_ context.Context, groupID, path, name string) (string, string, error) {
+	fileID := newEventID()
+	if name == "" {
+		name = filepath.Base(path)
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return "", "", err
+	}
+	if cErr := saveSentCopy(path, xfer.Offer{ID: fileID, Name: name}); cErr != nil {
+		appLog("skychat: group file served copy failed: %v", cErr)
+	}
+	text, err := encodeGroupFileText(groupFileMeta{ID: fileID, Name: name, Size: fi.Size()})
+	if err != nil {
+		return "", "", err
+	}
+	if err := pairRPCCall("GroupSend", func(c visor.API) error {
+		return c.GroupSend(visor.GroupSendArgs{ID: groupID, Text: text})
+	}); err != nil {
+		return "", "", err
+	}
+	return fileID, "/files/" + fileID + strings.ToLower(filepath.Ext(name)), nil
+}
 
 // groupPollerCancel stops the SSE-bridge goroutine on shutdown.
 var groupPollerCancel context.CancelFunc
@@ -66,12 +146,16 @@ func startGroupPoller(parent context.Context) {
 				if m.TS.After(since) {
 					since = m.TS
 				}
-				envelope := map[string]string{
+				envelope := map[string]any{
 					"sender":   m.SenderPK.Hex(),
 					"message":  m.Text,
 					"channel":  "group",
 					"group_id": m.GroupID,
 					"ts":       m.TS.Format(time.RFC3339Nano),
+				}
+				if meta, ok := parseGroupFileText(m.Text); ok {
+					envelope["message"] = "📎 " + meta.Name
+					enrichGroupFileRow(envelope, meta)
 				}
 				body, mErr := json.Marshal(envelope)
 				if mErr != nil {
@@ -315,7 +399,23 @@ func groupItemHandler() http.HandlerFunc {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
-			writeJSON(w, msgs)
+			// Enrich file-reference messages with file_* fields so the UI
+			// renders them as media (mirroring the SSE poller).
+			out := make([]map[string]any, 0, len(msgs))
+			for _, m := range msgs {
+				row := map[string]any{
+					"group_id":  m.GroupID,
+					"sender_pk": m.SenderPK.Hex(),
+					"text":      m.Text,
+					"ts":        m.TS,
+				}
+				if meta, ok := parseGroupFileText(m.Text); ok {
+					row["text"] = "📎 " + meta.Name
+					enrichGroupFileRow(row, meta)
+				}
+				out = append(out, row)
+			}
+			writeJSON(w, out)
 
 		default:
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

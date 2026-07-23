@@ -207,10 +207,12 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 		ev.Channel = channelGroup
 		ev.GroupID = offer.Group
 	}
+	var wasRequested bool
 	switch dir {
 	case xfer.Incoming:
 		ev.Dir = "in"
 		ev.From = peer.Hex()
+		wasRequested = isRequestedFile(offer.ID, peer)
 		clearRequestedFile(offer.ID) // fulfilled (or terminal) — drop the pending request
 		if err != nil {
 			ev.FileStatus = "failed"
@@ -240,15 +242,34 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 			}
 		}
 	}
-	if hub != nil {
+	// A backfill response (a file we explicitly requested) patches the existing
+	// referenced message rather than creating a new one — emit a file-ready
+	// event carrying the file id + its now-servable URL. Everything else
+	// surfaces as a normal file event.
+	switch {
+	case wasRequested && err == nil:
+		if hub != nil {
+			fileURL := ""
+			if ev.FilePath != "" {
+				fileURL = "/files/" + filepath.Base(ev.FilePath)
+			}
+			if body, mErr := json.Marshal(map[string]any{
+				"channel":  "file-ready",
+				"file_id":  offer.ID,
+				"file_url": fileURL,
+			}); mErr == nil {
+				hub.broadcast(string(body))
+			}
+		}
+	case hub != nil:
 		hub.publishEvent(ev)
 	}
 
-	// Persist DM file events so they survive a cache wipe and reappear on a
-	// fresh browser via /history (group files live in the group bucket and
-	// are skipped here). Best-effort — a persistence failure never blocks
-	// delivery.
-	if offer.Group == "" {
+	// Persist normal DM file events so they survive a cache wipe and reappear on
+	// a fresh browser via /history (group files live in the group bucket, and
+	// requested backfill responses patch an existing message — both skipped).
+	// Best-effort — a persistence failure never blocks delivery.
+	if offer.Group == "" && !wasRequested {
 		msg := history.Message{
 			Peer:       peer.Hex(),
 			Outgoing:   dir == xfer.Outgoing,
@@ -500,6 +521,19 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 
 		switch {
 		case groupVal != "":
+			// Visor-managed group (browser /group): publish a file reference on
+			// the feed; members pull the bytes on demand via file-backfill. Falls
+			// back to the standalone --cxo-group fan-out when pairing is off.
+			if pairEnable && pairRPCAlive() {
+				id, url, serr := sendFileToVisorGroup(ctx, groupVal, path, name)
+				cancel()
+				if serr != nil {
+					http.Error(w, serr.Error(), http.StatusBadGateway)
+					return
+				}
+				writeJSON(w, map[string]any{"id": id, "file_url": url, "group": groupVal})
+				return
+			}
 			n, gerr := sendFileToGroup(ctx, path)
 			if gerr != nil {
 				cancel()

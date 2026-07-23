@@ -1380,6 +1380,12 @@
             this.handleGroupSSE(data);
             return;
           }
+          // A backfill re-send we requested has arrived — patch the existing
+          // file bubble in place rather than appending a new message.
+          if (data.channel === 'file-ready') {
+            this.handleFileReady(data);
+            return;
+          }
           const message = {
             ts: new Date(),
             from: this.processPk(data.sender),
@@ -1846,23 +1852,27 @@
       }
 
       // sendFile uploads the picked file to /send-file (multipart) for the
-      // current recipient and optimistically renders it in the thread. The
-      // matching "out" SSE event mirrors it to other listeners; the local
-      // object-URL gives an instant image preview (dropped from localStorage
-      // on save so a dead blob URL isn't rehydrated after reload).
+      // active conversation — a DM (pk) or a group (group id) — and
+      // optimistically renders it. For a DM the bytes ship 1:1; for a group
+      // only a reference goes on the feed and members pull the bytes on demand
+      // (so the "sent" toast means "published", not "delivered to everyone").
+      // The local object-URL gives an instant image preview (dropped from
+      // localStorage on save so a dead blob URL isn't rehydrated after reload).
       sendFile() {
         const input = document.getElementById('fileField');
         if (!input.files || !input.files.length) return;
-        if (!this.recipient) {
-          this.showToast('Select a contact first.', 'error');
+        const isGroup = !!this.group;
+        const destination = isGroup ? this.group : this.recipient;
+        if (!destination) {
+          this.showToast('Select a conversation first.', 'error');
           input.value = '';
           return;
         }
         const file = input.files[0];
-        const destination = this.recipient;
 
         const form = new FormData();
-        form.append('pk', destination);
+        if (isGroup) form.append('group', destination);
+        else form.append('pk', destination);
         form.append('file', file);
 
         const localUrl = URL.createObjectURL(file);
@@ -1871,35 +1881,45 @@
           from: 'me',
           text: '📎 ' + file.name,
           file: { name: file.name, size: file.size, status: 'sending', url: localUrl, local: true },
+          group: isGroup || undefined,
+          sender: isGroup ? this.myPK : undefined,
         };
-        this.addMsgToList(destination, message);
+        this.addMsgToList(destination, message, { group: isGroup });
         const msgArea = document.getElementById('messages');
         msgArea.scrollTop = msgArea.scrollHeight;
         input.value = '';
 
         // For images, swap the ephemeral blob preview for a persistent
-        // data-URL thumbnail so the sent image still shows after a reload.
-        // The live bubble already rendered from the blob; this only affects
-        // what gets persisted to localStorage.
+        // data-URL thumbnail so a sent image still shows after a reload (DM
+        // threads are localStorage-cached; groups reload from visor history,
+        // where the sender's held copy re-renders it). Only affects the
+        // persisted copy — the live bubble already rendered from the blob.
         if (this.isImageFile(message.file)) {
           this.makeThumbDataURL(file, 320).then(dataUrl => {
             if (!dataUrl) return;
             message.file.url = dataUrl;
             message.file.local = false; // data URL persists — don't strip on save
-            this.saveChat(destination);
+            if (!isGroup) this.saveChat(destination);
           });
         }
 
         fetch('/send-file', { method: 'POST', body: form })
           .then(res => {
-            if (res.ok) {
-              message.file.status = 'sent';
-              this.showToast('File sent.');
-            } else {
+            if (!res.ok) {
               message.file.status = 'failed';
               res.text().then(t => this.showToast(`File send failed: ${t}`, 'error'));
+              if (!isGroup) this.saveChat(destination);
+              return;
             }
-            this.saveChat(destination);
+            message.file.status = 'sent';
+            this.showToast('File sent.');
+            // The response carries the server-assigned file id so a re-request
+            // can locate the bytes and the id matches the feed reference other
+            // members see.
+            res.json().then(j => {
+              if (j && j.id) message.file.id = j.id;
+              if (!isGroup) this.saveChat(destination);
+            }).catch(() => { if (!isGroup) this.saveChat(destination); });
           })
           .catch(e => {
             message.file.status = 'failed';
@@ -1992,10 +2012,11 @@
         document.getElementById('groupHeader').classList.remove('hidden');
         document.getElementById('messages').classList.remove('hidden');
         document.getElementById('msgForm').classList.remove('hidden');
-        // Groups don't use the network selector or file attach (v1).
+        // Groups support file attach (a reference on the feed + bytes pulled on
+        // demand) but not the DM network selector.
         document.getElementById('networkSelect').classList.add('hidden');
         const attachBtn = document.querySelector('.attach-btn');
-        if (attachBtn) attachBtn.classList.add('hidden');
+        if (attachBtn) attachBtn.classList.remove('hidden');
 
         const info = this.groups.find(g => g.id === id);
         document.getElementById('groupHeaderName').textContent = info ? info.name : id;
@@ -2029,7 +2050,20 @@
               const day = ts.toDateString();
               if (day !== lastDay) { withDates.push({ date: ts }); lastDay = day; }
               const sender = String(m.sender_pk || '').toLowerCase();
-              withDates.push({ ts, from: sender === this.myPK ? 'me' : sender, text: m.text, group: true, sender });
+              const senderIsMe = sender === this.myPK;
+              // A file-reference row (file_id set) becomes a media bubble.
+              // file_url is present only when this visor already holds the
+              // bytes; otherwise it renders as a card with a re-request link
+              // (skipped on our own sends — no .from). Bytes then arrive via a
+              // file-ready patch.
+              const file = m.file_id ? {
+                id: m.file_id,
+                name: m.file_name || 'file',
+                size: m.file_size || 0,
+                url: m.file_url || null,
+                from: senderIsMe ? null : sender,
+              } : null;
+              withDates.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file });
             });
             this.messages[id] = withDates;
             this.messagesQuantity[id] = msgs.length;
@@ -2070,8 +2104,48 @@
         if (!gid) return;
         const sender = String(data.sender || '').toLowerCase();
         if (this.myPK && sender === this.myPK) return;
-        this.addMsgToList(gid, { ts: new Date(), from: sender, text: data.message, group: true, sender }, { group: true });
+        // A group file reference carries the same additive file_* fields as a
+        // DM file event, so fileFromSSE builds the descriptor (its .from = the
+        // sender, which powers the re-request link when the bytes aren't held).
+        const file = this.fileFromSSE(data);
+        this.addMsgToList(gid, { ts: new Date(), from: sender, text: data.message, group: true, sender, file }, { group: true });
         if (!this.groups.find(g => g.id === gid)) this.syncGroups();
+      }
+
+      // handleFileReady attaches the now-servable URL to a file bubble whose
+      // bytes just arrived from a backfill re-send we requested. The event
+      // carries only the file id + URL (no thread), so scan every conversation
+      // for the matching reference, patch it, and re-render if it's open. Serves
+      // both DM re-requests and group file pulls (new joiner / pruned copy).
+      handleFileReady(data) {
+        const fid = data.file_id;
+        if (!fid) return;
+        let touched = null;
+        Object.keys(this.messages).forEach(key => {
+          (this.messages[key] || []).forEach(m => {
+            if (m.file && m.file.id === fid) {
+              if (data.file_url) m.file.url = data.file_url;
+              m.file.local = false;
+              m.file.status = 'received';
+              touched = key;
+            }
+          });
+        });
+        if (touched == null) return;
+        // A 66-hex key is a DM (localStorage-cached); a group id is not.
+        if (touched.length === 66) this.saveChat(touched);
+        if (touched === this.activeKey()) this._rerenderActive();
+      }
+
+      // _rerenderActive redraws the open conversation (DM or group) from its
+      // message buffer — used after an in-place patch (e.g. a file-ready fill).
+      _rerenderActive() {
+        const key = this.activeKey();
+        if (!key) return;
+        const el = document.getElementById('messages');
+        el.innerHTML = '';
+        (this.messages[key] || []).forEach(m => this._showMessage(m));
+        el.scrollTop = el.scrollHeight;
       }
 
       updateGroupPreview(gid, msg) {
