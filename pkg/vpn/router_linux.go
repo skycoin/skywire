@@ -18,6 +18,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/util/osutil"
+	"github.com/skycoin/skywire/pkg/vpn/netctl"
 	"github.com/skycoin/skywire/pkg/vpnrouter"
 	"github.com/skycoin/skywire/pkg/vpnrouter/meshgw"
 )
@@ -158,11 +159,11 @@ func (r *Router) setupLANInterface() error {
 	lan := r.cfg.LANInterface
 	cidr := fmt.Sprintf("%s/%d", r.cfg.Gateway, r.cfg.prefixLen())
 	// Flush any stale addressing, set ours, bring the link up.
-	_ = osutil.RunElevated("ip", "addr", "flush", "dev", lan) //nolint:errcheck // best-effort clean slate
-	if err := osutil.RunElevated("ip", "addr", "add", cidr, "dev", lan); err != nil {
+	_ = netctl.FlushAddrs(lan) //nolint:errcheck // best-effort clean slate
+	if err := netctl.AddrAdd(lan, cidr); err != nil {
 		return fmt.Errorf("assign %s to %s: %w", cidr, lan, err)
 	}
-	if err := osutil.RunElevated("ip", "link", "set", lan, "up"); err != nil {
+	if err := netctl.LinkUp(lan); err != nil {
 		return fmt.Errorf("bring up %s: %w", lan, err)
 	}
 	r.log.Infof("downstream %s = %s", lan, cidr)
@@ -315,21 +316,19 @@ func (r *Router) setupNAT() error {
 // gateway response. `iif <lan>` only matches packets forwarded in from the
 // downstream — locally-generated router traffic has no iif and stays on main.
 func (r *Router) setupPolicyRouting() error {
-	table := strconv.Itoa(lanPolicyTable)
 	lan := r.cfg.LANInterface
 
 	// default route via the tun device in our private table.
-	if err := osutil.RunElevated("ip", "route", "replace", "default", "dev", r.tunIfc, "table", table); err != nil {
-		return fmt.Errorf("policy route (default dev %s table %s): %w", r.tunIfc, table, err)
+	if err := netctl.ReplaceDefaultRouteDev(r.tunIfc, lanPolicyTable); err != nil {
+		return fmt.Errorf("policy route (default dev %s table %d): %w", r.tunIfc, lanPolicyTable, err)
 	}
-	// route traffic forwarded in from the LAN interface into that table. Delete
-	// any stale copy first so a restart doesn't stack duplicate rules.
-	_ = osutil.RunElevated("ip", "rule", "del", "iif", lan, "lookup", table) //nolint:errcheck // best-effort cleanup of a stale rule
-	if err := osutil.RunElevated("ip", "rule", "add", "iif", lan, "lookup", table); err != nil {
-		return fmt.Errorf("policy rule (iif %s lookup %s): %w", lan, table, err)
+	// route traffic forwarded in from the LAN interface into that table
+	// (AddRuleIif deletes any stale copy first so a restart doesn't stack rules).
+	if err := netctl.AddRuleIif(lan, lanPolicyTable); err != nil {
+		return fmt.Errorf("policy rule (iif %s lookup %d): %w", lan, lanPolicyTable, err)
 	}
 	r.policyRouting = true
-	r.log.Infof("policy routing: iif %s → %s (table %s); router uplink + local services unchanged", lan, r.tunIfc, table)
+	r.log.Infof("policy routing: iif %s → %s (table %d); router uplink + local services unchanged", lan, r.tunIfc, lanPolicyTable)
 	return nil
 }
 
@@ -405,11 +404,10 @@ func (r *Router) teardown() {
 	}
 	// Remove the LAN→tun policy route+rule.
 	if r.policyRouting {
-		table := strconv.Itoa(lanPolicyTable)
-		if err := osutil.RunElevated("ip", "rule", "del", "iif", r.cfg.LANInterface, "lookup", table); err != nil {
+		if err := netctl.DelRuleIif(r.cfg.LANInterface, lanPolicyTable); err != nil {
 			r.log.WithError(err).Warn("teardown: remove policy rule")
 		}
-		if err := osutil.RunElevated("ip", "route", "flush", "table", table); err != nil {
+		if err := netctl.FlushTable(lanPolicyTable); err != nil {
 			r.log.WithError(err).Warn("teardown: flush policy table")
 		}
 	}
@@ -437,7 +435,7 @@ func (r *Router) teardown() {
 	// Drop the gateway address we assigned.
 	if r.cfg.LANInterface != "" && r.cfg.Gateway != nil {
 		cidr := fmt.Sprintf("%s/%d", r.cfg.Gateway, r.cfg.prefixLen())
-		if err := osutil.RunElevated("ip", "addr", "del", cidr, "dev", r.cfg.LANInterface); err != nil {
+		if err := netctl.AddrDel(r.cfg.LANInterface, cidr); err != nil {
 			r.log.WithError(err).Warn("teardown: remove downstream address")
 		}
 	}
