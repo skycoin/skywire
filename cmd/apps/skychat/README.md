@@ -142,6 +142,55 @@ request routed to the message's sender. A member who doesn't hold a
 file yet sees a card with a re-request link; once the bytes arrive
 the bubble is patched in place (an image becomes inline).
 
+## Replies, deletes & pinning (browser UI)
+
+These are browser-UI features; the CLI stays plain send/listen.
+
+### Quoted replies
+
+Hover a message and click **↩ Reply** to quote it: the reply rides
+the normal message body as a `{"skychat_reply":{...}}` envelope (no
+new endpoint, no wire-version bump), and every read boundary — DM
+`/sse`, DM `/history`, the group SSE poller, and group `/history` —
+unwraps it into the plain text plus additive `reply_to_*` fields.
+The quoted block renders above the reply, and clicking it scrolls to
+the original. The parent's preview is embedded, so the quote renders
+even for a reader who doesn't hold the parent (a fresh group joiner,
+or after backfill). Works for both DMs and groups.
+
+### Deleting messages
+
+The per-message **⋯** menu offers:
+
+- **Delete for me** — local only. DM threads are dropped from the
+  browser cache; group messages are remembered in a persisted
+  hidden-set (keyed by the message's `ts_nano`) and filtered on
+  reload, since groups re-load from visor history.
+- **Delete for everyone** — shown only on your **own group**
+  messages. `DELETE /group/<id>/message?ts=<unixnano>` publishes a
+  durable `{"skychat_delete":{to_ts_nano}}` tombstone (via
+  `GroupSend`) *and* prunes the original leaf (via `GroupUnsend`).
+  The tombstone rides the normal `GroupPoll` → SSE path so it
+  propagates live, and — being a durable leaf — also reaches members
+  who were offline during the delete and future joiners; group
+  `/history` filters both the tombstone and the deleted message. It
+  is sender-scoped (the tombstone leaf is signed), so you can only
+  delete your own messages for everyone. As with any federated
+  store, a client that is offline forever or archived the bytes
+  can't be forced to forget.
+
+DM "delete for everyone" is intentionally not offered: DM messages
+carry no shared, stable id across the two visors, which a reliable
+delete-for-all would require.
+
+### Pinning
+
+The 📌 button in a conversation header pins that conversation (DM or
+group) to a **Pinned** slot at the top of the sidebar; its copy in
+the normal list is hidden so it isn't shown twice. The pin persists
+across reloads and clears automatically if the conversation is
+deleted or left. One pin at a time — pinning another replaces it.
+
 ## Message history
 
 When persistence is enabled, the chat-app stores every inbound and
@@ -283,7 +332,9 @@ See:
 - `commands/skychat.go` — main app + framed-conn protocol
 - `commands/filexfer.go` — file send / serve / thumbnails
 - `commands/filebackfill.go` — file re-request / re-send
+- `commands/reply.go` — quoted-reply envelope + enrichment
 - `commands/group.go` — browser group-chat HTTP proxy + SSE bridge
+  (incl. group files + delete tombstones)
 - `group/` — group chat (TreeStore-backed)
 - `history/` — SQLite persistence layer
 - `pairing/` — per-pair CXO encryption (see also
