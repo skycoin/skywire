@@ -1225,6 +1225,7 @@
           size: data.file_size || 0,
           status: data.file_status || '',
           url: data.file_url || null,
+          from: data.sender ? String(data.sender).toLowerCase() : null,
         };
       }
 
@@ -1288,6 +1289,12 @@
         const nameAttr = this.escapeAttr(file.name || 'file');
         const urlAttr = file.url ? this.escapeAttr(file.url) : '';
         const sizeStr = this.humanSize(file.size || 0);
+        // Re-request link on received files (backfill): ask the sender to
+        // re-send if the local copy is gone (fresh device / pruned). data-* are
+        // DOM-read by requestFile, so no interpolation/injection.
+        const reqLink = (file.from && !file.local && file.id)
+          ? ` · <a class="media-dl file-req" data-from="${this.escapeAttr(file.from)}" data-fid="${this.escapeAttr(file.id)}" data-fname="${nameAttr}" onclick="app.requestFile(this)">re-request</a>`
+          : '';
         if (this.isImageFile(file) && urlAttr) {
           // src is a lightweight server-side thumbnail (received files);
           // data-full is the full-resolution image the lightbox opens. If the
@@ -1302,7 +1309,7 @@
           return `<img class="media-image" src="${thumb}" data-full="${full}" alt="${nameAttr}"
               loading="lazy" onclick="app.openLightbox(this.dataset.full)"
               onerror="this.onerror=null;this.src=this.dataset.full" />
-            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}</div>`;
+            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${reqLink}</div>`;
         }
         if ((this.isVideoFile(file) || this.isAudioFile(file)) && urlAttr) {
           // Native inline player (browser handles its own preview/controls;
@@ -1315,7 +1322,7 @@
           const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
             ? ` · <a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
           return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"></${tag}>
-            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${dl}</div>`;
+            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${dl}${reqLink}</div>`;
         }
         const sub = file.status === 'failed' ? 'transfer failed' : sizeStr;
         const dl = urlAttr
@@ -1325,7 +1332,7 @@
             <div class="file-icon">&#x1F4CE;</div>
             <div class="file-meta">
               <div class="file-name">${name}</div>
-              <div class="file-sub">${this.escapeHtml(sub)}</div>
+              <div class="file-sub">${this.escapeHtml(sub)}${reqLink}</div>
             </div>
             ${dl}
           </div>`;
@@ -1471,6 +1478,7 @@
                   size: m.file_size || 0,
                   status: m.file_status || '',
                   url: m.file_url || null,
+                  from: m.outgoing ? null : (m.from || m.peer),
                 };
               }
               withDates.push(entry);
@@ -1897,6 +1905,25 @@
             message.file.status = 'failed';
             this.showToast(e.message, 'error');
           });
+      }
+
+      // requestFile asks a file's original sender to re-send it (backfill) —
+      // e.g. after the local copy was pruned or on a fresh device. Params come
+      // from the message's file descriptor via data-* attributes (DOM-read, so
+      // no interpolation/injection).
+      requestFile(el) {
+        const from = el.dataset.from, fid = el.dataset.fid, fname = el.dataset.fname || '';
+        if (!from || !fid) return;
+        fetch('/request-file', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk: from, file_id: fid, file_name: fname })
+        })
+          .then(res => {
+            if (res.ok) this.showToast('Requested file from sender…');
+            else res.text().then(t => this.showToast(`Request failed: ${t}`, 'error'));
+          })
+          .catch(e => this.showToast(e.message, 'error'));
       }
 
       // ---- Groups ----------------------------------------------------

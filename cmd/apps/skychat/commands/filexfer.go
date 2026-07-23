@@ -106,6 +106,11 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 	default:
 		accept = isEstablishedPeer(from)
 	}
+	// A file we explicitly requested (backfill) is accepted even from a peer we
+	// haven't otherwise established a chat with — we asked for it.
+	if !accept && isRequestedFile(offer.ID, from) {
+		accept = true
+	}
 	if !accept {
 		appLog("skychat: declining file %q from unestablished peer %s", offer.Name, from)
 		return nil, false
@@ -206,6 +211,7 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 	case xfer.Incoming:
 		ev.Dir = "in"
 		ev.From = peer.Hex()
+		clearRequestedFile(offer.ID) // fulfilled (or terminal) — drop the pending request
 		if err != nil {
 			ev.FileStatus = "failed"
 			ev.Text = fmt.Sprintf("📎 %s — receive failed: %v", offer.Name, err)
@@ -328,8 +334,19 @@ func sendFileToPeer(ctx context.Context, peer cipher.PubKey, path string) (strin
 }
 
 // sendFile streams path to peer; when group != "" the offer is stamped with the
-// group id (used by the group path). Shared by 1:1 and group sends.
+// group id (used by the group path). Shared by 1:1 and group sends. Allocates a
+// fresh transfer id, uses the file's base name for display, and keeps a served
+// sender copy.
 func sendFile(ctx context.Context, peer cipher.PubKey, group, path string) (string, error) {
+	return sendFileID(ctx, peer, group, path, newEventID(), filepath.Base(path), true)
+}
+
+// sendFileID is sendFile with an explicit transfer id + display name and
+// control over whether a served sender copy is kept. The re-send (backfill)
+// path passes the ORIGINAL id + name — so the requester correlates the file to
+// the referenced message and sees the real filename — and keepCopy=false (the
+// file is already served locally; re-copying could truncate a same-path source).
+func sendFileID(ctx context.Context, peer cipher.PubKey, group, path, id, name string, keepCopy bool) (string, error) {
 	fileMgrMu.Lock()
 	mgr := fileMgr
 	fileMgrMu.Unlock()
@@ -348,9 +365,11 @@ func sendFile(ctx context.Context, peer cipher.PubKey, group, path string) (stri
 	if fi.IsDir() {
 		return "", fmt.Errorf("%s is a directory", path)
 	}
-	name := filepath.Base(path)
+	if name == "" {
+		name = filepath.Base(path)
+	}
 	offer := xfer.Offer{
-		ID:    newEventID(),
+		ID:    id,
 		Name:  name,
 		Size:  fi.Size(),
 		MIME:  mime.TypeByExtension(filepath.Ext(name)),
@@ -359,7 +378,7 @@ func sendFile(ctx context.Context, peer cipher.PubKey, group, path string) (stri
 	// Keep a served copy of DM sends so the sender's own view + /history can
 	// render a thumbnail (best-effort; a failure just means no sender-side
 	// URL). Done before SendFile so the copy exists when onXferDone fires.
-	if group == "" {
+	if keepCopy && group == "" {
 		if cErr := saveSentCopy(path, offer); cErr != nil {
 			appLog("skychat: sender copy of %q failed: %v", name, cErr)
 		}

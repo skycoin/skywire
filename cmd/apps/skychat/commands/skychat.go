@@ -948,6 +948,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
 	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
+	mux.HandleFunc("/request-file", requireAuthFunc(requestFileHandler(ctx)))
 	registerPairHTTPHandlers(ctx, mux)
 	registerGroupHTTPHandlers(mux)
 
@@ -1079,6 +1080,12 @@ func handleConn(conn *framedConn) {
 		// legacy plain-text path so the existing CI tests are
 		// unaffected.
 		if handlePairControlFrame(context.Background(), raddr.PubKey, payload) {
+			continue
+		}
+
+		// File-backfill control envelope (file-request). Recognized frames
+		// trigger a re-send of the held file and are not surfaced as chat.
+		if handleFileRequestFrame(context.Background(), raddr.PubKey, payload) {
 			continue
 		}
 
