@@ -920,6 +920,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 	defer stopPairRPCWatchdog()
 	startPairPoller(ctx)
 	defer stopPairPoller()
+	startGroupPoller(ctx)
+	defer stopGroupPoller()
 
 	// Wire optional password protection. If passwordFile is empty or
 	// the file is missing, requireAuth* are no-ops.
@@ -947,6 +949,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
 	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
 	registerPairHTTPHandlers(ctx, mux)
+	registerGroupHTTPHandlers(mux)
 
 	// Portless-internal mode: no TCP port. Publish the mux to the visor's
 	// in-process HTTP-handler registry so the hypervisor's control surface

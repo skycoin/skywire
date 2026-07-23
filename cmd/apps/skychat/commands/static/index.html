@@ -870,6 +870,91 @@
       }
     }
 
+    /* Groups */
+    .groups-section { border-bottom: 1px solid var(--border-color); }
+    .groups-section.hidden { display: none; }
+
+    .groups-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--accent-green);
+    }
+
+    .groups-actions { display: flex; gap: 4px; }
+
+    .group-hdr-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      font-size: 13px;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .group-hdr-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    .group-list { list-style: none; }
+
+    .group-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border-color);
+      transition: background 0.2s;
+    }
+
+    .group-item:hover { background: var(--bg-hover); }
+    .group-item.active { background: var(--bg-tertiary); border-left: 3px solid var(--accent-green); }
+
+    .group-avatar-sm, .group-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      color: var(--accent-green);
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .group-avatar { width: 40px; height: 40px; font-size: 18px; }
+    .group-header-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .msg-sender {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-green);
+      margin: 0 4px 2px;
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+
+    .message-row.sent .msg-sender { display: none; }
+
+    .cg-input {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
     .hidden {
       display: none !important;
     }
@@ -894,6 +979,16 @@
       <div class="invites-header">Pending Pair Invites</div>
       <div id="invitesList"></div>
     </div>
+    <div id="groupsSection" class="groups-section hidden">
+      <div class="groups-header">
+        <span>Groups</span>
+        <div class="groups-actions">
+          <button class="group-hdr-btn" onclick="app.openCreateGroup()" title="Create group">+</button>
+          <button class="group-hdr-btn" onclick="app.openJoinGroup()" title="Join a group by invite">&#x2913;</button>
+        </div>
+      </div>
+      <ul id="groups" class="group-list"></ul>
+    </div>
     <ul id="recipients" class="recipient-list"></ul>
   </aside>
 
@@ -908,6 +1003,21 @@
         <button class="icon-btn" onclick="app.copyPk()" title="Copy public key">&#x2398;</button>
         <button class="icon-btn" onclick="app.openSettings()" title="Contact settings">&#x2699;</button>
         <button class="icon-btn danger" onclick="app.deleteChat()" title="Delete chat">&#x2715;</button>
+      </div>
+    </div>
+
+    <div id="groupHeader" class="chat-header hidden">
+      <div class="chat-header-info">
+        <div class="group-avatar">#</div>
+        <div>
+          <div class="chat-header-pk" id="groupHeaderName">-</div>
+          <div class="group-header-sub" id="groupHeaderSub"></div>
+        </div>
+      </div>
+      <div class="chat-header-actions">
+        <button class="icon-btn" onclick="app.showGroupInvite()" title="Copy invite link">&#x1F517;</button>
+        <button class="icon-btn" onclick="app.leaveGroup()" title="Leave group">&#x21AA;</button>
+        <button class="icon-btn danger" onclick="app.deleteGroup()" title="Delete group (owner)">&#x2715;</button>
       </div>
     </div>
 
@@ -951,6 +1061,34 @@
     </div>
   </div>
 
+  <!-- Create Group Modal -->
+  <div id="createGroupModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Create Group</h3>
+      <input id="cgName" class="cg-input" type="text" placeholder="Group name" />
+      <select id="cgMode" class="cg-input">
+        <option value="public">Public</option>
+        <option value="private">Private (encrypted)</option>
+      </select>
+      <div class="modal-actions">
+        <button class="btn" onclick="app.createGroup()">Create</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('createGroupModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Group Modal -->
+  <div id="joinGroupModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Join Group</h3>
+      <input id="jgInvite" class="cg-input" type="text" placeholder="Paste invite link (skychat:invite:...)" />
+      <div class="modal-actions">
+        <button class="btn" onclick="app.joinGroup()">Join</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('joinGroupModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
 
@@ -971,12 +1109,17 @@
         this.pairedSet = new Set();
         this.pairAvailable = false;
         this.pendingInvites = new Set();
+        this.groups = [];
+        this.group = null;   // active group id (null when a DM is selected)
+        this.myPK = null;    // this visor's PK, for group self-echo dedup
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
         this._sseSubscribe();
         this.syncPairedFromVisor();
         this.syncHistoryPeers();
+        this.syncMyPK();
+        this.syncGroups();
       }
 
       showToast(message, type = 'success') {
@@ -1033,17 +1176,20 @@
             hour: '2-digit', minute: '2-digit', hour12: false
           });
 
-          if (msg.from !== 'me' && !this.recipients.includes(msg.from)) {
+          if (!msg.group && msg.from !== 'me' && !this.recipients.includes(msg.from)) {
             this._addRecipient(msg.from);
           }
 
           const msgArea = document.getElementById('messages');
           const wasAtBottom = (msgArea.scrollHeight - msgArea.scrollTop) <= msgArea.clientHeight + 50;
 
+          const senderLabel = (msg.group && msg.from !== 'me')
+            ? `<div class="msg-sender">${this.escapeHtml(this.shortPk(msg.sender || msg.from))}</div>` : '';
           const bubbleClass = 'message-bubble' + (msg.file ? ' media' : '');
           const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(msg.text);
           msgArea.innerHTML += `
             <div class="message-row ${rowClass}">
+              ${senderLabel}
               <div class="${bubbleClass}">${bubbleInner}</div>
               <div class="message-time">${time}</div>
             </div>`;
@@ -1223,6 +1369,10 @@
             this.handlePairInviteSSE(data);
             return;
           }
+          if (data.channel === 'group') {
+            this.handleGroupSSE(data);
+            return;
+          }
           const message = {
             ts: new Date(),
             from: this.processPk(data.sender),
@@ -1350,7 +1500,13 @@
       }
 
       selectRecipient(pk) {
-        if (this.recipient === pk) return;
+        if (this.recipient === pk && !this.group) return;
+        this.group = null;
+        document.getElementById('groupHeader').classList.add('hidden');
+        document.getElementById('networkSelect').classList.remove('hidden');
+        const attachBtn = document.querySelector('.attach-btn');
+        if (attachBtn) attachBtn.classList.remove('hidden');
+        document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
 
         this.recipient = pk;
         this.loadHistoryFor(pk);
@@ -1635,6 +1791,12 @@
         const msg = msgField.value.trim();
         if (!msg) return;
 
+        if (this.group) {
+          this.sendGroupMessage(msg);
+          msgField.value = '';
+          return;
+        }
+
         const destination = this.recipient;
         const network = document.getElementById('networkSelect').value;
 
@@ -1737,14 +1899,259 @@
           });
       }
 
+      // ---- Groups ----------------------------------------------------
+
+      // activeKey is the currently-open conversation's key: a group id when a
+      // group is selected, else the DM recipient PK. Groups use their UUID as
+      // the messages-map key (distinct from 66-hex PKs, so no collision).
+      activeKey() { return this.group || this.recipient; }
+
+      shortPk(pk) {
+        if (!pk) return '?';
+        return pk.length >= 14 ? pk.substring(0, 8) + '…' + pk.substring(pk.length - 4) : pk;
+      }
+
+      // syncMyPK records this visor's PK (from /status) so group messages
+      // echoed back from our own sends can be de-duplicated.
+      syncMyPK() {
+        fetch('/status')
+          .then(res => res.ok ? res.json() : null)
+          .then(s => { if (s && s.visor_pk) this.myPK = String(s.visor_pk).toLowerCase(); })
+          .catch(() => {});
+      }
+
+      // syncGroups pulls the joined-group list from the visor. 404/503 means
+      // group support is off (visor without --pair-enable / grouping disabled);
+      // the Groups section stays hidden and the UI is DM-only.
+      syncGroups() {
+        fetch('/group')
+          .then(res => (res.status === 404 || res.status === 503) ? null : (res.ok ? res.json() : null))
+          .then(groups => {
+            if (!groups) return;
+            document.getElementById('groupsSection').classList.remove('hidden');
+            this.groups = groups;
+            this.renderGroups();
+          })
+          .catch(e => console.debug('skychat groups sync skipped:', e.message));
+      }
+
+      renderGroups() {
+        const list = document.getElementById('groups');
+        list.innerHTML = '';
+        this.groups.forEach(g => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div class="group-item ${g.id === this.group ? 'active' : ''}" data-gid="${g.id}" onclick="app.selectGroup('${g.id}')">
+              <div class="group-avatar-sm">#</div>
+              <div class="recipient-info">
+                <div class="recipient-pk">${this.escapeHtml(g.name || g.id)}</div>
+                <div class="recipient-preview">${this.escapeHtml(g.role || 'member')} · ${(g.members || []).length} members</div>
+              </div>
+            </div>`;
+          list.appendChild(li);
+        });
+      }
+
+      selectGroup(id) {
+        this.group = id;
+        this.recipient = null;
+        if (!this.messages[id]) this.messages[id] = [];
+
+        document.querySelectorAll('.group-item').forEach(el => el.classList.toggle('active', el.dataset.gid === id));
+        document.querySelectorAll('.recipient-item').forEach(el => el.classList.remove('active'));
+
+        document.getElementById('emptyState').classList.add('hidden');
+        document.getElementById('chatHeader').classList.add('hidden');
+        document.getElementById('groupHeader').classList.remove('hidden');
+        document.getElementById('messages').classList.remove('hidden');
+        document.getElementById('msgForm').classList.remove('hidden');
+        // Groups don't use the network selector or file attach (v1).
+        document.getElementById('networkSelect').classList.add('hidden');
+        const attachBtn = document.querySelector('.attach-btn');
+        if (attachBtn) attachBtn.classList.add('hidden');
+
+        const info = this.groups.find(g => g.id === id);
+        document.getElementById('groupHeaderName').textContent = info ? info.name : id;
+        document.getElementById('groupHeaderSub').textContent = info
+          ? `${info.role} · ${(info.members || []).length} members · ${info.mode}` : '';
+
+        const msgEl = document.getElementById('messages');
+        msgEl.innerHTML = '';
+        this.messages[id].forEach(m => this._showMessage(m));
+        msgEl.scrollTop = msgEl.scrollHeight;
+        document.getElementById('msgField').focus();
+
+        this.loadGroupHistory(id);
+      }
+
+      // loadGroupHistory backfills persisted messages when the local buffer is
+      // empty. Group messages aren't cached in localStorage (the visor's
+      // history store is the source of truth), so this runs on each open of an
+      // empty thread; returns silently if group history is disabled.
+      loadGroupHistory(id) {
+        if (this.messages[id] && this.messages[id].length > 0) return;
+        fetch(`/group/${id}/history?limit=100`)
+          .then(res => res.ok ? res.json() : null)
+          .then(msgs => {
+            if (!msgs || !msgs.length) return;
+            if (this.messages[id].length > 0) return;
+            const withDates = [];
+            let lastDay = null;
+            msgs.forEach(m => {
+              const ts = new Date(m.ts);
+              const day = ts.toDateString();
+              if (day !== lastDay) { withDates.push({ date: ts }); lastDay = day; }
+              const sender = String(m.sender_pk || '').toLowerCase();
+              withDates.push({ ts, from: sender === this.myPK ? 'me' : sender, text: m.text, group: true, sender });
+            });
+            this.messages[id] = withDates;
+            this.messagesQuantity[id] = msgs.length;
+            if (this.group === id) {
+              const el = document.getElementById('messages');
+              el.innerHTML = '';
+              this.messages[id].forEach(m => this._showMessage(m));
+              el.scrollTop = el.scrollHeight;
+            }
+          })
+          .catch(e => console.debug('group history skipped:', e.message));
+      }
+
+      sendGroupMessage(text) {
+        const gid = this.group;
+        fetch(`/group/${gid}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        })
+          .then(res => {
+            if (res.ok) {
+              this.addMsgToList(gid, { ts: new Date(), from: 'me', text, group: true, sender: this.myPK }, { group: true });
+              const el = document.getElementById('messages');
+              el.scrollTop = el.scrollHeight;
+            } else {
+              res.text().then(t => this.showToast(`Group send failed: ${t}`, 'error'));
+            }
+          })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      // handleGroupSSE routes an inbound group message (channel="group") to its
+      // thread. Our own messages are echoed back by the visor's poll, so skip
+      // them — the optimistic bubble already showed them.
+      handleGroupSSE(data) {
+        const gid = data.group_id;
+        if (!gid) return;
+        const sender = String(data.sender || '').toLowerCase();
+        if (this.myPK && sender === this.myPK) return;
+        this.addMsgToList(gid, { ts: new Date(), from: sender, text: data.message, group: true, sender }, { group: true });
+        if (!this.groups.find(g => g.id === gid)) this.syncGroups();
+      }
+
+      updateGroupPreview(gid, msg) {
+        document.querySelectorAll('.group-item').forEach(item => {
+          if (item.dataset.gid === gid) {
+            const arrow = msg.from === 'me' ? '↑ ' : '';
+            const prev = item.querySelector('.recipient-preview');
+            if (prev) prev.textContent = arrow + (msg.text || '');
+          }
+        });
+      }
+
+      openCreateGroup() {
+        document.getElementById('cgName').value = '';
+        document.getElementById('createGroupModal').classList.add('visible');
+      }
+
+      openJoinGroup() {
+        document.getElementById('jgInvite').value = '';
+        document.getElementById('joinGroupModal').classList.add('visible');
+      }
+
+      closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+      createGroup() {
+        const name = document.getElementById('cgName').value.trim();
+        const mode = document.getElementById('cgMode').value;
+        if (!name) { this.showToast('Enter a group name.', 'error'); return; }
+        fetch('/group', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, mode, members: [] })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(j => {
+            this.closeModal('createGroupModal');
+            this.syncGroups();
+            if (j.invite) { navigator.clipboard.writeText(j.invite).catch(() => {}); this.showToast('Group created — invite link copied.'); }
+            if (j.info && j.info.id) setTimeout(() => this.selectGroup(j.info.id), 300);
+          })
+          .catch(e => this.showToast(`Create failed: ${e}`, 'error'));
+      }
+
+      joinGroup() {
+        const invite = document.getElementById('jgInvite').value.trim();
+        if (!invite) { this.showToast('Paste an invite link.', 'error'); return; }
+        fetch('/group/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invite })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            this.closeModal('joinGroupModal');
+            this.syncGroups();
+            this.showToast('Joined group.');
+            if (info && info.id) setTimeout(() => this.selectGroup(info.id), 300);
+          })
+          .catch(e => this.showToast(`Join failed: ${e}`, 'error'));
+      }
+
+      showGroupInvite() {
+        if (!this.group) return;
+        fetch(`/group/${this.group}/invite`)
+          .then(res => res.ok ? res.json() : Promise.reject('unavailable'))
+          .then(j => { navigator.clipboard.writeText(j.invite).catch(() => {}); this.showToast('Invite link copied to clipboard.'); })
+          .catch(() => this.showToast('Could not get invite link.', 'error'));
+      }
+
+      leaveGroup() {
+        if (!this.group || !confirm('Leave this group?')) return;
+        const gid = this.group;
+        fetch(`/group/${gid}/leave`, { method: 'POST' })
+          .then(res => { if (res.ok) { this._removeGroup(gid); this.showToast('Left group.'); } else res.text().then(t => this.showToast(t, 'error')); })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      deleteGroup() {
+        if (!this.group || !confirm('Delete this group? (owner only)')) return;
+        const gid = this.group;
+        fetch(`/group/${gid}`, { method: 'DELETE' })
+          .then(res => { if (res.ok) { this._removeGroup(gid); this.showToast('Group deleted.'); } else res.text().then(t => this.showToast(t, 'error')); })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      _removeGroup(gid) {
+        this.groups = this.groups.filter(g => g.id !== gid);
+        this.renderGroups();
+        if (this.group === gid) {
+          this.group = null;
+          document.getElementById('groupHeader').classList.add('hidden');
+          document.getElementById('messages').classList.add('hidden');
+          document.getElementById('msgForm').classList.add('hidden');
+          document.getElementById('emptyState').classList.remove('hidden');
+        }
+      }
+
       processPk(pk) {
         return pk.toLowerCase();
       }
 
-      addMsgToList(remotePk, msg) {
-        if (msg.from !== 'me' && !this.recipients.includes(msg.from)) {
+      addMsgToList(remotePk, msg, opts = {}) {
+        const isGroup = !!opts.group;
+        if (!isGroup && msg.from !== 'me' && !this.recipients.includes(msg.from)) {
           this._addRecipient(msg.from);
         }
+        if (!this.messages[remotePk]) this.messages[remotePk] = [];
 
         let needsDate = false;
         const msgs = this.messages[remotePk];
@@ -1759,15 +2166,19 @@
         if (needsDate) {
           const dateMsg = { date: new Date() };
           this.messages[remotePk].push(dateMsg);
-          if (remotePk === this.recipient) this._showMessage(dateMsg);
+          if (remotePk === this.activeKey()) this._showMessage(dateMsg);
         }
 
         this.messages[remotePk].push(msg);
         this.messagesQuantity[remotePk] = (this.messagesQuantity[remotePk] || 0) + 1;
-        if (remotePk === this.recipient) this._showMessage(msg);
+        if (remotePk === this.activeKey()) this._showMessage(msg);
 
-        this.saveChat(remotePk);
-        this.updatePreview(remotePk, msg);
+        if (isGroup) {
+          this.updateGroupPreview(remotePk, msg);
+        } else {
+          this.saveChat(remotePk);
+          this.updatePreview(remotePk, msg);
+        }
       }
 
       updatePreview(remotePk, msg) {
@@ -1945,9 +2356,21 @@
       if (e.target === this) app.closeSettings();
     });
 
+    // Close group modals on backdrop click.
+    ['createGroupModal', 'joinGroupModal'].forEach(function(id) {
+      document.getElementById(id).addEventListener('click', function(e) {
+        if (e.target === this) app.closeModal(id);
+      });
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') { app.closeSettings(); app.closeLightbox(); }
+      if (e.key === 'Escape') {
+        app.closeSettings();
+        app.closeLightbox();
+        app.closeModal('createGroupModal');
+        app.closeModal('joinGroupModal');
+      }
     });
   </script>
 </body>
