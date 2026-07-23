@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -34,27 +33,17 @@ type Router struct {
 	daemons []*exec.Cmd
 	tunIfc  string
 
+	// fw installs/removes the packet-filter + NAT rules — iptables (default) or
+	// nftables (build tag nftfw). It owns its own teardown.
+	fw firewall
+
 	// mesh gateway (optional; nil cfg.MeshDial = off).
-	meshGW       *meshgw.Gateway
-	meshProxy    net.Listener
-	meshRedirect []string // the nat/PREROUTING REDIRECT argv we added (nil = none)
+	meshGW    *meshgw.Gateway
+	meshProxy net.Listener
 
 	// state captured for restoration on teardown.
 	prevForwarding string
-	masquerading   bool
-	forwardRules   [][]string // iptables argv sets we added to the FORWARD chain
-	policyRouting  bool       // true once the LAN→tun policy route+rule are installed
-	mssClamped     bool       // true once the TCPMSS clamp rule is installed
-}
-
-// mssClampRule is the mangle-table rule that clamps forwarded TCP SYNs' MSS to
-// the path MTU. Shared by setup + teardown ("-A" vs "-D") via mssClampArgs.
-func (r *Router) mssClampArgs(op string) []string {
-	return []string{
-		"-t", "mangle", op, "FORWARD", "-o", r.tunIfc,
-		"-p", "tcp", "-m", "tcp", "--tcp-flags", "SYN,RST", "SYN",
-		"-j", "TCPMSS", "--clamp-mss-to-pmtu",
-	}
+	policyRouting  bool // true once the LAN→tun policy route+rule are installed
 }
 
 // lanPolicyTable is the dedicated routing table the router uses to send
@@ -111,6 +100,14 @@ func (r *Router) setup(ctx context.Context) error {
 		return fmt.Errorf("temp dir: %w", err)
 	}
 	r.confDir = dir
+
+	// Firewall backend (iptables by default; nftables under -tags nftfw). Built
+	// before the mesh gateway + NAT, which install rules through it.
+	fw, err := newFirewall(r.log)
+	if err != nil {
+		return fmt.Errorf("firewall backend: %w", err)
+	}
+	r.fw = fw
 
 	// 1. Bring up the downstream interface with the gateway address.
 	if err := r.setupLANInterface(); err != nil {
@@ -261,21 +258,16 @@ func (r *Router) setupNAT() error {
 	if err := EnableIPv4Forwarding(); err != nil {
 		return fmt.Errorf("enable IPv4 forwarding: %w", err)
 	}
-	if err := EnableIPMasquerading(r.tunIfc); err != nil {
+	if err := r.fw.masquerade(r.tunIfc); err != nil {
 		return fmt.Errorf("masquerade out %s: %w", r.tunIfc, err)
 	}
-	r.masquerading = true
 
 	// downstream → tunnel (new+established) and tunnel → downstream (established)
-	rules := [][]string{
-		{"-A", "FORWARD", "-i", r.cfg.LANInterface, "-o", r.tunIfc, "-j", "ACCEPT"},
-		{"-A", "FORWARD", "-i", r.tunIfc, "-o", r.cfg.LANInterface, "-m", "state", "--state", "RELATED,ESTABLISHED", "-j", "ACCEPT"},
+	if err := r.fw.forwardAccept(r.cfg.LANInterface, r.tunIfc, false); err != nil {
+		return fmt.Errorf("forward %s→%s: %w", r.cfg.LANInterface, r.tunIfc, err)
 	}
-	for _, rule := range rules {
-		if err := osutil.RunElevated("iptables", rule...); err != nil {
-			return fmt.Errorf("iptables %s: %w", strings.Join(rule, " "), err)
-		}
-		r.forwardRules = append(r.forwardRules, rule)
+	if err := r.fw.forwardAccept(r.tunIfc, r.cfg.LANInterface, true); err != nil {
+		return fmt.Errorf("forward %s→%s: %w", r.tunIfc, r.cfg.LANInterface, err)
 	}
 	r.log.Infof("NAT: %s → %s (masquerade)", r.cfg.LANInterface, r.tunIfc)
 
@@ -284,11 +276,9 @@ func (r *Router) setupNAT() error {
 	// segments black-hole (PMTU discovery is unreliable across NAT) — TCP
 	// stalls while ping works. Clamping lets clients auto-negotiate a fitting
 	// MSS with no per-client MTU tweaks.
-	if err := osutil.RunElevated("iptables", r.mssClampArgs("-A")...); err != nil {
+	if err := r.fw.clampMSS(r.tunIfc); err != nil {
 		// Non-fatal: forwarding still works; large-segment flows may stall.
 		r.log.WithError(err).Warn("could not install TCPMSS clamp (large downstream TCP flows may stall)")
-	} else {
-		r.mssClamped = true
 	}
 
 	if err := r.setupPolicyRouting(); err != nil {
@@ -369,38 +359,21 @@ func (r *Router) setupMeshGateway(ctx context.Context) error {
 		}
 	}()
 
-	rule := []string{
-		"-t", "nat", "-A", "PREROUTING",
-		"-i", r.cfg.LANInterface,
-		"-d", gw.PoolCIDR().String(),
-		"-p", "tcp",
-		"-j", "REDIRECT", "--to-ports", strconv.Itoa(port),
-	}
-	if err := osutil.RunElevated("iptables", rule...); err != nil {
+	if err := r.fw.redirectTCP(fwPrerouting, r.cfg.LANInterface, gw.PoolCIDR(), uint16(port)); err != nil { //nolint:gosec // ephemeral port fits uint16
 		return fmt.Errorf("mesh gateway REDIRECT: %w", err)
 	}
-	r.meshRedirect = rule
 	r.log.Infof("mesh gateway: *.dmsg / *.skynet → synthetic %s → proxy :%d (dials over mesh)", gw.PoolCIDR().String(), port)
 	return nil
 }
 
 // teardown reverses setup, best-effort (logs but does not abort on errors).
 func (r *Router) teardown() {
-	// Remove the mesh-gateway REDIRECT and stop its proxy.
-	if r.meshRedirect != nil {
-		del := append([]string{"-t", "nat", "-D"}, r.meshRedirect[3:]...)
-		if err := osutil.RunElevated("iptables", del...); err != nil {
-			r.log.WithError(err).Warn("teardown: remove mesh gateway REDIRECT")
-		}
+	// Remove every firewall rule (masquerade, FORWARD, MSS clamp, mesh REDIRECT).
+	if r.fw != nil {
+		r.fw.teardown()
 	}
 	if r.meshProxy != nil {
 		_ = r.meshProxy.Close() //nolint:errcheck // best-effort close on shutdown
-	}
-	// Remove the TCPMSS clamp.
-	if r.mssClamped {
-		if err := osutil.RunElevated("iptables", r.mssClampArgs("-D")...); err != nil {
-			r.log.WithError(err).Warn("teardown: remove TCPMSS clamp")
-		}
 	}
 	// Remove the LAN→tun policy route+rule.
 	if r.policyRouting {
@@ -409,18 +382,6 @@ func (r *Router) teardown() {
 		}
 		if err := netctl.FlushTable(lanPolicyTable); err != nil {
 			r.log.WithError(err).Warn("teardown: flush policy table")
-		}
-	}
-	// Remove the FORWARD rules we added (-D mirrors each -A).
-	for _, rule := range r.forwardRules {
-		del := append([]string{"-D"}, rule[1:]...)
-		if err := osutil.RunElevated("iptables", del...); err != nil {
-			r.log.WithError(err).Warnf("teardown: remove FORWARD rule %s", strings.Join(rule, " "))
-		}
-	}
-	if r.masquerading {
-		if err := DisableIPMasquerading(r.tunIfc); err != nil {
-			r.log.WithError(err).Warn("teardown: disable masquerading")
 		}
 	}
 	if r.prevForwarding != "" && r.prevForwarding != "1" {
