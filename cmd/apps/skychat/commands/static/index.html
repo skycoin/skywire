@@ -1167,13 +1167,13 @@
           const tag = isVideo ? 'video' : 'audio';
           const cls = isVideo ? 'media-video' : 'media-audio';
           const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
-            ? ` · <a class="media-dl" href="${urlAttr}" download>download</a>` : '';
+            ? ` · <a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
           return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"></${tag}>
             <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${dl}</div>`;
         }
         const sub = file.status === 'failed' ? 'transfer failed' : sizeStr;
         const dl = urlAttr
-          ? `<a class="file-dl" href="${urlAttr}" download title="Download">&#x2B07;</a>`
+          ? `<a class="file-dl" href="${urlAttr}" download="${nameAttr}" title="Download">&#x2B07;</a>`
           : '';
         return `<div class="file-card">
             <div class="file-icon">&#x1F4CE;</div>

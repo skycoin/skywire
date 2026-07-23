@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/xfer"
 )
 
 func TestRenderLegacySSE_FileFields(t *testing.T) {
@@ -205,5 +206,42 @@ func TestHistoryHandler_EmitsFileFields(t *testing.T) {
 	}
 	if msgs[0]["file_name"] != "pic.png" || msgs[0]["file_url"] != "/files/pic.png" || msgs[0]["file_status"] != "received" {
 		t.Errorf("/history did not emit file fields: %v", msgs[0])
+	}
+}
+
+func TestSentCopyName(t *testing.T) {
+	cases := []struct{ id, name, want string }{
+		{"a1b2c3", "photo.png", "a1b2c3.png"},
+		{"deadbeef", "clip.MP4", "deadbeef.MP4"}, // extension case preserved
+		{"cafe01", "noext", "cafe01"},
+	}
+	for _, c := range cases {
+		got := sentCopyName(xfer.Offer{ID: c.id, Name: c.name})
+		if got != c.want {
+			t.Errorf("sentCopyName(%s,%s) = %q, want %q", c.id, c.name, got, c.want)
+		}
+		// Must be safeFileName-idempotent so /files/ + /thumb/ resolve it unchanged.
+		if safeFileName(got, "") != got {
+			t.Errorf("sentCopyName %q not safeFileName-idempotent (-> %q)", got, safeFileName(got, ""))
+		}
+	}
+}
+
+func TestCopyFile(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src.bin")
+	if err := os.WriteFile(src, []byte("hello copy 123"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "dst.bin")
+	if err := copyFile(src, dst); err != nil {
+		t.Fatalf("copyFile: %v", err)
+	}
+	b, err := os.ReadFile(dst)
+	if err != nil || string(b) != "hello copy 123" {
+		t.Errorf("copied content = %q err=%v", b, err)
+	}
+	if err := copyFile(filepath.Join(dir, "missing"), dst); err == nil {
+		t.Error("copyFile should error on a missing source")
 	}
 }

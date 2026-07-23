@@ -147,6 +147,47 @@ func safeFileName(name, id string) string {
 	return name
 }
 
+// sentCopyName is the collision-free on-disk name for the sender's kept copy
+// of an outbound file: the transfer's unique id plus the original extension
+// (e.g. "a1b2c3d4e5f60718.png"). The original name is preserved separately for
+// display (chatEvent/history FileName) and for the download filename; the
+// id-based name only exists so a sent file never clobbers a same-named
+// received file or another send. Always safeFileName-idempotent (a hex id + a
+// separator-free extension), so /files/ and /thumb/ resolve it unchanged.
+func sentCopyName(offer xfer.Offer) string {
+	return offer.ID + filepath.Ext(offer.Name)
+}
+
+// copyFile copies src to dst (created/truncated).
+func copyFile(src, dst string) error {
+	in, err := os.Open(src) //nolint:gosec // UI/operator-supplied local source
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }() //nolint:errcheck
+	out, err := os.Create(dst)        //nolint:gosec // dst rooted in downloadsDir
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close() //nolint:errcheck
+		return err
+	}
+	return out.Close()
+}
+
+// saveSentCopy keeps a served copy of an outbound file under the downloads dir
+// (named by sentCopyName) so the sender's own UI and /history can render a
+// thumbnail — the receiver already saves its own copy. DM sends only; the
+// caller skips groups.
+func saveSentCopy(srcPath string, offer xfer.Offer) error {
+	dir, err := downloadsDir()
+	if err != nil {
+		return err
+	}
+	return copyFile(srcPath, filepath.Join(dir, sentCopyName(offer)))
+}
+
 // onXferDone surfaces a completed transfer (either direction) as a chatEvent and
 // logs the result. It runs on the xfer manager's goroutine.
 func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err error) {
@@ -184,6 +225,13 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 		} else {
 			ev.FileStatus = "sent"
 			ev.Text = fmt.Sprintf("📎 %s (%s)", offer.Name, humanSize(offer.Size))
+			// Point at the sender's kept served copy (DM only) so the "out"
+			// event carries a file_url and the sender's own thumbnail renders.
+			if offer.Group == "" {
+				if d, derr := downloadsDir(); derr == nil {
+					ev.FilePath = filepath.Join(d, sentCopyName(offer))
+				}
+			}
 		}
 	}
 	if hub != nil {
@@ -206,9 +254,11 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 		}
 		if dir == xfer.Incoming {
 			msg.From = peer.Hex()
-			if ev.FilePath != "" {
-				msg.FileURL = "/files/" + filepath.Base(ev.FilePath)
-			}
+		}
+		// Both directions now keep a served copy, so a set FilePath yields the
+		// /files/ URL history uses to re-render the thumbnail on any device.
+		if ev.FilePath != "" {
+			msg.FileURL = "/files/" + filepath.Base(ev.FilePath)
 		}
 		persistMessage(msg)
 	}
@@ -305,6 +355,14 @@ func sendFile(ctx context.Context, peer cipher.PubKey, group, path string) (stri
 		Size:  fi.Size(),
 		MIME:  mime.TypeByExtension(filepath.Ext(name)),
 		Group: group,
+	}
+	// Keep a served copy of DM sends so the sender's own view + /history can
+	// render a thumbnail (best-effort; a failure just means no sender-side
+	// URL). Done before SendFile so the copy exists when onXferDone fires.
+	if group == "" {
+		if cErr := saveSentCopy(path, offer); cErr != nil {
+			appLog("skychat: sender copy of %q failed: %v", name, cErr)
+		}
 	}
 	rc, err := mgr.SendFile(ctx, peer, offer, f)
 	if err != nil {
