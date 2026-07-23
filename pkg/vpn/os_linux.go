@@ -7,12 +7,29 @@ package vpn
 import (
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/skycoin/skywire/pkg/util/osutil"
+	"github.com/skycoin/skywire/pkg/vpn/netctl"
 )
+
+// mapRouteAddErr reproduces the old `ip route add` stderr handling for the
+// netlink path: a pre-existing route (EEXIST) is not an error, and a permission
+// failure (EPERM) surfaces as errPermissionDenied.
+func mapRouteAddErr(err error) error {
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, unix.EEXIST):
+		return nil
+	case errors.Is(err, unix.EPERM):
+		return errPermissionDenied
+	default:
+		return err
+	}
+}
 
 // Client
 
@@ -22,7 +39,7 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
 		return err
 	}
-	if err := osutil.Run("ip", "a", "add", ipCIDR, "dev", ifcName); err != nil {
+	if err := netctl.AddrAdd(ifcName, ipCIDR); err != nil {
 		return fmt.Errorf("error assigning IP: %w", err)
 	}
 	c.releaseSysPrivileges()
@@ -31,7 +48,7 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
 		return err
 	}
-	if err := osutil.Run("ip", "link", "set", "dev", ifcName, "mtu", strconv.Itoa(mtu)); err != nil {
+	if err := netctl.SetMTU(ifcName, mtu); err != nil {
 		return fmt.Errorf("error setting MTU: %w", err)
 	}
 	c.releaseSysPrivileges()
@@ -45,7 +62,7 @@ func (c *Client) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		print(fmt.Sprintf("Failed to setup system privileges for SetupTUN: %v\n", err))
 		return err
 	}
-	if err := osutil.Run("ip", "link", "set", ifcName, "up"); err != nil {
+	if err := netctl.LinkUp(ifcName); err != nil {
 		return fmt.Errorf("error setting interface up: %w", err)
 	}
 	c.releaseSysPrivileges()
@@ -76,7 +93,7 @@ func (c *Client) ChangeRoute(ip, gateway string) error {
 		return err
 	}
 	defer c.releaseSysPrivileges()
-	return osutil.Run("ip", "r", "change", ip, "via", gateway)
+	return netctl.RouteReplaceViaGateway(ip, gateway)
 }
 
 // AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
@@ -86,22 +103,7 @@ func (c *Client) AddRoute(ip, gateway string) error {
 		return err
 	}
 	defer c.releaseSysPrivileges()
-	err := osutil.Run("ip", "r", "add", ip, "via", gateway)
-
-	var e *osutil.ErrorWithStderr
-	if errors.As(err, &e) {
-		if strings.Contains(string(e.Stderr), "File exists") {
-			return nil
-		}
-	}
-
-	if errors.As(err, &e) {
-		if strings.Contains(string(e.Stderr), "Operation not permitted") {
-			return errPermissionDenied
-		}
-	}
-
-	return err
+	return mapRouteAddErr(netctl.RouteAddViaGateway(ip, gateway))
 }
 
 // DeleteRoute removes route to `ip` with `netmask` through the `gateway` from the OS routing table.
@@ -111,7 +113,7 @@ func (c *Client) DeleteRoute(ip, gateway string) error {
 		return err
 	}
 	defer c.releaseSysPrivileges()
-	return osutil.Run("ip", "r", "del", ip, "via", gateway)
+	return netctl.RouteDelViaGateway(ip, gateway)
 }
 
 // SetupDNS set dns address for TUN device on tun0
@@ -146,11 +148,11 @@ func (c *Client) RevertDNS() {
 
 // SetupTUN sets the allocated TUN interface up, setting its IP, gateway, netmask and MTU.
 func (s *Server) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
-	if err := osutil.Run("ip", "a", "add", ipCIDR, "dev", ifcName); err != nil {
+	if err := netctl.AddrAdd(ifcName, ipCIDR); err != nil {
 		return fmt.Errorf("error assigning IP: %w", err)
 	}
 
-	if err := osutil.Run("ip", "link", "set", "dev", ifcName, "mtu", strconv.Itoa(mtu)); err != nil {
+	if err := netctl.SetMTU(ifcName, mtu); err != nil {
 		return fmt.Errorf("error setting MTU: %w", err)
 	}
 
@@ -159,7 +161,7 @@ func (s *Server) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 		return fmt.Errorf("error parsing IP CIDR: %w", err)
 	}
 
-	if err := osutil.Run("ip", "link", "set", ifcName, "up"); err != nil {
+	if err := netctl.LinkUp(ifcName); err != nil {
 		return fmt.Errorf("error setting interface up: %w", err)
 	}
 
@@ -172,20 +174,5 @@ func (s *Server) SetupTUN(ifcName, ipCIDR, gateway string, mtu int) error {
 
 // AddRoute adds route to `ip` with `netmask` through the `gateway` to the OS routing table.
 func (s *Server) AddRoute(ip, gateway string) error {
-	err := osutil.Run("ip", "r", "add", ip, "via", gateway)
-
-	var e *osutil.ErrorWithStderr
-	if errors.As(err, &e) {
-		if strings.Contains(string(e.Stderr), "File exists") {
-			return nil
-		}
-	}
-
-	if errors.As(err, &e) {
-		if strings.Contains(string(e.Stderr), "Operation not permitted") {
-			return errPermissionDenied
-		}
-	}
-
-	return err
+	return mapRouteAddErr(netctl.RouteAddViaGateway(ip, gateway))
 }
