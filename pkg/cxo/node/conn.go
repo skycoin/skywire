@@ -735,6 +735,14 @@ func (c *Conn) responseTimeout() (rt time.Duration) {
 	} else {
 		rt = c.n.config.UDP.ResponseTimeout
 	}
+	if rt <= 0 {
+		// A non-positive response timeout leaves the per-request wait channel
+		// (tc) nil, so an object request to a peer that never delivers pins its
+		// wanted-cache entry + handler goroutine for the whole connection
+		// lifetime. Treat 0 as "use the default", not "disable" — a disabled
+		// per-request timeout is a footgun, not a feature.
+		rt = ResponseTimeout
+	}
 	return
 }
 
