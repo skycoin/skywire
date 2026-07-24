@@ -218,6 +218,8 @@ const envfileLinux = `#
 
 #--	skynetweb upstream address the bridge listens on (host:port)
 #SKYNETWEBUPSTREAM=':8083'
+#DMSGWEBADDR='0.0.0.0'
+#SKYNETWEBADDR='0.0.0.0'
 
 #--	Autostart the skymail bridge (SMTP <-> skywire mail gateway). Off by default.
 #SKYMAILBRIDGE=false
