@@ -2148,7 +2148,15 @@ func handleIPCSignal(client *ipc.Client) {
 	for {
 		m, err := client.Read()
 		if err != nil {
-			appLog("%s IPC received error: %v", skyenv.SkychatName, err)
+			// A read error is terminal: golang-ipc closes the receive channel
+			// on error, so every subsequent Read returns immediately with the
+			// same error. Without breaking, this loop spins at full tilt (seen
+			// on Windows as hundreds of "received channel has been closed" lines
+			// per millisecond), starving the HTTP server + dmsg on constrained
+			// hosts. Stop the handler instead — the app keeps serving; it just
+			// won't receive a shutdown-via-IPC signal.
+			appLog("%s IPC read error, stopping IPC handler: %v", skyenv.SkychatName, err)
+			break
 		}
 
 		if m != nil {

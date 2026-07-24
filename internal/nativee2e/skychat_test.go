@@ -128,15 +128,38 @@ func requireChatAppReady(t *testing.T, addr, rpc, logName string) {
 }
 
 // visorLogTail returns the last n lines of a visor's log in the harness
-// workdir (which still exists during the test; teardown removes it).
+// workdir (which still exists during the test; teardown removes it). Runs of
+// lines carrying the same message (differing only by their leading timestamp)
+// are collapsed to "…(×N)" so a hot log-spam loop can't bury the real error.
 func visorLogTail(name string, n int) string {
 	b, err := os.ReadFile(filepath.Join(env.work, name+".log"))
 	if err != nil {
 		return fmt.Sprintf("(read %s.log: %v)", name, err)
 	}
-	lines := strings.Split(string(b), "\n")
+	lines := strings.Split(strings.TrimRight(string(b), "\n"), "\n")
 	if len(lines) > n {
 		lines = lines[len(lines)-n:]
 	}
-	return strings.Join(lines, "\n")
+	// msgKey drops the leading "[timestamp] LEVEL [tag]: " so repeated messages
+	// compare equal regardless of their per-line timestamp.
+	msgKey := func(s string) string {
+		if i := strings.LastIndex(s, "]: "); i >= 0 {
+			return s[i+3:]
+		}
+		return s
+	}
+	var out []string
+	for i := 0; i < len(lines); {
+		j := i + 1
+		for j < len(lines) && msgKey(lines[j]) == msgKey(lines[i]) {
+			j++
+		}
+		if j-i > 1 {
+			out = append(out, fmt.Sprintf("%s  …(×%d)", lines[i], j-i))
+		} else {
+			out = append(out, lines[i])
+		}
+		i = j
+	}
+	return strings.Join(out, "\n")
 }
