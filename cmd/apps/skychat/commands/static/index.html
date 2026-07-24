@@ -476,6 +476,21 @@
       padding: 0 4px;
     }
 
+    /* Delivery-status tick on our own DM bubbles (pending→sent→received→read,
+       or failed). received/read are the WhatsApp-style double tick; read is
+       tinted. */
+    .msg-status {
+      font-size: 10px;
+      line-height: 1;
+      color: var(--text-muted);
+      padding: 0 2px;
+      cursor: default;
+      user-select: none;
+    }
+    .msg-status.pending { opacity: 0.6; }
+    .msg-status.read { color: #4aa3ff; }
+    .msg-status.failed { color: var(--danger, #e5484d); font-weight: 600; }
+
     /* Reply affordance (appears on hover), quote block, compose chip */
     .reply-link {
       background: none;
@@ -1358,6 +1373,8 @@
           const senderAttr = msg.from === 'me' ? 'me' : (msg.sender || msg.from || '');
           const tsIso = (msg.ts instanceof Date && !isNaN(msg.ts)) ? msg.ts.toISOString() : '';
           if (msg.mid == null) msg.mid = ++this._mid;
+          // Our own DM bubbles carry a delivery-status tick (groups don't in v1).
+          const statusTick = (msg.from === 'me' && !msg.group) ? this._statusTick(msg.status || 'sent') : '';
           msgArea.insertAdjacentHTML('beforeend', `
             <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}" data-mid="${msg.mid}" data-tsnano="${this.escapeAttr(msg.tsNano != null ? String(msg.tsNano) : '')}">
               ${senderLabel}
@@ -1366,6 +1383,7 @@
                 <button class="reply-link" onclick="app.startReply(this)" title="Reply">&#x21A9; Reply</button>
                 <button class="reply-link msg-menu-btn" onclick="app.openMsgMenu(this)" title="More">&#x22EF;</button>
                 <span class="message-time">${time}</span>
+                ${statusTick}
               </div>
             </div>`);
 
@@ -1388,6 +1406,81 @@
         return String(s == null ? '' : s)
           .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
           .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      // ---- DM message status (failed/pending/sent/received/read) -----
+
+      // _statusTick renders the delivery-status glyph shown on our own DM
+      // bubbles. received/read are a double tick (read is tinted via CSS).
+      _statusTick(status) {
+        const map = {
+          pending:  { cls: 'pending',  txt: '○',       title: 'Sending…' }, // ○
+          sent:     { cls: 'sent',     txt: '✓',       title: 'Sent' },          // ✓
+          received: { cls: 'received', txt: '✓✓', title: 'Received' },       // ✓✓
+          read:     { cls: 'read',     txt: '✓✓', title: 'Read' },           // ✓✓ (blue)
+          failed:   { cls: 'failed',   txt: '⚠',       title: 'Failed to send' }, // ⚠
+        };
+        const s = map[status] || map.sent;
+        return `<span class="msg-status ${s.cls}" title="${s.title}">${s.txt}</span>`;
+      }
+
+      // _setMsgStatus advances a message's status (monotonically — a late 'sent'
+      // never clobbers a 'read' that arrived first), persists the DM thread, and
+      // repaints the bubble's tick in place. 'failed' only replaces a bubble
+      // still pending.
+      _setMsgStatus(key, message, status) {
+        if (!message) return;
+        const order = ['pending', 'sent', 'received', 'read'];
+        if (status === 'failed') {
+          if (message.status && message.status !== 'pending') return;
+          message.status = 'failed';
+        } else {
+          const next = order.indexOf(status);
+          if (next < 0 || next <= order.indexOf(message.status)) return;
+          message.status = status;
+        }
+        if (key && this.messages[key] && !message.group) this.saveChat(key);
+        this._patchStatusTick(message);
+      }
+
+      // _patchStatusTick swaps the tick glyph on an already-rendered own DM
+      // bubble (no-op when the thread isn't the one on screen).
+      _patchStatusTick(message) {
+        if (!message || message.from !== 'me' || message.group || message.mid == null) return;
+        const row = document.querySelector(`.message-row[data-mid="${message.mid}"]`);
+        if (!row) return;
+        const el = row.querySelector('.msg-status');
+        if (el) el.outerHTML = this._statusTick(message.status);
+      }
+
+      // handleDmStatus applies an inbound dm-status receipt {id,status,peer} to
+      // the matching outbound bubble in that peer's thread.
+      handleDmStatus(data) {
+        const key = this.processPk(data.peer);
+        const list = this.messages[key];
+        if (!list) return;
+        const m = list.find(x => x && x.from === 'me' && x.wireId && x.wireId === data.id);
+        if (m) this._setMsgStatus(key, m, data.status);
+      }
+
+      // _sendReadReceipts tells pk we've displayed its inbound messages so the
+      // sender's bubbles advance to "read". Each id is reported once.
+      _sendReadReceipts(pk) {
+        const list = this.messages[pk];
+        if (!pk || !list) return;
+        const ids = [];
+        list.forEach(m => {
+          if (m && m.from !== 'me' && m.wireId && !m._readSent) {
+            ids.push(m.wireId);
+            m._readSent = true;
+          }
+        });
+        if (!ids.length) return;
+        fetch('/read-receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk, ids }),
+        }).catch(() => {});
       }
 
       // ---- Replies ---------------------------------------------------
@@ -1764,6 +1857,12 @@
             this.handleFileReady(data);
             return;
           }
+          // A delivery-status receipt for one of OUR sent DM bubbles — patch
+          // the tick, don't render a message.
+          if (data.channel === 'dm-status') {
+            this.handleDmStatus(data);
+            return;
+          }
           const message = {
             ts: new Date(),
             from: this.processPk(data.sender),
@@ -1771,6 +1870,7 @@
             viaPair: data.channel === 'pair',
             file: this.fileFromSSE(data),
             reply: this.replyFromSSE(data),
+            wireId: data.id, // sender-side id — referenced by the read receipt we send back
           };
           this.addMsgToList(data.sender, message);
 
@@ -1779,6 +1879,8 @@
               (msgArea.scrollHeight - msgArea.scrollTop) <= msgArea.clientHeight + 50) {
             this.messagesSeen[this.recipient] = this.messagesQuantity[this.recipient];
             this.saveSeenList();
+            // The user is looking at this thread — tell the sender it's read.
+            this._sendReadReceipts(this.recipient);
           }
 
           this.updateUnreadBadges();
@@ -1928,6 +2030,8 @@
 
         document.getElementById('messages').innerHTML = '';
         this.messages[this.recipient].forEach(msg => this._showMessage(msg));
+        // Viewing the thread marks its inbound messages read for the sender.
+        this._sendReadReceipts(this.recipient);
 
         document.getElementById('msgField').focus();
 
@@ -2214,14 +2318,32 @@
         // a paired publisher must already exist (handled by Pair button
         // / pair-invite handshake). Falls back to legacy if pairing
         // isn't set up.
+        // The legacy DM path (skynet/dmsg) supports the status lifecycle via
+        // receipts:true — the server returns a wire id and the peer's
+        // received/read receipts arrive later as dm-status events. The CXO
+        // path is eventual (no per-message receipt), so its bubble stops at
+        // "sent".
+        const useReceipts = network !== 'cxo';
         let url, body;
         if (network === 'cxo') {
           url = `/pair/${destination}/message`;
           body = JSON.stringify({ text: wireText });
         } else {
           url = '/message';
-          body = JSON.stringify({ recipient: destination, message: wireText, network: network });
+          body = JSON.stringify({ recipient: destination, message: wireText, network: network, receipts: true });
         }
+
+        // Render the bubble immediately as pending, then advance it on the
+        // response (sent/failed) and — for receipts sends — later on dm-status
+        // events (received/read).
+        const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo', reply: replyMeta, status: 'pending' };
+        this.addMsgToList(destination, message);
+        msgField.value = '';
+        const msgArea = document.getElementById('messages');
+        msgArea.scrollTop = msgArea.scrollHeight;
+        this.messagesSeen[destination] = this.messagesQuantity[destination];
+        this.saveSeenList();
+        this.updateUnreadBadges();
 
         fetch(url, {
           method: 'POST',
@@ -2229,22 +2351,23 @@
           body: body
         })
           .then(res => {
-            if (res.ok) {
-              const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo', reply: replyMeta };
-              this.addMsgToList(destination, message);
-              msgField.value = '';
-
-              const msgArea = document.getElementById('messages');
-              msgArea.scrollTop = msgArea.scrollHeight;
-
-              this.messagesSeen[destination] = this.messagesQuantity[destination];
-              this.saveSeenList();
-              this.updateUnreadBadges();
-            } else {
-              res.text().then(text => this.showToast(`Failed: ${text}`, 'error'));
+            if (!res.ok) {
+              return res.text().then(text => {
+                this._setMsgStatus(destination, message, 'failed');
+                this.showToast(`Failed: ${text}`, 'error');
+              });
             }
+            // Capture the server-assigned wire id so dm-status receipts can
+            // match this bubble (receipts path only; cxo returns no id).
+            return res.json().then(j => {
+              if (useReceipts && j && j.id) message.wireId = j.id;
+              this._setMsgStatus(destination, message, 'sent');
+            }).catch(() => this._setMsgStatus(destination, message, 'sent'));
           })
-          .catch(e => this.showToast(e.message, 'error'));
+          .catch(e => {
+            this._setMsgStatus(destination, message, 'failed');
+            this.showToast(e.message, 'error');
+          });
       }
 
       // sendFile uploads the picked file to /send-file (multipart) for the

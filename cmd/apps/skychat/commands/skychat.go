@@ -956,6 +956,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
 	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
 	mux.HandleFunc("/request-file", requireAuthFunc(requestFileHandler(ctx)))
+	mux.HandleFunc("/read-receipt", requireAuthFunc(readReceiptHandler(ctx)))
 	registerPairHTTPHandlers(ctx, mux)
 	registerGroupHTTPHandlers(mux)
 
@@ -1105,7 +1106,7 @@ func handleConn(conn *framedConn) {
 		// to satisfy a waiting /message --wait request, NOT surfaced
 		// to the SSE stream. Plain-text bodies fall through to the
 		// legacy path unchanged.
-		envHandled, envBody, _ := tryHandleChatEnvelope(payload, peerPK, func(id string) {
+		envHandled, envBody, envID, envKind := tryHandleChatEnvelope(payload, peerPK, func(id string) {
 			ackEnv := chatEnvelope{Type: chatTypeAck, ID: id}
 			ackBytes, mErr := json.Marshal(ackEnv)
 			if mErr != nil {
@@ -1116,15 +1117,29 @@ func handleConn(conn *framedConn) {
 				appLog("chat-ack write to %s failed: %v", peerPK, wErr)
 			}
 		})
-		var text string
-		if envHandled {
-			if envBody == "" {
-				// chat-ack consumed — nothing to surface.
-				continue
+		// A chat-ack / chat-read frame is a receipt for a message WE sent:
+		// advance that bubble's status at our end (received / read) and stop —
+		// receipts are never surfaced as chat lines. envID is the sender-side
+		// message id the receipt echoes; peerPK is the recipient it came from.
+		if envHandled && envBody == "" {
+			switch envKind {
+			case chatTypeAck:
+				broadcastDMStatus(envID, dmStatusReceived, peerPK)
+			case chatTypeRead:
+				broadcastDMStatus(envID, dmStatusRead, peerPK)
 			}
+			continue
+		}
+		// eventID is the stable per-message id. For an inbound chat-msg it's the
+		// SENDER's envelope id, so our read-receipt (and the sender's status
+		// correlation) reference the same id on both ends; plain text has none.
+		text := string(payload)
+		eventID := newEventID()
+		if envHandled {
 			text = envBody
-		} else {
-			text = string(payload)
+			if envID != "" {
+				eventID = envID
+			}
 		}
 
 		counterMu.Lock()
@@ -1159,7 +1174,7 @@ func handleConn(conn *framedConn) {
 		// "len" is the body byte length, surfaced for size-debug
 		// without forcing consumers to count after a json round-trip.
 		hub.publishEvent(chatEvent{
-			ID:        newEventID(),
+			ID:        eventID,
 			Channel:   channelDM,
 			Transport: string(raddr.Net),
 			Dir:       "in",
@@ -1185,6 +1200,16 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			// {acked:false, reason:"timeout"}. Clamped to
 			// [chatAckTimeoutFloor, chatAckTimeoutCeiling] server-side.
 			WaitMS int `json:"wait_ms,omitempty"`
+			// Receipts requests the message-status lifecycle WITHOUT
+			// blocking: the message is wrapped in an id'd chat-msg
+			// envelope (ack=true) exactly like --wait, but the handler
+			// returns immediately with {ok:true, id:<hex>} instead of
+			// waiting. The id lets the browser track the bubble as the
+			// peer's chat-ack (→ received) and chat-read (→ read)
+			// receipts arrive later as dm-status /sse events. Used by
+			// the browser UI; the CLI keeps the byte-identical plain
+			// send unless it opts in.
+			Receipts bool `json:"receipts,omitempty"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1312,7 +1337,12 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		var ackCh <-chan struct{}
 		var unregisterAck func()
 		var ackWait time.Duration
-		if data.WaitMS > 0 {
+		// Both --wait and receipts wrap the body in an id'd chat-msg envelope
+		// (ack=true). --wait additionally blocks on a waiter for the returning
+		// chat-ack; receipts does not (the ack/read arrive later as dm-status
+		// /sse events). A plain send with neither stays byte-identical on the
+		// wire for back-compat with pre-envelope peers.
+		if data.WaitMS > 0 || data.Receipts {
 			ackID = newEventID()
 			env := chatEnvelope{Type: chatTypeMsg, ID: ackID, Body: data.Message, Ack: true}
 			eb, mErr := json.Marshal(env)
@@ -1321,9 +1351,11 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				return
 			}
 			wirePayload = eb
-			ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
-			ackCh, unregisterAck = registerAckWaiter(ackID)
-			defer unregisterAck()
+			if data.WaitMS > 0 {
+				ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
+				ackCh, unregisterAck = registerAckWaiter(ackID)
+				defer unregisterAck()
+			}
 		}
 
 		// Write the framed payload. On a *cached* conn, a write
@@ -1481,6 +1513,15 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			case <-req.Context().Done():
 				return
 			}
+		} else if data.Receipts {
+			// Non-blocking receipts: hand the browser the wire id so it can
+			// track this bubble as the peer's received/read status arrives
+			// later on the dm-status /sse stream.
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+				"ok": true,
+				"id": ackID,
+			})
 		}
 
 		// Mirror the outgoing message into the SSE stream so headless

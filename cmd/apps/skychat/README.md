@@ -191,6 +191,46 @@ the normal list is hidden so it isn't shown twice. The pin persists
 across reloads and clears automatically if the conversation is
 deleted or left. One pin at a time — pinning another replaces it.
 
+### Message status
+
+Your own DM bubbles carry a delivery-status tick that advances
+through the message's lifecycle:
+
+| Tick | State | Meaning |
+|------|-------|---------|
+| ○ | pending | optimistic bubble, the send is in flight |
+| ✓ | sent | the frame left this machine (`/message` returned) |
+| ✓✓ | received | the peer's app acknowledged receipt |
+| ✓✓ (blue) | read | the peer's UI displayed the message |
+| ⚠ | failed | the send errored (peer offline / route broken) |
+
+There is **no middle server** — receipts are just messages travelling
+the other way over the same peer-to-peer conn. `pending`/`sent`/
+`failed` are decided at send time; `received`/`read` arrive
+asynchronously and advance the tick later:
+
+- A browser send sets `receipts:true` on `/message`, so the body is
+  wrapped in an id'd `chat-msg` envelope (`ack=true`) and the handler
+  returns `{ok,id}` immediately (unlike `--wait`, it does not block).
+- The recipient's app auto-replies with a `chat-ack` on receipt (→
+  `received`); when its UI displays the message it `POST`s
+  `/read-receipt`, sending a `chat-read` envelope back (→ `read`).
+- Both receipts ride back as `dm-status` control events on `/sse`
+  (`{channel:"dm-status",id,status,peer}`), which the sender's UI
+  matches to the bubble by id. Line-based `/sse` consumers (`cli
+  skychat listen`) ignore channel-tagged events, as they do for
+  group/pair events.
+
+Because delivery is direct-dial with no store-and-forward, an offline
+recipient means the send **fails** (nothing is queued); the tick is
+`sent` or `failed`, never a lingering `pending`. Status is browser-UI
+only — the CLI stays byte-identical plain send/listen — and persists
+in the local DM cache across reloads.
+
+Group messages currently show `pending`/`sent`/`failed` only;
+per-member `received`/`read` (a receipt fan-out on the feed) is not
+yet implemented.
+
 ## Message history
 
 When persistence is enabled, the chat-app stores every inbound and

@@ -154,10 +154,44 @@ func TestHandleConn_ChatAckConsumedNotSurfaced(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("chat-ack was not delivered to the registered waiter")
 	}
-	// Nothing should surface on the SSE stream for a consumed ack.
-	select {
-	case s := <-sub:
-		t.Errorf("chat-ack must not surface on SSE, got %q", s)
-	case <-time.After(200 * time.Millisecond):
+	// A chat-ack is not surfaced as a chat MESSAGE, but it does emit a
+	// dm-status "received" control event so the sender's bubble advances.
+	got := waitForString(t, sub, 2*time.Second)
+	if strings.Contains(got, `"message"`) {
+		t.Errorf("chat-ack must not surface as a chat message, got %q", got)
+	}
+	if !strings.Contains(got, `"channel":"dm-status"`) ||
+		!strings.Contains(got, `"status":"received"`) ||
+		!strings.Contains(got, `"id":"ackid-9"`) {
+		t.Errorf("expected a dm-status received event for ackid-9, got %q", got)
+	}
+	if !strings.Contains(got, peerPK.Hex()) {
+		t.Errorf("dm-status event should carry the peer PK %s, got %q", peerPK.Hex(), got)
+	}
+}
+
+func TestHandleConn_ChatReadEmitsReadStatus(t *testing.T) {
+	withHubAndPairing(t)
+	peerPK, _ := cipher.GenerateKeyPair()
+	sub, unsub := hub.subscribe()
+	defer unsub()
+	client := startHandleConn(t, peerPK)
+
+	// The peer reports it has displayed a message WE sent (id "m-7").
+	env := chatEnvelope{Type: chatTypeRead, ID: "m-7"}
+	payload, _ := json.Marshal(env) //nolint:errcheck
+	if err := client.WriteFrame(payload); err != nil {
+		t.Fatalf("write frame: %v", err)
+	}
+
+	// It must surface as a dm-status "read" event, not a chat message.
+	got := waitForString(t, sub, 2*time.Second)
+	if strings.Contains(got, `"message"`) {
+		t.Errorf("chat-read must not surface as a chat message, got %q", got)
+	}
+	if !strings.Contains(got, `"channel":"dm-status"`) ||
+		!strings.Contains(got, `"status":"read"`) ||
+		!strings.Contains(got, `"id":"m-7"`) {
+		t.Errorf("expected a dm-status read event for m-7, got %q", got)
 	}
 }

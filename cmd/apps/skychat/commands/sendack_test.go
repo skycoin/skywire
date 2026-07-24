@@ -81,9 +81,9 @@ func TestTryHandleChatEnvelope_ChatMsgWithAck(t *testing.T) {
 		t.Fatal(err)
 	}
 	var ackedID string
-	handled, body, id := tryHandleChatEnvelope(payload, "peerhex", func(id string) { ackedID = id })
-	if !handled || body != "hello" || id != "m1" {
-		t.Fatalf("handled=%v body=%q id=%q, want true/hello/m1", handled, body, id)
+	handled, body, id, kind := tryHandleChatEnvelope(payload, "peerhex", func(id string) { ackedID = id })
+	if !handled || body != "hello" || id != "m1" || kind != chatTypeMsg {
+		t.Fatalf("handled=%v body=%q id=%q kind=%q, want true/hello/m1/chat-msg", handled, body, id, kind)
 	}
 	if ackedID != "m1" {
 		t.Errorf("sendAck called with %q, want m1", ackedID)
@@ -94,7 +94,7 @@ func TestTryHandleChatEnvelope_ChatMsgNoAck(t *testing.T) {
 	env := chatEnvelope{Type: chatTypeMsg, ID: "m2", Body: "hi"} // Ack:false
 	payload, _ := json.Marshal(env)                              //nolint:errcheck
 	acked := false
-	handled, body, _ := tryHandleChatEnvelope(payload, "peer", func(string) { acked = true })
+	handled, body, _, _ := tryHandleChatEnvelope(payload, "peer", func(string) { acked = true })
 	if !handled || body != "hi" {
 		t.Fatalf("handled=%v body=%q, want true/hi", handled, body)
 	}
@@ -108,7 +108,7 @@ func TestTryHandleChatEnvelope_ChatMsgNilSendAckSafe(t *testing.T) {
 	payload, _ := json.Marshal(env) //nolint:errcheck
 	// A nil sendAck with Ack=true must not panic — the message is still
 	// surfaced.
-	handled, body, _ := tryHandleChatEnvelope(payload, "peer", nil)
+	handled, body, _, _ := tryHandleChatEnvelope(payload, "peer", nil)
 	if !handled || body != "hi" {
 		t.Fatalf("handled=%v body=%q, want true/hi", handled, body)
 	}
@@ -119,9 +119,9 @@ func TestTryHandleChatEnvelope_ChatAckDelivers(t *testing.T) {
 	defer unregister()
 	env := chatEnvelope{Type: chatTypeAck, ID: "a1"}
 	payload, _ := json.Marshal(env) //nolint:errcheck
-	handled, body, id := tryHandleChatEnvelope(payload, "peer", nil)
-	if !handled || body != "" || id != "a1" {
-		t.Fatalf("handled=%v body=%q id=%q, want true/empty/a1", handled, body, id)
+	handled, body, id, kind := tryHandleChatEnvelope(payload, "peer", nil)
+	if !handled || body != "" || id != "a1" || kind != chatTypeAck {
+		t.Fatalf("handled=%v body=%q id=%q kind=%q, want true/empty/a1/chat-ack", handled, body, id, kind)
 	}
 	select {
 	case <-ch:
@@ -141,9 +141,20 @@ func TestTryHandleChatEnvelope_PlainAndMalformed(t *testing.T) {
 		[]byte(""),
 	}
 	for _, p := range cases {
-		handled, _, _ := tryHandleChatEnvelope(p, "peer", nil)
+		handled, _, _, _ := tryHandleChatEnvelope(p, "peer", nil)
 		if handled {
 			t.Errorf("payload %q should NOT be handled as an envelope", p)
 		}
+	}
+}
+
+func TestTryHandleChatEnvelope_ChatRead(t *testing.T) {
+	env := chatEnvelope{Type: chatTypeRead, ID: "r1"}
+	payload, _ := json.Marshal(env) //nolint:errcheck
+	// A chat-read is consumed (not surfaced) and reports its id + kind so the
+	// caller can emit a "read" status for the referenced message.
+	handled, body, id, kind := tryHandleChatEnvelope(payload, "peer", nil)
+	if !handled || body != "" || id != "r1" || kind != chatTypeRead {
+		t.Fatalf("handled=%v body=%q id=%q kind=%q, want true/empty/r1/chat-read", handled, body, id, kind)
 	}
 }
