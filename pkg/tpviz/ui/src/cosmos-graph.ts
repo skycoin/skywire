@@ -50,7 +50,7 @@ let tooltip: HTMLDivElement | null = null;
 // Group-boundary overlay (grouping mode): the packed group circles + labels,
 // drawn on a canvas above the cosmos canvas and converted space→screen each frame
 // so they track pan/zoom — the WebGL analogue of the flat view's group boundaries.
-let boundaryCircles: { x: number; y: number; r: number; color: string; label: string; flag: string }[] = [];
+let boundaryCircles: { x: number; y: number; r: number; color: string; label: string; flag: string; count: number }[] = [];
 let boundaryCanvas: HTMLCanvasElement | null = null;
 let boundaryRAF: number | null = null;
 
@@ -130,7 +130,7 @@ function drawBoundaries(): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
   ctx.textAlign = 'center';
-  ctx.font = '13px system-ui, sans-serif';
+  ctx.font = 'bold 15px system-ui, sans-serif';
   for (const b of boundaryCircles) {
     const [sx, sy] = graph.spaceToScreenPosition([b.x, b.y]);
     const sr = graph.spaceToScreenRadius(b.r);
@@ -138,11 +138,18 @@ function drawBoundaries(): void {
     ctx.beginPath();
     ctx.arc(sx, sy, sr, 0, 2 * Math.PI);
     ctx.globalAlpha = 0.07; ctx.fillStyle = b.color; ctx.fill();
-    ctx.globalAlpha = 0.55; ctx.lineWidth = 1.2; ctx.strokeStyle = b.color; ctx.stroke();
+    // Dashed boundary ring — matches the classic Flat view's group circles.
+    ctx.globalAlpha = 0.6; ctx.lineWidth = 2; ctx.strokeStyle = b.color;
+    ctx.setLineDash([8, 4]); ctx.stroke(); ctx.setLineDash([]);
     ctx.globalAlpha = 1;
-    const label = (b.flag ? b.flag + ' ' : '') + b.label;
-    ctx.fillStyle = b.color;
-    ctx.fillText(label, sx, sy - sr - 5);
+    // "🇺🇸 US (123)" on a translucent black plate above the circle (as in Flat).
+    const label = (b.flag ? b.flag + ' ' : '') + b.label + ' (' + b.count + ')';
+    const tw = ctx.measureText(label).width;
+    const ly = sy - sr - 12;
+    ctx.globalAlpha = 0.6; ctx.fillStyle = '#000';
+    ctx.fillRect(sx - tw / 2 - 6, ly - 13, tw + 12, 20);
+    ctx.globalAlpha = 1; ctx.fillStyle = b.color;
+    ctx.fillText(label, sx, ly + 2);
   }
   boundaryRAF = requestAnimationFrame(drawBoundaries);
 }
@@ -222,7 +229,7 @@ function groupFlagOf(key: string, mode: 'country' | 'ip'): string {
   return countryToFlag(key);
 }
 
-interface GroupCircle { cx: number; cy: number; r: number; color: string; label: string; flag: string }
+interface GroupCircle { cx: number; cy: number; r: number; color: string; label: string; flag: string; count: number }
 
 // computeGroupedLayout packs the given nodes into per-group circles using the SAME
 // geometry as the flat view's arrangeNodesIntoGroups (calculateGroupRadius +
@@ -251,7 +258,7 @@ function computeGroupedLayout(
     const c = findNonOverlappingPosition(g.radius, placed, 60);
     placed.push({ x: c.x, y: c.y, radius: g.radius });
     const col = groupColorOf(g.key, mode);
-    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode) });
+    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode), count: g.ids.length });
     const inner = g.radius - 50;
     const n = g.ids.length;
     g.ids.forEach((id, i) => {
@@ -351,7 +358,7 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
     // Group boundary circles in the SAME normalized space (drawn on the overlay).
     boundaryCircles = groups.map(g => {
       const s = toSpace(g.cx, g.cy);
-      return { x: s.x, y: s.y, r: g.r * scale, color: g.color, label: g.label, flag: g.flag };
+      return { x: s.x, y: s.y, r: g.r * scale, color: g.color, label: g.label, flag: g.flag, count: g.count };
     });
   } else {
     boundaryCircles = [];
@@ -386,8 +393,12 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
     // into solid blobs.
     scaleNodesOnZoom: false,
     fitViewOnInit: true,
-    // GPU force simulation — light gravity + repulsion settle a ~20k-edge
+    // GPU force simulation — light gravity + repulsion settle a ~15k-edge
     // hairball into a readable ball in a couple seconds, off the main thread.
+    // Like the classic Flat view (which stabilizes then disables physics), we
+    // run it briefly, follow it with the camera, then pause + frame — a
+    // continuously-running sim doesn't reach true stationarity on this graph and
+    // slowly translates the (unfollowed) frame off-screen.
     spaceSize: COSMOS_SPACE,
     simulation: {
       gravity: 0.9,
@@ -476,20 +487,53 @@ function stopSettle(): void {
   if (settleInterval != null) { clearInterval(settleInterval); settleInterval = null; }
 }
 
-// startSettle runs the GPU sim for a few seconds and RE-FITS the camera on a short
-// cadence the whole time, so the view tracks the expanding hairball instead of
-// being framed once (tight, at the center) and then left behind as the layout
-// balloons. After the window it pauses the sim (frees the GPU) and does a final fit.
+// fitCore frames the DENSE CORE of the force layout, excluding the handful of
+// weakly-connected nodes the GPU repulsion flings far out — those otherwise
+// stretch fitView's bounding box and shove the main cluster off-center (dead
+// space on one side). It keeps every node within a robust distance of the
+// centroid (so legitimate spread is untouched) and only drops the far tail;
+// if there's nothing to trim it falls back to the plain fitView.
+function fitCore(g: Graph<CosmosNode, CosmosLink>, duration: number): void {
+  const posMap = g.getNodePositionsMap();
+  const ids: string[] = [];
+  const dist: number[] = [];
+  let cx = 0; let cy = 0;
+  posMap.forEach((p) => { cx += p[0]; cy += p[1]; });
+  const n = posMap.size;
+  if (n < 12) { g.fitView(duration, 0.12); return; }
+  cx /= n; cy /= n;
+  posMap.forEach((p, id) => { ids.push(id); dist.push(Math.hypot(p[0] - cx, p[1] - cy)); });
+  const sorted = [...dist].sort((a, b) => a - b);
+  const median = sorted[Math.floor(n / 2)] || 1;
+  const p95 = sorted[Math.floor(n * 0.95)];
+  // Keep everything within 3.5x the median distance OR the 95th percentile,
+  // whichever is larger — trims only the true far-flung tail (≤5% of nodes).
+  const cutoff = Math.max(median * 3.5, p95);
+  const kept: string[] = [];
+  for (let i = 0; i < ids.length; i++) { if (dist[i] <= cutoff) { kept.push(ids[i]); } }
+  if (kept.length >= 8 && kept.length < ids.length) {
+    g.fitViewByNodeIds(kept, duration, 0.15);
+  } else {
+    g.fitView(duration, 0.12);
+  }
+}
+
+// startSettle runs the GPU sim and RE-FITS the camera on a short cadence while
+// the layout expands, so the view tracks it instead of being framed once (tight,
+// at the center) and then left behind. After the window it pauses the sim (which
+// is now stationary) and does a final fit — matching the classic Flat view, which
+// stabilizes then disables physics. (Leaving the sim running slowly translates
+// the frame off-screen: it never reaches true stationarity on this graph.)
 function startSettle(): void {
   stopSettle();
   const start = performance.now();
   settleInterval = setInterval(() => {
     if (!graph || !active) { stopSettle(); return; }
-    graph.fitView(280, 0.12);
+    fitCore(graph, 280);
     if (performance.now() - start >= 4500) {
       stopSettle();
       graph.pause();
-      graph.fitView(500, 0.12);
+      fitCore(graph, 500);
       settled = true;
     }
   }, 350);
