@@ -81,8 +81,8 @@ func TestRenderLegacySSE_OutFileHasNoURL(t *testing.T) {
 	}
 }
 
-// writeTestPNG writes a solid w×h PNG to a temp file and returns its path.
-func writeTestPNG(t *testing.T, w, h int) string {
+// writePNGAt writes a solid w×h PNG to path (created/truncated).
+func writePNGAt(t *testing.T, path string, w, h int) {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := range h {
@@ -90,7 +90,6 @@ func writeTestPNG(t *testing.T, w, h int) string {
 			img.Set(x, y, color.RGBA{uint8(x % 256), uint8(y % 256), 128, 255})
 		}
 	}
-	path := filepath.Join(t.TempDir(), "img.png")
 	f, err := os.Create(path)
 	if err != nil {
 		t.Fatal(err)
@@ -99,6 +98,13 @@ func writeTestPNG(t *testing.T, w, h int) string {
 	if err := png.Encode(f, img); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// writeTestPNG writes a solid w×h PNG to a temp file and returns its path.
+func writeTestPNG(t *testing.T, w, h int) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "img.png")
+	writePNGAt(t, path, w, h)
 	return path
 }
 
