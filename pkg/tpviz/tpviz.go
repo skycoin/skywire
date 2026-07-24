@@ -20,7 +20,9 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
+	geoip2 "github.com/oschwald/geoip2-golang/v2"
 
+	geoipcmd "github.com/skycoin/skywire/cmd/svc/geoip/commands"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -299,6 +301,16 @@ type Server struct {
 	localGeoMu sync.RWMutex
 	localGeo   *localGeoData
 
+	// geoDB is the embedded GeoIP database (same one the reward calc uses); it
+	// resolves each visor's survey IP to a country so the network view can group
+	// the WHOLE fleet by country — not just the ~30 visors that register a service
+	// in the service discovery (whose geo the SD provides). Nil if it fails to load.
+	geoDB *geoip2.Reader
+	// surveyCountry maps visor PK → ISO country, built from the survey IPs during
+	// refreshIPGroupsCache and merged into /api/services.
+	surveyCountryMu sync.RWMutex
+	surveyCountry   map[string]string
+
 	// Embedded TPS API (optional — nil when tps_sk not configured)
 	tpsMu  sync.RWMutex
 	tpsAPI TPSAPI
@@ -434,6 +446,14 @@ func NewServer(cfg Config) *Server {
 		prevBandwidth: make(map[string]bandwidthSnapshot),
 		wsClients:     make(map[*websocket.Conn]struct{}),
 		wsBroadcast:   make(chan []byte, 100),
+		surveyCountry: make(map[string]string),
+	}
+	// Load the embedded GeoIP DB for full-fleet country grouping (best-effort:
+	// without it, country grouping falls back to the SD's registered-service geo).
+	if db, err := geoip2.OpenBytes(geoipcmd.EmbeddedGeoIP()); err != nil {
+		s.log.WithError(err).Warn("GeoIP DB unavailable — country grouping limited to service-discovery geo")
+	} else {
+		s.geoDB = db
 	}
 	s.setupRoutes()
 	return s
@@ -493,12 +513,14 @@ func (s *Server) tpdBase() string {
 	}
 	return s.config.TPDURL
 }
+
 func (s *Server) sdBase() string {
 	if s.getDmsgHTTP() != nil && s.config.SDURLDmsg != "" {
 		return s.config.SDURLDmsg
 	}
 	return s.config.SDURL
 }
+
 func (s *Server) dmsgBase() string {
 	if s.getDmsgHTTP() != nil && s.config.DMSGURLDmsg != "" {
 		return s.config.DMSGURLDmsg
@@ -883,6 +905,26 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 		s.parseServices(visorData, "visor", services)
 	}
 
+	// Merge full-fleet country from the survey GeoIP map. The SD only carries geo
+	// for the handful of visors that register a service; the surveys cover every
+	// visor, so this is what lets the network view group the WHOLE fleet by
+	// country (e.g. Indonesia — the largest — actually forms its cluster).
+	s.surveyCountryMu.RLock()
+	for pk, country := range s.surveyCountry {
+		if country == "" {
+			continue
+		}
+		if info, ok := services[pk]; ok {
+			if info.Country == "" {
+				info.Country = country
+				services[pk] = info
+			}
+		} else {
+			services[pk] = ServiceInfo{PK: pk, Services: []string{}, Country: country}
+		}
+	}
+	s.surveyCountryMu.RUnlock()
+
 	// Convert to JSON
 	result, err := json.Marshal(services)
 	if err != nil {
@@ -923,6 +965,9 @@ func (s *Server) refreshIPGroupsCache() {
 	ipToGroup := make(map[string]int)
 	// Map from public key (or node ID) to group ID
 	pkToGroup := make(map[string]int)
+	// Map from public key → ISO country (survey IP → GeoIP), for full-fleet
+	// country grouping in the network view.
+	pkToCountry := make(map[string]string)
 	nextGroupID := 1
 
 	// Walk the survey directory looking for node-info.json files
@@ -968,9 +1013,21 @@ func (s *Server) refreshIPGroupsCache() {
 				}
 
 				pkToGroup[pk] = groupID
+
+				// Full-fleet country: resolve the survey IP via the embedded GeoIP.
+				if s.geoDB != nil {
+					if res, gerr := geoipcmd.LookupIP(s.geoDB, survey.IPAddr); gerr == nil && res.CountryCode != "" {
+						pkToCountry[pk] = res.CountryCode
+					}
+				}
 			}
 		}
 	}
+
+	// Publish the survey-derived country map for /api/services to merge.
+	s.surveyCountryMu.Lock()
+	s.surveyCountry = pkToCountry
+	s.surveyCountryMu.Unlock()
 
 	// Add local visor to the correct IP group based on its geoip IP
 	s.localGeoMu.RLock()
