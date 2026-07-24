@@ -161,6 +161,20 @@ type Config struct {
 	// per feed matters. Defaults to 2m. Mirrors the treestore
 	// Publisher's runCleanup, which the aggregator's node lacked.
 	CleanupInterval time.Duration
+	// MaxFillingTime caps how long the CXO node will keep a single Root
+	// fill in flight before aborting it with ErrTimeout. The node default
+	// (node.NewConfig) is 10m, which is far too generous for TPD's
+	// aggregator: it subscribes to every visor feed, and any flapping peer
+	// leaves its fill hung — holding all the fill's "wanted" objects in the
+	// in-memory cache (which cleanDown skips, so LRU can't evict them) for
+	// the full 10m before the timeout fires Unwant. With hundreds of
+	// unstable peers that standing pool of hung-fill memory is the residual
+	// leak the Root-prune cleanup can't reach. The aggregator is best-effort
+	// (an aborted fill just retries when the visor republishes), so we cap
+	// this low — a healthy transport-tree fill completes in seconds, and a
+	// fill still running after this long is a broken peer, not a slow one.
+	// Defaults to 90s.
+	MaxFillingTime time.Duration
 	// Logger overrides the default tagged logger.
 	Logger *logging.Logger
 	// InMemoryDB / DataDir control the aggregator's CXO storage.
@@ -202,11 +216,19 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	if conf.CleanupInterval <= 0 {
 		conf.CleanupInterval = 2 * time.Minute
 	}
+	if conf.MaxFillingTime <= 0 {
+		conf.MaxFillingTime = 90 * time.Second
+	}
 	if conf.Logger == nil {
 		conf.Logger = logging.MustGetLogger("tpd-cxo-aggregator")
 	}
 
 	cfg := node.NewConfig()
+	// Override the 10m node default: cap hung fills from flapping peers so
+	// their "wanted" objects are released in seconds, not minutes. See the
+	// Config.MaxFillingTime doc for why this is the aggregator's residual
+	// memory leak.
+	cfg.MaxFillingTime = conf.MaxFillingTime
 	cfg.Config = skyobject.NewConfig()
 	cfg.Config.InMemoryDB = conf.InMemoryDB || conf.DataDir == ""
 	if conf.DataDir != "" {
