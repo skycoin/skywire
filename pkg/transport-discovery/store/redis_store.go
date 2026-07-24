@@ -142,8 +142,16 @@ func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, vers
 	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
 	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
 
-	_, err := pipe.Exec(ctx)
-	return err
+	if _, err := pipe.Exec(ctx); err != nil {
+		// Reward-critical: a persistent failure here silently drops the fleet's
+		// uptime/presence data, which is exactly how a reward-uptime outage can
+		// hide for days. Callers treat the heartbeat as best-effort and rely on
+		// the store to surface failures, so log at Warn here rather than let it
+		// vanish into a Debug line or a discarded error.
+		s.log.WithError(err).Warn("RecordHeartbeat: failed to persist visor heartbeat (uptime/reward data lost for this tick)")
+		return err
+	}
+	return nil
 }
 
 const minP2PTransportsOnline = 2

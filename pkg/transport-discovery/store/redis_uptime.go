@@ -190,8 +190,13 @@ func (s *redisStore) RecordTransportHeartbeat(ctx context.Context, tpID uuid.UUI
 	pipe.SetBit(ctx, tlKey, currentTimelineSlot(at), 1)
 	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
 
-	_, err := pipe.Exec(ctx)
-	return err
+	if _, err := pipe.Exec(ctx); err != nil {
+		// Reward-critical (see RecordHeartbeat): surface store failures at Warn
+		// rather than letting best-effort callers discard them silently.
+		s.log.WithError(err).Warn("RecordTransportHeartbeat: failed to persist transport heartbeat (uptime data lost for this tick)")
+		return err
+	}
+	return nil
 }
 
 // transportTimelineBitmapBytes is the expected wire size of a single
