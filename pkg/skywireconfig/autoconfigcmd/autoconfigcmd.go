@@ -176,6 +176,8 @@ type Values struct {
 	NoSkynetweb       bool
 	DmsgwebUpstream   string // DMSGWEBUPSTREAM
 	SkynetwebUpstream string // SKYNETWEBUPSTREAM
+	DmsgwebAddr       string // DMSGWEBADDR
+	SkynetwebAddr     string // SKYNETWEBADDR
 
 	// --- Skychat ---
 	Skychat         bool
@@ -325,6 +327,8 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.NoSkynetweb, "no-skynetweb", false, "disable embedded .skynet resolving SOCKS5 proxy — writes SKYNETWEB=false in skywire.conf")
 	cmd.Flags().StringVar(&v.DmsgwebUpstream, "dmsgweb-upstream", "", "upstream SOCKS5 for non-.dmsg traffic (empty chains to skynetweb) — writes DMSGWEBUPSTREAM in skywire.conf")
 	cmd.Flags().StringVar(&v.SkynetwebUpstream, "skynetweb-upstream", "", "upstream SOCKS5 for non-.skynet traffic — writes SKYNETWEBUPSTREAM in skywire.conf")
+	cmd.Flags().StringVar(&v.DmsgwebAddr, "dmsgweb-addr", "", "host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN) — writes DMSGWEBADDR in skywire.conf")
+	cmd.Flags().StringVar(&v.SkynetwebAddr, "skynetweb-addr", "", "host the .skynet SOCKS5 proxy binds to — writes SKYNETWEBADDR in skywire.conf")
 
 	// --- Skychat ---
 	cmd.Flags().BoolVar(&v.Skychat, "skychat", false, "autostart skychat — writes SKYCHAT=true in skywire.conf")
@@ -466,6 +470,8 @@ var envMap = map[string]EnvMapping{
 	"skynetweb":          {Key: "SKYNETWEB", Format: EnvFormatBool},
 	"no-skynetweb":       {Key: "SKYNETWEB", Format: EnvFormatBool, Negate: true},
 	"dmsgweb-upstream":   {Key: "DMSGWEBUPSTREAM", Format: EnvFormatString},
+	"dmsgweb-addr":       {Key: "DMSGWEBADDR", Format: EnvFormatString},
+	"skynetweb-addr":     {Key: "SKYNETWEBADDR", Format: EnvFormatString},
 	"skynetweb-upstream": {Key: "SKYNETWEBUPSTREAM", Format: EnvFormatString},
 
 	// Skychat
