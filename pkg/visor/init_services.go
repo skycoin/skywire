@@ -33,6 +33,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/utclient"
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) error { //nolint:revive
@@ -54,28 +55,14 @@ func initSystemSurvey(_ context.Context, v *Visor, log *logging.Logger) error {
 func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 5 * time.Minute
 
-	// Standalone uptime-tracker URL — may be absent: the standalone tracker has
-	// been decommissioned fleet-wide, so most configs no longer set it.
-	var utURL string
-	if conf := v.conf.UptimeTracker; conf != nil {
-		utURL = conf.Addr
-		if utURL == "" && conf.AddrDmsg != "" {
-			utURL = conf.AddrDmsg
-		}
-	}
-
-	// TPD heartbeat URL. This is the REWARD-CRITICAL uptime source now that the
-	// standalone tracker is gone: TPD's /v4/update is how a visor's presence is
-	// recorded for rewards. It MUST run independently of whether uptime_tracker
-	// is configured. Previously this whole goroutine returned early when
-	// uptime_tracker was empty — so decommissioning the standalone tracker
-	// silently disabled the TPD heartbeat too, a fleet-wide reward-uptime
-	// regression that stayed invisible because the failure below was logged at
-	// Debug.
-	tpdURL := v.conf.Transport.Discovery
-	if tpdURL == "" && v.conf.Transport.DiscoveryDmsg != "" {
-		tpdURL = v.conf.Transport.DiscoveryDmsg
-	}
+	// Resolve both targets. The standalone uptime-tracker URL may be absent
+	// (the tracker is decommissioned fleet-wide); the TPD heartbeat URL is the
+	// REWARD-CRITICAL presence signal and is derived INDEPENDENTLY of whether
+	// uptime_tracker is set. Previously this whole goroutine returned early when
+	// uptime_tracker was empty, so decommissioning the standalone tracker
+	// silently disabled the TPD heartbeat too — a fleet-wide reward-uptime
+	// regression. resolveUptimeTargets keeps that invariant unit-testable.
+	utURL, tpdURL := resolveUptimeTargets(v.conf.UptimeTracker, v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg)
 
 	if utURL == "" && tpdURL == "" {
 		v.log.Debug("uptime: no uptime_tracker and no transport-discovery addr; skipping heartbeat.")
@@ -143,6 +130,27 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 	}()
 
 	return nil
+}
+
+// resolveUptimeTargets decides which uptime endpoints the heartbeat loop
+// targets. It returns the standalone uptime-tracker URL (empty when
+// unconfigured — the tracker is decommissioned fleet-wide) and the TPD
+// heartbeat URL, the reward-critical presence signal. The TPD URL is derived
+// independently of ut so that an absent/nil uptime_tracker can never disable
+// the TPD heartbeat — the regression that silently collapsed fleet reward
+// uptime. Pure and side-effect-free so the invariant is unit-testable.
+func resolveUptimeTargets(ut *visorconfig.UptimeTracker, discovery, discoveryDmsg string) (utURL, tpdURL string) {
+	if ut != nil {
+		utURL = ut.Addr
+		if utURL == "" {
+			utURL = ut.AddrDmsg
+		}
+	}
+	tpdURL = discovery
+	if tpdURL == "" {
+		tpdURL = discoveryDmsg
+	}
+	return utURL, tpdURL
 }
 
 // buildUptimeClient constructs an authenticated uptime/heartbeat client for the
