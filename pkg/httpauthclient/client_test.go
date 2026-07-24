@@ -63,7 +63,7 @@ func TestClient(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, res.Body.Close())
 	assert.Equal(t, []byte(payload), b)
-	assert.Equal(t, uint64(2), c.nonce)
+	assert.Equal(t, uint64(2), uint64(c.getCurrentNonce()))
 
 	headers := <-headerCh
 	checkResp(t, headers, b, pk, 1)
@@ -80,7 +80,7 @@ func TestClient_BadNonce(t *testing.T) {
 	c, err := NewClient(context.TODO(), ts.URL, pk, sk, &http.Client{}, ip, masterLogger)
 	require.NoError(t, err)
 
-	c.nonce = 999
+	c.SetNonce(999)
 
 	req, err := http.NewRequest(http.MethodGet, ts.URL+"/foo", bytes.NewBufferString(payload))
 	require.NoError(t, err)
@@ -90,7 +90,7 @@ func TestClient_BadNonce(t *testing.T) {
 	b, err := io.ReadAll(res.Body)
 	require.NoError(t, err)
 	require.NoError(t, res.Body.Close())
-	assert.Equal(t, uint64(2), c.nonce)
+	assert.Equal(t, uint64(2), uint64(c.getCurrentNonce()))
 
 	headers := <-headerCh
 	checkResp(t, headers, b, pk, 1)
