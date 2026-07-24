@@ -42,12 +42,14 @@ var (
 	resolverSkynetOnly bool
 	resolverUpstream   string
 	resolverNoChain    bool
+	resolverBind       string
 )
 
 func init() {
 	upCmd.Flags().BoolVar(&resolverDmsgOnly, "dmsg-only", false, "only enable the .dmsg resolver")
 	upCmd.Flags().BoolVar(&resolverSkynetOnly, "skynet-only", false, "only enable the .skynet resolver")
 	upCmd.Flags().StringVar(&resolverUpstream, "upstream", "", "upstream SOCKS5 for non-matching traffic (e.g. 127.0.0.1:1080)")
+	upCmd.Flags().StringVar(&resolverBind, "bind", "", "SOCKS5 bind host, persisted (e.g. 0.0.0.0 or a LAN IP to serve the LAN; empty = loopback)")
 	upCmd.Flags().BoolVar(&resolverNoChain, "no-chain", false, "skip the dmsgweb→skynetweb auto-chain even when both resolvers are up")
 	upCmd.MarkFlagsMutuallyExclusive("dmsg-only", "skynet-only")
 
@@ -125,6 +127,22 @@ different flags update the upstream.`,
 			}
 		}
 
+		// Bind host (persisted). Empty leaves the resolver on loopback.
+		// A LAN IP or 0.0.0.0 makes the resolver reachable from the LAN and
+		// survives a restart (the visor re-reads the persisted proxy_addr).
+		if resolverBind != "" {
+			if wantDmsg {
+				if err := rpcClient.SetEmbeddedProxyBind("dmsg", resolverBind); err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("bind dmsg resolver: %w", err))
+				}
+			}
+			if wantSkynet {
+				if err := rpcClient.SetEmbeddedProxyBind("skynet", resolverBind); err != nil {
+					internal.PrintFatalError(cmd.Flags(), fmt.Errorf("bind skynet resolver: %w", err))
+				}
+			}
+		}
+
 		// Wire upstream and the auto-chain. If both resolvers are up
 		// and the user didn't explicitly opt out, chain dmsgweb to
 		// skynetweb (so .skynet still resolves through the same
@@ -151,6 +169,9 @@ different flags update the upstream.`,
 
 		var msg strings.Builder
 		msg.WriteString("Resolver up.\n")
+		if resolverBind != "" {
+			fmt.Fprintf(&msg, "  bind:     %s (persisted; reachable from the LAN)\n", resolverBind)
+		}
 		if resolverUpstream != "" {
 			fmt.Fprintf(&msg, "  upstream: %s\n", resolverUpstream)
 		}
