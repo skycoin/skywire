@@ -6,6 +6,33 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.89
+
+15 PRs on top of v1.3.88. Headline: **reward uptime is fixed** — the fleet's presence heartbeat, silently broken since the standalone uptime tracker was decommissioned, works again; the TPD memory leaks behind the reward outage are closed; and a board can now share its `.dmsg` / `.skynet` resolver with a whole home-router LAN. **Because the heartbeat fix is visor-side and the reward minimum-version floor auto-increments, a current-fleet visor only earns rewards correctly once it updates to this release** — which both clears the version floor and carries the working heartbeat.
+
+-   **Reward uptime restored — the reason to update (#3563, #3570, #3564, #3567).** When the standalone uptime tracker was decommissioned fleet-wide, `initUptimeTracker` returned early on the now-empty `uptime_tracker` config and silently disabled the TPD `/v4/update` heartbeat that had become the reward-critical presence signal — so visors' recorded uptime collapsed to near-zero despite being online, invisibly, because it logged at Debug. #3563 decouples the TPD heartbeat from the dead tracker (it runs whenever a transport-discovery address is set) and raises the failure to Warn + a health flag. #3570 fixes the deeper cause for high-transport visors: a visor holds several httpauth clients to the same TPD (uptime heartbeat + transport registration), each with its own nonce counter, so concurrent same-PK requests raced the server's single monotonic nonce and 401'd until a resync that kept losing under load — now one shared nonce per (server, identity) serializes them. #3564 makes the TPD store log reward-heartbeat write failures instead of discarding them (a Redis outage was previously invisible at every log level), and #3567 adds a CI regression test for the decouple.
+-   **TPD memory leaks fixed (#3561, #3562, #3571).** The transport-discovery's CXO aggregator subscribed to every visor feed but never pruned the Roots it received (~1 GB/day of unbounded growth); #3561 adds the cleanup, and #3562 caps the fill timeout at 90s so hung fills from flapping peers release their "wanted" objects in seconds instead of the 10-minute node default. #3571 also stops two CXO node timeouts (fill / response) from silently disabling themselves at a non-positive config value.
+-   **Latent-bug hardening from a codebase audit (#3565, #3566).** Bounded two remaining unbounded `stun.ready` waits that could wedge transport setup or the heartbeat client at boot, and pruned an unbounded per-transport bandwidth-baseline map that grew with transport churn.
+-   **`.dmsg` / `.skynet` for a whole LAN (#3572, #3576, #3574).** The embedded resolving proxy's SOCKS5 bind is now configurable via `skywire autoconfig --dmsgweb-addr 0.0.0.0`, so one board with a visor becomes a `.dmsg`/`.skynet` gateway for a home-router (OpenWRT / DD-WRT) LAN — every device reaches dmsg-only deployment services (reward system, transport discovery, …) with no per-device install. New guide: [A `.dmsg` / `.skynet` gateway for your LAN](https://skycoin.github.io/skywire/guides/dmsg-lan-gateway/).
+-   **Go-native VPN-router control plane (#3556, #3558).** The vpn-router's `ip`/iptables shell-outs move to a pure-Go netlink + nftables backend (tag-gated), toward a dependency-free gokrazy appliance image, and add a firewall backend seam.
+-   **Vendored skycoin bumped to develop HEAD (#3575).**
+
+-   feat(autoconfig): DMSGWEBADDR/SKYNETWEBADDR + rework LAN-gateway guide  [#3576](https://github.com/skycoin/skywire/pull/3576)
+-   chore(vendor): bump skycoin to develop HEAD (skycoin#2954)  [#3575](https://github.com/skycoin/skywire/pull/3575)
+-   docs(guides): .dmsg gateway for a home router (OpenWRT / DD-WRT)  [#3574](https://github.com/skycoin/skywire/pull/3574)
+-   feat(resolver): configurable SOCKS5 bind host so a board can serve the LAN  [#3572](https://github.com/skycoin/skywire/pull/3572)
+-   fix(cxo): treat non-positive fill/response timeouts as default, not disabled  [#3571](https://github.com/skycoin/skywire/pull/3571)
+-   fix(httpauth): share the nonce per (addr, PK) to stop concurrent-request 401s  [#3570](https://github.com/skycoin/skywire/pull/3570)
+-   test(visor): regression-guard the reward-uptime decouple in CI  [#3567](https://github.com/skycoin/skywire/pull/3567)
+-   fix(visor/stats): prune day-start bandwidth baselines (unbounded map)  [#3566](https://github.com/skycoin/skywire/pull/3566)
+-   fix(visor): bound the remaining unbounded stun.ready waits  [#3565](https://github.com/skycoin/skywire/pull/3565)
+-   fix(tpd): log reward-heartbeat store failures instead of dropping them silently  [#3564](https://github.com/skycoin/skywire/pull/3564)
+-   fix(visor): TPD uptime heartbeat must run without the standalone tracker  [#3563](https://github.com/skycoin/skywire/pull/3563)
+-   fix(tpd): cap aggregator fill time to release hung-fill memory  [#3562](https://github.com/skycoin/skywire/pull/3562)
+-   fix(tpd): prune superseded CXO roots in the aggregator (memory leak)  [#3561](https://github.com/skycoin/skywire/pull/3561)
+-   feat(vpnrouter): firewall backend seam (iptables | nftables) — completes Phase 0b  [#3558](https://github.com/skycoin/skywire/pull/3558)
+-   feat(vpn): Go-native control plane — netlink (default) + nftables firewall (tag-gated)  [#3556](https://github.com/skycoin/skywire/pull/3556)
+
 ## 1.3.88
 
 16 PRs on top of v1.3.87. Headline: the **VPN router** graduates from prototype to a fully configurable, documented feature, and a new **mesh gateway** lets ordinary devices reach `.dmsg` / `.skynet` services by name.
