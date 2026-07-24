@@ -66,6 +66,11 @@ type Overview struct {
 	Hypervisors         []cipher.PubKey `json:"hypervisors"`
 	ConnectedHypervisor []cipher.PubKey `json:"connected_hypervisor"`
 	Hostname            string          `json:"hostname,omitempty"`
+	// CountryCode is the visor's ISO country, shown in the hypervisor node list.
+	// A wasm visor has no embedded GeoIP DB, so (like its public IP) it learns
+	// this from a dmsg server via LookupIPGeo. Same json tag as the native
+	// visor's Overview so the HV UI renders it identically.
+	CountryCode string `json:"country_code,omitempty"`
 
 	// transports holds THIS (self) visor's live transports so MarshalJSON can
 	// emit them in the overview's "transports" array (the node-table count). It
