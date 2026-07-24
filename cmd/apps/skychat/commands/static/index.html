@@ -486,10 +486,16 @@
       padding: 0 2px;
       cursor: default;
       user-select: none;
+      background: none;
+      border: none;
+      font-family: inherit;
     }
     .msg-status.pending { opacity: 0.6; }
     .msg-status.read { color: #4aa3ff; }
     .msg-status.failed { color: var(--danger, #e5484d); font-weight: 600; }
+    /* The failed tick is a click-to-resend button. */
+    button.msg-status.failed { cursor: pointer; }
+    button.msg-status.failed:hover { text-decoration: underline; }
 
     /* Reply affordance (appears on hover), quote block, compose chip */
     .reply-link {
@@ -1415,12 +1421,15 @@
       // bubbles (DM + group). received/read are a double tick (read is tinted
       // via CSS) and only occur for DMs; group bubbles stop at sent/failed.
       _statusTick(status) {
+        // A failed bubble's tick is a click-to-resend button (see resendMessage).
+        if (status === 'failed') {
+          return `<button type="button" class="msg-status failed" onclick="app.resendMessage(this)" title="Failed to send — click to resend">⚠ Resend</button>`;
+        }
         const map = {
           pending:  { cls: 'pending',  txt: '○',       title: 'Sending…' }, // ○
           sent:     { cls: 'sent',     txt: '✓',       title: 'Sent' },          // ✓
           received: { cls: 'received', txt: '✓✓', title: 'Received' },       // ✓✓
           read:     { cls: 'read',     txt: '✓✓', title: 'Read' },           // ✓✓ (blue)
-          failed:   { cls: 'failed',   txt: '⚠',       title: 'Failed to send' }, // ⚠
         };
         const s = map[status] || map.sent;
         return `<span class="msg-status ${s.cls}" title="${s.title}">${s.txt}</span>`;
@@ -1483,6 +1492,84 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ pk, ids }),
         }).catch(() => {});
+      }
+
+      // _deliverDM sends an already-composed DM bubble over the wire and advances
+      // its status: sent (frame left this machine) or failed. On the receipts
+      // path (non-cxo) it captures the server's wire id so later received/read
+      // receipts can match. Shared by the first send and resend.
+      _deliverDM(destination, message, wireText, network) {
+        const useReceipts = network !== 'cxo';
+        let url, body;
+        if (network === 'cxo') {
+          url = `/pair/${destination}/message`;
+          body = JSON.stringify({ text: wireText });
+        } else {
+          url = '/message';
+          body = JSON.stringify({ recipient: destination, message: wireText, network: network, receipts: true });
+        }
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+          .then(res => {
+            if (!res.ok) {
+              return res.text().then(text => {
+                this._setMsgStatus(destination, message, 'failed');
+                this.showToast(`Failed: ${text}`, 'error');
+              });
+            }
+            return res.json().then(j => {
+              if (useReceipts && j && j.id) message.wireId = j.id;
+              this._setMsgStatus(destination, message, 'sent');
+            }).catch(() => this._setMsgStatus(destination, message, 'sent'));
+          })
+          .catch(e => {
+            this._setMsgStatus(destination, message, 'failed');
+            this.showToast(e.message, 'error');
+          });
+      }
+
+      // _deliverGroup publishes an already-composed group bubble and advances its
+      // status: sent (GroupSend ok = the reference is on the feed) or failed.
+      _deliverGroup(gid, message, wireText) {
+        fetch(`/group/${gid}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: wireText }),
+        })
+          .then(res => {
+            if (res.ok) {
+              this._setMsgStatus(gid, message, 'sent');
+            } else {
+              res.text().then(t => {
+                this._setMsgStatus(gid, message, 'failed');
+                this.showToast(`Group send failed: ${t}`, 'error');
+              });
+            }
+          })
+          .catch(e => {
+            this._setMsgStatus(gid, message, 'failed');
+            this.showToast(e.message, 'error');
+          });
+      }
+
+      // resendMessage retries a bubble whose send failed (the ⚠ Resend tick).
+      // The bubble is re-armed to pending and re-delivered in place — no
+      // duplicate. Works for DM (current network) and group threads.
+      resendMessage(btn) {
+        const row = btn.closest ? btn.closest('.message-row') : null;
+        if (!row) return;
+        const key = this.activeKey();
+        const list = this.messages[key];
+        if (!list) return;
+        const message = list.find(m => m && String(m.mid) === String(row.dataset.mid) && m.from === 'me');
+        if (!message || message.status !== 'failed') return;
+
+        this._setMsgStatus(key, message, 'pending');
+        const wireText = message.reply ? this._encodeReply(message.text) : message.text;
+        if (message.group) {
+          this._deliverGroup(key, message, wireText);
+        } else {
+          this._deliverDM(key, message, wireText, document.getElementById('networkSelect').value);
+        }
       }
 
       // ---- Replies ---------------------------------------------------
@@ -2316,28 +2403,12 @@
         const wireText = replyMeta ? this._encodeReply(msg) : msg;
         this.cancelReply();
 
-        // CXO routes through /pair/<pk>/message instead of /message —
-        // a paired publisher must already exist (handled by Pair button
-        // / pair-invite handshake). Falls back to legacy if pairing
-        // isn't set up.
-        // The legacy DM path (skynet/dmsg) supports the status lifecycle via
-        // receipts:true — the server returns a wire id and the peer's
-        // received/read receipts arrive later as dm-status events. The CXO
-        // path is eventual (no per-message receipt), so its bubble stops at
-        // "sent".
-        const useReceipts = network !== 'cxo';
-        let url, body;
-        if (network === 'cxo') {
-          url = `/pair/${destination}/message`;
-          body = JSON.stringify({ text: wireText });
-        } else {
-          url = '/message';
-          body = JSON.stringify({ recipient: destination, message: wireText, network: network, receipts: true });
-        }
-
         // Render the bubble immediately as pending, then advance it on the
         // response (sent/failed) and — for receipts sends — later on dm-status
-        // events (received/read).
+        // events (received/read). CXO routes through /pair/<pk>/message and is
+        // eventual (no per-message receipt, so its bubble stops at "sent");
+        // skynet/dmsg use receipts:true for the full lifecycle. _deliverDM owns
+        // the wire call (shared with resend).
         const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo', reply: replyMeta, status: 'pending' };
         this.addMsgToList(destination, message);
         msgField.value = '';
@@ -2347,29 +2418,7 @@
         this.saveSeenList();
         this.updateUnreadBadges();
 
-        fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: body
-        })
-          .then(res => {
-            if (!res.ok) {
-              return res.text().then(text => {
-                this._setMsgStatus(destination, message, 'failed');
-                this.showToast(`Failed: ${text}`, 'error');
-              });
-            }
-            // Capture the server-assigned wire id so dm-status receipts can
-            // match this bubble (receipts path only; cxo returns no id).
-            return res.json().then(j => {
-              if (useReceipts && j && j.id) message.wireId = j.id;
-              this._setMsgStatus(destination, message, 'sent');
-            }).catch(() => this._setMsgStatus(destination, message, 'sent'));
-          })
-          .catch(e => {
-            this._setMsgStatus(destination, message, 'failed');
-            this.showToast(e.message, 'error');
-          });
+        this._deliverDM(destination, message, wireText, network);
       }
 
       // sendFile uploads the picked file to /send-file (multipart) for the
@@ -2742,30 +2791,13 @@
         // Optimistic pending bubble → sent (GroupSend ok = the reference is on
         // the feed, headed to every member) / failed. Per-member received/read
         // isn't tracked in v1. The poll echo dedups against this bubble
-        // (from='me' + matching text) and backfills its ts_nano.
+        // (from='me' + matching text) and backfills its ts_nano. _deliverGroup
+        // owns the wire call (shared with resend).
         const message = { ts: new Date(), from: 'me', text, group: true, sender: this.myPK, reply: replyMeta, status: 'pending' };
         this.addMsgToList(gid, message, { group: true });
         const el = document.getElementById('messages');
         el.scrollTop = el.scrollHeight;
-        fetch(`/group/${gid}/send`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: wireText })
-        })
-          .then(res => {
-            if (res.ok) {
-              this._setMsgStatus(gid, message, 'sent');
-            } else {
-              res.text().then(t => {
-                this._setMsgStatus(gid, message, 'failed');
-                this.showToast(`Group send failed: ${t}`, 'error');
-              });
-            }
-          })
-          .catch(e => {
-            this._setMsgStatus(gid, message, 'failed');
-            this.showToast(e.message, 'error');
-          });
+        this._deliverGroup(gid, message, wireText);
       }
 
       // handleGroupSSE routes an inbound group message (channel="group") to its
