@@ -1,4 +1,4 @@
-# A `.dmsg` gateway for a home router (OpenWRT / DD-WRT)
+# A `.dmsg` / `.skynet` gateway for your LAN (OpenWRT / DD-WRT)
 
 Skywire's deployment services — the reward system, transport discovery, route
 finder, address resolver, uptime tracker — are reachable **only over dmsg**;
@@ -19,30 +19,34 @@ device**.
 
 ## 1. On the board — bind the resolver to the LAN
 
-Generate (or regenerate) the visor config with the resolver enabled and bound
-to all interfaces instead of loopback:
+Enable the resolver and bind it to all interfaces instead of loopback. On an
+installed Linux system, configure this through **`skywire autoconfig`** (which
+writes `skywire.conf`) — **not** a direct `config gen` or a hand-edit of
+`skywire.json`, because the next `skywire autoconfig` run regenerates
+`skywire.json` and would overwrite anything not backed by `skywire.conf`:
 
 ```
-skywire cli config gen --dmsgweb --dmsgweb-addr 0.0.0.0 \
-                       --skynetweb --skynetweb-addr 0.0.0.0 \
-                       -bo /opt/skywire/skywire.json
-sudo systemctl restart skywire
+sudo skywire autoconfig --dmsgweb   --dmsgweb-addr   0.0.0.0 \
+                        --skynetweb --skynetweb-addr 0.0.0.0
 ```
 
-`--dmsgweb-addr 0.0.0.0` binds the `.dmsg` SOCKS5 proxy on **port 4445** on every
-interface (`--skynetweb-addr` does the same for `.skynet` on 4446). You can bind
-a specific LAN IP instead of `0.0.0.0` if you prefer. On an installed system you
-can also set it via autoconfig:
+That writes `DMSGWEB=true`, `DMSGWEBADDR=0.0.0.0`, `SKYNETWEB=true`, and
+`SKYNETWEBADDR=0.0.0.0` into `skywire.conf`, regenerates `skywire.json` from it,
+and restarts the visor — so the setting **survives both a visor restart and
+future `autoconfig` runs**. `DMSGWEBADDR=0.0.0.0` binds the `.dmsg` SOCKS5 proxy
+on **port 4445** on every interface; `SKYNETWEBADDR` does the same for `.skynet`
+on 4446. Bind a specific LAN IP instead of `0.0.0.0` if you prefer.
+
+Equivalently, edit `skywire.conf` directly and re-run autoconfig:
 
 ```
-sudo skywire autoconfig --dmsgweb --skynetweb   # then edit proxy_addr, or use the flags above
+DMSGWEB=true
+DMSGWEBADDR='0.0.0.0'
+SKYNETWEB=true
+SKYNETWEBADDR='0.0.0.0'
 ```
-
-Or set it directly in `skywire.json`:
-
-```json
-"dmsgweb":   { "enable": true, "proxy_addr": "0.0.0.0" },
-"skynetweb": { "enable": true, "proxy_addr": "0.0.0.0" }
+```
+sudo skywire autoconfig
 ```
 
 Confirm it is listening on the LAN (replace `192.168.1.50` with the board's IP):
