@@ -38,7 +38,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skycoin/skycoin v0.28.6-0.20260721161120-6bc1726c472a
+	github.com/skycoin/skycoin v0.28.6-0.20260724194028-65fb33282e59
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -74,6 +74,7 @@ require (
 	github.com/gen2brain/malgo v0.11.25
 	github.com/gizak/termui/v3 v3.1.0
 	github.com/google/gopacket v1.1.19
+	github.com/google/nftables v0.3.0
 	github.com/google/renameio v1.0.1
 	github.com/hanwen/go-fuse/v2 v2.10.1
 	github.com/insomniacslk/dhcp v0.0.0-20260719225207-c76316d4aa82
@@ -95,6 +96,7 @@ require (
 	github.com/soheilhy/cmux v0.1.5
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/thesyncim/gopus v0.1.1
+	github.com/vishvananda/netlink v1.3.1
 	github.com/xxxserxxx/lingo/v2 v2.0.1
 	go.starlark.net v0.0.0-20260708150628-5395d018f003
 	golang.org/x/time v0.15.0
@@ -119,7 +121,6 @@ require (
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
-	github.com/google/nftables v0.3.0 // indirect
 	github.com/google/pprof v0.0.0-20241210010833-40e02aabc2ad // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/josharian/native v1.1.0 // indirect
@@ -157,7 +158,6 @@ require (
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/u-root/uio v0.0.0-20230220225925-ffce2a382923 // indirect
-	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/zyedidia/micro v1.4.1 // indirect
