@@ -31,6 +31,14 @@ func (f *Factory) geoData() *geo.LocationData {
 	return g
 }
 
+// geoFunc recovers the live geolocation getter stored in the `any`-typed
+// Factory.GeoFunc (nil if unset). Preferred over geoData so heartbeats pick up
+// the visor's country once its async geoip lookup completes.
+func (f *Factory) geoFunc() func() *geo.LocationData {
+	fn, _ := f.GeoFunc.(func() *geo.LocationData)
+	return fn
+}
+
 // VisorUpdater obtains a visor updater.
 func (f *Factory) VisorUpdater(port uint16) Updater {
 	// Always return empty updater if keys are not set.
@@ -46,6 +54,7 @@ func (f *Factory) VisorUpdater(port uint16) Updater {
 		DiscAddr:      f.ServiceDisc,
 		DisplayNodeIP: f.DisplayNodeIP,
 		Geo:           f.geoData(),
+		GeoFunc:       f.geoFunc(),
 	}
 
 	return newServiceUpdater(
@@ -77,6 +86,7 @@ func (f *Factory) PublicVisorUpdater(
 		DiscAddr:      f.ServiceDisc,
 		DisplayNodeIP: f.DisplayNodeIP,
 		Geo:           f.geoData(),
+		GeoFunc:       f.geoFunc(),
 	}
 
 	inner := newServiceUpdater(
@@ -119,6 +129,7 @@ func (f *Factory) AppUpdater(conf appcommon.ProcConfig) (Updater, bool) {
 			Port:     uint16(conf.RoutingPort),
 			DiscAddr: f.ServiceDisc,
 			Geo:      f.geoData(),
+			GeoFunc:  f.geoFunc(),
 		}
 	}
 

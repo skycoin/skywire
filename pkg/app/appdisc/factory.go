@@ -32,6 +32,12 @@ type Factory struct {
 	ClientPublicIP    string
 	HeartbeatInterval time.Duration // Interval for service discovery heartbeats
 	Geo               any           // *geo.LocationData on native builds; visor geolocation in service entries
+	// GeoFunc, when set, is a `func() *geo.LocationData` that returns the visor's
+	// CURRENT geolocation. It is preferred over Geo so a heartbeat picks up the
+	// geo once the async public-IP/geo lookup finishes — Geo alone was a nil
+	// snapshot captured at init (before that lookup), which dropped country from
+	// every registration that lost the race.
+	GeoFunc any
 }
 
 func (f *Factory) setDefaults() {
