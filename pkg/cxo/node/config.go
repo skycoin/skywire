@@ -17,7 +17,7 @@ const (
 	Prefix                string        = "[node] "
 	MaxConnections        int           = 1000 * 1000
 	MaxPendingConnections int           = 1000
-	MaxFillingTime        time.Duration = 10 * time.Minute
+	MaxFillingTime        time.Duration = 2 * time.Minute
 	MaxHeads              int           = 10
 	ListenTCP             string        = ":8870"
 	ListenUDP             string        = "" // don't listen
@@ -137,7 +137,15 @@ type Config struct {
 	// MaxHeads is limit of heads per feed.
 	MaxHeads int
 
-	// MaxFillingTime is time limit for filling of a Root object.
+	// MaxFillingTime is the time limit for filling of a Root object. A fill
+	// still running after this long is treated as a broken peer and aborted
+	// with ErrTimeout (the Root refills when the publisher republishes). The
+	// default was 10m, which is pathologically generous — a healthy tree fill
+	// completes in seconds, and a fill hung that long pins all its "wanted"
+	// objects in the cache (which cleanDown skips) for the whole window. That
+	// was the residual TPD aggregator leak (#3562/#3569); 2m keeps ~20-40x
+	// margin over a healthy fill while capping hung fills. The TPD aggregator
+	// pins its own tighter 90s override on top of this.
 	MaxFillingTime time.Duration
 
 	// RPC is RPC listening address. Empty string disables RPC.
