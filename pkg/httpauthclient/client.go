@@ -48,12 +48,49 @@ type HTTPError struct {
 	Code    int    `json:"code"`
 }
 
+// nonceState is the nonce counter + request serialization SHARED by every
+// Client that targets the same (addr, PK). httpauth's server keeps a single
+// monotonic nonce per PK (redis INCR), but a process legitimately holds several
+// clients to the same server as the same identity — e.g. a visor's utclient
+// (uptime heartbeat) and tpdclient (transport registration) both hit the TPD.
+// Before this, each Client had its own counter + reqMu, so two of them could
+// issue concurrent same-PK requests: both passed verifyAuth at nonce N, the
+// server INCR'd twice to N+2 while each client advanced only to N+1, and every
+// subsequent request 401'd until a resync that kept losing under sustained
+// load. That silently suppressed reward-uptime heartbeats for high-transport
+// visors. Sharing one counter + one reqMu per (addr, PK) serializes a process's
+// requests to a server so it never races its own nonce.
+type nonceState struct {
+	nonce       uint64     // shared counter; 64-bit-aligned as the first field
+	reqMu       sync.Mutex // serializes all Do() calls sharing this (addr, PK)
+	initMu      sync.Mutex // guards one-time initial nonce fetch
+	initialized bool
+}
+
+var (
+	nonceStatesMu sync.Mutex
+	// nonceStates is keyed by sanitizedAddr+"\x00"+PK. Bounded by the number of
+	// distinct (server, identity) pairs a process uses (a handful), so it is
+	// intentionally never pruned.
+	nonceStates = map[string]*nonceState{}
+)
+
+func sharedNonceState(addr string, key cipher.PubKey) *nonceState {
+	k := addr + "\x00" + key.Hex()
+	nonceStatesMu.Lock()
+	defer nonceStatesMu.Unlock()
+	st, ok := nonceStates[k]
+	if !ok {
+		st = &nonceState{}
+		nonceStates[k] = st
+	}
+	return st
+}
+
 // Client implements Client for auth services.
 type Client struct {
-	// atomic requires 64-bit alignment for struct field access
-	nonce          uint64
-	mu             sync.Mutex
-	reqMu          sync.Mutex
+	state          *nonceState // shared per (addr, PK) — see nonceState
+	mu             sync.Mutex  // serializes THIS client's own http.Client use
 	client         *http.Client
 	key            cipher.PubKey
 	sec            cipher.SecKey
@@ -78,13 +115,21 @@ func NewClient(ctx context.Context, addr string, key cipher.PubKey, sec cipher.S
 		clientPublicIP: clientPublicIP,
 		log:            mLog.PackageLogger("httpauth"),
 	}
+	c.state = sharedNonceState(c.addr, key)
 
-	// request server for a nonce
-	nonce, err := c.Nonce(ctx, c.key)
-	if err != nil {
-		return nil, err
+	// Establish the shared nonce once per (addr, PK). Additional clients to the
+	// same server+identity reuse the shared counter — kept current by the
+	// resync-on-401 path in do() — rather than each fetching and racing it.
+	c.state.initMu.Lock()
+	defer c.state.initMu.Unlock()
+	if !c.state.initialized {
+		nonce, err := c.Nonce(ctx, c.key)
+		if err != nil {
+			return nil, err
+		}
+		atomic.StoreUint64(&c.state.nonce, uint64(nonce))
+		c.state.initialized = true
 	}
-	c.nonce = uint64(nonce)
 
 	return c, nil
 }
@@ -96,8 +141,8 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 }
 
 func (c *Client) do(client *http.Client, req *http.Request) (*http.Response, error) {
-	c.reqMu.Lock()
-	defer c.reqMu.Unlock()
+	c.state.reqMu.Lock()
+	defer c.state.reqMu.Unlock()
 
 	body := make([]byte, 0)
 	if req.ContentLength != 0 {
@@ -184,7 +229,7 @@ func (c *Client) Nonce(ctx context.Context, key cipher.PubKey) (Nonce, error) {
 
 // SetNonce sets client current nonce to given nonce
 func (c *Client) SetNonce(n Nonce) {
-	atomic.StoreUint64(&c.nonce, uint64(n))
+	atomic.StoreUint64(&c.state.nonce, uint64(n))
 }
 
 // Addr returns sanitized address of the client
@@ -214,12 +259,12 @@ func (c *Client) doRequest(client *http.Client, req *http.Request, body []byte) 
 }
 
 func (c *Client) getCurrentNonce() Nonce {
-	return Nonce(atomic.LoadUint64(&c.nonce))
+	return Nonce(atomic.LoadUint64(&c.state.nonce))
 }
 
 // IncrementNonce increments client's current nonce.
 func (c *Client) IncrementNonce() {
-	atomic.AddUint64(&c.nonce, 1)
+	atomic.AddUint64(&c.state.nonce, 1)
 }
 
 // isNonceValid checks if `res` contains an invalid nonce error.
