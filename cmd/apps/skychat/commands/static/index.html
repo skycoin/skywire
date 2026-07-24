@@ -1952,6 +1952,15 @@
             this.handleDmStatus(data);
             return;
           }
+          // Ignore our OWN outbound mirror. The visor re-broadcasts every send
+          // on /sse (dir="out", sender = our own PK) so headless `skychat
+          // listen` sees a full transcript. The browser already renders its
+          // sends optimistically, so rendering the mirror here would spawn a
+          // phantom self-thread (a contact for our own PK) and double every
+          // bubble once that thread is opened.
+          if (data.dir === 'out' || (this.myPK && this.processPk(data.sender) === this.myPK)) {
+            return;
+          }
           const message = {
             ts: new Date(),
             from: this.processPk(data.sender),
@@ -2534,7 +2543,12 @@
       syncMyPK() {
         fetch('/status')
           .then(res => res.ok ? res.json() : null)
-          .then(s => { if (s && s.visor_pk) this.myPK = String(s.visor_pk).toLowerCase(); })
+          .then(s => {
+            if (s && s.visor_pk) {
+              this.myPK = String(s.visor_pk).toLowerCase();
+              this._purgeSelfThread(); // one-time cleanup of the old self-mirror bug
+            }
+          })
           .catch(() => {});
       }
 
@@ -3056,6 +3070,35 @@
 
         this.recipient = null;
         this.showToast('Conversation deleted.');
+      }
+
+      // _purgeSelfThread removes a phantom self-conversation (keyed by our own
+      // PK) that an earlier build created by rendering our outbound /sse mirror
+      // as an inbound message. One-time cleanup for existing caches; a no-op
+      // once gone. The onmessage dir="out" guard stops new ones from appearing.
+      _purgeSelfThread() {
+        const me = this.myPK;
+        if (!me || !this.recipients.includes(me)) return;
+        this.recipients = this.recipients.filter(v => v !== me);
+        this._unpinIf('dm:' + me);
+        delete this.messages[me];
+        delete this.messagesQuantity[me];
+        delete this.messagesSeen[me];
+        document.querySelectorAll('.recipient-item').forEach(item => {
+          if (item.dataset.pk === me) item.parentElement.remove();
+        });
+        this.saveRecipients();
+        this.saveSeenList();
+        localStorage.removeItem(`c_${me}`);
+        localStorage.removeItem(`i_${me}`);
+        if (this.recipient === me) {
+          this.recipient = null;
+          document.getElementById('messages').innerHTML = '';
+          document.getElementById('chatHeader').classList.add('hidden');
+          document.getElementById('messages').classList.add('hidden');
+          document.getElementById('msgForm').classList.add('hidden');
+          document.getElementById('emptyState').classList.remove('hidden');
+        }
       }
 
       openSettings() {
