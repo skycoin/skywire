@@ -1337,6 +1337,12 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		var ackCh <-chan struct{}
 		var unregisterAck func()
 		var ackWait time.Duration
+		// receiptCh backs the non-blocking stale-conn auto-recovery: when
+		// receipts are on we register an ack waiter BEFORE the write (so a fast
+		// ack isn't missed), then a background goroutine drops the cached conn if
+		// no ack comes back — see staleAckWindow below.
+		var receiptCh <-chan struct{}
+		var receiptUnreg func()
 		// Both --wait and receipts wrap the body in an id'd chat-msg envelope
 		// (ack=true). --wait additionally blocks on a waiter for the returning
 		// chat-ack; receipts does not (the ack/read arrive later as dm-status
@@ -1355,6 +1361,11 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
 				ackCh, unregisterAck = registerAckWaiter(ackID)
 				defer unregisterAck()
+			} else if data.Receipts {
+				// Registered here (pre-write) so the returning ack always finds a
+				// waiter; ownership passes to the background goroutine after the
+				// response is written.
+				receiptCh, receiptUnreg = registerAckWaiter(ackID)
 			}
 		}
 
@@ -1522,6 +1533,17 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				"ok": true,
 				"id": ackID,
 			})
+			// Stale-conn auto-recovery: a half-open cached conn (peer restarted,
+			// idle-dead transport) accepts our write without error but the frame
+			// never lands, so no chat-ack returns. If none arrives within
+			// staleAckWindow, drop the conn we wrote to — the next send (or a
+			// Resend) redials fresh, so the operator recovers without restarting
+			// the visor. A live peer acks in well under a second, so this rarely
+			// fires on a healthy conn. Old peers that never ack pay a redial on
+			// the next send (functional, just chattier).
+			if receiptCh != nil {
+				go dropStaleConn(pk, conn, receiptCh, receiptUnreg, staleAckWindow)
+			}
 		}
 
 		// Mirror the outgoing message into the SSE stream so headless

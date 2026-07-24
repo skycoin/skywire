@@ -148,6 +148,12 @@ const (
 	chatAckTimeoutCeiling = 60 * time.Second
 )
 
+// staleAckWindow bounds how long a non-blocking receipts send waits for the
+// peer's chat-ack before concluding the cached conn is half-open and dropping
+// it (so the next send redials). Generous relative to a real ack (sub-second on
+// a live conn) to avoid dropping a healthy conn on a momentarily-slow peer.
+const staleAckWindow = 20 * time.Second
+
 // clampAckWait normalizes a caller-supplied wait_ms into the
 // allowed range. Zero / negative / unset → floor; over-ceiling → ceiling.
 func clampAckWait(d time.Duration) time.Duration {

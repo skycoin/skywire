@@ -469,8 +469,13 @@ func humanSize(n int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-// sendTimeout bounds a single outbound file transfer.
-const sendTimeout = 30 * time.Minute
+// sendTimeout bounds a single outbound file transfer. Kept modest so a send to
+// an unreachable / half-open peer fails the /send-file request (and the UI
+// bubble) in a bounded time instead of hanging "pending" for many minutes —
+// the common failure mode when the chat conn has gone stale. Still comfortably
+// covers a normal in-chat image/clip over dmsg; a genuinely huge transfer that
+// needs longer is out of scope for the browser send path.
+const sendTimeout = 3 * time.Minute
 
 // maxUploadMemory is the in-memory portion of a multipart upload before spilling
 // to a temp file.
