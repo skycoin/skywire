@@ -13,7 +13,7 @@
 
 import { Graph } from '@cosmograph/cosmos';
 import * as S from './state';
-import { colors, LOCAL_EDGE_COLOR } from './constants';
+import { colors, LOCAL_EDGE_COLOR, ORBIT_LANES, ORBIT_LANE_SPACING } from './constants';
 import { handleGraphNodeClick } from './node-click';
 import { getCountryColor, getIPGroupColor, countryToFlag } from './utils';
 import { calculateGroupRadius, findNonOverlappingPosition } from './grouping';
@@ -42,6 +42,9 @@ interface CosmosLink {
 // Cosmos simulation-space extent. Nodes with explicit x/y (grouping mode) must
 // live inside [0, COSMOS_SPACE]; keep this in sync with the graph's spaceSize.
 const COSMOS_SPACE = 4096;
+
+// Dim colour for satellite (country-less) visors that orbit the country clusters.
+const SATELLITE_COLOR = '#8a94a6';
 
 let graph: Graph<CosmosNode, CosmosLink> | null = null;
 let active = false;
@@ -238,7 +241,8 @@ interface GroupCircle { cx: number; cy: number; r: number; color: string; label:
 // positions with the simulation disabled, so WebGL groups by country/IP like Flat.
 function computeGroupedLayout(
   nodeIds: string[], mode: 'country' | 'ip',
-): { pos: Map<string, { x: number; y: number }>; color: Map<string, string>; groups: GroupCircle[] } {
+): { pos: Map<string, { x: number; y: number }>; color: Map<string, string>; groups: GroupCircle[]; satellites: Set<string> } {
+  const unknownKey = mode === 'ip' ? '_no_ip' : '_unknown';
   const buckets = new Map<string, string[]>();
   for (const id of nodeIds) {
     const k = groupKeyOf(id, mode);
@@ -246,6 +250,11 @@ function computeGroupedLayout(
     if (!arr) { arr = []; buckets.set(k, arr); }
     arr.push(id);
   }
+  // Country-less visors don't get a circle — they become satellites orbiting the
+  // whole cluster (matching the classic view), so pull them out before packing.
+  const satIds = buckets.get(unknownKey) || [];
+  buckets.delete(unknownKey);
+
   const grouped = Array.from(buckets.entries())
     .map(([key, ids]) => ({ key, ids, radius: calculateGroupRadius(ids.length) }))
     .sort((a, b) => b.radius - a.radius);
@@ -259,7 +268,11 @@ function computeGroupedLayout(
     placed.push({ x: c.x, y: c.y, radius: g.radius });
     const col = groupColorOf(g.key, mode);
     groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode), count: g.ids.length });
-    const inner = g.radius - 50;
+    // Fibonacci/sunflower placement — identical to the flat view's
+    // placeNodesInCircle: innerRadius = r - 40, golden-angle spiral, 0.9 fill.
+    // The 0.9 keeps the furthest node inside the circle, so it always encloses
+    // every visor of the country.
+    const inner = g.radius - 40;
     const n = g.ids.length;
     g.ids.forEach((id, i) => {
       let x: number; let y: number;
@@ -277,7 +290,33 @@ function computeGroupedLayout(
       color.set(id, col);
     });
   }
-  return { pos, color, groups };
+
+  // Satellites: country-less visors orbit the country clusters on concentric
+  // lanes, evenly spaced by angle — the classic view's satellite ring. Placed
+  // OUTSIDE every country circle (base = furthest circle edge + 150), matching
+  // calculateOrbitParams / initializeSatelliteOrbits.
+  const satellites = new Set(satIds);
+  if (satIds.length > 0) {
+    let ox = 0; let oy = 0;
+    for (const p of placed) { ox += p.x; oy += p.y; }
+    ox = placed.length ? ox / placed.length : 0;
+    oy = placed.length ? oy / placed.length : 0;
+    let maxExtent = 0;
+    for (const p of placed) {
+      const d = Math.hypot(p.x - ox, p.y - oy) + p.radius;
+      if (d > maxExtent) { maxExtent = d; }
+    }
+    const base = (maxExtent || 350) + 150;
+    const step = (2 * Math.PI) / satIds.length;
+    satIds.forEach((id, i) => {
+      const r = base + (i % ORBIT_LANES) * ORBIT_LANE_SPACING;
+      const a = i * step;
+      pos.set(id, { x: ox + r * Math.cos(a), y: oy + r * Math.sin(a) });
+      color.set(id, SATELLITE_COLOR);
+    });
+  }
+
+  return { pos, color, groups, satellites };
 }
 
 // buildData projects the vis-network datasets into cosmos node/link arrays,
@@ -322,11 +361,11 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
 
   const mode = cosmosGroupMode();
   if (mode) {
-    const { pos, color, groups } = computeGroupedLayout(linkedNodes.map(n => n.id), mode);
-    // Only one group (e.g. no country/IP survey data → every node resolves to
-    // "Unknown"): a single packed circle is worse than — and looks like a broken
-    // version of — the free force layout, so fall back to it instead.
-    if (groups.length < 2) {
+    const { pos, color, groups, satellites } = computeGroupedLayout(linkedNodes.map(n => n.id), mode);
+    // No country/IP circles at all (e.g. no survey data → everything is a
+    // satellite): a lone satellite ring around empty space is worse than the free
+    // force layout, so fall back to it instead.
+    if (groups.length === 0) {
       boundaryCircles = [];
       return { nodes: linkedNodes, links, grouped: false };
     }
@@ -352,8 +391,10 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
       const p = pos.get(n.id);
       if (p) { const s = toSpace(p.x, p.y); n.x = s.x; n.y = s.y; }
       // Colour by group so the clusters read at a glance (keep the local visor
-      // cyan so "YOU" stays findable).
+      // cyan so "YOU" stays findable). Satellites keep their dim colour + a
+      // smaller dot so they read as orbiting country-less visors.
       if (!n.isLocal) { const col = color.get(n.id); if (col) { n.color = col; } }
+      if (satellites.has(n.id) && !n.isLocal) { n.size = Math.min(n.size, 2.5); }
     }
     // Group boundary circles in the SAME normalized space (drawn on the overlay).
     boundaryCircles = groups.map(g => {
