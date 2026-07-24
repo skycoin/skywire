@@ -263,6 +263,10 @@ func (p *proxiedVisorAPI) SetEmbeddedProxyUpstream(kind, addr string) error {
 	return p.hvAPI.HVSetEmbeddedProxyUpstream(p.targetPK, kind, addr)
 }
 
+func (p *proxiedVisorAPI) SetEmbeddedProxyBind(_, _ string) error {
+	return ErrProxyNotSupported
+}
+
 func (p *proxiedVisorAPI) ListTCPPorts() ([]int, error) {
 	return p.hvAPI.HVListTCPPorts(p.targetPK)
 }

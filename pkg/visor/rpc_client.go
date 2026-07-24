@@ -1387,6 +1387,13 @@ func (rc *rpcClient) SetEmbeddedProxyUpstream(kind, addr string) error {
 		&struct{}{})
 }
 
+// SetEmbeddedProxyBind sets a resolver's SOCKS5 bind host at runtime (persisted).
+func (rc *rpcClient) SetEmbeddedProxyBind(kind, addr string) error {
+	return rc.Call("SetEmbeddedProxyBind",
+		&SetEmbeddedProxyBindRequest{Kind: kind, Addr: addr},
+		&struct{}{})
+}
+
 // DmsgHTTP performs an HTTP request over dmsg using the visor's dmsg client.
 func (rc *rpcClient) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 	var resp DmsgHTTPResponse

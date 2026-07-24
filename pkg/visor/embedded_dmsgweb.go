@@ -181,6 +181,23 @@ func (e *EmbeddedDmsgWeb) SetUpstream(addr string) error {
 	return nil
 }
 
+// SetBind changes the SOCKS5 bind host and restarts the resolver so it takes
+// effect immediately. "" = loopback (default); "0.0.0.0"/a LAN IP serves the LAN.
+func (e *EmbeddedDmsgWeb) SetBind(addr string) error {
+	e.mu.Lock()
+	e.cfg.ProxyAddr = addr
+	wasRunning := e.running
+	e.mu.Unlock()
+
+	if wasRunning {
+		if err := e.Stop(); err != nil {
+			return fmt.Errorf("stop before bind change: %w", err)
+		}
+		return e.Start()
+	}
+	return nil
+}
+
 // Upstream returns the current upstream SOCKS5 address.
 func (e *EmbeddedDmsgWeb) Upstream() string {
 	e.mu.Lock()

@@ -334,6 +334,11 @@ type SetEmbeddedProxyUpstreamRequest struct {
 	Kind string
 	Addr string // upstream SOCKS5 address, "" to clear
 }
+
+type SetEmbeddedProxyBindRequest struct {
+	Kind string
+	Addr string // SOCKS5 bind host, "" = loopback
+}
 type DmsgProbeRequest struct {
 	PK   cipher.PubKey
 	Port uint16
