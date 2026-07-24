@@ -406,10 +406,16 @@ func (f *fillHead) createFiller(cr connRoot) {
 
 	f.tp = time.Now() // time point
 
-	if ft := f.node().config.MaxFillingTime; ft > 0 {
-		f.ft = time.NewTimer(ft)
-		f.tc = f.ft.C
+	// A non-positive MaxFillingTime would leave f.tc nil and disable the fill
+	// timeout entirely, so a peer that flaps mid-fill pins all the fill's
+	// "wanted" objects in the cache until the connection closes (the leak class
+	// behind #3562). Treat <= 0 as "use the default", not "disable".
+	ft := f.node().config.MaxFillingTime
+	if ft <= 0 {
+		ft = MaxFillingTime
 	}
+	f.ft = time.NewTimer(ft)
+	f.tc = f.ft.C
 
 	f.r = cr
 	f.rq = make(chan cipher.SHA256, f.maxParallel())
