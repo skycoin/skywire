@@ -144,6 +144,37 @@ func setup() error {
 	// from racing the still-churning network.
 	fmt.Println("nativee2e: visors ready; warming up the network (90s)...")
 	time.Sleep(90 * time.Second)
+
+	// Post-warmup liveness: a cold-start visor can pass waitVisor and then die
+	// during the warmup (a transport module failing late on a degraded host,
+	// seen on the Windows runner as visor-B's RPC going refused right at test
+	// time). Re-verify both are still up and relaunch any that aren't, with a
+	// short re-warm — the backstop that keeps a mid-warmup death from failing
+	// the whole suite.
+	for round := 0; round < 2; round++ {
+		restarted := false
+		for _, v := range []struct{ name, cfg, rpc string }{
+			{"visorA", "visorA.json", rpcA},
+			{"visorB", "visorB.json", rpcB},
+		} {
+			if visorAlive(v.rpc) {
+				continue
+			}
+			fmt.Printf("nativee2e: %s went down after warmup — relaunching\n", v.name)
+			killProc(v.name)
+			if err := launchVisor(v.name, v.cfg, v.rpc); err != nil {
+				dumpLog(v.name)
+				dumpLog("svc")
+				return err
+			}
+			restarted = true
+		}
+		if !restarted {
+			break
+		}
+		fmt.Println("nativee2e: re-warming after a visor relaunch (30s)...")
+		time.Sleep(30 * time.Second)
+	}
 	fmt.Println("nativee2e: deployment + 2 visors ready")
 	return nil
 }
@@ -385,6 +416,12 @@ func waitDmsgDisc(timeout time.Duration) error {
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("dmsg-discovery not reachable on %s", dmsgDiscURL)
+}
+
+// visorAlive is a quick liveness probe: the visor's RPC answers with a PK.
+func visorAlive(rpc string) bool {
+	out, err := cli("visor", "--rpc", rpc, "pk")
+	return err == nil && has66Hex(out)
 }
 
 // waitVisor polls the visor RPC for its PK, then for at least one dmsg session,
