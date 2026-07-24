@@ -95,6 +95,11 @@ func PerformHandshake(conn net.Conn, port uint16) error {
 type Config struct {
 	// DomainSuffix is the TLD matched by the resolver (default ".skynet").
 	DomainSuffix string
+	// ProxyAddr is the host the SOCKS5 proxy listens on. Empty means loopback
+	// ("127.0.0.1"). Set to "0.0.0.0" or a LAN IP to serve other devices on
+	// the network (a `.skynet` gateway for a home router's LAN). Only bind a
+	// non-loopback address on a trusted network.
+	ProxyAddr string
 	// ProxyPort is the SOCKS5 listener port.
 	ProxyPort uint
 	// UpstreamSOCKS forwards non-matching SOCKS5 CONNECTs to this
@@ -335,7 +340,11 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 	if err != nil {
 		return fmt.Errorf("create SOCKS5 server: %w", err)
 	}
-	lisAddr := fmt.Sprintf("127.0.0.1:%d", cfg.ProxyPort)
+	host := cfg.ProxyAddr
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	lisAddr := fmt.Sprintf("%s:%d", host, cfg.ProxyPort)
 	log.WithField("addr", lisAddr).Info("Serving skynetweb SOCKS5 proxy")
 
 	// Open the listener ourselves so we can close it on ctx cancel —
