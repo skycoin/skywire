@@ -1373,8 +1373,9 @@
           const senderAttr = msg.from === 'me' ? 'me' : (msg.sender || msg.from || '');
           const tsIso = (msg.ts instanceof Date && !isNaN(msg.ts)) ? msg.ts.toISOString() : '';
           if (msg.mid == null) msg.mid = ++this._mid;
-          // Our own DM bubbles carry a delivery-status tick (groups don't in v1).
-          const statusTick = (msg.from === 'me' && !msg.group) ? this._statusTick(msg.status || 'sent') : '';
+          // Our own text bubbles carry a delivery-status tick (DM + group). File
+          // bubbles show their own sending/sent state on the card instead.
+          const statusTick = (msg.from === 'me' && !msg.file) ? this._statusTick(msg.status || 'sent') : '';
           msgArea.insertAdjacentHTML('beforeend', `
             <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}" data-mid="${msg.mid}" data-tsnano="${this.escapeAttr(msg.tsNano != null ? String(msg.tsNano) : '')}">
               ${senderLabel}
@@ -1410,8 +1411,9 @@
 
       // ---- DM message status (failed/pending/sent/received/read) -----
 
-      // _statusTick renders the delivery-status glyph shown on our own DM
-      // bubbles. received/read are a double tick (read is tinted via CSS).
+      // _statusTick renders the delivery-status glyph shown on our own text
+      // bubbles (DM + group). received/read are a double tick (read is tinted
+      // via CSS) and only occur for DMs; group bubbles stop at sent/failed.
       _statusTick(status) {
         const map = {
           pending:  { cls: 'pending',  txt: '○',       title: 'Sending…' }, // ○
@@ -1425,9 +1427,9 @@
       }
 
       // _setMsgStatus advances a message's status (monotonically — a late 'sent'
-      // never clobbers a 'read' that arrived first), persists the DM thread, and
-      // repaints the bubble's tick in place. 'failed' only replaces a bubble
-      // still pending.
+      // never clobbers a 'read' that arrived first), persists the DM thread (not
+      // groups — they reload from visor history), and repaints the bubble's tick
+      // in place. 'failed' only replaces a bubble still pending.
       _setMsgStatus(key, message, status) {
         if (!message) return;
         const order = ['pending', 'sent', 'received', 'read'];
@@ -1443,10 +1445,10 @@
         this._patchStatusTick(message);
       }
 
-      // _patchStatusTick swaps the tick glyph on an already-rendered own DM
-      // bubble (no-op when the thread isn't the one on screen).
+      // _patchStatusTick swaps the tick glyph on an already-rendered own bubble
+      // (DM or group; no-op when the thread isn't the one on screen).
       _patchStatusTick(message) {
-        if (!message || message.from !== 'me' || message.group || message.mid == null) return;
+        if (!message || message.from !== 'me' || message.file || message.mid == null) return;
         const row = document.querySelector(`.message-row[data-mid="${message.mid}"]`);
         if (!row) return;
         const el = row.querySelector('.msg-status');
@@ -2737,6 +2739,14 @@
         const replyMeta = this.replyTo ? { ...this.replyTo } : null;
         const wireText = replyMeta ? this._encodeReply(text) : text;
         this.cancelReply();
+        // Optimistic pending bubble → sent (GroupSend ok = the reference is on
+        // the feed, headed to every member) / failed. Per-member received/read
+        // isn't tracked in v1. The poll echo dedups against this bubble
+        // (from='me' + matching text) and backfills its ts_nano.
+        const message = { ts: new Date(), from: 'me', text, group: true, sender: this.myPK, reply: replyMeta, status: 'pending' };
+        this.addMsgToList(gid, message, { group: true });
+        const el = document.getElementById('messages');
+        el.scrollTop = el.scrollHeight;
         fetch(`/group/${gid}/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2744,14 +2754,18 @@
         })
           .then(res => {
             if (res.ok) {
-              this.addMsgToList(gid, { ts: new Date(), from: 'me', text, group: true, sender: this.myPK, reply: replyMeta }, { group: true });
-              const el = document.getElementById('messages');
-              el.scrollTop = el.scrollHeight;
+              this._setMsgStatus(gid, message, 'sent');
             } else {
-              res.text().then(t => this.showToast(`Group send failed: ${t}`, 'error'));
+              res.text().then(t => {
+                this._setMsgStatus(gid, message, 'failed');
+                this.showToast(`Group send failed: ${t}`, 'error');
+              });
             }
           })
-          .catch(e => this.showToast(e.message, 'error'));
+          .catch(e => {
+            this._setMsgStatus(gid, message, 'failed');
+            this.showToast(e.message, 'error');
+          });
       }
 
       // handleGroupSSE routes an inbound group message (channel="group") to its
