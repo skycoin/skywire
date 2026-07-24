@@ -1381,7 +1381,7 @@
           if (msg.mid == null) msg.mid = ++this._mid;
           // Our own bubbles (text OR file) carry a delivery-status tick; the
           // file tick is derived from the transfer state (see _msgTickStatus).
-          const statusTick = (msg.from === 'me') ? this._statusTick(this._msgTickStatus(msg), !msg.file) : '';
+          const statusTick = (msg.from === 'me') ? this._statusTick(this._msgTickStatus(msg), this._tickMode(msg)) : '';
           msgArea.insertAdjacentHTML('beforeend', `
             <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}" data-mid="${msg.mid}" data-tsnano="${this.escapeAttr(msg.tsNano != null ? String(msg.tsNano) : '')}">
               ${senderLabel}
@@ -1423,10 +1423,16 @@
       // sent/failed. resendable=false renders a plain failed glyph instead of
       // the click-to-resend button (files can't be resent from the cached
       // bubble — the bytes are gone once the upload completes).
-      _statusTick(status, resendable = true) {
+      _statusTick(status, mode = 'text') {
+        // mode: 'text' → click to resend the message; 'file' → click to retry
+        // the upload (the File object is retained in-session); 'plain' → no
+        // action (e.g. a failed file after reload, whose bytes are gone).
         if (status === 'failed') {
-          if (resendable) {
+          if (mode === 'text') {
             return `<button type="button" class="msg-status failed" onclick="app.resendMessage(this)" title="Failed to send — click to resend">⚠ Resend</button>`;
+          }
+          if (mode === 'file') {
+            return `<button type="button" class="msg-status failed" onclick="app.resendFile(this)" title="Transfer failed — click to retry">⚠ Retry</button>`;
           }
           return `<span class="msg-status failed" title="Transfer failed">⚠</span>`;
         }
@@ -1438,6 +1444,14 @@
         };
         const s = map[status] || map.sent;
         return `<span class="msg-status ${s.cls}" title="${s.title}">${s.txt}</span>`;
+      }
+
+      // _tickMode picks how a failed tick behaves: text bubbles resend; file
+      // bubbles retry the upload only while the File object is still held
+      // in-session (gone after reload → 'plain', no action).
+      _tickMode(msg) {
+        if (!msg.file) return 'text';
+        return msg._file ? 'file' : 'plain';
       }
 
       // _msgTickStatus is the tick status for a bubble. Text bubbles use the
@@ -1482,7 +1496,7 @@
         const row = document.querySelector(`.message-row[data-mid="${message.mid}"]`);
         if (!row) return;
         const el = row.querySelector('.msg-status');
-        if (el) el.outerHTML = this._statusTick(this._msgTickStatus(message), !message.file);
+        if (el) el.outerHTML = this._statusTick(this._msgTickStatus(message), this._tickMode(message));
       }
 
       // handleDmStatus applies an inbound dm-status receipt {id,status,peer} to
@@ -1595,6 +1609,50 @@
         } else {
           this._deliverDM(key, message, wireText, document.getElementById('networkSelect').value);
         }
+      }
+
+      // resendFile retries a failed file transfer (the ⚠ Retry tick) by
+      // re-uploading the retained File object in place. Only works in-session —
+      // the File isn't persisted, so after a reload a failed file shows a plain
+      // ⚠ and must be re-attached.
+      resendFile(btn) {
+        const row = btn.closest ? btn.closest('.message-row') : null;
+        if (!row) return;
+        const key = this.activeKey();
+        const list = this.messages[key];
+        if (!list) return;
+        const message = list.find(m => m && String(m.mid) === String(row.dataset.mid) && m.from === 'me' && m.file);
+        if (!message || !message._file || message.file.status !== 'failed') return;
+
+        const isGroup = !!message.group;
+        message.file.status = 'sending';
+        this._patchStatusTick(message);
+        const form = new FormData();
+        if (isGroup) form.append('group', key);
+        else form.append('pk', key);
+        form.append('file', message._file);
+
+        fetch('/send-file', { method: 'POST', body: form })
+          .then(res => {
+            if (!res.ok) {
+              message.file.status = 'failed';
+              this._patchStatusTick(message);
+              res.text().then(t => this.showToast(`File send failed: ${t}`, 'error'));
+              return;
+            }
+            message.file.status = 'sent';
+            this._patchStatusTick(message);
+            this.showToast('File sent.');
+            res.json().then(j => {
+              if (j && j.id) message.file.id = j.id;
+              if (!isGroup) this.saveChat(key);
+            }).catch(() => { if (!isGroup) this.saveChat(key); });
+          })
+          .catch(e => {
+            message.file.status = 'failed';
+            this._patchStatusTick(message);
+            this.showToast(e.message, 'error');
+          });
       }
 
       // ---- Replies ---------------------------------------------------
@@ -1990,6 +2048,15 @@
           // phantom self-thread (a contact for our own PK) and double every
           // bubble once that thread is opened.
           if (data.dir === 'out' || (this.myPK && this.processPk(data.sender) === this.myPK)) {
+            return;
+          }
+          // Dedup by wire id. The same message can arrive twice — e.g. the
+          // sender's first message to a cold peer times out on one network and
+          // is re-sent over the other, and both actually deliver. Both copies
+          // carry the same envelope id, so if this thread already has it, drop
+          // the repeat (this also keeps the localStorage cache clean, so a
+          // reload doesn't show the dup again).
+          if (data.id && (this.messages[data.sender] || []).some(m => m && m.wireId === data.id)) {
             return;
           }
           const message = {
@@ -2492,6 +2559,7 @@
           from: 'me',
           text: '📎 ' + file.name,
           file: { name: file.name, size: file.size, status: 'sending', url: localUrl, local: true },
+          _file: file, // retained in-session so a failed transfer can be retried (see resendFile); stripped on save
           group: isGroup || undefined,
           sender: isGroup ? this.myPK : undefined,
         };
@@ -3202,8 +3270,13 @@
         // so strip them before persisting — a received file keeps its
         // /files/ URL. Prevents a broken image after reload.
         const serializable = this.messages[pk].map(m => {
-          if (m.file && m.file.local && m.file.url) {
-            return Object.assign({}, m, { file: Object.assign({}, m.file, { url: null }) });
+          // Strip the retained File object (not serializable) and a locally-sent
+          // file's object-URL preview (a dead blob URL after reload).
+          if (m._file || (m.file && m.file.local && m.file.url)) {
+            const copy = Object.assign({}, m);
+            delete copy._file;
+            if (m.file && m.file.local && m.file.url) copy.file = Object.assign({}, m.file, { url: null });
+            return copy;
           }
           return m;
         });
@@ -3233,6 +3306,15 @@
             const saved = localStorage.getItem(`c_${pk}`);
             if (saved) {
               this.messages[pk] = JSON.parse(saved);
+              // Drop any duplicate-wireId messages a past double-delivery left
+              // in the cache, so old dups don't reappear on reload.
+              const seenIds = new Set();
+              this.messages[pk] = this.messages[pk].filter(m => {
+                if (!m || m.date || !m.wireId) return true;
+                if (seenIds.has(m.wireId)) return false;
+                seenIds.add(m.wireId);
+                return true;
+              });
               this.messages[pk].forEach(m => {
                 if (m.date) {
                   m.date = new Date(m.date);
@@ -3241,6 +3323,7 @@
                   m.ts = new Date(m.ts);
                 }
               });
+              this.saveChat(pk); // persist the de-duped list
               setTimeout(() => {
                 const lastMsg = this.messages[pk][this.messages[pk].length - 1];
                 if (lastMsg && !lastMsg.date) this.updatePreview(pk, lastMsg);
