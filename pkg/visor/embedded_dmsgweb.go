@@ -192,6 +192,7 @@ func (e *EmbeddedDmsgWeb) serve(ctx context.Context) {
 	cfg := dmsgweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, dmsgweb.DefaultDomainSuffix),
 		ProxyPort:     uintOrDefault(e.cfg.ProxyPort, defaultDmsgWebProxyPort),
+		ProxyAddr:     e.cfg.ProxyAddr,
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		Stats:         e.stats,
 	}

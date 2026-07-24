@@ -119,6 +119,8 @@ var (
 	enableSkymailBridge        bool
 	dmsgWebUpstreamSOCKS       string
 	skynetWebUpstreamSOCKS     string
+	dmsgWebProxyAddr           string
+	skynetWebProxyAddr         string
 	configServicePath          string
 	dmsgHTTPPath               string
 	snConfig                   bool
