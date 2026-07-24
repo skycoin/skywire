@@ -274,6 +274,11 @@ type DmsgWebConfig struct {
 	Enable bool `json:"enable"`
 	// ProxyPort is the local SOCKS5 listener. Default 4445.
 	ProxyPort uint `json:"proxy_port,omitempty"`
+	// ProxyAddr is the host the SOCKS5 proxy binds to. Empty = loopback
+	// ("127.0.0.1"). Set to "0.0.0.0" or a LAN IP to serve OTHER devices on
+	// the network — e.g. a board acting as a `.dmsg` gateway for a home
+	// router's LAN. Only bind a non-loopback address on a trusted network.
+	ProxyAddr string `json:"proxy_addr,omitempty"`
 	// WebPort is the local HTTP bridge the SOCKS5 proxy rewrites
 	// matched hosts to. Default 8080.
 	WebPort uint `json:"web_port,omitempty"`
@@ -345,6 +350,11 @@ type SkynetWebConfig struct {
 	Enable bool `json:"enable"`
 	// ProxyPort is the local SOCKS5 listener. Default 4446.
 	ProxyPort uint `json:"proxy_port,omitempty"`
+	// ProxyAddr is the host the SOCKS5 proxy binds to. Empty = loopback
+	// ("127.0.0.1"). Set to "0.0.0.0" or a LAN IP to serve other devices on
+	// the network (a `.skynet` gateway for a home router's LAN). Only bind a
+	// non-loopback address on a trusted network.
+	ProxyAddr string `json:"proxy_addr,omitempty"`
 	// WebPort is the local HTTP bridge port. Default 8081.
 	WebPort uint `json:"web_port,omitempty"`
 	// DomainSuffix is the TLD treated as skynet addresses. Default ".skynet".
