@@ -28,27 +28,30 @@ import (
 )
 
 var (
-	lanIfc      string
-	tunIfc      string
-	subnetCIDR  string
-	dhcpStart   string
-	dhcpEnd     string
-	dnsAddr     string
-	leaseTime   string
-	wifi        bool
-	ssid        string
-	passphrase  string
-	band        string
-	channel     int
-	country     string
-	openWiFi    bool
-	meshGateway bool
-	meshGWCIDR  string
-	meshTLS     bool
-	meshCACert  string
-	meshCAKey   string
-	meshAliases []string
-	appPort     uint16
+	lanIfc          string
+	tunIfc          string
+	subnetCIDR      string
+	dhcpStart       string
+	dhcpEnd         string
+	dnsAddr         string
+	leaseTime       string
+	wifi            bool
+	ssid            string
+	passphrase      string
+	band            string
+	channel         int
+	country         string
+	openWiFi        bool
+	meshGateway     bool
+	meshGatewayOnly bool
+	meshGWCIDR      string
+	meshBind        string
+	meshDNSPort     int
+	meshTLS         bool
+	meshCACert      string
+	meshCAKey       string
+	meshAliases     []string
+	appPort         uint16
 )
 
 // defaultMeshCADir is where the mesh gateway persists its self-generated CA so
@@ -74,7 +77,10 @@ func registerFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&country, "country", "US", "WiFi regulatory country code (with --wifi)")
 	fs.BoolVar(&openWiFi, "open", false, "allow an open (passphrase-less) WiFi network")
 	fs.BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway: resolve *.dmsg / *.skynet for downstream clients and proxy them over the mesh (visor-launched only)")
+	fs.BoolVar(&meshGatewayOnly, "mesh-gateway-only", false, "standalone mesh gateway: ONLY serve *.dmsg / *.skynet DNS + transparent proxy for the LAN (no DHCP / NAT / tunnel) — for a board behind an existing OpenWRT/DD-WRT router (visor-launched only)")
 	fs.StringVar(&meshGWCIDR, "mesh-gateway-cidr", "", "synthetic-IP pool the mesh gateway leases from (empty = 100.64.0.0/16)")
+	fs.StringVar(&meshBind, "mesh-bind", "", "standalone mesh gateway: address the DNS + transparent proxy bind (empty = 0.0.0.0)")
+	fs.IntVar(&meshDNSPort, "mesh-dns-port", 53, "standalone mesh gateway: DNS port the upstream router forwards .dmsg/.skynet to")
 	fs.BoolVar(&meshTLS, "mesh-gateway-tls", false, "mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet with a self-generated CA (LAN clients must trust it)")
 	fs.StringVar(&meshCACert, "mesh-gateway-ca", "", "mesh-gateway CA cert path (empty = <local>/mesh-gateway-ca/ca.pem; generated if absent)")
 	fs.StringVar(&meshCAKey, "mesh-gateway-ca-key", "", "mesh-gateway CA key path (empty = <local>/mesh-gateway-ca/ca.key)")
@@ -146,6 +152,19 @@ func RunVPNRouter(ctx context.Context, args []string) error {
 	bi := buildinfo.Get()
 	logger.Infof("Version %q built on %q against commit %q", bi.Version, bi.Date, bi.Commit)
 
+	// Standalone mesh-gateway mode: serve .dmsg/.skynet DNS + transparent proxy
+	// for the LAN only, with no DHCP/NAT/tunnel. Runs behind an existing router.
+	if meshGatewayOnly {
+		setAppStatus(appCl, logger, appserver.AppDetailedStatusRunning)
+		defer setAppStatus(appCl, logger, appserver.AppDetailedStatusStopped)
+		if err := runMeshGatewayOnly(ctx, vpn.MeshDialer(appCl), logger); err != nil {
+			logger.WithError(err).Error("standalone mesh gateway exited with error")
+			setAppErr(appCl, logger, err)
+			return err
+		}
+		return nil
+	}
+
 	cfg, err := buildRouterConfig(vpn.MeshDialer(appCl))
 	if err != nil {
 		logger.WithError(err).Error("invalid vpn-router configuration")
@@ -178,6 +197,13 @@ func RunVPNRouter(ctx context.Context, args []string) error {
 func runStandalone(ctx context.Context) error {
 	logger := logrus.New()
 	logger.SetOutput(os.Stderr)
+
+	// The mesh gateway (full or standalone) dials the mesh through the visor's
+	// app-server, which a directly-invoked binary doesn't have. Fail clearly
+	// rather than silently degrading to a plain (no-mesh) router.
+	if meshGatewayOnly || meshGateway {
+		return fmt.Errorf("--mesh-gateway / --mesh-gateway-only need the visor app-server to dial the mesh; launch vpn-router from a visor, not directly")
+	}
 
 	// Standalone has no visor app-server, so no mesh dialer (nil). buildRouterConfig
 	// rejects --mesh-gateway here with a clear error.
