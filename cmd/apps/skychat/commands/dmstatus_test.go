@@ -34,7 +34,7 @@ func cacheConn(t *testing.T, pk cipher.PubKey) *framedConn {
 		connsMu.Lock()
 		delete(conns, pk)
 		connsMu.Unlock()
-		_ = raw.Close()
+		_ = raw.Close() //nolint
 	})
 	return fc
 }
@@ -86,7 +86,7 @@ func TestDropStaleConn_LeavesReplacedConn(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	newConn := cacheConn(t, pk) // map now holds the NEW conn
 	oldRaw, _ := net.Pipe()
-	defer func() { _ = oldRaw.Close() }()
+	defer func() { _ = oldRaw.Close() }() //nolint
 	oldConn := newFramedConn(&tcpDirectConn{Conn: oldRaw, rPK: pk})
 
 	never := make(chan struct{})
