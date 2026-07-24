@@ -79,11 +79,28 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 					continue
 				}
 
-				// Wait until stun client is ready
-				<-v.stun.ready
+				// Wait until the stun client is ready — but bounded. An
+				// unbounded <-v.stun.ready blocks direct-transport setup for this
+				// peer forever when STUN never becomes ready (no reachable STUN
+				// server), wedging automatic transport establishment. Same wedge
+				// class as the AR/service-discovery paths.
+				stunReady := false
+				select {
+				case <-v.stun.ready:
+					stunReady = true
+				case <-time.After(20 * time.Second):
+					log.Warn("STUN not ready within 20s; skipping SUDPH for this peer")
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 
 				// skip SUDPH if NAT type prevents it (symmetric NAT, firewall, or STUN failure)
 				if nType == types.SUDPH {
+					// Without a ready STUN client we can't determine NAT type;
+					// skip SUDPH rather than nil-deref v.stun.client.
+					if !stunReady || v.stun.client == nil {
+						continue
+					}
 					switch v.stun.client.NATType {
 					case stun.NATSymmetric, stun.NATSymmetricUDPFirewall,
 						stun.NATError, stun.NATUnknown, stun.NATBlocked:

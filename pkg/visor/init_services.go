@@ -181,8 +181,16 @@ func getPublicIP(v *Visor, service string) (string, error) {
 		return pIP, fmt.Errorf("provided URL is invalid: %w", err)
 	}
 
-	<-v.stun.ready
-	if v.stun.client.PublicIP != nil {
+	// Bound the STUN wait — an unbounded <-v.stun.ready blocks every caller of
+	// getPublicIP (transport setup, the reward heartbeat client) forever when
+	// STUN never becomes ready. The public IP is only a registration hint, so
+	// proceed without it on timeout.
+	select {
+	case <-v.stun.ready:
+	case <-time.After(20 * time.Second):
+		v.log.Warn("getPublicIP: STUN not ready within 20s; proceeding without a STUN-derived public IP")
+	}
+	if v.stun.client != nil && v.stun.client.PublicIP != nil {
 		pIP = v.stun.client.PublicIP.IP()
 		return pIP, nil
 	}
