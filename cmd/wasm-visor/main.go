@@ -110,6 +110,11 @@ var (
 	// does for AR bind payloads. Refreshed by refreshSelfPublicIP; read by
 	// SelfOverview. Holds a string ("" until first learned).
 	selfPublicIP atomic.Value
+	// selfGeoCountry caches this visor's ISO country as resolved by a dmsg server
+	// (ClientSession.LookupIPGeo). A wasm visor ships no embedded GeoIP DB, so —
+	// like its public IP — this is the only way it can show its own country in
+	// the hypervisor node list.
+	selfGeoCountry atomic.Value
 )
 
 // vlog emits a step message to the browser console AND, when present, the
@@ -777,6 +782,9 @@ func (s visorSelf) SelfOverview() wasmhv.Overview {
 	if ip, ok := selfPublicIP.Load().(string); ok {
 		ov.PublicIP = ip
 	}
+	if c, ok := selfGeoCountry.Load().(string); ok {
+		ov.CountryCode = c
+	}
 	return ov
 }
 
@@ -814,6 +822,15 @@ func refreshSelfPublicIP(ctx context.Context) {
 		if prev, _ := selfPublicIP.Load().(string); prev != ip {
 			selfPublicIP.Store(ip)
 			vlog("self public IP (via dmsg server): " + ip)
+		}
+		// Country (once): the dmsg server folds geoip into LookupIPGeo, so a wasm
+		// visor — which ships no embedded GeoIP DB — can still show its own
+		// country in the hypervisor node list.
+		if _, ok := selfGeoCountry.Load().(string); !ok {
+			if resp, gerr := dmsgC.LookupIPGeo(ctx, nil); gerr == nil && resp.GeoCountry != "" {
+				selfGeoCountry.Store(resp.GeoCountry)
+				vlog("self country (via dmsg server): " + resp.GeoCountry)
+			}
 		}
 	}
 }
