@@ -51,80 +51,64 @@ func initSystemSurvey(_ context.Context, v *Visor, log *logging.Logger) error {
 	return nil
 }
 
-func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error {
+func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 5 * time.Minute
 
-	conf := v.conf.UptimeTracker
+	// Standalone uptime-tracker URL — may be absent: the standalone tracker has
+	// been decommissioned fleet-wide, so most configs no longer set it.
+	var utURL string
+	if conf := v.conf.UptimeTracker; conf != nil {
+		utURL = conf.Addr
+		if utURL == "" && conf.AddrDmsg != "" {
+			utURL = conf.AddrDmsg
+		}
+	}
 
-	if conf == nil {
-		v.log.Debug("'uptime_tracker' is not configured, skipping.")
+	// TPD heartbeat URL. This is the REWARD-CRITICAL uptime source now that the
+	// standalone tracker is gone: TPD's /v4/update is how a visor's presence is
+	// recorded for rewards. It MUST run independently of whether uptime_tracker
+	// is configured. Previously this whole goroutine returned early when
+	// uptime_tracker was empty — so decommissioning the standalone tracker
+	// silently disabled the TPD heartbeat too, a fleet-wide reward-uptime
+	// regression that stayed invisible because the failure below was logged at
+	// Debug.
+	tpdURL := v.conf.Transport.Discovery
+	if tpdURL == "" && v.conf.Transport.DiscoveryDmsg != "" {
+		tpdURL = v.conf.Transport.DiscoveryDmsg
+	}
+
+	if utURL == "" && tpdURL == "" {
+		v.log.Debug("uptime: no uptime_tracker and no transport-discovery addr; skipping heartbeat.")
 		return nil
 	}
 
-	// Resolve UT URL: prefer HTTP, fall back to dmsghttp.
-	utURL := conf.Addr
-	if utURL == "" && conf.AddrDmsg != "" {
-		utURL = conf.AddrDmsg
-	}
-	if utURL == "" {
-		v.log.Debug("'uptime_tracker' addr is empty, skipping.")
-		return nil
-	}
-
-	// Connect to the uptime tracker IN THE BACKGROUND. utclient.NewHTTP runs a
-	// blocking auth handshake with infinite exponential-backoff retry, so a
-	// synchronous connect here hangs initUptimeTracker forever whenever the UT
-	// service is unreachable (e.g. it is being deprecated/torn down — "dmsg
-	// error 202 - cannot connect to delegated server"). That stalls the whole
-	// `visor` module from completing, which blocks every module that depends on
-	// it — most visibly the hypervisor, whose HTTP + DMSG-RPC servers then never
-	// start and managed visors fail to connect ("306 - no associated listener").
-	// UT is non-critical (transport re-registration also records uptime), so it
-	// must never gate startup. Use the visor's long-lived ctx, not the init ctx.
+	// Connect IN THE BACKGROUND. utclient.NewHTTP runs a blocking auth handshake
+	// with infinite exponential-backoff retry, so a synchronous connect here
+	// would hang initUptimeTracker (and every module that depends on the visor,
+	// most visibly the hypervisor) whenever a service is unreachable. Neither
+	// client may gate startup. Use the visor's long-lived ctx, not the init ctx.
 	bgCtx := v.ctx
 	if bgCtx == nil {
 		bgCtx = context.Background()
 	}
 	go func() { //nolint:gosec,contextcheck
-		httpC, err := getHTTPClient(bgCtx, v, utURL)
-		if err != nil {
-			v.log.WithError(err).Warn("uptime tracker: failed to build http client")
-			return
-		}
-
-		pIP, err := getPublicIP(v, utURL)
-		if err != nil {
-			v.log.WithError(err).Warn("uptime tracker: failed to resolve public IP")
-			return
-		}
-
-		ut, err := utclient.NewHTTP(utURL, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
-		if err != nil {
-			v.log.WithError(err).Warn("Failed to connect to uptime tracker.")
-			return
-		}
-
-		// Also create a heartbeat client for the TPD so visors without
-		// transports still report uptime. The TPD's /v4/update endpoint
-		// uses the same auth + protocol as the uptime tracker.
-		var tpdUT utclient.APIClient
-		tpdURL := v.conf.Transport.Discovery
-		if tpdURL == "" && v.conf.Transport.DiscoveryDmsg != "" {
-			tpdURL = v.conf.Transport.DiscoveryDmsg
-		}
-		if tpdURL != "" {
-			tpdHTTP, err := getHTTPClient(bgCtx, v, tpdURL)
-			if err != nil {
-				log.WithError(err).Warn("Failed to create TPD heartbeat client")
-			} else {
-				tpdPIP, _ := getPublicIP(v, tpdURL) //nolint:errcheck
-				tpdClient, err := utclient.NewHTTP(tpdURL, v.conf.PK, v.conf.SK, tpdHTTP, tpdPIP, v.MasterLogger())
-				if err != nil {
-					log.WithError(err).Warn("Failed to connect to TPD for heartbeat")
-				} else {
-					tpdUT = tpdClient
-				}
+		var ut utclient.APIClient
+		if utURL != "" {
+			if ut = buildUptimeClient(bgCtx, v, utURL, "uptime tracker"); ut != nil {
+				v.initLock.Lock()
+				v.uptimeTracker = ut
+				v.initLock.Unlock()
 			}
+		}
+
+		var tpdUT utclient.APIClient
+		if tpdURL != "" {
+			tpdUT = buildUptimeClient(bgCtx, v, tpdURL, "TPD heartbeat")
+		}
+
+		if ut == nil && tpdUT == nil {
+			v.log.Warn("uptime: no heartbeat client could be built; visor presence will not be reported")
+			return
 		}
 
 		ticker := time.NewTicker(tickDuration)
@@ -133,32 +117,55 @@ func initUptimeTracker(ctx context.Context, v *Visor, log *logging.Logger) error
 			return nil
 		})
 
-		v.initLock.Lock()
-		v.uptimeTracker = ut
-		v.initLock.Unlock()
-
 		for range ticker.C {
 			c := context.Background()
-			if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
-				v.isServicesHealthy.unset()
-				v.isUptimeTrackerHealthy.unset()
-				log.WithError(err).Warn("Failed to update visor uptime.")
-			} else {
-				v.isServicesHealthy.set()
-				v.isUptimeTrackerHealthy.set()
+			if ut != nil {
+				if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
+					log.WithError(err).Warn("Failed to update visor uptime (standalone tracker).")
+				}
 			}
-			// Heartbeat to TPD for integrated uptime tracking.
-			// Errors are non-fatal — transport re-registration also
-			// records heartbeats, so this is a backup for transportless visors.
+			// The TPD heartbeat is the reward-critical presence signal. Surface
+			// failures at Warn and flip the health flags so a persistent 401 /
+			// auth / connectivity failure is visible in the visor's own logs and
+			// /health — the silent-failure class that hid a fleet-wide
+			// reward-uptime outage for days.
 			if tpdUT != nil {
 				if err := tpdUT.UpdateVisorUptime(c, v.conf.Version); err != nil {
-					log.WithError(err).Debug("Failed to send TPD heartbeat")
+					v.isServicesHealthy.unset()
+					v.isUptimeTrackerHealthy.unset()
+					log.WithError(err).Warn("Failed to send TPD uptime heartbeat (reward-critical).")
+				} else {
+					v.isServicesHealthy.set()
+					v.isUptimeTrackerHealthy.set()
 				}
 			}
 		}
 	}()
 
 	return nil
+}
+
+// buildUptimeClient constructs an authenticated uptime/heartbeat client for the
+// given service URL. It returns nil (after logging at Warn) on any failure, so
+// one unreachable service never gates the other or startup. label is used only
+// in log messages to distinguish the standalone tracker from the TPD heartbeat.
+func buildUptimeClient(ctx context.Context, v *Visor, url, label string) utclient.APIClient {
+	httpC, err := getHTTPClient(ctx, v, url)
+	if err != nil {
+		v.log.WithError(err).Warnf("%s: failed to build http client", label)
+		return nil
+	}
+	pIP, err := getPublicIP(v, url)
+	if err != nil {
+		v.log.WithError(err).Warnf("%s: failed to resolve public IP", label)
+		return nil
+	}
+	c, err := utclient.NewHTTP(url, v.conf.PK, v.conf.SK, httpC, pIP, v.MasterLogger())
+	if err != nil {
+		v.log.WithError(err).Warnf("%s: failed to connect", label)
+		return nil
+	}
+	return c
 }
 
 func getPublicIP(v *Visor, service string) (string, error) {
