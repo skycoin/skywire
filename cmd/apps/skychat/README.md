@@ -373,6 +373,8 @@ See:
 - `commands/filexfer.go` — file send / serve / thumbnails
 - `commands/filebackfill.go` — file re-request / re-send
 - `commands/reply.go` — quoted-reply envelope + enrichment
+- `commands/sendack.go` — chat-msg/chat-ack/chat-read envelopes + ack routing
+- `commands/dmstatus.go` — DM status receipts + `dm-status` SSE + `/read-receipt`
 - `commands/group.go` — browser group-chat HTTP proxy + SSE bridge
   (incl. group files + delete tombstones)
 - `group/` — group chat (TreeStore-backed)
