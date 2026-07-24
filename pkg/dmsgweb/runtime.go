@@ -46,6 +46,15 @@ import (
 // default so the visor app gets the same behavior.
 const DefaultDomainSuffix = ".dmsg"
 
+// proxyHost returns the SOCKS5 bind host, defaulting to loopback when unset so
+// the proxy is never accidentally exposed to the network.
+func proxyHost(addr string) string {
+	if addr == "" {
+		return "127.0.0.1"
+	}
+	return addr
+}
+
 // Config configures a dmsgweb runtime. Two operating modes:
 //
 //  1. ResolveAddr empty → SOCKS5 resolver mode. Any hostname ending
@@ -68,6 +77,13 @@ type Config struct {
 	// (fixed-mapping); ignored in SOCKS5 mode. One entry per ResolveAddr.
 	WebPorts []uint
 
+	// ProxyAddr is the host the SOCKS5 proxy listens on. Empty means
+	// loopback ("127.0.0.1") — the safe default. Set to "0.0.0.0" or a
+	// specific LAN IP to serve OTHER devices on the network, e.g. a board
+	// acting as a `.dmsg` gateway for a home router's LAN. Binding a
+	// non-loopback address exposes the proxy to the LAN; only do so on a
+	// trusted network.
+	ProxyAddr string
 	// ProxyPort is the SOCKS5 proxy listener port. Zero disables the
 	// SOCKS5 proxy (useful when the runtime is embedded inside an
 	// app that already provides its own SOCKS5 front-end).
@@ -416,7 +432,7 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 	if err != nil {
 		return fmt.Errorf("create SOCKS5 server: %w", err)
 	}
-	lisAddr := fmt.Sprintf("127.0.0.1:%d", cfg.ProxyPort)
+	lisAddr := fmt.Sprintf("%s:%d", proxyHost(cfg.ProxyAddr), cfg.ProxyPort)
 	log.WithField("addr", lisAddr).Debug("Serving SOCKS5 direct proxy")
 	// Open the listener ourselves so we can close it on ctx cancel —
 	// armon/go-socks5's Serve returns when the listener is closed.

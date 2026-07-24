@@ -321,6 +321,10 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "dmsgweb-upstream")
 	genConfigCmd.Flags().StringVar(&skynetWebUpstreamSOCKS, "skynetweb-upstream", scriptExecString("${SKYNETWEBUPSTREAM}"), "upstream SOCKS5 for non .skynet traffic")
 	gHiddenFlags = append(gHiddenFlags, "skynetweb-upstream")
+	genConfigCmd.Flags().StringVar(&dmsgWebProxyAddr, "dmsgweb-addr", scriptExecString("${DMSGWEBADDR}"), "host the .dmsg SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
+	gHiddenFlags = append(gHiddenFlags, "dmsgweb-addr")
+	genConfigCmd.Flags().StringVar(&skynetWebProxyAddr, "skynetweb-addr", scriptExecString("${SKYNETWEBADDR}"), "host the .skynet SOCKS5 proxy binds to (empty=127.0.0.1; 0.0.0.0 or a LAN IP to serve the LAN)")
+	gHiddenFlags = append(gHiddenFlags, "skynetweb-addr")
 
 	// Skychat flags
 	genConfigCmd.Flags().BoolVar(&isSkychatEnable, "servechat", scriptExecBool("${SKYCHAT:-true}"), "autostart skychat")
@@ -2044,12 +2048,14 @@ func configureResolvingProxies() {
 		conf.DmsgWeb = &visorconfig.DmsgWebConfig{
 			Enable:        true,
 			UpstreamSOCKS: dmsgWebUpstreamSOCKS,
+			ProxyAddr:     dmsgWebProxyAddr,
 		}
 	}
 	if enableSkynetWeb {
 		conf.SkynetWeb = &visorconfig.SkynetWebConfig{
 			Enable:        true,
 			UpstreamSOCKS: skynetWebUpstreamSOCKS,
+			ProxyAddr:     skynetWebProxyAddr,
 		}
 	}
 	if enableSkymailBridge {

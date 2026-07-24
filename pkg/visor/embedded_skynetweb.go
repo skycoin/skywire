@@ -162,6 +162,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 	cfg := skynetweb.Config{
 		DomainSuffix:  stringOrDefault(e.cfg.DomainSuffix, skynetweb.DefaultDomainSuffix),
 		ProxyPort:     uintOrDefault(e.cfg.ProxyPort, defaultSkynetWebProxyPort),
+		ProxyAddr:     e.cfg.ProxyAddr,
 		UpstreamSOCKS: e.cfg.UpstreamSOCKS,
 		Stats:         e.stats,
 	}
