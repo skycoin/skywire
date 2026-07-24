@@ -227,6 +227,10 @@ func initDiscovery(ctx context.Context, v *Visor, _ *logging.Logger) error {
 		factory.HeartbeatInterval = time.Duration(conf.HeartbeatInterval)
 		factory.Client = httpC
 		factory.Geo = v.serviceGeo()
+		// Live getter: the geoip lookup (resolvePublicIPForAR) runs async and
+		// usually finishes AFTER this point, so the snapshot above is nil for the
+		// race-losers. GeoFunc lets each heartbeat re-read the current geo.
+		factory.GeoFunc = v.serviceGeo
 
 		// Get public IP for service discovery (needed for NAT setups).
 		// Try dmsg first; fall back to STUN. No HTTP geoip query.
@@ -792,6 +796,7 @@ func (v *Visor) startPublicAutoconnectInternal(ctx context.Context, log *logging
 		DiscAddr:      serviceDisc,
 		DisplayNodeIP: v.conf.Launcher.DisplayNodeIP,
 		Geo:           v.serviceGeo(),
+		GeoFunc:       v.serviceGeo, // live: heartbeats re-read geo once the async lookup completes
 	}
 	// only needed for dmsghttp
 	pIP, err := getPublicIP(v, serviceDisc)

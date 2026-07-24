@@ -49,6 +49,13 @@ type Config struct {
 	// its own geoip lookup (via dmsg-server LookupIPGeo or the visor's
 	// embedded MaxMind DB) eliminates the SD→geoip-service round-trip.
 	Geo *geo.LocationData
+	// GeoFunc, when non-nil, returns the visor's CURRENT geolocation and is
+	// re-read on every RegisterEntry (heartbeat). This is what makes geo
+	// RELIABLE: the visor's geoip lookup is async and usually finishes AFTER
+	// the first registration, so a fixed Geo snapshot (captured at NewClient)
+	// permanently registered with no country whenever it lost that race. With
+	// GeoFunc, the next heartbeat after the lookup completes carries the country.
+	GeoFunc func() *geo.LocationData
 }
 
 // HTTPClient is responsible for interacting with the service-discovery
@@ -227,6 +234,14 @@ func (c *HTTPClient) RegisterEntry(ctx context.Context) error {
 		}
 	}
 	c.entry.Addr = NewSWAddr(c.conf.PK, c.conf.Port) // Just in case.
+
+	// Refresh geo from the live getter so a heartbeat picks up the country once
+	// the visor's async geoip lookup has completed (see Config.GeoFunc).
+	if c.conf.GeoFunc != nil {
+		if g := c.conf.GeoFunc(); g != nil {
+			c.entry.Geo = g
+		}
+	}
 
 	entry, err := c.postEntry(ctx)
 	if err != nil {
