@@ -1444,9 +1444,11 @@
       // receipts lifecycle (msg.status). File bubbles derive it from the file
       // transfer state: sending→pending, failed→failed, and a completed 1:1
       // transfer is delivery-confirmed (received) while a group publish only
-      // means "on the feed" (sent). Files never reach "read".
+      // means "on the feed" (sent). A file also advances to "read" when the
+      // recipient's read receipt lands (handleDmStatus sets msg.status='read').
       _msgTickStatus(msg) {
         if (!msg.file) return msg.status || 'sent';
+        if (msg.status === 'read') return 'read'; // read receipt for a viewed file
         const fs = msg.file.status;
         if (fs === 'sending') return 'pending';
         if (fs === 'failed') return 'failed';
@@ -1484,12 +1486,15 @@
       }
 
       // handleDmStatus applies an inbound dm-status receipt {id,status,peer} to
-      // the matching outbound bubble in that peer's thread.
+      // the matching outbound bubble in that peer's thread. Text bubbles match
+      // by wireId; file bubbles by the transfer id (the file event's id is the
+      // file id, so a read receipt for a viewed file carries file.id).
       handleDmStatus(data) {
         const key = this.processPk(data.peer);
         const list = this.messages[key];
         if (!list) return;
-        const m = list.find(x => x && x.from === 'me' && x.wireId && x.wireId === data.id);
+        const m = list.find(x => x && x.from === 'me' &&
+          ((x.wireId && x.wireId === data.id) || (x.file && x.file.id && x.file.id === data.id)));
         if (m) this._setMsgStatus(key, m, data.status);
       }
 
@@ -1946,6 +1951,12 @@
 
         source.onmessage = (msg) => {
           const data = JSON.parse(msg.data);
+          // Ignore the server's history seed. On every /sse (re)connect the app
+          // replays the last N stored messages (tagged history:"true") for
+          // headless consumers like `cli skychat listen`. The browser keeps its
+          // own history (localStorage + /history), so rendering these would show
+          // old messages again as new on reload / EventSource auto-reconnect.
+          if (data.history) return;
           // Pair-invite control envelope — handle separately so it
           // doesn't get rendered as a chat message.
           if (data.channel === 'pair-invite') {
