@@ -115,7 +115,7 @@ func TestBoltStore_ListByGroupAndGroups(t *testing.T) {
 		t.Errorf("g1 messages = %d, want 2", len(g1))
 	}
 	// Empty groupID returns nothing (no cross-group scan).
-	if got, _ := s.ListByGroup("", 0); len(got) != 0 {
+	if got, _ := s.ListByGroup("", 0); len(got) != 0 { //nolint
 		t.Errorf(`ListByGroup("") = %d, want 0`, len(got))
 	}
 

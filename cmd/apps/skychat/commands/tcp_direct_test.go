@@ -29,11 +29,11 @@ func TestParseTCPPeerSpec(t *testing.T) {
 	bad := []string{
 		"",
 		"http://" + pk.Hex() + "@1.2.3.4:8800", // wrong scheme
-		"tcp://" + pk.Hex(),                     // missing @
-		"tcp://@1.2.3.4:8800",                   // empty pk (at<=0)
-		"tcp://" + pk.Hex() + "@",               // trailing @ (at==len-1)
-		"tcp://zzzz@1.2.3.4:8800",               // bad pk hex
-		"tcp://" + pk.Hex() + "@not-host-port",  // bad host:port
+		"tcp://" + pk.Hex(),                    // missing @
+		"tcp://@1.2.3.4:8800",                  // empty pk (at<=0)
+		"tcp://" + pk.Hex() + "@",              // trailing @ (at==len-1)
+		"tcp://zzzz@1.2.3.4:8800",              // bad pk hex
+		"tcp://" + pk.Hex() + "@not-host-port", // bad host:port
 	}
 	for _, b := range bad {
 		if _, _, err := parseTCPPeerSpec(b); err == nil {
@@ -83,8 +83,8 @@ func TestReadSKFromConfig(t *testing.T) {
 	}
 
 	cases := map[string]string{
-		"bad.json":  "{not json",
-		"nosk.json": `{"pk":"abc"}`,
+		"bad.json":   "{not json",
+		"nosk.json":  `{"pk":"abc"}`,
 		"badsk.json": `{"sk":"zzzz"}`,
 	}
 	for name, body := range cases {

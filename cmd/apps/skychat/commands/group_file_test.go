@@ -78,7 +78,7 @@ func TestEnrichGroupFileRow(t *testing.T) {
 	if err := os.WriteFile(served, []byte("pdf-bytes"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Remove(served) })
+	t.Cleanup(func() { _ = os.Remove(served) }) //nolint
 
 	row2 := map[string]any{}
 	enrichGroupFileRow(row2, meta)
@@ -113,7 +113,7 @@ func TestSendFileToVisorGroup(t *testing.T) {
 	if !ok {
 		t.Fatal("served copy not kept — findFileByID missed")
 	}
-	t.Cleanup(func() { _ = os.Remove(served) })
+	t.Cleanup(func() { _ = os.Remove(served) }) //nolint
 
 	// Exactly one GroupSend, carrying the file-reference envelope (not bytes).
 	if len(fake.sent) != 1 || fake.sent[0].ID != "gid-9" {

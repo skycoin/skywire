@@ -33,8 +33,8 @@ func TestParseReplyText_Gate(t *testing.T) {
 		"",
 		"plain text",
 		"  hello skychat_reply not json  ", // substring present but not an envelope
-		`{"skychat_file":{"id":"x"}}`,       // a different envelope
-		`{"skychat_reply"`,                  // malformed JSON
+		`{"skychat_file":{"id":"x"}}`,      // a different envelope
+		`{"skychat_reply"`,                 // malformed JSON
 		`{"foo":1}`,
 	} {
 		if _, ok := parseReplyText(raw); ok {

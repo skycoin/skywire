@@ -90,11 +90,11 @@ func writePNGAt(t *testing.T, path string, w, h int) {
 			img.Set(x, y, color.RGBA{uint8(x % 256), uint8(y % 256), 128, 255})
 		}
 	}
-	f, err := os.Create(path)
+	f, err := os.Create(path) //nolint
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = f.Close() }()
+	defer func() { _ = f.Close() }() //nolint
 	if err := png.Encode(f, img); err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestCopyFile(t *testing.T) {
 	if err := copyFile(src, dst); err != nil {
 		t.Fatalf("copyFile: %v", err)
 	}
-	b, err := os.ReadFile(dst)
+	b, err := os.ReadFile(dst) //nolint
 	if err != nil || string(b) != "hello copy 123" {
 		t.Errorf("copied content = %q err=%v", b, err)
 	}

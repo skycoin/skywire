@@ -120,7 +120,7 @@ func sendFileToVisorGroup(_ context.Context, groupID, path, name string) (string
 	if name == "" {
 		name = filepath.Base(path)
 	}
-	fi, err := os.Stat(path)
+	fi, err := os.Stat(path) //nolint
 	if err != nil {
 		return "", "", err
 	}

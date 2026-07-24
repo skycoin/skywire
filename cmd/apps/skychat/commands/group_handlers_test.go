@@ -40,8 +40,11 @@ func (a *groupAPI) GroupJoin(args visor.GroupJoinArgs) (visor.GroupInfo, error) 
 func (a *groupAPI) GroupGet(id string) (visor.GroupInfo, error) {
 	return visor.GroupInfo{ID: id, Name: "g"}, nil
 }
-func (a *groupAPI) GroupInvite(string) (string, error)        { return "skychat:invite:reemit", nil }
-func (a *groupAPI) GroupSend(args visor.GroupSendArgs) error { a.sent = append(a.sent, args); return nil }
+func (a *groupAPI) GroupInvite(string) (string, error) { return "skychat:invite:reemit", nil } //nolint
+func (a *groupAPI) GroupSend(args visor.GroupSendArgs) error {
+	a.sent = append(a.sent, args)
+	return nil
+}
 func (a *groupAPI) GroupUnsend(args visor.GroupUnsendArgs) error {
 	a.unsent = append(a.unsent, args)
 	return nil

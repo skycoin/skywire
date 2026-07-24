@@ -59,7 +59,7 @@ func reconcileSession(t *testing.T, myPK cipher.PubKey, mySK cipher.SecKey, rec 
 	return s, cap
 }
 
-func signedRosterLeaf(t *testing.T, gid uuid.UUID, op RosterOp, peerPK cipher.PubKey, issuerSK cipher.SecKey, seq uint64) (string, []byte) {
+func signedRosterLeaf(t *testing.T, gid uuid.UUID, op RosterOp, peerPK cipher.PubKey, issuerSK cipher.SecKey, seq uint64) (string, []byte) { //nolint:unparam
 	t.Helper()
 	m := RosterMutation{GroupID: gid, Op: op, PeerPK: peerPK, IssuedAt: time.Now().UTC()}
 	if err := SignRoster(&m, issuerSK); err != nil {

@@ -55,8 +55,8 @@ func startHandleConn(t *testing.T, peerPK cipher.PubKey) *framedConn {
 	go handleConn(server)
 
 	t.Cleanup(func() {
-		_ = clientRaw.Close()
-		_ = serverRaw.Close()
+		_ = clientRaw.Close() //nolint
+		_ = serverRaw.Close() //nolint
 		connsMu.Lock()
 		delete(conns, peerPK)
 		connsMu.Unlock()
@@ -64,7 +64,7 @@ func startHandleConn(t *testing.T, peerPK cipher.PubKey) *framedConn {
 	return newFramedConn(clientRaw)
 }
 
-func waitForString(t *testing.T, ch <-chan string, d time.Duration) string {
+func waitForString(t *testing.T, ch <-chan string, d time.Duration) string { //nolint:unparam
 	t.Helper()
 	select {
 	case s := <-ch:

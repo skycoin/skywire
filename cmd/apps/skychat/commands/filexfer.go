@@ -675,7 +675,7 @@ const thumbMaxDim = 640
 // fit within maxDim×maxDim (aspect preserved). Returns an error for a
 // missing file or an undecodable/non-image payload — the caller surfaces
 // that so the UI can fall back to the full file.
-func makeThumbnail(srcPath string, maxDim int) (image.Image, error) {
+func makeThumbnail(srcPath string, maxDim int) (image.Image, error) { //nolint:unparam
 	img, err := imaging.Open(srcPath)
 	if err != nil {
 		return nil, err

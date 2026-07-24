@@ -33,9 +33,9 @@ func TestSaveSentCopy(t *testing.T) {
 		t.Fatalf("downloadsDir: %v", err)
 	}
 	saved := filepath.Join(dir, sentCopyName(offer)) // ssc-1.png
-	t.Cleanup(func() { _ = os.Remove(saved) })
+	t.Cleanup(func() { _ = os.Remove(saved) })       //nolint
 
-	b, err := os.ReadFile(saved)
+	b, err := os.ReadFile(saved) //nolint
 	if err != nil || string(b) != "PNG-BYTES" {
 		t.Fatalf("served copy content = %q err=%v", b, err)
 	}
@@ -58,7 +58,7 @@ func TestThumbnailHandler_ServesJPEG(t *testing.T) {
 	name := "thumb-serve.png"
 	path := filepath.Join(dir, name)
 	writePNGAt(t, path, 800, 600)
-	t.Cleanup(func() { _ = os.Remove(path) })
+	t.Cleanup(func() { _ = os.Remove(path) }) //nolint
 
 	rec := httptest.NewRecorder()
 	thumbnailHandler(rec, httptest.NewRequest(http.MethodGet, "/thumb/"+name, nil))
@@ -91,7 +91,7 @@ func TestThumbnailHandler_NonImageReturns415(t *testing.T) {
 	if err := os.WriteFile(path, []byte("not an image"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Remove(path) })
+	t.Cleanup(func() { _ = os.Remove(path) }) //nolint
 
 	rec := httptest.NewRecorder()
 	thumbnailHandler(rec, httptest.NewRequest(http.MethodGet, "/thumb/"+name, nil))

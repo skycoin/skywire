@@ -53,7 +53,7 @@ func TestFindFileByID(t *testing.T) {
 	if err := os.WriteFile(sent, []byte("img"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Remove(sent) })
+	t.Cleanup(func() { _ = os.Remove(sent) }) //nolint
 	if p, ok := findFileByID("abc123", "photo.png"); !ok || p != sent {
 		t.Errorf("sender-copy lookup: p=%q ok=%v, want %q", p, ok, sent)
 	}
@@ -63,7 +63,7 @@ func TestFindFileByID(t *testing.T) {
 	if err := os.WriteFile(recv, []byte("pdf"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Remove(recv) })
+	t.Cleanup(func() { _ = os.Remove(recv) }) //nolint
 	if p, ok := findFileByID("def456", "doc.pdf"); !ok || p != recv {
 		t.Errorf("received lookup: p=%q ok=%v, want %q", p, ok, recv)
 	}
