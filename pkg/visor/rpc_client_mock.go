@@ -1191,6 +1191,11 @@ func (mc *mockRPCClient) SetEmbeddedProxyUpstream(_, _ string) error {
 	return nil
 }
 
+// SetEmbeddedProxyBind implements API.
+func (mc *mockRPCClient) SetEmbeddedProxyBind(_, _ string) error {
+	return nil
+}
+
 // SkynetHTTP implements API.
 func (mc *mockRPCClient) SkynetHTTP(_ SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
 	return &SkynetHTTPResponse{StatusCode: 200, Status: "OK"}, nil

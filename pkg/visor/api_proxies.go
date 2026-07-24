@@ -189,6 +189,53 @@ func (v *Visor) SetEmbeddedProxyUpstream(kind, addr string) error {
 	}
 }
 
+// SetEmbeddedProxyBind changes the SOCKS5 bind host for a resolving proxy at
+// runtime AND persists it (proxy_addr + enable) to the visor config, so it
+// survives a restart — the way to make a board a `.dmsg`/`.skynet` LAN gateway
+// without a config-file edit. Pass "" for loopback (the default) or
+// "0.0.0.0"/a LAN IP to serve the LAN. Note: a subsequent `skywire autoconfig`
+// regenerates the config from skywire.conf and would reset this; on
+// autoconfig-managed hosts, set DMSGWEBADDR in skywire.conf instead.
+func (v *Visor) SetEmbeddedProxyBind(kind, addr string) error {
+	if v == nil {
+		return fmt.Errorf("visor not initialized")
+	}
+	switch kind {
+	case "dmsg", "dmsgweb", "dmsg_web":
+		v.initLock.Lock()
+		runtime := v.embeddedDmsgWeb
+		if v.conf.DmsgWeb == nil {
+			v.conf.DmsgWeb = &visorconfig.DmsgWebConfig{}
+		}
+		v.conf.DmsgWeb.Enable = true
+		v.conf.DmsgWeb.ProxyAddr = addr
+		v.initLock.Unlock()
+		if runtime != nil {
+			if err := runtime.SetBind(addr); err != nil {
+				return err
+			}
+		}
+		return v.conf.Flush()
+	case "skynet", "skynetweb", "skynet_web":
+		v.initLock.Lock()
+		runtime := v.embeddedSkynetWeb
+		if v.conf.SkynetWeb == nil {
+			v.conf.SkynetWeb = &visorconfig.SkynetWebConfig{}
+		}
+		v.conf.SkynetWeb.Enable = true
+		v.conf.SkynetWeb.ProxyAddr = addr
+		v.initLock.Unlock()
+		if runtime != nil {
+			if err := runtime.SetBind(addr); err != nil {
+				return err
+			}
+		}
+		return v.conf.Flush()
+	default:
+		return fmt.Errorf("unknown proxy kind %q (want \"dmsg\" or \"skynet\")", kind)
+	}
+}
+
 func dmsgProxyInfo(cfg *visorconfig.DmsgWebConfig, runtime *EmbeddedDmsgWeb) *EmbeddedProxyInfo {
 	info := &EmbeddedProxyInfo{
 		Enabled:       cfg.Enable,
