@@ -65,3 +65,12 @@ func (r *RPC) SetEmbeddedProxyUpstream(req *SetEmbeddedProxyUpstreamRequest, _ *
 	}
 	return r.visor.SetEmbeddedProxyUpstream(req.Kind, req.Addr)
 }
+
+// SetEmbeddedProxyBind sets a resolver's SOCKS5 bind host (and persists it).
+func (r *RPC) SetEmbeddedProxyBind(req *SetEmbeddedProxyBindRequest, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "SetEmbeddedProxyBind", req)(nil, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.SetEmbeddedProxyBind(req.Kind, req.Addr)
+}

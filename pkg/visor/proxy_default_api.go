@@ -934,6 +934,10 @@ func (proxyDefaultAPI) SetEmbeddedProxyUpstream(_ string, _ string) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) SetEmbeddedProxyBind(_ string, _ string) error {
+	return ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) ResetRouteSetupStats() error {
 	return ErrProxyNotSupported
 }
