@@ -105,7 +105,12 @@ for private groups, so the browser never handles keys.
 
 The browser UI can attach and render media inline — the CLI stays
 text-only. Click 📎 to send a file to the open conversation (DM or
-group); received images / video / audio render in place.
+group); received images / video / audio render in place. Your own file
+bubbles carry the same delivery-status tick as text (see Message
+status). There is **no size limit** on uploads: `/send-file` bounds
+only the request-header read (`ReadHeaderTimeout`) and clears its
+write deadline for the transfer, so a large upload/transfer is never
+truncated.
 
 - **Images** show a downscaled thumbnail (`GET /thumb/<name>`,
   ~4–5× smaller than the original) and open full-size in an in-app
@@ -130,7 +135,9 @@ the original sender to re-send it. Received file bubbles carry a
 the holder locates the bytes by id and re-sends preserving the
 original id + name, and the requester auto-accepts (it asked). When
 the bytes land, the existing bubble is patched in place rather than
-duplicated.
+duplicated. The file id is persisted with the message in `/history`
+(`file_id`), so the re-request link keeps working after a reload or on
+a fresh device — not only while the bytes are missing.
 
 ### Group files
 
@@ -202,7 +209,7 @@ through the message's lifecycle:
 | ✓ | sent | the frame left this machine (`/message` returned) |
 | ✓✓ | received | the peer's app acknowledged receipt |
 | ✓✓ (blue) | read | the peer's UI displayed the message |
-| ⚠ | failed | the send errored (peer offline / route broken) |
+| ⚠ Resend | failed | the send errored — click the tick to resend |
 
 There is **no middle server** — receipts are just messages travelling
 the other way over the same peer-to-peer conn. `pending`/`sent`/
@@ -227,9 +234,20 @@ recipient means the send **fails** (nothing is queued); the tick is
 only — the CLI stays byte-identical plain send/listen — and persists
 in the local DM cache across reloads.
 
-Group messages currently show `pending`/`sent`/`failed` only;
-per-member `received`/`read` (a receipt fan-out on the feed) is not
-yet implemented.
+**Stale-conn recovery.** A cached connection can go half-open (the peer
+restarted, or an idle transport died) — a write into it succeeds
+without error but never lands, so no `chat-ack` returns and the bubble
+stops at `sent`. If no ack arrives within a short window the sender
+drops that conn, so the **⚠ Resend** button (or the next message)
+redials a fresh one — no visor restart needed.
+
+**Files** carry the same tick (○ sending → ✓✓ received on a completed
+1:1 transfer; group files stop at ✓ sent — "on the feed"). A failed
+file shows a plain ⚠ with no resend, since the bytes are gone once the
+upload completes.
+
+Group text messages show `pending`/`sent`/`failed` only; per-member
+`received`/`read` (a receipt fan-out on the feed) is not implemented.
 
 ## Message history
 
@@ -375,6 +393,7 @@ See:
 - `commands/reply.go` — quoted-reply envelope + enrichment
 - `commands/sendack.go` — chat-msg/chat-ack/chat-read envelopes + ack routing
 - `commands/dmstatus.go` — DM status receipts + `dm-status` SSE + `/read-receipt`
+  + half-open-conn auto-recovery (`dropStaleConn`)
 - `commands/group.go` — browser group-chat HTTP proxy + SSE bridge
   (incl. group files + delete tombstones)
 - `group/` — group chat (TreeStore-backed)
