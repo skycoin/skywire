@@ -110,6 +110,13 @@ func RemoveObjects(c *skyobject.Container) (err error) {
 			if rc != 0 {
 				return false, nil
 			}
+			// Skipping cached keys is BY DESIGN: an object the in-memory Cache
+			// still holds (a wanted item from an in-flight fill) must not be
+			// deleted from under the fill. The residual — a rc==0 object kept
+			// alive only by a hung fill's want entry — is bounded not here but
+			// by MaxFillingTime (see head.go / #3562): when the fill times out
+			// it Unwants, the object leaves the cache, and the next sweep
+			// reclaims it. Do not "fix" this by deleting cached keys.
 			_, isCached := cached[key]
 			return !isCached, nil
 		})
