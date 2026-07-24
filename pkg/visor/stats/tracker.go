@@ -507,7 +507,19 @@ func (t *Tracker) runRetention(now time.Time) {
 	// bounded at the configured rolling-window size.
 	t.sinkPruneOutsidePublishWindow(now)
 
+	// Prune day-start bandwidth baselines for transports not sampled today.
+	// A live transport recreates its baseline (keyed to today) on its next
+	// sample, so any entry still tagged with an earlier day belongs to a
+	// transport that has gone away. Without this, baselines grows unbounded
+	// with transport churn — every other prune path reclaimed records/bitmaps
+	// but structurally never touched this map.
+	today := now.UTC().Format(dateFmt)
 	t.mu.Lock()
+	for id, base := range t.baselines {
+		if base.day != today {
+			delete(t.baselines, id)
+		}
+	}
 	t.lastPruned = now
 	t.mu.Unlock()
 }
