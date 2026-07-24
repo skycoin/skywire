@@ -123,8 +123,35 @@ func requireChatAppReady(t *testing.T, addr, rpc, logName string) {
 	appls, _ := cli("visor", "--rpc", rpc, "app", "ls")
 	t.Logf("skychat status err=%v out=%q", lastErr, lastOut)
 	t.Logf("visor app ls (%s):\n%s", rpc, appls)
+	// The app's OWN output ("[skychat]" lines) is what tells us why it exited;
+	// show those first since the visor's dmsg DEBUG churn floods the plain tail.
+	t.Logf("skychat app log (%s.log, [skychat] lines):\n%s", logName, visorLogGrep(logName, "[skychat]", 80))
 	t.Logf("visor log tail (%s.log):\n%s", logName, visorLogTail(logName, 100))
 	t.Fatalf("skychat app never became reachable at %s", addr)
+}
+
+// visorLogGrep returns the last n lines of a visor's log that contain sub —
+// used to surface an app's own output (e.g. "[skychat]") from under the
+// visor's dmsg DEBUG churn, which otherwise floods the plain tail and buries
+// the app's real startup/exit reason.
+func visorLogGrep(name, sub string, n int) string {
+	b, err := os.ReadFile(filepath.Join(env.work, name+".log"))
+	if err != nil {
+		return fmt.Sprintf("(read %s.log: %v)", name, err)
+	}
+	var hits []string
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.Contains(line, sub) {
+			hits = append(hits, line)
+		}
+	}
+	if len(hits) == 0 {
+		return fmt.Sprintf("(no lines containing %q)", sub)
+	}
+	if len(hits) > n {
+		hits = hits[len(hits)-n:]
+	}
+	return strings.Join(hits, "\n")
 }
 
 // visorLogTail returns the last n lines of a visor's log in the harness
