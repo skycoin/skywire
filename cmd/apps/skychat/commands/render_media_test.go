@@ -188,7 +188,7 @@ func TestHistoryHandler_EmitsFileFields(t *testing.T) {
 	t.Cleanup(func() { _ = st.Close() }) //nolint:errcheck
 	if err := st.Append(history.Message{
 		Peer: "peerpk", From: "peerpk", Text: "📎 pic.png",
-		FileName: "pic.png", FileSize: 10, FileStatus: "received", FileURL: "/files/pic.png",
+		FileID: "fid-123", FileName: "pic.png", FileSize: 10, FileStatus: "received", FileURL: "/files/pic.png",
 		Timestamp: time.Now().UTC(),
 	}); err != nil {
 		t.Fatalf("Append: %v", err)
@@ -212,6 +212,10 @@ func TestHistoryHandler_EmitsFileFields(t *testing.T) {
 	}
 	if msgs[0]["file_name"] != "pic.png" || msgs[0]["file_url"] != "/files/pic.png" || msgs[0]["file_status"] != "received" {
 		t.Errorf("/history did not emit file fields: %v", msgs[0])
+	}
+	// file_id must survive persistence so a reload can still "re-request" the file.
+	if msgs[0]["file_id"] != "fid-123" {
+		t.Errorf("/history did not emit file_id (re-request would break on reload): %v", msgs[0])
 	}
 }
 

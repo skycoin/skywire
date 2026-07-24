@@ -1379,9 +1379,9 @@
           const senderAttr = msg.from === 'me' ? 'me' : (msg.sender || msg.from || '');
           const tsIso = (msg.ts instanceof Date && !isNaN(msg.ts)) ? msg.ts.toISOString() : '';
           if (msg.mid == null) msg.mid = ++this._mid;
-          // Our own text bubbles carry a delivery-status tick (DM + group). File
-          // bubbles show their own sending/sent state on the card instead.
-          const statusTick = (msg.from === 'me' && !msg.file) ? this._statusTick(msg.status || 'sent') : '';
+          // Our own bubbles (text OR file) carry a delivery-status tick; the
+          // file tick is derived from the transfer state (see _msgTickStatus).
+          const statusTick = (msg.from === 'me') ? this._statusTick(this._msgTickStatus(msg), !msg.file) : '';
           msgArea.insertAdjacentHTML('beforeend', `
             <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}" data-mid="${msg.mid}" data-tsnano="${this.escapeAttr(msg.tsNano != null ? String(msg.tsNano) : '')}">
               ${senderLabel}
@@ -1417,13 +1417,18 @@
 
       // ---- DM message status (failed/pending/sent/received/read) -----
 
-      // _statusTick renders the delivery-status glyph shown on our own text
-      // bubbles (DM + group). received/read are a double tick (read is tinted
-      // via CSS) and only occur for DMs; group bubbles stop at sent/failed.
-      _statusTick(status) {
-        // A failed bubble's tick is a click-to-resend button (see resendMessage).
+      // _statusTick renders the delivery-status glyph shown on our own bubbles
+      // (DM + group, text + file). received/read are a double tick (read is
+      // tinted via CSS) and only occur for DMs; group bubbles stop at
+      // sent/failed. resendable=false renders a plain failed glyph instead of
+      // the click-to-resend button (files can't be resent from the cached
+      // bubble — the bytes are gone once the upload completes).
+      _statusTick(status, resendable = true) {
         if (status === 'failed') {
-          return `<button type="button" class="msg-status failed" onclick="app.resendMessage(this)" title="Failed to send — click to resend">⚠ Resend</button>`;
+          if (resendable) {
+            return `<button type="button" class="msg-status failed" onclick="app.resendMessage(this)" title="Failed to send — click to resend">⚠ Resend</button>`;
+          }
+          return `<span class="msg-status failed" title="Transfer failed">⚠</span>`;
         }
         const map = {
           pending:  { cls: 'pending',  txt: '○',       title: 'Sending…' }, // ○
@@ -1433,6 +1438,20 @@
         };
         const s = map[status] || map.sent;
         return `<span class="msg-status ${s.cls}" title="${s.title}">${s.txt}</span>`;
+      }
+
+      // _msgTickStatus is the tick status for a bubble. Text bubbles use the
+      // receipts lifecycle (msg.status). File bubbles derive it from the file
+      // transfer state: sending→pending, failed→failed, and a completed 1:1
+      // transfer is delivery-confirmed (received) while a group publish only
+      // means "on the feed" (sent). Files never reach "read".
+      _msgTickStatus(msg) {
+        if (!msg.file) return msg.status || 'sent';
+        const fs = msg.file.status;
+        if (fs === 'sending') return 'pending';
+        if (fs === 'failed') return 'failed';
+        if (fs === 'received') return 'received';
+        return msg.group ? 'sent' : 'received';
       }
 
       // _setMsgStatus advances a message's status (monotonically — a late 'sent'
@@ -1455,13 +1474,13 @@
       }
 
       // _patchStatusTick swaps the tick glyph on an already-rendered own bubble
-      // (DM or group; no-op when the thread isn't the one on screen).
+      // (DM or group, text or file; no-op when the thread isn't on screen).
       _patchStatusTick(message) {
-        if (!message || message.from !== 'me' || message.file || message.mid == null) return;
+        if (!message || message.from !== 'me' || message.mid == null) return;
         const row = document.querySelector(`.message-row[data-mid="${message.mid}"]`);
         if (!row) return;
         const el = row.querySelector('.msg-status');
-        if (el) el.outerHTML = this._statusTick(message.status);
+        if (el) el.outerHTML = this._statusTick(this._msgTickStatus(message), !message.file);
       }
 
       // handleDmStatus applies an inbound dm-status receipt {id,status,peer} to
@@ -1562,6 +1581,7 @@
         if (!list) return;
         const message = list.find(m => m && String(m.mid) === String(row.dataset.mid) && m.from === 'me');
         if (!message || message.status !== 'failed') return;
+        if (message.file) return; // files can't be resent from the cached bubble (bytes gone)
 
         this._setMsgStatus(key, message, 'pending');
         const wireText = message.reply ? this._encodeReply(message.text) : message.text;
@@ -2059,6 +2079,7 @@
               // file descriptor so history re-renders the thumbnail/player.
               if (m.file_name) {
                 entry.file = {
+                  id: m.file_id || null, // persisted so "re-request" works after reload
                   name: m.file_name,
                   size: m.file_size || 0,
                   status: m.file_status || '',
@@ -2487,11 +2508,13 @@
           .then(res => {
             if (!res.ok) {
               message.file.status = 'failed';
+              this._patchStatusTick(message);
               res.text().then(t => this.showToast(`File send failed: ${t}`, 'error'));
               if (!isGroup) this.saveChat(destination);
               return;
             }
             message.file.status = 'sent';
+            this._patchStatusTick(message);
             this.showToast('File sent.');
             // The response carries the server-assigned file id so a re-request
             // can locate the bytes and the id matches the feed reference other
@@ -2503,6 +2526,7 @@
           })
           .catch(e => {
             message.file.status = 'failed';
+            this._patchStatusTick(message);
             this.showToast(e.message, 'error');
           });
       }

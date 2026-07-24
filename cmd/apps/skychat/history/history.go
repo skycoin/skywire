@@ -40,7 +40,10 @@ type Message struct {
 	// File attachment metadata — set only for file messages (Telegram-style
 	// "a file is a message"). FileURL is the /files/<name> path for received
 	// files so the UI can re-render the thumbnail from history; empty for
-	// sent files (the sender keeps no served copy).
+	// sent files (the sender keeps no served copy). FileID is the transfer id,
+	// stored so a "re-request" (backfill) still works after a reload / on a
+	// fresh device — without it the UI has no id to request the bytes by.
+	FileID     string `json:"file_id,omitempty"`
 	FileName   string `json:"file_name,omitempty"`
 	FileSize   int64  `json:"file_size,omitempty"`
 	FileStatus string `json:"file_status,omitempty"`

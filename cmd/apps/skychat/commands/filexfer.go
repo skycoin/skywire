@@ -275,6 +275,7 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 			Outgoing:   dir == xfer.Outgoing,
 			Text:       ev.Text,
 			Timestamp:  time.Now().UTC(),
+			FileID:     offer.ID,
 			FileName:   offer.Name,
 			FileSize:   offer.Size,
 			FileStatus: ev.FileStatus,
@@ -491,6 +492,15 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)
 			return
+		}
+		// A file send holds the response open for the whole transfer (a large
+		// file over the mesh can take much longer than the server's default
+		// WriteTimeout), so clear the per-request write deadline the way the SSE
+		// handler does — otherwise the transfer is torn down mid-flight and the
+		// UI sees a spurious failure. Best-effort: a wrapped writer that doesn't
+		// support it still works, just under the default deadline.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+			appLog("skychat: send-file clear write deadline: %v", err)
 		}
 		// A multipart upload spills large bodies to temp files internally.
 		if err := r.ParseMultipartForm(maxUploadMemory); err != nil && r.MultipartForm == nil { //nolint

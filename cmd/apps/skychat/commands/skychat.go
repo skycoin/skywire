@@ -1009,9 +1009,18 @@ func RunSkychat(ctx context.Context, args []string) error {
 
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 	srv := &http.Server{
-		Addr:         url,
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
+		Addr:    url,
+		Handler: mux,
+		// ReadHeaderTimeout (not ReadTimeout) bounds only the request-header read
+		// for slowloris protection; the BODY read is left unbounded so a large
+		// file upload (/send-file) is never truncated by a whole-request deadline
+		// — a 5s ReadTimeout used to cut a multi-MB upload short, surfacing as
+		// "no file". There is no size cap on uploads.
+		ReadHeaderTimeout: 5 * time.Second,
+		// WriteTimeout bounds the response write for ordinary handlers; the SSE
+		// stream and the /send-file handler (which blocks for the whole transfer)
+		// clear their own per-request deadline so a long-lived stream / large
+		// transfer isn't killed.
 		WriteTimeout: 10 * time.Second,
 	}
 
