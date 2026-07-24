@@ -316,6 +316,13 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
   const mode = cosmosGroupMode();
   if (mode) {
     const { pos, color, groups } = computeGroupedLayout(linkedNodes.map(n => n.id), mode);
+    // Only one group (e.g. no country/IP survey data → every node resolves to
+    // "Unknown"): a single packed circle is worse than — and looks like a broken
+    // version of — the free force layout, so fall back to it instead.
+    if (groups.length < 2) {
+      boundaryCircles = [];
+      return { nodes: linkedNodes, links, grouped: false };
+    }
     // The packed layout is centered on the origin (negative → positive). Cosmos
     // random-inits nodes in a [0, spaceSize] box and renders provided x/y in that
     // same space, so negative coords land off-screen. Translate + (only if needed)
@@ -390,8 +397,9 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
       friction: 0.85,
       decay: 2000,
       // Re-frame once the layout settles (the initial fit is too tight while
-      // every node still sits clustered near the center).
-      onEnd: () => { if (graph) { graph.fitView(400, 0.1); } },
+      // every node still sits clustered near the center) — but never yank the
+      // camera after we've settled + paused (the user may have panned/zoomed).
+      onEnd: () => { if (graph && !settled) { graph.fitView(400, 0.1); } },
     },
     events: {
       onClick: (node?: CosmosNode) => {
@@ -448,39 +456,82 @@ export function hideCosmos(): void {
   active = false;
   hideTooltip();
   stopBoundaries();
+  stopSettle();
   const cosmosContainer = document.getElementById('cosmos-container');
   if (cosmosContainer) { cosmosContainer.style.display = 'none'; }
 }
 
-let settleTimer: ReturnType<typeof setTimeout> | null = null;
+// settled tracks whether the force layout has finished its settle window and been
+// paused + framed; lastSig fingerprints the currently-rendered graph (mode + node
+// + link counts). Together they let a periodic refresh of an UNCHANGED graph
+// update the data WITHOUT restarting the simulation — the fix for the view
+// "drifting out of view within moments": the 1s countdown refresh (min 5s, see
+// api.ts) used to re-run setData every cycle, restarting the force sim before its
+// own settle completed, so the graph perpetually re-expanded past the viewport.
+let settled = false;
+let lastSig = '';
+let settleInterval: ReturnType<typeof setInterval> | null = null;
 
-// updateCosmosData reprojects + repushes the data (on refresh or filter change),
-// runs the GPU simulation briefly, then pauses + fits. The force sim never fully
-// "cools" on a ~20k-edge graph, so rather than wait for it we let it run a few
-// seconds (enough to untangle the hairball), then pause to free the GPU and
-// frame the result.
+function stopSettle(): void {
+  if (settleInterval != null) { clearInterval(settleInterval); settleInterval = null; }
+}
+
+// startSettle runs the GPU sim for a few seconds and RE-FITS the camera on a short
+// cadence the whole time, so the view tracks the expanding hairball instead of
+// being framed once (tight, at the center) and then left behind as the layout
+// balloons. After the window it pauses the sim (frees the GPU) and does a final fit.
+function startSettle(): void {
+  stopSettle();
+  const start = performance.now();
+  settleInterval = setInterval(() => {
+    if (!graph || !active) { stopSettle(); return; }
+    graph.fitView(280, 0.12);
+    if (performance.now() - start >= 4500) {
+      stopSettle();
+      graph.pause();
+      graph.fitView(500, 0.12);
+      settled = true;
+    }
+  }, 350);
+}
+
+// updateCosmosData reprojects + repushes the data (on refresh, filter, or grouping
+// change). It only (re)runs the force layout when the graph actually changed;
+// a plain refresh of the same graph updates data in place (runSimulation=false)
+// so nothing re-expands.
 export function updateCosmosData(): void {
   if (!active) { return; }
   const g = ensureGraph();
   if (!g) { return; }
   const { nodes, links, grouped } = buildData();
-  if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
+  const sig = (grouped ? 'g:' : 'f:') + nodes.length + ':' + links.length;
+  const unchanged = settled && sig === lastSig;
+
   if (grouped) {
     // Fixed group-packed positions. disableSimulation keeps cosmos rendering the
     // nodes at their x/y (so the country/IP clusters stay put, like the flat view)
     // WITHOUT running the force layout — and, unlike pause(), leaves the render loop
     // alive so pan/zoom still work. The boundary overlay loop draws the group
     // circles + labels, tracking pan/zoom.
+    stopSettle();
     g.setConfig({ disableSimulation: true });
-    g.setData(nodes, links);
-    g.fitView(500, 0.1);
+    g.setData(nodes, links, false);
+    if (!unchanged) { g.fitView(500, 0.1); } // frame only on (re)layout, not every refresh
+    lastSig = sig; settled = true;
     startBoundaries();
     return;
   }
+
   stopBoundaries();
+  if (unchanged) {
+    // Periodic refresh of an already-framed force layout: update the data without
+    // restarting the sim, so the graph keeps its positions and stays in view.
+    g.setData(nodes, links, false);
+    return;
+  }
+  // Fresh or changed force layout: run the sim and follow it with the camera.
+  lastSig = sig; settled = false;
   g.setConfig({ disableSimulation: false });
   g.setData(nodes, links);
-  settleTimer = setTimeout(() => {
-    if (graph && active) { graph.pause(); graph.fitView(500, 0.1); }
-  }, 5000);
+  startSettle();
 }
