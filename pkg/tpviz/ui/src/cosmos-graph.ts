@@ -13,7 +13,7 @@
 
 import { Graph } from '@cosmograph/cosmos';
 import * as S from './state';
-import { colors, LOCAL_EDGE_COLOR, ORBIT_LANES, ORBIT_LANE_SPACING } from './constants';
+import { colors, LOCAL_EDGE_COLOR } from './constants';
 import { handleGraphNodeClick } from './node-click';
 import { getCountryColor, getIPGroupColor, countryToFlag } from './utils';
 import { calculateGroupRadius, findNonOverlappingPosition } from './grouping';
@@ -43,9 +43,6 @@ interface CosmosLink {
 // live inside [0, COSMOS_SPACE]; keep this in sync with the graph's spaceSize.
 const COSMOS_SPACE = 4096;
 
-// Dim colour for satellite (country-less) visors that orbit the country clusters.
-const SATELLITE_COLOR = '#8a94a6';
-
 let graph: Graph<CosmosNode, CosmosLink> | null = null;
 let active = false;
 let tooltip: HTMLDivElement | null = null;
@@ -53,7 +50,7 @@ let tooltip: HTMLDivElement | null = null;
 // Group-boundary overlay (grouping mode): the packed group circles + labels,
 // drawn on a canvas above the cosmos canvas and converted space→screen each frame
 // so they track pan/zoom — the WebGL analogue of the flat view's group boundaries.
-let boundaryCircles: { x: number; y: number; r: number; color: string; label: string; flag: string; count: number }[] = [];
+let boundaryCircles: { x: number; y: number; r: number; color: string; label: string; flag: string }[] = [];
 let boundaryCanvas: HTMLCanvasElement | null = null;
 let boundaryRAF: number | null = null;
 
@@ -133,7 +130,7 @@ function drawBoundaries(): void {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
   ctx.textAlign = 'center';
-  ctx.font = 'bold 15px system-ui, sans-serif';
+  ctx.font = '13px system-ui, sans-serif';
   for (const b of boundaryCircles) {
     const [sx, sy] = graph.spaceToScreenPosition([b.x, b.y]);
     const sr = graph.spaceToScreenRadius(b.r);
@@ -141,18 +138,11 @@ function drawBoundaries(): void {
     ctx.beginPath();
     ctx.arc(sx, sy, sr, 0, 2 * Math.PI);
     ctx.globalAlpha = 0.07; ctx.fillStyle = b.color; ctx.fill();
-    // Dashed boundary ring — matches the classic Flat view's group circles.
-    ctx.globalAlpha = 0.6; ctx.lineWidth = 2; ctx.strokeStyle = b.color;
-    ctx.setLineDash([8, 4]); ctx.stroke(); ctx.setLineDash([]);
+    ctx.globalAlpha = 0.55; ctx.lineWidth = 1.2; ctx.strokeStyle = b.color; ctx.stroke();
     ctx.globalAlpha = 1;
-    // "🇺🇸 US (123)" on a translucent black plate above the circle (as in Flat).
-    const label = (b.flag ? b.flag + ' ' : '') + b.label + ' (' + b.count + ')';
-    const tw = ctx.measureText(label).width;
-    const ly = sy - sr - 12;
-    ctx.globalAlpha = 0.6; ctx.fillStyle = '#000';
-    ctx.fillRect(sx - tw / 2 - 6, ly - 13, tw + 12, 20);
-    ctx.globalAlpha = 1; ctx.fillStyle = b.color;
-    ctx.fillText(label, sx, ly + 2);
+    const label = (b.flag ? b.flag + ' ' : '') + b.label;
+    ctx.fillStyle = b.color;
+    ctx.fillText(label, sx, sy - sr - 5);
   }
   boundaryRAF = requestAnimationFrame(drawBoundaries);
 }
@@ -232,7 +222,7 @@ function groupFlagOf(key: string, mode: 'country' | 'ip'): string {
   return countryToFlag(key);
 }
 
-interface GroupCircle { cx: number; cy: number; r: number; color: string; label: string; flag: string; count: number }
+interface GroupCircle { cx: number; cy: number; r: number; color: string; label: string; flag: string }
 
 // computeGroupedLayout packs the given nodes into per-group circles using the SAME
 // geometry as the flat view's arrangeNodesIntoGroups (calculateGroupRadius +
@@ -241,8 +231,7 @@ interface GroupCircle { cx: number; cy: number; r: number; color: string; label:
 // positions with the simulation disabled, so WebGL groups by country/IP like Flat.
 function computeGroupedLayout(
   nodeIds: string[], mode: 'country' | 'ip',
-): { pos: Map<string, { x: number; y: number }>; color: Map<string, string>; groups: GroupCircle[]; satellites: Set<string> } {
-  const unknownKey = mode === 'ip' ? '_no_ip' : '_unknown';
+): { pos: Map<string, { x: number; y: number }>; color: Map<string, string>; groups: GroupCircle[] } {
   const buckets = new Map<string, string[]>();
   for (const id of nodeIds) {
     const k = groupKeyOf(id, mode);
@@ -250,11 +239,6 @@ function computeGroupedLayout(
     if (!arr) { arr = []; buckets.set(k, arr); }
     arr.push(id);
   }
-  // Country-less visors don't get a circle — they become satellites orbiting the
-  // whole cluster (matching the classic view), so pull them out before packing.
-  const satIds = buckets.get(unknownKey) || [];
-  buckets.delete(unknownKey);
-
   const grouped = Array.from(buckets.entries())
     .map(([key, ids]) => ({ key, ids, radius: calculateGroupRadius(ids.length) }))
     .sort((a, b) => b.radius - a.radius);
@@ -267,12 +251,8 @@ function computeGroupedLayout(
     const c = findNonOverlappingPosition(g.radius, placed, 60);
     placed.push({ x: c.x, y: c.y, radius: g.radius });
     const col = groupColorOf(g.key, mode);
-    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode), count: g.ids.length });
-    // Fibonacci/sunflower placement — identical to the flat view's
-    // placeNodesInCircle: innerRadius = r - 40, golden-angle spiral, 0.9 fill.
-    // The 0.9 keeps the furthest node inside the circle, so it always encloses
-    // every visor of the country.
-    const inner = g.radius - 40;
+    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode) });
+    const inner = g.radius - 50;
     const n = g.ids.length;
     g.ids.forEach((id, i) => {
       let x: number; let y: number;
@@ -290,33 +270,7 @@ function computeGroupedLayout(
       color.set(id, col);
     });
   }
-
-  // Satellites: country-less visors orbit the country clusters on concentric
-  // lanes, evenly spaced by angle — the classic view's satellite ring. Placed
-  // OUTSIDE every country circle (base = furthest circle edge + 150), matching
-  // calculateOrbitParams / initializeSatelliteOrbits.
-  const satellites = new Set(satIds);
-  if (satIds.length > 0) {
-    let ox = 0; let oy = 0;
-    for (const p of placed) { ox += p.x; oy += p.y; }
-    ox = placed.length ? ox / placed.length : 0;
-    oy = placed.length ? oy / placed.length : 0;
-    let maxExtent = 0;
-    for (const p of placed) {
-      const d = Math.hypot(p.x - ox, p.y - oy) + p.radius;
-      if (d > maxExtent) { maxExtent = d; }
-    }
-    const base = (maxExtent || 350) + 150;
-    const step = (2 * Math.PI) / satIds.length;
-    satIds.forEach((id, i) => {
-      const r = base + (i % ORBIT_LANES) * ORBIT_LANE_SPACING;
-      const a = i * step;
-      pos.set(id, { x: ox + r * Math.cos(a), y: oy + r * Math.sin(a) });
-      color.set(id, SATELLITE_COLOR);
-    });
-  }
-
-  return { pos, color, groups, satellites };
+  return { pos, color, groups };
 }
 
 // buildData projects the vis-network datasets into cosmos node/link arrays,
@@ -361,14 +315,7 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
 
   const mode = cosmosGroupMode();
   if (mode) {
-    const { pos, color, groups, satellites } = computeGroupedLayout(linkedNodes.map(n => n.id), mode);
-    // No country/IP circles at all (e.g. no survey data → everything is a
-    // satellite): a lone satellite ring around empty space is worse than the free
-    // force layout, so fall back to it instead.
-    if (groups.length === 0) {
-      boundaryCircles = [];
-      return { nodes: linkedNodes, links, grouped: false };
-    }
+    const { pos, color, groups } = computeGroupedLayout(linkedNodes.map(n => n.id), mode);
     // The packed layout is centered on the origin (negative → positive). Cosmos
     // random-inits nodes in a [0, spaceSize] box and renders provided x/y in that
     // same space, so negative coords land off-screen. Translate + (only if needed)
@@ -391,15 +338,13 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
       const p = pos.get(n.id);
       if (p) { const s = toSpace(p.x, p.y); n.x = s.x; n.y = s.y; }
       // Colour by group so the clusters read at a glance (keep the local visor
-      // cyan so "YOU" stays findable). Satellites keep their dim colour + a
-      // smaller dot so they read as orbiting country-less visors.
+      // cyan so "YOU" stays findable).
       if (!n.isLocal) { const col = color.get(n.id); if (col) { n.color = col; } }
-      if (satellites.has(n.id) && !n.isLocal) { n.size = Math.min(n.size, 2.5); }
     }
     // Group boundary circles in the SAME normalized space (drawn on the overlay).
     boundaryCircles = groups.map(g => {
       const s = toSpace(g.cx, g.cy);
-      return { x: s.x, y: s.y, r: g.r * scale, color: g.color, label: g.label, flag: g.flag, count: g.count };
+      return { x: s.x, y: s.y, r: g.r * scale, color: g.color, label: g.label, flag: g.flag };
     });
   } else {
     boundaryCircles = [];
@@ -434,12 +379,8 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
     // into solid blobs.
     scaleNodesOnZoom: false,
     fitViewOnInit: true,
-    // GPU force simulation — light gravity + repulsion settle a ~15k-edge
+    // GPU force simulation — light gravity + repulsion settle a ~20k-edge
     // hairball into a readable ball in a couple seconds, off the main thread.
-    // Like the classic Flat view (which stabilizes then disables physics), we
-    // run it briefly, follow it with the camera, then pause + frame — a
-    // continuously-running sim doesn't reach true stationarity on this graph and
-    // slowly translates the (unfollowed) frame off-screen.
     spaceSize: COSMOS_SPACE,
     simulation: {
       gravity: 0.9,
@@ -449,9 +390,8 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
       friction: 0.85,
       decay: 2000,
       // Re-frame once the layout settles (the initial fit is too tight while
-      // every node still sits clustered near the center) — but never yank the
-      // camera after we've settled + paused (the user may have panned/zoomed).
-      onEnd: () => { if (graph && !settled) { graph.fitView(400, 0.1); } },
+      // every node still sits clustered near the center).
+      onEnd: () => { if (graph) { graph.fitView(400, 0.1); } },
     },
     events: {
       onClick: (node?: CosmosNode) => {
@@ -508,115 +448,39 @@ export function hideCosmos(): void {
   active = false;
   hideTooltip();
   stopBoundaries();
-  stopSettle();
   const cosmosContainer = document.getElementById('cosmos-container');
   if (cosmosContainer) { cosmosContainer.style.display = 'none'; }
 }
 
-// settled tracks whether the force layout has finished its settle window and been
-// paused + framed; lastSig fingerprints the currently-rendered graph (mode + node
-// + link counts). Together they let a periodic refresh of an UNCHANGED graph
-// update the data WITHOUT restarting the simulation — the fix for the view
-// "drifting out of view within moments": the 1s countdown refresh (min 5s, see
-// api.ts) used to re-run setData every cycle, restarting the force sim before its
-// own settle completed, so the graph perpetually re-expanded past the viewport.
-let settled = false;
-let lastSig = '';
-let settleInterval: ReturnType<typeof setInterval> | null = null;
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
-function stopSettle(): void {
-  if (settleInterval != null) { clearInterval(settleInterval); settleInterval = null; }
-}
-
-// fitCore frames the DENSE CORE of the force layout, excluding the handful of
-// weakly-connected nodes the GPU repulsion flings far out — those otherwise
-// stretch fitView's bounding box and shove the main cluster off-center (dead
-// space on one side). It keeps every node within a robust distance of the
-// centroid (so legitimate spread is untouched) and only drops the far tail;
-// if there's nothing to trim it falls back to the plain fitView.
-function fitCore(g: Graph<CosmosNode, CosmosLink>, duration: number): void {
-  const posMap = g.getNodePositionsMap();
-  const ids: string[] = [];
-  const dist: number[] = [];
-  let cx = 0; let cy = 0;
-  posMap.forEach((p) => { cx += p[0]; cy += p[1]; });
-  const n = posMap.size;
-  if (n < 12) { g.fitView(duration, 0.12); return; }
-  cx /= n; cy /= n;
-  posMap.forEach((p, id) => { ids.push(id); dist.push(Math.hypot(p[0] - cx, p[1] - cy)); });
-  const sorted = [...dist].sort((a, b) => a - b);
-  const median = sorted[Math.floor(n / 2)] || 1;
-  const p95 = sorted[Math.floor(n * 0.95)];
-  // Keep everything within 3.5x the median distance OR the 95th percentile,
-  // whichever is larger — trims only the true far-flung tail (≤5% of nodes).
-  const cutoff = Math.max(median * 3.5, p95);
-  const kept: string[] = [];
-  for (let i = 0; i < ids.length; i++) { if (dist[i] <= cutoff) { kept.push(ids[i]); } }
-  if (kept.length >= 8 && kept.length < ids.length) {
-    g.fitViewByNodeIds(kept, duration, 0.15);
-  } else {
-    g.fitView(duration, 0.12);
-  }
-}
-
-// startSettle runs the GPU sim and RE-FITS the camera on a short cadence while
-// the layout expands, so the view tracks it instead of being framed once (tight,
-// at the center) and then left behind. After the window it pauses the sim (which
-// is now stationary) and does a final fit — matching the classic Flat view, which
-// stabilizes then disables physics. (Leaving the sim running slowly translates
-// the frame off-screen: it never reaches true stationarity on this graph.)
-function startSettle(): void {
-  stopSettle();
-  const start = performance.now();
-  settleInterval = setInterval(() => {
-    if (!graph || !active) { stopSettle(); return; }
-    fitCore(graph, 280);
-    if (performance.now() - start >= 4500) {
-      stopSettle();
-      graph.pause();
-      fitCore(graph, 500);
-      settled = true;
-    }
-  }, 350);
-}
-
-// updateCosmosData reprojects + repushes the data (on refresh, filter, or grouping
-// change). It only (re)runs the force layout when the graph actually changed;
-// a plain refresh of the same graph updates data in place (runSimulation=false)
-// so nothing re-expands.
+// updateCosmosData reprojects + repushes the data (on refresh or filter change),
+// runs the GPU simulation briefly, then pauses + fits. The force sim never fully
+// "cools" on a ~20k-edge graph, so rather than wait for it we let it run a few
+// seconds (enough to untangle the hairball), then pause to free the GPU and
+// frame the result.
 export function updateCosmosData(): void {
   if (!active) { return; }
   const g = ensureGraph();
   if (!g) { return; }
   const { nodes, links, grouped } = buildData();
-  const sig = (grouped ? 'g:' : 'f:') + nodes.length + ':' + links.length;
-  const unchanged = settled && sig === lastSig;
-
+  if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
   if (grouped) {
     // Fixed group-packed positions. disableSimulation keeps cosmos rendering the
     // nodes at their x/y (so the country/IP clusters stay put, like the flat view)
     // WITHOUT running the force layout — and, unlike pause(), leaves the render loop
     // alive so pan/zoom still work. The boundary overlay loop draws the group
     // circles + labels, tracking pan/zoom.
-    stopSettle();
     g.setConfig({ disableSimulation: true });
-    g.setData(nodes, links, false);
-    if (!unchanged) { g.fitView(500, 0.1); } // frame only on (re)layout, not every refresh
-    lastSig = sig; settled = true;
+    g.setData(nodes, links);
+    g.fitView(500, 0.1);
     startBoundaries();
     return;
   }
-
   stopBoundaries();
-  if (unchanged) {
-    // Periodic refresh of an already-framed force layout: update the data without
-    // restarting the sim, so the graph keeps its positions and stays in view.
-    g.setData(nodes, links, false);
-    return;
-  }
-  // Fresh or changed force layout: run the sim and follow it with the camera.
-  lastSig = sig; settled = false;
   g.setConfig({ disableSimulation: false });
   g.setData(nodes, links);
-  startSettle();
+  settleTimer = setTimeout(() => {
+    if (graph && active) { graph.pause(); graph.fitView(500, 0.1); }
+  }, 5000);
 }
