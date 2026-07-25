@@ -60,16 +60,12 @@ func (c *Core) ServeHTTP(method, path string, body []byte) (int, []byte) {
 		return jsonResp(c.allSummaries())
 
 	// The node-list UI uses /visors-tree-summary (getNodesTree) and expects a
-	// {sections:[{hypervisor_pk, visors:[...]}]} TREE, not a flat array — a flat
-	// array leaves result.sections undefined and the list renders EMPTY. The tab
-	// is a single local hypervisor, so emit one section keyed by its own PK whose
-	// visors are the flat summaries (this tab's visor + any that dialed in).
+	// {sections:[{hypervisor_pk, visors:[...]}]} TREE. Section 0 is this
+	// hypervisor; each connected visor that is ITSELF a hypervisor gets its own
+	// section, so the UI renders separate per-hypervisor clusters like the native
+	// HV (was a single flat section here).
 	case p == "/visors-tree-summary":
-		return jsonResp(map[string]interface{}{
-			"sections": []map[string]interface{}{
-				{"hypervisor_pk": c.pk.String(), "via_chain": []string{}, "visors": c.allSummaries()},
-			},
-		})
+		return jsonResp(map[string]interface{}{"sections": c.treeSections()})
 
 	case strings.HasPrefix(p, "/visors/"):
 		rawQuery := ""
@@ -294,6 +290,47 @@ func (c *Core) allSummaries() []Summary {
 		out = append([]Summary{self.SelfSummary()}, out...)
 	}
 	return out
+}
+
+// treeSections groups the connected visors into the per-hypervisor sections the
+// node-list UI renders as separate clusters (result.sections). Section 0 is this
+// wasm hypervisor (self + everything connected to it); then one section per
+// connected visor that is ITSELF a hypervisor, whose members are the visors that
+// report it in their connected_hypervisor list. A visor managed by several
+// hypervisors appears under each, mirroring the native HV's tree. Previously the
+// wasm HV emitted a single flat section, so no per-hypervisor clusters showed.
+func (c *Core) treeSections() []map[string]interface{} {
+	sums := c.allSummaries()
+	sections := []map[string]interface{}{
+		{"hypervisor_pk": c.pk.String(), "via_chain": []string{}, "visors": sums},
+	}
+	seen := map[string]bool{c.pk.String(): true}
+	for _, s := range sums {
+		if !s.IsHypervisor || s.Overview == nil {
+			continue
+		}
+		hvpk := s.Overview.PubKey.String()
+		if seen[hvpk] {
+			continue
+		}
+		seen[hvpk] = true
+		members := []Summary{}
+		for _, m := range sums {
+			if m.Overview == nil {
+				continue
+			}
+			for _, ch := range m.Overview.ConnectedHypervisor {
+				if ch.String() == hvpk {
+					members = append(members, m)
+					break
+				}
+			}
+		}
+		sections = append(sections, map[string]interface{}{
+			"hypervisor_pk": hvpk, "via_chain": []string{}, "visors": members,
+		})
+	}
+	return sections
 }
 
 func jsonResp(v interface{}) (int, []byte) {
