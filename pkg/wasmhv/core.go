@@ -163,7 +163,33 @@ type Core struct {
 	mu     sync.RWMutex
 	visors map[cipher.PubKey]*gobRPCClient
 	self   SelfProvider // the tab's OWN visor (nil for a plain standalone HV)
+
+	// Per-visor caches that make the node list resilient to the wasm visor's
+	// often-marginal dmsg link: a transient RPC timeout no longer blinks a
+	// visor to offline (red-X / blank) or its transport count to 0.
+	cacheMu  sync.Mutex
+	tpCache  map[cipher.PubKey]tpCacheEntry
+	sumCache map[cipher.PubKey]sumCacheEntry
 }
+
+type tpCacheEntry struct {
+	tps []*TransportSummary
+	at  time.Time
+}
+
+type sumCacheEntry struct {
+	s  Summary
+	at time.Time
+}
+
+// tpCacheTTL is how long a fetched transport list is reused before re-fetching
+// (transports change rarely, and re-RPCing every node-list poll adds load to a
+// marginal link). sumGrace is how long a last-known Summary is shown after an
+// RPC failure before the visor is reported offline for real.
+const (
+	tpCacheTTL = 20 * time.Second
+	sumGrace   = 45 * time.Second
+)
 
 // NewCore returns a Core for the given dmsg client + this hypervisor's PK.
 func NewCore(pk cipher.PubKey, dmsgC *dmsg.Client) *Core {
@@ -230,15 +256,62 @@ func (c *Core) overviewOf(pk cipher.PubKey) Overview {
 	if err := c.call(pk, "Overview", &struct{}{}, &ov); err != nil {
 		return Overview{PubKey: pk}
 	}
+	ov.SetSelfTransports(c.transportsForCount(pk))
 	return ov
 }
 
-// summaryOf fetches a visor's Summary, or an offline stub on error.
+// summaryOf fetches a visor's Summary. On a transient RPC failure it returns the
+// last-known Summary within sumGrace (so the node list doesn't blink the visor
+// to offline on a marginal link), else an offline stub.
 func (c *Core) summaryOf(pk cipher.PubKey) Summary {
 	var s Summary
 	if err := c.call(pk, "Summary", &struct{}{}, &s); err != nil {
+		c.cacheMu.Lock()
+		e, ok := c.sumCache[pk]
+		c.cacheMu.Unlock()
+		if ok && time.Since(e.at) < sumGrace {
+			return e.s
+		}
 		return Summary{Overview: &Overview{PubKey: pk}, Online: false}
 	}
 	s.Online = true
+	if s.Overview != nil {
+		s.Overview.SetSelfTransports(c.transportsForCount(pk))
+	}
+	c.cacheMu.Lock()
+	if c.sumCache == nil {
+		c.sumCache = make(map[cipher.PubKey]sumCacheEntry)
+	}
+	c.sumCache[pk] = sumCacheEntry{s: s, at: time.Now()}
+	c.cacheMu.Unlock()
 	return s
+}
+
+// transportsForCount fetches a remote visor's transports (no logs) so the node
+// table's "Total" count is real — remote mirrored overviews arrive with nil
+// transports (the field is unexported + gob-skipped). Cached for tpCacheTTL to
+// avoid re-RPCing every poll; on failure it reuses the last-known list so the
+// count doesn't blink to 0.
+func (c *Core) transportsForCount(pk cipher.PubKey) []*TransportSummary {
+	c.cacheMu.Lock()
+	if e, ok := c.tpCache[pk]; ok && time.Since(e.at) < tpCacheTTL {
+		c.cacheMu.Unlock()
+		return e.tps
+	}
+	c.cacheMu.Unlock()
+
+	var reply []*TransportSummary
+	if err := c.call(pk, "Transports", &transportsIn{ShowLogs: false}, &reply); err != nil {
+		c.cacheMu.Lock()
+		e := c.tpCache[pk]
+		c.cacheMu.Unlock()
+		return e.tps // last-known (nil if never fetched)
+	}
+	c.cacheMu.Lock()
+	if c.tpCache == nil {
+		c.tpCache = make(map[cipher.PubKey]tpCacheEntry)
+	}
+	c.tpCache[pk] = tpCacheEntry{tps: reply, at: time.Now()}
+	c.cacheMu.Unlock()
+	return reply
 }
