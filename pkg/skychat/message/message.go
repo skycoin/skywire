@@ -125,11 +125,18 @@ func (c *Conn) ReadFrame() ([]byte, error) { return ReadFrame(c.Conn) }
 
 // Envelope is the JSON payload shape for the opt-in peer-receipt protocol:
 //
-//	chat-msg: {"type":"chat-msg","id":"<hex>","body":"...","ack":true}
-//	chat-ack: {"type":"chat-ack","id":"<hex>"}
+//	chat-msg:  {"type":"chat-msg","id":"<hex>","body":"...","ack":true}
+//	chat-ack:  {"type":"chat-ack","id":"<hex>"}
+//	chat-read: {"type":"chat-read","id":"<hex>"}
 //
 // A default (no --wait) send writes the plain-text body with no envelope, so the
 // wire stays byte-identical for ordinary chat; the envelope is opt-in at the sender.
+//
+// The three types drive the message-status lifecycle. chat-msg with ack=true
+// asks the recipient's app to send a chat-ack back on receipt (→ "received"
+// status at the sender). chat-read is sent later, when the recipient's UI
+// actually displays the message (→ "read" status). chat-ack/chat-read carry
+// only the id of the chat-msg they refer to.
 type Envelope struct {
 	Type string `json:"type"`
 	ID   string `json:"id"`
@@ -139,8 +146,9 @@ type Envelope struct {
 
 // Envelope type values.
 const (
-	TypeMsg = "chat-msg"
-	TypeAck = "chat-ack"
+	TypeMsg  = "chat-msg"
+	TypeAck  = "chat-ack"
+	TypeRead = "chat-read"
 )
 
 // Marshal encodes the envelope as its JSON wire bytes.
@@ -160,7 +168,7 @@ func ParseEnvelope(payload []byte) (env Envelope, ok bool) {
 		return Envelope{}, false
 	}
 	switch env.Type {
-	case TypeMsg, TypeAck:
+	case TypeMsg, TypeAck, TypeRead:
 		return env, true
 	}
 	return Envelope{}, false

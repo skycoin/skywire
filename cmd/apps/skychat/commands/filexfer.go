@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
 	"io"
 	"mime"
 	"net"
@@ -28,6 +29,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/disintegration/imaging"
+
+	"github.com/skycoin/skywire/cmd/apps/skychat/history"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -102,6 +106,11 @@ func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) 
 	default:
 		accept = isEstablishedPeer(from)
 	}
+	// A file we explicitly requested (backfill) is accepted even from a peer we
+	// haven't otherwise established a chat with — we asked for it.
+	if !accept && isRequestedFile(offer.ID, from) {
+		accept = true
+	}
 	if !accept {
 		appLog("skychat: declining file %q from unestablished peer %s", offer.Name, from)
 		return nil, false
@@ -143,6 +152,47 @@ func safeFileName(name, id string) string {
 	return name
 }
 
+// sentCopyName is the collision-free on-disk name for the sender's kept copy
+// of an outbound file: the transfer's unique id plus the original extension
+// (e.g. "a1b2c3d4e5f60718.png"). The original name is preserved separately for
+// display (chatEvent/history FileName) and for the download filename; the
+// id-based name only exists so a sent file never clobbers a same-named
+// received file or another send. Always safeFileName-idempotent (a hex id + a
+// separator-free extension), so /files/ and /thumb/ resolve it unchanged.
+func sentCopyName(offer xfer.Offer) string {
+	return offer.ID + filepath.Ext(offer.Name)
+}
+
+// copyFile copies src to dst (created/truncated).
+func copyFile(src, dst string) error {
+	in, err := os.Open(src) //nolint:gosec // UI/operator-supplied local source
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }() //nolint:errcheck
+	out, err := os.Create(dst)        //nolint:gosec // dst rooted in downloadsDir
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close() //nolint:errcheck
+		return err
+	}
+	return out.Close()
+}
+
+// saveSentCopy keeps a served copy of an outbound file under the downloads dir
+// (named by sentCopyName) so the sender's own UI and /history can render a
+// thumbnail — the receiver already saves its own copy. DM sends only; the
+// caller skips groups.
+func saveSentCopy(srcPath string, offer xfer.Offer) error {
+	dir, err := downloadsDir()
+	if err != nil {
+		return err
+	}
+	return copyFile(srcPath, filepath.Join(dir, sentCopyName(offer)))
+}
+
 // onXferDone surfaces a completed transfer (either direction) as a chatEvent and
 // logs the result. It runs on the xfer manager's goroutine.
 func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err error) {
@@ -157,10 +207,13 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 		ev.Channel = channelGroup
 		ev.GroupID = offer.Group
 	}
+	var wasRequested bool
 	switch dir {
 	case xfer.Incoming:
 		ev.Dir = "in"
 		ev.From = peer.Hex()
+		wasRequested = isRequestedFile(offer.ID, peer)
+		clearRequestedFile(offer.ID) // fulfilled (or terminal) — drop the pending request
 		if err != nil {
 			ev.FileStatus = "failed"
 			ev.Text = fmt.Sprintf("📎 %s — receive failed: %v", offer.Name, err)
@@ -180,11 +233,64 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 		} else {
 			ev.FileStatus = "sent"
 			ev.Text = fmt.Sprintf("📎 %s (%s)", offer.Name, humanSize(offer.Size))
+			// Point at the sender's kept served copy (DM only) so the "out"
+			// event carries a file_url and the sender's own thumbnail renders.
+			if offer.Group == "" {
+				if d, derr := downloadsDir(); derr == nil {
+					ev.FilePath = filepath.Join(d, sentCopyName(offer))
+				}
+			}
 		}
 	}
-	if hub != nil {
+	// A backfill response (a file we explicitly requested) patches the existing
+	// referenced message rather than creating a new one — emit a file-ready
+	// event carrying the file id + its now-servable URL. Everything else
+	// surfaces as a normal file event.
+	switch {
+	case wasRequested && err == nil:
+		if hub != nil {
+			fileURL := ""
+			if ev.FilePath != "" {
+				fileURL = "/files/" + filepath.Base(ev.FilePath)
+			}
+			if body, mErr := json.Marshal(map[string]any{
+				"channel":  "file-ready",
+				"file_id":  offer.ID,
+				"file_url": fileURL,
+			}); mErr == nil {
+				hub.broadcast(string(body))
+			}
+		}
+	case hub != nil:
 		hub.publishEvent(ev)
 	}
+
+	// Persist normal DM file events so they survive a cache wipe and reappear on
+	// a fresh browser via /history (group files live in the group bucket, and
+	// requested backfill responses patch an existing message — both skipped).
+	// Best-effort — a persistence failure never blocks delivery.
+	if offer.Group == "" && !wasRequested {
+		msg := history.Message{
+			Peer:       peer.Hex(),
+			Outgoing:   dir == xfer.Outgoing,
+			Text:       ev.Text,
+			Timestamp:  time.Now().UTC(),
+			FileID:     offer.ID,
+			FileName:   offer.Name,
+			FileSize:   offer.Size,
+			FileStatus: ev.FileStatus,
+		}
+		if dir == xfer.Incoming {
+			msg.From = peer.Hex()
+		}
+		// Both directions now keep a served copy, so a set FilePath yields the
+		// /files/ URL history uses to re-render the thumbnail on any device.
+		if ev.FilePath != "" {
+			msg.FileURL = "/files/" + filepath.Base(ev.FilePath)
+		}
+		persistMessage(msg)
+	}
+
 	if err != nil {
 		appLog("skychat: file %s %s <-> %s: %v", dir, offer.Name, peer, err)
 	} else {
@@ -250,8 +356,19 @@ func sendFileToPeer(ctx context.Context, peer cipher.PubKey, path string) (strin
 }
 
 // sendFile streams path to peer; when group != "" the offer is stamped with the
-// group id (used by the group path). Shared by 1:1 and group sends.
+// group id (used by the group path). Shared by 1:1 and group sends. Allocates a
+// fresh transfer id, uses the file's base name for display, and keeps a served
+// sender copy.
 func sendFile(ctx context.Context, peer cipher.PubKey, group, path string) (string, error) {
+	return sendFileID(ctx, peer, group, path, newEventID(), filepath.Base(path), true)
+}
+
+// sendFileID is sendFile with an explicit transfer id + display name and
+// control over whether a served sender copy is kept. The re-send (backfill)
+// path passes the ORIGINAL id + name — so the requester correlates the file to
+// the referenced message and sees the real filename — and keepCopy=false (the
+// file is already served locally; re-copying could truncate a same-path source).
+func sendFileID(ctx context.Context, peer cipher.PubKey, group, path, id, name string, keepCopy bool) (string, error) {
 	fileMgrMu.Lock()
 	mgr := fileMgr
 	fileMgrMu.Unlock()
@@ -270,13 +387,23 @@ func sendFile(ctx context.Context, peer cipher.PubKey, group, path string) (stri
 	if fi.IsDir() {
 		return "", fmt.Errorf("%s is a directory", path)
 	}
-	name := filepath.Base(path)
+	if name == "" {
+		name = filepath.Base(path)
+	}
 	offer := xfer.Offer{
-		ID:    newEventID(),
+		ID:    id,
 		Name:  name,
 		Size:  fi.Size(),
 		MIME:  mime.TypeByExtension(filepath.Ext(name)),
 		Group: group,
+	}
+	// Keep a served copy of DM sends so the sender's own view + /history can
+	// render a thumbnail (best-effort; a failure just means no sender-side
+	// URL). Done before SendFile so the copy exists when onXferDone fires.
+	if keepCopy && group == "" {
+		if cErr := saveSentCopy(path, offer); cErr != nil {
+			appLog("skychat: sender copy of %q failed: %v", name, cErr)
+		}
 	}
 	rc, err := mgr.SendFile(ctx, peer, offer, f)
 	if err != nil {
@@ -343,8 +470,13 @@ func humanSize(n int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-// sendTimeout bounds a single outbound file transfer.
-const sendTimeout = 30 * time.Minute
+// sendTimeout bounds a single outbound file transfer. Kept modest so a send to
+// an unreachable / half-open peer fails the /send-file request (and the UI
+// bubble) in a bounded time instead of hanging "pending" for many minutes —
+// the common failure mode when the chat conn has gone stale. Still comfortably
+// covers a normal in-chat image/clip over dmsg; a genuinely huge transfer that
+// needs longer is out of scope for the browser send path.
+const sendTimeout = 3 * time.Minute
 
 // maxUploadMemory is the in-memory portion of a multipart upload before spilling
 // to a temp file.
@@ -360,6 +492,15 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 		if r.Method != http.MethodPost {
 			http.Error(w, "POST only", http.StatusMethodNotAllowed)
 			return
+		}
+		// A file send holds the response open for the whole transfer (a large
+		// file over the mesh can take much longer than the server's default
+		// WriteTimeout), so clear the per-request write deadline the way the SSE
+		// handler does — otherwise the transfer is torn down mid-flight and the
+		// UI sees a spurious failure. Best-effort: a wrapped writer that doesn't
+		// support it still works, just under the default deadline.
+		if err := http.NewResponseController(w).SetWriteDeadline(time.Time{}); err != nil {
+			appLog("skychat: send-file clear write deadline: %v", err)
 		}
 		// A multipart upload spills large bodies to temp files internally.
 		if err := r.ParseMultipartForm(maxUploadMemory); err != nil && r.MultipartForm == nil { //nolint
@@ -395,6 +536,19 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 
 		switch {
 		case groupVal != "":
+			// Visor-managed group (browser /group): publish a file reference on
+			// the feed; members pull the bytes on demand via file-backfill. Falls
+			// back to the standalone --cxo-group fan-out when pairing is off.
+			if pairEnable && pairRPCAlive() {
+				id, url, serr := sendFileToVisorGroup(ctx, groupVal, path, name)
+				cancel()
+				if serr != nil {
+					http.Error(w, serr.Error(), http.StatusBadGateway)
+					return
+				}
+				writeJSON(w, map[string]any{"id": id, "file_url": url, "group": groupVal})
+				return
+			}
 			n, gerr := sendFileToGroup(ctx, path)
 			if gerr != nil {
 				cancel()
@@ -455,9 +609,45 @@ func resolveUploadOrPath(r *http.Request) (path string, cleanup func(), name str
 	return p, nil, filepath.Base(p), nil
 }
 
+// mediaContentType maps a media file extension to its MIME type, or "" for
+// anything not a recognized audio/video type. Used to set an explicit
+// Content-Type before serving so the UI's <video>/<audio> elements play
+// reliably — http.ServeFile otherwise depends on the host's mime.types,
+// which is inconsistent across OSes and often missing webm/ogg/m4a/etc.
+func mediaContentType(name string) string {
+	switch strings.ToLower(filepath.Ext(name)) {
+	case ".mp4", ".m4v":
+		return "video/mp4"
+	case ".webm":
+		return "video/webm"
+	case ".ogv":
+		return "video/ogg"
+	case ".mov":
+		return "video/quicktime"
+	case ".mkv":
+		return "video/x-matroska"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".ogg", ".oga":
+		return "audio/ogg"
+	case ".opus":
+		return "audio/opus"
+	case ".wav":
+		return "audio/wav"
+	case ".m4a", ".aac":
+		return "audio/mp4"
+	case ".flac":
+		return "audio/flac"
+	case ".weba":
+		return "audio/webm"
+	}
+	return ""
+}
+
 // downloadFileHandler serves GET /files/<name> from the downloads dir so a UI can
 // fetch a received file. The name is sanitized to a base name rooted in the
-// downloads dir (no traversal).
+// downloads dir (no traversal). http.ServeFile honors HTTP Range requests, so
+// <video>/<audio> streaming + seeking work without extra handling.
 func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "GET only", http.StatusMethodNotAllowed)
@@ -474,6 +664,12 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	// Set an explicit media Content-Type when we recognize the extension;
+	// http.ServeFile keeps a Content-Type already on the header rather than
+	// re-sniffing, so this wins for audio/video the host's mime table misses.
+	if ct := mediaContentType(name); ct != "" {
+		w.Header().Set("Content-Type", ct)
+	}
 	// name is a sanitized base name (safeFileName strips separators + traversal),
 	// so the join stays rooted in the downloads dir.
 	http.ServeFile(w, r, filepath.Join(dir, name)) //nolint:gosec // name sanitized by safeFileName
@@ -482,4 +678,58 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v) //nolint:errcheck
+}
+
+// thumbMaxDim bounds the longest side of a generated thumbnail. 640px is
+// crisp for an in-chat preview on hi-dpi displays while keeping the JPEG
+// small (tens of KB) — so the browser fetches a lightweight thumbnail
+// instead of decoding the full-resolution original for every preview.
+const thumbMaxDim = 640
+
+// makeThumbnail decodes the image at srcPath and returns a copy scaled to
+// fit within maxDim×maxDim (aspect preserved). Returns an error for a
+// missing file or an undecodable/non-image payload — the caller surfaces
+// that so the UI can fall back to the full file.
+func makeThumbnail(srcPath string, maxDim int) (image.Image, error) { //nolint:unparam
+	img, err := imaging.Open(srcPath)
+	if err != nil {
+		return nil, err
+	}
+	return imaging.Fit(img, maxDim, maxDim, imaging.Lanczos), nil
+}
+
+// thumbnailHandler serves GET /thumb/<name>: a downscaled JPEG of a received
+// image from the downloads dir. On any decode failure (a non-image file, or
+// a format the decoder can't handle) it returns 415 so the UI's <img>
+// onerror falls back to the full file at /files/<name>. The name is
+// sanitized to a base name rooted in the downloads dir (no traversal), the
+// same guard downloadFileHandler uses.
+func thumbnailHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "GET only", http.StatusMethodNotAllowed)
+		return
+	}
+	name := safeFileName(strings.TrimPrefix(r.URL.Path, "/thumb/"), "")
+	if name == "" {
+		http.Error(w, "no file", http.StatusBadRequest)
+		return
+	}
+	dir, err := downloadsDir()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// name is a sanitized base name, so the join stays inside downloadsDir.
+	thumb, err := makeThumbnail(filepath.Join(dir, name), thumbMaxDim)
+	if err != nil {
+		http.Error(w, "not a decodable image", http.StatusUnsupportedMediaType)
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "private, max-age=86400")
+	if err := imaging.Encode(w, thumb, imaging.JPEG); err != nil {
+		// Headers/body may be partially written by now; a log line is all
+		// we can do (the client will see a truncated image and can retry).
+		appLog("skychat: thumbnail encode %q: %v", name, err)
+	}
 }

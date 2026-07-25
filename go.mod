@@ -25,7 +25,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/securecookie v1.1.2
 	github.com/hashicorp/go-version v1.9.0
-	github.com/hashicorp/yamux v0.1.2
 	github.com/ivanpirog/coloredcobra v1.0.1
 	github.com/james-barrow/golang-ipc v1.2.4
 	github.com/jaypipes/ghw v0.25.0
@@ -48,7 +47,6 @@ require (
 	github.com/toqueteos/webbrowser v1.2.1
 	github.com/xtaci/kcp-go v5.4.20+incompatible
 	github.com/yuin/goldmark v1.8.4
-	go.etcd.io/bbolt v1.5.0
 	golang.org/x/net v0.57.0
 	golang.org/x/sync v0.22.0
 	golang.org/x/sys v0.47.0
@@ -77,6 +75,7 @@ require (
 	github.com/google/nftables v0.3.0
 	github.com/google/renameio v1.0.1
 	github.com/hanwen/go-fuse/v2 v2.10.1
+	github.com/hashicorp/yamux v0.1.2
 	github.com/insomniacslk/dhcp v0.0.0-20260719225207-c76316d4aa82
 	github.com/itchyny/gojq v0.12.19
 	github.com/jfreymuth/pulse v0.1.2
@@ -98,6 +97,7 @@ require (
 	github.com/thesyncim/gopus v0.1.1
 	github.com/vishvananda/netlink v1.3.1
 	github.com/xxxserxxx/lingo/v2 v2.0.1
+	go.etcd.io/bbolt v1.5.0
 	go.starlark.net v0.0.0-20260708150628-5395d018f003
 	golang.org/x/time v0.15.0
 	google.golang.org/grpc v1.82.1
@@ -200,7 +200,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
-	github.com/disintegration/imaging v1.6.2 // indirect
+	github.com/disintegration/imaging v1.6.2
 	github.com/distatus/battery v0.11.0
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
