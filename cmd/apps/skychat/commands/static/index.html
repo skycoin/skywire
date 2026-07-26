@@ -743,6 +743,70 @@
       color: var(--text-primary);
     }
 
+    /* Holding the button to record: red, with a soft pulse. touch-action keeps
+       a long-press from scrolling/selecting instead of recording. */
+    .composer-btn {
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .composer-btn.recording,
+    .composer-btn.recording:hover {
+      background: var(--accent-red);
+      border-color: transparent;
+      color: white;
+      transform: scale(1.08);
+      animation: rec-pulse 1.4s ease-in-out infinite;
+    }
+
+    @keyframes rec-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+      50%      { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    }
+
+    /* Recording indicator — stands in for the text input while recording. */
+    .rec-bar {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      font-size: 14px;
+      color: var(--text-primary);
+    }
+
+    .rec-bar.hidden {
+      display: none;
+    }
+
+    .rec-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent-red);
+      flex-shrink: 0;
+      animation: rec-blink 1.2s steps(1, end) infinite;
+    }
+
+    @keyframes rec-blink {
+      0%, 49%   { opacity: 1; }
+      50%, 100% { opacity: 0.15; }
+    }
+
+    .rec-time {
+      font-variant-numeric: tabular-nums;
+      min-width: 34px;
+    }
+
+    .rec-hint {
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
     /* Icon swap: a quick pop so the morph is legible instead of instant. */
     .composer-btn .composer-icon {
       display: block;
@@ -1347,11 +1411,22 @@
         <input type="file" id="fileField" style="display:none" onchange="app.sendFile()" />
       </label>
       <input id="msgField" class="message-input" type="text" placeholder="Type a message..." oninput="app.syncComposerBtn()" />
-      <!-- Morphing button: submits when there is text, otherwise toggles the
-           voice/video recording mode (see app.onComposerBtn). Its type/icon/
-           label are all set by syncComposerBtn(). -->
+      <!-- Takes the input's place while recording: elapsed time + a hint. -->
+      <div id="recBar" class="rec-bar hidden">
+        <span class="rec-dot"></span>
+        <span id="recTime" class="rec-time">0:00</span>
+        <span class="rec-hint">Release to send</span>
+      </div>
+      <!-- Morphing button: submits when there is text, otherwise a tap toggles
+           the voice/video recording mode and a press-and-hold records a voice
+           message (see onComposerBtn / _onComposerDown). Its type/icon/label
+           are all set by syncComposerBtn(). -->
       <button type="submit" id="composerBtn" class="composer-btn" data-mode="send"
-              onclick="app.onComposerBtn(event)"><span class="composer-icon">&#x27A4;</span></button>
+              onclick="app.onComposerBtn(event)"
+              onpointerdown="app._onComposerDown(event)"
+              onpointerup="app._onComposerUp(event)"
+              onpointercancel="app._onComposerUp(event)"
+              oncontextmenu="return false"><span class="composer-icon">&#x27A4;</span></button>
     </form>
   </main>
 
@@ -1503,6 +1578,21 @@
         // arrow; with the field empty it is the recording affordance, either
         // 'mic' (voice message) or 'video' — a user choice kept across reloads.
         this.mediaMode = localStorage.getItem('skychat_media_mode') === 'video' ? 'video' : 'mic';
+        // Voice-message recorder state (see the recording section below). One
+        // recording at a time; every field is reset by _recReset().
+        this.rec = {
+          active: false,     // MediaRecorder is running
+          pending: false,    // getUserMedia in flight (permission prompt may be up)
+          released: false,   // pointer came up while still acquiring the mic
+          cancelled: false,  // discard on stop instead of sending
+          stopping: false,   // stop() already issued, waiting for onstop
+          holdTimer: null,   // press-and-hold threshold timer
+          holdFired: false,  // this gesture became a hold, so its click isn't a tap
+          recorder: null, stream: null, chunks: [],
+          mime: '', ext: 'weba',
+          startedAt: 0, clockTimer: null,
+          dest: null,        // {key, isGroup} the recording belongs to
+        };
         this._mid = 0;       // per-render message id, for identifying a clicked bubble locally
         // Group messages "deleted for me": a persisted set of "<gid>:<ts_nano>"
         // keys, filtered out on every group render/reload (groups reload from
@@ -1520,7 +1610,15 @@
         // behavior) while still notifying for background threads.
         this._winFocused = (typeof document !== 'undefined' && document.hasFocus) ? document.hasFocus() : true;
         window.addEventListener('focus', () => { this._winFocused = true; });
-        window.addEventListener('blur', () => { this._winFocused = false; });
+        window.addEventListener('blur', () => {
+          this._winFocused = false;
+          // Leaving the window ends a hold we can no longer track: stop and
+          // send what was captured rather than holding the mic open.
+          if (this.rec.active) this._stopVoiceRecording(false);
+        });
+        // Safety net for a release that never reaches the button (finger lifted
+        // outside the window). _onComposerUp is a no-op when nothing is running.
+        window.addEventListener('pointerup', () => this._onComposerUp());
         // Tell the server whether this UI can show notifications, so the
         // background process only posts host-OS notifications when no capable
         // UI is attached. The heartbeat keeps the server-side lease fresh while
@@ -2851,9 +2949,12 @@
 
       // onComposerBtn handles the click. In send mode it steps aside and lets
       // the submit reach the form; otherwise the tap toggles mic <-> video.
+      // A click that ends a press-and-hold isn't a tap — that gesture was a
+      // recording, already handled by the pointer handlers.
       onComposerBtn(e) {
         if (this._composerMode() === 'send') return;
         e.preventDefault();
+        if (this.rec.holdFired) return;
         this.toggleMediaMode();
       }
 
@@ -2866,9 +2967,238 @@
           : '&#x1F3A4; Voice message mode');
       }
 
-      // sendFile uploads the picked file to /send-file (multipart) for the
-      // active conversation — a DM (pk) or a group (group id) — and
-      // optimistically renders it. For a DM the bytes ship 1:1; for a group
+      // ---------------------------------------------------------------------
+      // Voice messages
+      //
+      // Press and hold 🎤 to record, release to send. The clip is captured with
+      // MediaRecorder (Opus in a WebM container) and shipped through the plain
+      // file path as voice-<ts>.weba — no new transport: /send-file carries it
+      // and renderFile() already plays .weba inline as <audio>.
+      //
+      // Tap vs hold: the hold threshold below keeps a quick tap (which toggles
+      // mic/video) from opening the mic. Recording only starts once the finger
+      // has been down that long, so a tap never triggers a permission prompt.
+      // ---------------------------------------------------------------------
+
+      _recHoldMs() { return 220; }  // press this long before recording starts
+      _recMinMs() { return 500; }   // shorter than this is treated as a mis-tap
+
+      _recSupported() {
+        return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+      }
+
+      // _recMime picks a container/codec this browser can actually record, with
+      // the file extension that makes it round-trip: .weba (not .webm) so
+      // isAudioFile/mediaContentType class it as audio rather than video.
+      _recMime() {
+        const want = [
+          ['audio/webm;codecs=opus', 'weba'],
+          ['audio/webm', 'weba'],
+          ['audio/ogg;codecs=opus', 'oga'],
+          ['audio/ogg', 'oga'],
+        ];
+        for (const [mime, ext] of want) {
+          if (window.MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)) {
+            return { mime, ext };
+          }
+        }
+        return null;
+      }
+
+      _onComposerDown(e) {
+        this.rec.holdFired = false;
+        if (e.button !== undefined && e.button !== 0) return; // primary button only
+        if (this._composerMode() !== 'mic') return;           // video capture is a later part
+        const btn = document.getElementById('composerBtn');
+        // Capture the pointer so the release reaches us even if the finger
+        // drifts off the button.
+        try { btn.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+        this.rec.holdTimer = setTimeout(() => {
+          this.rec.holdTimer = null;
+          this.rec.holdFired = true;
+          this._startVoiceRecording();
+        }, this._recHoldMs());
+      }
+
+      _onComposerUp() {
+        if (this.rec.holdTimer) {
+          clearTimeout(this.rec.holdTimer);
+          this.rec.holdTimer = null;
+          return; // released before the threshold — a tap, handled by onComposerBtn
+        }
+        if (this.rec.pending) {
+          // Still waiting on the mic (likely a permission prompt). Don't record
+          // a clip the user is no longer holding for; _startVoiceRecording
+          // unwinds when it sees this.
+          this.rec.released = true;
+          return;
+        }
+        if (this.rec.active) this._stopVoiceRecording(false);
+      }
+
+      async _startVoiceRecording() {
+        if (this.rec.active || this.rec.pending) return;
+        if (!this._recSupported()) {
+          // getUserMedia needs a secure context: 127.0.0.1/localhost is fine,
+          // a plain-http LAN address is not.
+          this.showToast(window.isSecureContext === false
+            ? 'Voice messages need a secure context — open Skychat on 127.0.0.1.'
+            : 'This browser can\'t record audio.', 'error');
+          return;
+        }
+        const codec = this._recMime();
+        if (!codec) {
+          this.showToast('This browser has no supported audio recording format.', 'error');
+          return;
+        }
+        const key = this.activeKey();
+        if (!key) {
+          this.showToast('Select a conversation first.', 'error');
+          return;
+        }
+
+        this.rec.pending = true;
+        this.rec.released = false;
+        this.rec.cancelled = false;
+
+        let stream;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        } catch (err) {
+          this.rec.pending = false;
+          const name = err && err.name;
+          this.showToast(
+            name === 'NotAllowedError' ? 'Microphone access denied.'
+              : name === 'NotFoundError' ? 'No microphone found.'
+                : name === 'NotReadableError' ? 'Microphone is in use by another app.'
+                  : `Microphone error: ${(err && err.message) || name || 'unknown'}`,
+            'error');
+          return;
+        }
+
+        // The hold ended while the permission prompt was up: there's nothing to
+        // record, so let the tracks go and tell the user to hold again.
+        if (this.rec.released) {
+          stream.getTracks().forEach(t => t.stop());
+          this.rec.pending = false;
+          this.showToast('Microphone ready — hold &#x1F3A4; to record.');
+          return;
+        }
+
+        let recorder;
+        try {
+          recorder = new MediaRecorder(stream, { mimeType: codec.mime });
+        } catch (err) {
+          stream.getTracks().forEach(t => t.stop());
+          this.rec.pending = false;
+          this.showToast(`Can't start recorder: ${(err && err.message) || 'unknown error'}`, 'error');
+          return;
+        }
+
+        this.rec.chunks = [];
+        recorder.ondataavailable = ev => { if (ev.data && ev.data.size) this.rec.chunks.push(ev.data); };
+        recorder.onstop = () => this._finishVoiceRecording();
+        recorder.onerror = () => { this.rec.cancelled = true; };
+
+        this.rec.recorder = recorder;
+        this.rec.stream = stream;
+        this.rec.mime = codec.mime;
+        this.rec.ext = codec.ext;
+        this.rec.dest = { key, isGroup: !!this.group };
+        this.rec.startedAt = Date.now();
+        this.rec.pending = false;
+        this.rec.active = true;
+
+        recorder.start();
+        this._recShowUI(true);
+      }
+
+      // _stopVoiceRecording ends the take; the actual send happens in
+      // _finishVoiceRecording, which the recorder's onstop drives.
+      _stopVoiceRecording(cancel) {
+        if (!this.rec.active || this.rec.stopping) return;
+        this.rec.stopping = true;
+        this.rec.cancelled = !!cancel;
+        try {
+          this.rec.recorder.stop();
+        } catch (err) {
+          this._finishVoiceRecording(); // recorder already dead — unwind by hand
+        }
+      }
+
+      _finishVoiceRecording() {
+        if (!this.rec.active) return;
+        const { chunks, mime, ext, startedAt, dest, cancelled } = this.rec;
+        const ms = Date.now() - startedAt;
+        this._recReset();
+        this._recShowUI(false);
+
+        if (cancelled) return;
+        const blob = new Blob(chunks, { type: mime });
+        if (ms < this._recMinMs() || !blob.size) {
+          this.showToast('Hold &#x1F3A4; to record a voice message.');
+          return;
+        }
+
+        const name = `voice-${this._recStamp(new Date(startedAt))}.${ext}`;
+        const file = new File([blob], name, { type: mime });
+        this._uploadFile(file, {
+          dest,
+          text: '\u{1F3A4} Voice message',
+          sentToast: 'Voice message sent.',
+        });
+      }
+
+      // _recReset releases the mic and clears every per-recording field. The
+      // tracks must be stopped or the browser keeps showing the recording
+      // indicator (and holds the device) after the clip is done.
+      _recReset() {
+        if (this.rec.stream) this.rec.stream.getTracks().forEach(t => t.stop());
+        if (this.rec.clockTimer) clearInterval(this.rec.clockTimer);
+        this.rec.active = false;
+        this.rec.pending = false;
+        this.rec.released = false;
+        this.rec.cancelled = false;
+        this.rec.stopping = false;
+        this.rec.recorder = null;
+        this.rec.stream = null;
+        this.rec.chunks = [];
+        this.rec.clockTimer = null;
+        this.rec.startedAt = 0;
+        this.rec.dest = null;
+      }
+
+      // _recShowUI swaps the text input for the recording indicator (and back)
+      // and runs the elapsed clock.
+      _recShowUI(on) {
+        const bar = document.getElementById('recBar');
+        const field = document.getElementById('msgField');
+        const btn = document.getElementById('composerBtn');
+        if (!bar || !field || !btn) return;
+        bar.classList.toggle('hidden', !on);
+        field.classList.toggle('hidden', on);
+        btn.classList.toggle('recording', on);
+        if (!on) return;
+        const tick = () => {
+          const secs = Math.floor((Date.now() - this.rec.startedAt) / 1000);
+          document.getElementById('recTime').textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+        };
+        tick();
+        this.rec.clockTimer = setInterval(tick, 250);
+      }
+
+      // _recStamp renders a local-time filename stamp: 20260727-140322.
+      _recStamp(d) {
+        const p = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+      }
+
+      // sendFile uploads the file picked with 📎; _uploadFile below does the
+      // work for any File — a picked attachment or a recorded voice clip.
+      //
+      // The upload goes to /send-file (multipart) for the active conversation
+      // — a DM (pk) or a group (group id) — and is rendered
+      // optimistically. For a DM the bytes ship 1:1; for a group
       // only a reference goes on the feed and members pull the bytes on demand
       // (so the "sent" toast means "published", not "delivered to everyone").
       // The local object-URL gives an instant image preview (dropped from
@@ -2876,14 +3206,23 @@
       sendFile() {
         const input = document.getElementById('fileField');
         if (!input.files || !input.files.length) return;
-        const isGroup = !!this.group;
-        const destination = isGroup ? this.group : this.recipient;
+        const file = input.files[0];
+        input.value = '';
+        this._uploadFile(file);
+      }
+
+      // _uploadFile ships one File (a picked attachment or a recorded voice/
+      // video clip — same wire path either way) to the active conversation.
+      // opts.text overrides the bubble's caption/preview line; opts.dest
+      // ({key, isGroup}) pins the upload to a thread other than the open one,
+      // for a recording whose thread changed while it was running.
+      _uploadFile(file, opts = {}) {
+        const isGroup = opts.dest ? !!opts.dest.isGroup : !!this.group;
+        const destination = opts.dest ? opts.dest.key : (isGroup ? this.group : this.recipient);
         if (!destination) {
           this.showToast('Select a conversation first.', 'error');
-          input.value = '';
           return;
         }
-        const file = input.files[0];
 
         const form = new FormData();
         if (isGroup) form.append('group', destination);
@@ -2894,7 +3233,7 @@
         const message = {
           ts: new Date(),
           from: 'me',
-          text: '📎 ' + file.name,
+          text: opts.text || ('📎 ' + file.name),
           file: { name: file.name, size: file.size, status: 'sending', url: localUrl, local: true },
           _file: file, // retained in-session so a failed transfer can be retried (see resendFile); stripped on save
           group: isGroup || undefined,
@@ -2904,7 +3243,6 @@
         this.addMsgToList(destination, message, { group: isGroup });
         const msgArea = document.getElementById('messages');
         msgArea.scrollTop = msgArea.scrollHeight;
-        input.value = '';
 
         // For images, swap the ephemeral blob preview for a persistent
         // data-URL thumbnail so a sent image still shows after a reload (DM
@@ -2931,7 +3269,7 @@
             }
             message.file.status = 'sent';
             this._patchStatusTick(message);
-            this.showToast('File sent.');
+            this.showToast(opts.sentToast || 'File sent.');
             // The response carries the server-assigned file id so a re-request
             // can locate the bytes and the id matches the feed reference other
             // members see.
