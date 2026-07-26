@@ -99,6 +99,31 @@ func TestHandleFileRequestFrame_Parsing(t *testing.T) {
 	}
 }
 
+func TestHandleFileRequestFrame_HeldFileReSend(t *testing.T) {
+	if appLog == nil {
+		appLog = func(string, ...any) {}
+	}
+	peer, _ := cipher.GenerateKeyPair()
+
+	// Seed a sender-copy (<id><ext>) so findFileByID hits and the holder path
+	// re-sends. The re-send goroutine fails fast (fileMgr is nil in unit tests),
+	// which is fine — we only assert the frame was recognized + consumed.
+	dir, err := downloadsDir()
+	if err != nil {
+		t.Fatalf("downloadsDir: %v", err)
+	}
+	held := filepath.Join(dir, "held-req-id.png")
+	if err := os.WriteFile(held, []byte("img-bytes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Remove(held) }) //nolint
+
+	req, _ := json.Marshal(fileReqMsg{Type: fileReqType, FileID: "held-req-id", Name: "pretty.png"}) //nolint:errcheck
+	if !handleFileRequestFrame(context.Background(), peer, req) {
+		t.Error("a file-request for a held file should be consumed")
+	}
+}
+
 func TestRequestFileHandler_Validation(t *testing.T) {
 	if appLog == nil {
 		appLog = func(string, ...any) {}
@@ -117,6 +142,13 @@ func TestRequestFileHandler_Validation(t *testing.T) {
 	h(rr, httptest.NewRequest(http.MethodPost, "/request-file", strings.NewReader(`{"pk":"x"}`)))
 	if rr.Code != http.StatusBadRequest {
 		t.Errorf("no file_id: code=%d, want 400", rr.Code)
+	}
+
+	// Malformed JSON body → 400 (decode error, before the field checks).
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodPost, "/request-file", strings.NewReader(`{not json`)))
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("bad body: code=%d, want 400", rr.Code)
 	}
 
 	// Bad PK.
