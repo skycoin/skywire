@@ -193,6 +193,34 @@ func TestVoiceLevelsHandler(t *testing.T) {
 	}
 }
 
+func TestVoiceAudioHandler(t *testing.T) {
+	fake := &voiceAPI{sent: []int16{1, 2, 3}, recv: []int16{-4, -5}}
+	withFakePairRPC(t, fake)
+
+	rr := httptest.NewRecorder()
+	voiceAudioHandler()(rr, httptest.NewRequest(http.MethodGet, "/voice/audio?call=c1", nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("audio: code=%d body=%q", rr.Code, rr.Body.String())
+	}
+	var pcm struct {
+		Sent []int16 `json:"sent"`
+		Recv []int16 `json:"recv"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &pcm); err != nil {
+		t.Fatal(err)
+	}
+	if len(pcm.Sent) != 3 || len(pcm.Recv) != 2 || pcm.Sent[0] != 1 || pcm.Recv[0] != -4 {
+		t.Errorf("pcm = %+v", pcm)
+	}
+
+	// Missing call param → 400.
+	rr = httptest.NewRecorder()
+	voiceAudioHandler()(rr, httptest.NewRequest(http.MethodGet, "/voice/audio", nil))
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("no call: code=%d, want 400", rr.Code)
+	}
+}
+
 func TestVoiceHandlers_503WhenRPCDown(t *testing.T) {
 	pairRPCMu.Lock()
 	prev := pairRPC
