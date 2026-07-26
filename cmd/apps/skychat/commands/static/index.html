@@ -402,6 +402,7 @@
     .messages-container {
       flex: 1;
       overflow-y: auto;
+      overflow-x: hidden;
       padding: 20px;
       display: flex;
       flex-direction: column;
@@ -411,6 +412,11 @@
     .message-row {
       display: flex;
       flex-direction: column;
+      /* A flex item defaults to min-width:auto, which lets a long unbreakable
+         token (URL, hash) stretch the row past the panel and force a
+         horizontal scrollbar. min-width:0 lets it shrink so the bubble wraps. */
+      min-width: 0;
+      max-width: 100%;
     }
 
     .message-row.sent {
@@ -427,7 +433,9 @@
       border-radius: 16px;
       font-size: 14px;
       line-height: 1.4;
-      word-wrap: break-word;
+      /* Break long words/URLs instead of overflowing the bubble. */
+      overflow-wrap: break-word;
+      word-break: break-word;
       animation: messageIn 0.2s ease-out;
     }
 
@@ -454,12 +462,146 @@
       border-bottom-left-radius: 4px;
     }
 
+    .message-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .message-row.sent .message-meta { flex-direction: row-reverse; }
+
     .message-time {
       font-size: 10px;
       color: var(--text-muted);
-      margin-top: 4px;
       padding: 0 4px;
     }
+
+    /* Delivery-status tick on our own DM bubbles (pending→sent→received→read,
+       or failed). received/read are the WhatsApp-style double tick; read is
+       tinted. */
+    .msg-status {
+      font-size: 10px;
+      line-height: 1;
+      color: var(--text-muted);
+      padding: 0 2px;
+      cursor: default;
+      user-select: none;
+      background: none;
+      border: none;
+      font-family: inherit;
+    }
+    .msg-status.pending { opacity: 0.6; }
+    .msg-status.read { color: #4aa3ff; }
+    .msg-status.failed { color: var(--danger, #e5484d); font-weight: 600; }
+    /* The failed tick is a click-to-resend button. */
+    button.msg-status.failed { cursor: pointer; }
+    button.msg-status.failed:hover { text-decoration: underline; }
+
+    /* Reply affordance (appears on hover), quote block, compose chip */
+    .reply-link {
+      background: none;
+      border: none;
+      padding: 0;
+      font-size: 10px;
+      color: var(--text-muted);
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .message-row:hover .reply-link { opacity: 1; }
+    .reply-link:hover { color: var(--text-primary); text-decoration: underline; }
+
+    .reply-quote {
+      border-left: 3px solid var(--msg-sent);
+      padding: 3px 8px;
+      margin-bottom: 6px;
+      background: rgba(127, 127, 127, 0.15);
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1.3;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .reply-quote-who { font-weight: 600; font-size: 11px; color: var(--msg-sent); }
+    .reply-quote-text {
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .message-row.sent .reply-quote {
+      background: rgba(255, 255, 255, 0.18);
+      border-left-color: rgba(255, 255, 255, 0.6);
+    }
+    .message-row.sent .reply-quote-who,
+    .message-row.sent .reply-quote-text { color: rgba(255, 255, 255, 0.9); }
+
+    .reply-chip {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      margin: 0 12px 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--msg-sent);
+      border-radius: 8px;
+    }
+    .reply-chip-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+    .reply-chip-who { font-size: 11px; font-weight: 600; color: var(--msg-sent); }
+    .reply-chip-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .reply-chip-x {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 18px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .reply-chip-x:hover { color: var(--text-primary); }
+
+    .message-row.reply-highlight .message-bubble { animation: replyFlash 1.5s ease-out; }
+    @keyframes replyFlash {
+      0% { box-shadow: 0 0 0 3px var(--msg-sent); }
+      100% { box-shadow: 0 0 0 0 transparent; }
+    }
+
+    .msg-menu-btn { font-size: 13px; }
+    .msg-menu {
+      position: fixed;
+      z-index: 1000;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+      min-width: 160px;
+    }
+    .msg-menu button {
+      background: none;
+      border: none;
+      text-align: left;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 13px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+    .msg-menu button:hover { background: var(--bg-hover); }
+    .msg-menu button.danger { color: var(--accent-red); }
+    .msg-menu button.danger:hover { background: rgba(239, 68, 68, 0.1); }
 
     .date-divider {
       display: flex;
@@ -573,6 +715,139 @@
 
     .send-btn:active {
       transform: scale(0.98);
+    }
+
+    /* Media & file attachments */
+    .attach-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      font-size: 16px;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .attach-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .message-bubble.media {
+      padding: 6px;
+      max-width: 320px;
+    }
+
+    .media-image {
+      display: block;
+      max-width: 100%;
+      max-height: 320px;
+      border-radius: 12px;
+      cursor: pointer;
+      object-fit: cover;
+    }
+
+    .media-caption {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin: 6px 4px 2px;
+      word-break: break-all;
+    }
+
+    .file-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 180px;
+      max-width: 300px;
+    }
+
+    .file-card .file-icon {
+      font-size: 24px;
+      flex-shrink: 0;
+    }
+
+    .file-card .file-meta {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .file-card .file-name {
+      font-size: 13px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .file-card .file-sub {
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .file-card .file-dl {
+      flex-shrink: 0;
+      color: inherit;
+      text-decoration: none;
+      font-size: 18px;
+      opacity: 0.8;
+    }
+
+    .file-card .file-dl:hover {
+      opacity: 1;
+    }
+
+    /* Image lightbox — click a chat thumbnail to view it full size */
+    .lightbox-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.92);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 200;
+      cursor: zoom-out;
+      padding: 24px;
+    }
+
+    .lightbox-overlay.visible {
+      display: flex;
+    }
+
+    .lightbox-img {
+      max-width: 100%;
+      max-height: 100%;
+      border-radius: 8px;
+      box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    /* Inline video & audio players */
+    .media-video {
+      display: block;
+      max-width: 100%;
+      max-height: 360px;
+      border-radius: 12px;
+      background: #000;
+    }
+
+    .media-audio {
+      display: block;
+      width: 260px;
+      max-width: 100%;
+    }
+
+    .media-caption .media-dl {
+      color: var(--accent-blue);
+      text-decoration: none;
+    }
+
+    .media-caption .media-dl:hover {
+      text-decoration: underline;
     }
 
     /* Toast Notifications */
@@ -737,6 +1012,96 @@
       }
     }
 
+    /* Groups */
+    .groups-section { border-bottom: 1px solid var(--border-color); }
+    .groups-section.hidden { display: none; }
+
+    .groups-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--accent-green);
+    }
+
+    .groups-actions { display: flex; gap: 4px; }
+
+    .group-hdr-btn {
+      background: transparent;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      font-size: 13px;
+      width: 22px;
+      height: 22px;
+      border-radius: 4px;
+      cursor: pointer;
+      line-height: 1;
+    }
+
+    .group-hdr-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    .group-list { list-style: none; }
+
+    /* A pinned conversation is rendered in #pinnedList; its copy in the normal
+       list is hidden so it isn't shown twice. */
+    li.pin-dup { display: none; }
+    .icon-btn.pinned-active { color: var(--msg-sent); border-color: var(--msg-sent); }
+
+    .group-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      cursor: pointer;
+      border-bottom: 1px solid var(--border-color);
+      transition: background 0.2s;
+    }
+
+    .group-item:hover { background: var(--bg-hover); }
+    .group-item.active { background: var(--bg-tertiary); border-left: 3px solid var(--accent-green); }
+
+    .group-avatar-sm, .group-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 12px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+      color: var(--accent-green);
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .group-avatar { width: 40px; height: 40px; font-size: 18px; }
+    .group-header-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    .msg-sender {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--accent-green);
+      margin: 0 4px 2px;
+      font-family: 'Monaco', 'Menlo', monospace;
+    }
+
+    .message-row.sent .msg-sender { display: none; }
+
+    .cg-input {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
     .hidden {
       display: none !important;
     }
@@ -757,9 +1122,23 @@
         <button type="submit" class="btn btn-icon" title="Add contact">+</button>
       </form>
     </div>
+    <div id="pinnedSection" class="groups-section hidden">
+      <div class="groups-header"><span>Pinned</span></div>
+      <ul id="pinnedList" class="recipient-list"></ul>
+    </div>
     <div id="invitesSection" class="invites-section hidden">
       <div class="invites-header">Pending Pair Invites</div>
       <div id="invitesList"></div>
+    </div>
+    <div id="groupsSection" class="groups-section hidden">
+      <div class="groups-header">
+        <span>Groups</span>
+        <div class="groups-actions">
+          <button class="group-hdr-btn" onclick="app.openCreateGroup()" title="Create group">+</button>
+          <button class="group-hdr-btn" onclick="app.openJoinGroup()" title="Join a group by invite">&#x2913;</button>
+        </div>
+      </div>
+      <ul id="groups" class="group-list"></ul>
     </div>
     <ul id="recipients" class="recipient-list"></ul>
   </aside>
@@ -771,10 +1150,41 @@
         <div class="chat-header-pk" id="headerPk">-</div>
       </div>
       <div class="chat-header-actions">
+        <button id="dmPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
         <button id="pairToggleBtn" class="icon-btn hidden" onclick="app.togglePair()" title="Pair / unpair via CXO">&#x29B5;</button>
         <button class="icon-btn" onclick="app.copyPk()" title="Copy public key">&#x2398;</button>
         <button class="icon-btn" onclick="app.openSettings()" title="Contact settings">&#x2699;</button>
-        <button class="icon-btn danger" onclick="app.deleteChat()" title="Delete chat">&#x2715;</button>
+        <button class="icon-btn danger" onclick="app.deleteChat()" title="Delete chat" aria-label="Delete chat">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="groupHeader" class="chat-header hidden">
+      <div class="chat-header-info">
+        <div class="group-avatar">#</div>
+        <div>
+          <div class="chat-header-pk" id="groupHeaderName">-</div>
+          <div class="group-header-sub" id="groupHeaderSub"></div>
+        </div>
+      </div>
+      <div class="chat-header-actions">
+        <button id="groupPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
+        <button class="icon-btn" onclick="app.showGroupInvite()" title="Copy invite link">&#x1F517;</button>
+        <button class="icon-btn" onclick="app.leaveGroup()" title="Leave group">&#x21AA;</button>
+        <button class="icon-btn danger" onclick="app.deleteGroup()" title="Delete group (owner only)" aria-label="Delete group">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line>
+            <line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -786,12 +1196,18 @@
 
     <ul id="messages" class="messages-container hidden"></ul>
 
+    <div id="replyChip" class="reply-chip hidden"></div>
+
     <form id="msgForm" class="message-form hidden" autocomplete="off" onsubmit="app.sendMessage(this); return false;">
       <select id="networkSelect" class="network-select" title="Network type">
         <option value="skynet">Skynet</option>
         <option value="dmsg">DMSG</option>
         <option value="cxo" id="cxoNetworkOption" class="hidden">CXO (paired)</option>
       </select>
+      <label class="attach-btn" title="Attach a file">
+        &#x1F4CE;
+        <input type="file" id="fileField" style="display:none" onchange="app.sendFile()" />
+      </label>
       <input id="msgField" class="message-input" type="text" placeholder="Type a message..." />
       <button type="submit" class="send-btn">Send</button>
     </form>
@@ -814,8 +1230,41 @@
     </div>
   </div>
 
+  <!-- Create Group Modal -->
+  <div id="createGroupModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Create Group</h3>
+      <input id="cgName" class="cg-input" type="text" placeholder="Group name" />
+      <select id="cgMode" class="cg-input">
+        <option value="public">Public</option>
+        <option value="private">Private (encrypted)</option>
+      </select>
+      <div class="modal-actions">
+        <button class="btn" onclick="app.createGroup()">Create</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('createGroupModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Join Group Modal -->
+  <div id="joinGroupModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Join Group</h3>
+      <input id="jgInvite" class="cg-input" type="text" placeholder="Paste invite link (skychat:invite:...)" />
+      <div class="modal-actions">
+        <button class="btn" onclick="app.joinGroup()">Join</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('joinGroupModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Image Lightbox -->
+  <div id="lightbox" class="lightbox-overlay" onclick="app.closeLightbox()">
+    <img id="lightboxImg" class="lightbox-img" src="" alt="" />
+  </div>
 
   <script>
     class Chat {
@@ -829,12 +1278,25 @@
         this.pairedSet = new Set();
         this.pairAvailable = false;
         this.pendingInvites = new Set();
+        this.groups = [];
+        this.group = null;   // active group id (null when a DM is selected)
+        this.myPK = null;    // this visor's PK, for group self-echo dedup
+        this.replyTo = null; // {sender, ts, preview} when composing a reply, else null
+        this._mid = 0;       // per-render message id, for identifying a clicked bubble locally
+        // Group messages "deleted for me": a persisted set of "<gid>:<ts_nano>"
+        // keys, filtered out on every group render/reload (groups reload from
+        // visor history, so a local hide needs to survive here, not in the cache).
+        this.hiddenGroup = new Set(this._loadHiddenGroup());
+        this.pinned = localStorage.getItem('skychat_pinned') || null; // "dm:<pk>" | "grp:<gid>" | null
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
         this._sseSubscribe();
         this.syncPairedFromVisor();
         this.syncHistoryPeers();
+        this.syncMyPK();
+        this.syncGroups();
+        this.renderPinned();
       }
 
       showToast(message, type = 'success') {
@@ -875,15 +1337,23 @@
         document.getElementById('recipients').appendChild(li);
 
         this.updateUnreadBadges();
+        this._syncPinHide(this._pinParts()); // hide this item's copy if it's the pinned one
       }
 
       _showMessage(msg) {
+        // Append with insertAdjacentHTML (NOT innerHTML +=): the latter
+        // re-serializes and re-parses the whole message list on every new
+        // message, which resets the scroll to the top, replays the entry
+        // animation on every bubble, and reloads all media. insertAdjacentHTML
+        // parses only the new markup and appends it, leaving existing nodes —
+        // and the scroll position — untouched.
+        const msgArea = document.getElementById('messages');
         if (msg.date) {
           const dateStr = msg.date.toLocaleDateString('en-US', {
             weekday: 'short', month: 'short', day: 'numeric'
           });
-          document.getElementById('messages').innerHTML +=
-            `<div class="date-divider"><span>${dateStr}</span></div>`;
+          msgArea.insertAdjacentHTML('beforeend',
+            `<div class="date-divider"><span>${this.escapeHtml(dateStr)}</span></div>`);
         } else {
           let rowClass = msg.from === 'me' ? 'sent' : 'received';
           if (msg.viaPair) rowClass += ' via-pair';
@@ -891,18 +1361,38 @@
             hour: '2-digit', minute: '2-digit', hour12: false
           });
 
-          if (msg.from !== 'me' && !this.recipients.includes(msg.from)) {
+          if (!msg.group && msg.from !== 'me' && !this.recipients.includes(msg.from)) {
             this._addRecipient(msg.from);
           }
 
-          const msgArea = document.getElementById('messages');
           const wasAtBottom = (msgArea.scrollHeight - msgArea.scrollTop) <= msgArea.clientHeight + 50;
 
-          msgArea.innerHTML += `
-            <div class="message-row ${rowClass}">
-              <div class="message-bubble">${this.escapeHtml(msg.text)}</div>
-              <div class="message-time">${time}</div>
-            </div>`;
+          const senderLabel = (msg.group && msg.from !== 'me')
+            ? `<div class="msg-sender">${this.escapeHtml(this.shortPk(msg.sender || msg.from))}</div>` : '';
+          const bubbleClass = 'message-bubble' + (msg.file ? ' media' : '');
+          const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(msg.text);
+          const quoteHtml = msg.reply ? this._renderQuote(msg.reply) : '';
+          // Row identity (data-*) lets a later reply quote this message and
+          // scroll back to it, and lets the menu act on it. senderAttr is 'me'
+          // for our own messages, else the author PK; mid identifies the bubble
+          // locally; ts_nano (groups) is the exact delete/reply target.
+          const senderAttr = msg.from === 'me' ? 'me' : (msg.sender || msg.from || '');
+          const tsIso = (msg.ts instanceof Date && !isNaN(msg.ts)) ? msg.ts.toISOString() : '';
+          if (msg.mid == null) msg.mid = ++this._mid;
+          // Our own bubbles (text OR file) carry a delivery-status tick; the
+          // file tick is derived from the transfer state (see _msgTickStatus).
+          const statusTick = (msg.from === 'me') ? this._statusTick(this._msgTickStatus(msg), this._tickMode(msg)) : '';
+          msgArea.insertAdjacentHTML('beforeend', `
+            <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}" data-mid="${msg.mid}" data-tsnano="${this.escapeAttr(msg.tsNano != null ? String(msg.tsNano) : '')}">
+              ${senderLabel}
+              <div class="${bubbleClass}">${quoteHtml}${bubbleInner}</div>
+              <div class="message-meta">
+                <button class="reply-link" onclick="app.startReply(this)" title="Reply">&#x21A9; Reply</button>
+                <button class="reply-link msg-menu-btn" onclick="app.openMsgMenu(this)" title="More">&#x22EF;</button>
+                <span class="message-time">${time}</span>
+                ${statusTick}
+              </div>
+            </div>`);
 
           if (wasAtBottom) {
             msgArea.scrollTop = msgArea.scrollHeight;
@@ -914,6 +1404,592 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      // escapeAttr escapes a value for safe interpolation inside an HTML
+      // attribute. escapeHtml leaves quotes intact, which is unsafe for a
+      // src/href built from a peer-supplied file name.
+      escapeAttr(s) {
+        return String(s == null ? '' : s)
+          .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+
+      // ---- DM message status (failed/pending/sent/received/read) -----
+
+      // _statusTick renders the delivery-status glyph shown on our own bubbles
+      // (DM + group, text + file). received/read are a double tick (read is
+      // tinted via CSS) and only occur for DMs; group bubbles stop at
+      // sent/failed. resendable=false renders a plain failed glyph instead of
+      // the click-to-resend button (files can't be resent from the cached
+      // bubble — the bytes are gone once the upload completes).
+      _statusTick(status, mode = 'text') {
+        // mode: 'text' → click to resend the message; 'file' → click to retry
+        // the upload (the File object is retained in-session); 'plain' → no
+        // action (e.g. a failed file after reload, whose bytes are gone).
+        if (status === 'failed') {
+          if (mode === 'text') {
+            return `<button type="button" class="msg-status failed" onclick="app.resendMessage(this)" title="Failed to send — click to resend">⚠ Resend</button>`;
+          }
+          if (mode === 'file') {
+            return `<button type="button" class="msg-status failed" onclick="app.resendFile(this)" title="Transfer failed — click to retry">⚠ Retry</button>`;
+          }
+          return `<span class="msg-status failed" title="Transfer failed">⚠</span>`;
+        }
+        const map = {
+          pending:  { cls: 'pending',  txt: '○',       title: 'Sending…' }, // ○
+          sent:     { cls: 'sent',     txt: '✓',       title: 'Sent' },          // ✓
+          received: { cls: 'received', txt: '✓✓', title: 'Received' },       // ✓✓
+          read:     { cls: 'read',     txt: '✓✓', title: 'Read' },           // ✓✓ (blue)
+        };
+        const s = map[status] || map.sent;
+        return `<span class="msg-status ${s.cls}" title="${s.title}">${s.txt}</span>`;
+      }
+
+      // _tickMode picks how a failed tick behaves: text bubbles resend; file
+      // bubbles retry the upload only while the File object is still held
+      // in-session (gone after reload → 'plain', no action).
+      _tickMode(msg) {
+        if (!msg.file) return 'text';
+        return msg._file ? 'file' : 'plain';
+      }
+
+      // _msgTickStatus is the tick status for a bubble. Text bubbles use the
+      // receipts lifecycle (msg.status). File bubbles derive it from the file
+      // transfer state: sending→pending, failed→failed, and a completed 1:1
+      // transfer is delivery-confirmed (received) while a group publish only
+      // means "on the feed" (sent). A file also advances to "read" when the
+      // recipient's read receipt lands (handleDmStatus sets msg.status='read').
+      _msgTickStatus(msg) {
+        if (!msg.file) return msg.status || 'sent';
+        if (msg.status === 'read') return 'read'; // read receipt for a viewed file
+        const fs = msg.file.status;
+        if (fs === 'sending') return 'pending';
+        if (fs === 'failed') return 'failed';
+        if (fs === 'received') return 'received';
+        return msg.group ? 'sent' : 'received';
+      }
+
+      // _setMsgStatus advances a message's status (monotonically — a late 'sent'
+      // never clobbers a 'read' that arrived first), persists the DM thread (not
+      // groups — they reload from visor history), and repaints the bubble's tick
+      // in place. 'failed' only replaces a bubble still pending.
+      _setMsgStatus(key, message, status) {
+        if (!message) return;
+        const order = ['pending', 'sent', 'received', 'read'];
+        if (status === 'failed') {
+          if (message.status && message.status !== 'pending') return;
+          message.status = 'failed';
+        } else {
+          const next = order.indexOf(status);
+          if (next < 0 || next <= order.indexOf(message.status)) return;
+          message.status = status;
+        }
+        if (key && this.messages[key] && !message.group) this.saveChat(key);
+        this._patchStatusTick(message);
+      }
+
+      // _patchStatusTick swaps the tick glyph on an already-rendered own bubble
+      // (DM or group, text or file; no-op when the thread isn't on screen).
+      _patchStatusTick(message) {
+        if (!message || message.from !== 'me' || message.mid == null) return;
+        const row = document.querySelector(`.message-row[data-mid="${message.mid}"]`);
+        if (!row) return;
+        const el = row.querySelector('.msg-status');
+        if (el) el.outerHTML = this._statusTick(this._msgTickStatus(message), this._tickMode(message));
+      }
+
+      // handleDmStatus applies an inbound dm-status receipt {id,status,peer} to
+      // the matching outbound bubble in that peer's thread. Text bubbles match
+      // by wireId; file bubbles by the transfer id (the file event's id is the
+      // file id, so a read receipt for a viewed file carries file.id).
+      handleDmStatus(data) {
+        const key = this.processPk(data.peer);
+        const list = this.messages[key];
+        if (!list) return;
+        const m = list.find(x => x && x.from === 'me' &&
+          ((x.wireId && x.wireId === data.id) || (x.file && x.file.id && x.file.id === data.id)));
+        if (m) this._setMsgStatus(key, m, data.status);
+      }
+
+      // _sendReadReceipts tells pk we've displayed its inbound messages so the
+      // sender's bubbles advance to "read". Each id is reported once.
+      _sendReadReceipts(pk) {
+        const list = this.messages[pk];
+        if (!pk || !list) return;
+        const ids = [];
+        list.forEach(m => {
+          if (m && m.from !== 'me' && m.wireId && !m._readSent) {
+            ids.push(m.wireId);
+            m._readSent = true;
+          }
+        });
+        if (!ids.length) return;
+        fetch('/read-receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk, ids }),
+        }).catch(() => {});
+      }
+
+      // _deliverDM sends an already-composed DM bubble over the wire and advances
+      // its status: sent (frame left this machine) or failed. On the receipts
+      // path (non-cxo) it captures the server's wire id so later received/read
+      // receipts can match. Shared by the first send and resend.
+      _deliverDM(destination, message, wireText, network) {
+        const useReceipts = network !== 'cxo';
+        let url, body;
+        if (network === 'cxo') {
+          url = `/pair/${destination}/message`;
+          body = JSON.stringify({ text: wireText });
+        } else {
+          url = '/message';
+          body = JSON.stringify({ recipient: destination, message: wireText, network: network, receipts: true });
+        }
+        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+          .then(res => {
+            if (!res.ok) {
+              return res.text().then(text => {
+                this._setMsgStatus(destination, message, 'failed');
+                this.showToast(`Failed: ${text}`, 'error');
+              });
+            }
+            return res.json().then(j => {
+              if (useReceipts && j && j.id) message.wireId = j.id;
+              this._setMsgStatus(destination, message, 'sent');
+            }).catch(() => this._setMsgStatus(destination, message, 'sent'));
+          })
+          .catch(e => {
+            this._setMsgStatus(destination, message, 'failed');
+            this.showToast(e.message, 'error');
+          });
+      }
+
+      // _deliverGroup publishes an already-composed group bubble and advances its
+      // status: sent (GroupSend ok = the reference is on the feed) or failed.
+      _deliverGroup(gid, message, wireText) {
+        fetch(`/group/${gid}/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: wireText }),
+        })
+          .then(res => {
+            if (res.ok) {
+              this._setMsgStatus(gid, message, 'sent');
+            } else {
+              res.text().then(t => {
+                this._setMsgStatus(gid, message, 'failed');
+                this.showToast(`Group send failed: ${t}`, 'error');
+              });
+            }
+          })
+          .catch(e => {
+            this._setMsgStatus(gid, message, 'failed');
+            this.showToast(e.message, 'error');
+          });
+      }
+
+      // resendMessage retries a bubble whose send failed (the ⚠ Resend tick).
+      // The bubble is re-armed to pending and re-delivered in place — no
+      // duplicate. Works for DM (current network) and group threads.
+      resendMessage(btn) {
+        const row = btn.closest ? btn.closest('.message-row') : null;
+        if (!row) return;
+        const key = this.activeKey();
+        const list = this.messages[key];
+        if (!list) return;
+        const message = list.find(m => m && String(m.mid) === String(row.dataset.mid) && m.from === 'me');
+        if (!message || message.status !== 'failed') return;
+        if (message.file) return; // files can't be resent from the cached bubble (bytes gone)
+
+        this._setMsgStatus(key, message, 'pending');
+        const wireText = message.reply ? this._encodeReply(message.text) : message.text;
+        if (message.group) {
+          this._deliverGroup(key, message, wireText);
+        } else {
+          this._deliverDM(key, message, wireText, document.getElementById('networkSelect').value);
+        }
+      }
+
+      // resendFile retries a failed file transfer (the ⚠ Retry tick) by
+      // re-uploading the retained File object in place. Only works in-session —
+      // the File isn't persisted, so after a reload a failed file shows a plain
+      // ⚠ and must be re-attached.
+      resendFile(btn) {
+        const row = btn.closest ? btn.closest('.message-row') : null;
+        if (!row) return;
+        const key = this.activeKey();
+        const list = this.messages[key];
+        if (!list) return;
+        const message = list.find(m => m && String(m.mid) === String(row.dataset.mid) && m.from === 'me' && m.file);
+        if (!message || !message._file || message.file.status !== 'failed') return;
+
+        const isGroup = !!message.group;
+        message.file.status = 'sending';
+        this._patchStatusTick(message);
+        const form = new FormData();
+        if (isGroup) form.append('group', key);
+        else form.append('pk', key);
+        form.append('file', message._file);
+
+        fetch('/send-file', { method: 'POST', body: form })
+          .then(res => {
+            if (!res.ok) {
+              message.file.status = 'failed';
+              this._patchStatusTick(message);
+              res.text().then(t => this.showToast(`File send failed: ${t}`, 'error'));
+              return;
+            }
+            message.file.status = 'sent';
+            this._patchStatusTick(message);
+            this.showToast('File sent.');
+            res.json().then(j => {
+              if (j && j.id) message.file.id = j.id;
+              if (!isGroup) this.saveChat(key);
+            }).catch(() => { if (!isGroup) this.saveChat(key); });
+          })
+          .catch(e => {
+            message.file.status = 'failed';
+            this._patchStatusTick(message);
+            this.showToast(e.message, 'error');
+          });
+      }
+
+      // ---- Replies ---------------------------------------------------
+
+      // _msgPreview builds a short, single-line snippet of a message, embedded
+      // in a reply so the quote renders even for a reader who lacks the parent.
+      _msgPreview(msg) {
+        if (msg.file) return '📎 ' + ((msg.file.name) || 'file');
+        return String(msg.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+      }
+
+      // _renderQuote draws the quoted-parent block shown above a reply bubble.
+      // Clicking it scrolls to the parent (data-* read from the DOM, no interp).
+      _renderQuote(reply) {
+        const isMine = reply.sender && (reply.sender === this.myPK || reply.sender === 'me');
+        const who = isMine ? 'You' : (reply.sender ? this.shortPk(reply.sender) : 'message');
+        const preview = this.escapeHtml(String(reply.preview || '').slice(0, 120)) || '&nbsp;';
+        return `<div class="reply-quote" data-target-ts="${this.escapeAttr(reply.ts || '')}" onclick="app.scrollToMessage(this.dataset.targetTs)" title="Go to message">
+            <span class="reply-quote-who">${this.escapeHtml(who)}</span>
+            <span class="reply-quote-text">${preview}</span>
+          </div>`;
+      }
+
+      // replyFromSSE builds a reply descriptor from the additive reply_to_*
+      // fields on an SSE envelope (DM or group), or null when absent.
+      replyFromSSE(data) {
+        if (!data || (!data.reply_to_ts && !data.reply_to_preview && !data.reply_to_sender)) return null;
+        return {
+          sender: data.reply_to_sender ? String(data.reply_to_sender).toLowerCase() : '',
+          ts: data.reply_to_ts || '',
+          preview: data.reply_to_preview || '',
+        };
+      }
+
+      // startReply arms the composer to quote the message the clicked button
+      // belongs to (its row carries data-ts/sender/preview).
+      startReply(btn) {
+        const row = btn.closest ? btn.closest('.message-row') : null;
+        if (!row) return;
+        this.replyTo = {
+          sender: row.dataset.sender || '',
+          ts: row.dataset.ts || '',
+          preview: row.dataset.preview || '',
+        };
+        this._renderReplyChip();
+        document.getElementById('msgField').focus();
+      }
+
+      cancelReply() {
+        this.replyTo = null;
+        this._renderReplyChip();
+      }
+
+      _renderReplyChip() {
+        const chip = document.getElementById('replyChip');
+        if (!this.replyTo) { chip.classList.add('hidden'); chip.innerHTML = ''; return; }
+        const r = this.replyTo;
+        const isMine = r.sender && (r.sender === this.myPK || r.sender === 'me');
+        const who = isMine ? 'You' : (r.sender ? this.shortPk(r.sender) : 'message');
+        chip.innerHTML = `
+          <div class="reply-chip-body">
+            <span class="reply-chip-who">Replying to ${this.escapeHtml(who)}</span>
+            <span class="reply-chip-text">${this.escapeHtml(String(r.preview || '').slice(0, 120))}</span>
+          </div>
+          <button class="reply-chip-x" onclick="app.cancelReply()" title="Cancel reply">&times;</button>`;
+        chip.classList.remove('hidden');
+      }
+
+      // _encodeReply wraps the typed text in a {"skychat_reply":...} envelope the
+      // server's read boundaries unwrap into text + reply_to_* fields.
+      _encodeReply(text) {
+        const r = this.replyTo;
+        const toSender = r.sender === 'me' ? (this.myPK || '') : r.sender;
+        return JSON.stringify({
+          skychat_reply: {
+            to_sender: toSender,
+            to_ts: r.ts,
+            to_preview: String(r.preview || '').slice(0, 120),
+            text,
+          },
+        });
+      }
+
+      // scrollToMessage jumps to and briefly highlights the message with the
+      // given timestamp, if it's currently loaded (best-effort — the quote
+      // always renders regardless).
+      scrollToMessage(tsIso) {
+        if (!tsIso) return;
+        const rows = document.querySelectorAll('#messages .message-row');
+        for (const r of rows) {
+          if (r.dataset.ts === tsIso) {
+            r.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            r.classList.add('reply-highlight');
+            setTimeout(() => r.classList.remove('reply-highlight'), 1600);
+            return;
+          }
+        }
+      }
+
+      // ---- Deleting messages ----------------------------------------
+
+      _loadHiddenGroup() {
+        try { return JSON.parse(localStorage.getItem('skychat_hidden_group') || '[]'); }
+        catch (e) { return []; }
+      }
+      _saveHiddenGroup() {
+        localStorage.setItem('skychat_hidden_group', JSON.stringify([...this.hiddenGroup]));
+      }
+      _groupHideKey(gid, tsNano) { return gid + ':' + tsNano; }
+      _isGroupHidden(gid, tsNano) {
+        return !!tsNano && this.hiddenGroup.has(this._groupHideKey(gid, tsNano));
+      }
+
+      // openMsgMenu shows the per-message actions (reply/delete). "Delete for
+      // me" is always available (local-only); "Delete for everyone" only on our
+      // own GROUP messages — it's sender-scoped on the feed, and DM has no
+      // shared message id to target across the two visors (a follow-up).
+      openMsgMenu(btn) {
+        this.closeMsgMenu();
+        const row = btn.closest('.message-row');
+        if (!row) return;
+        const isOwn = row.dataset.sender === 'me' || (this.myPK && row.dataset.sender === this.myPK);
+        const canDeleteAll = !!this.group && isOwn && !!row.dataset.tsnano;
+        const menu = document.createElement('div');
+        menu.className = 'msg-menu';
+        menu.id = 'msgMenu';
+        menu.dataset.mid = row.dataset.mid || '';
+        menu.dataset.tsnano = row.dataset.tsnano || '';
+        let html = `<button onclick="app.deleteForMe()">Delete for me</button>`;
+        if (canDeleteAll) {
+          html += `<button class="danger" onclick="app.deleteForAll()">Delete for everyone</button>`;
+        }
+        menu.innerHTML = html;
+        document.body.appendChild(menu);
+        const r = btn.getBoundingClientRect();
+        menu.style.top = (r.bottom + 4) + 'px';
+        menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, Math.max(8, r.left)) + 'px';
+        setTimeout(() => {
+          this._menuOutside = (e) => { if (!menu.contains(e.target)) this.closeMsgMenu(); };
+          document.addEventListener('click', this._menuOutside);
+        }, 0);
+      }
+      closeMsgMenu() {
+        const m = document.getElementById('msgMenu');
+        if (m) m.remove();
+        if (this._menuOutside) { document.removeEventListener('click', this._menuOutside); this._menuOutside = null; }
+      }
+
+      // deleteForMe removes the message from this device only. DM threads are
+      // localStorage-cached, so dropping it from the cache persists the hide;
+      // groups reload from visor history, so the ts_nano key is remembered in
+      // hiddenGroup and filtered on reload.
+      deleteForMe() {
+        const menu = document.getElementById('msgMenu');
+        if (!menu) return;
+        const mid = menu.dataset.mid, tsNano = menu.dataset.tsnano;
+        const key = this.activeKey();
+        this.closeMsgMenu();
+        if (!key || !this.messages[key]) return;
+        this.messages[key] = this.messages[key].filter(m => String(m.mid) !== String(mid));
+        if (this.group) {
+          if (tsNano) { this.hiddenGroup.add(this._groupHideKey(this.group, tsNano)); this._saveHiddenGroup(); }
+        } else {
+          this.saveChat(key);
+        }
+        this._rerenderActive();
+      }
+
+      // deleteForAll removes a GROUP message we authored for everyone: it drops
+      // it locally, then asks the visor to publish a tombstone (propagates live +
+      // to future joiners) and prune the leaf (erases the bytes).
+      deleteForAll() {
+        const menu = document.getElementById('msgMenu');
+        if (!menu || !this.group) return;
+        const mid = menu.dataset.mid, tsNano = menu.dataset.tsnano, gid = this.group;
+        this.closeMsgMenu();
+        if (!tsNano) { this.showToast('Message not yet confirmed — try again in a moment.', 'error'); return; }
+        // Optimistic local removal (+ remember, so a late echo can't re-add it).
+        this.messages[gid] = (this.messages[gid] || []).filter(m => String(m.mid) !== String(mid));
+        this.hiddenGroup.add(this._groupHideKey(gid, tsNano)); this._saveHiddenGroup();
+        this._rerenderActive();
+        fetch(`/group/${gid}/message?ts=${encodeURIComponent(tsNano)}`, { method: 'DELETE' })
+          .then(res => { if (!res.ok) res.text().then(t => this.showToast(`Delete failed: ${t}`, 'error')); })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      // handleGroupDelete applies a delete tombstone (channel="group-delete"):
+      // remove the message at deleted_ts_nano authored by deleted_by. The
+      // tombstone is signed by its author, so this can only hide that author's
+      // own messages.
+      handleGroupDelete(data) {
+        const gid = data.group_id, tsNano = data.deleted_ts_nano, by = String(data.deleted_by || '').toLowerCase();
+        if (!gid || !tsNano) return;
+        this.hiddenGroup.add(this._groupHideKey(gid, String(tsNano))); this._saveHiddenGroup();
+        const list = this.messages[gid];
+        if (list) {
+          this.messages[gid] = list.filter(m => !(String(m.tsNano) === String(tsNano) && (m.sender || '') === by));
+          if (this.group === gid) this._rerenderActive();
+        }
+      }
+
+      // fileFromSSE extracts the additive file_* fields from a legacy /sse
+      // envelope into a compact descriptor, or null for a plain message.
+      fileFromSSE(data) {
+        if (!data || !data.file_id) return null;
+        return {
+          id: data.file_id,
+          name: data.file_name || 'file',
+          size: data.file_size || 0,
+          status: data.file_status || '',
+          url: data.file_url || null,
+          from: data.sender ? String(data.sender).toLowerCase() : null,
+        };
+      }
+
+      isImageFile(file) {
+        return /\.(png|jpe?g|gif|webp|bmp|svg|avif)$/i.test((file && file.name) || '');
+      }
+
+      isVideoFile(file) {
+        return /\.(mp4|m4v|webm|ogv|mov|mkv)$/i.test((file && file.name) || '');
+      }
+
+      isAudioFile(file) {
+        return /\.(mp3|ogg|oga|opus|wav|m4a|aac|flac|weba)$/i.test((file && file.name) || '');
+      }
+
+      humanSize(n) {
+        n = Number(n) || 0;
+        if (n < 1024) return n + ' B';
+        const units = ['KB', 'MB', 'GB', 'TB'];
+        let i = -1;
+        do { n /= 1024; i++; } while (n >= 1024 && i < units.length - 1);
+        return n.toFixed(1) + ' ' + units[i];
+      }
+
+      // makeThumbDataURL downscales an image File to a small JPEG data URL
+      // (≤ maxDim on the long side). Used to give a locally-sent image a
+      // persistent preview: unlike an object URL, a data URL survives a
+      // reload from localStorage. Resolves null on any failure (e.g. a
+      // non-decodable image or a tainted canvas).
+      makeThumbDataURL(file, maxDim) {
+        return new Promise((resolve) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            try {
+              const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+              const w = Math.max(1, Math.round(img.width * scale));
+              const h = Math.max(1, Math.round(img.height * scale));
+              const canvas = document.createElement('canvas');
+              canvas.width = w;
+              canvas.height = h;
+              canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+              resolve(canvas.toDataURL('image/jpeg', 0.7));
+            } catch (e) {
+              resolve(null);
+            } finally {
+              URL.revokeObjectURL(url);
+            }
+          };
+          img.onerror = () => { URL.revokeObjectURL(url); resolve(null); };
+          img.src = url;
+        });
+      }
+
+      // renderFile builds the inner HTML of a media/file bubble: an inline
+      // image when the file is an image with a source URL, otherwise a
+      // compact file card with a download link (received files) to
+      // /files/<name>. Every peer-supplied value is escaped.
+      renderFile(file) {
+        const name = this.escapeHtml(file.name || 'file');
+        const nameAttr = this.escapeAttr(file.name || 'file');
+        const urlAttr = file.url ? this.escapeAttr(file.url) : '';
+        const sizeStr = this.humanSize(file.size || 0);
+        // Re-request link on received files (backfill): ask the sender to
+        // re-send if the local copy is gone (fresh device / pruned). data-* are
+        // DOM-read by requestFile, so no interpolation/injection.
+        const reqLink = (file.from && !file.local && file.id)
+          ? ` · <a class="media-dl file-req" data-from="${this.escapeAttr(file.from)}" data-fid="${this.escapeAttr(file.id)}" data-fname="${nameAttr}" onclick="app.requestFile(this)">re-request</a>`
+          : '';
+        if (this.isImageFile(file) && urlAttr) {
+          // src is a lightweight server-side thumbnail (received files);
+          // data-full is the full-resolution image the lightbox opens. If the
+          // thumbnailer can't decode this file, the <img> onerror falls back
+          // to the full image. Locally-sent files have no /files/ URL, so they
+          // preview straight from their own object URL.
+          const full = urlAttr;
+          let thumb = full;
+          if (!file.local && file.url && file.url.indexOf('/files/') === 0) {
+            thumb = this.escapeAttr('/thumb/' + file.url.slice('/files/'.length));
+          }
+          return `<img class="media-image" src="${thumb}" data-full="${full}" alt="${nameAttr}"
+              loading="lazy" onclick="app.openLightbox(this.dataset.full)"
+              onerror="this.onerror=null;this.src=this.dataset.full" />
+            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${reqLink}</div>`;
+        }
+        if ((this.isVideoFile(file) || this.isAudioFile(file)) && urlAttr) {
+          // Native inline player (browser handles its own preview/controls;
+          // /files/ supports Range so seeking works). No poster for video —
+          // that would need server-side frame extraction (ffmpeg). A download
+          // link is offered on received media so it can always be saved.
+          const isVideo = this.isVideoFile(file);
+          const tag = isVideo ? 'video' : 'audio';
+          const cls = isVideo ? 'media-video' : 'media-audio';
+          const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
+            ? ` · <a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
+          return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"></${tag}>
+            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${dl}${reqLink}</div>`;
+        }
+        const sub = file.status === 'failed' ? 'transfer failed' : sizeStr;
+        const dl = urlAttr
+          ? `<a class="file-dl" href="${urlAttr}" download="${nameAttr}" title="Download">&#x2B07;</a>`
+          : '';
+        return `<div class="file-card">
+            <div class="file-icon">&#x1F4CE;</div>
+            <div class="file-meta">
+              <div class="file-name">${name}</div>
+              <div class="file-sub">${this.escapeHtml(sub)}${reqLink}</div>
+            </div>
+            ${dl}
+          </div>`;
+      }
+
+      // openLightbox shows an image full-size in an in-app overlay (rather
+      // than opening a new browser tab). src comes from the clicked image's
+      // data-full attribute, i.e. the DOM value — no interpolation, so no
+      // injection surface.
+      openLightbox(src) {
+        if (!src) return;
+        document.getElementById('lightboxImg').src = src;
+        document.getElementById('lightbox').classList.add('visible');
+      }
+
+      closeLightbox() {
+        document.getElementById('lightbox').classList.remove('visible');
+        document.getElementById('lightboxImg').src = '';
       }
 
       _sseSubscribe() {
@@ -933,10 +2009,54 @@
 
         source.onmessage = (msg) => {
           const data = JSON.parse(msg.data);
+          // Ignore the server's history seed. On every /sse (re)connect the app
+          // replays the last N stored messages (tagged history:"true") for
+          // headless consumers like `cli skychat listen`. The browser keeps its
+          // own history (localStorage + /history), so rendering these would show
+          // old messages again as new on reload / EventSource auto-reconnect.
+          if (data.history) return;
           // Pair-invite control envelope — handle separately so it
           // doesn't get rendered as a chat message.
           if (data.channel === 'pair-invite') {
             this.handlePairInviteSSE(data);
+            return;
+          }
+          if (data.channel === 'group') {
+            this.handleGroupSSE(data);
+            return;
+          }
+          if (data.channel === 'group-delete') {
+            this.handleGroupDelete(data);
+            return;
+          }
+          // A backfill re-send we requested has arrived — patch the existing
+          // file bubble in place rather than appending a new message.
+          if (data.channel === 'file-ready') {
+            this.handleFileReady(data);
+            return;
+          }
+          // A delivery-status receipt for one of OUR sent DM bubbles — patch
+          // the tick, don't render a message.
+          if (data.channel === 'dm-status') {
+            this.handleDmStatus(data);
+            return;
+          }
+          // Ignore our OWN outbound mirror. The visor re-broadcasts every send
+          // on /sse (dir="out", sender = our own PK) so headless `skychat
+          // listen` sees a full transcript. The browser already renders its
+          // sends optimistically, so rendering the mirror here would spawn a
+          // phantom self-thread (a contact for our own PK) and double every
+          // bubble once that thread is opened.
+          if (data.dir === 'out' || (this.myPK && this.processPk(data.sender) === this.myPK)) {
+            return;
+          }
+          // Dedup by wire id. The same message can arrive twice — e.g. the
+          // sender's first message to a cold peer times out on one network and
+          // is re-sent over the other, and both actually deliver. Both copies
+          // carry the same envelope id, so if this thread already has it, drop
+          // the repeat (this also keeps the localStorage cache clean, so a
+          // reload doesn't show the dup again).
+          if (data.id && (this.messages[data.sender] || []).some(m => m && m.wireId === data.id)) {
             return;
           }
           const message = {
@@ -944,6 +2064,9 @@
             from: this.processPk(data.sender),
             text: data.message,
             viaPair: data.channel === 'pair',
+            file: this.fileFromSSE(data),
+            reply: this.replyFromSSE(data),
+            wireId: data.id, // sender-side id — referenced by the read receipt we send back
           };
           this.addMsgToList(data.sender, message);
 
@@ -952,6 +2075,8 @@
               (msgArea.scrollHeight - msgArea.scrollTop) <= msgArea.clientHeight + 50) {
             this.messagesSeen[this.recipient] = this.messagesQuantity[this.recipient];
             this.saveSeenList();
+            // The user is looking at this thread — tell the sender it's read.
+            this._sendReadReceipts(this.recipient);
           }
 
           this.updateUnreadBadges();
@@ -1023,11 +2148,32 @@
                 withDates.push({ date: ts });
                 lastDay = day;
               }
-              withDates.push({
+              const entry = {
                 ts: ts,
                 from: m.outgoing ? 'me' : (m.from || m.peer),
                 text: m.text,
-              });
+              };
+              // A persisted file message carries file_* metadata; rebuild the
+              // file descriptor so history re-renders the thumbnail/player.
+              if (m.file_name) {
+                entry.file = {
+                  id: m.file_id || null, // persisted so "re-request" works after reload
+                  name: m.file_name,
+                  size: m.file_size || 0,
+                  status: m.file_status || '',
+                  url: m.file_url || null,
+                  from: m.outgoing ? null : (m.from || m.peer),
+                };
+              }
+              // A persisted reply carries reply_to_* metadata; rebuild the quote.
+              if (m.reply_to_ts || m.reply_to_preview || m.reply_to_sender) {
+                entry.reply = {
+                  sender: (m.reply_to_sender || '').toLowerCase(),
+                  ts: m.reply_to_ts || '',
+                  preview: m.reply_to_preview || '',
+                };
+              }
+              withDates.push(entry);
             });
             this.messages[pk] = withDates;
             this.messagesQuantity[pk] = msgs.length;
@@ -1054,7 +2200,14 @@
       }
 
       selectRecipient(pk) {
-        if (this.recipient === pk) return;
+        if (this.recipient === pk && !this.group) return;
+        this.cancelReply(); // a reply armed in another thread must not follow
+        this.group = null;
+        document.getElementById('groupHeader').classList.add('hidden');
+        document.getElementById('networkSelect').classList.remove('hidden');
+        const attachBtn = document.querySelector('.attach-btn');
+        if (attachBtn) attachBtn.classList.remove('hidden');
+        document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
 
         this.recipient = pk;
         this.loadHistoryFor(pk);
@@ -1074,6 +2227,8 @@
 
         document.getElementById('messages').innerHTML = '';
         this.messages[this.recipient].forEach(msg => this._showMessage(msg));
+        // Viewing the thread marks its inbound messages read for the sender.
+        this._sendReadReceipts(this.recipient);
 
         document.getElementById('msgField').focus();
 
@@ -1084,6 +2239,8 @@
         this.saveSeenList();
         this.updateUnreadBadges();
         this.refreshPairControls();
+        this.renderPinned();
+        this._updatePinButtons();
       }
 
       // refreshPairControls toggles the pair button + the CXO option
@@ -1339,54 +2496,604 @@
         const msg = msgField.value.trim();
         if (!msg) return;
 
+        if (this.group) {
+          this.sendGroupMessage(msg);
+          msgField.value = '';
+          return;
+        }
+
         const destination = this.recipient;
         const network = document.getElementById('networkSelect').value;
 
-        // CXO routes through /pair/<pk>/message instead of /message —
-        // a paired publisher must already exist (handled by Pair button
-        // / pair-invite handshake). Falls back to legacy if pairing
-        // isn't set up.
-        let url, body;
-        if (network === 'cxo') {
-          url = `/pair/${destination}/message`;
-          body = JSON.stringify({ text: msg });
-        } else {
-          url = '/message';
-          body = JSON.stringify({ recipient: destination, message: msg, network: network });
+        // A reply wraps the text in a {"skychat_reply":...} envelope on the
+        // wire; the optimistic bubble keeps the reply descriptor + clean text.
+        const replyMeta = this.replyTo ? { ...this.replyTo } : null;
+        const wireText = replyMeta ? this._encodeReply(msg) : msg;
+        this.cancelReply();
+
+        // Render the bubble immediately as pending, then advance it on the
+        // response (sent/failed) and — for receipts sends — later on dm-status
+        // events (received/read). CXO routes through /pair/<pk>/message and is
+        // eventual (no per-message receipt, so its bubble stops at "sent");
+        // skynet/dmsg use receipts:true for the full lifecycle. _deliverDM owns
+        // the wire call (shared with resend).
+        const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo', reply: replyMeta, status: 'pending' };
+        this.addMsgToList(destination, message);
+        msgField.value = '';
+        const msgArea = document.getElementById('messages');
+        msgArea.scrollTop = msgArea.scrollHeight;
+        this.messagesSeen[destination] = this.messagesQuantity[destination];
+        this.saveSeenList();
+        this.updateUnreadBadges();
+
+        this._deliverDM(destination, message, wireText, network);
+      }
+
+      // sendFile uploads the picked file to /send-file (multipart) for the
+      // active conversation — a DM (pk) or a group (group id) — and
+      // optimistically renders it. For a DM the bytes ship 1:1; for a group
+      // only a reference goes on the feed and members pull the bytes on demand
+      // (so the "sent" toast means "published", not "delivered to everyone").
+      // The local object-URL gives an instant image preview (dropped from
+      // localStorage on save so a dead blob URL isn't rehydrated after reload).
+      sendFile() {
+        const input = document.getElementById('fileField');
+        if (!input.files || !input.files.length) return;
+        const isGroup = !!this.group;
+        const destination = isGroup ? this.group : this.recipient;
+        if (!destination) {
+          this.showToast('Select a conversation first.', 'error');
+          input.value = '';
+          return;
+        }
+        const file = input.files[0];
+
+        const form = new FormData();
+        if (isGroup) form.append('group', destination);
+        else form.append('pk', destination);
+        form.append('file', file);
+
+        const localUrl = URL.createObjectURL(file);
+        const message = {
+          ts: new Date(),
+          from: 'me',
+          text: '📎 ' + file.name,
+          file: { name: file.name, size: file.size, status: 'sending', url: localUrl, local: true },
+          _file: file, // retained in-session so a failed transfer can be retried (see resendFile); stripped on save
+          group: isGroup || undefined,
+          sender: isGroup ? this.myPK : undefined,
+        };
+        this.cancelReply(); // file replies aren't supported — drop any armed quote
+        this.addMsgToList(destination, message, { group: isGroup });
+        const msgArea = document.getElementById('messages');
+        msgArea.scrollTop = msgArea.scrollHeight;
+        input.value = '';
+
+        // For images, swap the ephemeral blob preview for a persistent
+        // data-URL thumbnail so a sent image still shows after a reload (DM
+        // threads are localStorage-cached; groups reload from visor history,
+        // where the sender's held copy re-renders it). Only affects the
+        // persisted copy — the live bubble already rendered from the blob.
+        if (this.isImageFile(message.file)) {
+          this.makeThumbDataURL(file, 320).then(dataUrl => {
+            if (!dataUrl) return;
+            message.file.url = dataUrl;
+            message.file.local = false; // data URL persists — don't strip on save
+            if (!isGroup) this.saveChat(destination);
+          });
         }
 
-        fetch(url, {
+        fetch('/send-file', { method: 'POST', body: form })
+          .then(res => {
+            if (!res.ok) {
+              message.file.status = 'failed';
+              this._patchStatusTick(message);
+              res.text().then(t => this.showToast(`File send failed: ${t}`, 'error'));
+              if (!isGroup) this.saveChat(destination);
+              return;
+            }
+            message.file.status = 'sent';
+            this._patchStatusTick(message);
+            this.showToast('File sent.');
+            // The response carries the server-assigned file id so a re-request
+            // can locate the bytes and the id matches the feed reference other
+            // members see.
+            res.json().then(j => {
+              if (j && j.id) message.file.id = j.id;
+              if (!isGroup) this.saveChat(destination);
+            }).catch(() => { if (!isGroup) this.saveChat(destination); });
+          })
+          .catch(e => {
+            message.file.status = 'failed';
+            this._patchStatusTick(message);
+            this.showToast(e.message, 'error');
+          });
+      }
+
+      // requestFile asks a file's original sender to re-send it (backfill) —
+      // e.g. after the local copy was pruned or on a fresh device. Params come
+      // from the message's file descriptor via data-* attributes (DOM-read, so
+      // no interpolation/injection).
+      requestFile(el) {
+        const from = el.dataset.from, fid = el.dataset.fid, fname = el.dataset.fname || '';
+        if (!from || !fid) return;
+        fetch('/request-file', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: body
+          body: JSON.stringify({ pk: from, file_id: fid, file_name: fname })
         })
           .then(res => {
-            if (res.ok) {
-              const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo' };
-              this.addMsgToList(destination, message);
-              msgField.value = '';
-
-              const msgArea = document.getElementById('messages');
-              msgArea.scrollTop = msgArea.scrollHeight;
-
-              this.messagesSeen[destination] = this.messagesQuantity[destination];
-              this.saveSeenList();
-              this.updateUnreadBadges();
-            } else {
-              res.text().then(text => this.showToast(`Failed: ${text}`, 'error'));
-            }
+            if (res.ok) this.showToast('Requested file from sender…');
+            else res.text().then(t => this.showToast(`Request failed: ${t}`, 'error'));
           })
           .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      // ---- Groups ----------------------------------------------------
+
+      // activeKey is the currently-open conversation's key: a group id when a
+      // group is selected, else the DM recipient PK. Groups use their UUID as
+      // the messages-map key (distinct from 66-hex PKs, so no collision).
+      activeKey() { return this.group || this.recipient; }
+
+      shortPk(pk) {
+        if (!pk) return '?';
+        return pk.length >= 14 ? pk.substring(0, 8) + '…' + pk.substring(pk.length - 4) : pk;
+      }
+
+      // syncMyPK records this visor's PK (from /status) so group messages
+      // echoed back from our own sends can be de-duplicated.
+      syncMyPK() {
+        fetch('/status')
+          .then(res => res.ok ? res.json() : null)
+          .then(s => {
+            if (s && s.visor_pk) {
+              this.myPK = String(s.visor_pk).toLowerCase();
+              this._purgeSelfThread(); // one-time cleanup of the old self-mirror bug
+            }
+          })
+          .catch(() => {});
+      }
+
+      // syncGroups pulls the joined-group list from the visor and reveals the
+      // Groups section. The visor RPC is dialed in the background, so it may not
+      // be up the instant the page loads: a 503 (or a transient network error)
+      // means "still connecting" and is retried with backoff rather than hiding
+      // the section for good. Only a 404 — the /group route isn't registered,
+      // i.e. skychat was started without --pair-enable — is terminal, leaving
+      // the UI DM-only.
+      syncGroups(attempt = 0) {
+        fetch('/group')
+          .then(res => {
+            if (res.status === 404) return { off: true };
+            if (!res.ok) return { retry: true }; // 503 etc. — RPC warming up
+            return res.json().then(groups => ({ groups }));
+          })
+          .then(r => {
+            if (r.off) return;
+            if (r.retry) { this._retryGroups(attempt); return; }
+            document.getElementById('groupsSection').classList.remove('hidden');
+            this.groups = r.groups || [];
+            this.renderGroups();
+          })
+          .catch(() => this._retryGroups(attempt));
+      }
+
+      // _retryGroups re-attempts syncGroups while the visor RPC is still coming
+      // up (503 / network error). Backs off 1s→5s and caps the attempts so a
+      // genuinely RPC-less visor doesn't spin forever — the section just stays
+      // hidden and the UI is DM-only.
+      _retryGroups(attempt) {
+        if (attempt >= 15) return;
+        setTimeout(() => this.syncGroups(attempt + 1), Math.min(5000, 1000 * (attempt + 1)));
+      }
+
+      renderGroups() {
+        const list = document.getElementById('groups');
+        list.innerHTML = '';
+        this.groups.forEach(g => {
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div class="group-item ${g.id === this.group ? 'active' : ''}" data-gid="${g.id}" onclick="app.selectGroup('${g.id}')">
+              <div class="group-avatar-sm">#</div>
+              <div class="recipient-info">
+                <div class="recipient-pk">${this.escapeHtml(g.name || g.id)}</div>
+                <div class="recipient-preview">${this.escapeHtml(g.role || 'member')} · ${(g.members || []).length} members</div>
+              </div>
+            </div>`;
+          list.appendChild(li);
+        });
+        this.renderPinned();
+      }
+
+      // ---- Pin (one conversation, DM or group, on top) ---------------
+
+      _pinParts() {
+        if (!this.pinned) return [null, null];
+        const i = this.pinned.indexOf(':');
+        return [this.pinned.slice(0, i), this.pinned.slice(i + 1)];
+      }
+      _currentPinKey() {
+        if (this.group) return 'grp:' + this.group;
+        if (this.recipient) return 'dm:' + this.recipient;
+        return null;
+      }
+
+      // togglePin pins (or unpins) the open conversation to the top slot.
+      togglePin() {
+        const key = this._currentPinKey();
+        if (!key) return;
+        this.pinned = (this.pinned === key) ? null : key;
+        if (this.pinned) localStorage.setItem('skychat_pinned', this.pinned);
+        else localStorage.removeItem('skychat_pinned');
+        this.renderPinned();
+        this._updatePinButtons();
+      }
+
+      // renderPinned draws the single pinned conversation in the top slot,
+      // reusing the normal item markup so it looks and clicks natively, then
+      // hides its duplicate in the regular list.
+      renderPinned() {
+        const section = document.getElementById('pinnedSection');
+        const list = document.getElementById('pinnedList');
+        list.innerHTML = '';
+        const [type, id] = this._pinParts();
+        let rendered = false;
+        if (type === 'grp') {
+          const g = this.groups.find(x => x.id === id);
+          if (g) {
+            const li = document.createElement('li');
+            li.innerHTML = `
+              <div class="group-item ${id === this.group ? 'active' : ''}" data-gid="${id}" onclick="app.selectGroup('${id}')">
+                <div class="group-avatar-sm">📌</div>
+                <div class="recipient-info">
+                  <div class="recipient-pk">${this.escapeHtml(g.name || g.id)}</div>
+                  <div class="recipient-preview">${this.escapeHtml(g.role || 'member')} · ${(g.members || []).length} members</div>
+                </div>
+              </div>`;
+            list.appendChild(li);
+            rendered = true;
+          }
+        } else if (type === 'dm') {
+          const r = id;
+          const image = localStorage.getItem(`i_${r}`) || 'p.png';
+          const shortPk = r.substring(0, 8) + '...' + r.substring(r.length - 8);
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div class="recipient-item ${r === this.recipient && !this.group ? 'active' : ''}" data-pk="${r}" onclick="app.selectRecipient('${r}')">
+              <img class="recipient-avatar" src="${image}" />
+              <div class="recipient-info">
+                <div class="recipient-pk">📌 ${shortPk}</div>
+                <div class="recipient-preview">Pinned</div>
+              </div>
+            </div>`;
+          list.appendChild(li);
+          rendered = true;
+        }
+        section.classList.toggle('hidden', !rendered);
+        this._syncPinHide(rendered ? [type, id] : [null, null]);
+      }
+
+      // _syncPinHide hides the pinned item's duplicate in the normal list (or
+      // clears the hide when nothing is pinned / the pin isn't loaded yet).
+      _syncPinHide(parts) {
+        document.querySelectorAll('li.pin-dup').forEach(el => el.classList.remove('pin-dup'));
+        const [type, id] = parts || [null, null];
+        if (!type) return;
+        const sel = type === 'grp'
+          ? `#groups .group-item[data-gid="${window.CSS && CSS.escape ? CSS.escape(id) : id}"]`
+          : `#recipients .recipient-item[data-pk="${window.CSS && CSS.escape ? CSS.escape(id) : id}"]`;
+        const node = document.querySelector(sel);
+        if (node && node.closest('li')) node.closest('li').classList.add('pin-dup');
+      }
+
+      // _unpinIf clears the pin when its conversation is deleted/left.
+      _unpinIf(key) {
+        if (this.pinned === key) {
+          this.pinned = null;
+          localStorage.removeItem('skychat_pinned');
+          this.renderPinned();
+          this._updatePinButtons();
+        }
+      }
+
+      _updatePinButtons() {
+        const key = this._currentPinKey();
+        const active = !!key && key === this.pinned;
+        ['dmPinBtn', 'groupPinBtn'].forEach(bid => {
+          const b = document.getElementById(bid);
+          if (!b) return;
+          b.classList.toggle('pinned-active', active);
+          b.title = active ? 'Unpin from top' : 'Pin to top';
+        });
+      }
+
+      selectGroup(id) {
+        this.cancelReply(); // a reply armed in another thread must not follow
+        this.group = id;
+        this.recipient = null;
+        if (!this.messages[id]) this.messages[id] = [];
+
+        document.querySelectorAll('.group-item').forEach(el => el.classList.toggle('active', el.dataset.gid === id));
+        document.querySelectorAll('.recipient-item').forEach(el => el.classList.remove('active'));
+
+        document.getElementById('emptyState').classList.add('hidden');
+        document.getElementById('chatHeader').classList.add('hidden');
+        document.getElementById('groupHeader').classList.remove('hidden');
+        document.getElementById('messages').classList.remove('hidden');
+        document.getElementById('msgForm').classList.remove('hidden');
+        // Groups support file attach (a reference on the feed + bytes pulled on
+        // demand) but not the DM network selector.
+        document.getElementById('networkSelect').classList.add('hidden');
+        const attachBtn = document.querySelector('.attach-btn');
+        if (attachBtn) attachBtn.classList.remove('hidden');
+
+        const info = this.groups.find(g => g.id === id);
+        document.getElementById('groupHeaderName').textContent = info ? info.name : id;
+        document.getElementById('groupHeaderSub').textContent = info
+          ? `${info.role} · ${(info.members || []).length} members · ${info.mode}` : '';
+
+        const msgEl = document.getElementById('messages');
+        msgEl.innerHTML = '';
+        this.messages[id].forEach(m => this._showMessage(m));
+        msgEl.scrollTop = msgEl.scrollHeight;
+        document.getElementById('msgField').focus();
+
+        this.loadGroupHistory(id);
+        this.renderPinned();
+        this._updatePinButtons();
+      }
+
+      // loadGroupHistory backfills persisted messages when the local buffer is
+      // empty. Group messages aren't cached in localStorage (the visor's
+      // history store is the source of truth), so this runs on each open of an
+      // empty thread; returns silently if group history is disabled.
+      loadGroupHistory(id) {
+        if (this.messages[id] && this.messages[id].length > 0) return;
+        fetch(`/group/${id}/history?limit=100`)
+          .then(res => res.ok ? res.json() : null)
+          .then(msgs => {
+            if (!msgs || !msgs.length) return;
+            if (this.messages[id].length > 0) return;
+            const withDates = [];
+            let lastDay = null;
+            msgs.forEach(m => {
+              const tsNano = m.ts_nano != null ? m.ts_nano : null;
+              // Skip messages this device deleted-for-me (groups reload from
+              // history, so the local hide lives in hiddenGroup, not the cache).
+              if (this._isGroupHidden(id, tsNano != null ? String(tsNano) : '')) return;
+              const ts = new Date(m.ts);
+              const day = ts.toDateString();
+              if (day !== lastDay) { withDates.push({ date: ts }); lastDay = day; }
+              const sender = String(m.sender_pk || '').toLowerCase();
+              const senderIsMe = sender === this.myPK;
+              // A file-reference row (file_id set) becomes a media bubble.
+              // file_url is present only when this visor already holds the
+              // bytes; otherwise it renders as a card with a re-request link
+              // (skipped on our own sends — no .from). Bytes then arrive via a
+              // file-ready patch.
+              const file = m.file_id ? {
+                id: m.file_id,
+                name: m.file_name || 'file',
+                size: m.file_size || 0,
+                url: m.file_url || null,
+                from: senderIsMe ? null : sender,
+              } : null;
+              const reply = (m.reply_to_ts || m.reply_to_preview || m.reply_to_sender) ? {
+                sender: (m.reply_to_sender || '').toLowerCase(),
+                ts: m.reply_to_ts || '',
+                preview: m.reply_to_preview || '',
+              } : null;
+              withDates.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file, reply, tsNano });
+            });
+            this.messages[id] = withDates;
+            this.messagesQuantity[id] = msgs.length;
+            if (this.group === id) {
+              const el = document.getElementById('messages');
+              el.innerHTML = '';
+              this.messages[id].forEach(m => this._showMessage(m));
+              el.scrollTop = el.scrollHeight;
+            }
+          })
+          .catch(e => console.debug('group history skipped:', e.message));
+      }
+
+      sendGroupMessage(text) {
+        const gid = this.group;
+        // A reply wraps the body in a {"skychat_reply":...} envelope; the
+        // optimistic bubble keeps the reply descriptor + clean text.
+        const replyMeta = this.replyTo ? { ...this.replyTo } : null;
+        const wireText = replyMeta ? this._encodeReply(text) : text;
+        this.cancelReply();
+        // Optimistic pending bubble → sent (GroupSend ok = the reference is on
+        // the feed, headed to every member) / failed. Per-member received/read
+        // isn't tracked in v1. The poll echo dedups against this bubble
+        // (from='me' + matching text) and backfills its ts_nano. _deliverGroup
+        // owns the wire call (shared with resend).
+        const message = { ts: new Date(), from: 'me', text, group: true, sender: this.myPK, reply: replyMeta, status: 'pending' };
+        this.addMsgToList(gid, message, { group: true });
+        const el = document.getElementById('messages');
+        el.scrollTop = el.scrollHeight;
+        this._deliverGroup(gid, message, wireText);
+      }
+
+      // handleGroupSSE routes an inbound group message (channel="group") to its
+      // thread. Our own messages are echoed back by the visor's poll, so skip
+      // them — the optimistic bubble already showed them.
+      handleGroupSSE(data) {
+        const gid = data.group_id;
+        if (!gid) return;
+        const sender = String(data.sender || '').toLowerCase();
+        const tsNano = data.ts_nano != null ? data.ts_nano : null;
+        if (this.myPK && sender === this.myPK) {
+          // Our own message echoed back by the poll — we already showed it
+          // optimistically, but the echo carries the feed's ts_nano (the exact
+          // delete/reply id). Backfill it onto the matching pending bubble so
+          // "delete for everyone" works before any reload.
+          if (tsNano != null) {
+            const list = this.messages[gid] || [];
+            for (let i = list.length - 1; i >= 0; i--) {
+              const m = list[i];
+              if (m.from === 'me' && m.tsNano == null && m.text === data.message) { m.tsNano = tsNano; break; }
+            }
+          }
+          return;
+        }
+        if (this._isGroupHidden(gid, tsNano != null ? String(tsNano) : '')) return; // hidden-for-me
+        // A group file reference carries the same additive file_* fields as a
+        // DM file event, so fileFromSSE builds the descriptor (its .from = the
+        // sender, which powers the re-request link when the bytes aren't held).
+        const file = this.fileFromSSE(data);
+        const reply = this.replyFromSSE(data);
+        // Use the feed timestamp (shared by all members) so a reply's scroll-to
+        // resolves the same parent everywhere; fall back to now if absent.
+        const ts = data.ts ? new Date(data.ts) : new Date();
+        this.addMsgToList(gid, { ts, from: sender, text: data.message, group: true, sender, file, reply, tsNano }, { group: true });
+        if (!this.groups.find(g => g.id === gid)) this.syncGroups();
+      }
+
+      // handleFileReady attaches the now-servable URL to a file bubble whose
+      // bytes just arrived from a backfill re-send we requested. The event
+      // carries only the file id + URL (no thread), so scan every conversation
+      // for the matching reference, patch it, and re-render if it's open. Serves
+      // both DM re-requests and group file pulls (new joiner / pruned copy).
+      handleFileReady(data) {
+        const fid = data.file_id;
+        if (!fid) return;
+        let touched = null;
+        Object.keys(this.messages).forEach(key => {
+          (this.messages[key] || []).forEach(m => {
+            if (m.file && m.file.id === fid) {
+              if (data.file_url) m.file.url = data.file_url;
+              m.file.local = false;
+              m.file.status = 'received';
+              touched = key;
+            }
+          });
+        });
+        if (touched == null) return;
+        // A 66-hex key is a DM (localStorage-cached); a group id is not.
+        if (touched.length === 66) this.saveChat(touched);
+        if (touched === this.activeKey()) this._rerenderActive();
+      }
+
+      // _rerenderActive redraws the open conversation (DM or group) from its
+      // message buffer — used after an in-place patch (e.g. a file-ready fill).
+      _rerenderActive() {
+        const key = this.activeKey();
+        if (!key) return;
+        const el = document.getElementById('messages');
+        el.innerHTML = '';
+        (this.messages[key] || []).forEach(m => this._showMessage(m));
+        el.scrollTop = el.scrollHeight;
+      }
+
+      updateGroupPreview(gid, msg) {
+        document.querySelectorAll('.group-item').forEach(item => {
+          if (item.dataset.gid === gid) {
+            const arrow = msg.from === 'me' ? '↑ ' : '';
+            const prev = item.querySelector('.recipient-preview');
+            if (prev) prev.textContent = arrow + (msg.text || '');
+          }
+        });
+      }
+
+      openCreateGroup() {
+        document.getElementById('cgName').value = '';
+        document.getElementById('createGroupModal').classList.add('visible');
+      }
+
+      openJoinGroup() {
+        document.getElementById('jgInvite').value = '';
+        document.getElementById('joinGroupModal').classList.add('visible');
+      }
+
+      closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+      createGroup() {
+        const name = document.getElementById('cgName').value.trim();
+        const mode = document.getElementById('cgMode').value;
+        if (!name) { this.showToast('Enter a group name.', 'error'); return; }
+        fetch('/group', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, mode, members: [] })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(j => {
+            this.closeModal('createGroupModal');
+            this.syncGroups();
+            if (j.invite) { navigator.clipboard.writeText(j.invite).catch(() => {}); this.showToast('Group created — invite link copied.'); }
+            if (j.info && j.info.id) setTimeout(() => this.selectGroup(j.info.id), 300);
+          })
+          .catch(e => this.showToast(`Create failed: ${e}`, 'error'));
+      }
+
+      joinGroup() {
+        const invite = document.getElementById('jgInvite').value.trim();
+        if (!invite) { this.showToast('Paste an invite link.', 'error'); return; }
+        fetch('/group/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ invite })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            this.closeModal('joinGroupModal');
+            this.syncGroups();
+            this.showToast('Joined group.');
+            if (info && info.id) setTimeout(() => this.selectGroup(info.id), 300);
+          })
+          .catch(e => this.showToast(`Join failed: ${e}`, 'error'));
+      }
+
+      showGroupInvite() {
+        if (!this.group) return;
+        fetch(`/group/${this.group}/invite`)
+          .then(res => res.ok ? res.json() : Promise.reject('unavailable'))
+          .then(j => { navigator.clipboard.writeText(j.invite).catch(() => {}); this.showToast('Invite link copied to clipboard.'); })
+          .catch(() => this.showToast('Could not get invite link.', 'error'));
+      }
+
+      leaveGroup() {
+        if (!this.group || !confirm('Leave this group?')) return;
+        const gid = this.group;
+        fetch(`/group/${gid}/leave`, { method: 'POST' })
+          .then(res => { if (res.ok) { this._removeGroup(gid); this.showToast('Left group.'); } else res.text().then(t => this.showToast(t, 'error')); })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      deleteGroup() {
+        if (!this.group || !confirm('Delete this group? (owner only)')) return;
+        const gid = this.group;
+        fetch(`/group/${gid}`, { method: 'DELETE' })
+          .then(res => { if (res.ok) { this._removeGroup(gid); this.showToast('Group deleted.'); } else res.text().then(t => this.showToast(t, 'error')); })
+          .catch(e => this.showToast(e.message, 'error'));
+      }
+
+      _removeGroup(gid) {
+        this.groups = this.groups.filter(g => g.id !== gid);
+        this._unpinIf('grp:' + gid);
+        this.renderGroups();
+        if (this.group === gid) {
+          this.group = null;
+          document.getElementById('groupHeader').classList.add('hidden');
+          document.getElementById('messages').classList.add('hidden');
+          document.getElementById('msgForm').classList.add('hidden');
+          document.getElementById('emptyState').classList.remove('hidden');
+        }
       }
 
       processPk(pk) {
         return pk.toLowerCase();
       }
 
-      addMsgToList(remotePk, msg) {
-        if (msg.from !== 'me' && !this.recipients.includes(msg.from)) {
+      addMsgToList(remotePk, msg, opts = {}) {
+        const isGroup = !!opts.group;
+        if (!isGroup && msg.from !== 'me' && !this.recipients.includes(msg.from)) {
           this._addRecipient(msg.from);
         }
+        if (!this.messages[remotePk]) this.messages[remotePk] = [];
 
         let needsDate = false;
         const msgs = this.messages[remotePk];
@@ -1401,15 +3108,19 @@
         if (needsDate) {
           const dateMsg = { date: new Date() };
           this.messages[remotePk].push(dateMsg);
-          if (remotePk === this.recipient) this._showMessage(dateMsg);
+          if (remotePk === this.activeKey()) this._showMessage(dateMsg);
         }
 
         this.messages[remotePk].push(msg);
         this.messagesQuantity[remotePk] = (this.messagesQuantity[remotePk] || 0) + 1;
-        if (remotePk === this.recipient) this._showMessage(msg);
+        if (remotePk === this.activeKey()) this._showMessage(msg);
 
-        this.saveChat(remotePk);
-        this.updatePreview(remotePk, msg);
+        if (isGroup) {
+          this.updateGroupPreview(remotePk, msg);
+        } else {
+          this.saveChat(remotePk);
+          this.updatePreview(remotePk, msg);
+        }
       }
 
       updatePreview(remotePk, msg) {
@@ -1432,6 +3143,7 @@
 
         const pk = this.recipient;
         this.recipients = this.recipients.filter(v => v !== pk);
+        this._unpinIf('dm:' + pk);
         delete this.messages[pk];
         delete this.messagesQuantity[pk];
         delete this.messagesSeen[pk];
@@ -1461,6 +3173,35 @@
 
         this.recipient = null;
         this.showToast('Conversation deleted.');
+      }
+
+      // _purgeSelfThread removes a phantom self-conversation (keyed by our own
+      // PK) that an earlier build created by rendering our outbound /sse mirror
+      // as an inbound message. One-time cleanup for existing caches; a no-op
+      // once gone. The onmessage dir="out" guard stops new ones from appearing.
+      _purgeSelfThread() {
+        const me = this.myPK;
+        if (!me || !this.recipients.includes(me)) return;
+        this.recipients = this.recipients.filter(v => v !== me);
+        this._unpinIf('dm:' + me);
+        delete this.messages[me];
+        delete this.messagesQuantity[me];
+        delete this.messagesSeen[me];
+        document.querySelectorAll('.recipient-item').forEach(item => {
+          if (item.dataset.pk === me) item.parentElement.remove();
+        });
+        this.saveRecipients();
+        this.saveSeenList();
+        localStorage.removeItem(`c_${me}`);
+        localStorage.removeItem(`i_${me}`);
+        if (this.recipient === me) {
+          this.recipient = null;
+          document.getElementById('messages').innerHTML = '';
+          document.getElementById('chatHeader').classList.add('hidden');
+          document.getElementById('messages').classList.add('hidden');
+          document.getElementById('msgForm').classList.add('hidden');
+          document.getElementById('emptyState').classList.remove('hidden');
+        }
       }
 
       openSettings() {
@@ -1524,9 +3265,22 @@
       }
 
       saveChat(pk) {
-        if (this.messages[pk]) {
-          localStorage.setItem(`c_${pk}`, JSON.stringify(this.messages[pk]));
-        }
+        if (!this.messages[pk]) return;
+        // Object-URL previews for locally-sent files don't survive a reload,
+        // so strip them before persisting — a received file keeps its
+        // /files/ URL. Prevents a broken image after reload.
+        const serializable = this.messages[pk].map(m => {
+          // Strip the retained File object (not serializable) and a locally-sent
+          // file's object-URL preview (a dead blob URL after reload).
+          if (m._file || (m.file && m.file.local && m.file.url)) {
+            const copy = Object.assign({}, m);
+            delete copy._file;
+            if (m.file && m.file.local && m.file.url) copy.file = Object.assign({}, m.file, { url: null });
+            return copy;
+          }
+          return m;
+        });
+        localStorage.setItem(`c_${pk}`, JSON.stringify(serializable));
       }
 
       saveSeenList() {
@@ -1552,6 +3306,15 @@
             const saved = localStorage.getItem(`c_${pk}`);
             if (saved) {
               this.messages[pk] = JSON.parse(saved);
+              // Drop any duplicate-wireId messages a past double-delivery left
+              // in the cache, so old dups don't reappear on reload.
+              const seenIds = new Set();
+              this.messages[pk] = this.messages[pk].filter(m => {
+                if (!m || m.date || !m.wireId) return true;
+                if (seenIds.has(m.wireId)) return false;
+                seenIds.add(m.wireId);
+                return true;
+              });
               this.messages[pk].forEach(m => {
                 if (m.date) {
                   m.date = new Date(m.date);
@@ -1560,6 +3323,7 @@
                   m.ts = new Date(m.ts);
                 }
               });
+              this.saveChat(pk); // persist the de-duped list
               setTimeout(() => {
                 const lastMsg = this.messages[pk][this.messages[pk].length - 1];
                 if (lastMsg && !lastMsg.date) this.updatePreview(pk, lastMsg);
@@ -1579,9 +3343,21 @@
       if (e.target === this) app.closeSettings();
     });
 
+    // Close group modals on backdrop click.
+    ['createGroupModal', 'joinGroupModal'].forEach(function(id) {
+      document.getElementById(id).addEventListener('click', function(e) {
+        if (e.target === this) app.closeModal(id);
+      });
+    });
+
     // Keyboard shortcuts
     document.addEventListener('keydown', function(e) {
-      if (e.key === 'Escape') app.closeSettings();
+      if (e.key === 'Escape') {
+        app.closeSettings();
+        app.closeLightbox();
+        app.closeModal('createGroupModal');
+        app.closeModal('joinGroupModal');
+      }
     });
   </script>
 </body>
