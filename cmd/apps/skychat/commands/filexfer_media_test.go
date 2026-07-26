@@ -50,6 +50,42 @@ func TestSaveSentCopy(t *testing.T) {
 	}
 }
 
+// The URL handed back to the sender must name the copy that was actually kept
+// — that is what lets the sender's own bubble (whose blob: URL dies with the
+// page) still render a recorded clip after a reload.
+func TestSentCopyURL(t *testing.T) {
+	src := filepath.Join(t.TempDir(), "voice-20260727-140322.weba")
+	if err := os.WriteFile(src, []byte("OPUS"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	offer := xfer.Offer{ID: "scu-1", Name: filepath.Base(src)}
+	if err := saveSentCopy(src, offer); err != nil {
+		t.Fatalf("saveSentCopy: %v", err)
+	}
+	dir, err := downloadsDir()
+	if err != nil {
+		t.Fatalf("downloadsDir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(filepath.Join(dir, sentCopyName(offer))) }) //nolint
+
+	// The extension comes from the source path, so /files/ + mediaContentType
+	// classify the clip as audio rather than falling back to a download.
+	if got, want := sentCopyURL(offer.ID, src), "/files/scu-1.weba"; got != want {
+		t.Errorf("sentCopyURL = %q, want %q", got, want)
+	}
+	if ct := mediaContentType(sentCopyName(offer)); ct != "audio/webm" {
+		t.Errorf("kept copy content type = %q, want audio/webm", ct)
+	}
+	// No id, or no copy on disk (saveSentCopy is best-effort, and the group
+	// path keeps none) → no URL, rather than one that 404s.
+	if got := sentCopyURL("", src); got != "" {
+		t.Errorf("sentCopyURL with no id = %q, want empty", got)
+	}
+	if got := sentCopyURL("scu-never-saved", src); got != "" {
+		t.Errorf("sentCopyURL with no kept copy = %q, want empty", got)
+	}
+}
+
 func TestThumbnailHandler_ServesJPEG(t *testing.T) {
 	dir, err := downloadsDir()
 	if err != nil {

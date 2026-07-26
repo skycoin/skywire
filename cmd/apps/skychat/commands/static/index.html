@@ -4415,9 +4415,19 @@
             this.showToast(opts.sentToast || 'File sent.');
             // The response carries the server-assigned file id so a re-request
             // can locate the bytes and the id matches the feed reference other
-            // members see.
+            // members see. It also carries file_url — the copy the visor kept
+            // of what we just sent.
             res.json().then(j => {
               if (j && j.id) message.file.id = j.id;
+              // Re-point the bubble at that served copy: what it is showing now
+              // is an object URL, which dies with the page, so without this a
+              // clip we recorded comes back as a bare file card after a reload.
+              // Images are left alone — they persist as their own thumbnail
+              // data URL (above), which survives even if the copy is pruned.
+              if (j && j.file_url && !this.isImageFile(message.file)) {
+                message.file.url = j.file_url;
+                message.file.local = false; // a served URL persists — don't strip on save
+              }
               if (!isGroup) this.saveChat(destination);
             }).catch(() => { if (!isGroup) this.saveChat(destination); });
           })
