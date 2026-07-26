@@ -27,7 +27,7 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/group"
+	"github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )

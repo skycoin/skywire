@@ -25,7 +25,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	skychatgroup "github.com/skycoin/skywire/cmd/apps/skychat/group"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 

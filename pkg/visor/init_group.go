@@ -13,7 +13,7 @@ import (
 	"path/filepath"
 	"time"
 
-	skychatgroup "github.com/skycoin/skywire/cmd/apps/skychat/group"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skychat/history"
