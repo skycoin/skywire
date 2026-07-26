@@ -30,6 +30,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
@@ -68,19 +69,107 @@ type chatMsg struct {
 // native app.
 
 var (
-	chatMu     sync.Mutex
-	chatLog    []chatMsg
+	chatMu        sync.Mutex
+	chatStoreOnce sync.Once
+	chatStore     *history.MemStore // shared skychat history backend (pkg/skychat/history)
+	// fileMeta holds the wasm-only file-transfer fields of file entries, keyed
+	// by the entry's message ID — history.Message doesn't carry them, so we
+	// re-hydrate them when projecting a stored record back to a chatMsg. File
+	// entries are rare (a browser session sends/receives few files), so the map
+	// isn't evicted in lockstep with the store's per-peer cap.
+	fileMeta   = map[string]chatMsg{}
 	chatClient *app.Client
 	chatConns  = map[string]*message.Conn{} // cached outbound conns keyed by "<network>|<peerPK hex>"
 )
 
-func appendChat(m chatMsg) {
-	chatMu.Lock()
-	chatLog = append(chatLog, m)
-	if len(chatLog) > 500 { // keep the last 500; a browser tab isn't a history store
-		chatLog = chatLog[len(chatLog)-500:]
+// chatHistoryLimits bounds the in-browser transcript. Unlike a public-facing
+// persistent store this is our OWN sent/received messages, not an abuse
+// surface, so rate-limiting/whitelisting are OFF (dropping would hide messages
+// from the UI). MaxMessageSize sits at the frame ceiling so nothing valid is
+// rejected; PerPeerCap bounds per-conversation memory; TotalCapBytes bounds
+// overall; TTL is off (the tab is already ephemeral).
+func chatHistoryLimits() history.Limits {
+	return history.Limits{
+		MaxMessageSize: message.MaxFrameSize,
+		PerPeerCap:     500,
+		TotalCapBytes:  8 * 1024 * 1024,
 	}
-	chatMu.Unlock()
+}
+
+// getChatStore lazily builds the MemStore on first use (skychat, file-xfer, and
+// voice events can all append). Limits are static + valid, so NewMemStore can't
+// realistically fail; on the impossible error path we log and return nil and
+// callers no-op rather than panic.
+func getChatStore() *history.MemStore {
+	chatStoreOnce.Do(func() {
+		s, err := history.NewMemStore(chatHistoryLimits())
+		if err != nil {
+			vlog("skychat: history init: " + err.Error())
+			return
+		}
+		chatStore = s
+	})
+	return chatStore
+}
+
+// appendChat records a surfaced message in the shared history store. chatMsg.From
+// is always the OTHER end (peer) for both directions (see the chatMsg doc), which
+// maps directly onto history.Message.Peer; the actual sender (From) is the peer on
+// an inbound message and empty on an outbound one.
+func appendChat(m chatMsg) {
+	st := getChatStore()
+	if st == nil {
+		return
+	}
+	if m.ID == "" {
+		m.ID = newChatID()
+	}
+	if m.IsFile {
+		chatMu.Lock()
+		fileMeta[m.ID] = m
+		chatMu.Unlock()
+	}
+	rec := history.Message{
+		Peer:     m.From,
+		Outgoing: m.Out,
+		Text:     m.Text,
+		ID:       m.ID,
+		ReplyTo:  m.ReplyTo,
+	}
+	if m.TS > 0 {
+		rec.Timestamp = time.UnixMilli(m.TS).UTC()
+	}
+	if !m.Out {
+		rec.From = m.From // inbound: the sender is the peer
+	}
+	if err := st.Append(rec); err != nil {
+		vlog("skychat: history append: " + err.Error())
+	}
+}
+
+// storeToChatMsg projects a stored history.Message back to the chatMsg shape the
+// page consumes, re-hydrating file-transfer fields from fileMeta by message ID.
+func storeToChatMsg(rec history.Message) chatMsg {
+	m := chatMsg{
+		ID:      rec.ID,
+		From:    rec.Peer,
+		Text:    rec.Text,
+		TS:      rec.Timestamp.UnixMilli(),
+		Out:     rec.Outgoing,
+		ReplyTo: rec.ReplyTo,
+	}
+	if rec.ID != "" {
+		chatMu.Lock()
+		if fm, ok := fileMeta[rec.ID]; ok {
+			m.IsFile = true
+			m.FileID = fm.FileID
+			m.FileName = fm.FileName
+			m.FileSize = fm.FileSize
+			m.FileOK = fm.FileOK
+		}
+		chatMu.Unlock()
+	}
+	return m
 }
 
 // runBrowserSkychat is the in-process skychat AppFunc. It connects an app.Client
@@ -300,10 +389,39 @@ func jsSkychatSend(_ js.Value, args []js.Value) interface{} {
 	})
 }
 
-// jsSkychatMessages() → JSON string of buffered messages (newest last).
+// jsSkychatMessages() → JSON string of recent messages across all peers,
+// newest last (up to 500). Backed by the shared history MemStore.
 func jsSkychatMessages(js.Value, []js.Value) interface{} {
-	chatMu.Lock()
-	b, _ := json.Marshal(chatLog) //nolint:errcheck
-	chatMu.Unlock()
+	out := []chatMsg{}
+	if st := getChatStore(); st != nil {
+		recs, _ := st.ListRecent(500) //nolint:errcheck
+		for _, r := range recs {
+			out = append(out, storeToChatMsg(r))
+		}
+	}
+	b, _ := json.Marshal(out) //nolint:errcheck
+	return string(b)
+}
+
+// jsSkychatHistory(peerPkHex[, limit]) → JSON string of that peer's messages,
+// newest last (limit <= 0 → all). Parity with the native app's /history?peer=
+// endpoint, now that both sides share pkg/skychat/history.
+func jsSkychatHistory(_ js.Value, args []js.Value) interface{} {
+	peer := ""
+	if len(args) >= 1 && args[0].Type() == js.TypeString {
+		peer = args[0].String()
+	}
+	limit := 0
+	if len(args) >= 2 && args[1].Type() == js.TypeNumber {
+		limit = args[1].Int()
+	}
+	out := []chatMsg{}
+	if st := getChatStore(); st != nil && peer != "" {
+		recs, _ := st.ListByPeer(peer, limit) //nolint:errcheck
+		for _, r := range recs {
+			out = append(out, storeToChatMsg(r))
+		}
+	}
+	b, _ := json.Marshal(out) //nolint:errcheck
 	return string(b)
 }
