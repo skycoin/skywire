@@ -1102,6 +1102,52 @@
       font-size: 14px;
     }
 
+    /* Notifications settings */
+    .notif-body { text-align: left; }
+    .notif-setting {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .notif-setting:last-child { border-bottom: none; }
+    .notif-setting .notif-label { font-size: 14px; color: var(--text-primary); }
+    .notif-setting .notif-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .notif-perm { font-size: 13px; color: var(--text-secondary); padding: 10px 0; }
+    .notif-perm.granted { color: var(--accent-green); }
+    .notif-perm.denied { color: var(--accent-orange); }
+    .notif-muted-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 4px; }
+    .notif-muted-list { max-height: 160px; overflow-y: auto; }
+    .notif-muted-empty { font-size: 13px; color: var(--text-muted); padding: 6px 0; }
+    .notif-muted-item {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 8px; padding: 7px 0; font-size: 13px; color: var(--text-primary);
+    }
+    .notif-muted-item .nm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .notif-muted-item .nm-unmute {
+      flex: 0 0 auto; background: var(--bg-tertiary); border: 1px solid var(--border-color);
+      color: var(--text-secondary); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+    }
+    .notif-muted-item .nm-unmute:hover { background: var(--bg-hover); color: var(--text-primary); }
+    /* On/off switch */
+    .switch { position: relative; width: 42px; height: 24px; flex: 0 0 auto; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .slider {
+      position: absolute; inset: 0; cursor: pointer; border-radius: 24px;
+      background: var(--bg-tertiary); border: 1px solid var(--border-color); transition: .2s;
+    }
+    .switch .slider::before {
+      content: ''; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px;
+      background: #fff; border-radius: 50%; transition: .2s;
+    }
+    .switch input:checked + .slider { background: var(--accent-blue); border-color: var(--accent-blue); }
+    .switch input:checked + .slider::before { transform: translateX(18px); }
+    .switch input:disabled + .slider { opacity: .5; cursor: not-allowed; }
+    /* Header mute-bell active (muted) state */
+    .icon-btn.muted { color: var(--accent-orange); border-color: var(--accent-orange); }
+
     .hidden {
       display: none !important;
     }
@@ -1116,6 +1162,7 @@
           <div id="statusDot" class="status-dot"></div>
           <span id="statusText">Connected</span>
         </div>
+        <button class="icon-btn" style="margin-left:auto" onclick="app.openNotifSettings()" title="Notification settings" aria-label="Notification settings">&#x1F514;</button>
       </div>
       <form class="recipient-form" onsubmit="app.createRecipient(this); return false;">
         <input id="destinationPk" type="text" placeholder="Enter public key..." />
@@ -1151,6 +1198,7 @@
       </div>
       <div class="chat-header-actions">
         <button id="dmPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
+        <button id="dmMuteBtn" class="icon-btn" onclick="app.toggleMute()" title="Mute notifications for this chat" aria-label="Mute notifications">&#x1F514;</button>
         <button id="pairToggleBtn" class="icon-btn hidden" onclick="app.togglePair()" title="Pair / unpair via CXO">&#x29B5;</button>
         <button class="icon-btn" onclick="app.copyPk()" title="Copy public key">&#x2398;</button>
         <button class="icon-btn" onclick="app.openSettings()" title="Contact settings">&#x2699;</button>
@@ -1175,6 +1223,7 @@
       </div>
       <div class="chat-header-actions">
         <button id="groupPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
+        <button id="groupMuteBtn" class="icon-btn" onclick="app.toggleMute()" title="Mute notifications for this group" aria-label="Mute notifications">&#x1F514;</button>
         <button class="icon-btn" onclick="app.showGroupInvite()" title="Copy invite link">&#x1F517;</button>
         <button class="icon-btn" onclick="app.leaveGroup()" title="Leave group">&#x21AA;</button>
         <button class="icon-btn danger" onclick="app.deleteGroup()" title="Delete group (owner only)" aria-label="Delete group">
@@ -1226,6 +1275,41 @@
         </label>
         <button class="btn btn-danger" onclick="app.removePicture()">Remove Avatar</button>
         <button class="btn btn-secondary" onclick="app.closeSettings()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notifications Settings Modal -->
+  <div id="notifModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Notifications</h3>
+      <div class="notif-body">
+        <div id="notifPerm" class="notif-perm"></div>
+        <div class="notif-setting">
+          <div>
+            <div class="notif-label">Enable notifications</div>
+            <div class="notif-desc">Desktop alerts for new messages</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="notifEnabled" onchange="app.toggleNotifEnabled(this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="notif-setting">
+          <div>
+            <div class="notif-label">Show message preview</div>
+            <div class="notif-desc">Include a snippet of the text (off = "New message" only)</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="notifPreview" onchange="app.toggleNotifPreview(this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="notif-muted-title">Muted chats &amp; groups</div>
+        <div id="notifMutedList" class="notif-muted-list"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="app.closeModal('notifModal')">Close</button>
       </div>
     </div>
   </div>
@@ -1288,6 +1372,18 @@
         // visor history, so a local hide needs to survive here, not in the cache).
         this.hiddenGroup = new Set(this._loadHiddenGroup());
         this.pinned = localStorage.getItem('skychat_pinned') || null; // "dm:<pk>" | "grp:<gid>" | null
+        // Notification prefs: master enable + preview toggle + per-thread mutes
+        // (keyed by DM pk or group id). Opt-out model — a thread notifies unless
+        // its key is in `muted`. Persisted in localStorage under skychat_notif.
+        this.notif = this._loadNotifPrefs();
+        this.notifPreviewLen = 80; // max chars of message text shown in a notification
+
+        // Whether the window currently has focus, so we can suppress a
+        // notification for the thread the user is actively looking at (Telegram
+        // behavior) while still notifying for background threads.
+        this._winFocused = (typeof document !== 'undefined' && document.hasFocus) ? document.hasFocus() : true;
+        window.addEventListener('focus', () => { this._winFocused = true; });
+        window.addEventListener('blur', () => { this._winFocused = false; });
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -2080,6 +2176,16 @@
           }
 
           this.updateUnreadBadges();
+
+          // Desktop notification for a background DM (suppressed for the open,
+          // focused thread and for muted/disabled threads by _shouldNotify).
+          const notifKey = this.processPk(data.sender);
+          this.notifyMessage(notifKey, {
+            title: this.shortPk(notifKey),
+            body: this.notif.preview ? (this._previewText(message.text, message.file) || 'New message') : 'New message',
+            icon: localStorage.getItem(`i_${notifKey}`) || 'p.png',
+            isGroup: false,
+          });
         };
       }
 
@@ -2241,6 +2347,7 @@
         this.refreshPairControls();
         this.renderPinned();
         this._updatePinButtons();
+        this._updateMuteButtons();
       }
 
       // refreshPairControls toggles the pair button + the CXO option
@@ -2842,6 +2949,7 @@
         this.loadGroupHistory(id);
         this.renderPinned();
         this._updatePinButtons();
+        this._updateMuteButtons();
       }
 
       // loadGroupHistory backfills persisted messages when the local buffer is
@@ -2950,6 +3058,16 @@
         const ts = data.ts ? new Date(data.ts) : new Date();
         this.addMsgToList(gid, { ts, from: sender, text: data.message, group: true, sender, file, reply, tsNano }, { group: true });
         if (!this.groups.find(g => g.id === gid)) this.syncGroups();
+
+        // Desktop notification for a background group message: "Group" title,
+        // "<sender>: <preview>" body (sender omitted when preview is off).
+        const gname = (this.groups.find(g => g.id === gid) || {}).name || 'Group';
+        let body = 'New message';
+        if (this.notif.preview) {
+          const pv = this._previewText(data.message, file);
+          body = this.shortPk(sender) + (pv ? ': ' + pv : '');
+        }
+        this.notifyMessage(gid, { title: gname, body, isGroup: true });
       }
 
       // handleFileReady attaches the now-servable URL to a file bubble whose
@@ -3214,6 +3332,188 @@
 
       closeSettings() {
         document.getElementById('settingsModal').classList.remove('visible');
+      }
+
+      // ---------------------------------------------------------------------
+      // Notifications
+      //
+      // Desktop alerts for inbound DM/group messages via the Web Notifications
+      // API (the UI runs on 127.0.0.1, a secure context, so the API is
+      // available). Prefs live in localStorage under skychat_notif:
+      //   { enabled:bool, preview:bool, muted:{ "<pk|gid>": true } }
+      // Opt-out model — every thread notifies unless its key is muted. The
+      // thread the user is actively viewing in a focused window is suppressed.
+      // ---------------------------------------------------------------------
+
+      _loadNotifPrefs() {
+        try {
+          const raw = JSON.parse(localStorage.getItem('skychat_notif') || '{}');
+          return {
+            enabled: raw.enabled !== false, // default ON
+            preview: raw.preview !== false, // default ON (show text snippet)
+            muted: (raw.muted && typeof raw.muted === 'object') ? raw.muted : {},
+          };
+        } catch (e) {
+          return { enabled: true, preview: true, muted: {} };
+        }
+      }
+
+      _saveNotifPrefs() {
+        localStorage.setItem('skychat_notif', JSON.stringify({
+          enabled: this.notif.enabled,
+          preview: this.notif.preview,
+          muted: this.notif.muted,
+        }));
+      }
+
+      _notifSupported() { return typeof window !== 'undefined' && 'Notification' in window; }
+
+      _isMuted(key) { return !!(key && this.notif.muted[key]); }
+
+      // _shouldNotify gates a desktop alert for thread `key` (DM pk or group id):
+      // notifications enabled + browser permission granted + thread not muted,
+      // and never for the thread already open in a focused window.
+      _shouldNotify(key) {
+        if (!this._notifSupported() || Notification.permission !== 'granted') return false;
+        if (!this.notif.enabled || this._isMuted(key)) return false;
+        if (this._winFocused && this.activeKey() === key) return false;
+        return true;
+      }
+
+      // _previewText renders a one-line snippet of a message for a notification
+      // body: a file shows its name; text is collapsed + trimmed to
+      // notifPreviewLen chars. Returns '' for an empty/whitespace text.
+      _previewText(text, file) {
+        if (file) return '📎 ' + (file.name || 'file');
+        const t = String(text || '').replace(/\s+/g, ' ').trim();
+        if (!t) return '';
+        return t.length > this.notifPreviewLen ? t.slice(0, this.notifPreviewLen) + '…' : t;
+      }
+
+      // notifyMessage raises a desktop notification for an inbound message.
+      // `key` is the thread key; opts = {title, body, icon?, isGroup?}. Clicking
+      // focuses the window and opens the thread.
+      notifyMessage(key, opts) {
+        if (!this._shouldNotify(key)) return;
+        try {
+          const n = new Notification(opts.title, {
+            body: opts.body,
+            icon: opts.icon || 'p.png',
+            tag: 'skychat:' + key, // collapse repeats from the same thread
+            renotify: true,
+          });
+          n.onclick = () => {
+            window.focus();
+            if (opts.isGroup) this.selectGroup(key); else this.selectRecipient(key);
+            n.close();
+          };
+        } catch (e) {
+          // Notification construction can throw if permission was revoked
+          // mid-session — degrade silently.
+        }
+      }
+
+      openNotifSettings() {
+        this._renderNotifModal();
+        document.getElementById('notifModal').classList.add('visible');
+      }
+
+      _renderNotifModal() {
+        const perm = document.getElementById('notifPerm');
+        const enabledBox = document.getElementById('notifEnabled');
+        const previewBox = document.getElementById('notifPreview');
+        if (!this._notifSupported()) {
+          perm.className = 'notif-perm denied';
+          perm.textContent = 'This browser does not support desktop notifications.';
+          enabledBox.checked = false; enabledBox.disabled = true;
+          previewBox.checked = this.notif.preview; previewBox.disabled = true;
+        } else {
+          const p = Notification.permission;
+          if (p === 'granted') {
+            perm.className = 'notif-perm granted';
+            perm.textContent = '✓ Browser notifications are allowed.';
+          } else if (p === 'denied') {
+            perm.className = 'notif-perm denied';
+            perm.textContent = 'Blocked by the browser. Allow notifications for this site in your browser settings to receive alerts.';
+          } else {
+            perm.className = 'notif-perm';
+            perm.textContent = 'Turn on “Enable notifications” to grant browser permission.';
+          }
+          enabledBox.disabled = false;
+          enabledBox.checked = this.notif.enabled;
+          previewBox.disabled = false;
+          previewBox.checked = this.notif.preview;
+        }
+        this._renderMutedList();
+      }
+
+      _renderMutedList() {
+        const wrap = document.getElementById('notifMutedList');
+        const keys = Object.keys(this.notif.muted).filter(k => this.notif.muted[k]);
+        if (!keys.length) {
+          wrap.innerHTML = '<div class="notif-muted-empty">No muted chats or groups.</div>';
+          return;
+        }
+        wrap.innerHTML = keys.map(k => {
+          const label = this._threadLabel(k);
+          return `<div class="notif-muted-item"><span class="nm-name" title="${this.escapeHtml(k)}">${this.escapeHtml(label)}</span>` +
+                 `<button class="nm-unmute" onclick="app.unmuteThread('${k}')">Unmute</button></div>`;
+        }).join('');
+      }
+
+      // _threadLabel resolves a thread key to a human label: a group's name if
+      // it's a known group, otherwise a short PK for a DM.
+      _threadLabel(key) {
+        const g = this.groups.find(x => x.id === key);
+        if (g) return g.name || key;
+        return this.shortPk(key);
+      }
+
+      toggleNotifEnabled(on) {
+        this.notif.enabled = !!on;
+        this._saveNotifPrefs();
+        // Enabling with no decision yet → ask the browser (this runs inside the
+        // checkbox's user gesture, so the prompt is allowed).
+        if (on && this._notifSupported() && Notification.permission === 'default') {
+          Notification.requestPermission().then(() => this._renderNotifModal());
+        }
+      }
+
+      toggleNotifPreview(on) {
+        this.notif.preview = !!on;
+        this._saveNotifPrefs();
+      }
+
+      // toggleMute flips notifications for the currently open thread and syncs
+      // the header bell. Invoked from the DM/group header mute button.
+      toggleMute() {
+        const key = this.activeKey();
+        if (!key) return;
+        const nowMuted = !this.notif.muted[key];
+        if (nowMuted) this.notif.muted[key] = true; else delete this.notif.muted[key];
+        this._saveNotifPrefs();
+        this._updateMuteButtons();
+        this.showToast(nowMuted ? 'Notifications muted for this chat.' : 'Notifications unmuted.');
+      }
+
+      unmuteThread(key) {
+        delete this.notif.muted[key];
+        this._saveNotifPrefs();
+        this._renderMutedList();
+        this._updateMuteButtons();
+      }
+
+      // _updateMuteButtons reflects the active thread's mute state on the DM and
+      // group header bells (🔕 muted / 🔔 unmuted).
+      _updateMuteButtons() {
+        const muted = this._isMuted(this.activeKey());
+        ['dmMuteBtn', 'groupMuteBtn'].forEach(id => {
+          const btn = document.getElementById(id);
+          if (!btn) return;
+          btn.classList.toggle('muted', muted);
+          btn.innerHTML = muted ? '&#x1F515;' : '&#x1F514;';
+          btn.title = muted ? 'Unmute notifications for this chat' : 'Mute notifications for this chat';
+        });
       }
 
       updatePicture() {
