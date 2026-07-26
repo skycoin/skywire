@@ -1067,7 +1067,7 @@ func handleConn(conn *framedConn) {
 		// to satisfy a waiting /message --wait request, NOT surfaced
 		// to the SSE stream. Plain-text bodies fall through to the
 		// legacy path unchanged.
-		envHandled, envBody, _ := tryHandleChatEnvelope(payload, peerPK, func(id string) {
+		envHandled, envBody, _, envReplyTo := tryHandleChatEnvelope(payload, peerPK, func(id string) {
 			ackEnv := chatEnvelope{Type: chatTypeAck, ID: id}
 			ackBytes, mErr := json.Marshal(ackEnv)
 			if mErr != nil {
@@ -1127,6 +1127,7 @@ func handleConn(conn *framedConn) {
 			Dir:       "in",
 			From:      peerPK,
 			Text:      text,
+			ReplyToID: envReplyTo, // quoted-reply target, threaded from the wire (shared codec)
 		})
 	}
 }

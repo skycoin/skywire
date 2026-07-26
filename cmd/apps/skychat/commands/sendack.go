@@ -103,10 +103,10 @@ func deliverAck(id string) {
 // JSON, type field matches a known chat-* value. Anything else is
 // "not an envelope" so plain-text JSON-looking chat (e.g. someone
 // typing literal {} into a chat window) still reaches its peer.
-func tryHandleChatEnvelope(payload []byte, peerPKHex string, sendAck func(id string)) (handled bool, body string, id string) {
+func tryHandleChatEnvelope(payload []byte, peerPKHex string, sendAck func(id string)) (handled bool, body string, id string, replyTo string) {
 	env, ok := message.ParseEnvelope(payload)
 	if !ok {
-		return false, "", ""
+		return false, "", "", ""
 	}
 	switch env.Type {
 	case chatTypeMsg:
@@ -116,16 +116,19 @@ func tryHandleChatEnvelope(payload []byte, peerPKHex string, sendAck func(id str
 			// message so the recipient sees it.
 			sendAck(env.ID)
 		}
-		return true, env.Body, env.ID
+		// env.ReplyTo (a quoted-reply's target id) rides the shared codec; the
+		// caller surfaces it as the inbound event's ReplyToID so the recipient
+		// sees the thread, not just the sender.
+		return true, env.Body, env.ID, env.ReplyTo
 	case chatTypeAck:
 		if env.ID != "" {
 			deliverAck(env.ID)
 		}
 		// Consumed; nothing to surface to the chat UI.
-		return true, "", env.ID
+		return true, "", env.ID, ""
 	}
 	_ = peerPKHex // reserved for future per-peer ack policy / rate-limit
-	return false, "", ""
+	return false, "", "", ""
 }
 
 // chatAckTimeoutFloor / chatAckTimeoutCeiling clamp the wait_ms

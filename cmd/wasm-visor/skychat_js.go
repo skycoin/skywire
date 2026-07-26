@@ -19,6 +19,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -39,10 +40,15 @@ const skychatPort = 1
 
 // chatMsg is one buffered message surfaced to the page (skychatMessages()).
 type chatMsg struct {
+	ID   string `json:"id"`   // stable message id (envelope id); addressable for replies
 	From string `json:"from"` // peer PK hex (the other end)
 	Text string `json:"text"`
 	TS   int64  `json:"ts"`  // unix milliseconds
 	Out  bool   `json:"out"` // true = we sent it, false = received
+	// ReplyTo, when set, is the ID of the message this one quotes (threaded
+	// reply). Carried on the wire in message.Envelope.ReplyTo — shared with the
+	// native app, so a reply sent from either side shows its quote on the other.
+	ReplyTo string `json:"reply_to,omitempty"`
 
 	// File attachment fields (Telegram-style: a file is a message). Set only on
 	// file events; empty on plain chat. On a received file (Out=false) FileID
@@ -140,7 +146,7 @@ func readChatConn(conn *message.Conn) {
 		if err != nil {
 			return
 		}
-		text, ackID := decodeChatPayload(payload)
+		text, ackID, replyTo, msgID := decodeChatPayload(payload)
 		if ackID != "" {
 			if b, mErr := (message.Envelope{Type: message.TypeAck, ID: ackID}).Marshal(); mErr == nil {
 				if wErr := conn.WriteFrame(b); wErr != nil {
@@ -151,7 +157,7 @@ func readChatConn(conn *message.Conn) {
 		if text == "" {
 			continue // an ack-only envelope, or empty — nothing to surface
 		}
-		appendChat(chatMsg{From: from, Text: text, TS: nowMs(), Out: false})
+		appendChat(chatMsg{ID: msgID, From: from, Text: text, TS: nowMs(), Out: false, ReplyTo: replyTo})
 		vlog(fmt.Sprintf("skychat: message from %s: %q", shortPK(from), text))
 	}
 }
@@ -161,7 +167,7 @@ func readChatConn(conn *message.Conn) {
 // is "dmsg" (default) or "skynet"; conns are cached per (network, peer) so the two
 // transports don't clobber each other. The dial/connect/send steps are vlog'd so
 // the chat window's log pane can surface them (like the skysocks-lite route setup).
-func sendChat(pkHex, text, network string) error {
+func sendChat(pkHex, text, network, replyTo string) error {
 	if chatClient == nil {
 		return fmt.Errorf("skychat not started yet")
 	}
@@ -205,7 +211,16 @@ func sendChat(pkHex, text, network string) error {
 			chatMu.Unlock()
 		}()
 	}
-	if err := conn.WriteFrame([]byte(text)); err != nil {
+	// Every DM rides a chat-msg envelope carrying a stable id, so it is
+	// addressable — replies (and, in follow-ups, receipts/deletes) reference it.
+	// The native read loop already decodes chat-msg envelopes (message.ParseEnvelope),
+	// so this stays wire-compatible; ReplyTo is omitempty, set only for a reply.
+	id := newChatID()
+	wire, mErr := (message.Envelope{Type: message.TypeMsg, ID: id, Body: text, ReplyTo: replyTo}).Marshal()
+	if mErr != nil {
+		return fmt.Errorf("encode: %w", mErr)
+	}
+	if err := conn.WriteFrame(wire); err != nil {
 		chatMu.Lock()
 		delete(chatConns, key)
 		chatMu.Unlock()
@@ -213,8 +228,17 @@ func sendChat(pkHex, text, network string) error {
 		return fmt.Errorf("send: %w", err)
 	}
 	vlog(fmt.Sprintf("skychat: sent %d bytes to %s over %s", len(text), shortPK(pkHex), net))
-	appendChat(chatMsg{From: pkHex, Text: text, TS: nowMs(), Out: true})
+	appendChat(chatMsg{ID: id, From: pkHex, Text: text, TS: nowMs(), Out: true, ReplyTo: replyTo})
 	return nil
+}
+
+// newChatID mints a short random hex id for an outbound chat-msg envelope.
+func newChatID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return fmt.Sprintf("%x", nowMs())
+	}
+	return fmt.Sprintf("%x", b[:])
 }
 
 // decodeChatPayload extracts the message text from a frame, plus the ack id to
@@ -224,19 +248,20 @@ func sendChat(pkHex, text, network string) error {
 // "chat-ack", else the raw bytes. Recognition (message.ParseEnvelope) is
 // conservative — a known chat-* type only — so literal JSON typed into a chat
 // still reaches the peer as plain text.
-func decodeChatPayload(payload []byte) (text, ackID string) {
+func decodeChatPayload(payload []byte) (text, ackID, replyTo, msgID string) {
 	if env, ok := message.ParseEnvelope(payload); ok {
 		switch env.Type {
 		case message.TypeAck:
-			return "", ""
+			return "", "", "", ""
 		case message.TypeMsg:
+			ack := ""
 			if env.Ack && env.ID != "" {
-				return env.Body, env.ID
+				ack = env.ID
 			}
-			return env.Body, ""
+			return env.Body, ack, env.ReplyTo, env.ID
 		}
 	}
-	return string(payload), ""
+	return string(payload), "", "", ""
 }
 
 func peerPKHex(conn net.Conn) string {
@@ -255,7 +280,7 @@ func shortPK(pk string) string {
 
 func nowMs() int64 { return time.Now().UnixMilli() }
 
-// jsSkychatSend(peerPkHex, text[, network]) → Promise<null> (rejects on error).
+// jsSkychatSend(peerPkHex, text[, network[, replyToID]]) → Promise<null>.
 // network is "dmsg" (default) or "skynet".
 func jsSkychatSend(_ js.Value, args []js.Value) interface{} {
 	if len(args) < 2 {
@@ -266,8 +291,12 @@ func jsSkychatSend(_ js.Value, args []js.Value) interface{} {
 	if len(args) >= 3 && args[2].Type() == js.TypeString {
 		network = args[2].String()
 	}
+	replyTo := "" // optional 4th arg: the id of a message from skychatMessages() to quote
+	if len(args) >= 4 && args[3].Type() == js.TypeString {
+		replyTo = args[3].String()
+	}
 	return promise(func() (interface{}, error) {
-		return nil, sendChat(pkHex, text, network)
+		return nil, sendChat(pkHex, text, network, replyTo)
 	})
 }
 
