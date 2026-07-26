@@ -1384,6 +1384,13 @@
         this._winFocused = (typeof document !== 'undefined' && document.hasFocus) ? document.hasFocus() : true;
         window.addEventListener('focus', () => { this._winFocused = true; });
         window.addEventListener('blur', () => { this._winFocused = false; });
+        // Tell the server whether this UI can show notifications, so the
+        // background process only posts host-OS notifications when no capable
+        // UI is attached. The heartbeat keeps the server-side lease fresh while
+        // we stay capable; when we stop (tab closed / permission revoked /
+        // disabled) the lease expires (~45s) and the Go side takes over.
+        this._reportNotifCapability();
+        setInterval(() => { if (this._notifCapable()) this._reportNotifCapability(); }, 20000);
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -2095,6 +2102,9 @@
           this.connected = true;
           document.getElementById('statusDot').classList.remove('disconnected');
           document.getElementById('statusText').textContent = 'Connected';
+          // Re-assert notification capability: a restarted visor starts with a
+          // cleared lease, and this is also our fresh-connection signal.
+          this._reportNotifCapability();
         };
 
         source.onerror = () => {
@@ -3475,8 +3485,11 @@
         // Enabling with no decision yet → ask the browser (this runs inside the
         // checkbox's user gesture, so the prompt is allowed).
         if (on && this._notifSupported() && Notification.permission === 'default') {
-          Notification.requestPermission().then(() => this._renderNotifModal());
+          Notification.requestPermission().then(() => { this._renderNotifModal(); this._reportNotifCapability(); });
         }
+        // Reflect the new capability to the server immediately (esp. disabling,
+        // so the Go side can take over without waiting for the lease to lapse).
+        this._reportNotifCapability();
       }
 
       toggleNotifPreview(on) {
@@ -3514,6 +3527,27 @@
           btn.innerHTML = muted ? '&#x1F515;' : '&#x1F514;';
           btn.title = muted ? 'Unmute notifications for this chat' : 'Mute notifications for this chat';
         });
+      }
+
+      // _notifCapable reports whether THIS browser can currently show a desktop
+      // notification (API present + browser permission granted + notifications
+      // enabled). Note it is capability, not per-message: a capable UI still
+      // suppresses individual messages for the focused/muted thread — the Go
+      // side stays out entirely whenever a capable UI is present.
+      _notifCapable() {
+        return this._notifSupported() && Notification.permission === 'granted' && this.notif.enabled;
+      }
+
+      // _reportNotifCapability tells the server whether this UI can show
+      // notifications, so the background process only posts host-OS
+      // notifications when no capable UI is attached (see commands/osnotify.go).
+      // Best-effort; a failed POST just lets the server-side lease drift.
+      _reportNotifCapability() {
+        fetch('/notify-capable', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ capable: this._notifCapable() }),
+        }).catch(() => {});
       }
 
       updatePicture() {

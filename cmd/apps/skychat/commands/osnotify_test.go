@@ -1,0 +1,138 @@
+// Package commands cmd/apps/skychat/commands/osnotify_test.go
+//
+// Unit coverage for the host-OS notification plumbing that doesn't touch the OS:
+// the capability lease + uiCanNotify gate, the /notify-capable handler, and the
+// title/preview helpers. The real osnotify backend is never invoked here (see
+// TestMain), so no desktop notification is posted during the suite.
+package commands
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/skycoin/skywire/pkg/cipher"
+)
+
+func TestMain(m *testing.M) {
+	// Never fire a real host-OS notification during the suite: handleConn-driven
+	// tests reach notifyOSInbound, and on a developer desktop
+	// osnotify.Available() is true, which would otherwise pop real notifications.
+	osNotify = false
+	os.Exit(m.Run())
+}
+
+// leaseIsFresh reads the capability lease directly (no clientCount gate), for
+// asserting the handler's effect.
+func leaseIsFresh() bool {
+	notifyCapMu.Lock()
+	defer notifyCapMu.Unlock()
+	return !notifyCapAt.IsZero() && time.Since(notifyCapAt) < notifyCapableTTL
+}
+
+func TestNotifyCapableHandler(t *testing.T) {
+	if appLog == nil {
+		appLog = func(string, ...any) {}
+	}
+	t.Cleanup(func() { markUINotifyCapable(false) })
+
+	// Wrong method → 405.
+	rr := httptest.NewRecorder()
+	notifyCapableHandler(rr, httptest.NewRequest(http.MethodGet, "/notify-capable", nil))
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET: code=%d, want 405", rr.Code)
+	}
+
+	// Malformed body → 400.
+	rr = httptest.NewRecorder()
+	notifyCapableHandler(rr, httptest.NewRequest(http.MethodPost, "/notify-capable", strings.NewReader("{bad")))
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("bad body: code=%d, want 400", rr.Code)
+	}
+
+	// capable:true → 204 + a fresh lease.
+	markUINotifyCapable(false)
+	rr = httptest.NewRecorder()
+	notifyCapableHandler(rr, httptest.NewRequest(http.MethodPost, "/notify-capable", strings.NewReader(`{"capable":true}`)))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("capable=true: code=%d", rr.Code)
+	}
+	if !leaseIsFresh() {
+		t.Error("capable=true should set a fresh lease")
+	}
+
+	// capable:false → 204 + lease cleared.
+	rr = httptest.NewRecorder()
+	notifyCapableHandler(rr, httptest.NewRequest(http.MethodPost, "/notify-capable", strings.NewReader(`{"capable":false}`)))
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("capable=false: code=%d", rr.Code)
+	}
+	if leaseIsFresh() {
+		t.Error("capable=false should clear the lease")
+	}
+}
+
+func TestUICanNotify(t *testing.T) {
+	origHub := hub
+	hub = newSSEHub()
+	t.Cleanup(func() {
+		hub = origHub
+		markUINotifyCapable(false)
+	})
+
+	// No SSE client → never "capable UI present", regardless of the lease.
+	markUINotifyCapable(true)
+	if uiCanNotify() {
+		t.Error("no SSE client attached → uiCanNotify must be false")
+	}
+
+	// Attach a client. Now a fresh lease means a capable UI is present.
+	_, unsub := hub.subscribe()
+	t.Cleanup(unsub)
+
+	markUINotifyCapable(true)
+	if !uiCanNotify() {
+		t.Error("client + fresh lease → uiCanNotify should be true")
+	}
+
+	// A stale lease (older than the TTL) → not capable, even with a client.
+	notifyCapMu.Lock()
+	notifyCapAt = time.Now().Add(-notifyCapableTTL - time.Second)
+	notifyCapMu.Unlock()
+	if uiCanNotify() {
+		t.Error("stale lease → uiCanNotify should be false (Go side takes over)")
+	}
+
+	// Client present but browser reported it can't notify → not capable.
+	markUINotifyCapable(false)
+	if uiCanNotify() {
+		t.Error("capable=false → uiCanNotify should be false")
+	}
+}
+
+func TestShortHexPK(t *testing.T) {
+	pk, _ := cipher.GenerateKeyPair()
+	hex := pk.Hex()
+	got := shortHexPK(hex)
+	if got != hex[:8]+"…"+hex[len(hex)-4:] {
+		t.Errorf("shortHexPK(%s) = %q", hex, got)
+	}
+	// A short string is returned unchanged (no panic on slicing).
+	if shortHexPK("abc") != "abc" {
+		t.Errorf("short input should pass through")
+	}
+}
+
+func TestNotifPreview(t *testing.T) {
+	if got := notifPreview("  hello   world \n friend "); got != "hello world friend" {
+		t.Errorf("collapse whitespace: got %q", got)
+	}
+	long := strings.Repeat("a", notifPreviewLen+20)
+	got := notifPreview(long)
+	if r := []rune(got); len(r) != notifPreviewLen+1 || r[notifPreviewLen] != '…' {
+		t.Errorf("truncation: len=%d want %d + ellipsis", len([]rune(got)), notifPreviewLen)
+	}
+}
