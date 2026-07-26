@@ -573,6 +573,14 @@ func (h *sseHub) publishEvent(ev chatEvent) {
 // renderLegacySSE renders a chatEvent into the historical /sse JSON shape
 // {sender, message, network, dir, id, len, [to]} so existing /sse consumers
 // (incl. `cli skychat listen`) are unaffected by the richer /events schema.
+//
+// File attachments are surfaced additively: when the event carries file_*
+// fields (a Telegram-style "a file is a message" event from the xfer
+// manager), they are appended to the same JSON object. This is a
+// backward-compatible extension — line-based consumers like `cli skychat
+// listen` ignore the unknown keys, while the browser UI renders the media
+// inline. file_url, present only on received ("in") files, is the ready-made
+// download path under /files/ so the UI needn't reconstruct the saved name.
 func renderLegacySSE(ev chatEvent) string {
 	m := map[string]interface{}{
 		"sender":  ev.From,
@@ -584,6 +592,25 @@ func renderLegacySSE(ev chatEvent) string {
 	}
 	if ev.To != "" {
 		m["to"] = ev.To
+	}
+	// A quoted reply rides the body as a {"skychat_reply":...} envelope; unwrap
+	// it to the plain text + additive reply_to_* fields (raw consumers still see
+	// the reply's text as the message).
+	if meta, ok := parseReplyText(ev.Text); ok {
+		m["message"] = meta.Text
+		enrichReplyRow(m, meta)
+	}
+	if ev.FileID != "" {
+		m["file_id"] = ev.FileID
+		m["file_name"] = ev.FileName
+		m["file_size"] = ev.FileSize
+		m["file_status"] = ev.FileStatus
+		// A saved local path (set on inbound files once the transfer
+		// verifies) becomes the /files/<name> download URL the UI can
+		// render directly. Empty on the sender's own "out" event.
+		if ev.FilePath != "" {
+			m["file_url"] = "/files/" + filepath.Base(ev.FilePath)
+		}
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -900,6 +927,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 	defer stopPairRPCWatchdog()
 	startPairPoller(ctx)
 	defer stopPairPoller()
+	startGroupPoller(ctx)
+	defer stopGroupPoller()
 
 	// Wire optional password protection. If passwordFile is empty or
 	// the file is missing, requireAuth* are no-ops.
@@ -925,7 +954,11 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
+	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
+	mux.HandleFunc("/request-file", requireAuthFunc(requestFileHandler(ctx)))
+	mux.HandleFunc("/read-receipt", requireAuthFunc(readReceiptHandler(ctx)))
 	registerPairHTTPHandlers(ctx, mux)
+	registerGroupHTTPHandlers(mux)
 
 	// Portless-internal mode: no TCP port. Publish the mux to the visor's
 	// in-process HTTP-handler registry so the hypervisor's control surface
@@ -976,9 +1009,18 @@ func RunSkychat(ctx context.Context, args []string) error {
 
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 	srv := &http.Server{
-		Addr:         url,
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
+		Addr:    url,
+		Handler: mux,
+		// ReadHeaderTimeout (not ReadTimeout) bounds only the request-header read
+		// for slowloris protection; the BODY read is left unbounded so a large
+		// file upload (/send-file) is never truncated by a whole-request deadline
+		// — a 5s ReadTimeout used to cut a multi-MB upload short, surfacing as
+		// "no file". There is no size cap on uploads.
+		ReadHeaderTimeout: 5 * time.Second,
+		// WriteTimeout bounds the response write for ordinary handlers; the SSE
+		// stream and the /send-file handler (which blocks for the whole transfer)
+		// clear their own per-request deadline so a long-lived stream / large
+		// transfer isn't killed.
 		WriteTimeout: 10 * time.Second,
 	}
 
@@ -1058,6 +1100,12 @@ func handleConn(conn *framedConn) {
 			continue
 		}
 
+		// File-backfill control envelope (file-request). Recognized frames
+		// trigger a re-send of the held file and are not surfaced as chat.
+		if handleFileRequestFrame(context.Background(), raddr.PubKey, payload) {
+			continue
+		}
+
 		peerPK := raddr.PubKey.Hex()
 
 		// Then try the chat-msg / chat-ack envelope. A chat-msg
@@ -1067,7 +1115,7 @@ func handleConn(conn *framedConn) {
 		// to satisfy a waiting /message --wait request, NOT surfaced
 		// to the SSE stream. Plain-text bodies fall through to the
 		// legacy path unchanged.
-		envHandled, envBody, _ := tryHandleChatEnvelope(payload, peerPK, func(id string) {
+		envHandled, envBody, envID, envKind := tryHandleChatEnvelope(payload, peerPK, func(id string) {
 			ackEnv := chatEnvelope{Type: chatTypeAck, ID: id}
 			ackBytes, mErr := json.Marshal(ackEnv)
 			if mErr != nil {
@@ -1078,15 +1126,29 @@ func handleConn(conn *framedConn) {
 				appLog("chat-ack write to %s failed: %v", peerPK, wErr)
 			}
 		})
-		var text string
-		if envHandled {
-			if envBody == "" {
-				// chat-ack consumed — nothing to surface.
-				continue
+		// A chat-ack / chat-read frame is a receipt for a message WE sent:
+		// advance that bubble's status at our end (received / read) and stop —
+		// receipts are never surfaced as chat lines. envID is the sender-side
+		// message id the receipt echoes; peerPK is the recipient it came from.
+		if envHandled && envBody == "" {
+			switch envKind {
+			case chatTypeAck:
+				broadcastDMStatus(envID, dmStatusReceived, peerPK)
+			case chatTypeRead:
+				broadcastDMStatus(envID, dmStatusRead, peerPK)
 			}
+			continue
+		}
+		// eventID is the stable per-message id. For an inbound chat-msg it's the
+		// SENDER's envelope id, so our read-receipt (and the sender's status
+		// correlation) reference the same id on both ends; plain text has none.
+		text := string(payload)
+		eventID := newEventID()
+		if envHandled {
 			text = envBody
-		} else {
-			text = string(payload)
+			if envID != "" {
+				eventID = envID
+			}
 		}
 
 		counterMu.Lock()
@@ -1121,7 +1183,7 @@ func handleConn(conn *framedConn) {
 		// "len" is the body byte length, surfaced for size-debug
 		// without forcing consumers to count after a json round-trip.
 		hub.publishEvent(chatEvent{
-			ID:        newEventID(),
+			ID:        eventID,
 			Channel:   channelDM,
 			Transport: string(raddr.Net),
 			Dir:       "in",
@@ -1147,6 +1209,16 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			// {acked:false, reason:"timeout"}. Clamped to
 			// [chatAckTimeoutFloor, chatAckTimeoutCeiling] server-side.
 			WaitMS int `json:"wait_ms,omitempty"`
+			// Receipts requests the message-status lifecycle WITHOUT
+			// blocking: the message is wrapped in an id'd chat-msg
+			// envelope (ack=true) exactly like --wait, but the handler
+			// returns immediately with {ok:true, id:<hex>} instead of
+			// waiting. The id lets the browser track the bubble as the
+			// peer's chat-ack (→ received) and chat-read (→ read)
+			// receipts arrive later as dm-status /sse events. Used by
+			// the browser UI; the CLI keeps the byte-identical plain
+			// send unless it opts in.
+			Receipts bool `json:"receipts,omitempty"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1274,7 +1346,18 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		var ackCh <-chan struct{}
 		var unregisterAck func()
 		var ackWait time.Duration
-		if data.WaitMS > 0 {
+		// receiptCh backs the non-blocking stale-conn auto-recovery: when
+		// receipts are on we register an ack waiter BEFORE the write (so a fast
+		// ack isn't missed), then a background goroutine drops the cached conn if
+		// no ack comes back — see staleAckWindow below.
+		var receiptCh <-chan struct{}
+		var receiptUnreg func()
+		// Both --wait and receipts wrap the body in an id'd chat-msg envelope
+		// (ack=true). --wait additionally blocks on a waiter for the returning
+		// chat-ack; receipts does not (the ack/read arrive later as dm-status
+		// /sse events). A plain send with neither stays byte-identical on the
+		// wire for back-compat with pre-envelope peers.
+		if data.WaitMS > 0 || data.Receipts {
 			ackID = newEventID()
 			env := chatEnvelope{Type: chatTypeMsg, ID: ackID, Body: data.Message, Ack: true}
 			eb, mErr := json.Marshal(env)
@@ -1283,9 +1366,16 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				return
 			}
 			wirePayload = eb
-			ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
-			ackCh, unregisterAck = registerAckWaiter(ackID)
-			defer unregisterAck()
+			if data.WaitMS > 0 {
+				ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
+				ackCh, unregisterAck = registerAckWaiter(ackID)
+				defer unregisterAck()
+			} else if data.Receipts {
+				// Registered here (pre-write) so the returning ack always finds a
+				// waiter; ownership passes to the background goroutine after the
+				// response is written.
+				receiptCh, receiptUnreg = registerAckWaiter(ackID)
+			}
 		}
 
 		// Write the framed payload. On a *cached* conn, a write
@@ -1442,6 +1532,26 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 				})
 			case <-req.Context().Done():
 				return
+			}
+		} else if data.Receipts {
+			// Non-blocking receipts: hand the browser the wire id so it can
+			// track this bubble as the peer's received/read status arrives
+			// later on the dm-status /sse stream.
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+				"ok": true,
+				"id": ackID,
+			})
+			// Stale-conn auto-recovery: a half-open cached conn (peer restarted,
+			// idle-dead transport) accepts our write without error but the frame
+			// never lands, so no chat-ack returns. If none arrives within
+			// staleAckWindow, drop the conn we wrote to — the next send (or a
+			// Resend) redials fresh, so the operator recovers without restarting
+			// the visor. A live peer acks in well under a second, so this rarely
+			// fires on a healthy conn. Old peers that never ack pay a redial on
+			// the next send (functional, just chattier).
+			if receiptCh != nil {
+				go dropStaleConn(pk, conn, receiptCh, receiptUnreg, staleAckWindow)
 			}
 		}
 
@@ -1712,6 +1822,13 @@ func historyHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Surface quoted-reply metadata: a reply is stored raw as a
+	// {"skychat_reply":...} body; rewrite each in place to the clean text +
+	// reply_to_* fields the browser renders on reload.
+	for i := range msgs {
+		enrichReplyMessage(&msgs[i])
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -2062,7 +2179,15 @@ func handleIPCSignal(client *ipc.Client) {
 	for {
 		m, err := client.Read()
 		if err != nil {
-			appLog("%s IPC received error: %v", skyenv.SkychatName, err)
+			// A read error is terminal: golang-ipc closes the receive channel
+			// on error, so every subsequent Read returns immediately with the
+			// same error. Without breaking, this loop spins at full tilt (seen
+			// on Windows as hundreds of "received channel has been closed" lines
+			// per millisecond), starving the HTTP server + dmsg on constrained
+			// hosts. Stop the handler instead — the app keeps serving; it just
+			// won't receive a shutdown-via-IPC signal.
+			appLog("%s IPC read error, stopping IPC handler: %v", skyenv.SkychatName, err)
+			break
 		}
 
 		if m != nil {
