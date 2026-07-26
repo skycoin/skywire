@@ -130,7 +130,7 @@ func TestPresenceStore_Sweep(t *testing.T) {
 	}
 }
 
-// A cancelled context stops the sweep instead of running it to completion —
+// A canceled context stops the sweep instead of running it to completion —
 // the loop must not outlive the app on shutdown.
 func TestPresenceStore_SweepStopsOnCancel(t *testing.T) {
 	pks := testPKs(t, 40)
@@ -152,7 +152,7 @@ func TestPresenceStore_SweepStopsOnCancel(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	if count == len(pks) {
-		t.Error("sweep ran to completion after its context was cancelled")
+		t.Error("sweep ran to completion after its context was canceled")
 	}
 }
 
