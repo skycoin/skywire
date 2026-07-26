@@ -60,6 +60,18 @@
   var SK_KEY = 'skywire-visor-sk';
   function loadStoredSK() { try { return localStorage.getItem(SK_KEY) || ''; } catch (e) { return ''; } }
   function storeSK(hex) { try { localStorage.setItem(SK_KEY, hex); } catch (e) {} }
+
+  // Go<->TinyGo wasm-visor selection. The chosen variant is persisted per-origin
+  // in localStorage; the SK above is variant-INDEPENDENT, so switching keeps the
+  // same identity/PK. Workers can't read localStorage, so the variant travels to
+  // worker.js as a `?variant=` query param on its URL (and on the wasm/wasm_exec
+  // fetches it makes). An empty value = the server's default blob. A SharedWorker
+  // is keyed by (url,name); the variant is in BOTH so switching spins up a fresh
+  // worker on the new blob instead of reusing the old-variant one.
+  var VARIANT_KEY = 'skywire-visor-variant';
+  function loadVariant() { try { return localStorage.getItem(VARIANT_KEY) || ''; } catch (e) { return ''; } }
+  function variantQS() { var v = loadVariant(); return v ? ('?variant=' + encodeURIComponent(v)) : ''; }
+  function variantSuffix() { var v = loadVariant(); return v ? ('-' + v) : ''; }
   function newSKHex() {
     var b = crypto.getRandomValues(new Uint8Array(32));
     return Array.prototype.map.call(b, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
@@ -154,7 +166,7 @@
     return new Promise(function (resolve, reject) {
       if (typeof SharedWorker === 'undefined') { reject(new Error('SharedWorker unavailable')); return; }
       var sw;
-      try { sw = new SharedWorker('worker.js', { name: 'skywire-wasm-visor' }); } catch (e) { reject(e); return; }
+      try { sw = new SharedWorker('worker.js' + variantQS(), { name: 'skywire-wasm-visor' + variantSuffix() }); } catch (e) { reject(e); return; }
       var port = sw.port;
       var nextId = 1, pending = Object.create(null);
       var upTimer = setTimeout(function () { reject(new Error('shared worker did not report ready in time')); }, 45000);
@@ -254,7 +266,7 @@
     return new Promise(function (resolve, reject) {
       if (typeof Worker === 'undefined') { reject(new Error('Web Workers unavailable')); return; }
       var worker;
-      try { worker = new Worker('worker.js'); } catch (e) { reject(e); return; }
+      try { worker = new Worker('worker.js' + variantQS()); } catch (e) { reject(e); return; }
       var nextId = 1, pending = Object.create(null);
       var upTimer = setTimeout(function () { reject(new Error('worker did not report ready in time')); }, 30000);
 
@@ -456,14 +468,14 @@
   // are unavailable or worker.js can't be loaded (e.g. exotic embeddings). Keeps the
   // page working, at the cost of the main-thread-freeze risk the worker path avoids.
   async function bootInPage(sk) {
-    await loadScript('wasm_exec.js');
+    await loadScript('wasm_exec.js' + variantQS());
     var go = new Go();
     if (go.importObject.gojs && !go.importObject.gojs['runtime.getRandomData']) {
       go.importObject.gojs['runtime.getRandomData'] = function (ptr, len) {
         crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
       };
     }
-    var buf = await fetch('wasm-visor.wasm').then(function (r) { return r.arrayBuffer(); });
+    var buf = await fetch('wasm-visor.wasm' + variantQS()).then(function (r) { return r.arrayBuffer(); });
     var res = await WebAssembly.instantiate(buf, go.importObject);
     go.run(res.instance); // installs globalThis.skywireVisor
     while (!self.skywireVisor || !self.skywireVisor.boot) {
@@ -498,4 +510,42 @@
     }
     return pk;
   })();
+
+  // Minimal Go<->TinyGo switcher. Shown only when the server advertises >1 embedded
+  // variant (a TinyGo-only build hides it). Selecting a variant persists it and
+  // reloads; the SK is variant-independent, so the page reboots the OTHER blob as
+  // the SAME PK — the A/B test harness. Lives here (not Angular) so it works in the
+  // served PWA and under --harness alike, with no UI rebuild.
+  function injectVariantToggle() {
+    try {
+      fetch('wasm-variants.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (info) {
+        var avail = (info && info.available) || [];
+        if (avail.length < 2) { return; }
+        var cur = loadVariant() || (info && info.default) || avail[0];
+        function build() {
+          if (!document.body || document.getElementById('sky-variant-toggle')) { return; }
+          var wrap = document.createElement('div');
+          wrap.id = 'sky-variant-toggle';
+          wrap.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:2147483647;font:12px system-ui,sans-serif;background:rgba(20,20,24,.9);color:#ddd;padding:4px 8px;border-radius:6px;border:1px solid #555;box-shadow:0 1px 4px rgba(0,0,0,.4)';
+          var lab = document.createElement('span'); lab.textContent = 'visor: '; wrap.appendChild(lab);
+          var sel = document.createElement('select');
+          sel.title = 'wasm-visor toolchain — reloads with the same identity';
+          sel.style.cssText = 'background:#111;color:#ddd;border:1px solid #555;border-radius:4px;font:inherit';
+          avail.forEach(function (v) {
+            var o = document.createElement('option'); o.value = v; o.textContent = v;
+            if (v === cur) { o.selected = true; }
+            sel.appendChild(o);
+          });
+          sel.addEventListener('change', function () {
+            try { localStorage.setItem(VARIANT_KEY, sel.value); } catch (e) {}
+            location.reload();
+          });
+          wrap.appendChild(sel);
+          document.body.appendChild(wrap);
+        }
+        if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', build); } else { build(); }
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  injectVariantToggle();
 })();

@@ -289,6 +289,8 @@ tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+a
 	cp ./cmd/wasm-visor/index.html ./build/wasm-visor/
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor/
+	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor/
+	cp ./pkg/wasmhv/worker.js ./build/wasm-visor/
 	@echo "built ./build/wasm-visor (TinyGo fork) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
