@@ -30,9 +30,9 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skychat/group"
 )
 
 const groupLogCap = 1000
@@ -54,7 +54,11 @@ type groupMsg struct {
 	GroupID string `json:"group_id"`
 	From    string `json:"from"` // sender PK hex
 	Text    string `json:"text"`
-	TS      int64  `json:"ts"` // unix milliseconds
+	TS      int64  `json:"ts"` // unix milliseconds (display)
+	// TSNano is the message's exact UnixNano as a STRING — JS numbers are
+	// float64 and lose precision past 2^53, but a nanosecond ts is ~1.7e18.
+	// skychatGroupUnsend(id, tsNano) round-trips this to delete-for-everyone.
+	TSNano string `json:"ts_nano"`
 }
 
 // appendGroupMsg records a group message, deduped by (group, sender, ns-ts) so
@@ -107,7 +111,7 @@ func startGroupChat(sk cipher.SecKey, log *logging.Logger) {
 	}
 	mgr.SetMessageHandler(func(groupID string, sender cipher.PubKey, msg group.Message) {
 		key := groupDedupKey(groupID, sender.Hex(), msg.TS.UnixNano())
-		if appendGroupMsg(groupMsg{GroupID: groupID, From: sender.Hex(), Text: msg.Text, TS: msg.TS.UnixMilli()}, key) {
+		if appendGroupMsg(groupMsg{GroupID: groupID, From: sender.Hex(), Text: msg.Text, TS: msg.TS.UnixMilli(), TSNano: strconv.FormatInt(msg.TS.UnixNano(), 10)}, key) {
 			vlog(fmt.Sprintf("group: message in %s from %s: %q", shortID(groupID), shortPK(sender.Hex()), msg.Text))
 		}
 	})
@@ -312,6 +316,25 @@ func jsGroupInvite(_ js.Value, args []js.Value) interface{} {
 	}
 	id := args[0].String()
 	return promise(func() (interface{}, error) { return groupMgr.BuildInvite(id) })
+}
+
+// jsGroupUnsend(id, tsNano) → Promise<null>. Delete-for-everyone: the shared
+// Manager publishes a signed tombstone for the message at that exact UnixNano.
+// tsNano is a STRING (the ts_nano field from skychatGroupMessages) to avoid the
+// JS float64 precision loss. Owner/sender authorization is enforced by Manager.
+func jsGroupUnsend(_ js.Value, args []js.Value) interface{} {
+	if groupMgr == nil {
+		return errPromise("group chat not ready")
+	}
+	if len(args) < 2 {
+		return errPromise("skychatGroupUnsend(id, tsNano)")
+	}
+	id := args[0].String()
+	ts, err := strconv.ParseInt(args[1].String(), 10, 64)
+	if err != nil {
+		return errPromise("skychatGroupUnsend: tsNano must be a numeric string")
+	}
+	return promise(func() (interface{}, error) { return nil, groupMgr.Unsend(id, ts) })
 }
 
 // jsGroupList() → JSON [{id,name,mode,role,members,status}].

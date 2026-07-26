@@ -191,6 +191,7 @@ func main() {
 		"skychatGroupLeave":     js.FuncOf(jsGroupLeave),
 		"skychatGroupDelete":    js.FuncOf(jsGroupDelete),
 		"skychatGroupInvite":    js.FuncOf(jsGroupInvite),
+		"skychatGroupUnsend":    js.FuncOf(jsGroupUnsend),
 		"skychatGroupList":      js.FuncOf(jsGroupList),
 		"skychatGroupMessages":  js.FuncOf(jsGroupMessages),
 		"skychatGroupReplay":    js.FuncOf(jsGroupReplay),
