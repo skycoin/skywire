@@ -34,13 +34,13 @@ func captureCmd(t *testing.T) *[]*exec.Cmd {
 
 func TestSanitize(t *testing.T) {
 	cases := map[string]struct{ in, want string }{
-		"plain":            {"hello world", "hello world"},
-		"collapse spaces":  {"a   b\t\tc", "a b c"},
+		"plain":             {"hello world", "hello world"},
+		"collapse spaces":   {"a   b\t\tc", "a b c"},
 		"newlines to space": {"line1\nline2\r\nline3", "line1 line2 line3"},
-		"strip control":    {"a\x00b\x07c", "abc"},
-		"trim edges":       {"  padded  ", "padded"},
-		"empty":            {"", ""},
-		"only whitespace":  {"   \n\t ", ""},
+		"strip control":     {"a\x00b\x07c", "abc"},
+		"trim edges":        {"  padded  ", "padded"},
+		"empty":             {"", ""},
+		"only whitespace":   {"   \n\t ", ""},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

@@ -33,12 +33,15 @@ type voiceAPI struct {
 	recv     []int16
 }
 
-func (a *voiceAPI) VoiceCall(peer cipher.PubKey) (string, error) { a.called = peer; return "call-1", nil }
-func (a *voiceAPI) VoiceAnswer(id string) error                  { a.answered = append(a.answered, id); return nil }
-func (a *voiceAPI) VoiceDecline(id string) error                 { a.declined = append(a.declined, id); return nil }
-func (a *voiceAPI) VoiceHangup(id string) error                  { a.hungup = append(a.hungup, id); return nil }
-func (a *voiceAPI) VoiceActive() ([]string, error)               { return a.active, nil }
-func (a *voiceAPI) VoiceIncoming() ([]string, error)             { return a.incoming, nil }
+func (a *voiceAPI) VoiceCall(peer cipher.PubKey) (string, error) {
+	a.called = peer
+	return "call-1", nil
+}
+func (a *voiceAPI) VoiceAnswer(id string) error      { a.answered = append(a.answered, id); return nil }
+func (a *voiceAPI) VoiceDecline(id string) error     { a.declined = append(a.declined, id); return nil }
+func (a *voiceAPI) VoiceHangup(id string) error      { a.hungup = append(a.hungup, id); return nil }
+func (a *voiceAPI) VoiceActive() ([]string, error)   { return a.active, nil }
+func (a *voiceAPI) VoiceIncoming() ([]string, error) { return a.incoming, nil }
 func (a *voiceAPI) VoiceCallAudio(string) ([]int16, []int16, error) {
 	return a.sent, a.recv, nil
 }
