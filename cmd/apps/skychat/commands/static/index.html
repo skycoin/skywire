@@ -1148,6 +1148,46 @@
     /* Header mute-bell active (muted) state */
     .icon-btn.muted { color: var(--accent-orange); border-color: var(--accent-orange); }
 
+    /* Voice call — incoming banner */
+    .incoming-call {
+      position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+      z-index: 1000; display: flex; align-items: center; gap: 24px;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 14px; padding: 14px 18px; box-shadow: var(--shadow);
+      animation: ic-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes ic-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.35); } 50% { box-shadow: 0 0 0 8px rgba(34,197,94,0); } }
+    .incoming-call .ic-info { display: flex; align-items: center; gap: 12px; }
+    .incoming-call .ic-avatar { font-size: 24px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary); border-radius: 50%; }
+    .incoming-call .ic-title { font-size: 13px; color: var(--text-secondary); }
+    .incoming-call .ic-from { font-size: 14px; color: var(--text-primary); font-weight: 600; }
+    .incoming-call .ic-actions { display: flex; gap: 8px; }
+    .ic-btn { border: none; border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer; color: #fff; }
+    .ic-btn.answer { background: var(--accent-green); }
+    .ic-btn.decline { background: var(--accent-red); }
+    .ic-btn:hover { filter: brightness(1.1); }
+
+    /* Voice call — active-call panel */
+    .call-panel {
+      position: fixed; bottom: 20px; right: 20px; z-index: 1000; width: 260px;
+      background: var(--bg-secondary); border: 1px solid var(--border-color);
+      border-radius: 14px; padding: 14px; box-shadow: var(--shadow);
+    }
+    .call-panel .cp-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+    .call-panel .cp-peer { font-size: 14px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .call-panel .cp-timer { font-size: 13px; color: var(--accent-green); font-variant-numeric: tabular-nums; }
+    .cp-meter { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .cp-meter-row { display: flex; align-items: center; gap: 8px; }
+    .cp-meter-row .cp-lbl { font-size: 11px; color: var(--text-muted); width: 30px; }
+    .cp-bar { flex: 1; height: 6px; background: var(--bg-tertiary); border-radius: 3px; overflow: hidden; }
+    .cp-bar-fill { height: 100%; width: 0; background: var(--accent-green); border-radius: 3px; transition: width .1s linear; }
+    .cp-actions { display: flex; justify-content: center; gap: 12px; }
+    .cp-ctl { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); font-size: 18px; cursor: pointer; transition: all .15s; }
+    .cp-ctl:hover { background: var(--bg-hover); }
+    .cp-ctl.muted { background: var(--accent-orange); border-color: var(--accent-orange); }
+    .cp-ctl.hangup { background: var(--accent-red); border-color: var(--accent-red); }
+    .cp-ctl.hangup:hover { filter: brightness(1.1); }
+
     .hidden {
       display: none !important;
     }
@@ -1197,6 +1237,7 @@
         <div class="chat-header-pk" id="headerPk">-</div>
       </div>
       <div class="chat-header-actions">
+        <button id="dmCallBtn" class="icon-btn hidden" onclick="app.placeCall()" title="Start a voice call" aria-label="Voice call">&#x1F4DE;</button>
         <button id="dmPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
         <button id="dmMuteBtn" class="icon-btn" onclick="app.toggleMute()" title="Mute notifications for this chat" aria-label="Mute notifications">&#x1F514;</button>
         <button id="pairToggleBtn" class="icon-btn hidden" onclick="app.togglePair()" title="Pair / unpair via CXO">&#x29B5;</button>
@@ -1276,6 +1317,38 @@
         <button class="btn btn-danger" onclick="app.removePicture()">Remove Avatar</button>
         <button class="btn btn-secondary" onclick="app.closeSettings()">Close</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Incoming voice call banner -->
+  <div id="incomingCall" class="incoming-call hidden">
+    <div class="ic-info">
+      <div class="ic-avatar">&#x1F4DE;</div>
+      <div>
+        <div class="ic-title">Incoming voice call</div>
+        <div class="ic-from" id="icFrom">-</div>
+      </div>
+    </div>
+    <div class="ic-actions">
+      <button class="ic-btn decline" onclick="app.declineIncoming()">Decline</button>
+      <button class="ic-btn answer" onclick="app.answerIncoming()">Answer</button>
+    </div>
+  </div>
+
+  <!-- Active call panel -->
+  <div id="callPanel" class="call-panel hidden">
+    <div class="cp-top">
+      <div class="cp-peer" id="cpPeer">-</div>
+      <div class="cp-timer" id="cpTimer">00:00</div>
+    </div>
+    <div class="cp-meter">
+      <div class="cp-meter-row"><span class="cp-lbl">You</span><div class="cp-bar"><div id="cpBarSent" class="cp-bar-fill"></div></div></div>
+      <div class="cp-meter-row"><span class="cp-lbl">Peer</span><div class="cp-bar"><div id="cpBarRecv" class="cp-bar-fill"></div></div></div>
+    </div>
+    <div class="cp-actions">
+      <button id="cpMicBtn" class="cp-ctl" onclick="app.toggleCallMic()" title="Mute microphone">&#x1F3A4;</button>
+      <button id="cpSpkBtn" class="cp-ctl" onclick="app.toggleCallSpk()" title="Mute speaker">&#x1F50A;</button>
+      <button class="cp-ctl hangup" onclick="app.hangupCall()" title="Hang up">&#x1F4F4;</button>
     </div>
   </div>
 
@@ -1391,6 +1464,15 @@
         // disabled) the lease expires (~45s) and the Go side takes over.
         this._reportNotifCapability();
         setInterval(() => { if (this._notifCapable()) this._reportNotifCapability(); }, 20000);
+        // Voice calls: the visor owns the call manager + host audio; this UI is a
+        // control surface that polls /voice/{incoming,active} and drives
+        // /voice/{call,answer,decline,hangup,mute,levels}. Auto-hides when voice
+        // is unavailable (no --pair-enable / no visor RPC / built without audio).
+        this.voice = { available: null, ring: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0 };
+        this._voiceLevelTimer = null;
+        this._voiceClockTimer = null;
+        this._pollVoice();
+        setInterval(() => this._pollVoice(), 3000);
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -3548,6 +3630,190 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ capable: this._notifCapable() }),
         }).catch(() => {});
+      }
+
+      // ---------------------------------------------------------------------
+      // Voice calls (1:1). Audio + the call manager live in the VISOR (host mic
+      // /speaker, explicit-answer); this browser UI proxies control over HTTP and
+      // shows a ring banner + in-call panel with a live level meter.
+      // ---------------------------------------------------------------------
+
+      // _pollVoice refreshes ring + active-call state and toggles voice
+      // availability (hiding the call button when the visor voice RPC is off).
+      async _pollVoice() {
+        try {
+          const [incR, actR] = await Promise.all([fetch('/voice/incoming'), fetch('/voice/active')]);
+          if (!incR.ok || !actR.ok) { this._setVoiceAvailable(false); return; }
+          this._setVoiceAvailable(true);
+          this._updateIncoming(await incR.json());
+          this._updateActive(await actR.json());
+        } catch (e) {
+          this._setVoiceAvailable(false);
+        }
+      }
+
+      _setVoiceAvailable(v) {
+        this.voice.available = v;
+        const btn = document.getElementById('dmCallBtn');
+        if (btn) btn.classList.toggle('hidden', !v);
+        if (!v) { // voice went away — tear down any UI
+          this.voice.ring = null; this._renderIncoming();
+          if (this.voice.activeId) this._endCallUI();
+        }
+      }
+
+      // _parseIncoming turns a visor "<call-id> from <peer-pk>" entry into {id,from}.
+      _parseIncoming(s) {
+        const i = String(s).indexOf(' from ');
+        return i < 0 ? { id: String(s).trim(), from: '' } : { id: s.slice(0, i).trim(), from: s.slice(i + 6).trim() };
+      }
+
+      _updateIncoming(list) {
+        // Show the first ringing call that isn't the one we're already in.
+        const ring = (Array.isArray(list) && list.length) ? this._parseIncoming(list[0]) : null;
+        if (ring && this.voice.activeId === ring.id) { this.voice.ring = null; }
+        else { this.voice.ring = ring; }
+        this._renderIncoming();
+      }
+
+      _renderIncoming() {
+        const el = document.getElementById('incomingCall');
+        if (!el) return;
+        if (this.voice.ring) {
+          document.getElementById('icFrom').textContent = this.shortPk(this.voice.ring.from) || 'unknown';
+          el.classList.remove('hidden');
+        } else {
+          el.classList.add('hidden');
+        }
+      }
+
+      _updateActive(list) {
+        const activeId = (Array.isArray(list) && list.length) ? list[0] : null;
+        if (activeId && this.voice.activeId !== activeId) {
+          this._enterCall(activeId);
+        } else if (!activeId && this.voice.activeId) {
+          this._endCallUI();
+        }
+      }
+
+      // _enterCall shows the in-call panel and starts the level + clock timers.
+      _enterCall(callID, peerHex) {
+        this.voice.activeId = callID;
+        this.voice.startedAt = Date.now();
+        this.voice.micMuted = false;
+        this.voice.spkMuted = false;
+        this.voice.ring = null; this._renderIncoming();
+        const peer = peerHex || (this.voice.ring && this.voice.ring.from) || this.recipient || '';
+        document.getElementById('cpPeer').textContent = peer ? this.shortPk(peer) : 'In call';
+        this._syncCallCtls();
+        document.getElementById('callPanel').classList.remove('hidden');
+        clearInterval(this._voiceLevelTimer);
+        this._voiceLevelTimer = setInterval(() => this._pollLevels(), 150);
+        clearInterval(this._voiceClockTimer);
+        this._voiceClockTimer = setInterval(() => this._tickCallClock(), 1000);
+        this._tickCallClock();
+      }
+
+      _endCallUI() {
+        this.voice.activeId = null;
+        clearInterval(this._voiceLevelTimer); this._voiceLevelTimer = null;
+        clearInterval(this._voiceClockTimer); this._voiceClockTimer = null;
+        const p = document.getElementById('callPanel');
+        if (p) p.classList.add('hidden');
+      }
+
+      _tickCallClock() {
+        const secs = Math.max(0, Math.floor((Date.now() - this.voice.startedAt) / 1000));
+        const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+        const ss = String(secs % 60).padStart(2, '0');
+        const el = document.getElementById('cpTimer');
+        if (el) el.textContent = `${mm}:${ss}`;
+      }
+
+      async _pollLevels() {
+        if (!this.voice.activeId) return;
+        try {
+          const r = await fetch('/voice/levels?call=' + encodeURIComponent(this.voice.activeId));
+          if (!r.ok) return;
+          const lv = await r.json();
+          const s = document.getElementById('cpBarSent'); const rc = document.getElementById('cpBarRecv');
+          if (s) s.style.width = Math.min(100, (lv.sent || 0) * 140) + '%';
+          if (rc) rc.style.width = Math.min(100, (lv.recv || 0) * 140) + '%';
+        } catch (e) { /* transient */ }
+      }
+
+      // placeCall dials the open DM's peer. The request blocks (in the visor)
+      // until the callee answers or the dial fails.
+      async placeCall() {
+        if (!this.recipient || !this.voice.available) return;
+        if (this.voice.activeId) { this.showToast('Already in a call.', 'error'); return; }
+        const peer = this.recipient;
+        this.showToast('Calling ' + this.shortPk(peer) + '…');
+        try {
+          const r = await fetch('/voice/call', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ peer }),
+          });
+          if (!r.ok) { this.showToast('Call failed: ' + (await r.text()).trim(), 'error'); return; }
+          const d = await r.json();
+          this._enterCall(d.call_id, peer);
+        } catch (e) {
+          this.showToast('Call failed.', 'error');
+        }
+      }
+
+      async answerIncoming() {
+        const ring = this.voice.ring;
+        if (!ring) return;
+        try {
+          const r = await fetch('/voice/answer', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ call_id: ring.id }),
+          });
+          if (!r.ok) { this.showToast('Answer failed.', 'error'); return; }
+          this._enterCall(ring.id, ring.from);
+        } catch (e) { this.showToast('Answer failed.', 'error'); }
+      }
+
+      async declineIncoming() {
+        const ring = this.voice.ring;
+        if (!ring) return;
+        this.voice.ring = null; this._renderIncoming();
+        try {
+          await fetch('/voice/decline', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ call_id: ring.id }),
+          });
+        } catch (e) { /* best-effort */ }
+      }
+
+      async hangupCall() {
+        const id = this.voice.activeId;
+        if (!id) return;
+        this._endCallUI();
+        try {
+          await fetch('/voice/hangup', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ call_id: id }),
+          });
+        } catch (e) { /* best-effort */ }
+      }
+
+      toggleCallMic() { this.voice.micMuted = !this.voice.micMuted; this._sendMute(); this._syncCallCtls(); }
+      toggleCallSpk() { this.voice.spkMuted = !this.voice.spkMuted; this._sendMute(); this._syncCallCtls(); }
+
+      _sendMute() {
+        if (!this.voice.activeId) return;
+        fetch('/voice/mute', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ call_id: this.voice.activeId, mic: this.voice.micMuted, speaker: this.voice.spkMuted }),
+        }).catch(() => {});
+      }
+
+      _syncCallCtls() {
+        const mic = document.getElementById('cpMicBtn'); const spk = document.getElementById('cpSpkBtn');
+        if (mic) { mic.classList.toggle('muted', this.voice.micMuted); mic.innerHTML = this.voice.micMuted ? '&#x1F507;' : '&#x1F3A4;'; mic.title = this.voice.micMuted ? 'Unmute microphone' : 'Mute microphone'; }
+        if (spk) { spk.classList.toggle('muted', this.voice.spkMuted); spk.innerHTML = this.voice.spkMuted ? '&#x1F515;' : '&#x1F50A;'; spk.title = this.voice.spkMuted ? 'Unmute speaker' : 'Mute speaker'; }
       }
 
       updatePicture() {
