@@ -1,7 +1,7 @@
-// Package history cmd/apps/skychat/history/history.go c4-app-chat
+// Package history pkg/skychat/history/history.go c4-app-chat
 //
 // By default skychat is entirely ephemeral — messages pass through and are not
-// stored anywhere. The history package adds an opt-in BoltDB-backed store with
+// stored anywhere. The history package adds an opt-in persistent store with
 // strict limits to prevent disk-fill/spam attacks:
 //
 //   - per-message size cap (drop larger)
@@ -14,6 +14,13 @@
 // The ephemeral delivery path is never blocked by the store. Messages that
 // can't be persisted are still delivered to the UI SSE stream; only the
 // side-effect of durable storage is skipped.
+//
+// Two backends implement Store: BoltStore (durable, BoltDB-backed, native
+// only — bbolt does not compile under GOOS=js) lives in store_bolt.go behind
+// a `!js` build tag; MemStore (in-memory, all platforms including the wasm
+// visor) lives in store_mem.go. The Message/GroupMessage types, the Store
+// interface, and Limits are pure Go and shared by both, so this file compiles
+// everywhere.
 package history
 
 import (
