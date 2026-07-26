@@ -42,6 +42,7 @@ func registerVoiceHTTPHandlers(mux *http.ServeMux) {
 	mux.HandleFunc("/voice/active", requireAuthFunc(voiceListHandler("VoiceActive", func(c visor.API) ([]string, error) { return c.VoiceActive() })))
 	mux.HandleFunc("/voice/incoming", requireAuthFunc(voiceListHandler("VoiceIncoming", func(c visor.API) ([]string, error) { return c.VoiceIncoming() })))
 	mux.HandleFunc("/voice/levels", requireAuthFunc(voiceLevelsHandler()))
+	mux.HandleFunc("/voice/audio", requireAuthFunc(voiceAudioHandler()))
 }
 
 // voiceRPCDown reports whether the visor RPC is unavailable and, if so, writes a
@@ -216,6 +217,43 @@ func voiceLevelsHandler() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, map[string]float64{"sent": voiceRMS(sent), "recv": voiceRMS(recv)})
+	}
+}
+
+// voiceAudioHandler serves GET /voice/audio?call=<id> → {sent:[], recv:[]} the
+// recent sent/received PCM (int16) of a call, for the live spectrogram. Heavier
+// than /voice/levels (a full ~1s ring), so the UI only polls it while the
+// spectrogram view is open.
+func voiceAudioHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if voiceRPCDown(w) {
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "GET only", http.StatusMethodNotAllowed)
+			return
+		}
+		callID := strings.TrimSpace(r.URL.Query().Get("call"))
+		if callID == "" {
+			http.Error(w, "call required", http.StatusBadRequest)
+			return
+		}
+		var sent, recv []int16
+		if err := pairRPCCall("VoiceCallAudio", func(c visor.API) error {
+			s, rc, e := c.VoiceCallAudio(callID)
+			sent, recv = s, rc
+			return e
+		}); err != nil {
+			http.Error(w, err.Error(), voiceErrStatus(err))
+			return
+		}
+		if sent == nil {
+			sent = []int16{}
+		}
+		if recv == nil {
+			recv = []int16{}
+		}
+		writeJSON(w, map[string][]int16{"sent": sent, "recv": recv})
 	}
 }
 
