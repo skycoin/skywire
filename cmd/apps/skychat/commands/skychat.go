@@ -1148,6 +1148,12 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			// {acked:false, reason:"timeout"}. Clamped to
 			// [chatAckTimeoutFloor, chatAckTimeoutCeiling] server-side.
 			WaitMS int `json:"wait_ms,omitempty"`
+			// ReplyTo, if set, is the id of a prior message this send
+			// quotes (a threaded reply). It forces a chat-msg envelope
+			// (see below) carrying ReplyTo so the RECIPIENT surfaces the
+			// thread — the receive-side wiring already reads env.ReplyTo
+			// (sendack.go). Empty keeps a default send byte-identical.
+			ReplyTo string `json:"reply_to,omitempty"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1275,18 +1281,27 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		var ackCh <-chan struct{}
 		var unregisterAck func()
 		var ackWait time.Duration
-		if data.WaitMS > 0 {
+		// Wrap in a chat-msg envelope when the caller wants an ack
+		// (wait_ms) OR is sending a quoted reply (reply_to). A default
+		// send with neither stays plain-text so the wire is byte-identical
+		// for ordinary chat and pre-envelope peers. The ack-waiter is only
+		// registered for wait_ms sends; a reply-only send sets Ack:false so
+		// the peer doesn't ack and this handler doesn't block.
+		wantAck := data.WaitMS > 0
+		if wantAck || data.ReplyTo != "" {
 			ackID = newEventID()
-			env := chatEnvelope{Type: chatTypeMsg, ID: ackID, Body: data.Message, Ack: true}
+			env := chatEnvelope{Type: chatTypeMsg, ID: ackID, Body: data.Message, Ack: wantAck, ReplyTo: data.ReplyTo}
 			eb, mErr := json.Marshal(env)
 			if mErr != nil {
 				http.Error(w, mErr.Error(), http.StatusInternalServerError)
 				return
 			}
 			wirePayload = eb
-			ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
-			ackCh, unregisterAck = registerAckWaiter(ackID)
-			defer unregisterAck()
+			if wantAck {
+				ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
+				ackCh, unregisterAck = registerAckWaiter(ackID)
+				defer unregisterAck()
+			}
 		}
 
 		// Write the framed payload. On a *cached* conn, a write
@@ -1490,6 +1505,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			From:      myPK,
 			To:        pk.Hex(),
 			Text:      data.Message,
+			ReplyToID: data.ReplyTo, // outbound mirror carries the quote so the sender's UI threads it too
 		})
 
 		counterMu.Lock()
