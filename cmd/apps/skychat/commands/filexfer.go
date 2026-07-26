@@ -291,6 +291,20 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 		persistMessage(msg)
 	}
 
+	// Host-OS notification for a newly received file when no capable UI is
+	// attached. Skip failures and backfill re-sends (which just fill in bytes
+	// for a message already shown). Group file *references* already notify via
+	// the group poller, and their bytes arrive as requested backfills — so this
+	// covers the DM-file-received case the poller can't see.
+	if dir == xfer.Incoming && err == nil && !wasRequested {
+		desc := notifPreview("📎 " + fileKindLabel(offer.Name, offer.MIME) + ": " + offer.Name)
+		if offer.Group != "" {
+			notifyOSInbound("Group message", shortHexPK(peer.Hex())+": "+desc)
+		} else {
+			notifyOSInbound(shortHexPK(peer.Hex()), desc)
+		}
+	}
+
 	if err != nil {
 		appLog("skychat: file %s %s <-> %s: %v", dir, offer.Name, peer, err)
 	} else {
