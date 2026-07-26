@@ -145,7 +145,7 @@ func progressConn(conn net.Conn) net.Conn {
 	return idleConn{Conn: conn, idle: IdleWindow}
 }
 
-// copyN moves exactly n bytes, checking ctx between chunks so a cancelled
+// copyN moves exactly n bytes, checking ctx between chunks so a canceled
 // transfer stops promptly instead of running to completion. Returns the number
 // of bytes copied.
 func copyN(ctx context.Context, dst io.Writer, src io.Reader, n int64) (int64, error) {
