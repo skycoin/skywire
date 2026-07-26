@@ -2,6 +2,7 @@
 package router
 
 import (
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -29,6 +30,29 @@ func TestRouteGroup_RemoteAddr(t *testing.T) {
 	require.Equal(t, rg.desc.Src(), rg.RemoteAddr())
 
 	require.NoError(t, rg.Close())
+}
+
+// Data that already arrived must be readable even once the remote has closed:
+// a peer that writes and immediately hangs up is ordinary (a final frame
+// followed by Close), and dropping its payload turns a completed exchange into
+// an EOF error. Both signals are ready here, so a select that treats them as
+// equals would fail this roughly half the time.
+func TestRouteGroup_ReadDrainsBeforeRemoteClose(t *testing.T) {
+	rg := createRouteGroup(DefaultRouteGroupConfig())
+	t.Cleanup(func() { _ = rg.Close() }) //nolint:errcheck
+
+	payload := []byte("final-frame")
+	rg.readCh <- payload
+	close(rg.remoteClosed) // the peer hangs up in the same breath
+
+	buf := make([]byte, len(payload))
+	n, err := rg.read(buf)
+	require.NoError(t, err, "buffered data must be delivered before EOF")
+	require.Equal(t, payload, buf[:n])
+
+	// Only once it's drained does the close surface.
+	_, err = rg.read(buf)
+	require.ErrorIs(t, err, io.EOF)
 }
 
 func createRouteGroup(cfg *RouteGroupConfig) *RouteGroup {

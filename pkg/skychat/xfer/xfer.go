@@ -35,6 +35,7 @@ import (
 	"hash"
 	"io"
 	"net"
+	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/message"
@@ -88,14 +89,107 @@ type AcceptFunc func(from cipher.PubKey, offer Offer) (dst io.WriteCloser, ok bo
 // reject an over-large Size before a single byte is read.
 const MaxOfferSize = message.MaxFrameSize
 
-var errDeclined = errors.New("xfer: transfer declined")
+const (
+	// IdleWindow bounds how long a transfer may make NO progress before it is
+	// abandoned. It is deliberately an idle timeout and not a total one: a
+	// total deadline is a file-size limit in disguise (a 35 MB file over a
+	// slow route legitimately takes minutes), whereas a dead peer still fails
+	// within one window.
+	IdleWindow = 60 * time.Second
 
-// deadlineConn applies ctx's deadline to conn for the whole exchange (best
-// effort; a conn without deadline support just ignores it).
-func applyDeadline(ctx context.Context, conn net.Conn) {
-	if dl, ok := ctx.Deadline(); ok {
-		_ = conn.SetDeadline(dl) //nolint:errcheck
+	// drainWindow bounds how long the receiver waits for the sender to hang up
+	// after the receipt is written. Short: the sender closes as soon as it has
+	// read the receipt, so this only ever absorbs the round-trip. See
+	// waitPeerClose.
+	drainWindow = 2 * time.Second
+
+	// copyChunk is the body copy's granularity — every chunk re-arms the idle
+	// deadline and re-checks ctx.
+	copyChunk = 32 << 10
+)
+
+var (
+	errDeclined = errors.New("xfer: transfer declined")
+
+	// ErrNoReceipt reports that the body AND its digest trailer were written in
+	// full but the receiver's verdict never came back. The bytes are on the
+	// peer's side — only the confirmation is missing — so a caller should treat
+	// this as delivered-but-unconfirmed rather than as a failed transfer.
+	ErrNoReceipt = errors.New("xfer: no receipt")
+)
+
+// idleConn re-arms the conn's deadline before every read and write, so a
+// transfer is bounded by stalling rather than by its total duration. A conn
+// without deadline support just ignores the calls.
+type idleConn struct {
+	net.Conn
+	idle time.Duration
+}
+
+func (c idleConn) Read(p []byte) (int, error) {
+	_ = c.Conn.SetReadDeadline(time.Now().Add(c.idle)) //nolint:errcheck
+	return c.Conn.Read(p)
+}
+
+func (c idleConn) Write(p []byte) (int, error) {
+	_ = c.Conn.SetWriteDeadline(time.Now().Add(c.idle)) //nolint:errcheck
+	return c.Conn.Write(p)
+}
+
+// progressConn wraps conn so each I/O gets a fresh idle deadline. Any deadline
+// already on the conn from a caller is superseded.
+func progressConn(conn net.Conn) net.Conn {
+	if conn == nil {
+		return nil
 	}
+	return idleConn{Conn: conn, idle: IdleWindow}
+}
+
+// copyN moves exactly n bytes, checking ctx between chunks so a cancelled
+// transfer stops promptly instead of running to completion. Returns the number
+// of bytes copied.
+func copyN(ctx context.Context, dst io.Writer, src io.Reader, n int64) (int64, error) {
+	buf := make([]byte, copyChunk)
+	var done int64
+	for done < n {
+		if err := ctx.Err(); err != nil {
+			return done, err
+		}
+		want := min(n-done, int64(len(buf)))
+		rn, rerr := io.ReadFull(src, buf[:want])
+		if rn > 0 {
+			wn, werr := dst.Write(buf[:rn])
+			done += int64(wn)
+			if werr != nil {
+				return done, werr
+			}
+			if wn != rn {
+				return done, io.ErrShortWrite
+			}
+		}
+		if rerr != nil {
+			if rerr == io.ErrUnexpectedEOF {
+				rerr = io.EOF // a short source reads as a truncated stream
+			}
+			return done, rerr
+		}
+	}
+	return done, nil
+}
+
+// waitPeerClose blocks until the peer hangs up (or window elapses), discarding
+// anything it sends. The receiver calls this AFTER writing its receipt so the
+// sender is the side that closes first: a skywire route group surfaces a remote
+// close in the same select as buffered data, so closing here can make the
+// sender's pending receipt read return EOF instead of the receipt — reporting a
+// delivered file as failed.
+func waitPeerClose(conn net.Conn, window time.Duration) {
+	if conn == nil {
+		return
+	}
+	_ = conn.SetReadDeadline(time.Now().Add(window)) //nolint:errcheck
+	var b [1]byte
+	_, _ = conn.Read(b[:]) //nolint:errcheck // EOF is the expected outcome
 }
 
 // Send streams offer + the first offer.Size bytes of r over conn, then reads the
@@ -103,7 +197,7 @@ func applyDeadline(ctx context.Context, conn net.Conn) {
 // streamed, so r need not be seekable. conn is NOT closed here — the caller owns
 // it (it may be a reused/pooled stream).
 func Send(ctx context.Context, conn net.Conn, offer Offer, r io.Reader) (Receipt, error) {
-	applyDeadline(ctx, conn)
+	conn = progressConn(conn)
 
 	hdr, err := json.Marshal(offer)
 	if err != nil {
@@ -130,7 +224,7 @@ func Send(ctx context.Context, conn net.Conn, offer Offer, r io.Reader) (Receipt
 	h := sha256.New()
 	if offer.Size > 0 {
 		// Copy to the wire and the hash in one pass.
-		n, cerr := io.CopyN(io.MultiWriter(conn, h), r, offer.Size)
+		n, cerr := copyN(ctx, io.MultiWriter(conn, h), r, offer.Size)
 		if cerr != nil {
 			return Receipt{}, fmt.Errorf("xfer: stream body (%d/%d bytes): %w", n, offer.Size, cerr)
 		}
@@ -146,7 +240,10 @@ func Send(ctx context.Context, conn net.Conn, offer Offer, r io.Reader) (Receipt
 
 	rf, err := message.ReadFrame(conn)
 	if err != nil {
-		return Receipt{}, fmt.Errorf("xfer: read receipt: %w", err)
+		// Everything the receiver needs is already on its side; only the verdict
+		// is missing. Distinguished so the caller doesn't report a delivered
+		// file as failed.
+		return Receipt{ID: offer.ID}, fmt.Errorf("%w (read: %v)", ErrNoReceipt, err)
 	}
 	var rc Receipt
 	if err := json.Unmarshal(rf, &rc); err != nil {
@@ -163,7 +260,8 @@ func Send(ctx context.Context, conn net.Conn, offer Offer, r io.Reader) (Receipt
 // (the receiver still tries to send a negative Receipt so the sender learns).
 // conn is NOT closed here.
 func Receive(ctx context.Context, from cipher.PubKey, conn net.Conn, accept AcceptFunc) (Offer, error) {
-	applyDeadline(ctx, conn)
+	raw := conn
+	conn = progressConn(conn)
 
 	of, err := message.ReadFrame(conn)
 	if err != nil {
@@ -189,7 +287,7 @@ func Receive(ctx context.Context, from cipher.PubKey, conn net.Conn, accept Acce
 	}
 
 	h := sha256.New()
-	if cerr := streamBody(conn, dst, h, offer.Size); cerr != nil {
+	if cerr := streamBody(ctx, conn, dst, h, offer.Size); cerr != nil {
 		_ = dst.Close()                                      //nolint:errcheck
 		_ = sendReceipt(conn, offer.ID, false, cerr.Error()) //nolint:errcheck
 		return offer, cerr
@@ -218,16 +316,21 @@ func Receive(ctx context.Context, from cipher.PubKey, conn net.Conn, accept Acce
 	if err := sendReceipt(conn, offer.ID, true, ""); err != nil {
 		return offer, fmt.Errorf("xfer: send receipt: %w", err)
 	}
+	// Hand the close over to the sender: it reads the receipt and hangs up,
+	// which this read observes. Closing from here first can cost the sender the
+	// receipt (see waitPeerClose). Uses the unwrapped conn so the drain window
+	// applies rather than the idle window.
+	waitPeerClose(raw, drainWindow)
 	return offer, nil
 }
 
 // streamBody copies exactly size bytes from conn into dst (and h), guarding
 // against a short stream.
-func streamBody(conn net.Conn, dst io.Writer, h hash.Hash, size int64) error {
+func streamBody(ctx context.Context, conn net.Conn, dst io.Writer, h hash.Hash, size int64) error {
 	if size == 0 {
 		return nil
 	}
-	n, err := io.CopyN(io.MultiWriter(dst, h), conn, size)
+	n, err := copyN(ctx, io.MultiWriter(dst, h), conn, size)
 	if err != nil {
 		return fmt.Errorf("xfer: stream body (%d/%d bytes): %w", n, size, err)
 	}
@@ -260,3 +363,8 @@ func sendReceipt(conn net.Conn, id string, ok bool, errMsg string) error {
 // IsDeclined reports whether err is the sentinel returned by Receive when the
 // AcceptFunc declined the transfer (so callers can treat it as non-fatal).
 func IsDeclined(err error) bool { return errors.Is(err, errDeclined) }
+
+// IsNoReceipt reports whether err means "fully delivered, verdict unknown" —
+// the body and its digest went out in full but the receiver's receipt never
+// came back. Callers should treat this as sent, not failed.
+func IsNoReceipt(err error) bool { return errors.Is(err, ErrNoReceipt) }

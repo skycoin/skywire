@@ -1951,6 +1951,9 @@
         this.group = null;   // active group id (null when a DM is selected)
         this.myPK = null;    // this visor's PK, for group self-echo dedup
         this.replyTo = null; // {sender, ts, preview} when composing a reply, else null
+        // Delivery receipts that arrived before their bubble knew its id
+        // (id -> status). See handleDmStatus / _claimOrphanStatus.
+        this._orphanStatus = new Map();
         // Composer button mode. With text in the field the button is a send
         // arrow; with the field empty it is the recording affordance, either
         // 'mic' (voice message) or 'video' — a user choice kept across reloads.
@@ -2290,11 +2293,38 @@
       // file id, so a read receipt for a viewed file carries file.id).
       handleDmStatus(data) {
         const key = this.processPk(data.peer);
-        const list = this.messages[key];
-        if (!list) return;
+        const list = this.messages[key] || [];
         const m = list.find(x => x && x.from === 'me' &&
           ((x.wireId && x.wireId === data.id) || (x.file && x.file.id && x.file.id === data.id)));
-        if (m) this._setMsgStatus(key, m, data.status);
+        if (m) {
+          this._setMsgStatus(key, m, data.status);
+          return;
+        }
+        // No bubble carries this id YET. The sender only learns its wire id
+        // from the send response, and on a fast hop the peer's ack beats that
+        // response home — so hold the receipt until the id lands, instead of
+        // dropping it and leaving the bubble stuck on "sent" forever.
+        this._stashOrphanStatus(data.id, data.status);
+      }
+
+      // _stashOrphanStatus remembers a receipt that arrived before its bubble
+      // had an id. Bounded — only the most recent sends can still be waiting.
+      _stashOrphanStatus(id, status) {
+        if (!id || !status) return;
+        this._orphanStatus.set(id, status);
+        if (this._orphanStatus.size > 64) {
+          this._orphanStatus.delete(this._orphanStatus.keys().next().value);
+        }
+      }
+
+      // _claimOrphanStatus applies a receipt that was waiting for this id.
+      // Called the moment a bubble learns its wire/file id.
+      _claimOrphanStatus(key, message, id) {
+        if (!id || !this._orphanStatus.size) return;
+        const status = this._orphanStatus.get(id);
+        if (!status) return;
+        this._orphanStatus.delete(id);
+        this._setMsgStatus(key, message, status);
       }
 
       // _sendReadReceipts tells pk we've displayed its inbound messages so the
@@ -2342,6 +2372,8 @@
             return res.json().then(j => {
               if (useReceipts && j && j.id) message.wireId = j.id;
               this._setMsgStatus(destination, message, 'sent');
+              // A receipt may already have come back for this id.
+              this._claimOrphanStatus(destination, message, message.wireId);
             }).catch(() => this._setMsgStatus(destination, message, 'sent'));
           })
           .catch(e => {
@@ -4533,6 +4565,9 @@
                 message.file.url = j.file_url;
                 message.file.local = false; // a served URL persists — don't strip on save
               }
+              // Same race as a text bubble: the peer's read receipt for this
+              // transfer can land before we learn its id.
+              this._claimOrphanStatus(destination, message, message.file.id);
               if (!isGroup) this.saveChat(destination);
             }).catch(() => { if (!isGroup) this.saveChat(destination); });
           })

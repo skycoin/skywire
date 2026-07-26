@@ -497,6 +497,19 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 	}
 	rg.mu.Unlock()
 
+	// Data already delivered outranks a remote close. Without this, a peer that
+	// writes and immediately closes races itself: both remoteClosed and readCh
+	// are ready, Go picks a ready case at random, and half the time the reader
+	// gets EOF while the bytes sit unread in readCh — a stream must surface
+	// buffered data first and report EOF only once it's drained. (Cost the
+	// skychat file transfer its final receipt frame, turning a delivered file
+	// into a reported failure.)
+	select {
+	case data, ok := <-rg.readCh:
+		return rg.readData(data, ok, p)
+	default:
+	}
+
 	select {
 	case <-rg.readDeadline.Wait():
 		return 0, timeoutError{}
@@ -504,21 +517,33 @@ func (rg *RouteGroup) read(p []byte) (int, error) {
 		return 0, io.ErrClosedPipe
 	case <-rg.remoteClosed:
 		// readCh is never closed (see close()), so a remote-initiated close is
-		// observed here rather than via a closed readCh returning ok==false.
-		return 0, io.EOF
-	case data, ok := <-rg.readCh:
-		if !ok || len(data) == 0 {
-			// route group got closed or empty data received. Behavior on the empty
-			// data is equivalent to the behavior of `read()` unix syscall as described here:
-			// https://www.ibm.com/support/knowledgecenter/en/SSLTBW_2.4.0/com.ibm.zos.v2r4.bpxbd00/rtrea.htm
+		// observed here rather than via a closed readCh returning ok==false. One
+		// last non-blocking check for the same reason as above: the close signal
+		// may have won a race against data that is already here.
+		select {
+		case data, ok := <-rg.readCh:
+			return rg.readData(data, ok, p)
+		default:
 			return 0, io.EOF
 		}
-
-		rg.mu.Lock()
-		defer rg.mu.Unlock()
-
-		return ioutil.BufRead(&rg.readBuf, data, p)
+	case data, ok := <-rg.readCh:
+		return rg.readData(data, ok, p)
 	}
+}
+
+// readData buffers one delivery from readCh into p.
+func (rg *RouteGroup) readData(data []byte, ok bool, p []byte) (int, error) {
+	if !ok || len(data) == 0 {
+		// route group got closed or empty data received. Behavior on the empty
+		// data is equivalent to the behavior of `read()` unix syscall as described here:
+		// https://www.ibm.com/support/knowledgecenter/en/SSLTBW_2.4.0/com.ibm.zos.v2r4.bpxbd00/rtrea.htm
+		return 0, io.EOF
+	}
+
+	rg.mu.Lock()
+	defer rg.mu.Unlock()
+
+	return ioutil.BufRead(&rg.readBuf, data, p)
 }
 
 func (rg *RouteGroup) write(data []byte, tp *transport.ManagedTransport, rule routing.Rule, leg int) (int, error) {

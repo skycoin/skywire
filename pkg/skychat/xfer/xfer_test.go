@@ -6,12 +6,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
 // nopWriteCloser adapts a bytes.Buffer to io.WriteCloser.
@@ -50,6 +52,10 @@ func runTransfer(t *testing.T, payload []byte, accept AcceptFunc) (Receipt, erro
 	}()
 
 	rc, sErr := Send(ctx, a, offer, bytes.NewReader(payload))
+	// Close the sender the way Manager.SendFile does (defer conn.Close()): the
+	// receiver waits for this hang-up after writing its receipt, so a test that
+	// held the conn open would just sit out the drain window.
+	_ = a.Close() //nolint:errcheck
 	res := <-recvCh
 	return rc, sErr, res.err
 }
@@ -110,6 +116,102 @@ func TestDeclinedTransfer(t *testing.T) {
 	}
 	if !IsDeclined(rErr) {
 		t.Fatalf("Receive err = %v, want declined sentinel", rErr)
+	}
+}
+
+// A receiver that hangs up the instant it has written the receipt used to cost
+// the sender that receipt on conns whose remote-close races buffered data (a
+// skywire route group). The sender must classify that as ErrNoReceipt — fully
+// delivered, verdict unknown — and NOT as a failed transfer, because the bytes
+// and the digest are already on the receiver's side.
+func TestSendNoReceipt(t *testing.T) {
+	a, b := net.Pipe()
+	defer func() { _ = a.Close() }() //nolint:errcheck
+
+	from, _ := cipher.GenerateKeyPair()
+	payload := []byte("delivered but unconfirmed")
+	offer := Offer{ID: "nr1", Name: "blob.bin", Size: int64(len(payload)), From: from}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var got bytes.Buffer
+	go func() {
+		// Read the whole transfer, then drop the conn without answering. The
+		// frames the sender is waiting for never arrive.
+		defer func() { _ = b.Close() }()                //nolint:errcheck
+		if _, err := message.ReadFrame(b); err != nil { // offer
+			return
+		}
+		if err := sendAccept(b, true, ""); err != nil {
+			return
+		}
+		if _, err := io.CopyN(&got, b, int64(len(payload))); err != nil {
+			return
+		}
+		_, _ = message.ReadFrame(b) //nolint:errcheck // trailer, then hang up
+	}()
+
+	rc, err := Send(ctx, a, offer, bytes.NewReader(payload))
+	if !IsNoReceipt(err) {
+		t.Fatalf("Send err = %v, want an ErrNoReceipt-wrapped error", err)
+	}
+	if rc.ID != offer.ID {
+		t.Errorf("receipt carries id %q, want the offer's %q", rc.ID, offer.ID)
+	}
+	if rc.OK {
+		t.Error("an unconfirmed transfer must not claim an OK verdict")
+	}
+	if !bytes.Equal(got.Bytes(), payload) {
+		t.Errorf("receiver got %d bytes, want the full %d", got.Len(), len(payload))
+	}
+	// A body that failed mid-stream must NOT look like this case.
+	if IsNoReceipt(fmt.Errorf("xfer: stream body (10/99 bytes): %w", io.ErrClosedPipe)) {
+		t.Error("a truncated body was misclassified as delivered-unconfirmed")
+	}
+}
+
+// The receiver hands the close over to the sender: after writing the receipt it
+// waits for the peer to hang up, so the receipt is always drained first.
+func TestReceiveWaitsForSenderClose(t *testing.T) {
+	a, b := net.Pipe()
+	defer func() { _ = b.Close() }() //nolint:errcheck
+
+	from, _ := cipher.GenerateKeyPair()
+	payload := []byte("drain-order")
+	offer := Offer{ID: "d1", Name: "blob.bin", Size: int64(len(payload)), From: from}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var got bytes.Buffer
+	recvDone := make(chan error, 1)
+	go func() {
+		_, err := Receive(ctx, from, b, func(cipher.PubKey, Offer) (io.WriteCloser, bool) {
+			return nopWriteCloser{&got}, true
+		})
+		recvDone <- err
+	}()
+
+	rc, sErr := Send(ctx, a, offer, bytes.NewReader(payload))
+	if sErr != nil || !rc.OK {
+		t.Fatalf("Send: err=%v receipt=%+v", sErr, rc)
+	}
+	// Receive must still be parked in its drain read: it has written the
+	// receipt but the sender hasn't closed yet.
+	select {
+	case err := <-recvDone:
+		t.Fatalf("Receive returned before the sender closed (err=%v)", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	_ = a.Close() //nolint:errcheck // the sender hangs up, as Manager.SendFile does
+	select {
+	case err := <-recvDone:
+		if err != nil {
+			t.Fatalf("Receive after the sender closed: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Receive did not return after the sender closed")
 	}
 }
 
