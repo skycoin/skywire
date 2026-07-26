@@ -11,6 +11,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"html"
@@ -235,11 +236,49 @@ page never asks anyone to type a secret key.`,
 		}
 		// The wasm-visor bootstrap files hv-boot.js fetches by name (resolved against
 		// <base href="/">). These are NOT in the Angular FS, so serve them explicitly.
-		serveBytes("/wasm-visor.wasm", "application/wasm", wasm)
-		// wasm_exec.js MUST match the embedded wasm's toolchain (Go vs TinyGo
-		// loaders differ — TinyGo's provides the WASI shims its module imports),
-		// so take it from wasmbin alongside the blob, not a fixed copy.
-		serveBytes("/wasm_exec.js", "text/javascript", wasmbin.WasmExecJSVariant(variant))
+		//
+		// Variant-aware: BOTH embedded blobs are served from the same origin so the
+		// PWA can switch Go<->TinyGo at runtime WITHOUT restarting the server or
+		// changing identity (the SK lives in localStorage, shared across variants —
+		// see hv-boot.js). `?variant=go|tinygo` selects a blob; an unknown/absent
+		// value falls back to the launch default. wasm_exec.js MUST match the blob's
+		// toolchain (Go vs TinyGo loaders differ — TinyGo's provides the WASI shims
+		// its module imports), so it is selected by the SAME variant param.
+		pickVariant := func(r *http.Request) wasmbin.Variant {
+			if q := r.URL.Query().Get("variant"); q != "" && wasmbin.Has(wasmbin.Variant(q)) {
+				return wasmbin.Variant(q)
+			}
+			return variant
+		}
+		mux.HandleFunc("/wasm-visor.wasm", func(w http.ResponseWriter, r *http.Request) {
+			b, err := wasmbin.GetVariant(pickVariant(r))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/wasm")
+			w.Header().Set("Cache-Control", "public, max-age=300")
+			_, _ = w.Write(b) //nolint:errcheck
+		})
+		mux.HandleFunc("/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/javascript")
+			w.Header().Set("Cache-Control", "public, max-age=300")
+			_, _ = w.Write(wasmbin.WasmExecJSVariant(pickVariant(r))) //nolint:errcheck
+		})
+		// Discovery: lets the UI toggle offer only the variants this build actually
+		// embeds, and know which one boots by default. A standard-Go build ships
+		// both; a TinyGo build ships only TinyGo, so the toggle self-hides there.
+		mux.HandleFunc("/wasm-variants.json", func(w http.ResponseWriter, _ *http.Request) {
+			avail := wasmbin.Available()
+			names := make([]string, len(avail))
+			for i, v := range avail {
+				names[i] = string(v)
+			}
+			b, _ := json.Marshal(map[string]interface{}{"available": names, "default": string(variant)}) //nolint:errcheck
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(b) //nolint:errcheck
+		})
 		serveBytes("/hv-boot.js", "text/javascript", wasmhv.HvBootJS)
 		// worker.js hosts the wasm runtime off the main thread; hv-boot.js loads it
 		// by name (new Worker('worker.js')) and proxies skywireVisor over postMessage.
