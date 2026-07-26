@@ -709,6 +709,7 @@ func init() {
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
 	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", true, "listen on dmsg network")
+	RootCmd.Flags().BoolVar(&osNotify, "os-notify", true, "post host-OS desktop notifications for inbound messages when no browser UI is showing them (no-ops on a headless host)")
 	RootCmd.Flags().StringVar(&passwordFile, "password-file", "", "path to a file containing a bcrypt hash; when set, gates HTTP endpoints with basic auth")
 	RootCmd.Flags().StringVar(&internalToken, "internal-token", "", "shared secret used by the hypervisor's reverse proxy to bypass the password gate; managed automatically by the visor")
 
@@ -784,6 +785,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
 		fs.BoolVar(&useDmsg, "dmsg", true, "listen on dmsg")
+		fs.BoolVar(&osNotify, "os-notify", true, "host-OS desktop notifications when no UI is attached")
 		fs.StringVar(&passwordFile, "password-file", "", "path to bcrypt hash for HTTP basic auth")
 		fs.StringVar(&internalToken, "internal-token", "", "hypervisor proxy bypass token")
 		fs.BoolVar(&persistEnabled, "persist", false, "persist chat history to BoltDB")
@@ -945,6 +947,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	// taking the entire chat-app down whenever the launcher tried to
 	// recover from a transient failure or any other re-launch path.
 	mux := http.NewServeMux()
+	logOSNotifyStartup()
 	mux.Handle("/", requireAuth(http.FileServer(getFileSystem())))
 	mux.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
 	mux.HandleFunc("/sse", requireAuthFunc(sseHandler))
@@ -957,6 +960,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
 	mux.HandleFunc("/request-file", requireAuthFunc(requestFileHandler(ctx)))
 	mux.HandleFunc("/read-receipt", requireAuthFunc(readReceiptHandler(ctx)))
+	mux.HandleFunc("/notify-capable", requireAuthFunc(notifyCapableHandler))
 	registerPairHTTPHandlers(ctx, mux)
 	registerGroupHTTPHandlers(mux)
 
@@ -1190,6 +1194,8 @@ func handleConn(conn *framedConn) {
 			From:      peerPK,
 			Text:      text,
 		})
+		// Host-OS notification when no capable browser UI is showing it.
+		notifyOSInbound(shortHexPK(peerPK), notifPreview(text))
 	}
 }
 
