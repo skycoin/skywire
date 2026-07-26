@@ -14,6 +14,9 @@
 //	skychatGroupJoin(inviteLink)                   -> Promise<{id,name}>
 //	skychatGroupSend(id, text)                     -> Promise<null>
 //	skychatGroupAddMember(id, peerPkHex)           -> Promise<{id,members}>
+//	skychatGroupLeave(id)                          -> Promise<null>   (unsubscribe, keep history)
+//	skychatGroupDelete(id)                         -> Promise<null>   (leave + drop the record)
+//	skychatGroupInvite(id)                         -> Promise<string> (re-share invite link)
 //	skychatGroupList()                             -> JSON [{id,name,mode,role,members,status}]
 //	skychatGroupMessages([id])                     -> JSON [{group_id,from,text,ts}] (newest last)
 package main
@@ -268,6 +271,47 @@ func jsGroupAddMember(_ js.Value, args []js.Value) interface{} {
 		}
 		return map[string]interface{}{"id": rec.ID, "members": len(rec.Members)}, nil
 	})
+}
+
+// jsGroupLeave(id) → Promise<null>. Unsubscribes from the group's CXO feed and
+// marks it StatusLeft, but keeps the record (history stays visible). Mirrors the
+// native app's Leave. The shared Manager owns the CXO teardown + roster update.
+func jsGroupLeave(_ js.Value, args []js.Value) interface{} {
+	if groupMgr == nil {
+		return errPromise("group chat not ready")
+	}
+	if len(args) < 1 {
+		return errPromise("skychatGroupLeave(id)")
+	}
+	id := args[0].String()
+	return promise(func() (interface{}, error) { return nil, groupMgr.Leave(id) })
+}
+
+// jsGroupDelete(id) → Promise<null>. Leaves the group AND removes it from the
+// store (record + local history gone). Mirrors the native app's Delete.
+func jsGroupDelete(_ js.Value, args []js.Value) interface{} {
+	if groupMgr == nil {
+		return errPromise("group chat not ready")
+	}
+	if len(args) < 1 {
+		return errPromise("skychatGroupDelete(id)")
+	}
+	id := args[0].String()
+	return promise(func() (interface{}, error) { return nil, groupMgr.Delete(id) })
+}
+
+// jsGroupInvite(id) → Promise<string>. Regenerates the shareable invite link for
+// an EXISTING group (Create already returns one on first creation; this lets the
+// UI re-fetch/re-share it later). Owner/admin only, enforced by the Manager.
+func jsGroupInvite(_ js.Value, args []js.Value) interface{} {
+	if groupMgr == nil {
+		return errPromise("group chat not ready")
+	}
+	if len(args) < 1 {
+		return errPromise("skychatGroupInvite(id)")
+	}
+	id := args[0].String()
+	return promise(func() (interface{}, error) { return groupMgr.BuildInvite(id) })
 }
 
 // jsGroupList() → JSON [{id,name,mode,role,members,status}].
