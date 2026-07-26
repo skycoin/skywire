@@ -652,6 +652,9 @@
     .message-form {
       display: flex;
       position: relative; /* anchors the recording lock pill above the button */
+      /* Diameter of the round video-message self-view; the lock pill clears it
+         by this much when a video take is running. */
+      --rec-bubble: min(200px, 55vw);
       gap: 12px;
       padding: 16px 20px;
       background: var(--bg-secondary);
@@ -901,8 +904,45 @@
       color: white;
     }
 
+    /* A video take fills the space above the button with the round self-view,
+       so the lock target moves up to sit on top of it. */
+    .lock-pill.raised {
+      margin-bottom: calc(var(--rec-bubble) + 20px);
+    }
+
     .lock-pill.hidden {
       display: none;
+    }
+
+    /* Round self-view for a video message: a circular crop of the camera,
+       floating above the composer for as long as the take runs, ringed in the
+       same red pulse as the button. It never takes pointer events — the finger
+       on top of it is dragging the composer button underneath (lock/cancel). */
+    .video-bubble {
+      position: absolute;
+      right: 20px;
+      bottom: 100%;
+      margin-bottom: 10px;
+      width: var(--rec-bubble);
+      height: var(--rec-bubble);
+      border-radius: 50%;
+      overflow: hidden;
+      background: #000;
+      border: 3px solid var(--accent-red);
+      pointer-events: none;
+      animation: rec-pulse 1.4s ease-in-out infinite;
+    }
+
+    .video-bubble.hidden {
+      display: none;
+    }
+
+    .video-bubble video {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;      /* fill the circle whatever the camera's aspect */
+      transform: scaleX(-1);  /* a self-view reads as a mirror; the file isn't flipped */
     }
 
     /* Icon swap: a quick pop so the morph is legible instead of instant. */
@@ -1514,11 +1554,17 @@
            button, since there's no pointer left to slide. -->
       <div id="recBar" class="rec-bar hidden">
         <button type="button" id="recCancel" class="rec-cancel hidden" title="Delete recording"
-                aria-label="Delete recording" onclick="app.cancelVoiceRecording()">&#x1F5D1;</button>
+                aria-label="Delete recording" onclick="app.cancelRecording()">&#x1F5D1;</button>
         <span class="rec-dot"></span>
         <span id="recTime" class="rec-time">0:00</span>
         <canvas id="recWave" class="rec-wave"></canvas>
         <span id="recHint" class="rec-hint">&#x25C0; slide to cancel</span>
+      </div>
+      <!-- Round self-view, shown above the composer while a video message
+           records. Muted: the microphone is in the same stream, so playing it
+           back here would howl. -->
+      <div id="videoBubble" class="video-bubble hidden" aria-hidden="true">
+        <video id="videoPreview" muted playsinline autoplay></video>
       </div>
       <!-- Floats above the mic button while recording unlocked; slide the
            pointer up onto it to go hands-free. -->
@@ -1528,8 +1574,8 @@
       </div>
       <!-- Morphing button: submits when there is text, otherwise a tap toggles
            the voice/video recording mode and a press-and-hold records a voice
-           message (see onComposerBtn / _onComposerDown). Its type/icon/label
-           are all set by syncComposerBtn(). -->
+           or video message (see onComposerBtn / _onComposerDown). Its
+           type/icon/label are all set by syncComposerBtn(). -->
       <button type="submit" id="composerBtn" class="composer-btn" data-mode="send"
               onclick="app.onComposerBtn(event)"
               onpointerdown="app._onComposerDown(event)"
@@ -1688,9 +1734,10 @@
         // arrow; with the field empty it is the recording affordance, either
         // 'mic' (voice message) or 'video' — a user choice kept across reloads.
         this.mediaMode = localStorage.getItem('skychat_media_mode') === 'video' ? 'video' : 'mic';
-        // Voice-message recorder state (see the recording section below). One
-        // recording at a time; every field is reset by _recReset().
+        // Voice/video-message recorder state (see the recording section below).
+        // One recording at a time; every field is reset by _recReset().
         this.rec = {
+          kind: 'mic',       // what this take is: 'mic' (voice) or 'video'
           active: false,     // MediaRecorder is running
           pending: false,    // getUserMedia in flight (permission prompt may be up)
           released: false,   // pointer came up while still acquiring the mic
@@ -1707,6 +1754,7 @@
           audioCtx: null, analyser: null, source: null, buf: null,
           rafId: 0, levels: [], peak: 0, lastPush: 0,
           waveCanvas: null, waveCtx: null,
+          videoEl: null,     // the round self-view, while a video take runs
           mime: '', ext: 'weba',
           startedAt: 0, clockTimer: null,
           dest: null,        // {key, isGroup} the recording belongs to
@@ -1733,7 +1781,7 @@
           // Leaving the window ends a hold we can no longer track: stop and
           // send what was captured rather than holding the mic open. A locked
           // take is hands-free by definition, so it keeps running.
-          if (this.rec.active && !this.rec.locked) this._stopVoiceRecording(false);
+          if (this.rec.active && !this.rec.locked) this._stopRecording(false);
         });
         // Safety net for a release that never reaches the button (finger lifted
         // outside the window). _onComposerUp is a no-op when nothing is running.
@@ -3074,7 +3122,7 @@
         // While locked the button is the send control for the running take.
         if (this.rec.locked) {
           e.preventDefault();
-          this._stopVoiceRecording(false);
+          this._stopRecording(false);
           return;
         }
         if (this._composerMode() === 'send') return;
@@ -3093,15 +3141,19 @@
       }
 
       // ---------------------------------------------------------------------
-      // Voice messages
+      // Voice & video messages
       //
-      // Press and hold 🎤 to record, release to send. The clip is captured with
-      // MediaRecorder (Opus in a WebM container) and shipped through the plain
-      // file path as voice-<ts>.weba — no new transport: /send-file carries it
-      // and renderFile() already plays .weba inline as <audio>.
+      // Press and hold the composer button to record, release to send. Both
+      // kinds run the same machine — only the capture constraints, the
+      // container and the labels differ:
+      //   'mic'   -> Opus in WebM, sent as voice-<ts>.weba, plays as <audio>
+      //   'video' -> VP8/VP9+Opus in WebM, sent as video-<ts>.webm, plays as
+      //              <video>, with a round self-view above the composer
+      // Neither needs a new transport: /send-file carries the clip and
+      // renderFile() already plays both inline.
       //
       // Tap vs hold: the hold threshold below keeps a quick tap (which toggles
-      // mic/video) from opening the mic. Recording only starts once the finger
+      // mic/video) from opening a device. Recording only starts once the finger
       // has been down that long, so a tap never triggers a permission prompt.
       // ---------------------------------------------------------------------
 
@@ -3114,11 +3166,33 @@
         return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
       }
 
+      // The kind of take that is running (or about to). Everything below that
+      // differs between voice and video reads it through _recSpec.
+      _recKind() { return this.rec.kind === 'video' ? 'video' : 'mic'; }
+
+      // _recSpec is the per-kind vocabulary: what to call the clip, which icon
+      // to hold, which devices it opens (a video take opens the camera *and*
+      // the microphone, so its device wording covers both). The icon is a plain
+      // character, not an entity — it goes into message text, which is escaped.
+      _recSpec(kind) {
+        return (kind || this._recKind()) === 'video'
+          ? { noun: 'Video message', icon: '\u{1F4F9}', media: 'video', prefix: 'video',
+              device: 'Camera', devices: 'Camera or microphone' }
+          : { noun: 'Voice message', icon: '\u{1F3A4}', media: 'audio', prefix: 'voice',
+              device: 'Microphone', devices: 'Microphone' };
+      }
+
       // _recMime picks a container/codec this browser can actually record, with
-      // the file extension that makes it round-trip: .weba (not .webm) so
-      // isAudioFile/mediaContentType class it as audio rather than video.
-      _recMime() {
-        const want = [
+      // the file extension that makes it round-trip. For voice that means .weba
+      // (not .webm) so isAudioFile/mediaContentType class it as audio rather
+      // than video; a video take wants exactly the opposite.
+      _recMime(kind) {
+        const want = (kind || this._recKind()) === 'video' ? [
+          ['video/webm;codecs=vp9,opus', 'webm'],
+          ['video/webm;codecs=vp8,opus', 'webm'],
+          ['video/webm', 'webm'],
+          ['video/mp4', 'mp4'],
+        ] : [
           ['audio/webm;codecs=opus', 'weba'],
           ['audio/webm', 'weba'],
           ['audio/ogg;codecs=opus', 'oga'],
@@ -3132,11 +3206,28 @@
         return null;
       }
 
+      // Capture constraints. The video track is asked for a square-ish frame
+      // because the preview — and the Part 6 player — crop it to a circle;
+      // 'ideal' keeps it a preference, so a camera that can't do it still runs.
+      _recConstraints(kind) {
+        if ((kind || this._recKind()) !== 'video') return { audio: true };
+        return {
+          audio: true,
+          video: {
+            width: { ideal: 480 },
+            height: { ideal: 480 },
+            frameRate: { ideal: 30 },
+            facingMode: 'user',
+          },
+        };
+      }
+
       _onComposerDown(e) {
         this.rec.holdFired = false;
         if (this.rec.locked) return;                          // locked take owns the button
         if (e.button !== undefined && e.button !== 0) return; // primary button only
-        if (this._composerMode() !== 'mic') return;           // video capture is a later part
+        const mode = this._composerMode();
+        if (mode !== 'mic' && mode !== 'video') return;       // 'send' — the form handles it
         const btn = document.getElementById('composerBtn');
         // Capture the pointer so the release — and every move in between —
         // reaches us even once the finger has drifted off the button.
@@ -3146,7 +3237,9 @@
         this.rec.holdTimer = setTimeout(() => {
           this.rec.holdTimer = null;
           this.rec.holdFired = true;
-          this._startVoiceRecording();
+          // Record the kind the press started in, not whatever the button
+          // shows by the time the devices open.
+          this._startRecording(mode);
         }, this._recHoldMs());
       }
 
@@ -3157,10 +3250,11 @@
         if (!this.rec.active || this.rec.locked) return;
         const dx = e.clientX - this.rec.startX;
         const dy = e.clientY - this.rec.startY;
-        if (dy <= -this._recLockDy()) { this._lockVoiceRecording(); return; }
+        if (dy <= -this._recLockDy()) { this._lockRecording(); return; }
         if (dx <= -this._recCancelDx()) {
-          this._stopVoiceRecording(true);
-          this.showToast('Voice message cancelled.');
+          const noun = this._recSpec().noun;
+          this._stopRecording(true);
+          this.showToast(`${noun} cancelled.`);
           return;
         }
         this._recDragUI(dx, dy);
@@ -3174,28 +3268,30 @@
         }
         if (this.rec.pending) {
           // Still waiting on the mic (likely a permission prompt). Don't record
-          // a clip the user is no longer holding for; _startVoiceRecording
+          // a clip the user is no longer holding for; _startRecording
           // unwinds when it sees this.
           this.rec.released = true;
           return;
         }
         if (this.rec.locked) return;  // hands-free — the release means nothing
-        if (this.rec.active) this._stopVoiceRecording(false);
+        if (this.rec.active) this._stopRecording(false);
       }
 
-      async _startVoiceRecording() {
+      async _startRecording(kind) {
         if (this.rec.active || this.rec.pending) return;
+        kind = kind === 'video' ? 'video' : 'mic';
+        const spec = this._recSpec(kind);
         if (!this._recSupported()) {
           // getUserMedia needs a secure context: 127.0.0.1/localhost is fine,
           // a plain-http LAN address is not.
           this.showToast(window.isSecureContext === false
-            ? 'Voice messages need a secure context — open Skychat on 127.0.0.1.'
-            : 'This browser can\'t record audio.', 'error');
+            ? `${spec.noun}s need a secure context — open Skychat on 127.0.0.1.`
+            : `This browser can't record ${spec.media}.`, 'error');
           return;
         }
-        const codec = this._recMime();
+        const codec = this._recMime(kind);
         if (!codec) {
-          this.showToast('This browser has no supported audio recording format.', 'error');
+          this.showToast(`This browser has no supported ${spec.media} recording format.`, 'error');
           return;
         }
         const key = this.activeKey();
@@ -3204,21 +3300,22 @@
           return;
         }
 
+        this.rec.kind = kind;
         this.rec.pending = true;
         this.rec.released = false;
         this.rec.cancelled = false;
 
         let stream;
         try {
-          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          stream = await navigator.mediaDevices.getUserMedia(this._recConstraints(kind));
         } catch (err) {
           this.rec.pending = false;
           const name = err && err.name;
           this.showToast(
-            name === 'NotAllowedError' ? 'Microphone access denied.'
-              : name === 'NotFoundError' ? 'No microphone found.'
-                : name === 'NotReadableError' ? 'Microphone is in use by another app.'
-                  : `Microphone error: ${(err && err.message) || name || 'unknown'}`,
+            name === 'NotAllowedError' ? `${spec.devices} access denied.`
+              : name === 'NotFoundError' ? `No ${spec.devices.toLowerCase()} found.`
+                : name === 'NotReadableError' ? `${spec.devices} is in use by another app.`
+                  : `${spec.device} error: ${(err && err.message) || name || 'unknown'}`,
             'error');
           return;
         }
@@ -3228,7 +3325,7 @@
         if (this.rec.released) {
           stream.getTracks().forEach(t => t.stop());
           this.rec.pending = false;
-          this.showToast('Microphone ready — hold &#x1F3A4; to record.');
+          this.showToast(`${spec.device} ready — hold ${spec.icon} to record.`);
           return;
         }
 
@@ -3244,7 +3341,7 @@
 
         this.rec.chunks = [];
         recorder.ondataavailable = ev => { if (ev.data && ev.data.size) this.rec.chunks.push(ev.data); };
-        recorder.onstop = () => this._finishVoiceRecording();
+        recorder.onstop = () => this._finishRecording();
         recorder.onerror = () => { this.rec.cancelled = true; };
 
         this.rec.recorder = recorder;
@@ -3258,7 +3355,39 @@
 
         recorder.start();
         this._recShowUI(true);
+        if (kind === 'video') this._recStartPreview(stream);
         this._recStartMeter(stream); // after the UI is up, so the canvas can be measured
+      }
+
+      // ---- Round self-view --------------------------------------------------
+      //
+      // A video take shows the camera in a circle above the composer for as
+      // long as it runs (including hands-free, after a lock). The element is
+      // muted — the microphone is in the same stream, so playing it here would
+      // howl — and mirrored, the way a self-view should read; only the preview
+      // is flipped, the recorded file keeps the real orientation.
+
+      _recStartPreview(stream) {
+        const wrap = document.getElementById('videoBubble');
+        const el = document.getElementById('videoPreview');
+        if (!wrap || !el) return; // decorative — the clip records either way
+        el.muted = true;
+        el.srcObject = stream;
+        const played = el.play();
+        if (played && played.catch) played.catch(() => { /* autoplay blocked; recording is unaffected */ });
+        wrap.classList.remove('hidden');
+        this.rec.videoEl = el;
+      }
+
+      _recStopPreview() {
+        const wrap = document.getElementById('videoBubble');
+        const el = this.rec.videoEl;
+        if (wrap) wrap.classList.add('hidden');
+        if (el) {
+          try { el.pause(); } catch (e) { /* wasn't playing */ }
+          el.srcObject = null; // drop the stream reference so the camera light goes out
+        }
+        this.rec.videoEl = null;
       }
 
       // ---- Live waveform ----------------------------------------------------
@@ -3388,10 +3517,10 @@
         this.rec.waveCtx = null;
       }
 
-      // _lockVoiceRecording makes the running take hands-free: the release no
+      // _lockRecording makes the running take hands-free: the release no
       // longer sends it, so the mic button becomes Send and the bar grows a
       // Cancel button (there's no pointer left to slide with).
-      _lockVoiceRecording() {
+      _lockRecording() {
         if (!this.rec.active || this.rec.locked) return;
         this.rec.locked = true;
         this._recDragUI(0, 0);
@@ -3407,20 +3536,22 @@
         if (btn) {
           // Wear the send look; the pointer handlers defer to rec.locked, so
           // this can't be mistaken for an ordinary send.
+          const label = `Send ${this._recSpec().noun.toLowerCase()}`;
           btn.classList.remove('recording');
           btn.dataset.mode = 'send';
           btn.type = 'button';
-          btn.title = 'Send voice message';
-          btn.setAttribute('aria-label', 'Send voice message');
+          btn.title = label;
+          btn.setAttribute('aria-label', label);
           btn.querySelector('.composer-icon').textContent = '➤';
         }
       }
 
-      // cancelVoiceRecording discards the take (the locked Cancel button).
-      cancelVoiceRecording() {
+      // cancelRecording discards the take (the locked Cancel button).
+      cancelRecording() {
         if (!this.rec.active) return;
-        this._stopVoiceRecording(true);
-        this.showToast('Voice message discarded.');
+        const noun = this._recSpec().noun;
+        this._stopRecording(true);
+        this.showToast(`${noun} discarded.`);
       }
 
       // _recDragUI reflects an in-progress slide: the hint tracks the pointer
@@ -3436,22 +3567,23 @@
         if (pill) pill.classList.toggle('near', up >= this._recLockDy() / 2);
       }
 
-      // _stopVoiceRecording ends the take; the actual send happens in
-      // _finishVoiceRecording, which the recorder's onstop drives.
-      _stopVoiceRecording(cancel) {
+      // _stopRecording ends the take; the actual send happens in
+      // _finishRecording, which the recorder's onstop drives.
+      _stopRecording(cancel) {
         if (!this.rec.active || this.rec.stopping) return;
         this.rec.stopping = true;
         this.rec.cancelled = !!cancel;
         try {
           this.rec.recorder.stop();
         } catch (err) {
-          this._finishVoiceRecording(); // recorder already dead — unwind by hand
+          this._finishRecording(); // recorder already dead — unwind by hand
         }
       }
 
-      _finishVoiceRecording() {
+      _finishRecording() {
         if (!this.rec.active) return;
         const { chunks, mime, ext, startedAt, dest, cancelled } = this.rec;
+        const spec = this._recSpec();
         const ms = Date.now() - startedAt;
         this._recReset();
         this._recShowUI(false);
@@ -3459,26 +3591,31 @@
         if (cancelled) return;
         const blob = new Blob(chunks, { type: mime });
         if (ms < this._recMinMs() || !blob.size) {
-          this.showToast('Hold &#x1F3A4; to record a voice message.');
+          this.showToast(`Hold ${spec.icon} to record a ${spec.noun.toLowerCase()}.`);
           return;
         }
 
-        const name = `voice-${this._recStamp(new Date(startedAt))}.${ext}`;
+        // voice-<ts>.weba / video-<ts>.webm — the prefix is what Part 6 keys
+        // "this is a recorded message" off, and the extension is what makes
+        // renderFile() play it as <audio> or <video>.
+        const name = `${spec.prefix}-${this._recStamp(new Date(startedAt))}.${ext}`;
         const file = new File([blob], name, { type: mime });
         this._uploadFile(file, {
           dest,
-          text: '\u{1F3A4} Voice message',
-          sentToast: 'Voice message sent.',
+          text: `${spec.icon} ${spec.noun}`,
+          sentToast: `${spec.noun} sent.`,
         });
       }
 
-      // _recReset releases the mic and clears every per-recording field. The
-      // tracks must be stopped or the browser keeps showing the recording
-      // indicator (and holds the device) after the clip is done.
+      // _recReset releases the devices and clears every per-recording field.
+      // The tracks must be stopped or the browser keeps showing the recording
+      // indicator (and holds the mic/camera) after the clip is done.
       _recReset() {
         this._recStopMeter();
+        this._recStopPreview();
         if (this.rec.stream) this.rec.stream.getTracks().forEach(t => t.stop());
         if (this.rec.clockTimer) clearInterval(this.rec.clockTimer);
+        this.rec.kind = 'mic';
         this.rec.active = false;
         this.rec.pending = false;
         this.rec.released = false;
@@ -3512,7 +3649,13 @@
         field.classList.toggle('hidden', on);
         btn.classList.toggle('recording', on);
         if (cancel) cancel.classList.add('hidden');       // shown only once locked
-        if (pill) { pill.classList.toggle('hidden', !on); pill.classList.remove('near'); }
+        if (pill) {
+          pill.classList.toggle('hidden', !on);
+          pill.classList.remove('near');
+          // A video take puts the round self-view where the pill sits, so the
+          // lock target climbs above it.
+          pill.classList.toggle('raised', on && this._recKind() === 'video');
+        }
         if (hint) {
           hint.style.transform = '';
           hint.innerHTML = '&#x25C0; slide to cancel';
