@@ -43,6 +43,15 @@ type Message struct {
 	Text string `json:"text"`
 	// Timestamp is the server-side receive or send time in UTC.
 	Timestamp time.Time `json:"timestamp"`
+	// ID is the stable message id carried on the wire in message.Envelope.ID.
+	// It makes a stored message addressable — quoted replies (ReplyTo) and,
+	// later, receipts/deletes reference it. omitempty: pre-envelope plain-text
+	// messages have no id, so the field is simply absent for them.
+	ID string `json:"id,omitempty"`
+	// ReplyTo, when set, is the ID of the message this one quotes (a threaded
+	// reply), mirroring message.Envelope.ReplyTo. Persisting it means the
+	// thread survives a reload / history backfill, not just the live SSE event.
+	ReplyTo string `json:"reply_to,omitempty"`
 }
 
 // GroupMessage is a single group-chat message record. Mirrors Message
