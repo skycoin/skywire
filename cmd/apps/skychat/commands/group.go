@@ -224,6 +224,11 @@ func startGroupPoller(parent context.Context) {
 					GroupID:   m.GroupID,
 					Text:      m.Text,
 				})
+				// Host-OS notification when no capable browser UI is showing it.
+				// Body = "<sender>: <text>" using the display text (file/reply
+				// overrides applied above).
+				msgText, _ := envelope["message"].(string)
+				notifyOSInbound("Group message", shortHexPK(m.SenderPK.Hex())+": "+notifPreview(msgText))
 			}
 		}
 	}()
