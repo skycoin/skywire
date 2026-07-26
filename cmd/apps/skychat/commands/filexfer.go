@@ -193,6 +193,28 @@ func saveSentCopy(srcPath string, offer xfer.Offer) error {
 	return copyFile(srcPath, filepath.Join(dir, sentCopyName(offer)))
 }
 
+// sentCopyURL is the /files/ URL of the copy saveSentCopy kept for a DM send,
+// or "" when there is no copy to serve (it is best-effort, and the group path
+// never keeps one). The browser renders its own sends optimistically from a
+// blob: URL, which dies with the page; handing back this URL is what lets a
+// sent image, voice message or video message still render after a reload.
+// srcPath — not the client-supplied name — decides the extension, because
+// that is what sendFile passes to the offer and hence to sentCopyName.
+func sentCopyURL(id, srcPath string) string {
+	if id == "" {
+		return ""
+	}
+	base := sentCopyName(xfer.Offer{ID: id, Name: filepath.Base(srcPath)})
+	dir, err := downloadsDir()
+	if err != nil {
+		return ""
+	}
+	if _, serr := os.Stat(filepath.Join(dir, base)); serr != nil {
+		return ""
+	}
+	return "/files/" + base
+}
+
 // onXferDone surfaces a completed transfer (either direction) as a chatEvent and
 // logs the result. It runs on the xfer manager's goroutine.
 func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err error) {
@@ -582,7 +604,13 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 				http.Error(w, serr.Error(), http.StatusBadGateway)
 				return
 			}
-			writeJSON(w, map[string]any{"id": id, "pk": pkHex})
+			resp := map[string]any{"id": id, "pk": pkHex}
+			// Point the sender's own bubble at our kept copy, so it survives the
+			// page (its blob: URL does not). Omitted when no copy was kept.
+			if url := sentCopyURL(id, path); url != "" {
+				resp["file_url"] = url
+			}
+			writeJSON(w, resp)
 		default:
 			http.Error(w, "specify pk (1:1) or group", http.StatusBadRequest)
 		}
