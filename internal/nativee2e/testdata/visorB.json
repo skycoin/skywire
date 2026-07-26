@@ -61,6 +61,12 @@
     "service_discovery": "dmsg://026f96adae04285f8b35eeba23b9aa2be3470ea4bb005118f4e64006afdeea85a7:80",
     "apps": [
       {
+        "name": "skychat",
+        "auto_start": false,
+        "port": 1,
+        "args": ["--addr", "127.0.0.1:8011", "--persist"]
+      },
+      {
         "name": "skysocks",
         "auto_start": true,
         "port": 3

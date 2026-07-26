@@ -43,8 +43,9 @@ import (
 type chatEnvelope = message.Envelope
 
 const (
-	chatTypeMsg = message.TypeMsg
-	chatTypeAck = message.TypeAck
+	chatTypeMsg  = message.TypeMsg
+	chatTypeAck  = message.TypeAck
+	chatTypeRead = message.TypeRead
 )
 
 // ackWaiters routes an inbound chat-ack envelope back to the
@@ -91,22 +92,30 @@ func deliverAck(id string) {
 	}
 }
 
-// tryHandleChatEnvelope attempts to parse payload as a chat-msg or
-// chat-ack envelope. Returns (handled=true, body=...) if it's a
-// chat-msg the caller should surface as a normal chat message after
-// optionally sending an ack back. Returns (handled=true, body="")
-// if it's a chat-ack (consumed internally, no surfacing). Returns
-// (handled=false, _) for anything else — caller falls through to
-// the legacy plain-text path.
+// tryHandleChatEnvelope attempts to parse payload as a chat-msg,
+// chat-ack, or chat-read envelope. The returned kind is the envelope
+// type (chatTypeMsg/chatTypeAck/chatTypeRead), or "" when payload is
+// not a recognized envelope and the caller should fall through to the
+// legacy plain-text path:
+//
+//   - chat-msg  → (handled=true, body=<text>, id, kind=chatTypeMsg):
+//     surface body as a normal chat message; an ack was sent back first
+//     when the sender requested one.
+//   - chat-ack  → (handled=true, body="", id, kind=chatTypeAck): a
+//     receipt for a message WE sent — consumed internally (satisfies a
+//     --wait waiter; the caller also emits "received" status).
+//   - chat-read → (handled=true, body="", id, kind=chatTypeRead): the
+//     peer has now displayed a message WE sent — the caller emits "read"
+//     status. Nothing is surfaced to the chat UI.
 //
 // Envelope recognition is conservative: must start with '{', valid
 // JSON, type field matches a known chat-* value. Anything else is
 // "not an envelope" so plain-text JSON-looking chat (e.g. someone
 // typing literal {} into a chat window) still reaches its peer.
-func tryHandleChatEnvelope(payload []byte, peerPKHex string, sendAck func(id string)) (handled bool, body string, id string) {
+func tryHandleChatEnvelope(payload []byte, peerPKHex string, sendAck func(id string)) (handled bool, body string, id string, kind string) {
 	env, ok := message.ParseEnvelope(payload)
 	if !ok {
-		return false, "", ""
+		return false, "", "", ""
 	}
 	switch env.Type {
 	case chatTypeMsg:
@@ -116,16 +125,19 @@ func tryHandleChatEnvelope(payload []byte, peerPKHex string, sendAck func(id str
 			// message so the recipient sees it.
 			sendAck(env.ID)
 		}
-		return true, env.Body, env.ID
+		return true, env.Body, env.ID, chatTypeMsg
 	case chatTypeAck:
 		if env.ID != "" {
 			deliverAck(env.ID)
 		}
 		// Consumed; nothing to surface to the chat UI.
-		return true, "", env.ID
+		return true, "", env.ID, chatTypeAck
+	case chatTypeRead:
+		// Consumed; the caller turns it into a "read" status update.
+		return true, "", env.ID, chatTypeRead
 	}
 	_ = peerPKHex // reserved for future per-peer ack policy / rate-limit
-	return false, "", ""
+	return false, "", "", ""
 }
 
 // chatAckTimeoutFloor / chatAckTimeoutCeiling clamp the wait_ms
@@ -135,6 +147,12 @@ const (
 	chatAckTimeoutFloor   = 100 * time.Millisecond
 	chatAckTimeoutCeiling = 60 * time.Second
 )
+
+// staleAckWindow bounds how long a non-blocking receipts send waits for the
+// peer's chat-ack before concluding the cached conn is half-open and dropping
+// it (so the next send redials). Generous relative to a real ack (sub-second on
+// a live conn) to avoid dropping a healthy conn on a momentarily-slow peer.
+const staleAckWindow = 20 * time.Second
 
 // clampAckWait normalizes a caller-supplied wait_ms into the
 // allowed range. Zero / negative / unset → floor; over-ceiling → ceiling.

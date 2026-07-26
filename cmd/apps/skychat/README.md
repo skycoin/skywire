@@ -93,6 +93,162 @@ the canonical group feed; members subscribe and (post-#2539)
 publish their own per-member feed. See `cmd/apps/skychat/group/`
 for the implementation.
 
+The browser UI mirrors this with a Groups sidebar (create/join
+modals, per-sender message labels), backed by an HTTP proxy to the
+visor's group RPC — `GET/POST /group`, `POST /group/join`, and
+`/group/<id>/{invite,send,leave,history}`. It needs the visor RPC
+connection (`--pair-enable`); without it the Groups section stays
+hidden and the UI is DM-only. Group text is decrypted by the visor
+for private groups, so the browser never handles keys.
+
+## Media & files (browser UI)
+
+The browser UI can attach and render media inline — the CLI stays
+text-only. Click 📎 to send a file to the open conversation (DM or
+group); received images / video / audio render in place. Your own file
+bubbles carry the same delivery-status tick as text (see Message
+status). There is **no size limit** on uploads: `/send-file` bounds
+only the request-header read (`ReadHeaderTimeout`) and clears its
+write deadline for the transfer, so a large upload/transfer is never
+truncated.
+
+- **Images** show a downscaled thumbnail (`GET /thumb/<name>`,
+  ~4–5× smaller than the original) and open full-size in an in-app
+  lightbox on click.
+- **Video / audio** play in native `<video>` / `<audio>` players;
+  `GET /files/<name>` sets an explicit media Content-Type and
+  supports Range requests, so seeking works.
+- **Other files** render as a download card.
+
+Sent and received media survive a cache wipe / fresh device: DM
+file events persist to `/history`, and both sender and receiver
+keep an id-named served copy under the downloads dir, so previews
+re-render anywhere the visor is reachable. Every peer-supplied name
+and URL is attribute-escaped before it reaches the DOM.
+
+### File backfill (re-request)
+
+Transfers are point-to-point, so a peer that missed a file (offline
+at send time, a pruned local copy, or a brand-new device) can ask
+the original sender to re-send it. Received file bubbles carry a
+**re-request** link: it POSTs `/request-file {pk,file_id,file_name}`,
+the holder locates the bytes by id and re-sends preserving the
+original id + name, and the requester auto-accepts (it asked). When
+the bytes land, the existing bubble is patched in place rather than
+duplicated. The file id is persisted with the message in `/history`
+(`file_id`), so the re-request link keeps working after a reload or on
+a fresh device — not only while the bytes are missing.
+
+### Group files
+
+Group files ride the feed as a small reference
+(`{"skychat_file":{id,name,size}}`), not as bytes — so nothing is
+fanned out and the feed stays cheap. Every member, including future
+joiners, pulls the bytes on demand via the same file-backfill
+request routed to the message's sender. A member who doesn't hold a
+file yet sees a card with a re-request link; once the bytes arrive
+the bubble is patched in place (an image becomes inline).
+
+## Replies, deletes & pinning (browser UI)
+
+These are browser-UI features; the CLI stays plain send/listen.
+
+### Quoted replies
+
+Hover a message and click **↩ Reply** to quote it: the reply rides
+the normal message body as a `{"skychat_reply":{...}}` envelope (no
+new endpoint, no wire-version bump), and every read boundary — DM
+`/sse`, DM `/history`, the group SSE poller, and group `/history` —
+unwraps it into the plain text plus additive `reply_to_*` fields.
+The quoted block renders above the reply, and clicking it scrolls to
+the original. The parent's preview is embedded, so the quote renders
+even for a reader who doesn't hold the parent (a fresh group joiner,
+or after backfill). Works for both DMs and groups.
+
+### Deleting messages
+
+The per-message **⋯** menu offers:
+
+- **Delete for me** — local only. DM threads are dropped from the
+  browser cache; group messages are remembered in a persisted
+  hidden-set (keyed by the message's `ts_nano`) and filtered on
+  reload, since groups re-load from visor history.
+- **Delete for everyone** — shown only on your **own group**
+  messages. `DELETE /group/<id>/message?ts=<unixnano>` publishes a
+  durable `{"skychat_delete":{to_ts_nano}}` tombstone (via
+  `GroupSend`) *and* prunes the original leaf (via `GroupUnsend`).
+  The tombstone rides the normal `GroupPoll` → SSE path so it
+  propagates live, and — being a durable leaf — also reaches members
+  who were offline during the delete and future joiners; group
+  `/history` filters both the tombstone and the deleted message. It
+  is sender-scoped (the tombstone leaf is signed), so you can only
+  delete your own messages for everyone. As with any federated
+  store, a client that is offline forever or archived the bytes
+  can't be forced to forget.
+
+DM "delete for everyone" is intentionally not offered: DM messages
+carry no shared, stable id across the two visors, which a reliable
+delete-for-all would require.
+
+### Pinning
+
+The 📌 button in a conversation header pins that conversation (DM or
+group) to a **Pinned** slot at the top of the sidebar; its copy in
+the normal list is hidden so it isn't shown twice. The pin persists
+across reloads and clears automatically if the conversation is
+deleted or left. One pin at a time — pinning another replaces it.
+
+### Message status
+
+Your own DM bubbles carry a delivery-status tick that advances
+through the message's lifecycle:
+
+| Tick | State | Meaning |
+|------|-------|---------|
+| ○ | pending | optimistic bubble, the send is in flight |
+| ✓ | sent | the frame left this machine (`/message` returned) |
+| ✓✓ | received | the peer's app acknowledged receipt |
+| ✓✓ (blue) | read | the peer's UI displayed the message |
+| ⚠ Resend | failed | the send errored — click the tick to resend |
+
+There is **no middle server** — receipts are just messages travelling
+the other way over the same peer-to-peer conn. `pending`/`sent`/
+`failed` are decided at send time; `received`/`read` arrive
+asynchronously and advance the tick later:
+
+- A browser send sets `receipts:true` on `/message`, so the body is
+  wrapped in an id'd `chat-msg` envelope (`ack=true`) and the handler
+  returns `{ok,id}` immediately (unlike `--wait`, it does not block).
+- The recipient's app auto-replies with a `chat-ack` on receipt (→
+  `received`); when its UI displays the message it `POST`s
+  `/read-receipt`, sending a `chat-read` envelope back (→ `read`).
+- Both receipts ride back as `dm-status` control events on `/sse`
+  (`{channel:"dm-status",id,status,peer}`), which the sender's UI
+  matches to the bubble by id. Line-based `/sse` consumers (`cli
+  skychat listen`) ignore channel-tagged events, as they do for
+  group/pair events.
+
+Because delivery is direct-dial with no store-and-forward, an offline
+recipient means the send **fails** (nothing is queued); the tick is
+`sent` or `failed`, never a lingering `pending`. Status is browser-UI
+only — the CLI stays byte-identical plain send/listen — and persists
+in the local DM cache across reloads.
+
+**Stale-conn recovery.** A cached connection can go half-open (the peer
+restarted, or an idle transport died) — a write into it succeeds
+without error but never lands, so no `chat-ack` returns and the bubble
+stops at `sent`. If no ack arrives within a short window the sender
+drops that conn, so the **⚠ Resend** button (or the next message)
+redials a fresh one — no visor restart needed.
+
+**Files** carry the same tick (○ sending → ✓✓ received on a completed
+1:1 transfer; group files stop at ✓ sent — "on the feed"). A failed
+file shows a plain ⚠ with no resend, since the bytes are gone once the
+upload completes.
+
+Group text messages show `pending`/`sent`/`failed` only; per-member
+`received`/`read` (a receipt fan-out on the feed) is not implemented.
+
 ## Message history
 
 When persistence is enabled, the chat-app stores every inbound and
@@ -217,10 +373,13 @@ frames, since #2504).
 ## Architecture
 
 - HTTP server on `--addr` serves the browser UI, `/status`, `/sse`
-  (listener stream), `/message` (send), `/history`, and pair-control
-  endpoints when pairing is on.
+  (listener stream), `/message` (send), `/history`, the file
+  endpoints (`/send-file`, `/files/`, `/thumb/`, `/request-file`),
+  and — when pairing is on — the pair-control and `/group` endpoints.
 - DM messages are length-prefixed framed connections (4-byte
   big-endian length + payload, max 64 KiB per frame).
+- File transfers run over a dedicated port (`pkg/skychat/xfer`); the
+  bytes never ride the group feed — only a small file reference does.
 - Group messages are published over CXO TreeStore feeds.
 - The app talks to the visor via `pkg/app` — it does NOT speak
   directly to dmsg or the router; everything routes through the
@@ -229,6 +388,14 @@ frames, since #2504).
 See:
 
 - `commands/skychat.go` — main app + framed-conn protocol
+- `commands/filexfer.go` — file send / serve / thumbnails
+- `commands/filebackfill.go` — file re-request / re-send
+- `commands/reply.go` — quoted-reply envelope + enrichment
+- `commands/sendack.go` — chat-msg/chat-ack/chat-read envelopes + ack routing
+- `commands/dmstatus.go` — DM status receipts + `dm-status` SSE + `/read-receipt`
+  + half-open-conn auto-recovery (`dropStaleConn`)
+- `commands/group.go` — browser group-chat HTTP proxy + SSE bridge
+  (incl. group files + delete tombstones)
 - `group/` — group chat (TreeStore-backed)
 - `history/` — SQLite persistence layer
 - `pairing/` — per-pair CXO encryption (see also
