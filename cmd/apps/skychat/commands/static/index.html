@@ -804,6 +804,7 @@
     }
 
     .rec-hint {
+      flex-shrink: 0;
       color: var(--text-muted);
       font-size: 12px;
       white-space: nowrap;
@@ -824,15 +825,28 @@
       color: var(--accent-red);
     }
 
-    /* Locked: no pointer left to slide with, so cancel becomes a button. */
+    /* Live waveform: newest sample at the right, scrolling left. */
+    .rec-wave {
+      flex: 1;
+      min-width: 30px;
+      height: 24px;
+      display: block;
+    }
+
+    /* Locked: no pointer left to slide with, so delete becomes a button. */
     .rec-cancel {
-      margin-left: auto;
-      padding: 5px 12px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      padding: 0;
       background: transparent;
       border: 1px solid var(--accent-red);
-      border-radius: 14px;
+      border-radius: 50%;
       color: var(--accent-red);
-      font-size: 12px;
+      font-size: 13px;
       cursor: pointer;
       transition: background 0.2s, color 0.2s;
     }
@@ -1499,10 +1513,12 @@
            hint (which slides with the pointer), and — once locked — a cancel
            button, since there's no pointer left to slide. -->
       <div id="recBar" class="rec-bar hidden">
+        <button type="button" id="recCancel" class="rec-cancel hidden" title="Delete recording"
+                aria-label="Delete recording" onclick="app.cancelVoiceRecording()">&#x1F5D1;</button>
         <span class="rec-dot"></span>
         <span id="recTime" class="rec-time">0:00</span>
-        <span id="recHint" class="rec-hint">&#x25C0; slide to cancel &middot; slide up to lock</span>
-        <button type="button" id="recCancel" class="rec-cancel hidden" onclick="app.cancelVoiceRecording()">Cancel</button>
+        <canvas id="recWave" class="rec-wave"></canvas>
+        <span id="recHint" class="rec-hint">&#x25C0; slide to cancel</span>
       </div>
       <!-- Floats above the mic button while recording unlocked; slide the
            pointer up onto it to go hands-free. -->
@@ -1684,7 +1700,13 @@
           holdFired: false,  // this gesture became a hold, so its click isn't a tap
           locked: false,     // hands-free: recording continues after the release
           startX: 0, startY: 0, // pointer origin, for the lock/cancel gestures
+          warn: false,       // slide is far enough left that cancelling is likely
           recorder: null, stream: null, chunks: [],
+          // Live waveform (Web Audio): analyser tap on the mic stream, a rolling
+          // list of levels, and the rAF loop drawing them.
+          audioCtx: null, analyser: null, source: null, buf: null,
+          rafId: 0, levels: [], peak: 0, lastPush: 0,
+          waveCanvas: null, waveCtx: null,
           mime: '', ext: 'weba',
           startedAt: 0, clockTimer: null,
           dest: null,        // {key, isGroup} the recording belongs to
@@ -3236,6 +3258,134 @@
 
         recorder.start();
         this._recShowUI(true);
+        this._recStartMeter(stream); // after the UI is up, so the canvas can be measured
+      }
+
+      // ---- Live waveform ----------------------------------------------------
+      //
+      // An AnalyserNode taps the mic stream (never connected to the speakers —
+      // that would echo). Each animation frame reads the time-domain buffer for
+      // an RMS level; the peak between pushes is appended a few times a second
+      // so the bars scroll at a readable pace rather than a 60 Hz blur.
+      //
+      // Purely decorative: if Web Audio is unavailable or throws, recording
+      // carries on without bars.
+
+      _recPushMs() { return 55; }  // one bar per this many ms of audio
+
+      _recStartMeter(stream) {
+        const canvas = document.getElementById('recWave');
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        if (!canvas || !Ctx || typeof requestAnimationFrame !== 'function') return;
+        try {
+          const ac = new Ctx();
+          if (ac.state === 'suspended' && ac.resume) ac.resume();
+          const source = ac.createMediaStreamSource(stream);
+          const analyser = ac.createAnalyser();
+          analyser.fftSize = 1024;
+          analyser.smoothingTimeConstant = 0.4;
+          source.connect(analyser);
+
+          this.rec.audioCtx = ac;
+          this.rec.source = source;
+          this.rec.analyser = analyser;
+          this.rec.buf = new Uint8Array(analyser.fftSize);
+          this.rec.levels = [];
+          this.rec.peak = 0;
+          this.rec.lastPush = Date.now();
+          this.rec.waveCanvas = canvas;
+          this.rec.waveCtx = canvas.getContext('2d');
+
+          const loop = () => {
+            if (!this.rec.analyser) return; // torn down
+            this.rec.rafId = requestAnimationFrame(loop);
+            this._recSampleLevel();
+            this._recDrawWave();
+          };
+          loop();
+        } catch (e) {
+          console.debug('skychat waveform unavailable:', (e && e.message) || e);
+          this._recStopMeter();
+        }
+      }
+
+      _recSampleLevel() {
+        const a = this.rec.analyser, buf = this.rec.buf;
+        if (!a || !buf) return;
+        a.getByteTimeDomainData(buf);
+        let sum = 0;
+        for (let i = 0; i < buf.length; i++) {
+          const v = (buf[i] - 128) / 128;
+          sum += v * v;
+        }
+        // Speech RMS sits low in the 0..1 range, so lift it into something
+        // visible: gain, then a curve that keeps quiet passages readable.
+        const level = Math.min(1, Math.pow(Math.sqrt(sum / buf.length) * 3.2, 0.7));
+        this.rec.peak = Math.max(this.rec.peak, level);
+
+        const now = Date.now();
+        if (now - this.rec.lastPush < this._recPushMs()) return;
+        this.rec.lastPush = now;
+        this.rec.levels.push(this.rec.peak);
+        this.rec.peak = 0;
+        // Keep only what can be drawn (plus a little slack) so a long recording
+        // doesn't grow this without bound.
+        const cap = this._recWaveCapacity() + 8;
+        if (this.rec.levels.length > cap) this.rec.levels.splice(0, this.rec.levels.length - cap);
+      }
+
+      _recWaveCapacity() {
+        const c = this.rec.waveCanvas;
+        if (!c) return 64;
+        const dpr = window.devicePixelRatio || 1;
+        return Math.max(8, Math.ceil(c.width / (5 * dpr))); // 3px bar + 2px gap
+      }
+
+      _recDrawWave() {
+        const c = this.rec.waveCanvas, ctx = this.rec.waveCtx;
+        if (!c || !ctx) return;
+        // Track the element's live size (the composer is fluid) and keep the
+        // backing store at device resolution so the bars stay crisp.
+        const dpr = window.devicePixelRatio || 1;
+        const rect = c.getBoundingClientRect();
+        const w = Math.max(1, Math.round(rect.width * dpr));
+        const h = Math.max(1, Math.round(rect.height * dpr));
+        if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+
+        ctx.clearRect(0, 0, w, h);
+        const barW = 3 * dpr, step = 5 * dpr, minH = 2 * dpr, mid = h / 2;
+        const levels = this.rec.levels;
+        ctx.fillStyle = this.rec.warn ? '#ef4444' : '#0ea5e9';
+        for (let i = levels.length - 1; i >= 0; i--) {
+          const x = w - (levels.length - i) * step;
+          if (x + barW < 0) break; // scrolled off the left edge
+          const bh = Math.max(minH, levels[i] * (h - minH));
+          const y = mid - bh / 2;
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(x, y, barW, bh, barW / 2);
+          else ctx.rect(x, y, barW, bh);
+          ctx.fill();
+        }
+      }
+
+      _recStopMeter() {
+        if (this.rec.rafId && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(this.rec.rafId);
+        // Null the analyser first: the rAF loop checks it and bails out.
+        this.rec.analyser = null;
+        try { if (this.rec.source) this.rec.source.disconnect(); } catch (e) { /* already gone */ }
+        try { if (this.rec.audioCtx) this.rec.audioCtx.close(); } catch (e) { /* already closed */ }
+        if (this.rec.waveCtx && this.rec.waveCanvas) {
+          this.rec.waveCtx.clearRect(0, 0, this.rec.waveCanvas.width, this.rec.waveCanvas.height);
+        }
+        this.rec.rafId = 0;
+        this.rec.source = null;
+        this.rec.audioCtx = null;
+        this.rec.buf = null;
+        this.rec.levels = [];
+        this.rec.peak = 0;
+        this.rec.lastPush = 0;
+        this.rec.waveCanvas = null;
+        this.rec.waveCtx = null;
       }
 
       // _lockVoiceRecording makes the running take hands-free: the release no
@@ -3251,7 +3401,7 @@
         const cancel = document.getElementById('recCancel');
         const btn = document.getElementById('composerBtn');
         if (bar) bar.classList.remove('near-cancel');
-        if (hint) hint.textContent = 'Recording — tap ➤ to send';
+        if (hint) hint.textContent = 'tap ➤ to send';
         if (pill) pill.classList.add('hidden');
         if (cancel) cancel.classList.remove('hidden');
         if (btn) {
@@ -3280,8 +3430,9 @@
         const hint = document.getElementById('recHint');
         const pill = document.getElementById('lockPill');
         const left = Math.max(0, -dx), up = Math.max(0, -dy);
+        this.rec.warn = left >= this._recCancelDx() / 2; // the waveform reads this for its colour
         if (hint) hint.style.transform = left ? `translateX(${-Math.min(left, this._recCancelDx())}px)` : '';
-        if (bar) bar.classList.toggle('near-cancel', left >= this._recCancelDx() / 2);
+        if (bar) bar.classList.toggle('near-cancel', this.rec.warn);
         if (pill) pill.classList.toggle('near', up >= this._recLockDy() / 2);
       }
 
@@ -3325,6 +3476,7 @@
       // tracks must be stopped or the browser keeps showing the recording
       // indicator (and holds the device) after the clip is done.
       _recReset() {
+        this._recStopMeter();
         if (this.rec.stream) this.rec.stream.getTracks().forEach(t => t.stop());
         if (this.rec.clockTimer) clearInterval(this.rec.clockTimer);
         this.rec.active = false;
@@ -3333,6 +3485,7 @@
         this.rec.cancelled = false;
         this.rec.stopping = false;
         this.rec.locked = false;
+        this.rec.warn = false;
         this.rec.startX = 0;
         this.rec.startY = 0;
         this.rec.recorder = null;
@@ -3362,7 +3515,7 @@
         if (pill) { pill.classList.toggle('hidden', !on); pill.classList.remove('near'); }
         if (hint) {
           hint.style.transform = '';
-          hint.innerHTML = '&#x25C0; slide to cancel &middot; slide up to lock';
+          hint.innerHTML = '&#x25C0; slide to cancel';
         }
         if (!on) {
           this.syncComposerBtn(); // restore the mic icon after a locked take
