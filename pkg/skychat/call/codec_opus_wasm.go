@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package voice pkg/skychat/voice/codec_opus_wasm.go c4-app-chat
+// Package call pkg/skychat/call/codec_opus_wasm.go c4-app-chat
 //
 // Browser build: no pure-Go Opus. github.com/thesyncim/gopus ships ~200 KB of
 // static CELT lookup tables (celt.pulseCacheLookup50 et al.) as package-level
@@ -11,7 +11,7 @@
 // not a Go implementation. NewOpusCodec therefore reports unavailable so the
 // voice manager falls back to the raw-PCM codec (see visor init_voice.go), which
 // is the wire-compatible baseline until a WebCodecs-backed codec is wired in.
-package voice
+package call
 
 import "errors"
 
