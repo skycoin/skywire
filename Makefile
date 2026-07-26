@@ -8,7 +8,7 @@
 .PHONY : docker-run docker-stop
 .PHONY : integration-build
 .PHONY : integration-run-generic
-.PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean
+.PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
 VERSION := $(shell git describe --always)
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
@@ -651,6 +651,15 @@ e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment 
 		sh -c "go clean -testcache && go test -v -timeout=45m ./internal/integration"
 
 e2e-config: ## E2E. Regenerate visor configs from template and deployment config
+	@# HEADS UP: `config gen` emits skychat as an INTERNAL app with
+	@# `--portless` (no TCP port, served through the visor's control
+	@# surface). The committed e2e configs deliberately run it as
+	@# `--addr *:8001 --pair-enable` instead — still the in-process app
+	@# (no "binary" key; bin_path is "./", so an external launch could
+	@# not resolve one anyway), but bound to a port so the e2e suite can
+	@# reach http://visor-x:8001 and a browser can reach the published
+	@# host ports. Regenerating drops that: re-apply the skychat args in
+	@# all three configs afterwards (see the note printed below).
 	@echo "Regenerating E2E visor configs..."
 	@# visor-A: skychat node with hypervisor set to visor-B
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
@@ -667,6 +676,53 @@ e2e-config: ## E2E. Regenerate visor configs from template and deployment config
 		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
 		-o docker/integration/visorC.json
 	@echo "E2E visor configs regenerated."
+	@echo ""
+	@echo "NOTE: skychat was regenerated as \"--portless\". For the e2e env + browser"
+	@echo "      testing, set its args back to \"--addr *:8001 --pair-enable\" in"
+	@echo "      docker/integration/visor{A,B,C}.json (see make e2e-skychat)."
+
+e2e-skychat: ## E2E. Wire transports between all three visors and print the skychat UIs + PKs
+	@# Manual/browser testing of the chat app against three real visors.
+	@# Run after `make e2e-build && make e2e-run`.
+	@#
+	@# Every visor runs skychat in-process on container port 8001, published
+	@# to the host by docker-compose on 8001/8002/8003 (127.0.0.1 only — the
+	@# mic/camera and notification APIs need a secure context, which plain
+	@# http only provides for localhost).
+	@#
+	@# The composer's default network is "skynet", which routes over a
+	@# transport, so this pairs every visor with every other one. ("dmsg"
+	@# needs none — it goes through the dmsg server — so if a transport
+	@# fails you can still test by switching the composer's network select.)
+	@set -e; \
+	pk() { docker exec "$$1" /release/skywire cli visor --rpc localhost:3435 pk --json | tr -dc '0-9a-f'; }; \
+	tp() { \
+	  if docker exec "$$1" /release/skywire cli --rpc localhost:3435 tp add "$$2" --json >/dev/null 2>&1; then \
+	    echo "  $$1 -> $$3  ok"; \
+	  else \
+	    echo "  $$1 -> $$3  not added (already present, or the pair is still settling)"; \
+	  fi; }; \
+	PKA=$$(pk visor-a); PKB=$$(pk visor-b); PKC=$$(pk visor-c); \
+	for p in "$$PKA" "$$PKB" "$$PKC"; do \
+	  if [ $${#p} -ne 66 ]; then \
+	    echo "could not read a visor public key — is the environment up? (make e2e-build && make e2e-run)"; \
+	    exit 1; \
+	  fi; \
+	done; \
+	echo ""; \
+	echo "Transports:"; \
+	tp visor-a "$$PKB" visor-b; \
+	tp visor-a "$$PKC" visor-c; \
+	tp visor-b "$$PKC" visor-c; \
+	echo ""; \
+	echo "Open a skychat UI per visor, then add a peer by pasting its public key:"; \
+	echo ""; \
+	printf '  %-9s %-28s %s\n' visor-a "http://127.0.0.1:8001" "$$PKA"; \
+	printf '  %-9s %-28s %s\n' visor-b "http://127.0.0.1:8002" "$$PKB"; \
+	printf '  %-9s %-28s %s\n' visor-c "http://127.0.0.1:8003" "$$PKC"; \
+	echo ""; \
+	echo "  hypervisor (visor-b)  http://127.0.0.1:8000"; \
+	echo ""
 
 e2e-stop: ## E2E. Stop e2e environment without destroying it. Restart with `make e2e-run`
 	bash -c "DOCKER_TAG=e2e docker compose -f ${COMPOSE_FILE} stop"
