@@ -1,5 +1,5 @@
-// Package voice pkg/skychat/voice/codec_opus_test.go c2-app-chat
-package voice
+// Package call pkg/skychat/call/codec_opus_test.go c2-app-chat
+package call
 
 import (
 	"math"

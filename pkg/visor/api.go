@@ -287,7 +287,7 @@ type API interface {
 	GroupHistory(groupID string, limit int) ([]GroupMessage, error)
 	GroupHistoryGroups() ([]string, error)
 
-	// Skychat 1:1 voice calls (pkg/skychat/voice).
+	// Skychat 1:1 voice calls (pkg/skychat/call).
 	VoiceCall(peer cipher.PubKey) (string, error)
 	VoiceHangup(callID string) error
 	VoiceActive() ([]string, error)

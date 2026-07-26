@@ -1,6 +1,6 @@
 //go:build voiceaudio && (windows || darwin)
 
-// Package voice pkg/skychat/voice/audio_malgo.go c4-app-chat
+// Package call pkg/skychat/call/audio_malgo.go c4-app-chat
 //
 // Windows/macOS audio capture + playback for skychat voice, via
 // github.com/gen2brain/malgo (a cgo binding for the single-header miniaudio — no
@@ -14,7 +14,7 @@
 // backend yet — NewMicSource always captures the default input device. This
 // backend is best-effort and has not been run on Windows/macOS from this Linux
 // dev host; treat it as ready-for-testing.
-package voice
+package call
 
 import (
 	"encoding/binary"

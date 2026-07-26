@@ -25,8 +25,8 @@ import (
 
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
-	skyvoice "github.com/skycoin/skywire/pkg/skychat/voice"
-	"github.com/skycoin/skywire/pkg/skychat/voice/spectrogram"
+	skycall "github.com/skycoin/skywire/pkg/skychat/call"
+	"github.com/skycoin/skywire/pkg/skychat/call/spectrogram"
 )
 
 // Fixed history resolution (independent of terminal size), matching audioprism.
@@ -34,7 +34,7 @@ const (
 	specBufferWidth  = 2048
 	specBufferHeight = 1024
 	specMaxFreqHz    = 12000 // vertical axis spans 0..12 kHz, like audioprism
-	callAudioRate    = 48000 // voice call PCM sample rate (pkg/skychat/voice)
+	callAudioRate    = 48000 // voice call PCM sample rate (pkg/skychat/call)
 )
 
 var (
@@ -79,7 +79,7 @@ feed on a voice call. Matches the audioprism-go tcell view. Linux only
 		}
 		// Default: local audio, captured at the spectrogram's native rate so the
 		// frequency mapping and magnitude scaling match audioprism-go exactly.
-		src, err := skyvoice.NewMicSource(voiceSpectrogramMonitor, spectrogram.SampleRate)
+		src, err := skycall.NewMicSource(voiceSpectrogramMonitor, spectrogram.SampleRate)
 		if err != nil {
 			cliutil.PrintFatalError(cmd.Flags(), err)
 		}
@@ -194,7 +194,7 @@ func (v *specView) draw(screen tcell.Screen, x0, w, h int) {
 
 // runSpectrogramTUI drives the tcell screen: an audio goroutine steps FFT columns
 // into a queue; the render loop (~60fps) folds them into history and repaints.
-func runSpectrogramTUI(src skyvoice.Source) error {
+func runSpectrogramTUI(src skycall.Source) error {
 	screen, err := tcell.NewScreen()
 	if err != nil {
 		return err
@@ -377,7 +377,7 @@ func drawCentered(screen tcell.Screen, msg string) {
 	screen.Show()
 }
 
-func closeSource(src skyvoice.Source) error {
+func closeSource(src skycall.Source) error {
 	if c, ok := src.(interface{ Close() error }); ok {
 		return c.Close()
 	}

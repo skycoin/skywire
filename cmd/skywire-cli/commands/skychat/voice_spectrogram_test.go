@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/skychat/voice/spectrogram"
+	"github.com/skycoin/skywire/pkg/skychat/call/spectrogram"
 )
 
 // TestSpectrogramColumnFreqPosition verifies the column mapping matches
