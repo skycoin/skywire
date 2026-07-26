@@ -1,5 +1,5 @@
-// Package voice pkg/skychat/voice/voice_test.go
-package voice
+// Package call pkg/skychat/call/voice_test.go
+package call
 
 import (
 	"context"

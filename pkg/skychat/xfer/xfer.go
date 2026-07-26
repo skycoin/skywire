@@ -2,7 +2,7 @@
 //
 // xfer is skychat's file-transfer primitive: it moves one file over a single
 // skywire stream (a dmsg stream or a skynet route — the caller supplies the
-// DialFunc/listener, exactly like pkg/skychat/voice). Files are conversation
+// DialFunc/listener, exactly like pkg/skychat/call). Files are conversation
 // messages, Telegram-style: the Offer is announced into chat/group history and
 // the bytes stream out-of-band on skyenv.SkychatFilePort so a large transfer
 // never blocks the chat-message conn.

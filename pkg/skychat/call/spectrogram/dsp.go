@@ -1,4 +1,4 @@
-// Package spectrogram pkg/skychat/voice/spectrogram/dsp.go c4-app-chat
+// Package spectrogram pkg/skychat/call/spectrogram/dsp.go c4-app-chat
 //
 // Self-contained DSP so the spectrogram core needs only the standard library —
 // no external FFT/window module. This replaces the github.com/0magnet/go-dsp

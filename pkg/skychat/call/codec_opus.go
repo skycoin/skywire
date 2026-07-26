@@ -1,6 +1,6 @@
 //go:build !(js && wasm)
 
-// Package voice pkg/skychat/voice/codec_opus.go c4-app-chat
+// Package call pkg/skychat/call/codec_opus.go c4-app-chat
 //
 // Opus codec — ~24 kbit/s versus the PCM passthrough's ~1.5 Mbit/s for the same
 // 48 kHz mono voice. This uses github.com/thesyncim/gopus, a hand-written PURE-GO
@@ -11,7 +11,7 @@
 // budget). Each session gets its own codec (opus keeps encoder/decoder state — see
 // Manager.NewCodec). Alternative if reference-exact libopus is ever needed:
 // github.com/godeps/opus (real libopus via wazero, but adds a WASM blob).
-package voice
+package call
 
 import (
 	"fmt"

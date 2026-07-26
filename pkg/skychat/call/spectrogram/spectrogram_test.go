@@ -1,4 +1,4 @@
-// Package spectrogram pkg/skychat/voice/spectrogram/spectrogram_test.go c2-app-chat
+// Package spectrogram pkg/skychat/call/spectrogram/spectrogram_test.go c2-app-chat
 package spectrogram
 
 import (

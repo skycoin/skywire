@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package voice pkg/skychat/voice/pulse_linux.go c4-app-chat
+// Package call pkg/skychat/call/pulse_linux.go c4-app-chat
 //
 // PulseAudio/PipeWire capture + playback for skychat voice, via
 // github.com/jfreymuth/pulse — a PURE-GO PulseAudio client (no cgo, no system
@@ -11,7 +11,7 @@
 // monitor=true) captures the default sink's MONITOR — i.e. whatever audio the
 // system is playing — so a call (or the spectrogram demo) can carry internal
 // audio with no mic plugged in, the way `pactl`/PulseAudio monitor sources work.
-package voice
+package call
 
 import (
 	"fmt"

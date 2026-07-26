@@ -1,5 +1,5 @@
-// Package voice pkg/skychat/voice/session.go c4-app-chat
-package voice
+// Package call pkg/skychat/call/session.go c4-app-chat
+package call
 
 import (
 	"context"

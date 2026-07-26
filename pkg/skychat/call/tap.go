@@ -1,4 +1,4 @@
-// Package voice pkg/skychat/voice/tap.go c4-app-chat
+// Package call pkg/skychat/call/tap.go c4-app-chat
 //
 // Per-call audio taps for visualization. When a Manager has Visualize set, each
 // session's Source (sent audio) and Sink (received audio) are wrapped so a copy
@@ -6,7 +6,7 @@
 // most recent ~1s of each direction, which the CLI polls to draw a two-panel
 // sent/received spectrogram during a call. The audio itself is untouched — the
 // tee just observes.
-package voice
+package call
 
 import (
 	"io"

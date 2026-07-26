@@ -1,4 +1,4 @@
-// Package voice pkg/skychat/voice/voice.go c4-app-chat
+// Package call pkg/skychat/call/voice.go c4-app-chat
 //
 // Real-time 1:1 voice for skychat, per docs/skychat-voice-rfc.md. All media
 // rides an ENCRYPTED skywire transport (dmsg stream or skynet route) — never a
@@ -18,7 +18,7 @@
 //     audio make the whole control+transport plane real and testable.
 //
 // The manager (manager.go) owns active calls and drives the signaler.
-package voice
+package call
 
 import (
 	"encoding/binary"
