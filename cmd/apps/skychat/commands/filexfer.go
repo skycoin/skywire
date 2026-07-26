@@ -443,6 +443,15 @@ func sendFileID(ctx context.Context, peer cipher.PubKey, group, path, id, name s
 	}
 	rc, err := mgr.SendFile(ctx, peer, offer, f)
 	if err != nil {
+		// The body and its digest went out in full and only the receiver's
+		// verdict is missing: the file IS on the peer's disk, so reporting a
+		// failure here would be wrong (it showed up as "File send failed:
+		// xfer: read receipt: EOF" on a file that arrived fine). Count it as
+		// sent and say so in the log.
+		if xfer.IsNoReceipt(err) {
+			appLog("skychat: %q delivered to %s but the receipt never came back: %v", name, peer, err)
+			return offer.ID, nil
+		}
 		return offer.ID, err
 	}
 	if !rc.OK {
@@ -506,13 +515,17 @@ func humanSize(n int64) string {
 	return fmt.Sprintf("%.1f %cB", float64(n)/float64(div), "KMGTPE"[exp])
 }
 
-// sendTimeout bounds a single outbound file transfer. Kept modest so a send to
-// an unreachable / half-open peer fails the /send-file request (and the UI
-// bubble) in a bounded time instead of hanging "pending" for many minutes —
-// the common failure mode when the chat conn has gone stale. Still comfortably
-// covers a normal in-chat image/clip over dmsg; a genuinely huge transfer that
-// needs longer is out of scope for the browser send path.
-const sendTimeout = 3 * time.Minute
+// sendTimeout is the OUTER bound on one outbound file transfer — a backstop, no
+// longer the thing that detects a dead peer. That job belongs to xfer's idle
+// window (xfer.IdleWindow): a transfer is abandoned after that long with NO
+// progress, so an unreachable / half-open peer still fails the /send-file
+// request quickly, while a large file that keeps moving is not cut off.
+//
+// The previous value (3 minutes for the whole exchange) was a size limit in
+// disguise: a 35 MB clip over a skynet route needs sustained ~200 KB/s to fit,
+// and when it didn't, the deadline landed mid-body — or, worse, on the final
+// receipt read, reporting a fully delivered file as failed.
+const sendTimeout = 2 * time.Hour
 
 // maxUploadMemory is the in-memory portion of a multipart upload before spilling
 // to a temp file.
