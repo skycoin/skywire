@@ -126,7 +126,7 @@ func TestPersistMessage(t *testing.T) {
 	small := newTempStore(t, history.Limits{MaxMessageSize: 4})
 	historyStore = small
 	persistMessage(history.Message{Peer: pk.Hex(), Text: "far larger than the four-byte cap"})
-	if rows, _ := small.ListByPeer(pk.Hex(), 0); len(rows) != 0 {
+	if rows, _ := small.ListByPeer(pk.Hex(), 0); len(rows) != 0 { //nolint
 		t.Errorf("oversize message should be dropped, stored %d", len(rows))
 	}
 }
@@ -172,7 +172,7 @@ func TestOpenHistoryStore(t *testing.T) {
 	other, _ := cipher.GenerateKeyPair()
 	persistMessage(history.Message{Peer: other.Hex(), Text: "blocked", Timestamp: time.Now().UTC()})
 	persistMessage(history.Message{Peer: wlPK.Hex(), Text: "allowed", Timestamp: time.Now().UTC()})
-	peers, _ := historyStore.Peers()
+	peers, _ := historyStore.Peers() //nolint
 	if len(peers) != 1 || peers[0] != wlPK.Hex() {
 		t.Errorf("whitelist store peers = %v, want only %s", peers, wlPK.Hex())
 	}
