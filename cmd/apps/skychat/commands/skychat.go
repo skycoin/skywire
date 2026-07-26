@@ -964,6 +964,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 	registerPairHTTPHandlers(ctx, mux)
 	registerGroupHTTPHandlers(mux)
 	registerVoiceHTTPHandlers(mux)
+	registerPresenceHTTPHandlers(mux)
+	startPresenceLoop(ctx)
 
 	// Portless-internal mode: no TCP port. Publish the mux to the visor's
 	// in-process HTTP-handler registry so the hypervisor's control surface

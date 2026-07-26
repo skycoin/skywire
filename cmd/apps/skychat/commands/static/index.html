@@ -186,6 +186,52 @@
       flex-shrink: 0;
     }
 
+    /* Presence: a dot on the avatar's corner, green when the peer's visor
+       answered the last probe, grey when it didn't, hidden while unknown (no
+       probe yet, or presence unavailable — see _pollPresence). */
+    .avatar-wrap {
+      position: relative;
+      flex-shrink: 0;
+      line-height: 0;
+    }
+
+    .presence-dot {
+      position: absolute;
+      right: -1px;
+      bottom: -1px;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 2px solid var(--bg-secondary);
+      background: var(--text-muted);
+      display: none;
+    }
+
+    .presence-dot.online,
+    .presence-dot.offline {
+      display: block;
+    }
+
+    .presence-dot.online {
+      background: var(--accent-green);
+    }
+
+    /* Same state as a word, next to the peer key in the chat header. */
+    .presence-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .presence-tag.online {
+      color: var(--accent-green);
+    }
+
+    .presence-tag.hidden {
+      display: none;
+    }
+
     .recipient-info {
       flex: 1;
       min-width: 0;
@@ -328,6 +374,12 @@
     /* Chat Area */
     .chat-container {
       flex: 1;
+      /* Without this the chat area's automatic minimum size is its content's
+         min-content width — and the composer row grows when a recording locks
+         (a delete button appears, the hint text gets longer), which pushed the
+         body wider than the viewport and put a horizontal scrollbar on the
+         page mid-gesture. */
+      min-width: 0;
       display: flex;
       flex-direction: column;
       background: var(--bg-primary);
@@ -772,6 +824,7 @@
     /* Recording indicator — stands in for the text input while recording. */
     .rec-bar {
       flex: 1;
+      min-width: 0;   /* shrink instead of widening the composer (see .chat-container) */
       display: flex;
       align-items: center;
       gap: 10px;
@@ -807,7 +860,10 @@
     }
 
     .rec-hint {
-      flex-shrink: 0;
+      /* Shrinks (and ellipsises) before the bar can force the composer wider —
+         the hint is the one part of the bar that's expendable on a narrow window. */
+      flex-shrink: 1;
+      min-width: 0;
       color: var(--text-muted);
       font-size: 12px;
       white-space: nowrap;
@@ -1238,12 +1294,20 @@
       padding: 0;
     }
 
-    /* Toast Notifications */
+    /* Toast Notifications — just below the chat header, not at the bottom:
+       down there they sat on top of the composer and covered the send/record
+       buttons exactly when a recording toast fired. The container never takes
+       pointer events, so a toast can't swallow a click on what's underneath. */
     .toast-container {
       position: fixed;
-      bottom: 20px;
+      top: 78px;      /* chat-header is min-height 65px + 1px border */
       right: 20px;
       z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      max-width: calc(100vw - 360px);   /* clear of the 320px sidebar */
+      pointer-events: none;
     }
 
     .toast {
@@ -1252,21 +1316,23 @@
       padding: 12px 20px;
       border-radius: 8px;
       margin-top: 8px;
+      max-width: 100%;
       box-shadow: var(--shadow);
       animation: toastIn 0.3s ease-out;
       display: flex;
       align-items: center;
       gap: 10px;
+      pointer-events: auto;
     }
 
     @keyframes toastIn {
       from {
         opacity: 0;
-        transform: translateX(20px);
+        transform: translateY(-10px);
       }
       to {
         opacity: 1;
-        transform: translateX(0);
+        transform: translateY(0);
       }
     }
 
@@ -1628,8 +1694,12 @@
   <main class="chat-container">
     <div id="chatHeader" class="chat-header hidden">
       <div class="chat-header-info">
-        <img id="headerAvatar" class="chat-header-avatar" src="p.png" />
+        <div class="avatar-wrap">
+          <img id="headerAvatar" class="chat-header-avatar" src="p.png" />
+          <span id="headerPresenceDot" class="presence-dot"></span>
+        </div>
         <div class="chat-header-pk" id="headerPk">-</div>
+        <span id="headerPresence" class="presence-tag hidden"></span>
       </div>
       <div class="chat-header-actions">
         <button id="dmCallBtn" class="icon-btn hidden" onclick="app.placeCall()" title="Start a voice call" aria-label="Voice call">&#x1F4DE;</button>
@@ -1737,7 +1807,13 @@
       <h3>Contact Settings</h3>
       <img id="modalAvatar" class="modal-avatar" src="p.png" />
       <div id="modalPk" class="modal-pk">-</div>
+      <!-- Address book: a name for this key, kept on this device only (nothing
+           is sent to the peer). Empty clears it and the key shows again. -->
+      <input id="modalName" class="cg-input" type="text" maxlength="40" autocomplete="off"
+             placeholder="Name for this contact (this device only)"
+             onkeydown="if (event.key === 'Enter') app.savePeerName()" />
       <div class="modal-actions">
+        <button class="btn" onclick="app.savePeerName()">Save Name</button>
         <label class="btn btn-secondary" style="text-align: center;">
           Change Avatar
           <input type="file" id="profilePicture" accept="image/*" style="display: none;" onchange="app.updatePicture()">
@@ -1914,6 +1990,14 @@
         // visor history, so a local hide needs to survive here, not in the cache).
         this.hiddenGroup = new Set(this._loadHiddenGroup());
         this.pinned = localStorage.getItem('skychat_pinned') || null; // "dm:<pk>" | "grp:<gid>" | null
+        // Address book: local nicknames for public keys, this device only.
+        this.nameMaxLen = 40;
+        this.names = this._loadNames();
+        // Peer presence, refreshed from /presence: {pk: {online, rtt_ms, at}}.
+        // presenceAvailable stays null until the first answer; false means the
+        // endpoint isn't there (no --pair-enable) so the dots stay hidden.
+        this.presence = {};
+        this.presenceAvailable = null;
         // Notification prefs: master enable + preview toggle + per-thread mutes
         // (keyed by DM pk or group id). Opt-out model — a thread notifies unless
         // its key is in `muted`. Persisted in localStorage under skychat_notif.
@@ -1974,6 +2058,10 @@
         this._specCtx = null;
         this._pollVoice();
         setInterval(() => this._pollVoice(), 3000);
+        // Peer presence: the visor probes in the background, this just reads
+        // the latest sweep once a minute.
+        this._pollPresence();
+        setInterval(() => this._pollPresence(), this._presencePollMs());
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -2006,16 +2094,21 @@
         }
 
         let image = localStorage.getItem(`i_${r}`) || 'p.png';
-        const shortPk = r.substring(0, 8) + '...' + r.substring(r.length - 8);
+        // The address-book name when one is set, else the abbreviated key. The
+        // full key stays in the title so it's always recoverable.
+        const label = this.escapeHtml(this.shortPk(r));
 
         const isPaired = this.pairedSet && this.pairedSet.has(r);
 
         const li = document.createElement('li');
         li.innerHTML = `
           <div class="recipient-item ${r === this.recipient ? 'active' : ''}" data-pk="${r}" onclick="app.selectRecipient('${r}')">
-            <img class="recipient-avatar" src="${image}" />
+            <div class="avatar-wrap">
+              <img class="recipient-avatar" src="${image}" />
+              <span class="presence-dot" data-presence="${this.escapeAttr(r)}"></span>
+            </div>
             <div class="recipient-info">
-              <div class="recipient-pk">${shortPk}</div>
+              <div class="recipient-pk" title="${this.escapeAttr(r)}"><span class="peer-label">${label}</span></div>
               <div class="recipient-preview">New conversation</div>
             </div>
             <div class="pair-badge ${isPaired ? '' : 'hidden'}" title="Paired via CXO">CXO</div>
@@ -2024,6 +2117,7 @@
         document.getElementById('recipients').appendChild(li);
 
         this.updateUnreadBadges();
+        this._renderPresence();  // paint the new dot from what we already know
         this._syncPinHide(this._pinParts()); // hide this item's copy if it's the pinned one
       }
 
@@ -3219,7 +3313,8 @@
 
         const image = localStorage.getItem(`i_${pk}`) || 'p.png';
         document.getElementById('headerAvatar').src = image;
-        document.getElementById('headerPk').textContent = pk;
+        this._paintHeaderPeer(pk);
+        this._renderHeaderPresence();
 
         document.getElementById('messages').innerHTML = '';
         this.messages[this.recipient].forEach(msg => this._showMessage(msg));
@@ -3587,6 +3682,16 @@
         // While locked the button is the send control for the running take.
         if (this.rec.locked) {
           e.preventDefault();
+          // ...but not for the click that ends the very hold which locked it.
+          // The button has pointer capture, so releasing anywhere retargets a
+          // click back to it — without this, sliding up to go hands-free sent
+          // the clip the instant the finger came off. holdFired marks the
+          // gesture that started this take; the next press clears it, so a
+          // deliberate tap on ➤ still sends.
+          if (this.rec.holdFired) {
+            this.rec.holdFired = false;
+            return;
+          }
           this._stopRecording(false);
           return;
         }
@@ -4464,9 +4569,176 @@
       // the messages-map key (distinct from 66-hex PKs, so no collision).
       activeKey() { return this.group || this.recipient; }
 
+      // shortPk renders a peer for display. Every display path goes through
+      // here, so the address-book name (when the user has set one) shows up in
+      // the contact list, the header, group sender labels, reply quotes and
+      // notifications without each of them knowing about names.
       shortPk(pk) {
         if (!pk) return '?';
+        return this.peerName(pk) || this.abbrevPk(pk);
+      }
+
+      // abbrevPk is the key itself, shortened — what to show when there is no
+      // name, and the only form to use where a key must read as a key.
+      abbrevPk(pk) {
+        if (!pk) return '?';
         return pk.length >= 14 ? pk.substring(0, 8) + '…' + pk.substring(pk.length - 4) : pk;
+      }
+
+      // ---- Address book ------------------------------------------------
+      //
+      // Local nicknames for public keys: a map of pk -> name in localStorage,
+      // never sent anywhere. Purely this device's view of who a key is.
+
+      _loadNames() {
+        try {
+          const raw = JSON.parse(localStorage.getItem('skychat_names') || '{}');
+          const out = {};
+          Object.keys(raw).forEach(k => {
+            const name = String(raw[k] || '').trim();
+            if (name) out[String(k).toLowerCase()] = name.slice(0, this.nameMaxLen);
+          });
+          return out;
+        } catch (e) {
+          return {};
+        }
+      }
+
+      _saveNames() {
+        localStorage.setItem('skychat_names', JSON.stringify(this.names));
+      }
+
+      peerName(pk) {
+        if (!pk || !this.names) return '';
+        return this.names[String(pk).toLowerCase()] || '';
+      }
+
+      // setPeerName stores (or, with an empty name, forgets) a contact's name
+      // and repaints everywhere the peer is displayed.
+      setPeerName(pk, name) {
+        if (!pk) return;
+        const key = String(pk).toLowerCase();
+        const clean = String(name || '').trim().replace(/\s+/g, ' ').slice(0, this.nameMaxLen);
+        if (clean) this.names[key] = clean;
+        else delete this.names[key];
+        this._saveNames();
+        this._paintPeerLabel(pk);
+        if (this.recipient === pk && !this.group) this._paintHeaderPeer(pk);
+        // Sender labels and reply quotes are baked into rendered bubbles.
+        if (this.activeKey()) this._rerenderActive();
+      }
+
+      // _paintPeerLabel refreshes this peer's rows in the contact list. In
+      // place, not a rebuild: the rows carry message previews accumulated this
+      // session, and a rebuild would reset them to "New conversation".
+      _paintPeerLabel(pk) {
+        const label = this.shortPk(pk);
+        document.querySelectorAll('.recipient-item').forEach(item => {
+          if (item.dataset.pk !== pk) return;
+          const el = item.querySelector('.peer-label');
+          if (el) el.textContent = label;
+        });
+      }
+
+      // savePeerName applies what's in the Contact Settings field.
+      savePeerName() {
+        const pk = this.recipient;
+        const field = document.getElementById('modalName');
+        if (!pk || !field) return;
+        const had = this.peerName(pk);
+        this.setPeerName(pk, field.value);
+        const now = this.peerName(pk);
+        this.showToast(now ? `Saved as "${this.escapeHtml(now)}".`
+          : (had ? 'Name cleared.' : 'Enter a name first.'));
+        if (now || had) this.closeSettings();
+      }
+
+      // _paintHeaderPeer writes the open DM's name/key into the chat header.
+      // With a name set, the key stays visible (shortened) so it's still
+      // verifiable at a glance.
+      _paintHeaderPeer(pk) {
+        const el = document.getElementById('headerPk');
+        if (!el) return;
+        const name = this.peerName(pk);
+        el.textContent = name ? `${name} · ${this.abbrevPk(pk)}` : pk;
+        el.title = pk;
+      }
+
+      // ---- Presence ----------------------------------------------------
+      //
+      // The dot next to a contact. The app asks the visor (via /presence,
+      // which probes over dmsg in the background) once a minute — it never
+      // blocks on a probe, it just reads the latest sweep. Unavailable without
+      // --pair-enable, in which case the dots stay hidden rather than lying.
+
+      _presencePollMs() { return 60000; }
+
+      _pollPresence() {
+        if (this.presenceAvailable === false) return;
+        const pks = (this.recipients || []).slice(0, 64);
+        if (!pks.length) return;
+        fetch('/presence', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pks }),
+        })
+          .then(res => {
+            // 404 = built/run without --pair-enable; 503 = visor RPC down.
+            if (res.status === 404 || res.status === 503) {
+              this.presenceAvailable = false;
+              this.presence = {};
+              this._renderPresence();
+              return null;
+            }
+            return res.ok ? res.json() : null;
+          })
+          .then(j => {
+            if (!j) return;
+            this.presenceAvailable = true;
+            this.presence = j.peers || {};
+            this._renderPresence();
+          })
+          .catch(() => { /* transient — the next poll tries again */ });
+      }
+
+      // _presenceOf returns 'online' | 'offline' | '' (unknown) for a peer.
+      _presenceOf(pk) {
+        if (!pk || this.presenceAvailable === false) return '';
+        const p = this.presence[String(pk).toLowerCase()];
+        if (!p) return '';
+        return p.online ? 'online' : 'offline';
+      }
+
+      _renderPresence() {
+        document.querySelectorAll('.presence-dot[data-presence]').forEach(dot => {
+          const state = this._presenceOf(dot.dataset.presence);
+          dot.classList.toggle('online', state === 'online');
+          dot.classList.toggle('offline', state === 'offline');
+          dot.title = state === 'online' ? 'Online' : state === 'offline' ? 'Offline' : '';
+        });
+        this._renderHeaderPresence();
+      }
+
+      _renderHeaderPresence() {
+        const tag = document.getElementById('headerPresence');
+        const dot = document.getElementById('headerPresenceDot');
+        const pk = (!this.group && this.recipient) ? this.recipient : null;
+        const state = pk ? this._presenceOf(pk) : '';
+        if (dot) {
+          dot.classList.toggle('online', state === 'online');
+          dot.classList.toggle('offline', state === 'offline');
+        }
+        if (!tag) return;
+        tag.classList.toggle('hidden', !state);
+        tag.classList.toggle('online', state === 'online');
+        if (!state) {
+          tag.textContent = '';
+          return;
+        }
+        const p = this.presence[String(pk).toLowerCase()] || {};
+        tag.textContent = state === 'online'
+          ? (p.rtt_ms ? `online · ${p.rtt_ms} ms` : 'online')
+          : 'offline';
       }
 
       // syncMyPK records this visor's PK (from /status) so group messages
@@ -4585,13 +4857,15 @@
         } else if (type === 'dm') {
           const r = id;
           const image = localStorage.getItem(`i_${r}`) || 'p.png';
-          const shortPk = r.substring(0, 8) + '...' + r.substring(r.length - 8);
           const li = document.createElement('li');
           li.innerHTML = `
             <div class="recipient-item ${r === this.recipient && !this.group ? 'active' : ''}" data-pk="${r}" onclick="app.selectRecipient('${r}')">
-              <img class="recipient-avatar" src="${image}" />
+              <div class="avatar-wrap">
+                <img class="recipient-avatar" src="${image}" />
+                <span class="presence-dot" data-presence="${this.escapeAttr(r)}"></span>
+              </div>
               <div class="recipient-info">
-                <div class="recipient-pk">📌 ${shortPk}</div>
+                <div class="recipient-pk" title="${this.escapeAttr(r)}">📌 <span class="peer-label">${this.escapeHtml(this.shortPk(r))}</span></div>
                 <div class="recipient-preview">Pinned</div>
               </div>
             </div>`;
@@ -4599,6 +4873,7 @@
           rendered = true;
         }
         section.classList.toggle('hidden', !rendered);
+        this._renderPresence();
         this._syncPinHide(rendered ? [type, id] : [null, null]);
       }
 
@@ -5048,6 +5323,8 @@
         const image = localStorage.getItem(`i_${this.recipient}`) || 'p.png';
         document.getElementById('modalAvatar').src = image;
         document.getElementById('modalPk').textContent = this.recipient;
+        const name = document.getElementById('modalName');
+        if (name) name.value = this.peerName(this.recipient);
         document.getElementById('settingsModal').classList.add('visible');
       }
 
