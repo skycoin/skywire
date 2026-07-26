@@ -141,6 +141,13 @@ func TestReadReceiptHandler_Validation(t *testing.T) {
 		t.Errorf("GET: code=%d, want 405", rr.Code)
 	}
 
+	// Malformed JSON body → 400 (decode error, before pk parsing).
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodPost, "/read-receipt", strings.NewReader(`{not json`)))
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("bad body: code=%d, want 400", rr.Code)
+	}
+
 	// Bad pk → 400 (parsed before the transport guard).
 	rr = httptest.NewRecorder()
 	h(rr, httptest.NewRequest(http.MethodPost, "/read-receipt", strings.NewReader(`{"pk":"nothex","ids":["a"]}`)))
