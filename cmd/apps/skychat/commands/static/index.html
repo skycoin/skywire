@@ -1893,7 +1893,11 @@
           locked: false,     // hands-free: recording continues after the release
           startX: 0, startY: 0, // pointer origin, for the lock/cancel gestures
           warn: false,       // slide is far enough left that cancelling is likely
+          muteWarned: false, // already said the device went quiet, don't repeat
           recorder: null, stream: null, chunks: [],
+          // Long takes stream to a temp file instead of piling up in memory:
+          // disk = {handle, writable, chain, ...} while one is open, else null.
+          disk: null, bytes: 0,
           // Live waveform (Web Audio): analyser tap on the mic stream, a rolling
           // list of levels, and the rAF loop drawing them.
           audioCtx: null, analyser: null, source: null, buf: null,
@@ -1931,6 +1935,26 @@
         // Safety net for a release that never reaches the button (finger lifted
         // outside the window). _onComposerUp is a no-op when nothing is running.
         window.addEventListener('pointerup', () => this._onComposerUp());
+        // Tab hidden: the belt to blur's braces (switching virtual desktops or
+        // minimising doesn't always blur). Coming back, repaint the waveform —
+        // requestAnimationFrame is frozen while hidden, so a hands-free take's
+        // bars stopped where they were.
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden) {
+            if (this.rec.active && !this.rec.locked) this._stopRecording(false);
+          } else if (this.rec.active) {
+            this._recDrawWave();
+          }
+        });
+        // Losing the tab mid-take would silently lose the clip — a hands-free
+        // recording can be minutes long by now, so make the browser ask.
+        window.addEventListener('beforeunload', e => {
+          if (!this.rec.active) return;
+          e.preventDefault();
+          e.returnValue = ''; // Chrome only shows the prompt when this is set
+        });
+        // Clear any recording temp file a previous session left behind.
+        this._recSweepDisk();
         // Tell the server whether this UI can show notifications, so the
         // background process only posts host-OS notifications when no capable
         // UI is attached. The heartbeat keeps the server-side lease fresh while
@@ -3602,6 +3626,9 @@
       _recMinMs() { return 500; }    // shorter than this is treated as a mis-tap
       _recLockDy() { return 56; }    // slide up this far to go hands-free
       _recCancelDx() { return 90; }  // slide left this far to discard
+      _recSliceMs() { return 3000; } // emit a chunk this often instead of one blob at the end
+      _recMemCapMB() { return 96; }  // in-memory ceiling when there's no disk to stream to
+      _recTmpPrefix() { return 'skychat-rec-'; }
 
       _recSupported() {
         return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
@@ -3780,10 +3807,31 @@
           return;
         }
 
+        // Park the take on disk if we can, so its length is bounded by free
+        // space rather than by the tab's memory.
+        const disk = await this._recOpenDisk(codec.ext);
+        // Opening the file is another await: the hold may have ended during it.
+        if (this.rec.released) {
+          stream.getTracks().forEach(t => t.stop());
+          this._recDiscardDisk(disk);
+          this.rec.pending = false;
+          this.showToast(`${spec.device} ready — hold ${spec.icon} to record.`);
+          return;
+        }
+
         this.rec.chunks = [];
-        recorder.ondataavailable = ev => { if (ev.data && ev.data.size) this.rec.chunks.push(ev.data); };
+        this.rec.bytes = 0;
+        this.rec.disk = disk;
+        recorder.ondataavailable = ev => this._recChunk(ev);
         recorder.onstop = () => this._finishRecording();
-        recorder.onerror = () => { this.rec.cancelled = true; };
+        recorder.onerror = ev => this._recRecorderError(ev);
+        // A capture device can vanish mid-take — unplugged, or claimed by
+        // another app. 'ended' is final, so wind the take up and keep what was
+        // captured; 'mute' can be temporary, so only say so.
+        stream.getTracks().forEach(track => {
+          track.addEventListener('ended', () => this._recDeviceLost(spec));
+          track.addEventListener('mute', () => this._recDeviceMuted(spec));
+        });
 
         this.rec.recorder = recorder;
         this.rec.stream = stream;
@@ -3794,10 +3842,161 @@
         this.rec.pending = false;
         this.rec.active = true;
 
-        recorder.start();
+        // Chunked, not one blob at the end: with a timeslice the recorder hands
+        // over a piece every few seconds, which is what lets a long take be
+        // streamed to disk instead of accumulating in memory.
+        recorder.start(this._recSliceMs());
         this._recShowUI(true);
         if (kind === 'video') this._recStartPreview(stream);
         this._recStartMeter(stream); // after the UI is up, so the canvas can be measured
+      }
+
+      // ---- Long takes: stream to disk --------------------------------------
+      //
+      // A clip has no built-in length limit, so it must not be held in the
+      // tab's memory while it records. Each chunk is appended to a temp file in
+      // the origin-private file system (OPFS) as it arrives and released
+      // immediately; the finished file is handed to the upload by reference, so
+      // even a very long recording keeps memory flat.
+      //
+      // OPFS is not required. Without it (or if opening the file fails) chunks
+      // buffer in memory as before — fine for clips of the length that fits,
+      // with a ceiling that ends the take by sending it rather than by
+      // crashing the tab.
+
+      _recChunk(ev) {
+        const data = ev && ev.data;
+        if (!data || !data.size) return;
+        this.rec.bytes += data.size;
+        const disk = this.rec.disk;
+        if (disk && !disk.failed) {
+          // Writes to a FileSystemWritableFileStream must not overlap, so each
+          // one queues behind the last; the chunk is released once it lands.
+          disk.chain = disk.chain
+            .then(() => disk.writable.write(data))
+            .catch(err => this._recDiskFail(err));
+          return;
+        }
+        this.rec.chunks.push(data);
+        if (this.rec.bytes > this._recMemCapMB() * 1024 * 1024) {
+          this.showToast(`Recording reached ${this._recMemCapMB()} MB — sending it now.`);
+          this._stopRecording(false);
+        }
+      }
+
+      // _recOpenDisk creates this take's temp file and opens it for writing.
+      // Resolves null when OPFS isn't available — the caller then buffers in
+      // memory. The name is unique per take so two recordings in the same
+      // second can't collide.
+      async _recOpenDisk(ext) {
+        if (!navigator.storage || !navigator.storage.getDirectory) return null;
+        this._recSeq = (this._recSeq || 0) + 1;
+        const name = `${this._recTmpPrefix()}${Date.now()}-${this._recSeq}.${ext}`;
+        try {
+          const dir = await navigator.storage.getDirectory();
+          const handle = await dir.getFileHandle(name, { create: true });
+          if (!handle.createWritable) return null;
+          const writable = await handle.createWritable();
+          return { dir, handle, writable, name, chain: Promise.resolve(), failed: false };
+        } catch (e) {
+          console.debug('skychat: recording to disk unavailable:', (e && e.message) || e);
+          return null;
+        }
+      }
+
+      // A write failed (out of quota, storage revoked): keep the take rather
+      // than losing it — stop now and send what reached the disk. Chunks that
+      // arrive between here and the stop go to memory, and _recAssemble joins
+      // the two halves in order.
+      _recDiskFail(err) {
+        const disk = this.rec.disk;
+        if (!disk || disk.failed) return;
+        disk.failed = true;
+        console.debug('skychat: recording to disk failed:', (err && err.message) || err);
+        if (!this.rec.active || this.rec.stopping) return;
+        this.showToast('Recording storage failed — sending what was captured.', 'error');
+        this._stopRecording(false);
+      }
+
+      // _recAssemble produces the finished clip: the disk file (by reference,
+      // so its bytes are never pulled into memory) followed by anything left
+      // buffered. Resolves null when there is nothing to send.
+      async _recAssemble(take) {
+        const parts = [];
+        if (take.disk) {
+          try {
+            await take.disk.chain;
+            await take.disk.writable.close();
+            const f = await take.disk.handle.getFile();
+            if (f && f.size) parts.push(f);
+          } catch (e) {
+            console.debug('skychat: closing the recording file failed:', (e && e.message) || e);
+          }
+        }
+        (take.chunks || []).forEach(c => parts.push(c));
+        if (!parts.length) return null;
+        return new Blob(parts, { type: take.mime });
+      }
+
+      // _recDiscardDisk throws a temp file away — a cancelled or too-short
+      // take. Fire-and-forget: a leftover file is swept at the next startup.
+      _recDiscardDisk(disk) {
+        if (!disk) return;
+        Promise.resolve(disk.chain)
+          .catch(() => {})
+          .then(() => (disk.writable.abort ? disk.writable.abort() : disk.writable.close()))
+          .catch(() => {})
+          .then(() => disk.dir.removeEntry(disk.name))
+          .catch(() => { /* swept at startup instead */ });
+      }
+
+      // _recSweepDisk clears temp files a previous session left behind (a tab
+      // closed mid-take). Done at startup rather than after each upload: for
+      // the rest of the session the sent bubble plays from an object URL backed
+      // by that very file.
+      async _recSweepDisk() {
+        try {
+          if (!navigator.storage || !navigator.storage.getDirectory) return;
+          const dir = await navigator.storage.getDirectory();
+          if (!dir.entries) return;
+          for await (const entry of dir.entries()) {
+            const name = entry && entry[0];
+            if (name && name.indexOf(this._recTmpPrefix()) === 0) {
+              await dir.removeEntry(name).catch(() => { /* in use; try next time */ });
+            }
+          }
+        } catch (e) {
+          console.debug('skychat: recording sweep skipped:', (e && e.message) || e);
+        }
+      }
+
+      // ---- Devices that go away mid-take -----------------------------------
+
+      // The track ended for good (device unplugged, or the OS took it). Keep
+      // what was captured instead of recording silence until the user notices.
+      _recDeviceLost(spec) {
+        if (!this.rec.active || this.rec.stopping) return;
+        this.showToast(`${spec.device} disconnected — sending what was recorded.`, 'error');
+        this._stopRecording(false);
+      }
+
+      // A muted track usually means another app grabbed the device; it can
+      // unmute again, so say it once and let the take run.
+      _recDeviceMuted(spec) {
+        if (!this.rec.active || this.rec.muteWarned) return;
+        this.rec.muteWarned = true;
+        this.showToast(`${spec.device} went quiet — another app may have taken it.`, 'error');
+      }
+
+      _recRecorderError(ev) {
+        const err = ev && ev.error;
+        console.debug('skychat: recorder error:', (err && err.message) || err);
+        if (!this.rec.active || this.rec.stopping) {
+          this.rec.cancelled = true;
+          return;
+        }
+        this.showToast(`Recording failed: ${(err && err.message) || 'unknown error'}`, 'error');
+        this._stopRecording(true);
       }
 
       // ---- Round self-view --------------------------------------------------
@@ -4023,28 +4222,41 @@
 
       _finishRecording() {
         if (!this.rec.active) return;
-        const { chunks, mime, ext, startedAt, dest, cancelled } = this.rec;
+        // The take outlives this.rec: assembling it is asynchronous (the disk
+        // file has to be flushed and closed), while _recReset has to run now so
+        // the devices are released and the UI can go back to normal.
+        const take = {
+          chunks: this.rec.chunks, disk: this.rec.disk, mime: this.rec.mime, ext: this.rec.ext,
+          startedAt: this.rec.startedAt, dest: this.rec.dest, cancelled: this.rec.cancelled,
+        };
         const spec = this._recSpec();
-        const ms = Date.now() - startedAt;
+        const ms = Date.now() - take.startedAt;
         this._recReset();
         this._recShowUI(false);
 
-        if (cancelled) return;
-        const blob = new Blob(chunks, { type: mime });
-        if (ms < this._recMinMs() || !blob.size) {
-          this.showToast(`Hold ${spec.icon} to record a ${spec.noun.toLowerCase()}.`);
+        const tooShort = ms < this._recMinMs();
+        if (take.cancelled || tooShort) {
+          this._recDiscardDisk(take.disk);
+          if (tooShort && !take.cancelled) {
+            this.showToast(`Hold ${spec.icon} to record a ${spec.noun.toLowerCase()}.`);
+          }
           return;
         }
 
-        // voice-<ts>.weba / video-<ts>.webm — the prefix is what Part 6 keys
-        // "this is a recorded message" off, and the extension is what makes
-        // renderFile() play it as <audio> or <video>.
-        const name = `${spec.prefix}-${this._recStamp(new Date(startedAt))}.${ext}`;
-        const file = new File([blob], name, { type: mime });
-        this._uploadFile(file, {
-          dest,
-          text: `${spec.icon} ${spec.noun}`,
-          sentToast: `${spec.noun} sent.`,
+        this._recAssemble(take).then(blob => {
+          if (!blob || !blob.size) {
+            this.showToast(`Hold ${spec.icon} to record a ${spec.noun.toLowerCase()}.`);
+            return;
+          }
+          // voice-<ts>.weba / video-<ts>.webm — the prefix is what Part 6 keys
+          // "this is a recorded message" off, and the extension is what makes
+          // renderFile() play it as <audio> or <video>.
+          const name = `${spec.prefix}-${this._recStamp(new Date(take.startedAt))}.${take.ext}`;
+          this._uploadFile(new File([blob], name, { type: take.mime }), {
+            dest: take.dest,
+            text: `${spec.icon} ${spec.noun}`,
+            sentToast: `${spec.noun} sent.`,
+          });
         });
       }
 
@@ -4064,11 +4276,16 @@
         this.rec.stopping = false;
         this.rec.locked = false;
         this.rec.warn = false;
+        this.rec.muteWarned = false;
         this.rec.startX = 0;
         this.rec.startY = 0;
         this.rec.recorder = null;
         this.rec.stream = null;
         this.rec.chunks = [];
+        this.rec.bytes = 0;
+        // Only dropped, never closed here: _finishRecording owns the temp file
+        // from this point (it still has to be flushed, or discarded).
+        this.rec.disk = null;
         this.rec.clockTimer = null;
         this.rec.startedAt = 0;
         this.rec.dest = null;
