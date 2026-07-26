@@ -126,6 +126,28 @@ func TestShortHexPK(t *testing.T) {
 	}
 }
 
+func TestFileKindLabel(t *testing.T) {
+	cases := map[string]struct{ name, mime, want string }{
+		"png image":       {"photo.png", "", "Image"},
+		"mov video":       {"clip.MOV", "", "Video"},
+		"flac audio":      {"song.flac", "", "Audio"},
+		"pdf":             {"paper.pdf", "", "PDF"},
+		"zip archive":     {"bundle.zip", "", "Archive"},
+		"docx document":   {"notes.docx", "", "Document"},
+		"unknown ext":     {"data.bin", "", "File"},
+		"no ext":          {"README", "", "File"},
+		"mime fallback":   {"weirdname", "image/x-thing", "Image"},
+		"ext beats mime":  {"a.mp3", "application/octet-stream", "Audio"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := fileKindLabel(tc.name, tc.mime); got != tc.want {
+				t.Errorf("fileKindLabel(%q,%q) = %q, want %q", tc.name, tc.mime, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestNotifPreview(t *testing.T) {
 	if got := notifPreview("  hello   world \n friend "); got != "hello world friend" {
 		t.Errorf("collapse whitespace: got %q", got)

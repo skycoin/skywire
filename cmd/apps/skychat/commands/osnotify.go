@@ -26,6 +26,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -128,6 +129,38 @@ func shortHexPK(hex string) string {
 		return hex[:8] + "…" + hex[len(hex)-4:]
 	}
 	return hex
+}
+
+// fileKindLabel returns a short human label for a file's kind, for a file
+// notification body ("Image", "Video", "Audio", "PDF", "Archive", "Document",
+// or a generic "File"). Derived from the extension, falling back to the
+// top-level MIME type when the extension is unknown.
+func fileKindLabel(name, mimeType string) string {
+	switch strings.ToLower(strings.TrimPrefix(filepath.Ext(name), ".")) {
+	case "jpg", "jpeg", "png", "gif", "webp", "bmp", "svg", "heic", "tiff", "tif":
+		return "Image"
+	case "mp4", "m4v", "webm", "mov", "mkv", "avi", "ogv", "flv", "wmv":
+		return "Video"
+	case "mp3", "wav", "ogg", "oga", "opus", "m4a", "aac", "flac", "weba", "wma":
+		return "Audio"
+	case "pdf":
+		return "PDF"
+	case "zip", "tar", "gz", "tgz", "bz2", "xz", "7z", "rar", "zst":
+		return "Archive"
+	case "doc", "docx", "odt", "rtf", "txt", "md", "xls", "xlsx", "ods", "ppt", "pptx", "odp", "csv":
+		return "Document"
+	}
+	if i := strings.IndexByte(mimeType, '/'); i > 0 {
+		switch mimeType[:i] {
+		case "image":
+			return "Image"
+		case "video":
+			return "Video"
+		case "audio":
+			return "Audio"
+		}
+	}
+	return "File"
 }
 
 // notifPreview collapses whitespace and truncates message text for a
