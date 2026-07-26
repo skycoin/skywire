@@ -1,4 +1,13 @@
-// Package history cmd/apps/skychat/history/store.go c4-app-chat
+//go:build !js
+// +build !js
+
+// Package history pkg/skychat/history/store_bolt.go c4-app-chat
+//
+// BoltStore is the durable, BoltDB-backed Store. bbolt mmaps a file and
+// references syscalls (e.g. MaxAllocSize) that don't exist under GOOS=js, so
+// this backend is native-only — the `!js` build tag keeps the wasm visor's
+// build green. Under js the in-memory MemStore (store_mem.go) is the only
+// Store; it implements the same interface with the same limit semantics.
 package history
 
 import (

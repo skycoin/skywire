@@ -14,7 +14,7 @@ import (
 	"time"
 
 	skychatgroup "github.com/skycoin/skywire/cmd/apps/skychat/group"
-	"github.com/skycoin/skywire/cmd/apps/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/logging"
 )
