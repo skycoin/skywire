@@ -1185,8 +1185,15 @@
     .cp-ctl { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); font-size: 18px; cursor: pointer; transition: all .15s; }
     .cp-ctl:hover { background: var(--bg-hover); }
     .cp-ctl.muted { background: var(--accent-orange); border-color: var(--accent-orange); }
+    .cp-ctl.active { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
     .cp-ctl.hangup { background: var(--accent-red); border-color: var(--accent-red); }
     .cp-ctl.hangup:hover { filter: brightness(1.1); }
+    /* In-call spectrogram */
+    .cp-spec { margin-bottom: 12px; }
+    .cp-spec-head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .cp-spec-chan { background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 2px 10px; font-size: 11px; cursor: pointer; }
+    .cp-spec-chan:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .cp-spec-canvas { width: 232px; max-width: 100%; height: 84px; display: block; background: #000; border-radius: 8px; image-rendering: pixelated; }
 
     .hidden {
       display: none !important;
@@ -1345,9 +1352,17 @@
       <div class="cp-meter-row"><span class="cp-lbl">You</span><div class="cp-bar"><div id="cpBarSent" class="cp-bar-fill"></div></div></div>
       <div class="cp-meter-row"><span class="cp-lbl">Peer</span><div class="cp-bar"><div id="cpBarRecv" class="cp-bar-fill"></div></div></div>
     </div>
+    <div id="cpSpec" class="cp-spec hidden">
+      <div class="cp-spec-head">
+        <span>Spectrogram</span>
+        <button id="cpSpecChan" class="cp-spec-chan" onclick="app.toggleSpecChannel()">Peer</button>
+      </div>
+      <canvas id="specCanvas" class="cp-spec-canvas" width="232" height="84"></canvas>
+    </div>
     <div class="cp-actions">
       <button id="cpMicBtn" class="cp-ctl" onclick="app.toggleCallMic()" title="Mute microphone">&#x1F3A4;</button>
       <button id="cpSpkBtn" class="cp-ctl" onclick="app.toggleCallSpk()" title="Mute speaker">&#x1F50A;</button>
+      <button id="cpSpecBtn" class="cp-ctl" onclick="app.toggleSpectrogram()" title="Show spectrogram">&#x1F4CA;</button>
       <button class="cp-ctl hangup" onclick="app.hangupCall()" title="Hang up">&#x1F4F4;</button>
     </div>
   </div>
@@ -1468,9 +1483,12 @@
         // control surface that polls /voice/{incoming,active} and drives
         // /voice/{call,answer,decline,hangup,mute,levels}. Auto-hides when voice
         // is unavailable (no --pair-enable / no visor RPC / built without audio).
-        this.voice = { available: null, ring: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0 };
+        this.voice = { available: null, ring: null, activeId: null, micMuted: false, spkMuted: false, startedAt: 0, specOn: false, specChan: 'recv' };
         this._voiceLevelTimer = null;
         this._voiceClockTimer = null;
+        this._specTimer = null;
+        this._specCanvas = null;
+        this._specCtx = null;
         this._pollVoice();
         setInterval(() => this._pollVoice(), 3000);
 
@@ -3706,6 +3724,11 @@
         const peer = peerHex || (this.voice.ring && this.voice.ring.from) || this.recipient || '';
         document.getElementById('cpPeer').textContent = peer ? this.shortPk(peer) : 'In call';
         this._syncCallCtls();
+        // Start each call with the spectrogram closed.
+        this.voice.specOn = false;
+        this._stopSpec();
+        const specBox = document.getElementById('cpSpec'); if (specBox) specBox.classList.add('hidden');
+        const specBtn = document.getElementById('cpSpecBtn'); if (specBtn) specBtn.classList.remove('active');
         document.getElementById('callPanel').classList.remove('hidden');
         clearInterval(this._voiceLevelTimer);
         this._voiceLevelTimer = setInterval(() => this._pollLevels(), 150);
@@ -3718,6 +3741,7 @@
         this.voice.activeId = null;
         clearInterval(this._voiceLevelTimer); this._voiceLevelTimer = null;
         clearInterval(this._voiceClockTimer); this._voiceClockTimer = null;
+        this._stopSpec(); this.voice.specOn = false;
         const p = document.getElementById('callPanel');
         if (p) p.classList.add('hidden');
       }
@@ -3814,6 +3838,123 @@
         const mic = document.getElementById('cpMicBtn'); const spk = document.getElementById('cpSpkBtn');
         if (mic) { mic.classList.toggle('muted', this.voice.micMuted); mic.innerHTML = this.voice.micMuted ? '&#x1F507;' : '&#x1F3A4;'; mic.title = this.voice.micMuted ? 'Unmute microphone' : 'Mute microphone'; }
         if (spk) { spk.classList.toggle('muted', this.voice.spkMuted); spk.innerHTML = this.voice.spkMuted ? '&#x1F515;' : '&#x1F50A;'; spk.title = this.voice.spkMuted ? 'Unmute speaker' : 'Mute speaker'; }
+      }
+
+      // ---- In-call spectrogram ----
+      // The visor serves recent call PCM at /voice/audio; this computes a live
+      // FFT (1024-pt Hann, matching the Go spectrogram package) and scroll-draws
+      // a hot-colormap heatmap onto a canvas. Only runs while toggled open.
+
+      toggleSpectrogram() {
+        this.voice.specOn = !this.voice.specOn;
+        const box = document.getElementById('cpSpec');
+        const btn = document.getElementById('cpSpecBtn');
+        if (box) box.classList.toggle('hidden', !this.voice.specOn);
+        if (btn) btn.classList.toggle('active', this.voice.specOn);
+        if (this.voice.specOn) this._startSpec(); else this._stopSpec();
+      }
+
+      toggleSpecChannel() {
+        this.voice.specChan = (this.voice.specChan === 'recv') ? 'sent' : 'recv';
+        const b = document.getElementById('cpSpecChan');
+        if (b) b.textContent = this.voice.specChan === 'recv' ? 'Peer' : 'You';
+      }
+
+      _startSpec() {
+        this._specCanvas = document.getElementById('specCanvas');
+        this._specCtx = this._specCanvas ? this._specCanvas.getContext('2d') : null;
+        if (this._specCtx) { this._specCtx.fillStyle = '#000'; this._specCtx.fillRect(0, 0, this._specCanvas.width, this._specCanvas.height); }
+        clearInterval(this._specTimer);
+        this._specTimer = setInterval(() => this._pollSpec(), 100);
+      }
+
+      _stopSpec() {
+        clearInterval(this._specTimer);
+        this._specTimer = null;
+      }
+
+      async _pollSpec() {
+        if (!this.voice.activeId || !this._specCtx) return;
+        try {
+          const r = await fetch('/voice/audio?call=' + encodeURIComponent(this.voice.activeId));
+          if (!r.ok) return;
+          const d = await r.json();
+          const pcm = this.voice.specChan === 'sent' ? d.sent : d.recv;
+          if (pcm && pcm.length) this._drawSpecColumn(this._specColumn(pcm));
+        } catch (e) { /* transient */ }
+      }
+
+      // _fft: in-place iterative radix-2 FFT (re/im arrays, length a power of 2).
+      _fft(re, im) {
+        const n = re.length;
+        for (let i = 1, j = 0; i < n; i++) {
+          let bit = n >> 1;
+          for (; j & bit; bit >>= 1) j ^= bit;
+          j ^= bit;
+          if (i < j) { const tr = re[i]; re[i] = re[j]; re[j] = tr; const ti = im[i]; im[i] = im[j]; im[j] = ti; }
+        }
+        for (let len = 2; len <= n; len <<= 1) {
+          const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+          for (let i = 0; i < n; i += len) {
+            let cr = 1, ci = 0;
+            for (let k = 0; k < (len >> 1); k++) {
+              const a = i + k, b = a + (len >> 1);
+              const xr = re[b] * cr - im[b] * ci, xi = re[b] * ci + im[b] * cr;
+              re[b] = re[a] - xr; im[b] = im[a] - xi;
+              re[a] += xr; im[a] += xi;
+              const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+            }
+          }
+        }
+      }
+
+      // _specColumn: magnitude spectrum (N/2 bins) of the newest N Hann-windowed
+      // samples of pcm. N=1024 matches the spectrogram package DFT default.
+      _specColumn(pcm) {
+        const N = 1024;
+        const re = new Float32Array(N), im = new Float32Array(N);
+        const start = Math.max(0, pcm.length - N);
+        for (let i = 0; i < N; i++) {
+          const idx = start + i;
+          const s = idx < pcm.length ? pcm[idx] / 32768 : 0;
+          const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1)); // Hann
+          re[i] = s * w;
+        }
+        this._fft(re, im);
+        const bins = N >> 1;
+        const mag = new Float32Array(bins);
+        for (let k = 0; k < bins; k++) mag[k] = Math.hypot(re[k], im[k]);
+        return mag;
+      }
+
+      // _drawSpecColumn scrolls the canvas left and paints the newest column on
+      // the right. Frequency runs low (bottom) → high (top); only the voice band
+      // (~0-6 kHz) is shown. Log magnitude → hot colormap. floor/ceil dB are
+      // tunable if the image reads too dark or too washed out.
+      _drawSpecColumn(mag) {
+        const c = this._specCanvas, ctx = this._specCtx;
+        if (!c || !ctx) return;
+        const W = c.width, H = c.height, col = 3;
+        ctx.drawImage(c, -col, 0);
+        const maxBin = 130;               // ~0-6 kHz of the 512 bins (Nyquist 24 kHz)
+        const floorDb = -18, ceilDb = 42; // dark → bright
+        for (let y = 0; y < H; y++) {
+          const frac = 1 - y / H;
+          const bin = Math.min(maxBin - 1, Math.floor(frac * maxBin));
+          const db = 20 * Math.log10(mag[bin] + 1e-6);
+          const t = (db - floorDb) / (ceilDb - floorDb);
+          ctx.fillStyle = this._heat(t);
+          ctx.fillRect(W - col, y, col, 1);
+        }
+      }
+
+      // _heat: "hot" colormap black → red → yellow → white for t in 0..1.
+      _heat(t) {
+        t = Math.max(0, Math.min(1, t));
+        const r = Math.max(0, Math.min(1, t / 0.4));
+        const g = Math.max(0, Math.min(1, (t - 0.4) / 0.35));
+        const b = Math.max(0, Math.min(1, (t - 0.75) / 0.25));
+        return `rgb(${r * 255 | 0},${g * 255 | 0},${b * 255 | 0})`;
       }
 
       updatePicture() {
