@@ -698,23 +698,64 @@
       color: var(--text-muted);
     }
 
-    .send-btn {
-      padding: 10px 24px;
+    /* Morphing composer button: a send arrow while the field has text,
+       otherwise the recording affordance (mic or video). One button, three
+       looks — the mode lives in data-mode, the styling follows from it. */
+    .composer-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      align-self: center;
+      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      padding: 0;
       background: var(--accent-blue);
-      border: none;
-      border-radius: 20px;
+      border: 1px solid transparent;
+      border-radius: 50%;
       color: white;
-      font-weight: 500;
+      font-size: 17px;
+      line-height: 1;
       cursor: pointer;
-      transition: background 0.2s, transform 0.1s;
+      transition: background 0.2s, color 0.2s, border-color 0.2s, transform 0.1s;
     }
 
-    .send-btn:hover {
+    .composer-btn:hover {
       background: #0284c7;
     }
 
-    .send-btn:active {
-      transform: scale(0.98);
+    .composer-btn:active {
+      transform: scale(0.94);
+    }
+
+    /* Recording modes read as "not send": muted, like the attach button. */
+    .composer-btn[data-mode="mic"],
+    .composer-btn[data-mode="video"] {
+      background: var(--bg-tertiary);
+      border-color: var(--border-color);
+      color: var(--text-secondary);
+      font-size: 16px;
+    }
+
+    .composer-btn[data-mode="mic"]:hover,
+    .composer-btn[data-mode="video"]:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    /* Icon swap: a quick pop so the morph is legible instead of instant. */
+    .composer-btn .composer-icon {
+      display: block;
+      pointer-events: none;
+    }
+
+    .composer-btn.morphing .composer-icon {
+      animation: composer-pop 0.18s ease-out;
+    }
+
+    @keyframes composer-pop {
+      0%   { transform: scale(0.5) rotate(-25deg); opacity: 0.2; }
+      100% { transform: scale(1) rotate(0); opacity: 1; }
     }
 
     /* Media & file attachments */
@@ -1305,8 +1346,12 @@
         &#x1F4CE;
         <input type="file" id="fileField" style="display:none" onchange="app.sendFile()" />
       </label>
-      <input id="msgField" class="message-input" type="text" placeholder="Type a message..." />
-      <button type="submit" class="send-btn">Send</button>
+      <input id="msgField" class="message-input" type="text" placeholder="Type a message..." oninput="app.syncComposerBtn()" />
+      <!-- Morphing button: submits when there is text, otherwise toggles the
+           voice/video recording mode (see app.onComposerBtn). Its type/icon/
+           label are all set by syncComposerBtn(). -->
+      <button type="submit" id="composerBtn" class="composer-btn" data-mode="send"
+              onclick="app.onComposerBtn(event)"><span class="composer-icon">&#x27A4;</span></button>
     </form>
   </main>
 
@@ -1454,6 +1499,10 @@
         this.group = null;   // active group id (null when a DM is selected)
         this.myPK = null;    // this visor's PK, for group self-echo dedup
         this.replyTo = null; // {sender, ts, preview} when composing a reply, else null
+        // Composer button mode. With text in the field the button is a send
+        // arrow; with the field empty it is the recording affordance, either
+        // 'mic' (voice message) or 'video' — a user choice kept across reloads.
+        this.mediaMode = localStorage.getItem('skychat_media_mode') === 'video' ? 'video' : 'mic';
         this._mid = 0;       // per-render message id, for identifying a clicked bubble locally
         // Group messages "deleted for me": a persisted set of "<gid>:<ts_nano>"
         // keys, filtered out on every group render/reload (groups reload from
@@ -1500,6 +1549,7 @@
         this.syncMyPK();
         this.syncGroups();
         this.renderPinned();
+        this.syncComposerBtn();
       }
 
       showToast(message, type = 'success') {
@@ -2716,6 +2766,7 @@
         if (this.group) {
           this.sendGroupMessage(msg);
           msgField.value = '';
+          this.syncComposerBtn();
           return;
         }
 
@@ -2737,6 +2788,7 @@
         const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo', reply: replyMeta, status: 'pending' };
         this.addMsgToList(destination, message);
         msgField.value = '';
+        this.syncComposerBtn();
         const msgArea = document.getElementById('messages');
         msgArea.scrollTop = msgArea.scrollHeight;
         this.messagesSeen[destination] = this.messagesQuantity[destination];
@@ -2744,6 +2796,74 @@
         this.updateUnreadBadges();
 
         this._deliverDM(destination, message, wireText, network);
+      }
+
+      // ---------------------------------------------------------------------
+      // Morphing composer button
+      //
+      // One button beside the input with three faces, driven purely by state:
+      //   text in the field  -> 'send'  (➤, type=submit, the form sends it)
+      //   field empty        -> 'mic' (🎤) or 'video' (📹), the recording mode
+      // A tap while empty flips mic <-> video and persists the choice. Capture
+      // itself lands in a later part; this is the state machine only.
+      // ---------------------------------------------------------------------
+
+      _composerModes() {
+        return {
+          send:  { icon: '➤',    label: 'Send',          title: 'Send message' },
+          mic:   { icon: '\u{1F3A4}', label: 'Voice message', title: 'Voice message mode — tap to switch to video' },
+          video: { icon: '\u{1F4F9}', label: 'Video message', title: 'Video message mode — tap to switch to voice' },
+        };
+      }
+
+      // The mode the button should currently be in.
+      _composerMode() {
+        const field = document.getElementById('msgField');
+        return (field && field.value.trim()) ? 'send' : this.mediaMode;
+      }
+
+      // syncComposerBtn repaints the button for the current mode. Cheap and
+      // idempotent — called on every keystroke, so it no-ops when unchanged.
+      syncComposerBtn() {
+        const btn = document.getElementById('composerBtn');
+        if (!btn) return;
+        const mode = this._composerMode();
+        if (btn.dataset.mode === mode) return;
+
+        const spec = this._composerModes()[mode];
+        btn.dataset.mode = mode;
+        // Only 'send' submits the form; the recording modes are plain buttons
+        // so a tap can't fire sendMessage.
+        btn.type = mode === 'send' ? 'submit' : 'button';
+        btn.title = spec.title;
+        btn.setAttribute('aria-label', spec.label);
+        btn.querySelector('.composer-icon').textContent = spec.icon;
+
+        // Restart the pop animation on each swap (reflow forces a replay), but
+        // not on the first paint — the button shouldn't twitch on page load.
+        if (btn.dataset.painted) {
+          btn.classList.remove('morphing');
+          void btn.offsetWidth;
+          btn.classList.add('morphing');
+        }
+        btn.dataset.painted = '1';
+      }
+
+      // onComposerBtn handles the click. In send mode it steps aside and lets
+      // the submit reach the form; otherwise the tap toggles mic <-> video.
+      onComposerBtn(e) {
+        if (this._composerMode() === 'send') return;
+        e.preventDefault();
+        this.toggleMediaMode();
+      }
+
+      toggleMediaMode() {
+        this.mediaMode = this.mediaMode === 'mic' ? 'video' : 'mic';
+        localStorage.setItem('skychat_media_mode', this.mediaMode);
+        this.syncComposerBtn();
+        this.showToast(this.mediaMode === 'video'
+          ? '&#x1F4F9; Video message mode'
+          : '&#x1F3A4; Voice message mode');
       }
 
       // sendFile uploads the picked file to /send-file (multipart) for the
