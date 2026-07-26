@@ -1093,6 +1093,151 @@
       text-decoration: underline;
     }
 
+    /* ---- Recorded voice & video messages ---------------------------------
+       A clip recorded in the composer gets a player built for it — a waveform
+       decoded from the audio itself, or a round video the size of a bubble —
+       so it reads as a message, not as a file that happens to be playable. An
+       ordinary attached .mp3/.mp4 keeps the browser's native controls above,
+       and the two never look alike. */
+    .vm-player {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 250px;
+      max-width: 100%;
+      padding: 2px 2px 0;
+    }
+
+    .vm-play {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      padding: 0;
+      background: rgba(255, 255, 255, 0.16);
+      border: none;
+      border-radius: 50%;
+      color: #fff;
+      font-size: 13px;
+      line-height: 1;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .vm-play:hover { background: rgba(255, 255, 255, 0.3); }
+    .vm-play:active { transform: scale(0.94); }
+
+    .vm-body {
+      flex: 1;
+      min-width: 0;
+    }
+
+    /* Bars are drawn in JS (see _vmDrawWave); the click seeks. */
+    .vm-wave {
+      display: block;
+      width: 100%;
+      height: 26px;
+      cursor: pointer;
+    }
+
+    /* Overrides the shared .media-caption look for the one-line player meta. */
+    .vm-meta {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin: 2px 0 0;
+      word-break: normal;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Round video message: a circle the size of a bubble, no player chrome. */
+    .vm-round {
+      width: 200px;
+      max-width: 100%;
+    }
+
+    .vm-round-frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      overflow: hidden;
+      background: #000;
+      cursor: pointer;
+    }
+
+    .vm-round-frame video {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Progress ring over the crop, wound from 12 o'clock. */
+    .vm-ring {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      transform: rotate(-90deg);
+      pointer-events: none;
+    }
+
+    .vm-ring circle {
+      fill: none;
+      stroke-width: 4;
+    }
+
+    .vm-ring-track { stroke: rgba(255, 255, 255, 0.22); }
+
+    .vm-ring-fill {
+      stroke: var(--accent-blue);
+      stroke-linecap: round;
+    }
+
+    /* Play badge: centred while paused, fades out while playing. */
+    .vm-badge {
+      position: absolute;
+      inset: 0;
+      margin: auto;
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.45);
+      border-radius: 50%;
+      color: #fff;
+      font-size: 17px;
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+
+    .vm-round.playing .vm-badge { opacity: 0; }
+
+    .vm-round .vm-time {
+      position: absolute;
+      left: 50%;
+      bottom: 10px;
+      transform: translateX(-50%);
+      padding: 1px 8px;
+      background: rgba(0, 0, 0, 0.55);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      pointer-events: none;
+    }
+
+    /* A round video needs no bubble behind it — it is its own shape. Chrome
+       has :has(); anywhere it doesn't, the plain bubble is a fine fallback. */
+    .message-bubble.media:has(.vm-round) {
+      background: transparent;
+      padding: 0;
+    }
+
     /* Toast Notifications */
     .toast-container {
       position: fixed;
@@ -1912,6 +2057,10 @@
               </div>
             </div>`);
 
+          // renderFile can only return markup; a recorded-message player needs
+          // a JS pass once its nodes exist (canvas, media events).
+          this._initPlayers(msgArea.lastElementChild);
+
           if (wasAtBottom) {
             msgArea.scrollTop = msgArea.scrollHeight;
           }
@@ -2398,6 +2547,18 @@
         return /\.(mp3|ogg|oga|opus|wav|m4a|aac|flac|weba)$/i.test((file && file.name) || '');
       }
 
+      // A voice/video MESSAGE is a clip recorded in the composer, which names
+      // its files voice-<stamp>/video-<stamp> (see _finishRecording). That
+      // prefix is the whole signal: a recorded clip gets the purpose-built
+      // player below, an ordinary attached .mp3/.mp4 keeps the native one.
+      isVoiceMessage(file) {
+        return /^voice-\d/i.test((file && file.name) || '') && this.isAudioFile(file);
+      }
+
+      isVideoMessage(file) {
+        return /^video-\d/i.test((file && file.name) || '') && this.isVideoFile(file);
+      }
+
       humanSize(n) {
         n = Number(n) || 0;
         if (n < 1024) return n + ' B';
@@ -2473,14 +2634,24 @@
           // /files/ supports Range so seeking works). No poster for video —
           // that would need server-side frame extraction (ffmpeg). A download
           // link is offered on received media so it can always be saved.
+          const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
+            ? ` · <a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
+          // A clip recorded in the composer is a message, not an attachment:
+          // it gets its own player, and its filename (a bare timestamp) is not
+          // worth showing.
+          const links = `${dl}${reqLink}`;
+          if (this.isVoiceMessage(file)) return this._renderVoicePlayer(urlAttr, sizeStr, links);
+          if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, links);
           const isVideo = this.isVideoFile(file);
           const tag = isVideo ? 'video' : 'audio';
           const cls = isVideo ? 'media-video' : 'media-audio';
-          const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
-            ? ` · <a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
           return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"></${tag}>
             <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${dl}${reqLink}</div>`;
         }
+        // No bytes to play (never received / pruned): fall through to the file
+        // card, but still name a recorded clip for what it is.
+        const cardName = this.isVoiceMessage(file) ? 'Voice message'
+          : this.isVideoMessage(file) ? 'Video message' : name;
         const sub = file.status === 'failed' ? 'transfer failed' : sizeStr;
         const dl = urlAttr
           ? `<a class="file-dl" href="${urlAttr}" download="${nameAttr}" title="Download">&#x2B07;</a>`
@@ -2488,11 +2659,281 @@
         return `<div class="file-card">
             <div class="file-icon">&#x1F4CE;</div>
             <div class="file-meta">
-              <div class="file-name">${name}</div>
+              <div class="file-name">${cardName}</div>
               <div class="file-sub">${this.escapeHtml(sub)}${reqLink}</div>
             </div>
             ${dl}
           </div>`;
+      }
+
+      // ---------------------------------------------------------------------
+      // Recorded-message players
+      //
+      // Voice: a play button, the clip's real waveform, and its duration —
+      // the bars come from decoding the file itself (it is a few KB, and the
+      // decode is cached per URL), so they are the actual audio, not decor.
+      // Video: the round self-view shape it was recorded in, wound with a
+      // progress ring, playing in place on click.
+      //
+      // Both are built as markup by renderFile and wired by _initPlayers once
+      // the nodes exist (a canvas can't be drawn from an HTML string). Every
+      // interactive part routes back here through an inline handler, the way
+      // the rest of this UI does.
+      // ---------------------------------------------------------------------
+
+      _renderVoicePlayer(urlAttr, sizeStr, links) {
+        return `<div class="vm-player">
+            <button type="button" class="vm-play" title="Play" aria-label="Play voice message"
+                    onclick="app.vmToggle(this)"><span class="vm-icon">&#x25B6;</span></button>
+            <div class="vm-body">
+              <canvas class="vm-wave" title="Seek" onclick="app.vmSeek(event, this)"></canvas>
+              <div class="media-caption vm-meta">
+                <span class="vm-time">0:00</span><span>&middot; ${this.escapeHtml(sizeStr)}${links}</span>
+              </div>
+            </div>
+            <audio class="vm-media" src="${urlAttr}" preload="metadata"></audio>
+          </div>`;
+      }
+
+      _renderRoundPlayer(urlAttr, sizeStr, links) {
+        // r=47 in a 100-unit box leaves room for the 4-unit ring stroke; the
+        // circumference is set as the dash pattern in _vmPaint.
+        return `<div class="vm-round">
+            <div class="vm-round-frame" role="button" tabindex="0" title="Play video message"
+                 aria-label="Play video message" onclick="app.vmToggle(this)">
+              <video class="vm-media" src="${urlAttr}" preload="metadata" playsinline></video>
+              <svg class="vm-ring" viewBox="0 0 100 100" aria-hidden="true">
+                <circle class="vm-ring-track" cx="50" cy="50" r="47"></circle>
+                <circle class="vm-ring-fill" cx="50" cy="50" r="47"></circle>
+              </svg>
+              <span class="vm-badge"><span class="vm-icon">&#x25B6;</span></span>
+              <span class="vm-time">0:00</span>
+            </div>
+            <div class="media-caption vm-meta"><span>${this.escapeHtml(sizeStr)}${links}</span></div>
+          </div>`;
+      }
+
+      _vmBarCount() { return 48; }
+
+      // The player element a control belongs to (voice and round share the
+      // same handlers — only the parts they own differ).
+      _vmBox(el) { return (el && el.closest) ? el.closest('.vm-player, .vm-round') : null; }
+
+      // _initPlayers wires every recorded-message player inside a freshly
+      // rendered row: media events repaint it, and a voice player kicks off the
+      // waveform decode. Idempotent, so a re-render can't double-bind.
+      _initPlayers(root) {
+        if (!root || !root.querySelectorAll) return;
+        root.querySelectorAll('.vm-player, .vm-round').forEach(box => {
+          const media = box.querySelector('.vm-media');
+          if (!media || box.dataset.vmInit) return;
+          box.dataset.vmInit = '1';
+          ['play', 'pause', 'timeupdate', 'seeked'].forEach(ev =>
+            media.addEventListener(ev, () => this._vmPaint(box)));
+          media.addEventListener('ended', () => {
+            try { media.currentTime = 0; } catch (e) { /* not seekable */ }
+            this._vmPaint(box);
+          });
+          media.addEventListener('loadedmetadata', () => {
+            if (isFinite(media.duration)) box.dataset.total = String(media.duration);
+            // Do the duration scan up front rather than on first play — it
+            // seeks to the end and back, which would be an audible/visible
+            // jump mid-playback. The bytes are already on this machine (the
+            // clip is served from our own /files/), so it is a local read.
+            this._vmFixDuration(box, media);
+            this._vmPaint(box);
+          });
+          if (box.querySelector('.vm-wave')) this._vmLoadPeaks(box, media.getAttribute('src'));
+          this._vmPaint(box);
+        });
+      }
+
+      // vmToggle plays or pauses the clip a control belongs to. Only one clip
+      // plays at a time, the way a chat should behave.
+      vmToggle(el) {
+        const box = this._vmBox(el);
+        const media = box && box.querySelector('.vm-media');
+        if (!media) return;
+        if (media.paused) {
+          document.querySelectorAll('.vm-media').forEach(m => { if (m !== media && !m.paused) m.pause(); });
+          const played = media.play();
+          if (played && played.catch) played.catch(() => this.showToast('Cannot play this clip.', 'error'));
+        } else {
+          media.pause();
+        }
+      }
+
+      // vmSeek jumps to the position clicked on the waveform.
+      vmSeek(ev, canvas) {
+        const box = this._vmBox(canvas);
+        const media = box && box.querySelector('.vm-media');
+        const total = this._vmTotal(box, media);
+        if (!media || !total) return;
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width) return;
+        const ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+        try { media.currentTime = ratio * total; } catch (e) { /* not seekable yet */ }
+        this._vmPaint(box);
+      }
+
+      // The clip's length in seconds, or 0 while it is still unknown. Prefer
+      // the value we worked out (decoded buffer / duration scan) over the
+      // element's, which is Infinity for a recorded WebM.
+      _vmTotal(box, media) {
+        const stored = box ? Number(box.dataset.total) : 0;
+        if (stored > 0 && isFinite(stored)) return stored;
+        const d = media ? media.duration : 0;
+        return (d > 0 && isFinite(d)) ? d : 0;
+      }
+
+      // MediaRecorder writes a WebM with no duration in its header, so a
+      // recorded clip reports Infinity until the browser has scanned to the
+      // end. Seeking far past the end forces that scan; the position is put
+      // back as soon as the real duration lands.
+      _vmFixDuration(box, media) {
+        if (!media || !box || box.dataset.durFix || isFinite(media.duration)) return;
+        box.dataset.durFix = '1';
+        const settle = () => {
+          if (!isFinite(media.duration)) return;
+          media.removeEventListener('timeupdate', settle);
+          box.dataset.total = String(media.duration);
+          try { media.currentTime = 0; } catch (e) { /* ignore */ }
+          this._vmPaint(box);
+        };
+        media.addEventListener('timeupdate', settle);
+        try {
+          media.currentTime = 1e101; // past any real end: forces the scan
+        } catch (e) {
+          media.removeEventListener('timeupdate', settle);
+        }
+      }
+
+      // _vmPaint repaints a player for its media's current state: icon,
+      // elapsed/total time, progress ring, waveform fill.
+      _vmPaint(box) {
+        if (!box) return;
+        const media = box.querySelector('.vm-media');
+        if (!media) return;
+        const total = this._vmTotal(box, media);
+        const cur = media.currentTime || 0;
+        const playing = !media.paused && !media.ended;
+        box.classList.toggle('playing', playing);
+
+        const icon = box.querySelector('.vm-icon');
+        if (icon) icon.innerHTML = playing ? '&#x23F8;' : '&#x25B6;';
+        const btn = box.querySelector('.vm-play');
+        if (btn) {
+          const label = playing ? 'Pause voice message' : 'Play voice message';
+          btn.title = playing ? 'Pause' : 'Play';
+          btn.setAttribute('aria-label', label);
+        }
+        // Idle shows how long the clip is; playing shows how far in we are.
+        const time = box.querySelector('.vm-time');
+        if (time) time.textContent = this._vmFmt((playing || cur > 0) ? cur : total);
+
+        const ratio = total ? Math.min(1, cur / total) : 0;
+        const ring = box.querySelector('.vm-ring-fill');
+        if (ring) {
+          const circ = 2 * Math.PI * 47;
+          ring.style.strokeDasharray = String(circ);
+          ring.style.strokeDashoffset = String(circ * (1 - ratio));
+        }
+        if (box.querySelector('.vm-wave')) this._vmDrawWave(box, ratio);
+      }
+
+      // Formats m:ss. A clip whose length is still unknown reads 0:00 rather
+      // than the Infinity a duration-less WebM would otherwise print.
+      _vmFmt(secs) {
+        const n = Number(secs);
+        const s = isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+      }
+
+      // _vmDrawWave draws the decoded bars, filled up to the play position.
+      // Until the decode lands (or if it fails) a flat row stands in, so the
+      // player looks deliberate rather than broken.
+      _vmDrawWave(box, ratio) {
+        const canvas = box.querySelector('.vm-wave');
+        if (!canvas || !canvas.getContext) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        // The canvas is fluid (bubble width); size the backing store to the
+        // element each paint so the bars stay crisp and correctly placed.
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.getBoundingClientRect();
+        const w = Math.max(1, Math.round(rect.width * dpr));
+        const h = Math.max(1, Math.round(rect.height * dpr));
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+
+        const peaks = box._vmPeaks || new Array(this._vmBarCount()).fill(0.18);
+        ctx.clearRect(0, 0, w, h);
+        const step = w / peaks.length;
+        const barW = Math.max(1, Math.min(3 * dpr, step * 0.6));
+        const minH = 2 * dpr, mid = h / 2, played = ratio * w;
+        for (let i = 0; i < peaks.length; i++) {
+          const x = i * step + (step - barW) / 2;
+          const bh = Math.max(minH, peaks[i] * (h - minH));
+          // Bars behind the playhead are lit; the rest stay dim.
+          ctx.fillStyle = (x + barW / 2) <= played ? '#f1f5f9' : 'rgba(241, 245, 249, 0.35)';
+          ctx.beginPath();
+          if (ctx.roundRect) ctx.roundRect(x, mid - bh / 2, barW, bh, barW / 2);
+          else ctx.rect(x, mid - bh / 2, barW, bh);
+          ctx.fill();
+        }
+      }
+
+      _vmLoadPeaks(box, url) {
+        if (!url) return;
+        this._vmDecode(url).then(res => {
+          if (!res) return;
+          box._vmPeaks = res.peaks;
+          if (res.duration > 0 && isFinite(res.duration)) box.dataset.total = String(res.duration);
+          this._vmPaint(box);
+        });
+      }
+
+      // _vmDecode fetches a clip and reduces it to bar heights, cached per URL
+      // (a bubble is re-rendered on every chat switch). Resolves null when Web
+      // Audio is unavailable or the fetch/decode fails — the player then keeps
+      // its placeholder bars and still plays.
+      _vmDecode(url) {
+        if (!this._vmCache) this._vmCache = new Map();
+        if (this._vmCache.has(url)) return this._vmCache.get(url);
+        const Ctx = window.AudioContext || window.webkitAudioContext;
+        let p;
+        if (!Ctx || typeof fetch !== 'function') {
+          p = Promise.resolve(null);
+        } else {
+          // One shared context for the whole app: browsers cap how many can
+          // exist at once, and one per clip would burn through that.
+          this._vmCtx = this._vmCtx || new Ctx();
+          p = fetch(url)
+            .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('http ' + r.status))))
+            .then(buf => this._vmCtx.decodeAudioData(buf))
+            .then(audio => ({ peaks: this._vmReduce(audio, this._vmBarCount()), duration: audio.duration }))
+            .catch(e => { console.debug('skychat waveform decode failed:', (e && e.message) || e); return null; });
+        }
+        this._vmCache.set(url, p);
+        return p;
+      }
+
+      // _vmReduce turns a decoded clip into n bar heights: RMS per bucket,
+      // normalized to the loudest one so a quiet recording still reads, then
+      // curved the way the live recording meter is.
+      _vmReduce(buffer, n) {
+        const data = buffer.getChannelData(0);
+        const per = Math.max(1, Math.floor(data.length / n));
+        const out = [];
+        let max = 0;
+        for (let i = 0; i < n; i++) {
+          const start = i * per, end = Math.min(data.length, start + per);
+          let sum = 0;
+          for (let j = start; j < end; j++) sum += data[j] * data[j];
+          const rms = Math.sqrt(sum / Math.max(1, end - start));
+          if (rms > max) max = rms;
+          out.push(rms);
+        }
+        return out.map(v => Math.max(0.08, Math.min(1, Math.pow(max ? v / max : 0, 0.65))));
       }
 
       // openLightbox shows an image full-size in an in-app overlay (rather
