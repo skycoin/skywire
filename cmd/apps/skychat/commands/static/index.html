@@ -651,6 +651,7 @@
     /* Message Form */
     .message-form {
       display: flex;
+      position: relative; /* anchors the recording lock pill above the button */
       gap: 12px;
       padding: 16px 20px;
       background: var(--bg-secondary);
@@ -805,6 +806,89 @@
     .rec-hint {
       color: var(--text-muted);
       font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      /* Follows the pointer as it slides toward cancel — set inline by
+         _recDragUI, so no transition here (it would lag the finger). */
+    }
+
+    /* Past halfway to the cancel threshold the whole bar goes red, so the
+       gesture's outcome is obvious before the user commits to it. */
+    .rec-bar.near-cancel {
+      border-color: var(--accent-red);
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    .rec-bar.near-cancel .rec-hint {
+      color: var(--accent-red);
+    }
+
+    /* Locked: no pointer left to slide with, so cancel becomes a button. */
+    .rec-cancel {
+      margin-left: auto;
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid var(--accent-red);
+      border-radius: 14px;
+      color: var(--accent-red);
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    .rec-cancel:hover {
+      background: var(--accent-red);
+      color: white;
+    }
+
+    .rec-cancel.hidden {
+      display: none;
+    }
+
+    /* Lock target: floats just above the mic button during an unlocked hold. */
+    .lock-pill {
+      position: absolute;
+      right: 20px;
+      bottom: 100%;
+      margin-bottom: 8px;
+      width: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 8px 0 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 20px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      box-shadow: var(--shadow);
+      transition: transform 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+      pointer-events: none;
+    }
+
+    .lock-pill .lock-arrow {
+      font-size: 11px;
+      line-height: 1;
+      animation: lock-bob 1.2s ease-in-out infinite;
+    }
+
+    @keyframes lock-bob {
+      0%, 100% { transform: translateY(0); opacity: 0.5; }
+      50%      { transform: translateY(-3px); opacity: 1; }
+    }
+
+    /* Halfway to the lock threshold: the pill grows and lights up. */
+    .lock-pill.near {
+      transform: scale(1.15);
+      background: var(--accent-blue);
+      border-color: var(--accent-blue);
+      color: white;
+    }
+
+    .lock-pill.hidden {
+      display: none;
     }
 
     /* Icon swap: a quick pop so the morph is legible instead of instant. */
@@ -1411,11 +1495,20 @@
         <input type="file" id="fileField" style="display:none" onchange="app.sendFile()" />
       </label>
       <input id="msgField" class="message-input" type="text" placeholder="Type a message..." oninput="app.syncComposerBtn()" />
-      <!-- Takes the input's place while recording: elapsed time + a hint. -->
+      <!-- Takes the input's place while recording: elapsed time, the gesture
+           hint (which slides with the pointer), and — once locked — a cancel
+           button, since there's no pointer left to slide. -->
       <div id="recBar" class="rec-bar hidden">
         <span class="rec-dot"></span>
         <span id="recTime" class="rec-time">0:00</span>
-        <span class="rec-hint">Release to send</span>
+        <span id="recHint" class="rec-hint">&#x25C0; slide to cancel &middot; slide up to lock</span>
+        <button type="button" id="recCancel" class="rec-cancel hidden" onclick="app.cancelVoiceRecording()">Cancel</button>
+      </div>
+      <!-- Floats above the mic button while recording unlocked; slide the
+           pointer up onto it to go hands-free. -->
+      <div id="lockPill" class="lock-pill hidden" aria-hidden="true">
+        <span class="lock-icon">&#x1F512;</span>
+        <span class="lock-arrow">&#x2303;</span>
       </div>
       <!-- Morphing button: submits when there is text, otherwise a tap toggles
            the voice/video recording mode and a press-and-hold records a voice
@@ -1424,6 +1517,7 @@
       <button type="submit" id="composerBtn" class="composer-btn" data-mode="send"
               onclick="app.onComposerBtn(event)"
               onpointerdown="app._onComposerDown(event)"
+              onpointermove="app._onComposerMove(event)"
               onpointerup="app._onComposerUp(event)"
               onpointercancel="app._onComposerUp(event)"
               oncontextmenu="return false"><span class="composer-icon">&#x27A4;</span></button>
@@ -1588,6 +1682,8 @@
           stopping: false,   // stop() already issued, waiting for onstop
           holdTimer: null,   // press-and-hold threshold timer
           holdFired: false,  // this gesture became a hold, so its click isn't a tap
+          locked: false,     // hands-free: recording continues after the release
+          startX: 0, startY: 0, // pointer origin, for the lock/cancel gestures
           recorder: null, stream: null, chunks: [],
           mime: '', ext: 'weba',
           startedAt: 0, clockTimer: null,
@@ -1613,8 +1709,9 @@
         window.addEventListener('blur', () => {
           this._winFocused = false;
           // Leaving the window ends a hold we can no longer track: stop and
-          // send what was captured rather than holding the mic open.
-          if (this.rec.active) this._stopVoiceRecording(false);
+          // send what was captured rather than holding the mic open. A locked
+          // take is hands-free by definition, so it keeps running.
+          if (this.rec.active && !this.rec.locked) this._stopVoiceRecording(false);
         });
         // Safety net for a release that never reaches the button (finger lifted
         // outside the window). _onComposerUp is a no-op when nothing is running.
@@ -2952,6 +3049,12 @@
       // A click that ends a press-and-hold isn't a tap — that gesture was a
       // recording, already handled by the pointer handlers.
       onComposerBtn(e) {
+        // While locked the button is the send control for the running take.
+        if (this.rec.locked) {
+          e.preventDefault();
+          this._stopVoiceRecording(false);
+          return;
+        }
         if (this._composerMode() === 'send') return;
         e.preventDefault();
         if (this.rec.holdFired) return;
@@ -2980,8 +3083,10 @@
       // has been down that long, so a tap never triggers a permission prompt.
       // ---------------------------------------------------------------------
 
-      _recHoldMs() { return 220; }  // press this long before recording starts
-      _recMinMs() { return 500; }   // shorter than this is treated as a mis-tap
+      _recHoldMs() { return 220; }   // press this long before recording starts
+      _recMinMs() { return 500; }    // shorter than this is treated as a mis-tap
+      _recLockDy() { return 56; }    // slide up this far to go hands-free
+      _recCancelDx() { return 90; }  // slide left this far to discard
 
       _recSupported() {
         return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
@@ -3007,17 +3112,36 @@
 
       _onComposerDown(e) {
         this.rec.holdFired = false;
+        if (this.rec.locked) return;                          // locked take owns the button
         if (e.button !== undefined && e.button !== 0) return; // primary button only
         if (this._composerMode() !== 'mic') return;           // video capture is a later part
         const btn = document.getElementById('composerBtn');
-        // Capture the pointer so the release reaches us even if the finger
-        // drifts off the button.
+        // Capture the pointer so the release — and every move in between —
+        // reaches us even once the finger has drifted off the button.
         try { btn.setPointerCapture(e.pointerId); } catch (err) { /* not fatal */ }
+        this.rec.startX = e.clientX;
+        this.rec.startY = e.clientY;
         this.rec.holdTimer = setTimeout(() => {
           this.rec.holdTimer = null;
           this.rec.holdFired = true;
           this._startVoiceRecording();
         }, this._recHoldMs());
+      }
+
+      // _onComposerMove steers a running take: far enough up locks it
+      // hands-free, far enough left throws it away, anything short of that is
+      // just feedback on the way there.
+      _onComposerMove(e) {
+        if (!this.rec.active || this.rec.locked) return;
+        const dx = e.clientX - this.rec.startX;
+        const dy = e.clientY - this.rec.startY;
+        if (dy <= -this._recLockDy()) { this._lockVoiceRecording(); return; }
+        if (dx <= -this._recCancelDx()) {
+          this._stopVoiceRecording(true);
+          this.showToast('Voice message cancelled.');
+          return;
+        }
+        this._recDragUI(dx, dy);
       }
 
       _onComposerUp() {
@@ -3033,6 +3157,7 @@
           this.rec.released = true;
           return;
         }
+        if (this.rec.locked) return;  // hands-free — the release means nothing
         if (this.rec.active) this._stopVoiceRecording(false);
       }
 
@@ -3113,6 +3238,53 @@
         this._recShowUI(true);
       }
 
+      // _lockVoiceRecording makes the running take hands-free: the release no
+      // longer sends it, so the mic button becomes Send and the bar grows a
+      // Cancel button (there's no pointer left to slide with).
+      _lockVoiceRecording() {
+        if (!this.rec.active || this.rec.locked) return;
+        this.rec.locked = true;
+        this._recDragUI(0, 0);
+        const bar = document.getElementById('recBar');
+        const hint = document.getElementById('recHint');
+        const pill = document.getElementById('lockPill');
+        const cancel = document.getElementById('recCancel');
+        const btn = document.getElementById('composerBtn');
+        if (bar) bar.classList.remove('near-cancel');
+        if (hint) hint.textContent = 'Recording — tap ➤ to send';
+        if (pill) pill.classList.add('hidden');
+        if (cancel) cancel.classList.remove('hidden');
+        if (btn) {
+          // Wear the send look; the pointer handlers defer to rec.locked, so
+          // this can't be mistaken for an ordinary send.
+          btn.classList.remove('recording');
+          btn.dataset.mode = 'send';
+          btn.type = 'button';
+          btn.title = 'Send voice message';
+          btn.setAttribute('aria-label', 'Send voice message');
+          btn.querySelector('.composer-icon').textContent = '➤';
+        }
+      }
+
+      // cancelVoiceRecording discards the take (the locked Cancel button).
+      cancelVoiceRecording() {
+        if (!this.rec.active) return;
+        this._stopVoiceRecording(true);
+        this.showToast('Voice message discarded.');
+      }
+
+      // _recDragUI reflects an in-progress slide: the hint tracks the pointer
+      // and both targets light up once the gesture is halfway committed.
+      _recDragUI(dx, dy) {
+        const bar = document.getElementById('recBar');
+        const hint = document.getElementById('recHint');
+        const pill = document.getElementById('lockPill');
+        const left = Math.max(0, -dx), up = Math.max(0, -dy);
+        if (hint) hint.style.transform = left ? `translateX(${-Math.min(left, this._recCancelDx())}px)` : '';
+        if (bar) bar.classList.toggle('near-cancel', left >= this._recCancelDx() / 2);
+        if (pill) pill.classList.toggle('near', up >= this._recLockDy() / 2);
+      }
+
       // _stopVoiceRecording ends the take; the actual send happens in
       // _finishVoiceRecording, which the recorder's onstop drives.
       _stopVoiceRecording(cancel) {
@@ -3160,6 +3332,9 @@
         this.rec.released = false;
         this.rec.cancelled = false;
         this.rec.stopping = false;
+        this.rec.locked = false;
+        this.rec.startX = 0;
+        this.rec.startY = 0;
         this.rec.recorder = null;
         this.rec.stream = null;
         this.rec.chunks = [];
@@ -3168,17 +3343,31 @@
         this.rec.dest = null;
       }
 
-      // _recShowUI swaps the text input for the recording indicator (and back)
-      // and runs the elapsed clock.
+      // _recShowUI swaps the text input for the recording indicator (and back),
+      // resets the gesture affordances to their start-of-take state, and runs
+      // the elapsed clock.
       _recShowUI(on) {
         const bar = document.getElementById('recBar');
         const field = document.getElementById('msgField');
         const btn = document.getElementById('composerBtn');
+        const hint = document.getElementById('recHint');
+        const pill = document.getElementById('lockPill');
+        const cancel = document.getElementById('recCancel');
         if (!bar || !field || !btn) return;
         bar.classList.toggle('hidden', !on);
+        bar.classList.remove('near-cancel');
         field.classList.toggle('hidden', on);
         btn.classList.toggle('recording', on);
-        if (!on) return;
+        if (cancel) cancel.classList.add('hidden');       // shown only once locked
+        if (pill) { pill.classList.toggle('hidden', !on); pill.classList.remove('near'); }
+        if (hint) {
+          hint.style.transform = '';
+          hint.innerHTML = '&#x25C0; slide to cancel &middot; slide up to lock';
+        }
+        if (!on) {
+          this.syncComposerBtn(); // restore the mic icon after a locked take
+          return;
+        }
         const tick = () => {
           const secs = Math.floor((Date.now() - this.rec.startedAt) / 1000);
           document.getElementById('recTime').textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
