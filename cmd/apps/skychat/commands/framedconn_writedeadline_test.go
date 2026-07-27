@@ -19,6 +19,7 @@ package commands
 
 import (
 	"errors"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 	"net"
 	"sync"
 	"testing"
@@ -37,7 +38,7 @@ func TestFramedConn_WriteFrameDeadline_TimesOutOnStalledPeer(t *testing.T) {
 	defer srvSide.Close() //nolint:errcheck,gosec
 	// Don't drain srvSide — that's the whole point.
 
-	c := newFramedConn(cliSide)
+	c := message.NewConn(cliSide)
 
 	const timeout = 100 * time.Millisecond
 	start := time.Now()
@@ -96,7 +97,7 @@ func TestFramedConn_WriteFrameDeadline_DeadlineResetForNextCaller(t *testing.T) 
 	srv := <-accepted
 	defer srv.Close() //nolint:errcheck,gosec
 
-	c := newFramedConn(cli)
+	c := message.NewConn(cli)
 
 	// First call: timeout immediately by setting the deadline to a
 	// past instant. Pre-fix the deadline would not get reset after
@@ -196,7 +197,7 @@ func TestFramedConn_WriteFrameDeadline_SetsAndResets(t *testing.T) {
 	defer cli.Close() //nolint:errcheck,gosec
 
 	rc := &recordingConn{Conn: cli}
-	c := newFramedConn(rc)
+	c := message.NewConn(rc)
 
 	// Short timeout — the Write will time out (net.Pipe honors
 	// deadlines via pipeDeadline) since srv isn't being drained.

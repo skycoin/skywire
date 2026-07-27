@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/history"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -37,6 +36,8 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skychat/dm"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/message"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -57,109 +58,6 @@ var r = netutil.NewRetrier(nil, 50*time.Millisecond, netutil.DefaultMaxBackoff, 
 // routes, where a VStream can split one Write across several Reads at arbitrary
 // boundaries — a 600-byte message arrived as two chat entries. The length-prefixed
 // frame fixed that; old unframed binaries can't talk to framed ones.
-type framedConn = message.Conn
-
-func newFramedConn(c net.Conn) *framedConn { return message.NewConn(c) }
-
-// messageWriteTimeout bounds a single WriteFrame call from the
-// /message HTTP handler. Picked above the typical successful-send
-// latency (low-ms) and below the operator-facing default ack budget
-// (5–10 s), so a slow peer hits the deadline well before the caller
-// gives up on the HTTP request entirely.
-//
-// Pre-fix the chat-app had no per-write deadline anywhere — a peer
-// whose underlying transport stalled (e.g. dmsg session half-dead
-// because the peer's visor was crashlooping) would pin the
-// /message handler's goroutine indefinitely on the inner
-// c.Conn.Write(). The hung handler held c.writeMu, so every
-// subsequent send on the SAME conn queued behind it. Worse,
-// observed cross-peer wedge: a single Beta-send hang at 20:20Z
-// preceded every subsequent /message request — to Alpha, Beta,
-// any peer — timing out at the HTTP context-deadline (~30 s) for
-// hours afterward. Bounding the inner Write lets the handler
-// surface a clean timeout, the writeMu releases, and the next
-// caller's send is freed.
-const messageWriteTimeout = 5 * time.Second
-
-// dialAndCache dials the peer at addr (using the package retrier),
-// wraps the raw conn in framing, registers it in the conns cache,
-// and starts the read loop. Used both from the cache-miss path in
-// messageHandler and from the redial-after-stale-write path. The
-// receive loop's lifetime is the underlying peer connection, not
-// the calling HTTP request — req.Context() cancel must NOT tear it
-// down, so we deliberately pass a long-lived context (the handler's
-// ctx, scoped to the whole app run).
-func dialAndCache(ctx context.Context, pk cipher.PubKey, addr appnet.Addr) (*framedConn, error) {
-	var raw net.Conn
-	err := r.Do(ctx, func() error {
-		c, dialErr := appCl.Dial(addr)
-		if dialErr != nil {
-			return dialErr
-		}
-		raw = c
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	conn := newFramedConn(raw)
-	connsMu.Lock()
-	conns[pk] = conn
-	connsMu.Unlock()
-	go handleConn(conn) //nolint:gosec // G118: long-lived conn, not request-scoped
-	return conn, nil
-}
-
-// tryNetworkFallback is the last-resort dial used by messageHandler
-// when the primary network's send (cached + redial+retry) failed.
-// Dials the OTHER network (skynet ↔ dmsg) once, caches the conn on
-// success, and returns it for the caller to write through.
-//
-// Returns (nil, _) when:
-//   - the alternate network isn't enabled in this chat-app run (the
-//     operator passed --skynet=false or --dmsg=false at launch)
-//   - the alternate-network dial itself fails (peer doesn't listen
-//     there, transport down, etc.)
-//
-// On success, also returns the appnet.Addr used so the caller can
-// label the fallback in logs / counters and update its local
-// netType state. The caller is responsible for the WriteFrame +
-// per-leg accounting; this helper only opens the conn.
-//
-// Implementation deliberately does NOT consult the cache for the
-// alternate network: by definition the primary network's cached
-// conn just failed; the alternate's cache is independent and may be
-// stale too. A fresh dial is the safest bet on a fallback path.
-// (We do still register the new conn in the conns map by PK, which
-// means the next /message to the same PK will find this conn —
-// per-conn caching is keyed by PK only, not by netType, so the
-// fallback "wins" until the operator's next chat-app restart or a
-// stale-write evicts it.)
-func tryNetworkFallback(ctx context.Context, pk cipher.PubKey, currentNet appnet.Type) (*framedConn, appnet.Addr) {
-	var altNet appnet.Type
-	switch currentNet {
-	case appnet.TypeSkynet:
-		altNet = appnet.TypeDmsg
-		if !useDmsg {
-			return nil, appnet.Addr{}
-		}
-	case appnet.TypeDmsg:
-		altNet = appnet.TypeSkynet
-		if !useSkynet {
-			return nil, appnet.Addr{}
-		}
-	default:
-		return nil, appnet.Addr{}
-	}
-	altAddr := appnet.Addr{Net: altNet, PubKey: pk, Port: 1}
-	conn, err := dialAndCache(ctx, pk, altAddr)
-	if err != nil {
-		chatLog.Debugf("Network-fallback dial %s → %s failed: %v", currentNet, altNet, err)
-		return nil, altAddr
-	}
-	return conn, altAddr
-}
-
 var (
 	addr     string
 	portless bool
@@ -172,9 +70,8 @@ var (
 	// handlers + SSE pumps + accept loops use chatLog to avoid the
 	// nil-deref crash class on standalone.
 	chatLog   logrus.FieldLogger
-	hub       *sseHub                       // SSE broadcast registry; see sse.go-like helpers below
-	conns     map[cipher.PubKey]*framedConn // Chat connections
-	connsMu   sync.Mutex
+	hub       *sseHub        // SSE broadcast registry; see sse.go-like helpers below
+	chatCtrl  *dm.Controller // shared 1:1 DM core (pkg/skychat/dm): conns, read loop, envelopes, send
 	appPort   uint16
 	useSkynet bool
 	useDmsg   bool
@@ -214,57 +111,17 @@ var (
 	// all of them since they're updated in lockstep with sse hub
 	// activity (well-bounded contention). counterMu is held only
 	// during the assignment, never spanning I/O.
-	counterMu        sync.Mutex
-	startedAt        = time.Now()
-	lastRxAt         time.Time // most recent inbound chat message (incl. self-loop)
-	lastSendAt       time.Time // most recent successful outgoing send
-	inboundMsgCount  uint64
-	outboundMsgCount uint64
-	inboundDropCount uint64 // ReadFrame errors / unparseable frames on the inbound path
-
-	// outboundFailCount is the # of /message requests where the
-	// write to the peer conn could not be delivered — counts the
-	// failure that finally surfaces to the HTTP caller, after the
-	// in-handler redial+retry path has already given up.
-	//
-	// outboundRetryCount is how many /message requests took the
-	// redial-after-stale-conn path. A healthy steady state has this
-	// ~= 0; a non-zero rate means peers' transports are flapping
-	// (or visor restarts are tearing them down) and the in-handler
-	// retry is masking the symptom. Operators with retry > 0 and
-	// fail == 0 means "we papered over the flap"; retry > 0 and
-	// fail > 0 means "the retry isn't winning".
-	outboundFailCount  uint64
-	outboundRetryCount uint64
+	// counterMu guards the SSE-hub drop counter below. The DM message
+	// counters (in/out, drops, retries, fallbacks, last rx/tx) now live in
+	// the dm.Controller and are read via chatCtrl.Stats() in /status.
+	counterMu sync.Mutex
+	startedAt = time.Now()
 
 	// sseDropCount counts messages the SSE hub dropped because a
 	// subscriber's per-client buffer was full at broadcast time.
-	// Each drop is a message that one listener never saw — climbs
-	// when a CLI listener stalls (terminal scrollback paused) or
-	// a browser tab is backgrounded long enough to drift behind
-	// sseSubscriberBufSize. Surfaced in /status so operators can
-	// tell "my listener missed N msgs" without log-scraping.
+	// Surfaced in /status so operators can tell "my listener missed N
+	// msgs" without log-scraping.
 	sseDropCount uint64
-
-	// outboundFallbackCount is how many /message requests succeeded
-	// only after falling over from the primary network (skynet by
-	// default) to the alternate (dmsg, and vice versa).
-	//
-	// Skychat listens on BOTH networks by default, so a peer who
-	// receives on one can usually be reached on the other. When the
-	// chosen network's WriteFrame fails after the redial+retry path
-	// exhausts itself, the handler dials the alternate network once
-	// and writes again before surfacing the failure. Successful
-	// rescues increment this counter; full failures (both networks
-	// dead) still increment outboundFailCount as usual.
-	//
-	// Operators with outbound_fallback_count > 0 are seeing the
-	// chosen-network path break often enough to need the safety
-	// net. Persistent non-zero rate is a signal to investigate the
-	// primary network (route flap, dmsg server churn) — the
-	// fallback is rescuing user-visible delivery but at the cost of
-	// an extra dial per affected message.
-	outboundFallbackCount uint64
 )
 
 // frameProtoVersion is the on-the-wire protocol version this chat
@@ -600,6 +457,13 @@ func renderLegacySSE(ev chatEvent) string {
 		m["message"] = meta.Text
 		enrichReplyRow(m, meta)
 	}
+	if ev.ReplyToID != "" {
+		// Surface the quoted-reply target on the legacy /sse shape too, so the
+		// bundled skychat SPA (which consumes /sse) can thread replies without
+		// switching to /events. Complements the reply_to_* fields above: this
+		// one threads by message id, those carry the quoted text itself.
+		m["reply_to_id"] = ev.ReplyToID
+	}
 	if ev.FileID != "" {
 		m["file_id"] = ev.FileID
 		m["file_name"] = ev.FileName
@@ -886,13 +750,60 @@ func RunSkychat(ctx context.Context, args []string) error {
 		port = routing.Port(appPort)
 	}
 
-	conns = make(map[cipher.PubKey]*framedConn)
-
+	// The 1:1 DM path — per-peer framed conns, listen/accept + read loops, the
+	// chat-msg/chat-ack/quoted-reply envelope handling, and the send path
+	// (ack-wait, stale-conn redial-retry, cross-network fallback) — is the
+	// shared pkg/skychat/dm.Controller, the same core the wasm visor uses.
+	// Persistence goes through historyStore (whitelist/rate/cap guardrails
+	// still apply); every surfaced message (inbound + the outbound mirror) is
+	// published to the SSE hub via OnEvent; pair-control frames are intercepted
+	// by PreHandleFrame; dials keep the app's retrier. In --standalone (appCl
+	// nil) there's no transport to dial or listen on — the controller is still
+	// created (so TCP-direct conns can be Serve'd into it), just not Started.
+	var nets []appnet.Type
 	if useSkynet {
-		go listenLoop(appnet.TypeSkynet, port)
+		nets = append(nets, appnet.TypeSkynet)
 	}
 	if useDmsg {
-		go listenLoop(appnet.TypeDmsg, port)
+		nets = append(nets, appnet.TypeDmsg)
+	}
+	var dmClient dm.Client
+	if appCl != nil {
+		dmClient = appCl
+	}
+	chatCtrl = dm.New(dm.Config{
+		Client:    dmClient,
+		Store:     historyStore,
+		Networks:  nets,
+		Port:      port,
+		OnEvent:   onChatEvent,
+		DialRetry: func(dctx context.Context, fn func() error) error { return r.Do(dctx, fn) },
+		PreHandleFrame: func(peer cipher.PubKey, payload []byte) bool {
+			// Pair-control (pair-invite / pair-ack) and file-backfill
+			// (file-request) envelopes are consumed here: both are control
+			// traffic that must never surface as a chat line.
+			if handlePairControlFrame(context.Background(), peer, payload) {
+				return true
+			}
+			return handleFileRequestFrame(context.Background(), peer, payload)
+		},
+		// A receipt about a message WE sent becomes a dm-status event, which is
+		// how the browser advances a bubble's tick to received / read.
+		OnReceipt: func(peer, id, kind string) {
+			switch kind {
+			case message.TypeAck:
+				broadcastDMStatus(id, dmStatusReceived, peer)
+			case message.TypeRead:
+				broadcastDMStatus(id, dmStatusRead, peer)
+			}
+		},
+		StaleAckWindow: staleAckWindow,
+		Log:            func(f string, a ...interface{}) { appLog(f, a...) },
+	})
+	if len(nets) > 0 && !standalone && appCl != nil {
+		if err := chatCtrl.Start(ctx); err != nil {
+			appLog("skychat: dm controller start: %v", err)
+		}
 	}
 	// TCP-direct entry point — independent of useSkynet/useDmsg.
 	// Operator opts in via --tcp-listen / --tcp-peer; nil-effect
@@ -1053,155 +964,6 @@ func RunSkychat(ctx context.Context, args []string) error {
 	return nil
 }
 
-func listenLoop(netType appnet.Type, appPort routing.Port) {
-	l, err := appCl.Listen(netType, appPort)
-	if err != nil {
-		appLog("Error listening network %v on port %d: %v", netType, appPort, err)
-		appCl.SetErrorOrLog(err)
-		return
-	}
-
-	appLog("Listening on %s network, port %d", netType, appPort)
-
-	for {
-		appCl.Log().Debugf("Accepting skychat conn on %s...", netType)
-		conn, err := l.Accept()
-		if err != nil {
-			appLog("Failed to accept conn on %s: %v", netType, err)
-			return
-		}
-		appCl.Log().Debugf("Accepted skychat conn on %s", netType)
-
-		raddr := conn.RemoteAddr().(appnet.Addr)
-		fc := newFramedConn(conn)
-		connsMu.Lock()
-		conns[raddr.PubKey] = fc
-		connsMu.Unlock()
-		appLog("Accepted skychat conn on %s from %s via %s", conn.LocalAddr(), raddr.PubKey, netType)
-
-		go handleConn(fc)
-	}
-}
-
-func handleConn(conn *framedConn) {
-	raddr := conn.RemoteAddr().(appnet.Addr)
-	for {
-		payload, err := conn.ReadFrame()
-		if err != nil {
-			appLog("Failed to read packet: %v", err)
-			counterMu.Lock()
-			inboundDropCount++
-			counterMu.Unlock()
-			connsMu.Lock()
-			delete(conns, raddr.PubKey)
-			connsMu.Unlock()
-			return
-		}
-
-		// First, try the pair-control envelope. Recognized types
-		// (pair-invite / pair-ack) are consumed here and not surfaced
-		// as chat messages; everything else falls through to the
-		// legacy plain-text path so the existing CI tests are
-		// unaffected.
-		if handlePairControlFrame(context.Background(), raddr.PubKey, payload) {
-			continue
-		}
-
-		// File-backfill control envelope (file-request). Recognized frames
-		// trigger a re-send of the held file and are not surfaced as chat.
-		if handleFileRequestFrame(context.Background(), raddr.PubKey, payload) {
-			continue
-		}
-
-		peerPK := raddr.PubKey.Hex()
-
-		// Then try the chat-msg / chat-ack envelope. A chat-msg
-		// envelope (type=chat-msg, ack=true) → unwrap body, send
-		// chat-ack back, surface body as a normal chat message.
-		// A chat-ack envelope (type=chat-ack) → consumed internally
-		// to satisfy a waiting /message --wait request, NOT surfaced
-		// to the SSE stream. Plain-text bodies fall through to the
-		// legacy path unchanged.
-		envHandled, envBody, envID, envKind := tryHandleChatEnvelope(payload, peerPK, func(id string) {
-			ackEnv := chatEnvelope{Type: chatTypeAck, ID: id}
-			ackBytes, mErr := json.Marshal(ackEnv)
-			if mErr != nil {
-				appLog("chat-ack marshal failed: %v", mErr)
-				return
-			}
-			if wErr := conn.WriteFrame(ackBytes); wErr != nil {
-				appLog("chat-ack write to %s failed: %v", peerPK, wErr)
-			}
-		})
-		// A chat-ack / chat-read frame is a receipt for a message WE sent:
-		// advance that bubble's status at our end (received / read) and stop —
-		// receipts are never surfaced as chat lines. envID is the sender-side
-		// message id the receipt echoes; peerPK is the recipient it came from.
-		if envHandled && envBody == "" {
-			switch envKind {
-			case chatTypeAck:
-				broadcastDMStatus(envID, dmStatusReceived, peerPK)
-			case chatTypeRead:
-				broadcastDMStatus(envID, dmStatusRead, peerPK)
-			}
-			continue
-		}
-		// eventID is the stable per-message id. For an inbound chat-msg it's the
-		// SENDER's envelope id, so our read-receipt (and the sender's status
-		// correlation) reference the same id on both ends; plain text has none.
-		text := string(payload)
-		eventID := newEventID()
-		if envHandled {
-			text = envBody
-			if envID != "" {
-				eventID = envID
-			}
-		}
-
-		counterMu.Lock()
-		inboundMsgCount++
-		lastRxAt = time.Now().UTC()
-		counterMu.Unlock()
-
-		// Persist (best-effort, never blocks ephemeral path).
-		persistMessage(history.Message{
-			Peer:      peerPK,
-			From:      peerPK,
-			Outgoing:  false,
-			Text:      text,
-			Timestamp: time.Now().UTC(),
-		})
-
-		// Include the network field so listen --net can filter
-		// inbound just as it can filter outbound. Without this, SSE
-		// events for incoming messages carry no transport tag and any
-		// consumer-side --net filter drops them all.
-		//
-		// "dir" is a string ("in"|"out"|... future "relay"|"group-in"|
-		// "group-out") rather than an "outgoing" bool so the schema
-		// stays extensible as group / relay flows land without a
-		// breaking wire-version bump.
-		//
-		// "id" is a stable per-event identifier. Pre-#65-ack: no one
-		// consumes it; post-#65-ack: send --wait references it to
-		// correlate inbound chat-ack envelopes back to the originating
-		// send without a separate schema bump. Today it's just a UUID
-		// so consumers can already use it for log correlation / dedup.
-		// "len" is the body byte length, surfaced for size-debug
-		// without forcing consumers to count after a json round-trip.
-		hub.publishEvent(chatEvent{
-			ID:        eventID,
-			Channel:   channelDM,
-			Transport: string(raddr.Net),
-			Dir:       "in",
-			From:      peerPK,
-			Text:      text,
-		})
-		// Host-OS notification when no capable browser UI is showing it.
-		notifyOSInbound(shortHexPK(peerPK), notifPreview(text))
-	}
-}
-
 func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.Request) {
 	return func(w http.ResponseWriter, req *http.Request) {
 
@@ -1228,6 +990,12 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			// the browser UI; the CLI keeps the byte-identical plain
 			// send unless it opts in.
 			Receipts bool `json:"receipts,omitempty"`
+			// ReplyTo, if set, is the id of a prior message this send
+			// quotes (a threaded reply). It forces a chat-msg envelope
+			// (see below) carrying ReplyTo so the RECIPIENT surfaces the
+			// thread — the receive side reads env.ReplyTo in the shared
+			// controller. Empty keeps a default send byte-identical.
+			ReplyTo string `json:"reply_to,omitempty"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -1307,313 +1075,50 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			chatLog.Infof("Self-send via %s on port %d", netType, addr.Port)
 		}
 
-		// cached tells the write path whether the conn came from
-		// the cache (worth a redial+retry on stale-conn write
-		// errors) or from a fresh dial below (write failure on a
-		// fresh dial means the path is really broken — retrying is
-		// unlikely to help and just doubles the surfaced latency).
-		connsMu.Lock()
-		conn, cached := conns[pk]
-		connsMu.Unlock()
-
-		if !cached {
-			// In --standalone mode appCl is nil — dialAndCache would
-			// panic on appCl.Dial(). Skynet/dmsg listenLoops are off
-			// in standalone (see RunSkychat above), so the only way
-			// /message can reach a peer is through an already-cached
-			// TCP-direct conn (populated by --tcp-peer outbound or
-			// --tcp-listen accept). Surface a clean 503 with the
-			// fix-it-yourself hint instead of a panic.
-			if appCl == nil {
-				http.Error(w,
-					fmt.Sprintf("standalone mode: no cached tcp-direct conn to %s "+
-						"(use --tcp-peer to establish a persistent outbound, "+
-						"or 'skywire cli skychat send --via tcp://<pk>@host:port' to dial directly)", pk),
-					http.StatusServiceUnavailable)
-				return
-			}
-			var err error
-			conn, err = dialAndCache(ctx, pk, addr)
-			if err != nil {
-				if isSelf {
-					chatLog.WithError(err).Errorf("Self-dial via %s failed", netType)
-				} else {
-					chatLog.WithError(err).Warnf("Dial to %s via %s failed", pk, netType)
-				}
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+		// Deliver through the shared DM controller (pkg/skychat/dm): it (re)uses a
+		// cached conn, writes with a deadline, redial-retries a stale cached conn,
+		// falls back to the alternate network, persists, and surfaces the outbound
+		// mirror via OnEvent → publishEvent. For a wait_ms send it wraps a chat-msg
+		// envelope and blocks on the peer's chat-ack; for a receipts send it asks
+		// for the same ack but returns straight away, leaving the controller to
+		// watch for it (status arrives later as dm-status /sse events).
+		opt := dm.SendOpts{ReplyTo: data.ReplyTo}
+		switch {
+		case data.WaitMS > 0:
+			opt.WaitAck = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
+		case data.Receipts:
+			opt.RequestAck = true
 		}
-
-		// Build the on-the-wire payload. Default is plain text (back-
-		// compat with every binary that has shipped to date). When
-		// wait_ms is set, we wrap in a chat-msg envelope with a fresh
-		// id, register an ack-waiter, and after the write blocks the
-		// HTTP request on the ack channel up to wait_ms.
-		wirePayload := []byte(data.Message)
-		var ackID string
-		var ackCh <-chan struct{}
-		var unregisterAck func()
-		var ackWait time.Duration
-		// receiptCh backs the non-blocking stale-conn auto-recovery: when
-		// receipts are on we register an ack waiter BEFORE the write (so a fast
-		// ack isn't missed), then a background goroutine drops the cached conn if
-		// no ack comes back — see staleAckWindow below.
-		var receiptCh <-chan struct{}
-		var receiptUnreg func()
-		// Both --wait and receipts wrap the body in an id'd chat-msg envelope
-		// (ack=true). --wait additionally blocks on a waiter for the returning
-		// chat-ack; receipts does not (the ack/read arrive later as dm-status
-		// /sse events). A plain send with neither stays byte-identical on the
-		// wire for back-compat with pre-envelope peers.
-		if data.WaitMS > 0 || data.Receipts {
-			ackID = newEventID()
-			env := chatEnvelope{Type: chatTypeMsg, ID: ackID, Body: data.Message, Ack: true}
-			eb, mErr := json.Marshal(env)
-			if mErr != nil {
-				http.Error(w, mErr.Error(), http.StatusInternalServerError)
-				return
-			}
-			wirePayload = eb
-			if data.WaitMS > 0 {
-				ackWait = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
-				ackCh, unregisterAck = registerAckWaiter(ackID)
-				defer unregisterAck()
-			} else if data.Receipts {
-				// Registered here (pre-write) so the returning ack always finds a
-				// waiter; ownership passes to the background goroutine after the
-				// response is written.
-				receiptCh, receiptUnreg = registerAckWaiter(ackID)
-			}
+		res, sErr := chatCtrl.Send(ctx, pk, netType, data.Message, opt)
+		if sErr != nil {
+			http.Error(w, sErr.Error(), http.StatusBadRequest)
+			return
 		}
-
-		// Write the framed payload. On a *cached* conn, a write
-		// failure usually means the underlying transport went stale
-		// between sends (peer visor restart, route churn) — the
-		// frame is lost AND every subsequent send would also fail
-		// until something kicks the cache. To get the operator out
-		// of that hole inside the same request, we redial + retry
-		// exactly once when the first attempt was on a cached conn.
-		// A fresh-dial write failure isn't retried (a second dial
-		// of the same network in the same handler tick won't help).
-		writeStart := time.Now()
-		err := conn.WriteFrameDeadline(wirePayload, messageWriteTimeout)
-		if err != nil && cached {
-			// Stale-conn auto-retry: a cached conn whose underlying
-			// transport has gone stale (peer chat-app restart,
-			// transient transport fault) used to lose the caller's
-			// CURRENT message — handler returned 400, operator had
-			// to retry from CLI/UI. Now we delete the stale entry
-			// (pointer-eq guarded so we don't clobber a fresh conn
-			// installed by a concurrent handler), dial fresh via
-			// dialAndCache, and retry the WriteFrame ONCE. Only on a
-			// second failure do we surface the error to the caller.
-			// Fresh-dial write failures (cached==false branch below)
-			// are NOT retried — a same-network second dial in the
-			// same handler tick won't help and just doubles latency.
-			connsMu.Lock()
-			if conns[pk] == conn {
-				delete(conns, pk)
-			}
-			connsMu.Unlock()
-
-			chatLog.Debugf("Stale-conn write to %s via %s: %v — redialing", pk, netType, err)
-			newConn, derr := dialAndCache(ctx, pk, addr)
-			if derr != nil {
-				counterMu.Lock()
-				outboundFailCount++
-				counterMu.Unlock()
-				http.Error(w, fmt.Sprintf("redial after write %v: %v", err, derr), http.StatusBadRequest)
-				return
-			}
-			if werr := newConn.WriteFrameDeadline(wirePayload, messageWriteTimeout); werr != nil {
-				connsMu.Lock()
-				if conns[pk] == newConn {
-					delete(conns, pk)
-				}
-				connsMu.Unlock()
-				counterMu.Lock()
-				outboundFailCount++
-				counterMu.Unlock()
-				http.Error(w, fmt.Sprintf("retry after %v: %v", err, werr), http.StatusBadRequest)
-				return
-			}
-			counterMu.Lock()
-			outboundRetryCount++
-			counterMu.Unlock()
-			conn = newConn
-			// Clear err so the post-retry block below doesn't double-
-			// report a failure on a now-successful retry.
-			err = nil
-		}
-		if err != nil {
-			connsMu.Lock()
-			if conns[pk] == conn {
-				delete(conns, pk)
-			}
-			connsMu.Unlock()
-			// Network fallback before surfacing the error to the
-			// caller. Skychat listens on BOTH skynet and dmsg by
-			// default (--skynet=true --dmsg=true), so a peer who
-			// receives on one will usually receive on the other.
-			// If the chosen network can't deliver, try the alternate
-			// in one last attempt: dial fresh, write once, on
-			// success continue to the normal mirror/ack/persist
-			// path. On second failure, surface the original error
-			// to the caller (the alternate's error is logged at
-			// debug but not exposed, to keep the public error
-			// stable across network-fallback fires/misses).
-			//
-			// Increment outboundFallbackCount on success so
-			// operators can see how often the fallback path is
-			// rescuing sends — a non-zero rate means the chosen
-			// network is unreliable enough that callers should
-			// reconsider the default, or the operator should fix
-			// the transport / route to the peer on that network.
-			fallbackOK := false
-			if fbConn, fbAddr := tryNetworkFallback(ctx, pk, netType); fbConn != nil {
-				if werr := fbConn.WriteFrameDeadline(wirePayload, messageWriteTimeout); werr == nil {
-					counterMu.Lock()
-					outboundFallbackCount++
-					counterMu.Unlock()
-					// Successful fallback write — conn / netType
-					// would-be-reassignments dropped because the
-					// caller doesn't read them after this point
-					// (the response is rendered from ackCh state,
-					// not the conn directly). Keeping fbAddr
-					// referenced under _ documents the intent.
-					_ = fbAddr
-					fallbackOK = true
-				} else {
-					connsMu.Lock()
-					if conns[pk] == fbConn {
-						delete(conns, pk)
-					}
-					connsMu.Unlock()
-					chatLog.Debugf("Network-fallback write to %s via %s also failed: %v",
-						pk, fbAddr.Net, werr)
-				}
-			}
-			if !fallbackOK {
-				counterMu.Lock()
-				outboundFailCount++
-				counterMu.Unlock()
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-		}
-
-		// Persist outgoing message (best-effort).
-		persistMessage(history.Message{
-			Peer:      pk.Hex(),
-			Outgoing:  true,
-			Text:      data.Message,
-			Timestamp: time.Now().UTC(),
-		})
-
-		// If --wait was requested, block on the ack channel. The
-		// envelope was written above; the peer's chat-app, if it
-		// speaks the chat-msg envelope (i.e. is post-2026-05-12),
-		// recognizes it, persists the body, sends chat-ack back over
-		// the same conn, which our handleConn routes to deliverAck →
-		// our ackCh. Old peers see the JSON-encoded envelope as plain
-		// text and never ack; we time out cleanly.
-		if ackCh != nil {
-			timer := time.NewTimer(ackWait)
-			defer timer.Stop()
-			select {
-			case <-ackCh:
-				elapsed := time.Since(writeStart)
-				w.Header().Set("Content-Type", "application/json")
+		if data.WaitMS > 0 {
+			w.Header().Set("Content-Type", "application/json")
+			if res.Acked {
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
-					"acked": true,
-					"id":    ackID,
-					"ms":    elapsed.Milliseconds(),
+					"acked": true, "id": res.ID, "ms": res.Elapsed.Milliseconds(),
 				})
-			case <-timer.C:
-				w.Header().Set("Content-Type", "application/json")
+			} else {
 				w.WriteHeader(http.StatusGatewayTimeout)
 				_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
-					"acked":  false,
-					"id":     ackID,
-					"reason": "timeout",
-					"ms":     ackWait.Milliseconds(),
+					"acked": false, "id": res.ID, "reason": "timeout", "ms": opt.WaitAck.Milliseconds(),
 				})
-			case <-req.Context().Done():
-				return
 			}
 		} else if data.Receipts {
 			// Non-blocking receipts: hand the browser the wire id so it can
 			// track this bubble as the peer's received/read status arrives
-			// later on the dm-status /sse stream.
+			// later on the dm-status /sse stream. The stale-conn recovery that
+			// used to live here (drop a half-open conn when no ack comes back)
+			// moved into the controller with the conn cache — RequestAck arms
+			// it, bounded by the StaleAckWindow passed at construction.
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
 				"ok": true,
-				"id": ackID,
+				"id": res.ID,
 			})
-			// Stale-conn auto-recovery: a half-open cached conn (peer restarted,
-			// idle-dead transport) accepts our write without error but the frame
-			// never lands, so no chat-ack returns. If none arrives within
-			// staleAckWindow, drop the conn we wrote to — the next send (or a
-			// Resend) redials fresh, so the operator recovers without restarting
-			// the visor. A live peer acks in well under a second, so this rarely
-			// fires on a healthy conn. Old peers that never ack pay a redial on
-			// the next send (functional, just chattier).
-			if receiptCh != nil {
-				go dropStaleConn(pk, conn, receiptCh, receiptUnreg, staleAckWindow)
-			}
 		}
-
-		// Mirror the outgoing message into the SSE stream so headless
-		// listeners (skywire-cli skychat listen) see a complete
-		// transcript without having to scrape send invocations and
-		// merge by timestamp. The TUI's bidirectional view already
-		// renders both directions natively; this brings parity to the
-		// listen-on-the-CLI use case.
-		//
-		// IMPORTANT: dir="out" means "WriteFrame returned without
-		// error" — i.e. the framed payload was handed to the
-		// underlying skywire conn. It does NOT mean the peer's
-		// chat-app received or processed the message. Peer-app
-		// receipt-ack is a deferred protocol feature (msg-id +
-		// chat-ack envelope frame type); consumers should not treat
-		// dir:out as delivery confirmation.
-		//
-		// The "sender" field carries the RECIPIENT'S PK here (per-peer
-		// thread routing on the consumer's side stays keyed by the
-		// remote PK regardless of direction). dir distinguishes
-		// directionality (string, not bool, for extensibility — future
-		// relay/group flows can emit "relay" / "group-in" /
-		// "group-out" without a wire-schema bump).
-		// "to" is set on dir:out events so consumers can correlate
-		// outgoing mirrors back to a specific send. dir:in events
-		// don't need "to" (we're always the recipient).
-		// "from" stays as the visor's own PK so consumers can route
-		// by per-peer thread regardless of direction.
-		var myPK string
-		if appCl != nil {
-			myPK = appCl.Config().VisorPK.Hex()
-		}
-		// Use the ack id when --wait was used, so consumers correlate
-		// the outgoing mirror to a specific send by id.
-		mirrorID := ackID
-		if mirrorID == "" {
-			mirrorID = newEventID()
-		}
-		hub.publishEvent(chatEvent{
-			ID:        mirrorID,
-			Channel:   channelDM,
-			Transport: string(netType),
-			Dir:       "out",
-			From:      myPK,
-			To:        pk.Hex(),
-			Text:      data.Message,
-		})
-
-		counterMu.Lock()
-		outboundMsgCount++
-		lastSendAt = time.Now().UTC()
-		counterMu.Unlock()
 	}
 }
 
@@ -1908,13 +1413,15 @@ func historyPeersHandler(w http.ResponseWriter, _ *http.Request) {
 //	last_rx_ts           last successful inbound (RFC3339 / "" if none)
 //	last_send_ts         last successful outbound (RFC3339 / "" if none)
 func statusHandler(w http.ResponseWriter, _ *http.Request) {
-	connsMu.Lock()
-	connCount := len(conns)
-	peers := make([]string, 0, connCount)
-	for pk := range conns {
-		peers = append(peers, pk.Hex())
+	var connCount int
+	var peers []string
+	if chatCtrl != nil {
+		connCount = chatCtrl.Conns()
+		peers = chatCtrl.Peers()
 	}
-	connsMu.Unlock()
+	if peers == nil {
+		peers = []string{}
+	}
 
 	var subscriberCount int
 	if hub != nil {
@@ -1929,25 +1436,21 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		visorPKErr = "app client not initialized"
 	}
 
+	var st dm.Stats
+	if chatCtrl != nil {
+		st = chatCtrl.Stats()
+	}
 	counterMu.Lock()
-	inMsgs := inboundMsgCount
-	outMsgs := outboundMsgCount
-	inDrops := inboundDropCount
-	outFails := outboundFailCount
-	outRetries := outboundRetryCount
-	outFallbacks := outboundFallbackCount
 	sseDrops := sseDropCount
-	lastRx := lastRxAt
-	lastSend := lastSendAt
 	counterMu.Unlock()
 
 	rxStr := ""
-	if !lastRx.IsZero() {
-		rxStr = lastRx.UTC().Format(time.RFC3339Nano)
+	if !st.LastRxAt.IsZero() {
+		rxStr = st.LastRxAt.UTC().Format(time.RFC3339Nano)
 	}
 	sendStr := ""
-	if !lastSend.IsZero() {
-		sendStr = lastSend.UTC().Format(time.RFC3339Nano)
+	if !st.LastTxAt.IsZero() {
+		sendStr = st.LastTxAt.UTC().Format(time.RFC3339Nano)
 	}
 
 	status := map[string]interface{}{
@@ -1960,12 +1463,12 @@ func statusHandler(w http.ResponseWriter, _ *http.Request) {
 		"frame_proto_version":     frameProtoVersion,
 		"schema_version":          schemaVersion,
 		"app_uptime_sec":          int64(time.Since(startedAt).Seconds()),
-		"inbound_msg_count":       inMsgs,
-		"outbound_msg_count":      outMsgs,
-		"inbound_drop_count":      inDrops,
-		"outbound_fail_count":     outFails,
-		"outbound_retry_count":    outRetries,
-		"outbound_fallback_count": outFallbacks,
+		"inbound_msg_count":       st.InboundMsgs,
+		"outbound_msg_count":      st.OutboundMsgs,
+		"inbound_drop_count":      st.InboundDrops,
+		"outbound_fail_count":     st.OutboundFails,
+		"outbound_retry_count":    st.OutboundRetry,
+		"outbound_fallback_count": st.OutboundFallbk,
 		"sse_drop_count":          sseDrops,
 		"last_rx_ts":              rxStr,
 		"last_send_ts":            sendStr,
@@ -2093,6 +1596,43 @@ func collectGroupHealth() ([]groupHealth, string) {
 // persistMessage stores a message in the history backend if persistence is
 // enabled. Errors are logged at debug level; ephemeral delivery is never
 // blocked by persistence failure.
+// onChatEvent bridges the shared DM controller's surfaced messages (inbound +
+// the outbound mirror) into the SSE hub. Persistence and counters live in the
+// controller now, so this only fans the event out to /sse and /events. The
+// event id is the message's own envelope id when present (so a reply's
+// reply_to_id resolves to it), else a fresh id; an outbound mirror carries the
+// sender=self, to=peer shape the UI expects.
+func onChatEvent(ev dm.Event) {
+	id := ev.ID
+	if id == "" {
+		id = newEventID()
+	}
+	from, to := ev.Peer, ""
+	if ev.Dir == "out" {
+		from = ""
+		if appCl != nil {
+			from = appCl.Config().VisorPK.Hex()
+		}
+		to = ev.Peer
+	}
+	hub.publishEvent(chatEvent{
+		ID:        id,
+		Channel:   channelDM,
+		Transport: ev.Network,
+		Dir:       ev.Dir,
+		From:      from,
+		To:        to,
+		Text:      ev.Text,
+		ReplyToID: ev.ReplyTo,
+		Len:       len(ev.Text),
+	})
+	// Host-OS notification when no capable browser UI is showing it. Inbound
+	// only — our own outbound mirror is not news to this host.
+	if ev.Dir == "in" {
+		notifyOSInbound(shortHexPK(ev.Peer), notifPreview(ev.Text))
+	}
+}
+
 func persistMessage(msg history.Message) {
 	if historyStore == nil {
 		return

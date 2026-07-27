@@ -3,12 +3,15 @@
 // Unit coverage for the DM message-status plumbing: the dm-status control
 // event shape broadcast on /sse, and the /read-receipt handler's validation
 // (method, pk, standalone-mode guard).
+//
+// The stale-conn recovery that used to live here moved into the shared
+// controller with the conn cache — see TestController_RequestAck* in
+// pkg/skychat/dm.
 package commands
 
 import (
 	"context"
 	"encoding/json"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,82 +21,32 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
-// cacheConn registers a fresh framed conn for pk in the package conns map and
-// returns it (+ cleanup), so the stale-conn tests can assert against it.
-func cacheConn(t *testing.T, pk cipher.PubKey) *framedConn {
+// withHubAndPairing gives the test a private SSE hub (so broadcasts can be
+// read back) and pairing off, restoring both afterwards. Lived in
+// handleconn_test.go until the DM read loop moved into pkg/skychat/dm.
+func withHubAndPairing(t *testing.T) {
 	t.Helper()
-	raw, _ := net.Pipe()
-	fc := newFramedConn(&tcpDirectConn{Conn: raw, rPK: pk})
-	connsMu.Lock()
-	if conns == nil { // nil until RunSkychat inits it; lazy-init like startHandleConn
-		conns = make(map[cipher.PubKey]*framedConn)
+	if appLog == nil {
+		appLog = func(string, ...any) {}
 	}
-	conns[pk] = fc
-	connsMu.Unlock()
+	origHub, origPair := hub, pairEnable
+	hub = newSSEHub()
+	pairEnable = false
 	t.Cleanup(func() {
-		connsMu.Lock()
-		delete(conns, pk)
-		connsMu.Unlock()
-		_ = raw.Close() //nolint
+		hub = origHub
+		pairEnable = origPair
 	})
-	return fc
 }
 
-func connCached(pk cipher.PubKey) (*framedConn, bool) {
-	connsMu.Lock()
-	defer connsMu.Unlock()
-	c, ok := conns[pk]
-	return c, ok
-}
-
-func TestDropStaleConn_TimeoutDropsConn(t *testing.T) {
-	if appLog == nil {
-		appLog = func(string, ...any) {}
-	}
-	pk, _ := cipher.GenerateKeyPair()
-	fc := cacheConn(t, pk)
-
-	never := make(chan struct{}) // no ack ever arrives
-	dropStaleConn(pk, fc, never, nil, 20*time.Millisecond)
-
-	if _, ok := connCached(pk); ok {
-		t.Error("a conn with no returning ack should be dropped after the window")
-	}
-}
-
-func TestDropStaleConn_AckKeepsConn(t *testing.T) {
-	if appLog == nil {
-		appLog = func(string, ...any) {}
-	}
-	pk, _ := cipher.GenerateKeyPair()
-	fc := cacheConn(t, pk)
-
-	acked := make(chan struct{}, 1)
-	acked <- struct{}{}
-	dropStaleConn(pk, fc, acked, nil, 5*time.Second) // returns via ack, not timeout
-
-	if got, ok := connCached(pk); !ok || got != fc {
-		t.Error("an acked conn must stay cached")
-	}
-}
-
-func TestDropStaleConn_LeavesReplacedConn(t *testing.T) {
-	// If a fresh dial already replaced the cached conn before the window fires,
-	// the pointer-eq guard must NOT drop the new conn.
-	if appLog == nil {
-		appLog = func(string, ...any) {}
-	}
-	pk, _ := cipher.GenerateKeyPair()
-	newConn := cacheConn(t, pk) // map now holds the NEW conn
-	oldRaw, _ := net.Pipe()
-	defer func() { _ = oldRaw.Close() }() //nolint
-	oldConn := newFramedConn(&tcpDirectConn{Conn: oldRaw, rPK: pk})
-
-	never := make(chan struct{})
-	dropStaleConn(pk, oldConn, never, nil, 20*time.Millisecond) // checks the OLD conn
-
-	if got, ok := connCached(pk); !ok || got != newConn {
-		t.Error("must not drop a conn that was already replaced by a fresh dial")
+// waitForString reads one SSE broadcast or fails the test.
+func waitForString(t *testing.T, ch <-chan string, d time.Duration) string { //nolint:unparam
+	t.Helper()
+	select {
+	case s := <-ch:
+		return s
+	case <-time.After(d):
+		t.Fatal("timed out waiting for an SSE message")
+		return ""
 	}
 }
 

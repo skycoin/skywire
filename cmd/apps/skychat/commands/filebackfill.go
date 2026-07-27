@@ -158,12 +158,13 @@ func requestFileHandler(ctx context.Context) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		conn, err := dialOrReusePeerConn(ctx, peer)
-		if err != nil {
-			http.Error(w, "dial peer: "+err.Error(), http.StatusBadGateway)
+		if chatCtrl == nil {
+			http.Error(w, "skychat: dm controller not started", http.StatusServiceUnavailable)
 			return
 		}
-		if err := conn.WriteFrame(payload); err != nil {
+		// Raw control frame: the peer consumes it in PreHandleFrame, so it is
+		// never surfaced or persisted as a chat message.
+		if err := chatCtrl.SendRaw(ctx, peer, payload); err != nil {
 			http.Error(w, "send request: "+err.Error(), http.StatusBadGateway)
 			return
 		}
