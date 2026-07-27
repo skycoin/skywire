@@ -3,7 +3,7 @@
 // and the non-blocking RequestAck send that backs a UI's "sent → received →
 // read" ticks, including its stale-conn recovery.
 //
-// These behaviours used to live in the native app (handleConn + dropStaleConn)
+// These behaviors used to live in the native app (handleConn + dropStaleConn)
 // and moved here with the DM core; their coverage moved with them.
 package dm
 
@@ -163,10 +163,10 @@ func TestController_RequestAckLeavesReplacedConn(t *testing.T) {
 	oldRaw, oldPeer := net.Pipe()
 	newRaw, newPeer := net.Pipe()
 	t.Cleanup(func() { //nolint:errcheck
-		_ = oldRaw.Close()
-		_ = oldPeer.Close()
-		_ = newRaw.Close()
-		_ = newPeer.Close()
+		_ = oldRaw.Close()  //nolint
+		_ = oldPeer.Close() //nolint
+		_ = newRaw.Close()  //nolint
+		_ = newPeer.Close() //nolint
 	})
 	addr := appnet.Addr{Net: appnet.TypeDmsg, PubKey: pk}
 	oldConn := message.NewConn(memConn{Conn: oldRaw, raddr: addr})
