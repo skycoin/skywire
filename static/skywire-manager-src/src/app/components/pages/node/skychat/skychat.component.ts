@@ -343,11 +343,27 @@ return {
   private handleSSE(raw: string) {
     let data: any = null;
     try {
- data = JSON.parse(raw); 
+ data = JSON.parse(raw);
 } catch { /* ignore */ }
     if (!data || typeof data !== 'object') {
- return; 
+ return;
 }
+    // dm-status control events (delivery/read receipts + delete-for-everyone)
+    // carry no message body; handle them separately so they aren't dropped by
+    // the empty-text guard below. Today we act on 'deleted' (tombstone the
+    // bubble by its wire id, whoever authored it); received/read ticks are a
+    // later addition (the Angular UI has no tick rendering yet).
+    if (data.channel === 'dm-status') {
+      if (data.status === 'deleted' && data.id) {
+        const dm = this.messages.find(m => m.id && m.id === data.id);
+        if (dm) {
+          dm.deleted = true;
+          dm.text = '';
+          this.cdr.markForCheck();
+        }
+      }
+      return;
+    }
     const msg: ChatMessage = {
       peer: data.sender || data.from || '',
       direction: 'in',
