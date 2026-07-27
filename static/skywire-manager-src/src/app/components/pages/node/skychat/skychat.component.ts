@@ -362,6 +362,7 @@ return {
           this.cdr.markForCheck();
         }
       }
+
       return;
     }
     const msg: ChatMessage = {
@@ -543,7 +544,7 @@ return {
       fetch(this.proxyUrl('delete'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pk, id: m.id }),
+        body: JSON.stringify({ pk: pk, id: m.id }),
       }).catch(() => {});
     }
     m.deleted = true;
