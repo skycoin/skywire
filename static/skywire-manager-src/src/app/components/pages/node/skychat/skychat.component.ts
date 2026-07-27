@@ -41,6 +41,11 @@ interface ChatMessage {
   replyTo?: string;
   // deleted-for-everyone: rendered as a "message deleted" placeholder.
   deleted?: boolean;
+  // Delivery-status tick on our OWN (direction==='out') DM bubbles, advanced by
+  // dm-status receipts: 'sent' (✓) → 'received' (✓✓, peer's app acked) →
+  // 'read' (✓✓ blue, peer's UI displayed it). Undefined on incoming bubbles
+  // and on the wasm path (which doesn't surface per-message receipts yet).
+  status?: string;
 }
 
 /** One federated group/room as surfaced by the group list. */
@@ -90,6 +95,10 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // id -> text index for resolving a reply's quoted-parent snippet in O(1)
   // from the template, kept in sync as messages arrive.
   private msgById = new Map<string, string>();
+  // A dm-status receipt can race ahead of the /message response that first tells
+  // us our own bubble's wire id. Stash such orphans by id (bounded) and claim
+  // them once the outgoing bubble lands. See applyReceipt / claimOrphanReceipt.
+  private orphanReceipts = new Map<string, string>();
   connected = false;
   errorText = '';
   // Skychat returns 503 for /history* unless --persist is on. We
@@ -350,9 +359,8 @@ return {
 }
     // dm-status control events (delivery/read receipts + delete-for-everyone)
     // carry no message body; handle them separately so they aren't dropped by
-    // the empty-text guard below. Today we act on 'deleted' (tombstone the
-    // bubble by its wire id, whoever authored it); received/read ticks are a
-    // later addition (the Angular UI has no tick rendering yet).
+    // the empty-text guard below. 'deleted' tombstones the bubble by its wire id
+    // (whoever authored it); 'received'/'read' advance our own bubble's tick.
     if (data.channel === 'dm-status') {
       if (data.status === 'deleted' && data.id) {
         const dm = this.messages.find(m => m.id && m.id === data.id);
@@ -361,6 +369,8 @@ return {
           dm.text = '';
           this.cdr.markForCheck();
         }
+      } else if ((data.status === 'received' || data.status === 'read') && data.id) {
+        this.applyReceipt(data.id, data.status);
       }
 
       return;
@@ -380,9 +390,74 @@ return {
     this.indexMsg(msg);
     this.messages.push(msg);
     if (this.messages.length > 500) {
- this.messages.shift(); 
+ this.messages.shift();
 }
     this.cdr.markForCheck();
+    // The bubble is now on screen — send a read receipt so the sender's tick
+    // advances to 'read'. Best-effort; the wasm path has no /read-receipt proxy.
+    if (msg.id && msg.peer && !this.wasmChat) {
+      this.sendReadReceipt(msg.peer, msg.id);
+    }
+  }
+
+  /** POST /read-receipt so the peer's bubble advances to 'read'. Best-effort. */
+  private sendReadReceipt(peer: string, id: string) {
+    fetch(this.proxyUrl('read-receipt'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pk: peer, ids: [id] }),
+    }).catch(() => { /* peer may be offline; the tick just stays at 'received' */ });
+  }
+
+  /** Apply a delivery receipt to our own bubble by wire id. Never downgrades a
+   *  bubble that already reached 'read' (a late 'received' is ignored). If the
+   *  bubble isn't known yet (receipt raced the /message response), stash it. */
+  private applyReceipt(id: string, status: string) {
+    const m = this.messages.find(x => x.id === id && x.direction === 'out');
+    if (!m) {
+      this.orphanReceipts.set(id, status);
+      if (this.orphanReceipts.size > 64) {
+        this.orphanReceipts.delete(this.orphanReceipts.keys().next().value as string);
+      }
+
+      return;
+    }
+    if (m.status === 'read') {
+      return;
+    }
+    m.status = status;
+    this.cdr.markForCheck();
+  }
+
+  /** Claim a receipt that arrived before this outgoing bubble had its id. */
+  private claimOrphanReceipt(m: ChatMessage) {
+    if (!m.id) {
+      return;
+    }
+    const status = this.orphanReceipts.get(m.id);
+    if (!status) {
+      return;
+    }
+    this.orphanReceipts.delete(m.id);
+    m.status = status;
+    this.cdr.markForCheck();
+  }
+
+  /** Tick glyph for an outgoing bubble's delivery status (WhatsApp-style). */
+  tickGlyph(status?: string): string {
+    return (status === 'received' || status === 'read') ? '✓✓' : '✓';
+  }
+
+  /** Human-readable tooltip for the delivery tick. */
+  tickTitle(status?: string): string {
+    if (status === 'read') {
+      return 'Read';
+    }
+    if (status === 'received') {
+      return 'Received';
+    }
+
+    return 'Sent';
   }
 
   /** Send the composed message. */
@@ -420,7 +495,10 @@ return {
 
       return;
     }
-    const payload: any = { recipient: recipient, message: text, network: this.network };
+    // receipts:true wraps the send in an id'd envelope and returns {ok,id} at
+    // once, so we can track this bubble as the peer's received/read receipts
+    // arrive later on the dm-status stream.
+    const payload: any = { recipient: recipient, message: text, network: this.network, receipts: true };
     if (replyToId) {
  payload.reply_to = replyToId;
 }
@@ -433,8 +511,13 @@ return {
         const body = await resp.text();
         throw new Error(body || `HTTP ${resp.status}`);
       }
+      const res = await resp.json().catch(() => ({} as any));
+      const wireId = (res && res.id) || '';
       this.captureScroll();
-      this.messages.push({ peer: recipient, direction: 'out', text: text, ts: Date.now(), id: '', replyTo: replyToId });
+      const out: ChatMessage = { peer: recipient, direction: 'out', text: text, ts: Date.now(), id: wireId, replyTo: replyToId, status: 'sent' };
+      this.messages.push(out);
+      this.indexMsg(out);
+      this.claimOrphanReceipt(out);
       if (this.messages.length > 500) {
  this.messages.shift();
 }

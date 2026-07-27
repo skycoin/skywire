@@ -136,6 +136,9 @@
                       {{ m.direction === 'out' ? '→' : '←' }} {{ m.peer }}
                     </span>
                     <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
+                    @if (m.direction === 'out' && !m.deleted) {
+                      <span class="sc-tick" [class.read]="m.status === 'read'" [matTooltip]="tickTitle(m.status)">{{ tickGlyph(m.status) }}</span>
+                    }
                     @if (m.id && !m.deleted) {
                       <button class="sc-reply-btn" (click)="setReplyTo(m)" matTooltip="Reply">↩</button>
                     }
