@@ -136,7 +136,13 @@
                       {{ m.direction === 'out' ? '→' : '←' }} {{ m.peer }}
                     </span>
                     <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
+                    @if (m.id) {
+                      <button class="sc-reply-btn" (click)="setReplyTo(m)" matTooltip="Reply">↩</button>
+                    }
                   </div>
+                  @if (m.replyTo) {
+                    <div class="sc-reply-quote">↩ {{ replyParentText(m.replyTo) }}</div>
+                  }
                   <div class="sc-msg-text">{{ m.text }}</div>
                 </div>
               }
@@ -156,6 +162,12 @@
               </mat-select>
             </mat-form-field>
           </div>
+          @if (replyTarget) {
+            <div class="sc-reply-banner">
+              <span class="sc-reply-banner-text">↩ {{ replyTarget.text }}</span>
+              <button class="sc-reply-cancel" (click)="cancelReply()" matTooltip="Cancel reply">✕</button>
+            </div>
+          }
           <div class="sc-composer">
             <mat-form-field appearance="outline" class="field-msg">
               <mat-label>{{ 'skychat.message' | translate }}</mat-label>
