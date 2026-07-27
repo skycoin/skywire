@@ -239,6 +239,20 @@
   font-style: italic;
 }
 
+// Delivery-status tick on our own DM bubbles: dim ✓/✓✓ for sent/received,
+// bright blue ✓✓ once the peer's UI reports the message read.
+.sc-tick {
+  font-size: 11px;
+  opacity: 0.55;
+  margin-left: 2px;
+  letter-spacing: -1px;
+
+  &.read {
+    color: #4aa3ff;
+    opacity: 1;
+  }
+}
+
 .sc-reply-quote {
   font-size: 11px;
   opacity: 0.7;
