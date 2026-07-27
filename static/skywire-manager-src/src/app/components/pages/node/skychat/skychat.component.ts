@@ -33,6 +33,12 @@ interface ChatMessage {
   // Local sender timestamp for outgoing; SSE doesn't carry one for
   // incoming (we capture arrival time client-side).
   ts: number;
+  // id is the message's own envelope id (stable, addressable). replyTo is the
+  // id of the message this one quotes (a threaded reply). Both empty for plain
+  // pre-envelope messages. /sse carries reply_to_id, /history + the wasm
+  // skychatMessages() buffer carry reply_to.
+  id?: string;
+  replyTo?: string;
 }
 
 /** One federated group/room as surfaced by the group list. */
@@ -77,6 +83,11 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   sending = false;
   // Display state.
   messages: ChatMessage[] = [];
+  // Quoted-reply compose target (the message the next send quotes), or null.
+  replyTarget: ChatMessage | null = null;
+  // id -> text index for resolving a reply's quoted-parent snippet in O(1)
+  // from the template, kept in sync as messages arrive.
+  private msgById = new Map<string, string>();
   connected = false;
   errorText = '';
   // Skychat returns 503 for /history* unless --persist is on. We
@@ -296,8 +307,10 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
         this.messages = arr.slice(-500).map(m => {
 return {
           peer: m.from || '', direction: m.out ? 'out' : 'in', text: m.text || '', ts: m.ts || Date.now(),
+          id: m.id || '', replyTo: m.reply_to || '',
         }
 });
+        this.rebuildMsgIndex();
         this.lastPollLen = arr.length;
         this.cdr.markForCheck();
       }
@@ -334,11 +347,14 @@ return {
       direction: 'in',
       text: typeof data.message === 'string' ? data.message : (data.text || ''),
       ts: Date.now(),
+      id: data.id || '',
+      replyTo: data.reply_to_id || '',
     };
     if (!msg.peer || !msg.text) {
- return; 
+ return;
 }
     this.captureScroll();
+    this.indexMsg(msg);
     this.messages.push(msg);
     if (this.messages.length > 500) {
  this.messages.shift(); 
@@ -365,34 +381,42 @@ return {
     // In-browser wasm visor: send through the in-process skychat hook. The sent
     // message is buffered with out:true, so the poll loop renders it — no manual
     // push needed here.
+    const replyToId = this.replyTarget ? (this.replyTarget.id || '') : '';
     if (this.wasmChat) {
       const sv = (window as any).skywireVisor;
-      Promise.resolve(sv.skychatSend(recipient, text))
+      // 4th arg = reply_to (the quoted message's id); the sent message is
+      // buffered with reply_to + out:true, so the poll loop renders it threaded.
+      Promise.resolve(sv.skychatSend(recipient, text, 'dmsg', replyToId))
         .then(() => {
- this.message = ''; 
+ this.message = ''; this.cancelReply();
 })
         .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
         .finally(() => {
- this.sending = false; this.cdr.markForCheck(); 
+ this.sending = false; this.cdr.markForCheck();
 });
 
       return;
     }
+    const payload: any = { recipient: recipient, message: text, network: this.network };
+    if (replyToId) {
+ payload.reply_to = replyToId;
+}
     fetch(this.proxyUrl('message'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipient: recipient, message: text, network: this.network }),
+      body: JSON.stringify(payload),
     }).then(async (resp) => {
       if (!resp.ok) {
         const body = await resp.text();
         throw new Error(body || `HTTP ${resp.status}`);
       }
       this.captureScroll();
-      this.messages.push({ peer: recipient, direction: 'out', text: text, ts: Date.now() });
+      this.messages.push({ peer: recipient, direction: 'out', text: text, ts: Date.now(), id: '', replyTo: replyToId });
       if (this.messages.length > 500) {
- this.messages.shift(); 
+ this.messages.shift();
 }
       this.message = '';
+      this.cancelReply();
       this.cdr.markForCheck();
     }).catch((err) => {
       this.snackbar.showError(err?.message || String(err));
@@ -429,13 +453,16 @@ return {
         const seeded: ChatMessage[] = rows.map((m: any): ChatMessage => {
 return {
           peer: m.peer || m.sender || '',
-          direction: m.direction === 'out' ? 'out' : 'in',
+          direction: (m.outgoing || m.direction === 'out') ? 'out' : 'in',
           text: m.message || m.text || '',
           ts: m.timestamp || m.ts || Date.now(),
+          id: m.id || '',
+          replyTo: m.reply_to || '',
         }
 }).filter((m: ChatMessage) => m.peer && m.text);
         // Prepend so existing live tail keeps its order.
         this.messages = seeded.concat(this.messages);
+        this.rebuildMsgIndex();
         this.cdr.markForCheck();
       })
       .catch(() => { /* network glitch — live SSE will pick up new traffic anyway */ });
@@ -443,6 +470,46 @@ return {
 
   pickRecipient(pk: string) {
     this.toPK = pk;
+  }
+
+  private indexMsg(m: ChatMessage) {
+    if (m.id) {
+ this.msgById.set(m.id, m.text);
+}
+  }
+
+  private rebuildMsgIndex() {
+    this.msgById.clear();
+    for (const m of this.messages) {
+      if (m.id) {
+ this.msgById.set(m.id, m.text);
+}
+    }
+  }
+
+  /** Quoted-parent snippet for a reply, resolved by id (O(1) from the index). */
+  replyParentText(id: string): string {
+    const t = this.msgById.get(id);
+    if (!t) {
+ return '…';
+}
+
+    return t.length > 80 ? t.slice(0, 80) + '…' : t;
+  }
+
+  /** Arm the next send as a quoted reply to m (id-bearing messages only). */
+  setReplyTo(m: ChatMessage) {
+    if (!m || !m.id) {
+ return;
+}
+    this.replyTarget = m;
+    this.cdr.markForCheck();
+  }
+
+  /** Disarm the reply compose state. */
+  cancelReply() {
+    this.replyTarget = null;
+    this.cdr.markForCheck();
   }
 
   private captureScroll() {
