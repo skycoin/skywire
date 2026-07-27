@@ -22,7 +22,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"net"
 	"sync"
 	"syscall/js"
 	"time"
@@ -30,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/dm"
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/message"
 )
@@ -79,7 +79,7 @@ var (
 	// isn't evicted in lockstep with the store's per-peer cap.
 	fileMeta   = map[string]chatMsg{}
 	chatClient *app.Client
-	chatConns  = map[string]*message.Conn{} // cached outbound conns keyed by "<network>|<peerPK hex>"
+	chatCtrl   *dm.Controller // shared 1:1 DM core (pkg/skychat/dm): conns, read loop, envelopes, send
 )
 
 // chatHistoryLimits bounds the in-browser transcript. Unlike a public-facing
@@ -182,26 +182,32 @@ func runBrowserSkychat(ctx context.Context, _ []string) error {
 	defer cl.Close()
 	chatClient = cl
 
-	started := 0
-	for _, n := range []appnet.Type{appnet.TypeDmsg, appnet.TypeSkynet} {
-		lis, err := cl.Listen(n, skychatPort)
-		if err != nil {
-			// A missing networker (e.g. skynet before the router is up) shouldn't
-			// kill the app — keep whatever listener(s) we got.
-			vlog(fmt.Sprintf("skychat: listen %s:%d: %s", n, skychatPort, err.Error()))
-			continue
-		}
-		started++
-		vlog(fmt.Sprintf("skychat: listening on %s:%d", n, skychatPort))
-		go func(l net.Listener) {
-			<-ctx.Done()
-			l.Close() //nolint:errcheck,gosec
-		}(lis)
-		go acceptChatLoop(lis)
+	// The 1:1 DM path (listen/accept, read loop, envelopes, send) is the shared
+	// pkg/skychat/dm.Controller — the same core the native app uses. It listens
+	// on dmsg:1 + skynet:1, surfaces every message (in + the outbound mirror)
+	// through OnEvent → appendChat (which persists to the in-memory history
+	// store the page polls). AlwaysID keeps every DM addressable (id-keyed
+	// buffer, quoted replies). Store is nil here — appendChat owns persistence
+	// so file entries (fileMeta) and DM text share one MemStore writer.
+	chatCtrl = dm.New(dm.Config{
+		Client:   cl,
+		Networks: []appnet.Type{appnet.TypeDmsg, appnet.TypeSkynet},
+		Port:     skychatPort,
+		AlwaysID: true,
+		OnEvent: func(ev dm.Event) {
+			appendChat(chatMsg{
+				ID: ev.ID, From: ev.Peer, Text: ev.Text,
+				TS: ev.TS.UnixMilli(), Out: ev.Dir == "out", ReplyTo: ev.ReplyTo,
+			})
+			vlog(fmt.Sprintf("skychat: %s %s: %q", ev.Dir, shortPK(ev.Peer), ev.Text))
+		},
+		Log: func(format string, args ...interface{}) { vlog(fmt.Sprintf(format, args...)) },
+	})
+	if err := chatCtrl.Start(ctx); err != nil {
+		return err
 	}
-	if started == 0 {
-		return fmt.Errorf("skychat: no listeners started")
-	}
+	go func() { <-ctx.Done(); _ = chatCtrl.Close() }()
+
 	// File transfer shares the same app.Client: listen on the file port over the
 	// same networks so peers can send us files (see filexfer_js.go).
 	startFileXferWasm(ctx, cl)
@@ -211,53 +217,13 @@ func runBrowserSkychat(ctx context.Context, _ []string) error {
 	return nil
 }
 
-// acceptChatLoop accepts connections on one listener until it closes.
-func acceptChatLoop(lis net.Listener) {
-	for {
-		conn, err := lis.Accept()
-		if err != nil {
-			return
-		}
-		go readChatConn(message.NewConn(conn))
-	}
-}
-
-// readChatConn reads framed messages off one peer connection into the buffer
-// until the peer closes or errors. Used for both accepted (inbound) and dialed
-// (outbound) conns — a skychat conn is bidirectional. When the peer sends an
-// ack-requesting chat-msg (native `send --wait`), we reply with a chat-ack on the
-// same conn so the sender's wait resolves instead of falsely timing out.
-func readChatConn(conn *message.Conn) {
-	defer conn.Close() //nolint:errcheck
-	from := peerPKHex(conn)
-	for {
-		payload, err := conn.ReadFrame()
-		if err != nil {
-			return
-		}
-		text, ackID, replyTo, msgID := decodeChatPayload(payload)
-		if ackID != "" {
-			if b, mErr := (message.Envelope{Type: message.TypeAck, ID: ackID}).Marshal(); mErr == nil {
-				if wErr := conn.WriteFrame(b); wErr != nil {
-					vlog(fmt.Sprintf("skychat: ack to %s failed: %s", shortPK(from), wErr.Error()))
-				}
-			}
-		}
-		if text == "" {
-			continue // an ack-only envelope, or empty — nothing to surface
-		}
-		appendChat(chatMsg{ID: msgID, From: from, Text: text, TS: nowMs(), Out: false, ReplyTo: replyTo})
-		vlog(fmt.Sprintf("skychat: message from %s: %q", shortPK(from), text))
-	}
-}
-
-// sendChat dials the peer on <network>:1 (reusing a cached conn) and writes one
-// plain-text frame — the format native skychat accepts on its read loop. network
-// is "dmsg" (default) or "skynet"; conns are cached per (network, peer) so the two
-// transports don't clobber each other. The dial/connect/send steps are vlog'd so
-// the chat window's log pane can surface them (like the skysocks-lite route setup).
+// sendChat delivers text to the peer via the shared DM controller. network is
+// "dmsg" (default) or "skynet". The controller mints the message id (AlwaysID),
+// frames the chat-msg envelope (carrying replyTo when set), dials/reuses the
+// conn, and surfaces the outbound mirror through OnEvent → appendChat — so this
+// no longer buffers or frames anything itself.
 func sendChat(pkHex, text, network, replyTo string) error {
-	if chatClient == nil {
+	if chatCtrl == nil {
 		return fmt.Errorf("skychat not started yet")
 	}
 	if text == "" {
@@ -276,88 +242,18 @@ func sendChat(pkHex, text, network, replyTo string) error {
 	if err := pk.Set(pkHex); err != nil {
 		return fmt.Errorf("bad peer pk: %w", err)
 	}
-	key := string(net) + "|" + pkHex
-	chatMu.Lock()
-	conn := chatConns[key]
-	chatMu.Unlock()
-	if conn == nil {
-		vlog(fmt.Sprintf("skychat: dialing %s %s:%d…", net, shortPK(pkHex), skychatPort))
-		c, err := chatClient.Dial(appnet.Addr{Net: net, PubKey: pk, Port: skychatPort})
-		if err != nil {
-			vlog(fmt.Sprintf("skychat: dial %s %s failed: %s", net, shortPK(pkHex), err.Error()))
-			return fmt.Errorf("dial %s over %s: %w", shortPK(pkHex), net, err)
-		}
-		vlog(fmt.Sprintf("skychat: connected to %s over %s", shortPK(pkHex), net))
-		conn = message.NewConn(c)
-		chatMu.Lock()
-		chatConns[key] = conn
-		chatMu.Unlock()
-		// Read replies on the same conn; drop it from the cache when it closes.
-		go func() {
-			readChatConn(conn)
-			chatMu.Lock()
-			delete(chatConns, key)
-			chatMu.Unlock()
-		}()
-	}
-	// Every DM rides a chat-msg envelope carrying a stable id, so it is
-	// addressable — replies (and, in follow-ups, receipts/deletes) reference it.
-	// The native read loop already decodes chat-msg envelopes (message.ParseEnvelope),
-	// so this stays wire-compatible; ReplyTo is omitempty, set only for a reply.
-	id := newChatID()
-	wire, mErr := (message.Envelope{Type: message.TypeMsg, ID: id, Body: text, ReplyTo: replyTo}).Marshal()
-	if mErr != nil {
-		return fmt.Errorf("encode: %w", mErr)
-	}
-	if err := conn.WriteFrame(wire); err != nil {
-		chatMu.Lock()
-		delete(chatConns, key)
-		chatMu.Unlock()
-		conn.Close() //nolint:errcheck,gosec
-		return fmt.Errorf("send: %w", err)
-	}
-	vlog(fmt.Sprintf("skychat: sent %d bytes to %s over %s", len(text), shortPK(pkHex), net))
-	appendChat(chatMsg{ID: id, From: pkHex, Text: text, TS: nowMs(), Out: true, ReplyTo: replyTo})
-	return nil
+	_, err := chatCtrl.Send(context.Background(), pk, net, text, dm.SendOpts{ReplyTo: replyTo})
+	return err
 }
 
-// newChatID mints a short random hex id for an outbound chat-msg envelope.
+// newChatID mints a short random hex id for a file-entry chatMsg (DM text ids
+// come from the controller; file transfers surface through appendChat directly).
 func newChatID() string {
 	var b [8]byte
 	if _, err := rand.Read(b[:]); err != nil {
 		return fmt.Sprintf("%x", nowMs())
 	}
 	return fmt.Sprintf("%x", b[:])
-}
-
-// decodeChatPayload extracts the message text from a frame, plus the ack id to
-// reply with (non-empty only when the peer's chat-msg requested an ack — native
-// `send --wait`). Native skychat sends either plain UTF-8 bytes (default) or a
-// chat-* JSON envelope: we return the body for a "chat-msg", ("","") for a
-// "chat-ack", else the raw bytes. Recognition (message.ParseEnvelope) is
-// conservative — a known chat-* type only — so literal JSON typed into a chat
-// still reaches the peer as plain text.
-func decodeChatPayload(payload []byte) (text, ackID, replyTo, msgID string) {
-	if env, ok := message.ParseEnvelope(payload); ok {
-		switch env.Type {
-		case message.TypeAck:
-			return "", "", "", ""
-		case message.TypeMsg:
-			ack := ""
-			if env.Ack && env.ID != "" {
-				ack = env.ID
-			}
-			return env.Body, ack, env.ReplyTo, env.ID
-		}
-	}
-	return string(payload), "", "", ""
-}
-
-func peerPKHex(conn net.Conn) string {
-	if a, ok := conn.RemoteAddr().(appnet.Addr); ok {
-		return a.PubKey.Hex()
-	}
-	return conn.RemoteAddr().String()
 }
 
 func shortPK(pk string) string {
