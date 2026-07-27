@@ -740,6 +740,55 @@
     .hidden {
       display: none !important;
     }
+    /* Quoted-reply threading */
+    .reply-quote {
+      font-size: 0.78rem;
+      opacity: 0.75;
+      border-left: 3px solid currentColor;
+      padding: 2px 8px;
+      margin-bottom: 3px;
+      border-radius: 4px;
+      background: rgba(127,127,127,0.12);
+      max-width: 320px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .message-row.sent .reply-quote { margin-left: auto; }
+    .reply-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      opacity: 0;
+      font-size: 0.85rem;
+      padding: 0 4px;
+      transition: opacity 0.15s;
+      color: inherit;
+    }
+    .message-row:hover .reply-btn { opacity: 0.6; }
+    .reply-btn:hover { opacity: 1; }
+    #replyBanner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      font-size: 0.8rem;
+      background: rgba(127,127,127,0.14);
+      border-left: 3px solid #4a90d9;
+    }
+    #replyBanner.active { display: flex; }
+    #replyBanner .reply-banner-text {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      opacity: 0.85;
+    }
+    #replyBanner .reply-cancel {
+      background: none; border: none; cursor: pointer;
+      font-size: 1rem; opacity: 0.7; color: inherit;
+    }
+    #replyBanner .reply-cancel:hover { opacity: 1; }
   </style>
 </head>
 <body>
@@ -786,6 +835,10 @@
 
     <ul id="messages" class="messages-container hidden"></ul>
 
+    <div id="replyBanner">
+      <span class="reply-banner-text"></span>
+      <button type="button" class="reply-cancel" title="Cancel reply" onclick="app.clearReplyTarget()">✕</button>
+    </div>
     <form id="msgForm" class="message-form hidden" autocomplete="off" onsubmit="app.sendMessage(this); return false;">
       <select id="networkSelect" class="network-select" title="Network type">
         <option value="skynet">Skynet</option>
@@ -898,10 +951,23 @@
           const msgArea = document.getElementById('messages');
           const wasAtBottom = (msgArea.scrollHeight - msgArea.scrollTop) <= msgArea.clientHeight + 50;
 
+          let quoteHtml = '';
+          if (msg.replyTo) {
+            const parent = this._findMsgById(msg.replyTo);
+            const snippet = parent ? parent.text : '(message)';
+            quoteHtml = `<div class="reply-quote">↩ ${this.escapeHtml(this._truncate(snippet, 80))}</div>`;
+          }
+          // A reply affordance only for messages that carry an id (received /
+          // envelope-bearing) — a plain sent message has no id to quote.
+          const replyBtn = msg.id
+            ? ` <button type="button" class="reply-btn" title="Reply" onclick="app.setReplyTarget('${this.escapeHtml(msg.id)}')">↩</button>`
+            : '';
+
           msgArea.innerHTML += `
             <div class="message-row ${rowClass}">
+              ${quoteHtml}
               <div class="message-bubble">${this.escapeHtml(msg.text)}</div>
-              <div class="message-time">${time}</div>
+              <div class="message-time">${time}${replyBtn}</div>
             </div>`;
 
           if (wasAtBottom) {
@@ -914,6 +980,38 @@
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+      }
+
+      _truncate(s, n) { return (s && s.length > n) ? s.slice(0, n) + '…' : (s || ''); }
+
+      // _findMsgById locates a message in the current conversation by its
+      // stable id, so a reply's quote can render its parent's text. Scans
+      // newest-first (a reply usually quotes something recent).
+      _findMsgById(id) {
+        if (!id) return null;
+        const msgs = this.messages[this.recipient];
+        if (!msgs) return null;
+        for (let i = msgs.length - 1; i >= 0; i--) {
+          if (!msgs[i].date && msgs[i].id === id) return msgs[i];
+        }
+        return null;
+      }
+
+      // setReplyTarget arms the next send as a quoted reply to the message with
+      // the given id, showing the compose banner. clearReplyTarget disarms it.
+      setReplyTarget(id) {
+        const m = this._findMsgById(id);
+        if (!m) return;
+        this.replyTarget = { id: id, text: m.text };
+        const banner = document.getElementById('replyBanner');
+        banner.querySelector('.reply-banner-text').textContent = '↩ ' + this._truncate(m.text, 90);
+        banner.classList.add('active');
+        document.getElementById('msgField').focus();
+      }
+
+      clearReplyTarget() {
+        this.replyTarget = null;
+        document.getElementById('replyBanner').classList.remove('active');
       }
 
       _sseSubscribe() {
@@ -944,6 +1042,8 @@
             from: this.processPk(data.sender),
             text: data.message,
             viaPair: data.channel === 'pair',
+            id: data.id || '',
+            replyTo: data.reply_to_id || '',
           };
           this.addMsgToList(data.sender, message);
 
@@ -1027,6 +1127,8 @@
                 ts: ts,
                 from: m.outgoing ? 'me' : (m.from || m.peer),
                 text: m.text,
+                id: m.id || '',
+                replyTo: m.reply_to || '', // /history uses reply_to; /sse uses reply_to_id
               });
             });
             this.messages[pk] = withDates;
@@ -1352,8 +1454,11 @@
           body = JSON.stringify({ text: msg });
         } else {
           url = '/message';
-          body = JSON.stringify({ recipient: destination, message: msg, network: network });
+          const payload = { recipient: destination, message: msg, network: network };
+          if (this.replyTarget) payload.reply_to = this.replyTarget.id;
+          body = JSON.stringify(payload);
         }
+        const replyToId = this.replyTarget ? this.replyTarget.id : '';
 
         fetch(url, {
           method: 'POST',
@@ -1362,8 +1467,9 @@
         })
           .then(res => {
             if (res.ok) {
-              const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo' };
+              const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo', replyTo: replyToId };
               this.addMsgToList(destination, message);
+              this.clearReplyTarget();
               msgField.value = '';
 
               const msgArea = document.getElementById('messages');
