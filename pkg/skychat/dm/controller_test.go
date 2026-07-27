@@ -1,0 +1,208 @@
+// Package dm controller_test.go — exercises the Controller end-to-end over an
+// in-memory transport pair (no real dmsg/skynet): send/receive, quoted replies,
+// and the peer-receipt ack round-trip.
+package dm
+
+import (
+	"context"
+	"fmt"
+	"net"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/skycoin/skywire/pkg/app/appnet"
+	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/routing"
+)
+
+// --- in-memory transport ----------------------------------------------------
+
+type memHub struct {
+	mu        sync.Mutex
+	listeners map[string]*memListener
+}
+
+func newMemHub() *memHub { return &memHub{listeners: map[string]*memListener{}} }
+
+func key(n appnet.Type, pk cipher.PubKey, port routing.Port) string {
+	return fmt.Sprintf("%s|%s|%d", n, pk.Hex(), uint16(port))
+}
+
+type memListener struct {
+	accept chan net.Conn
+	addr   appnet.Addr
+	once   sync.Once
+}
+
+func (l *memListener) Accept() (net.Conn, error) {
+	c, ok := <-l.accept
+	if !ok {
+		return nil, net.ErrClosed
+	}
+	return c, nil
+}
+func (l *memListener) Close() error   { l.once.Do(func() { close(l.accept) }); return nil }
+func (l *memListener) Addr() net.Addr { return l.addr }
+
+// memConn overrides RemoteAddr so the controller sees an appnet.Addr carrying
+// the peer's PK (which is how it derives the peer identity).
+type memConn struct {
+	net.Conn
+	raddr appnet.Addr
+}
+
+func (c memConn) RemoteAddr() net.Addr { return c.raddr }
+
+type memClient struct {
+	hub    *memHub
+	selfPK cipher.PubKey
+}
+
+func (m *memClient) Listen(n appnet.Type, port routing.Port) (net.Listener, error) {
+	l := &memListener{accept: make(chan net.Conn, 8), addr: appnet.Addr{Net: n, PubKey: m.selfPK, Port: port}}
+	m.hub.mu.Lock()
+	m.hub.listeners[key(n, m.selfPK, port)] = l
+	m.hub.mu.Unlock()
+	return l, nil
+}
+
+func (m *memClient) Dial(addr appnet.Addr) (net.Conn, error) {
+	m.hub.mu.Lock()
+	l := m.hub.listeners[key(addr.Net, addr.PubKey, addr.Port)]
+	m.hub.mu.Unlock()
+	if l == nil {
+		return nil, net.ErrClosed
+	}
+	dialerEnd, calleeEnd := net.Pipe()
+	// The callee sees the dialer's PK; the dialer sees the callee's PK.
+	l.accept <- memConn{Conn: calleeEnd, raddr: appnet.Addr{Net: addr.Net, PubKey: m.selfPK, Port: addr.Port}}
+	return memConn{Conn: dialerEnd, raddr: addr}, nil
+}
+
+// --- helpers ----------------------------------------------------------------
+
+func mustPK(t *testing.T) cipher.PubKey {
+	t.Helper()
+	pk, _ := cipher.GenerateKeyPair()
+	return pk
+}
+
+type recorder struct {
+	mu sync.Mutex
+	ev []Event
+}
+
+func (r *recorder) on(e Event) { r.mu.Lock(); r.ev = append(r.ev, e); r.mu.Unlock() }
+func (r *recorder) find(pred func(Event) bool) (Event, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, e := range r.ev {
+		if pred(e) {
+			return e, true
+		}
+	}
+	return Event{}, false
+}
+
+func waitFor(t *testing.T, r *recorder, pred func(Event) bool) Event {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if e, ok := r.find(pred); ok {
+			return e
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("event not observed within deadline; got %d events", len(r.ev))
+	return Event{}
+}
+
+// --- tests ------------------------------------------------------------------
+
+func TestController_SendReceive(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	recA, recB := &recorder{}, &recorder{}
+
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recB.on})
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recA.on})
+	if err := ctrlB.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrlA.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() })
+
+	// Plain send A -> B.
+	if _, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "hello B", SendOpts{}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	inB := waitFor(t, recB, func(e Event) bool { return e.Dir == "in" && e.Text == "hello B" })
+	if inB.Peer != pkA.Hex() {
+		t.Errorf("inbound peer = %s, want %s", inB.Peer, pkA.Hex())
+	}
+	// A sees the outbound mirror.
+	if _, ok := recA.find(func(e Event) bool { return e.Dir == "out" && e.Text == "hello B" && e.Peer == pkB.Hex() }); !ok {
+		t.Error("A missing outbound mirror event")
+	}
+}
+
+func TestController_QuotedReply(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	recB := &recorder{}
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recB.on})
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	_ = ctrlB.Start(context.Background())
+	_ = ctrlA.Start(context.Background())
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() })
+
+	res, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "a threaded reply", SendOpts{ReplyTo: "parent123"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.ID == "" {
+		t.Error("reply send should mint an id")
+	}
+	in := waitFor(t, recB, func(e Event) bool { return e.Text == "a threaded reply" })
+	if in.ReplyTo != "parent123" {
+		t.Errorf("reply_to propagated = %q, want parent123", in.ReplyTo)
+	}
+	if in.ID != res.ID {
+		t.Errorf("inbound id %q != sent id %q", in.ID, res.ID)
+	}
+}
+
+func TestController_AckRoundTrip(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	_ = ctrlB.Start(context.Background())
+	_ = ctrlA.Start(context.Background())
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() })
+
+	res, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "ack me", SendOpts{WaitAck: 2 * time.Second})
+	if err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	if !res.Acked {
+		t.Error("WaitAck send should be acked by a live peer")
+	}
+}
+
+func TestController_AckTimeoutNoPeer(t *testing.T) {
+	// No peer listening: dial fails, Send returns an error (not a hang).
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	_ = ctrlA.Start(context.Background())
+	t.Cleanup(func() { _ = ctrlA.Close() })
+
+	_, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "nobody home", SendOpts{})
+	if err == nil {
+		t.Error("send to a non-listening peer should error")
+	}
+}
