@@ -261,6 +261,54 @@ func TestController_DeleteForEveryone(t *testing.T) {
 	}
 }
 
+func TestController_ReadReceipt(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	var gotPeer, gotID, gotKind string
+	var mu sync.Mutex
+	done := make(chan struct{}, 1)
+	// ctrlA sent a message; ctrlB reads it and sends a read receipt back, which
+	// surfaces on ctrlA as OnReceipt(kind=chat-read) about A's own message.
+	ctrlA := New(Config{
+		Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg},
+		OnEvent: func(Event) {},
+		OnReceipt: func(peer, id, kind string) {
+			mu.Lock()
+			gotPeer, gotID, gotKind = peer, id, kind
+			mu.Unlock()
+			select {
+			case done <- struct{}{}:
+			default:
+			}
+		},
+	})
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	_ = ctrlA.Start(context.Background())                      //nolint
+	_ = ctrlB.Start(context.Background())                      //nolint
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
+
+	const targetID = "msg-read-42"
+	if err := ctrlB.SendRead(context.Background(), pkA, targetID); err != nil {
+		t.Fatalf("SendRead: %v", err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnReceipt not called within deadline")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if gotPeer != pkB.Hex() {
+		t.Errorf("receipt peer = %s, want %s", gotPeer, pkB.Hex())
+	}
+	if gotID != targetID {
+		t.Errorf("receipt id = %s, want %s", gotID, targetID)
+	}
+	if gotKind != message.TypeRead {
+		t.Errorf("receipt kind = %s, want %s", gotKind, message.TypeRead)
+	}
+}
+
 func TestController_NoTransportDialErrors(t *testing.T) {
 	// A controller with no Client (native --standalone): a send with no cached
 	// conn must error cleanly, not panic.
