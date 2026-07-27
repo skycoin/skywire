@@ -582,6 +582,18 @@ func (c *Controller) SendDelete(ctx context.Context, pk cipher.PubKey, id string
 	return c.SendRaw(ctx, pk, b)
 }
 
+// SendRead sends a read receipt for the message id to pk (the message's original
+// sender), over a cached-or-dialed conn. On the sender, OnReceipt fires with kind
+// "read" so their bubble's tick advances to read. Best-effort like SendDelete —
+// a peer that's offline simply never advances the tick.
+func (c *Controller) SendRead(ctx context.Context, pk cipher.PubKey, id string) error {
+	b, err := (message.Envelope{Type: message.TypeRead, ID: id}).Marshal()
+	if err != nil {
+		return err
+	}
+	return c.SendRaw(ctx, pk, b)
+}
+
 func (c *Controller) evict(pk cipher.PubKey, conn *message.Conn) {
 	c.mu.Lock()
 	if c.conns[pk] == conn {

@@ -55,6 +55,12 @@ type chatMsg struct {
 	// message was deleted" placeholder and the text is blanked in the projection.
 	Deleted bool `json:"deleted,omitempty"`
 
+	// Status is the delivery-status tick on our OWN (Out=true) messages, advanced
+	// by peer receipts: "received" (peer's app acked) → "read" (peer's UI showed
+	// it). Empty on inbound messages and before any receipt arrives (rendered as
+	// a plain "sent" tick). Not persisted — a live-only lifecycle like Deleted.
+	Status string `json:"status,omitempty"`
+
 	// File attachment fields (Telegram-style: a file is a message). Set only on
 	// file events; empty on plain chat. On a received file (Out=false) FileID
 	// keys the in-memory blob the page fetches via skychatFile(id) to download.
@@ -88,6 +94,11 @@ var (
 	// peer). storeToChatMsg tombstones them on projection. Not persisted — a
 	// live-only tombstone, symmetric with the native app's dm-status "deleted".
 	deletedChat = map[string]struct{}{}
+	// receiptChat maps our own sent-message id → delivery status ("received" or
+	// "read"), set from the controller's OnReceipt. storeToChatMsg stamps it onto
+	// the outgoing projection so the page renders the tick. Live-only like
+	// deletedChat; symmetric with the native app's dm-status "received"/"read".
+	receiptChat = map[string]string{}
 )
 
 // markChatDeleted tombstones the message with the given id (guarded by chatMu).
@@ -97,6 +108,19 @@ func markChatDeleted(id string) {
 	}
 	chatMu.Lock()
 	deletedChat[id] = struct{}{}
+	chatMu.Unlock()
+}
+
+// markChatReceipt records a delivery receipt for one of our sent messages. A late
+// "received" never downgrades a message already marked "read" (guarded by chatMu).
+func markChatReceipt(id, kind string) {
+	if id == "" || (kind != "received" && kind != "read") {
+		return
+	}
+	chatMu.Lock()
+	if !(kind == "received" && receiptChat[id] == "read") {
+		receiptChat[id] = kind
+	}
 	chatMu.Unlock()
 }
 
@@ -189,6 +213,12 @@ func storeToChatMsg(rec history.Message) chatMsg {
 			m.FileSize = fm.FileSize
 			m.FileOK = fm.FileOK
 		}
+		// Delivery tick on our own sent messages (receipts only apply outbound).
+		if m.Out {
+			if s, ok := receiptChat[rec.ID]; ok {
+				m.Status = s
+			}
+		}
 		chatMu.Unlock()
 	}
 	return m
@@ -227,6 +257,17 @@ func runBrowserSkychat(ctx context.Context, _ []string) error {
 		OnDelete: func(peer, id string) {
 			markChatDeleted(id)
 			vlog(fmt.Sprintf("skychat: %s deleted message %s", shortPK(peer), id))
+		},
+		// A receipt about a message WE sent — advance its delivery tick. kind is
+		// the envelope type: chat-ack → received, chat-read → read.
+		OnReceipt: func(peer, id, kind string) {
+			switch kind {
+			case message.TypeAck:
+				markChatReceipt(id, "received")
+			case message.TypeRead:
+				markChatReceipt(id, "read")
+			}
+			vlog(fmt.Sprintf("skychat: %s %s message %s", shortPK(peer), kind, id))
 		},
 		Log: func(format string, args ...interface{}) { vlog(fmt.Sprintf(format, args...)) },
 	})
@@ -269,7 +310,10 @@ func sendChat(pkHex, text, network, replyTo string) error {
 	if err := pk.Set(pkHex); err != nil {
 		return fmt.Errorf("bad peer pk: %w", err)
 	}
-	_, err := chatCtrl.Send(context.Background(), pk, net, text, dm.SendOpts{ReplyTo: replyTo})
+	// RequestAck rides an id'd envelope with ack=true (non-blocking): the peer
+	// auto-acks, surfacing as a "received" receipt via OnReceipt so the bubble's
+	// tick advances. The peer's "read" receipt follows when its UI displays it.
+	_, err := chatCtrl.Send(context.Background(), pk, net, text, dm.SendOpts{ReplyTo: replyTo, RequestAck: true})
 	return err
 }
 
@@ -332,6 +376,26 @@ func jsSkychatDelete(_ js.Value, args []js.Value) interface{} {
 		err := chatCtrl.SendDelete(context.Background(), pk, id)
 		markChatDeleted(id)
 		return nil, err
+	})
+}
+
+// jsSkychatReadReceipt(peerPkHex, id) → Promise<null>. Tells the peer we've read
+// their message id so their bubble's tick advances to read. Best-effort — a peer
+// that's offline simply never sees it (their tick stays at received).
+func jsSkychatReadReceipt(_ js.Value, args []js.Value) interface{} {
+	if len(args) < 2 {
+		return js.Global().Get("Error").New("skychatReadReceipt(peerPkHex, id)")
+	}
+	pkHex, id := args[0].String(), args[1].String()
+	return promise(func() (interface{}, error) {
+		if chatCtrl == nil {
+			return nil, fmt.Errorf("skychat not started yet")
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(pkHex); err != nil {
+			return nil, fmt.Errorf("bad peer pk: %w", err)
+		}
+		return nil, chatCtrl.SendRead(context.Background(), pk, id)
 	})
 }
 
