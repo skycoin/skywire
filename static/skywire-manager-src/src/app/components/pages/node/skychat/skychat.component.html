@@ -136,14 +136,21 @@
                       {{ m.direction === 'out' ? '→' : '←' }} {{ m.peer }}
                     </span>
                     <span class="ts">{{ m.ts | date:'mediumTime' }}</span>
-                    @if (m.id) {
+                    @if (m.id && !m.deleted) {
                       <button class="sc-reply-btn" (click)="setReplyTo(m)" matTooltip="Reply">↩</button>
                     }
+                    @if (m.id && m.direction === 'out' && !m.deleted) {
+                      <button class="sc-del-btn" (click)="deleteMsg(m)" matTooltip="Delete for everyone">🗑</button>
+                    }
                   </div>
-                  @if (m.replyTo) {
+                  @if (m.replyTo && !m.deleted) {
                     <div class="sc-reply-quote">↩ {{ replyParentText(m.replyTo) }}</div>
                   }
-                  <div class="sc-msg-text">{{ m.text }}</div>
+                  @if (m.deleted) {
+                    <div class="sc-msg-text sc-deleted">🚫 message deleted</div>
+                  } @else {
+                    <div class="sc-msg-text">{{ m.text }}</div>
+                  }
                 </div>
               }
             </div>
