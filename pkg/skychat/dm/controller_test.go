@@ -218,6 +218,49 @@ func TestController_ServeAndStats(t *testing.T) {
 	}
 }
 
+func TestController_DeleteForEveryone(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	var gotPeer, gotID string
+	var mu sync.Mutex
+	done := make(chan struct{}, 1)
+	ctrlB := New(Config{
+		Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg},
+		OnEvent: func(Event) {},
+		OnDelete: func(peer, id string) {
+			mu.Lock()
+			gotPeer, gotID = peer, id
+			mu.Unlock()
+			select {
+			case done <- struct{}{}:
+			default:
+			}
+		},
+	})
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	_ = ctrlB.Start(context.Background())                      //nolint
+	_ = ctrlA.Start(context.Background())                      //nolint
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
+
+	const targetID = "msg-abc-123"
+	if err := ctrlA.SendDelete(context.Background(), pkB, targetID); err != nil {
+		t.Fatalf("SendDelete: %v", err)
+	}
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("OnDelete not called within deadline")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if gotPeer != pkA.Hex() {
+		t.Errorf("delete peer = %s, want %s", gotPeer, pkA.Hex())
+	}
+	if gotID != targetID {
+		t.Errorf("delete id = %s, want %s", gotID, targetID)
+	}
+}
+
 func TestController_NoTransportDialErrors(t *testing.T) {
 	// A controller with no Client (native --standalone): a send with no cached
 	// conn must error cleanly, not panic.
