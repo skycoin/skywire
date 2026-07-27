@@ -69,6 +69,13 @@ type SendOpts struct {
 	// envelope with ack=true and Send blocks up to WaitAck for the peer's
 	// chat-ack. Zero = fire-and-forget (default).
 	WaitAck time.Duration
+	// RequestAck asks the peer for a chat-ack WITHOUT blocking: the message
+	// rides an id'd envelope with ack=true exactly like WaitAck, but Send
+	// returns as soon as the write lands and the ack surfaces later through
+	// OnReceipt. This is the message-status lifecycle a UI wants (sent →
+	// received → read) as opposed to a CLI's synchronous --wait. Ignored when
+	// WaitAck is set, which already asks for the ack and waits for it.
+	RequestAck bool
 }
 
 // SendResult reports the outcome of a send.
@@ -92,6 +99,19 @@ type Config struct {
 	// OnEvent is called for every surfaced message (inbound + outbound mirror).
 	// Never nil in practice; a nil callback simply drops surfacing.
 	OnEvent func(Event)
+	// OnReceipt is called for an inbound receipt about a message WE sent: a
+	// chat-ack (the peer's app received it) or a chat-read (the peer actually
+	// displayed it). id is the envelope id of the original message, so a UI can
+	// advance that bubble's delivery status; peer is who the receipt came from.
+	// Receipts are consumed here — they are never surfaced as chat lines.
+	// Nil = the app doesn't track delivery status.
+	OnReceipt func(peer, id, kind string)
+	// StaleAckWindow bounds how long a RequestAck send waits for the peer's
+	// chat-ack before concluding the cached conn is half-open and evicting it,
+	// so the next send redials. A live peer acks in well under a second; this
+	// is generous so a momentarily-slow peer doesn't cost a healthy conn.
+	// Zero disables the check.
+	StaleAckWindow time.Duration
 	// DialRetry, if set, wraps each dial attempt (e.g. a netutil.Retrier's Do)
 	// to preserve the native app's retry behavior. Nil = single attempt.
 	DialRetry func(context.Context, func() error) error
@@ -330,6 +350,12 @@ func (c *Controller) readConn(conn *message.Conn) {
 		if c.cfg.PreHandleFrame != nil && c.cfg.PreHandleFrame(peer, payload) {
 			continue
 		}
+		// A receipt (chat-ack / chat-read) is about a message WE sent: report
+		// it and let decodeInbound consume it. Checked before decoding so the
+		// app sees acks too, not only reads.
+		if kind, id := receiptKind(payload); kind != "" && c.cfg.OnReceipt != nil {
+			c.cfg.OnReceipt(peer.Hex(), id, kind)
+		}
 		text, ackID, replyTo, msgID := c.decodeInbound(payload)
 		if ackID != "" {
 			if b, mErr := (message.Envelope{Type: message.TypeAck, ID: ackID}).Marshal(); mErr == nil {
@@ -367,7 +393,10 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 	res.Network = netType
 
 	wire := []byte(text)
-	wantAck := opt.WaitAck > 0
+	// Both ack modes put ack=true on the wire; they differ only in whether this
+	// call waits for the answer. WaitAck blocks here, RequestAck lets it arrive
+	// later through OnReceipt (and backs the stale-conn check below).
+	wantAck := opt.WaitAck > 0 || opt.RequestAck
 	var ackID string
 	var ackCh <-chan struct{}
 	var unreg func()
@@ -380,11 +409,19 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 			return res, fmt.Errorf("skychat/dm: encode: %w", err)
 		}
 		wire = b
-		if wantAck {
+		if opt.WaitAck > 0 || (opt.RequestAck && c.cfg.StaleAckWindow > 0) {
+			// Registered BEFORE the write so a fast ack can't be missed. The
+			// deferred cleanup below releases it on every path except the
+			// RequestAck hand-off, where the watcher goroutine takes ownership.
 			ackCh, unreg = c.registerAck(ackID)
-			defer unreg()
 		}
 	}
+	handedOff := false
+	defer func() {
+		if unreg != nil && !handedOff {
+			unreg()
+		}
+	}()
 
 	addr := appnet.Addr{Net: netType, PubKey: pk, Port: c.port}
 	c.mu.Lock()
@@ -444,7 +481,8 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		Text: text, ReplyTo: opt.ReplyTo, TS: time.Now().UTC(),
 	})
 
-	if ackCh != nil {
+	switch {
+	case opt.WaitAck > 0 && ackCh != nil:
 		timer := time.NewTimer(opt.WaitAck)
 		defer timer.Stop()
 		select {
@@ -455,8 +493,36 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		case <-ctx.Done():
 			return res, ctx.Err()
 		}
+	case opt.RequestAck && ackCh != nil:
+		// Don't wait — but do watch. A half-open cached conn (peer restarted,
+		// idle-dead transport) accepts the write without error while the frame
+		// never lands, so no ack comes back; evicting it means the next send
+		// redials instead of writing into the void again.
+		handedOff = true
+		go c.watchAck(pk, conn, ackCh, unreg, c.cfg.StaleAckWindow)
 	}
 	return res, nil
+}
+
+// watchAck backs RequestAck's stale-conn recovery: it waits for the peer's
+// chat-ack and, if none arrives within window, evicts the conn the message was
+// written to. A live peer acks in well under a second, so on a healthy conn
+// this returns via ackCh and leaves the cache untouched.
+func (c *Controller) watchAck(pk cipher.PubKey, conn *message.Conn, ackCh <-chan struct{}, unreg func(), window time.Duration) {
+	if unreg != nil {
+		defer unreg()
+	}
+	timer := time.NewTimer(window)
+	defer timer.Stop()
+	select {
+	case <-ackCh:
+		// Acked — the conn is alive, keep it cached.
+	case <-timer.C:
+		c.evict(pk, conn)
+		c.log("skychat/dm: no receipt from %s within %v — dropped stale conn; next send will redial", short(pk.Hex()), window)
+	case <-c.done:
+		// Controller shutting down.
+	}
 }
 
 // SendRaw writes a pre-framed raw payload to pk over a cached or freshly-dialed
@@ -607,6 +673,12 @@ func (c *Controller) decodeInbound(payload []byte) (text, ackID, replyTo, msgID 
 				c.deliverAck(env.ID)
 			}
 			return "", "", "", ""
+		case message.TypeRead:
+			// A read receipt for a message WE sent. Consumed like an ack —
+			// nothing to surface — but reported so the sender's UI can advance
+			// that bubble from "received" to "read". Handled here rather than
+			// falling through, or the raw JSON would show up as a chat line.
+			return "", "", "", ""
 		case message.TypeMsg:
 			ack := ""
 			if env.Ack && env.ID != "" {
@@ -616,6 +688,21 @@ func (c *Controller) decodeInbound(payload []byte) (text, ackID, replyTo, msgID 
 		}
 	}
 	return string(payload), "", "", ""
+}
+
+// receiptKind reports the receipt type a frame carries about a message we sent
+// (message.TypeAck / message.TypeRead) plus the id it refers to, or "" for
+// anything that is not a receipt.
+func receiptKind(payload []byte) (kind, id string) {
+	env, ok := message.ParseEnvelope(payload)
+	if !ok || env.ID == "" {
+		return "", ""
+	}
+	switch env.Type {
+	case message.TypeAck, message.TypeRead:
+		return env.Type, env.ID
+	}
+	return "", ""
 }
 
 func newID() string {

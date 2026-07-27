@@ -53,9 +53,10 @@ const (
 
 // env is the shared harness state, set up in TestMain.
 var env struct {
-	work  string // temp working directory (cwd for every process)
-	bin   string // path to the built skywire binary
-	procs []*exec.Cmd
+	work       string // temp working directory (cwd for every process)
+	bin        string // path to the built skywire binary
+	procs      []*exec.Cmd
+	procByName map[string]*exec.Cmd // last-launched process per name (for relaunch)
 }
 
 func TestMain(m *testing.M) {
@@ -113,25 +114,28 @@ func setup() error {
 	}
 	env.bin = filepath.Join(binDir, exe("skywire"))
 
-	// 3. Start the deployment, then the two visors.
+	// 3. Start the deployment, then the two visors — STAGGERED, one fully up
+	// before the next. Starting both at once makes them race for the cold
+	// single dmsg server; the loser (usually visorB) times out a boot module
+	// and the whole visor aborts ("failed to start visor"), which then takes
+	// down every test that needs it. Bringing visorA fully up first warms the
+	// server so visorB connects cleanly, and launchVisor retries a visor whose
+	// boot aborts.
 	if err := startProc("svc", env.bin, "svc", "run", "--config", "services.json"); err != nil {
 		return err
 	}
 	if err := waitDmsgDisc(60 * time.Second); err != nil {
 		return fmt.Errorf("deployment not ready: %w", err)
 	}
-	if err := startProc("visorA", env.bin, "visor", "-c", "visorA.json"); err != nil {
+	if err := launchVisor("visorA", "visorA.json", rpcA); err != nil {
+		dumpLog("visorA")
+		dumpLog("svc")
 		return err
 	}
-	if err := startProc("visorB", env.bin, "visor", "-c", "visorB.json"); err != nil {
+	if err := launchVisor("visorB", "visorB.json", rpcB); err != nil {
+		dumpLog("visorB")
+		dumpLog("svc")
 		return err
-	}
-	for name, rpc := range map[string]string{"visorA": rpcA, "visorB": rpcB} {
-		if err := waitVisor(rpc, 180*time.Second); err != nil {
-			dumpLog(name)
-			dumpLog("svc")
-			return fmt.Errorf("visor %s not ready: %w", rpc, err)
-		}
 	}
 	// Warm-up: the dmsg backbone + route-finder/setup-node need a little time to
 	// settle on a freshly-started single-server loopback deployment before route
@@ -140,6 +144,37 @@ func setup() error {
 	// from racing the still-churning network.
 	fmt.Println("nativee2e: visors ready; warming up the network (90s)...")
 	time.Sleep(90 * time.Second)
+
+	// Post-warmup liveness: a cold-start visor can pass waitVisor and then die
+	// during the warmup (a transport module failing late on a degraded host,
+	// seen on the Windows runner as visor-B's RPC going refused right at test
+	// time). Re-verify both are still up and relaunch any that aren't, with a
+	// short re-warm — the backstop that keeps a mid-warmup death from failing
+	// the whole suite.
+	for round := 0; round < 2; round++ {
+		restarted := false
+		for _, v := range []struct{ name, cfg, rpc string }{
+			{"visorA", "visorA.json", rpcA},
+			{"visorB", "visorB.json", rpcB},
+		} {
+			if visorAlive(v.rpc) {
+				continue
+			}
+			fmt.Printf("nativee2e: %s went down after warmup — relaunching\n", v.name)
+			killProc(v.name)
+			if err := launchVisor(v.name, v.cfg, v.rpc); err != nil {
+				dumpLog(v.name)
+				dumpLog("svc")
+				return err
+			}
+			restarted = true
+		}
+		if !restarted {
+			break
+		}
+		fmt.Println("nativee2e: re-warming after a visor relaunch (30s)...")
+		time.Sleep(30 * time.Second)
+	}
 	fmt.Println("nativee2e: deployment + 2 visors ready")
 	return nil
 }
@@ -278,7 +313,51 @@ func startProc(name, bin string, args ...string) error {
 		return fmt.Errorf("start %s: %w", name, err)
 	}
 	env.procs = append(env.procs, cmd)
+	if env.procByName == nil {
+		env.procByName = map[string]*exec.Cmd{}
+	}
+	env.procByName[name] = cmd
 	return nil
+}
+
+// killProc terminates (and reaps) the process last started under name — used to
+// clear a visor whose boot aborted or hung before relaunching it, so the new
+// process can rebind the RPC port cleanly. No-op if it already exited.
+func killProc(name string) {
+	cmd := env.procByName[name]
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	_ = cmd.Process.Kill()
+	_, _ = cmd.Process.Wait()
+}
+
+// launchVisor starts a visor and waits until it is FULLY ready (RPC + dmsg
+// session + launcher initialized), retrying the whole launch if the boot
+// aborts. On a cold single-server deployment the second visor can lose the
+// dmsg-session race, time out a boot module, and exit ("failed to start
+// visor"); a relaunch after the deployment has warmed usually succeeds.
+func launchVisor(name, configFile, rpc string) error {
+	const attempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= attempts; attempt++ {
+		if attempt > 1 {
+			fmt.Printf("nativee2e: %s not ready (%v) — relaunching (attempt %d/%d)\n",
+				name, lastErr, attempt, attempts)
+			killProc(name)
+			time.Sleep(8 * time.Second) // let the dmsg server settle before retrying
+		}
+		if err := startProc(name, env.bin, "visor", "-c", configFile); err != nil {
+			lastErr = err
+			continue
+		}
+		if err := waitVisor(rpc, 120*time.Second); err != nil {
+			lastErr = err
+			continue
+		}
+		return nil
+	}
+	return fmt.Errorf("%s never became ready after %d attempts: %w", name, attempts, lastErr)
 }
 
 // rewriteBinPath points both visor configs' launcher.bin_path at an absolute
@@ -339,7 +418,18 @@ func waitDmsgDisc(timeout time.Duration) error {
 	return fmt.Errorf("dmsg-discovery not reachable on %s", dmsgDiscURL)
 }
 
-// waitVisor polls the visor RPC for its PK, then for at least one dmsg session.
+// visorAlive is a quick liveness probe: the visor's RPC answers with a PK.
+func visorAlive(rpc string) bool {
+	out, err := cli("visor", "--rpc", rpc, "pk")
+	return err == nil && has66Hex(out)
+}
+
+// waitVisor polls the visor RPC for its PK, then for at least one dmsg session,
+// then for the app launcher to be initialized. The launcher check matters: a
+// visor that aborts boot on a launcher.proc_manager module timeout (the
+// cold-start dmsg race) answers `pk` for a moment but never finishes the
+// launcher — so requiring `app ls` to succeed keeps us from treating a
+// soon-to-exit visor as ready and running the whole suite against a dead visor.
 func waitVisor(rpc string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
@@ -348,12 +438,17 @@ func waitVisor(rpc string, timeout time.Duration) error {
 			// RPC up; now wait for a dmsg session.
 			s, _ := cli("dmsg", "--rpc", rpc, "sessions")
 			if strings.Contains(s, "Connected sessions:") && !strings.Contains(s, "Connected sessions: 0") {
-				return nil
+				// Finally require the launcher: `app ls` only succeeds once the
+				// proc_manager module has initialized (so this visor won't
+				// abort on that module's timeout).
+				if _, lerr := cli("visor", "--rpc", rpc, "app", "ls"); lerr == nil {
+					return nil
+				}
 			}
 		}
 		time.Sleep(2 * time.Second)
 	}
-	return fmt.Errorf("visor on %s never reached ready (RPC + dmsg session)", rpc)
+	return fmt.Errorf("visor on %s never reached ready (RPC + dmsg session + launcher)", rpc)
 }
 
 // --- small utilities ---------------------------------------------------------

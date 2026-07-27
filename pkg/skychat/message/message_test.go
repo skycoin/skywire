@@ -98,6 +98,7 @@ func TestParseEnvelope(t *testing.T) {
 	}{
 		{"chat-msg with ack", `{"type":"chat-msg","id":"deadbeef","body":"hi","ack":true}`, true, TypeMsg, "deadbeef", true},
 		{"chat-ack", `{"type":"chat-ack","id":"deadbeef"}`, true, TypeAck, "deadbeef", false},
+		{"chat-read", `{"type":"chat-read","id":"deadbeef"}`, true, TypeRead, "deadbeef", false},
 		{"leading whitespace", "  {\"type\":\"chat-ack\",\"id\":\"x\"}", true, TypeAck, "x", false},
 		{"plain text", "hello world", false, "", "", false},
 		{"json-looking but unknown type", `{"type":"something-else"}`, false, "", "", false},

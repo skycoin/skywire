@@ -1,6 +1,6 @@
 // Package visor pkg/visor/init_voice.go c3-vis-core
 //
-// Brings up the skychat 1:1 voice-call manager (pkg/skychat/voice): it listens
+// Brings up the skychat 1:1 voice-call manager (pkg/skychat/call): it listens
 // for inbound call signaling on skyenv.SkychatVoiceSignalPort over BOTH dmsg AND
 // skynet (same port), and dials outbound calls over whichever network resolves.
 // Media (RTP) rides the signaling conn (a Noise-encrypted skywire transport),
@@ -19,7 +19,7 @@ import (
 	dmsgpkg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
-	skyvoice "github.com/skycoin/skywire/pkg/skychat/voice"
+	skycall "github.com/skycoin/skywire/pkg/skychat/call"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -44,7 +44,7 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		return v.dmsgC.DialStream(dctx, dmsgpkg.Addr{PK: peer, Port: p})
 	}
 
-	cfg := skyvoice.Config{
+	cfg := skycall.Config{
 		LocalPK:    localPK,
 		Dial:       dial,
 		SignalPort: port,
@@ -55,10 +55,10 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 	// use it for EVERY call — both the silent auto-answer path and the real-audio
 	// path — so both ends always agree on the codec. Each session gets its own
 	// (opus is stateful); fall back to PCM only if the encoder can't initialize.
-	cfg.NewCodec = func() skyvoice.Codec {
-		c, err := skyvoice.NewOpusCodec()
+	cfg.NewCodec = func() skycall.Codec {
+		c, err := skycall.NewOpusCodec()
 		if err != nil {
-			return skyvoice.NewPCMCodec()
+			return skycall.NewPCMCodec()
 		}
 		return c
 	}
@@ -76,14 +76,14 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 	//   monitor           → force the default sink's monitor (system audio)
 	//   off/none/silent/0 → no local capture (receive-only), still explicit-answer
 	//   auto/auto-answer  → auto-accept inbound calls, silent (headless/testing)
-	ring := func(inv skyvoice.Sig) {
+	ring := func(inv skycall.Sig) {
 		log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
 			Warn("voice: INCOMING CALL — answer in the hvui or `skywire cli skychat voice answer <id>`")
 	}
 	switch mode := strings.ToLower(strings.TrimSpace(os.Getenv("SKYWIRE_VOICE_AUDIO"))); mode {
 	case "auto", "auto-answer", "autoanswer":
 		// Headless/testing: accept every inbound call silently.
-		cfg.OnIncoming = func(inv skyvoice.Sig) bool {
+		cfg.OnIncoming = func(inv skycall.Sig) bool {
 			log.WithField("from", inv.FromPK.Hex()).Info("voice: inbound call — auto-answering (silent)")
 			return true
 		}
@@ -95,18 +95,18 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		monitor := mode == "monitor"
 		cfg.ManualAnswer = true
 		cfg.Visualize = true // tap call audio for `voice spectrogram --call`
-		cfg.NewSource = func() skyvoice.Source {
-			s, err := skyvoice.NewMicSource(monitor, 0)
+		cfg.NewSource = func() skycall.Source {
+			s, err := skycall.NewMicSource(monitor, 0)
 			if err != nil {
 				log.WithError(err).Warn("voice: audio capture unavailable — using silence (call still connects)")
-				return skyvoice.SilentSource{}
+				return skycall.SilentSource{}
 			}
 			return s
 		}
-		cfg.NewSink = func() skyvoice.Sink {
-			s, err := skyvoice.NewSpeakerSink(0)
+		cfg.NewSink = func() skycall.Sink {
+			s, err := skycall.NewSpeakerSink(0)
 			if err != nil {
-				return skyvoice.NullSink{}
+				return skycall.NullSink{}
 			}
 			return s
 		}
@@ -118,7 +118,7 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		log.Infof("voice: real audio enabled (%s) — calls ring; answer to connect", srcKind)
 	}
 
-	mgr := skyvoice.NewManager(cfg)
+	mgr := skycall.NewManager(cfg)
 	v.voice = mgr
 
 	// dmsg signaling listener on the shared port, now.

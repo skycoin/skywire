@@ -139,6 +139,29 @@ services:
   # part of the e2e topology.
 
   # skywire visors, which by being on a different network are to be isolated from the first one
+  #
+  # Each visor runs skychat as an in-process app on container port 8001 (see
+  # the launcher.apps entry in its config: no "binary", so the name resolves to
+  # the in-tree run func). The three UIs are published on the host so the chat
+  # app can be driven from a browser against three real visors — DMs, groups,
+  # file transfers, and voice/video messages:
+  #
+  #   visor-a  http://127.0.0.1:8001
+  #   visor-b  http://127.0.0.1:8002   (also the hypervisor: http://127.0.0.1:8000)
+  #   visor-c  http://127.0.0.1:8003
+  #
+  # Published on 127.0.0.1 deliberately, and not just to limit exposure: the
+  # microphone/camera (getUserMedia) and the Notifications API only work in a
+  # secure context, which plain http satisfies for 127.0.0.1/localhost and NOT
+  # for a LAN address. Reaching these UIs over the network instead would leave
+  # voice/video messages and desktop notifications disabled.
+  #
+  # Real-time voice CALLS are the one part that can't be exercised here: the
+  # visor captures/plays host audio (pkg/skychat/call — PulseAudio/PipeWire on
+  # Linux), and these alpine containers run no audio daemon, so the call
+  # manager reports disabled and the UI hides its call controls. Voice/video
+  # MESSAGES are unaffected — the browser records them and they ship over the
+  # ordinary file path.
 
   visor-a:
     privileged: true
@@ -152,6 +175,8 @@ services:
         ipv4_address: 173.0.0.11
       intra:
         ipv4_address: 174.0.0.11
+    ports:
+      - "127.0.0.1:8001:8001"   # skychat UI
     extra_hosts:
       - "visor-b:173.0.0.12"
       - "visor-c:173.0.0.13"
@@ -197,6 +222,9 @@ services:
         ipv4_address: 173.0.0.12
       intra:
         ipv4_address: 174.0.0.12
+    ports:
+      - "127.0.0.1:8002:8001"   # skychat UI (container port is 8001 on every visor)
+      - "127.0.0.1:8000:8000"   # hypervisor UI — visor-b is the hypervisor for a and c
     extra_hosts:
       - "visor-a:173.0.0.11"
       - "visor-c:173.0.0.13"
@@ -251,6 +279,8 @@ services:
         ipv4_address: 173.0.0.13
       intra:
         ipv4_address: 174.0.0.13
+    ports:
+      - "127.0.0.1:8003:8001"   # skychat UI
     extra_hosts:
       - "visor-a:173.0.0.11"
       - "visor-b:173.0.0.12"
