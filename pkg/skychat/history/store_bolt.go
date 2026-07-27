@@ -42,8 +42,10 @@ type BoltStore struct {
 	peerLastSeen map[string]time.Time // for GC of rateCount map
 
 	// background sweep
-	done chan struct{}
-	wg   sync.WaitGroup
+	done      chan struct{}
+	wg        sync.WaitGroup
+	closeOnce sync.Once
+	closeErr  error
 }
 
 const (
@@ -447,11 +449,17 @@ func iterateGroupForward(bkt *bolt.Bucket, limit int, fn func(GroupMessage) erro
 	})
 }
 
-// Close implements Store.
+// Close implements Store. Idempotent: a second call is a no-op returning the
+// first call's error. Shutdown paths legitimately close more than once (a
+// defer plus an explicit close, or two owners of the same store), and closing
+// s.done twice would panic the process rather than report anything useful.
 func (s *BoltStore) Close() error {
-	close(s.done)
-	s.wg.Wait()
-	return s.db.Close()
+	s.closeOnce.Do(func() {
+		close(s.done)
+		s.wg.Wait()
+		s.closeErr = s.db.Close()
+	})
+	return s.closeErr
 }
 
 func (s *BoltStore) sweepLoop() {

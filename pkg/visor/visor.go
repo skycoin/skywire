@@ -36,7 +36,7 @@ import (
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/serviceuptime"
-	skyvoice "github.com/skycoin/skywire/pkg/skychat/voice"
+	skycall "github.com/skycoin/skywire/pkg/skychat/call"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/transport/network"
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
@@ -256,7 +256,7 @@ type Visor struct {
 	// voice is the skychat 1:1 voice-call manager (signaling over dmsg +
 	// skynet on skyenv.SkychatVoiceSignalPort, RTP media over a skywire
 	// conn). Brought up by init_voice.go; nil when dmsg is unavailable.
-	voice *skyvoice.Manager
+	voice *skycall.Manager
 
 	// groupStreamSendCounter ticks once per successful stream.Send on
 	// any rpcgrpc.StreamGroupMessages stream. Bumped from the gRPC

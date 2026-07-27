@@ -1,7 +1,7 @@
 // Package visor pkg/visor/voice.go c3-vis-core
 //
 // Visor-side RPC surface for skychat 1:1 voice (the manager lives in
-// pkg/skychat/voice, brought up by init_voice.go). Place a call, hang up, and
+// pkg/skychat/call, brought up by init_voice.go). Place a call, hang up, and
 // list active calls; media rides an encrypted skywire transport.
 package visor
 

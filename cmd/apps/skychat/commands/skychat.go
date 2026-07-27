@@ -38,6 +38,7 @@ import (
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/skychat/dm"
 	"github.com/skycoin/skywire/pkg/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -429,6 +430,14 @@ func (h *sseHub) publishEvent(ev chatEvent) {
 // renderLegacySSE renders a chatEvent into the historical /sse JSON shape
 // {sender, message, network, dir, id, len, [to]} so existing /sse consumers
 // (incl. `cli skychat listen`) are unaffected by the richer /events schema.
+//
+// File attachments are surfaced additively: when the event carries file_*
+// fields (a Telegram-style "a file is a message" event from the xfer
+// manager), they are appended to the same JSON object. This is a
+// backward-compatible extension — line-based consumers like `cli skychat
+// listen` ignore the unknown keys, while the browser UI renders the media
+// inline. file_url, present only on received ("in") files, is the ready-made
+// download path under /files/ so the UI needn't reconstruct the saved name.
 func renderLegacySSE(ev chatEvent) string {
 	m := map[string]interface{}{
 		"sender":  ev.From,
@@ -441,11 +450,31 @@ func renderLegacySSE(ev chatEvent) string {
 	if ev.To != "" {
 		m["to"] = ev.To
 	}
+	// A quoted reply rides the body as a {"skychat_reply":...} envelope; unwrap
+	// it to the plain text + additive reply_to_* fields (raw consumers still see
+	// the reply's text as the message).
+	if meta, ok := parseReplyText(ev.Text); ok {
+		m["message"] = meta.Text
+		enrichReplyRow(m, meta)
+	}
 	if ev.ReplyToID != "" {
 		// Surface the quoted-reply target on the legacy /sse shape too, so the
 		// bundled skychat SPA (which consumes /sse) can thread replies without
-		// switching to /events.
+		// switching to /events. Complements the reply_to_* fields above: this
+		// one threads by message id, those carry the quoted text itself.
 		m["reply_to_id"] = ev.ReplyToID
+	}
+	if ev.FileID != "" {
+		m["file_id"] = ev.FileID
+		m["file_name"] = ev.FileName
+		m["file_size"] = ev.FileSize
+		m["file_status"] = ev.FileStatus
+		// A saved local path (set on inbound files once the transfer
+		// verifies) becomes the /files/<name> download URL the UI can
+		// render directly. Empty on the sender's own "out" event.
+		if ev.FilePath != "" {
+			m["file_url"] = "/files/" + filepath.Base(ev.FilePath)
+		}
 	}
 	b, err := json.Marshal(m)
 	if err != nil {
@@ -544,6 +573,7 @@ func init() {
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
 	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", true, "listen on dmsg network")
+	RootCmd.Flags().BoolVar(&osNotify, "os-notify", true, "post host-OS desktop notifications for inbound messages when no browser UI is showing them (no-ops on a headless host)")
 	RootCmd.Flags().StringVar(&passwordFile, "password-file", "", "path to a file containing a bcrypt hash; when set, gates HTTP endpoints with basic auth")
 	RootCmd.Flags().StringVar(&internalToken, "internal-token", "", "shared secret used by the hypervisor's reverse proxy to bypass the password gate; managed automatically by the visor")
 
@@ -619,6 +649,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
 		fs.BoolVar(&useDmsg, "dmsg", true, "listen on dmsg")
+		fs.BoolVar(&osNotify, "os-notify", true, "host-OS desktop notifications when no UI is attached")
 		fs.StringVar(&passwordFile, "password-file", "", "path to bcrypt hash for HTTP basic auth")
 		fs.StringVar(&internalToken, "internal-token", "", "hypervisor proxy bypass token")
 		fs.BoolVar(&persistEnabled, "persist", false, "persist chat history to BoltDB")
@@ -748,9 +779,26 @@ func RunSkychat(ctx context.Context, args []string) error {
 		OnEvent:   onChatEvent,
 		DialRetry: func(dctx context.Context, fn func() error) error { return r.Do(dctx, fn) },
 		PreHandleFrame: func(peer cipher.PubKey, payload []byte) bool {
-			return handlePairControlFrame(context.Background(), peer, payload)
+			// Pair-control (pair-invite / pair-ack) and file-backfill
+			// (file-request) envelopes are consumed here: both are control
+			// traffic that must never surface as a chat line.
+			if handlePairControlFrame(context.Background(), peer, payload) {
+				return true
+			}
+			return handleFileRequestFrame(context.Background(), peer, payload)
 		},
-		Log: func(f string, a ...interface{}) { appLog(f, a...) },
+		// A receipt about a message WE sent becomes a dm-status event, which is
+		// how the browser advances a bubble's tick to received / read.
+		OnReceipt: func(peer, id, kind string) {
+			switch kind {
+			case message.TypeAck:
+				broadcastDMStatus(id, dmStatusReceived, peer)
+			case message.TypeRead:
+				broadcastDMStatus(id, dmStatusRead, peer)
+			}
+		},
+		StaleAckWindow: staleAckWindow,
+		Log:            func(f string, a ...interface{}) { appLog(f, a...) },
 	})
 	if len(nets) > 0 && !standalone && appCl != nil {
 		if err := chatCtrl.Start(ctx); err != nil {
@@ -792,6 +840,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 	defer stopPairRPCWatchdog()
 	startPairPoller(ctx)
 	defer stopPairPoller()
+	startGroupPoller(ctx)
+	defer stopGroupPoller()
 
 	// Wire optional password protection. If passwordFile is empty or
 	// the file is missing, requireAuth* are no-ops.
@@ -808,6 +858,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	// taking the entire chat-app down whenever the launcher tried to
 	// recover from a transient failure or any other re-launch path.
 	mux := http.NewServeMux()
+	logOSNotifyStartup()
 	mux.Handle("/", requireAuth(http.FileServer(getFileSystem())))
 	mux.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
 	mux.HandleFunc("/sse", requireAuthFunc(sseHandler))
@@ -817,7 +868,15 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
+	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
+	mux.HandleFunc("/request-file", requireAuthFunc(requestFileHandler(ctx)))
+	mux.HandleFunc("/read-receipt", requireAuthFunc(readReceiptHandler(ctx)))
+	mux.HandleFunc("/notify-capable", requireAuthFunc(notifyCapableHandler))
 	registerPairHTTPHandlers(ctx, mux)
+	registerGroupHTTPHandlers(mux)
+	registerVoiceHTTPHandlers(mux)
+	registerPresenceHTTPHandlers(mux)
+	startPresenceLoop(ctx)
 
 	// Portless-internal mode: no TCP port. Publish the mux to the visor's
 	// in-process HTTP-handler registry so the hypervisor's control surface
@@ -868,9 +927,18 @@ func RunSkychat(ctx context.Context, args []string) error {
 
 	appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 	srv := &http.Server{
-		Addr:         url,
-		Handler:      mux,
-		ReadTimeout:  5 * time.Second,
+		Addr:    url,
+		Handler: mux,
+		// ReadHeaderTimeout (not ReadTimeout) bounds only the request-header read
+		// for slowloris protection; the BODY read is left unbounded so a large
+		// file upload (/send-file) is never truncated by a whole-request deadline
+		// — a 5s ReadTimeout used to cut a multi-MB upload short, surfacing as
+		// "no file". There is no size cap on uploads.
+		ReadHeaderTimeout: 5 * time.Second,
+		// WriteTimeout bounds the response write for ordinary handlers; the SSE
+		// stream and the /send-file handler (which blocks for the whole transfer)
+		// clear their own per-request deadline so a long-lived stream / large
+		// transfer isn't killed.
 		WriteTimeout: 10 * time.Second,
 	}
 
@@ -912,11 +980,21 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			// {acked:false, reason:"timeout"}. Clamped to
 			// [chatAckTimeoutFloor, chatAckTimeoutCeiling] server-side.
 			WaitMS int `json:"wait_ms,omitempty"`
+			// Receipts requests the message-status lifecycle WITHOUT
+			// blocking: the message is wrapped in an id'd chat-msg
+			// envelope (ack=true) exactly like --wait, but the handler
+			// returns immediately with {ok:true, id:<hex>} instead of
+			// waiting. The id lets the browser track the bubble as the
+			// peer's chat-ack (→ received) and chat-read (→ read)
+			// receipts arrive later as dm-status /sse events. Used by
+			// the browser UI; the CLI keeps the byte-identical plain
+			// send unless it opts in.
+			Receipts bool `json:"receipts,omitempty"`
 			// ReplyTo, if set, is the id of a prior message this send
 			// quotes (a threaded reply). It forces a chat-msg envelope
 			// (see below) carrying ReplyTo so the RECIPIENT surfaces the
-			// thread — the receive-side wiring already reads env.ReplyTo
-			// (sendack.go). Empty keeps a default send byte-identical.
+			// thread — the receive side reads env.ReplyTo in the shared
+			// controller. Empty keeps a default send byte-identical.
 			ReplyTo string `json:"reply_to,omitempty"`
 		}
 		if err := json.NewDecoder(req.Body).Decode(&data); err != nil {
@@ -1001,10 +1079,15 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		// cached conn, writes with a deadline, redial-retries a stale cached conn,
 		// falls back to the alternate network, persists, and surfaces the outbound
 		// mirror via OnEvent → publishEvent. For a wait_ms send it wraps a chat-msg
-		// envelope and blocks on the peer's chat-ack.
+		// envelope and blocks on the peer's chat-ack; for a receipts send it asks
+		// for the same ack but returns straight away, leaving the controller to
+		// watch for it (status arrives later as dm-status /sse events).
 		opt := dm.SendOpts{ReplyTo: data.ReplyTo}
-		if data.WaitMS > 0 {
+		switch {
+		case data.WaitMS > 0:
 			opt.WaitAck = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
+		case data.Receipts:
+			opt.RequestAck = true
 		}
 		res, sErr := chatCtrl.Send(ctx, pk, netType, data.Message, opt)
 		if sErr != nil {
@@ -1023,6 +1106,18 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 					"acked": false, "id": res.ID, "reason": "timeout", "ms": opt.WaitAck.Milliseconds(),
 				})
 			}
+		} else if data.Receipts {
+			// Non-blocking receipts: hand the browser the wire id so it can
+			// track this bubble as the peer's received/read status arrives
+			// later on the dm-status /sse stream. The stale-conn recovery that
+			// used to live here (drop a half-open conn when no ack comes back)
+			// moved into the controller with the conn cache — RequestAck arms
+			// it, bounded by the StaleAckWindow passed at construction.
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+				"ok": true,
+				"id": res.ID,
+			})
 		}
 	}
 }
@@ -1241,6 +1336,13 @@ func historyHandler(w http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+
+	// Surface quoted-reply metadata: a reply is stored raw as a
+	// {"skychat_reply":...} body; rewrite each in place to the clean text +
+	// reply_to_* fields the browser renders on reload.
+	for i := range msgs {
+		enrichReplyMessage(&msgs[i])
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -1524,6 +1626,11 @@ func onChatEvent(ev dm.Event) {
 		ReplyToID: ev.ReplyTo,
 		Len:       len(ev.Text),
 	})
+	// Host-OS notification when no capable browser UI is showing it. Inbound
+	// only — our own outbound mirror is not news to this host.
+	if ev.Dir == "in" {
+		notifyOSInbound(shortHexPK(ev.Peer), notifPreview(ev.Text))
+	}
 }
 
 func persistMessage(msg history.Message) {
@@ -1621,7 +1728,15 @@ func handleIPCSignal(client *ipc.Client) {
 	for {
 		m, err := client.Read()
 		if err != nil {
-			appLog("%s IPC received error: %v", skyenv.SkychatName, err)
+			// A read error is terminal: golang-ipc closes the receive channel
+			// on error, so every subsequent Read returns immediately with the
+			// same error. Without breaking, this loop spins at full tilt (seen
+			// on Windows as hundreds of "received channel has been closed" lines
+			// per millisecond), starving the HTTP server + dmsg on constrained
+			// hosts. Stop the handler instead — the app keeps serving; it just
+			// won't receive a shutdown-via-IPC signal.
+			appLog("%s IPC read error, stopping IPC handler: %v", skyenv.SkychatName, err)
+			break
 		}
 
 		if m != nil {

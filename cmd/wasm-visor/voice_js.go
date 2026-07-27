@@ -2,11 +2,11 @@
 
 // Package main cmd/wasm-visor/voice_js.go c3-vis-wasm
 //
-// Wires pkg/skychat/voice into the wasm visor over the SAME app.Client the
+// Wires pkg/skychat/call into the wasm visor over the SAME app.Client the
 // browser skychat already uses: signaling (invite/accept/decline/hangup) on
 // skyenv.SkychatVoiceSignalPort over dmsg + skynet, media (RTP) on the same
 // conn. The codec is the pure-Go Opus (compiles under js/wasm — no WebCodecs
-// needed); audio I/O is the browser WebAudio backend (pkg/skychat/voice/
+// needed); audio I/O is the browser WebAudio backend (pkg/skychat/call/
 // audio_wasm.go) driven by a main-thread proxy, since getUserMedia/AudioContext
 // aren't available in the worker where the visor runs.
 //
@@ -28,11 +28,11 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
-	skyvoice "github.com/skycoin/skywire/pkg/skychat/voice"
+	skycall "github.com/skycoin/skywire/pkg/skychat/call"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
-var voiceMgr *skyvoice.Manager
+var voiceMgr *skycall.Manager
 
 // voiceDialWasm opens a signaling/media stream to peer on the voice port,
 // dmsg-first then skynet, via the browser skychat app.Client.
@@ -57,38 +57,38 @@ func voiceDialWasm(_ context.Context, peer cipher.PubKey, port uint16) (net.Conn
 // startVoiceWasm builds the voice manager on the browser skychat's app.Client
 // and listens for inbound calls on the voice port over dmsg + skynet.
 func startVoiceWasm(ctx context.Context, cl *app.Client) {
-	cfg := skyvoice.Config{
+	cfg := skycall.Config{
 		LocalPK:      cl.Config().VisorPK,
 		Dial:         voiceDialWasm,
 		SignalPort:   skyenv.SkychatVoiceSignalPort,
 		ManualAnswer: true, // ring; answer explicitly (never auto-stream the mic)
 		Visualize:    true,
-		NewCodec: func() skyvoice.Codec {
-			c, err := skyvoice.NewOpusCodec()
+		NewCodec: func() skycall.Codec {
+			c, err := skycall.NewOpusCodec()
 			if err != nil {
-				return skyvoice.NewPCMCodec()
+				return skycall.NewPCMCodec()
 			}
 			return c
 		},
-		NewSource: func() skyvoice.Source {
-			s, err := skyvoice.NewMicSource(false, 0)
+		NewSource: func() skycall.Source {
+			s, err := skycall.NewMicSource(false, 0)
 			if err != nil {
-				return skyvoice.SilentSource{}
+				return skycall.SilentSource{}
 			}
 			return s
 		},
-		NewSink: func() skyvoice.Sink {
-			s, err := skyvoice.NewSpeakerSink(0)
+		NewSink: func() skycall.Sink {
+			s, err := skycall.NewSpeakerSink(0)
 			if err != nil {
-				return skyvoice.NullSink{}
+				return skycall.NullSink{}
 			}
 			return s
 		},
-		Ring: func(inv skyvoice.Sig) {
+		Ring: func(inv skycall.Sig) {
 			vlog(fmt.Sprintf("voice: incoming call from %s — answer to accept", shortPK(inv.FromPK.Hex())))
 		},
 	}
-	voiceMgr = skyvoice.NewManager(cfg)
+	voiceMgr = skycall.NewManager(cfg)
 
 	var listeners []net.Listener
 	for _, n := range []appnet.Type{appnet.TypeDmsg, appnet.TypeSkynet} {
