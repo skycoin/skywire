@@ -957,6 +957,69 @@ func readExistingConfig(log *logging.Logger) {
 // oldConfCache holds the previously-read config for use across configure* functions.
 var oldConfCache *visorconfig.V1
 
+// mergeExistingApps makes a regenerate non-destructive to the launcher apps.
+// Without it, `config gen -r` rebuilds the apps list from the current defaults,
+// which both adds newly-introduced apps AND silently drops any app the operator
+// added by hand (plus resetting their per-app toggles). This reconciles the
+// freshly-built default list against the previous config so that:
+//
+//   - operator-toggled fields on apps present in both (AutoStart, Args,
+//     LauncherMode, RestartPolicy) are restored from the old entry — so a regen
+//     doesn't reset e.g. a skysocks-client's --srv or an app you enabled;
+//   - custom apps present only in the old config are carried over verbatim; and
+//   - brand-new default apps (added since the old config was written) still
+//     appear.
+//
+// Structural/versioned fields (Binary, Port) always come from the freshly-built
+// defaults. No-op when not regenerating or when the old config had no apps.
+func mergeExistingApps(log *logging.Logger) {
+	if !isRegen || oldConfCache == nil || oldConfCache.Launcher == nil {
+		return
+	}
+	old := oldConfCache.Launcher.Apps
+	if len(old) == 0 {
+		return
+	}
+	oldByName := make(map[string]appserver.AppConfig, len(old))
+	for _, a := range old {
+		oldByName[a.Name] = a
+	}
+	newByName := make(map[string]struct{}, len(conf.Launcher.Apps))
+	var added []string
+	for i := range conf.Launcher.Apps {
+		name := conf.Launcher.Apps[i].Name
+		newByName[name] = struct{}{}
+		prev, ok := oldByName[name]
+		if !ok {
+			added = append(added, name)
+			continue
+		}
+		conf.Launcher.Apps[i].AutoStart = prev.AutoStart
+		if len(prev.Args) > 0 {
+			conf.Launcher.Apps[i].Args = prev.Args
+		}
+		if prev.LauncherMode != "" {
+			conf.Launcher.Apps[i].LauncherMode = prev.LauncherMode
+		}
+		if prev.RestartPolicy != "" {
+			conf.Launcher.Apps[i].RestartPolicy = prev.RestartPolicy
+		}
+	}
+	var carried []string
+	for _, a := range old {
+		if _, ok := newByName[a.Name]; !ok {
+			conf.Launcher.Apps = append(conf.Launcher.Apps, a)
+			carried = append(carried, a.Name)
+		}
+	}
+	if len(added) > 0 {
+		log.Infof("regen: added %d new default app(s): %s", len(added), strings.Join(added, ", "))
+	}
+	if len(carried) > 0 {
+		log.Infof("regen: preserved %d custom app(s): %s", len(carried), strings.Join(carried, ", "))
+	}
+}
+
 // configureDMSGHTTP loads dmsghttp server list when dmsg URLs are needed.
 // Deployment services are dmsg-only; the DMSG fields are already in the services
 // struct from services-config.json. The separate dmsghttp-config.json path is
@@ -1933,6 +1996,14 @@ func configureApps(log *logging.Logger) {
 		log.WithError(cnErr).Fatal("invalid coin-nodes configuration")
 	}
 	conf.CoinNodes = coinNodeCfgs
+
+	// On regen, fold the previous config's apps back in so a regenerate
+	// updates-in-place instead of wiping the operator's setup: custom apps
+	// (added by hand) survive, and the operator's per-app toggles are kept —
+	// while brand-new default apps (added since the old config was written)
+	// still appear. Runs before --disable-apps so an explicit disable still
+	// wins over a preserved entry.
+	mergeExistingApps(log)
 
 	// Disable apps --disable-apps flag
 	if disableApps != "" {
