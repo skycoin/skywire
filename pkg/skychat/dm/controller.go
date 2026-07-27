@@ -459,6 +459,40 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 	return res, nil
 }
 
+// SendRaw writes a pre-framed raw payload to pk over a cached or freshly-dialed
+// conn, trying each configured network in order. No envelope, persistence, or
+// surfacing — it's for out-of-band control frames (the native app's
+// pair-invite / pair-ack) whose inbound side is consumed by PreHandleFrame.
+func (c *Controller) SendRaw(ctx context.Context, pk cipher.PubKey, payload []byte) error {
+	c.mu.Lock()
+	conn := c.conns[pk]
+	c.mu.Unlock()
+	if conn != nil {
+		if err := conn.WriteFrameDeadline(payload, writeTimeout); err == nil {
+			return nil
+		}
+		c.evict(pk, conn)
+	}
+	var lastErr error
+	for _, n := range c.cfg.Networks {
+		fc, err := c.dialAndCache(ctx, pk, appnet.Addr{Net: n, PubKey: pk, Port: c.port})
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if werr := fc.WriteFrameDeadline(payload, writeTimeout); werr == nil {
+			return nil
+		} else { //nolint:revive
+			c.evict(pk, fc)
+			lastErr = werr
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.New("skychat/dm: no network to send raw frame")
+	}
+	return lastErr
+}
+
 func (c *Controller) evict(pk cipher.PubKey, conn *message.Conn) {
 	c.mu.Lock()
 	if c.conns[pk] == conn {
@@ -472,6 +506,32 @@ func (c *Controller) Conns() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return len(c.conns)
+}
+
+// HasConn reports whether a live cached connection to pk exists.
+func (c *Controller) HasConn(pk cipher.PubKey) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.conns[pk]
+	return ok
+}
+
+// NoteInbound records an inbound message that arrived outside the framed-conn
+// read loop (e.g. the native app's CXO feed path) so the /status counters stay
+// accurate for those transports too.
+func (c *Controller) NoteInbound() {
+	c.bump(func(s *Stats) { s.InboundMsgs++; s.LastRxAt = time.Now().UTC() })
+}
+
+// Peers returns the PK hexes of every cached peer connection (for /status).
+func (c *Controller) Peers() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]string, 0, len(c.conns))
+	for pk := range c.conns {
+		out = append(out, pk.Hex())
+	}
+	return out
 }
 
 // Close stops accept/read loops and closes every cached conn. Idempotent.

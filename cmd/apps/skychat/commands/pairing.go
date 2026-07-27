@@ -35,14 +35,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -578,51 +576,10 @@ func sendPairControl(ctx context.Context, peerPK cipher.PubKey, msgType string) 
 	if err != nil {
 		return err
 	}
-	conn, err := dialOrReusePeerConn(ctx, peerPK)
-	if err != nil {
-		return err
-	}
-	return conn.WriteFrame(body)
-}
-
-// dialOrReusePeerConn returns a live framed connection to peerPK,
-// dialing over skynet (or dmsg as fallback) if none exists. Mirrors
-// what messageHandler does but doesn't take the HTTP request
-// context's shape.
-func dialOrReusePeerConn(ctx context.Context, peerPK cipher.PubKey) (*framedConn, error) {
-	connsMu.Lock()
-	conn, ok := conns[peerPK]
-	connsMu.Unlock()
-	if ok {
-		return conn, nil
-	}
-
-	var lastErr error
-	for _, netType := range []appnet.Type{appnet.TypeSkynet, appnet.TypeDmsg} {
-		addr := appnet.Addr{Net: netType, PubKey: peerPK, Port: 1}
-		var dialed net.Conn
-		err := r.Do(ctx, func() error {
-			c, dialErr := appCl.Dial(addr)
-			if dialErr != nil {
-				return dialErr
-			}
-			dialed = c
-			return nil
-		})
-		if err == nil && dialed != nil {
-			fc := newFramedConn(dialed)
-			connsMu.Lock()
-			conns[peerPK] = fc
-			connsMu.Unlock()
-			go handleConn(fc) //nolint:gosec
-			return fc, nil
-		}
-		lastErr = err
-	}
-	if lastErr == nil {
-		lastErr = errors.New("pairing: no network type succeeded")
-	}
-	return nil, lastErr
+	// Pair-control frames ride the shared DM controller's conns (dial/reuse +
+	// raw write, trying skynet then dmsg). The inbound side is consumed by the
+	// controller's PreHandleFrame hook → handlePairControlFrame.
+	return chatCtrl.SendRaw(ctx, peerPK, body)
 }
 
 // parsePK parses a hex-encoded public key and returns a cipher.PubKey.

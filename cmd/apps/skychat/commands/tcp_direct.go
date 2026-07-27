@@ -216,12 +216,10 @@ func acceptTCPConn(
 	}
 
 	tdc := &tcpDirectConn{Conn: wrapped, rPK: rPK}
-	fc := newFramedConn(tdc)
-	connsMu.Lock()
-	conns[rPK] = fc
-	connsMu.Unlock()
 	appLog("skychat: tcp-direct conn accepted from %s", rPK)
-	handleConn(fc)
+	// Serve caches the conn (by its appnet.Addr RemoteAddr) and runs it through
+	// the shared DM read loop, exactly as the dmsg/skynet accept path does.
+	chatCtrl.Serve(tdc)
 }
 
 // runTCPPeerDialers spawns one persistent-dial goroutine per
@@ -286,17 +284,11 @@ func peerDialLoop(
 		backoff = tcpReconnectMin
 
 		tdc := &tcpDirectConn{Conn: conn, rPK: rPK}
-		fc := newFramedConn(tdc)
-		connsMu.Lock()
-		// If a prior conn (from accept side OR a previous loop iter)
-		// is still registered, supersede it. The old framedConn's
-		// handleConn will exit naturally on its next ReadFrame.
-		conns[rPK] = fc
-		connsMu.Unlock()
 		appLog("skychat: tcp-peer connected to %s@%s", rPK, addr)
-		// handleConn blocks until the peer disconnects (ReadFrame
-		// error). On return we'll loop and redial.
-		handleConn(fc)
+		// Serve supersedes any prior conn for this PK in the controller's cache
+		// and blocks until the peer disconnects (ReadFrame error); on return we
+		// loop and redial.
+		chatCtrl.Serve(tdc)
 		appLog("skychat: tcp-peer disconnected from %s@%s", rPK, addr)
 	}
 }
