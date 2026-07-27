@@ -37,6 +37,10 @@ import (
 const (
 	dmStatusReceived = "received"
 	dmStatusRead     = "read"
+	// dmStatusDeleted flags a message deleted for everyone: the browser replaces
+	// the bubble with a "this message was deleted" placeholder. Broadcast on
+	// both ends — the deleter's own UI and, via OnDelete, the recipient's.
+	dmStatusDeleted = "deleted"
 )
 
 // staleAckWindow bounds how long a non-blocking receipts send waits for the
@@ -88,6 +92,47 @@ func sendReadReceipt(ctx context.Context, peer cipher.PubKey, id string) error {
 // id): the recipient's UI reports which inbound messages from pk it has now
 // displayed, and we send a chat-read envelope per id back to that peer so the
 // original sender's bubbles advance to "read".
+// deleteHandler serves POST /delete {pk, id}: the operator deletes their own
+// message for everyone. Sends a chat-delete to the peer (their UI tombstones it
+// via OnDelete) and broadcasts a dm-status "deleted" locally so the deleter's
+// own bubble tombstones immediately.
+func deleteHandler(ctx context.Context) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "POST only", http.StatusMethodNotAllowed)
+			return
+		}
+		var body struct {
+			PK string `json:"pk"`
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		peer, err := parsePK(body.PK)
+		if err != nil {
+			http.Error(w, "invalid pk: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(body.ID) == "" {
+			http.Error(w, "missing id", http.StatusBadRequest)
+			return
+		}
+		if chatCtrl == nil {
+			http.Error(w, "chat controller not ready", http.StatusServiceUnavailable)
+			return
+		}
+		if err := chatCtrl.SendDelete(ctx, peer, body.ID); err != nil {
+			appLog("skychat: delete %s to %s failed: %v", body.ID, peer, err)
+			// Still tombstone locally — the operator's intent is recorded even if
+			// the peer is currently unreachable (they can't receive the delete).
+		}
+		broadcastDMStatus(body.ID, dmStatusDeleted, peer.Hex())
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 func readReceiptHandler(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
