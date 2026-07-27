@@ -237,6 +237,26 @@ func TestBoltStore_TTLSweep(t *testing.T) {
 	}
 }
 
+// Close is called more than once in practice — a defer plus an explicit close,
+// or two owners of the same store (a test helper and the global it was assigned
+// to). It must report the first result rather than panic on a re-closed
+// channel, which used to take the whole process down.
+func TestBoltStore_CloseIsIdempotent(t *testing.T) {
+	s, err := NewBoltStore(filepath.Join(t.TempDir(), "twice.db"), Limits{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("first close: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Errorf("second close: %v, want the first call's nil", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Errorf("third close: %v", err)
+	}
+}
+
 func TestBoltStore_Persists(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "persist.db")
 	s1, err := NewBoltStore(path, Limits{})
