@@ -184,6 +184,7 @@ func main() {
 		"skychatGroupAddMember": js.FuncOf(jsGroupAddMember),
 		"skychatGroupList":      js.FuncOf(jsGroupList),
 		"skychatGroupMessages":  js.FuncOf(jsGroupMessages),
+		"skychatGroupReplay":    js.FuncOf(jsGroupReplay),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
