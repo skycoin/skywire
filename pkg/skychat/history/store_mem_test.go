@@ -254,11 +254,11 @@ func TestMemStore_GroupAppendAndSince(t *testing.T) {
 		t.Fatalf("zero-time ListGroupSince: len=%d err=%v", len(zeroAll), err)
 	}
 	// Unknown group → nil.
-	if got, _ := s.ListGroupSince("nope", since); got != nil {
+	if got, _ := s.ListGroupSince("nope", since); got != nil { //nolint
 		t.Errorf("unknown group should be nil, got %v", got)
 	}
 	// Groups() lists the one group.
-	groups, _ := s.Groups()
+	groups, _ := s.Groups() //nolint
 	if len(groups) != 1 || groups[0] != "g1" {
 		t.Errorf("Groups() = %v, want [g1]", groups)
 	}
@@ -274,11 +274,11 @@ func TestMemStore_GroupIsolation(t *testing.T) {
 	if err := s.AppendGroup(GroupMessage{GroupID: "x", SenderPK: "x", Text: "grp"}); err != nil {
 		t.Fatal(err)
 	}
-	dm, _ := s.ListByPeer("x", 0)
+	dm, _ := s.ListByPeer("x", 0) //nolint
 	if len(dm) != 1 || dm[0].Text != "dm" {
 		t.Errorf("ListByPeer leaked group traffic: %+v", dm)
 	}
-	grp, _ := s.ListByGroup("x", 0)
+	grp, _ := s.ListByGroup("x", 0) //nolint
 	if len(grp) != 1 || grp[0].Text != "grp" {
 		t.Errorf("ListByGroup leaked dm traffic: %+v", grp)
 	}

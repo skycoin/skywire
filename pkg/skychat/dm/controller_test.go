@@ -134,7 +134,7 @@ func TestController_SendReceive(t *testing.T) {
 	if err := ctrlA.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() })
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
 
 	// Plain send A -> B.
 	if _, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "hello B", SendOpts{}); err != nil {
@@ -156,9 +156,9 @@ func TestController_QuotedReply(t *testing.T) {
 	recB := &recorder{}
 	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recB.on})
 	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
-	_ = ctrlB.Start(context.Background())
-	_ = ctrlA.Start(context.Background())
-	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() })
+	_ = ctrlB.Start(context.Background())                      //nolint
+	_ = ctrlA.Start(context.Background())                      //nolint
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
 
 	res, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "a threaded reply", SendOpts{ReplyTo: "parent123"})
 	if err != nil {
@@ -181,9 +181,9 @@ func TestController_AckRoundTrip(t *testing.T) {
 	pkA, pkB := mustPK(t), mustPK(t)
 	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
 	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
-	_ = ctrlB.Start(context.Background())
-	_ = ctrlA.Start(context.Background())
-	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() })
+	_ = ctrlB.Start(context.Background())                      //nolint
+	_ = ctrlA.Start(context.Background())                      //nolint
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
 
 	res, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "ack me", SendOpts{WaitAck: 2 * time.Second})
 	if err != nil {
@@ -201,14 +201,14 @@ func TestController_ServeAndStats(t *testing.T) {
 	pkPeer := mustPK(t)
 	rec := &recorder{}
 	ctrl := New(Config{Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: rec.on})
-	t.Cleanup(func() { _ = ctrl.Close() })
+	t.Cleanup(func() { _ = ctrl.Close() }) //nolint
 
 	near, far := net.Pipe()
 	// far is what Serve reads; give it a RemoteAddr carrying the peer PK.
 	go ctrl.Serve(memConn{Conn: far, raddr: appnet.Addr{Net: appnet.TypeDmsg, PubKey: pkPeer, Port: chatPort}})
 
 	// Write a plain-text frame from the near end (peer -> us).
-	go func() { _ = message.WriteFrame(near, []byte("injected hello")) }()
+	go func() { _ = message.WriteFrame(near, []byte("injected hello")) }() //nolint
 	in := waitFor(t, rec, func(e Event) bool { return e.Text == "injected hello" && e.Dir == "in" })
 	if in.Peer != pkPeer.Hex() {
 		t.Errorf("served-conn peer = %s, want %s", in.Peer, pkPeer.Hex())
@@ -223,7 +223,7 @@ func TestController_NoTransportDialErrors(t *testing.T) {
 	// conn must error cleanly, not panic.
 	pk := mustPK(t)
 	ctrl := New(Config{Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
-	t.Cleanup(func() { _ = ctrl.Close() })
+	t.Cleanup(func() { _ = ctrl.Close() }) //nolint
 	if _, err := ctrl.Send(context.Background(), pk, appnet.TypeDmsg, "hi", SendOpts{}); err == nil {
 		t.Error("send with no transport + no cached conn should error")
 	}
@@ -234,8 +234,8 @@ func TestController_AckTimeoutNoPeer(t *testing.T) {
 	hub := newMemHub()
 	pkA, pkB := mustPK(t), mustPK(t)
 	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
-	_ = ctrlA.Start(context.Background())
-	t.Cleanup(func() { _ = ctrlA.Close() })
+	_ = ctrlA.Start(context.Background())   //nolint
+	t.Cleanup(func() { _ = ctrlA.Close() }) //nolint
 
 	_, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "nobody home", SendOpts{})
 	if err == nil {
