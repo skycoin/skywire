@@ -19,7 +19,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 )
 
 // replyMeta is the reply reference carried in a message body.

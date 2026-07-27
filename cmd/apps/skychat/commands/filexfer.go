@@ -31,10 +31,10 @@ import (
 
 	"github.com/disintegration/imaging"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/history"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/xfer"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
@@ -66,10 +66,7 @@ func downloadsDir() (string, error) {
 // live conn exists) — the "already established a chat" half of the auto-accept
 // policy. Group membership is handled by the group path (filexfer_group.go).
 func isEstablishedPeer(pk cipher.PubKey) bool {
-	connsMu.Lock()
-	_, ok := conns[pk]
-	connsMu.Unlock()
-	return ok
+	return chatCtrl != nil && chatCtrl.HasConn(pk)
 }
 
 // fileDialFunc opens a fresh transfer stream to peer on the file port, trying

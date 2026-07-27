@@ -86,6 +86,10 @@ nav:
           - vpn/README.md
           - vpn/client.md
           - vpn/router.md
+  - Packaging & Updates:
+      - packaging/README.md
+      - Auto-Update: packaging/auto-update.md
+      - AUR Packages: packaging/aur-packages.md
   - Specs: specs/index.md
   - Glossary: glossary.md
   - Rewards: rewards/index.md

@@ -1,4 +1,7 @@
-// Package history store_test.go
+//go:build !js
+// +build !js
+
+// Package history store_bolt_test.go
 package history
 
 import (

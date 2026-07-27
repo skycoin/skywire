@@ -9,7 +9,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 )
 
 func TestReplyEnvelopeRoundTrip(t *testing.T) {

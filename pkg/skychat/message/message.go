@@ -142,6 +142,13 @@ type Envelope struct {
 	ID   string `json:"id"`
 	Body string `json:"body,omitempty"`
 	Ack  bool   `json:"ack,omitempty"` // chat-msg only: request ack-on-receipt
+	// ReplyTo, when set on a chat-msg, is the ID of the message this one quotes
+	// (a threaded reply). omitempty keeps the wire byte-identical for non-reply
+	// messages, so a peer that predates this field simply ignores it — the field
+	// is additive and backward-compatible. Both the native app and the wasm-visor
+	// set/read it, so quoted replies now propagate to the RECIPIENT (previously
+	// reply-threading was sender-local only).
+	ReplyTo string `json:"reply_to,omitempty"`
 }
 
 // Envelope type values.

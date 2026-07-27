@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 	"syscall/js"
 	"time"
@@ -33,10 +34,16 @@ import (
 
 const groupLogCap = 1000
 
+// groupSeenCap bounds the dedup set. Larger than groupLogCap so the dedup
+// window outlives the display ring; on overflow we clear it wholesale (a
+// browser tab can tolerate the rare re-duplication that implies).
+const groupSeenCap = 8192
+
 var (
-	groupMgr *group.Manager
-	groupMu  sync.Mutex
-	groupLog []groupMsg // in-memory ring of received group messages
+	groupMgr  *group.Manager
+	groupMu   sync.Mutex
+	groupLog  []groupMsg          // in-memory ring of received group messages
+	groupSeen = map[string]bool{} // dedup: GroupID|senderHex|ts-nanos (replay vs. live)
 )
 
 // groupMsg is one group message surfaced to the page (skychatGroupMessages()).
@@ -47,13 +54,27 @@ type groupMsg struct {
 	TS      int64  `json:"ts"` // unix milliseconds
 }
 
-func appendGroupMsg(m groupMsg) {
+// appendGroupMsg records a group message, deduped by (group, sender, ns-ts) so
+// a ReplayHistory pump can't double-list messages already delivered live (or by
+// an earlier replay). Returns true if the message was new. key is derived from
+// nanosecond ts so it survives the millisecond truncation in groupMsg.TS.
+func appendGroupMsg(m groupMsg, key string) bool {
 	groupMu.Lock()
+	defer groupMu.Unlock()
+	if key != "" {
+		if groupSeen[key] {
+			return false
+		}
+		if len(groupSeen) >= groupSeenCap {
+			groupSeen = make(map[string]bool, groupSeenCap)
+		}
+		groupSeen[key] = true
+	}
 	groupLog = append(groupLog, m)
 	if len(groupLog) > groupLogCap {
 		groupLog = groupLog[len(groupLog)-groupLogCap:]
 	}
-	groupMu.Unlock()
+	return true
 }
 
 // startGroupChat brings up the in-browser group Manager over the wasm dmsg client
@@ -82,8 +103,10 @@ func startGroupChat(sk cipher.SecKey, log *logging.Logger) {
 		return
 	}
 	mgr.SetMessageHandler(func(groupID string, sender cipher.PubKey, msg group.Message) {
-		appendGroupMsg(groupMsg{GroupID: groupID, From: sender.Hex(), Text: msg.Text, TS: msg.TS.UnixMilli()})
-		vlog(fmt.Sprintf("group: message in %s from %s: %q", shortID(groupID), shortPK(sender.Hex()), msg.Text))
+		key := groupDedupKey(groupID, sender.Hex(), msg.TS.UnixNano())
+		if appendGroupMsg(groupMsg{GroupID: groupID, From: sender.Hex(), Text: msg.Text, TS: msg.TS.UnixMilli()}, key) {
+			vlog(fmt.Sprintf("group: message in %s from %s: %q", shortID(groupID), shortPK(sender.Hex()), msg.Text))
+		}
 	})
 	groupMgr = mgr
 	if err := mgr.Resume(); err != nil {
@@ -97,6 +120,36 @@ func shortID(id string) string {
 		return id[:8]
 	}
 	return id
+}
+
+// groupDedupKey identifies a group message by (group, sender, nanosecond ts):
+// a sender does not publish two leaves at the same nanosecond, so this is a
+// stable identity across the replay and live delivery paths.
+func groupDedupKey(groupID, senderHex string, tsNano int64) string {
+	return groupID + "|" + senderHex + "|" + strconv.FormatInt(tsNano, 10)
+}
+
+// backfillGroupHistory re-pumps a group's history through the message handler
+// after a Join, best-effort. A Join subscribes to peers' CXO feeds but their
+// historical leaves sync asynchronously, so we replay a few times on a short
+// backoff — dedup makes the repeats idempotent — to catch history that lands
+// after the initial subscribe returns. The page can also call skychatGroupReplay
+// explicitly (e.g. a "load history" action).
+func backfillGroupHistory(id string) {
+	go func() {
+		for _, d := range []time.Duration{2 * time.Second, 6 * time.Second, 15 * time.Second} {
+			t := time.NewTimer(d)
+			select {
+			case <-ctx.Done():
+				t.Stop()
+				return
+			case <-t.C:
+			}
+			if groupMgr != nil {
+				groupMgr.ReplayHistory(id)
+			}
+		}
+	}()
 }
 
 // groupView is the compact record shape returned by skychatGroupList().
@@ -154,7 +207,28 @@ func jsGroupJoin(_ js.Value, args []js.Value) interface{} {
 		if err != nil {
 			return nil, err
 		}
+		// Peer CXO feeds sync asynchronously after subscribe; pull their
+		// history into the buffer over the next few seconds.
+		backfillGroupHistory(rec.ID)
 		return map[string]interface{}{"id": rec.ID, "name": rec.Name}, nil
+	})
+}
+
+// jsGroupReplay(id) → Promise<null>. Explicitly re-pumps a group's history
+// through the handler (deduped), for a UI "load history" action or to backfill
+// after a slow feed sync. Parity with the native app, where Resume replays at
+// startup.
+func jsGroupReplay(_ js.Value, args []js.Value) interface{} {
+	if groupMgr == nil {
+		return errPromise("group chat not ready")
+	}
+	if len(args) < 1 || args[0].String() == "" {
+		return errPromise("skychatGroupReplay(id)")
+	}
+	id := args[0].String()
+	return promise(func() (interface{}, error) {
+		groupMgr.ReplayHistory(id)
+		return nil, nil
 	})
 }
 

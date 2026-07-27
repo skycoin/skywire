@@ -163,6 +163,7 @@ func main() {
 		"closeWindow":       js.FuncOf(jsCloseWindow),
 		"skychatSend":       js.FuncOf(jsSkychatSend),
 		"skychatMessages":   js.FuncOf(jsSkychatMessages),
+		"skychatHistory":    js.FuncOf(jsSkychatHistory),
 		// File sharing (in-process, over the encrypted transport) — see filexfer_js.go.
 		"skychatSendFile": js.FuncOf(jsSkychatSendFile),
 		"skychatFile":     js.FuncOf(jsSkychatFile),
@@ -183,6 +184,7 @@ func main() {
 		"skychatGroupAddMember": js.FuncOf(jsGroupAddMember),
 		"skychatGroupList":      js.FuncOf(jsGroupList),
 		"skychatGroupMessages":  js.FuncOf(jsGroupMessages),
+		"skychatGroupReplay":    js.FuncOf(jsGroupReplay),
 	}))
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever

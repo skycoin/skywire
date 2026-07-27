@@ -82,7 +82,13 @@
   console.error = function () { forward('error', arguments); real.error.apply(null, arguments); };
   console.warn = function () { forward('warn', arguments); real.warn.apply(null, arguments); };
 
-  importScripts('wasm_exec.js');
+  // Variant (go|tinygo) arrives on this worker's URL (hv-boot.js appends it —
+  // workers can't read localStorage). It selects BOTH the loader and the blob,
+  // which must match toolchains. Empty = the server default.
+  var __variant = '';
+  try { __variant = (new URLSearchParams(self.location.search)).get('variant') || ''; } catch (e) {}
+  var __vqs = __variant ? ('?variant=' + encodeURIComponent(__variant)) : '';
+  importScripts('wasm_exec.js' + __vqs);
   var go = new Go();
   // TinyGo's wasm_exec.js omits the gojs getRandomData import the crypto-using Go
   // runtime needs to seed itself; inject it only when absent (mirrors hv-boot.js).
@@ -349,7 +355,7 @@
     registerPort(selfPort);
   }
 
-  fetch('wasm-visor.wasm').then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
+  fetch('wasm-visor.wasm' + __vqs).then(function (r) { return r.arrayBuffer(); }).then(function (buf) {
     return WebAssembly.instantiate(buf, go.importObject);
   }).then(function (res) {
     go.run(res.instance); // installs self.skywireVisor, then parks on select{}

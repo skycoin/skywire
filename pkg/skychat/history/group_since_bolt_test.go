@@ -1,4 +1,7 @@
-// Package history — cmd/apps/skychat/history/group_since_test.go:
+//go:build !js
+// +build !js
+
+// Package history — pkg/skychat/history/group_since_bolt_test.go:
 // pins the BoltStore.ListGroupSince contract added so the gRPC
 // StreamGroupMessages handler can backfill a reconnecting subscriber
 // whose disconnect gap exceeds the in-memory inbox ring. Without

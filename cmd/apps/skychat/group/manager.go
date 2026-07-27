@@ -1317,6 +1317,19 @@ func (m *Manager) kickReconnect(ctx context.Context, id string) {
 	go m.tryReconnect(ctx, sess, id)
 }
 
+// ReplayHistory pumps the last resumeReplayMessageCap messages of one
+// resumed group back through the registered message handler, on demand.
+// Resume() already does this once per group at startup; this exported
+// entry point lets a consumer re-pull after a subscribe has had time to
+// sync peer CXO feeds — the wasm visor uses it to backfill group history
+// into its in-memory buffer after a Join (its store doesn't survive a tab
+// reload, so there is nothing to Resume; the history arrives over the
+// network and this walks it into view). Safe to call repeatedly: the
+// walk dedups within a call, and consumers are expected to dedup replayed
+// vs. live messages on their side (the visor inbox and the wasm buffer
+// both do). No-op for an unknown/closed session.
+func (m *Manager) ReplayHistory(id string) { m.replaySessionHistory(id) }
+
 // replaySessionHistory pumps the last resumeReplayMessageCap messages
 // from a session's persistent tree through the registered handler.
 // Best-effort: errors decoding individual leaves or running the

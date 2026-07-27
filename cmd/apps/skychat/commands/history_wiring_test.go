@@ -22,8 +22,8 @@ import (
 
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/history"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 )
 
 // withChatLog installs a discard logrus logger as the package chatLog for the
