@@ -106,6 +106,11 @@ type Config struct {
 	// Receipts are consumed here — they are never surfaced as chat lines.
 	// Nil = the app doesn't track delivery status.
 	OnReceipt func(peer, id, kind string)
+	// OnDelete is called for an inbound chat-delete: the peer asks us to drop
+	// (tombstone) a message THEY sent us, identified by its envelope id. Like a
+	// receipt it is consumed here, never surfaced as a chat line; the app
+	// replaces the message with a "deleted" placeholder. Nil = deletes ignored.
+	OnDelete func(peer, id string)
 	// StaleAckWindow bounds how long a RequestAck send waits for the peer's
 	// chat-ack before concluding the cached conn is half-open and evicting it,
 	// so the next send redials. A live peer acks in well under a second; this
@@ -356,6 +361,12 @@ func (c *Controller) readConn(conn *message.Conn) {
 		if kind, id := receiptKind(payload); kind != "" && c.cfg.OnReceipt != nil {
 			c.cfg.OnReceipt(peer.Hex(), id, kind)
 		}
+		// A chat-delete asks us to tombstone a message the peer sent us. Reported
+		// then consumed (decodeInbound returns empty for it, so it never surfaces
+		// as a chat line).
+		if id := deleteID(payload); id != "" && c.cfg.OnDelete != nil {
+			c.cfg.OnDelete(peer.Hex(), id)
+		}
 		text, ackID, replyTo, msgID := c.decodeInbound(payload)
 		if ackID != "" {
 			if b, mErr := (message.Envelope{Type: message.TypeAck, ID: ackID}).Marshal(); mErr == nil {
@@ -559,6 +570,18 @@ func (c *Controller) SendRaw(ctx context.Context, pk cipher.PubKey, payload []by
 	return lastErr
 }
 
+// SendDelete sends a delete-for-everyone command for the message id to pk over a
+// cached-or-dialed conn. On the peer, OnDelete fires and the message is
+// tombstoned. Best-effort like a receipt — a peer that's offline simply never
+// applies it (the sender's own copy is deleted locally by the caller).
+func (c *Controller) SendDelete(ctx context.Context, pk cipher.PubKey, id string) error {
+	b, err := (message.Envelope{Type: message.TypeDelete, ID: id}).Marshal()
+	if err != nil {
+		return err
+	}
+	return c.SendRaw(ctx, pk, b)
+}
+
 func (c *Controller) evict(pk cipher.PubKey, conn *message.Conn) {
 	c.mu.Lock()
 	if c.conns[pk] == conn {
@@ -679,6 +702,10 @@ func (c *Controller) decodeInbound(payload []byte) (text, ackID, replyTo, msgID 
 			// that bubble from "received" to "read". Handled here rather than
 			// falling through, or the raw JSON would show up as a chat line.
 			return "", "", "", ""
+		case message.TypeDelete:
+			// A delete-for-everyone command. Consumed here (reported via OnDelete
+			// in readConn); never surfaced as a chat line.
+			return "", "", "", ""
 		case message.TypeMsg:
 			ack := ""
 			if env.Ack && env.ID != "" {
@@ -703,6 +730,15 @@ func receiptKind(payload []byte) (kind, id string) {
 		return env.Type, env.ID
 	}
 	return "", ""
+}
+
+// deleteID reports the target id of an inbound chat-delete frame, or "".
+func deleteID(payload []byte) string {
+	env, ok := message.ParseEnvelope(payload)
+	if !ok || env.Type != message.TypeDelete || env.ID == "" {
+		return ""
+	}
+	return env.ID
 }
 
 func newID() string {

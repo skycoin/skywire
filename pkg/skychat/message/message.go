@@ -156,6 +156,13 @@ const (
 	TypeMsg  = "chat-msg"
 	TypeAck  = "chat-ack"
 	TypeRead = "chat-read"
+	// TypeDelete is a delete-for-everyone command: {"type":"chat-delete","id":"<hex>"}.
+	// The sender asks the recipient to drop (tombstone) the message with that id
+	// — the id the sender minted for it (chat-msg ID). It carries no body and is
+	// consumed like a receipt, never surfaced as a chat line; the recipient's app
+	// replaces the message with a "deleted" placeholder. additive + backward-
+	// compatible (a peer predating it ignores the unknown type).
+	TypeDelete = "chat-delete"
 )
 
 // Marshal encodes the envelope as its JSON wire bytes.
@@ -175,7 +182,7 @@ func ParseEnvelope(payload []byte) (env Envelope, ok bool) {
 		return Envelope{}, false
 	}
 	switch env.Type {
-	case TypeMsg, TypeAck, TypeRead:
+	case TypeMsg, TypeAck, TypeRead, TypeDelete:
 		return env, true
 	}
 	return Envelope{}, false
