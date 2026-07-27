@@ -14,6 +14,7 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
 // --- in-memory transport ----------------------------------------------------
@@ -190,6 +191,41 @@ func TestController_AckRoundTrip(t *testing.T) {
 	}
 	if !res.Acked {
 		t.Error("WaitAck send should be acked by a live peer")
+	}
+}
+
+func TestController_ServeAndStats(t *testing.T) {
+	// Serve injects an already-established conn (the TCP-direct shape): a
+	// framed conn whose RemoteAddr reports an appnet.Addr. A frame written to
+	// the other end should surface as an inbound event and bump InboundMsgs.
+	pkPeer := mustPK(t)
+	rec := &recorder{}
+	ctrl := New(Config{Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: rec.on})
+	t.Cleanup(func() { _ = ctrl.Close() })
+
+	near, far := net.Pipe()
+	// far is what Serve reads; give it a RemoteAddr carrying the peer PK.
+	go ctrl.Serve(memConn{Conn: far, raddr: appnet.Addr{Net: appnet.TypeDmsg, PubKey: pkPeer, Port: chatPort}})
+
+	// Write a plain-text frame from the near end (peer -> us).
+	go func() { _ = message.WriteFrame(near, []byte("injected hello")) }()
+	in := waitFor(t, rec, func(e Event) bool { return e.Text == "injected hello" && e.Dir == "in" })
+	if in.Peer != pkPeer.Hex() {
+		t.Errorf("served-conn peer = %s, want %s", in.Peer, pkPeer.Hex())
+	}
+	if s := ctrl.Stats(); s.InboundMsgs != 1 {
+		t.Errorf("InboundMsgs = %d, want 1", s.InboundMsgs)
+	}
+}
+
+func TestController_NoTransportDialErrors(t *testing.T) {
+	// A controller with no Client (native --standalone): a send with no cached
+	// conn must error cleanly, not panic.
+	pk := mustPK(t)
+	ctrl := New(Config{Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: func(Event) {}})
+	t.Cleanup(func() { _ = ctrl.Close() })
+	if _, err := ctrl.Send(context.Background(), pk, appnet.TypeDmsg, "hi", SendOpts{}); err == nil {
+		t.Error("send with no transport + no cached conn should error")
 	}
 }
 

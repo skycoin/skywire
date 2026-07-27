@@ -121,9 +121,37 @@ type Controller struct {
 	ackMu      sync.Mutex
 	ackWaiters map[string]chan struct{}
 
+	statsMu sync.Mutex
+	stats   Stats
+
 	closeOnce sync.Once
 	done      chan struct{}
 	wg        sync.WaitGroup
+}
+
+// Stats is a snapshot of the controller's message counters, for a status probe.
+type Stats struct {
+	InboundMsgs    int64
+	OutboundMsgs   int64
+	InboundDrops   int64 // conn read errors (peer/transport dropped)
+	OutboundFails  int64 // sends that failed even after retry + fallback
+	OutboundRetry  int64 // stale-cached-conn writes rescued by a redial+retry
+	OutboundFallbk int64 // sends rescued by the alternate network
+	LastRxAt       time.Time
+	LastTxAt       time.Time
+}
+
+// Stats returns a snapshot of the message counters.
+func (c *Controller) Stats() Stats {
+	c.statsMu.Lock()
+	defer c.statsMu.Unlock()
+	return c.stats
+}
+
+func (c *Controller) bump(f func(*Stats)) {
+	c.statsMu.Lock()
+	f(&c.stats)
+	c.statsMu.Unlock()
 }
 
 // New builds a Controller. It does not open any connection until Start.
@@ -194,10 +222,29 @@ func (c *Controller) acceptLoop(lis net.Listener) {
 	}
 }
 
+// Serve runs an already-established conn (whose RemoteAddr() reports an
+// appnet.Addr) through the same cache + read loop as a dialed/accepted conn.
+// It exists for transports the Client seam doesn't cover — the native app's
+// TCP-direct entry points hand their handshaked conn here. Blocks until the
+// conn closes (the caller decides whether to run it in a goroutine), mirroring
+// the pre-extraction handleConn call it replaces.
+func (c *Controller) Serve(conn net.Conn) {
+	fc := message.NewConn(conn)
+	if raddr, ok := conn.RemoteAddr().(appnet.Addr); ok {
+		c.mu.Lock()
+		c.conns[raddr.PubKey] = fc
+		c.mu.Unlock()
+	}
+	c.readConn(fc)
+}
+
 // dialAndCache dials pk at addr (through DialRetry if configured), wraps the
 // conn in framing, caches it by PK, and starts its read loop. The read loop's
 // lifetime is the peer connection, not any request.
 func (c *Controller) dialAndCache(ctx context.Context, pk cipher.PubKey, addr appnet.Addr) (*message.Conn, error) {
+	if c.cfg.Client == nil {
+		return nil, errors.New("skychat/dm: no transport configured (dial unavailable)")
+	}
 	var raw net.Conn
 	dial := func() error {
 		cc, err := c.cfg.Client.Dial(addr)
@@ -277,6 +324,7 @@ func (c *Controller) readConn(conn *message.Conn) {
 	for {
 		payload, err := conn.ReadFrame()
 		if err != nil {
+			c.bump(func(s *Stats) { s.InboundDrops++ })
 			return
 		}
 		if c.cfg.PreHandleFrame != nil && c.cfg.PreHandleFrame(peer, payload) {
@@ -294,6 +342,7 @@ func (c *Controller) readConn(conn *message.Conn) {
 			continue // ack-only / empty — nothing to surface
 		}
 		peerHex := peer.Hex()
+		c.bump(func(s *Stats) { s.InboundMsgs++; s.LastRxAt = time.Now().UTC() })
 		c.persist(history.Message{
 			Peer: peerHex, From: peerHex, Outgoing: false,
 			Text: text, Timestamp: time.Now().UTC(), ID: msgID, ReplyTo: replyTo,
@@ -358,6 +407,7 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		if newConn, derr := c.dialAndCache(ctx, pk, addr); derr == nil {
 			if werr := newConn.WriteFrameDeadline(wire, writeTimeout); werr == nil {
 				conn, err = newConn, nil
+				c.bump(func(s *Stats) { s.OutboundRetry++ })
 			} else {
 				c.evict(pk, newConn)
 				err = werr
@@ -372,14 +422,18 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 		if fbConn, alt := c.tryNetworkFallback(ctx, pk, netType); fbConn != nil {
 			if werr := fbConn.WriteFrameDeadline(wire, writeTimeout); werr == nil {
 				res.Network, err = alt, nil
+				c.bump(func(s *Stats) { s.OutboundFallbk++ })
 			} else {
 				c.evict(pk, fbConn)
 			}
 		}
 		if err != nil {
+			c.bump(func(s *Stats) { s.OutboundFails++ })
 			return res, err
 		}
 	}
+
+	c.bump(func(s *Stats) { s.OutboundMsgs++; s.LastTxAt = time.Now().UTC() })
 
 	c.persist(history.Message{
 		Peer: pk.Hex(), Outgoing: true, Text: text,
