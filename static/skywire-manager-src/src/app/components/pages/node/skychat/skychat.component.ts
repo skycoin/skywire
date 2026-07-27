@@ -117,6 +117,9 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   private wasmChat = false;
   private pollTimer: any = null;
   private lastPollLen = -1;
+  // ids of inbound wasm messages we've already sent a read receipt for, so the
+  // per-poll ack sweep doesn't re-send on every tick.
+  private wasmReadSent = new Set<string>();
 
   // --- Password gate management state. ----------------------------
   // Whether the password section is expanded.
@@ -311,23 +314,33 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
  return; 
 }
       this.connected = true; this.errorText = '';
-      // Rebuild on any length change OR when a message flips to deleted (a
-      // delete-for-everyone blanks a message in place without changing the
-      // count). Combined signature = length*1e5 + deleted-count; the buffer is
-      // small so this stays cheap. Newest last, so the tail stays scrolled.
+      // Rebuild on any length change OR when a message flips deleted/receipt
+      // status in place (delete-for-everyone blanks a message, a received/read
+      // receipt advances a tick — neither changes the count). Combined signature
+      // = length*1e6 + deleted-count*1e3 + receipt-weight; the buffer is small so
+      // this stays cheap. Newest last, so the tail stays scrolled.
       const delCount = arr.reduce((n, m) => n + (m.deleted ? 1 : 0), 0);
-      const sig = arr.length * 100000 + delCount;
+      const statWeight = arr.reduce((n, m) => n + (m.status === 'read' ? 2 : (m.status === 'received' ? 1 : 0)), 0);
+      const sig = arr.length * 1000000 + delCount * 1000 + statWeight;
       if (sig !== this.lastPollLen) {
         this.captureScroll();
         this.messages = arr.slice(-500).map(m => {
 return {
           peer: m.from || '', direction: m.out ? 'out' : 'in', text: m.text || '', ts: m.ts || Date.now(),
-          id: m.id || '', replyTo: m.reply_to || '', deleted: !!m.deleted,
+          id: m.id || '', replyTo: m.reply_to || '', deleted: !!m.deleted, status: m.status || '',
         }
 });
         this.rebuildMsgIndex();
         this.lastPollLen = sig;
         this.cdr.markForCheck();
+        // Ack inbound messages we haven't yet, so the sender's tick turns blue.
+        // Track sent ids so we don't re-send the receipt on every poll.
+        for (const m of this.messages) {
+          if (m.direction === 'in' && m.id && !m.deleted && !this.wasmReadSent.has(m.id)) {
+            this.wasmReadSent.add(m.id);
+            Promise.resolve(sv.skychatReadReceipt(m.peer, m.id)).catch(() => { /* peer offline */ });
+          }
+        }
       }
     };
     // Under the SharedWorker architecture skywireVisor is a MessagePort proxy,
