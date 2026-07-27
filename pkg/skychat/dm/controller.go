@@ -99,6 +99,12 @@ type Config struct {
 	// decoding; returning true consumes the frame (used by the native app for
 	// its pair-control envelopes). Nil = no interception.
 	PreHandleFrame func(peer cipher.PubKey, payload []byte) bool
+	// AlwaysID makes every send ride a chat-msg envelope with a minted id, even
+	// a plain (no-reply, no-ack) message — so every message is addressable for
+	// replies. The wasm visor sets this (its whole buffer is id-keyed). The
+	// native app leaves it false so a default send stays byte-identical on the
+	// wire for pre-envelope peers.
+	AlwaysID bool
 	// Log is an optional structured logger sink.
 	Log func(format string, args ...interface{})
 }
@@ -316,7 +322,7 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 	var ackID string
 	var ackCh <-chan struct{}
 	var unreg func()
-	if wantAck || opt.ReplyTo != "" {
+	if wantAck || opt.ReplyTo != "" || c.cfg.AlwaysID {
 		ackID = newID()
 		res.ID = ackID
 		env := message.Envelope{Type: message.TypeMsg, ID: ackID, Body: text, Ack: wantAck, ReplyTo: opt.ReplyTo}
