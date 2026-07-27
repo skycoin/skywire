@@ -52,6 +52,28 @@ type Message struct {
 	// reply), mirroring message.Envelope.ReplyTo. Persisting it means the
 	// thread survives a reload / history backfill, not just the live SSE event.
 	ReplyTo string `json:"reply_to,omitempty"`
+
+	// File attachment metadata — set only for file messages (Telegram-style
+	// "a file is a message"). FileURL is the /files/<name> path for received
+	// files so the UI can re-render the thumbnail from history; empty for
+	// sent files (the sender keeps no served copy). FileID is the transfer id,
+	// stored so a "re-request" (backfill) still works after a reload / on a
+	// fresh device — without it the UI has no id to request the bytes by.
+	FileID     string `json:"file_id,omitempty"`
+	FileName   string `json:"file_name,omitempty"`
+	FileSize   int64  `json:"file_size,omitempty"`
+	FileStatus string `json:"file_status,omitempty"`
+	FileURL    string `json:"file_url,omitempty"`
+
+	// Reply reference — set only when this message quotes another (a
+	// {"skychat_reply":...} body). Populated at serve time from the stored
+	// envelope; the browser renders these as a quote block above the bubble.
+	// Distinct from ReplyTo above: that threads by message id (wire-level),
+	// these carry the quoted text itself so a reply still renders when the
+	// quoted message isn't in the local history.
+	ReplyToSender  string `json:"reply_to_sender,omitempty"`
+	ReplyToTS      string `json:"reply_to_ts,omitempty"`
+	ReplyToPreview string `json:"reply_to_preview,omitempty"`
 }
 
 // GroupMessage is a single group-chat message record. Mirrors Message
