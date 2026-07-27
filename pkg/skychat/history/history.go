@@ -1,7 +1,7 @@
-// Package history cmd/apps/skychat/history/history.go c4-app-chat
+// Package history pkg/skychat/history/history.go c4-app-chat
 //
 // By default skychat is entirely ephemeral — messages pass through and are not
-// stored anywhere. The history package adds an opt-in BoltDB-backed store with
+// stored anywhere. The history package adds an opt-in persistent store with
 // strict limits to prevent disk-fill/spam attacks:
 //
 //   - per-message size cap (drop larger)
@@ -14,6 +14,13 @@
 // The ephemeral delivery path is never blocked by the store. Messages that
 // can't be persisted are still delivered to the UI SSE stream; only the
 // side-effect of durable storage is skipped.
+//
+// Two backends implement Store: BoltStore (durable, BoltDB-backed, native
+// only — bbolt does not compile under GOOS=js) lives in store_bolt.go behind
+// a `!js` build tag; MemStore (in-memory, all platforms including the wasm
+// visor) lives in store_mem.go. The Message/GroupMessage types, the Store
+// interface, and Limits are pure Go and shared by both, so this file compiles
+// everywhere.
 package history
 
 import (
@@ -36,6 +43,15 @@ type Message struct {
 	Text string `json:"text"`
 	// Timestamp is the server-side receive or send time in UTC.
 	Timestamp time.Time `json:"timestamp"`
+	// ID is the stable message id carried on the wire in message.Envelope.ID.
+	// It makes a stored message addressable — quoted replies (ReplyTo) and,
+	// later, receipts/deletes reference it. omitempty: pre-envelope plain-text
+	// messages have no id, so the field is simply absent for them.
+	ID string `json:"id,omitempty"`
+	// ReplyTo, when set, is the ID of the message this one quotes (a threaded
+	// reply), mirroring message.Envelope.ReplyTo. Persisting it means the
+	// thread survives a reload / history backfill, not just the live SSE event.
+	ReplyTo string `json:"reply_to,omitempty"`
 
 	// File attachment metadata — set only for file messages (Telegram-style
 	// "a file is a message"). FileURL is the /files/<name> path for received
@@ -52,6 +68,9 @@ type Message struct {
 	// Reply reference — set only when this message quotes another (a
 	// {"skychat_reply":...} body). Populated at serve time from the stored
 	// envelope; the browser renders these as a quote block above the bubble.
+	// Distinct from ReplyTo above: that threads by message id (wire-level),
+	// these carry the quoted text itself so a reply still renders when the
+	// quoted message isn't in the local history.
 	ReplyToSender  string `json:"reply_to_sender,omitempty"`
 	ReplyToTS      string `json:"reply_to_ts,omitempty"`
 	ReplyToPreview string `json:"reply_to_preview,omitempty"`

@@ -24,11 +24,13 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
 // DM status values (also the strings the browser renders as ticks).
@@ -37,29 +39,13 @@ const (
 	dmStatusRead     = "read"
 )
 
-// dropStaleConn implements the receipts half-open-conn auto-recovery: it waits
-// for the peer's chat-ack on ackCh and, if none arrives within window, drops the
-// conn we wrote to from the cache so the next send (or a Resend) redials fresh —
-// recovering from a peer restart / idle-dead transport without a visor restart.
-// A live peer acks in well under a second, so on a healthy conn this returns via
-// ackCh long before the timeout and leaves the cache untouched. Runs in its own
-// goroutine; unreg releases the ack waiter on exit.
-func dropStaleConn(pk cipher.PubKey, conn *framedConn, ackCh <-chan struct{}, unreg func(), window time.Duration) {
-	if unreg != nil {
-		defer unreg()
-	}
-	select {
-	case <-ackCh:
-		// acked — the conn is alive, keep it cached.
-	case <-time.After(window):
-		connsMu.Lock()
-		if conns[pk] == conn {
-			delete(conns, pk)
-		}
-		connsMu.Unlock()
-		appLog("skychat: no receipt from %s within %v — dropped stale conn; next send will redial", pk, window)
-	}
-}
+// staleAckWindow bounds how long a non-blocking receipts send waits for the
+// peer's chat-ack before its conn is treated as half-open and evicted (so the
+// next send redials). Generous relative to a real ack (sub-second on a live
+// conn) to avoid dropping a healthy conn on a momentarily-slow peer. The wait
+// itself lives in the controller (dm.Controller.watchAck), which owns the conn
+// cache; this is only the policy value the app hands it.
+const staleAckWindow = 20 * time.Second
 
 // broadcastDMStatus emits a dm-status control event on the legacy /sse stream.
 // id is the sender-side message id; peer is the other party's PK hex. No-op on
@@ -85,16 +71,17 @@ func broadcastDMStatus(id, status, peer string) {
 // reused/fresh framed conn. Best-effort: the peer turns it into a "read" status
 // on its side; a delivery failure just means the tick never advances.
 func sendReadReceipt(ctx context.Context, peer cipher.PubKey, id string) error {
-	env := chatEnvelope{Type: chatTypeRead, ID: id}
+	env := message.Envelope{Type: message.TypeRead, ID: id}
 	payload, err := env.Marshal()
 	if err != nil {
 		return err
 	}
-	conn, err := dialOrReusePeerConn(ctx, peer)
-	if err != nil {
-		return err
+	if chatCtrl == nil {
+		return errors.New("skychat: dm controller not started")
 	}
-	return conn.WriteFrame(payload)
+	// SendRaw reuses the controller's cached conn (or dials one) and writes the
+	// frame as-is — no envelope wrapping, no persistence, nothing surfaced.
+	return chatCtrl.SendRaw(ctx, peer, payload)
 }
 
 // readReceiptHandler serves POST /read-receipt {pk, ids:[...]} (or a single

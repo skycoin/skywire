@@ -12,7 +12,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/dm"
 )
 
 func TestStatusHandler_JSONShape(t *testing.T) {
@@ -21,11 +21,12 @@ func TestStatusHandler_JSONShape(t *testing.T) {
 	}
 	origHub := hub
 	hub = newSSEHub()
-	connsMu.Lock()
-	if conns == nil {
-		conns = make(map[cipher.PubKey]*framedConn)
-	}
-	connsMu.Unlock()
+	// The peer-conn count comes from the shared controller now (it owns the
+	// cache); a zero-value controller reports none, which is all this shape
+	// test needs.
+	origCtrl := chatCtrl
+	chatCtrl = dm.New(dm.Config{})
+	t.Cleanup(func() { chatCtrl = origCtrl })
 	// Force the pair RPC unavailable so collectGroupHealth is deterministic.
 	pairRPCMu.Lock()
 	prevRPC := pairRPC

@@ -19,7 +19,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/history"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/xfer"
 )
 
