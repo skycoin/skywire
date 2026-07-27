@@ -797,6 +797,11 @@ func RunSkychat(ctx context.Context, args []string) error {
 				broadcastDMStatus(id, dmStatusRead, peer)
 			}
 		},
+		// A peer deleted (for everyone) a message they sent us — tombstone it in
+		// our UI via the same dm-status channel.
+		OnDelete: func(peer, id string) {
+			broadcastDMStatus(id, dmStatusDeleted, peer)
+		},
 		StaleAckWindow: staleAckWindow,
 		Log:            func(f string, a ...interface{}) { appLog(f, a...) },
 	})
@@ -871,6 +876,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
 	mux.HandleFunc("/request-file", requireAuthFunc(requestFileHandler(ctx)))
 	mux.HandleFunc("/read-receipt", requireAuthFunc(readReceiptHandler(ctx)))
+	mux.HandleFunc("/delete", requireAuthFunc(deleteHandler(ctx)))
 	mux.HandleFunc("/notify-capable", requireAuthFunc(notifyCapableHandler))
 	registerPairHTTPHandlers(ctx, mux)
 	registerGroupHTTPHandlers(mux)
