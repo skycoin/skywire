@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
@@ -37,6 +36,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/netutil"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/message"
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -585,6 +585,12 @@ func renderLegacySSE(ev chatEvent) string {
 	if ev.To != "" {
 		m["to"] = ev.To
 	}
+	if ev.ReplyToID != "" {
+		// Surface the quoted-reply target on the legacy /sse shape too, so the
+		// bundled skychat SPA (which consumes /sse) can thread replies without
+		// switching to /events.
+		m["reply_to_id"] = ev.ReplyToID
+	}
 	b, err := json.Marshal(m)
 	if err != nil {
 		return "{}"
@@ -1067,7 +1073,7 @@ func handleConn(conn *framedConn) {
 		// to satisfy a waiting /message --wait request, NOT surfaced
 		// to the SSE stream. Plain-text bodies fall through to the
 		// legacy path unchanged.
-		envHandled, envBody, _, envReplyTo := tryHandleChatEnvelope(payload, peerPK, func(id string) {
+		envHandled, envBody, envMsgID, envReplyTo := tryHandleChatEnvelope(payload, peerPK, func(id string) {
 			ackEnv := chatEnvelope{Type: chatTypeAck, ID: id}
 			ackBytes, mErr := json.Marshal(ackEnv)
 			if mErr != nil {
@@ -1101,6 +1107,8 @@ func handleConn(conn *framedConn) {
 			Outgoing:  false,
 			Text:      text,
 			Timestamp: time.Now().UTC(),
+			ID:        envMsgID,   // message's own id (empty for plain messages)
+			ReplyTo:   envReplyTo, // quoted-reply target — persisted so the thread survives a reload
 		})
 
 		// Include the network field so listen --net can filter
@@ -1120,8 +1128,15 @@ func handleConn(conn *framedConn) {
 		// so consumers can already use it for log correlation / dedup.
 		// "len" is the body byte length, surfaced for size-debug
 		// without forcing consumers to count after a json round-trip.
+		// Key the inbound event by the message's own envelope id when it
+		// carries one, so a later reply's reply_to_id can resolve to it. Plain
+		// (pre-envelope) messages have no id — fall back to a fresh event id.
+		inEventID := envMsgID
+		if inEventID == "" {
+			inEventID = newEventID()
+		}
 		hub.publishEvent(chatEvent{
-			ID:        newEventID(),
+			ID:        inEventID,
 			Channel:   channelDM,
 			Transport: string(raddr.Net),
 			Dir:       "in",
@@ -1420,12 +1435,17 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			}
 		}
 
-		// Persist outgoing message (best-effort).
+		// Persist outgoing message (best-effort). ackID is the envelope id
+		// minted above for a reply/wait send (empty for a plain send); persisting
+		// it + ReplyTo keeps outgoing quoted-replies addressable and threaded
+		// across a reload, symmetric with the inbound path.
 		persistMessage(history.Message{
 			Peer:      pk.Hex(),
 			Outgoing:  true,
 			Text:      data.Message,
 			Timestamp: time.Now().UTC(),
+			ID:        ackID,
+			ReplyTo:   data.ReplyTo,
 		})
 
 		// If --wait was requested, block on the ack channel. The
