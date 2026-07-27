@@ -288,10 +288,9 @@ func startCXOGroup(ctx context.Context) error {
 // surfaceCXOInbound pushes a message received from a subscribed CXO feed
 // onto the SSE hub, mirroring handleConn's inbound clientMsg shape.
 func surfaceCXOInbound(senderPK, text string) {
-	counterMu.Lock()
-	inboundMsgCount++
-	lastRxAt = time.Now().UTC()
-	counterMu.Unlock()
+	if chatCtrl != nil {
+		chatCtrl.NoteInbound()
+	}
 
 	hub.publishEvent(chatEvent{
 		ID:        newEventID(),
