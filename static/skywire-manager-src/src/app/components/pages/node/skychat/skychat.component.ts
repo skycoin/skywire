@@ -39,6 +39,8 @@ interface ChatMessage {
   // skychatMessages() buffer carry reply_to.
   id?: string;
   replyTo?: string;
+  // deleted-for-everyone: rendered as a "message deleted" placeholder.
+  deleted?: boolean;
 }
 
 /** One federated group/room as surfaced by the group list. */
@@ -300,18 +302,22 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
  return; 
 }
       this.connected = true; this.errorText = '';
-      // Rebuild on any length change — simple + robust to buffer trims (the
-      // buffer is small). Newest last, so the tail stays scrolled.
-      if (arr.length !== this.lastPollLen) {
+      // Rebuild on any length change OR when a message flips to deleted (a
+      // delete-for-everyone blanks a message in place without changing the
+      // count). Combined signature = length*1e5 + deleted-count; the buffer is
+      // small so this stays cheap. Newest last, so the tail stays scrolled.
+      const delCount = arr.reduce((n, m) => n + (m.deleted ? 1 : 0), 0);
+      const sig = arr.length * 100000 + delCount;
+      if (sig !== this.lastPollLen) {
         this.captureScroll();
         this.messages = arr.slice(-500).map(m => {
 return {
           peer: m.from || '', direction: m.out ? 'out' : 'in', text: m.text || '', ts: m.ts || Date.now(),
-          id: m.id || '', replyTo: m.reply_to || '',
+          id: m.id || '', replyTo: m.reply_to || '', deleted: !!m.deleted,
         }
 });
         this.rebuildMsgIndex();
-        this.lastPollLen = arr.length;
+        this.lastPollLen = sig;
         this.cdr.markForCheck();
       }
     };
@@ -503,6 +509,29 @@ return {
  return;
 }
     this.replyTarget = m;
+    this.cdr.markForCheck();
+  }
+
+  /** Delete one of our own messages for everyone. Sends a chat-delete (wasm hook
+   *  or the native /delete proxy) and tombstones the bubble optimistically; the
+   *  peer drops it on their side via the controller's OnDelete. */
+  deleteMsg(m: ChatMessage) {
+    if (!m || !m.id) {
+ return;
+}
+    const pk = m.peer;
+    if (this.wasmChat) {
+      const sv = (window as any).skywireVisor;
+      Promise.resolve(sv.skychatDelete(pk, m.id)).catch(() => {});
+    } else {
+      fetch(this.proxyUrl('delete'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pk, id: m.id }),
+      }).catch(() => {});
+    }
+    m.deleted = true;
+    m.text = '';
     this.cdr.markForCheck();
   }
 
