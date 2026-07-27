@@ -2293,6 +2293,20 @@
       // file id, so a read receipt for a viewed file carries file.id).
       handleDmStatus(data) {
         const key = this.processPk(data.peer);
+        // A delete-for-everyone: drop the bubble carrying this wire id, whoever
+        // authored it (our own delete broadcasts about our message; the peer's
+        // OnDelete broadcasts about theirs). Matches the group-delete "remove"
+        // behavior rather than a tombstone placeholder.
+        if (data.status === 'deleted') {
+          const l = this.messages[key] || [];
+          const before = l.length;
+          this.messages[key] = l.filter(x => !(x && x.wireId && x.wireId === data.id));
+          if (this.messages[key].length !== before) {
+            this.saveChat(key);
+            if (this.activeKey() === key) this._rerenderActive();
+          }
+          return;
+        }
         const list = this.messages[key] || [];
         const m = list.find(x => x && x.from === 'me' &&
           ((x.wireId && x.wireId === data.id) || (x.file && x.file.id && x.file.id === data.id)));
@@ -2592,7 +2606,19 @@
         const row = btn.closest('.message-row');
         if (!row) return;
         const isOwn = row.dataset.sender === 'me' || (this.myPK && row.dataset.sender === this.myPK);
-        const canDeleteAll = !!this.group && isOwn && !!row.dataset.tsnano;
+        // "Delete for everyone" is offered for our own messages: group messages
+        // that carry a ts_nano (the group tombstone key), and DM messages that
+        // carry a wire id (the chat-delete target). A plain DM with no wire id
+        // can't be deleted for everyone — the peer has no id to drop it by.
+        let canDeleteAll = false;
+        if (isOwn) {
+          if (this.group) {
+            canDeleteAll = !!row.dataset.tsnano;
+          } else {
+            const om = (this.messages[this.activeKey()] || []).find(m => String(m.mid) === String(row.dataset.mid));
+            canDeleteAll = !!(om && om.wireId);
+          }
+        }
         const menu = document.createElement('div');
         menu.className = 'msg-menu';
         menu.id = 'msgMenu';
@@ -2643,15 +2669,33 @@
       // to future joiners) and prune the leaf (erases the bytes).
       deleteForAll() {
         const menu = document.getElementById('msgMenu');
-        if (!menu || !this.group) return;
-        const mid = menu.dataset.mid, tsNano = menu.dataset.tsnano, gid = this.group;
+        if (!menu) return;
+        const mid = menu.dataset.mid;
         this.closeMsgMenu();
-        if (!tsNano) { this.showToast('Message not yet confirmed — try again in a moment.', 'error'); return; }
-        // Optimistic local removal (+ remember, so a late echo can't re-add it).
-        this.messages[gid] = (this.messages[gid] || []).filter(m => String(m.mid) !== String(mid));
-        this.hiddenGroup.add(this._groupHideKey(gid, tsNano)); this._saveHiddenGroup();
+        if (this.group) {
+          const tsNano = menu.dataset.tsnano, gid = this.group;
+          if (!tsNano) { this.showToast('Message not yet confirmed — try again in a moment.', 'error'); return; }
+          // Optimistic local removal (+ remember, so a late echo can't re-add it).
+          this.messages[gid] = (this.messages[gid] || []).filter(m => String(m.mid) !== String(mid));
+          this.hiddenGroup.add(this._groupHideKey(gid, tsNano)); this._saveHiddenGroup();
+          this._rerenderActive();
+          fetch(`/group/${gid}/message?ts=${encodeURIComponent(tsNano)}`, { method: 'DELETE' })
+            .then(res => { if (!res.ok) res.text().then(t => this.showToast(`Delete failed: ${t}`, 'error')); })
+            .catch(e => this.showToast(e.message, 'error'));
+          return;
+        }
+        // DM (1:1) delete-for-everyone: POST /delete sends a chat-delete to the
+        // peer; both ends drop the bubble (the peer via handleDmStatus 'deleted',
+        // us optimistically here). Only messages carrying a wire id are eligible.
+        const pk = this.recipient;
+        const list = this.messages[pk] || [];
+        const m = list.find(x => String(x.mid) === String(mid));
+        if (!m || !m.wireId) { this.showToast('Message not yet confirmed — try again in a moment.', 'error'); return; }
+        const id = m.wireId;
+        this.messages[pk] = list.filter(x => String(x.mid) !== String(mid));
+        this.saveChat(pk);
         this._rerenderActive();
-        fetch(`/group/${gid}/message?ts=${encodeURIComponent(tsNano)}`, { method: 'DELETE' })
+        fetch('/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pk, id }) })
           .then(res => { if (!res.ok) res.text().then(t => this.showToast(`Delete failed: ${t}`, 'error')); })
           .catch(e => this.showToast(e.message, 'error'));
       }
