@@ -57,6 +57,15 @@ func newTempStore(t *testing.T, limits history.Limits) history.Store {
 	if err != nil {
 		t.Fatalf("NewBoltStore: %v", err)
 	}
+	// Close HERE, not via restoreHistoryStore. Cleanups run last-registered-
+	// first, and t.TempDir() above registered its RemoveAll after that helper
+	// did — so this is the only place a close lands before the directory is
+	// removed. Windows refuses to delete a file another handle still holds
+	// open, which failed the whole test there ("The process cannot access the
+	// file because it is being used by another process"). It also closes every
+	// store a test opens, not just the one left in the historyStore global.
+	// Closing twice is harmless: bbolt's Close is idempotent.
+	t.Cleanup(func() { _ = st.Close() }) //nolint:errcheck
 	return st
 }
 
