@@ -51,6 +51,10 @@ type chatMsg struct {
 	// native app, so a reply sent from either side shows its quote on the other.
 	ReplyTo string `json:"reply_to,omitempty"`
 
+	// Deleted marks a message deleted-for-everyone: the page renders a "this
+	// message was deleted" placeholder and the text is blanked in the projection.
+	Deleted bool `json:"deleted,omitempty"`
+
 	// File attachment fields (Telegram-style: a file is a message). Set only on
 	// file events; empty on plain chat. On a received file (Out=false) FileID
 	// keys the in-memory blob the page fetches via skychatFile(id) to download.
@@ -80,7 +84,21 @@ var (
 	fileMeta   = map[string]chatMsg{}
 	chatClient *app.Client
 	chatCtrl   *dm.Controller // shared 1:1 DM core (pkg/skychat/dm): conns, read loop, envelopes, send
+	// deletedChat holds the ids of messages deleted-for-everyone (by us or the
+	// peer). storeToChatMsg tombstones them on projection. Not persisted — a
+	// live-only tombstone, symmetric with the native app's dm-status "deleted".
+	deletedChat = map[string]struct{}{}
 )
+
+// markChatDeleted tombstones the message with the given id (guarded by chatMu).
+func markChatDeleted(id string) {
+	if id == "" {
+		return
+	}
+	chatMu.Lock()
+	deletedChat[id] = struct{}{}
+	chatMu.Unlock()
+}
 
 // chatHistoryLimits bounds the in-browser transcript. Unlike a public-facing
 // persistent store this is our OWN sent/received messages, not an abuse
@@ -160,7 +178,11 @@ func storeToChatMsg(rec history.Message) chatMsg {
 	}
 	if rec.ID != "" {
 		chatMu.Lock()
-		if fm, ok := fileMeta[rec.ID]; ok {
+		if _, del := deletedChat[rec.ID]; del {
+			m.Deleted = true
+			m.Text = ""
+			m.IsFile = false
+		} else if fm, ok := fileMeta[rec.ID]; ok {
 			m.IsFile = true
 			m.FileID = fm.FileID
 			m.FileName = fm.FileName
@@ -200,6 +222,11 @@ func runBrowserSkychat(ctx context.Context, _ []string) error {
 				TS: ev.TS.UnixMilli(), Out: ev.Dir == "out", ReplyTo: ev.ReplyTo,
 			})
 			vlog(fmt.Sprintf("skychat: %s %s: %q", ev.Dir, shortPK(ev.Peer), ev.Text))
+		},
+		// A peer deleted (for everyone) a message they sent us — tombstone it.
+		OnDelete: func(peer, id string) {
+			markChatDeleted(id)
+			vlog(fmt.Sprintf("skychat: %s deleted message %s", shortPK(peer), id))
 		},
 		Log: func(format string, args ...interface{}) { vlog(fmt.Sprintf(format, args...)) },
 	})
@@ -282,6 +309,29 @@ func jsSkychatSend(_ js.Value, args []js.Value) interface{} {
 	}
 	return promise(func() (interface{}, error) {
 		return nil, sendChat(pkHex, text, network, replyTo)
+	})
+}
+
+// jsSkychatDelete(peerPkHex, id) → Promise<null>. Deletes the message for
+// everyone: sends a chat-delete to the peer (their app tombstones it via
+// OnDelete) and tombstones our own copy immediately (best-effort — if the send
+// fails because the peer is offline, our copy is still marked deleted).
+func jsSkychatDelete(_ js.Value, args []js.Value) interface{} {
+	if len(args) < 2 {
+		return js.Global().Get("Error").New("skychatDelete(peerPkHex, id)")
+	}
+	pkHex, id := args[0].String(), args[1].String()
+	return promise(func() (interface{}, error) {
+		if chatCtrl == nil {
+			return nil, fmt.Errorf("skychat not started yet")
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(pkHex); err != nil {
+			return nil, fmt.Errorf("bad peer pk: %w", err)
+		}
+		err := chatCtrl.SendDelete(context.Background(), pk, id)
+		markChatDeleted(id)
+		return nil, err
 	})
 }
 
