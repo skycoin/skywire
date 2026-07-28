@@ -27,7 +27,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -866,21 +865,29 @@ func TestStartPresenceLoop_DisabledIsNoOp(t *testing.T) {
 
 func TestLogOSNotifyStartup(t *testing.T) {
 	withLifecycleEnv(t)
-	var lines []string
-	origLog := appLog
-	appLog = func(f string, a ...any) { lines = append(lines, fmt.Sprintf(f, a...)) }
-	t.Cleanup(func() { appLog = origLog })
+	// Read the package-wide recorder rather than swapping appLog: background
+	// loops from earlier tests can still be calling it, and assigning the global
+	// here would race them (see appLogRecorder in osnotify_test.go).
+	mark := testAppLog.count()
 
 	osNotify = false
 	logOSNotifyStartup()
-	if len(lines) != 0 {
-		t.Errorf("nothing should be logged when notifications are off, got %v", lines)
+	if got := testAppLog.since(mark); len(got) != 0 {
+		t.Errorf("nothing should be logged when notifications are off, got %v", got)
 	}
 
+	mark = testAppLog.count()
 	osNotify = true
 	logOSNotifyStartup()
-	if len(lines) != 1 || !strings.Contains(lines[0], "Host-OS desktop notifications") {
-		t.Errorf("startup log = %v, want one line about host-OS notifications", lines)
+
+	var found bool
+	for _, l := range testAppLog.since(mark) {
+		if strings.Contains(l, "Host-OS desktop notifications") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("startup should log a line about host-OS notifications; got %v", testAppLog.since(mark))
 	}
 }
 
