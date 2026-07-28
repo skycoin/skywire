@@ -6,6 +6,44 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 
+## 1.3.91
+
+30 PRs on top of v1.3.90. Headlines: **the reward-uptime regression is fixed** (v1.3.89 collapsed heartbeat DELIVERY to ~30% for many visors — this restores it), **the browser TinyGo wasm-visor boots again** (its in-process apps no longer panic on TinyGo's missing reflect), the **skychat DM stack** gains delete-for-everyone + delivery ticks on one shared controller, and **Bitcoin config moves into the wallet** where it belongs.
+
+-   **Reward uptime — delivery regression fixed (#3619).** v1.3.89's heartbeat loop ran the send inline, so a slow/blocked send (TPD auth contending with transport re-registration under load) made `time.Ticker` drop ticks — collapsing recorded uptime to ~30% for heartbeat-dependent visors despite being online. Now each round runs in its own bounded goroutine (never stalls the ticker) + fires immediately on start; the TPD store also backfills missed 5-min slots (bounded 30 min) so flaky delivery still records a continuously-up visor near 100%. **A current-fleet visor records uptime correctly again once it updates to this release.**
+-   **TinyGo wasm-visor un-wedged (#3620).** `appserver.Proc.AwaitConn` still registered the app RPC gateway via reflection (`RegisterName`), which TinyGo's runtime reflect can't do — so the browser wasm-visor panicked the instant it launched an in-process app (skychat), wedging it inside the HV SharedWorker. The gateway's ~18 methods are now registered as reflection-free gobrpc `HandleFunc`s on the TinyGo build (mirroring the edge RPC). Verified live: the tinygo worker now boots + runs skychat.
+-   **Skychat DM convergence + features (#3608–#3618).** Native app and browser wasm-visor now share ONE `pkg/skychat/dm` controller. New: delete-for-everyone (tombstones) and WhatsApp-style delivery-status ticks (sent → received → read), both native SPA + HV Angular + wasm.
+-   **Bitcoin electrum config in the wallet (#3621).** BTC's electrum server is now the Bitcoin coin's node URL in skycoin-web's own Settings → Nodes (like every other coin); the visor side keeps only the skysocks exit.
+
+-   fix(skyroute): deterministic ErrNoMux via yamux Ping liveness probe (flaky test under -race)  [#3623](https://github.com/skycoin/skywire/pull/3623)
+-   feat(wallet): BTC electrum server lives in the wallet's Settings → Nodes (only skysocks stays visor-side)  [#3621](https://github.com/skycoin/skywire/pull/3621)
+-   fix(appserver): reflection-free gob RPC on js (unwedge the TinyGo wasm-visor)  [#3620](https://github.com/skycoin/skywire/pull/3620)
+-   fix(reward-uptime): heartbeat delivery + bounded backfill (v1.3.89 ~30% uptime regression)  [#3619](https://github.com/skycoin/skywire/pull/3619)
+-   feat(skychat): delivery-status ticks on the wasm-visor path (HV Angular UI)  [#3618](https://github.com/skycoin/skywire/pull/3618)
+-   feat(skychat): delivery-status ticks in the HV Angular UI (native path)  [#3617](https://github.com/skycoin/skywire/pull/3617)
+-   fix(skychat): eslint errors in the Angular skychat component (unblock ui CI)  [#3616](https://github.com/skycoin/skywire/pull/3616)
+-   feat(skychat): handle dm-status delete in the HV Angular UI native path  [#3615](https://github.com/skycoin/skywire/pull/3615)
+-   feat(skychat): DM delete-for-everyone UI (native SPA + HV Angular)  [#3614](https://github.com/skycoin/skywire/pull/3614)
+-   feat(skychat): delete-for-everyone in the native app + wasm visor  [#3613](https://github.com/skycoin/skywire/pull/3613)
+-   feat(skychat/dm): delete-for-everyone wire type + controller support  [#3612](https://github.com/skycoin/skywire/pull/3612)
+-   feat(skychat): migrate the native app onto the shared pkg/skychat/dm controller  [#3611](https://github.com/skycoin/skywire/pull/3611)
+-   feat(skychat/dm): Serve (inject conns), Stats counters, nil-transport safety  [#3610](https://github.com/skycoin/skywire/pull/3610)
+-   feat(wasm-visor): run 1:1 skychat on the shared pkg/skychat/dm controller  [#3609](https://github.com/skycoin/skywire/pull/3609)
+-   feat(skychat): shared DM controller in pkg/skychat/dm  [#3608](https://github.com/skycoin/skywire/pull/3608)
+-   feat(skychat): quoted-reply threading in the HV Angular UI  [#3607](https://github.com/skycoin/skywire/pull/3607)
+-   feat(skychat): quoted-reply threading in the native SPA  [#3606](https://github.com/skycoin/skywire/pull/3606)
+-   docs(skydex): RFC — SkyDEX as a website over dmsg  [#3605](https://github.com/skycoin/skywire/pull/3605)
+-   feat(skychat): persist + surface message id and reply_to on native read paths  [#3604](https://github.com/skycoin/skywire/pull/3604)
+-   fix(config): regen preserves custom apps + operator toggles, adds new defaults  [#3603](https://github.com/skycoin/skywire/pull/3603)
+-   feat(wasm-visor): backfill group chat history via Manager.ReplayHistory  [#3602](https://github.com/skycoin/skywire/pull/3602)
+-   feat(wasm-visor): back the skychat buffer with pkg/skychat/history MemStore  [#3601](https://github.com/skycoin/skywire/pull/3601)
+-   docs(packaging): document the three auto-update mechanisms + AUR packages  [#3600](https://github.com/skycoin/skywire/pull/3600)
+-   refactor(skychat): move history store to pkg/skychat/history + wasm-safe MemStore  [#3599](https://github.com/skycoin/skywire/pull/3599)
+-   feat(skychat): native send-side quoted replies (reply_to on /message)  [#3598](https://github.com/skycoin/skywire/pull/3598)
+-   feat(skychat): wire-propagate quoted replies via the shared codec + DM message ids  [#3597](https://github.com/skycoin/skywire/pull/3597)
+-   feat(wasm-visor): runtime Go<->TinyGo variant switch in one PWA  [#3594](https://github.com/skycoin/skywire/pull/3594)
+-   Improve Skychat  [#3592](https://github.com/skycoin/skywire/pull/3592)
+
 ## 1.3.89
 
 15 PRs on top of v1.3.88. Headline: **reward uptime is fixed** — the fleet's presence heartbeat, silently broken since the standalone uptime tracker was decommissioned, works again; the TPD memory leaks behind the reward outage are closed; and a board can now share its `.dmsg` / `.skynet` resolver with a whole home-router LAN. **Because the heartbeat fix is visor-side and the reward minimum-version floor auto-increments, a current-fleet visor only earns rewards correctly once it updates to this release** — which both clears the version floor and carries the working heartbeat.
