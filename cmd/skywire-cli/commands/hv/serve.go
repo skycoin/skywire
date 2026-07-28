@@ -124,7 +124,12 @@ func walletDmsgFetchShim() string {
 		// dials the ssl:// electrum via skysocks-lite (upstream-proxy exit).
 		`if(btc){` +
 		`if(!v.btcFetch)return Promise.resolve(jr(503,{error:"BTC gateway not available"}));` +
-		`var back=ls("skywire-btc-backend");if(!back)return Promise.resolve(jr(502,{error:"no BTC electrum server configured"}));` +
+		// Electrum server comes from the wallet's OWN Settings → Nodes: skycoin-web
+		// persists per-coin node URLs to localStorage["nodeUrls"] (Bitcoin coin
+		// id -2). Legacy skywire-btc-backend, then a public default, keep it working
+		// out of the box — so BTC is configured exactly like every other coin and
+		// the visor side only owns the skysocks exit.
+		`var back="";try{var _nu=JSON.parse(ls("nodeUrls")||"{}");back=(_nu&&_nu["-2"])||"";}catch(e){}if(!back)back=ls("skywire-btc-backend")||"";if(!back)back="ssl://electrum.blockstream.info:50002";` +
 		`var btag="btc "+m+" "+pth;wlog(btag);` +
 		`return Promise.resolve(v.btcFetch(back,m,pth,init.body||null,ls("skywire-btc-proxy")||ls("skywire-upstream-proxy"))).then(done(btag)).catch(fail(btag));` +
 		`}` +

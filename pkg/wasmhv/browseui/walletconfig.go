@@ -30,9 +30,14 @@ package browseui
 //	                        a filesystem + skycoin-web backend); the served PWA
 //	                        and browser-tab wasm visor never send it. Realizing
 //	                        disk custody in the backend is Stage 3 of the design.
-//	skywire-btc-backend     ssl:// electrum server
 //	skywire-btc-proxy       skysocks exit PK for the BTC electrum egress
 //	                        (required on wasm; optional on native = self-egress)
+//
+// The BTC electrum server is NOT set here anymore — it is the Bitcoin coin's
+// node URL in skycoin-web's own Settings → Nodes (localStorage["nodeUrls"], coin
+// id -2), exactly like every other coin. Both shims read it from there (falling
+// back to the legacy skywire-btc-backend key, then a public default), so this
+// panel only owns the skysocks exit the visor routes that egress through.
 const WalletConfigHTML = `<!doctype html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
@@ -65,18 +70,8 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <button id="ms" title="Point at another visor's skycoin-web server over dmsg.">Remote</button>
 </div>
 <div id="browser">
-<div class="hint">Wallets are created + stored in <b>this browser</b>. The <b>coin node</b> each coin queries is set in the wallet's own <b>Settings → Nodes</b> (per coin — enter a mesh node as <span class="mono">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span>, or a clearnet URL). This panel keeps the Bitcoin electrum + skysocks-exit settings below.</div>
+<div class="hint">Wallets are created + stored in <b>this browser</b>. Each coin's <b>node</b> — including <b>Bitcoin's</b> <span class="mono">ssl://</span> electrum server — is set in the wallet's own <b>Settings → Nodes</b> (per coin: a mesh node <span class="mono">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span> or a clearnet URL). This panel keeps only the <b>skysocks exit</b> the visor routes that clearnet traffic through.</div>
 <div class="sec">
-<div class="hint"><b>Bitcoin</b> (optional): an <span class="mono">ssl://host:port</span> electrum server, reached over the mesh by the visor's BTC gateway. Keys + signing stay in this browser; only chain queries cross.</div>
-<div class="row"><label>btc</label><input id="btc" list="btclist" spellcheck="false" placeholder="pick or type an ssl:// electrum server"></div>
-<datalist id="btclist">
-<option value="ssl://electrum.blockstream.info:50002"></option>
-<option value="ssl://fortress.qtornado.com:50002"></option>
-<option value="ssl://electrum.emzy.de:50002"></option>
-<option value="ssl://electrum.bitaroo.net:50002"></option>
-<option value="ssl://bitcoin.lu.ke:50002"></option>
-<option value="ssl://electrum.jochen-hoenicke.de:50006"></option>
-</datalist>
 <div class="hint"><b>Skysocks exit</b> <span id="proxyreq"></span>: the visor PK whose skysocks-server relays the clearnet connection — the BTC electrum egress AND the iframe browser share this exit. <span id="proxynote"></span></div>
 <div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex)"><button class="add" id="psrv" title="list skysocks-server PKs from service discovery">servers ▾</button><button class="add" id="prnd" title="pick a random skysocks server from service discovery">🎲 random</button></div>
 <div class="row" id="pselrow" style="display:none"><label></label><select id="psel"></select></div>
@@ -96,7 +91,7 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <button class="apply" id="apply">Apply</button>
 </div>
 <script>(function(){
-var K={mode:"skywire-wallet-mode",nodes:"skywire-coin-nodes",prim:"skywire-coin-node",svc:"skywire-wallet-service",btc:"skywire-btc-backend",proxy:"skywire-btc-proxy",dir:"skywire-wallet-dir"};
+var K={mode:"skywire-wallet-mode",nodes:"skywire-coin-nodes",prim:"skywire-coin-node",svc:"skywire-wallet-service",proxy:"skywire-btc-proxy",dir:"skywire-wallet-dir"};
 function ls(k,d){try{return localStorage.getItem(k)||d;}catch(e){return d;}}
 function set(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 function $(id){return document.getElementById(id);}
@@ -116,7 +111,7 @@ if(mode==="disk"&&!diskCapable)mode="browser"; // clamp a disk config opened in 
 function setMode(m){mode=m;
 $("mb").classList.toggle("on",m==="browser");$("md").classList.toggle("on",m==="disk");$("ms").classList.toggle("on",m==="service");
 $("browser").style.display=m==="browser"?"":"none";$("disk").style.display=m==="disk"?"":"none";$("service").style.display=m==="service"?"":"none";}
-$("btc").value=ls(K.btc,"");$("proxy").value=ls(K.proxy,"")||ls("skywire-upstream-proxy","");$("svc").value=ls(K.svc,"");$("dir").value=ls(K.dir,"");
+$("proxy").value=ls(K.proxy,"")||ls("skywire-upstream-proxy","");$("svc").value=ls(K.svc,"");$("dir").value=ls(K.dir,"");
 setMode(mode);
 $("mb").onclick=function(){setMode("browser");};$("md").onclick=function(){setMode("disk");};$("ms").onclick=function(){setMode("service");};
 // Skysocks exit: SD-populated dropdown + live proxy/resolving-proxy log — the
@@ -147,7 +142,6 @@ else{set(K.mode,"browser");
 // Coin node config moved to skycoin-web's Settings → Nodes; clear any legacy
 // panel-set node so that page (or the deployment mesh default) is authoritative.
 set(K.nodes,"");set(K.prim,"");
-set(K.btc,($("btc").value||"").trim());
 var pxy=($("proxy").value||"").trim();set(K.proxy,pxy);set("skywire-upstream-proxy",pxy);}
 try{parent.postMessage({type:"skywire-wallet-config"},"*");}catch(_){}
 };
