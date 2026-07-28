@@ -120,9 +120,14 @@ const walletNodeShim = `<script>(function(){` +
 	`if(mc){var tail=p.slice(p.indexOf("/coin/"));target=location.origin+"/wallet"+tail+searchOf(url);}` +
 	`else{var bare=p.replace(/^\/(wallet\/)?/,"");target=location.origin+"/wallet/coin/0/"+bare+searchOf(url);}` +
 	// Tag the backend selection by path: BTC carries electrum backend + skysocks
-	// exit; a skycoin-style node carries the chosen node host.
+	// exit; a skycoin-style node carries the chosen node host. The electrum server
+	// is now sourced from the wallet's OWN Settings -> Nodes (customNodeUrls, which
+	// skycoin-web persists to localStorage["nodeUrls"] keyed by coin id; the
+	// Bitcoin coin's id is -2), so BTC is configured exactly like every other coin
+	// and the visor side only owns the skysocks exit. Falls back to the legacy
+	// skywire-btc-backend key, then a public default, so it works out of the box.
 	`var h={};` +
-	`if(/\/v1\/btc\//.test(p)){var b=ls("skywire-btc-backend");if(b){h["X-Skywire-Btc-Backend"]=b;}var xp=ls("skywire-btc-proxy");if(xp){h["X-Skywire-Btc-Proxy"]=xp;}}` +
+	`if(/\/v1\/btc\//.test(p)){var b="";try{var _nu=JSON.parse(ls("nodeUrls")||"{}");b=(_nu&&_nu["-2"])||"";}catch(e){}if(!b){b=ls("skywire-btc-backend")||"";}if(!b){b="ssl://electrum.blockstream.info:50002";}h["X-Skywire-Btc-Backend"]=b;var xp=ls("skywire-btc-proxy");if(xp){h["X-Skywire-Btc-Proxy"]=xp;}}` +
 	`else{var nn=hostOf(url)||ls("skywire-coin-node");if(nn){h["X-Skywire-Coin-Node"]=nn;}}` +
 	`return {t:target,h:h};}` +
 	// fetch override.
