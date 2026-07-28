@@ -15,6 +15,7 @@ updates may be generated with `scripts/changelog.sh <PR#lowest> <PR#highest>`
 -   **Skychat DM convergence + features (#3608–#3618).** Native app and browser wasm-visor now share ONE `pkg/skychat/dm` controller. New: delete-for-everyone (tombstones) and WhatsApp-style delivery-status ticks (sent → received → read), both native SPA + HV Angular + wasm.
 -   **Bitcoin electrum config in the wallet (#3621).** BTC's electrum server is now the Bitcoin coin's node URL in skycoin-web's own Settings → Nodes (like every other coin); the visor side keeps only the skysocks exit.
 
+-   fix(skyroute): deterministic ErrNoMux via yamux Ping liveness probe (flaky test under -race)  [#3623](https://github.com/skycoin/skywire/pull/3623)
 -   feat(wallet): BTC electrum server lives in the wallet's Settings → Nodes (only skysocks stays visor-side)  [#3621](https://github.com/skycoin/skywire/pull/3621)
 -   fix(appserver): reflection-free gob RPC on js (unwedge the TinyGo wasm-visor)  [#3620](https://github.com/skycoin/skywire/pull/3620)
 -   fix(reward-uptime): heartbeat delivery + bounded backfill (v1.3.89 ~30% uptime regression)  [#3619](https://github.com/skycoin/skywire/pull/3619)
