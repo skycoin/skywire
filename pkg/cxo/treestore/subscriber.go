@@ -139,6 +139,14 @@ type Subscriber struct {
 	// succeeds.
 	publisherAddr atomic.Pointer[string]
 
+	// reconnectMu guards reconnectStop / reconnectKick. Both are assigned
+	// lazily on the first successful Connect and read by Close and by
+	// handleFillingBreaks, which run on unrelated goroutines — the two
+	// sync.Once values below order nothing between those parties (they are
+	// DIFFERENT Onces, and Close's closeMu is not held by Connect). Held only
+	// around the field access itself, never across a call, so it cannot
+	// participate in a lock cycle.
+	reconnectMu sync.Mutex
 	// reconnectStop, when closed, terminates the watchdog. Created
 	// when Connect is first called; closed by Close. Idempotent
 	// close via reconnectOnce.
@@ -385,8 +393,12 @@ func (s *Subscriber) Connect(ctx context.Context, publisherPK cipher.PubKey) err
 	s.lastUpdateNs.Store(time.Now().UnixNano())
 	// Start the watchdog on the FIRST successful Connect only.
 	s.reconnectStartOnce.Do(func() {
+		s.reconnectMu.Lock()
 		s.reconnectStop = make(chan struct{})
 		s.reconnectKick = make(chan struct{}, 1)
+		s.reconnectMu.Unlock()
+		// The watchdog's reads of both channels are ordered by this
+		// goroutine start, so it needs no lock of its own.
 		go s.runReconnectWatchdog()
 	})
 	return nil
@@ -424,8 +436,12 @@ func (s *Subscriber) ConnectTCP(ctx context.Context, address string) error {
 	s.lastUpdateNs.Store(time.Now().UnixNano())
 	// Start the watchdog on the FIRST successful connect only.
 	s.reconnectStartOnce.Do(func() {
+		s.reconnectMu.Lock()
 		s.reconnectStop = make(chan struct{})
 		s.reconnectKick = make(chan struct{}, 1)
+		s.reconnectMu.Unlock()
+		// The watchdog's reads of both channels are ordered by this
+		// goroutine start, so it needs no lock of its own.
 		go s.runReconnectWatchdog()
 	})
 	return nil
@@ -713,8 +729,11 @@ func (s *Subscriber) Close() error {
 	// node mid-Connect. Idempotent — channel may already be nil if
 	// Connect was never called.
 	s.reconnectOnce.Do(func() {
-		if s.reconnectStop != nil {
-			close(s.reconnectStop)
+		s.reconnectMu.Lock()
+		stop := s.reconnectStop
+		s.reconnectMu.Unlock()
+		if stop != nil {
+			close(stop)
 		}
 	})
 	if s.ownsNode {
@@ -891,8 +910,11 @@ func (s *Subscriber) handleFillingBreaks(r *registry.Root, err error) {
 		Warn("treestore-sub: Root filling aborted; kicking a re-Connect to re-fetch")
 	// Non-blocking — the cap-1 channel coalesces repeated breaks, and a nil
 	// channel (watchdog never started, e.g. native-TCP pre-Connect) no-ops.
+	s.reconnectMu.Lock()
+	kick := s.reconnectKick
+	s.reconnectMu.Unlock()
 	select {
-	case s.reconnectKick <- struct{}{}:
+	case kick <- struct{}{}:
 	default:
 	}
 }
