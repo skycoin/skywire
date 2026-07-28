@@ -117,11 +117,49 @@ const expectedHeartbeatsPerDay = float64(24*60*60) / float64(90) // 960
 
 // RecordHeartbeat records a visor heartbeat for uptime tracking.
 // Each heartbeat increments the daily counter and updates the version/last_seen.
+// maxHeartbeatBackfillSlots caps how many missed 5-minute slots a single
+// heartbeat backfills (see backfillStartSlot / RecordHeartbeat). 6 slots =
+// 30 minutes: generous enough to cover a burst of dropped heartbeat ticks on a
+// visor that was actually up, but small enough that a genuine longer absence is
+// not credited.
+const maxHeartbeatBackfillSlots = 6
+
+// backfillStartSlot returns the first timeline slot a heartbeat at `now` should
+// set, given the previous heartbeat time (`prev`, valid only when prevSeen>0).
+// Normally that is just the current slot, but heartbeat DELIVERY is flaky (the
+// visor's 5-min ticker drops ticks when its TPD auth contends with transport
+// re-registration under load), so a continuously-up visor may only land a
+// heartbeat every few slots. A heartbeat now plus one a short while ago means
+// the visor was up across the gap, so backfill the missed slots — BOUNDED by
+// maxHeartbeatBackfillSlots, and only within the same day (the timeline bitmap
+// is per-day). A larger gap is treated as a real absence and NOT credited. This
+// is what makes recorded uptime robust to under-delivery instead of collapsing
+// to ~30%.
+func backfillStartSlot(now, prev time.Time, prevSeen int64) int64 {
+	curSlot := currentTimelineSlot(now)
+	if prevSeen <= 0 || prev.Format("2006-01-02") != now.Format("2006-01-02") {
+		return curSlot
+	}
+	if prevSlot := currentTimelineSlot(prev); prevSlot < curSlot && curSlot-prevSlot <= maxHeartbeatBackfillSlots {
+		return prevSlot + 1 // prevSlot was already set by the earlier heartbeat
+	}
+	return curSlot
+}
+
 func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, version string) error {
 	now := time.Now().UTC()
 	date := now.Format("2006-01-02")
 	pkHex := pk.Hex()
 	key := uptimeKey(pkHex, date)
+	tlKey := uptimeTimelineKey(pkHex, date)
+	curSlot := currentTimelineSlot(now)
+
+	// Set the current slot, plus any bounded backfill of slots missed since the
+	// previous heartbeat (flaky delivery — see backfillStartSlot).
+	startSlot := curSlot
+	if prevSeen, err := s.client.HGet(ctx, key, "last_seen").Int64(); err == nil {
+		startSlot = backfillStartSlot(now, time.Unix(prevSeen, 0).UTC(), prevSeen)
+	}
 
 	pipe := s.client.Pipeline()
 
@@ -137,9 +175,12 @@ func (s *redisStore) RecordHeartbeat(ctx context.Context, pk cipher.PubKey, vers
 	pipe.SAdd(ctx, uptimeOnlineKey(date), pkHex)
 	pipe.Expire(ctx, uptimeOnlineKey(date), 8*24*time.Hour)
 
-	// Set the current 5-minute slot in the timeline bitmap.
-	tlKey := uptimeTimelineKey(pkHex, date)
-	pipe.SetBit(ctx, tlKey, currentTimelineSlot(now), 1)
+	// Set the current 5-minute slot (plus any bounded backfill) in the timeline
+	// bitmap. SetBit is idempotent, so concurrent heartbeats for the same PK are
+	// harmless.
+	for slot := startSlot; slot <= curSlot; slot++ {
+		pipe.SetBit(ctx, tlKey, slot, 1)
+	}
 	pipe.Expire(ctx, tlKey, 8*24*time.Hour)
 
 	if _, err := pipe.Exec(ctx); err != nil {
