@@ -65,16 +65,60 @@ func TestNormalize(t *testing.T) {
 }
 
 // TestNormalize_DegenerateWindows pins the two out-of-contract cases, both
-// reachable from the UI via AdjustMin/AdjustMax (which clamp independently).
+// reachable from the UI via AdjustMin/AdjustMax (which clamp independently)
+// and via the unclamped SetMagMin/SetMagMax.
 func TestNormalize_DegenerateWindows(t *testing.T) {
-	// min == max divides by zero → NaN. Documented, not defended against here;
-	// the colormaps absorb it without panicking (see the test below).
-	if got := Normalize(10, 45, 45); !math.IsNaN(got) {
-		t.Errorf("Normalize with min==max = %v, want NaN", got)
+	// A zero-width window must behave as a step at the threshold, never NaN —
+	// NaN would reach uint8(NaN) in the colormaps, which Go leaves
+	// implementation-defined.
+	cases := []struct {
+		value, min, max float64
+		want            float64
+	}{
+		{10, 45, 45, 0},     // below the threshold
+		{45, 45, 45, 0},     // exactly at it — floors, matching the ramp's v==min
+		{100, 45, 45, 1},    // above it saturates
+		{0, 0, 0, 0},        // zero window at the origin
+		{-1, 0, 0, 0},       //
+		{1, 0, 0, 1},        //
+		{-100, -80, -80, 0}, // negative dB window, below the threshold
+		{-80, -80, -80, 0},  // exactly at it
+		{-50, -80, -80, 1},  // above it
+	}
+	for _, c := range cases {
+		got := Normalize(c.value, c.min, c.max)
+		if math.IsNaN(got) {
+			t.Errorf("Normalize(%v, %v, %v) = NaN; the zero-width guard is missing", c.value, c.min, c.max)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("Normalize(%v, %v, %v) = %v, want %v", c.value, c.min, c.max, got, c.want)
+		}
 	}
 	// min > max collapses to zero rather than producing a negative or NaN.
 	if got := Normalize(10, 50, 45); got != 0 {
 		t.Errorf("Normalize with min>max = %v, want 0", got)
+	}
+}
+
+// TestNormalize_NeverNaN sweeps the window combinations the settings API can
+// produce and asserts the result is always a usable [0,1] fraction — the
+// property the colormaps rely on to avoid an undefined uint8 conversion.
+func TestNormalize_NeverNaN(t *testing.T) {
+	bounds := []float64{-80, -45, -1, 0, 1, 45, 80, 1000}
+	values := []float64{-200, -80, -0.5, 0, 0.5, 45, 200, 1e6}
+	for _, lo := range bounds {
+		for _, hi := range bounds {
+			for _, v := range values {
+				got := Normalize(v, lo, hi)
+				if math.IsNaN(got) || math.IsInf(got, 0) {
+					t.Fatalf("Normalize(%v, %v, %v) = %v, want a finite value", v, lo, hi, got)
+				}
+				if got < 0 || got > 1 {
+					t.Fatalf("Normalize(%v, %v, %v) = %v, want it within [0,1]", v, lo, hi, got)
+				}
+			}
+		}
 	}
 }
 
@@ -248,20 +292,29 @@ func TestMagnitudeToPixelWith_ColorSchemeDispatch(t *testing.T) {
 	}
 }
 
-// TestMagnitudeToPixel_DegenerateRangeDoesNotPanic covers the MagMin == MagMax
-// case, which the UI can reach by pushing AdjustMin up into MagMax (the two
-// clamp independently). Normalize then yields NaN and the colormaps convert it
-// with uint8(NaN) — implementation-defined in Go, so only the invariants that
-// hold on every platform are asserted: no panic, and an opaque pixel.
-func TestMagnitudeToPixel_DegenerateRangeDoesNotPanic(t *testing.T) {
+// TestMagnitudeToPixel_DegenerateRange covers the MagMin == MagMax case, which
+// the UI can reach by pushing AdjustMin up into MagMax (the two clamp
+// independently). With the zero-width guard in Normalize the window acts as a
+// threshold, so the result is fully determined on every platform rather than
+// depending on an implementation-defined uint8(NaN).
+func TestMagnitudeToPixel_DegenerateRange(t *testing.T) {
+	const (
+		black = 5.0    // 20*log10(5) ≈ 14 dB — below the 45 dB threshold
+		white = 1000.0 // 60 dB — above it
+	)
 	for _, scheme := range []ColorScheme{ColorHeat, ColorBlue, ColorGrayscale} {
 		s := DefaultSettings()
 		s.Color = scheme
 		s.SetMagMin(45)
 		s.SetMagMax(45)
-		got := rgba(t, MagnitudeToPixelWith(5, s))
-		if got.A != 255 {
-			t.Errorf("scheme %v with a zero-width window: alpha = %d, want 255", scheme, got.A)
+
+		lo := rgba(t, MagnitudeToPixelWith(black, s))
+		if lo != (color.RGBA{0, 0, 0, 255}) {
+			t.Errorf("scheme %v below the threshold = %v, want black", scheme, lo)
+		}
+		hi := rgba(t, MagnitudeToPixelWith(white, s))
+		if hi != (color.RGBA{255, 255, 255, 255}) {
+			t.Errorf("scheme %v above the threshold = %v, want white", scheme, hi)
 		}
 	}
 	// Inverted window (min > max) is well-defined: Normalize → 0 → black.
