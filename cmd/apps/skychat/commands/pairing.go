@@ -583,7 +583,17 @@ func sendPairControl(ctx context.Context, peerPK cipher.PubKey, msgType string) 
 }
 
 // parsePK parses a hex-encoded public key and returns a cipher.PubKey.
+//
+// The empty string is rejected explicitly: cipher.PubKey.UnmarshalText treats
+// "" as a no-op and returns a nil error, so without this guard an absent
+// peer_pk in a request body would parse as the all-zero key and be handed to
+// PairAdd/PairSend/SendRaw as if it were a real peer. The path-based callers
+// pre-check for an empty segment; the body-based ones (POST /pair, /delete,
+// /read-receipt, /request-file, /voice/call) rely on this.
 func parsePK(s string) (cipher.PubKey, error) {
+	if strings.TrimSpace(s) == "" {
+		return cipher.PubKey{}, errors.New("empty public key")
+	}
 	var pk cipher.PubKey
 	if err := pk.UnmarshalText([]byte(s)); err != nil {
 		return cipher.PubKey{}, err
