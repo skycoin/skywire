@@ -1725,12 +1725,32 @@ func getFileSystem() http.FileSystem {
 	return http.FS(fsys)
 }
 
+// ipcStartupDelay is the grace period before the IPC handler starts reading,
+// giving the visor's IPC server time to come up. A package var so tests can
+// drive the handler without waiting it out.
+var ipcStartupDelay = 5 * time.Second
+
+// ipcConn is the subset of *ipc.Client the signal handler uses. It exists so
+// ipcSignalLoop can be driven from a test: the spin-loop regression the loop
+// guards against is only observable by controlling what Read returns, which a
+// live IPC server can't do on demand.
+type ipcConn interface {
+	Read() (*ipc.Message, error)
+	Close()
+}
+
 func handleIPCSignal(client *ipc.Client) {
-	time.Sleep(5 * time.Second)
+	time.Sleep(ipcStartupDelay)
 	if client == nil {
 		appLog("Unable to create IPC Client: server is non-existent")
 		return
 	}
+	ipcSignalLoop(client)
+}
+
+// ipcSignalLoop drains IPC messages until a shutdown signal or a read error,
+// then closes the client.
+func ipcSignalLoop(client ipcConn) {
 	for {
 		m, err := client.Read()
 		if err != nil {
