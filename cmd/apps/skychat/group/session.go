@@ -379,6 +379,9 @@ type Session struct {
 	// lastInbound timing. Owner-role sessions ignore this — they're
 	// always alive while the publisher is running.
 	closed atomic.Bool
+	// closeOnce / closeErr make Close concurrency-safe and idempotent.
+	closeOnce sync.Once
+	closeErr  error
 
 	// heartbeatCancel stops the owner-side heartbeat emission loop.
 	// nil for member-role sessions or when HeartbeatInterval=0.
@@ -1692,9 +1695,20 @@ func (s *Session) PublishAdminMutation(op AdminOp, peerPK cipher.PubKey, parentS
 	return seq, nil
 }
 
-// Close tears down the subscriber + publisher (and the underlying
-// CXO node, owned by the publisher). Idempotent.
+// Close tears down the subscriber + publisher (and the underlying CXO node,
+// owned by the publisher).
+//
+// Safe to call concurrently and repeatedly: the body runs exactly once and
+// later callers get the same error. Without the Once, two closers race on the
+// s.pub / s.sub / relay fields (read-then-write with no lock) — reachable
+// whenever a ctx-done teardown goroutine and an explicit Close both fire, e.g.
+// the native-TCP group path in commands.startCXOGroup.
 func (s *Session) Close() error {
+	s.closeOnce.Do(func() { s.closeErr = s.doClose() })
+	return s.closeErr
+}
+
+func (s *Session) doClose() error {
 	var firstErr error
 	// Mark closed first so any concurrent /status read sees the
 	// session as dead even if Close races with a long Subscriber.Close.
