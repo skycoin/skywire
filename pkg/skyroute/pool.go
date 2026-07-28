@@ -266,6 +266,15 @@ func openWithTimeout(ctx context.Context, sess *yamux.Session, d time.Duration) 
 	}
 	ch := make(chan res, 1)
 	go func() {
+		// A yamux round-trip is the definitive liveness probe: the far-end's yamux
+		// layer auto-answers the ping, so a destination not running a mux server (or
+		// a dead route) fails here. Open() alone is unreliable — it returns a stream
+		// optimistically before a dead session is noticed, which surfaced as a flaky
+		// ErrNoMux-vs-nil race under -race.
+		if _, perr := sess.Ping(); perr != nil {
+			ch <- res{nil, perr}
+			return
+		}
 		c, err := sess.Open()
 		ch <- res{c, err}
 	}()
