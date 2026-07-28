@@ -53,7 +53,14 @@ func initSystemSurvey(_ context.Context, v *Visor, log *logging.Logger) error {
 }
 
 func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
-	const tickDuration = 5 * time.Minute
+	const (
+		tickDuration = 5 * time.Minute
+		// heartbeatSendTimeout bounds one heartbeat round so a slow or blocked
+		// send (the TPD auth can contend with transport re-registration under
+		// deployment load) can never stall the ticker and drop the next slot's
+		// heartbeat. Kept well under tickDuration so rounds never overlap.
+		heartbeatSendTimeout = 2 * time.Minute
+	)
 
 	// Resolve both targets. The standalone uptime-tracker URL may be absent
 	// (the tracker is decommissioned fleet-wide); the TPD heartbeat URL is the
@@ -98,14 +105,11 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 			return
 		}
 
-		ticker := time.NewTicker(tickDuration)
-		v.pushCloseStack("uptime_tracker", func() error {
-			ticker.Stop()
-			return nil
-		})
-
-		for range ticker.C {
-			c := context.Background()
+		// sendHeartbeats fires one heartbeat round, bounded by heartbeatSendTimeout
+		// so a hung send can't run forever.
+		sendHeartbeats := func() {
+			c, cancel := context.WithTimeout(context.Background(), heartbeatSendTimeout)
+			defer cancel()
 			if ut != nil {
 				if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
 					log.WithError(err).Warn("Failed to update visor uptime (standalone tracker).")
@@ -126,6 +130,37 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 					v.isUptimeTrackerHealthy.set()
 				}
 			}
+		}
+
+		ticker := time.NewTicker(tickDuration)
+		v.pushCloseStack("uptime_tracker", func() error {
+			ticker.Stop()
+			return nil
+		})
+
+		// Run each round in its own goroutine so a slow send never delays the
+		// ticker and drops the next slot's heartbeat — the tick-dropping that
+		// collapsed recorded uptime to ~30% for heartbeat-dependent visors. The
+		// semaphore skips a round when the previous one is still in flight so a
+		// wedged send can't pile up goroutines.
+		sem := make(chan struct{}, 1)
+		runRound := func() {
+			select {
+			case sem <- struct{}{}:
+				go func() {
+					defer func() { <-sem }()
+					sendHeartbeats()
+				}()
+			default:
+			}
+		}
+
+		// Fire immediately: a (re)started visor should register presence in the
+		// current slot instead of forfeiting the first full tick — every restart
+		// was silently losing 5 minutes of uptime.
+		runRound()
+		for range ticker.C {
+			runRound()
 		}
 	}()
 
