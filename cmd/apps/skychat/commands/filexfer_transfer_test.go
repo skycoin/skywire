@@ -87,7 +87,12 @@ func withXferEnv(t *testing.T) {
 	hub = newSSEHub()
 	pairEnable = false
 	osNotify = false
+	// fileMgr is read under fileMgrMu by sendFileID, which handleFileRequestFrame
+	// calls from a goroutine that can outlive the test that spawned it — so this
+	// write needs the lock too, not just the one in Cleanup below.
+	fileMgrMu.Lock()
 	fileMgr = nil
+	fileMgrMu.Unlock()
 	cxoGroupSess = nil
 	cxoGroup = ""
 
