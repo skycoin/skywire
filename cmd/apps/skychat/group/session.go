@@ -379,6 +379,9 @@ type Session struct {
 	// lastInbound timing. Owner-role sessions ignore this — they're
 	// always alive while the publisher is running.
 	closed atomic.Bool
+	// closeOnce / closeErr make Close concurrency-safe and idempotent.
+	closeOnce sync.Once
+	closeErr  error
 
 	// heartbeatCancel stops the owner-side heartbeat emission loop.
 	// nil for member-role sessions or when HeartbeatInterval=0.
@@ -1692,9 +1695,20 @@ func (s *Session) PublishAdminMutation(op AdminOp, peerPK cipher.PubKey, parentS
 	return seq, nil
 }
 
-// Close tears down the subscriber + publisher (and the underlying
-// CXO node, owned by the publisher). Idempotent.
+// Close tears down the subscriber + publisher (and the underlying CXO node,
+// owned by the publisher).
+//
+// Safe to call concurrently and repeatedly: the body runs exactly once and
+// later callers get the same error. Without the Once, two closers race on the
+// s.pub / s.sub / relay fields (read-then-write with no lock) — reachable
+// whenever a ctx-done teardown goroutine and an explicit Close both fire, e.g.
+// the native-TCP group path in commands.startCXOGroup.
 func (s *Session) Close() error {
+	s.closeOnce.Do(func() { s.closeErr = s.doClose() })
+	return s.closeErr
+}
+
+func (s *Session) doClose() error {
 	var firstErr error
 	// Mark closed first so any concurrent /status read sees the
 	// session as dead even if Close races with a long Subscriber.Close.
@@ -1711,11 +1725,23 @@ func (s *Session) Close() error {
 	if s.relayCancel != nil {
 		s.relayCancel()
 	}
+	// NOTE on the fields below: teardown deliberately does NOT nil s.relayDmsg,
+	// s.sub or s.pub. Those writes were the old idempotency mechanism, which
+	// closeOnce now provides — and they are unguarded, so each one raced every
+	// concurrent reader of the field. The one CI caught: openLocked spawns a
+	// delayed BroadcastRoster goroutine that reads s.pub, so creating or
+	// joining a group and tearing it down inside rosterBroadcastDelay raced
+	// `s.pub = nil` here. Closing the handles is what matters; leaving the
+	// pointers in place lets readers keep their nil-checks and get an error
+	// from the closed handle instead of racing a write.
+	//
+	// Dropping the s.sub nil also fixes IsSubscriberAlive: it short-circuits
+	// `s.sub == nil` to true (owner role), so a CLOSED member session used to
+	// report subscriber_alive=true. It now falls through to the closed flag.
 	if s.relayDmsg != nil {
 		if err := s.relayDmsg.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		s.relayDmsg = nil
 	}
 	s.relayMu.Lock()
 	skyLis := s.relaySkynet
@@ -1731,7 +1757,6 @@ func (s *Session) Close() error {
 		if err := s.sub.Close(); err != nil {
 			firstErr = err
 		}
-		s.sub = nil
 	}
 	// D1 per-PK peer subscribers — close before the local publisher so
 	// the subscribers' Disconnect frames flush through pub.Node() while
@@ -1752,7 +1777,6 @@ func (s *Session) Close() error {
 		if err := s.pub.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		s.pub = nil
 	}
 	return firstErr
 }

@@ -197,7 +197,11 @@ func (s *Session) applyAdminLeaf(body []byte) {
 // so it's safe to call on every owner-session open. Best-effort: publish errors
 // are debug-logged and retried on the next open.
 func (s *Session) BroadcastRoster() {
-	if s.pub == nil {
+	// openLocked calls this from a goroutine after rosterBroadcastDelay, so the
+	// session can already be torn down by the time it fires (create-then-delete,
+	// or app shutdown right after a join). Bail rather than publishing N leaves
+	// into a closed publisher.
+	if s == nil || s.pub == nil || s.closed.Load() {
 		return
 	}
 	s.membersMu.RLock()

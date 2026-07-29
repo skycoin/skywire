@@ -31,8 +31,27 @@ const StepSize = int(FFTSize * (1.0 - Overlap))
 // synchronous. Kept for API compatibility with upstream audioprism-go.
 func SetSingleThreaded() {}
 
-// Normalize normalizes the value between the given range.
+// Normalize maps value onto [0,1] across the [minVal,maxVal] window, clamping
+// anything outside it.
+//
+// A zero-width window (maxVal == minVal) is handled explicitly: the ramp's
+// limit as the window narrows is a step at the threshold, so values above it
+// saturate and everything else floors. Without this guard the division below
+// is 0/0 = NaN, and the colormaps then evaluate uint8(NaN) — a conversion Go
+// leaves implementation-defined, so the rendered column would differ by
+// platform. The degenerate window is reachable from the UI because AdjustMin
+// and AdjustMax clamp independently (nothing stops MagMin being pushed onto
+// MagMax), and because SetMagMin/SetMagMax apply no clamping at all.
+//
+// An inverted window (minVal > maxVal) is left as it was: the clamps collapse
+// the numerator to zero, so the result is 0.
 func Normalize(value, minVal, maxVal float64) float64 {
+	if maxVal == minVal {
+		if value > minVal {
+			return 1
+		}
+		return 0
+	}
 	return (math.Max(math.Min(value, maxVal), minVal) - minVal) / (maxVal - minVal)
 }
 
