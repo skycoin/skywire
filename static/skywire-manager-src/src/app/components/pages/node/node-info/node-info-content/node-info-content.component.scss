@@ -145,6 +145,18 @@
       text-shadow: 0 0 8px rgba(0, 212, 255, 0.4);
     }
 
+    .dmsg-protocol {
+      color: #9d7cff;
+      font-weight: 500;
+      font-size: 0.9em;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      padding: 1px 6px;
+      border: 1px solid rgba(157, 124, 255, 0.4);
+      border-radius: 4px;
+      background: rgba(157, 124, 255, 0.08);
+    }
+
     .dmsg-latency {
       color: #4ade80;
       font-weight: 500;
