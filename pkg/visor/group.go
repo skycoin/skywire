@@ -37,6 +37,37 @@ type GroupInfo struct {
 	OwnerPK cipher.PubKey     `json:"owner_pk"`
 	Port    uint16            `json:"port"`
 	Mode    skychatgroup.Mode `json:"mode"`
+	// Kind is the user-facing group type — "public" (open admission,
+	// plaintext) or "private" (admin-approved admission, encrypted).
+	// Mode is retained above for older clients; new code should read
+	// Kind, JoinPolicy and PostPolicy.
+	Kind skychatgroup.Kind `json:"kind,omitempty"`
+	// JoinPolicy and PostPolicy are derived, not stored: they answer
+	// "can someone walk in" and "who may speak right now" so a UI
+	// doesn't have to re-derive the rules from Kind + ReadOnly.
+	JoinPolicy skychatgroup.JoinPolicy `json:"join_policy,omitempty"`
+	PostPolicy skychatgroup.PostPolicy `json:"post_policy,omitempty"`
+
+	// Banned and Muted are the moderation lists. Banned PKs are out of
+	// the group and refused at the join gate; muted PKs read but
+	// cannot post.
+	Banned []cipher.PubKey `json:"banned,omitempty"`
+	Muted  []cipher.PubKey `json:"muted,omitempty"`
+
+	// ReadOnly suspends posting for every non-admin.
+	ReadOnly bool `json:"read_only,omitempty"`
+
+	// CanPost / CannotPostReason answer "may THIS visor post into this
+	// group right now", pre-computed so the UI can disable the composer
+	// and explain why without duplicating the precedence rules
+	// (banned > muted > read-only).
+	CanPost          bool   `json:"can_post"`
+	CannotPostReason string `json:"cannot_post_reason,omitempty"`
+
+	// PendingJoins is the number of join requests awaiting an admin
+	// decision. Zero for non-admins and for open groups, which admit
+	// without queuing. Populated by GroupList and GroupGet.
+	PendingJoins int `json:"pending_joins,omitempty"`
 	// Admins is the per-record roster-authority set. Mirrors
 	// Record.Admins exactly — founder is implicitly admin and is
 	// surfaced explicitly here after EnsureFounderInAdmins runs on
@@ -171,9 +202,30 @@ type GroupMessage struct {
 
 // GroupCreateArgs is the RPC input for GroupCreate.
 type GroupCreateArgs struct {
-	Name           string            `json:"name"`
-	Mode           skychatgroup.Mode `json:"mode"`
-	InitialMembers []cipher.PubKey   `json:"initial_members,omitempty"`
+	Name string `json:"name"`
+
+	// Kind is the group type: "public" (open admission, plaintext) or
+	// "private" (admin-approved admission, encrypted). Preferred over
+	// Mode.
+	Kind skychatgroup.Kind `json:"kind,omitempty"`
+
+	// Mode is the legacy field, kept so an older RPC client keeps
+	// working: it carried the same two values and mapped onto the same
+	// two group types. Used only when Kind is empty.
+	Mode skychatgroup.Mode `json:"mode,omitempty"`
+
+	InitialMembers []cipher.PubKey `json:"initial_members,omitempty"`
+}
+
+// kind resolves the group type from either field, defaulting to public.
+func (a GroupCreateArgs) kind() skychatgroup.Kind {
+	if a.Kind != "" {
+		return a.Kind
+	}
+	if a.Mode == skychatgroup.ModePrivate {
+		return skychatgroup.KindPrivate
+	}
+	return skychatgroup.KindPublic
 }
 
 // GroupJoinArgs is the RPC input for GroupJoin.
@@ -210,7 +262,7 @@ func (v *Visor) GroupCreate(args GroupCreateArgs) (GroupInfo, string, error) {
 	if mgr == nil {
 		return GroupInfo{}, "", ErrGroupingDisabled
 	}
-	r, err := mgr.Create(args.Name, args.Mode, args.InitialMembers)
+	r, err := mgr.Create(args.Name, args.kind(), args.InitialMembers)
 	if err != nil {
 		return GroupInfo{}, "", err
 	}
@@ -257,7 +309,7 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 	streamSendCount := v.groupStreamSendCount()
 	out := make([]GroupInfo, 0, len(all))
 	for _, r := range all {
-		info := toInfo(r)
+		info := v.toInfoFor(r, mgr)
 		info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
 		info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 		info.SubDropCount = subDrop
@@ -343,7 +395,7 @@ func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	if !ok {
 		return GroupInfo{}, ErrGroupNotFound
 	}
-	info := toInfo(r)
+	info := v.toInfoFor(r, mgr)
 	info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
 	info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 	info.SubDropCount = v.groupSubDropCount()
@@ -406,6 +458,122 @@ func (v *Visor) GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error) {
 		return GroupInfo{}, err
 	}
 	return toInfo(r), nil
+}
+
+// GroupJoinRequest is one entry in a group's admission queue.
+type GroupJoinRequest struct {
+	GroupID   string                  `json:"group_id"`
+	PK        cipher.PubKey           `json:"pk"`
+	Note      string                  `json:"note,omitempty"`
+	AskedAt   time.Time               `json:"asked_at"`
+	Status    skychatgroup.JoinStatus `json:"status"`
+	DecidedAt time.Time               `json:"decided_at,omitempty"`
+	DecidedBy cipher.PubKey           `json:"decided_by,omitempty"`
+}
+
+func toJoinRequest(r skychatgroup.JoinRequest) GroupJoinRequest {
+	return GroupJoinRequest{
+		GroupID:   r.GroupID,
+		PK:        r.PK,
+		Note:      r.Note,
+		AskedAt:   r.AskedAt,
+		Status:    r.Status,
+		DecidedAt: r.DecidedAt,
+		DecidedBy: r.DecidedBy,
+	}
+}
+
+// GroupJoinRequests returns the admission queue for a group, newest
+// first. Includes decided entries so callers can show history; filter
+// on Status == "pending" for the actionable set.
+func (v *Visor) GroupJoinRequests(id string) ([]GroupJoinRequest, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return nil, ErrGroupingDisabled
+	}
+	reqs, err := mgr.PendingJoins(id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]GroupJoinRequest, 0, len(reqs))
+	for _, r := range reqs {
+		out = append(out, toJoinRequest(r))
+	}
+	return out, nil
+}
+
+// GroupApproveJoin admits a queued requester. Admin-only.
+func (v *Visor) GroupApproveJoin(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.ApproveJoin(id, pk)
+	})
+}
+
+// GroupDenyJoin declines a queued request. Admin-only.
+func (v *Visor) GroupDenyJoin(id string, pk cipher.PubKey) error {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return ErrGroupingDisabled
+	}
+	return mgr.DenyJoin(id, pk)
+}
+
+// GroupRemoveMember evicts a peer from the roster. Admin-only. A kick,
+// not a ban — the peer may ask to rejoin.
+func (v *Visor) GroupRemoveMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.RemoveMember(id, pk)
+	})
+}
+
+// GroupBanMember bars a peer from the group. Admin-only.
+func (v *Visor) GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.BanMember(id, pk)
+	})
+}
+
+// GroupUnbanMember lifts a ban. The peer must ask to join again.
+func (v *Visor) GroupUnbanMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.UnbanMember(id, pk)
+	})
+}
+
+// GroupMuteMember restricts a peer from posting. Admin-only.
+func (v *Visor) GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.MuteMember(id, pk)
+	})
+}
+
+// GroupUnmuteMember lifts a posting restriction. Admin-only.
+func (v *Visor) GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.UnmuteMember(id, pk)
+	})
+}
+
+// GroupSetReadOnly suspends (or resumes) posting for every non-admin.
+// Admin-only.
+func (v *Visor) GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.SetReadOnly(id, readOnly)
+	})
+}
+
+// groupRosterOp is the shared body of every admin command that mutates
+// a group and returns its updated info.
+func (v *Visor) groupRosterOp(_ string, _ cipher.PubKey, op func(*skychatgroup.Manager) (skychatgroup.Record, error)) (GroupInfo, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupInfo{}, ErrGroupingDisabled
+	}
+	r, err := op(mgr)
+	if err != nil {
+		return GroupInfo{}, err
+	}
+	return v.toInfoFor(r, mgr), nil
 }
 
 // GroupPromoteAdmin adds pk to the group's Admins set. Callable by
@@ -568,14 +736,40 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 		OwnerPK:       r.OwnerPK,
 		Port:          r.Port,
 		Mode:          r.Mode,
+		Kind:          r.Kind,
+		JoinPolicy:    r.JoinPolicy(),
+		PostPolicy:    r.PostPolicy(),
 		Admins:        append([]cipher.PubKey(nil), r.Admins...),
 		Members:       append([]cipher.PubKey(nil), r.Members...),
+		Banned:        append([]cipher.PubKey(nil), r.Banned...),
+		Muted:         append([]cipher.PubKey(nil), r.Muted...),
+		ReadOnly:      r.ReadOnly,
 		Role:          r.Role,
 		Status:        r.Status,
 		CreatedAt:     r.CreatedAt,
 		JoinedAt:      r.JoinedAt,
 		LastMessageAt: r.LastMessageAt,
 	}
+}
+
+// toInfoFor is toInfo plus the fields that depend on who is asking:
+// whether this visor may post, and how many requests await its
+// decision. Split out because toInfo is called from paths that have no
+// manager handy (and don't need either answer).
+func (v *Visor) toInfoFor(r skychatgroup.Record, mgr *skychatgroup.Manager) GroupInfo {
+	info := toInfo(r)
+	canPost, reason := r.CanPost(v.conf.PK)
+	info.CanPost, info.CannotPostReason = canPost, reason
+	if mgr != nil && r.IsAdmin(v.conf.PK) {
+		if reqs, err := mgr.PendingJoins(r.ID); err == nil {
+			for _, q := range reqs {
+				if q.IsPending() {
+					info.PendingJoins++
+				}
+			}
+		}
+	}
+	return info
 }
 
 // groupInbox is a bounded ring buffer of inbound group messages,

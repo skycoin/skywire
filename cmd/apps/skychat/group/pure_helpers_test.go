@@ -102,7 +102,7 @@ func TestContainsRemovePK(t *testing.T) {
 
 func TestSubscribedPrefixes(t *testing.T) {
 	got := subscribedPrefixes()
-	want := []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix}
+	want := []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix, ModerationPathPrefix}
 	if len(got) != len(want) {
 		t.Fatalf("subscribedPrefixes = %v, want %v", got, want)
 	}

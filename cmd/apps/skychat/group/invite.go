@@ -45,9 +45,17 @@ type Invite struct {
 	Port    uint16        `json:"port"`
 	Mode    Mode          `json:"mode"`
 
-	// AESKey is set iff Mode == ModePrivate. Anybody with this link
-	// can decrypt the feed; the invite IS the key. Owner-side key
-	// rotation = create a fresh group with a fresh invite.
+	// AESKey is the group key, and is now normally ABSENT even for
+	// ModePrivate: the key is handed to a joiner in the approval
+	// response over the encrypted relay stream, once an admin has said
+	// yes. See JoinResponseMsg.AESKey.
+	//
+	// It used to travel here, which made the invite itself the secret —
+	// anyone the link reached could decrypt the feed, a denied
+	// requester included, and the key could never be rotated because
+	// links already in circulation would keep working. Links minted by
+	// older builds still carry it and are still accepted; the legacy
+	// join path uses it when a group doesn't answer the join request.
 	AESKey []byte `json:"aes_key,omitempty"`
 }
 
@@ -56,8 +64,11 @@ func EncodeInvite(inv Invite) (string, error) {
 	if !inv.Mode.IsValid() {
 		return "", fmt.Errorf("group invite: invalid mode %q", inv.Mode)
 	}
-	if inv.Mode == ModePrivate && len(inv.AESKey) != 32 {
-		return "", fmt.Errorf("group invite: private mode needs 32-byte AES key, got %d", len(inv.AESKey))
+	// A private invite may legitimately carry no key — that is the
+	// key-on-approval shape. If one IS present (a legacy link being
+	// re-encoded) it still has to be the right size.
+	if len(inv.AESKey) > 0 && len(inv.AESKey) != 32 {
+		return "", fmt.Errorf("group invite: AES key must be 32 bytes, got %d", len(inv.AESKey))
 	}
 	if inv.Mode == ModePublic && len(inv.AESKey) > 0 {
 		return "", fmt.Errorf("group invite: public mode must not carry an AES key")
@@ -89,8 +100,8 @@ func DecodeInvite(s string) (Invite, error) {
 	if !inv.Mode.IsValid() {
 		return Invite{}, fmt.Errorf("group invite: invalid mode %q", inv.Mode)
 	}
-	if inv.Mode == ModePrivate && len(inv.AESKey) != 32 {
-		return Invite{}, fmt.Errorf("group invite: private mode requires 32-byte AES key, got %d", len(inv.AESKey))
+	if len(inv.AESKey) > 0 && len(inv.AESKey) != 32 {
+		return Invite{}, fmt.Errorf("group invite: AES key must be 32 bytes, got %d", len(inv.AESKey))
 	}
 	if inv.Mode == ModePublic && len(inv.AESKey) > 0 {
 		return Invite{}, fmt.Errorf("group invite: public mode must not carry an AES key")

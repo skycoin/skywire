@@ -810,6 +810,42 @@ func (proxyDefaultAPI) GroupAddMember(_ string, _ cipher.PubKey) (GroupInfo, err
 	return GroupInfo{}, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GroupJoinRequests(_ string) ([]GroupJoinRequest, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupApproveJoin(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupDenyJoin(_ string, _ cipher.PubKey) error {
+	return ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupRemoveMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupBanMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupUnbanMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupMuteMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupUnmuteMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupSetReadOnly(_ string, _ bool) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupPromoteAdmin(_ string, _ cipher.PubKey) (GroupInfo, error) {
 	return GroupInfo{}, ErrProxyNotSupported
 }
