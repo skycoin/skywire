@@ -334,6 +334,14 @@ type Record struct {
 	// (owner) or a Subscriber (member).
 	Role Role `json:"role"`
 
+	// MutationSeen is the replay guard's state: the IssuedAt of the
+	// newest gossip mutation applied per (family, target), keyed
+	// "<r|a|m>:<pkHex|group>". A mutation older than its entry is
+	// refused, so a replayed leaf cannot resurrect state an admin
+	// already undid. See replay_guard.go for why this exists and why
+	// the map is never pruned.
+	MutationSeen map[string]time.Time `json:"mutation_seen,omitempty"`
+
 	Status        Status    `json:"status"`
 	CreatedAt     time.Time `json:"created_at"`
 	JoinedAt      time.Time `json:"joined_at"`

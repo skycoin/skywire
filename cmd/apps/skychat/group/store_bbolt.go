@@ -195,6 +195,14 @@ func (s *Store) SetModeration(id string, st ModState) error {
 	return s.update(id, func(r *Record) { st.applyTo(r) })
 }
 
+// SetMutationSeen persists the replay guard's watermarks. Merges rather
+// than replaces: a snapshot taken by one reconciler path can be written
+// while another has already advanced a different target, and the guard
+// must never move a watermark backwards.
+func (s *Store) SetMutationSeen(id string, seen map[string]time.Time) error {
+	return s.update(id, func(r *Record) { r.MutationSeen = mergeWatermarks(r.MutationSeen, seen) })
+}
+
 // PutJoinRequest writes (or replaces) a join request.
 func (s *Store) PutJoinRequest(req JoinRequest) error {
 	if req.GroupID == "" || req.PK == (cipher.PubKey{}) {

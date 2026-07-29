@@ -147,6 +147,12 @@ func (s *Store) SetModeration(id string, st ModState) error {
 	return s.update(id, func(r *Record) { st.applyTo(r) })
 }
 
+// SetMutationSeen persists the replay guard's watermarks, merging so a
+// watermark is never moved backwards. Mirrors the bbolt store.
+func (s *Store) SetMutationSeen(id string, seen map[string]time.Time) error {
+	return s.update(id, func(r *Record) { r.MutationSeen = mergeWatermarks(r.MutationSeen, seen) })
+}
+
 // PutJoinRequest writes (or replaces) a join request.
 func (s *Store) PutJoinRequest(req JoinRequest) error {
 	if req.GroupID == "" || req.PK == (cipher.PubKey{}) {
