@@ -20,6 +20,7 @@ package group
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 	"time"
@@ -124,10 +125,10 @@ func hasText(text string) func([]Message) bool {
 
 // createAndJoin runs the real onboarding flow: A creates, admits B, issues an
 // invite, B joins. Returns the group id.
-func createAndJoin(t *testing.T, a, b *groupNode, mode Mode) string {
+func createAndJoin(t *testing.T, a, b *groupNode) string {
 	t.Helper()
 
-	rec, err := a.mgr.Create("integration room", mode, nil)
+	rec, err := a.mgr.Create("integration room", ModePublic, nil)
 	require.NoError(t, err, "Create")
 	require.Equal(t, RoleOwner, rec.Role)
 	require.Equal(t, StatusActive, rec.Status)
@@ -158,7 +159,7 @@ func createAndJoin(t *testing.T, a, b *groupNode, mode Mode) string {
 // asserts the owner's message actually reaches the joiner's handler.
 func TestManagerIntegration_CreateJoinAndSend(t *testing.T) {
 	a, b := newGroupEnv(t)
-	id := createAndJoin(t, a, b, ModePublic)
+	id := createAndJoin(t, a, b)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -244,7 +245,7 @@ func TestManagerIntegration_PrivateGroupRoundTrip(t *testing.T) {
 // non-integration test cannot reach (they all mutate a live session).
 func TestManagerIntegration_RosterOps(t *testing.T) {
 	a, b := newGroupEnv(t)
-	id := createAndJoin(t, a, b, ModePublic)
+	id := createAndJoin(t, a, b)
 
 	// AddMember is idempotent.
 	before, _, _ := a.mgr.Get(id) //nolint:errcheck
@@ -303,7 +304,7 @@ func TestManagerIntegration_JoinRejectsOwnGroup(t *testing.T) {
 // reopened session must still send.
 func TestManagerIntegration_ResumeReopensStoredGroups(t *testing.T) {
 	a, b := newGroupEnv(t)
-	id := createAndJoin(t, a, b, ModePublic)
+	id := createAndJoin(t, a, b)
 
 	// A revoked group must NOT come back.
 	revoked, err := a.mgr.Create("deleted room", ModePublic, nil)
@@ -347,4 +348,50 @@ func TestManagerIntegration_ResumeReopensStoredGroups(t *testing.T) {
 
 	// ReplayHistory for an unknown group is a no-op, not a panic.
 	mgr2.ReplayHistory("no-such-group")
+}
+
+// TestManagerIntegration_SubmitToOwnerRelay drives the member's relay fallback
+// over dmsg: B submits to A's relay listener, A's handleRelay verifies the
+// sender against the allowlist, republishes, and acks.
+//
+// The relay is vestigial for steady-state groups (every member publishes to its
+// own feed now), but SendToGroup still falls back to it when the local
+// publisher is unhealthy — so it has to keep working.
+func TestManagerIntegration_SubmitToOwnerRelay(t *testing.T) {
+	a, b := newGroupEnv(t)
+	id := createAndJoin(t, a, b)
+
+	b.mgr.mu.RLock()
+	sess := b.mgr.sessions[id]
+	b.mgr.mu.RUnlock()
+	require.NotNil(t, sess, "the joiner should hold a live session")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	// The owner's relay listener binds during openOwner; give dmsg a moment.
+	const viaRelay = "submitted through the owner relay"
+	var lastErr error
+	for attempt := 0; attempt < 10; attempt++ {
+		lastErr = sess.SubmitToOwner(ctx, viaRelay)
+		// ErrRelayNoAck means the bytes landed but the ack didn't come back —
+		// still a successful submit as far as the owner's feed is concerned.
+		if lastErr == nil || errors.Is(lastErr, ErrRelayNoAck) {
+			break
+		}
+		time.Sleep(time.Duration(500+attempt*500) * time.Millisecond)
+	}
+	require.True(t, lastErr == nil || errors.Is(lastErr, ErrRelayNoAck),
+		"SubmitToOwner over dmsg: %v", lastErr)
+
+	// The owner republished it under the MEMBER's PK — sender attribution
+	// survives the relay hop, which is the whole point of the path.
+	waitInbox(t, a.inbox, "the relayed message", func(msgs []Message) bool {
+		for _, m := range msgs {
+			if m.Text == viaRelay && m.SenderPK == b.pk {
+				return true
+			}
+		}
+		return false
+	})
 }
