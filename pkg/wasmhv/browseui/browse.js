@@ -1210,7 +1210,7 @@
     // cleanup(). The `closed` guard makes both paths idempotent.
     function done() { cleanup(); try { if (wb) { wb.close(true); } } catch (e) {} }
     wb = makeWin(doc, {
-      title: "Skywire tour", root: host, width: "380px", height: "384px",
+      title: "Skywire tour", root: host, width: "380px", height: "240px",
       mount: call, onclose: function () { cleanup(); return false; }
     });
     globalThis.__tourWB = wb;
@@ -1240,8 +1240,8 @@
           '<div style="display:flex;align-items:center;gap:.5em;margin-bottom:.55em">' +
           '<b style="color:#9d7cff;font-size:14px">' + pick(s.title) + '</b><span style="flex:1"></span>' +
           '<span style="opacity:.55;font-size:11px">more</span></div>' +
-          '<div style="margin-bottom:.9em;color:#9aa0ad;font-size:12px;line-height:1.5;max-height:46vh;overflow:auto">' + s.more.panel + '</div>' +
-          '<div style="display:flex;gap:.5em;align-items:center">' +
+          '<div style="margin-bottom:.9em;color:#9aa0ad;font-size:12px;line-height:1.5">' + s.more.panel + '</div>' +
+          '<div style="display:flex;gap:.5em;align-items:center;position:sticky;bottom:0;background:#15131c;padding-top:.6em">' +
           '<button id="tour-skip" style="cursor:pointer;background:transparent;color:#8b93a7;border:0">skip</button>' +
           '<span style="flex:1"></span>' +
           '<button id="tour-moreback" style="' + btn + ';background:#241f33;color:#cdd2da;border:1px solid #2a2342">&larr; back</button>' +
@@ -1257,7 +1257,7 @@
             '<summary style="cursor:pointer;color:#8b93a7;font-size:11.5px;outline:none">' + s.disc.summary + '</summary>' +
             '<div style="margin-top:.5em;color:#9aa0ad;font-size:11.5px">' + s.disc.details + '</div>' +
             '</details>' : '') +
-          '<div style="display:flex;gap:.5em;align-items:center">' +
+          '<div style="display:flex;gap:.5em;align-items:center;position:sticky;bottom:0;background:#15131c;padding-top:.6em">' +
           '<button id="tour-skip" style="cursor:pointer;background:transparent;color:#8b93a7;border:0">skip</button>' +
           '<span style="flex:1"></span>' +
           (s.more ? '<button id="tour-more" style="' + btn + ';padding:.4em .7em;background:transparent;color:#8b93a7;border:1px solid #2a2342">more</button>' : '') +
@@ -1280,6 +1280,13 @@
       if ((b = call.querySelector("#tour-moreback"))) b.onclick = function () { showMore = false; render(); };
       if ((b = call.querySelector("#tour-back"))) b.onclick = function () { showMore = false; if (i > 0) i--; render(); };
       if ((b = call.querySelector("#tour-next"))) b.onclick = function () { showMore = false; if (last) { done(); } else { i++; render(); } };
+      // Fit the window to the step's content: no dead space on short steps, no
+      // nested scroll on long "more" panels. Cap to 82vh (the body scrolls, and
+      // the button row is sticky, so controls stay reachable past the cap).
+      try {
+        var vpH = (doc.defaultView || window).innerHeight || 700;
+        wb.resize(380, Math.max(170, Math.min(call.scrollHeight + 38, Math.round(vpH * 0.82))));
+      } catch (e) {}
     }
     render();
   }
