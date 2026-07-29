@@ -768,6 +768,12 @@ type PortDetail struct {
 type DMSGServerInfo struct {
 	PK      cipher.PubKey `json:"pk"`
 	Latency time.Duration `json:"latency"` // Round-trip latency via self-ping, 0 if not measured
+	// Carrier is the transport the client↔server session runs on (tcp | ws | wt |
+	// quic); Protocol is its human-readable label (e.g. "tcp", "wss",
+	// "webtransport", "quic"). Empty when the session can't be matched. Lets the
+	// UI show HOW each server was reached, not just that it was.
+	Carrier  string `json:"carrier,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
 }
 
 // DmsgClientSessions enumerates every dmsg client running inside the visor

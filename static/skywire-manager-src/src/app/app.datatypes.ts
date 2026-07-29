@@ -1,6 +1,7 @@
 export interface DMSGServerInfo {
   pk: string;
   latency: number; // in nanoseconds
+  protocol?: string; // how the server was reached: tcp | ws | wss | webtransport | quic
 }
 
 export class Node {
