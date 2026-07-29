@@ -1860,15 +1860,21 @@
         '.sww-bar button{background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .65em;cursor:pointer;font:inherit;line-height:1}' +
         '.sww-bar button:hover{background:#3a3352;color:#fff}.sww-bar button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.2)}' +
         '.sww-served{font-size:.92em;padding:.15em .6em;border-radius:999px;background:rgba(74,222,128,.18);color:#4ade80}' +
-        '#sww-cfg{display:none;border:0;border-bottom:1px solid #2a2342;width:100%;height:62%;min-height:0;background:#15131c}' +
-        '#sww-cfg.open{display:block}' +
+        // WinBox forces `.winbox iframe{position:absolute}`, which yanks a bare
+        // iframe out of the flex column (collapsing #sww-cfg to a thin strip).
+        // So give the config overlay its OWN relative flex container (same trick
+        // as the wallet iframe below) with a real height; the iframe fills it and
+        // scrolls its own ~644px content.
+        '#sww-cfg-wrap{display:none;position:relative;flex:0 0 60%;min-height:0;border-bottom:1px solid #2a2342}' +
+        '#sww-cfg-wrap.open{display:block}' +
+        '#sww-cfg{position:absolute;inset:0;width:100%;height:100%;border:0;background:#15131c}' +
         '</style>' +
         '<div class="sww-bar">' +
         '<button id="sww-gear" title="wallet configuration">⚙ settings</button>' +
         '<span class="sww-served" title="Served by this visor at /wallet/ — wallets are client-side; only the node/BTC queries cross the mesh.">served</span>' +
         '<span style="flex:1"></span>' +
         '</div>' +
-        '<iframe id="sww-cfg" src="' + cfgSrc + '"></iframe>' +
+        '<div id="sww-cfg-wrap"><iframe id="sww-cfg" src="' + cfgSrc + '"></iframe></div>' +
         // WinBox styles window-body iframes position:absolute; give the wallet
         // iframe a relative flex container so it fills only the region below.
         '<div style="flex:1;position:relative;min-height:0">' +
@@ -1883,7 +1889,7 @@
         }
       }));
       var frame = wrap.querySelector("#sww-frame");
-      var cfg = wrap.querySelector("#sww-cfg");
+      var cfg = wrap.querySelector("#sww-cfg-wrap");
       wrap.querySelector("#sww-gear").onclick = function () {
         this.classList.toggle("on", cfg.classList.toggle("open"));
       };
