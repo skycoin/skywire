@@ -574,6 +574,20 @@ func TestSessionIsSubscriberAlive(t *testing.T) {
 	if closed.IsSubscriberAlive() {
 		t.Error("a closed session must never report alive")
 	}
+
+	// Same through the REAL Close path. This used to report ALIVE: doClose set
+	// s.sub = nil, which hits the `s.sub == nil -> owner role -> true`
+	// short-circuit above, so a torn-down member session advertised
+	// subscriber_alive=true on /status. doClose no longer nils the field —
+	// that write also raced every concurrent reader of it.
+	reallyClosed := newMember(t)
+	reallyClosed.lastInboundNs.Store(time.Now().UnixNano())
+	if err := reallyClosed.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if reallyClosed.IsSubscriberAlive() {
+		t.Error("a member session closed via Close() must not report subscriber_alive")
+	}
 }
 
 // --- dialSkynetRelay --------------------------------------------------------
