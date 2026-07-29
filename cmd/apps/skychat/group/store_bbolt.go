@@ -11,6 +11,7 @@
 package group
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -25,6 +26,24 @@ import (
 )
 
 const groupsBucket = "groups"
+
+// joinReqsBucket holds pending + decided join requests, keyed
+// "<groupID>/<requesterPKHex>". A flat bucket with a composite key
+// rather than a nested bucket per group: group IDs are fixed-length
+// UUIDs containing no "/", so a prefix scan on "<groupID>/" is exact,
+// and a flat bucket keeps the Delete-on-group-removal path a single
+// cursor walk instead of bucket bookkeeping.
+const joinReqsBucket = "group_join_requests"
+
+// joinReqKey builds the composite key for a request.
+func joinReqKey(groupID string, pk cipher.PubKey) []byte {
+	return []byte(groupID + "/" + pk.Hex())
+}
+
+// joinReqPrefix is the scan prefix for every request against a group.
+func joinReqPrefix(groupID string) []byte {
+	return []byte(groupID + "/")
+}
 
 // Store is a bolt-backed group record store. Safe for concurrent use.
 type Store struct {
@@ -49,7 +68,10 @@ func OpenStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("group: open bolt: %w", err)
 	}
 	if err := db.Update(func(tx *bolt.Tx) error {
-		_, e := tx.CreateBucketIfNotExists([]byte(groupsBucket))
+		if _, e := tx.CreateBucketIfNotExists([]byte(groupsBucket)); e != nil {
+			return e
+		}
+		_, e := tx.CreateBucketIfNotExists([]byte(joinReqsBucket))
 		return e
 	}); err != nil {
 		_ = db.Close() //nolint:errcheck
@@ -105,6 +127,7 @@ func (s *Store) Get(id string) (Record, bool, error) {
 	// gated manager ops see a consistent shape. Idempotent for new
 	// records that already have the founder explicit.
 	r.EnsureFounderInAdmins()
+	r.EnsureKind()
 	return r, found, err
 }
 
@@ -123,8 +146,9 @@ func (s *Store) List() ([]Record, error) {
 			}
 			// Mirror Get's legacy-record normalization so any
 			// caller iterating List sees the same admin-shape
-			// invariant Get returns.
+			// and group-kind invariants Get returns.
 			r.EnsureFounderInAdmins()
+			r.EnsureKind()
 			out = append(out, r)
 			return nil
 		})
@@ -163,6 +187,92 @@ func (s *Store) MarkMessage(id string, ts time.Time) error {
 func (s *Store) SetMembers(id string, members []cipher.PubKey) error {
 	return s.update(id, func(r *Record) {
 		r.Members = members
+	})
+}
+
+// SetModeration persists a converged moderation snapshot.
+func (s *Store) SetModeration(id string, st ModState) error {
+	return s.update(id, func(r *Record) { st.applyTo(r) })
+}
+
+// PutJoinRequest writes (or replaces) a join request.
+func (s *Store) PutJoinRequest(req JoinRequest) error {
+	if req.GroupID == "" || req.PK == (cipher.PubKey{}) {
+		return fmt.Errorf("group: PutJoinRequest: group id and pk required")
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("group: marshal join request: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket([]byte(joinReqsBucket)).Put(joinReqKey(req.GroupID, req.PK), body)
+	})
+}
+
+// GetJoinRequest returns the request for (groupID, pk) if one exists.
+func (s *Store) GetJoinRequest(groupID string, pk cipher.PubKey) (JoinRequest, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var (
+		req   JoinRequest
+		found bool
+	)
+	err := s.db.View(func(tx *bolt.Tx) error {
+		raw := tx.Bucket([]byte(joinReqsBucket)).Get(joinReqKey(groupID, pk))
+		if raw == nil {
+			return nil
+		}
+		found = true
+		return json.Unmarshal(raw, &req)
+	})
+	return req, found, err
+}
+
+// ListJoinRequests returns every request recorded against groupID,
+// newest first so an admin's queue reads top-down.
+func (s *Store) ListJoinRequests(groupID string) ([]JoinRequest, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []JoinRequest
+	err := s.db.View(func(tx *bolt.Tx) error {
+		cur := tx.Bucket([]byte(joinReqsBucket)).Cursor()
+		prefix := joinReqPrefix(groupID)
+		for k, v := cur.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = cur.Next() {
+			var req JoinRequest
+			if err := json.Unmarshal(v, &req); err != nil {
+				return err
+			}
+			out = append(out, req)
+		}
+		return nil
+	})
+	sortJoinRequests(out)
+	return out, err
+}
+
+// DeleteJoinRequests drops every request against groupID. Called when
+// the group is deleted or left so the queue doesn't outlive its group.
+func (s *Store) DeleteJoinRequests(groupID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(joinReqsBucket))
+		cur := b.Cursor()
+		prefix := joinReqPrefix(groupID)
+		// Collect first, then delete: mutating through a cursor while
+		// iterating it is undefined in bbolt.
+		var keys [][]byte
+		for k, _ := cur.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = cur.Next() {
+			keys = append(keys, append([]byte(nil), k...))
+		}
+		for _, k := range keys {
+			if err := b.Delete(k); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 

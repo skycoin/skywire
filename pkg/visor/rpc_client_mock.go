@@ -1295,6 +1295,47 @@ func (mc *mockRPCClient) GroupAddMember(_ string, _ cipher.PubKey) (GroupInfo, e
 	return GroupInfo{}, nil
 }
 
+// GroupJoinRequests implements API.
+func (mc *mockRPCClient) GroupJoinRequests(_ string) ([]GroupJoinRequest, error) { return nil, nil }
+
+// GroupApproveJoin implements API.
+func (mc *mockRPCClient) GroupApproveJoin(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupDenyJoin implements API.
+func (mc *mockRPCClient) GroupDenyJoin(_ string, _ cipher.PubKey) error { return nil }
+
+// GroupRemoveMember implements API.
+func (mc *mockRPCClient) GroupRemoveMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupBanMember implements API.
+func (mc *mockRPCClient) GroupBanMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupUnbanMember implements API.
+func (mc *mockRPCClient) GroupUnbanMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupMuteMember implements API.
+func (mc *mockRPCClient) GroupMuteMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupUnmuteMember implements API.
+func (mc *mockRPCClient) GroupUnmuteMember(_ string, _ cipher.PubKey) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupSetReadOnly implements API.
+func (mc *mockRPCClient) GroupSetReadOnly(_ string, _ bool) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
 // GroupPromoteAdmin implements API.
 func (mc *mockRPCClient) GroupPromoteAdmin(_ string, _ cipher.PubKey) (GroupInfo, error) {
 	return GroupInfo{}, nil

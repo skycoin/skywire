@@ -277,6 +277,15 @@ type API interface {
 	GroupGet(id string) (GroupInfo, error)
 	GroupInvite(id string) (string, error)
 	GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupJoinRequests(id string) ([]GroupJoinRequest, error)
+	GroupApproveJoin(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupDenyJoin(id string, pk cipher.PubKey) error
+	GroupRemoveMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupUnbanMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error)
 	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupSend(args GroupSendArgs) error

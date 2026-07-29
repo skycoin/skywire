@@ -58,6 +58,17 @@ type Manager struct {
 	onMessageMu sync.RWMutex
 	onMessage   MessageHandler
 
+	// onJoinRequestNotify is fired when a new join request lands on
+	// this visor's approval queue, so the app layer can raise an SSE
+	// event + OS notification. See SetJoinRequestNotifier.
+	onJoinRequestMu     sync.RWMutex
+	onJoinRequestNotify func(JoinRequest)
+
+	// pendingJoinLast rate-limits re-asks per group, keyed by group ID.
+	// Guarded by reconnectMu, which already serializes the background
+	// loop that drives the retries.
+	pendingJoinLast map[string]time.Time
+
 	mu       sync.RWMutex
 	sessions map[string]*Session
 
@@ -148,6 +159,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		heartbeatInterval:  cfg.HeartbeatInterval,
 		reconnectState:     make(map[string]*reconnectState),
 		peerReconnectState: make(map[string]map[cipher.PubKey]*reconnectState),
+		pendingJoinLast:    make(map[string]time.Time),
 	}, nil
 }
 
@@ -187,13 +199,14 @@ func (m *Manager) persistRoster(id string) func(members, admins []cipher.PubKey)
 // Create constructs a new owner-side group, persists it, and opens
 // the publisher. Returns the persisted Record (with ID + Port + key
 // populated) so the caller can build the invite link.
-func (m *Manager) Create(name string, mode Mode, initialMembers []cipher.PubKey) (Record, error) {
+func (m *Manager) Create(name string, kind Kind, initialMembers []cipher.PubKey) (Record, error) {
 	if name == "" {
 		return Record{}, errors.New("group: Create: name required")
 	}
-	if !mode.IsValid() {
-		return Record{}, fmt.Errorf("group: Create: invalid mode %q", mode)
+	if !kind.IsValid() {
+		return Record{}, fmt.Errorf("group: Create: invalid kind %q", kind)
 	}
+	mode := modeForKind(kind)
 	port, err := m.portAlloc()
 	if err != nil {
 		return Record{}, fmt.Errorf("group: Create: port: %w", err)
@@ -204,6 +217,7 @@ func (m *Manager) Create(name string, mode Mode, initialMembers []cipher.PubKey)
 		OwnerPK:   m.myPK,
 		Port:      port,
 		Mode:      mode,
+		Kind:      kind,
 		Members:   uniqueWithSelf(m.myPK, initialMembers),
 		Role:      RoleOwner,
 		Status:    StatusActive,
@@ -227,69 +241,20 @@ func (m *Manager) Create(name string, mode Mode, initialMembers []cipher.PubKey)
 	return r, nil
 }
 
-// Join accepts an invite link, persists a member-side record, and
-// opens a subscriber connected to the owner. Returns the record.
+// Join accepts an invite link and asks the group for admission.
+//
+// Thin wrapper over RequestJoin, which owns the whole flow: ask, act on
+// the answer, and fall back to the legacy direct-subscribe path when the
+// group runs a build without admission control. Kept as a named method
+// because it is the API every caller (visor RPC, wasm, CLI) already
+// speaks.
+//
+// Pre-admission-control this method persisted a record and dialed the
+// owner's publisher immediately, which only worked if an admin had
+// already run AddMember for this PK out of band — the invite link alone
+// never granted access. See RequestJoin for what replaced that.
 func (m *Manager) Join(inv Invite) (Record, error) {
-	if inv.OwnerPK == m.myPK {
-		return Record{}, errors.New("group: Join: refusing to subscribe to own group")
-	}
-	r := Record{
-		ID:        inv.ID,
-		Name:      inv.Name,
-		OwnerPK:   inv.OwnerPK,
-		Port:      inv.Port,
-		Mode:      inv.Mode,
-		AESKey:    inv.AESKey,
-		Members:   []cipher.PubKey{inv.OwnerPK, m.myPK},
-		Role:      RoleMember,
-		Status:    StatusPending,
-		CreatedAt: time.Now().UTC(),
-		JoinedAt:  time.Now().UTC(),
-	}
-	if err := m.store.Put(r); err != nil {
-		return Record{}, fmt.Errorf("group: Join: store: %w", err)
-	}
-	sess, err := m.openLocked(r)
-	if err != nil {
-		_ = m.store.Delete(r.ID) //nolint:errcheck
-		return Record{}, err
-	}
-	// Join's interactive caller wants a bounded wait: a Connect that
-	// blocks indefinitely on an unreachable owner publisher would
-	// stall the CLI. Use reconnectAttemptTimeout — same per-attempt
-	// budget the background reconnect loop uses, so the failure
-	// mode is identical (and the same backoff machinery picks up
-	// on the next 30s tick).
-	joinCtx, cancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-	defer cancel()
-	if err := sess.Connect(joinCtx); err != nil {
-		// A subscribe REJECTION means this PK isn't admitted to the group
-		// (public auto-admit aside, the owner must AddMember first). That is
-		// actionable and permanent for now, so tear the half-open membership
-		// down and surface it.
-		if isSubscribeRejected(err) {
-			_ = sess.Close()         //nolint:errcheck
-			_ = m.store.Delete(r.ID) //nolint:errcheck
-			return Record{}, fmt.Errorf("group: Join: connect: %w", err)
-		}
-		// A TRANSIENT failure — the owner publisher's dmsg dial didn't
-		// complete within the join budget (common when the joiner is a
-		// browser wasm visor over WS, or during deploy churn) — is NOT fatal.
-		// The session is already registered (openLocked), so the per-session
-		// reconnect watchdog will attach the owner feed + peerSubs in the
-		// background; the owner's own watchdog re-Connects to us in parallel.
-		// Keep the membership and join optimistically: the room appears now
-		// and messages flow once the dmsg path settles. Previously this path
-		// Close()d the session and Delete()d the freshly-persisted record, so
-		// a perfectly joinable group looked permanently un-joinable on a slow
-		// first dial (observed wasm↔native as "context deadline exceeded"
-		// while the owner was in fact re-Connecting seconds later).
-		m.log.WithError(err).WithField("id", r.ID).
-			Info("group: Join: initial connect not ready; joined optimistically — reconnect watchdog will attach the feed")
-	}
-	_ = m.store.SetStatus(r.ID, StatusActive) //nolint:errcheck
-	r.Status = StatusActive
-	return r, nil
+	return m.RequestJoin(inv, "")
 }
 
 // Leave (member) or Delete (owner): both tear down the session and
@@ -340,7 +305,16 @@ func (m *Manager) terminate(id string, status Status) error {
 	m.reconnectMu.Lock()
 	delete(m.reconnectState, id)
 	delete(m.peerReconnectState, id)
+	delete(m.pendingJoinLast, id)
 	m.reconnectMu.Unlock()
+	// The approval queue is scoped to a live group; leaving one behind
+	// would resurface stale requests if the same group ID were ever
+	// rejoined, and would keep a denied PK's entry authoritative past
+	// the point where the group still exists to deny them.
+	if err := m.store.DeleteJoinRequests(id); err != nil {
+		m.log.WithError(err).WithField("id", id).
+			Debug("group: terminate: clearing join requests failed")
+	}
 	_ = m.store.SetStatus(r.ID, status) //nolint:errcheck
 	return nil
 }
@@ -605,8 +579,14 @@ func (m *Manager) DemoteAdmin(id string, pk cipher.PubKey) (Record, error) {
 const resumeReplayMessageCap = 100
 
 // Resume walks the store and reopens every non-terminal session.
-// Records in StatusLeft / StatusRevoked are skipped; the operator
-// can `group join <invite>` again to bring them back.
+// Terminal records (left / revoked / denied / banned) are skipped; the
+// operator can `group join <invite>` again to bring them back.
+//
+// Awaiting-approval records are skipped too, but for the opposite
+// reason: they are not finished, they have not started. Without an
+// allowlist seat a subscribe would just be refused, so the reconnect
+// loop's retryPendingJoins re-asks instead and opens the session the
+// moment an admin approves.
 //
 // On reopen, the most recent resumeReplayMessageCap messages per
 // group are replayed through the registered handler so consumers
@@ -620,7 +600,7 @@ func (m *Manager) Resume() error {
 		return fmt.Errorf("group: Resume: list: %w", err)
 	}
 	for _, r := range all {
-		if r.Status == StatusLeft || r.Status == StatusRevoked {
+		if r.Status.IsTerminal() || r.Status == StatusAwaitingApproval {
 			continue
 		}
 		if _, err := m.openLocked(r); err != nil {
@@ -764,6 +744,12 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 		case <-t.C:
 		}
 		m.detectStaleAndReconnect(ctx)
+		// Re-ask any group holding us in its approval queue. Rides this
+		// loop rather than owning a timer because it is the same job —
+		// keep trying in the background until the group lets us in — and
+		// pendingJoinShouldAttempt rate-limits it independently of this
+		// loop's adaptive cadence.
+		m.retryPendingJoins(ctx)
 		if m.hasWarmingPeer() {
 			interval = reconnectWarmupInterval
 		} else if interval < reconnectInterval {
@@ -1493,14 +1479,19 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 	if !r.IsAdmin(m.myPK) {
 		return "", errors.New("group: BuildInvite: only admins can issue invites")
 	}
-	return EncodeInvite(Invite{
+	inv := Invite{
 		ID:      r.ID,
 		Name:    r.Name,
 		OwnerPK: r.OwnerPK,
 		Port:    r.Port,
 		Mode:    r.Mode,
-		AESKey:  r.AESKey,
-	})
+	}
+	// The group key is deliberately NOT in the link. It is delivered in
+	// the approval response, over the encrypted relay stream, only to a
+	// PK an admin has admitted — so forwarding this link grants nothing
+	// on its own, a declined requester walks away with nothing, and the
+	// key stays rotatable because no copy of it is loose in circulation.
+	return EncodeInvite(inv)
 }
 
 // openLocked is the shared "open and remember" helper. Caller does
@@ -1528,6 +1519,13 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	// Persist reconciled roster changes back to the store so group info/list
 	// reflect convergence and it survives restart (#3426).
 	sess.SetRosterChangeHandler(m.persistRoster(r.ID))
+	sess.SetModChangeHandler(m.persistModeration(r.ID))
+	// Admission: the session authenticates inbound join requests against
+	// the transport and hands them here for the policy decision. Installed
+	// on every session, not just owner-role ones — the handler re-checks
+	// admin authority against the live record, and installing it uniformly
+	// means a member promoted to admin can act without reopening.
+	sess.SetJoinRequestHandler(m.admissionHandler(r.ID))
 	m.mu.Lock()
 	m.sessions[r.ID] = sess
 	m.mu.Unlock()
@@ -1539,6 +1537,12 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	go func() {
 		time.Sleep(rosterBroadcastDelay)
 		sess.BroadcastRoster()
+		// Moderation converges the same way and for the same reason: a
+		// joiner admitted into a group with standing bans or mutes must
+		// learn them, and the response payload only covers the joiner's
+		// first moment. Broadcast after the roster so a ban's implied
+		// roster removal doesn't race the roster add that precedes it.
+		sess.BroadcastModeration()
 	}()
 	return sess, nil
 }
