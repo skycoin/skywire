@@ -1725,11 +1725,23 @@ func (s *Session) doClose() error {
 	if s.relayCancel != nil {
 		s.relayCancel()
 	}
+	// NOTE on the fields below: teardown deliberately does NOT nil s.relayDmsg,
+	// s.sub or s.pub. Those writes were the old idempotency mechanism, which
+	// closeOnce now provides — and they are unguarded, so each one raced every
+	// concurrent reader of the field. The one CI caught: openLocked spawns a
+	// delayed BroadcastRoster goroutine that reads s.pub, so creating or
+	// joining a group and tearing it down inside rosterBroadcastDelay raced
+	// `s.pub = nil` here. Closing the handles is what matters; leaving the
+	// pointers in place lets readers keep their nil-checks and get an error
+	// from the closed handle instead of racing a write.
+	//
+	// Dropping the s.sub nil also fixes IsSubscriberAlive: it short-circuits
+	// `s.sub == nil` to true (owner role), so a CLOSED member session used to
+	// report subscriber_alive=true. It now falls through to the closed flag.
 	if s.relayDmsg != nil {
 		if err := s.relayDmsg.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		s.relayDmsg = nil
 	}
 	s.relayMu.Lock()
 	skyLis := s.relaySkynet
@@ -1745,7 +1757,6 @@ func (s *Session) doClose() error {
 		if err := s.sub.Close(); err != nil {
 			firstErr = err
 		}
-		s.sub = nil
 	}
 	// D1 per-PK peer subscribers — close before the local publisher so
 	// the subscribers' Disconnect frames flush through pub.Node() while
@@ -1766,7 +1777,6 @@ func (s *Session) doClose() error {
 		if err := s.pub.Close(); err != nil && firstErr == nil {
 			firstErr = err
 		}
-		s.pub = nil
 	}
 	return firstErr
 }
