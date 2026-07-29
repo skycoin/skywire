@@ -81,7 +81,7 @@ func (i *msgInbox) snapshot() []Message {
 // them (see the scope note at the top of the file) — opening both is how
 // openOwner AND openMember get exercised, and it lets a test assert the
 // structural difference between the two.
-func openTCPGroup(t *testing.T, mode Mode, aesKey []byte, heartbeat time.Duration) (owner, member *tcpNode) {
+func openTCPGroup(t *testing.T, heartbeat time.Duration) (owner, member *tcpNode) {
 	t.Helper()
 	id := uuid.NewString()
 
@@ -96,8 +96,7 @@ func openTCPGroup(t *testing.T, mode Mode, aesKey []byte, heartbeat time.Duratio
 			Name:    "tcp-group",
 			OwnerPK: ownerPK,
 			Port:    8870,
-			Mode:    mode,
-			AESKey:  aesKey,
+			Mode:    ModePublic,
 			Members: members,
 			Admins:  members, // full mesh: everyone follows everyone
 			Role:    role,
@@ -184,7 +183,7 @@ func TestOpen_Validation(t *testing.T) {
 // TestSessionTCP_ReplayHistoryThrough — the wasm visor calls this after a Join
 // to backfill history that arrived before its handler existed.
 func TestSessionTCP_ReplayHistoryThrough(t *testing.T) {
-	owner, _ := openTCPGroup(t, ModePublic, nil, 0)
+	owner, _ := openTCPGroup(t, 0)
 
 	sent := []string{"first", "second", "third"}
 	for _, txt := range sent {
@@ -236,7 +235,7 @@ func TestSessionTCP_ReplayHistoryThrough(t *testing.T) {
 // members detect a silently-stalled subscriber. It rides the normal publish
 // path but must NOT surface as chat content.
 func TestSessionTCP_HeartbeatPublishes(t *testing.T) {
-	owner, _ := openTCPGroup(t, ModePublic, nil, 50*time.Millisecond)
+	owner, _ := openTCPGroup(t, 50*time.Millisecond)
 
 	deadline := time.Now().Add(20 * time.Second)
 	var seen bool
@@ -309,7 +308,7 @@ func TestBroadcastRoster_AdminOnly(t *testing.T) {
 // member carries the legacy owner-feed subscriber, and both roles follow every
 // other member under the full-mesh admin roster.
 func TestOpen_RoleShapes(t *testing.T) {
-	owner, member := openTCPGroup(t, ModePublic, nil, 0)
+	owner, member := openTCPGroup(t, 0)
 
 	if owner.sess.sub != nil {
 		t.Error("an owner session must not have a legacy owner-feed subscriber")
@@ -336,5 +335,21 @@ func TestOpen_RoleShapes(t *testing.T) {
 	// A fresh session has seen nothing from its peer yet.
 	if !owner.sess.PeerLastInbound(member.pk).IsZero() {
 		t.Error("a freshly opened session should have no per-peer inbound yet")
+	}
+}
+
+// TestSubmitToOwner_MemberRoleOnly — the relay is the member's fallback send
+// path. An owner has nowhere to relay TO (it is the relay), so calling it on an
+// owner session is a programming error and must be reported rather than
+// silently dialing itself.
+func TestSubmitToOwner_MemberRoleOnly(t *testing.T) {
+	owner, _ := openTCPGroup(t, 0)
+
+	err := owner.sess.SubmitToOwner(t.Context(), "owner relaying to itself")
+	if err == nil {
+		t.Fatal("SubmitToOwner on an owner-role session should error")
+	}
+	if !strings.Contains(err.Error(), "member-role") {
+		t.Errorf("err = %v, want it to name the member-role requirement", err)
 	}
 }
