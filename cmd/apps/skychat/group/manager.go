@@ -1520,6 +1520,17 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	// reflect convergence and it survives restart (#3426).
 	sess.SetRosterChangeHandler(m.persistRoster(r.ID))
 	sess.SetModChangeHandler(m.persistModeration(r.ID))
+	// Persist the replay guard's watermarks. Unlike the roster and
+	// moderation handlers this is NOT best-effort decoration: if the
+	// watermarks don't survive a restart, every target's replay window
+	// reopens, so a failure here is worth a warning rather than a debug
+	// line.
+	sess.SetMutationSeenHandler(func(seen map[string]time.Time) {
+		if err := m.store.SetMutationSeen(r.ID, seen); err != nil {
+			m.log.WithError(err).WithField("id", r.ID).
+				Warn("group: persisting gossip replay watermarks failed; a restart would reopen the replay window")
+		}
+	})
 	// Admission: the session authenticates inbound join requests against
 	// the transport and hands them here for the policy decision. Installed
 	// on every session, not just owner-role ones — the handler re-checks
