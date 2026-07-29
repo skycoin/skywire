@@ -497,6 +497,12 @@ type Session struct {
 	// persisted Record shape.
 	mutedSince    map[string]time.Time
 	readOnlySince time.Time
+
+	// mutationSeen is the replay guard's live watermark set, seeded from
+	// cfg.Record.MutationSeen and guarded by membersMu alongside the
+	// state it protects. onMutationSeen persists it.
+	mutationSeen   map[string]time.Time
+	onMutationSeen func(map[string]time.Time)
 }
 
 // subscriberStaleThreshold is defined in manager.go (it's used by
@@ -679,6 +685,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		mutedSince:    copyMuteTimes(cfg.Record.MutedSince),
 		readOnly:      cfg.Record.ReadOnly,
 		readOnlySince: cfg.Record.ReadOnlySince,
+		mutationSeen:  copyWatermarks(cfg.Record.MutationSeen),
 		relayCtx:      ctx, relayCancel: cancel,
 		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
 		peerLastInboundNs: make(map[cipher.PubKey]*atomic.Int64),
@@ -839,6 +846,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		mutedSince:        copyMuteTimes(cfg.Record.MutedSince),
 		readOnly:          cfg.Record.ReadOnly,
 		readOnlySince:     cfg.Record.ReadOnlySince,
+		mutationSeen:      copyWatermarks(cfg.Record.MutationSeen),
 		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
 		peerLastInboundNs: make(map[cipher.PubKey]*atomic.Int64),
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
@@ -1688,6 +1696,13 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 // (s.pub != nil) — sessions opened in a degenerate state (no DMSG)
 // have nil publishers and return an error here.
 func (s *Session) PublishRosterMutation(op RosterOp, peerPK cipher.PubKey, parentSeq uint64) (uint64, error) {
+	return s.publishRosterMutationAt(op, peerPK, parentSeq, time.Now().UTC())
+}
+
+// publishRosterMutationAt is PublishRosterMutation with an explicit
+// issue time. The re-assertion path (BroadcastRoster) uses it to date
+// echoes of old decisions correctly — see assertionTimeLocked.
+func (s *Session) publishRosterMutationAt(op RosterOp, peerPK cipher.PubKey, parentSeq uint64, at time.Time) (uint64, error) {
 	if s == nil || s.pub == nil {
 		return 0, errors.New("group: PublishRosterMutation: no live publisher")
 	}
@@ -1697,7 +1712,7 @@ func (s *Session) PublishRosterMutation(op RosterOp, peerPK cipher.PubKey, paren
 		Op:        op,
 		PeerPK:    peerPK,
 		ParentSeq: parentSeq,
-		IssuedAt:  time.Now().UTC(),
+		IssuedAt:  at.UTC(),
 	}
 	if err := SignRoster(&m, s.cfg.MySK); err != nil {
 		return 0, fmt.Errorf("group: PublishRosterMutation: sign: %w", err)
@@ -1710,6 +1725,7 @@ func (s *Session) PublishRosterMutation(op RosterOp, peerPK cipher.PubKey, paren
 	if err := s.pub.Put(path, body); err != nil {
 		return 0, fmt.Errorf("group: PublishRosterMutation: Put %s: %w", path, err)
 	}
+	s.noteLocalMutation(familyRoster, peerPK, m.IssuedAt)
 	return seq, nil
 }
 
@@ -1718,6 +1734,12 @@ func (s *Session) PublishRosterMutation(op RosterOp, peerPK cipher.PubKey, paren
 // and semantics as PublishRosterMutation, scoped to the admin-feed
 // path (AdminPathPrefix/<seq>) and using s.adminSeq.
 func (s *Session) PublishAdminMutation(op AdminOp, peerPK cipher.PubKey, parentSeq uint64) (uint64, error) {
+	return s.publishAdminMutationAt(op, peerPK, parentSeq, time.Now().UTC())
+}
+
+// publishAdminMutationAt is PublishAdminMutation with an explicit issue
+// time, for the re-assertion path.
+func (s *Session) publishAdminMutationAt(op AdminOp, peerPK cipher.PubKey, parentSeq uint64, at time.Time) (uint64, error) {
 	if s == nil || s.pub == nil {
 		return 0, errors.New("group: PublishAdminMutation: no live publisher")
 	}
@@ -1727,7 +1749,7 @@ func (s *Session) PublishAdminMutation(op AdminOp, peerPK cipher.PubKey, parentS
 		Op:        op,
 		PeerPK:    peerPK,
 		ParentSeq: parentSeq,
-		IssuedAt:  time.Now().UTC(),
+		IssuedAt:  at.UTC(),
 	}
 	if err := SignAdmin(&m, s.cfg.MySK); err != nil {
 		return 0, fmt.Errorf("group: PublishAdminMutation: sign: %w", err)
@@ -1740,6 +1762,7 @@ func (s *Session) PublishAdminMutation(op AdminOp, peerPK cipher.PubKey, parentS
 	if err := s.pub.Put(path, body); err != nil {
 		return 0, fmt.Errorf("group: PublishAdminMutation: Put %s: %w", path, err)
 	}
+	s.noteLocalMutation(familyAdmin, peerPK, m.IssuedAt)
 	return seq, nil
 }
 

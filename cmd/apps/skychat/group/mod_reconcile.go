@@ -212,6 +212,12 @@ func (s *Session) CanPostLocally() (bool, string) {
 //
 // Same shape as PublishRosterMutation / PublishAdminMutation.
 func (s *Session) PublishModMutation(op ModOp, peerPK cipher.PubKey, parentSeq uint64) (uint64, error) {
+	return s.publishModMutationAt(op, peerPK, parentSeq, time.Now().UTC())
+}
+
+// publishModMutationAt is PublishModMutation with an explicit issue
+// time, for the re-assertion path (BroadcastModeration).
+func (s *Session) publishModMutationAt(op ModOp, peerPK cipher.PubKey, parentSeq uint64, at time.Time) (uint64, error) {
 	if s == nil || s.pub == nil {
 		return 0, errors.New("group: PublishModMutation: no live publisher")
 	}
@@ -225,7 +231,7 @@ func (s *Session) PublishModMutation(op ModOp, peerPK cipher.PubKey, parentSeq u
 		Op:        op,
 		PeerPK:    peerPK,
 		ParentSeq: parentSeq,
-		IssuedAt:  time.Now().UTC(),
+		IssuedAt:  at.UTC(),
 	}
 	if err := SignMod(&m, s.cfg.MySK); err != nil {
 		return 0, fmt.Errorf("group: PublishModMutation: sign: %w", err)
@@ -238,6 +244,7 @@ func (s *Session) PublishModMutation(op ModOp, peerPK cipher.PubKey, parentSeq u
 	if err := s.pub.Put(path, body); err != nil {
 		return 0, fmt.Errorf("group: PublishModMutation: Put %s: %w", path, err)
 	}
+	s.noteLocalMutation(familyMod, peerPK, m.IssuedAt)
 	return seq, nil
 }
 
@@ -276,6 +283,25 @@ func (s *Session) applyModLeaf(body []byte) {
 			Warn("group: reconcile: refusing moderation mutation against founder")
 		return
 	}
+	// Freshness gate — without it, a replayed ModOpUnban lifts a standing
+	// ban and a replayed ModOpUnmute lifts a restriction, using nothing
+	// but a leaf the attacker legitimately observed. One watermark covers
+	// the whole moderation family per target: ban and mute are different
+	// dimensions, but ordering them together means the newest admin
+	// decision about a PK always wins, which is the behaviour an operator
+	// expects from a moderation queue.
+	wmKey := watermarkKey(familyMod, m.PeerPK)
+	if ok, why := mutationFresh(s.mutationSeen, wmKey, m.IssuedAt, time.Now().UTC()); !ok {
+		s.membersMu.Unlock()
+		s.log.WithField("issuer", m.IssuerPK.String()).WithField("peer", m.PeerPK.String()).
+			WithField("reason", why).
+			Debug("group: reconcile: rejecting stale moderation mutation")
+		return
+	}
+	s.mutationSeen = recordMutation(s.mutationSeen, wmKey, m.IssuedAt)
+	s.cfg.Record.MutationSeen = copyWatermarks(s.mutationSeen)
+	seenSnapshot := copyWatermarks(s.mutationSeen)
+
 	changed := false
 	switch m.Op {
 	case ModOpBan:
@@ -345,6 +371,8 @@ func (s *Session) applyModLeaf(body []byte) {
 	wasBan := m.Op == ModOpBan
 	s.membersMu.Unlock()
 
+	s.persistWatermarks(seenSnapshot)
+
 	if !changed {
 		return
 	}
@@ -386,16 +414,26 @@ func (s *Session) BroadcastModeration() {
 		return
 	}
 	st := s.moderationLocked()
+	// Historical timestamps, same reason as BroadcastRoster: an echo of
+	// an old decision must not out-rank another admin's newer one.
+	modAt := make(map[cipher.PubKey]time.Time, len(st.Banned)+len(st.Muted))
+	for _, pk := range st.Banned {
+		modAt[pk] = s.assertionTimeLocked(familyMod, pk)
+	}
+	for _, pk := range st.Muted {
+		modAt[pk] = s.assertionTimeLocked(familyMod, pk)
+	}
+	groupAt := s.assertionTimeLocked(familyMod, cipher.PubKey{})
 	s.membersMu.RUnlock()
 
 	for _, pk := range st.Banned {
-		if _, err := s.PublishModMutation(ModOpBan, pk, 0); err != nil {
+		if _, err := s.publishModMutationAt(ModOpBan, pk, 0, modAt[pk]); err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Debug("group: BroadcastModeration: ban publish failed")
 		}
 	}
 	for _, pk := range st.Muted {
-		if _, err := s.PublishModMutation(ModOpMute, pk, 0); err != nil {
+		if _, err := s.publishModMutationAt(ModOpMute, pk, 0, modAt[pk]); err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Debug("group: BroadcastModeration: mute publish failed")
 		}
@@ -405,7 +443,7 @@ func (s *Session) BroadcastModeration() {
 	// joiners but would race a concurrent admin's ModOpReadOnly on
 	// resume, flipping a deliberately quieted room back open.
 	if st.ReadOnly {
-		if _, err := s.PublishModMutation(ModOpReadOnly, cipher.PubKey{}, 0); err != nil {
+		if _, err := s.publishModMutationAt(ModOpReadOnly, cipher.PubKey{}, 0, groupAt); err != nil {
 			s.log.WithError(err).Debug("group: BroadcastModeration: read-only publish failed")
 		}
 	}
