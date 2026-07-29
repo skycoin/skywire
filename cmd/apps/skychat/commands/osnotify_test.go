@@ -7,21 +7,62 @@
 package commands
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
 
+// appLogRecorder is the package-wide appLog sink, installed ONCE by TestMain.
+//
+// appLog is a plain global func var that background loops (the pollers, the
+// cxo-group Connect/reconnect goroutines, the tcp-direct dialers) call from
+// goroutines which routinely outlive the test that started them. Any test that
+// assigned appLog itself would therefore race those readers. Installing one
+// mutex-guarded recorder up front means nothing ever writes the variable again,
+// and a test that wants to assert on log output reads the recorder instead.
+type appLogRecorder struct {
+	mu    sync.Mutex
+	lines []string
+}
+
+func (r *appLogRecorder) record(format string, args ...interface{}) {
+	r.mu.Lock()
+	r.lines = append(r.lines, fmt.Sprintf(format, args...))
+	r.mu.Unlock()
+}
+
+// count returns how many lines have been recorded so far.
+func (r *appLogRecorder) count() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return len(r.lines)
+}
+
+// since returns the lines recorded after index n.
+func (r *appLogRecorder) since(n int) []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if n > len(r.lines) {
+		return nil
+	}
+	return append([]string(nil), r.lines[n:]...)
+}
+
+var testAppLog = &appLogRecorder{}
+
 func TestMain(m *testing.M) {
 	// Never fire a real host-OS notification during the suite: handleConn-driven
 	// tests reach notifyOSInbound, and on a developer desktop
 	// osnotify.Available() is true, which would otherwise pop real notifications.
 	osNotify = false
+	appLog = testAppLog.record
 	os.Exit(m.Run())
 }
 
