@@ -1578,6 +1578,67 @@ func (rc *rpcClient) GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, err
 	return resp, err
 }
 
+// GroupJoinRequests implements API.
+func (rc *rpcClient) GroupJoinRequests(id string) ([]GroupJoinRequest, error) {
+	var resp []GroupJoinRequest
+	err := rc.Call("GroupJoinRequests", &id, &resp)
+	return resp, err
+}
+
+// GroupApproveJoin implements API.
+func (rc *rpcClient) GroupApproveJoin(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupApproveJoin", &GroupPeerRequest{ID: id, PK: pk}, &resp)
+	return resp, err
+}
+
+// GroupDenyJoin implements API.
+func (rc *rpcClient) GroupDenyJoin(id string, pk cipher.PubKey) error {
+	return rc.Call("GroupDenyJoin", &GroupPeerRequest{ID: id, PK: pk}, &struct{}{})
+}
+
+// GroupRemoveMember implements API.
+func (rc *rpcClient) GroupRemoveMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupRemoveMember", &GroupPeerRequest{ID: id, PK: pk}, &resp)
+	return resp, err
+}
+
+// GroupBanMember implements API.
+func (rc *rpcClient) GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupBanMember", &GroupPeerRequest{ID: id, PK: pk}, &resp)
+	return resp, err
+}
+
+// GroupUnbanMember implements API.
+func (rc *rpcClient) GroupUnbanMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupUnbanMember", &GroupPeerRequest{ID: id, PK: pk}, &resp)
+	return resp, err
+}
+
+// GroupMuteMember implements API.
+func (rc *rpcClient) GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupMuteMember", &GroupPeerRequest{ID: id, PK: pk}, &resp)
+	return resp, err
+}
+
+// GroupUnmuteMember implements API.
+func (rc *rpcClient) GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupUnmuteMember", &GroupPeerRequest{ID: id, PK: pk}, &resp)
+	return resp, err
+}
+
+// GroupSetReadOnly implements API.
+func (rc *rpcClient) GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupSetReadOnly", &GroupReadOnlyRequest{ID: id, ReadOnly: readOnly}, &resp)
+	return resp, err
+}
+
 // GroupPromoteAdmin implements API.
 func (rc *rpcClient) GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error) {
 	var resp GroupInfo

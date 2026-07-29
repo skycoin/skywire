@@ -172,12 +172,12 @@ func jsGroupCreate(_ js.Value, args []js.Value) interface{} {
 		return errPromise("skychatGroupCreate(name[, mode])")
 	}
 	name := args[0].String()
-	mode := group.ModePublic
+	kind := group.KindPublic
 	if len(args) >= 2 && args[1].String() == "private" {
-		mode = group.ModePrivate
+		kind = group.KindPrivate
 	}
 	return promise(func() (interface{}, error) {
-		rec, err := groupMgr.Create(name, mode, nil)
+		rec, err := groupMgr.Create(name, kind, nil)
 		if err != nil {
 			return nil, err
 		}

@@ -17,6 +17,7 @@ package group
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -28,10 +29,20 @@ import (
 const rosterBroadcastDelay = 3 * time.Second
 
 // subscribedPrefixes is the set of CXO path prefixes every group subscriber
-// watches: msgs/ (chat) plus roster/ and admin/ (signed membership + admin
-// gossip). Centralized so all SetPrefixes call sites stay in lockstep.
+// watches: msgs/ (chat) plus roster/, admin/ and mod/ (signed membership,
+// admin and moderation gossip). Centralized so all SetPrefixes call sites
+// stay in lockstep.
 func subscribedPrefixes() []string {
-	return []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix}
+	return []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix, ModerationPathPrefix}
+}
+
+// isGossipPath reports whether a leaf path belongs to one of the signed
+// control subtrees rather than to chat. The inbox loop skips these — they
+// were already consumed by the reconciler pre-pass.
+func isGossipPath(path string) bool {
+	return strings.HasPrefix(path, RosterPathPrefix+"/") ||
+		strings.HasPrefix(path, AdminPathPrefix+"/") ||
+		strings.HasPrefix(path, ModerationPathPrefix+"/")
 }
 
 // SetRosterChangeHandler installs a callback invoked (with a snapshot of the

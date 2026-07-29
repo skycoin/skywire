@@ -346,7 +346,18 @@ type Session struct {
 	// admins after applyRosterLeaf/applyAdminLeaf mutate the roster, so the
 	// manager can persist the converged Record. See SetRosterChangeHandler.
 	onRosterChange func(members, admins []cipher.PubKey)
-	log            *logging.Logger
+	// onModChange is invoked with a snapshot of the converged moderation
+	// state after applyModLeaf mutates it, so the manager can persist it.
+	// Parallel to onRosterChange. See SetModChangeHandler.
+	onModChange func(ModState)
+	// onJoinRequest decides an inbound join request. Installed by the
+	// Manager, which owns both the admission policy and the store the
+	// pending queue lives in; the session only authenticates the
+	// requester and moves bytes. nil means this session has no
+	// admission authority (e.g. the native-TCP standalone path, which
+	// has no Manager) and every request is refused.
+	onJoinRequest JoinRequestHandler
+	log           *logging.Logger
 
 	// lastInboundNs is the unified liveness signal for this session,
 	// in unix-nanoseconds. Set on every observable inbound event —
@@ -470,6 +481,22 @@ type Session struct {
 	// post-restart seq collision is at worst a no-op replay.
 	rosterSeq atomic.Uint64
 	adminSeq  atomic.Uint64
+	// modSeq is the same counter for ModerationPathPrefix/<seq>.
+	modSeq atomic.Uint64
+
+	// Live moderation state, guarded by membersMu alongside members
+	// because every enforcement decision reads them together and a
+	// second lock would just create an ordering hazard. Seeded from
+	// cfg.Record at Open, replaced by applyModLeaf / SetModeration.
+	banned   []cipher.PubKey
+	muted    []cipher.PubKey
+	readOnly bool
+	// mutedSince / readOnlySince make the mute and read-only gates
+	// forward-only — see Record.MutedSince for why retroactive
+	// enforcement would be wrong. Keyed by hex PK to match the
+	// persisted Record shape.
+	mutedSince    map[string]time.Time
+	readOnlySince time.Time
 }
 
 // subscriberStaleThreshold is defined in manager.go (it's used by
@@ -646,8 +673,13 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, log: log,
-		members:  append([]cipher.PubKey(nil), cfg.Record.Members...),
-		relayCtx: ctx, relayCancel: cancel,
+		members:       append([]cipher.PubKey(nil), cfg.Record.Members...),
+		banned:        append([]cipher.PubKey(nil), cfg.Record.Banned...),
+		muted:         append([]cipher.PubKey(nil), cfg.Record.Muted...),
+		mutedSince:    copyMuteTimes(cfg.Record.MutedSince),
+		readOnly:      cfg.Record.ReadOnly,
+		readOnlySince: cfg.Record.ReadOnlySince,
+		relayCtx:      ctx, relayCancel: cancel,
 		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
 		peerLastInboundNs: make(map[cipher.PubKey]*atomic.Int64),
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
@@ -802,6 +834,11 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	sub.SetPrefixes(subscribedPrefixes())
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log,
+		banned:            append([]cipher.PubKey(nil), cfg.Record.Banned...),
+		muted:             append([]cipher.PubKey(nil), cfg.Record.Muted...),
+		mutedSince:        copyMuteTimes(cfg.Record.MutedSince),
+		readOnly:          cfg.Record.ReadOnly,
+		readOnlySince:     cfg.Record.ReadOnlySince,
 		peerSubs:          make(map[cipher.PubKey]*treestore.Subscriber),
 		peerLastInboundNs: make(map[cipher.PubKey]*atomic.Int64),
 		peerUpdateCount:   make(map[cipher.PubKey]*atomic.Uint64),
@@ -1352,6 +1389,17 @@ func (s *Session) Send(text string) error {
 	if s.pub == nil {
 		return errors.New("group: Send: session has no publisher")
 	}
+	// Local moderation gate. Publishing anyway would "work" — the leaf
+	// lands on our own feed — while every reader silently dropped it,
+	// so the operator would watch their messages vanish with no
+	// explanation. Fail loudly here instead, with the reason the UI
+	// shows verbatim.
+	//
+	// Heartbeats go through publishAs directly and are not subject to
+	// this: a quieted group must still report liveness.
+	if ok, why := s.CanPostLocally(); !ok {
+		return fmt.Errorf("%w: %s", ErrPostNotPermitted, why)
+	}
 	// D1: every role publishes via its own publisher. Pre-D1 this was
 	// owner-only and members went through SubmitToOwner → relay-listener
 	// → owner re-publish. SubmitToOwner is retained for backward-compat
@@ -1871,6 +1919,14 @@ func (s *Session) handleRelay(c net.Conn) {
 		s.log.WithError(err).Debug("group: relay read")
 		return
 	}
+	// Frame dispatch. Chat submissions carry no "kind" field, so an
+	// empty kind is the legacy RelayMessage path and stays byte-for-byte
+	// compatible with members running older builds.
+	var probe relayFrameProbe
+	if err := json.Unmarshal(payload, &probe); err == nil && probe.Kind == frameKindJoinRequest {
+		s.handleJoinRequest(c, payload)
+		return
+	}
 	var rm RelayMessage
 	if err := json.Unmarshal(payload, &rm); err != nil {
 		s.log.WithError(err).Debug("group: relay unmarshal")
@@ -1883,6 +1939,16 @@ func (s *Session) handleRelay(c net.Conn) {
 	if !s.isMember(rm.SenderPK) {
 		s.log.WithField("sender", rm.SenderPK.Hex()).
 			Warn("group: relay rejected: sender not in allowlist")
+		return
+	}
+	// A relayed submission is a post like any other, so it answers to
+	// the same moderation state as a direct publish. Without this a
+	// muted member could route around their restriction by falling back
+	// to the relay path, and the owner would sign the leaf onto its own
+	// feed — where readers accept it, because the owner is an admin.
+	if ok, why := s.senderAllowedToPost(rm.SenderPK, rm.TS); !ok {
+		s.log.WithField("sender", rm.SenderPK.Hex()).WithField("reason", why).
+			Warn("group: relay rejected: sender restricted")
 		return
 	}
 	if rm.TS.IsZero() {
@@ -2344,10 +2410,13 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 		if ev.Value == nil {
 			continue
 		}
-		if strings.HasPrefix(ev.Path, RosterPathPrefix+"/") {
+		switch {
+		case strings.HasPrefix(ev.Path, RosterPathPrefix+"/"):
 			s.applyRosterLeaf(ev.Value)
-		} else if strings.HasPrefix(ev.Path, AdminPathPrefix+"/") {
+		case strings.HasPrefix(ev.Path, AdminPathPrefix+"/"):
 			s.applyAdminLeaf(ev.Value)
+		case strings.HasPrefix(ev.Path, ModerationPathPrefix+"/"):
+			s.applyModLeaf(ev.Value)
 		}
 	}
 	h := s.handler
@@ -2358,8 +2427,8 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 		if ev.Value == nil {
 			continue
 		}
-		// roster/admin leaves were handled by the reconciler pre-pass above.
-		if strings.HasPrefix(ev.Path, RosterPathPrefix+"/") || strings.HasPrefix(ev.Path, AdminPathPrefix+"/") {
+		// roster/admin/mod leaves were handled by the reconciler pre-pass above.
+		if isGossipPath(ev.Path) {
 			continue
 		}
 		// Cross-source dedup: collapse the (primary + N mirror copies)
@@ -2405,6 +2474,29 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 				continue
 			}
 		}
+		// Moderation gate (reader-side enforcement). Runs AFTER the
+		// signature check — msg.SenderPK is only an authenticated
+		// author once VerifyMessage has passed, and gating on an
+		// unverified claim would let anyone silence a member by
+		// forging leaves in their name.
+		//
+		// Placed BEFORE the admin republish below on purpose: an admin
+		// must not launder a muted member's leaf onto its own canonical
+		// feed, because non-admin members follow admin feeds and would
+		// then render exactly what the mute was supposed to suppress.
+		//
+		// Heartbeats bypass the gate — they're per-publisher liveness
+		// probes, and dropping them would make a muted-but-present
+		// member look offline to the stale-subscriber watchdog.
+		if !IsHeartbeat(msg) {
+			if ok, why := s.senderAllowedToPost(msg.SenderPK, msg.TS); !ok {
+				s.log.WithField("path", ev.Path).WithField("sender_pk", msg.SenderPK.String()).
+					WithField("reason", why).
+					Debug("group: dropping leaf from restricted sender")
+				continue
+			}
+		}
+
 		// Admin-aggregator republish (Beta slice): if this session is
 		// an admin on the group record, write the verified leaf
 		// VERBATIM (same path, same body bytes) onto this admin's own

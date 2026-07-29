@@ -121,6 +121,142 @@ type GroupPromoteAdminRequest struct {
 	PK cipher.PubKey `json:"pk"`
 }
 
+// GroupPeerRequest is the (group, peer) input shared by every
+// admission + moderation command: approve, deny, remove, ban, unban,
+// mute, unmute. One request type rather than seven identical ones —
+// the method name already carries the verb.
+type GroupPeerRequest struct {
+	ID string        `json:"id"`
+	PK cipher.PubKey `json:"pk"`
+}
+
+// GroupReadOnlyRequest toggles group-wide read-only.
+type GroupReadOnlyRequest struct {
+	ID       string `json:"id"`
+	ReadOnly bool   `json:"read_only"`
+}
+
+// GroupJoinRequests returns the admission queue for a group.
+func (r *RPC) GroupJoinRequests(id *string, out *[]GroupJoinRequest) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupJoinRequests", id)(out, &err)
+	if id == nil {
+		return fmt.Errorf("nil request")
+	}
+	reqs, err := r.visor.GroupJoinRequests(*id)
+	if err != nil {
+		return err
+	}
+	*out = reqs
+	return nil
+}
+
+// GroupApproveJoin admits a queued requester.
+func (r *RPC) GroupApproveJoin(req *GroupPeerRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupApproveJoin", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupApproveJoin(req.ID, req.PK)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupDenyJoin declines a queued request.
+func (r *RPC) GroupDenyJoin(req *GroupPeerRequest, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupDenyJoin", req)(nil, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.GroupDenyJoin(req.ID, req.PK)
+}
+
+// GroupRemoveMember evicts a peer from the roster.
+func (r *RPC) GroupRemoveMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupRemoveMember", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupRemoveMember(req.ID, req.PK)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupBanMember bars a peer from the group.
+func (r *RPC) GroupBanMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupBanMember", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupBanMember(req.ID, req.PK)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupUnbanMember lifts a ban.
+func (r *RPC) GroupUnbanMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupUnbanMember", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupUnbanMember(req.ID, req.PK)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupMuteMember restricts a peer from posting.
+func (r *RPC) GroupMuteMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupMuteMember", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupMuteMember(req.ID, req.PK)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupUnmuteMember lifts a posting restriction.
+func (r *RPC) GroupUnmuteMember(req *GroupPeerRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupUnmuteMember", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupUnmuteMember(req.ID, req.PK)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupSetReadOnly suspends or resumes posting for non-admins.
+func (r *RPC) GroupSetReadOnly(req *GroupReadOnlyRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupSetReadOnly", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupSetReadOnly(req.ID, req.ReadOnly)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
 // GroupPromoteAdmin grants roster authority to PK on the named group.
 // Callable by any existing admin on this visor.
 func (r *RPC) GroupPromoteAdmin(req *GroupPromoteAdminRequest, out *GroupInfo) (err error) {

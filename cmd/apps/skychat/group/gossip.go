@@ -107,9 +107,9 @@ type AdminMutation struct {
 // leading version byte so old verifiers can fast-reject the new
 // shape rather than silently mis-verifying a re-ordered layout.
 func canonicalBytesRoster(m RosterMutation) []byte {
-	// Pre-size: 1 (version) + 16 (uuid) + 1 (op) + 33 (pk) + 8 (seq) + 8 (ts) + 33 (issuer)
-	buf := make([]byte, 0, 1+16+1+33+8+8+33)
-	buf = append(buf, gossipCanonicalVersion)
+	// Pre-size: 1 (version) + 1 (domain) + 16 (uuid) + 1 (op) + 33 (pk) + 8 (seq) + 8 (ts) + 33 (issuer)
+	buf := make([]byte, 0, 1+1+16+1+33+8+8+33)
+	buf = append(buf, gossipCanonicalVersion, domainRoster)
 	buf = append(buf, m.GroupID[:]...)
 	buf = append(buf, byte(m.Op))
 	buf = append(buf, m.PeerPK[:]...)
@@ -131,8 +131,8 @@ func canonicalBytesRoster(m RosterMutation) []byte {
 // canonicalBytesAdmin is the parallel canonicalizer for
 // AdminMutation. Identical layout aside from the Op type tag.
 func canonicalBytesAdmin(m AdminMutation) []byte {
-	buf := make([]byte, 0, 1+16+1+33+8+8+33)
-	buf = append(buf, gossipCanonicalVersion)
+	buf := make([]byte, 0, 1+1+16+1+33+8+8+33)
+	buf = append(buf, gossipCanonicalVersion, domainAdmin)
 	buf = append(buf, m.GroupID[:]...)
 	buf = append(buf, byte(m.Op))
 	buf = append(buf, m.PeerPK[:]...)
@@ -153,6 +153,35 @@ func canonicalBytesAdmin(m AdminMutation) []byte {
 // version returns ErrUnknownCanonicalVersion so an old binary
 // gracefully rejects a newer envelope instead of mis-verifying.
 const gossipCanonicalVersion byte = 1
+
+// Domain separation tags. Every canonical-bytes layout in this family
+// carries one immediately after the version byte, so a signature over
+// one envelope type can never verify against another.
+//
+// This is load-bearing, not hygiene. Before these existed,
+// canonicalBytesRoster and canonicalBytesAdmin emitted byte-identical
+// layouts, and the op spaces collide numerically (RosterOpAdd == 1 ==
+// AdminOpPromote, RosterOpRemove == 2 == AdminOpDemote). Every member
+// joins via an admin-signed roster/<seq> leaf with Op=1 — which any
+// member can read. Copying that leaf's IssuerPK + Signature +
+// IssuedAt + ParentSeq into an admin/<seq> envelope with
+// Op=AdminOpPromote produced a mutation that VerifyAdmin accepted and
+// applyAdminLeaf applied, because the issuer genuinely was an admin
+// and the bytes genuinely were what they signed. Any member could
+// therefore promote themselves (or anyone) to admin and inherit
+// roster authority, invite issuance, and group deletion.
+//
+// Adding the tag changes the signed bytes, so mutations issued by a
+// patched binary do not verify on an unpatched one and vice versa —
+// roster/admin gossip will not converge across a mixed-version group
+// until every visor is upgraded. That is the intended trade: a
+// compatibility window that heals on upgrade, against an escalation
+// any member could execute today.
+const (
+	domainRoster byte = 1
+	domainAdmin  byte = 2
+	domainMod    byte = 3
+)
 
 // Sentinel errors. Tests assert these directly; callers can
 // errors.Is them off the returned err.
