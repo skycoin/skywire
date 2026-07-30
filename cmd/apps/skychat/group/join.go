@@ -191,6 +191,12 @@ type JoinResponseMsg struct {
 	Muted    []cipher.PubKey `json:"muted,omitempty"`
 	ReadOnly bool            `json:"read_only,omitempty"`
 
+	// PeerBackfillDisabled seeds the group's backfill policy for the same
+	// reason: a joiner that assumed the default would start mirroring
+	// other members' leaves in a group whose admins had turned that off,
+	// and would only stop once the first mod/ leaf corrected it.
+	PeerBackfillDisabled bool `json:"peer_backfill_disabled,omitempty"`
+
 	// Reason is operator-facing text for the non-admitted cases.
 	Reason string `json:"reason,omitempty"`
 }

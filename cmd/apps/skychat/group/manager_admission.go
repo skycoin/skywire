@@ -292,13 +292,14 @@ func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 // approved and nobody else.
 func (m *Manager) admittedResponse(r Record) JoinResponseMsg {
 	resp := JoinResponseMsg{
-		Status:   JoinStatusAdmitted,
-		GroupID:  r.ID,
-		Name:     r.Name,
-		Members:  append([]cipher.PubKey(nil), r.Members...),
-		Admins:   append([]cipher.PubKey(nil), r.Admins...),
-		Muted:    append([]cipher.PubKey(nil), r.Muted...),
-		ReadOnly: r.ReadOnly,
+		Status:               JoinStatusAdmitted,
+		GroupID:              r.ID,
+		Name:                 r.Name,
+		Members:              append([]cipher.PubKey(nil), r.Members...),
+		Admins:               append([]cipher.PubKey(nil), r.Admins...),
+		Muted:                append([]cipher.PubKey(nil), r.Muted...),
+		ReadOnly:             r.ReadOnly,
+		PeerBackfillDisabled: r.PeerBackfillDisabled,
 	}
 	if r.Encrypted() {
 		resp.AESKey = append([]byte(nil), r.AESKey...)
@@ -540,6 +541,52 @@ func (m *Manager) SetReadOnly(id string, readOnly bool) (Record, error) {
 	})
 }
 
+// SetPeerBackfill decides whether any online member may serve this
+// group's history and messages to a joiner, or only admins.
+//
+// Admin-only and group-wide, converging to every member through the same
+// signed gossip as the read-only toggle. Turning it ON is what makes a
+// group readable while its admins are offline; turning it OFF restores the
+// admins-only topology, at the cost of the group going dark whenever no
+// admin is up. See Record.PeerBackfillDisabled for the full trade.
+//
+// The live session's subscription set is re-evaluated either way, so the
+// change takes effect now rather than at the next restart.
+func (m *Manager) SetPeerBackfill(id string, enabled bool) (Record, error) {
+	op := ModOpPeerBackfillOff
+	if enabled {
+		op = ModOpPeerBackfillOn
+	}
+	r, err := m.moderate(id, cipher.PubKey{}, op, "SetPeerBackfill", func(r *Record) bool {
+		if r.PeerBackfillEnabled() == enabled {
+			return false
+		}
+		r.PeerBackfillDisabled = !enabled
+		return true
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	// moderate() pushed the new ModState onto the session, which is what
+	// the subscription rule reads; ask it to re-apply that rule now.
+	m.mu.RLock()
+	sess, live := m.sessions[id]
+	m.mu.RUnlock()
+	if live {
+		// Async: this opens or closes peer subscriptions and dials each
+		// new one, which would otherwise hold the admin's RPC call open
+		// for the dial timeout per peer.
+		admins := append([]cipher.PubKey(nil), r.Admins...)
+		go func() {
+			if _, sErr := sess.SetAdminRoster(admins); sErr != nil {
+				m.log.WithError(sErr).WithField("id", id).
+					Debug("group: SetPeerBackfill: peer-sub re-evaluation failed; takes effect on next roster change or restart")
+			}
+		}()
+	}
+	return r, nil
+}
+
 // moderate is the shared body of every moderation command: authorize,
 // apply the caller's mutation, persist, push to the live session, emit
 // the signed gossip.
@@ -700,18 +747,19 @@ func (m *Manager) recordFromInvite(inv Invite, resp JoinResponseMsg) Record {
 		// Remember who the link said could let us in, so a queued
 		// request keeps re-asking all of them and not just the founder.
 		// Kept out of Admins on purpose — see Record.AdmissionPKs.
-		AdmissionPKs: append([]cipher.PubKey(nil), inv.Admins...),
-		Port:         inv.Port,
-		Mode:         inv.Mode,
-		Kind:         kindForMode(inv.Mode),
-		AESKey:       key,
-		KeyEpoch:     resp.KeyEpoch,
-		Members:      members,
-		Muted:        resp.Muted,
-		ReadOnly:     resp.ReadOnly,
-		Role:         RoleMember,
-		CreatedAt:    time.Now().UTC(),
-		JoinedAt:     time.Now().UTC(),
+		AdmissionPKs:         append([]cipher.PubKey(nil), inv.Admins...),
+		Port:                 inv.Port,
+		Mode:                 inv.Mode,
+		Kind:                 kindForMode(inv.Mode),
+		AESKey:               key,
+		KeyEpoch:             resp.KeyEpoch,
+		Members:              members,
+		Muted:                resp.Muted,
+		ReadOnly:             resp.ReadOnly,
+		PeerBackfillDisabled: resp.PeerBackfillDisabled,
+		Role:                 RoleMember,
+		CreatedAt:            time.Now().UTC(),
+		JoinedAt:             time.Now().UTC(),
 	}
 	r.EnsureFounderInAdmins()
 	return r
@@ -854,6 +902,7 @@ func (m *Manager) retryPendingJoins(ctx context.Context) {
 			}
 			admitted.Muted = resp.Muted
 			admitted.ReadOnly = resp.ReadOnly
+			admitted.PeerBackfillDisabled = resp.PeerBackfillDisabled
 			admitted.EnsureFounderInAdmins()
 			admitted.Status = StatusPending
 			if admitted.Encrypted() && len(admitted.AESKey) != 32 {

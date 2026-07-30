@@ -45,7 +45,12 @@ func newRosterSession(t *testing.T, myPK cipher.PubKey, mySK cipher.SecKey, rec 
 		rec.ID = uuid.NewString()
 	}
 	return &Session{
-		cfg: Config{MyPK: myPK, MySK: mySK, Record: rec},
+		// PeerFanout -1 opts this fixture out of the peer-backfill fanout,
+		// so these tests keep asserting the ADMIN-ROSTER rule in isolation:
+		// "who do I follow because of who is an admin", with no ring
+		// neighbors mixed in. The fanout itself is covered in
+		// nonadmin_sub_topology_test.go.
+		cfg: Config{MyPK: myPK, MySK: mySK, Record: rec, PeerFanout: -1},
 		pub: newInProcessPublisher(t, mySK),
 		log: logging.MustGetLogger("group.roster-authority-test"),
 
@@ -126,17 +131,33 @@ func assertBookkeepingMatchesSubs(t *testing.T, s *Session) {
 
 // --- SetAllowlist -----------------------------------------------------------
 
-func TestSetAllowlist_RejectsNonOwnerRole(t *testing.T) {
+// A member session DOES have an allowlist — its own publisher's, which
+// gates who may follow its feed — and it has to track roster changes. It
+// used to be refused here, which froze the list at Open and made a peer
+// added afterwards permanently unable to subscribe to this member.
+//
+// What stays owner-only is the follow-everyone peer-sub reconciliation, so
+// a member returns no evictions.
+func TestSetAllowlist_MemberRefreshesAllowlistButNotPeerSubs(t *testing.T) {
 	me, sk := cipher.GenerateKeyPair()
 	other, _ := cipher.GenerateKeyPair()
+	late, _ := cipher.GenerateKeyPair()
 	s := newRosterSession(t, me, sk, Record{OwnerPK: other, Role: RoleMember})
 
-	evicted, err := s.SetAllowlist([]cipher.PubKey{me, other})
-	if err == nil {
-		t.Fatal("a member-role session has no allowlist to set; want an error")
+	evicted, err := s.SetAllowlist([]cipher.PubKey{me, other, late})
+	if err != nil {
+		t.Fatalf("SetAllowlist on a member session: %v", err)
 	}
 	if evicted != nil {
-		t.Errorf("evicted = %v, want nil on the rejected path", hexes(evicted))
+		t.Errorf("evicted = %v, want nil — members don't run the owner's peer-sub rule", hexes(evicted))
+	}
+	// The relay gate's view of membership tracked the change.
+	if !s.isMember(late) {
+		t.Error("a member added after Open is still missing from the live member set")
+	}
+	// And no peer subs were opened by this call.
+	if got := peerSubPKs(s); len(got) != 0 {
+		t.Errorf("peerSubs = %v, want none from a member-role SetAllowlist", hexes(got))
 	}
 }
 

@@ -50,16 +50,20 @@ type ModState struct {
 	MutedSince    map[string]time.Time
 	ReadOnly      bool
 	ReadOnlySince time.Time
+	// PeerBackfillDisabled mirrors Record.PeerBackfillDisabled — a
+	// group-wide admin toggle that converges through this same envelope.
+	PeerBackfillDisabled bool
 }
 
 // modStateOf builds a snapshot from a Record.
 func modStateOf(r Record) ModState {
 	return ModState{
-		Banned:        append([]cipher.PubKey(nil), r.Banned...),
-		Muted:         append([]cipher.PubKey(nil), r.Muted...),
-		MutedSince:    copyMuteTimes(r.MutedSince),
-		ReadOnly:      r.ReadOnly,
-		ReadOnlySince: r.ReadOnlySince,
+		Banned:               append([]cipher.PubKey(nil), r.Banned...),
+		Muted:                append([]cipher.PubKey(nil), r.Muted...),
+		MutedSince:           copyMuteTimes(r.MutedSince),
+		ReadOnly:             r.ReadOnly,
+		ReadOnlySince:        r.ReadOnlySince,
+		PeerBackfillDisabled: r.PeerBackfillDisabled,
 	}
 }
 
@@ -70,6 +74,7 @@ func (m ModState) applyTo(r *Record) {
 	r.MutedSince = copyMuteTimes(m.MutedSince)
 	r.ReadOnly = m.ReadOnly
 	r.ReadOnlySince = m.ReadOnlySince
+	r.PeerBackfillDisabled = m.PeerBackfillDisabled
 }
 
 func copyMuteTimes(in map[string]time.Time) map[string]time.Time {
@@ -99,6 +104,13 @@ func (s *Session) moderationLocked() ModState {
 		MutedSince:    copyMuteTimes(s.mutedSince),
 		ReadOnly:      s.readOnly,
 		ReadOnlySince: s.readOnlySince,
+		// Unlike the lists above there is no mirrored session field for
+		// this one — the record IS the live state. It still has to be
+		// carried here, because applyModLeaf round-trips the snapshot back
+		// onto the record and a field missing from the snapshot gets
+		// zeroed: the toggle would appear to apply and then immediately
+		// revert.
+		PeerBackfillDisabled: s.cfg.Record.PeerBackfillDisabled,
 	}
 }
 
@@ -294,8 +306,10 @@ func (s *Session) applyModLeaf(body []byte) {
 	if ok, why := mutationFresh(s.mutationSeen, wmKey, m.IssuedAt, time.Now().UTC()); !ok {
 		s.membersMu.Unlock()
 		s.log.WithField("issuer", m.IssuerPK.String()).WithField("peer", m.PeerPK.String()).
-			WithField("reason", why).
-			Debug("group: reconcile: rejecting stale moderation mutation")
+			WithField("reason", why).WithField("op", int(m.Op)).
+			WithField("issued_at", m.IssuedAt.UnixNano()).
+			WithField("watermark", s.mutationSeen[wmKey].UnixNano()).
+			Debug("XXDEBUG group: reconcile: rejecting stale moderation mutation")
 		return
 	}
 	s.mutationSeen = recordMutation(s.mutationSeen, wmKey, m.IssuedAt)
@@ -303,6 +317,10 @@ func (s *Session) applyModLeaf(body []byte) {
 	seenSnapshot := copyWatermarks(s.mutationSeen)
 
 	changed := false
+	// topologyChanged flags the peer-backfill toggle: unlike the other
+	// moderation ops it changes WHO this visor subscribes to, so the
+	// subscription set has to be re-evaluated once the lock is released.
+	topologyChanged := false
 	switch m.Op {
 	case ModOpBan:
 		if !containsPK(s.banned, m.PeerPK) {
@@ -361,6 +379,18 @@ func (s *Session) applyModLeaf(body []byte) {
 			s.readOnlySince = time.Time{}
 			changed = true
 		}
+	case ModOpPeerBackfillOn:
+		if s.cfg.Record.PeerBackfillDisabled {
+			s.cfg.Record.PeerBackfillDisabled = false
+			changed = true
+			topologyChanged = true
+		}
+	case ModOpPeerBackfillOff:
+		if !s.cfg.Record.PeerBackfillDisabled {
+			s.cfg.Record.PeerBackfillDisabled = true
+			changed = true
+			topologyChanged = true
+		}
 	}
 
 	s.moderationLocked().applyTo(&s.cfg.Record)
@@ -392,6 +422,22 @@ func (s *Session) applyModLeaf(body []byte) {
 		if s.onRosterChange != nil {
 			s.onRosterChange(members, admins)
 		}
+	}
+	// The backfill toggle decides whether non-admins follow each other, so
+	// applying it means re-running the subscription rule: switching it on
+	// has to actually open those subs (otherwise the setting is inert until
+	// the next restart), and switching it off has to close them.
+	if topologyChanged {
+		// Off the update-callback goroutine: SetAdminRoster opens peer
+		// subscriptions, and each one dials with a 15s timeout. Running
+		// that inline would stall this subscriber's whole receive pump —
+		// every other leaf in the batch, and every batch behind it —
+		// while a peer that may well be offline times out.
+		go func() {
+			if _, err := s.SetAdminRoster(admins); err != nil {
+				s.log.WithError(err).Debug("group: reconcile: peer-sub re-evaluation after backfill toggle failed")
+			}
+		}()
 	}
 	if s.onModChange != nil {
 		s.onModChange(modSnapshot)
@@ -445,6 +491,15 @@ func (s *Session) BroadcastModeration() {
 	if st.ReadOnly {
 		if _, err := s.publishModMutationAt(ModOpReadOnly, cipher.PubKey{}, 0, groupAt); err != nil {
 			s.log.WithError(err).Debug("group: BroadcastModeration: read-only publish failed")
+		}
+	}
+	// Same asymmetry, same reason: only the non-default state is worth
+	// re-asserting. Backfill is enabled unless an admin turned it off, so
+	// broadcasting the "on" op would be a no-op for fresh joiners while
+	// racing another admin's genuine "off" on resume.
+	if st.PeerBackfillDisabled {
+		if _, err := s.publishModMutationAt(ModOpPeerBackfillOff, cipher.PubKey{}, 0, groupAt); err != nil {
+			s.log.WithError(err).Debug("group: BroadcastModeration: peer-backfill publish failed")
 		}
 	}
 }

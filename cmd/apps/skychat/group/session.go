@@ -266,6 +266,29 @@ type Config struct {
 	// caller supplies addresses). Consulted by the per-peer dial loop in
 	// TCP mode; ignored under dmsg.
 	PeerAddrs map[cipher.PubKey]string
+
+	// PeerFanout is how many non-admin peers a non-admin member follows
+	// beyond the admins — the local resource limit on the replication
+	// factor. Zero takes defaultPeerFanout; negative disables the fanout
+	// on this visor regardless of the group's own setting.
+	//
+	// Two switches govern this, deliberately: the GROUP decides whether
+	// backfill-from-any-member is allowed at all (Record.PeerBackfill-
+	// Disabled, an admin decision that converges to everyone), and each
+	// visor decides how much of it to pay for. Neither can force the
+	// other's hand.
+	PeerFanout int
+}
+
+// peerFanout resolves the configured fanout, applying the default.
+func (cfg Config) peerFanout() int {
+	if cfg.PeerFanout == 0 {
+		return defaultPeerFanout
+	}
+	if cfg.PeerFanout < 0 {
+		return 0
+	}
+	return cfg.PeerFanout
 }
 
 // Session is one live group as this visor knows it — either as the
@@ -911,7 +934,7 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 	// desiredPeerSubsForRole encodes the admin-aggregator rule;
 	// see its docstring. Iterating the pure-function output keeps
 	// the openMember vs SetAdminRoster behavior in lockstep.
-	desired := desiredPeerSubsForRole(cfg.Record, cfg.MyPK)
+	desired := desiredPeerSubsForRole(cfg.Record, cfg.MyPK, cfg.peerFanout())
 	for peerPK := range desired {
 		ps, err := treestore.NewSubscriberOnNode(pub.Node(), peerPK, treestore.SubConfig{Logger: log})
 		if err != nil {
@@ -1004,6 +1027,7 @@ func (s *Session) Connect(ctx context.Context) error {
 	// the underlying dmsg dial also honors ctx, so a canceled
 	// Connect actually aborts the dial rather than leaking a
 	// goroutine that runs to completion before discarding its result.
+	var legacyErr error
 	if s.sub != nil {
 		done := make(chan error, 1)
 		go func() { done <- s.connectSub(ctx, s.sub, s.cfg.Record.OwnerPK) }()
@@ -1012,7 +1036,21 @@ func (s *Session) Connect(ctx context.Context) error {
 			return ctx.Err()
 		case err := <-done:
 			if err != nil {
-				return fmt.Errorf("group: Connect: %w", err)
+				// Remember it, but keep going. This used to return here,
+				// which made the OWNER's reachability a precondition for
+				// attaching to anyone: a member whose owner was offline
+				// never dialed a single peer sub from this path, and only
+				// recovered through the manager's per-peer loop after
+				// subscriberStaleThreshold (100s) of silence.
+				//
+				// That was defensible while the owner feed was the only
+				// read path. With peer backfill it is not — any member can
+				// serve the room — so this is the "any sub succeeded"
+				// relaxation the D4 note anticipated. A subscribe REJECTION
+				// is still surfaced below, since that means the group
+				// refused us rather than being unreachable.
+				legacyErr = fmt.Errorf("group: Connect: %w", err)
+				s.log.WithError(err).Debug("group: Connect: legacy owner-feed sub failed; continuing to peer subs")
 			}
 		}
 		// Bump per-s.sub liveness: a successful Connect is positive
@@ -1090,9 +1128,20 @@ func (s *Session) Connect(ctx context.Context) error {
 	// least one peer attached, otherwise the next reconnect tick
 	// should re-enter the reconnect path instead of being masked by
 	// a phantom freshness window.
-	if s.sub != nil || peerSuccessCount > 0 {
+	// A subscribe rejection is the group refusing us, not a transport
+	// problem: surface it even when peer subs attached, so the join path's
+	// isSubscribeRejected guard keeps working.
+	if legacyErr != nil && isSubscribeRejected(legacyErr) {
+		return legacyErr
+	}
+	if (s.sub != nil && legacyErr == nil) || peerSuccessCount > 0 {
 		s.lastInboundNs.Store(time.Now().UnixNano())
 		return nil
+	}
+	// Nothing attached at all. Prefer the legacy error when there is one —
+	// it names the owner, which is the more actionable diagnosis.
+	if legacyErr != nil {
+		return legacyErr
 	}
 	// Owner-role with zero peer connections succeeded: surface the
 	// failure so tryReconnect's failure-count machinery engages.
@@ -1474,8 +1523,8 @@ func (s *Session) Unsend(tsNano int64) error {
 }
 
 // SetAllowlist updates the publisher's subscriber allowlist AND the
-// owner-side relay-gate's view of the member set, both live. Owner-
-// side only. Used when an invite is issued or a member is removed.
+// relay-gate's view of the member set, both live. Used when an invite is
+// issued or a member is removed.
 // Returns the list of peers whose peerSubs were torn down — the
 // caller (Manager) is responsible for clearing any state keyed by
 // (group ID, peer PK), e.g. the per-peer reconnect backoff map.
@@ -1495,15 +1544,33 @@ func (s *Session) Unsend(tsNano int64) error {
 // Visible symptom: member sends silently dropped on the owner; the
 // member's local Record.Members showing the original allowlist while
 // the owner had since added more peers.
+// Roles: EVERY session has a publisher whose allowlist is the member set
+// (openMember sets it too, so peers can subscribe to a member's own feed),
+// so both roles refresh it here. This used to be owner-only, which froze a
+// member's allowlist at Open — a peer added afterwards was refused by that
+// member's publisher forever, so it could never be followed. Invisible
+// while only admins were followed and admins existed from create time;
+// fatal for peer backfill, and already a latent bug for an admin promoted
+// later.
+//
+// The peer-sub reconciliation below is still owner-shaped ("follow every
+// member"), so it stays gated on role. Member sessions get their
+// subscription set from SetAdminRoster, which applyRosterLeaf calls
+// alongside this.
 func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error) {
-	if s.pub == nil || s.cfg.Record.Role != RoleOwner {
-		return nil, errors.New("group: SetAllowlist: only owner-role sessions have an allowlist")
+	if s.pub == nil {
+		return nil, errors.New("group: SetAllowlist: session has no publisher")
 	}
 	snap := append([]cipher.PubKey(nil), members...)
 	s.pub.SetAllowlist(append([]cipher.PubKey(nil), members...))
 	s.membersMu.Lock()
 	s.members = snap
 	s.membersMu.Unlock()
+	if s.cfg.Record.Role != RoleOwner {
+		// Allowlist refreshed; the rest of this function is the owner's
+		// follow-everyone rule.
+		return nil, nil
+	}
 
 	// D1: keep the owner's per-PK peer-sub map in sync with the new
 	// allowlist. Add subscribers for newly-added members; close and
@@ -1573,31 +1640,120 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 	return evicted, nil
 }
 
-// desiredPeerSubsForRole computes the set of peer PKs this visor
-// should hold per-peer CXO subscriptions for, under the admin-
-// aggregator topology (#2685):
+// defaultPeerFanout is how many non-admin peers a non-admin member
+// follows on top of the admins.
+//
+// Why more than zero. Under the original admin-aggregator rule a
+// non-admin followed admins ONLY, so every leaf in the group had to
+// travel through an admin's feed to reach it: no admin online meant no
+// history, no backfill, and no message between two non-admins even when
+// both were up. Availability was pinned to a role rather than to the
+// number of visors present, and in the common single-admin group that is
+// one point of failure for reading.
+//
+// Why not full mesh. Following everyone restores N² subscriptions, which
+// is precisely the cost the aggregator topology existed to avoid. Two
+// successors is a replication factor: content reaches a non-admin if ANY
+// of its two ring neighbors or any admin is online, and the ring is
+// connected, so leaves still propagate group-wide transitively.
+//
+// Two, not one, because a single successor makes availability depend on
+// one specific peer; two tolerates either of them being offline. Raise it
+// (Config.PeerFanout) for a group that expects most members offline most
+// of the time; set it to a negative value to restore the admin-only
+// topology exactly.
+const defaultPeerFanout = 2
+
+// ringSuccessors picks up to k peers deterministically from candidates,
+// as the k entries following self on the hex-sorted ring (wrapping).
+//
+// Deterministic from the roster alone, so every visor computes the same
+// topology with no coordination and re-computes it identically after a
+// roster change. Successor-on-a-ring rather than random choice gives an
+// even in-degree — each candidate is followed by about k others, with no
+// hotspot — and a ring is connected, which is what makes transitive
+// propagation between non-admins hold rather than leaving islands.
+func ringSuccessors(candidates []cipher.PubKey, self cipher.PubKey, k int) []cipher.PubKey {
+	if k <= 0 || len(candidates) == 0 {
+		return nil
+	}
+	sorted := append([]cipher.PubKey(nil), candidates...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Hex() < sorted[j].Hex() })
+	if k >= len(sorted) {
+		return sorted
+	}
+	// Self is not in candidates, so this is the insertion point — our
+	// position on the ring — and the k entries from there are our
+	// successors.
+	selfHex := self.Hex()
+	start := sort.Search(len(sorted), func(i int) bool { return sorted[i].Hex() >= selfHex })
+	out := make([]cipher.PubKey, 0, k)
+	for i := 0; i < k; i++ {
+		out = append(out, sorted[(start+i)%len(sorted)])
+	}
+	return out
+}
+
+// shouldMirrorLeaves reports whether this session republishes other
+// members' verified leaves onto its own feed.
+//
+// Admins always do — they are followed by every non-admin, so their
+// mirror is the guaranteed path and it predates this setting. Everyone
+// else does when the group allows backfill from any member AND this visor
+// is willing to pay the fanout. Both conditions matter: mirroring for
+// nobody's benefit would be pure disk cost, and a visor that follows
+// peers but refuses to be followed would take availability without
+// contributing it.
+func (s *Session) shouldMirrorLeaves() bool {
+	if s.cfg.Record.IsAdmin(s.cfg.MyPK) {
+		return true
+	}
+	return s.cfg.Record.PeerBackfillEnabled() && s.cfg.peerFanout() > 0
+}
+
+// desiredPeerSubsForRole computes the set of peer PKs this visor should
+// hold per-peer CXO subscriptions for:
 //
 //	desired = { pk in r.Members : pk != myPK AND (r.IsAdmin(myPK) OR r.IsAdmin(pk)) }
+//	          ∪ ringSuccessors(non-admin members, myPK, fanout)   // non-admins only
 //
-// Admins follow every member (input pipe + republish). Non-admins
-// follow only admins (the admin canonical feed receives every
-// signed leaf verbatim). The legacy s.sub subscription to OwnerPK
-// is independent of this set; non-admins always have the owner
-// covered via legacy s.sub plus (transitively) via owner-as-admin
-// membership in this set.
+// Admins follow every member (input pipe + mirror). A non-admin follows
+// every admin — the guaranteed path, since an admin's feed carries a
+// verbatim mirror of the whole room — PLUS `fanout` other non-admins, so
+// the group stays readable when no admin is up. See defaultPeerFanout for
+// why the second term exists and why it is bounded.
+//
+// The legacy s.sub subscription to OwnerPK is independent of this set;
+// non-admins always have the owner covered via s.sub plus (transitively)
+// via owner-as-admin membership here.
 //
 // Pure function: no Session state, no CXO. Used at openMember and
 // SetAdminRoster so the rule has one source of truth.
-func desiredPeerSubsForRole(r Record, myPK cipher.PubKey) map[cipher.PubKey]struct{} {
+func desiredPeerSubsForRole(r Record, myPK cipher.PubKey, fanout int) map[cipher.PubKey]struct{} {
 	iAmAdmin := r.IsAdmin(myPK)
+	// The group's own setting is the ceiling. An admin turning backfill off
+	// means "members must not carry each other's history", and a member
+	// that kept following its neighbors would keep doing exactly that.
+	if !r.PeerBackfillEnabled() {
+		fanout = 0
+	}
 	out := make(map[cipher.PubKey]struct{}, len(r.Members))
+	var peers []cipher.PubKey
 	for _, pk := range r.Members {
 		if pk == myPK {
 			continue
 		}
-		if !iAmAdmin && !r.IsAdmin(pk) {
+		if iAmAdmin || r.IsAdmin(pk) {
+			out[pk] = struct{}{}
 			continue
 		}
+		// Non-admin, and we are a non-admin: a fanout candidate.
+		peers = append(peers, pk)
+	}
+	if iAmAdmin {
+		return out // already following everyone
+	}
+	for _, pk := range ringSuccessors(peers, myPK, fanout) {
 		out[pk] = struct{}{}
 	}
 	return out
@@ -1659,7 +1815,7 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 		r.Members = append([]cipher.PubKey(nil), s.cfg.Record.Members...)
 	}
 	s.membersMu.RUnlock()
-	desired := desiredPeerSubsForRole(r, s.cfg.MyPK)
+	desired := desiredPeerSubsForRole(r, s.cfg.MyPK, s.cfg.peerFanout())
 
 	var evicted []cipher.PubKey
 	s.peerSubsMu.Lock()
@@ -2581,42 +2737,47 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 			}
 		}
 
-		// Admin-aggregator republish (Beta slice): if this session is
-		// an admin on the group record, write the verified leaf
-		// VERBATIM (same path, same body bytes) onto this admin's own
-		// publisher feed. Non-admin members in the admin-aggregator
-		// topology subscribe to admin canonical feeds rather than to
-		// every peer's per-peer feed, so this republish is what makes
-		// the source leaf reachable through this admin when the
-		// original sender's publisher is offline.
+		// Peer mirror: write the verified leaf VERBATIM (same path, same
+		// body bytes) onto this session's own publisher feed, so this
+		// visor can serve it to anyone following us when the original
+		// author's publisher is offline. This is what makes a copy of the
+		// room exist in more than one place.
+		//
+		// It used to be admins only, which made availability a property of
+		// a role: no admin online meant no history and no message between
+		// two non-admins, even with both of them up. Any member can serve
+		// now — a mirror is the AUTHOR's signed leaf byte-for-byte, and
+		// every reader re-verifies it (above), so a mirroring peer is
+		// never trusted, only convenient. An admin can turn this back off
+		// for the whole group; see Record.PeerBackfillDisabled.
 		//
 		// Gating:
 		//   - VerifyMessage above succeeded (or was the unsigned-legacy
-		//     accept-with-warning) — admins act as gatekeepers, not as
-		//     forwarders of forged input. ErrLeafBadSignature already
-		//     continued out of the loop above.
+		//     accept-with-warning) — a mirror must not launder forged
+		//     input. A bad signature already continued out of the loop.
+		//   - The moderation gate above already dropped muted / banned
+		//     authors, so a mirror cannot resurrect suppressed content.
 		//   - s.pub != nil — degraded sessions (e.g. the test fixture
 		//     with no publisher) skip cleanly instead of panicking.
 		//   - msg.SenderPK != s.cfg.MyPK — our own publishAs already
 		//     wrote this leaf on our publisher at this path; a second
 		//     Put is a content-equal no-op but skip the round-trip.
 		//   - !IsHeartbeat(msg) — heartbeats are per-publisher liveness
-		//     probes; non-admin subscribers get liveness from the
-		//     admin's OWN heartbeats, no need to mirror others'.
-		//   - dedup.Add returned true above (line ~2104) — protects
-		//     against cross-admin republish loops: when admin-A and
-		//     admin-B both observe sender-C's leaf, whichever observes
-		//     first republishes; the other's observation (via its own
-		//     peerSub or via cross-admin subscription) finds the leaf
-		//     already in the dedup set and skips here too.
+		//     probes; subscribers get liveness from our OWN heartbeats,
+		//     so mirroring someone else's would be misleading as well as
+		//     wasteful.
+		//   - dedup.Add returned true above — this is what stops a mirror
+		//     storm. The second copy of a leaf to reach us (via another
+		//     peer's mirror) is already in the dedup set, so it is never
+		//     re-published: each visor mirrors each leaf at most once.
 		//
-		// Failures are debug-logged, not propagated. Admin republish is
-		// opportunistic redundancy — the user-facing inbox fan-out
-		// below MUST NOT be gated on the republish Put succeeding.
-		if s.pub != nil && !IsHeartbeat(msg) && msg.SenderPK != s.cfg.MyPK && s.cfg.Record.IsAdmin(s.cfg.MyPK) {
+		// Failures are debug-logged, not propagated. The mirror is
+		// opportunistic redundancy — the user-facing inbox fan-out below
+		// MUST NOT be gated on the Put succeeding.
+		if s.pub != nil && !IsHeartbeat(msg) && msg.SenderPK != s.cfg.MyPK && s.shouldMirrorLeaves() {
 			if err := s.pub.Put(ev.Path, ev.Value); err != nil {
 				s.log.WithError(err).WithField("path", ev.Path).WithField("sender_pk", msg.SenderPK.String()).
-					Debug("group: admin-republish put failed")
+					Debug("group: peer-mirror put failed")
 			}
 		}
 		if s.cfg.Record.Mode == ModePrivate {

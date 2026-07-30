@@ -57,6 +57,13 @@ type GroupInfo struct {
 	// ReadOnly suspends posting for every non-admin.
 	ReadOnly bool `json:"read_only,omitempty"`
 
+	// PeerBackfill reports whether any online member may serve this
+	// group's history and messages to a joiner (true) or only admins
+	// (false). Positive sense here even though the record stores the
+	// negative — an API consumer should not have to reason about a double
+	// negative to render a checkbox.
+	PeerBackfill bool `json:"peer_backfill"`
+
 	// KeyEpoch is the generation of the key this group currently encrypts
 	// with — 0 for a plaintext group or one still on its create-time key,
 	// incremented by every rotation. Surfaced so an operator can see that
@@ -222,6 +229,14 @@ type GroupCreateArgs struct {
 	Mode skychatgroup.Mode `json:"mode,omitempty"`
 
 	InitialMembers []cipher.PubKey `json:"initial_members,omitempty"`
+
+	// DisablePeerBackfill is the creator's choice on whether any online
+	// member may serve this group's history to a joiner, or only admins.
+	// The zero value keeps backfill ENABLED, which is the default an
+	// operator gets by not saying anything and matches the group record's
+	// own inverted field. An admin can change it later with
+	// GroupSetPeerBackfill.
+	DisablePeerBackfill bool `json:"disable_peer_backfill,omitempty"`
 }
 
 // kind resolves the group type from either field, defaulting to public.
@@ -269,7 +284,8 @@ func (v *Visor) GroupCreate(args GroupCreateArgs) (GroupInfo, string, error) {
 	if mgr == nil {
 		return GroupInfo{}, "", ErrGroupingDisabled
 	}
-	r, err := mgr.Create(args.Name, args.kind(), args.InitialMembers)
+	r, err := mgr.Create(args.Name, args.kind(), args.InitialMembers,
+		skychatgroup.WithPeerBackfill(!args.DisablePeerBackfill))
 	if err != nil {
 		return GroupInfo{}, "", err
 	}
@@ -569,6 +585,18 @@ func (v *Visor) GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error) {
 	})
 }
 
+// GroupSetPeerBackfill decides whether any online member may serve this
+// group's history and messages to a joiner, or only admins. Admin-only.
+//
+// Enabled (the default) is what keeps a group readable while its admins
+// are offline; disabled restores the admins-only topology and the group
+// goes dark whenever no admin is up.
+func (v *Visor) GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.SetPeerBackfill(id, enabled)
+	})
+}
+
 // GroupRotateKey mints a new key for an encrypted group and hands it to
 // every current member, each copy sealed to that member's own PK.
 // Admin-only.
@@ -764,6 +792,7 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 		Banned:        append([]cipher.PubKey(nil), r.Banned...),
 		Muted:         append([]cipher.PubKey(nil), r.Muted...),
 		ReadOnly:      r.ReadOnly,
+		PeerBackfill:  r.PeerBackfillEnabled(),
 		KeyEpoch:      r.KeyEpoch,
 		Role:          r.Role,
 		Status:        r.Status,

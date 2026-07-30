@@ -331,6 +331,32 @@ type Record struct {
 	// enforcement model as Muted.
 	ReadOnly bool `json:"read_only,omitempty"`
 
+	// PeerBackfillDisabled turns OFF serving the group's history and
+	// messages from any online member, restricting it to admins only.
+	//
+	// An admin decision, gossiped like the other group-wide toggles. With
+	// backfill enabled (the default) every member mirrors the verified
+	// leaves it sees onto its own feed and non-admins follow a couple of
+	// other non-admins, so a joiner can be caught up by whoever happens to
+	// be online. Disabled, only admins mirror and only admins are
+	// followed — the original topology, where no admin online means no
+	// history for anyone.
+	//
+	// Stored as the NEGATIVE so the zero value means enabled: existing
+	// records and newly created groups get the availability behavior
+	// without a migration step. Read it through PeerBackfillEnabled()
+	// rather than testing this field.
+	//
+	// What an admin is trading. Enabled costs storage and subscriptions on
+	// every member (each holds the room's history, not just admins) and
+	// widens who can be asked for it. It does NOT widen who may READ:
+	// every copy is the author's own signed leaf, still encrypted for
+	// private groups, and only members hold an allowlist seat. Disable it
+	// for a group where members should not carry each other's history at
+	// rest, and accept that the group then goes dark whenever the admins
+	// are offline.
+	PeerBackfillDisabled bool `json:"peer_backfill_disabled,omitempty"`
+
 	// ReadOnlySince is when the current read-only period began, and
 	// exists for the same forward-only reason as MutedSince. Without
 	// it, flipping a busy group to read-only would make every prior
@@ -491,6 +517,12 @@ func (r Record) PostPolicy() PostPolicy {
 	}
 	return PostAll
 }
+
+// PeerBackfillEnabled reports whether any online member may serve this
+// group's history and messages, as opposed to admins only. The single
+// predicate every call site should consult — see PeerBackfillDisabled for
+// why the stored field is inverted.
+func (r Record) PeerBackfillEnabled() bool { return !r.PeerBackfillDisabled }
 
 // IsBanned reports whether pk is barred from this group.
 func (r Record) IsBanned(pk cipher.PubKey) bool { return containsPK(r.Banned, pk) }

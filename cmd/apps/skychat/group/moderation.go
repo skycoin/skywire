@@ -94,17 +94,27 @@ const (
 
 	// ModOpReadWrite lifts read-only. Group-scope, PeerPK zero.
 	ModOpReadWrite ModOp = 6
+
+	// ModOpPeerBackfillOn allows any online member to serve the group's
+	// history and messages, not just admins. Group-scope, PeerPK zero.
+	// See Record.PeerBackfillDisabled for the trade an admin is making.
+	ModOpPeerBackfillOn ModOp = 7
+
+	// ModOpPeerBackfillOff restricts serving to admins only — the
+	// original topology. Group-scope, PeerPK zero.
+	ModOpPeerBackfillOff ModOp = 8
 )
 
 // isGroupScoped reports whether op targets the group as a whole rather
 // than a specific peer — the ops for which a zero PeerPK is legal.
 func (o ModOp) isGroupScoped() bool {
-	return o == ModOpReadOnly || o == ModOpReadWrite
+	return o == ModOpReadOnly || o == ModOpReadWrite ||
+		o == ModOpPeerBackfillOn || o == ModOpPeerBackfillOff
 }
 
 // isValid reports whether op is a defined moderation op.
 func (o ModOp) isValid() bool {
-	return o >= ModOpBan && o <= ModOpReadWrite
+	return o >= ModOpBan && o <= ModOpPeerBackfillOff
 }
 
 // ModerationMutation is one signed moderation instruction, issued by

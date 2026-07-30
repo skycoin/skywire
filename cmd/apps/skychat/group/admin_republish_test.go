@@ -157,18 +157,45 @@ func TestAdminRepublishPreservesCiphertext(t *testing.T) {
 	}
 }
 
-func TestNonAdminDoesNotRepublish(t *testing.T) {
-	s := nonAdminSessionFixture(t)
+// A plain member mirrors by default — that is what lets it serve the room
+// when no admin is online. It stops when the group's admins turn peer
+// backfill off, and when this visor opts out of the fanout locally.
+func TestNonAdminMirrorsUnlessBackfillIsOff(t *testing.T) {
 	senderPK, senderSK := cipher.GenerateKeyPair()
 	ts := time.Unix(1700000000, 0).UTC()
-	path, body := makeSignedLeaf(t, senderPK, senderSK, "hi", ts, 1)
 
-	s.onUpdate([]treestore.UpdateEvent{{Path: path, Value: body}})
+	t.Run("default_mirrors", func(t *testing.T) {
+		s := nonAdminSessionFixture(t)
+		path, body := makeSignedLeaf(t, senderPK, senderSK, "hi", ts, 1)
+		s.onUpdate([]treestore.UpdateEvent{{Path: path, Value: body}})
+		got, ok := s.pub.Get(path)
+		if !ok {
+			t.Fatal("a plain member did not mirror the leaf onto its own feed")
+		}
+		if string(got) != string(body) {
+			t.Error("the mirror is not byte-identical to the original leaf")
+		}
+	})
 
-	// Non-admin session must NOT have written the leaf to its own pub.
-	if _, ok := s.pub.Get(path); ok {
-		t.Errorf("non-admin republished a leaf it should have ignored")
-	}
+	t.Run("group_disabled", func(t *testing.T) {
+		s := nonAdminSessionFixture(t)
+		s.cfg.Record.PeerBackfillDisabled = true
+		path, body := makeSignedLeaf(t, senderPK, senderSK, "hi", ts, 2)
+		s.onUpdate([]treestore.UpdateEvent{{Path: path, Value: body}})
+		if _, ok := s.pub.Get(path); ok {
+			t.Error("a member mirrored despite the group disabling peer backfill")
+		}
+	})
+
+	t.Run("visor_opted_out", func(t *testing.T) {
+		s := nonAdminSessionFixture(t)
+		s.cfg.PeerFanout = -1
+		path, body := makeSignedLeaf(t, senderPK, senderSK, "hi", ts, 3)
+		s.onUpdate([]treestore.UpdateEvent{{Path: path, Value: body}})
+		if _, ok := s.pub.Get(path); ok {
+			t.Error("a member that follows nobody still mirrored")
+		}
+	})
 }
 
 func TestAdminSkipsOwnMessage(t *testing.T) {

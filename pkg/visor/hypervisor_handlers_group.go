@@ -299,6 +299,26 @@ func (hv *Hypervisor) postGroupReadOnly() http.HandlerFunc {
 	})
 }
 
+// postGroupPeerBackfill → POST /skychat/groups/peer-backfill {id, enabled}.
+func (hv *Hypervisor) postGroupPeerBackfill() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		info, err := ctx.API.GroupSetPeerBackfill(rb.ID, rb.Enabled)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, info)
+	})
+}
+
 // postGroupRotateKey → POST /skychat/groups/rotate-key {id} : mint a new
 // group key and seal it to each current member.
 func (hv *Hypervisor) postGroupRotateKey() http.HandlerFunc {

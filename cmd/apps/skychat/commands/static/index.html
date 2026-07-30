@@ -1565,6 +1565,16 @@
       color: var(--text-secondary);
       text-align: left;
     }
+    .cg-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: var(--text-primary);
+      text-align: left;
+      cursor: pointer;
+    }
 
     /* Group admin panel: members, join requests, moderation. Wider than
        the default modal because each row carries a PK plus actions. */
@@ -2047,6 +2057,18 @@
         <option value="private">Private — you approve each request</option>
       </select>
       <p id="cgKindHelp" class="cg-help"></p>
+      <!-- Who can catch a new member up. Checked by default: it is what
+           keeps the group readable when the admins happen to be offline. -->
+      <label class="cg-check">
+        <input type="checkbox" id="cgPeerBackfill" checked />
+        <span>Any member can share history with new members</span>
+      </label>
+      <p class="cg-help">
+        Off means only admins can — the group goes quiet for everyone else
+        whenever no admin is online. On costs each member some storage,
+        since they keep a copy of the room. Either way only members can
+        read it, and an admin can change this later.
+      </p>
       <div class="modal-actions">
         <button class="btn" onclick="app.createGroup()">Create</button>
         <button class="btn btn-secondary" onclick="app.closeModal('createGroupModal')">Cancel</button>
@@ -2075,6 +2097,20 @@
           <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
           <span>Read-only — only admins can send messages</span>
         </label>
+      </div>
+      <!-- Who can catch a new member up, and who can serve the room while
+           the admins are offline. -->
+      <div id="gaBackfillRow" class="ga-row hidden">
+        <label class="ga-toggle">
+          <input type="checkbox" id="gaPeerBackfill" onchange="app.toggleGroupPeerBackfill()" />
+          <span>Any member can share history with new members</span>
+        </label>
+        <div class="ga-key-note">
+          Off means only admins can, so nothing reaches a new member — and
+          no message passes between two non-admins — while every admin is
+          offline. On, each member keeps a copy of the room; only members
+          can read it either way.
+        </div>
       </div>
       <!-- Encryption row: private groups only. Shows which key generation
            the group is on (it advances on every eviction) and lets an
@@ -5415,6 +5451,11 @@
 
       openCreateGroup() {
         document.getElementById('cgName').value = '';
+        // Back to the default on every open: an unchecked box left over
+        // from a previous create would silently make the next group
+        // admins-only.
+        const backfill = document.getElementById('cgPeerBackfill');
+        if (backfill) backfill.checked = true;
         this.describeGroupKind();
         document.getElementById('createGroupModal').classList.add('visible');
       }
@@ -5441,11 +5482,16 @@
       createGroup() {
         const name = document.getElementById('cgName').value.trim();
         const kind = document.getElementById('cgMode').value;
+        const backfillEl = document.getElementById('cgPeerBackfill');
+        // Default on when the element is somehow missing, matching the
+        // server-side default rather than silently creating a group that
+        // goes dark whenever its admins are offline.
+        const peer_backfill = backfillEl ? !!backfillEl.checked : true;
         if (!name) { this.showToast('Enter a group name.', 'error'); return; }
         fetch('/group', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, kind, members: [] })
+          body: JSON.stringify({ name, kind, members: [], peer_backfill })
         })
           .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
           .then(j => {
@@ -5519,6 +5565,10 @@
         // only admins can rotate it — a public group's bodies are plaintext
         // on the feed by design, so offering a rotation there would imply a
         // protection it doesn't have.
+        const backfillRow = document.getElementById('gaBackfillRow');
+        backfillRow.classList.toggle('hidden', !isAdmin);
+        document.getElementById('gaPeerBackfill').checked = !!(info && info.peer_backfill);
+
         const encrypted = !!(info && (info.kind === 'private' || info.mode === 'private'));
         const keyRow = document.getElementById('gaKeyRow');
         keyRow.classList.toggle('hidden', !(encrypted && isAdmin));
@@ -5670,6 +5720,33 @@
             this.showToast(`Group re-keyed — now on key #${(info && info.key_epoch) || 0}.`);
           })
           .catch(e => { restore(); this.showToast(`Rotate failed: ${e}`, 'error'); });
+      }
+
+      // toggleGroupPeerBackfill flips who may serve the group's history.
+      // Reverts the checkbox on failure so the control never claims a
+      // setting the group didn't take.
+      toggleGroupPeerBackfill() {
+        const gid = this.group;
+        const on = document.getElementById('gaPeerBackfill').checked;
+        fetch(`/group/${gid}/peer-backfill`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: on })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            if (info && info.id) {
+              const i = this.groups.findIndex(g => g.id === info.id);
+              if (i >= 0) this.groups[i] = info;
+            }
+            this.showToast(on
+              ? 'Any member can now share history with new members.'
+              : 'Only admins can share history now.');
+          })
+          .catch(e => {
+            document.getElementById('gaPeerBackfill').checked = !on;
+            this.showToast(`Failed: ${e}`, 'error');
+          });
       }
 
       toggleGroupReadOnly() {
