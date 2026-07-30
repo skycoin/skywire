@@ -11,13 +11,35 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
+
+// vlogHook mirrors every Go subsystem log line (dmsg / transport / router / …)
+// into the in-tab log ring, so the Angular node Logs page (/runtime-logs →
+// vlogRing) shows the SAME firehose as the browse.js desktop log window (which
+// reads the browser console capture). Without it the two log surfaces diverged —
+// the desktop window had the full log, the Angular page only sparse vlog()
+// markers — one instance of the recurring wasm dual-surface divergence.
+type vlogHook struct{}
+
+func (vlogHook) Levels() []logrus.Level { return logrus.AllLevels }
+
+func (vlogHook) Fire(e *logrus.Entry) error {
+	line := e.Message
+	if s, err := e.String(); err == nil {
+		line = strings.TrimRight(s, "\n")
+	}
+	vlogRing.appendLevel(e.Level.String(), line)
+	return nil
+}
 
 // --- log ring buffer -------------------------------------------------------
 //
@@ -26,7 +48,10 @@ import (
 // each step line here; SelfRuntimeLogs serves the delta since a cursor. Bounded so a
 // long-lived tab doesn't grow unbounded.
 
-const logRingCap = 1000
+// Sized to match the browse.js desktop log window's console buffer (5000) so the
+// Angular /runtime-logs page shows a comparable window of the same firehose now
+// that vlogHook mirrors the Go subsystem logs in here too (not just vlog markers).
+const logRingCap = 5000
 
 type logRing struct {
 	mu      sync.Mutex
@@ -37,11 +62,16 @@ type logRing struct {
 
 var vlogRing = &logRing{}
 
-// append records one log line as a native-shaped JSON object string.
-func (r *logRing) append(msg string) {
+// append records one info-level log line (the vlog() step markers).
+func (r *logRing) append(msg string) { r.appendLevel("info", msg) }
+
+// appendLevel records one log line with an explicit level as a native-shaped
+// JSON object string. Used both by vlog() (info) and by vlogHook, which mirrors
+// the Go subsystem firehose in at its real level.
+func (r *logRing) appendLevel(level, msg string) {
 	entry, err := json.Marshal(map[string]interface{}{
 		"time":    time.Now().Format(time.RFC3339),
-		"level":   "info",
+		"level":   level,
 		"_module": "wasm-visor",
 		"msg":     msg,
 	})
