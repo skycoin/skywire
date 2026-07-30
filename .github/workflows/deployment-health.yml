@@ -1,0 +1,31 @@
+# Scheduled deployment-health probe: every dmsg server's advertised wss front
+# must actually serve (correct DNS, valid TLS cert, 426 to a plain HTTP/1.1
+# GET). Browser/wasm visors can ONLY bootstrap over wss, so a broken front
+# silently shrinks the browser-reachable deployment — exactly what happened
+# 2026-07-30 (2 stale DNS records + 1 failed cert issuance, invisible until
+# client-side carrier fixes surfaced them). This job turns that class of
+# breakage into a red scheduled run instead of a support mystery.
+#
+# Uses the clearnet discovery mirror (a CI runner has no dmsg visor); operators
+# run the same probe locally with plain `skywire cli mdisc check` (dmsg-native).
+name: Deployment health
+
+on:
+  schedule:
+    - cron: '17 */6 * * *' # every 6 hours
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  dmsg-wss-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+      - name: Probe dmsg-server wss fronts
+        run: go run ./cmd/skywire cli mdisc check --url https://dmsgd.skywire.dev
