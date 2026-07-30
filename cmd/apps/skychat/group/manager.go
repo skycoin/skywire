@@ -75,6 +75,9 @@ type Manager struct {
 	// heartbeatInterval is the owner-emit cadence forwarded to every
 	// new owner-role Session via openLocked. Zero disables.
 	heartbeatInterval time.Duration
+	// peerFanout is this visor's cap on non-admin peer subscriptions,
+	// passed through to every session. See ManagerConfig.PeerFanout.
+	peerFanout int
 
 	// reconnect loop state — see runReconnectLoop.
 	reconnectCtx    context.Context
@@ -122,6 +125,12 @@ type ManagerConfig struct {
 	// subscriber inside ~3×interval. Zero disables (default for
 	// callers that don't set it; for visor production set to 30s).
 	HeartbeatInterval time.Duration
+
+	// PeerFanout caps how many non-admin peers each non-admin session on
+	// this visor follows, on top of the admins. Zero takes the package
+	// default; negative opts this visor out of peer backfill entirely
+	// regardless of what a group's admins chose. See Config.PeerFanout.
+	PeerFanout int
 }
 
 // DefaultHeartbeatInterval is the recommended interval an owner
@@ -157,6 +166,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		portAlloc:          defaultPortAlloc,
 		sessions:           make(map[string]*Session),
 		heartbeatInterval:  cfg.HeartbeatInterval,
+		peerFanout:         cfg.PeerFanout,
 		reconnectState:     make(map[string]*reconnectState),
 		peerReconnectState: make(map[string]map[cipher.PubKey]*reconnectState),
 		pendingJoinLast:    make(map[string]time.Time),
@@ -196,10 +206,26 @@ func (m *Manager) persistRoster(id string) func(members, admins []cipher.PubKey)
 	}
 }
 
+// CreateOption adjusts a group at create time. Variadic so the three
+// existing call sites (visor RPC, wasm, CLI) keep compiling, and so a
+// future create-time choice is one more option rather than another
+// parameter on every caller.
+type CreateOption func(*Record)
+
+// WithPeerBackfill sets whether any online member may serve this group's
+// history to a joiner, or only admins. The creator's choice at create
+// time; an admin can change it later with Manager.SetPeerBackfill.
+//
+// Enabled is the default when the option is not passed — see
+// Record.PeerBackfillDisabled for what the setting costs and protects.
+func WithPeerBackfill(enabled bool) CreateOption {
+	return func(r *Record) { r.PeerBackfillDisabled = !enabled }
+}
+
 // Create constructs a new owner-side group, persists it, and opens
 // the publisher. Returns the persisted Record (with ID + Port + key
 // populated) so the caller can build the invite link.
-func (m *Manager) Create(name string, kind Kind, initialMembers []cipher.PubKey) (Record, error) {
+func (m *Manager) Create(name string, kind Kind, initialMembers []cipher.PubKey, opts ...CreateOption) (Record, error) {
 	if name == "" {
 		return Record{}, errors.New("group: Create: name required")
 	}
@@ -230,6 +256,12 @@ func (m *Manager) Create(name string, kind Kind, initialMembers []cipher.PubKey)
 			return Record{}, err
 		}
 		r.AESKey = key
+	}
+	// Creator's choices last, so an option can override a derived default.
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&r)
+		}
 	}
 	if err := m.store.Put(r); err != nil {
 		return Record{}, fmt.Errorf("group: Create: store: %w", err)
@@ -1530,6 +1562,7 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 		InMemoryDB:        m.inMemoryDB,
 		Logger:            m.log,
 		HeartbeatInterval: m.heartbeatInterval,
+		PeerFanout:        m.peerFanout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("group: open %s: %w", r.ID, err)
