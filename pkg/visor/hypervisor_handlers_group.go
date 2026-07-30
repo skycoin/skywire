@@ -299,6 +299,26 @@ func (hv *Hypervisor) postGroupReadOnly() http.HandlerFunc {
 	})
 }
 
+// postGroupJoinPoW → POST /skychat/groups/join-pow {id, bits}.
+func (hv *Hypervisor) postGroupJoinPoW() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID   string `json:"id"`
+			Bits uint8  `json:"bits"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		info, err := ctx.API.GroupSetJoinPoW(rb.ID, rb.Bits)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, info)
+	})
+}
+
 // postGroupPeerBackfill → POST /skychat/groups/peer-backfill {id, enabled}.
 func (hv *Hypervisor) postGroupPeerBackfill() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {

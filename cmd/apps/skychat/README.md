@@ -93,6 +93,22 @@ the canonical group feed; members subscribe and (post-#2539)
 publish their own per-member feed. See `cmd/apps/skychat/group/`
 for the implementation.
 
+Asking to join costs something. Public keys are free to mint, so every
+per-PK gate a group has — the ban list, the approval queue, the
+allowlist — can be outrun by whoever generates identities faster than an
+admin declines them. Three things bound that: a join request must carry a
+proof of work bound to the group and to the requester's own key (default
+~18 bits, tens of milliseconds once, minutes by the thousand); requests
+that would consume something are rate-limited per group; and the approval
+queue is capped, so a flood cannot bury the real requests. A throttled or
+unpaid request is never stored, so refusing one costs the admin a single
+hash. Set the price with `skywire cli skychat group join-cost <group-id>
+<bits>` (0 disables it, 26 is the cap) or from the group's admin panel;
+`group info` shows it as `join_cost_bits`. Raise it while a group is
+being flooded — links already handed out keep working, their holders are
+simply told the new price and pay it. This is not Sybil resistance: a
+determined attacker still gets in, it just stops being free.
+
 Any online member can catch a new member up. Members mirror the leaves
 they receive onto their own feed — verbatim, still signed by the original
 author, so a mirroring peer is never trusted, only convenient — and each

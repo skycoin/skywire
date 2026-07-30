@@ -219,7 +219,10 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	if info.PeerBackfill {
 		served = "any online member"
 	}
-	fmt.Fprintf(&buf, "history_served_by: %s\n", served)                                    //nolint:errcheck
+	fmt.Fprintf(&buf, "history_served_by: %s\n", served) //nolint:errcheck
+	// The price of one identity. Zero means anyone can ask for free, which
+	// is what a flood exploits.
+	fmt.Fprintf(&buf, "join_cost_bits:    %d\n", info.JoinPoWBits)                          //nolint:errcheck
 	fmt.Fprintf(&buf, "role:              %s\n", info.Role)                                 //nolint:errcheck
 	fmt.Fprintf(&buf, "status:            %s\n", info.Status)                               //nolint:errcheck
 	fmt.Fprintf(&buf, "created_at:        %s\n", info.CreatedAt.UTC().Format(time.RFC3339)) //nolint:errcheck

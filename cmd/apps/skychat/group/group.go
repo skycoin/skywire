@@ -331,6 +331,28 @@ type Record struct {
 	// enforcement model as Muted.
 	ReadOnly bool `json:"read_only,omitempty"`
 
+	// JoinPoWBits is how much proof of work this group demands with a join
+	// request, in leading zero bits. Zero means none.
+	//
+	// Local policy, not gossiped, and that is a deliberate limitation
+	// worth stating: each admin enforces its own price, and an open group
+	// is only as expensive as its cheapest admin. Converging it would not
+	// fix that — an admin running a patched binary can always answer for
+	// free — so the cost of the extra machinery buys nothing against the
+	// threat that matters, which is an outsider minting identities rather
+	// than an insider undercutting the group.
+	//
+	// Zero on records written before this existed. Read it through
+	// JoinPoWRequired(), which applies the default so an operator who has
+	// never heard of this field still gets the protection.
+	JoinPoWBits uint8 `json:"join_pow_bits,omitempty"`
+
+	// JoinPoWConfigured distinguishes "an admin chose zero" from "this
+	// record predates the setting". Without it, turning the price OFF
+	// would be indistinguishable from never having set it, and the
+	// default would silently turn itself back on.
+	JoinPoWConfigured bool `json:"join_pow_configured,omitempty"`
+
 	// PeerBackfillDisabled turns OFF serving the group's history and
 	// messages from any online member, restricting it to admins only.
 	//
@@ -516,6 +538,16 @@ func (r Record) PostPolicy() PostPolicy {
 		return PostAdminsOnly
 	}
 	return PostAll
+}
+
+// JoinPoWRequired returns the difficulty a join request must meet for
+// this group: the admin's setting when one exists, the package default
+// otherwise. The single predicate the admission gate consults.
+func (r Record) JoinPoWRequired() uint8 {
+	if !r.JoinPoWConfigured {
+		return DefaultJoinPoWBits
+	}
+	return clampJoinPoWBits(r.JoinPoWBits)
 }
 
 // PeerBackfillEnabled reports whether any online member may serve this

@@ -926,6 +926,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/skychat/groups/read-only", hv.postGroupReadOnly())
 				r.Post("/visors/{pk}/skychat/groups/rotate-key", hv.postGroupRotateKey())
 				r.Post("/visors/{pk}/skychat/groups/peer-backfill", hv.postGroupPeerBackfill())
+				r.Post("/visors/{pk}/skychat/groups/join-pow", hv.postGroupJoinPoW())
 				r.Get("/visors/{pk}/skychat/groups/invite", hv.getGroupInvite())
 				r.Post("/visors/{pk}/skychat/groups/leave", hv.postGroupLeave())
 				r.Post("/visors/{pk}/skychat/groups/delete", hv.postGroupDelete())

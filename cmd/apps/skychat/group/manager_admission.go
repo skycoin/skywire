@@ -177,6 +177,29 @@ func (m *Manager) rotateAfterEviction(id string, r Record, evicted cipher.PubKey
 		WithField("epoch", epoch).Info("group: rotated the group key after eviction")
 }
 
+// pendingJoinCount returns how many requests are awaiting a decision.
+func (m *Manager) pendingJoinCount(id string) (int, error) {
+	reqs, err := m.store.ListJoinRequests(id)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, q := range reqs {
+		if q.IsPending() {
+			n++
+		}
+	}
+	return n, nil
+}
+
+// maxPendingJoins is this visor's cap on undecided requests per group.
+func (m *Manager) maxPendingJoins() int {
+	if m.maxPending > 0 {
+		return m.maxPending
+	}
+	return DefaultMaxPendingJoins
+}
+
 // keyRecipients is who a rotation on record r must be sealed to: every
 // member except this visor (which mints the key) and except anyone
 // banned.
@@ -229,8 +252,41 @@ func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 		// Already in. A re-ask from a member is how a joiner recovers
 		// after being admitted but losing the response frame, so it must
 		// be idempotent and must re-deliver the key.
+		//
+		// Answered BEFORE the cost gates on purpose: a member re-syncing
+		// is not a new identity, and charging it would mean an honest
+		// member could be throttled out of recovering.
 		if containsPK(r.Members, req.PK) {
 			return m.admittedResponse(r)
+		}
+
+		// Cost gate. From here down the request is from a PK the group has
+		// never admitted — the only shape a Sybil flood can take — so it
+		// pays before it consumes anything that costs us.
+		if bits := r.JoinPoWRequired(); bits > 0 {
+			if ok, why := VerifyJoinPoW(id, req.PK, req.PoW, bits, time.Now().UTC()); !ok {
+				// A challenge, not a refusal: the requester solves and comes
+				// straight back. Nothing is stored, so an attacker that
+				// never solves costs us one hash per attempt.
+				return JoinResponseMsg{
+					Status:  JoinStatusChallenge,
+					PoWBits: bits,
+					Reason:  why,
+				}
+			}
+		}
+		// Rate gate. Bounds what a flood can consume per unit time even
+		// when every identity paid: proof of work prices an identity, the
+		// bucket prices the group's attention.
+		if ok, wait := m.joinBucket.allow(id, time.Now()); !ok {
+			m.log.WithField("id", id).WithField("peer", req.PK.Hex()).
+				WithField("retry_in", wait.Round(time.Second).String()).
+				Info("group: admission: join rate limit reached; refusing without queueing")
+			return JoinResponseMsg{
+				Status:        JoinStatusThrottled,
+				RetryAfterSec: int(wait.Round(time.Second).Seconds()),
+				Reason:        "this group is accepting new members slowly right now; try again later",
+			}
 		}
 
 		switch r.JoinPolicy() {
@@ -253,6 +309,24 @@ func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 
 		case JoinApproval:
 			existing, found, err := m.store.GetJoinRequest(id, req.PK)
+			if !found {
+				// Queue depth is an admin's attention, and attention is what
+				// a flood actually attacks: bury the real requests and the
+				// group is unusable even though every gate "worked". At the
+				// cap we refuse rather than evict, because a PK that has
+				// been waiting already paid for its slot and dropping it for
+				// the newest arrival is precisely the primitive an attacker
+				// wants.
+				if n, cErr := m.pendingJoinCount(id); cErr == nil && n >= m.maxPendingJoins() {
+					m.log.WithField("id", id).WithField("pending", n).
+						Info("group: admission: approval queue is full; refusing without queueing")
+					return JoinResponseMsg{
+						Status:        JoinStatusThrottled,
+						RetryAfterSec: int(DefaultJoinRefill.Seconds()),
+						Reason:        "this group's approval queue is full; try again later",
+					}
+				}
+			}
 			if err == nil && found {
 				switch existing.Status {
 				case JoinStatusDenied:
@@ -541,6 +615,38 @@ func (m *Manager) SetReadOnly(id string, readOnly bool) (Record, error) {
 	})
 }
 
+// SetJoinPoW sets how much proof of work this group asks of a join
+// request, in leading zero bits. Zero turns the price off entirely.
+//
+// Admin-only. Local policy rather than gossiped state — see
+// Record.JoinPoWBits for why converging it would buy nothing — so it
+// takes effect on requests THIS visor answers, and on invites this visor
+// mints. Raising it is the lever for a group under active flood; every
+// link already in circulation understates the price, and those joiners
+// get one extra round trip (a challenge) rather than a refusal.
+func (m *Manager) SetJoinPoW(id string, bits uint8) (Record, error) {
+	r, ok, err := m.store.Get(id)
+	if err != nil {
+		return Record{}, fmt.Errorf("group: SetJoinPoW: get: %w", err)
+	}
+	if !ok {
+		return Record{}, fmt.Errorf("group: SetJoinPoW: no record for %s", id)
+	}
+	if !r.IsAdmin(m.myPK) {
+		return Record{}, errors.New("group: SetJoinPoW: only admins can set the join cost")
+	}
+	if bits > MaxJoinPoWBits {
+		return Record{}, fmt.Errorf("group: SetJoinPoW: %d bits exceeds the %d-bit cap; a higher price would burn a joiner's CPU for minutes", bits, MaxJoinPoWBits)
+	}
+	r.JoinPoWBits = bits
+	r.JoinPoWConfigured = true
+	if err := m.store.Put(r); err != nil {
+		return Record{}, fmt.Errorf("group: SetJoinPoW: store: %w", err)
+	}
+	m.log.WithField("id", id).WithField("bits", bits).Info("group: join proof-of-work difficulty set")
+	return r, nil
+}
+
 // SetPeerBackfill decides whether any online member may serve this
 // group's history and messages to a joiner, or only admins.
 //
@@ -677,7 +783,7 @@ func (m *Manager) RequestJoin(inv Invite, note string) (Record, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), joinAttemptBudget(len(targets)))
 	defer cancel()
-	resp, err := SendJoinRequestAny(ctx, m.dmsgC, inv.ID, targets, inv.Port, m.myPK, note)
+	resp, err := SendJoinRequestAny(ctx, m.dmsgC, inv.ID, targets, inv.Port, m.myPK, note, inv.PoWBits)
 	if err != nil {
 		if errors.Is(err, ErrJoinNoResponse) {
 			m.log.WithField("id", inv.ID).
@@ -869,7 +975,7 @@ func (m *Manager) retryPendingJoins(ctx context.Context) {
 		if len(targets) == 0 {
 			continue
 		}
-		resp, err := SendJoinRequestAny(ctx, m.dmsgC, r.ID, targets, r.Port, m.myPK, "")
+		resp, err := SendJoinRequestAny(ctx, m.dmsgC, r.ID, targets, r.Port, m.myPK, "", r.JoinPoWBits)
 		if err != nil {
 			if terminal := errIsTerminalJoin(err); terminal {
 				_ = m.store.SetStatus(r.ID, StatusDenied) //nolint:errcheck
