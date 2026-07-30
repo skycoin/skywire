@@ -93,6 +93,17 @@ the canonical group feed; members subscribe and (post-#2539)
 publish their own per-member feed. See `cmd/apps/skychat/group/`
 for the implementation.
 
+Private groups re-key when a member is evicted. Kicking or banning
+someone generates a new AES key and publishes it on the group feed as
+one copy per remaining member, each sealed to that member's own public
+key (secp256k1 ECDH), so the key the evicted member still holds opens
+nothing published afterwards — a ban takes away reading, not just
+connecting. Older messages stay readable: every visor keeps the keys it
+has already held. `skywire cli skychat group rotate-key <group-id>`
+re-keys on demand (a device or key you think was exposed), and
+`group info` shows the current `key_epoch` so you can confirm every
+member converged.
+
 An invite link names the group's other admins alongside the founder,
 and a joiner asks all of them, so admission survives the founder
 being offline or its key being lost — promote a second admin

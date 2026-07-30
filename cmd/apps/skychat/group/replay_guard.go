@@ -67,6 +67,13 @@ const (
 	familyRoster = "r"
 	familyAdmin  = "a"
 	familyMod    = "m"
+	// familyKey covers key rotations. Group-scoped — a rotation addresses
+	// the whole group rather than one peer — so its watermark always
+	// lands on groupScopeKey and orders every rotation against every
+	// other. That is what a replayed rotation must not be able to escape:
+	// re-installing a superseded key would put the group back on a key an
+	// evicted member still holds.
+	familyKey = "k"
 )
 
 // groupScopeKey is the watermark target for mutations that address the

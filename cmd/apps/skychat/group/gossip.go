@@ -181,6 +181,7 @@ const (
 	domainRoster byte = 1
 	domainAdmin  byte = 2
 	domainMod    byte = 3
+	domainKey    byte = 4
 )
 
 // Sentinel errors. Tests assert these directly; callers can

@@ -212,6 +212,13 @@ func (s *Store) SetModeration(id string, st ModState) error {
 	return s.update(id, func(r *Record) { st.applyTo(r) })
 }
 
+// SetKeyState persists a rotated group key plus the ring of retired keys.
+// Read-modify-write inside the transaction, like every other setter here,
+// so it cannot clobber a concurrent roster or moderation change.
+func (s *Store) SetKeyState(id string, st KeyState) error {
+	return s.update(id, func(r *Record) { st.applyTo(r) })
+}
+
 // SetMutationSeen persists the replay guard's watermarks. Merges rather
 // than replaces: a snapshot taken by one reconciler path can be written
 // while another has already advanced a different target, and the guard

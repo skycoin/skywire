@@ -29,11 +29,11 @@ import (
 const rosterBroadcastDelay = 3 * time.Second
 
 // subscribedPrefixes is the set of CXO path prefixes every group subscriber
-// watches: msgs/ (chat) plus roster/, admin/ and mod/ (signed membership,
-// admin and moderation gossip). Centralized so all SetPrefixes call sites
-// stay in lockstep.
+// watches: msgs/ (chat) plus roster/, admin/, mod/ and keys/ (signed
+// membership, admin, moderation and key-rotation gossip). Centralized so
+// all SetPrefixes call sites stay in lockstep.
 func subscribedPrefixes() []string {
-	return []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix, ModerationPathPrefix}
+	return []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix, ModerationPathPrefix, KeyPathPrefix}
 }
 
 // isGossipPath reports whether a leaf path belongs to one of the signed
@@ -42,7 +42,8 @@ func subscribedPrefixes() []string {
 func isGossipPath(path string) bool {
 	return strings.HasPrefix(path, RosterPathPrefix+"/") ||
 		strings.HasPrefix(path, AdminPathPrefix+"/") ||
-		strings.HasPrefix(path, ModerationPathPrefix+"/")
+		strings.HasPrefix(path, ModerationPathPrefix+"/") ||
+		strings.HasPrefix(path, KeyPathPrefix+"/")
 }
 
 // SetRosterChangeHandler installs a callback invoked (with a snapshot of the

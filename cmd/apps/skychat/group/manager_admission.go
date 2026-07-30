@@ -81,6 +81,123 @@ func (m *Manager) persistModeration(id string) func(ModState) {
 	}
 }
 
+// persistKeys returns the key-change callback installed on every session.
+//
+// Unlike persistRoster and persistModeration this is NOT best-effort
+// decoration: roster and moderation state re-converge from the next
+// gossip round, but a rotation is a one-shot delivery. A visor that
+// applied a new key and failed to save it comes back after a restart
+// holding a retired key — unable to read anything published since, and
+// sealing its own messages into a key the group has moved off. Hence the
+// warning rather than a debug line.
+func (m *Manager) persistKeys(id string) func(KeyState) {
+	return func(st KeyState) {
+		if err := m.store.SetKeyState(id, st); err != nil {
+			m.log.WithError(err).WithField("id", id).WithField("epoch", st.Epoch).
+				Warn("group: persisting the rotated group key failed; a restart would leave this visor unable to read the group")
+		}
+	}
+}
+
+// RotateKey mints a new group key and distributes it to every current
+// member except this visor, each copy sealed to that member's PK.
+//
+// Admin-only and encrypted-groups-only. Exposed for the operator-driven
+// case — a key believed leaked, an operator tidying up after an
+// out-of-band departure — while eviction rotates automatically through
+// rotateAfterEviction.
+func (m *Manager) RotateKey(id string) (Record, error) {
+	r, ok, err := m.store.Get(id)
+	if err != nil {
+		return Record{}, fmt.Errorf("group: RotateKey: get: %w", err)
+	}
+	if !ok {
+		return Record{}, fmt.Errorf("group: RotateKey: no record for %s", id)
+	}
+	if !r.IsAdmin(m.myPK) {
+		return Record{}, errors.New("group: RotateKey: only admins can rotate the group key")
+	}
+	if !r.Encrypted() {
+		return Record{}, ErrKeyRotationNotEncrypted
+	}
+	m.mu.RLock()
+	sess, live := m.sessions[id]
+	m.mu.RUnlock()
+	if !live {
+		// Rotating without a publisher would mint a key we cannot
+		// distribute — every member would keep the old one and we would
+		// be the only visor unable to read the group.
+		return Record{}, fmt.Errorf("group: RotateKey: no live session for %s", id)
+	}
+	if _, err := sess.RotateKeyFor(m.keyRecipients(r)); err != nil {
+		return Record{}, err
+	}
+	// The session's key-change handler has already persisted the new
+	// state; re-read so the caller sees it.
+	updated, _, err := m.store.Get(id)
+	if err != nil {
+		return Record{}, fmt.Errorf("group: RotateKey: re-read: %w", err)
+	}
+	return updated, nil
+}
+
+// rotateAfterEviction rotates the group key after a peer loses its seat,
+// so the eviction takes away the ability to READ and not merely the
+// ability to connect.
+//
+// Called after the roster has already shrunk and been persisted — the new
+// key is sealed to the members that remain, and the evicted PK is not
+// among them. Best-effort by design: a rotation that cannot be published
+// (no live session, publisher mid-bootstrap) must not roll back the
+// eviction itself, which is already correct locally and already gossiped.
+// It is logged loudly because the gap it leaves is exactly the gap this
+// feature closes, and re-running the moderation command rotates again.
+//
+// No-op for plaintext groups, where there is no key and the CXO allowlist
+// is the whole of the access control.
+func (m *Manager) rotateAfterEviction(id string, r Record, evicted cipher.PubKey, why string) {
+	if !r.Encrypted() {
+		return
+	}
+	m.mu.RLock()
+	sess, live := m.sessions[id]
+	m.mu.RUnlock()
+	if !live {
+		m.log.WithField("id", id).WithField("peer", evicted.Hex()).WithField("op", why).
+			Warn("group: no live session to rotate the group key on; the evicted peer still holds the current key — re-run the command once the group is connected")
+		return
+	}
+	epoch, err := sess.RotateKeyFor(m.keyRecipients(r))
+	if err != nil {
+		m.log.WithError(err).WithField("id", id).WithField("peer", evicted.Hex()).WithField("op", why).
+			Warn("group: key rotation after eviction failed; the evicted peer still holds the current key")
+		return
+	}
+	m.log.WithField("id", id).WithField("peer", evicted.Hex()).WithField("op", why).
+		WithField("epoch", epoch).Info("group: rotated the group key after eviction")
+}
+
+// keyRecipients is who a rotation on record r must be sealed to: every
+// member except this visor (which mints the key) and except anyone
+// banned.
+//
+// Taken from the persisted record rather than from the live session,
+// because the session's copy of Members is the snapshot it opened with —
+// roster changes update the CXO allowlist and the store, not that field.
+// Deriving recipients session-side would seal the key to whoever was in
+// the room when the session started and silently skip everyone admitted
+// since.
+func (m *Manager) keyRecipients(r Record) []cipher.PubKey {
+	out := make([]cipher.PubKey, 0, len(r.Members))
+	for _, pk := range r.Members {
+		if pk == m.myPK || pk == (cipher.PubKey{}) || r.IsBanned(pk) {
+			continue
+		}
+		out = append(out, pk)
+	}
+	return out
+}
+
 // admissionHandler returns the JoinRequestHandler installed on sessions
 // for group id. Runs on the relay listener goroutine with the requester
 // already authenticated against the transport.
@@ -185,6 +302,7 @@ func (m *Manager) admittedResponse(r Record) JoinResponseMsg {
 	}
 	if r.Encrypted() {
 		resp.AESKey = append([]byte(nil), r.AESKey...)
+		resp.KeyEpoch = r.KeyEpoch
 	}
 	return resp
 }
@@ -301,6 +419,11 @@ func (m *Manager) RemoveMember(id string, pk cipher.PubKey) (Record, error) {
 		return Record{}, fmt.Errorf("group: RemoveMember: store: %w", err)
 	}
 	m.applyRosterToSession(id, r, pk)
+	// A kick is weaker than a ban — the peer may ask to rejoin — but it
+	// still ends their read access now, and the key they hold would
+	// otherwise keep working until they did. Rotate for the same reason a
+	// ban does; if they come back, admission hands them the new key.
+	m.rotateAfterEviction(id, r, pk, "kick")
 	return r, nil
 }
 
@@ -467,6 +590,14 @@ func (m *Manager) moderate(id string, pk cipher.PubKey, op ModOp, what string, m
 		m.log.WithError(err).WithField("id", id).WithField("op", int(op)).
 			Debug("group: moderation gossip emit failed; local state still consistent")
 	}
+	// Losing the seat is not the same as losing the ability to read: the
+	// banned PK has held the group key since the day it was admitted, and
+	// a copy of the feed keeps opening with it. Rotate so "banned" means
+	// cut off. Last, after the roster shrank and the ban gossiped, so the
+	// new key is sealed only to the members that remain.
+	if op == ModOpBan {
+		m.rotateAfterEviction(id, r, pk, "ban")
+	}
 	return r, nil
 }
 
@@ -574,6 +705,7 @@ func (m *Manager) recordFromInvite(inv Invite, resp JoinResponseMsg) Record {
 		Mode:         inv.Mode,
 		Kind:         kindForMode(inv.Mode),
 		AESKey:       key,
+		KeyEpoch:     resp.KeyEpoch,
 		Members:      members,
 		Muted:        resp.Muted,
 		ReadOnly:     resp.ReadOnly,
@@ -718,6 +850,7 @@ func (m *Manager) retryPendingJoins(ctx context.Context) {
 			}
 			if len(resp.AESKey) > 0 {
 				admitted.AESKey = resp.AESKey
+				admitted.KeyEpoch = resp.KeyEpoch
 			}
 			admitted.Muted = resp.Muted
 			admitted.ReadOnly = resp.ReadOnly

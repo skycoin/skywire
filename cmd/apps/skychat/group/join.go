@@ -167,6 +167,18 @@ type JoinResponseMsg struct {
 	// links already in circulation.
 	AESKey []byte `json:"aes_key,omitempty"`
 
+	// KeyEpoch numbers the key above. Carried so a joiner starts out
+	// agreeing with the group about which generation it holds — without
+	// it a joiner would sit at epoch 0 and treat the group's next
+	// rotation as if it were the first, which is harmless for reading but
+	// makes the epoch meaningless as a diagnostic.
+	//
+	// Only the CURRENT key is handed over. A new member cannot read
+	// history published under retired keys, which is the same forward-only
+	// rule rotation itself follows: admission grants access from now on,
+	// not retroactively.
+	KeyEpoch uint64 `json:"key_epoch,omitempty"`
+
 	// Members / Admins seed the joiner's roster. Sent on admission
 	// only — a pending or refused requester learns nothing about who
 	// is in the group.

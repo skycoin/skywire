@@ -288,6 +288,7 @@ type API interface {
 	GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error)
 	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupRotateKey(id string) (GroupInfo, error)
 	GroupSend(args GroupSendArgs) error
 	GroupUnsend(args GroupUnsendArgs) error
 	GroupPoll(since time.Time) ([]GroupMessage, error)
