@@ -19,7 +19,7 @@ import (
 
 func TestJoinRequestRoundTrip(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	body, err := encodeJoinRequest(NewJoinRequest("gid-1", pk, "let me in"))
+	body, err := encodeJoinRequest(NewJoinRequest("gid-1", pk, "let me in", 0))
 	if err != nil {
 		t.Fatalf("encodeJoinRequest: %v", err)
 	}
@@ -39,7 +39,7 @@ func TestJoinRequestRoundTrip(t *testing.T) {
 // compatibility story, so it is worth pinning.
 func TestJoinRequestHasNoSenderPKField(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
-	body, err := encodeJoinRequest(NewJoinRequest("gid-1", pk, ""))
+	body, err := encodeJoinRequest(NewJoinRequest("gid-1", pk, "", 0))
 	if err != nil {
 		t.Fatalf("encodeJoinRequest: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestJoinRequestNoteBounded(t *testing.T) {
 	for i := range long {
 		long[i] = 'x'
 	}
-	req := NewJoinRequest("gid", pk, string(long))
+	req := NewJoinRequest("gid", pk, string(long), 0)
 	if len(req.Note) != maxJoinNoteLen {
 		t.Errorf("note len = %d, want it clamped to %d", len(req.Note), maxJoinNoteLen)
 	}

@@ -604,6 +604,25 @@ func groupItemHandler() http.HandlerFunc {
 			}
 			writeJSON(w, info)
 
+		case action == "join-pow" && r.Method == http.MethodPost:
+			var body struct {
+				Bits uint8 `json:"bits"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupSetJoinPoW", func(c visor.API) error {
+				i, e := c.GroupSetJoinPoW(id, body.Bits)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
 		case action == "peer-backfill" && r.Method == http.MethodPost:
 			var body struct {
 				Enabled bool `json:"enabled"`

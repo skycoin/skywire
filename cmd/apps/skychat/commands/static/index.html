@@ -1636,6 +1636,15 @@
     .ga-btn.danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
     .ga-btn.primary { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
     .ga-empty { padding: 8px 4px; font-size: 12px; color: var(--text-secondary); }
+    .ga-select {
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
     .ga-key-line {
       display: flex;
       align-items: center;
@@ -2097,6 +2106,27 @@
           <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
           <span>Read-only — only admins can send messages</span>
         </label>
+      </div>
+      <!-- Flood protection. Public keys are free, so this is the only
+           thing that makes an identity cost anything. -->
+      <div id="gaJoinCostRow" class="ga-row hidden">
+        <div class="ga-key-line">
+          <span>Cost to ask to join</span>
+          <select id="gaJoinCost" class="ga-select" onchange="app.setGroupJoinCost()">
+            <option value="0">Free</option>
+            <option value="16">Low</option>
+            <option value="18">Normal</option>
+            <option value="22">High</option>
+            <option value="26">Maximum</option>
+          </select>
+        </div>
+        <div class="ga-key-note">
+          Anyone can make unlimited public keys, so a flood of join requests
+          costs an attacker nothing and costs you your attention. This makes
+          each request spend CPU first — unnoticeable once, expensive by the
+          thousand. Raise it while you are being flooded. Requests are also
+          rate-limited and the approval queue is capped regardless.
+        </div>
       </div>
       <!-- Who can catch a new member up, and who can serve the room while
            the admins are offline. -->
@@ -5565,6 +5595,17 @@
         // only admins can rotate it — a public group's bodies are plaintext
         // on the feed by design, so offering a rotation there would imply a
         // protection it doesn't have.
+        const costRow = document.getElementById('gaJoinCostRow');
+        costRow.classList.toggle('hidden', !isAdmin);
+        if (isAdmin) {
+          // Snap to the nearest preset so a value set from the CLI still
+          // shows something truthful rather than an empty select.
+          const bits = (info && typeof info.join_pow_bits === 'number') ? info.join_pow_bits : 18;
+          const presets = [0, 16, 18, 22, 26];
+          const nearest = presets.reduce((a, b) => Math.abs(b - bits) < Math.abs(a - bits) ? b : a, 0);
+          document.getElementById('gaJoinCost').value = String(nearest);
+        }
+
         const backfillRow = document.getElementById('gaBackfillRow');
         backfillRow.classList.toggle('hidden', !isAdmin);
         document.getElementById('gaPeerBackfill').checked = !!(info && info.peer_backfill);
@@ -5720,6 +5761,31 @@
             this.showToast(`Group re-keyed — now on key #${(info && info.key_epoch) || 0}.`);
           })
           .catch(e => { restore(); this.showToast(`Rotate failed: ${e}`, 'error'); });
+      }
+
+      // setGroupJoinCost changes the proof-of-work price of a join request.
+      // Reverts the select on failure so the control never shows a setting
+      // the group didn't take.
+      setGroupJoinCost() {
+        const gid = this.group;
+        const sel = document.getElementById('gaJoinCost');
+        const bits = parseInt(sel.value, 10) || 0;
+        fetch(`/group/${gid}/join-pow`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bits })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            if (info && info.id) {
+              const i = this.groups.findIndex(g => g.id === info.id);
+              if (i >= 0) this.groups[i] = info;
+            }
+            this.showToast(bits === 0
+              ? 'Joining is free again — anyone can ask at no cost.'
+              : 'Join cost updated. New requests must do the work first.');
+          })
+          .catch(e => { this.refreshGroupAdmin(); this.showToast(`Failed: ${e}`, 'error'); });
       }
 
       // toggleGroupPeerBackfill flips who may serve the group's history.

@@ -1341,6 +1341,11 @@ func (mc *mockRPCClient) GroupPromoteAdmin(_ string, _ cipher.PubKey) (GroupInfo
 	return GroupInfo{}, nil
 }
 
+// GroupSetJoinPoW implements API.
+func (mc *mockRPCClient) GroupSetJoinPoW(_ string, _ uint8) (GroupInfo, error) {
+	return GroupInfo{}, ErrNotImplemented
+}
+
 // GroupSetPeerBackfill implements API.
 func (mc *mockRPCClient) GroupSetPeerBackfill(_ string, _ bool) (GroupInfo, error) {
 	return GroupInfo{}, ErrNotImplemented

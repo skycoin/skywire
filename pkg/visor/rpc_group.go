@@ -279,6 +279,26 @@ func (r *RPC) GroupSetPeerBackfill(req *GroupPeerBackfillRequest, out *GroupInfo
 	return nil
 }
 
+// GroupJoinPoWRequest sets the join proof-of-work difficulty.
+type GroupJoinPoWRequest struct {
+	ID   string `json:"id"`
+	Bits uint8  `json:"bits"`
+}
+
+// GroupSetJoinPoW sets how much proof of work a join request must carry.
+func (r *RPC) GroupSetJoinPoW(req *GroupJoinPoWRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupSetJoinPoW", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupSetJoinPoW(req.ID, req.Bits)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
 // GroupSetReadOnly suspends or resumes posting for non-admins.
 func (r *RPC) GroupSetReadOnly(req *GroupReadOnlyRequest, out *GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSetReadOnly", req)(out, &err)
