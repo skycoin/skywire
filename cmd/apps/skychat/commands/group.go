@@ -736,6 +736,21 @@ var groupPeerActions = map[string]func(string, cipher.PubKey) (visor.GroupInfo, 
 			return c.GroupUnmuteMember(id, pk)
 		})
 	},
+	// Promote / demote were reachable over the CLI and the visor RPC but
+	// had no route here, so a browser-only operator could never create a
+	// second admin. That made the founder a permanent single point of
+	// failure for admission — invites name the group's admins, and there
+	// was never more than one to name.
+	"members/promote": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupPromoteAdmin", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupPromoteAdmin(id, pk)
+		})
+	},
+	"members/demote": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupDemoteAdmin", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupDemoteAdmin(id, pk)
+		})
+	},
 }
 
 // groupPeerRPC adapts an info-returning visor call to pairRPCCall's
