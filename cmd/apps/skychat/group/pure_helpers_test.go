@@ -191,7 +191,7 @@ func TestUniqueWithSelf(t *testing.T) {
 }
 
 func TestStoreMarkMessage(t *testing.T) {
-	s, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	s, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"), testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

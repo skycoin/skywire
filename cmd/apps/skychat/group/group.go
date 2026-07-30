@@ -343,7 +343,18 @@ type Record struct {
 	// outgoing messages. Set iff Mode == ModePrivate. Reaches a joiner in
 	// the admission response (it no longer travels in the invite link)
 	// and is replaced on every rotation.
+	//
+	// In memory only. The store swaps it for AESKeySealed on the way to
+	// disk, so a persisted record never carries it — see store_seal.go.
+	// It is still tagged (rather than json:"-") because records written
+	// before sealing existed carry it, and those have to keep opening.
 	AESKey []byte `json:"aes_key,omitempty"`
+
+	// AESKeySealed is AESKey encrypted at rest under a key derived from
+	// this visor's secret key. Present on disk, absent in memory: the
+	// store fills one and clears the other in each direction. Never
+	// populate it by hand.
+	AESKeySealed []byte `json:"aes_key_sealed,omitempty"`
 
 	// KeyEpoch numbers the generation of AESKey. Zero is the key the
 	// group was created with — and the value every record written before

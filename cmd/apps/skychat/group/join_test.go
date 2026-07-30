@@ -250,7 +250,7 @@ func TestSortJoinRequestsNewestFirst(t *testing.T) {
 }
 
 func TestStoreJoinRequestLifecycle(t *testing.T) {
-	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"), testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestStoreJoinRequestLifecycle(t *testing.T) {
 }
 
 func TestStoreModerationRoundTrip(t *testing.T) {
-	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"), testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -357,7 +357,7 @@ func TestStoreModerationRoundTrip(t *testing.T) {
 // A record persisted before Kind existed must come back normalized, so
 // no caller ever has to handle the zero value.
 func TestStoreNormalizesKindOnRead(t *testing.T) {
-	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"), testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
