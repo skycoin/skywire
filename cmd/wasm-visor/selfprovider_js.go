@@ -8,7 +8,9 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -116,6 +118,45 @@ func (s visorSelf) SelfDmsgSessions() []byte {
 	if err != nil {
 		return nil
 	}
+	return b
+}
+
+// SelfDmsgConnectAll serves POST /visors/<pk>/dmsg/connect-all. A browser edge
+// boots with a session to only a couple of dmsg servers (sessions_count), so it
+// can't reach peers delegated to OTHER servers → "dmsg error 202 - cannot
+// connect to delegated server" (the skychat-reply + resolving-proxy failures).
+// This opens a session to every wss-reachable server the deployment config
+// advertises — concurrently, mirroring the boot seed loop (main.go) — so the
+// edge can rendezvous with any peer. Result mirrors native Visor.DmsgConnectAll.
+func (s visorSelf) SelfDmsgConnectAll() []byte {
+	res := map[string]interface{}{"total": 0, "already_connected": 0, "newly_connected": 0}
+	if dmsgC == nil {
+		b, _ := json.Marshal(res)
+		return b
+	}
+	// ConnectToAllServers enumerates every server in dmsg DISCOVERY (not just the
+	// 2 embedded seed servers) and EnsureSessions each over the browser's wss
+	// carrier — the same routine the native visor uses. Bounded so a slow/dead
+	// server can't hang the /api call forever.
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	r, err := dmsgC.ConnectToAllServers(ctx)
+	res["total"] = r.Total
+	res["already_connected"] = r.AlreadyConnected
+	res["newly_connected"] = r.NewlyConnected
+	if len(r.Failed) > 0 {
+		failed := make(map[string]string, len(r.Failed))
+		for pk, e := range r.Failed {
+			failed[pk.String()] = e
+		}
+		res["failed"] = failed
+	}
+	if err != nil {
+		res["error"] = err.Error()
+	}
+	vlog(fmt.Sprintf("dmsg connect-all: total=%d already=%d newly=%d failed=%d err=%v",
+		r.Total, r.AlreadyConnected, r.NewlyConnected, len(r.Failed), err))
+	b, _ := json.Marshal(res)
 	return b
 }
 
