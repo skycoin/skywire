@@ -1341,6 +1341,11 @@ func (mc *mockRPCClient) GroupPromoteAdmin(_ string, _ cipher.PubKey) (GroupInfo
 	return GroupInfo{}, nil
 }
 
+// GroupRotateKey implements API.
+func (mc *mockRPCClient) GroupRotateKey(_ string) (GroupInfo, error) {
+	return GroupInfo{}, ErrNotImplemented
+}
+
 // GroupDemoteAdmin implements API.
 func (mc *mockRPCClient) GroupDemoteAdmin(_ string, _ cipher.PubKey) (GroupInfo, error) {
 	return GroupInfo{}, nil

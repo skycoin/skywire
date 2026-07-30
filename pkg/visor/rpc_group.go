@@ -243,6 +243,21 @@ func (r *RPC) GroupUnmuteMember(req *GroupPeerRequest, out *GroupInfo) (err erro
 	return nil
 }
 
+// GroupRotateKey mints a new key for an encrypted group and distributes
+// it to every current member, sealed per member.
+func (r *RPC) GroupRotateKey(id *string, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupRotateKey", id)(out, &err)
+	if id == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupRotateKey(*id)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
 // GroupSetReadOnly suspends or resumes posting for non-admins.
 func (r *RPC) GroupSetReadOnly(req *GroupReadOnlyRequest, out *GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSetReadOnly", req)(out, &err)

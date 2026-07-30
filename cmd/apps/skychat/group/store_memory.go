@@ -155,6 +155,12 @@ func (s *Store) SetModeration(id string, st ModState) error {
 	return s.update(id, func(r *Record) { st.applyTo(r) })
 }
 
+// SetKeyState persists a rotated group key plus the ring of retired keys.
+// Mirrors the bbolt store.
+func (s *Store) SetKeyState(id string, st KeyState) error {
+	return s.update(id, func(r *Record) { st.applyTo(r) })
+}
+
 // SetMutationSeen persists the replay guard's watermarks, merging so a
 // watermark is never moved backwards. Mirrors the bbolt store.
 func (s *Store) SetMutationSeen(id string, seen map[string]time.Time) error {

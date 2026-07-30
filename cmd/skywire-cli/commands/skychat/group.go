@@ -75,7 +75,7 @@ func init() {
 
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
-		groupJoinCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd,
+		groupJoinCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd, groupRotateKeyCmd,
 		groupSendCmd, groupUnsendCmd, groupListenCmd, groupHistoryCmd,
 		groupLeaveCmd, groupDeleteCmd,
 	)
@@ -197,11 +197,17 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	if !info.LastMessageAt.IsZero() {
 		last = info.LastMessageAt.UTC().Format(time.RFC3339)
 	}
-	fmt.Fprintf(&buf, "id:                %s\n", info.ID)                                   //nolint:errcheck
-	fmt.Fprintf(&buf, "name:              %s\n", info.Name)                                 //nolint:errcheck
-	fmt.Fprintf(&buf, "owner:             %s\n", info.OwnerPK)                              //nolint:errcheck
-	fmt.Fprintf(&buf, "port:              %d\n", info.Port)                                 //nolint:errcheck
-	fmt.Fprintf(&buf, "mode:              %s\n", info.Mode)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "id:                %s\n", info.ID)      //nolint:errcheck
+	fmt.Fprintf(&buf, "name:              %s\n", info.Name)    //nolint:errcheck
+	fmt.Fprintf(&buf, "owner:             %s\n", info.OwnerPK) //nolint:errcheck
+	fmt.Fprintf(&buf, "port:              %d\n", info.Port)    //nolint:errcheck
+	fmt.Fprintf(&buf, "mode:              %s\n", info.Mode)    //nolint:errcheck
+	// Key generation, encrypted groups only. Advances on every rotation
+	// (each eviction, plus any manual `group rotate-key`), so comparing it
+	// across members is how an operator confirms a re-key converged.
+	if info.Mode == skychatgroup.ModePrivate {
+		fmt.Fprintf(&buf, "key_epoch:         %d\n", info.KeyEpoch) //nolint:errcheck
+	}
 	fmt.Fprintf(&buf, "role:              %s\n", info.Role)                                 //nolint:errcheck
 	fmt.Fprintf(&buf, "status:            %s\n", info.Status)                               //nolint:errcheck
 	fmt.Fprintf(&buf, "created_at:        %s\n", info.CreatedAt.UTC().Format(time.RFC3339)) //nolint:errcheck
@@ -354,6 +360,50 @@ PR).`,
 		human := fmt.Sprintf("group %s now has %d admin(s)\n", args[0], len(info.Admins))
 		internal.PrintOutput(cmd.Flags(), info, human)
 	},
+}
+
+var groupRotateKeyCmd = &cobra.Command{
+	Use:   "rotate-key <group-id>",
+	Short: "Admin: mint a new group key and seal it to each current member",
+	Long: `Rotate the encryption key of a private group.
+
+A fresh key is generated and distributed on the group feed as one copy
+per member, each sealed to that member's own public key (secp256k1 ECDH).
+Members that are offline pick it up when they reconnect. From the moment
+it lands, new messages are encrypted with the new key; every message
+published before it stays readable, because each visor keeps the keys it
+has already held.
+
+Eviction rotates automatically — kicking or banning a member re-keys the
+group so that losing the seat also means losing the ability to read what
+comes next. Run this by hand when a member's device or key may have been
+exposed without them being evicted, or after someone left out of band.
+
+Admin-only, and only for private groups: a public group's message bodies
+are plaintext on the feed by design, so there is no key to rotate.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupRotateKey(args[0])
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		human := fmt.Sprintf("group %s re-keyed\n  key epoch: %d\n  sealed for: %d member(s)\n",
+			args[0], info.KeyEpoch, maxInt(len(info.Members)-1, 0))
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+// maxInt keeps the "sealed for" count honest: the rotating visor is in
+// Members but needs no copy of its own key.
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 var groupDemoteCmd = &cobra.Command{

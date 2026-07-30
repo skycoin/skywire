@@ -299,6 +299,26 @@ func (hv *Hypervisor) postGroupReadOnly() http.HandlerFunc {
 	})
 }
 
+// postGroupRotateKey → POST /skychat/groups/rotate-key {id} : mint a new
+// group key and seal it to each current member.
+func (hv *Hypervisor) postGroupRotateKey() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID string `json:"id"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		info, err := ctx.API.GroupRotateKey(rb.ID)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, info)
+	})
+}
+
 // getGroupInvite → GET /skychat/groups/invite?group_id= : mint a fresh invite.
 func (hv *Hypervisor) getGroupInvite() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {

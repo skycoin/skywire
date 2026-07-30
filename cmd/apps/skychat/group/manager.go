@@ -1541,6 +1541,9 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	// reflect convergence and it survives restart (#3426).
 	sess.SetRosterChangeHandler(m.persistRoster(r.ID))
 	sess.SetModChangeHandler(m.persistModeration(r.ID))
+	// Key rotations converge through the same gossip channel, and the
+	// converged key MUST survive a restart — see persistKeys.
+	sess.SetKeyChangeHandler(m.persistKeys(r.ID))
 	// Persist the replay guard's watermarks. Unlike the roster and
 	// moderation handlers this is NOT best-effort decoration: if the
 	// watermarks don't survive a restart, every target's replay window

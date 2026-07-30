@@ -1604,6 +1604,13 @@ func (rc *rpcClient) GroupRemoveMember(id string, pk cipher.PubKey) (GroupInfo, 
 	return resp, err
 }
 
+// GroupRotateKey implements API.
+func (rc *rpcClient) GroupRotateKey(id string) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupRotateKey", &id, &resp)
+	return resp, err
+}
+
 // GroupBanMember implements API.
 func (rc *rpcClient) GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error) {
 	var resp GroupInfo
