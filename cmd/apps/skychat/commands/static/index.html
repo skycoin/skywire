@@ -1626,6 +1626,15 @@
     .ga-btn.danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
     .ga-btn.primary { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
     .ga-empty { padding: 8px 4px; font-size: 12px; color: var(--text-secondary); }
+    .ga-key-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    .ga-key-note { font-size: 11px; color: var(--text-secondary); margin-top: 4px; line-height: 1.45; }
     .ga-hint {
       margin-top: 10px;
       padding: 8px 10px;
@@ -2066,6 +2075,21 @@
           <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
           <span>Read-only — only admins can send messages</span>
         </label>
+      </div>
+      <!-- Encryption row: private groups only. Shows which key generation
+           the group is on (it advances on every eviction) and lets an
+           admin re-key on demand. -->
+      <div id="gaKeyRow" class="ga-row hidden">
+        <div class="ga-key-line">
+          <span id="gaKeyEpoch">Encryption: key #0</span>
+          <button id="gaRotateBtn" class="ga-btn" onclick="app.rotateGroupKey()">Rotate key</button>
+        </div>
+        <div class="ga-key-note">
+          Evicting a member rotates this automatically. Rotate by hand if a
+          member's device or key may have been exposed — the new key is
+          sealed to each remaining member, so anyone outside the group stops
+          being able to read new messages. Older messages stay readable.
+        </div>
       </div>
       <div id="gaRequestsWrap" class="hidden">
         <h4 class="ga-heading">Join requests <span id="gaRequestsCount" class="ga-badge"></span></h4>
@@ -5489,6 +5513,18 @@
         roRow.classList.toggle('hidden', !isAdmin);
         document.getElementById('gaReadOnly').checked = !!(info && info.read_only);
 
+        // Encryption / key generation. Only private groups have a key, and
+        // only admins can rotate it — a public group's bodies are plaintext
+        // on the feed by design, so offering a rotation there would imply a
+        // protection it doesn't have.
+        const encrypted = !!(info && (info.kind === 'private' || info.mode === 'private'));
+        const keyRow = document.getElementById('gaKeyRow');
+        keyRow.classList.toggle('hidden', !(encrypted && isAdmin));
+        if (encrypted && isAdmin) {
+          document.getElementById('gaKeyEpoch').textContent =
+            `Encryption: key #${(info && info.key_epoch) || 0}`;
+        }
+
         this._renderMemberList(info, isAdmin);
 
         const banWrap = document.getElementById('gaBannedWrap');
@@ -5608,6 +5644,30 @@
             this.showToast('Done.');
           })
           .catch(e => this.showToast(`Failed: ${e}`, 'error'));
+      }
+
+      // rotateGroupKey re-keys an encrypted group on demand. The button is
+      // disabled for the round trip: rotation seals a copy of the new key
+      // per member, and a double-click would mint two generations back to
+      // back — harmless (both converge) but confusing to read afterwards.
+      rotateGroupKey() {
+        const gid = this.group;
+        if (!gid) return;
+        const btn = document.getElementById('gaRotateBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Rotating…'; }
+        const restore = () => { if (btn) { btn.disabled = false; btn.textContent = 'Rotate key'; } };
+        fetch(`/group/${gid}/rotate-key`, { method: 'POST' })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            if (info && info.id) {
+              const i = this.groups.findIndex(g => g.id === info.id);
+              if (i >= 0) this.groups[i] = info;
+            }
+            restore();
+            this.refreshGroupAdmin();
+            this.showToast(`Group re-keyed — now on key #${(info && info.key_epoch) || 0}.`);
+          })
+          .catch(e => { restore(); this.showToast(`Rotate failed: ${e}`, 'error'); });
       }
 
       toggleGroupReadOnly() {

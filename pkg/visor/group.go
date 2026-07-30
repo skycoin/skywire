@@ -57,6 +57,13 @@ type GroupInfo struct {
 	// ReadOnly suspends posting for every non-admin.
 	ReadOnly bool `json:"read_only,omitempty"`
 
+	// KeyEpoch is the generation of the key this group currently encrypts
+	// with — 0 for a plaintext group or one still on its create-time key,
+	// incremented by every rotation. Surfaced so an operator can see that
+	// an eviction actually re-keyed the group, and that every member
+	// converged onto the same epoch.
+	KeyEpoch uint64 `json:"key_epoch,omitempty"`
+
 	// CanPost / CannotPostReason answer "may THIS visor post into this
 	// group right now", pre-computed so the UI can disable the composer
 	// and explain why without duplicating the precedence rules
@@ -562,6 +569,19 @@ func (v *Visor) GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error) {
 	})
 }
 
+// GroupRotateKey mints a new key for an encrypted group and hands it to
+// every current member, each copy sealed to that member's own PK.
+// Admin-only.
+//
+// Eviction rotates on its own; this is the operator-driven case — a key
+// believed leaked, or tidying up after someone left out of band. Errors
+// for a plaintext group, which has no key to rotate.
+func (v *Visor) GroupRotateKey(id string) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.RotateKey(id)
+	})
+}
+
 // groupRosterOp is the shared body of every admin command that mutates
 // a group and returns its updated info.
 func (v *Visor) groupRosterOp(_ string, _ cipher.PubKey, op func(*skychatgroup.Manager) (skychatgroup.Record, error)) (GroupInfo, error) {
@@ -744,6 +764,7 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 		Banned:        append([]cipher.PubKey(nil), r.Banned...),
 		Muted:         append([]cipher.PubKey(nil), r.Muted...),
 		ReadOnly:      r.ReadOnly,
+		KeyEpoch:      r.KeyEpoch,
 		Role:          r.Role,
 		Status:        r.Status,
 		CreatedAt:     r.CreatedAt,

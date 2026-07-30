@@ -102,7 +102,10 @@ func TestContainsRemovePK(t *testing.T) {
 
 func TestSubscribedPrefixes(t *testing.T) {
 	got := subscribedPrefixes()
-	want := []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix, ModerationPathPrefix}
+	// keys/ is load-bearing, not decoration: a subscriber that doesn't
+	// watch it never sees a rotation, so it keeps encrypting under a
+	// retired key and stops being able to read the group.
+	want := []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix, ModerationPathPrefix, KeyPathPrefix}
 	if len(got) != len(want) {
 		t.Fatalf("subscribedPrefixes = %v, want %v", got, want)
 	}
@@ -110,6 +113,16 @@ func TestSubscribedPrefixes(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("prefix %d = %q, want %q", i, got[i], want[i])
 		}
+	}
+	// Every control subtree must be recognized as gossip, or the inbox
+	// loop would try to render a rotation envelope as a chat message.
+	for _, p := range []string{RosterPathPrefix, AdminPathPrefix, ModerationPathPrefix, KeyPathPrefix} {
+		if !isGossipPath(p + "/00001") {
+			t.Errorf("isGossipPath(%q/…) = false", p)
+		}
+	}
+	if isGossipPath(MessagePathPrefix + "/x/y/z") {
+		t.Error("a message path must not be classified as gossip")
 	}
 }
 

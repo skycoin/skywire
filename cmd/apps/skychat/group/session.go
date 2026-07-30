@@ -350,6 +350,11 @@ type Session struct {
 	// state after applyModLeaf mutates it, so the manager can persist it.
 	// Parallel to onRosterChange. See SetModChangeHandler.
 	onModChange func(ModState)
+	// onKeyChange is invoked with the converged key state after a
+	// rotation is applied or issued. Parallel to onModChange, but not
+	// best-effort decoration: losing a rotation across a restart leaves
+	// this visor unable to read the group. See SetKeyChangeHandler.
+	onKeyChange func(KeyState)
 	// onJoinRequest decides an inbound join request. Installed by the
 	// Manager, which owns both the admission policy and the store the
 	// pending queue lives in; the session only authenticates the
@@ -483,6 +488,8 @@ type Session struct {
 	adminSeq  atomic.Uint64
 	// modSeq is the same counter for ModerationPathPrefix/<seq>.
 	modSeq atomic.Uint64
+	// keySeq is the same counter for KeyPathPrefix/<seq>.
+	keySeq atomic.Uint64
 
 	// Live moderation state, guarded by membersMu alongside members
 	// because every enforcement decision reads them together and a
@@ -2087,7 +2094,13 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 	case ModePublic:
 		msg.Text = text
 	case ModePrivate:
-		ct, nonce, err := Encrypt(s.cfg.Record.AESKey, []byte(text))
+		// Read the key under the lock: a rotation can land between two
+		// sends, and encrypting under a half-swapped key would produce a
+		// body nobody can open.
+		s.membersMu.RLock()
+		key := append([]byte(nil), s.encryptionKeyLocked()...)
+		s.membersMu.RUnlock()
+		ct, nonce, err := Encrypt(key, []byte(text))
 		if err != nil {
 			return fmt.Errorf("group: publishAs: %w", err)
 		}
@@ -2411,7 +2424,9 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 			continue
 		}
 		if s.cfg.Record.Mode == ModePrivate && len(msg.Ciphertext) > 0 {
-			plain, dErr := Decrypt(s.cfg.Record.AESKey, msg.Ciphertext, msg.Nonce)
+			// Every key we hold, not just the current one — history
+			// published before a rotation opens under a retired key.
+			plain, dErr := decryptWithRing(s.decryptionKeys(), msg.Ciphertext, msg.Nonce)
 			if dErr != nil {
 				s.log.WithError(dErr).WithField("path", l.path).
 					Debug("group: replay: decrypt failed, skipping")
@@ -2481,6 +2496,11 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 			s.applyAdminLeaf(ev.Value)
 		case strings.HasPrefix(ev.Path, ModerationPathPrefix+"/"):
 			s.applyModLeaf(ev.Value)
+		case strings.HasPrefix(ev.Path, KeyPathPrefix+"/"):
+			// Must run in this pre-pass, before the message loop below:
+			// the rotation that lets us read the rest of this batch may
+			// have arrived in the same batch.
+			s.applyKeyLeaf(ev.Value)
 		}
 	}
 	h := s.handler
@@ -2600,7 +2620,11 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 			}
 		}
 		if s.cfg.Record.Mode == ModePrivate {
-			plain, err := Decrypt(s.cfg.Record.AESKey, msg.Ciphertext, msg.Nonce)
+			// Try the current key first, then every retired one: a peer
+			// that hasn't applied the latest rotation yet is still
+			// encrypting under the previous epoch, and pre-rotation
+			// history has to keep opening too.
+			plain, err := decryptWithRing(s.decryptionKeys(), msg.Ciphertext, msg.Nonce)
 			if err != nil {
 				s.log.WithError(err).WithField("path", ev.Path).
 					Debug("group: ignoring leaf failing decrypt")

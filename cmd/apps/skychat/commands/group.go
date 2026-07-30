@@ -598,6 +598,19 @@ func groupItemHandler() http.HandlerFunc {
 			}
 			writeJSON(w, info)
 
+		case action == "rotate-key" && r.Method == http.MethodPost:
+			// No body: rotation targets the group, not a peer.
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupRotateKey", func(c visor.API) error {
+				i, e := c.GroupRotateKey(id)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
 		case action == "readonly" && r.Method == http.MethodPost:
 			var body struct {
 				ReadOnly bool `json:"read_only"`

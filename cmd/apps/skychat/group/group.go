@@ -31,10 +31,10 @@
 //     are AES-256-GCM. The key is handed to the joiner inside the
 //     approval response over the (already encrypted) relay stream —
 //     NOT in the invite link. That is what makes a forwarded link
-//     worthless on its own, and it is also the precondition for ever
-//     rotating the key: the owner is a live distributor rather than a
-//     one-shot link author. Links that still carry a key are accepted
-//     for backward compatibility.
+//     worthless on its own, and it is what made rotation possible: the
+//     owner is a live distributor rather than a one-shot link author.
+//     Links that still carry a key are accepted for backward
+//     compatibility.
 //
 // Mode is retained as the persisted encryption switch (and the
 // invite-link wire field) so existing records and links keep working
@@ -44,6 +44,12 @@
 // Moderation state (Banned / Muted / ReadOnly) rides alongside the
 // roster and converges through the same signed-gossip reconciler. See
 // moderation.go for the envelope and the enforcement-point table.
+//
+// The key is not fixed for the life of the group. Evicting a member
+// rotates it, sealed per remaining member over secp256k1 ECDH, so losing
+// the seat also means losing the ability to read what comes next — see
+// keyrotate.go for the distribution and keyring.go for why every visor
+// keeps the keys it has already held.
 package group
 
 import (
@@ -333,10 +339,27 @@ type Record struct {
 	// quieted" from "sent last week".
 	ReadOnlySince time.Time `json:"read_only_since,omitempty"`
 
-	// AESKey is the 32-byte AES-256-GCM key. Set iff Mode ==
-	// ModePrivate. Travels in the invite link; storing locally
-	// avoids having to re-decode the invite every send.
+	// AESKey is the 32-byte AES-256-GCM key currently used to encrypt
+	// outgoing messages. Set iff Mode == ModePrivate. Reaches a joiner in
+	// the admission response (it no longer travels in the invite link)
+	// and is replaced on every rotation.
 	AESKey []byte `json:"aes_key,omitempty"`
+
+	// KeyEpoch numbers the generation of AESKey. Zero is the key the
+	// group was created with — and the value every record written before
+	// rotation existed carries, so no migration is needed.
+	KeyEpoch uint64 `json:"key_epoch,omitempty"`
+
+	// KeyIssuedAt is the IssuedAt of the KeyMutation that delivered
+	// AESKey. Used to settle a same-epoch race between two admins
+	// rotating at once; zero for the create-time key.
+	KeyIssuedAt time.Time `json:"key_issued_at,omitempty"`
+
+	// KeyRing holds superseded keys, newest first, so messages published
+	// before a rotation still open. Rotation is forward-only: it takes
+	// away what the evicted PK can read NEXT, it does not erase the
+	// group's history for everyone else. See keyring.go.
+	KeyRing []GroupKey `json:"key_ring,omitempty"`
 
 	// Members enumerates every PK the owner has allowlisted. On
 	// the owner side this drives Publisher.SetAllowlist; on the
