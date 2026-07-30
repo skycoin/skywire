@@ -13,6 +13,7 @@
 package group
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -206,6 +207,135 @@ func TestAdmission_FounderIsProtected(t *testing.T) {
 
 	_, err = b.mgr.RemoveMember(rec.ID, a.pk)
 	require.Error(t, err, "an admin removed the founder")
+}
+
+// The founder must not be a single point of failure in admission. Every
+// invite used to point join requests at OwnerPK alone: founder offline
+// meant nobody could join, and a founder whose key was lost meant the
+// group could never admit anyone again — with other admins sitting there
+// authorized and unreachable.
+//
+// A (founder) creates and promotes B, then goes away for good. C, holding
+// nothing but the link, has to get in through B.
+func TestAdmission_SecondAdminAdmitsWhileFounderIsOffline(t *testing.T) {
+	nodes := newGroupEnvN(t, 3)
+	a, b, c := nodes[0], nodes[1], nodes[2]
+
+	rec, err := a.mgr.Create("resilient room", KindPublic, nil)
+	require.NoError(t, err, "Create")
+
+	// B joins and is promoted, so the group has two admins.
+	_, err = b.mgr.Join(inviteFor(t, a, rec.ID))
+	require.NoError(t, err, "B joins")
+	_, err = a.mgr.PromoteAdmin(rec.ID, b.pk)
+	require.NoError(t, err, "PromoteAdmin")
+	waitMember(t, b, rec.ID, func(r Record) bool { return r.IsAdmin(b.pk) }, "B never saw its own promotion")
+
+	// The link B hands out names B as well as the founder.
+	inv := inviteFor(t, b, rec.ID)
+	require.Contains(t, inv.Admins, b.pk, "an admin's invite must name that admin")
+	require.Equal(t, a.pk, inv.OwnerPK)
+
+	// The founder goes dark: sessions closed, relay listener gone.
+	require.NoError(t, a.mgr.Close(), "closing the founder's manager")
+
+	// The pre-fix shape of the same link — founder only — is exactly the
+	// failure this change is about, so pin it: C cannot get in.
+	founderOnly := inv
+	founderOnly.Admins = nil
+	_, err = c.mgr.RequestJoin(founderOnly, "")
+	require.Error(t, err, "a founder-only invite must fail while the founder is offline")
+
+	// Naming B makes the same group joinable.
+	joined, err := c.mgr.RequestJoin(inv, "let me in")
+	require.NoError(t, err, "C could not join through the second admin")
+	require.Equal(t, StatusActive, joined.Status)
+	require.Equal(t, RoleMember, joined.Role)
+
+	// B did the admitting: its roster carries C, which is what makes the
+	// membership real rather than local to C.
+	onB, ok, err := b.mgr.Get(rec.ID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Contains(t, onB.Members, c.pk, "the admitting admin did not add C to the roster")
+
+	// And C learned the group's real admin set from the response — the
+	// founder included, so a returning founder is still the anchor.
+	require.Contains(t, joined.Admins, a.pk)
+	require.Contains(t, joined.Admins, b.pk)
+}
+
+// A private group's approval queue has to be reachable through a second
+// admin too, or "founder offline" merely moves from "cannot join" to
+// "cannot be approved".
+func TestAdmission_SecondAdminApprovesWhileFounderIsOffline(t *testing.T) {
+	nodes := newGroupEnvN(t, 3)
+	a, b, c := nodes[0], nodes[1], nodes[2]
+
+	rec, err := a.mgr.Create("private resilient room", KindPrivate, nil)
+	require.NoError(t, err, "Create")
+
+	_, err = b.mgr.Join(inviteFor(t, a, rec.ID))
+	require.NoError(t, err, "B joins")
+	waitStatus(t, b, rec.ID, StatusAwaitingApproval, "B never queued")
+	_, err = a.mgr.ApproveJoin(rec.ID, b.pk)
+	require.NoError(t, err, "ApproveJoin B")
+	waitStatus(t, b, rec.ID, StatusActive, "B never became active")
+
+	_, err = a.mgr.PromoteAdmin(rec.ID, b.pk)
+	require.NoError(t, err, "PromoteAdmin")
+	waitMember(t, b, rec.ID, func(r Record) bool { return r.IsAdmin(b.pk) }, "B never saw its own promotion")
+
+	inv := inviteFor(t, b, rec.ID)
+	require.Empty(t, inv.AESKey, "the link must stay keyless")
+	require.NoError(t, a.mgr.Close(), "closing the founder's manager")
+
+	// C's request lands on B's queue rather than nowhere.
+	queued, err := c.mgr.RequestJoin(inv, "hi")
+	require.NoError(t, err, "RequestJoin should queue, not fail")
+	require.Equal(t, StatusAwaitingApproval, queued.Status)
+	require.Equal(t, inv.Admins, queued.AdmissionPKs,
+		"the record must remember who else can be asked, or the re-ask goes back to dialing only the founder")
+
+	reqs, err := b.mgr.PendingJoins(rec.ID)
+	require.NoError(t, err, "PendingJoins on the second admin")
+	require.Len(t, reqs, 1, "the request did not reach the second admin's queue")
+	require.Equal(t, c.pk, reqs[0].PK)
+
+	// B approves, and C's retry loop — which must be re-asking B, not the
+	// offline founder — picks it up along with the group key.
+	_, err = b.mgr.ApproveJoin(rec.ID, c.pk)
+	require.NoError(t, err, "ApproveJoin C")
+	waitStatus(t, c, rec.ID, StatusActive, "C never became active after the second admin approved")
+
+	admitted, ok, err := c.mgr.Get(rec.ID)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, rec.AESKey, admitted.AESKey, "the second admin must hand over the group key too")
+}
+
+// A visor that holds no authority answers "ask someone else" rather than
+// "no", so one stale name in a link can't sink a join the group's real
+// admins would have approved.
+func TestAdmission_NonAdminAnswersUnavailable(t *testing.T) {
+	a, b := newGroupEnv(t)
+
+	rec, err := a.mgr.Create("open room", KindPublic, nil)
+	require.NoError(t, err, "Create")
+	_, err = b.mgr.Join(inviteFor(t, a, rec.ID))
+	require.NoError(t, err, "B joins as a plain member")
+
+	// Ask the plain member directly — the fan-out would fold this into
+	// ErrJoinNoAdmin, so go one level down to see the actual answer. The
+	// requester PK has to be A's own: the responder takes the identity
+	// from the authenticated stream and refuses a mismatched claim.
+	ctx, cancel := context.WithTimeout(t.Context(), joinResponseReadTimeout+5*time.Second)
+	defer cancel()
+	resp, err := SendJoinRequest(ctx, a.dmsgC, rec.ID, b.pk, rec.Port, a.pk, "")
+	require.NoError(t, err, "a member session must answer join requests at all")
+	require.Equal(t, JoinStatusUnavailable, resp.Status,
+		"a non-admin must not answer a join request with a terminal refusal")
+	require.False(t, resp.Status.IsTerminal())
 }
 
 // --- helpers ---------------------------------------------------------------

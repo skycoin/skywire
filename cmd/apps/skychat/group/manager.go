@@ -1485,6 +1485,12 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 		OwnerPK: r.OwnerPK,
 		Port:    r.Port,
 		Mode:    r.Mode,
+		// Name the group's other admins so the founder isn't the only
+		// door in. Self first: whoever is minting this link is
+		// demonstrably alive and is the admin most likely to be watching
+		// for the request, and being first also means we're never the
+		// name that falls off the end of the cap.
+		Admins: inviteAdmins(r, m.myPK),
 	}
 	// The group key is deliberately NOT in the link. It is delivered in
 	// the approval response, over the encrypted relay stream, only to a
@@ -1492,6 +1498,21 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 	// on its own, a declined requester walks away with nothing, and the
 	// key stays rotatable because no copy of it is loose in circulation.
 	return EncodeInvite(inv)
+}
+
+// inviteAdmins picks the Invite.Admins list for a link issued by issuer:
+// the group's admins other than the founder (who travels as OwnerPK and
+// is always tried first), issuer at the head.
+//
+// Trimmed to the fan-out cap here rather than at the joiner so the link
+// itself stays short enough to paste into a chat message — each PK is 66
+// characters of hex before base64.
+func inviteAdmins(r Record, issuer cipher.PubKey) []cipher.PubKey {
+	others := admissionOrder(issuer, r.OwnerPK, r.Admins)
+	if len(others) > maxAdmissionTargets-1 {
+		others = others[:maxAdmissionTargets-1]
+	}
+	return others
 }
 
 // openLocked is the shared "open and remember" helper. Caller does

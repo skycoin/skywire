@@ -730,22 +730,7 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		ps.OnUpdate(s.makePeerOnUpdate(peerPK))
 		s.peerSubs[peerPK] = ps
 	}
-	// Relay listeners are the owner-centric/visor fallback path; the
-	// federated peerSubs mesh (above) makes them vestigial. They depend
-	// on dmsg + the visor's skynet app context, so skip them entirely in
-	// native-TCP standalone mode (DmsgC == nil).
-	if cfg.DmsgC != nil {
-		if dmsgLis, err := cfg.DmsgC.Listen(relayPort); err != nil {
-			log.WithError(err).WithField("port", relayPort).
-				Warn("group: owner relay dmsg listen failed")
-		} else {
-			s.relayDmsg = dmsgLis
-			s.relayWG.Add(1)
-			go s.acceptRelayOn(dmsgLis, "dmsg")
-		}
-		s.relayWG.Add(1)
-		go s.bindRelaySkynet(relayPort)
-	}
+	s.startRelayListeners(relayPort)
 
 	// Heartbeat emission. Publishes a tiny no-op message to the feed
 	// every HeartbeatInterval so members can detect a silently-stalled
@@ -759,6 +744,44 @@ func openOwner(cfg Config, log *logging.Logger) (*Session, error) {
 		go s.runHeartbeatLoop(hbCtx, cfg.HeartbeatInterval)
 	}
 	return s, nil
+}
+
+// startRelayListeners binds the dmsg + skynet listeners on the relay
+// port and starts accepting. Shared by both roles; the caller must have
+// initialized relayCtx / relayCancel.
+//
+// Two different jobs arrive on this port, and which of them a session
+// serves depends on its role (handleRelay dispatches):
+//
+//   - Chat submission (RelayMessage) — the owner-centric fallback the
+//     federated peerSubs mesh made vestigial. Owner sessions only.
+//   - Join requests — served by EVERY session, because admission is no
+//     longer the founder's job alone. An invite can name any admin, and
+//     an admin's session is a member session like any other; without a
+//     listener here, naming them in a link would point join requests at
+//     a closed port. Non-admins answer JoinStatusUnavailable, which
+//     costs the requester one round trip and moves it to the next name
+//     — and it means a member promoted to admin can start admitting
+//     immediately, with no session reopen.
+//
+// Both listeners depend on dmsg + the visor's skynet app context, so
+// native-TCP standalone mode (DmsgC == nil) binds neither. Failures are
+// non-fatal: a group with no relay listener is still readable and still
+// sends over the mesh; it just can't be joined through this visor.
+func (s *Session) startRelayListeners(relayPort uint16) {
+	if s.cfg.DmsgC == nil {
+		return
+	}
+	if dmsgLis, err := s.cfg.DmsgC.Listen(relayPort); err != nil {
+		s.log.WithError(err).WithField("port", relayPort).WithField("role", string(s.cfg.Record.Role)).
+			Warn("group: relay dmsg listen failed")
+	} else {
+		s.relayDmsg = dmsgLis
+		s.relayWG.Add(1)
+		go s.acceptRelayOn(dmsgLis, "dmsg")
+	}
+	s.relayWG.Add(1)
+	go s.bindRelaySkynet(relayPort)
 }
 
 // runHeartbeatLoop is the owner-side periodic heartbeat publisher.
@@ -839,8 +862,10 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		return nil, fmt.Errorf("group: Open member: attach subscriber: %w", err)
 	}
 	sub.SetPrefixes(subscribedPrefixes())
+	relayCtx, relayCancel := context.WithCancel(context.Background())
 	s := &Session{
 		cfg: cfg, port: cfg.Record.Port, pub: pub, sub: sub, log: log,
+		relayCtx: relayCtx, relayCancel: relayCancel,
 		banned:            append([]cipher.PubKey(nil), cfg.Record.Banned...),
 		muted:             append([]cipher.PubKey(nil), cfg.Record.Muted...),
 		mutedSince:        copyMuteTimes(cfg.Record.MutedSince),
@@ -906,6 +931,10 @@ func openMember(cfg Config, log *logging.Logger) (*Session, error) {
 		s.lastInboundNs.Store(cfg.Record.LastMessageAt.UnixNano())
 	}
 	sub.OnUpdate(s.makeLegacySubOnUpdate())
+	// Members listen on the relay port too — for join requests only (see
+	// startRelayListeners). This is what lets an invite name an admin
+	// other than the founder and have that name mean something.
+	s.startRelayListeners(cfg.Record.Port + relayPortOffset)
 	return s, nil
 }
 
@@ -1948,6 +1977,18 @@ func (s *Session) handleRelay(c net.Conn) {
 	var probe relayFrameProbe
 	if err := json.Unmarshal(payload, &probe); err == nil && probe.Kind == frameKindJoinRequest {
 		s.handleJoinRequest(c, payload)
+		return
+	}
+	// Chat submission is the owner's job. Member sessions bind this port
+	// to answer join requests, and republishing someone else's text onto
+	// a member's own feed is not something any honest peer asks for:
+	// members submit to Record.OwnerPK (SubmitToOwner) and nowhere else.
+	// The leaf would fail signature verification everywhere anyway —
+	// publishAs signs with THIS session's key over a foreign SenderPK —
+	// so serving it would only burn feed space on a leaf every reader
+	// drops.
+	if s.cfg.Record.Role != RoleOwner {
+		s.log.Debug("group: relay rejected: this session serves join requests only")
 		return
 	}
 	var rm RelayMessage
