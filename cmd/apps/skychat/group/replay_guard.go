@@ -197,7 +197,7 @@ func mergeWatermarks(base, incoming map[string]time.Time) map[string]time.Time {
 }
 
 // copyWatermarks returns an independent copy, or nil for an empty input
-// so an untouched Record keeps marshalling without the field.
+// so an untouched Record keeps marshaling without the field.
 func copyWatermarks(in map[string]time.Time) map[string]time.Time {
 	if len(in) == 0 {
 		return nil

@@ -368,7 +368,7 @@ func waitStatus(t *testing.T, n *groupNode, id string, want Status, msg string) 
 		n.mgr.retryPendingJoins(t.Context())
 		time.Sleep(200 * time.Millisecond)
 	}
-	r, _, _ := n.mgr.Get(id)
+	r, _, _ := n.mgr.Get(id) //nolint
 	t.Fatalf("%s (status = %q, want %q)", msg, r.Status, want)
 }
 

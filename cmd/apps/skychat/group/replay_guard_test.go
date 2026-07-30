@@ -119,7 +119,7 @@ func TestStorePutDoesNotWalkWatermarksBackwards(t *testing.T) {
 
 // guardSession builds a member-role session whose admin is a separate
 // PK, with no publisher (these are pure state transitions).
-func guardSession(t *testing.T) (*Session, cipher.SecKey, cipher.PubKey) {
+func guardSession(t *testing.T) (*Session, cipher.SecKey, cipher.PubKey) { //nolint
 	t.Helper()
 	selfPK, _ := cipher.GenerateKeyPair()
 	adminPK, adminSK := cipher.GenerateKeyPair()
@@ -225,7 +225,7 @@ func TestReplayedUnbanCannotLiftStandingBan(t *testing.T) {
 
 // Out-of-order arrival must converge to the newest mutation regardless
 // of which order the leaves turn up in. This is the same mechanism as
-// the replay defence, and it fixes a genuine convergence bug: a joiner
+// the replay defense, and it fixes a genuine convergence bug: a joiner
 // replaying feed history has no ordering guarantee across peers.
 func TestOutOfOrderRosterLeavesConverge(t *testing.T) {
 	victim, _ := cipher.GenerateKeyPair()

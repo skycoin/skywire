@@ -300,7 +300,7 @@ func (s *Session) applyModLeaf(body []byte) {
 	// but a leaf the attacker legitimately observed. One watermark covers
 	// the whole moderation family per target: ban and mute are different
 	// dimensions, but ordering them together means the newest admin
-	// decision about a PK always wins, which is the behaviour an operator
+	// decision about a PK always wins, which is the behavior an operator
 	// expects from a moderation queue.
 	wmKey := watermarkKey(familyMod, m.PeerPK)
 	if ok, why := mutationFresh(s.mutationSeen, wmKey, m.IssuedAt, time.Now().UTC()); !ok {

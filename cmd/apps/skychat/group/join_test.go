@@ -67,7 +67,7 @@ func TestJoinRequestNoteBounded(t *testing.T) {
 	}
 	// The receive side must clamp too — a hostile peer builds the frame
 	// itself and never calls NewJoinRequest.
-	raw, _ := json.Marshal(JoinRequestMsg{
+	raw, _ := json.Marshal(JoinRequestMsg{ //nolint
 		Kind: frameKindJoinRequest, GroupID: "gid", RequesterPK: pk,
 		Note: string(long), TS: time.Now(),
 	})
@@ -90,11 +90,11 @@ func TestDecodeJoinResponseValidatesStatus(t *testing.T) {
 			t.Errorf("decode %q: %v", s, err)
 		}
 	}
-	bad, _ := json.Marshal(JoinResponseMsg{Kind: frameKindJoinResponse, GroupID: "g", Status: "sideways"})
+	bad, _ := json.Marshal(JoinResponseMsg{Kind: frameKindJoinResponse, GroupID: "g", Status: "sideways"}) //nolint
 	if _, err := decodeJoinResponse(bad); err == nil {
 		t.Error("unknown status accepted")
 	}
-	wrongKind, _ := json.Marshal(JoinResponseMsg{Kind: "something-else", Status: JoinStatusAdmitted})
+	wrongKind, _ := json.Marshal(JoinResponseMsg{Kind: "something-else", Status: JoinStatusAdmitted}) //nolint
 	if _, err := decodeJoinResponse(wrongKind); err == nil {
 		t.Error("wrong frame kind accepted")
 	}
@@ -298,7 +298,7 @@ func TestStoreJoinRequestLifecycle(t *testing.T) {
 	if err := st.PutJoinRequest(req); err != nil {
 		t.Fatalf("PutJoinRequest decision: %v", err)
 	}
-	list, _ = st.ListJoinRequests("g1")
+	list, _ = st.ListJoinRequests("g1") //nolint
 	if len(list) != 2 {
 		t.Errorf("queue grew to %d on a decision update, want 2", len(list))
 	}
@@ -306,10 +306,10 @@ func TestStoreJoinRequestLifecycle(t *testing.T) {
 	if err := st.DeleteJoinRequests("g1"); err != nil {
 		t.Fatalf("DeleteJoinRequests: %v", err)
 	}
-	if list, _ = st.ListJoinRequests("g1"); len(list) != 0 {
+	if list, _ = st.ListJoinRequests("g1"); len(list) != 0 { //nolint
 		t.Errorf("g1 queue not cleared: %d left", len(list))
 	}
-	if list, _ = st.ListJoinRequests("g2"); len(list) != 1 {
+	if list, _ = st.ListJoinRequests("g2"); len(list) != 1 { //nolint
 		t.Errorf("clearing g1 also removed g2's queue: %d left", len(list))
 	}
 }
