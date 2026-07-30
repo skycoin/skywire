@@ -93,6 +93,22 @@ the canonical group feed; members subscribe and (post-#2539)
 publish their own per-member feed. See `cmd/apps/skychat/group/`
 for the implementation.
 
+Any online member can catch a new member up. Members mirror the leaves
+they receive onto their own feed — verbatim, still signed by the original
+author, so a mirroring peer is never trusted, only convenient — and each
+non-admin follows a couple of other members as well as the admins. That
+is what keeps a group readable when its admins happen to be offline;
+before it, two members could both be online and still not see each other.
+The creator chooses at create time (`group create --no-peer-backfill` to
+opt out) and any admin can change it later with
+`skywire cli skychat group peer-backfill <group-id> on|off`; `group info`
+shows the current setting as `history_served_by`. Turning it off restores
+the admins-only topology, and the group then goes dark whenever no admin
+is up. The cost of leaving it on is storage — every member keeps a copy
+of the room rather than just the admins — and it does not widen who may
+read: only members hold an allowlist seat, and private groups stay
+encrypted.
+
 Group keys are encrypted at rest. `groups.db` no longer holds any
 group's AES key in the clear — each one is sealed with a key derived
 from the visor's own secret key (HKDF-SHA256 → ChaCha20-Poly1305), so a

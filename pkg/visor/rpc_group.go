@@ -258,6 +258,27 @@ func (r *RPC) GroupRotateKey(id *string, out *GroupInfo) (err error) {
 	return nil
 }
 
+// GroupPeerBackfillRequest toggles whether any online member may serve
+// the group's history to a joiner.
+type GroupPeerBackfillRequest struct {
+	ID      string `json:"id"`
+	Enabled bool   `json:"enabled"`
+}
+
+// GroupSetPeerBackfill sets the group's backfill-from-any-member policy.
+func (r *RPC) GroupSetPeerBackfill(req *GroupPeerBackfillRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupSetPeerBackfill", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupSetPeerBackfill(req.ID, req.Enabled)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
 // GroupSetReadOnly suspends or resumes posting for non-admins.
 func (r *RPC) GroupSetReadOnly(req *GroupReadOnlyRequest, out *GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupSetReadOnly", req)(out, &err)

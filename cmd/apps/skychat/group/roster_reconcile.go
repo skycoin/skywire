@@ -164,6 +164,23 @@ func (s *Session) applyRosterLeaf(body []byte) {
 	if _, err := s.SetAllowlist(members); err != nil {
 		s.log.WithError(err).Debug("group: reconcile: SetAllowlist after roster change failed")
 	}
+	// SetAllowlist is owner-role only, so on a MEMBER session the call
+	// above did nothing and the subscription set was left untouched by a
+	// roster change. That was invisible while non-admins followed admins
+	// only — the set never depended on the plain-member roster — but it
+	// means a member-role admin never picked up a newly added member
+	// either, and with peer backfill it would leave a joiner unfollowed by
+	// everyone except the admins. SetAdminRoster is the role-agnostic
+	// re-evaluation of the same rule; it is idempotent, so running it on
+	// both paths is free.
+	// Async for the same reason as the backfill toggle: this opens peer
+	// subscriptions, and dialing a peer that is offline would otherwise
+	// block this subscriber's receive pump for the dial timeout.
+	go func() {
+		if _, err := s.SetAdminRoster(admins); err != nil {
+			s.log.WithError(err).Debug("group: reconcile: peer-sub re-evaluation after roster change failed")
+		}
+	}()
 	if s.onRosterChange != nil {
 		s.onRosterChange(members, admins)
 	}

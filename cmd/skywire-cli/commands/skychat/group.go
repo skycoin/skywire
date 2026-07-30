@@ -43,9 +43,10 @@ import (
 )
 
 var (
-	groupCreateName    string
-	groupCreateMode    string
-	groupCreateMembers []string
+	groupCreateName           string
+	groupCreateMode           string
+	groupCreateMembers        []string
+	groupCreateNoPeerBackfill bool
 
 	groupListenSince string
 	groupListenPoll  time.Duration
@@ -60,6 +61,8 @@ func init() {
 	groupCreateCmd.Flags().StringVarP(&groupCreateName, "name", "n", "", "human-readable group name (required)")
 	groupCreateCmd.Flags().StringVarP(&groupCreateMode, "mode", "m", "public", "public | private — private encrypts feed messages with an AES key shipped in the invite link")
 	groupCreateCmd.Flags().StringSliceVar(&groupCreateMembers, "member", nil, "initial member PK; repeat for many (the owner is implicit)")
+	groupCreateCmd.Flags().BoolVar(&groupCreateNoPeerBackfill, "no-peer-backfill", false,
+		"only admins may serve this group's history to a joiner; without this flag any online member can, so the group stays readable while admins are offline")
 	groupCreateCmd.MarkFlagRequired("name") //nolint:errcheck,gosec
 
 	groupListenCmd.Flags().StringVar(&groupListenSince, "since", "", "RFC3339 lower bound for the first poll; empty = drain current inbox window then follow")
@@ -76,6 +79,7 @@ func init() {
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
 		groupJoinCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd, groupRotateKeyCmd,
+		groupPeerBackfillCmd,
 		groupSendCmd, groupUnsendCmd, groupListenCmd, groupHistoryCmd,
 		groupLeaveCmd, groupDeleteCmd,
 	)
@@ -208,6 +212,14 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	if info.Mode == skychatgroup.ModePrivate {
 		fmt.Fprintf(&buf, "key_epoch:         %d\n", info.KeyEpoch) //nolint:errcheck
 	}
+	// Who can serve this group's history — the difference between "goes
+	// dark when the admins are offline" and "any online member can catch a
+	// joiner up".
+	served := "admins only"
+	if info.PeerBackfill {
+		served = "any online member"
+	}
+	fmt.Fprintf(&buf, "history_served_by: %s\n", served)                                    //nolint:errcheck
 	fmt.Fprintf(&buf, "role:              %s\n", info.Role)                                 //nolint:errcheck
 	fmt.Fprintf(&buf, "status:            %s\n", info.Status)                               //nolint:errcheck
 	fmt.Fprintf(&buf, "created_at:        %s\n", info.CreatedAt.UTC().Format(time.RFC3339)) //nolint:errcheck
@@ -358,6 +370,55 @@ PR).`,
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		human := fmt.Sprintf("group %s now has %d admin(s)\n", args[0], len(info.Admins))
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+var groupPeerBackfillCmd = &cobra.Command{
+	Use:   "peer-backfill <group-id> <on|off>",
+	Short: "Admin: allow any online member (on) or only admins (off) to serve history",
+	Long: `Set who can serve this group's history and messages.
+
+on  — any online member. Every member mirrors the leaves it sees onto its
+      own feed and follows a couple of other members, so a joiner can be
+      caught up by whoever happens to be online. This is the default, and
+      it is what keeps a group readable while its admins are offline.
+
+off — admins only. The original topology: non-admins follow admins and
+      only admins mirror. Nothing is served, and no message passes between
+      two non-admins, while every admin is offline.
+
+The trade for "on" is storage and subscriptions on every member — each
+holds the room's history rather than just the admins. It does NOT widen
+who may read: every copy is the author's own signed leaf, still encrypted
+for private groups, and only members hold an allowlist seat.
+
+Admin-only. Converges to every member through signed gossip, and takes
+effect on live sessions immediately.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var enabled bool
+		switch strings.ToLower(args[1]) {
+		case "on", "true", "yes", "enable", "enabled":
+			enabled = true
+		case "off", "false", "no", "disable", "disabled":
+			enabled = false
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid state %q (use on or off)", args[1]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupSetPeerBackfill(args[0], enabled)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		state := "admins only"
+		if info.PeerBackfill {
+			state = "any online member"
+		}
+		human := fmt.Sprintf("group %s history served by: %s\n", args[0], state)
 		internal.PrintOutput(cmd.Flags(), info, human)
 	},
 }

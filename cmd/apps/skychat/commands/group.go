@@ -366,6 +366,12 @@ func groupRootHandler() http.HandlerFunc {
 				Kind    string   `json:"kind"`
 				Mode    string   `json:"mode"`
 				Members []string `json:"members"`
+				// PeerBackfill is the creator's choice on whether any online
+				// member may serve this group's history to a joiner. Sent as
+				// a pointer so an older cached UI build — which sends no such
+				// field — still gets the default (enabled) rather than
+				// silently creating admins-only groups.
+				PeerBackfill *bool `json:"peer_backfill"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
@@ -593,6 +599,25 @@ func groupItemHandler() http.HandlerFunc {
 			}
 			info, err := groupPeerActions[action](id, pk)
 			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
+		case action == "peer-backfill" && r.Method == http.MethodPost:
+			var body struct {
+				Enabled bool `json:"enabled"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupSetPeerBackfill", func(c visor.API) error {
+				i, e := c.GroupSetPeerBackfill(id, body.Enabled)
+				info = i
+				return e
+			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}

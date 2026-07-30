@@ -1611,6 +1611,13 @@ func (rc *rpcClient) GroupRotateKey(id string) (GroupInfo, error) {
 	return resp, err
 }
 
+// GroupSetPeerBackfill implements API.
+func (rc *rpcClient) GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupSetPeerBackfill", &GroupPeerBackfillRequest{ID: id, Enabled: enabled}, &resp)
+	return resp, err
+}
+
 // GroupBanMember implements API.
 func (rc *rpcClient) GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error) {
 	var resp GroupInfo

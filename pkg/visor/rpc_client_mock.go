@@ -1341,6 +1341,11 @@ func (mc *mockRPCClient) GroupPromoteAdmin(_ string, _ cipher.PubKey) (GroupInfo
 	return GroupInfo{}, nil
 }
 
+// GroupSetPeerBackfill implements API.
+func (mc *mockRPCClient) GroupSetPeerBackfill(_ string, _ bool) (GroupInfo, error) {
+	return GroupInfo{}, ErrNotImplemented
+}
+
 // GroupRotateKey implements API.
 func (mc *mockRPCClient) GroupRotateKey(_ string) (GroupInfo, error) {
 	return GroupInfo{}, ErrNotImplemented
