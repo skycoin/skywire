@@ -204,10 +204,20 @@ func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
 			return CarrierTCP, entry.Server.Address
 		}
 	}
-	if entry.Protocol == "quic" && entry.Server.AddressUDP != "" {
+	// No configured carrier matched the server's advertised endpoints. Fall back
+	// to a default ONLY to a carrier this client can actually dial. Empty Carriers
+	// means "native default" (the historical QUIC-then-TCP behavior); a wss-only
+	// browser client (Carriers=[WT,WS]) can dial neither raw QUIC nor TCP, so it
+	// gets no carrier ("") and the caller surfaces a clear unreachable error
+	// instead of a futile `dial tcp`/`dial udp`.
+	nativeDefault := len(carriers) == 0
+	if entry.Protocol == "quic" && entry.Server.AddressUDP != "" && (nativeDefault || hasCarrier(carriers, CarrierQUIC)) {
 		return CarrierQUIC, entry.Server.AddressUDP
 	}
-	return CarrierTCP, entry.Server.Address
+	if nativeDefault || hasCarrier(carriers, CarrierTCP) {
+		return CarrierTCP, entry.Server.Address
+	}
+	return "", ""
 }
 
 // ProtocolLabel renders a human-readable label for the protocol a client used
@@ -252,6 +262,13 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	// default (QUIC when advertised, else TCP). The chosen carrier is dialed below
 	// with a TCP fallback on failure.
 	network, dialAddr := pickCarrier(ce.conf.Carriers, entry)
+	if network == "" {
+		// The server advertises no endpoint this client can dial (e.g. a browser,
+		// which can only do wss/WebTransport, reaching a server whose entry carries
+		// no AddressWS). Surface a clear error so the rendezvous tries another of
+		// the peer's delegated servers rather than a futile raw dial.
+		return ClientSession{}, fmt.Errorf("dmsg: no carrier for server %s dialable by this client (carriers=%v)", entry.Static, ce.conf.Carriers)
+	}
 	var dSes ClientSession
 
 	// Trigger dial callback.
@@ -277,7 +294,7 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 			case hasCarrier(ce.conf.Carriers, CarrierWS) && entry.Server.AddressWS != "":
 				ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to WS", entry.Static)
 				network = CarrierWS
-			case entry.Server.Address != "":
+			case entry.Server.Address != "" && hasCarrier(ce.conf.Carriers, CarrierTCP):
 				ce.log.WithError(err).Debugf("WT dial to %s failed, falling back to TCP", entry.Static)
 				network = "tcp"
 				dialAddr = entry.Server.Address
@@ -290,11 +307,14 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	}
 	if network == "ws" {
 		if dSes, err = ce.dialSessionWS(ctx, entry); err != nil {
-			// WS dial failed. Fall back to the server's TCP endpoint when there
-			// is one (native clients on a restrictive network that briefly
-			// permits TCP). The js/wasm build has no TCP address to fall back
-			// to, so an empty Address simply surfaces the WS error.
-			if entry.Server.Address == "" {
+			// WS dial failed. Fall back to the server's TCP endpoint only when this
+			// client is actually configured to dial TCP. Gating on Address=="" was
+			// wrong: it assumed the js/wasm build never has a TCP address, but
+			// DISCOVERY-resolved server entries DO carry one — so a browser
+			// (Carriers=[WT,WS], no TCP) would fall back to a raw `dial tcp` it can
+			// never satisfy ("connection refused"), instead of surfacing the WS
+			// error so the rendezvous moves on to another of the peer's servers.
+			if entry.Server.Address == "" || !hasCarrier(ce.conf.Carriers, CarrierTCP) {
 				return ClientSession{}, err
 			}
 			ce.log.WithError(err).Debugf("WS dial to %s failed, falling back to TCP", entry.Static)
@@ -308,8 +328,9 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 		if dSes, err = ce.dialSessionQUIC(ctx, entry); err != nil {
 			// QUIC dial failed (e.g. UDP blocked by a firewall). Fall back to
 			// the server's TCP endpoint, which a QUIC-advertising server also
-			// listens on (dual-listen). Only give up if there is no TCP address.
-			if entry.Server.Address == "" {
+			// listens on (dual-listen). Only if this client can actually dial TCP
+			// (a browser can't) and the server has a TCP address.
+			if entry.Server.Address == "" || !hasCarrier(ce.conf.Carriers, CarrierTCP) {
 				return ClientSession{}, err
 			}
 			ce.log.WithError(err).Debugf("QUIC dial to %s failed, falling back to TCP", entry.Static)
