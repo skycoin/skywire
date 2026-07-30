@@ -75,7 +75,7 @@ func newGroupEnvN(t *testing.T, n int) []*groupNode {
 		waitDmsgClientReady(t, c)
 
 		dir := t.TempDir()
-		st, serr := OpenStore(filepath.Join(dir, "groups.db"))
+		st, serr := OpenStore(filepath.Join(dir, "groups.db"), testStoreSK())
 		require.NoError(t, serr)
 		t.Cleanup(func() { _ = st.Close() }) //nolint:errcheck
 

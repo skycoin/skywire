@@ -84,7 +84,7 @@ func startGroupChat(sk cipher.SecKey, log *logging.Logger) {
 	if dmsgC == nil || selfPK.Null() {
 		return
 	}
-	store, err := group.OpenStore("") // js build -> in-memory (path ignored)
+	store, err := group.OpenStore("", sk) // js build -> in-memory (path ignored); sk seals key material
 	if err != nil {
 		vlog("group: store open failed: " + err.Error())
 		return

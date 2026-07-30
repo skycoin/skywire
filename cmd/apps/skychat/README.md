@@ -93,6 +93,17 @@ the canonical group feed; members subscribe and (post-#2539)
 publish their own per-member feed. See `cmd/apps/skychat/group/`
 for the implementation.
 
+Group keys are encrypted at rest. `groups.db` no longer holds any
+group's AES key in the clear — each one is sealed with a key derived
+from the visor's own secret key (HKDF-SHA256 → ChaCha20-Poly1305), so a
+copy of the database on its own is inert. Records written by an older
+build are re-sealed the first time the visor opens the file, which it
+logs. This is not disk encryption: an attacker who takes the visor
+config as well can derive the sealing key. What it buys is that the file
+that actually travels — backups, bug reports, container volumes — stops
+being enough. Note the flip side: a `groups.db` is tied to the visor
+that wrote it and cannot be moved to another identity.
+
 Private groups re-key when a member is evicted. Kicking or banning
 someone generates a new AES key and publishes it on the group feed as
 one copy per remaining member, each sealed to that member's own public

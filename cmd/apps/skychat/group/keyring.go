@@ -63,8 +63,14 @@ type GroupKey struct {
 	// distributed it, or 0 for the group's create-time key.
 	Epoch uint64 `json:"epoch"`
 
-	// Key is the 32-byte AES-256-GCM key.
-	Key []byte `json:"key"`
+	// Key is the 32-byte AES-256-GCM key. In memory only — the store
+	// swaps it for Sealed on the way to disk, exactly as it does for
+	// Record.AESKey. Kept tagged so pre-sealing records still open.
+	Key []byte `json:"key,omitempty"`
+
+	// Sealed is Key encrypted at rest. Present on disk, absent in
+	// memory; never populate it by hand. See store_seal.go.
+	Sealed []byte `json:"key_sealed,omitempty"`
 
 	// AddedAt is when THIS visor learned the key, not when it was
 	// issued. Only used to order the ring for eviction, so a peer with a
