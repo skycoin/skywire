@@ -4,6 +4,7 @@
 package group
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -37,6 +38,83 @@ func signedAdmin(t *testing.T, gid string, op AdminOp, peer cipher.PubKey, sk ci
 		t.Fatalf("MarshalAdmin: %v", err)
 	}
 	return body
+}
+
+// A watermark that reaches the store must survive every other write to
+// the record.
+//
+// Manager ops are all read-modify-Put, and the reconciler advances
+// watermarks in the background between the read and the Put. A Put that
+// replaced the map wholesale would silently drop whatever the reconciler
+// pinned in that window — and a dropped watermark never comes back, so
+// the next replayed RosterOpAdd for that target sails through the
+// freshness gate. That is the original bug, resurfacing through the
+// persistence layer instead of the wire.
+func TestStorePutDoesNotWalkWatermarksBackwards(t *testing.T) {
+	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	if err != nil {
+		t.Fatalf("OpenStore: %v", err)
+	}
+	defer st.Close() //nolint:errcheck
+
+	id := uuid.NewString()
+	evicted, other := pkN(1), pkN(2)
+	base := Record{
+		ID: id, OwnerPK: pkN(3), Port: 40011,
+		Mode: ModePublic, Kind: KindPublic, Role: RoleOwner, Status: StatusActive,
+	}
+	if err := st.Put(base); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	// A stale read, taken before the reconciler acts.
+	stale, _, err := st.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	// The reconciler applies an eviction and persists the watermark.
+	pinned := time.Date(2026, 7, 30, 12, 0, 0, 0, time.UTC)
+	evictedKey := watermarkKey(familyRoster, evicted)
+	if err := st.SetMutationSeen(id, map[string]time.Time{evictedKey: pinned}); err != nil {
+		t.Fatalf("SetMutationSeen: %v", err)
+	}
+
+	// Now an admin op lands, built on the stale read: it adds a member and
+	// writes the whole record back, watermarks and all.
+	stale.Members = append(stale.Members, other)
+	if err := st.Put(stale); err != nil {
+		t.Fatalf("Put (stale): %v", err)
+	}
+
+	got, ok, err := st.Get(id)
+	if err != nil || !ok {
+		t.Fatalf("Get: err=%v ok=%v", err, ok)
+	}
+	if !containsPK(got.Members, other) {
+		t.Error("the admin's roster change was lost")
+	}
+	at, held := got.MutationSeen[evictedKey]
+	if !held {
+		t.Fatal("the eviction watermark was dropped — a replayed RosterOpAdd would now be accepted")
+	}
+	if !at.Equal(pinned) {
+		t.Errorf("watermark = %v, want %v", at, pinned)
+	}
+
+	// A genuinely newer watermark carried by a Put still advances.
+	later := pinned.Add(time.Minute)
+	got.MutationSeen[evictedKey] = later
+	if err := st.Put(got); err != nil {
+		t.Fatalf("Put (advance): %v", err)
+	}
+	again, _, err := st.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if at := again.MutationSeen[evictedKey]; !at.Equal(later) {
+		t.Errorf("watermark = %v, want the newer %v", at, later)
+	}
 }
 
 // guardSession builds a member-role session whose admin is a separate

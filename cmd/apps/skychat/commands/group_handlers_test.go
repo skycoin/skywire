@@ -12,20 +12,23 @@ import (
 	"testing"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
 // groupAPI is a fake visor.API capturing the group calls the handlers make.
 type groupAPI struct {
 	visorAPIShim
-	groups  []visor.GroupInfo
-	created visor.GroupCreateArgs
-	joined  visor.GroupJoinArgs
-	sent    []visor.GroupSendArgs
-	unsent  []visor.GroupUnsendArgs
-	deleted []string
-	left    []string
-	history []visor.GroupMessage // returned by GroupHistory when non-nil
+	groups   []visor.GroupInfo
+	created  visor.GroupCreateArgs
+	joined   visor.GroupJoinArgs
+	sent     []visor.GroupSendArgs
+	unsent   []visor.GroupUnsendArgs
+	deleted  []string
+	left     []string
+	promoted []cipher.PubKey
+	demoted  []cipher.PubKey
+	history  []visor.GroupMessage // returned by GroupHistory when non-nil
 }
 
 func (a *groupAPI) GroupList() ([]visor.GroupInfo, error) { return a.groups, nil }
@@ -53,6 +56,14 @@ func (a *groupAPI) GroupLeave(id string) error { a.left = append(a.left, id); re
 func (a *groupAPI) GroupDelete(id string) error {
 	a.deleted = append(a.deleted, id)
 	return nil
+}
+func (a *groupAPI) GroupPromoteAdmin(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+	a.promoted = append(a.promoted, pk)
+	return visor.GroupInfo{ID: id, Admins: a.promoted}, nil
+}
+func (a *groupAPI) GroupDemoteAdmin(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+	a.demoted = append(a.demoted, pk)
+	return visor.GroupInfo{ID: id}, nil
 }
 func (a *groupAPI) GroupHistory(id string, _ int) ([]visor.GroupMessage, error) {
 	if a.history != nil {
@@ -180,6 +191,38 @@ func TestGroupItemHandler(t *testing.T) {
 	h(rr, httptest.NewRequest(http.MethodDelete, "/group/gid-9", nil))
 	if rr.Code != http.StatusNoContent || len(fake.deleted) != 1 {
 		t.Errorf("delete: code=%d deleted=%v", rr.Code, fake.deleted)
+	}
+}
+
+// Promote / demote had no route here for a long time: the visor RPC and
+// the CLI both had them, so nothing looked missing, but a browser-only
+// operator could never create a second admin — and an invite names the
+// group's admins, so the founder stayed the only way in. Route coverage
+// is what would have caught it.
+func TestGroupItemHandler_PromoteDemote(t *testing.T) {
+	fake := &groupAPI{}
+	withFakePairRPC(t, fake)
+	h := groupItemHandler()
+
+	pk, _ := cipher.GenerateKeyPair()
+	body := `{"pk":"` + pk.Hex() + `"}`
+
+	rr := httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodPost, "/group/gid-9/members/promote", strings.NewReader(body)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("promote: code=%d body=%q", rr.Code, rr.Body.String())
+	}
+	if len(fake.promoted) != 1 || fake.promoted[0] != pk {
+		t.Errorf("promote captured = %v, want [%s]", fake.promoted, pk)
+	}
+
+	rr = httptest.NewRecorder()
+	h(rr, httptest.NewRequest(http.MethodPost, "/group/gid-9/members/demote", strings.NewReader(body)))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("demote: code=%d body=%q", rr.Code, rr.Body.String())
+	}
+	if len(fake.demoted) != 1 || fake.demoted[0] != pk {
+		t.Errorf("demote captured = %v, want [%s]", fake.demoted, pk)
 	}
 }
 

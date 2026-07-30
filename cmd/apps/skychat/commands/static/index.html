@@ -1626,6 +1626,18 @@
     .ga-btn.danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
     .ga-btn.primary { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
     .ga-empty { padding: 8px 4px; font-size: 12px; color: var(--text-secondary); }
+    .ga-hint {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--accent-orange);
+      background: rgba(249, 115, 22, 0.08);
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+      text-align: left;
+    }
+    .ga-hint.hidden { display: none; }
     .ga-badge {
       display: inline-block;
       min-width: 18px;
@@ -2061,6 +2073,13 @@
       </div>
       <h4 class="ga-heading">Members</h4>
       <ul id="gaMembers" class="ga-list"></ul>
+      <!-- Shown to admins of a group that has only one. An invite names
+           the group's admins, so with one admin the group can only be
+           joined while that one visor is online. -->
+      <div id="gaSoloAdminHint" class="ga-hint hidden">
+        You are this group's only admin — nobody can join while you are
+        offline. Make another member an admin so invites have a second door.
+      </div>
       <div id="gaBannedWrap" class="hidden">
         <h4 class="ga-heading">Banned</h4>
         <ul id="gaBanned" class="ga-list"></ul>
@@ -5510,14 +5529,20 @@
         const gid = this.group;
         const list = document.getElementById('gaMembers');
         list.innerHTML = '';
+        const muted = ((info && info.muted) || []).map(p => String(p).toLowerCase());
+        const admins = ((info && info.admins) || []).map(p => String(p).toLowerCase());
+        const ownerPK = String((info && info.owner_pk) || '').toLowerCase();
+        // The founder counts as an admin even on records whose admins list
+        // predates the field, so union it in before deciding we're alone.
+        const adminCount = new Set(admins.concat(ownerPK ? [ownerPK] : [])).size;
         const members = (info && info.members) || [];
+        // Only worth saying when there is somebody to promote.
+        document.getElementById('gaSoloAdminHint').classList.toggle(
+          'hidden', !(isAdmin && adminCount <= 1 && members.length > 1));
         if (!members.length) {
           list.innerHTML = '<li class="ga-empty">No members yet.</li>';
           return;
         }
-        const muted = ((info && info.muted) || []).map(p => String(p).toLowerCase());
-        const admins = ((info && info.admins) || []).map(p => String(p).toLowerCase());
-        const ownerPK = String((info && info.owner_pk) || '').toLowerCase();
         members.forEach(raw => {
           const pk = String(raw);
           const low = pk.toLowerCase();
@@ -5528,7 +5553,15 @@
           if (muted.includes(low)) tags.push('restricted');
           // The founder can't be removed, banned or muted — the server
           // refuses it, so offering the buttons would only produce errors.
+          //
+          // Promote comes first because it's the one constructive action
+          // here, and because it's what keeps the group joinable when the
+          // founder is offline: an invite names the group's admins, so a
+          // group with a single admin has a single door.
           const actions = (isAdmin && low !== ownerPK) ? [
+            admins.includes(low)
+              ? { label: 'Demote', cls: '', fn: `app.groupMemberAction('${gid}','members/demote','${pk}')` }
+              : { label: 'Make admin', cls: 'primary', fn: `app.groupMemberAction('${gid}','members/promote','${pk}')` },
             muted.includes(low)
               ? { label: 'Unrestrict', cls: '', fn: `app.groupMemberAction('${gid}','members/unmute','${pk}')` }
               : { label: 'Restrict', cls: '', fn: `app.groupMemberAction('${gid}','members/mute','${pk}')` },
