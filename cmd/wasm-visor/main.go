@@ -275,6 +275,10 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	}
 
 	mLog := logging.NewMasterLogger()
+	// Mirror the subsystem firehose into the in-tab log ring so the Angular Logs
+	// page (/runtime-logs) shows the same lines as the browse.js desktop log
+	// window instead of only the sparse vlog() step markers.
+	mLog.Logger.AddHook(vlogHook{})
 
 	// 1. dmsg client (browser WebSocket carrier). Seed from ALL embedded dmsg
 	// servers via WebSocket on their advertised port — the unified dmsg-server
