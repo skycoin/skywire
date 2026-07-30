@@ -37,12 +37,17 @@ const (
 	// side runs rpc.Client). Here the visor itself serves rpc.Server
 	// to whoever's authorized to dial in.
 	//
-	// MUST NOT be 44: that is VPNServerPort, and the skynet mirror
-	// reserves this port in the appnet porter at visor init (whenever
-	// the visor has hypervisor/dmsgpty-whitelist PKs — i.e. almost
-	// always). Sharing 44 made vpn-server's `Listen(skynet, 44)` fail
-	// with "port already bound" on every hypervisor-connected board.
-	DmsgVisorRPCPort uint16 = 57
+	// The skynet mirror reserves this number in the appnet porter at
+	// visor init (whenever the visor has hypervisor/dmsgpty-whitelist
+	// PKs — i.e. almost always), so it must not collide with ANY
+	// skynet port either, not just with another dmsg one. It was 44
+	// (VPNServerPort), which made vpn-server's `Listen(skynet, 44)`
+	// fail with "port already bound" on every hypervisor-connected
+	// board; then 57 (SkyForwardingServerPort), which raced the
+	// sky_forward_conn module for the same number — whichever bound
+	// second lost, and a lost sky_forward_conn is a FATAL module-init
+	// error that takes the whole visor down at boot.
+	DmsgVisorRPCPort uint16 = 65
 
 	// DmsgHypervisorPort Listening port of a hypervisor for incoming RPC visor connections over dmsg.
 	DmsgHypervisorPort uint16 = 46
@@ -218,9 +223,13 @@ const (
 
 	// VPNRouterPort is a nominal launcher port for the vpn-router app. The app
 	// serves no dmsg endpoint (it's a local gateway), but every launcher
-	// AppConfig carries a port; this keeps it unique from the others. 62 was
-	// already taken by SkychatVoiceSignalPort, so this uses 58.
-	VPNRouterPort uint16 = 58
+	// AppConfig carries a port; this keeps it unique from the others.
+	//
+	// It was 62 (SkychatVoiceSignalPort), then 58 — which is SkyPingPort,
+	// bound on skynet by initPing on EVERY visor, where a failed bind is a
+	// fatal module-init error. Nominal or not, an app port has to stay out
+	// of the numbers the visor itself claims.
+	VPNRouterPort uint16 = 66
 
 	// ExampleServerName is the name of the example server app
 	ExampleServerName = "example-server-app"

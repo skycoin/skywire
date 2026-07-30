@@ -32,7 +32,7 @@
   },
   "skywire-tcp": {
     "pk_table": null,
-    "listening_address": ":7777"
+    "listening_address": ":7778"
   },
   "transport": {
     "discovery": "dmsg://02a5993cb6792eb18908cb7c6c9c742ef5fbe3dcfcce2862bbc4615a5f35cbed46:80",
