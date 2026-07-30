@@ -102,6 +102,118 @@ func (s *Session) handleJoinRequest(c net.Conn, payload []byte) {
 		Info("group: join: answered join request")
 }
 
+// joinCandidateStagger is how long the fan-out gives one candidate to
+// answer before also asking the next.
+//
+// The point is to ask as few admins as possible while never letting one
+// dead admin hold up a join. A healthy relay answers in tens of
+// milliseconds, so in the normal case the founder wins before the second
+// dial is ever attempted and the group sees exactly the single request it
+// saw before this existed. Only a candidate that is slow or gone costs
+// the group a second (and third) queue entry, which is the trade the
+// whole feature is for.
+const joinCandidateStagger = 2 * time.Second
+
+// joinAttempt is one candidate's outcome inside the fan-out.
+type joinAttempt struct {
+	pk   cipher.PubKey
+	resp JoinResponseMsg
+	err  error
+}
+
+// SendJoinRequestAny asks every candidate admin, staggered, and returns
+// the first answer that is an actual decision about the requester.
+//
+// Answers that are about the RESPONDER rather than the requester
+// (JoinStatusUnavailable — demoted, or doesn't hold the group) and
+// candidates that don't answer at all are passed over: the next name gets
+// its turn. A group is joinable as long as one admin in the invite is
+// alive and still authorized.
+//
+// Error precedence when nobody decides:
+//
+//   - ErrJoinNoResponse if any candidate took the frame and stayed silent.
+//     That is the fingerprint of a build predating admission control, and
+//     the caller's fallback to the legacy direct-subscribe join is the
+//     right response — it has to outrank the others or a group with one
+//     old founder and one unreachable admin would stop working.
+//   - ErrJoinNoAdmin if some candidate answered "not mine to rule on".
+//     The group exists and is reachable; nobody present can admit.
+//   - otherwise the first transport error, verbatim.
+func SendJoinRequestAny(ctx context.Context, dmsgC *dmsg.Client, groupID string, candidates []cipher.PubKey, port uint16, requester cipher.PubKey, note string) (JoinResponseMsg, error) {
+	switch len(candidates) {
+	case 0:
+		return JoinResponseMsg{}, ErrJoinNoAdmin
+	case 1:
+		// No fan-out, no stagger, no goroutine — byte-for-byte the
+		// pre-multi-admin path, which is what every link minted by an
+		// older build resolves to.
+		return SendJoinRequest(ctx, dmsgC, groupID, candidates[0], port, requester, note)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	// Cancel on return so the candidates we didn't wait for stop dialing
+	// as soon as one of them has answered.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Buffered for every candidate: a goroutine whose answer arrives
+	// after we've returned must not block on the send.
+	results := make(chan joinAttempt, len(candidates))
+	for i, pk := range candidates {
+		go func(i int, pk cipher.PubKey) {
+			if i > 0 {
+				select {
+				case <-ctx.Done():
+					results <- joinAttempt{pk: pk, err: ctx.Err()}
+					return
+				case <-time.After(time.Duration(i) * joinCandidateStagger):
+				}
+			}
+			resp, err := SendJoinRequest(ctx, dmsgC, groupID, pk, port, requester, note)
+			results <- joinAttempt{pk: pk, resp: resp, err: err}
+		}(i, pk)
+	}
+
+	var (
+		silent      bool   // some candidate accepted the frame and never answered
+		unavailable string // some candidate answered "ask another admin", with which one
+		firstErr    error
+	)
+	for range candidates {
+		att := <-results
+		switch {
+		case att.err != nil:
+			if errors.Is(att.err, ErrJoinNoResponse) {
+				silent = true
+			}
+			if firstErr == nil {
+				firstErr = att.err
+			}
+		case att.resp.Status == JoinStatusUnavailable:
+			unavailable = fmt.Sprintf("%s: %s", att.pk, att.resp.Reason)
+		case att.resp.Status.IsDecision():
+			return att.resp, nil
+		default:
+			// Unknown status; decodeJoinResponse already rejects these,
+			// so this is unreachable in practice. Treat as "no decision".
+			unavailable = fmt.Sprintf("%s: unknown status %q", att.pk, att.resp.Status)
+		}
+	}
+
+	switch {
+	case silent:
+		return JoinResponseMsg{}, fmt.Errorf("%w (asked %d admins)", ErrJoinNoResponse, len(candidates))
+	case unavailable != "":
+		return JoinResponseMsg{}, fmt.Errorf("%w: %s", ErrJoinNoAdmin, unavailable)
+	case firstErr != nil:
+		return JoinResponseMsg{}, firstErr
+	default:
+		return JoinResponseMsg{}, ErrJoinNoAdmin
+	}
+}
+
 // SendJoinRequest is the requester side: dial the group's relay listener,
 // write a join request, read the answer.
 //

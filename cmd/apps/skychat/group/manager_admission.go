@@ -40,6 +40,24 @@ import (
 // indistinguishable from pestering.
 const pendingJoinRetryInterval = 30 * time.Second
 
+// joinAttemptBudget is how long one join attempt may take for n
+// candidates: the last candidate starts after (n-1) staggers and then
+// needs a full response window of its own, plus the slack the
+// single-target path always had for the dial itself.
+//
+// It grows with n rather than being a flat constant so that adding an
+// admin to an invite cannot silently cut the last candidate's read short
+// — a joiner that timed out mid-answer would leave the admin with a
+// queued request and the joiner with an error, the one outcome worse
+// than a slow join.
+func joinAttemptBudget(n int) time.Duration {
+	if n < 1 {
+		n = 1
+	}
+	return joinResponseReadTimeout + 5*time.Second +
+		time.Duration(n-1)*joinCandidateStagger
+}
+
 // SetJoinRequestNotifier installs a callback fired when a NEW join
 // request lands on this visor's approval queue. Used by the app layer
 // to raise an SSE event and an OS notification. Not fired for a re-ask
@@ -68,22 +86,28 @@ func (m *Manager) persistModeration(id string) func(ModState) {
 // already authenticated against the transport.
 func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 	return func(req JoinRequest) JoinResponseMsg {
+		// The three "not my call" answers below are deliberately
+		// JoinStatusUnavailable rather than denied. A requester now asks
+		// several admins, and a refusal it believes is terminal would let
+		// one stale name in an invite — a visor that left the group, or
+		// deleted it, or was demoted — sink a join every other admin
+		// would have approved. Unavailable moves it to the next name.
 		r, ok, err := m.store.Get(id)
 		if err != nil || !ok {
-			return JoinResponseMsg{Status: JoinStatusDenied, Reason: "group not found"}
+			return JoinResponseMsg{Status: JoinStatusUnavailable, Reason: "this visor does not hold that group"}
 		}
 		if r.Status.IsTerminal() {
-			return JoinResponseMsg{Status: JoinStatusDenied, Reason: "group is no longer active"}
+			return JoinResponseMsg{Status: JoinStatusUnavailable, Reason: "this visor has left or deleted the group"}
 		}
 		if r.IsBanned(req.PK) {
 			return JoinResponseMsg{Status: JoinStatusBanned, Reason: "banned from this group"}
 		}
-		// Only a visor with roster authority can admit. In practice the
-		// requester dials the founder, so this is a guard rather than a
-		// live branch — but a non-admin silently queueing requests it
-		// could never act on would be worse than an honest refusal.
+		// Only a visor with roster authority can admit. Reachable now that
+		// invites name several admins: any of them may have been demoted
+		// since the link was minted, and a member session answers join
+		// requests too so it can act the moment it IS promoted.
 		if !r.IsAdmin(m.myPK) {
-			return JoinResponseMsg{Status: JoinStatusDenied, Reason: "this visor cannot admit members to the group"}
+			return JoinResponseMsg{Status: JoinStatusUnavailable, Reason: "this visor holds no roster authority on the group"}
 		}
 		// Already in. A re-ask from a member is how a joiner recovers
 		// after being admitted but losing the response frame, so it must
@@ -458,6 +482,9 @@ func (m *Manager) moderate(id string, pk cipher.PubKey, op ModOp, what string, m
 //   - no response → the group runs a build without admission control;
 //     fall back to the legacy "persist and try to subscribe" path so
 //     existing groups keep working
+//
+// The request goes to every admin the invite names, not just the founder
+// — see Invite.Admins for why that stopped being good enough.
 func (m *Manager) RequestJoin(inv Invite, note string) (Record, error) {
 	if inv.OwnerPK == m.myPK {
 		return Record{}, errors.New("group: RequestJoin: refusing to join own group")
@@ -465,10 +492,14 @@ func (m *Manager) RequestJoin(inv Invite, note string) (Record, error) {
 	if existing, ok, err := m.store.Get(inv.ID); err == nil && ok && existing.Status == StatusActive {
 		return existing, nil // already in — idempotent
 	}
+	targets := inv.AdmissionTargets(m.myPK)
+	if len(targets) == 0 {
+		return Record{}, errors.New("group: RequestJoin: invite names nobody who can admit us")
+	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), joinResponseReadTimeout+5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), joinAttemptBudget(len(targets)))
 	defer cancel()
-	resp, err := SendJoinRequest(ctx, m.dmsgC, inv.ID, inv.OwnerPK, inv.Port, m.myPK, note)
+	resp, err := SendJoinRequestAny(ctx, m.dmsgC, inv.ID, targets, inv.Port, m.myPK, note)
 	if err != nil {
 		if errors.Is(err, ErrJoinNoResponse) {
 			m.log.WithField("id", inv.ID).
@@ -481,6 +512,13 @@ func (m *Manager) RequestJoin(inv Invite, note string) (Record, error) {
 	switch resp.Status {
 	case JoinStatusDenied, JoinStatusBanned:
 		return Record{}, errForStatus(resp.Status, resp.Reason)
+
+	case JoinStatusUnavailable:
+		// Only reachable on the single-candidate path (the fan-out folds
+		// this into ErrJoinNoAdmin itself): the one PK we could ask holds
+		// no authority over the group, or no longer holds it at all.
+		// Retryable, not a refusal.
+		return Record{}, fmt.Errorf("%w: %s", ErrJoinNoAdmin, resp.Reason)
 
 	case JoinStatusPending:
 		r := m.recordFromInvite(inv, resp)
@@ -524,20 +562,24 @@ func (m *Manager) recordFromInvite(inv Invite, resp JoinResponseMsg) Record {
 		key = inv.AESKey
 	}
 	r := Record{
-		ID:        inv.ID,
-		Name:      name,
-		OwnerPK:   inv.OwnerPK,
-		Admins:    resp.Admins,
-		Port:      inv.Port,
-		Mode:      inv.Mode,
-		Kind:      kindForMode(inv.Mode),
-		AESKey:    key,
-		Members:   members,
-		Muted:     resp.Muted,
-		ReadOnly:  resp.ReadOnly,
-		Role:      RoleMember,
-		CreatedAt: time.Now().UTC(),
-		JoinedAt:  time.Now().UTC(),
+		ID:      inv.ID,
+		Name:    name,
+		OwnerPK: inv.OwnerPK,
+		Admins:  resp.Admins,
+		// Remember who the link said could let us in, so a queued
+		// request keeps re-asking all of them and not just the founder.
+		// Kept out of Admins on purpose — see Record.AdmissionPKs.
+		AdmissionPKs: append([]cipher.PubKey(nil), inv.Admins...),
+		Port:         inv.Port,
+		Mode:         inv.Mode,
+		Kind:         kindForMode(inv.Mode),
+		AESKey:       key,
+		Members:      members,
+		Muted:        resp.Muted,
+		ReadOnly:     resp.ReadOnly,
+		Role:         RoleMember,
+		CreatedAt:    time.Now().UTC(),
+		JoinedAt:     time.Now().UTC(),
 	}
 	r.EnsureFounderInAdmins()
 	return r
@@ -643,10 +685,25 @@ func (m *Manager) retryPendingJoins(ctx context.Context) {
 		if !m.pendingJoinShouldAttempt(r.ID) {
 			continue
 		}
-		resp, err := SendJoinRequest(ctx, m.dmsgC, r.ID, r.OwnerPK, r.Port, m.myPK, "")
+		targets := r.AdmissionTargets(m.myPK)
+		if len(targets) == 0 {
+			continue
+		}
+		resp, err := SendJoinRequestAny(ctx, m.dmsgC, r.ID, targets, r.Port, m.myPK, "")
 		if err != nil {
 			if terminal := errIsTerminalJoin(err); terminal {
 				_ = m.store.SetStatus(r.ID, StatusDenied) //nolint:errcheck
+			}
+			// Deliberately NOT terminal: every admin we know of is either
+			// unreachable or says the group isn't theirs to rule on, and
+			// any of those can change. Logged because the record otherwise
+			// sits in awaiting-approval indefinitely with nothing to
+			// distinguish "nobody has decided yet" from "there is nobody
+			// left to decide" — the group's last admin may be gone for
+			// good, in which case the operator wants to Leave it.
+			if errors.Is(err, ErrJoinNoAdmin) {
+				m.log.WithField("id", r.ID).WithField("asked", len(targets)).
+					Info("group: join: no reachable admin can rule on our request; still waiting")
 			}
 			continue
 		}

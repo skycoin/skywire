@@ -249,6 +249,20 @@ type Record struct {
 	// removing the founder (OwnerPK) from this list.
 	Admins []cipher.PubKey `json:"admins,omitempty"`
 
+	// AdmissionPKs are the admin PKs an invite named as able to admit us.
+	// Kept ONLY so a requester whose join is queued can keep asking
+	// someone other than the founder — retryPendingJoins reads it, and
+	// nothing else does.
+	//
+	// Deliberately not merged into Admins. These PKs are an unverified
+	// claim by whoever wrote the invite, and Admins is roster authority:
+	// a PK in there has its signed roster/mod gossip accepted. Keeping
+	// the two apart means an invite can route a join request without also
+	// granting the PKs it names any power over our copy of the group. The
+	// real admin set arrives in the admission response and converges
+	// through gossip from then on.
+	AdmissionPKs []cipher.PubKey `json:"admission_pks,omitempty"`
+
 	// Port is the DMSG port the owner's publisher listens on.
 	// Chosen by the owner at create time (not deterministic from
 	// the groupID — pair-allocator-style determinism doesn't help
@@ -373,6 +387,15 @@ func (r Record) IsAdmin(pk cipher.PubKey) bool {
 		}
 	}
 	return false
+}
+
+// AdmissionTargets returns the ordered PKs to send a join request to for
+// this group: the founder, then whoever the invite named, then any admin
+// we have since learned about. self is excluded. Used by the pending-join
+// retry loop; the first attempt goes through Invite.AdmissionTargets
+// because there is no Record yet.
+func (r Record) AdmissionTargets(self cipher.PubKey) []cipher.PubKey {
+	return admissionOrder(r.OwnerPK, self, r.AdmissionPKs, r.Admins)
 }
 
 // EnsureFounderInAdmins normalizes the on-disk Admins slice so the

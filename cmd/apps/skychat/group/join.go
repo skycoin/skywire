@@ -94,11 +94,35 @@ const (
 	// JoinStatusBanned — the PK is barred. Terminal, and deliberately
 	// distinguished from denied so the UI can say which happened.
 	JoinStatusBanned JoinStatus = "banned"
+
+	// JoinStatusUnavailable — "not my decision to make, ask someone
+	// else". Answered by a visor that holds no roster authority on the
+	// group, or no longer holds the group at all. It is NOT a refusal:
+	// the requester moves to the next admin the invite named rather
+	// than treating the group as closed.
+	//
+	// This status exists because a multi-admin invite means a joiner can
+	// legitimately dial a PK that has since been demoted or has left. If
+	// that answered "denied", one stale name in a link would sink a join
+	// the group's other admins would happily have approved.
+	//
+	// Only ever sent to a requester that asked more than one PK — see
+	// handleJoinRequest for why an older joiner never sees it.
+	JoinStatusUnavailable JoinStatus = "unavailable"
 )
 
 // IsTerminal reports whether the requester should stop re-asking.
 func (s JoinStatus) IsTerminal() bool {
 	return s == JoinStatusAdmitted || s == JoinStatusDenied || s == JoinStatusBanned
+}
+
+// IsDecision reports whether this status is an answer about the
+// requester ("you're in", "wait", "no") as opposed to an answer about
+// the responder ("I can't rule on this"). The fan-out in
+// SendJoinRequestAny keeps asking until it gets a decision.
+func (s JoinStatus) IsDecision() bool {
+	return s == JoinStatusAdmitted || s == JoinStatusPending ||
+		s == JoinStatusDenied || s == JoinStatusBanned
 }
 
 // JoinRequestMsg is the frame a prospective member writes to the
@@ -193,7 +217,65 @@ var (
 	// identified. Only reachable on a transport that isn't dmsg or
 	// skynet, which the relay listener never binds.
 	ErrJoinNoTransportIdentity = errors.New("group: join: connection has no authenticated peer identity")
+
+	// ErrJoinNoAdmin means every admin the invite named was reachable
+	// but unable to rule (demoted, or no longer holds the group), or was
+	// not reachable at all. Retryable: an admin coming back online is
+	// all it takes, which is why the requester's record stays in
+	// awaiting-approval rather than going terminal.
+	ErrJoinNoAdmin = errors.New("group: join: no admin able to admit is reachable")
 )
+
+// maxAdmissionTargets caps how many PKs one join attempt will ever dial.
+//
+// Two reasons for a cap rather than "however many the link lists". An
+// invite is attacker-supplied text, so an unbounded admin list is an
+// unbounded fan-out of dials from whoever pastes it. And the attempt is
+// bounded in time by its slowest candidate, so every extra name widens
+// the worst case an operator waits on a join click — with the stagger in
+// SendJoinRequestAny, four keeps that inside ~20s.
+//
+// Truncation is not a loss of authority: it only limits which admins a
+// single attempt asks. The group's real admin set arrives with the
+// admission response and converges through gossip afterwards.
+const maxAdmissionTargets = 4
+
+// admissionOrder builds the ordered candidate list a joiner walks when
+// asking to be let in: the founder first, then everyone else in the
+// order they were named, minus zero keys, duplicates, and self.
+//
+// Founder-first is deliberate. It keeps the single-dial latency of the
+// pre-multi-admin path for the overwhelmingly common case (founder
+// online, answers, done), and the founder is the one PK that can never
+// be demoted — so it is the candidate least likely to answer "not my
+// group". The rest of the list is what makes the founder's absence
+// survivable rather than terminal.
+//
+// self is dropped because dialing our own relay listener would at best
+// waste a round trip on an answer we could have computed locally, and an
+// invite naming us as an admin is a normal thing to receive (we may have
+// been an admin, lost the record, and been re-invited).
+func admissionOrder(founder, self cipher.PubKey, more ...[]cipher.PubKey) []cipher.PubKey {
+	out := make([]cipher.PubKey, 0, maxAdmissionTargets)
+	seen := make(map[cipher.PubKey]struct{}, maxAdmissionTargets)
+	add := func(pk cipher.PubKey) {
+		if pk == (cipher.PubKey{}) || pk == self || len(out) >= maxAdmissionTargets {
+			return
+		}
+		if _, dup := seen[pk]; dup {
+			return
+		}
+		seen[pk] = struct{}{}
+		out = append(out, pk)
+	}
+	add(founder)
+	for _, list := range more {
+		for _, pk := range list {
+			add(pk)
+		}
+	}
+	return out
+}
 
 // NewJoinRequest builds a well-formed request frame.
 func NewJoinRequest(groupID string, requester cipher.PubKey, note string) JoinRequestMsg {
@@ -342,7 +424,7 @@ func decodeJoinResponse(b []byte) (JoinResponseMsg, error) {
 		return JoinResponseMsg{}, fmt.Errorf("group: decode join response: unexpected kind %q", m.Kind)
 	}
 	switch m.Status {
-	case JoinStatusAdmitted, JoinStatusPending, JoinStatusDenied, JoinStatusBanned:
+	case JoinStatusAdmitted, JoinStatusPending, JoinStatusDenied, JoinStatusBanned, JoinStatusUnavailable:
 	default:
 		return JoinResponseMsg{}, fmt.Errorf("group: decode join response: unknown status %q", m.Status)
 	}

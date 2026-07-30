@@ -49,26 +49,31 @@ type groupNode struct {
 // newGroupEnv brings up a dmsg env with two managers wired to it.
 func newGroupEnv(t *testing.T) (a, b *groupNode) {
 	t.Helper()
+	nodes := newGroupEnvN(t, 2)
+	return nodes[0], nodes[1]
+}
+
+// newGroupEnvN is the same harness for n visors, for the cases that need
+// a third party — a founder, a second admin, and someone trying to join.
+func newGroupEnvN(t *testing.T, n int) []*groupNode {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("dmsg integration test; skipped under -short")
 	}
-
-	pkA, skA := cipher.GenerateKeyPair()
-	pkB, skB := cipher.GenerateKeyPair()
 
 	env := dmsgtest.NewEnv(t, dmsgtest.DefaultTimeout)
 	env.Discovery()
 	require.NoError(t, env.Startup(dmsgtest.DefaultTimeout, 1, 0, &dmsg.Config{MinSessions: 1}))
 	t.Cleanup(env.Shutdown)
 
-	dmsgA, err := env.NewClientWithKeys(pkA, skA, &dmsg.Config{MinSessions: 1})
-	require.NoError(t, err)
-	dmsgB, err := env.NewClientWithKeys(pkB, skB, &dmsg.Config{MinSessions: 1})
-	require.NoError(t, err)
-	waitDmsgClientReady(t, dmsgA)
-	waitDmsgClientReady(t, dmsgB)
+	nodes := make([]*groupNode, 0, n)
+	for i := 0; i < n; i++ {
+		tag := string(rune('A' + i))
+		pk, sk := cipher.GenerateKeyPair()
+		c, err := env.NewClientWithKeys(pk, sk, &dmsg.Config{MinSessions: 1})
+		require.NoError(t, err)
+		waitDmsgClientReady(t, c)
 
-	mk := func(pk cipher.PubKey, sk cipher.SecKey, c *dmsg.Client, tag string) *groupNode {
 		dir := t.TempDir()
 		st, serr := OpenStore(filepath.Join(dir, "groups.db"))
 		require.NoError(t, serr)
@@ -84,10 +89,9 @@ func newGroupEnv(t *testing.T) (a, b *groupNode) {
 
 		box := &msgInbox{}
 		mgr.SetMessageHandler(box.deliver)
-		return &groupNode{pk: pk, sk: sk, dmsgC: c, store: st, dir: dir, mgr: mgr, inbox: box}
+		nodes = append(nodes, &groupNode{pk: pk, sk: sk, dmsgC: c, store: st, dir: dir, mgr: mgr, inbox: box})
 	}
-
-	return mk(pkA, skA, dmsgA, "A"), mk(pkB, skB, dmsgB, "B")
+	return nodes
 }
 
 func waitDmsgClientReady(t *testing.T, c *dmsg.Client) {

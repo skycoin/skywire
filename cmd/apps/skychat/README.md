@@ -93,6 +93,14 @@ the canonical group feed; members subscribe and (post-#2539)
 publish their own per-member feed. See `cmd/apps/skychat/group/`
 for the implementation.
 
+An invite link names the group's other admins alongside the founder,
+and a joiner asks all of them, so admission survives the founder
+being offline or its key being lost — promote a second admin
+(`skywire cli skychat group promote`) and every link minted
+afterwards has a fallback door. The founder is still the group's
+immutable recovery anchor and is still asked first; it just isn't the
+only one who can let people in.
+
 The browser UI mirrors this with a Groups sidebar (create/join
 modals, per-sender message labels), backed by an HTTP proxy to the
 visor's group RPC — `GET/POST /group`, `POST /group/join`, and
