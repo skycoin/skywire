@@ -78,6 +78,12 @@ type Manager struct {
 	// peerFanout is this visor's cap on non-admin peer subscriptions,
 	// passed through to every session. See ManagerConfig.PeerFanout.
 	peerFanout int
+	// joinBucket throttles join attempts from PKs the group has never
+	// admitted. Per-visor and in memory — see joincost.go.
+	joinBucket *joinBucket
+	// maxPending caps undecided join requests per group; zero takes
+	// DefaultMaxPendingJoins.
+	maxPending int
 
 	// reconnect loop state — see runReconnectLoop.
 	reconnectCtx    context.Context
@@ -131,6 +137,15 @@ type ManagerConfig struct {
 	// default; negative opts this visor out of peer backfill entirely
 	// regardless of what a group's admins chose. See Config.PeerFanout.
 	PeerFanout int
+
+	// JoinBurst / JoinRefill / MaxPendingJoins tune the anti-flood gates:
+	// how many join attempts a group absorbs back-to-back, how fast that
+	// allowance returns, and how deep the approval queue may get. Zero
+	// takes the package defaults. See joincost.go for what each one
+	// actually protects.
+	JoinBurst       int
+	JoinRefill      time.Duration
+	MaxPendingJoins int
 }
 
 // DefaultHeartbeatInterval is the recommended interval an owner
@@ -167,6 +182,8 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		sessions:           make(map[string]*Session),
 		heartbeatInterval:  cfg.HeartbeatInterval,
 		peerFanout:         cfg.PeerFanout,
+		joinBucket:         newJoinBucket(cfg.JoinBurst, cfg.JoinRefill),
+		maxPending:         cfg.MaxPendingJoins,
 		reconnectState:     make(map[string]*reconnectState),
 		peerReconnectState: make(map[string]map[cipher.PubKey]*reconnectState),
 		pendingJoinLast:    make(map[string]time.Time),
@@ -314,6 +331,9 @@ func (m *Manager) Delete(id string) error {
 }
 
 func (m *Manager) terminate(id string, status Status) error {
+	// Drop the anti-flood bucket for a group we're done with, so its map
+	// doesn't accumulate entries for IDs that no longer exist.
+	defer m.joinBucket.forget(id)
 	r, ok, err := m.store.Get(id)
 	if err != nil {
 		return fmt.Errorf("group: terminate: get %s: %w", id, err)
@@ -1523,6 +1543,9 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 		// for the request, and being first also means we're never the
 		// name that falls off the end of the cap.
 		Admins: inviteAdmins(r, m.myPK),
+		// Tell the joiner the price up front so paying it costs no extra
+		// round trip. A stale link just gets challenged.
+		PoWBits: r.JoinPoWRequired(),
 	}
 	// The group key is deliberately NOT in the link. It is delivered in
 	// the approval response, over the encrypted relay stream, only to a

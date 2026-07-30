@@ -109,6 +109,22 @@ const (
 	// Only ever sent to a requester that asked more than one PK — see
 	// handleJoinRequest for why an older joiner never sees it.
 	JoinStatusUnavailable JoinStatus = "unavailable"
+
+	// JoinStatusChallenge — "pay first". The group wants a proof of work
+	// the request didn't carry, or carried too weakly, and the response
+	// says how many bits it wants. The requester solves and re-asks
+	// immediately; this is a round trip, not a refusal.
+	//
+	// Distinct from unavailable because the requester must ACT rather than
+	// move on to another admin: every admin will ask the same, and moving
+	// on would spend the fan-out looking for a laxer one.
+	JoinStatusChallenge JoinStatus = "challenge"
+
+	// JoinStatusThrottled — the group is absorbing requests slower than
+	// they are arriving. Retryable, and deliberately cheap to produce: a
+	// throttled request is never stored, so a flood costs the admin one
+	// hash and one frame rather than a row and a notification.
+	JoinStatusThrottled JoinStatus = "throttled"
 )
 
 // IsTerminal reports whether the requester should stop re-asking.
@@ -124,6 +140,11 @@ func (s JoinStatus) IsDecision() bool {
 	return s == JoinStatusAdmitted || s == JoinStatusPending ||
 		s == JoinStatusDenied || s == JoinStatusBanned
 }
+
+// NeedsWork reports whether the group answered "solve a proof of work and
+// come back". Handled by the requester itself rather than by moving on to
+// the next admin — see JoinStatusChallenge.
+func (s JoinStatus) NeedsWork() bool { return s == JoinStatusChallenge }
 
 // JoinRequestMsg is the frame a prospective member writes to the
 // group's relay listener.
@@ -142,6 +163,13 @@ type JoinRequestMsg struct {
 	// a hostile requester can't push a megabyte into the admin's
 	// pending list.
 	Note string `json:"note,omitempty"`
+
+	// PoW is the requester's proof of work, when the group asks for one.
+	// Absent from requests by older builds, which the responder answers
+	// with a challenge rather than a refusal — so an un-upgraded joiner
+	// hitting a group that requires work gets one extra round trip and
+	// then fails honestly, instead of being silently dropped.
+	PoW JoinPoW `json:"pow,omitempty"`
 
 	TS time.Time `json:"ts"`
 }
@@ -196,6 +224,16 @@ type JoinResponseMsg struct {
 	// other members' leaves in a group whose admins had turned that off,
 	// and would only stop once the first mod/ leaf corrected it.
 	PeerBackfillDisabled bool `json:"peer_backfill_disabled,omitempty"`
+
+	// PoWBits is the difficulty this group requires, sent with a
+	// challenge so a requester holding a stale invite learns the current
+	// price rather than guessing.
+	PoWBits uint8 `json:"pow_bits,omitempty"`
+
+	// RetryAfterSec is how long a throttled requester should wait. Advisory
+	// — the requester's own retry timer is the floor — but it lets a UI say
+	// something better than "try again sometime".
+	RetryAfterSec int `json:"retry_after_sec,omitempty"`
 
 	// Reason is operator-facing text for the non-admitted cases.
 	Reason string `json:"reason,omitempty"`
@@ -295,19 +333,40 @@ func admissionOrder(founder, self cipher.PubKey, more ...[]cipher.PubKey) []ciph
 	return out
 }
 
-// NewJoinRequest builds a well-formed request frame.
-func NewJoinRequest(groupID string, requester cipher.PubKey, note string) JoinRequestMsg {
+// NewJoinRequest builds a well-formed request frame, solving the group's
+// proof of work when one is asked for.
+//
+// Solving here — on the requester's own goroutine, before the dial — is
+// what makes the cost land on the party creating identities. bits comes
+// from the invite link or from a challenge; zero means the group asks for
+// nothing and the call is free.
+func NewJoinRequest(groupID string, requester cipher.PubKey, note string, bits uint8) JoinRequestMsg {
 	if len(note) > maxJoinNoteLen {
 		note = note[:maxJoinNoteLen]
 	}
-	return JoinRequestMsg{
+	msg := JoinRequestMsg{
 		Kind:        frameKindJoinRequest,
 		GroupID:     groupID,
 		RequesterPK: requester,
 		Note:        note,
 		TS:          time.Now().UTC(),
 	}
+	if bits = clampJoinPoWBits(bits); bits > 0 {
+		now := time.Now().UTC()
+		// A bounded solve: at MaxJoinPoWBits this finishes in seconds, and
+		// giving up produces a request the group answers with a challenge
+		// rather than one that never gets sent.
+		if p, ok := SolveJoinPoW(groupID, requester, bits, now, now.Add(joinPoWSolveBudget)); ok {
+			msg.PoW = p
+		}
+	}
+	return msg
 }
+
+// joinPoWSolveBudget caps how long a requester grinds before giving up and
+// sending the request anyway. The group will answer with a challenge, so a
+// slow machine degrades into an extra round trip rather than a hang.
+const joinPoWSolveBudget = 30 * time.Second
 
 // remotePKOf extracts the cryptographically authenticated peer key
 // from a relay connection. Both transports the relay listener binds
@@ -377,6 +436,12 @@ type JoinRequest struct {
 	Note    string        `json:"note,omitempty"`
 	AskedAt time.Time     `json:"asked_at"`
 
+	// PoW is the proof the requester sent, handed to the policy layer so
+	// it can verify against the group's current price. Not persisted with
+	// the queue entry — it is spent on arrival, and keeping it would
+	// invite someone to treat a stored proof as still valid.
+	PoW JoinPoW `json:"-"`
+
 	// Status is pending until an admin rules. Approved requests are
 	// recorded as admitted AND added to Members; the queue entry stays
 	// as an audit trail.
@@ -442,7 +507,8 @@ func decodeJoinResponse(b []byte) (JoinResponseMsg, error) {
 		return JoinResponseMsg{}, fmt.Errorf("group: decode join response: unexpected kind %q", m.Kind)
 	}
 	switch m.Status {
-	case JoinStatusAdmitted, JoinStatusPending, JoinStatusDenied, JoinStatusBanned, JoinStatusUnavailable:
+	case JoinStatusAdmitted, JoinStatusPending, JoinStatusDenied, JoinStatusBanned,
+		JoinStatusUnavailable, JoinStatusChallenge, JoinStatusThrottled:
 	default:
 		return JoinResponseMsg{}, fmt.Errorf("group: decode join response: unknown status %q", m.Status)
 	}

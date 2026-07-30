@@ -850,6 +850,10 @@ func (proxyDefaultAPI) GroupPromoteAdmin(_ string, _ cipher.PubKey) (GroupInfo, 
 	return GroupInfo{}, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GroupSetJoinPoW(_ string, _ uint8) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupSetPeerBackfill(_ string, _ bool) (GroupInfo, error) {
 	return GroupInfo{}, ErrProxyNotSupported
 }

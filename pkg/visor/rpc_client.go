@@ -1611,6 +1611,13 @@ func (rc *rpcClient) GroupRotateKey(id string) (GroupInfo, error) {
 	return resp, err
 }
 
+// GroupSetJoinPoW implements API.
+func (rc *rpcClient) GroupSetJoinPoW(id string, bits uint8) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupSetJoinPoW", &GroupJoinPoWRequest{ID: id, Bits: bits}, &resp)
+	return resp, err
+}
+
 // GroupSetPeerBackfill implements API.
 func (rc *rpcClient) GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error) {
 	var resp GroupInfo

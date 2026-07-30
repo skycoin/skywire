@@ -290,6 +290,7 @@ type API interface {
 	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupRotateKey(id string) (GroupInfo, error)
 	GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error)
+	GroupSetJoinPoW(id string, bits uint8) (GroupInfo, error)
 	GroupSend(args GroupSendArgs) error
 	GroupUnsend(args GroupUnsendArgs) error
 	GroupPoll(since time.Time) ([]GroupMessage, error)

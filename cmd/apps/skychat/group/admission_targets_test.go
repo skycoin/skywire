@@ -214,7 +214,7 @@ func TestDecodeJoinResponseAcceptsUnavailable(t *testing.T) {
 }
 
 func TestSendJoinRequestAnyNoCandidates(t *testing.T) {
-	_, err := SendJoinRequestAny(t.Context(), nil, "g", nil, 20003, pkN(1), "")
+	_, err := SendJoinRequestAny(t.Context(), nil, "g", nil, 20003, pkN(1), "", 0)
 	if !errors.Is(err, ErrJoinNoAdmin) {
 		t.Errorf("got %v, want ErrJoinNoAdmin", err)
 	}

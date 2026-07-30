@@ -57,6 +57,12 @@ type GroupInfo struct {
 	// ReadOnly suspends posting for every non-admin.
 	ReadOnly bool `json:"read_only,omitempty"`
 
+	// JoinPoWBits is how much proof of work this group asks of a join
+	// request, in leading zero bits — the price of one identity. Zero
+	// means none. Surfaced so an operator under a flood can see the
+	// current setting and raise it.
+	JoinPoWBits uint8 `json:"join_pow_bits"`
+
 	// PeerBackfill reports whether any online member may serve this
 	// group's history and messages to a joiner (true) or only admins
 	// (false). Positive sense here even though the record stores the
@@ -585,6 +591,18 @@ func (v *Visor) GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error) {
 	})
 }
 
+// GroupSetJoinPoW sets how much proof of work a join request must carry,
+// in leading zero bits. Zero turns the price off. Admin-only.
+//
+// The lever for a group being flooded: public keys are free, so this is
+// what makes each identity cost measurable CPU. Local to this visor —
+// see skychatgroup.Record.JoinPoWBits.
+func (v *Visor) GroupSetJoinPoW(id string, bits uint8) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.SetJoinPoW(id, bits)
+	})
+}
+
 // GroupSetPeerBackfill decides whether any online member may serve this
 // group's history and messages to a joiner, or only admins. Admin-only.
 //
@@ -793,6 +811,7 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 		Muted:         append([]cipher.PubKey(nil), r.Muted...),
 		ReadOnly:      r.ReadOnly,
 		PeerBackfill:  r.PeerBackfillEnabled(),
+		JoinPoWBits:   r.JoinPoWRequired(),
 		KeyEpoch:      r.KeyEpoch,
 		Role:          r.Role,
 		Status:        r.Status,

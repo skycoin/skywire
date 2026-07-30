@@ -63,6 +63,18 @@ type Invite struct {
 	// ignores it and dials the founder, same as it always did.
 	Admins []cipher.PubKey `json:"admins,omitempty"`
 
+	// PoWBits is how much proof of work the group wants with a join
+	// request. Carried so the common case costs no extra round trip: the
+	// joiner pays before it dials, and only a stale or absent value turns
+	// into a challenge from the responder.
+	//
+	// Untrusted, like the rest of the link — it is clamped to
+	// MaxJoinPoWBits on read so a hostile invite cannot make whoever
+	// pastes it grind for hours. The responder checks against its own
+	// requirement regardless, so a link understating the price costs the
+	// joiner one extra round trip rather than getting anyone in cheaply.
+	PoWBits uint8 `json:"pow_bits,omitempty"`
+
 	// AESKey is the group key, and is now normally ABSENT even for
 	// ModePrivate: the key is handed to a joiner in the approval
 	// response over the encrypted relay stream, once an admin has said
@@ -141,6 +153,7 @@ func DecodeInvite(s string) (Invite, error) {
 	if inv.Port == 0 {
 		return Invite{}, fmt.Errorf("group invite: zero Port")
 	}
+	inv.PoWBits = clampJoinPoWBits(inv.PoWBits)
 	return inv, nil
 }
 
