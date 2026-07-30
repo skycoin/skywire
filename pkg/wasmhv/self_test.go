@@ -31,6 +31,9 @@ func (f fakeSelf) SelfNetworkTransports(int) []byte    { return nil }
 func (f fakeSelf) SelfDmsgSessions() []byte {
 	return []byte(`{"main":{"pk":"","role":"main","count":1,"servers":[]}}`)
 }
+func (f fakeSelf) SelfDmsgConnectAll() []byte {
+	return []byte(`{"total":0,"already_connected":0,"newly_connected":0}`)
+}
 func (f fakeSelf) SelfRouterSettings() []byte {
 	return []byte(`{"force_local_routes":false,"existing_tp_only":false,"mux_routes":0,"min_hops":0}`)
 }

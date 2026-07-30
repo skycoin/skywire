@@ -47,6 +47,13 @@ type SelfProvider interface {
 	// edge runs only the main client. nil when dmsg isn't up. Without it the node
 	// page's dmsg-sessions expander errors "Failed to fetch dmsg sessions".
 	SelfDmsgSessions() []byte
+	// SelfDmsgConnectAll opens a dmsg session to every wss-reachable server the
+	// tab knows (mirrors the native Visor.DmsgConnectAll), so a browser edge can
+	// rendezvous with peers delegated to servers it wasn't already on — the fix
+	// for "dmsg error 202 - cannot connect to delegated server" that breaks
+	// skychat replies + the resolving proxy. Returns the native
+	// DmsgConnectAllResult JSON ({total,already_connected,newly_connected,failed?}).
+	SelfDmsgConnectAll() []byte
 	// SelfRouterSettings returns the router knobs as pre-marshaled JSON in the
 	// native /visors/{pk}/router-settings shape
 	// ({force_local_routes,existing_tp_only,mux_routes,min_hops}). nil when the
@@ -140,6 +147,17 @@ func (c *Core) selfRoute(self SelfProvider, method, sub string, body []byte, que
 			return 200, body
 		}
 		return jsonResp(map[string]interface{}{})
+	case "dmsg/connect-all":
+		// POST "Connect to all servers": reach every known wss dmsg server so the
+		// edge can rendezvous with any peer. Native implements this; the wasm core
+		// used to 404, so the button errored in the browser.
+		if method != "POST" {
+			return 405, []byte(`{"error":"method not allowed"}`)
+		}
+		if body := self.SelfDmsgConnectAll(); body != nil {
+			return 200, body
+		}
+		return jsonResp(map[string]interface{}{"total": 0, "already_connected": 0, "newly_connected": 0})
 	case "router-settings":
 		// The Router Settings expander (force-local-routes / existing-tp-only /
 		// mux-routes / min-hops).
