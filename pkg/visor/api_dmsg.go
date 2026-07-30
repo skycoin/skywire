@@ -530,6 +530,16 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 		return []DMSGServerInfo{}, nil
 	}
 
+	// Map each server PK to the carrier/protocol of its live session, so the UI
+	// can show HOW the visor reached each server (tcp/ws/wt/quic), not just that
+	// it did — the same data `cli dmsg sessions` reports.
+	carrier := make(map[cipher.PubKey]string)
+	protocol := make(map[cipher.PubKey]string)
+	for _, s := range v.dmsgC.AllSessions() {
+		carrier[s.RemotePK()] = s.Carrier()
+		protocol[s.RemotePK()] = s.Protocol()
+	}
+
 	// Build list with latencies
 	servers := make([]DMSGServerInfo, 0, len(serverPKs))
 	v.dmsgLatency.mu.RLock()
@@ -539,8 +549,10 @@ func (v *Visor) DMSGServers() ([]DMSGServerInfo, error) {
 			continue
 		}
 		info := DMSGServerInfo{
-			PK:      pk,
-			Latency: v.dmsgLatency.servers[pk],
+			PK:       pk,
+			Latency:  v.dmsgLatency.servers[pk],
+			Carrier:  carrier[pk],
+			Protocol: protocol[pk],
 		}
 		servers = append(servers, info)
 	}

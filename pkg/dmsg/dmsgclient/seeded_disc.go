@@ -74,6 +74,17 @@ func (c *seededDiscClient) AvailableServers(ctx context.Context) ([]*disc.Entry,
 func (c *seededDiscClient) AllServers(ctx context.Context) ([]*disc.Entry, error) {
 	srv, err := c.real.AllServers(ctx)
 	if err != nil || len(srv) == 0 {
+		// /dmsg-discovery/all_servers can fail over the browser's dmsghttp path
+		// (the edge only ever exercises /available_servers for normal session
+		// establishment). Fall back to AvailableServers — the reachable set — so
+		// callers like ConnectToAllServers see the whole deployment instead of the
+		// 2 seed servers, which is what made "Connect to all servers" a no-op on
+		// the wasm visor and left it unable to rendezvous with peers on other servers.
+		if avail, aerr := c.real.AvailableServers(ctx); aerr == nil && len(avail) > 0 {
+			jslog(fmt.Sprintf("seeded.AllServers -> AvailableServers(%d) (all_servers err=%v n=%d)", len(avail), err, len(srv)))
+			return avail, nil
+		}
+		jslog(fmt.Sprintf("seeded.AllServers -> seeds(%d) (all_servers err=%v; available also empty)", len(c.seeds), err))
 		return c.seeds, nil
 	}
 	return srv, nil

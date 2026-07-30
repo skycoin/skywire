@@ -167,7 +167,8 @@ export class NodeService {
             node.dmsgServers = response.dmsg_servers.map((s: any) => {
 return {
               pk: s.pk,
-              latency: s.latency || 0
+              latency: s.latency || 0,
+              protocol: s.protocol || ''
             }
 });
           }
@@ -631,7 +632,8 @@ return {
           node.dmsgServers = response.dmsg_servers.map((s: any) => {
 return {
             pk: s.pk,
-            latency: s.latency || 0
+            latency: s.latency || 0,
+            protocol: s.protocol || ''
           }
 });
         }

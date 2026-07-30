@@ -1076,36 +1076,146 @@
   var TOUR_SEEN_KEY = "skywire-tour-seen";
   function startTour(doc) {
     doc = doc || document;
-    if (doc.getElementById("skywire-tour")) { return; }
+    if (globalThis.__tourWB || doc.getElementById("skywire-tour-hl")) { return; }
+    var win = doc.defaultView || window;
+    // Platform: the wasm-visor PWA sets window.__SKYWIRE_HV__ in hv-boot.js before
+    // Angular boots; the native hypervisor UI serves this SAME browse.js but never
+    // sets it. So its presence means we're the wasm visor running in a browser tab.
+    // (SKYWIRE_HV_MODE is an explicit override the serving layer may inject later.)
+    var mode = (win.__SKYWIRE_HV__ || win.SKYWIRE_HV_MODE === "wasm") ? "wasm" : "native";
+    // pick resolves per-platform copy: a plain string, {wasm,native,both}, or fn(mode).
+    function pick(v) {
+      if (typeof v === "function") { return v(mode); }
+      if (v && typeof v === "object" && !v.nodeType) { return v[mode] != null ? v[mode] : (v.both != null ? v.both : ""); }
+      return v == null ? "" : v;
+    }
     var steps = [
       { title: "This is not a normal web page",
-        body: "You're running a full <b>Skywire visor</b> — a live routing peer on an encrypted, peer-to-peer mesh — right here in this browser tab. No install, no account, no central server, no one in the middle. Here's a 60-second tour of what that means.",
+        body: {
+          wasm: "You're running a full <b>Skywire visor</b> — a live routing peer on an encrypted, peer-to-peer mesh — <b>inside this browser tab</b>. No install, no account, no server, no one in the middle. It lives only here: close the tab and it's gone (unless you export your key). Here's a short tour.",
+          native: "You're running a full <b>Skywire visor</b> on this machine — a persistent routing peer on an encrypted, peer-to-peer mesh. No account, no central server, no one in the middle. Here's a short tour of what that means." },
         disc: { summary: "Open-source, no warranty — your keys are yours",
           details: "Skywire and the Skycoin wallet are experimental, open-source software, provided as-is and without warranty. You run this visor yourself and hold your own keys and coins; no one else can access or recover them. Understand the risks before relying on it or storing value." } },
+
+      { title: "How you're connected: dmsg",
+        body: {
+          wasm: "Before anything else, your visor joins <b>dmsg</b> — an encrypted relay network. Any two visors reach each other through dmsg servers without knowing each other's location. Your browser can't open raw TCP, so it connects over <b>WebSocket</b> (<code>wss://</code> on an https page, <code>ws://</code> otherwise), plus WebTransport where available.",
+          native: "Before anything else, your visor joins <b>dmsg</b> — an encrypted relay network. Any two visors reach each other through dmsg servers without knowing each other's location. On a native visor these are plain <b>TCP</b> connections (plus direct stcpr/sudph links)." },
+        more: { summary: "Protocols, and why the browser is different",
+          panel: "dmsg carries the control plane and a fallback data path. The <b>carrier</b> — how a visor reaches a dmsg server — depends on the host:" +
+            '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
+            '<li style="margin:.3em 0"><b>tcp</b> — native visors; a raw TCP socket.</li>' +
+            '<li style="margin:.3em 0"><b>ws</b> / <b>wss</b> — WebSocket, the browser\'s only option. <code>wss</code> (TLS) is required on an https page — browsers block mixed-content <code>ws</code>.</li>' +
+            '<li style="margin:.3em 0"><b>webtransport</b> — HTTP/3 datagrams; browser-dialable.</li>' +
+            '<li style="margin:.3em 0"><b>quic</b> — QUIC over UDP; native. The one carrier that also passes unreliable <b>datagrams</b> (UDP-over-dmsg), not just reliable streams.</li>' +
+            '</ul>' +
+            "A wasm visor in a tab has no raw sockets, so it leans on <b>wss + WebTransport</b>; a native visor can also make direct TCP/UDP transports. These four carriers are the <i>same four protocols</i> Skywire uses for direct transports (next step) — dmsg is simply the <b>relayed</b> version: same wire, reached through a server instead of directly." } },
+
+      { title: "Direct links: transports",
+        body: {
+          wasm: "Once it's on dmsg, your visor builds <b>direct transports</b> to peers where the browser allows — mostly <b>WebTransport</b> and dmsg itself. This tab is already dialing peers around the world.",
+          native: "Once it's on dmsg, your visor builds <b>direct transports</b> to peers — stcpr, sudph, dmsg, quic — punching through NATs where needed, so traffic can take the shortest path instead of always relaying." },
+        more: { summary: "Transport types, and how they mirror dmsg",
+          panel: "A transport is a direct link between two visors. <b>Four mirror the dmsg carriers exactly</b> — same wire, dialed peer-to-peer instead of to a server:" +
+            '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
+            '<li style="margin:.3em 0"><b>stcpr</b> — direct TCP, found via the address resolver <span style="opacity:.65">(≙ the tcp carrier)</span>.</li>' +
+            '<li style="margin:.3em 0"><b>ws</b> — direct WebSocket <span style="opacity:.65">(≙ ws / wss)</span>.</li>' +
+            '<li style="margin:.3em 0"><b>webtransport</b> — direct WebTransport <span style="opacity:.65">(≙ webtransport)</span>.</li>' +
+            '<li style="margin:.3em 0"><b>quic</b> — QUIC over UDP; also carries faithful <b>UDP datagrams</b> end-to-end <span style="opacity:.65">(≙ quic)</span>.</li>' +
+            '</ul>' +
+            "<b>Two only make sense peer-to-peer</b> — a dmsg server is a fixed, public endpoint, so there's nothing to holepunch to:" +
+            '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
+            '<li style="margin:.3em 0"><b>sudph</b> — direct UDP, NAT-holepunched (a reliable stream, via KCP).</li>' +
+            '<li style="margin:.3em 0"><b>webrtc</b> — browser-to-browser DataChannel, NAT-traversed via ICE; dmsg carries only the signaling.</li>' +
+            '</ul>' +
+            "And <b>dmsg</b> itself is a transport — the <i>relayed</i> one. Most transports hand up a reliable stream; QUIC (direct or over dmsg) can also carry true unreliable UDP end-to-end. More direct transports = less relaying = lower latency." } },
+
+      { title: "Going further: routing",
+        body: "Traffic doesn't have to go straight to a peer — it can take a <b>multi-hop route</b> through several visors, so no single hop sees both ends. The route-finder picks paths across the transports above.",
+        more: { summary: "Hops &amp; the privacy trade-off",
+          panel: "A route is an ordered path of transports. One hop is fastest; more hops mean no single intermediary knows both source and destination, at the cost of latency. Skywire's route-finder builds these paths on demand, and apps like the skynet browser ride them." } },
+
       { sel: "#tb-menu", title: "Your apps",
-        body: "Everything opens from here: a browser for the mesh, encrypted 1:1 chat, a live log, a command console, and your visor's cryptographic identity." },
+        body: "Everything opens from here: a browser for the mesh, encrypted 1:1 chat, a live log, a command console, your <b>Skycoin wallet</b>, and your visor's cryptographic identity." },
+
       { sel: "app-top-bar", title: "The network, live",
-        body: "Visor list, rewards, transports, and a live map of the mesh — all fetched <b>peer-to-peer over dmsg</b>, never from a web server. This tab is talking directly to other visors around the world." },
+        body: {
+          wasm: "Visor list, rewards, transports, and a live map of the mesh — all fetched <b>peer-to-peer over dmsg</b>, never from a web server. A browser tab, talking directly to other visors around the world.",
+          native: "Visor list, rewards, transports, and a live map of the mesh — all fetched <b>peer-to-peer over dmsg</b>, never from a web server. This visor is talking directly to peers around the world." } },
+
       { sel: ".visor-switcher-row", title: "Every peer is addressable",
         body: "Each chip is a visor on the network, shown by label and public key. Click one to inspect its transports, routes, and apps. There are no usernames here — only keys." },
+
       { sel: "#skywire-skynet-taskbar", title: "The mesh desktop",
-        body: "Tool windows float above the UI. The <b>skynet browser</b> fetches sites over dmsg — anonymous, no DNS, no certificate authorities; sites are addressed by public key (e.g. <code>&lt;pk&gt;.dmsg</code>). Pages run sandboxed and isolated from your keys (the ⓘ button explains)." },
+        body: "Tool windows float above the UI. The <b>skynet browser</b> fetches sites over dmsg — anonymous, no DNS, no certificate authorities; sites are addressed by public key (e.g. <code>&lt;pk&gt;.dmsg</code>).",
+        more: { summary: "How mesh sites stay safe",
+          panel: "Fetched pages run sandboxed and isolated from your keys — a site can't read your identity or reach the clearnet on its own. There's no DNS and no certificate authority; the public key <i>is</i> the address and the authentication. The ⓘ button on a browse window explains the isolation model." } },
+
       { sel: "#tb-menu", title: "You are your keys",
-        body: "Your visor is a keypair held in this browser (Apps → identity). Export it to back up or move your visor to another device — that key <i>is</i> your identity on the mesh. Whoever holds it is this visor." },
-      { title: "A self-hosting internet, in a tab",
-        body: "No server. No account. No IP address handed out. Just your browser, cryptographic keys, and a global peer-to-peer mesh — reachable from anywhere, run by nobody. Reopen this tour any time from the Apps (☰) menu → tour. Welcome to Skywire." }
+        body: {
+          wasm: "Your visor is a keypair held in <b>this browser</b> (Apps → identity). Export it to back up or move your visor to another device — that key <i>is</i> your identity on the mesh.",
+          native: "Your visor is a keypair on <b>this machine</b> (Apps → identity). Back it up — that key <i>is</i> your identity on the mesh. Whoever holds it is this visor." },
+        more: { summary: "Wasm visor vs. a native visor",
+          panel: "Same protocol, different host. A <b>wasm visor</b> lives in a browser tab: ephemeral by default (export your key to persist it), dials over WebSocket/WebTransport, and hosts a lighter app set. A <b>native visor</b> runs as a system service: persistent on disk, can make direct TCP/UDP transports and bind low ports, and can host the full app set (VPN, skysocks server, and more). Both are first-class peers on the same mesh." } },
+
+      { title: { wasm: "A self-hosting internet, in a tab", native: "A self-hosting internet" },
+        body: {
+          wasm: "No server. No account. No IP address handed out. Just your browser, cryptographic keys, and a global peer-to-peer mesh — reachable from anywhere, run by nobody, and gone when you close the tab unless you export your key. Reopen this tour any time from the Apps (☰) menu → tour. Welcome to Skywire.",
+          native: "No server. No account. Just cryptographic keys and a global peer-to-peer mesh — reachable from anywhere, run by nobody. Reopen this tour any time from the Apps (☰) menu → tour. Welcome to Skywire." } }
     ];
     var host = doc.body || doc.documentElement;
-    var ov = doc.createElement("div");
-    ov.id = "skywire-tour";
-    ov.style.cssText = "position:fixed;inset:0;z-index:2147483647;font:13px/1.55 system-ui,sans-serif";
+    // Ensure the WinBox dark chrome exists even if the skynet desktop (which
+    // normally injects it) hasn't mounted yet. Distinct id from mountPanel's
+    // #skywire-wb-style so we never shadow its browse-iframe fix; the shared
+    // .winbox.skywire-wb rules are identical, so co-existing is harmless.
+    if (!doc.getElementById("skywire-tour-style")) {
+      var tst = doc.createElement("style");
+      tst.id = "skywire-tour-style";
+      tst.textContent = ".winbox.skywire-wb{background:#15131c}.skywire-wb .wb-header{background:#1b1726}.skywire-wb .wb-body{background:#15131c}.skywire-wb{pointer-events:auto}";
+      (doc.head || doc.documentElement).appendChild(tst);
+    }
+    // Non-modal tour: the callout lives in a movable / minimizable / closable
+    // WinBox window (makeWin), and the current step's target gets a LIGHT highlight
+    // ring — pointer-events:none, no full-screen dim — instead of a blocking
+    // spotlight. So the HV UI behind the tour stays fully interactive: the user can
+    // drag the window aside, minimize it, or close it without finishing the tour.
+    // `spot` is that ring; `call` is the window body.
     var spot = doc.createElement("div");
-    spot.style.cssText = "position:fixed;border-radius:8px;box-shadow:0 0 0 9999px rgba(8,6,16,.74);transition:all .2s ease;pointer-events:none;border:2px solid #9d7cff";
+    spot.id = "skywire-tour-hl";
+    spot.style.cssText = "position:fixed;border-radius:8px;border:2px solid #9d7cff;box-shadow:0 0 0 3px rgba(157,124,255,.22),0 0 22px rgba(157,124,255,.5);transition:all .18s ease;pointer-events:none;z-index:2147483001;display:none";
+    host.appendChild(spot);
     var call = doc.createElement("div");
-    call.style.cssText = "position:fixed;max-width:340px;background:#15131c;color:#cdd2da;border:1px solid #2a2342;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.6);padding:1em 1.1em;box-sizing:border-box";
-    ov.appendChild(spot); ov.appendChild(call); host.appendChild(ov);
-    var i = 0;
-    function done() { try { localStorage.setItem(TOUR_SEEN_KEY, "1"); } catch (e) {} if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    call.style.cssText = "color:#cdd2da;font:13px/1.55 system-ui,sans-serif;padding:1em 1.15em;box-sizing:border-box;height:100%;overflow:auto;background:#15131c";
+    var i = 0, showMore = false, closed = false, wb = null;
+    // reposition keeps the ring glued to its target when the page scrolls/resizes
+    // behind the (now non-modal) window; per-step positioning happens in render().
+    function reposition() {
+      var s = steps[i], el = s && pickTarget(s.sel);
+      if (el && spot.style.display === "block") {
+        var r = el.getBoundingClientRect(), pad = 6;
+        spot.style.left = (r.left - pad) + "px"; spot.style.top = (r.top - pad) + "px";
+        spot.style.width = (r.width + pad * 2) + "px"; spot.style.height = (r.height + pad * 2) + "px";
+      }
+    }
+    function cleanup() {
+      if (closed) { return; }
+      closed = true;
+      try { localStorage.setItem(TOUR_SEEN_KEY, "1"); } catch (e) {}
+      try { win.removeEventListener("scroll", reposition, true); win.removeEventListener("resize", reposition); } catch (e) {}
+      if (spot.parentNode) { spot.parentNode.removeChild(spot); }
+      globalThis.__tourWB = null;
+    }
+    // done() is the tour-driven close (skip / final "done"); it closes the WinBox,
+    // whose onclose routes back through cleanup(). The window's own × also lands in
+    // cleanup(). The `closed` guard makes both paths idempotent.
+    function done() { cleanup(); try { if (wb) { wb.close(true); } } catch (e) {} }
+    wb = makeWin(doc, {
+      title: "Skywire tour", root: host, width: "380px", height: "240px",
+      mount: call, onclose: function () { cleanup(); return false; }
+    });
+    globalThis.__tourWB = wb;
+    win.addEventListener("scroll", reposition, true);
+    win.addEventListener("resize", reposition);
     // pickTarget returns the first VISIBLE, non-tiny element matching sel (there
     // can be hidden/collapsed duplicates — e.g. a loading vs loaded top-bar — and
     // spotlighting a 1px ghost looks broken).
@@ -1121,44 +1231,62 @@
     function render() {
       var s = steps[i];
       var el = pickTarget(s.sel);
-      if (s.sel && !el && i < steps.length - 1) { i++; return render(); } // absent/hidden target → skip
+      if (s.sel && !el && i < steps.length - 1) { i++; showMore = false; return render(); } // absent/hidden target → skip
       var last = (i === steps.length - 1);
-      call.innerHTML =
-        '<div style="display:flex;align-items:center;gap:.5em;margin-bottom:.55em">' +
-        '<b style="color:#9d7cff;font-size:14px">' + s.title + '</b><span style="flex:1"></span>' +
-        '<span style="opacity:.55;font-size:11px">' + (i + 1) + " / " + steps.length + '</span></div>' +
-        '<div style="margin-bottom:.9em">' + s.body + '</div>' +
-        (s.disc ?
-          '<details style="margin:-.35em 0 .85em;border-top:1px solid #2a2342;padding-top:.6em">' +
-          '<summary style="cursor:pointer;color:#8b93a7;font-size:11.5px;outline:none">' + s.disc.summary + '</summary>' +
-          '<div style="margin-top:.5em;color:#9aa0ad;font-size:11.5px">' + s.disc.details + '</div>' +
-          '</details>' : '') +
-        '<div style="display:flex;gap:.5em;align-items:center">' +
-        '<button id="tour-skip" style="cursor:pointer;background:transparent;color:#8b93a7;border:0">skip</button>' +
-        '<span style="flex:1"></span>' +
-        (i > 0 ? '<button id="tour-back" style="cursor:pointer;background:#241f33;color:#cdd2da;border:1px solid #2a2342;border-radius:6px;padding:.4em .85em">back</button>' : '') +
-        '<button id="tour-next" style="cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.4em 1em;font-weight:600">' + (last ? "done" : "next") + '</button>' +
-        '</div>';
+      var btn = 'cursor:pointer;border-radius:6px;padding:.4em .85em';
+      if (showMore && s.more) {
+        // drill-down side view: the step's "more" panel, off the linear spine.
+        call.innerHTML =
+          '<div style="display:flex;align-items:center;gap:.5em;margin-bottom:.55em">' +
+          '<b style="color:#9d7cff;font-size:14px">' + pick(s.title) + '</b><span style="flex:1"></span>' +
+          '<span style="opacity:.55;font-size:11px">more</span></div>' +
+          '<div style="margin-bottom:.9em;color:#9aa0ad;font-size:12px;line-height:1.5">' + s.more.panel + '</div>' +
+          '<div style="display:flex;gap:.5em;align-items:center;position:sticky;bottom:0;background:#15131c;padding-top:.6em">' +
+          '<button id="tour-skip" style="cursor:pointer;background:transparent;color:#8b93a7;border:0">skip</button>' +
+          '<span style="flex:1"></span>' +
+          '<button id="tour-moreback" style="' + btn + ';background:#241f33;color:#cdd2da;border:1px solid #2a2342">&larr; back</button>' +
+          '</div>';
+      } else {
+        call.innerHTML =
+          '<div style="display:flex;align-items:center;gap:.5em;margin-bottom:.55em">' +
+          '<b style="color:#9d7cff;font-size:14px">' + pick(s.title) + '</b><span style="flex:1"></span>' +
+          '<span style="opacity:.55;font-size:11px">' + (i + 1) + " / " + steps.length + '</span></div>' +
+          '<div style="margin-bottom:.9em">' + pick(s.body) + '</div>' +
+          (s.disc ?
+            '<details style="margin:-.35em 0 .85em;border-top:1px solid #2a2342;padding-top:.6em">' +
+            '<summary style="cursor:pointer;color:#8b93a7;font-size:11.5px;outline:none">' + s.disc.summary + '</summary>' +
+            '<div style="margin-top:.5em;color:#9aa0ad;font-size:11.5px">' + s.disc.details + '</div>' +
+            '</details>' : '') +
+          '<div style="display:flex;gap:.5em;align-items:center;position:sticky;bottom:0;background:#15131c;padding-top:.6em">' +
+          '<button id="tour-skip" style="cursor:pointer;background:transparent;color:#8b93a7;border:0">skip</button>' +
+          '<span style="flex:1"></span>' +
+          (s.more ? '<button id="tour-more" style="' + btn + ';padding:.4em .7em;background:transparent;color:#8b93a7;border:1px solid #2a2342">more</button>' : '') +
+          (i > 0 ? '<button id="tour-back" style="' + btn + ';background:#241f33;color:#cdd2da;border:1px solid #2a2342">back</button>' : '') +
+          '<button id="tour-next" style="cursor:pointer;background:#9d7cff;color:#0e0c14;border:0;border-radius:6px;padding:.4em 1em;font-weight:600">' + (last ? "done" : "next") + '</button>' +
+          '</div>';
+      }
       if (el) {
+        try { el.scrollIntoView({ block: "nearest" }); } catch (e) {}
         var r = el.getBoundingClientRect(), pad = 6;
         spot.style.display = "block";
         spot.style.left = (r.left - pad) + "px"; spot.style.top = (r.top - pad) + "px";
         spot.style.width = (r.width + pad * 2) + "px"; spot.style.height = (r.height + pad * 2) + "px";
-        try { el.scrollIntoView({ block: "nearest" }); } catch (e) {}
-        var vw = (doc.defaultView || window).innerWidth, vh = (doc.defaultView || window).innerHeight, cw = 340;
-        call.style.transform = "none";
-        call.style.left = Math.min(Math.max(8, r.left), vw - cw - 8) + "px";
-        if (r.bottom + 170 < vh) { call.style.top = (r.bottom + 12) + "px"; call.style.bottom = "auto"; }
-        else { call.style.bottom = (vh - r.top + 12) + "px"; call.style.top = "auto"; }
       } else {
         spot.style.display = "none";
-        call.style.left = "50%"; call.style.top = "50%"; call.style.bottom = "auto";
-        call.style.transform = "translate(-50%,-50%)";
       }
       var b;
       if ((b = call.querySelector("#tour-skip"))) b.onclick = done;
-      if ((b = call.querySelector("#tour-back"))) b.onclick = function () { if (i > 0) i--; render(); };
-      if ((b = call.querySelector("#tour-next"))) b.onclick = function () { if (last) { done(); } else { i++; render(); } };
+      if ((b = call.querySelector("#tour-more"))) b.onclick = function () { showMore = true; render(); };
+      if ((b = call.querySelector("#tour-moreback"))) b.onclick = function () { showMore = false; render(); };
+      if ((b = call.querySelector("#tour-back"))) b.onclick = function () { showMore = false; if (i > 0) i--; render(); };
+      if ((b = call.querySelector("#tour-next"))) b.onclick = function () { showMore = false; if (last) { done(); } else { i++; render(); } };
+      // Fit the window to the step's content: no dead space on short steps, no
+      // nested scroll on long "more" panels. Cap to 82vh (the body scrolls, and
+      // the button row is sticky, so controls stay reachable past the cap).
+      try {
+        var vpH = (doc.defaultView || window).innerHeight || 700;
+        wb.resize(380, Math.max(170, Math.min(call.scrollHeight + 38, Math.round(vpH * 0.82))));
+      } catch (e) {}
     }
     render();
   }
@@ -1860,15 +1988,21 @@
         '.sww-bar button{background:#2a2342;color:#e8e8f0;border:1px solid #3a3352;border-radius:3px;padding:.35em .65em;cursor:pointer;font:inherit;line-height:1}' +
         '.sww-bar button:hover{background:#3a3352;color:#fff}.sww-bar button.on{border-color:#6f4bd8;color:#cbb8ff;background:rgba(111,75,216,.2)}' +
         '.sww-served{font-size:.92em;padding:.15em .6em;border-radius:999px;background:rgba(74,222,128,.18);color:#4ade80}' +
-        '#sww-cfg{display:none;border:0;border-bottom:1px solid #2a2342;width:100%;height:62%;min-height:0;background:#15131c}' +
-        '#sww-cfg.open{display:block}' +
+        // WinBox forces `.winbox iframe{position:absolute}`, which yanks a bare
+        // iframe out of the flex column (collapsing #sww-cfg to a thin strip).
+        // So give the config overlay its OWN relative flex container (same trick
+        // as the wallet iframe below) with a real height; the iframe fills it and
+        // scrolls its own ~644px content.
+        '#sww-cfg-wrap{display:none;position:relative;flex:0 0 60%;min-height:0;border-bottom:1px solid #2a2342}' +
+        '#sww-cfg-wrap.open{display:block}' +
+        '#sww-cfg{position:absolute;inset:0;width:100%;height:100%;border:0;background:#15131c}' +
         '</style>' +
         '<div class="sww-bar">' +
         '<button id="sww-gear" title="wallet configuration">⚙ settings</button>' +
         '<span class="sww-served" title="Served by this visor at /wallet/ — wallets are client-side; only the node/BTC queries cross the mesh.">served</span>' +
         '<span style="flex:1"></span>' +
         '</div>' +
-        '<iframe id="sww-cfg" src="' + cfgSrc + '"></iframe>' +
+        '<div id="sww-cfg-wrap"><iframe id="sww-cfg" src="' + cfgSrc + '"></iframe></div>' +
         // WinBox styles window-body iframes position:absolute; give the wallet
         // iframe a relative flex container so it fills only the region below.
         '<div style="flex:1;position:relative;min-height:0">' +
@@ -1883,7 +2017,7 @@
         }
       }));
       var frame = wrap.querySelector("#sww-frame");
-      var cfg = wrap.querySelector("#sww-cfg");
+      var cfg = wrap.querySelector("#sww-cfg-wrap");
       wrap.querySelector("#sww-gear").onclick = function () {
         this.classList.toggle("on", cfg.classList.toggle("open"));
       };

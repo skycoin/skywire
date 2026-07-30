@@ -166,6 +166,9 @@
             @for (server of node.dmsgServers; track server) {
               <div class="dmsg-server-item">
                 <app-copy-to-clipboard-text text="{{ server.pk }}"></app-copy-to-clipboard-text>
+                @if (server.protocol) {
+                  <span class="dmsg-protocol">{{ server.protocol }}</span>
+                }
                 @if (server.latency > 0) {
                   <span class="dmsg-latency"
                 [ngClass]="{
