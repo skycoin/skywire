@@ -261,7 +261,7 @@ func TestEncryptNonceUnique(t *testing.T) {
 func TestStoreCRUD(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "groups.db")
-	s, err := OpenStore(path)
+	s, err := OpenStore(path, testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

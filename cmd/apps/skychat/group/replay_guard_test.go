@@ -51,7 +51,7 @@ func signedAdmin(t *testing.T, gid string, op AdminOp, peer cipher.PubKey, sk ci
 // freshness gate. That is the original bug, resurfacing through the
 // persistence layer instead of the wire.
 func TestStorePutDoesNotWalkWatermarksBackwards(t *testing.T) {
-	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"), testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

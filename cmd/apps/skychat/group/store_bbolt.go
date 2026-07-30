@@ -49,11 +49,26 @@ func joinReqPrefix(groupID string) []byte {
 type Store struct {
 	db *bolt.DB
 	mu sync.RWMutex
+	// sealer encrypts the record's key material at rest. Required — see
+	// store_seal.go for why there is no plaintext fallback.
+	sealer *recordSealer
+	// migrated counts records OpenStore re-sealed on this open. Written
+	// once before the store is handed to any caller, so it needs no lock.
+	migrated int
 }
 
 // OpenStore opens (or creates) the bolt file at path. The parent dir
 // is created if missing.
-func OpenStore(path string) (*Store, error) {
+//
+// sk is the visor's secret key, used to derive the at-rest key that seals
+// each group's AES key. It is required: a store opened without it would
+// write group keys in the clear, which is the state store_seal.go exists
+// to end. Records written by a different visor's key will not open.
+func OpenStore(path string, sk cipher.SecKey) (*Store, error) {
+	sealer, err := newRecordSealer(sk)
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("group: mkdir parent: %w", err)
 	}
@@ -77,7 +92,71 @@ func OpenStore(path string) (*Store, error) {
 		_ = db.Close() //nolint:errcheck
 		return nil, fmt.Errorf("group: init bucket: %w", err)
 	}
-	return &Store{db: db}, nil
+	st := &Store{db: db, sealer: sealer}
+	// Re-seal anything the previous build left in the clear. Without this
+	// pass, sealing would only apply to groups that happen to be written
+	// again — a group nobody touches would keep its plaintext key in the
+	// file forever, which is most of the exposure this is meant to remove.
+	if n, mErr := st.sealLegacyRecords(); mErr != nil {
+		_ = db.Close() //nolint:errcheck
+		return nil, fmt.Errorf("group: sealing existing group keys: %w", mErr)
+	} else if n > 0 {
+		st.migrated = n
+	}
+	return st, nil
+}
+
+// MigratedRecords reports how many records OpenStore had to re-seal
+// because they still held plaintext key material. Non-zero exactly once
+// per upgrade; the visor logs it so an operator can see the migration
+// happened rather than having to infer it.
+func (s *Store) MigratedRecords() int {
+	if s == nil {
+		return 0
+	}
+	return s.migrated
+}
+
+// sealLegacyRecords rewrites every record whose key material is still in
+// the clear. One write transaction, so an interrupted upgrade either
+// re-seals the whole file or none of it.
+func (s *Store) sealLegacyRecords() (int, error) {
+	var n int
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(groupsBucket))
+		type pending struct {
+			key  []byte
+			body []byte
+		}
+		var writes []pending
+		if err := b.ForEach(func(k, v []byte) error {
+			var r Record
+			// Read the raw JSON directly: decodeRecord would try to open
+			// blobs, and here we specifically want the pre-seal shape.
+			if err := json.Unmarshal(v, &r); err != nil {
+				return nil // leave undecodable rows alone
+			}
+			if !hasPlaintextKeys(r) {
+				return nil
+			}
+			body, err := s.encodeRecord(r)
+			if err != nil {
+				return err
+			}
+			writes = append(writes, pending{key: append([]byte(nil), k...), body: body})
+			return nil
+		}); err != nil {
+			return err
+		}
+		for _, w := range writes {
+			if err := b.Put(w.key, w.body); err != nil {
+				return err
+			}
+		}
+		n = len(writes)
+		return nil
+	})
+	return n, err
 }
 
 // Close releases the bolt file handle.
@@ -110,11 +189,13 @@ func (s *Store) Put(r Record) error {
 		b := tx.Bucket([]byte(groupsBucket))
 		if raw := b.Get([]byte(r.ID)); raw != nil {
 			var prev Record
+			// Watermarks are not sealed, so the raw JSON is enough here and
+			// a record we cannot open still contributes its watermarks.
 			if err := json.Unmarshal(raw, &prev); err == nil {
 				r.MutationSeen = mergeWatermarks(prev.MutationSeen, r.MutationSeen)
 			}
 		}
-		body, err := json.Marshal(r)
+		body, err := s.encodeRecord(r)
 		if err != nil {
 			return fmt.Errorf("group: marshal record: %w", err)
 		}
@@ -137,7 +218,7 @@ func (s *Store) Get(id string) (Record, bool, error) {
 			return nil
 		}
 		found = true
-		return json.Unmarshal(raw, &r)
+		return s.decodeRecord(raw, &r)
 	})
 	// Legacy records persisted before the Admins field existed have
 	// Admins == nil. Normalize on every read so IsAdmin and admin-
@@ -158,7 +239,7 @@ func (s *Store) List() ([]Record, error) {
 		b := tx.Bucket([]byte(groupsBucket))
 		return b.ForEach(func(_, v []byte) error {
 			var r Record
-			if err := json.Unmarshal(v, &r); err != nil {
+			if err := s.decodeRecord(v, &r); err != nil {
 				return err
 			}
 			// Mirror Get's legacy-record normalization so any
@@ -321,11 +402,14 @@ func (s *Store) update(id string, fn func(*Record)) error {
 			return fmt.Errorf("group: no record for %s", id)
 		}
 		var r Record
-		if err := json.Unmarshal(raw, &r); err != nil {
+		// Open the key material before the mutation and re-seal after: a
+		// setter that only touches the roster must not drop the group key,
+		// and one that replaces it (SetKeyState) hands us plaintext.
+		if err := s.decodeRecord(raw, &r); err != nil {
 			return err
 		}
 		fn(&r)
-		body, err := json.Marshal(&r)
+		body, err := s.encodeRecord(r)
 		if err != nil {
 			return err
 		}
