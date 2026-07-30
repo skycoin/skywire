@@ -290,8 +290,16 @@ var groupJoinCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		human := fmt.Sprintf("joined group %q\n  id:    %s\n  owner: %s\n  mode:  %s\n",
-			info.Name, info.ID, info.OwnerPK, info.Mode)
+		// A private group queues the request instead of admitting, so
+		// don't report a membership we don't have. The visor keeps
+		// re-asking every admin the invite named and flips the record to
+		// active on approval; `group list` shows the wait.
+		verb := "joined group"
+		if info.Status == skychatgroup.StatusAwaitingApproval {
+			verb = "requested to join group (waiting for an admin to approve)"
+		}
+		human := fmt.Sprintf("%s %q\n  id:    %s\n  owner: %s\n  mode:  %s\n",
+			verb, info.Name, info.ID, info.OwnerPK, info.Mode)
 		internal.PrintOutput(cmd.Flags(), info, human)
 	},
 }

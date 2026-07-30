@@ -89,18 +89,35 @@ func (s *Store) Close() error {
 }
 
 // Put writes (or replaces) the record for r.ID.
+//
+// Replay watermarks are the one field that is merged rather than
+// replaced. Every manager op is read-modify-Put, and the reconciler
+// advances watermarks continuously in the background, so a Put built on
+// a record read a moment earlier would carry stale watermarks and undo
+// that progress — reopening the replay window for whatever target the
+// reconciler had just pinned. A lost watermark never re-converges (see
+// the retention note in replay_guard.go), and the resulting failure is
+// the silent one the guard exists to prevent: a replayed RosterOpAdd
+// re-admitting someone an admin evicted. No caller ever legitimately
+// lowers a watermark, so merging costs nothing.
 func (s *Store) Put(r Record) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if r.ID == "" {
 		return fmt.Errorf("group: Put: empty ID")
 	}
-	body, err := json.Marshal(r)
-	if err != nil {
-		return fmt.Errorf("group: marshal record: %w", err)
-	}
 	return s.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(groupsBucket))
+		if raw := b.Get([]byte(r.ID)); raw != nil {
+			var prev Record
+			if err := json.Unmarshal(raw, &prev); err == nil {
+				r.MutationSeen = mergeWatermarks(prev.MutationSeen, r.MutationSeen)
+			}
+		}
+		body, err := json.Marshal(r)
+		if err != nil {
+			return fmt.Errorf("group: marshal record: %w", err)
+		}
 		return b.Put([]byte(r.ID), body)
 	})
 }

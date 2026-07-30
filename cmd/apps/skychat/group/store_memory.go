@@ -58,17 +58,25 @@ func joinReqKey(groupID string, pk cipher.PubKey) string {
 // Close is a no-op (nothing to release).
 func (s *Store) Close() error { return nil }
 
-// Put writes (or replaces) the record for r.ID.
+// Put writes (or replaces) the record for r.ID. Replay watermarks are
+// merged rather than replaced — see the bbolt Put for why a stale
+// read-modify-Put must not be able to walk them backwards.
 func (s *Store) Put(r Record) error {
 	if r.ID == "" {
 		return fmt.Errorf("group: Put: empty ID")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if raw, ok := s.kvs[r.ID]; ok {
+		var prev Record
+		if err := json.Unmarshal(raw, &prev); err == nil {
+			r.MutationSeen = mergeWatermarks(prev.MutationSeen, r.MutationSeen)
+		}
 	}
 	body, err := json.Marshal(r)
 	if err != nil {
 		return fmt.Errorf("group: marshal record: %w", err)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.kvs[r.ID] = body
 	return nil
 }
