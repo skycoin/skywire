@@ -332,12 +332,22 @@ page never asks anyone to type a secret key.`,
 		// plus real asset paths — no SPA rewrite needed.
 		fileServer := http.FileServer(http.FS(uiFS))
 
-		// Skycoin-web thin-client wallet, bundled into the PWA (make embed-wallet)
-		// and served under /wallet/ from the embedded static/wallet tree. The
-		// vendored dist ships <base href="/"> (skycoin's own root deployment);
+		// Skycoin-web thin-client wallet, served under /wallet/ straight from the
+		// VENDORED skycoin module's embedded dist (visor.WalletUIFS — a skycoin
+		// vendor bump is the wallet update; no copied tree, no embed-wallet sync).
+		// The bundle ships <base href="/"> (skycoin's own root deployment);
 		// rewrite it to /wallet/ so the wallet's relative asset paths resolve under
-		// this mount. Only registered when the wallet is actually embedded.
-		if walletIndex, werr := fs.ReadFile(uiFS, "wallet/index.html"); werr == nil && serveWallet {
+		// this mount. Only registered when the wallet FS is actually available.
+		walletFS, wfsErr := visor.WalletUIFS()
+		var walletIndex []byte
+		var werr error
+		if wfsErr == nil {
+			walletIndex, werr = fs.ReadFile(walletFS, "index.html")
+		} else {
+			werr = wfsErr
+		}
+		if werr == nil && serveWallet {
+			walletFiles := http.StripPrefix("/wallet/", http.FileServer(http.FS(walletFS)))
 			// Rewrite the base href AND inject the dmsg fetch shim right after it,
 			// so the shim runs before the wallet's own scripts. The shim overrides
 			// window.fetch (the wallet uses Angular's fetch backend) to route the
@@ -363,7 +373,7 @@ page never asks anyone to type a secret key.`,
 					_, _ = w.Write([]byte(wasmhv.WalletConfigHTML)) //nolint:errcheck
 					return
 				}
-				fileServer.ServeHTTP(w, r) // /wallet/<asset> → static/wallet/<asset>
+				walletFiles.ServeHTTP(w, r) // /wallet/<asset> → vendored dist/<asset>
 			})
 		}
 

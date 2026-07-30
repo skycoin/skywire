@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wasm-visor-tinygo embed-wallet prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
@@ -314,17 +314,10 @@ embed-wasm-visor-tinygo: tinygo-wasm-visor ## Update the COMMITTED TinyGo embedd
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmtinygo/wasm_exec.js
 	@echo "updated pkg/wasmhv/wasmbin/wasmtinygo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~2.9MB blob)."
 
-embed-wallet: ## Sync the vendored skycoin-web wallet dist into the embedded PWA tree (pkg/visor/static/wallet). Run after re-vendoring skycoin, then `git add` + commit it (~11MB). The wallet loads same-origin in the wasm-visor PWA; only its node API traffic crosses dmsg. Source (relative asset paths) lives upstream in skycoin/skycoin — the base href is rewritten to /wallet/ at serve time.
-	rm -rf ./pkg/visor/static/wallet
-	mkdir -p ./pkg/visor/static/wallet
-	cp -a ./vendor/github.com/skycoin/skycoin/src/skycoin-web/src/gui/dist/. ./pkg/visor/static/wallet/
-	@# Normalize modes: cp -a preserves the vendored source's permission bits, and
-	@# some assets (e.g. skycoin-lite.wasm) carry a 755 exec bit that then shows as
-	@# a spurious mode-only change vs the committed 644 tree. Force 644/755 so a
-	@# re-embed only diffs on real content (the content-hashed chunk renames).
-	find ./pkg/visor/static/wallet -type f -exec chmod 0644 {} +
-	find ./pkg/visor/static/wallet -type d -exec chmod 0755 {} +
-	@echo "synced pkg/visor/static/wallet from the vendored skycoin-web dist — review with 'git status', commit intentionally (~11MB)."
+# embed-wallet was removed: the wallet is now served straight from the VENDORED
+# skycoin module's own embedded dist (skycoin-web/src/gui.DistFS, via
+# visor.WalletUIFS) — a skycoin vendor bump IS the wallet update; there is no
+# copied pkg/visor/static/wallet tree to sync (or forget to sync) anymore.
 
 prune-wasm-embed-history: ## Drop OLD embedded wasm-visor blobs from git history, keeping only the current one (reclaims ~9MB per past update). REWRITES HISTORY — needs git-filter-repo; run on a fresh clone, then force-push. See scripts/prune-wasm-embed-history.sh for the full warning.
 	scripts/prune-wasm-embed-history.sh
