@@ -155,3 +155,34 @@ func TestSelf_NodePageSubroutes(t *testing.T) {
 		t.Fatalf("runtime-logs since not threaded: got %d, want 42", gotSince)
 	}
 }
+
+// TestSelf_DmsgConnectAllRoute locks the "Connect to all servers" endpoint the
+// wasm core serves for the shared HV UI (it 404'd before #3632, so the button
+// errored on every browser visor): POST dispatches to the provider and returns
+// its result; other methods are rejected rather than silently no-oping.
+func TestSelf_DmsgConnectAllRoute(t *testing.T) {
+	pk := newSelfPK(t)
+	core := NewCore(pk, nil)
+	core.SetSelf(fakeSelf{pk: pk})
+
+	base := "/api/visors/" + pk.Hex()
+	status, body := core.ServeHTTP("POST", base+"/dmsg/connect-all", nil)
+	if status != 200 {
+		t.Fatalf("POST dmsg/connect-all status = %d (body %s)", status, body)
+	}
+	var res struct {
+		Total            *int `json:"total"`
+		AlreadyConnected *int `json:"already_connected"`
+		NewlyConnected   *int `json:"newly_connected"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil {
+		t.Fatalf("connect-all body not the DmsgConnectAllResult shape: %v (%s)", err, body)
+	}
+	if res.Total == nil || res.AlreadyConnected == nil || res.NewlyConnected == nil {
+		t.Fatalf("connect-all result missing fields: %s", body)
+	}
+
+	if status, _ := core.ServeHTTP("GET", base+"/dmsg/connect-all", nil); status != 405 {
+		t.Fatalf("GET dmsg/connect-all status = %d, want 405", status)
+	}
+}
