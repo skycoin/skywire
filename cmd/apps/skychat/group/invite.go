@@ -45,6 +45,24 @@ type Invite struct {
 	Port    uint16        `json:"port"`
 	Mode    Mode          `json:"mode"`
 
+	// Admins are further PKs with roster authority that a joiner may ask
+	// for admission when the founder doesn't answer. Excludes OwnerPK,
+	// which is carried above and is always tried first.
+	//
+	// Without this the founder was a single point of failure in the one
+	// place a group can least afford one: every invite pointed join
+	// requests at OwnerPK alone, so a founder that was offline meant
+	// nobody could join, and a founder whose key was lost meant the
+	// group could never admit anyone again — while other admins sat
+	// there, authorized and idle. The founder stays the recovery anchor;
+	// it just stops being the only door.
+	//
+	// Absent in links minted before this field existed. A joiner reading
+	// one falls back to the founder alone, which is exactly the old
+	// behavior; an older joiner reading a link that HAS the field
+	// ignores it and dials the founder, same as it always did.
+	Admins []cipher.PubKey `json:"admins,omitempty"`
+
 	// AESKey is the group key, and is now normally ABSENT even for
 	// ModePrivate: the key is handed to a joiner in the approval
 	// response over the encrypted relay stream, once an admin has said
@@ -57,6 +75,14 @@ type Invite struct {
 	// older builds still carry it and are still accepted; the legacy
 	// join path uses it when a group doesn't answer the join request.
 	AESKey []byte `json:"aes_key,omitempty"`
+}
+
+// AdmissionTargets returns the ordered PKs this invite says may admit
+// us: the founder, then the named admins. self is excluded so we never
+// dial ourselves. See admissionOrder for the ordering rationale and the
+// cap.
+func (inv Invite) AdmissionTargets(self cipher.PubKey) []cipher.PubKey {
+	return admissionOrder(inv.OwnerPK, self, inv.Admins)
 }
 
 // EncodeInvite returns the printable invite-link form.
