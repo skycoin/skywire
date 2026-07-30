@@ -133,13 +133,27 @@ func (f *fallbackDiscClient) DelEntry(ctx context.Context, entry *disc.Entry) er
 	return f.direct.DelEntry(ctx, entry)
 }
 
-// AvailableServers delegates to direct client
+// AvailableServers delegates to the direct client. This is the BOOT / normal
+// session-maintenance path — it must stay fast and never block on the live
+// discovery (which isn't reachable until dmsg is up), so it returns the seed set
+// the client already holds.
 func (f *fallbackDiscClient) AvailableServers(ctx context.Context) ([]*disc.Entry, error) {
 	return f.direct.AvailableServers(ctx)
 }
 
-// AllServers delegates to direct client
+// AllServers prefers the LIVE discovery (every registered server), falling back
+// to the direct client's seed set only on failure/empty. This is the "maximize
+// connectivity now" path (ConnectToAllServers) — not boot — so a live fetch is
+// safe and desired. Delegating solely to `direct` pinned a seeded client (the
+// wasm/browser edge, which boots from just 2 seed servers) to those seeds, so it
+// never learned the rest of the deployment and couldn't rendezvous with peers
+// delegated to other servers ("dmsg error 202 - cannot connect to delegated
+// server") — "connect to all servers" was a no-op. The discovery's own entry is
+// seed-cached, so this dial doesn't recurse.
 func (f *fallbackDiscClient) AllServers(ctx context.Context) ([]*disc.Entry, error) {
+	if srv, err := f.http.AllServers(ctx); err == nil && len(srv) > 0 {
+		return srv, nil
+	}
 	return f.direct.AllServers(ctx)
 }
 

@@ -133,6 +133,10 @@ type DmsgClientSummary struct {
 type DMSGServerInfo struct {
 	PK      cipher.PubKey `json:"pk"`
 	Latency time.Duration `json:"latency"`
+	// Carrier/Protocol: how the tab reached this server (ws/wss/wt/quic). Mirrors
+	// visor.DMSGServerInfo so the shared node UI shows the connection type.
+	Carrier  string `json:"carrier,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
 }
 
 // Summary mirrors the scalar fields of visor.Summary the node table reads.

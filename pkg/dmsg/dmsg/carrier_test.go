@@ -34,9 +34,15 @@ func TestPickCarrier(t *testing.T) {
 		{"wt preferred", []string{"wt"}, full, "wt", "https://1.2.3.4:8084/dmsg"},
 		{"explicit tcp beats advertised quic", []string{"tcp"}, full, "tcp", "1.2.3.4:8081"},
 		{"first advertised wins (wt before ws)", []string{"wt", "ws"}, full, "wt", "https://1.2.3.4:8084/dmsg"},
-		{"skip unavailable, take next", []string{"wt", "ws"}, tcpOnly, "tcp", "1.2.3.4:8081"},
-		{"unknown name ignored, default applies", []string{"bogus"}, full, "quic", "1.2.3.4:8085"},
-		{"ws requested but not advertised → default", []string{"ws"}, tcpOnly, "tcp", "1.2.3.4:8081"},
+		// A non-empty carrier list is a CAPABILITY set, not just a preference: a
+		// wss-only browser client (Carriers=[wt,ws]) that can't match the server's
+		// advertised endpoints gets NO carrier ("") rather than a raw TCP/QUIC
+		// fallback it can't dial — so the caller surfaces a clear error and the
+		// rendezvous moves on to another of the peer's servers. Only an EMPTY list
+		// (native default) still falls back to QUIC-then-TCP.
+		{"ws/wt-only client can't reach a tcp-only server", []string{"wt", "ws"}, tcpOnly, "", ""},
+		{"non-empty list without a dialable default → none", []string{"bogus"}, full, "", ""},
+		{"ws-only client, server advertises no ws → none", []string{"ws"}, tcpOnly, "", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

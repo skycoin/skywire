@@ -24,6 +24,7 @@ import (
 	"sync"
 
 	"github.com/go-chi/chi/v5"
+	skycoinwebgui "github.com/skycoin/skycoin/src/skycoin-web/src/gui"
 
 	"github.com/skycoin/skywire/pkg/btcgateway"
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -143,15 +144,25 @@ const walletNodeShim = `<script>(function(){` +
 	`XMLHttpRequest.prototype.send=function(b){if(this.__sky){var h=this.__sky.h;for(var k in h){try{this.setRequestHeader(k,h[k]);}catch(e){}}}return XS.apply(this,arguments);};` +
 	`})();</script>`
 
+// WalletUIFS returns the skycoin-web wallet bundle embedded in the VENDORED
+// skycoin module (skycoin-web/src/gui.DistFS), rooted at the bundle top
+// (index.html at "index.html"). Serving straight from the module means a
+// skycoin vendor bump IS the wallet update — no copied static/wallet tree in
+// this repo, no `make embed-wallet` sync step to forget (the old copy could go
+// stale against vendor/ silently).
+func WalletUIFS() (fs.FS, error) {
+	return fs.Sub(skycoinwebgui.DistFS, "dist")
+}
+
 // walletHandler serves /wallet/* : node API calls are proxied to the skycoin
-// node over dmsg; everything else is the embedded static wallet bundle (the
-// index's <base href> rewritten to /wallet/ so relative asset + /api paths
-// resolve under the mount and land back on this handler).
+// node over dmsg; everything else is the wallet bundle embedded in the vendored
+// skycoin module (the index's <base href> rewritten to /wallet/ so relative
+// asset + /api paths resolve under the mount and land back on this handler).
 func (hv *Hypervisor) walletHandler() http.HandlerFunc {
-	uiFS, fsErr := HypervisorUIFS()
+	walletFS, fsErr := WalletUIFS()
 	var fileServer http.Handler
 	if fsErr == nil {
-		fileServer = http.FileServer(http.FS(uiFS))
+		fileServer = http.FileServer(http.FS(walletFS))
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		rest := chi.URLParam(r, "*")
@@ -193,11 +204,11 @@ func (hv *Hypervisor) walletHandler() http.HandlerFunc {
 		// index.html: rewrite <base href="/"> → "/wallet/" so the SPA's
 		// relative asset + API URLs resolve under the mount.
 		if rest == "" || rest == "index.html" {
-			hv.serveWalletIndex(w, r, uiFS)
+			hv.serveWalletIndex(w, r, walletFS)
 			return
 		}
-		// Static asset: serve wallet/<rest> from the embedded UI FS.
-		r.URL.Path = "/wallet/" + rest
+		// Static asset: serve <rest> from the vendored wallet FS (dist-rooted).
+		r.URL.Path = "/" + rest
 		fileServer.ServeHTTP(w, r)
 	}
 }
@@ -242,10 +253,10 @@ func (hv *Hypervisor) walletCoinProxy(w http.ResponseWriter, r *http.Request, re
 	hv.walletNodeProxy(w, r, path)
 }
 
-// serveWalletIndex serves the embedded wallet index.html with its <base href>
-// rewritten from the vendored root ("/") to the mount ("/wallet/").
-func (hv *Hypervisor) serveWalletIndex(w http.ResponseWriter, _ *http.Request, uiFS fs.FS) {
-	b, err := fs.ReadFile(uiFS, "wallet/index.html")
+// serveWalletIndex serves the vendored wallet index.html with its <base href>
+// rewritten from the bundle root ("/") to the mount ("/wallet/").
+func (hv *Hypervisor) serveWalletIndex(w http.ResponseWriter, _ *http.Request, walletFS fs.FS) {
+	b, err := fs.ReadFile(walletFS, "index.html")
 	if err != nil {
 		http.Error(w, "wallet UI not embedded in this build", http.StatusNotFound)
 		return
