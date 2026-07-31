@@ -25,6 +25,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall/js"
 	"time"
 
@@ -47,6 +48,12 @@ const (
 	// participation — so it can carry/relay routes like a first-class node, not
 	// just hold a handful of links.
 	autoconnectMaxDirect = 32
+	// autoconnectDialConcurrency bounds how many direct dials run at once. Each
+	// dialDirect blocks up to ~25s per carrier (AR resolve + WT/WS handshake), so
+	// dialing SEQUENTIALLY made the first transport take ~26s when an early target
+	// was slow/dead. Dialing concurrently makes it ~the fastest single dial. Bounded
+	// so a browser tab doesn't open dozens of QUIC handshakes at once.
+	autoconnectDialConcurrency = 8
 	// WebRTC (NAT-traversing DataChannel over dmsg) is reserved on a SEPARATE,
 	// smaller budget for peers no direct carrier can reach (NAT'd / WT-less
 	// visors). Kept apart so WebRTC — heavier, and something ANY visor can accept
@@ -149,29 +156,68 @@ func wsAutoconnectOnce(ctx context.Context, sdPK cipher.PubKey, ar *arDmsg, self
 	addedDirect := 0
 	skippedCooldown := 0
 	var directFailed []cipher.PubKey
+	// Dial the eligible public visors CONCURRENTLY (bounded): a single slow or
+	// dead target no longer blocks the rest for its full ~25s timeout, so the
+	// first transports land in ~the fastest dial instead of the sum of the
+	// misses. mu guards the shared counters + maps across the dial goroutines
+	// (dialDirect's own table writes are individually thread-safe). Each
+	// goroutine recovers its own panic so one bad AR reply can't crash the tab.
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, autoconnectDialConcurrency)
 	for i := range services {
-		if directPeers >= autoconnectMaxDirect {
-			break
-		}
 		pk := services[i].Addr.PubKey()
-		if pk == selfPK || haveDirect[pk] {
+		if pk == selfPK {
 			continue
 		}
+		mu.Lock()
+		over := directPeers >= autoconnectMaxDirect
+		dup := haveDirect[pk]
+		cooled := false
 		if ts, bad := autoconnectFailed[pk]; bad {
 			if time.Since(ts) < autoconnectFailCooldown {
-				skippedCooldown++
-				continue
+				cooled = true
+			} else {
+				delete(autoconnectFailed, pk)
 			}
-			delete(autoconnectFailed, pk)
 		}
-		if dialDirect(ctx, ar, pk, services[i].Addr.Port(), https) {
-			directPeers++
-			addedDirect++
-			delete(autoconnectFailed, pk)
-		} else {
-			directFailed = append(directFailed, pk)
+		mu.Unlock()
+		if over {
+			break
 		}
+		if dup {
+			continue
+		}
+		if cooled {
+			mu.Lock()
+			skippedCooldown++
+			mu.Unlock()
+			continue
+		}
+		port := services[i].Addr.Port()
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(pk cipher.PubKey, port uint16) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			defer func() {
+				if r := recover(); r != nil {
+					vlog(fmt.Sprintf("ws-autoconnect: dial recovered panic: %v", r))
+				}
+			}()
+			ok := dialDirect(ctx, ar, pk, port, https)
+			mu.Lock()
+			if ok {
+				directPeers++
+				addedDirect++
+				delete(autoconnectFailed, pk)
+			} else {
+				directFailed = append(directFailed, pk)
+			}
+			mu.Unlock()
+		}(pk, port)
 	}
+	wg.Wait()
 
 	// --- Pass 2: WebRTC to the peers no direct carrier reached. ---
 	// Today those are NAT'd / WT-less "public" visors; the same mechanism is how
