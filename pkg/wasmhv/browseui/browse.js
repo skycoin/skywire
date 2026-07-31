@@ -1299,51 +1299,34 @@
   // Backward-compatible surface: returns { panel, browser, toggle, openWindow }
   // where toggle() shows/hides the desktop (opening a first window on demand), so
   // the existing skynet launcher button keeps working unchanged.
-  // createLogWindow opens a draggable window showing the live visor log (the
-  // captured console ring buffer) with a level filter + text filter — the
-  // operator can watch what the visor is doing (incl. the upstream-proxy/browse
-  // activity) without browser devtools or a shell. One per panel; toggled from
-  // the taskbar.
+  // createLogWindow hosts the ONE Angular Logs tab — the same component the
+  // node page's Logs tab renders — in a WinBox window, chrome-less via the
+  // node page's ?embed=1 mode. This replaced a bespoke console-capture viewer
+  // (window.skywireLog) that showed DIFFERENT lines in a DIFFERENT format from
+  // the Logs tab (the operator-flagged dual-surface divergence; the tab reads
+  // /runtime-logs, which since the vlogHook change carries the full subsystem
+  // firehose with real levels). One implementation now serves both surfaces;
+  // the window is just a movable viewport onto the tab. Raw page-console
+  // capture (window.skywireLog) remains available in browser devtools.
   function createLogWindow(doc, opts) {
     opts = opts || {};
+    function selfPK() {
+      try { if (opts.selfPK && opts.selfPK()) return opts.selfPK(); } catch (_) {}
+      try { var st = (globalThis.skywireVisor || {}).status; var o = st ? st() : null; return (o && o.pk) || ""; } catch (_) { return ""; }
+    }
     var wrap = doc.createElement("div");
-    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;color:#cdd2da;font:11px/1.4 monospace;display:flex;flex-direction:column;overflow:hidden";
-    wrap.innerHTML =
-      '<div class="lw-bar" style="display:flex;gap:.4em;align-items:center;padding:.45em;background:#1b1726;border-bottom:1px solid #2a2342">' +
-      '<select id="lw-level" title="min level" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342"><option value="all">all</option><option value="info">info+</option><option value="warn">warn+</option><option value="error">error</option></select>' +
-      '<input id="lw-filter" placeholder="filter" size="8" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.2em">' +
-      '<button id="lw-follow" title="auto-scroll" style="cursor:pointer">▼</button>' +
-      '<button id="lw-clear" title="clear" style="cursor:pointer">clear</button></div>' +
-      '<pre id="lw-body" style="flex:1;margin:0;padding:.5em;overflow:auto;white-space:pre-wrap;word-break:break-all"></pre>';
-    function $(id) { return wrap.querySelector("#" + id); }
-    var body = $("lw-body"), follow = true, minLevel = "all", filter = "";
-    var rank = { debug: 0, log: 1, info: 1, warn: 2, error: 3 };
-    var minRank = { all: 0, info: 1, warn: 2, error: 3 };
-    var color = { error: "#f7768e", warn: "#e0af68", info: "#7dcfff", log: "#cdd2da", debug: "#9aa0a6" };
-    function show(line) {
-      if ((rank[line.level] || 1) < minRank[minLevel]) return false;
-      if (filter && line.text.toLowerCase().indexOf(filter) < 0) return false;
-      return true;
+    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;display:flex;flex-direction:column;overflow:hidden";
+    if (!selfPK()) {
+      wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">boot the visor first</div>';
+    } else {
+      var f = doc.createElement("iframe");
+      f.src = "/#/nodes/" + selfPK() + "/logs?embed=1";
+      f.style.cssText = "border:0;width:100%;height:100%;flex:1;background:#0e0c14";
+      wrap.appendChild(f);
     }
-    function append(line) {
-      if (!show(line)) return;
-      var d = doc.createElement("div");
-      d.style.color = color[line.level] || "#cdd2da";
-      d.textContent = new Date(line.t).toTimeString().slice(0, 8) + " " + line.text;
-      body.appendChild(d);
-      if (body.childNodes.length > 6000) body.removeChild(body.firstChild);
-      if (follow) body.scrollTop = body.scrollHeight;
-    }
-    function rerender() { body.textContent = ""; (window.skywireLog ? window.skywireLog.all() : []).forEach(append); }
-    rerender();
-    var unsub = window.skywireLog ? window.skywireLog.subscribe(append) : function () {};
-    $("lw-level").onchange = function () { minLevel = this.value; rerender(); };
-    $("lw-filter").oninput = function () { filter = this.value.trim().toLowerCase(); rerender(); };
-    $("lw-follow").onclick = function () { follow = !follow; this.style.opacity = follow ? "1" : ".5"; if (follow) body.scrollTop = body.scrollHeight; };
-    $("lw-clear").onclick = function () { if (window.skywireLog) window.skywireLog.clear(); body.textContent = ""; };
     var wb = makeWin(doc, {
       title: "visor log", root: opts.root, top: opts.top, bottom: opts.bottom, width: "46%", height: "60%",
-      mount: wrap, onclose: function () { unsub(); if (opts.onClose) opts.onClose(); }
+      mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); }
     });
     return { wb: wb, close: function () { wb.close(); } };
   }
@@ -1606,6 +1589,11 @@
     bar.style.cssText = "position:fixed;left:0;right:0;height:" + BARH + "px;box-sizing:border-box;z-index:2147483646;" +
       "display:flex;gap:.5em;align-items:center;padding:0 .6em;background:#0e0b16;" +
       "font:12px/1.3 monospace;color:#cdd2da";
+    // Chrome-less embed mode (?embed=1 — a WinBox window iframing one Angular
+    // tab, e.g. the ☰ Chat / visor-log windows): hide the taskbar so the
+    // embedded page can't spawn a desktop INSIDE a desktop window. Everything
+    // else initializes normally, so the page's contract is unchanged.
+    try { if (((doc.defaultView || window).location.hash || "").indexOf("embed=1") >= 0) { bar.style.display = "none"; } } catch (_) {}
     bar.innerHTML =
       '<button id="tb-menu" title="apps" style="cursor:pointer;font-size:15px;line-height:1;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.2em .5em">☰</button>' +
       '<span id="tb-items" style="display:flex;gap:.35em;flex:1;flex-wrap:wrap;min-width:0;overflow:hidden"></span>' +
