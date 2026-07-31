@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/send_test.go
+// Package group pkg/skychat/group/send_test.go
 //
 // Coverage for the outbound write path (Session.Send / publishAs): the
 // owner-side self-echo delivery, the signed leaf that lands on the

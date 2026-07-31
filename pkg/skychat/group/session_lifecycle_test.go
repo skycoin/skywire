@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/session_lifecycle_test.go
+// Package group pkg/skychat/group/session_lifecycle_test.go
 //
 // Coverage for the Session bring-up path that the rest of this package's tests
 // skipped as "needs a mesh": Open's validation arms, openOwner / openMember /
