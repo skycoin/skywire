@@ -252,6 +252,12 @@ func (s *Session) publishModMutationAt(op ModOp, peerPK cipher.PubKey, parentSeq
 	if err != nil {
 		return 0, fmt.Errorf("group: PublishModMutation: marshal: %w", err)
 	}
+	// The most sensitive of the three families: this is the leaf that
+	// says who was banned and who was muted. Sealed under the group key
+	// for an encrypted group — see gossip_seal.go.
+	if body, err = s.sealGossipBody(body); err != nil {
+		return 0, fmt.Errorf("group: PublishModMutation: seal: %w", err)
+	}
 	path := fmt.Sprintf("%s/%05d", ModerationPathPrefix, seq)
 	if err := s.pub.Put(path, body); err != nil {
 		return 0, fmt.Errorf("group: PublishModMutation: Put %s: %w", path, err)
@@ -270,6 +276,10 @@ func (s *Session) publishModMutationAt(op ModOp, peerPK cipher.PubKey, parentSeq
 // letting a promoted admin silence them would be a takeover primitive
 // (promote self, ban founder, own the group).
 func (s *Session) applyModLeaf(body []byte) {
+	body, ok := s.openOrPark(familyMod, body)
+	if !ok {
+		return
+	}
 	var m ModerationMutation
 	if err := json.Unmarshal(body, &m); err != nil {
 		return

@@ -216,3 +216,51 @@ func TestKeyRotation_MessagesSurviveTheRotationWindow(t *testing.T) {
 	require.True(t, hasText(beforeText)(b.inbox.snapshot()),
 		"the pre-rotation message vanished from the inbox")
 }
+
+// The wire lane for governance privacy (gossip_seal.go). Everything the
+// unit tests assert about sealing is about bytes in a buffer; this is the
+// part that has to survive a real transport: a ban that no observer can
+// read still has to REACH the other members and take effect there.
+//
+// Two rounds on purpose, because they fail differently:
+//
+//   - The ban on B is sealed under the key everyone currently holds, and
+//     the rotation it triggers lands right behind it. C has to apply both,
+//     in whatever order they arrive.
+//   - The mute on C afterwards is sealed under the POST-rotation key, so
+//     it only converges if C actually adopted the new epoch — and if the
+//     leaf outran the rotation, only if the parking lot replayed it.
+func TestSealedGovernance_ConvergesAcrossVisors(t *testing.T) {
+	nodes := newGroupEnvN(t, 3)
+	a, b, c := nodes[0], nodes[1], nodes[2]
+
+	rec, err := a.mgr.Create("sealed room", KindPrivate, nil)
+	require.NoError(t, err, "Create")
+	require.True(t, rec.Encrypted())
+
+	_, err = a.mgr.AddMember(rec.ID, b.pk)
+	require.NoError(t, err)
+	_, err = a.mgr.AddMember(rec.ID, c.pk)
+	require.NoError(t, err)
+
+	inv := inviteFor(t, a, rec.ID)
+	_, err = b.mgr.Join(inv)
+	require.NoError(t, err, "B joins")
+	_, err = c.mgr.Join(inv)
+	require.NoError(t, err, "C joins")
+
+	_, err = a.mgr.BanMember(rec.ID, b.pk)
+	require.NoError(t, err, "BanMember")
+
+	waitMember(t, c, rec.ID, func(r Record) bool { return r.IsBanned(b.pk) },
+		"C never applied the sealed ban")
+	waitMember(t, c, rec.ID, func(r Record) bool { return r.KeyEpoch == 1 },
+		"C never adopted the post-ban key")
+
+	// Round two: issued under the rotated key.
+	_, err = a.mgr.MuteMember(rec.ID, c.pk)
+	require.NoError(t, err, "MuteMember")
+
+	waitMember(t, c, rec.ID, func(r Record) bool { return containsPK(r.Muted, c.pk) },
+		"C never applied a moderation leaf sealed under the rotated key")
+}
