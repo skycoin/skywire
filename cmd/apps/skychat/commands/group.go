@@ -502,6 +502,22 @@ func groupItemHandler() http.HandlerFunc {
 			}
 			w.WriteHeader(http.StatusNoContent)
 
+		case action == "ask-again" && r.Method == http.MethodPost:
+			// Deliberate retry after an admin declined our join (the UI's
+			// "ask again" button). Everything is derived from the stored
+			// record, so no invite re-paste; it pays the same PoW +
+			// rate-limit gates as a first ask.
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupAskAgain", func(c visor.API) error {
+				i, e := c.GroupAskAgain(id)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
 		case action == "invite" && r.Method == http.MethodGet:
 			var link string
 			if err := pairRPCCall("GroupInvite", func(c visor.API) error {

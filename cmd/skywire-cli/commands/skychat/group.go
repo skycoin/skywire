@@ -78,7 +78,7 @@ func init() {
 
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
-		groupJoinCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd, groupRotateKeyCmd,
+		groupJoinCmd, groupAskAgainCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd, groupRotateKeyCmd,
 		groupPeerBackfillCmd,
 		groupSendCmd, groupUnsendCmd, groupListenCmd, groupHistoryCmd,
 		groupLeaveCmd, groupDeleteCmd,
@@ -326,6 +326,31 @@ var groupJoinCmd = &cobra.Command{
 		}
 		human := fmt.Sprintf("%s %q\n  id:    %s\n  owner: %s\n  mode:  %s\n",
 			verb, info.Name, info.ID, info.OwnerPK, info.Mode)
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+var groupAskAgainCmd = &cobra.Command{
+	Use:   "ask-again <group-id>",
+	Short: "Re-request to join a group after an admin declined",
+	Long: `Re-submit a join request an admin has declined (the "ask again" action).
+
+A passive re-join from a declined key stays terminal — that is what keeps a
+refused requester from refilling the approval queue by polling. This is the
+DELIBERATE retry: it replaces the denied record with a fresh pending one after
+paying the same proof-of-work and rate-limit gates as a first request. Against
+an admin running an older build the request is simply declined again.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupAskAgain(args[0])
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		human := fmt.Sprintf("re-requested to join group %q (waiting for an admin to approve)\n  id: %s\n", info.Name, info.ID)
 		internal.PrintOutput(cmd.Flags(), info, human)
 	},
 }

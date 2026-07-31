@@ -77,12 +77,13 @@ func (s *Session) handleJoinRequest(c net.Conn, payload []byte) {
 		resp.Reason = "this group is not accepting join requests"
 	default:
 		resp = handler(JoinRequest{
-			GroupID: s.cfg.Record.ID,
-			PK:      pk,
-			Note:    req.Note,
-			PoW:     req.PoW,
-			AskedAt: time.Now().UTC(),
-			Status:  JoinStatusPending,
+			GroupID:  s.cfg.Record.ID,
+			PK:       pk,
+			Note:     req.Note,
+			PoW:      req.PoW,
+			AskAgain: req.AskAgain,
+			AskedAt:  time.Now().UTC(),
+			Status:   JoinStatusPending,
 		})
 		resp.GroupID = s.cfg.Record.ID
 		if resp.Name == "" {
@@ -141,15 +142,16 @@ type joinAttempt struct {
 //   - ErrJoinNoAdmin if some candidate answered "not mine to rule on".
 //     The group exists and is reachable; nobody present can admit.
 //   - otherwise the first transport error, verbatim.
-func SendJoinRequestAny(ctx context.Context, dmsgC *dmsg.Client, groupID string, candidates []cipher.PubKey, port uint16, requester cipher.PubKey, note string, bits uint8) (JoinResponseMsg, error) {
+func SendJoinRequestAny(ctx context.Context, dmsgC *dmsg.Client, groupID string, candidates []cipher.PubKey, port uint16, requester cipher.PubKey, note string, bits uint8, askAgain bool) (JoinResponseMsg, error) {
 	switch len(candidates) {
 	case 0:
 		return JoinResponseMsg{}, ErrJoinNoAdmin
 	case 1:
 		// No fan-out, no stagger, no goroutine — byte-for-byte the
 		// pre-multi-admin path, which is what every link minted by an
-		// older build resolves to.
-		return SendJoinRequestPoW(ctx, dmsgC, groupID, candidates[0], port, requester, note, bits)
+		// older build resolves to. Still carries the ask-again flag so a
+		// single-admin group honors a deliberate retry after a decline.
+		return sendJoinRequestWithPoW(ctx, dmsgC, groupID, candidates[0], port, requester, note, bits, askAgain)
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -172,7 +174,7 @@ func SendJoinRequestAny(ctx context.Context, dmsgC *dmsg.Client, groupID string,
 				case <-time.After(time.Duration(i) * joinCandidateStagger):
 				}
 			}
-			resp, err := SendJoinRequestPoW(ctx, dmsgC, groupID, pk, port, requester, note, bits)
+			resp, err := sendJoinRequestWithPoW(ctx, dmsgC, groupID, pk, port, requester, note, bits, askAgain)
 			results <- joinAttempt{pk: pk, resp: resp, err: err}
 		}(i, pk)
 	}
@@ -234,14 +236,14 @@ func SendJoinRequestAny(ctx context.Context, dmsgC *dmsg.Client, groupID string,
 // ErrJoinNoResponse rather than a nil-pointer panic, because this is
 // reachable from the standalone build where DmsgC is legitimately nil.
 func SendJoinRequest(ctx context.Context, dmsgC *dmsg.Client, groupID string, ownerPK cipher.PubKey, port uint16, requester cipher.PubKey, note string) (JoinResponseMsg, error) {
-	return sendJoinRequestWithPoW(ctx, dmsgC, groupID, ownerPK, port, requester, note, 0)
+	return sendJoinRequestWithPoW(ctx, dmsgC, groupID, ownerPK, port, requester, note, 0, false)
 }
 
 // SendJoinRequestPoW is SendJoinRequest with the difficulty the requester
 // already knows about — from the invite link — so the common case is a
 // single round trip.
 func SendJoinRequestPoW(ctx context.Context, dmsgC *dmsg.Client, groupID string, ownerPK cipher.PubKey, port uint16, requester cipher.PubKey, note string, bits uint8) (JoinResponseMsg, error) {
-	return sendJoinRequestWithPoW(ctx, dmsgC, groupID, ownerPK, port, requester, note, bits)
+	return sendJoinRequestWithPoW(ctx, dmsgC, groupID, ownerPK, port, requester, note, bits, false)
 }
 
 // sendJoinRequestWithPoW does the round trip and, on a challenge, pays the
@@ -254,8 +256,8 @@ func SendJoinRequestPoW(ctx context.Context, dmsgC *dmsg.Client, groupID string,
 // group that challenges the answer to its own challenge is misbehaving,
 // and looping on it would be the flood we are trying to prevent, aimed
 // back at ourselves.
-func sendJoinRequestWithPoW(ctx context.Context, dmsgC *dmsg.Client, groupID string, ownerPK cipher.PubKey, port uint16, requester cipher.PubKey, note string, bits uint8) (JoinResponseMsg, error) {
-	resp, err := sendJoinRequestOnce(ctx, dmsgC, groupID, ownerPK, port, requester, note, bits)
+func sendJoinRequestWithPoW(ctx context.Context, dmsgC *dmsg.Client, groupID string, ownerPK cipher.PubKey, port uint16, requester cipher.PubKey, note string, bits uint8, askAgain bool) (JoinResponseMsg, error) {
+	resp, err := sendJoinRequestOnce(ctx, dmsgC, groupID, ownerPK, port, requester, note, bits, askAgain)
 	if err != nil || !resp.Status.NeedsWork() {
 		return resp, err
 	}
@@ -266,14 +268,15 @@ func sendJoinRequestWithPoW(ctx context.Context, dmsgC *dmsg.Client, groupID str
 		// the same answer again.
 		return resp, nil
 	}
-	return sendJoinRequestOnce(ctx, dmsgC, groupID, ownerPK, port, requester, note, want)
+	return sendJoinRequestOnce(ctx, dmsgC, groupID, ownerPK, port, requester, note, want, askAgain)
 }
 
-func sendJoinRequestOnce(ctx context.Context, dmsgC *dmsg.Client, groupID string, ownerPK cipher.PubKey, port uint16, requester cipher.PubKey, note string, bits uint8) (JoinResponseMsg, error) {
+func sendJoinRequestOnce(ctx context.Context, dmsgC *dmsg.Client, groupID string, ownerPK cipher.PubKey, port uint16, requester cipher.PubKey, note string, bits uint8, askAgain bool) (JoinResponseMsg, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	req := NewJoinRequest(groupID, requester, note, bits)
+	req.AskAgain = askAgain
 	body, err := encodeJoinRequest(req)
 	if err != nil {
 		return JoinResponseMsg{}, fmt.Errorf("group: SendJoinRequest: encode: %w", err)
