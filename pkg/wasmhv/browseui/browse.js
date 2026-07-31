@@ -1496,280 +1496,40 @@
     return { wb: wb, close: function () { wb.close(); } };
   }
 
-  // createChatWindow is the WinBox desktop's 1:1 skychat client — the missing
-  // desktop peer to the skynet browser. It drives the two existing wasm-visor JS
-  // hooks: skychatSend(peerPkHex, text) → Promise and skychatMessages() → JSON of
-  // [{from,text,ts,out}] (the in-memory ring the browser-tab visor keeps). Because
-  // receiving is passive (a peer just dials us on dmsg:1), the buffer's distinct
-  // `from` PKs are surfaced as clickable chips so an incoming message from a new
-  // peer is discoverable without knowing their key in advance. Wasm-visor only
-  // (native has its own Angular skychat tab), gated exactly like the host window.
+  // createChatWindow hosts the ONE Angular skychat client — the exact same
+  // component as the HV's top-level Chat tab — in a WinBox window, chrome-less
+  // via the node page's ?embed=1 mode, with ?peer= preselecting a conversation
+  // (deep links). This replaced a 270-line bespoke DOM chat that had its own
+  // rendering rules (no reply-to, no delete, no receipts) — the recurring
+  // dual-surface divergence class (desktop window vs Angular tab reading the
+  // same data through DIFFERENT implementations). One implementation now
+  // serves both surfaces; the window is just a movable viewport onto the tab.
   function createChatWindow(doc, opts) {
-    var sv = globalThis.skywireVisor || {};
-    var send = opts.skychatSend || sv.skychatSend;
-    var fetchMsgs = opts.skychatMessages || sv.skychatMessages;
-    var sendFile = opts.skychatSendFile || sv.skychatSendFile;
-    var fetchFile = opts.skychatFile || sv.skychatFile;
-    var voiceCall = sv.skychatVoiceCall, voiceAnswer = sv.skychatVoiceAnswer, voiceHangup = sv.skychatVoiceHangup, voiceIncoming = sv.skychatVoiceIncoming, voiceMute = sv.skychatVoiceMute;
-    var activeCall = null; // current call id while in a call
-    var micMuted = false, spkMuted = false; // in-call mute state
-    function selfPK() { try { return (opts.selfPK && opts.selfPK()) || ""; } catch (_) { return ""; } }
-    var peer = "";          // active conversation peer PK (full hex)
-    var lastRender = "";    // cheap change-detection so we don't rebuild every tick
-
+    function selfPK() {
+      try { if (opts.selfPK && opts.selfPK()) return opts.selfPK(); } catch (_) {}
+      try { var st = (globalThis.skywireVisor || {}).status; var o = st ? st() : null; return (o && o.pk) || ""; } catch (_) { return ""; }
+    }
+    function chatURL(peer) {
+      return "/#/nodes/" + selfPK() + "/chat?embed=1" + (peer ? "&peer=" + encodeURIComponent(peer) : "");
+    }
     var wrap = doc.createElement("div");
-    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;color:#cdd2da;font:12px/1.45 monospace;display:flex;flex-direction:column;overflow:hidden";
-    var sp = selfPK();
-    wrap.innerHTML =
-      '<div style="padding:.45em;border-bottom:1px solid #2a2342;background:#1b1726;display:flex;flex-direction:column;gap:.35em">' +
-      '<div style="color:#9aa0a6">you: <b style="color:#9d7cff;word-break:break-all">' + (sp ? esc(sp) : "(boot the visor first)") + '</b></div>' +
-      '<div style="display:flex;gap:.4em;align-items:center">peer ' +
-      '<input id="ch-peer" placeholder="paste a peer public key (66 hex)" autocapitalize="off" autocomplete="off" autocorrect="off" spellcheck="false" style="flex:1;min-width:0;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:12px monospace">' +
-      '<button id="ch-open" title="open conversation" style="cursor:pointer;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.3em .55em">open</button></div>' +
-      '<div style="display:flex;gap:.4em;align-items:center;font-size:11px;color:#9aa0a6">transport ' +
-      '<select id="ch-net" title="send over dmsg (direct) or skynet (routed)" style="background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.15em"><option value="dmsg">dmsg</option><option value="skynet">skynet</option></select>' +
-      '<span style="flex:1"></span>' +
-      '<button id="ch-log-toggle" title="show/hide skychat activity log" style="cursor:pointer;background:#15131c;color:#cdd2da;border:1px solid #2a2342;border-radius:4px;padding:.15em .5em">🐞 log</button></div>' +
-      '<div id="ch-chips" style="display:flex;gap:.3em;flex-wrap:wrap"></div></div>' +
-      '<div id="ch-body" style="flex:1;padding:.5em;overflow:auto;display:flex;flex-direction:column;gap:.25em"></div>' +
-      '<div style="display:flex;gap:.3em;padding:.4em;border-top:1px solid #2a2342;background:#15131c;align-items:center">' +
-      '<input id="ch-in" placeholder="message…" autocomplete="off" style="flex:1;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.35em;font:12px monospace" disabled>' +
-      '<button id="ch-attach" title="send a file" style="cursor:pointer;background:#1b1726;color:#9d7cff;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em" disabled>📎</button>' +
-      '<input id="ch-file" type="file" style="display:none">' +
-      '<button id="ch-call" title="voice call (Opus over the encrypted mesh)" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em" disabled>📞</button>' +
-      '<button id="ch-mute-mic" title="mute your microphone" style="display:none;cursor:pointer;background:#1b1726;color:#cdd2da;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em">🎙️</button>' +
-      '<button id="ch-mute-spk" title="mute the caller" style="display:none;cursor:pointer;background:#1b1726;color:#cdd2da;border:1px solid #2a2342;border-radius:5px;padding:.35em .55em">🔊</button>' +
-      '<button id="ch-send" style="cursor:pointer;background:#1b1726;color:#9ece6a;border:1px solid #2a2342;border-radius:5px;padding:.35em .7em" disabled>send</button></div>' +
-      '<div id="ch-status" style="padding:.2em .5em;min-height:1.2em;color:#9aa0a6;border-top:1px solid #15131c"></div>' +
-      '<pre id="ch-log" style="display:none;margin:0;height:120px;overflow:auto;background:#0e0c14;color:#a9b1d6;border-top:1px solid #2a2342;padding:.4em;font:10px/1.4 monospace;white-space:pre-wrap;word-break:break-all"></pre>';
-    function $(id) { return wrap.querySelector("#" + id); }
-    var body = $("ch-body"), input = $("ch-in"), chips = $("ch-chips"), status = $("ch-status");
-
-    function setStatus(t, color) { status.textContent = t || ""; status.style.color = color || "#9aa0a6"; }
-    function messages() {
-      if (!fetchMsgs) return [];
-      try { return JSON.parse(fetchMsgs() || "[]") || []; } catch (_) { return []; }
+    wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;display:flex;flex-direction:column;overflow:hidden";
+    var frame = null;
+    if (!selfPK()) {
+      wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">boot the visor first</div>';
+    } else {
+      frame = doc.createElement("iframe");
+      frame.src = chatURL(opts.initialPeer || "");
+      frame.style.cssText = "border:0;width:100%;height:100%;flex:1;background:#0e0c14";
+      frame.setAttribute("allow", "microphone; autoplay"); // voice calls live in the component
+      wrap.appendChild(frame);
     }
-    function setPeer(pk) {
-      peer = (pk || "").trim();
-      $("ch-peer").value = peer;
-      var ready = !!(send && peer);
-      input.disabled = !ready; $("ch-send").disabled = !ready;
-      $("ch-attach").disabled = !(sendFile && peer);
-      $("ch-call").disabled = !(voiceCall && peer);
-      lastRender = ""; render();
-      if (ready) setTimeout(function () { input.focus(); }, 30);
-    }
-    function renderChips(all) {
-      var seen = {}, order = [];
-      for (var i = 0; i < all.length; i++) { var f = all[i].from; if (f && !seen[f]) { seen[f] = true; order.push(f); } }
-      var key = order.join(",") + "|" + peer;
-      if (chips.__key === key) return; chips.__key = key;
-      chips.textContent = "";
-      order.forEach(function (f) {
-        var b = doc.createElement("button");
-        b.textContent = f.slice(0, 8) + "…";
-        b.title = f;
-        var active = (f === peer);
-        b.style.cssText = "cursor:pointer;border-radius:4px;padding:.2em .5em;font:11px monospace;border:1px solid #2a2342;" +
-          (active ? "background:#2a2342;color:#9d7cff" : "background:#15131c;color:#cdd2da");
-        b.onclick = function () { setPeer(f); };
-        chips.appendChild(b);
-      });
-    }
-    function render() {
-      var all = messages();
-      renderChips(all);
-      var thread = [];
-      for (var i = 0; i < all.length; i++) { if (all[i].from === peer) thread.push(all[i]); }
-      var sig = peer + "#" + thread.length + (thread.length ? "#" + thread[thread.length - 1].ts + thread[thread.length - 1].text : "");
-      if (sig === lastRender) return; lastRender = sig;
-      body.textContent = "";
-      if (!peer) { var h = doc.createElement("div"); h.style.color = "#9aa0a6"; h.textContent = "Paste a peer public key and press open — or pick a peer above once someone messages you."; body.appendChild(h); return; }
-      thread.forEach(function (m) {
-        var row = doc.createElement("div");
-        row.style.cssText = "display:flex;flex-direction:column;max-width:82%;" + (m.out ? "align-self:flex-end;align-items:flex-end" : "align-self:flex-start;align-items:flex-start");
-        var bub = doc.createElement("div");
-        bub.style.cssText = "padding:.3em .55em;border-radius:8px;white-space:pre-wrap;word-break:break-word;" +
-          (m.out ? "background:#1f2b1a;color:#c8e6a8" : "background:#1b1726;color:#cdd2da");
-        if (m.is_file) {
-          bub.textContent = "📎 " + (m.file_name || "file") + (m.file_size ? " (" + humanBytes(m.file_size) + ")" : "");
-          // A received, verified file gets a download link (fetch its bytes on demand).
-          if (!m.out && m.file_ok && fetchFile && m.file_id) {
-            var dl = doc.createElement("button");
-            dl.textContent = "download";
-            dl.style.cssText = "cursor:pointer;margin-left:.5em;background:#15131c;color:#9d7cff;border:1px solid #2a2342;border-radius:4px;padding:.1em .45em;font:10px monospace";
-            dl.onclick = function () { downloadChatFile(m.file_id, m.file_name); };
-            bub.appendChild(dl);
-          }
-        } else {
-          bub.textContent = m.text;
-        }
-        var meta = doc.createElement("div");
-        meta.style.cssText = "font-size:10px;color:#6b7280;margin:.1em .2em 0";
-        meta.textContent = (m.out ? "→ " : "← ") + new Date(m.ts).toTimeString().slice(0, 8);
-        row.appendChild(bub); row.appendChild(meta); body.appendChild(row);
-      });
-      body.scrollTop = body.scrollHeight;
-    }
-    function doSend() {
-      var text = input.value; if (!text.trim() || !send || !peer) return;
-      input.value = ""; setStatus("sending…");
-      Promise.resolve(send(peer, text, $("ch-net").value)).then(function () {
-        setStatus(""); lastRender = ""; render();
-      }).catch(function (e) {
-        setStatus("send failed: " + (e && e.message ? e.message : e), "#f7768e");
-        input.value = text; // let the operator retry without retyping
-      });
-    }
-    // humanBytes renders a byte count for a file bubble.
-    function humanBytes(n) {
-      if (n < 1024) return n + " B";
-      var u = ["KB", "MB", "GB", "TB"], i = -1;
-      do { n /= 1024; i++; } while (n >= 1024 && i < u.length - 1);
-      return n.toFixed(1) + " " + u[i];
-    }
-    // doSendFile reads the chosen File as base64 and streams it to the peer over
-    // the encrypted transport via skychatSendFile.
-    function doSendFile(file) {
-      if (!file || !sendFile || !peer) return;
-      setStatus("sending " + file.name + "…");
-      var reader = new FileReader();
-      reader.onload = function () {
-        // reader.result is a data URL: strip the "data:...;base64," prefix.
-        var b64 = String(reader.result || "");
-        var comma = b64.indexOf(",");
-        if (comma >= 0) b64 = b64.slice(comma + 1);
-        Promise.resolve(sendFile(peer, file.name, b64, $("ch-net").value)).then(function () {
-          setStatus(""); lastRender = ""; render();
-        }).catch(function (e) {
-          setStatus("file send failed: " + (e && e.message ? e.message : e), "#f7768e");
-        });
-      };
-      reader.onerror = function () { setStatus("could not read file", "#f7768e"); };
-      reader.readAsDataURL(file);
-    }
-    // downloadChatFile fetches a received file's bytes (base64) and saves them.
-    function downloadChatFile(id, name) {
-      if (!fetchFile) return;
-      Promise.resolve(fetchFile(id)).then(function (b64) {
-        if (!b64) { setStatus("file not available", "#f7768e"); return; }
-        var bin = atob(b64), len = bin.length, arr = new Uint8Array(len);
-        for (var i = 0; i < len; i++) arr[i] = bin.charCodeAt(i);
-        var url = URL.createObjectURL(new Blob([arr]));
-        var a = doc.createElement("a");
-        a.href = url; a.download = name || "download";
-        doc.body.appendChild(a); a.click(); doc.body.removeChild(a);
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
-      }).catch(function (e) { setStatus("download failed: " + (e && e.message ? e.message : e), "#f7768e"); });
-    }
-
-    $("ch-open").onclick = function () { setPeer($("ch-peer").value); };
-    $("ch-peer").addEventListener("keydown", function (e) { if (e.key === "Enter") setPeer(this.value); });
-    input.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); doSend(); } });
-    $("ch-send").onclick = doSend;
-    $("ch-attach").onclick = function () { $("ch-file").click(); };
-    $("ch-file").addEventListener("change", function () { if (this.files && this.files[0]) { doSendFile(this.files[0]); this.value = ""; } });
-
-    // --- voice calls ---
-    function startAudio() { try { if (globalThis.skywireVoiceAudioStart) return globalThis.skywireVoiceAudioStart(); } catch (_) {} }
-    function stopAudio() { try { if (globalThis.skywireVoiceAudioStop) globalThis.skywireVoiceAudioStop(); } catch (_) {} }
-    function applyMute() {
-      $("ch-mute-mic").textContent = micMuted ? "🔇" : "🎙️";
-      $("ch-mute-mic").style.color = micMuted ? "#f7768e" : "#cdd2da";
-      $("ch-mute-mic").title = micMuted ? "unmute your microphone" : "mute your microphone";
-      $("ch-mute-spk").textContent = spkMuted ? "🔇" : "🔊";
-      $("ch-mute-spk").style.color = spkMuted ? "#f7768e" : "#cdd2da";
-      $("ch-mute-spk").title = spkMuted ? "unmute the caller" : "mute the caller";
-      if (voiceMute && activeCall) { try { Promise.resolve(voiceMute(activeCall, micMuted, spkMuted)).catch(function () {}); } catch (_) {} }
-    }
-    function showMute(on) { $("ch-mute-mic").style.display = $("ch-mute-spk").style.display = on ? "" : "none"; }
-    function inCall(id) {
-      activeCall = id; micMuted = false; spkMuted = false;
-      $("ch-call").textContent = "🔴"; $("ch-call").title = "hang up";
-      showMute(true); applyMute();
-      setStatus("in call", "#9ece6a");
-    }
-    function callEnded() {
-      activeCall = null; micMuted = false; spkMuted = false;
-      $("ch-call").textContent = "📞"; $("ch-call").title = "voice call";
-      showMute(false); stopAudio();
-    }
-    $("ch-mute-mic").onclick = function () { if (!activeCall) { return; } micMuted = !micMuted; applyMute(); };
-    $("ch-mute-spk").onclick = function () { if (!activeCall) { return; } spkMuted = !spkMuted; applyMute(); };
-    $("ch-call").onclick = function () {
-      if (activeCall) { // hang up
-        try { if (voiceHangup) voiceHangup(activeCall); } catch (_) {}
-        callEnded(); setStatus("call ended");
-        return;
-      }
-      if (!voiceCall || !peer) return;
-      setStatus("calling " + peer.slice(0, 8) + "… (grant mic access)");
-      var micOk;
-      Promise.resolve(startAudio()).then(function (ok) {
-        micOk = ok;
-        return Promise.resolve(voiceCall(peer)); // blocks until the callee answers
-      }).then(function (r) {
-        inCall(r && r.id);
-        if (micOk === false) setStatus("in call — no microphone, receive-only", "#e0af68");
-      }).catch(function (e) {
-        callEnded(); setStatus("call failed: " + (e && e.message ? e.message : e), "#f7768e");
-      });
-    };
-    // Poll for inbound (ringing) calls and offer to answer.
-    var ringAsked = {};
-    var voicePoll = setInterval(function () {
-      if (activeCall || !voiceIncoming) return;
-      Promise.resolve(voiceIncoming()).then(function (js) {
-        var list = []; try { list = JSON.parse(js || "[]") || []; } catch (_) {}
-        if (!list.length) return;
-        var c = list[0];
-        if (ringAsked[c.id]) return; ringAsked[c.id] = true;
-        if (window.confirm("Incoming voice call from " + String(c.from).slice(0, 12) + "…  Answer?")) {
-          setStatus("answering… (grant mic access)");
-          var micOk;
-          Promise.resolve(startAudio()).then(function (ok) { micOk = ok; return Promise.resolve(voiceAnswer(c.id)); })
-            .then(function () { inCall(c.id); if (micOk === false) setStatus("in call — no microphone, receive-only", "#e0af68"); })
-            .catch(function (e) { callEnded(); setStatus("answer failed: " + (e && e.message ? e.message : e), "#f7768e"); });
-        } else if (sv.skychatVoiceDecline) { try { sv.skychatVoiceDecline(c.id); } catch (_) {} }
-      }).catch(function () {});
-    }, 1500);
-    // Stop polling when the window's DOM is removed (WinBox destroys wrap on close).
-    var voiceWatch = setInterval(function () { if (!wrap.isConnected) { clearInterval(voicePoll); clearInterval(voiceWatch); callEnded(); } }, 3000);
-
-    // Activity log pane — surfaces skychat's own dial/connect/send/receive vlog
-    // lines from the shared window.skywireLog ring (the same source the 'logs'
-    // window reads), filtered to skychat, so the operator sees the connection /
-    // route setup like the browser window's skysocks-lite log. Collapsible (🐞).
-    var logEl = $("ch-log"), logOpen = false;
-    function chatLogLine(line) {
-      if (!line || !line.text || !/skychat/i.test(line.text)) return;
-      var d = doc.createElement("div");
-      d.textContent = new Date(line.t || Date.now()).toTimeString().slice(0, 8) + " " + String(line.text).replace(/^\[visor\]\s*/, "");
-      logEl.appendChild(d);
-      if (logEl.childNodes.length > 500) logEl.removeChild(logEl.firstChild);
-      if (logOpen) logEl.scrollTop = logEl.scrollHeight;
-    }
-    var logUnsub = function () {};
-    if (window.skywireLog) {
-      try { window.skywireLog.all().forEach(chatLogLine); } catch (_) {}
-      logUnsub = window.skywireLog.subscribe(chatLogLine);
-    }
-    $("ch-log-toggle").onclick = function () {
-      logOpen = !logOpen; logEl.style.display = logOpen ? "block" : "none";
-      this.style.opacity = logOpen ? "1" : ".6";
-      if (logOpen) logEl.scrollTop = logEl.scrollHeight;
-    };
-
-    var timer = setInterval(render, 1500);
-    render();
-    if (!send) setStatus("skychat is only available in the browser-tab (wasm) visor", "#e0af68");
-    // Deep-link (?skydm=<pk>): open a conversation pre-addressed to this peer so a
-    // shared theskywirenetwork.net link drops the visitor straight into a 1:1 chat.
-    if (opts.initialPeer) { try { setPeer(opts.initialPeer); } catch (e) {} }
+    // Deep-link retarget: reload the embedded tab addressed to the new peer
+    // (the component reads ?peer= once at init — a src swap re-inits it).
+    function setPeer(pk) { if (frame && pk) { frame.src = chatURL(pk); } }
     var wb = makeWin(doc, {
       title: "skychat", root: opts.root, top: opts.top, bottom: opts.bottom, width: "42%", height: "62%",
-      mount: wrap, onclose: function () { clearInterval(timer); logUnsub(); if (opts.onClose) opts.onClose(); }
+      mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); }
     });
     return { wb: wb, close: function () { wb.close(); }, setPeer: setPeer };
   }
