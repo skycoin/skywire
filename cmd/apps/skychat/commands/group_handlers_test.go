@@ -29,6 +29,11 @@ type groupAPI struct {
 	promoted []cipher.PubKey
 	demoted  []cipher.PubKey
 	history  []visor.GroupMessage // returned by GroupHistory when non-nil
+	// fileKey, when set, is handed back by GroupFileKey as both the seal
+	// and open key — the encrypted-group case. Empty means a plaintext
+	// group.
+	fileKey      []byte
+	fileKeyCalls []visor.GroupFileKeyArgs
 }
 
 func (a *groupAPI) GroupList() ([]visor.GroupInfo, error) { return a.groups, nil }
@@ -47,6 +52,21 @@ func (a *groupAPI) GroupInvite(string) (string, error) { return "skychat:invite:
 func (a *groupAPI) GroupSend(args visor.GroupSendArgs) error {
 	a.sent = append(a.sent, args)
 	return nil
+}
+
+// GroupFileKey answers the attachment-key lookup. Zero value = a plaintext
+// group (no key, nothing to seal), which is what most of these tests want;
+// set fileKey to exercise the sealed path.
+func (a *groupAPI) GroupFileKey(args visor.GroupFileKeyArgs) (visor.GroupFileKeyResult, error) {
+	a.fileKeyCalls = append(a.fileKeyCalls, args)
+	if len(a.fileKey) == 0 {
+		return visor.GroupFileKeyResult{}, nil
+	}
+	return visor.GroupFileKeyResult{
+		Seal:      a.fileKey,
+		Open:      [][]byte{a.fileKey},
+		Encrypted: true,
+	}, nil
 }
 func (a *groupAPI) GroupUnsend(args visor.GroupUnsendArgs) error {
 	a.unsent = append(a.unsent, args)

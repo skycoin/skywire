@@ -288,6 +288,42 @@ type GroupSendArgs struct {
 	Text string `json:"text"`
 }
 
+// GroupFileKeyArgs is the RPC input for GroupFileKey: which group, and
+// which attachment within it.
+type GroupFileKeyArgs struct {
+	ID     string `json:"id"`
+	FileID string `json:"file_id"`
+}
+
+// GroupFileKeyResult carries the keys for one group attachment.
+//
+// Two fields rather than one because the two uses differ: sealing needs
+// exactly the current key, while opening has to try the retired ones too
+// (an attachment shared before a rotation must keep opening afterwards,
+// the same way message history does).
+//
+// Both are keys DERIVED for this one file id — the group key itself never
+// crosses the RPC boundary. See the group package's filekey.go.
+type GroupFileKeyResult struct {
+	// Seal is the key to encrypt a new attachment with. Nil for a
+	// plaintext (public) group, where sealing would protect nothing: the
+	// caller sends such files as-is.
+	Seal []byte `json:"seal,omitempty"`
+
+	// Open is every key that may open an existing attachment, current
+	// epoch first then the ring — the order that makes the common case a
+	// single trial decryption.
+	Open [][]byte `json:"open,omitempty"`
+
+	// Epoch is the group's current key generation, for diagnostics.
+	Epoch uint64 `json:"epoch,omitempty"`
+
+	// Encrypted reports whether this group seals attachments at all,
+	// distinguishing "public group, nothing to do" from "encrypted group
+	// whose key we somehow lack" — which is an error, not a no-op.
+	Encrypted bool `json:"encrypted"`
+}
+
 // ErrGroupingDisabled is returned by Visor group methods when the
 // manager isn't initialized (dmsg unavailable at startup, or the
 // bolt store failed to open).
@@ -713,6 +749,30 @@ func (v *Visor) GroupSend(args GroupSendArgs) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return mgr.SendToGroup(ctx, args.ID, args.Text)
+}
+
+// GroupFileKey returns the keys that seal and open one attachment of a
+// group — derived per file, so the group key itself stays in the visor.
+//
+// The chat app calls this on both sides of an attachment's life: once to
+// seal a file it is about to publish, and once per file it needs to render
+// or serve. See the group package's filekey.go for the derivation and
+// cmd/apps/skychat/commands/filecrypt.go for the container.
+func (v *Visor) GroupFileKey(args GroupFileKeyArgs) (GroupFileKeyResult, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupFileKeyResult{}, ErrGroupingDisabled
+	}
+	seal, open, epoch, err := mgr.FileKeys(args.ID, args.FileID)
+	if err != nil {
+		return GroupFileKeyResult{}, err
+	}
+	return GroupFileKeyResult{
+		Seal:      seal,
+		Open:      open,
+		Epoch:     epoch,
+		Encrypted: len(seal) > 0,
+	}, nil
 }
 
 // GroupUnsendArgs is the RPC input for GroupUnsend. TS is the message's

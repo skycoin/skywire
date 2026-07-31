@@ -2177,17 +2177,21 @@
            and the member is the one who cannot check it any other way. -->
       <div id="gaPrivacyRow" class="ga-row hidden">
         <div class="ga-key-line">
-          <span>Membership and moderation are encrypted</span>
+          <span>Membership, moderation and files are encrypted</span>
         </div>
         <div class="ga-key-note">
           Joins, removals, promotions, bans and mutes travel sealed under
           the group key, exactly like the messages — so someone who can pull
           this group's feed without being in it cannot read who was banned,
           who was muted, or when. Key hand-offs no longer name who they are
-          addressed to either. Such an observer can still tell that an admin
-          acted, roughly when, and about how many members the group has.
-          Members still running an older build publish these changes in the
-          clear until they update.
+          addressed to either. Shared files are sealed under the same key
+          before they leave this device and stay sealed on every member's
+          disk, so a copy of the downloads folder — or a re-send to someone
+          outside the group — is bytes nobody can open. Such an observer can
+          still tell that an admin acted, roughly when, how many members the
+          group has, and the name and size of a file. Members still running
+          an older build publish these changes in the clear until they
+          update.
         </div>
       </div>
       <!-- Encryption row: private groups only. Shows which key generation
@@ -5637,7 +5641,7 @@
       describeGroupKind() {
         const kind = document.getElementById('cgMode').value;
         document.getElementById('cgKindHelp').textContent = kind === 'private'
-          ? 'Every join is a request you approve. Messages are encrypted, and the key is sent to a member only after you let them in — so a forwarded invite link on its own grants nothing. Membership and moderation are encrypted too: who you admit, remove, ban or mute is not readable from outside the group.'
+          ? 'Every join is a request you approve. Messages are encrypted, and the key is sent to a member only after you let them in — so a forwarded invite link on its own grants nothing. Membership, moderation and shared files are encrypted too: who you admit, remove, ban or mute is not readable from outside the group, and attachments are sealed on disk as well as in transit.'
           : 'Anyone holding the invite link is admitted automatically. Messages are not encrypted on the feed: in an open group the key would go to anyone who asks, so it would protect nothing. Traffic is still encrypted in transit.';
       }
 
