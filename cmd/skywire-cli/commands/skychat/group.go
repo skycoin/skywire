@@ -211,6 +211,11 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	// across members is how an operator confirms a re-key converged.
 	if info.Mode == skychatgroup.ModePrivate {
 		fmt.Fprintf(&buf, "key_epoch:         %d\n", info.KeyEpoch) //nolint:errcheck
+		// Whether this group's roster/admin/mod leaves go onto the feed
+		// sealed or in the clear. Printed next to key_epoch because it is
+		// the same key doing the work, and because "the bans are private
+		// too" is a separate promise from "the messages are private".
+		fmt.Fprintf(&buf, "governance_sealed: %t\n", info.GovernanceSealed) //nolint:errcheck
 	}
 	// Who can serve this group's history — the difference between "goes
 	// dark when the admins are offline" and "any online member can catch a

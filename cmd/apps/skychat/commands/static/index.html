@@ -2171,6 +2171,25 @@
           can read it either way.
         </div>
       </div>
+      <!-- What an encrypted group hides beyond the message bodies. Shown
+           to every member, not only admins: "who was banned stays private"
+           is a promise about the members as much as about the moderators,
+           and the member is the one who cannot check it any other way. -->
+      <div id="gaPrivacyRow" class="ga-row hidden">
+        <div class="ga-key-line">
+          <span>Membership and moderation are encrypted</span>
+        </div>
+        <div class="ga-key-note">
+          Joins, removals, promotions, bans and mutes travel sealed under
+          the group key, exactly like the messages — so someone who can pull
+          this group's feed without being in it cannot read who was banned,
+          who was muted, or when. Key hand-offs no longer name who they are
+          addressed to either. Such an observer can still tell that an admin
+          acted, roughly when, and about how many members the group has.
+          Members still running an older build publish these changes in the
+          clear until they update.
+        </div>
+      </div>
       <!-- Encryption row: private groups only. Shows which key generation
            the group is on (it advances on every eviction) and lets an
            admin re-key on demand. -->
@@ -5618,7 +5637,7 @@
       describeGroupKind() {
         const kind = document.getElementById('cgMode').value;
         document.getElementById('cgKindHelp').textContent = kind === 'private'
-          ? 'Every join is a request you approve. Messages are encrypted, and the key is sent to a member only after you let them in — so a forwarded invite link on its own grants nothing.'
+          ? 'Every join is a request you approve. Messages are encrypted, and the key is sent to a member only after you let them in — so a forwarded invite link on its own grants nothing. Membership and moderation are encrypted too: who you admit, remove, ban or mute is not readable from outside the group.'
           : 'Anyone holding the invite link is admitted automatically. Messages are not encrypted on the feed: in an open group the key would go to anyone who asks, so it would protect nothing. Traffic is still encrypted in transit.';
       }
 
@@ -5731,6 +5750,14 @@
         document.getElementById('gaPeerBackfill').checked = !!(info && info.peer_backfill);
 
         const encrypted = !!(info && (info.kind === 'private' || info.mode === 'private'));
+        // Governance privacy. Driven by the server's own flag rather than
+        // by `encrypted`, because the two are not the same claim: the
+        // visor computes whether it actually seals roster/admin/mod
+        // leaves, and a build that doesn't must not display the promise.
+        const privacyRow = document.getElementById('gaPrivacyRow');
+        if (privacyRow) {
+          privacyRow.classList.toggle('hidden', !(info && info.governance_sealed));
+        }
         const keyRow = document.getElementById('gaKeyRow');
         keyRow.classList.toggle('hidden', !(encrypted && isAdmin));
         if (encrypted && isAdmin) {

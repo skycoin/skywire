@@ -81,6 +81,13 @@ func removePK(list []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
 // a current admin. Idempotent: an Add of an existing member (or Remove of an
 // absent one) is a no-op.
 func (s *Session) applyRosterLeaf(body []byte) {
+	// Unseal first: on an encrypted group the envelope arrives sealed
+	// under the group key. A leaf sealed under a key we do not hold yet
+	// is parked rather than dropped — see gossip_seal.go.
+	body, ok := s.openOrPark(familyRoster, body)
+	if !ok {
+		return
+	}
 	var m RosterMutation
 	if err := json.Unmarshal(body, &m); err != nil {
 		return
@@ -190,6 +197,10 @@ func (s *Session) applyRosterLeaf(body []byte) {
 // (promote/demote). Same authority gate as applyRosterLeaf; the founder can
 // never be demoted.
 func (s *Session) applyAdminLeaf(body []byte) {
+	body, ok := s.openOrPark(familyAdmin, body)
+	if !ok {
+		return
+	}
 	var m AdminMutation
 	if err := json.Unmarshal(body, &m); err != nil {
 		return

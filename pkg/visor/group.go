@@ -87,6 +87,17 @@ type GroupInfo struct {
 	// background tick will re-key it. Zero for a plaintext group.
 	KeyRotatesInSeconds int64 `json:"key_rotates_in_seconds,omitempty"`
 
+	// GovernanceSealed reports whether this group's membership and
+	// moderation history is encrypted on the feed as well as its
+	// messages — who was added, promoted, banned or muted, and when.
+	//
+	// True exactly when the group is encrypted; surfaced as its own
+	// field rather than left for a client to infer from Kind, because
+	// "the bans are private too" is a distinct promise from "the
+	// messages are private" and it was NOT true before this build. A
+	// client that shows it can tell the operator which one they have.
+	GovernanceSealed bool `json:"governance_sealed,omitempty"`
+
 	// CanPost / CannotPostReason answer "may THIS visor post into this
 	// group right now", pre-computed so the UI can disable the composer
 	// and explain why without duplicating the precedence rules
@@ -828,6 +839,10 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 		CreatedAt:     r.CreatedAt,
 		JoinedAt:      r.JoinedAt,
 		LastMessageAt: r.LastMessageAt,
+		// Same condition as the message bodies: a public group has no key
+		// to seal governance with, so it publishes roster/admin/mod
+		// mutations in the clear and this stays false.
+		GovernanceSealed: r.Encrypted(),
 	}
 	// Key age / time-to-rotation, for encrypted groups whose key has a
 	// known issue time. A record from before KeyIssuedAt was stamped

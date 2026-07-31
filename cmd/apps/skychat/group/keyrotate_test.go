@@ -29,9 +29,12 @@ func TestSealGroupKeyOnlyOpensForRecipient(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateAESKey: %v", err)
 	}
-	sealed, err := sealGroupKey(adminSK, memberPK, key)
+	sealed, tag, err := sealGroupKey(adminSK, memberPK, key)
 	if err != nil {
 		t.Fatalf("sealGroupKey: %v", err)
+	}
+	if len(tag) != wrapTagLen {
+		t.Fatalf("wrap tag is %d bytes, want %d", len(tag), wrapTagLen)
 	}
 	if bytes.Contains(sealed, key) {
 		t.Fatal("the sealed blob contains the group key verbatim")

@@ -62,11 +62,39 @@
 // other half: keys age out of the ring, so even a full-disk compromise
 // reaches back only so far.
 //
-// It also does not hide the SHAPE of the group: the wrap list names every
-// recipient PK in the clear, so an observer who can read the feed learns
-// the roster. That is not new information — Members already converges to
-// every member through roster/ gossip — so hiding it here would buy
-// nothing.
+// # Who the wraps are addressed to
+//
+// The wrap list used to name every recipient PK in the clear, on the
+// argument that it was not new information: roster/ gossip published the
+// same member list in plaintext anyway. Sealing the governance families
+// (gossip_seal.go) removed that argument and left this as the ONE place
+// an encrypted group still published its roster — and worse than the
+// roster, because diffing the recipient sets of two consecutive rotations
+// names exactly who was just evicted, which is the fact the moderation
+// seal exists to hide.
+//
+// So a wrap is now addressed by a blinded Tag instead: a digest of the
+// same ECDH secret that seals it, which only the intended recipient can
+// recompute. It keeps the direct lookup (a recipient finds its own wrap
+// without trial-decrypting the list) while telling an observer nothing
+// about who is in the group. The tag changes every rotation, because the
+// ephemeral half of the ECDH does, so tags cannot be correlated across
+// epochs either.
+//
+// What remains visible is the COUNT of wraps — the group's size, and the
+// fact that it grew or shrank. Hiding that needs padding to a fixed
+// recipient count, which trades real bandwidth for a much weaker property
+// than the one bought here, so it is left visible on purpose.
+//
+// Compatibility runs one way, and further than the governance seal does:
+// a member on a build that predates blinding looks for its wrap BY NAME,
+// finds none, and falls off the key schedule — it keeps the key it has
+// and stops being able to read the group after the next rotation. That is
+// the same upgrade window ephemeral wraps opened (a pre-ephemeral build
+// cannot open a wrap sealed under a throwaway key either), and the two
+// ship together, so blinding does not widen it. Receiving stays
+// backward-compatible in the other direction: a pre-blinding leaf that
+// names its recipient is still matched by name, forever.
 //
 // # Authority
 //
@@ -79,9 +107,11 @@
 package group
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -115,10 +145,24 @@ var (
 
 // KeyWrap is the group key sealed for exactly one recipient.
 type KeyWrap struct {
-	// RecipientPK is the member this copy is for. In the clear: the
-	// recipient has to find its own wrap without trial-decrypting every
-	// one, and the roster is not a secret from members anyway.
+	// RecipientPK named the member this copy is for, in the clear. Left
+	// ZERO by every rotation this build issues — see the "Who the wraps
+	// are addressed to" section above; Tag replaces it. Still read on
+	// receive, because pre-blinding leaves live in feeds forever and
+	// their recipient has no other way to find its wrap.
+	//
+	// Kept in the canonical bytes unconditionally (zero or not) so those
+	// old signatures still verify byte for byte.
 	RecipientPK cipher.PubKey `json:"recipient_pk"`
+
+	// Tag identifies the recipient without naming it: a digest over the
+	// same ECDH secret that seals this wrap, which only the holder of the
+	// recipient secret key can recompute. Absent on pre-blinding leaves.
+	//
+	// Signed, like EphPK and for the same reason — an attacker who could
+	// rewrite tags could make a member fail to find its own wrap and fall
+	// silently off the key schedule.
+	Tag []byte `json:"tag,omitempty"`
 
 	// Sealed is [12-byte nonce | ChaCha20-Poly1305 ciphertext + tag]
 	// over the 32-byte group key, under the ECDH secret shared by
@@ -188,10 +232,50 @@ type KeyMutation struct {
 	Signature cipher.Sig    `json:"signature"`
 }
 
-// wrapFor returns the wrap addressed to pk.
+// wrapFor returns the legacy wrap addressed to pk by name. Only finds
+// pre-blinding wraps; wrapForRecipient is the one the receive path uses.
 func (m KeyMutation) wrapFor(pk cipher.PubKey) (KeyWrap, bool) {
 	for _, w := range m.Wraps {
-		if w.RecipientPK == pk {
+		if w.RecipientPK != (cipher.PubKey{}) && w.RecipientPK == pk {
+			return w, true
+		}
+	}
+	return KeyWrap{}, false
+}
+
+// wrapForRecipient returns the wrap this rotation addressed to us, by tag
+// for a blinded leaf and by name for a pre-blinding one.
+//
+// The ECDH behind the tag is computed at most once per distinct sealer:
+// one rotation mints one ephemeral key, so in practice that is a single
+// scalar multiplication for the whole list however many members it has.
+//
+// A wrap whose tag we cannot compute (an unusable sealer PK) is skipped
+// rather than failing the lookup — one malformed entry in someone else's
+// wrap must not cost us our own key.
+func (m KeyMutation) wrapForRecipient(mySK cipher.SecKey, myPK cipher.PubKey) (KeyWrap, bool) {
+	tags := make(map[cipher.PubKey][]byte, 1)
+	for _, w := range m.Wraps {
+		if w.RecipientPK != (cipher.PubKey{}) {
+			if w.RecipientPK == myPK {
+				return w, true
+			}
+			continue
+		}
+		if len(w.Tag) == 0 {
+			continue
+		}
+		sealer := w.sealerPK(m.IssuerPK)
+		mine, ok := tags[sealer]
+		if !ok {
+			shared, err := deriveWrapKey(mySK, sealer)
+			if err != nil {
+				continue
+			}
+			mine = wrapTag(shared)
+			tags[sealer] = mine
+		}
+		if bytes.Equal(w.Tag, mine) {
 			return w, true
 		}
 	}
@@ -199,11 +283,15 @@ func (m KeyMutation) wrapFor(pk cipher.PubKey) (KeyWrap, bool) {
 }
 
 // Recipients returns the PKs this rotation was addressed to, in wire
-// order. Operator-facing (an admin can see who was cut off) and used by
-// tests.
+// order. Empty for a blinded rotation, which is the point of blinding —
+// only the issuer knows the list, and it knows it from the roster it
+// passed in. Operator-facing, and used by tests over legacy leaves.
 func (m KeyMutation) Recipients() []cipher.PubKey {
 	out := make([]cipher.PubKey, 0, len(m.Wraps))
 	for _, w := range m.Wraps {
+		if w.RecipientPK == (cipher.PubKey{}) {
+			continue
+		}
 		out = append(out, w.RecipientPK)
 	}
 	return out
@@ -223,8 +311,15 @@ func (m KeyMutation) Recipients() []cipher.PubKey {
 func canonicalBytesKey(m KeyMutation) []byte {
 	wraps := make([]KeyWrap, len(m.Wraps))
 	copy(wraps, m.Wraps)
+	// Sort on recipient AND tag. Recipient alone stopped being a unique
+	// sort key the moment blinded wraps left it zero across the whole
+	// list: sort.Slice is not stable, so an all-ties comparison could
+	// permute the wraps and hash to a different digest on every call,
+	// breaking the signature nondeterministically.
 	sort.Slice(wraps, func(i, j int) bool {
-		return wraps[i].RecipientPK.Hex() < wraps[j].RecipientPK.Hex()
+		a := wraps[i].RecipientPK.Hex() + "|" + hex.EncodeToString(wraps[i].Tag)
+		b := wraps[j].RecipientPK.Hex() + "|" + hex.EncodeToString(wraps[j].Tag)
+		return a < b
 	})
 	wh := sha256.New()
 	for _, w := range wraps {
@@ -241,6 +336,12 @@ func canonicalBytesKey(m KeyMutation) []byte {
 		// leaf swap in a value that silently makes the wrap unopenable.
 		if w.EphPK != (cipher.PubKey{}) {
 			_, _ = wh.Write(w.EphPK[:]) //nolint:errcheck
+		}
+		// Same conditional-fold rule as EphPK: a pre-blinding mutation
+		// carries no tag and hashes to exactly what it did before this
+		// field existed, so its signature keeps verifying.
+		if len(w.Tag) > 0 {
+			_, _ = wh.Write(w.Tag) //nolint:errcheck
 		}
 	}
 
@@ -270,7 +371,12 @@ func keyRequiredFieldsOK(m KeyMutation) bool {
 		return false
 	}
 	for _, w := range m.Wraps {
-		if w.RecipientPK == (cipher.PubKey{}) || len(w.Sealed) == 0 {
+		// Addressed either way — by name on a pre-blinding leaf, by tag
+		// on a current one. A wrap with neither is addressed to nobody.
+		if w.RecipientPK == (cipher.PubKey{}) && len(w.Tag) == 0 {
+			return false
+		}
+		if len(w.Sealed) == 0 {
 			return false
 		}
 	}
@@ -346,17 +452,54 @@ func deriveWrapKey(mySK cipher.SecKey, peerPK cipher.PubKey) ([]byte, error) {
 	return key, nil
 }
 
+// wrapTagLen is how many bytes of the tag digest ride on the wire. 16 is
+// far past any collision concern for a list of at most a few hundred
+// wraps, and keeps the leaf small.
+const wrapTagLen = 16
+
+// wrapTagLabel domain-separates the tag digest from any other use of the
+// same ECDH secret — the AEAD key for the wrap itself, most immediately.
+// Deriving both from one secret without separation is the classic way to
+// turn two safe primitives into one unsafe one.
+const wrapTagLabel = "skychat-group-wrap-tag-v1"
+
+// wrapTag derives the public, non-identifying address of a wrap from the
+// ECDH secret it is sealed under. Both sides compute the same value: the
+// issuer from (ephemeral_sk, recipient_pk), the recipient from
+// (recipient_sk, ephemeral_pk).
+//
+// An observer holding neither secret sees 16 bytes that are fresh every
+// rotation — the ephemeral half changes — so tags reveal nothing about
+// the recipient and cannot be linked across epochs.
+func wrapTag(shared []byte) []byte {
+	h := sha256.New()
+	_, _ = h.Write([]byte(wrapTagLabel)) //nolint:errcheck // hash.Write never errors
+	_, _ = h.Write(shared)               //nolint:errcheck
+	return h.Sum(nil)[:wrapTagLen]
+}
+
 // sealGroupKey seals groupKey for recipientPK under sealerSK — the
 // rotation's ephemeral secret, not the issuer's identity key. Layout:
-// [12-byte nonce | ct+tag].
-func sealGroupKey(sealerSK cipher.SecKey, recipientPK cipher.PubKey, groupKey []byte) ([]byte, error) {
+// [12-byte nonce | ct+tag]. Returns the wrap's blinding tag alongside,
+// derived from the same shared secret.
+func sealGroupKey(sealerSK cipher.SecKey, recipientPK cipher.PubKey, groupKey []byte) ([]byte, []byte, error) {
 	if len(groupKey) != 32 {
-		return nil, fmt.Errorf("group: key wrap: group key must be 32 bytes, got %d", len(groupKey))
+		return nil, nil, fmt.Errorf("group: key wrap: group key must be 32 bytes, got %d", len(groupKey))
 	}
 	wk, err := deriveWrapKey(sealerSK, recipientPK)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	sealed, err := sealGroupKeyWith(wk, groupKey)
+	if err != nil {
+		return nil, nil, err
+	}
+	return sealed, wrapTag(wk), nil
+}
+
+// sealGroupKeyWith is sealGroupKey once the shared secret is already in
+// hand, so a caller that also needs the tag pays for one ECDH, not two.
+func sealGroupKeyWith(wk, groupKey []byte) ([]byte, error) {
 	aead, err := chacha20poly1305.New(wk)
 	if err != nil {
 		return nil, fmt.Errorf("group: key wrap: aead init: %w", err)
@@ -413,12 +556,15 @@ func buildKeyMutation(gid uuid.UUID, epoch uint64, key []byte, recipients []ciph
 	m := KeyMutation{GroupID: gid, Epoch: epoch, IssuedAt: at.UTC()}
 	var skipped []cipher.PubKey
 	for _, pk := range recipients {
-		sealed, err := sealGroupKey(ephSK, pk, key)
+		sealed, tag, err := sealGroupKey(ephSK, pk, key)
 		if err != nil {
 			skipped = append(skipped, pk)
 			continue
 		}
-		m.Wraps = append(m.Wraps, KeyWrap{RecipientPK: pk, Sealed: sealed, EphPK: ephPK})
+		// RecipientPK deliberately left zero: the tag is the address now.
+		// Naming the member here would republish the roster in the clear
+		// on every rotation and undo the governance seal.
+		m.Wraps = append(m.Wraps, KeyWrap{Sealed: sealed, EphPK: ephPK, Tag: tag})
 	}
 	// Signed with the IDENTITY key: the ephemeral key proves nothing
 	// about who may re-key the group, and applyKeyLeaf's admin gate reads
