@@ -23,6 +23,12 @@ import (
 // PublicServiceDelay defines the interval for checking service discovery and adding transports to public visors.
 const PublicServiceDelay = skyenv.PublicAutoconnectInterval
 
+// initialAutoconnectDelay is how long after boot the FIRST public-autoconnect
+// pass fires (vs the full PublicServiceDelay for every pass after it). Long
+// enough for dmsg + transport clients to be up, short enough that a client
+// visor reaches the mesh in seconds rather than 5 minutes.
+const initialAutoconnectDelay = 3 * time.Second
+
 // sudphCacheTTL defines how long the cached SUDPH-capable visors list remains valid.
 const sudphCacheTTL = 5 * time.Minute
 
@@ -89,13 +95,22 @@ func isContextError(err error) bool {
 
 // Run implements Autoconnector interface
 func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
-	publicServiceTicker := time.NewTicker(PublicServiceDelay)
+	// Fire the first public-autoconnect pass a few seconds after boot instead
+	// of waiting a full PublicAutoconnectInterval (5 min). A fresh non-public
+	// (client) visor otherwise can't reach the public mesh via autoconnect for
+	// five minutes — measured as the exact analog of the wasm visor's fixed
+	// pre-delay. A self-resetting timer keeps the steady-state 5-min cadence
+	// after the first pass; on a public hub inbound transports fill in fast
+	// regardless, so this is purely upside for clients.
+	publicServiceTimer := time.NewTimer(initialAutoconnectDelay)
+	defer publicServiceTimer.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return context.Canceled
-		case <-publicServiceTicker.C:
+		case <-publicServiceTimer.C:
+			publicServiceTimer.Reset(PublicServiceDelay)
 
 			a.log.Infoln("Fetching public visors")
 
