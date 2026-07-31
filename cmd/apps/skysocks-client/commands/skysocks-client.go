@@ -49,6 +49,7 @@ var (
 	reconnect      bool
 	reconnectDelay int64
 	direct         bool
+	dmsgFallback   bool
 )
 
 func init() {
@@ -69,6 +70,7 @@ func init() {
 	RootCmd.Flags().BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure (vs exiting)")
 	RootCmd.Flags().Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between in-process reconnect attempts")
 	RootCmd.Flags().BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (create the transport on demand, dial 1-hop, bypass the route-finder + setup node); self-heals when the server restarts")
+	RootCmd.Flags().BoolVar(&dmsgFallback, "dmsg-fallback", false, "if the skynet (route) dial to the server fails, fall back to a direct dmsg stream (opt-in: dmsg relays via a dmsg server — higher latency + the server sees both endpoint PKs)")
 }
 
 // RootCmd is the root command for skysocks
@@ -103,6 +105,7 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 		fs.BoolVar(&reconnect, "reconnect", false, "in-process reconnect on stream failure")
 		fs.Int64Var(&reconnectDelay, "reconnect-delay", 2, "seconds between reconnect attempts")
 		fs.BoolVar(&direct, "direct", false, "force a direct-transport-only route to the server (1-hop, bypass the route-finder + setup node); self-heals on server restart")
+		fs.BoolVar(&dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
 		if err := fs.Parse(args); err != nil {
 			return fmt.Errorf("failed to parse flags: %w", err)
 		}
@@ -267,23 +270,23 @@ func RunSkysocksClient(ctx context.Context, args []string) error {
 func dialServer(ctx context.Context, appCl *app.Client, pk cipher.PubKey, port routing.Port) (net.Conn, error) {
 	//nolint:errcheck
 	appCl.SetDetailedStatus(appserver.AppDetailedStatusStarting) //nolint:errcheck,gosec
+	// dial one network to the server. On skynet, --direct forces a 1-hop
+	// direct-transport-only dial (create-on-demand, bypass the route-finder +
+	// setup node, self-heals on server restart); dmsg is a plain relay stream.
+	dial := func(_ context.Context, a appnet.Addr) (net.Conn, error) {
+		if a.Net == netType && direct {
+			return appCl.DialWithOptions(a, 0, 0, 0, 0, 0, 0, true)
+		}
+		return appCl.Dial(a)
+	}
+	nets := []appnet.Type{netType}
+	if dmsgFallback {
+		nets = append(nets, appnet.TypeDmsg)
+	}
 	var conn net.Conn
 	err := r.Do(ctx, func() error {
 		var err error
-		dstAddr := appnet.Addr{
-			Net:    netType,
-			PubKey: pk,
-			Port:   port,
-		}
-		if direct {
-			// Direct-transport-only: the router creates a direct transport to
-			// the server if none exists and dials 1-hop over it, bypassing the
-			// route-finder and setup node (and therefore the destination
-			// circuit breaker). Self-heals when the server restarts.
-			conn, err = appCl.DialWithOptions(dstAddr, 0, 0, 0, 0, 0, 0, true)
-		} else {
-			conn, err = appCl.Dial(dstAddr)
-		}
+		conn, _, err = appnet.DialWithFallback(ctx, dial, pk, port, nets...)
 		return err
 	})
 	if err != nil {
