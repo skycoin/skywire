@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/gossip_test.go: unit
+// Package group — pkg/skychat/group/gossip_test.go: unit
 // coverage for the signed-mutation envelopes added by gossip.go.
 //
 // Scope is pure types + sign + verify + JSON round-trip; the

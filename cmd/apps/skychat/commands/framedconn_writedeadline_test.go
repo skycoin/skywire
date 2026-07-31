@@ -19,11 +19,12 @@ package commands
 
 import (
 	"errors"
-	"github.com/skycoin/skywire/pkg/skychat/message"
 	"net"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/skycoin/skywire/pkg/skychat/message"
 )
 
 func TestFramedConn_WriteFrameDeadline_TimesOutOnStalledPeer(t *testing.T) {

@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/invite.go c4-app-chat
+// Package group pkg/skychat/group/invite.go c4-app-chat
 // the invite payload an owner hands to a prospective member.
 //
 // Invite-link grammar:
@@ -45,10 +45,56 @@ type Invite struct {
 	Port    uint16        `json:"port"`
 	Mode    Mode          `json:"mode"`
 
-	// AESKey is set iff Mode == ModePrivate. Anybody with this link
-	// can decrypt the feed; the invite IS the key. Owner-side key
-	// rotation = create a fresh group with a fresh invite.
+	// Admins are further PKs with roster authority that a joiner may ask
+	// for admission when the founder doesn't answer. Excludes OwnerPK,
+	// which is carried above and is always tried first.
+	//
+	// Without this the founder was a single point of failure in the one
+	// place a group can least afford one: every invite pointed join
+	// requests at OwnerPK alone, so a founder that was offline meant
+	// nobody could join, and a founder whose key was lost meant the
+	// group could never admit anyone again — while other admins sat
+	// there, authorized and idle. The founder stays the recovery anchor;
+	// it just stops being the only door.
+	//
+	// Absent in links minted before this field existed. A joiner reading
+	// one falls back to the founder alone, which is exactly the old
+	// behavior; an older joiner reading a link that HAS the field
+	// ignores it and dials the founder, same as it always did.
+	Admins []cipher.PubKey `json:"admins,omitempty"`
+
+	// PoWBits is how much proof of work the group wants with a join
+	// request. Carried so the common case costs no extra round trip: the
+	// joiner pays before it dials, and only a stale or absent value turns
+	// into a challenge from the responder.
+	//
+	// Untrusted, like the rest of the link — it is clamped to
+	// MaxJoinPoWBits on read so a hostile invite cannot make whoever
+	// pastes it grind for hours. The responder checks against its own
+	// requirement regardless, so a link understating the price costs the
+	// joiner one extra round trip rather than getting anyone in cheaply.
+	PoWBits uint8 `json:"pow_bits,omitempty"`
+
+	// AESKey is the group key, and is now normally ABSENT even for
+	// ModePrivate: the key is handed to a joiner in the approval
+	// response over the encrypted relay stream, once an admin has said
+	// yes. See JoinResponseMsg.AESKey.
+	//
+	// It used to travel here, which made the invite itself the secret —
+	// anyone the link reached could decrypt the feed, a denied
+	// requester included, and the key could never be rotated because
+	// links already in circulation would keep working. Links minted by
+	// older builds still carry it and are still accepted; the legacy
+	// join path uses it when a group doesn't answer the join request.
 	AESKey []byte `json:"aes_key,omitempty"`
+}
+
+// AdmissionTargets returns the ordered PKs this invite says may admit
+// us: the founder, then the named admins. self is excluded so we never
+// dial ourselves. See admissionOrder for the ordering rationale and the
+// cap.
+func (inv Invite) AdmissionTargets(self cipher.PubKey) []cipher.PubKey {
+	return admissionOrder(inv.OwnerPK, self, inv.Admins)
 }
 
 // EncodeInvite returns the printable invite-link form.
@@ -56,8 +102,11 @@ func EncodeInvite(inv Invite) (string, error) {
 	if !inv.Mode.IsValid() {
 		return "", fmt.Errorf("group invite: invalid mode %q", inv.Mode)
 	}
-	if inv.Mode == ModePrivate && len(inv.AESKey) != 32 {
-		return "", fmt.Errorf("group invite: private mode needs 32-byte AES key, got %d", len(inv.AESKey))
+	// A private invite may legitimately carry no key — that is the
+	// key-on-approval shape. If one IS present (a legacy link being
+	// re-encoded) it still has to be the right size.
+	if len(inv.AESKey) > 0 && len(inv.AESKey) != 32 {
+		return "", fmt.Errorf("group invite: AES key must be 32 bytes, got %d", len(inv.AESKey))
 	}
 	if inv.Mode == ModePublic && len(inv.AESKey) > 0 {
 		return "", fmt.Errorf("group invite: public mode must not carry an AES key")
@@ -89,8 +138,8 @@ func DecodeInvite(s string) (Invite, error) {
 	if !inv.Mode.IsValid() {
 		return Invite{}, fmt.Errorf("group invite: invalid mode %q", inv.Mode)
 	}
-	if inv.Mode == ModePrivate && len(inv.AESKey) != 32 {
-		return Invite{}, fmt.Errorf("group invite: private mode requires 32-byte AES key, got %d", len(inv.AESKey))
+	if len(inv.AESKey) > 0 && len(inv.AESKey) != 32 {
+		return Invite{}, fmt.Errorf("group invite: AES key must be 32 bytes, got %d", len(inv.AESKey))
 	}
 	if inv.Mode == ModePublic && len(inv.AESKey) > 0 {
 		return Invite{}, fmt.Errorf("group invite: public mode must not carry an AES key")
@@ -104,6 +153,7 @@ func DecodeInvite(s string) (Invite, error) {
 	if inv.Port == 0 {
 		return Invite{}, fmt.Errorf("group invite: zero Port")
 	}
+	inv.PoWBits = clampJoinPoWBits(inv.PoWBits)
 	return inv, nil
 }
 

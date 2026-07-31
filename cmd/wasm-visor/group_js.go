@@ -91,7 +91,7 @@ func startGroupChat(sk cipher.SecKey, log *logging.Logger) {
 	if dmsgC == nil || selfPK.Null() {
 		return
 	}
-	store, err := group.OpenStore("") // js build -> in-memory (path ignored)
+	store, err := group.OpenStore("", sk) // js build -> in-memory (path ignored); sk seals key material
 	if err != nil {
 		vlog("group: store open failed: " + err.Error())
 		return
@@ -179,12 +179,12 @@ func jsGroupCreate(_ js.Value, args []js.Value) interface{} {
 		return errPromise("skychatGroupCreate(name[, mode])")
 	}
 	name := args[0].String()
-	mode := group.ModePublic
+	kind := group.KindPublic
 	if len(args) >= 2 && args[1].String() == "private" {
-		mode = group.ModePrivate
+		kind = group.KindPrivate
 	}
 	return promise(func() (interface{}, error) {
-		rec, err := groupMgr.Create(name, mode, nil)
+		rec, err := groupMgr.Create(name, kind, nil)
 		if err != nil {
 			return nil, err
 		}
