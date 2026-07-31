@@ -12,12 +12,12 @@
 // each copy readable by exactly one recipient.
 //
 // Hence one KeyWrap per remaining member, each sealed under a key derived
-// from ECDH(recipient_pk, issuer_sk). The recipient recomputes the same
-// secret as ECDH(issuer_pk, recipient_sk) — the symmetry that makes this
-// work without any prior shared state — and opens its own wrap. Everyone
-// else's wraps are opaque to it. The evicted PK gets no wrap at all,
-// which is the entire point: it is not merely disconnected, it is not a
-// recipient.
+// from ECDH(recipient_pk, ephemeral_sk). The recipient recomputes the same
+// secret as ECDH(ephemeral_pk, recipient_sk) — the symmetry that makes
+// this work without any prior shared state — and opens its own wrap.
+// Everyone else's wraps are opaque to it. The evicted PK gets no wrap at
+// all, which is the entire point: it is not merely disconnected, it is not
+// a recipient.
 //
 // secp256k1 + ChaCha20-Poly1305, not NaCl box: skywire identities are
 // secp256k1, and skycoin/cipher.ECDH already does the scalar-mult and
@@ -26,12 +26,41 @@
 // crypto.go) — deliberately, so there is one ECDH-sealing idiom in this
 // app rather than two.
 //
+// # Why the wrap key is ephemeral
+//
+// The wrap secret used to be ECDH(recipient_pk, ISSUER_sk) — the issuer's
+// long-term identity key. That made the epoch machinery decorative
+// against the threat it looks like it addresses: every keys/<seq> leaf
+// stays in the feed forever, so anyone who captured the feed and LATER
+// obtained an admin's identity secret could unwrap every group key that
+// admin had ever issued, all the way back to the group's first epoch.
+// Rotating the group key while the key that unwraps it never changes
+// bounds nothing.
+//
+// Now each rotation mints a throwaway keypair, seals every wrap under
+// ECDH(recipient_pk, ephemeral_sk), publishes the ephemeral PUBLIC key in
+// the leaf, and drops the ephemeral secret when buildKeyMutation returns.
+// After that the issuer itself cannot re-derive the wrap — its identity
+// key is no longer sufficient to open its own past rotations, so neither
+// is a later compromise of it.
+//
 // # What this does and does not protect
 //
 // It gives forward secrecy against an evicted member: messages published
 // after the rotation are sealed under a key that member never receives.
 // It does NOT give backward secrecy — the evicted member keeps whatever
 // it already read, and no protocol can take that back.
+//
+// Against a later identity-key compromise it protects the ISSUER side
+// only. A recipient's wrap is still addressed to that recipient's
+// long-term PK, so whoever obtains a member's identity secret can open
+// every wrap ever addressed to that member. Closing that too would need
+// per-member published prekeys and the round trip to negotiate them;
+// what is here bounds the blast radius of an ADMIN key — the one that
+// unlocks the whole group rather than one seat — and that is the wider
+// hole of the two. Record.KeyRing's bounded retention (keyring.go) is the
+// other half: keys age out of the ring, so even a full-disk compromise
+// reaches back only so far.
 //
 // It also does not hide the SHAPE of the group: the wrap list names every
 // recipient PK in the clear, so an observer who can read the feed learns
@@ -92,9 +121,47 @@ type KeyWrap struct {
 	RecipientPK cipher.PubKey `json:"recipient_pk"`
 
 	// Sealed is [12-byte nonce | ChaCha20-Poly1305 ciphertext + tag]
-	// over the 32-byte group key, under the ECDH secret shared by the
-	// issuer and this recipient.
+	// over the 32-byte group key, under the ECDH secret shared by
+	// EphPK's secret half and this recipient.
 	Sealed []byte `json:"sealed"`
+
+	// EphPK is the public half of the throwaway keypair this rotation
+	// sealed with; its secret half was discarded the moment the leaf was
+	// built. Same value on every wrap in one mutation — the wraps differ
+	// because the RECIPIENT half of the ECDH differs.
+	//
+	// Zero on rotations from builds that predate ephemeral wraps, which
+	// is why it is omitempty and why openGroupKey still accepts a sender
+	// PK from the caller: a legacy leaf resolves to the issuer's identity
+	// PK, and canonicalBytesKey folds this field in only when it is set
+	// so those old signatures keep verifying byte for byte.
+	EphPK cipher.PubKey `json:"eph_pk,omitempty"`
+}
+
+// sealerPK returns the public key whose secret half sealed this wrap:
+// the rotation's ephemeral key, or the issuer's identity key for a
+// pre-ephemeral leaf.
+func (w KeyWrap) sealerPK(issuerPK cipher.PubKey) cipher.PubKey {
+	if w.EphPK != (cipher.PubKey{}) {
+		return w.EphPK
+	}
+	return issuerPK
+}
+
+// Ephemeral reports whether this rotation used a throwaway wrap key —
+// i.e. whether a later compromise of the issuer's identity key can still
+// open it. False for a leaf issued by a build that predates ephemeral
+// wraps, which is the one case where it can.
+func (m KeyMutation) Ephemeral() bool {
+	if len(m.Wraps) == 0 {
+		return false
+	}
+	for _, w := range m.Wraps {
+		if w.EphPK == (cipher.PubKey{}) {
+			return false
+		}
+	}
+	return true
 }
 
 // KeyMutation is one signed key rotation: a new epoch plus the sealed
@@ -166,6 +233,15 @@ func canonicalBytesKey(m KeyMutation) []byte {
 		binary.BigEndian.PutUint64(n[:], uint64(len(w.Sealed)))
 		_, _ = wh.Write(n[:])     //nolint:errcheck
 		_, _ = wh.Write(w.Sealed) //nolint:errcheck
+		// EphPK joins the digest only when set, so a pre-ephemeral
+		// mutation hashes to exactly what it did before this field
+		// existed and its signature still verifies. Signing it matters:
+		// it is the key half a recipient derives against, so an
+		// unauthenticated EphPK would let anyone who can rewrite the
+		// leaf swap in a value that silently makes the wrap unopenable.
+		if w.EphPK != (cipher.PubKey{}) {
+			_, _ = wh.Write(w.EphPK[:]) //nolint:errcheck
+		}
 	}
 
 	buf := make([]byte, 0, 1+1+16+8+32+8+8+33)
@@ -270,13 +346,14 @@ func deriveWrapKey(mySK cipher.SecKey, peerPK cipher.PubKey) ([]byte, error) {
 	return key, nil
 }
 
-// sealGroupKey seals groupKey for recipientPK. Layout: [12-byte nonce |
-// ct+tag].
-func sealGroupKey(mySK cipher.SecKey, recipientPK cipher.PubKey, groupKey []byte) ([]byte, error) {
+// sealGroupKey seals groupKey for recipientPK under sealerSK — the
+// rotation's ephemeral secret, not the issuer's identity key. Layout:
+// [12-byte nonce | ct+tag].
+func sealGroupKey(sealerSK cipher.SecKey, recipientPK cipher.PubKey, groupKey []byte) ([]byte, error) {
 	if len(groupKey) != 32 {
 		return nil, fmt.Errorf("group: key wrap: group key must be 32 bytes, got %d", len(groupKey))
 	}
-	wk, err := deriveWrapKey(mySK, recipientPK)
+	wk, err := deriveWrapKey(sealerSK, recipientPK)
 	if err != nil {
 		return nil, err
 	}
@@ -294,9 +371,10 @@ func sealGroupKey(mySK cipher.SecKey, recipientPK cipher.PubKey, groupKey []byte
 }
 
 // openGroupKey is the inverse: unseal a wrap addressed to us, given the
-// issuer's PK.
-func openGroupKey(mySK cipher.SecKey, issuerPK cipher.PubKey, sealed []byte) ([]byte, error) {
-	wk, err := deriveWrapKey(mySK, issuerPK)
+// PK whose secret half sealed it — KeyWrap.sealerPK, i.e. the rotation's
+// ephemeral key, or the issuer's identity key on a pre-ephemeral leaf.
+func openGroupKey(mySK cipher.SecKey, sealerPK cipher.PubKey, sealed []byte) ([]byte, error) {
+	wk, err := deriveWrapKey(mySK, sealerPK)
 	if err != nil {
 		return nil, err
 	}
@@ -322,17 +400,29 @@ func openGroupKey(mySK cipher.SecKey, issuerPK cipher.PubKey, sealed []byte) ([]
 // rather than failing the whole rotation — one bad roster entry must not
 // be able to block an eviction — but the caller is told, because a
 // rotation nobody can open is refused by SignKey.
+//
+// One ephemeral keypair per rotation, not per recipient: the wraps
+// already differ because the recipient half of each ECDH differs, so a
+// second throwaway key per member would buy nothing and cost a PK in
+// every wrap. ephSK is a local that goes out of scope here — that
+// disposal IS the forward-secrecy property, so nothing may store or
+// return it.
 func buildKeyMutation(gid uuid.UUID, epoch uint64, key []byte, recipients []cipher.PubKey, mySK cipher.SecKey, at time.Time) (KeyMutation, []cipher.PubKey, error) {
+	ephPK, ephSK := cipher.GenerateKeyPair()
+
 	m := KeyMutation{GroupID: gid, Epoch: epoch, IssuedAt: at.UTC()}
 	var skipped []cipher.PubKey
 	for _, pk := range recipients {
-		sealed, err := sealGroupKey(mySK, pk, key)
+		sealed, err := sealGroupKey(ephSK, pk, key)
 		if err != nil {
 			skipped = append(skipped, pk)
 			continue
 		}
-		m.Wraps = append(m.Wraps, KeyWrap{RecipientPK: pk, Sealed: sealed})
+		m.Wraps = append(m.Wraps, KeyWrap{RecipientPK: pk, Sealed: sealed, EphPK: ephPK})
 	}
+	// Signed with the IDENTITY key: the ephemeral key proves nothing
+	// about who may re-key the group, and applyKeyLeaf's admin gate reads
+	// IssuerPK. Authority and confidentiality are separate jobs here.
 	if err := SignKey(&m, mySK); err != nil {
 		return KeyMutation{}, skipped, fmt.Errorf("group: key rotation: sign: %w", err)
 	}

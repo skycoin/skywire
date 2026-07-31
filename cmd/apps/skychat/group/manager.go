@@ -802,6 +802,11 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 		// pendingJoinShouldAttempt rate-limits it independently of this
 		// loop's adaptive cadence.
 		m.retryPendingJoins(ctx)
+		// Re-key any group whose current key has aged or volumed out.
+		// Rides this loop for the same reason: the thresholds are hours
+		// to days, so being evaluated on a 30s-to-5s adaptive tick is
+		// enormously more often than needed and costs one store List.
+		m.rotateDueKeys(time.Now().UTC())
 		if m.hasWarmingPeer() {
 			interval = reconnectWarmupInterval
 		} else if interval < reconnectInterval {
