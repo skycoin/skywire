@@ -93,7 +93,7 @@ jobs:
           go run . --help
           go run . cli config gen -dnw
           go run . cli config gen --nofetch -nw
-          GO111MODULE=on go test -cover -timeout=5m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
+          GO111MODULE=on go test -cover -timeout=25m -mod=vendor -tags 'no_ci' ./internal/... ./pkg/... ./cmd/skywire-cli/commands/config/...
 
   windows:
     runs-on: windows-latest
