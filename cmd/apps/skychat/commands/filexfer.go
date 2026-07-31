@@ -73,23 +73,14 @@ func isEstablishedPeer(pk cipher.PubKey) bool {
 // fileDialFunc opens a fresh transfer stream to peer on the file port, trying
 // skynet first (on-mesh, IP-anonymous) then dmsg — the same preference order as
 // the chat conn. It always uses SkychatFilePort on both networks.
-func fileDialFunc(_ context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
+func fileDialFunc(ctx context.Context, peer cipher.PubKey, port uint16) (net.Conn, error) {
 	if appCl == nil {
 		return nil, fmt.Errorf("skychat: app client not initialized")
 	}
-	var lastErr error
-	for _, netType := range []appnet.Type{appnet.TypeSkynet, appnet.TypeDmsg} {
-		addr := appnet.Addr{Net: netType, PubKey: peer, Port: routing.Port(port)}
-		conn, err := appCl.Dial(addr)
-		if err == nil {
-			return conn, nil
-		}
-		lastErr = err
-	}
-	if lastErr == nil {
-		lastErr = fmt.Errorf("skychat: no network available for file dial")
-	}
-	return nil, lastErr
+	conn, _, err := appnet.DialWithFallback(ctx,
+		func(_ context.Context, addr appnet.Addr) (net.Conn, error) { return appCl.Dial(addr) },
+		peer, routing.Port(port), appnet.TypeSkynet, appnet.TypeDmsg)
+	return conn, err
 }
 
 // acceptInbound implements the auto-accept policy and picks the save path. It

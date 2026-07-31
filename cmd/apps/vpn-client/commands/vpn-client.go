@@ -32,20 +32,21 @@ import (
 )
 
 var (
-	serverPKStr string
-	localPKStr  string
-	localSKStr  string
-	killswitch  bool
-	dnsAddr     string
-	appPort     uint16
-	muxRoutes   int
-	minHops     int
-	meshGateway bool
-	meshGWCIDR  string
-	meshTLS     bool
-	meshCACert  string
-	meshCAKey   string
-	meshAliases []string
+	serverPKStr  string
+	localPKStr   string
+	localSKStr   string
+	killswitch   bool
+	dnsAddr      string
+	appPort      uint16
+	muxRoutes    int
+	minHops      int
+	dmsgFallback bool
+	meshGateway  bool
+	meshGWCIDR   string
+	meshTLS      bool
+	meshCACert   string
+	meshCAKey    string
+	meshAliases  []string
 )
 
 // defaultMeshCADir is where the client mesh gateway persists its self-generated
@@ -62,6 +63,7 @@ func init() {
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().IntVar(&muxRoutes, "mux", 0, "dial the server over this many parallel (multiplexed) routes")
 	RootCmd.Flags().IntVar(&minHops, "min-hops", 0, "force the route through at least this many intermediate visors")
+	RootCmd.Flags().BoolVar(&dmsgFallback, "dmsg-fallback", false, "if the skynet (route) dial to the server fails, fall back to a direct dmsg stream (opt-in: dmsg relays via a dmsg server — higher latency + the server sees both endpoint PKs)")
 	RootCmd.Flags().BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway: resolve *.dmsg / *.skynet on this host and proxy them over the mesh (opt-in; Linux only)")
 	RootCmd.Flags().StringVar(&meshGWCIDR, "mesh-gateway-cidr", "", "mesh-gateway synthetic-IP pool (empty = 100.64.0.0/16)")
 	RootCmd.Flags().BoolVar(&meshTLS, "mesh-gateway-tls", false, "mesh gateway: TLS-MITM HTTPS to *.dmsg/*.skynet with a self-generated CA (host must trust it)")
@@ -115,6 +117,7 @@ func RunVPNClient(ctx context.Context, args []string) error {
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.IntVar(&muxRoutes, "mux", 0, "multiplexed route count")
 		fs.IntVar(&minHops, "min-hops", 0, "minimum hops")
+		fs.BoolVar(&dmsgFallback, "dmsg-fallback", false, "fall back to a direct dmsg stream if the skynet dial fails")
 		fs.BoolVar(&meshGateway, "mesh-gateway", false, "mesh gateway")
 		fs.StringVar(&meshGWCIDR, "mesh-gateway-cidr", "", "mesh-gateway synthetic-IP pool")
 		fs.BoolVar(&meshTLS, "mesh-gateway-tls", false, "mesh-gateway TLS-MITM")
@@ -241,11 +244,12 @@ func RunVPNClient(ctx context.Context, args []string) error {
 	}
 
 	vpnClientCfg := vpn.ClientConfig{
-		Killswitch: killswitch,
-		ServerPK:   serverPK,
-		DNSAddr:    dnsAddress,
-		MuxRoutes:  muxRoutes,
-		MinHops:    minHops,
+		Killswitch:   killswitch,
+		ServerPK:     serverPK,
+		DNSAddr:      dnsAddress,
+		MuxRoutes:    muxRoutes,
+		MinHops:      minHops,
+		DmsgFallback: dmsgFallback,
 	}
 
 	if meshGateway {

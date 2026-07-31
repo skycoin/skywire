@@ -18,6 +18,13 @@ type ClientConfig struct {
 	// direct path. Both default to 0 (the plain single-route dial).
 	MuxRoutes int
 	MinHops   int
+	// DmsgFallback, when true, dials the VPN server over a direct dmsg stream if
+	// the skynet (route) dial fails. Opt-in: dmsg relays through a dmsg server, so
+	// the fallback trades higher latency and a metadata downgrade (the dmsg server
+	// sees both endpoint PKs, unlike a source-routed multihop skynet path) for the
+	// resilience of an always-available baseline. Default off keeps the plain
+	// skynet-only dial.
+	DmsgFallback bool
 
 	// MeshGateway, when true (Linux only), additionally runs a local MESH
 	// GATEWAY: the host resolves *.dmsg / *.skynet by name and those connections
