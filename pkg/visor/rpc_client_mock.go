@@ -1364,6 +1364,11 @@ func (mc *mockRPCClient) GroupDemoteAdmin(_ string, _ cipher.PubKey) (GroupInfo,
 // GroupSend implements API.
 func (mc *mockRPCClient) GroupSend(_ GroupSendArgs) error { return nil }
 
+// GroupFileKey implements API.
+func (mc *mockRPCClient) GroupFileKey(_ GroupFileKeyArgs) (GroupFileKeyResult, error) {
+	return GroupFileKeyResult{}, nil
+}
+
 // GroupUnsend implements API.
 func (mc *mockRPCClient) GroupUnsend(_ GroupUnsendArgs) error { return nil }
 

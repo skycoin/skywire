@@ -1679,6 +1679,13 @@ func (rc *rpcClient) GroupSend(args GroupSendArgs) error {
 	return rc.Call("GroupSend", &args, &struct{}{})
 }
 
+// GroupFileKey implements API.
+func (rc *rpcClient) GroupFileKey(args GroupFileKeyArgs) (GroupFileKeyResult, error) {
+	var resp GroupFileKeyResult
+	err := rc.Call("GroupFileKey", &args, &resp)
+	return resp, err
+}
+
 // GroupUnsend implements API.
 func (rc *rpcClient) GroupUnsend(args GroupUnsendArgs) error {
 	return rc.Call("GroupUnsend", &args, &struct{}{})

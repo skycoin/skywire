@@ -211,6 +211,26 @@ request routed to the message's sender. A member who doesn't hold a
 file yet sees a card with a re-request link; once the bytes arrive
 the bubble is patched in place (an image becomes inline).
 
+In an **encrypted** group the bytes are sealed before they leave the
+sending device and stay sealed at rest on every member's disk
+(`commands/filecrypt.go`). The container is
+`"SGF1" | group id | file id | name | plaintext size | AEAD chunks`,
+each 64 KiB chunk sealed under a key derived per file from the group
+key — `HKDF(group key, "skychat-group-file-v1" | group id | file id)`
+— so the group key itself never leaves the visor and a leaked file
+key opens exactly one attachment. Chunking is what keeps HTTP Range
+requests working, so video seeking behaves as before; `/files/` and
+`/thumb/` decrypt on the way to the browser.
+
+Two consequences worth knowing. A re-send to someone outside the
+group (the backfill path answers by file id, not by roster) now hands
+over bytes they cannot open. And an attachment shared before a key
+rotation still opens for members who lived through it — they keep the
+retired key in their ring — but not for a joiner admitted afterwards,
+the same boundary that already applies to message history. Public
+groups have no key and their attachments stay plaintext, for the same
+reason their message bodies do.
+
 ## Replies, deletes & pinning (browser UI)
 
 These are browser-UI features; the CLI stays plain send/listen.

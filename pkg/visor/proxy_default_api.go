@@ -870,6 +870,10 @@ func (proxyDefaultAPI) GroupSend(_ GroupSendArgs) error {
 	return ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GroupFileKey(_ GroupFileKeyArgs) (GroupFileKeyResult, error) {
+	return GroupFileKeyResult{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupUnsend(_ GroupUnsendArgs) error {
 	return ErrProxyNotSupported
 }

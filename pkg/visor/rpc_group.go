@@ -430,3 +430,27 @@ func (r *RPC) GroupHistoryGroups(_ *struct{}, out *[]string) (err error) {
 	*out = groups
 	return nil
 }
+
+// GroupFileKey returns the per-file keys that seal and open one group
+// attachment. The group key itself is not part of the response — see
+// Visor.GroupFileKey.
+//
+// On the exposure: anyone who can reach this RPC can already call
+// GroupPoll, which hands back decrypted message bodies, so a per-file
+// attachment key grants strictly less than what the same caller has. What
+// the scoping does buy is that the answer cannot be replayed against any
+// OTHER file, or against the group's message history.
+func (r *RPC) GroupFileKey(req *GroupFileKeyArgs, out *GroupFileKeyResult) (err error) {
+	// Deliberately NOT logged through rpcutil.LogCall's result path: the
+	// response carries key material, and an RPC log line is the one place
+	// it would come to rest in plaintext.
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	res, err := r.visor.GroupFileKey(*req)
+	if err != nil {
+		return err
+	}
+	*out = res
+	return nil
+}

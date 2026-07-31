@@ -25,7 +25,6 @@ import (
 
 	"github.com/skycoin/skywire/cmd/apps/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/skychat/xfer"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -124,8 +123,14 @@ func sendFileToVisorGroup(_ context.Context, groupID, path, name string) (string
 	if err != nil {
 		return "", "", err
 	}
-	if cErr := saveSentCopy(path, xfer.Offer{ID: fileID, Name: name}); cErr != nil {
-		appLog("skychat: group file served copy failed: %v", cErr)
+	// The served copy IS the copy every member will eventually hold: the
+	// backfill path re-sends these bytes verbatim. So it is sealed here,
+	// once, under a key derived for this file — and the plaintext never
+	// reaches the downloads dir on any member's disk. A failure is fatal to
+	// the send rather than a fallback: publishing the reference and then
+	// serving the file in the clear is exactly the gap being closed.
+	if err := storeGroupAttachment(path, groupID, fileID, name); err != nil {
+		return "", "", err
 	}
 	text, err := encodeGroupFileText(groupFileMeta{ID: fileID, Name: name, Size: fi.Size()})
 	if err != nil {
