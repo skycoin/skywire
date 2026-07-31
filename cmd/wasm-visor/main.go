@@ -90,12 +90,16 @@ var (
 	ctx context.Context
 
 	selfPK cipher.PubKey
-	dmsgC  *dmsg.Client
-	tpM    *transport.Manager
-	rtr    router.Router
-	procM  appserver.ProcManager
-	hvCore *wasmhv.Core
-	tpd    transport.DiscoveryClient
+	// bootTime is stamped when bootEdge starts, so SelfSummary/host-stats can
+	// report a real uptime instead of a hard-coded 0 (which read as a node that
+	// just started / is broken on the multi-visor page).
+	bootTime time.Time
+	dmsgC    *dmsg.Client
+	tpM      *transport.Manager
+	rtr      router.Router
+	procM    appserver.ProcManager
+	hvCore   *wasmhv.Core
+	tpd      transport.DiscoveryClient
 
 	// wsTable / wtTable hold the dial targets (peer PK → endpoint) for the
 	// browser-dialable direct transports. They are mutable so the dialTransport
@@ -257,6 +261,7 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		return pk, err
 	}
 	selfPK = pk
+	bootTime = time.Now()
 
 	// Resolve the deployment service endpoints through the SHARED resolver
 	// (pkg/visor/visorcore) — the same one the native visor will use — so the two
@@ -1031,7 +1036,29 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 		BuildTag:      "wasm",
 		Online:        true,
 		IsHypervisor:  true,
+		// Mirror-struct fields the native SelfSummary populates but the wasm
+		// builder used to leave zero — so the node page rendered a real
+		// long-running tab as "0s uptime", autoconnect off, etc.:
+		//   - Uptime: real seconds since bootEdge (0 read as just-started/broken).
+		//   - PublicAutoconnect: true — the edge runs the WS/WebRTC autoconnect
+		//     loop (autoconnect_js.go) by default.
+		//   - IsPublic: false, stated explicitly — a browser edge accepts no
+		//     inbound and never publishes a public entry.
+		//   - MinHops: 0 is the edge's real setting (direct routing).
+		//   - RewardAddress: genuinely none (no on-disk config; earns no rewards),
+		//     left empty rather than faked.
+		Uptime:            uptimeSeconds(),
+		PublicAutoconnect: true,
+		IsPublic:          false,
 	}
+}
+
+// uptimeSeconds is the tab's real uptime; 0 before bootEdge stamps bootTime.
+func uptimeSeconds() float64 {
+	if bootTime.IsZero() {
+		return 0
+	}
+	return time.Since(bootTime).Seconds()
 }
 
 // tpController is the wasmhv.TransportController backing the RPC gateway's
