@@ -510,6 +510,18 @@ type Transport struct {
 	// When deregistered, the visor cannot receive new inbound transports
 	// but can still initiate outbound connections.
 	ARTransportLimit int `json:"ar_transport_limit,omitempty"`
+	// NoDirectTransports, when true, stops the visor from CREATING direct
+	// peer-to-peer transports (stcpr/sudph/stcp/squicr/swsr/swtr/webrtc) — whether
+	// via autoconnect, the on-demand route-setup hook, `tp add`, or `--direct`.
+	// DMSG (a relay through a dmsg server, not a direct link) is still created, so
+	// the visor keeps a baseline path and can still reach peers over existing
+	// transports/routes. Inbound transports peers dial to us are unaffected.
+	NoDirectTransports bool `json:"no_direct_transports,omitempty"`
+	// TransportCreateDeny is an advanced/testing per-type deny list of transport
+	// types the visor must not create, INCLUDING dmsg (to force a pure-direct or
+	// fully-offline visor). Applied on top of no_direct_transports. Legacy type
+	// aliases (quic/ws/wt) are accepted. Empty/omitted denies nothing.
+	TransportCreateDeny []string `json:"transport_create_deny,omitempty"`
 }
 
 // WTPeer is a statically-configured WebTransport peer (transport.wt_table): the
