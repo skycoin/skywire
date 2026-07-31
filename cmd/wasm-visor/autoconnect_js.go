@@ -42,6 +42,11 @@ import (
 
 const (
 	autoconnectInterval = 90 * time.Second
+	// autoconnectFastRetry is the short interval used until the edge holds
+	// autoconnectTargetTransports — so a first pass that lands fewer than the
+	// target retries in seconds, not after the full 90s steady-state interval.
+	autoconnectFastRetry        = 12 * time.Second
+	autoconnectTargetTransports = 2
 	// Direct carriers (WT always; WS on insecure pages) are what ONLY a publicly
 	// reachable visor can accept. The wasm visor makes them to MANY public visors
 	// — its analog of a native public visor's stcpr-to-the-whole-fleet mesh
@@ -80,14 +85,25 @@ func startWSAutoconnect(ctx context.Context, sdDmsgURL, arDmsgURL string, pk cip
 	}
 	ar := &arDmsg{dmsgC: dmsgC, host: arPK.Hex(), key: pk, sec: sk}
 	go func() {
-		// Let boot fully settle (dmsg sessions up) before the first pass.
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(8 * time.Second):
+		// Start the first pass as soon as dmsg actually has a session — usually
+		// ~5s — rather than after a fixed 8s wait. The old fixed delay held the
+		// first transport back even when dmsg came up in 4s (measured: dmsg ~5s
+		// but first transport ~25s). Cap at 8s so a stalled dmsg can't hold
+		// autoconnect off forever.
+		settleDeadline := time.Now().Add(8 * time.Second)
+		for {
+			if dmsgC != nil && len(dmsgC.AllSessions()) > 0 {
+				break
+			}
+			if time.Now().After(settleDeadline) {
+				break
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(250 * time.Millisecond):
+			}
 		}
-		t := time.NewTicker(autoconnectInterval)
-		defer t.Stop()
 		for {
 			// Recover per-pass so a transient panic (e.g. a peer's malformed AR
 			// reply) can't take down the whole tab.
@@ -99,10 +115,19 @@ func startWSAutoconnect(ctx context.Context, sdDmsgURL, arDmsgURL string, pk cip
 				}()
 				wsAutoconnectOnce(ctx, sdPK, ar, pk)
 			}()
+			// Until the edge holds at least autoconnectTargetTransports, retry
+			// on a SHORT interval instead of waiting the full steady-state one —
+			// a first pass that lands only one (or zero) transport otherwise sat
+			// idle for 90s before trying again. Once the target is reached, back
+			// off to the steady-state interval.
+			wait := autoconnectInterval
+			if tpM != nil && tpM.TransportCount() < autoconnectTargetTransports {
+				wait = autoconnectFastRetry
+			}
 			select {
 			case <-ctx.Done():
 				return
-			case <-t.C:
+			case <-time.After(wait):
 			}
 		}
 	}()
