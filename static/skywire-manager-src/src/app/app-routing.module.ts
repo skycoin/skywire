@@ -149,14 +149,12 @@ const routes: Routes = [
             path: 'resources',
             component: NodeResourcesComponent
           },
-          // Skychat / VPN / Skysocks moved into the Apps tab as
-          // sub-tabs (the per-visor tab row was overflowing).
-          // Redirect old top-level URLs to the Apps tab — the
-          // operator picks the sub-tab from there.
+          // Skychat is its own top-level node tab (next to Apps) — it is
+          // the visor's primary interactive surface and matches the wasm
+          // visor's ☰ Chat entry. VPN / Skysocks remain Apps sub-tabs.
           {
             path: 'chat',
-            redirectTo: 'apps',
-            pathMatch: 'full'
+            component: SkychatComponent
           },
           {
             path: 'bandwidth',

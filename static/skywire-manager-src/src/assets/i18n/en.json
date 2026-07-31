@@ -264,6 +264,7 @@
     "tabs": {
       "info": "Info",
       "apps": "Apps",
+      "chat": "Chat",
       "routing": "Routing",
       "transports": "Transports",
       "bandwidth": "Bandwidth",

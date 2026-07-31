@@ -218,6 +218,17 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   ngOnInit() {
+    // Deep-link peer preselect (?peer=<pk>): the wasm desktop's ☰ Chat window
+    // and ?chat=<pk> deep links open this tab with the conversation target
+    // filled in. Hash routing keeps the query inside location.hash, so parse
+    // it directly rather than via ActivatedRoute (which only sees the primary
+    // outlet's params for the embedded case).
+    const hashQuery = (window.location.hash.split('?')[1] || '');
+    const peerParam = new URLSearchParams(hashQuery).get('peer') || '';
+    if (/^[0-9a-fA-F]{66}$/.test(peerParam)) {
+      this.toPK = peerParam;
+    }
+
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;

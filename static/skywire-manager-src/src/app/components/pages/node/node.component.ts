@@ -71,6 +71,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // which visor is loaded, on every tab.
   headerLabel = '';
   headerIdentifier = '';
+  // Chrome-less single-tab mode (?embed=1): hides the top bar + tab rows so a
+  // WinBox window / iframe shows only the active tab's content.
+  embedMode = false;
 
   /**
    * Indicates if the currently displayed subpage is one dedicated to show a full list
@@ -198,6 +201,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   private processRouteUpdate() {
+    // embed=1 renders the active tab chrome-less (no top bar / tab rows) so a
+    // WinBox window or external page can iframe a single tab — the wasm
+    // desktop's ☰ Chat hosts #/nodes/<pk>/chat?embed=1 this way, making the
+    // Angular skychat the ONE chat implementation on both surfaces.
+    this.embedMode = (this.lastUrl || '').includes('embed=1');
     NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
     if (this.nodeActionsHelper) {
       this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
@@ -305,11 +313,19 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'uptime'] : null,
         },
         {
-          // Apps tab: list view + sub-tabs for Skychat / VPN /
-          // Skysocks (was three separate top-level tabs each).
+          // Apps tab: list view + sub-tabs for VPN / Skysocks. (Skychat
+          // was pulled out to its own top-level Chat tab below.)
           icon: 'apps',
           label: 'node.tabs.apps',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'apps'] : null,
+        },
+        {
+          // Chat tab: the visor's skychat client, promoted from an Apps
+          // sub-tab to its own top-level tab (parity with the wasm visor's
+          // ☰ Chat entry).
+          icon: 'forum',
+          label: 'node.tabs.chat',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
         },
         {
           icon: 'monetization_on',
@@ -380,7 +396,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // /reachability redirect to /info so they fall through to the default.
       let matchedSeg = 'info';
       const routeOrder = ['routing', 'transports', 'bandwidth', 'uptime', 'apps',
-        'rewards', 'skynet', 'web-proxy', 'resources', 'terminal', 'wallet', 'logs'];
+        'chat', 'rewards', 'skynet', 'web-proxy', 'resources', 'terminal', 'wallet', 'logs'];
       for (const seg of routeOrder) {
         if (seg === 'apps') {
           if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
