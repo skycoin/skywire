@@ -29,13 +29,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skycoin/skywire/pkg/vpnrouter/router7/dhcp4d"
-	"github.com/skycoin/skywire/pkg/vpnrouter/router7/teelogger"
-
 	"github.com/miekg/dns"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/time/rate"
+
+	"github.com/skycoin/skywire/pkg/vpnrouter/router7/dhcp4d"
+	"github.com/skycoin/skywire/pkg/vpnrouter/router7/teelogger"
 )
 
 var log = teelogger.NewConsole()
