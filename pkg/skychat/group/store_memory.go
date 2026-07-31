@@ -1,6 +1,6 @@
 //go:build js
 
-// cmd/apps/skychat/group/store_memory.go: in-memory group record store for
+// pkg/skychat/group/store_memory.go: in-memory group record store for
 // js/wasm, where bbolt can't compile (arch-const MaxAllocSize + mmap) and a
 // browser tab has no filesystem. Drop-in for the bbolt store (store_bbolt.go):
 // same *Store type + method set, and records are held as JSON bytes keyed by
@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -33,29 +34,70 @@ import (
 type Store struct {
 	mu  sync.RWMutex
 	kvs map[string][]byte // group ID -> JSON Record (mirrors the bbolt value shape)
+	// joinReqs mirrors the bbolt joinReqsBucket, same composite
+	// "<groupID>/<pkHex>" key so both backends iterate identically.
+	joinReqs map[string][]byte
+	// sealer mirrors the bbolt store's at-rest sealing. Nothing here
+	// touches a disk, so it protects less — but the record bytes are the
+	// same shape either way, and keeping the field means the shared
+	// encode/decode path in store_seal.go compiles identically for both
+	// backends and an IndexedDB persistence tier (see the file header)
+	// inherits the sealing rather than having to add it.
+	sealer *recordSealer
+	// migrated exists for signature parity with the bbolt store; nothing
+	// survives a tab reload here, so it is always zero.
+	migrated int
 }
 
 // OpenStore returns an in-memory store. path is accepted for signature parity
-// with the bbolt store but ignored — there is no filesystem in js/wasm.
-func OpenStore(path string) (*Store, error) {
+// with the bbolt store but ignored — there is no filesystem in js/wasm. sk
+// derives the same at-rest sealing key the native store uses.
+func OpenStore(path string, sk cipher.SecKey) (*Store, error) {
 	_ = path
-	return &Store{kvs: make(map[string][]byte)}, nil
+	sealer, err := newRecordSealer(sk)
+	if err != nil {
+		return nil, err
+	}
+	return &Store{
+		kvs:      make(map[string][]byte),
+		joinReqs: make(map[string][]byte),
+		sealer:   sealer,
+	}, nil
+}
+
+// MigratedRecords mirrors the bbolt store's accessor. Always zero: an
+// in-memory store starts empty, so there is nothing legacy to re-seal.
+func (s *Store) MigratedRecords() int { return 0 }
+
+// joinReqKey builds the composite key for a request. Mirrors the bbolt
+// key layout exactly so the two backends stay wire-identical.
+func joinReqKey(groupID string, pk cipher.PubKey) string {
+	return groupID + "/" + pk.Hex()
 }
 
 // Close is a no-op (nothing to release).
 func (s *Store) Close() error { return nil }
 
-// Put writes (or replaces) the record for r.ID.
+// Put writes (or replaces) the record for r.ID. Replay watermarks are
+// merged rather than replaced — see the bbolt Put for why a stale
+// read-modify-Put must not be able to walk them backwards.
 func (s *Store) Put(r Record) error {
 	if r.ID == "" {
 		return fmt.Errorf("group: Put: empty ID")
 	}
-	body, err := json.Marshal(r)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if raw, ok := s.kvs[r.ID]; ok {
+		var prev Record
+		// Watermarks are not sealed, so the raw JSON is enough here.
+		if err := json.Unmarshal(raw, &prev); err == nil {
+			r.MutationSeen = mergeWatermarks(prev.MutationSeen, r.MutationSeen)
+		}
+	}
+	body, err := s.encodeRecord(r)
 	if err != nil {
 		return fmt.Errorf("group: marshal record: %w", err)
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.kvs[r.ID] = body
 	return nil
 }
@@ -69,12 +111,13 @@ func (s *Store) Get(id string) (Record, bool, error) {
 	if !ok {
 		return r, false, nil
 	}
-	if err := json.Unmarshal(raw, &r); err != nil {
+	if err := s.decodeRecord(raw, &r); err != nil {
 		return r, true, err
 	}
 	// Match store_bbolt.Get: normalize legacy records (nil Admins) so IsAdmin
 	// and admin-gated ops see a consistent shape.
 	r.EnsureFounderInAdmins()
+	r.EnsureKind()
 	return r, true, nil
 }
 
@@ -95,10 +138,11 @@ func (s *Store) List() ([]Record, error) {
 	out := make([]Record, 0, len(ids))
 	for _, raw := range raws {
 		var r Record
-		if err := json.Unmarshal(raw, &r); err != nil {
+		if err := s.decodeRecord(raw, &r); err != nil {
 			return out, err
 		}
 		r.EnsureFounderInAdmins()
+		r.EnsureKind()
 		out = append(out, r)
 	}
 	return out, nil
@@ -127,6 +171,90 @@ func (s *Store) SetMembers(id string, members []cipher.PubKey) error {
 	return s.update(id, func(r *Record) { r.Members = members })
 }
 
+// SetModeration persists a converged moderation snapshot.
+func (s *Store) SetModeration(id string, st ModState) error {
+	return s.update(id, func(r *Record) { st.applyTo(r) })
+}
+
+// SetKeyState persists a rotated group key plus the ring of retired keys.
+// Mirrors the bbolt store.
+func (s *Store) SetKeyState(id string, st KeyState) error {
+	return s.update(id, func(r *Record) { st.applyTo(r) })
+}
+
+// SetMutationSeen persists the replay guard's watermarks, merging so a
+// watermark is never moved backwards. Mirrors the bbolt store.
+func (s *Store) SetMutationSeen(id string, seen map[string]time.Time) error {
+	return s.update(id, func(r *Record) { r.MutationSeen = mergeWatermarks(r.MutationSeen, seen) })
+}
+
+// PutJoinRequest writes (or replaces) a join request.
+func (s *Store) PutJoinRequest(req JoinRequest) error {
+	if req.GroupID == "" || req.PK == (cipher.PubKey{}) {
+		return fmt.Errorf("group: PutJoinRequest: group id and pk required")
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("group: marshal join request: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.joinReqs[joinReqKey(req.GroupID, req.PK)] = body
+	return nil
+}
+
+// GetJoinRequest returns the request for (groupID, pk) if one exists.
+func (s *Store) GetJoinRequest(groupID string, pk cipher.PubKey) (JoinRequest, bool, error) {
+	s.mu.RLock()
+	raw, ok := s.joinReqs[joinReqKey(groupID, pk)]
+	s.mu.RUnlock()
+	var req JoinRequest
+	if !ok {
+		return req, false, nil
+	}
+	if err := json.Unmarshal(raw, &req); err != nil {
+		return req, true, err
+	}
+	return req, true, nil
+}
+
+// ListJoinRequests returns every request recorded against groupID,
+// newest first.
+func (s *Store) ListJoinRequests(groupID string) ([]JoinRequest, error) {
+	prefix := groupID + "/"
+	s.mu.RLock()
+	raws := make([][]byte, 0, len(s.joinReqs))
+	for k, v := range s.joinReqs {
+		if strings.HasPrefix(k, prefix) {
+			raws = append(raws, v)
+		}
+	}
+	s.mu.RUnlock()
+	out := make([]JoinRequest, 0, len(raws))
+	for _, raw := range raws {
+		var req JoinRequest
+		if err := json.Unmarshal(raw, &req); err != nil {
+			return out, err
+		}
+		out = append(out, req)
+	}
+	sortJoinRequests(out)
+	return out, nil
+}
+
+// DeleteJoinRequests drops every request against groupID.
+func (s *Store) DeleteJoinRequests(groupID string) error {
+	prefix := groupID + "/"
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for k := range s.joinReqs {
+		if strings.HasPrefix(k, prefix) {
+			delete(s.joinReqs, k)
+		}
+	}
+	return nil
+}
+
 // update is the shared read-modify-write helper. Returns an error if no record
 // exists for id.
 func (s *Store) update(id string, fn func(*Record)) error {
@@ -137,11 +265,12 @@ func (s *Store) update(id string, fn func(*Record)) error {
 		return fmt.Errorf("group: no record for %s", id)
 	}
 	var r Record
-	if err := json.Unmarshal(raw, &r); err != nil {
+	// Open before the mutation, re-seal after — see the bbolt update().
+	if err := s.decodeRecord(raw, &r); err != nil {
 		return err
 	}
 	fn(&r)
-	body, err := json.Marshal(&r)
+	body, err := s.encodeRecord(r)
 	if err != nil {
 		return err
 	}

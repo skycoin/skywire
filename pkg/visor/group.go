@@ -37,6 +37,78 @@ type GroupInfo struct {
 	OwnerPK cipher.PubKey     `json:"owner_pk"`
 	Port    uint16            `json:"port"`
 	Mode    skychatgroup.Mode `json:"mode"`
+	// Kind is the user-facing group type — "public" (open admission,
+	// plaintext) or "private" (admin-approved admission, encrypted).
+	// Mode is retained above for older clients; new code should read
+	// Kind, JoinPolicy and PostPolicy.
+	Kind skychatgroup.Kind `json:"kind,omitempty"`
+	// JoinPolicy and PostPolicy are derived, not stored: they answer
+	// "can someone walk in" and "who may speak right now" so a UI
+	// doesn't have to re-derive the rules from Kind + ReadOnly.
+	JoinPolicy skychatgroup.JoinPolicy `json:"join_policy,omitempty"`
+	PostPolicy skychatgroup.PostPolicy `json:"post_policy,omitempty"`
+
+	// Banned and Muted are the moderation lists. Banned PKs are out of
+	// the group and refused at the join gate; muted PKs read but
+	// cannot post.
+	Banned []cipher.PubKey `json:"banned,omitempty"`
+	Muted  []cipher.PubKey `json:"muted,omitempty"`
+
+	// ReadOnly suspends posting for every non-admin.
+	ReadOnly bool `json:"read_only,omitempty"`
+
+	// JoinPoWBits is how much proof of work this group asks of a join
+	// request, in leading zero bits — the price of one identity. Zero
+	// means none. Surfaced so an operator under a flood can see the
+	// current setting and raise it.
+	JoinPoWBits uint8 `json:"join_pow_bits"`
+
+	// PeerBackfill reports whether any online member may serve this
+	// group's history and messages to a joiner (true) or only admins
+	// (false). Positive sense here even though the record stores the
+	// negative — an API consumer should not have to reason about a double
+	// negative to render a checkbox.
+	PeerBackfill bool `json:"peer_backfill"`
+
+	// KeyEpoch is the generation of the key this group currently encrypts
+	// with — 0 for a plaintext group or one still on its create-time key,
+	// incremented by every rotation. Surfaced so an operator can see that
+	// an eviction actually re-keyed the group, and that every member
+	// converged onto the same epoch.
+	KeyEpoch uint64 `json:"key_epoch,omitempty"`
+
+	// KeyAge is how long the current key has been in force, in seconds.
+	// The epoch number alone doesn't say whether it is a week old or a
+	// year; this is what makes "bounded in time" visible.
+	KeyAgeSeconds int64 `json:"key_age_seconds,omitempty"`
+
+	// KeyRotatesInSeconds is how long until this group's key is due for
+	// replacement on age. Negative means it is already due and the next
+	// background tick will re-key it. Zero for a plaintext group.
+	KeyRotatesInSeconds int64 `json:"key_rotates_in_seconds,omitempty"`
+
+	// GovernanceSealed reports whether this group's membership and
+	// moderation history is encrypted on the feed as well as its
+	// messages — who was added, promoted, banned or muted, and when.
+	//
+	// True exactly when the group is encrypted; surfaced as its own
+	// field rather than left for a client to infer from Kind, because
+	// "the bans are private too" is a distinct promise from "the
+	// messages are private" and it was NOT true before this build. A
+	// client that shows it can tell the operator which one they have.
+	GovernanceSealed bool `json:"governance_sealed,omitempty"`
+
+	// CanPost / CannotPostReason answer "may THIS visor post into this
+	// group right now", pre-computed so the UI can disable the composer
+	// and explain why without duplicating the precedence rules
+	// (banned > muted > read-only).
+	CanPost          bool   `json:"can_post"`
+	CannotPostReason string `json:"cannot_post_reason,omitempty"`
+
+	// PendingJoins is the number of join requests awaiting an admin
+	// decision. Zero for non-admins and for open groups, which admit
+	// without queuing. Populated by GroupList and GroupGet.
+	PendingJoins int `json:"pending_joins,omitempty"`
 	// Admins is the per-record roster-authority set. Mirrors
 	// Record.Admins exactly — founder is implicitly admin and is
 	// surfaced explicitly here after EnsureFounderInAdmins runs on
@@ -171,9 +243,38 @@ type GroupMessage struct {
 
 // GroupCreateArgs is the RPC input for GroupCreate.
 type GroupCreateArgs struct {
-	Name           string            `json:"name"`
-	Mode           skychatgroup.Mode `json:"mode"`
-	InitialMembers []cipher.PubKey   `json:"initial_members,omitempty"`
+	Name string `json:"name"`
+
+	// Kind is the group type: "public" (open admission, plaintext) or
+	// "private" (admin-approved admission, encrypted). Preferred over
+	// Mode.
+	Kind skychatgroup.Kind `json:"kind,omitempty"`
+
+	// Mode is the legacy field, kept so an older RPC client keeps
+	// working: it carried the same two values and mapped onto the same
+	// two group types. Used only when Kind is empty.
+	Mode skychatgroup.Mode `json:"mode,omitempty"`
+
+	InitialMembers []cipher.PubKey `json:"initial_members,omitempty"`
+
+	// DisablePeerBackfill is the creator's choice on whether any online
+	// member may serve this group's history to a joiner, or only admins.
+	// The zero value keeps backfill ENABLED, which is the default an
+	// operator gets by not saying anything and matches the group record's
+	// own inverted field. An admin can change it later with
+	// GroupSetPeerBackfill.
+	DisablePeerBackfill bool `json:"disable_peer_backfill,omitempty"`
+}
+
+// kind resolves the group type from either field, defaulting to public.
+func (a GroupCreateArgs) kind() skychatgroup.Kind {
+	if a.Kind != "" {
+		return a.Kind
+	}
+	if a.Mode == skychatgroup.ModePrivate {
+		return skychatgroup.KindPrivate
+	}
+	return skychatgroup.KindPublic
 }
 
 // GroupJoinArgs is the RPC input for GroupJoin.
@@ -185,6 +286,42 @@ type GroupJoinArgs struct {
 type GroupSendArgs struct {
 	ID   string `json:"id"`
 	Text string `json:"text"`
+}
+
+// GroupFileKeyArgs is the RPC input for GroupFileKey: which group, and
+// which attachment within it.
+type GroupFileKeyArgs struct {
+	ID     string `json:"id"`
+	FileID string `json:"file_id"`
+}
+
+// GroupFileKeyResult carries the keys for one group attachment.
+//
+// Two fields rather than one because the two uses differ: sealing needs
+// exactly the current key, while opening has to try the retired ones too
+// (an attachment shared before a rotation must keep opening afterwards,
+// the same way message history does).
+//
+// Both are keys DERIVED for this one file id — the group key itself never
+// crosses the RPC boundary. See the group package's filekey.go.
+type GroupFileKeyResult struct {
+	// Seal is the key to encrypt a new attachment with. Nil for a
+	// plaintext (public) group, where sealing would protect nothing: the
+	// caller sends such files as-is.
+	Seal []byte `json:"seal,omitempty"`
+
+	// Open is every key that may open an existing attachment, current
+	// epoch first then the ring — the order that makes the common case a
+	// single trial decryption.
+	Open [][]byte `json:"open,omitempty"`
+
+	// Epoch is the group's current key generation, for diagnostics.
+	Epoch uint64 `json:"epoch,omitempty"`
+
+	// Encrypted reports whether this group seals attachments at all,
+	// distinguishing "public group, nothing to do" from "encrypted group
+	// whose key we somehow lack" — which is an error, not a no-op.
+	Encrypted bool `json:"encrypted"`
 }
 
 // ErrGroupingDisabled is returned by Visor group methods when the
@@ -210,7 +347,8 @@ func (v *Visor) GroupCreate(args GroupCreateArgs) (GroupInfo, string, error) {
 	if mgr == nil {
 		return GroupInfo{}, "", ErrGroupingDisabled
 	}
-	r, err := mgr.Create(args.Name, args.Mode, args.InitialMembers)
+	r, err := mgr.Create(args.Name, args.kind(), args.InitialMembers,
+		skychatgroup.WithPeerBackfill(!args.DisablePeerBackfill))
 	if err != nil {
 		return GroupInfo{}, "", err
 	}
@@ -239,6 +377,22 @@ func (v *Visor) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
 	return toInfo(r), nil
 }
 
+// GroupAskAgain re-submits a join request an admin has DECLINED — the UI's
+// "ask again" action. Everything is derived from the stored record, so the
+// caller passes only the group id; the request pays the same PoW and
+// rate-limit gates as a first ask (see group.Manager.AskAgain).
+func (v *Visor) GroupAskAgain(id string) (GroupInfo, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupInfo{}, ErrGroupingDisabled
+	}
+	r, err := mgr.AskAgain(id, "")
+	if err != nil {
+		return GroupInfo{}, err
+	}
+	return toInfo(r), nil
+}
+
 // GroupList returns every persisted group on this visor. The
 // SubscriberAlive field is populated from the live session map —
 // the only API surface where that's needed (the chat-app's /status
@@ -257,7 +411,7 @@ func (v *Visor) GroupList() ([]GroupInfo, error) {
 	streamSendCount := v.groupStreamSendCount()
 	out := make([]GroupInfo, 0, len(all))
 	for _, r := range all {
-		info := toInfo(r)
+		info := v.toInfoFor(r, mgr)
 		info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
 		info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 		info.SubDropCount = subDrop
@@ -343,7 +497,7 @@ func (v *Visor) GroupGet(id string) (GroupInfo, error) {
 	if !ok {
 		return GroupInfo{}, ErrGroupNotFound
 	}
-	info := toInfo(r)
+	info := v.toInfoFor(r, mgr)
 	info.SubscriberAlive = mgr.IsSubscriberAlive(r.ID)
 	info.PeerLastInbound = peerLivenessHex(mgr.PeerLiveness(r.ID))
 	info.SubDropCount = v.groupSubDropCount()
@@ -408,6 +562,159 @@ func (v *Visor) GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error) {
 	return toInfo(r), nil
 }
 
+// GroupJoinRequest is one entry in a group's admission queue.
+type GroupJoinRequest struct {
+	GroupID   string                  `json:"group_id"`
+	PK        cipher.PubKey           `json:"pk"`
+	Note      string                  `json:"note,omitempty"`
+	AskedAt   time.Time               `json:"asked_at"`
+	Status    skychatgroup.JoinStatus `json:"status"`
+	DecidedAt time.Time               `json:"decided_at,omitempty"`
+	DecidedBy cipher.PubKey           `json:"decided_by,omitempty"`
+}
+
+func toJoinRequest(r skychatgroup.JoinRequest) GroupJoinRequest {
+	return GroupJoinRequest{
+		GroupID:   r.GroupID,
+		PK:        r.PK,
+		Note:      r.Note,
+		AskedAt:   r.AskedAt,
+		Status:    r.Status,
+		DecidedAt: r.DecidedAt,
+		DecidedBy: r.DecidedBy,
+	}
+}
+
+// GroupJoinRequests returns the admission queue for a group, newest
+// first. Includes decided entries so callers can show history; filter
+// on Status == "pending" for the actionable set.
+func (v *Visor) GroupJoinRequests(id string) ([]GroupJoinRequest, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return nil, ErrGroupingDisabled
+	}
+	reqs, err := mgr.PendingJoins(id)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]GroupJoinRequest, 0, len(reqs))
+	for _, r := range reqs {
+		out = append(out, toJoinRequest(r))
+	}
+	return out, nil
+}
+
+// GroupApproveJoin admits a queued requester. Admin-only.
+func (v *Visor) GroupApproveJoin(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.ApproveJoin(id, pk)
+	})
+}
+
+// GroupDenyJoin declines a queued request. Admin-only.
+func (v *Visor) GroupDenyJoin(id string, pk cipher.PubKey) error {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return ErrGroupingDisabled
+	}
+	return mgr.DenyJoin(id, pk)
+}
+
+// GroupRemoveMember evicts a peer from the roster. Admin-only. A kick,
+// not a ban — the peer may ask to rejoin.
+func (v *Visor) GroupRemoveMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.RemoveMember(id, pk)
+	})
+}
+
+// GroupBanMember bars a peer from the group. Admin-only.
+func (v *Visor) GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.BanMember(id, pk)
+	})
+}
+
+// GroupUnbanMember lifts a ban. The peer must ask to join again.
+func (v *Visor) GroupUnbanMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.UnbanMember(id, pk)
+	})
+}
+
+// GroupMuteMember restricts a peer from posting. Admin-only.
+func (v *Visor) GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.MuteMember(id, pk)
+	})
+}
+
+// GroupUnmuteMember lifts a posting restriction. Admin-only.
+func (v *Visor) GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error) {
+	return v.groupRosterOp(id, pk, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.UnmuteMember(id, pk)
+	})
+}
+
+// GroupSetReadOnly suspends (or resumes) posting for every non-admin.
+// Admin-only.
+func (v *Visor) GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.SetReadOnly(id, readOnly)
+	})
+}
+
+// GroupSetJoinPoW sets how much proof of work a join request must carry,
+// in leading zero bits. Zero turns the price off. Admin-only.
+//
+// The lever for a group being flooded: public keys are free, so this is
+// what makes each identity cost measurable CPU. Local to this visor —
+// see skychatgroup.Record.JoinPoWBits.
+func (v *Visor) GroupSetJoinPoW(id string, bits uint8) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.SetJoinPoW(id, bits)
+	})
+}
+
+// GroupSetPeerBackfill decides whether any online member may serve this
+// group's history and messages to a joiner, or only admins. Admin-only.
+//
+// Enabled (the default) is what keeps a group readable while its admins
+// are offline; disabled restores the admins-only topology and the group
+// goes dark whenever no admin is up.
+func (v *Visor) GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.SetPeerBackfill(id, enabled)
+	})
+}
+
+// GroupRotateKey mints a new key for an encrypted group and hands it to
+// every current member, each copy sealed to that member's own PK.
+// Admin-only.
+//
+// Eviction rotates on its own; this is the operator-driven case — a key
+// believed leaked, or tidying up after someone left out of band. Errors
+// for a plaintext group, which has no key to rotate.
+func (v *Visor) GroupRotateKey(id string) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.RotateKey(id)
+	})
+}
+
+// groupRosterOp is the shared body of every admin command that mutates
+// a group and returns its updated info.
+func (v *Visor) groupRosterOp(_ string, _ cipher.PubKey, op func(*skychatgroup.Manager) (skychatgroup.Record, error)) (GroupInfo, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupInfo{}, ErrGroupingDisabled
+	}
+	r, err := op(mgr)
+	if err != nil {
+		return GroupInfo{}, err
+	}
+	return v.toInfoFor(r, mgr), nil
+}
+
 // GroupPromoteAdmin adds pk to the group's Admins set. Callable by
 // any existing admin (founder implicitly, or any explicit Admins
 // entry). Returns the updated info — surfacing Admins so the caller
@@ -458,6 +765,30 @@ func (v *Visor) GroupSend(args GroupSendArgs) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return mgr.SendToGroup(ctx, args.ID, args.Text)
+}
+
+// GroupFileKey returns the keys that seal and open one attachment of a
+// group — derived per file, so the group key itself stays in the visor.
+//
+// The chat app calls this on both sides of an attachment's life: once to
+// seal a file it is about to publish, and once per file it needs to render
+// or serve. See the group package's filekey.go for the derivation and
+// cmd/apps/skychat/commands/filecrypt.go for the container.
+func (v *Visor) GroupFileKey(args GroupFileKeyArgs) (GroupFileKeyResult, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupFileKeyResult{}, ErrGroupingDisabled
+	}
+	seal, open, epoch, err := mgr.FileKeys(args.ID, args.FileID)
+	if err != nil {
+		return GroupFileKeyResult{}, err
+	}
+	return GroupFileKeyResult{
+		Seal:      seal,
+		Open:      open,
+		Epoch:     epoch,
+		Encrypted: len(seal) > 0,
+	}, nil
 }
 
 // GroupUnsendArgs is the RPC input for GroupUnsend. TS is the message's
@@ -562,20 +893,62 @@ func (v *Visor) groupManager() *skychatgroup.Manager {
 }
 
 func toInfo(r skychatgroup.Record) GroupInfo {
-	return GroupInfo{
+	info := GroupInfo{
 		ID:            r.ID,
 		Name:          r.Name,
 		OwnerPK:       r.OwnerPK,
 		Port:          r.Port,
 		Mode:          r.Mode,
+		Kind:          r.Kind,
+		JoinPolicy:    r.JoinPolicy(),
+		PostPolicy:    r.PostPolicy(),
 		Admins:        append([]cipher.PubKey(nil), r.Admins...),
 		Members:       append([]cipher.PubKey(nil), r.Members...),
+		Banned:        append([]cipher.PubKey(nil), r.Banned...),
+		Muted:         append([]cipher.PubKey(nil), r.Muted...),
+		ReadOnly:      r.ReadOnly,
+		PeerBackfill:  r.PeerBackfillEnabled(),
+		JoinPoWBits:   r.JoinPoWRequired(),
+		KeyEpoch:      r.KeyEpoch,
 		Role:          r.Role,
 		Status:        r.Status,
 		CreatedAt:     r.CreatedAt,
 		JoinedAt:      r.JoinedAt,
 		LastMessageAt: r.LastMessageAt,
+		// Same condition as the message bodies: a public group has no key
+		// to seal governance with, so it publishes roster/admin/mod
+		// mutations in the clear and this stays false.
+		GovernanceSealed: r.Encrypted(),
 	}
+	// Key age / time-to-rotation, for encrypted groups whose key has a
+	// known issue time. A record from before KeyIssuedAt was stamped
+	// leaves both at zero rather than reporting a made-up age.
+	if r.Encrypted() && !r.KeyIssuedAt.IsZero() {
+		age := time.Since(r.KeyIssuedAt.UTC())
+		info.KeyAgeSeconds = int64(age / time.Second)
+		info.KeyRotatesInSeconds = int64((skychatgroup.DefaultKeyMaxAge - age) / time.Second)
+	}
+	return info
+}
+
+// toInfoFor is toInfo plus the fields that depend on who is asking:
+// whether this visor may post, and how many requests await its
+// decision. Split out because toInfo is called from paths that have no
+// manager handy (and don't need either answer).
+func (v *Visor) toInfoFor(r skychatgroup.Record, mgr *skychatgroup.Manager) GroupInfo {
+	info := toInfo(r)
+	canPost, reason := r.CanPost(v.conf.PK)
+	info.CanPost, info.CannotPostReason = canPost, reason
+	if mgr != nil && r.IsAdmin(v.conf.PK) {
+		if reqs, err := mgr.PendingJoins(r.ID); err == nil {
+			for _, q := range reqs {
+				if q.IsPending() {
+					info.PendingJoins++
+				}
+			}
+		}
+	}
+	return info
 }
 
 // groupInbox is a bounded ring buffer of inbound group messages,

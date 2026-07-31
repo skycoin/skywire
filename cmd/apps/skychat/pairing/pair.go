@@ -28,6 +28,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -42,6 +44,11 @@ import (
 // future non-message metadata (e.g. typing indicators) can land
 // under different prefixes without surfacing here.
 const MessagePathPrefix = "msgs"
+
+// announceRetryAfter bounds how often a pair re-attempts an
+// announcement that failed to publish. Only consulted on Send, so this
+// is a floor on retries, not a timer.
+const announceRetryAfter = 30 * time.Second
 
 // Message is the on-the-wire form of a chat message inside a pair
 // feed. Body encryption (PR-6) wraps Text into a ciphertext field;
@@ -77,6 +84,17 @@ type Config struct {
 
 	// BatchWindow forwards to the publisher (see treestore.Config).
 	BatchWindow time.Duration
+
+	// Ratchet is the pair's persisted forward-secrecy state, restored
+	// from the store. Nil for a brand-new pair (or one whose record
+	// predates the ratchet), in which case Open mints a first keypair.
+	Ratchet *RatchetState
+
+	// OnRatchetChange is fired with the ratchet's persistable snapshot
+	// whenever it advances, so the Manager can save it. Optional — a
+	// Pair without one still works, it just re-mints its ratchet on
+	// every restart and loses the epochs it had derived.
+	OnRatchetChange func(RatchetState)
 }
 
 // Pair is one live chat pair. Safe for concurrent use after Open
@@ -88,10 +106,46 @@ type Pair struct {
 	pub *treestore.Publisher
 	sub *treestore.Subscriber
 
-	// key is the ECDH-derived symmetric key for this pair. Both
-	// sides compute the same value from their own SK + the peer's
-	// PK. Derived once at Open and reused for every Send / decrypt.
+	// key is the LEGACY static ECDH key for this pair, derived from
+	// (my SK, peer PK). Kept only to open leaves published before
+	// either side had a ratchet, and to talk to a peer that never
+	// announces one. Every new message goes out under an epoch key —
+	// see ratchet below and the note in crypto.go.
 	key pairKey
+
+	// ratchet holds the short-lived keys that give this pair forward
+	// secrecy: our current ratchet secret, the peer's announced public
+	// key, and the ring of epoch keys that still open history.
+	ratchet *ratchetState
+
+	// onRatchetChange persists the ratchet after every advance.
+	onRatchetChange func(RatchetState)
+
+	// deferredMu / deferred hold leaves that named an epoch we could
+	// not derive yet, kept until a ratchet announcement supplies the
+	// key.
+	//
+	// This is not an optimisation, it is required for correctness. The
+	// sender starts sealing under an epoch the moment IT can derive one
+	// — which needs only OUR announcement — while we need THEIRS to
+	// derive the same epoch, and those two arrive over independent
+	// syncs. A one-second gap is normal, and Subscriber.OnUpdate fires
+	// exactly once per leaf, so without this the messages sent in that
+	// window are dropped permanently rather than late.
+	deferredMu sync.Mutex
+	deferred   []deferredLeaf
+
+	// announceMu guards the announcement bookkeeping below.
+	//
+	// announcedGen is the ratchet generation whose announcement we have
+	// successfully published. triedGen / lastAnnounceTry rate-limit
+	// RETRIES of a generation whose publish failed, without holding back
+	// a newer generation. All three are consulted only from Send — see
+	// maybeAnnounce for why there is no background timer.
+	announceMu      sync.Mutex
+	announcedGen    uint64
+	triedGen        uint64
+	lastAnnounceTry time.Time
 
 	// seq disambiguates messages with the same nanosecond timestamp.
 	// Per-pair scope so a sender posting in tight loops doesn't
@@ -162,11 +216,164 @@ func Open(cfg Config) (*Pair, error) {
 		_ = pub.Close() //nolint:errcheck
 		return nil, fmt.Errorf("pairing: Open: attach subscriber: %w", err)
 	}
-	sub.SetPrefixes([]string{MessagePathPrefix})
+	// Both prefixes: msgs/ carries content, ratchet/ carries the peer's
+	// announced ratchet keys. Without the second the peer's
+	// announcements would never reach onUpdate and the pair would sit
+	// on the legacy static key forever.
+	sub.SetPrefixes([]string{MessagePathPrefix, RatchetPathPrefix})
 
-	p := &Pair{cfg: cfg, port: port, pub: pub, sub: sub, key: key, log: log}
+	now := time.Now().UTC()
+	var rt *ratchetState
+	if cfg.Ratchet != nil {
+		rt = restoreRatchetState(*cfg.Ratchet, now)
+	} else {
+		rt = newRatchetState(now)
+	}
+
+	p := &Pair{
+		cfg: cfg, port: port, pub: pub, sub: sub, key: key, log: log,
+		ratchet:         rt,
+		onRatchetChange: cfg.OnRatchetChange,
+	}
 	sub.OnUpdate(p.onUpdate)
+
+	// Persist the freshly-minted (or restored) ratchet right away.
+	// Without this a brand-new pair holds its generation-1 secret only
+	// in memory until something else advances the ratchet, so a restart
+	// before the peer's first announcement mints generation 1 AGAIN
+	// under a different secret — and the announcement the peer already
+	// fetched names a public key we no longer hold the other half of.
+	p.saveRatchet()
+
+	// No announcement here, and no background timer to publish one
+	// either — Send does it. See maybeAnnounce.
 	return p, nil
+}
+
+// maybeAnnounce publishes our ratchet announcement, and rotates first if
+// the current secret has covered enough, as part of whatever publish the
+// caller is about to make.
+//
+// # Why this hangs off Send instead of a timer
+//
+// The announcement is a CXO write, and pkg/cxo/skyobject has a
+// lock-order inversion between a write and a fill on the SAME node:
+// Cache.Get holds Cache.mx and blocks on bbolt's writer lock, while
+// Cache.WithBatch (reached only from the publisher's tree walk) holds
+// bbolt's writer lock and blocks on Cache.mx. A pair puts its publisher
+// and its subscriber on one node by design, so an announcement
+// published while the peer's tree is filling can wedge the node
+// permanently — the publish loop stops clearing its dirty flag and
+// every later send is silently lost.
+//
+// Confirmed rather than guessed: with Cache.WithBatch bypassed the
+// pairing suite ran 6/6 green, and with it a background announce timer
+// hung the suite roughly one run in four.
+//
+// Riding Send is what makes this safe by construction rather than by
+// timing. The Put lands in the same publisher batch as the message, so
+// the pair performs exactly as many publishes as it did before this
+// feature existed — no new window is opened. The cost is that forward
+// secrecy engages once each side has sent at least once (the first
+// message from each side goes out under the legacy static key), which
+// for a conversation is the normal case.
+//
+// Removing this workaround is a one-line change once the CXO lock order
+// is fixed; the announcement can then go on a timer and cover pairs
+// where one side never speaks.
+func (p *Pair) maybeAnnounce(now time.Time) {
+	if p.pub == nil {
+		return
+	}
+	if p.ratchet.rotationDue(now) {
+		gen := p.ratchet.rotate(now)
+		p.log.WithField("peer", p.cfg.PeerPK.Hex()).WithField("generation", gen).
+			Debug("pairing: rotated ratchet key")
+		p.saveRatchet()
+	}
+	gen := p.ratchet.generation()
+
+	p.announceMu.Lock()
+	switch {
+	case p.announcedGen == gen:
+		// Already out. Re-publishing the same leaf would be a no-op
+		// write on every send.
+		p.announceMu.Unlock()
+		return
+	case p.triedGen == gen && now.Sub(p.lastAnnounceTry) < announceRetryAfter:
+		// A failed attempt for THIS generation, too soon to retry.
+		//
+		// Scoped to the generation on purpose: a fresh rotation must go
+		// out immediately, not wait out a backoff earned by the
+		// previous one. Until the peer sees the new ratchet key it
+		// cannot derive the new epoch, and everything we send under it
+		// piles up in the peer's deferred list.
+		p.announceMu.Unlock()
+		return
+	}
+	p.triedGen, p.lastAnnounceTry = gen, now
+	p.announceMu.Unlock()
+
+	if p.publishRatchet() {
+		p.announceMu.Lock()
+		p.announcedGen = gen
+		p.announceMu.Unlock()
+	}
+}
+
+// publishRatchet signs and publishes our current ratchet announcement.
+//
+// Idempotent on the path (ratchet/<generation>), so re-publishing the
+// same generation overwrites an identical leaf rather than growing the
+// tree. Best-effort: a publisher that isn't ready yet gets retried by the
+// announce loop, and until then the pair keeps working on the legacy key.
+func (p *Pair) publishRatchet() bool {
+	if p.pub == nil {
+		return false
+	}
+	a, err := p.ratchet.announce(p.cfg.MySK, time.Now().UTC())
+	if err != nil {
+		p.log.WithError(err).Debug("pairing: could not sign ratchet announcement")
+		return false
+	}
+	body, err := marshalRatchet(a)
+	if err != nil {
+		p.log.WithError(err).Debug("pairing: could not marshal ratchet announcement")
+		return false
+	}
+	path := RatchetPathPrefix + "/" + strconv.FormatUint(a.Generation, 10)
+	if err := p.pub.Put(path, body); err != nil {
+		p.log.WithError(err).WithField("path", path).
+			Debug("pairing: could not publish ratchet announcement; will retry on the next send")
+		return false
+	}
+	return true
+}
+
+// saveRatchet hands the ratchet's current snapshot to the persistence
+// callback.
+func (p *Pair) saveRatchet() {
+	if p.onRatchetChange == nil {
+		return
+	}
+	p.onRatchetChange(p.ratchet.snapshot())
+}
+
+// EpochID returns the epoch this pair currently seals under, and false
+// when it is still on the legacy static key.
+//
+// False is the normal state for a conversation nobody has spoken in
+// yet: an epoch needs BOTH ratchet keys, each side publishes its own as
+// part of a Send (see maybeAnnounce), so the epoch appears once each end
+// has sent at least once. It also stays false against a peer running a
+// build with no ratchet at all.
+//
+// Operator-facing: the UI shows it so a user can tell which of the two
+// modes a conversation is in, since they are otherwise indistinguishable
+// and differ in exactly the property that matters here.
+func (p *Pair) EpochID() (EpochID, bool) {
+	id, _, ok := p.ratchet.currentEpoch()
+	return id, ok
 }
 
 // Connect dials the peer's CXO node and starts the subscribe
@@ -230,14 +437,32 @@ func (p *Pair) Send(text string) error {
 		return ErrPairClosed
 	}
 	now := time.Now().UTC()
+	// Announce (and rotate, if due) FIRST, so the ratchet leaf and this
+	// message coalesce into the same publisher batch — one publish, not
+	// two. See maybeAnnounce.
+	p.maybeAnnounce(now)
+
 	msg := Message{Text: text, TS: now}
 	body, err := json.Marshal(msg)
 	if err != nil {
 		return fmt.Errorf("pairing: Send: marshal: %w", err)
 	}
-	sealed, err := sealMessage(p.key, body)
-	if err != nil {
-		return fmt.Errorf("pairing: Send: %w", err)
+	// Epoch key when we have one, legacy static key when we don't. The
+	// fallback fires only before the peer's first announcement reaches
+	// us — never as a downgrade afterwards, since currentEpoch stays
+	// set once an epoch exists.
+	var sealed []byte
+	if id, key, ok := p.ratchet.currentEpoch(); ok {
+		sealed, err = sealEnvelope(id, key, body)
+		if err != nil {
+			return fmt.Errorf("pairing: Send: %w", err)
+		}
+		p.ratchet.noteSent()
+	} else {
+		sealed, err = sealMessage(p.key, body)
+		if err != nil {
+			return fmt.Errorf("pairing: Send: %w", err)
+		}
 	}
 	seq := p.seq.Add(1)
 	path := MessagePathPrefix + "/" + strconv.FormatInt(now.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
@@ -274,28 +499,159 @@ func (p *Pair) Close() error {
 // failure here would surface as a noisy log without giving the
 // user any actionable signal.
 func (p *Pair) onUpdate(events []treestore.UpdateEvent) {
+	for _, ev := range events {
+		if ev.Value == nil {
+			continue
+		}
+		// Ratchet announcements first, and BEFORE any message in the
+		// same batch is opened: a resync delivers the peer's
+		// announcement and the messages sealed under the epoch it forms
+		// in one callback, and handling them in path order would drop
+		// every one of those messages as undecryptable.
+		if strings.HasPrefix(ev.Path, RatchetPathPrefix+"/") {
+			p.applyRatchetLeaf(ev.Value)
+		}
+	}
 	h := p.handler
 	if h == nil {
 		return
 	}
 	for _, ev := range events {
-		if ev.Value == nil {
+		if ev.Value == nil || strings.HasPrefix(ev.Path, RatchetPathPrefix+"/") {
 			continue
 		}
-		plaintext, err := openMessage(p.key, ev.Value)
-		if err != nil {
-			p.log.WithError(err).
-				WithField("path", ev.Path).
-				Debug("pairing: ignoring undecryptable leaf")
-			continue
+		p.deliverLeaf(h, ev.Path, ev.Value)
+	}
+}
+
+// deliverLeaf opens one message leaf and hands it to the handler.
+//
+// A leaf that names an epoch we cannot derive YET is parked rather than
+// dropped — see the deferred field. Anything else (tampered bytes, a
+// foreign ciphertext, undecodable JSON) is dropped, because no future
+// event would change the outcome.
+func (p *Pair) deliverLeaf(h MessageHandler, path string, leaf []byte) {
+	plaintext, err := p.openLeaf(leaf)
+	if err != nil {
+		if id, _, tagged := parseEnvelope(leaf); tagged {
+			if _, held := p.ratchet.keyFor(id); !held {
+				p.deferLeaf(path, leaf)
+				p.log.WithField("path", path).WithField("epoch", id.String()).
+					Debug("pairing: parked a leaf until its epoch key arrives")
+				return
+			}
 		}
-		var msg Message
-		if err := json.Unmarshal(plaintext, &msg); err != nil {
-			p.log.WithError(err).
-				WithField("path", ev.Path).
-				Debug("pairing: ignoring undecodable leaf")
-			continue
+		p.log.WithError(err).WithField("path", path).
+			Debug("pairing: ignoring undecryptable leaf")
+		return
+	}
+	var msg Message
+	if err := json.Unmarshal(plaintext, &msg); err != nil {
+		p.log.WithError(err).WithField("path", path).
+			Debug("pairing: ignoring undecodable leaf")
+		return
+	}
+	h(p.cfg.PeerPK, msg)
+}
+
+// deferredLeaf is one parked message plus the path it came from, which
+// doubles as its dedup key.
+type deferredLeaf struct {
+	path string
+	body []byte
+}
+
+// maxDeferredLeaves bounds the park. A peer that publishes leaves under
+// epochs it never announces would otherwise grow this without limit, and
+// the window this exists to cover is seconds — anything still parked
+// after hundreds of messages is not going to be resolved by waiting.
+const maxDeferredLeaves = 256
+
+func (p *Pair) deferLeaf(path string, body []byte) {
+	p.deferredMu.Lock()
+	defer p.deferredMu.Unlock()
+	for _, d := range p.deferred {
+		if d.path == path {
+			return
 		}
-		h(p.cfg.PeerPK, msg)
+	}
+	p.deferred = append(p.deferred, deferredLeaf{path: path, body: append([]byte(nil), body...)})
+	if len(p.deferred) > maxDeferredLeaves {
+		p.deferred = p.deferred[len(p.deferred)-maxDeferredLeaves:]
+	}
+}
+
+// drainDeferred re-attempts every parked leaf, delivering the ones whose
+// epoch key has since arrived and keeping the rest parked.
+//
+// Called after a ratchet advance, which is the only event that can add a
+// key — so this never spins on leaves that are simply undeliverable.
+func (p *Pair) drainDeferred() {
+	h := p.handler
+	if h == nil {
+		return
+	}
+	p.deferredMu.Lock()
+	pending := p.deferred
+	p.deferred = nil
+	p.deferredMu.Unlock()
+
+	for _, d := range pending {
+		p.deliverLeaf(h, d.path, d.body)
+	}
+}
+
+// openLeaf decrypts one message leaf, routing by wire form: an
+// epoch-tagged envelope goes to the ring, an untagged blob to the legacy
+// static key.
+//
+// An envelope naming an epoch we no longer hold is a real, expected
+// outcome — the ring is bounded on purpose (ratchetRingCap), so history
+// past the horizon stops opening. The error says so, because "message
+// too old to decrypt" and "message corrupt" are very different things to
+// see in a log.
+func (p *Pair) openLeaf(leaf []byte) ([]byte, error) {
+	id, body, tagged := parseEnvelope(leaf)
+	if !tagged {
+		return openMessage(p.key, leaf)
+	}
+	key, ok := p.ratchet.keyFor(id)
+	if !ok {
+		return nil, fmt.Errorf("pairing: no key for epoch %s (rotated out of the ring, or not yet derived)", id)
+	}
+	return openMessage(key, body)
+}
+
+// applyRatchetLeaf verifies a peer announcement and folds it into our
+// ratchet.
+//
+// Every accepted announcement is persisted, including ones that don't
+// advance the current epoch: an older generation still DERIVES an epoch
+// key we may need for messages already in the feed, and losing that key
+// on restart would make those messages permanently unreadable.
+func (p *Pair) applyRatchetLeaf(body []byte) {
+	a, err := unmarshalRatchet(body, p.cfg.PeerPK)
+	if err != nil {
+		p.log.WithError(err).Debug("pairing: ignoring invalid ratchet announcement")
+		return
+	}
+	advanced, err := p.ratchet.observePeer(a, time.Now().UTC())
+	if err != nil {
+		p.log.WithError(err).WithField("generation", a.Generation).
+			Debug("pairing: could not derive an epoch from the peer's ratchet key")
+		return
+	}
+	p.saveRatchet()
+	// A new key just landed, so retry anything parked for want of one.
+	// Unconditional rather than gated on `advanced`: an OLDER
+	// announcement still derives an epoch key (see observePeer), and
+	// the leaves waiting on it are exactly the ones an out-of-order
+	// sync produces.
+	p.drainDeferred()
+	if advanced {
+		id, _ := p.EpochID()
+		p.log.WithField("peer", p.cfg.PeerPK.Hex()).
+			WithField("generation", a.Generation).WithField("epoch", id.String()).
+			Debug("pairing: advanced to a new epoch")
 	}
 }

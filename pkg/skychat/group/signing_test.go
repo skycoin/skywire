@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/signing_test.go: pins
+// Package group — pkg/skychat/group/signing_test.go: pins
 // the contract on leaf signing/verification that admin-aggregator
 // safety relies on. Specifically:
 //

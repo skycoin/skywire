@@ -63,7 +63,20 @@ DOCKER_NETWORK?=SKYWIRE
 DOCKER_COMPOSE_FILE:=./docker/docker-compose.yml
 DOCKER_REGISTRY:=skycoin
 
-TEST_OPTS:=-cover -timeout=5m -mod=vendor -tags no_ci
+# -timeout is go test's PER-PACKAGE deadline: a deadlock backstop, not a
+# budget. A package that passes is unaffected by raising it.
+#
+# 5m was tight enough to BE the failure. cmd/apps/skychat/group runs
+# ~270 tests, a few dozen of them full dmsg round trips, and takes ~12.5
+# min in aggregate; crossing 5m panicked the package with "test timed
+# out" naming whichever 1s test happened to be running when the alarm
+# fired. That reads exactly like a hang and isn't one. 25m keeps real
+# headroom over that 12.5 min on a loaded runner.
+#
+# Race overhead doesn't scale this package the way it scales CPU-bound
+# ones — its wall clock is dominated by fixed network timeouts — so the
+# -race CI run measures about the same as a local run without it.
+TEST_OPTS:=-cover -timeout=25m -mod=vendor -tags no_ci
 
 GOARCH:=$(shell go env GOARCH)
 

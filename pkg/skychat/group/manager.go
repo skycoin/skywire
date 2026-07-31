@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/manager.go c4-app-chat
+// Package group pkg/skychat/group/manager.go c4-app-chat
 // this visor's collection of group sessions, parallel to pairing.Manager.
 //
 // The Manager owns the bbolt Store and a map[groupID]*Session of
@@ -58,12 +58,32 @@ type Manager struct {
 	onMessageMu sync.RWMutex
 	onMessage   MessageHandler
 
+	// onJoinRequestNotify is fired when a new join request lands on
+	// this visor's approval queue, so the app layer can raise an SSE
+	// event + OS notification. See SetJoinRequestNotifier.
+	onJoinRequestMu     sync.RWMutex
+	onJoinRequestNotify func(JoinRequest)
+
+	// pendingJoinLast rate-limits re-asks per group, keyed by group ID.
+	// Guarded by reconnectMu, which already serializes the background
+	// loop that drives the retries.
+	pendingJoinLast map[string]time.Time
+
 	mu       sync.RWMutex
 	sessions map[string]*Session
 
 	// heartbeatInterval is the owner-emit cadence forwarded to every
 	// new owner-role Session via openLocked. Zero disables.
 	heartbeatInterval time.Duration
+	// peerFanout is this visor's cap on non-admin peer subscriptions,
+	// passed through to every session. See ManagerConfig.PeerFanout.
+	peerFanout int
+	// joinBucket throttles join attempts from PKs the group has never
+	// admitted. Per-visor and in memory — see joincost.go.
+	joinBucket *joinBucket
+	// maxPending caps undecided join requests per group; zero takes
+	// DefaultMaxPendingJoins.
+	maxPending int
 
 	// reconnect loop state — see runReconnectLoop.
 	reconnectCtx    context.Context
@@ -111,6 +131,21 @@ type ManagerConfig struct {
 	// subscriber inside ~3×interval. Zero disables (default for
 	// callers that don't set it; for visor production set to 30s).
 	HeartbeatInterval time.Duration
+
+	// PeerFanout caps how many non-admin peers each non-admin session on
+	// this visor follows, on top of the admins. Zero takes the package
+	// default; negative opts this visor out of peer backfill entirely
+	// regardless of what a group's admins chose. See Config.PeerFanout.
+	PeerFanout int
+
+	// JoinBurst / JoinRefill / MaxPendingJoins tune the anti-flood gates:
+	// how many join attempts a group absorbs back-to-back, how fast that
+	// allowance returns, and how deep the approval queue may get. Zero
+	// takes the package defaults. See joincost.go for what each one
+	// actually protects.
+	JoinBurst       int
+	JoinRefill      time.Duration
+	MaxPendingJoins int
 }
 
 // DefaultHeartbeatInterval is the recommended interval an owner
@@ -146,8 +181,12 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		portAlloc:          defaultPortAlloc,
 		sessions:           make(map[string]*Session),
 		heartbeatInterval:  cfg.HeartbeatInterval,
+		peerFanout:         cfg.PeerFanout,
+		joinBucket:         newJoinBucket(cfg.JoinBurst, cfg.JoinRefill),
+		maxPending:         cfg.MaxPendingJoins,
 		reconnectState:     make(map[string]*reconnectState),
 		peerReconnectState: make(map[string]map[cipher.PubKey]*reconnectState),
+		pendingJoinLast:    make(map[string]time.Time),
 	}, nil
 }
 
@@ -184,16 +223,33 @@ func (m *Manager) persistRoster(id string) func(members, admins []cipher.PubKey)
 	}
 }
 
+// CreateOption adjusts a group at create time. Variadic so the three
+// existing call sites (visor RPC, wasm, CLI) keep compiling, and so a
+// future create-time choice is one more option rather than another
+// parameter on every caller.
+type CreateOption func(*Record)
+
+// WithPeerBackfill sets whether any online member may serve this group's
+// history to a joiner, or only admins. The creator's choice at create
+// time; an admin can change it later with Manager.SetPeerBackfill.
+//
+// Enabled is the default when the option is not passed — see
+// Record.PeerBackfillDisabled for what the setting costs and protects.
+func WithPeerBackfill(enabled bool) CreateOption {
+	return func(r *Record) { r.PeerBackfillDisabled = !enabled }
+}
+
 // Create constructs a new owner-side group, persists it, and opens
 // the publisher. Returns the persisted Record (with ID + Port + key
 // populated) so the caller can build the invite link.
-func (m *Manager) Create(name string, mode Mode, initialMembers []cipher.PubKey) (Record, error) {
+func (m *Manager) Create(name string, kind Kind, initialMembers []cipher.PubKey, opts ...CreateOption) (Record, error) {
 	if name == "" {
 		return Record{}, errors.New("group: Create: name required")
 	}
-	if !mode.IsValid() {
-		return Record{}, fmt.Errorf("group: Create: invalid mode %q", mode)
+	if !kind.IsValid() {
+		return Record{}, fmt.Errorf("group: Create: invalid kind %q", kind)
 	}
+	mode := modeForKind(kind)
 	port, err := m.portAlloc()
 	if err != nil {
 		return Record{}, fmt.Errorf("group: Create: port: %w", err)
@@ -204,6 +260,7 @@ func (m *Manager) Create(name string, mode Mode, initialMembers []cipher.PubKey)
 		OwnerPK:   m.myPK,
 		Port:      port,
 		Mode:      mode,
+		Kind:      kind,
 		Members:   uniqueWithSelf(m.myPK, initialMembers),
 		Role:      RoleOwner,
 		Status:    StatusActive,
@@ -217,6 +274,12 @@ func (m *Manager) Create(name string, mode Mode, initialMembers []cipher.PubKey)
 		}
 		r.AESKey = key
 	}
+	// Creator's choices last, so an option can override a derived default.
+	for _, opt := range opts {
+		if opt != nil {
+			opt(&r)
+		}
+	}
 	if err := m.store.Put(r); err != nil {
 		return Record{}, fmt.Errorf("group: Create: store: %w", err)
 	}
@@ -227,69 +290,20 @@ func (m *Manager) Create(name string, mode Mode, initialMembers []cipher.PubKey)
 	return r, nil
 }
 
-// Join accepts an invite link, persists a member-side record, and
-// opens a subscriber connected to the owner. Returns the record.
+// Join accepts an invite link and asks the group for admission.
+//
+// Thin wrapper over RequestJoin, which owns the whole flow: ask, act on
+// the answer, and fall back to the legacy direct-subscribe path when the
+// group runs a build without admission control. Kept as a named method
+// because it is the API every caller (visor RPC, wasm, CLI) already
+// speaks.
+//
+// Pre-admission-control this method persisted a record and dialed the
+// owner's publisher immediately, which only worked if an admin had
+// already run AddMember for this PK out of band — the invite link alone
+// never granted access. See RequestJoin for what replaced that.
 func (m *Manager) Join(inv Invite) (Record, error) {
-	if inv.OwnerPK == m.myPK {
-		return Record{}, errors.New("group: Join: refusing to subscribe to own group")
-	}
-	r := Record{
-		ID:        inv.ID,
-		Name:      inv.Name,
-		OwnerPK:   inv.OwnerPK,
-		Port:      inv.Port,
-		Mode:      inv.Mode,
-		AESKey:    inv.AESKey,
-		Members:   []cipher.PubKey{inv.OwnerPK, m.myPK},
-		Role:      RoleMember,
-		Status:    StatusPending,
-		CreatedAt: time.Now().UTC(),
-		JoinedAt:  time.Now().UTC(),
-	}
-	if err := m.store.Put(r); err != nil {
-		return Record{}, fmt.Errorf("group: Join: store: %w", err)
-	}
-	sess, err := m.openLocked(r)
-	if err != nil {
-		_ = m.store.Delete(r.ID) //nolint:errcheck
-		return Record{}, err
-	}
-	// Join's interactive caller wants a bounded wait: a Connect that
-	// blocks indefinitely on an unreachable owner publisher would
-	// stall the CLI. Use reconnectAttemptTimeout — same per-attempt
-	// budget the background reconnect loop uses, so the failure
-	// mode is identical (and the same backoff machinery picks up
-	// on the next 30s tick).
-	joinCtx, cancel := context.WithTimeout(context.Background(), reconnectAttemptTimeout)
-	defer cancel()
-	if err := sess.Connect(joinCtx); err != nil {
-		// A subscribe REJECTION means this PK isn't admitted to the group
-		// (public auto-admit aside, the owner must AddMember first). That is
-		// actionable and permanent for now, so tear the half-open membership
-		// down and surface it.
-		if isSubscribeRejected(err) {
-			_ = sess.Close()         //nolint:errcheck
-			_ = m.store.Delete(r.ID) //nolint:errcheck
-			return Record{}, fmt.Errorf("group: Join: connect: %w", err)
-		}
-		// A TRANSIENT failure — the owner publisher's dmsg dial didn't
-		// complete within the join budget (common when the joiner is a
-		// browser wasm visor over WS, or during deploy churn) — is NOT fatal.
-		// The session is already registered (openLocked), so the per-session
-		// reconnect watchdog will attach the owner feed + peerSubs in the
-		// background; the owner's own watchdog re-Connects to us in parallel.
-		// Keep the membership and join optimistically: the room appears now
-		// and messages flow once the dmsg path settles. Previously this path
-		// Close()d the session and Delete()d the freshly-persisted record, so
-		// a perfectly joinable group looked permanently un-joinable on a slow
-		// first dial (observed wasm↔native as "context deadline exceeded"
-		// while the owner was in fact re-Connecting seconds later).
-		m.log.WithError(err).WithField("id", r.ID).
-			Info("group: Join: initial connect not ready; joined optimistically — reconnect watchdog will attach the feed")
-	}
-	_ = m.store.SetStatus(r.ID, StatusActive) //nolint:errcheck
-	r.Status = StatusActive
-	return r, nil
+	return m.RequestJoin(inv, "")
 }
 
 // Leave (member) or Delete (owner): both tear down the session and
@@ -317,6 +331,9 @@ func (m *Manager) Delete(id string) error {
 }
 
 func (m *Manager) terminate(id string, status Status) error {
+	// Drop the anti-flood bucket for a group we're done with, so its map
+	// doesn't accumulate entries for IDs that no longer exist.
+	defer m.joinBucket.forget(id)
 	r, ok, err := m.store.Get(id)
 	if err != nil {
 		return fmt.Errorf("group: terminate: get %s: %w", id, err)
@@ -340,7 +357,16 @@ func (m *Manager) terminate(id string, status Status) error {
 	m.reconnectMu.Lock()
 	delete(m.reconnectState, id)
 	delete(m.peerReconnectState, id)
+	delete(m.pendingJoinLast, id)
 	m.reconnectMu.Unlock()
+	// The approval queue is scoped to a live group; leaving one behind
+	// would resurface stale requests if the same group ID were ever
+	// rejoined, and would keep a denied PK's entry authoritative past
+	// the point where the group still exists to deny them.
+	if err := m.store.DeleteJoinRequests(id); err != nil {
+		m.log.WithError(err).WithField("id", id).
+			Debug("group: terminate: clearing join requests failed")
+	}
 	_ = m.store.SetStatus(r.ID, status) //nolint:errcheck
 	return nil
 }
@@ -605,8 +631,14 @@ func (m *Manager) DemoteAdmin(id string, pk cipher.PubKey) (Record, error) {
 const resumeReplayMessageCap = 100
 
 // Resume walks the store and reopens every non-terminal session.
-// Records in StatusLeft / StatusRevoked are skipped; the operator
-// can `group join <invite>` again to bring them back.
+// Terminal records (left / revoked / denied / banned) are skipped; the
+// operator can `group join <invite>` again to bring them back.
+//
+// Awaiting-approval records are skipped too, but for the opposite
+// reason: they are not finished, they have not started. Without an
+// allowlist seat a subscribe would just be refused, so the reconnect
+// loop's retryPendingJoins re-asks instead and opens the session the
+// moment an admin approves.
 //
 // On reopen, the most recent resumeReplayMessageCap messages per
 // group are replayed through the registered handler so consumers
@@ -620,7 +652,7 @@ func (m *Manager) Resume() error {
 		return fmt.Errorf("group: Resume: list: %w", err)
 	}
 	for _, r := range all {
-		if r.Status == StatusLeft || r.Status == StatusRevoked {
+		if r.Status.IsTerminal() || r.Status == StatusAwaitingApproval {
 			continue
 		}
 		if _, err := m.openLocked(r); err != nil {
@@ -764,6 +796,17 @@ func (m *Manager) runReconnectLoop(ctx context.Context) {
 		case <-t.C:
 		}
 		m.detectStaleAndReconnect(ctx)
+		// Re-ask any group holding us in its approval queue. Rides this
+		// loop rather than owning a timer because it is the same job —
+		// keep trying in the background until the group lets us in — and
+		// pendingJoinShouldAttempt rate-limits it independently of this
+		// loop's adaptive cadence.
+		m.retryPendingJoins(ctx)
+		// Re-key any group whose current key has aged or volumed out.
+		// Rides this loop for the same reason: the thresholds are hours
+		// to days, so being evaluated on a 30s-to-5s adaptive tick is
+		// enormously more often than needed and costs one store List.
+		m.rotateDueKeys(time.Now().UTC())
 		if m.hasWarmingPeer() {
 			interval = reconnectWarmupInterval
 		} else if interval < reconnectInterval {
@@ -1493,14 +1536,43 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 	if !r.IsAdmin(m.myPK) {
 		return "", errors.New("group: BuildInvite: only admins can issue invites")
 	}
-	return EncodeInvite(Invite{
+	inv := Invite{
 		ID:      r.ID,
 		Name:    r.Name,
 		OwnerPK: r.OwnerPK,
 		Port:    r.Port,
 		Mode:    r.Mode,
-		AESKey:  r.AESKey,
-	})
+		// Name the group's other admins so the founder isn't the only
+		// door in. Self first: whoever is minting this link is
+		// demonstrably alive and is the admin most likely to be watching
+		// for the request, and being first also means we're never the
+		// name that falls off the end of the cap.
+		Admins: inviteAdmins(r, m.myPK),
+		// Tell the joiner the price up front so paying it costs no extra
+		// round trip. A stale link just gets challenged.
+		PoWBits: r.JoinPoWRequired(),
+	}
+	// The group key is deliberately NOT in the link. It is delivered in
+	// the approval response, over the encrypted relay stream, only to a
+	// PK an admin has admitted — so forwarding this link grants nothing
+	// on its own, a declined requester walks away with nothing, and the
+	// key stays rotatable because no copy of it is loose in circulation.
+	return EncodeInvite(inv)
+}
+
+// inviteAdmins picks the Invite.Admins list for a link issued by issuer:
+// the group's admins other than the founder (who travels as OwnerPK and
+// is always tried first), issuer at the head.
+//
+// Trimmed to the fan-out cap here rather than at the joiner so the link
+// itself stays short enough to paste into a chat message — each PK is 66
+// characters of hex before base64.
+func inviteAdmins(r Record, issuer cipher.PubKey) []cipher.PubKey {
+	others := admissionOrder(issuer, r.OwnerPK, r.Admins)
+	if len(others) > maxAdmissionTargets-1 {
+		others = others[:maxAdmissionTargets-1]
+	}
+	return others
 }
 
 // openLocked is the shared "open and remember" helper. Caller does
@@ -1518,6 +1590,7 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 		InMemoryDB:        m.inMemoryDB,
 		Logger:            m.log,
 		HeartbeatInterval: m.heartbeatInterval,
+		PeerFanout:        m.peerFanout,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("group: open %s: %w", r.ID, err)
@@ -1528,6 +1601,27 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	// Persist reconciled roster changes back to the store so group info/list
 	// reflect convergence and it survives restart (#3426).
 	sess.SetRosterChangeHandler(m.persistRoster(r.ID))
+	sess.SetModChangeHandler(m.persistModeration(r.ID))
+	// Key rotations converge through the same gossip channel, and the
+	// converged key MUST survive a restart — see persistKeys.
+	sess.SetKeyChangeHandler(m.persistKeys(r.ID))
+	// Persist the replay guard's watermarks. Unlike the roster and
+	// moderation handlers this is NOT best-effort decoration: if the
+	// watermarks don't survive a restart, every target's replay window
+	// reopens, so a failure here is worth a warning rather than a debug
+	// line.
+	sess.SetMutationSeenHandler(func(seen map[string]time.Time) {
+		if err := m.store.SetMutationSeen(r.ID, seen); err != nil {
+			m.log.WithError(err).WithField("id", r.ID).
+				Warn("group: persisting gossip replay watermarks failed; a restart would reopen the replay window")
+		}
+	})
+	// Admission: the session authenticates inbound join requests against
+	// the transport and hands them here for the policy decision. Installed
+	// on every session, not just owner-role ones — the handler re-checks
+	// admin authority against the live record, and installing it uniformly
+	// means a member promoted to admin can act without reopening.
+	sess.SetJoinRequestHandler(m.admissionHandler(r.ID))
 	m.mu.Lock()
 	m.sessions[r.ID] = sess
 	m.mu.Unlock()
@@ -1539,6 +1633,12 @@ func (m *Manager) openLocked(r Record) (*Session, error) {
 	go func() {
 		time.Sleep(rosterBroadcastDelay)
 		sess.BroadcastRoster()
+		// Moderation converges the same way and for the same reason: a
+		// joiner admitted into a group with standing bans or mutes must
+		// learn them, and the response payload only covers the joiner's
+		// first moment. Broadcast after the roster so a ban's implied
+		// roster removal doesn't race the roster add that precedes it.
+		sess.BroadcastModeration()
 	}()
 	return sess, nil
 }

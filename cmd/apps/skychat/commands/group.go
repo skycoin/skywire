@@ -25,7 +25,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skychat/group"
-	"github.com/skycoin/skywire/pkg/skychat/xfer"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -124,8 +123,14 @@ func sendFileToVisorGroup(_ context.Context, groupID, path, name string) (string
 	if err != nil {
 		return "", "", err
 	}
-	if cErr := saveSentCopy(path, xfer.Offer{ID: fileID, Name: name}); cErr != nil {
-		appLog("skychat: group file served copy failed: %v", cErr)
+	// The served copy IS the copy every member will eventually hold: the
+	// backfill path re-sends these bytes verbatim. So it is sealed here,
+	// once, under a key derived for this file — and the plaintext never
+	// reaches the downloads dir on any member's disk. A failure is fatal to
+	// the send rather than a fallback: publishing the reference and then
+	// serving the file in the clear is exactly the gap being closed.
+	if err := storeGroupAttachment(path, groupID, fileID, name); err != nil {
+		return "", "", err
 	}
 	text, err := encodeGroupFileText(groupFileMeta{ID: fileID, Name: name, Size: fi.Size()})
 	if err != nil {
@@ -155,6 +160,12 @@ func startGroupPoller(parent context.Context) {
 
 	go func() {
 		var since time.Time
+		// pendingSeen tracks the last observed pending-request count per
+		// group so a rising edge — someone new asked to join — can be
+		// surfaced once, rather than re-notifying on every poll for a
+		// request that is simply still waiting.
+		pendingSeen := map[string]int{}
+		var sinceJoinScan int
 		ticker := time.NewTicker(pairPollInterval)
 		defer ticker.Stop()
 		for {
@@ -162,6 +173,14 @@ func startGroupPoller(parent context.Context) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+			}
+			// The approval queue changes on human timescales, so scan it
+			// far less often than messages. GroupList is a store walk on
+			// the visor side; running it at message cadence would be
+			// pure overhead for a signal that can afford to be seconds late.
+			if sinceJoinScan++; sinceJoinScan >= joinScanEveryNPolls {
+				sinceJoinScan = 0
+				scanPendingJoins(pendingSeen)
 			}
 			var msgs []visor.GroupMessage
 			err := pairRPCCall("GroupPoll", func(c visor.API) error {
@@ -234,6 +253,62 @@ func startGroupPoller(parent context.Context) {
 	}()
 }
 
+// joinScanEveryNPolls is how many message-poll ticks pass between
+// approval-queue scans. At the default pair-poll cadence this lands
+// around a few seconds, which is far below the latency a human
+// approving a request would notice.
+const joinScanEveryNPolls = 10
+
+// scanPendingJoins looks for newly-arrived join requests and surfaces
+// them as an SSE control event plus a host-OS notification.
+//
+// Rising-edge only: seen holds the previous count per group, and a
+// notification fires only when the count goes up. A request that stays
+// queued because nobody has acted on it must not re-notify every scan —
+// that would train admins to ignore the signal.
+//
+// A group that disappears from the list is dropped from seen so a
+// rejoin later starts clean rather than comparing against a stale count.
+func scanPendingJoins(seen map[string]int) {
+	var groups []visor.GroupInfo
+	if err := pairRPCCall("GroupList", func(c visor.API) error {
+		out, e := c.GroupList()
+		groups = out
+		return e
+	}); err != nil {
+		return
+	}
+	live := make(map[string]bool, len(groups))
+	for _, g := range groups {
+		live[g.ID] = true
+		prev, had := seen[g.ID]
+		seen[g.ID] = g.PendingJoins
+		if g.PendingJoins == 0 || g.PendingJoins <= prev {
+			continue
+		}
+		// First observation of an existing queue (app just started) is
+		// still worth surfacing to the UI, but not worth a desktop
+		// notification — nothing actually happened just now.
+		if body, err := json.Marshal(map[string]any{
+			"channel":       "group-join-request",
+			"group_id":      g.ID,
+			"group_name":    g.Name,
+			"pending_joins": g.PendingJoins,
+		}); err == nil {
+			hub.broadcast(string(body))
+		}
+		if had {
+			notifyOSInbound("Group join request",
+				strconv.Itoa(g.PendingJoins)+" waiting to join "+g.Name)
+		}
+	}
+	for id := range seen {
+		if !live[id] {
+			delete(seen, id)
+		}
+	}
+}
+
 // stopGroupPoller cancels the poller goroutine. Idempotent.
 func stopGroupPoller() {
 	if groupPollerCancel != nil {
@@ -289,9 +364,19 @@ func groupRootHandler() http.HandlerFunc {
 
 		case http.MethodPost:
 			var body struct {
-				Name    string   `json:"name"`
+				Name string `json:"name"`
+				// Kind is the group type. "mode" is still read as a
+				// fallback so an older cached UI build keeps working —
+				// it carried the same two values.
+				Kind    string   `json:"kind"`
 				Mode    string   `json:"mode"`
 				Members []string `json:"members"`
+				// PeerBackfill is the creator's choice on whether any online
+				// member may serve this group's history to a joiner. Sent as
+				// a pointer so an older cached UI build — which sends no such
+				// field — still gets the default (enabled) rather than
+				// silently creating admins-only groups.
+				PeerBackfill *bool `json:"peer_backfill"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
@@ -301,12 +386,16 @@ func groupRootHandler() http.HandlerFunc {
 				http.Error(w, "name required", http.StatusBadRequest)
 				return
 			}
-			mode := group.Mode(body.Mode)
-			if body.Mode == "" {
-				mode = group.ModePublic
+			raw := body.Kind
+			if raw == "" {
+				raw = body.Mode
 			}
-			if !mode.IsValid() {
-				http.Error(w, "invalid mode (use public or private)", http.StatusBadRequest)
+			kind := group.Kind(raw)
+			if raw == "" {
+				kind = group.KindPublic
+			}
+			if !kind.IsValid() {
+				http.Error(w, "invalid kind (use public or private)", http.StatusBadRequest)
 				return
 			}
 			members, err := parsePKList(body.Members)
@@ -317,7 +406,7 @@ func groupRootHandler() http.HandlerFunc {
 			var info visor.GroupInfo
 			var link string
 			if err := pairRPCCall("GroupCreate", func(c visor.API) error {
-				i, l, e := c.GroupCreate(visor.GroupCreateArgs{Name: body.Name, Mode: mode, InitialMembers: members})
+				i, l, e := c.GroupCreate(visor.GroupCreateArgs{Name: body.Name, Kind: kind, InitialMembers: members})
 				info, link = i, l
 				return e
 			}); err != nil {
@@ -413,6 +502,22 @@ func groupItemHandler() http.HandlerFunc {
 			}
 			w.WriteHeader(http.StatusNoContent)
 
+		case action == "ask-again" && r.Method == http.MethodPost:
+			// Deliberate retry after an admin declined our join (the UI's
+			// "ask again" button). Everything is derived from the stored
+			// record, so no invite re-paste; it pays the same PoW +
+			// rate-limit gates as a first ask.
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupAskAgain", func(c visor.API) error {
+				i, e := c.GroupAskAgain(id)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
 		case action == "invite" && r.Method == http.MethodGet:
 			var link string
 			if err := pairRPCCall("GroupInvite", func(c visor.API) error {
@@ -475,6 +580,120 @@ func groupItemHandler() http.HandlerFunc {
 				appLog("Group: unsend prune failed (tombstone still applies): %v", err)
 			}
 			w.WriteHeader(http.StatusNoContent)
+
+		case action == "requests" && r.Method == http.MethodGet:
+			var reqs []visor.GroupJoinRequest
+			if err := pairRPCCall("GroupJoinRequests", func(c visor.API) error {
+				out, e := c.GroupJoinRequests(id)
+				reqs = out
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// Only the actionable set by default: an admin's queue should
+			// open on "what needs me", not on an audit log. ?all=1 returns
+			// decided entries too.
+			if r.URL.Query().Get("all") != "1" {
+				pending := make([]visor.GroupJoinRequest, 0, len(reqs))
+				for _, q := range reqs {
+					if q.Status == group.JoinStatusPending {
+						pending = append(pending, q)
+					}
+				}
+				reqs = pending
+			}
+			writeJSON(w, reqs)
+
+		case r.Method == http.MethodPost && groupPeerActions[action] != nil:
+			var body struct {
+				PK string `json:"pk"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			var pk cipher.PubKey
+			if err := pk.Set(strings.TrimSpace(body.PK)); err != nil {
+				http.Error(w, "invalid pk: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			info, err := groupPeerActions[action](id, pk)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
+		case action == "join-pow" && r.Method == http.MethodPost:
+			var body struct {
+				Bits uint8 `json:"bits"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupSetJoinPoW", func(c visor.API) error {
+				i, e := c.GroupSetJoinPoW(id, body.Bits)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
+		case action == "peer-backfill" && r.Method == http.MethodPost:
+			var body struct {
+				Enabled bool `json:"enabled"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupSetPeerBackfill", func(c visor.API) error {
+				i, e := c.GroupSetPeerBackfill(id, body.Enabled)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
+		case action == "rotate-key" && r.Method == http.MethodPost:
+			// No body: rotation targets the group, not a peer.
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupRotateKey", func(c visor.API) error {
+				i, e := c.GroupRotateKey(id)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
+		case action == "readonly" && r.Method == http.MethodPost:
+			var body struct {
+				ReadOnly bool `json:"read_only"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupSetReadOnly", func(c visor.API) error {
+				i, e := c.GroupSetReadOnly(id, body.ReadOnly)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
 
 		case action == "leave" && r.Method == http.MethodPost:
 			if err := pairRPCCall("GroupLeave", func(c visor.API) error { return c.GroupLeave(id) }); err != nil {
@@ -545,6 +764,83 @@ func groupItemHandler() http.HandlerFunc {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		}
 	}
+}
+
+// groupPeerActions maps a URL action onto the visor RPC it proxies.
+// Every one of these takes {pk} and returns the updated GroupInfo, so a
+// table beats seven near-identical switch arms — and adding a command
+// later means adding a row, not another arm to keep in sync.
+//
+// Deny is the one that doesn't return info; it re-reads the group so
+// the response shape stays uniform for the UI.
+var groupPeerActions = map[string]func(string, cipher.PubKey) (visor.GroupInfo, error){
+	"requests/approve": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupApproveJoin", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupApproveJoin(id, pk)
+		})
+	},
+	"requests/deny": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		if err := pairRPCCall("GroupDenyJoin", func(c visor.API) error {
+			return c.GroupDenyJoin(id, pk)
+		}); err != nil {
+			return visor.GroupInfo{}, err
+		}
+		return groupPeerRPC("GroupGet", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupGet(id)
+		})
+	},
+	"members/remove": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupRemoveMember", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupRemoveMember(id, pk)
+		})
+	},
+	"members/ban": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupBanMember", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupBanMember(id, pk)
+		})
+	},
+	"members/unban": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupUnbanMember", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupUnbanMember(id, pk)
+		})
+	},
+	"members/mute": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupMuteMember", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupMuteMember(id, pk)
+		})
+	},
+	"members/unmute": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupUnmuteMember", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupUnmuteMember(id, pk)
+		})
+	},
+	// Promote / demote were reachable over the CLI and the visor RPC but
+	// had no route here, so a browser-only operator could never create a
+	// second admin. That made the founder a permanent single point of
+	// failure for admission — invites name the group's admins, and there
+	// was never more than one to name.
+	"members/promote": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupPromoteAdmin", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupPromoteAdmin(id, pk)
+		})
+	},
+	"members/demote": func(id string, pk cipher.PubKey) (visor.GroupInfo, error) {
+		return groupPeerRPC("GroupDemoteAdmin", func(c visor.API) (visor.GroupInfo, error) {
+			return c.GroupDemoteAdmin(id, pk)
+		})
+	},
+}
+
+// groupPeerRPC adapts an info-returning visor call to pairRPCCall's
+// error-only closure shape.
+func groupPeerRPC(name string, call func(visor.API) (visor.GroupInfo, error)) (visor.GroupInfo, error) {
+	var info visor.GroupInfo
+	err := pairRPCCall(name, func(c visor.API) error {
+		i, e := call(c)
+		info = i
+		return e
+	})
+	return info, err
 }
 
 // parsePKList parses a list of hex public keys, skipping blank entries.
