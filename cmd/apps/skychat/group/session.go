@@ -281,7 +281,15 @@ type Config struct {
 }
 
 // peerFanout resolves the configured fanout, applying the default.
-func (cfg Config) peerFanout() int {
+//
+// POINTER receiver, and it matters. Config embeds Record, which is shared
+// mutable state guarded by Session.membersMu — so a value receiver copied
+// the whole Config on every call, reading every field of that Record. That
+// made `s.cfg.peerFanout()` a read of the roster, the moderation lists and
+// the key ring, racing every reconciler that writes them. -race found six
+// separate pairs from this one call. The method itself touches a single
+// int; taking the address is what keeps it that way.
+func (cfg *Config) peerFanout() int {
 	if cfg.PeerFanout == 0 {
 		return defaultPeerFanout
 	}
@@ -1726,7 +1734,12 @@ func ringSuccessors(candidates []cipher.PubKey, self cipher.PubKey, k int) []cip
 // nobody's benefit would be pure disk cost, and a visor that follows
 // peers but refuses to be followed would take availability without
 // contributing it.
+// Read under membersMu: both predicates are value-receiver methods on the
+// shared Record, so each copies the whole struct — and this runs on every
+// per-peer subscriber goroutine while the reconcilers mutate that Record.
 func (s *Session) shouldMirrorLeaves() bool {
+	s.membersMu.RLock()
+	defer s.membersMu.RUnlock()
 	if s.cfg.Record.IsAdmin(s.cfg.MyPK) {
 		return true
 	}
@@ -1820,23 +1833,34 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 	// IsAdmin checks elsewhere (publish path, openOwner doc, etc.)
 	// see the new view too. Founder PK stays where it is on
 	// cfg.Record.OwnerPK; IsAdmin's union semantics handle it.
+	//
+	// membersMu covers BOTH the write and the Record copy below, and it
+	// has to. cfg.Record is shared mutable state — every reconciler
+	// mutates it under this lock, and the gossip-seal path reads it (via
+	// DecryptionKeys, whose value receiver copies the whole struct) on
+	// every governance leaf. Writing Admins here unguarded was a real
+	// data race, caught by -race on Windows CI: read in
+	// Session.decryptionKeys, previous write on this line.
+	//
+	// Only the memory work is inside the lock. Everything below —
+	// closing and opening peer subscribers, which dials — stays outside
+	// it, because holding membersMu across a dial would stall every
+	// reconciler for the dial timeout.
 	adminSnap := append([]cipher.PubKey(nil), admins...)
+	s.membersMu.Lock()
 	s.cfg.Record.Admins = adminSnap
-
-	// members snapshot read under membersMu where one exists (owner
-	// role); on member-role sessions the field is nil and we fall
-	// back to cfg.Record.Members which never mutates after Open.
-	// Splice the live snapshot into a temporary Record for the pure
-	// helper — we already mutated cfg.Record.Admins above so the
-	// IsAdmin contract reads the new view.
+	// Splice the live member snapshot into a temporary Record for the
+	// pure helper: s.members is the owner-role live set, and on a
+	// member-role session it is nil, where cfg.Record.Members is the
+	// authority. The copy is taken here so the helper works on a stable
+	// view rather than reading shared state field by field.
 	r := s.cfg.Record
-	s.membersMu.RLock()
 	if s.members != nil {
 		r.Members = append([]cipher.PubKey(nil), s.members...)
 	} else {
 		r.Members = append([]cipher.PubKey(nil), s.cfg.Record.Members...)
 	}
-	s.membersMu.RUnlock()
+	s.membersMu.Unlock()
 	desired := desiredPeerSubsForRole(r, s.cfg.MyPK, s.cfg.peerFanout())
 
 	var evicted []cipher.PubKey
