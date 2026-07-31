@@ -82,7 +82,13 @@ func (s *Session) rotateKeyAt(recipients []cipher.PubKey, at time.Time) (uint64,
 	if s == nil || s.pub == nil {
 		return 0, errors.New("group: RotateKey: no live publisher")
 	}
-	if !s.cfg.Record.Encrypted() {
+	// Under the lock like every other read of the shared Record: these
+	// value-receiver methods copy the WHOLE struct, so an unguarded call
+	// races with any reconciler mutating any field of it.
+	s.membersMu.RLock()
+	encrypted := s.cfg.Record.Encrypted()
+	s.membersMu.RUnlock()
+	if !encrypted {
 		return 0, ErrKeyRotationNotEncrypted
 	}
 	gid, err := uuid.Parse(s.cfg.Record.ID)

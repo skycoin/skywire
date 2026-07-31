@@ -434,13 +434,19 @@ func TestShouldMirrorLeaves(t *testing.T) {
 }
 
 func TestConfigPeerFanout(t *testing.T) {
-	if got := (Config{}).peerFanout(); got != defaultPeerFanout {
+	// Addressable locals, not composite literals: peerFanout takes a
+	// POINTER receiver so calling it never copies the Config (and with it
+	// the shared Record) — see the method's comment.
+	unset := Config{}
+	if got := unset.peerFanout(); got != defaultPeerFanout {
 		t.Errorf("unset fanout = %d, want the default %d", got, defaultPeerFanout)
 	}
-	if got := (Config{PeerFanout: 5}).peerFanout(); got != 5 {
+	explicit := Config{PeerFanout: 5}
+	if got := explicit.peerFanout(); got != 5 {
 		t.Errorf("explicit fanout = %d, want 5", got)
 	}
-	if got := (Config{PeerFanout: -1}).peerFanout(); got != 0 {
+	optedOut := Config{PeerFanout: -1}
+	if got := optedOut.peerFanout(); got != 0 {
 		t.Errorf("negative fanout = %d, want 0 (opted out)", got)
 	}
 }
