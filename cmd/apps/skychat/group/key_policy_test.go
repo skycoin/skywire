@@ -31,7 +31,7 @@ func TestRotationIsNotOpenableWithTheIssuersIdentityKey(t *testing.T) {
 	require.Empty(t, skipped)
 	require.True(t, m.Ephemeral(), "the rotation did not use an ephemeral wrap key")
 
-	wrap, ok := m.wrapFor(memberPK)
+	wrap, ok := m.wrapForRecipient(memberSK, memberPK)
 	require.True(t, ok)
 	require.NotEqual(t, issuerPK, wrap.EphPK, "the wrap names the issuer's identity key, not a throwaway one")
 
@@ -63,8 +63,10 @@ func TestRotationUsesOneEphemeralKeyAndIsolatesRecipients(t *testing.T) {
 	require.Len(t, m.Wraps, 2)
 	require.Equal(t, m.Wraps[0].EphPK, m.Wraps[1].EphPK, "a rotation should mint ONE ephemeral key, not one per recipient")
 
-	wa, _ := m.wrapFor(aPK)
-	wb, _ := m.wrapFor(bPK)
+	wa, okA := m.wrapForRecipient(aSK, aPK)
+	require.True(t, okA)
+	wb, okB := m.wrapForRecipient(bSK, bPK)
+	require.True(t, okB)
 	require.NotEqual(t, wa.Sealed, wb.Sealed)
 
 	openedA, err := openGroupKey(aSK, wa.sealerPK(m.IssuerPK), wa.Sealed)
@@ -116,7 +118,7 @@ func TestLegacyIdentityWrappedRotationStillWorks(t *testing.T) {
 
 	// Hand-build the pre-ephemeral shape: sealed under the ISSUER's
 	// identity key, no EphPK.
-	sealed, err := sealGroupKey(issuerSK, memberPK, key)
+	sealed, _, err := sealGroupKey(issuerSK, memberPK, key)
 	require.NoError(t, err)
 	m := KeyMutation{
 		GroupID:  uuid.New(),

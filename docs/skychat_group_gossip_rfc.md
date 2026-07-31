@@ -307,3 +307,44 @@ admin issues. Filed as a sibling follow-up.
 4. Gamma's #2637 (seq-anchored replay) is a hard prereq for the
    bootstrap step — convergent state requires reading the full
    gossip log on rejoin.
+
+## Update 2026-07-31 — governance leaves are sealed on encrypted groups
+
+This RFC designed the roster/admin/mod envelopes as signed but
+plaintext, on the reasoning that only members can subscribe. That
+reasoning does not survive contact with the rest of the system: a
+CXO feed outlives the subscription that fetched it, so an evicted
+member's copy of the tree, a peer that served backfill, or anyone
+who reaches a member's on-disk CXO database reads the group's whole
+moderation history — every ban, mute and promotion, with the PK it
+named — while the message bodies beside it stay encrypted.
+
+As of `cmd/apps/skychat/group/gossip_seal.go`, a governance leaf on
+an **encrypted** group is published as
+
+```
+"SKG1" | 12-byte nonce | AES-256-GCM(group key, <signed envelope JSON>)
+```
+
+with the signature unchanged and still inside the seal — sealing is
+confidentiality only, authority is still the signature plus the
+current-admin gate. Leaves without the magic prefix are plaintext
+from an older publisher and are applied as before; an old binary
+reading a sealed leaf drops it, so governance stops converging
+toward un-upgraded members until they update (the same one-way
+window the domain-tag fix took, healing on upgrade). Public groups
+have no key and stay plaintext by design.
+
+The `keys/<seq>` rotation leaf changed with it: wraps are addressed
+by a blinded tag derived from the wrap's own ECDH secret rather than
+by naming the recipient PK, because a plaintext recipient list
+republished the roster on every re-key — and diffing two rotations
+named whoever had just been evicted. The wrap COUNT (group size) is
+still visible.
+
+Open question 4 above — cross-feed timing — gets a second instance
+here: a sealed leaf can arrive before the key that opens it. The
+resolution is the parking lot in the same file (bounded, replayed on
+every key install) rather than the "drop and re-evaluate later"
+sketch, because a subscriber callback fires once per leaf and a drop
+is permanent.

@@ -170,6 +170,10 @@ func (s *Session) installKeyLocal(epoch uint64, key []byte, issuedAt, at time.Ti
 	if f != nil {
 		f(st)
 	}
+	// A key we just minted can open governance leaves that were parked
+	// for want of one — the admin that rotated may have been holding
+	// another admin's sealed roster leaf. Cheap when the lot is empty.
+	s.drainDeferredGossip()
 }
 
 // SetGroupKey pushes key state from the Manager onto a live session —
@@ -182,6 +186,10 @@ func (s *Session) SetGroupKey(st KeyState) {
 	s.membersMu.Lock()
 	st.applyTo(&s.cfg.Record)
 	s.membersMu.Unlock()
+	// This is the joiner's first key, handed over in the admission
+	// response. Governance leaves it saw before that moment are sitting
+	// in the parking lot sealed under exactly this key.
+	s.drainDeferredGossip()
 }
 
 // applyKeyLeaf decodes, authenticates, and applies one keys/<seq> leaf.
@@ -226,7 +234,9 @@ func (s *Session) applyKeyLeaf(body []byte) {
 			Debug("group: reconcile: rejecting stale key rotation")
 		return
 	}
-	wrap, mine := m.wrapFor(s.cfg.MyPK)
+	// Blinded leaves address us by tag, which needs our secret key — see
+	// wrapForRecipient. Pre-blinding leaves still match by name.
+	wrap, mine := m.wrapForRecipient(s.cfg.MySK, s.cfg.MyPK)
 	if !mine {
 		// Not addressed to us. Do NOT advance the watermark: a later,
 		// genuine rotation from another admin at the same instant would
@@ -270,6 +280,11 @@ func (s *Session) applyKeyLeaf(body []byte) {
 	if f != nil {
 		f(st)
 	}
+	// Replay whatever we could not read before this key arrived. Sealed
+	// governance leaves reach us through a different feed than the
+	// rotation that opens them, so arriving first is normal, not an
+	// error — and a leaf dropped here would be dropped for good.
+	s.drainDeferredGossip()
 	s.log.WithField("issuer", m.IssuerPK.String()).WithField("epoch", epoch).
 		Info("group: applied rotated group key")
 }

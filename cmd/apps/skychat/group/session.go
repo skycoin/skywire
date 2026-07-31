@@ -546,6 +546,15 @@ type Session struct {
 	// state it protects. onMutationSeen persists it.
 	mutationSeen   map[string]time.Time
 	onMutationSeen func(map[string]time.Time)
+
+	// deferredGossip parks sealed governance leaves that arrived before
+	// the key that opens them, replayed by drainDeferredGossip on the
+	// next key install. Its own mutex rather than membersMu: the drain
+	// hands each leaf back to a reconciler that takes membersMu itself,
+	// so sharing the lock would deadlock on the first replay. See
+	// gossip_seal.go.
+	deferredGossipMu sync.Mutex
+	deferredGossip   []deferredGossipLeaf
 }
 
 // subscriberStaleThreshold is defined in manager.go (it's used by
@@ -1926,6 +1935,12 @@ func (s *Session) publishRosterMutationAt(op RosterOp, peerPK cipher.PubKey, par
 	if err != nil {
 		return 0, fmt.Errorf("group: PublishRosterMutation: marshal: %w", err)
 	}
+	// Encrypted group: the envelope goes onto the feed sealed, so the
+	// membership history is no more readable than the messages. No-op for
+	// a plaintext group. See gossip_seal.go.
+	if body, err = s.sealGossipBody(body); err != nil {
+		return 0, fmt.Errorf("group: PublishRosterMutation: seal: %w", err)
+	}
 	path := fmt.Sprintf("%s/%05d", RosterPathPrefix, seq)
 	if err := s.pub.Put(path, body); err != nil {
 		return 0, fmt.Errorf("group: PublishRosterMutation: Put %s: %w", path, err)
@@ -1962,6 +1977,9 @@ func (s *Session) publishAdminMutationAt(op AdminOp, peerPK cipher.PubKey, paren
 	body, err := MarshalAdmin(m)
 	if err != nil {
 		return 0, fmt.Errorf("group: PublishAdminMutation: marshal: %w", err)
+	}
+	if body, err = s.sealGossipBody(body); err != nil {
+		return 0, fmt.Errorf("group: PublishAdminMutation: seal: %w", err)
 	}
 	path := fmt.Sprintf("%s/%05d", AdminPathPrefix, seq)
 	if err := s.pub.Put(path, body); err != nil {
@@ -2667,6 +2685,20 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 	// admin mutations issued by current admins so late joiners converge to the
 	// real roster. Runs before the handler gate so it works even on sessions
 	// with no message handler installed.
+	// Key rotations go first, ahead of the other three families and ahead
+	// of the message loop below: the rotation that lets us read the rest
+	// of this batch may have arrived IN this batch, and both message
+	// bodies and (since gossip_seal.go) governance envelopes are sealed
+	// under it. Leaves that arrive in a different batch than their key
+	// are handled by the parking lot, not by this ordering.
+	for _, ev := range events {
+		if ev.Value == nil {
+			continue
+		}
+		if strings.HasPrefix(ev.Path, KeyPathPrefix+"/") {
+			s.applyKeyLeaf(ev.Value)
+		}
+	}
 	for _, ev := range events {
 		if ev.Value == nil {
 			continue
@@ -2678,11 +2710,6 @@ func (s *Session) onUpdate(events []treestore.UpdateEvent) {
 			s.applyAdminLeaf(ev.Value)
 		case strings.HasPrefix(ev.Path, ModerationPathPrefix+"/"):
 			s.applyModLeaf(ev.Value)
-		case strings.HasPrefix(ev.Path, KeyPathPrefix+"/"):
-			// Must run in this pre-pass, before the message loop below:
-			// the rotation that lets us read the rest of this batch may
-			// have arrived in the same batch.
-			s.applyKeyLeaf(ev.Value)
 		}
 	}
 	h := s.handler
