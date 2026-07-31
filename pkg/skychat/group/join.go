@@ -171,6 +171,16 @@ type JoinRequestMsg struct {
 	// then fails honestly, instead of being silently dropped.
 	PoW JoinPoW `json:"pow,omitempty"`
 
+	// AskAgain marks a DELIBERATE retry after a declined request (the UI's
+	// "ask again" button). A plain re-ask from a denied PK stays terminal —
+	// that is what keeps a refused requester from refilling the approval
+	// queue by polling — but an explicit ask-again replaces the denied
+	// record with a fresh pending one, after paying the same PoW and
+	// rate-limit gates as any first request. Old responders ignore the
+	// field and simply answer denied, which the requester surfaces
+	// honestly.
+	AskAgain bool `json:"ask_again,omitempty"`
+
 	TS time.Time `json:"ts"`
 }
 
@@ -441,6 +451,11 @@ type JoinRequest struct {
 	// the queue entry — it is spent on arrival, and keeping it would
 	// invite someone to treat a stored proof as still valid.
 	PoW JoinPoW `json:"-"`
+
+	// AskAgain mirrors the wire flag: a deliberate retry after a decline
+	// (see JoinRequestMsg.AskAgain). Like PoW it is a property of THIS
+	// arrival, not of the queue entry, so it is not persisted.
+	AskAgain bool `json:"-"`
 
 	// Status is pending until an admin rules. Approved requests are
 	// recorded as admitted AND added to Members; the queue entry stays

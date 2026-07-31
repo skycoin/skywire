@@ -330,10 +330,18 @@ func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 			if err == nil && found {
 				switch existing.Status {
 				case JoinStatusDenied:
-					// Terminal for the requester. An admin can still
-					// flip this from their queue via ApproveJoin; the
-					// requester picks it up when they next ask.
-					return JoinResponseMsg{Status: JoinStatusDenied, Reason: "request was declined"}
+					// Terminal for a PASSIVE re-ask — that is what keeps a
+					// refused requester from refilling the queue by polling.
+					// A deliberate ask-again (the UI's retry button) fell
+					// through every cost gate above like a first request, so
+					// honor it: replace the denied record with a fresh
+					// pending one and put it back in front of the admins.
+					// An admin can also still flip the old record from their
+					// queue via ApproveJoin; the requester picks either
+					// outcome up when they next ask.
+					if !req.AskAgain {
+						return JoinResponseMsg{Status: JoinStatusDenied, Reason: "request was declined"}
+					}
 				case JoinStatusAdmitted:
 					// Decided yes but the roster says otherwise (kicked
 					// after approval). Treat the roster as truth and
@@ -769,7 +777,21 @@ func (m *Manager) moderate(id string, pk cipher.PubKey, op ModOp, what string, m
 //
 // The request goes to every admin the invite names, not just the founder
 // — see Invite.Admins for why that stopped being good enough.
+// RequestJoinAgain is RequestJoin for a requester an admin has DECLINED: a
+// deliberate retry (the UI's "ask again" button) that asks the group to
+// replace the denied record with a fresh pending one. It pays the same PoW
+// and rate-limit gates as a first request, so a declined PK cannot spam the
+// approval queue any faster than a new one; against an admin running an older
+// build the flag is ignored and the answer is simply denied again.
+func (m *Manager) RequestJoinAgain(inv Invite, note string) (Record, error) {
+	return m.requestJoin(inv, note, true)
+}
+
 func (m *Manager) RequestJoin(inv Invite, note string) (Record, error) {
+	return m.requestJoin(inv, note, false)
+}
+
+func (m *Manager) requestJoin(inv Invite, note string, askAgain bool) (Record, error) {
 	if inv.OwnerPK == m.myPK {
 		return Record{}, errors.New("group: RequestJoin: refusing to join own group")
 	}
@@ -783,7 +805,7 @@ func (m *Manager) RequestJoin(inv Invite, note string) (Record, error) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), joinAttemptBudget(len(targets)))
 	defer cancel()
-	resp, err := SendJoinRequestAny(ctx, m.dmsgC, inv.ID, targets, inv.Port, m.myPK, note, inv.PoWBits)
+	resp, err := SendJoinRequestAny(ctx, m.dmsgC, inv.ID, targets, inv.Port, m.myPK, note, inv.PoWBits, askAgain)
 	if err != nil {
 		if errors.Is(err, ErrJoinNoResponse) {
 			m.log.WithField("id", inv.ID).
@@ -975,7 +997,7 @@ func (m *Manager) retryPendingJoins(ctx context.Context) {
 		if len(targets) == 0 {
 			continue
 		}
-		resp, err := SendJoinRequestAny(ctx, m.dmsgC, r.ID, targets, r.Port, m.myPK, "", r.JoinPoWBits)
+		resp, err := SendJoinRequestAny(ctx, m.dmsgC, r.ID, targets, r.Port, m.myPK, "", r.JoinPoWBits, false)
 		if err != nil {
 			if terminal := errIsTerminalJoin(err); terminal {
 				_ = m.store.SetStatus(r.ID, StatusDenied) //nolint:errcheck
@@ -993,48 +1015,97 @@ func (m *Manager) retryPendingJoins(ctx context.Context) {
 			}
 			continue
 		}
-		switch resp.Status {
-		case JoinStatusAdmitted:
-			admitted := r
-			if len(resp.Members) > 0 {
-				admitted.Members = resp.Members
-			}
-			if len(resp.Admins) > 0 {
-				admitted.Admins = resp.Admins
-			}
-			if len(resp.AESKey) > 0 {
-				admitted.AESKey = resp.AESKey
-				admitted.KeyEpoch = resp.KeyEpoch
-			}
-			admitted.Muted = resp.Muted
-			admitted.ReadOnly = resp.ReadOnly
-			admitted.PeerBackfillDisabled = resp.PeerBackfillDisabled
-			admitted.EnsureFounderInAdmins()
-			admitted.Status = StatusPending
-			if admitted.Encrypted() && len(admitted.AESKey) != 32 {
-				m.log.WithField("id", r.ID).
-					Warn("group: join: admitted to an encrypted group without a key; staying pending")
-				continue
-			}
-			if err := m.store.Put(admitted); err != nil {
-				continue
-			}
-			if _, err := m.openAdmitted(admitted); err != nil {
-				m.log.WithError(err).WithField("id", r.ID).
-					Warn("group: join: approved but session open failed")
-			} else {
-				m.log.WithField("id", r.ID).Info("group: join: approved by admin; group is now active")
-			}
-		case JoinStatusDenied:
-			_ = m.store.SetStatus(r.ID, StatusDenied) //nolint:errcheck
-			m.log.WithField("id", r.ID).Info("group: join: request declined by admin")
-		case JoinStatusBanned:
-			_ = m.store.SetStatus(r.ID, StatusBanned) //nolint:errcheck
-			m.log.WithField("id", r.ID).Info("group: join: banned from group")
-		case JoinStatusPending:
-			// Still waiting; ask again next tick.
-		}
+		m.applyJoinResponse(r, resp)
 	}
+}
+
+// applyJoinResponse applies an admission answer to our stored record — shared
+// by the background retry loop and the deliberate ask-again path, so both
+// handle an admit / deny / ban / still-pending identically.
+func (m *Manager) applyJoinResponse(r Record, resp JoinResponseMsg) {
+	switch resp.Status {
+	case JoinStatusAdmitted:
+		admitted := r
+		if len(resp.Members) > 0 {
+			admitted.Members = resp.Members
+		}
+		if len(resp.Admins) > 0 {
+			admitted.Admins = resp.Admins
+		}
+		if len(resp.AESKey) > 0 {
+			admitted.AESKey = resp.AESKey
+			admitted.KeyEpoch = resp.KeyEpoch
+		}
+		admitted.Muted = resp.Muted
+		admitted.ReadOnly = resp.ReadOnly
+		admitted.PeerBackfillDisabled = resp.PeerBackfillDisabled
+		admitted.EnsureFounderInAdmins()
+		admitted.Status = StatusPending
+		if admitted.Encrypted() && len(admitted.AESKey) != 32 {
+			m.log.WithField("id", r.ID).
+				Warn("group: join: admitted to an encrypted group without a key; staying pending")
+			return
+		}
+		if err := m.store.Put(admitted); err != nil {
+			return
+		}
+		if _, err := m.openAdmitted(admitted); err != nil {
+			m.log.WithError(err).WithField("id", r.ID).
+				Warn("group: join: approved but session open failed")
+		} else {
+			m.log.WithField("id", r.ID).Info("group: join: approved by admin; group is now active")
+		}
+	case JoinStatusDenied:
+		_ = m.store.SetStatus(r.ID, StatusDenied) //nolint:errcheck
+		m.log.WithField("id", r.ID).Info("group: join: request declined by admin")
+	case JoinStatusBanned:
+		_ = m.store.SetStatus(r.ID, StatusBanned) //nolint:errcheck
+		m.log.WithField("id", r.ID).Info("group: join: banned from group")
+	case JoinStatusPending:
+		// Still waiting. In the retry loop this is a no-op (the record is
+		// already awaiting approval); after a deliberate ask-again it flips
+		// the denied record back to awaiting, which is exactly the point.
+		_ = m.store.SetStatus(r.ID, StatusAwaitingApproval) //nolint:errcheck
+	}
+}
+
+// AskAgain re-submits a join request an admin has DENIED — the UI's
+// "ask again" button. Everything is derived from the stored record, so
+// callers pass only the group id (no invite re-paste). The request goes out
+// with the deliberate ask-again flag: the group replaces the denied record
+// with a fresh pending one after the same PoW and rate-limit gates as a
+// first request (see JoinRequestMsg.AskAgain). Against an admin running an
+// older build the flag is ignored and the denial is surfaced honestly.
+func (m *Manager) AskAgain(id, note string) (Record, error) {
+	r, found, err := m.store.Get(id)
+	if err != nil {
+		return Record{}, err
+	}
+	if !found {
+		return Record{}, errors.New("group: ask-again: unknown group id")
+	}
+	if r.Status != StatusDenied {
+		return Record{}, fmt.Errorf("group: ask-again: request is %s, not denied", r.Status)
+	}
+	targets := r.AdmissionTargets(m.myPK)
+	if len(targets) == 0 {
+		return Record{}, ErrJoinNoAdmin
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), joinAttemptBudget(len(targets)))
+	defer cancel()
+	resp, err := SendJoinRequestAny(ctx, m.dmsgC, r.ID, targets, r.Port, m.myPK, note, r.JoinPoWBits, true)
+	if err != nil {
+		return Record{}, err
+	}
+	m.applyJoinResponse(r, resp)
+	if resp.Status == JoinStatusDenied || resp.Status == JoinStatusBanned {
+		return Record{}, errForStatus(resp.Status, resp.Reason)
+	}
+	out, _, gerr := m.store.Get(id)
+	if gerr != nil {
+		return r, nil
+	}
+	return out, nil
 }
 
 // pendingJoinShouldAttempt rate-limits re-asks to

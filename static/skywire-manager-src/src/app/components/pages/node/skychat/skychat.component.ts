@@ -788,6 +788,34 @@ return {
 });
   }
 
+  // Re-request to join a group an admin declined (the "ask again" button on a
+  // room whose status is 'denied'). Derives everything from the stored record
+  // server-side and pays the same PoW + rate-limit gates as a first ask, so a
+  // declined key cannot spam the queue faster than a new one. $event.stop keeps
+  // the row's (click)=selectGroup from also firing.
+  askAgain(g: GroupView, ev?: Event) {
+    if (ev) {
+      ev.stopPropagation();
+    }
+    if (this.groupSending) {
+      return;
+    }
+    this.groupSending = true;
+    const sv = this.groupSv;
+    const after = () => {
+      this.refreshGroups();
+      this.snackbar.showDone('Re-requested to join — waiting for an admin');
+    };
+    const p = sv
+      ? Promise.resolve(sv.skychatGroupAskAgain(g.id)).then(after)
+      : this.groupApi(`/${encodeURIComponent(g.id)}/ask-again`, 'POST').then(after);
+    p.catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
+      .finally(() => {
+        this.groupSending = false;
+        this.cdr.markForCheck();
+      });
+  }
+
   selectGroup(g: GroupView) {
     this.selectedGroup = g;
     this.groupMessages = [];

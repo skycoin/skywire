@@ -221,6 +221,26 @@ func jsGroupJoin(_ js.Value, args []js.Value) interface{} {
 	})
 }
 
+// jsGroupAskAgain(id) → Promise<{id,name}>. Deliberate retry after an admin
+// declined our join (the UI's "ask again" button). Derives everything from the
+// stored record and pays the same PoW + rate-limit gates as a first ask.
+func jsGroupAskAgain(_ js.Value, args []js.Value) interface{} {
+	if groupMgr == nil {
+		return errPromise("group chat not ready")
+	}
+	if len(args) < 1 || args[0].String() == "" {
+		return errPromise("skychatGroupAskAgain(groupID)")
+	}
+	id := args[0].String()
+	return promise(func() (interface{}, error) {
+		rec, err := groupMgr.AskAgain(id, "")
+		if err != nil {
+			return nil, err
+		}
+		return map[string]interface{}{"id": rec.ID, "name": rec.Name}, nil
+	})
+}
+
 // jsGroupReplay(id) → Promise<null>. Explicitly re-pumps a group's history
 // through the handler (deduped), for a UI "load history" action or to backfill
 // after a slow feed sync. Parity with the native app, where Resume replays at
