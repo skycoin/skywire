@@ -17,6 +17,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"io"
@@ -485,12 +486,30 @@ func sendFileToGroup(ctx context.Context, path string) (int, error) {
 	if len(peers) == 0 {
 		return 0, fmt.Errorf("skychat: group %q has no other members online", cxoGroup)
 	}
+	// Seal once, fan the sealed bytes out to everyone: the members share
+	// the group key, so one container serves them all — and a leg that
+	// reaches the wrong PK carries nothing readable. The sealed copy is
+	// kept under the file's id (the same place the backfill path looks),
+	// so a later re-request ships identical bytes.
+	fileID := newEventID()
+	name := filepath.Base(path)
+	if err := storeGroupAttachment(path, cxoGroup, fileID, name); err != nil {
+		return 0, err
+	}
+	dir, err := downloadsDir()
+	if err != nil {
+		return 0, err
+	}
+	path = filepath.Join(dir, sentCopyName(xfer.Offer{ID: fileID, Name: name}))
 	for _, pk := range peers {
 		pk := pk
 		go func() {
 			sctx, cancel := context.WithTimeout(ctx, sendTimeout)
 			defer cancel()
-			if _, err := sendFile(sctx, pk, cxoGroup, path); err != nil {
+			// The id + name are carried explicitly so every member's copy
+			// shares one file id — which is what the key derivation binds
+			// to, and what a later backfill request names.
+			if _, err := sendFileID(sctx, pk, cxoGroup, path, fileID, name, false); err != nil {
 				appLog("skychat: group file to %s failed: %v", pk, err)
 			}
 		}()
@@ -698,8 +717,13 @@ func mediaContentType(name string) string {
 
 // downloadFileHandler serves GET /files/<name> from the downloads dir so a UI can
 // fetch a received file. The name is sanitized to a base name rooted in the
-// downloads dir (no traversal). http.ServeFile honors HTTP Range requests, so
-// <video>/<audio> streaming + seeking work without extra handling.
+// downloads dir (no traversal).
+//
+// Three shapes of file arrive here and each takes its own branch: a group
+// attachment stored sealed (decrypted through a seekable reader), an ordinary
+// plaintext file (served straight off disk), and a sealed one this visor holds
+// no key for (refused, never served as bytes). Both serving branches honor HTTP
+// Range, so <video>/<audio> streaming and seeking work either way.
 func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "GET only", http.StatusMethodNotAllowed)
@@ -724,7 +748,48 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	// name is a sanitized base name (safeFileName strips separators + traversal),
 	// so the join stays rooted in the downloads dir.
-	http.ServeFile(w, r, filepath.Join(dir, name)) //nolint:gosec // name sanitized by safeFileName
+	full := filepath.Join(dir, name) //nolint:gosec // name sanitized by safeFileName
+
+	// A group attachment is stored sealed (filecrypt.go). Serve the
+	// decrypted view: ServeContent over the seekable reader keeps Range
+	// requests working, so <video> seeking behaves exactly as it did when
+	// the bytes on disk were the file.
+	rs, err := openAttachment(full)
+	switch {
+	case err == nil:
+		defer func() { _ = rs.Close() }() //nolint:errcheck
+		modTime := time.Time{}
+		if fi, sErr := os.Stat(full); sErr == nil { //nolint:gosec // full = downloadsDir + safeFileName'd base name
+			modTime = fi.ModTime()
+		}
+		// Prefer the name the sender stored inside the container for the
+		// content-type sniff: the served copy on disk is id-named, so its
+		// extension is the right one, but a received copy may not be.
+		sniffName := name
+		if hdr := rs.Header(); hdr.Name != "" {
+			sniffName = hdr.Name
+		}
+		if ct := mediaContentType(sniffName); ct != "" {
+			w.Header().Set("Content-Type", ct)
+		}
+		http.ServeContent(w, r, sniffName, modTime, rs)
+		return
+	case errors.Is(err, errNotSealed):
+		// Ordinary file — a DM attachment, a public-group one, or one from
+		// before sealing existed.
+		http.ServeFile(w, r, full) //nolint:gosec
+		return
+	case os.IsNotExist(err):
+		http.NotFound(w, r)
+		return
+	default:
+		// Sealed, but no key we hold opens it: a group we have left, or an
+		// epoch we never received. Say so rather than serving ciphertext
+		// that would render as a corrupt image.
+		appLog("skychat: serving %q: %v", name, err)
+		http.Error(w, "attachment is encrypted for a group key this visor does not hold", http.StatusForbidden)
+		return
+	}
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -743,6 +808,20 @@ const thumbMaxDim = 640
 // missing file or an undecodable/non-image payload — the caller surfaces
 // that so the UI can fall back to the full file.
 func makeThumbnail(srcPath string, maxDim int) (image.Image, error) { //nolint:unparam
+	// A sealed group attachment is decoded through its decrypting reader;
+	// anything else is opened from disk as before. A sealed file we cannot
+	// open surfaces as an error, which the handler turns into the same 415
+	// the UI already knows how to fall back from.
+	if rs, err := openAttachment(srcPath); err == nil {
+		defer func() { _ = rs.Close() }() //nolint:errcheck
+		img, dErr := imaging.Decode(rs, imaging.AutoOrientation(true))
+		if dErr != nil {
+			return nil, dErr
+		}
+		return imaging.Fit(img, maxDim, maxDim, imaging.Lanczos), nil
+	} else if !errors.Is(err, errNotSealed) {
+		return nil, err
+	}
 	img, err := imaging.Open(srcPath)
 	if err != nil {
 		return nil, err

@@ -39,7 +39,7 @@ import (
 
 func TestNewManager_Validation(t *testing.T) {
 	dir := t.TempDir()
-	st, err := OpenStore(filepath.Join(dir, "pairs.db"))
+	st, err := OpenStore(filepath.Join(dir, "pairs.db"), testStoreSK())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = st.Close() }) //nolint:errcheck
 
@@ -91,7 +91,7 @@ func TestManagerGet(t *testing.T) {
 
 func TestManagerMarkActive(t *testing.T) {
 	dir := t.TempDir()
-	st, err := OpenStore(filepath.Join(dir, "pairs.db"))
+	st, err := OpenStore(filepath.Join(dir, "pairs.db"), testStoreSK())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = st.Close() }) //nolint:errcheck
 
@@ -204,10 +204,10 @@ func TestResumeReconnectsSubscriberAfterRestart(t *testing.T) {
 	dmsgA, dmsgB, pkA, skA, pkB, skB := resumeEnv(t)
 
 	dirA, dirB := t.TempDir(), t.TempDir()
-	storeA, err := OpenStore(filepath.Join(dirA, "pairs.db"))
+	storeA, err := OpenStore(filepath.Join(dirA, "pairs.db"), skA)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = storeA.Close() }) //nolint:errcheck
-	storeB, err := OpenStore(filepath.Join(dirB, "pairs.db"))
+	storeB, err := OpenStore(filepath.Join(dirB, "pairs.db"), skB)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = storeB.Close() }) //nolint:errcheck
 
@@ -315,7 +315,7 @@ func TestResumeSkipsRevokedAndAlreadyLive(t *testing.T) {
 	dmsgA, _, pkA, skA, pkB, _ := resumeEnv(t)
 
 	dir := t.TempDir()
-	store, err := OpenStore(filepath.Join(dir, "pairs.db"))
+	store, err := OpenStore(filepath.Join(dir, "pairs.db"), testStoreSK())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = store.Close() }) //nolint:errcheck
 

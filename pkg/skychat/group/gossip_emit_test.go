@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/gossip_emit_test.go:
+// Package group — pkg/skychat/group/gossip_emit_test.go:
 // targeted coverage for Session.PublishRosterMutation /
 // PublishAdminMutation (step 2 of #2636 RFC).
 //

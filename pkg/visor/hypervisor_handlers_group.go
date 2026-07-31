@@ -168,6 +168,197 @@ func (hv *Hypervisor) postGroupAddMember() http.HandlerFunc {
 	})
 }
 
+// getGroupJoinRequests → GET /skychat/groups/requests?group_id= : the
+// admission queue for a group.
+func (hv *Hypervisor) getGroupJoinRequests() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		gid := r.URL.Query().Get("group_id")
+		if gid == "" {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "group_id required"})
+			return
+		}
+		reqs, err := ctx.API.GroupJoinRequests(gid)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, reqs)
+	})
+}
+
+// groupPeerAction wraps the shared shape of every {id, pk} admin
+// command: decode, parse the PK, call, render the updated info. One
+// helper rather than seven near-identical handlers.
+func (hv *Hypervisor) groupPeerAction(op func(*httpCtx, string, cipher.PubKey) (GroupInfo, error)) http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID string `json:"id"`
+			PK string `json:"pk"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(rb.PK); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad pk: " + err.Error()})
+			return
+		}
+		info, err := op(ctx, rb.ID, pk)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, info)
+	})
+}
+
+// postGroupApproveJoin → POST /skychat/groups/requests/approve {id, pk}.
+func (hv *Hypervisor) postGroupApproveJoin() http.HandlerFunc {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+		return ctx.API.GroupApproveJoin(id, pk)
+	})
+}
+
+// postGroupDenyJoin → POST /skychat/groups/requests/deny {id, pk}.
+func (hv *Hypervisor) postGroupDenyJoin() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID string `json:"id"`
+			PK string `json:"pk"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		var pk cipher.PubKey
+		if err := pk.Set(rb.PK); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad pk: " + err.Error()})
+			return
+		}
+		if err := ctx.API.GroupDenyJoin(rb.ID, pk); err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, map[string]bool{"ok": true})
+	})
+}
+
+// postGroupRemoveMember → POST /skychat/groups/remove-member {id, pk}.
+func (hv *Hypervisor) postGroupRemoveMember() http.HandlerFunc {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+		return ctx.API.GroupRemoveMember(id, pk)
+	})
+}
+
+// postGroupBanMember → POST /skychat/groups/ban {id, pk}.
+func (hv *Hypervisor) postGroupBanMember() http.HandlerFunc {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+		return ctx.API.GroupBanMember(id, pk)
+	})
+}
+
+// postGroupUnbanMember → POST /skychat/groups/unban {id, pk}.
+func (hv *Hypervisor) postGroupUnbanMember() http.HandlerFunc {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+		return ctx.API.GroupUnbanMember(id, pk)
+	})
+}
+
+// postGroupMuteMember → POST /skychat/groups/mute {id, pk}.
+func (hv *Hypervisor) postGroupMuteMember() http.HandlerFunc {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+		return ctx.API.GroupMuteMember(id, pk)
+	})
+}
+
+// postGroupUnmuteMember → POST /skychat/groups/unmute {id, pk}.
+func (hv *Hypervisor) postGroupUnmuteMember() http.HandlerFunc {
+	return hv.groupPeerAction(func(ctx *httpCtx, id string, pk cipher.PubKey) (GroupInfo, error) {
+		return ctx.API.GroupUnmuteMember(id, pk)
+	})
+}
+
+// postGroupReadOnly → POST /skychat/groups/read-only {id, read_only}.
+func (hv *Hypervisor) postGroupReadOnly() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID       string `json:"id"`
+			ReadOnly bool   `json:"read_only"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		info, err := ctx.API.GroupSetReadOnly(rb.ID, rb.ReadOnly)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, info)
+	})
+}
+
+// postGroupJoinPoW → POST /skychat/groups/join-pow {id, bits}.
+func (hv *Hypervisor) postGroupJoinPoW() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID   string `json:"id"`
+			Bits uint8  `json:"bits"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		info, err := ctx.API.GroupSetJoinPoW(rb.ID, rb.Bits)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, info)
+	})
+}
+
+// postGroupPeerBackfill → POST /skychat/groups/peer-backfill {id, enabled}.
+func (hv *Hypervisor) postGroupPeerBackfill() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID      string `json:"id"`
+			Enabled bool   `json:"enabled"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		info, err := ctx.API.GroupSetPeerBackfill(rb.ID, rb.Enabled)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, info)
+	})
+}
+
+// postGroupRotateKey → POST /skychat/groups/rotate-key {id} : mint a new
+// group key and seal it to each current member.
+func (hv *Hypervisor) postGroupRotateKey() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		var rb struct {
+			ID string `json:"id"`
+		}
+		if err := httputil.ReadJSON(r, &rb); err != nil {
+			httputil.WriteJSON(w, r, http.StatusBadRequest, map[string]string{"error": "bad json: " + err.Error()})
+			return
+		}
+		info, err := ctx.API.GroupRotateKey(rb.ID)
+		if err != nil {
+			hv.writeGroupErr(w, r, err)
+			return
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, info)
+	})
+}
+
 // getGroupInvite → GET /skychat/groups/invite?group_id= : mint a fresh invite.
 func (hv *Hypervisor) getGroupInvite() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
