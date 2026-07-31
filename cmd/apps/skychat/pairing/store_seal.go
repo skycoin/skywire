@@ -57,7 +57,7 @@ const storeSealInfo = "skychat:pair-store-seal:v1"
 var ErrStoreSealKeyRequired = errors.New("pairing: OpenStore: a visor secret key is required to seal pair secrets at rest")
 
 // PersistedEpoch is one epoch key as stored. Key is plaintext in memory
-// and cleared in favour of Sealed on disk.
+// and cleared in favor of Sealed on disk.
 type PersistedEpoch struct {
 	ID      EpochID   `json:"id"`
 	Key     pairKey   `json:"key,omitempty"`
