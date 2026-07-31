@@ -173,12 +173,13 @@ func (tm *Manager) Serve(ctx context.Context) {
 	// for cleanup, reconnect, re-registration, deferred deletion, and
 	// transport-maintenance goroutines (the latter replaces what used
 	// to be 2 goroutines per ManagedTransport)
-	tm.wg.Add(5)
+	tm.wg.Add(6)
 	go tm.cleanupTransports(ctx)
 	go tm.runReconnectPersistent(ctx)
 	go tm.runReRegisterTransports(ctx)
 	go tm.runDeferredDeletions(ctx)
 	go tm.runTransportMaintenance(ctx)
+	go func() { defer tm.wg.Done(); tm.serveLockWatchdog(ctx.Done()) }()
 	tm.Logger.Debug("transport manager is serving.")
 }
 
@@ -1361,14 +1362,28 @@ func (tm *Manager) Transport(id uuid.UUID) *ManagedTransport {
 }
 
 // WalkTransports ranges through all transports.
+//
+// The caller's walk callback is arbitrary code, so it runs OUTSIDE tm.mx over
+// a snapshot — the same pattern recordAllTransportLogs/pingAllTransports use.
+// Running it under RLock was a latent freeze: a callback that panicked (and
+// got recovered upstream — e.g. an HTTP handler's recovery middleware) leaked
+// the read lock, and a slow callback held it, blocking every transport writer
+// (acceptTransport, SaveTransport) and — via RWMutex writer-preference — every
+// subsequent reader. That is the transport-manager wedge: one stuck holder,
+// the whole management surface frozen with no log line.
 func (tm *Manager) WalkTransports(walk func(tp *ManagedTransport) bool) {
 	tm.mx.RLock()
+	snapshot := make([]*ManagedTransport, 0, len(tm.tps))
 	for _, tp := range tm.tps {
+		snapshot = append(snapshot, tp)
+	}
+	tm.mx.RUnlock()
+
+	for _, tp := range snapshot {
 		if ok := walk(tp); !ok {
 			break
 		}
 	}
-	tm.mx.RUnlock()
 }
 
 // Local returns Manager.config.PubKey
