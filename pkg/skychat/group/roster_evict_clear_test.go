@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/roster_evict_clear_test.go:
+// Package group — pkg/skychat/group/roster_evict_clear_test.go:
 // targeted coverage for the per-peer reconnect state cleanup on
 // roster eviction added as a follow-up to PR #2627. Pre-fix,
 // Session.SetAllowlist tore down evicted peerSubs but the parallel

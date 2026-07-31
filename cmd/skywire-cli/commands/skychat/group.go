@@ -43,9 +43,10 @@ import (
 )
 
 var (
-	groupCreateName    string
-	groupCreateMode    string
-	groupCreateMembers []string
+	groupCreateName           string
+	groupCreateMode           string
+	groupCreateMembers        []string
+	groupCreateNoPeerBackfill bool
 
 	groupListenSince string
 	groupListenPoll  time.Duration
@@ -60,6 +61,8 @@ func init() {
 	groupCreateCmd.Flags().StringVarP(&groupCreateName, "name", "n", "", "human-readable group name (required)")
 	groupCreateCmd.Flags().StringVarP(&groupCreateMode, "mode", "m", "public", "public | private — private encrypts feed messages with an AES key shipped in the invite link")
 	groupCreateCmd.Flags().StringSliceVar(&groupCreateMembers, "member", nil, "initial member PK; repeat for many (the owner is implicit)")
+	groupCreateCmd.Flags().BoolVar(&groupCreateNoPeerBackfill, "no-peer-backfill", false,
+		"only admins may serve this group's history to a joiner; without this flag any online member can, so the group stays readable while admins are offline")
 	groupCreateCmd.MarkFlagRequired("name") //nolint:errcheck,gosec
 
 	groupListenCmd.Flags().StringVar(&groupListenSince, "since", "", "RFC3339 lower bound for the first poll; empty = drain current inbox window then follow")
@@ -75,7 +78,8 @@ func init() {
 
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
-		groupJoinCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd,
+		groupJoinCmd, groupAskAgainCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd, groupRotateKeyCmd,
+		groupPeerBackfillCmd,
 		groupSendCmd, groupUnsendCmd, groupListenCmd, groupHistoryCmd,
 		groupLeaveCmd, groupDeleteCmd,
 	)
@@ -197,11 +201,33 @@ func renderGroupInfo(info visor.GroupInfo) string {
 	if !info.LastMessageAt.IsZero() {
 		last = info.LastMessageAt.UTC().Format(time.RFC3339)
 	}
-	fmt.Fprintf(&buf, "id:                %s\n", info.ID)                                   //nolint:errcheck
-	fmt.Fprintf(&buf, "name:              %s\n", info.Name)                                 //nolint:errcheck
-	fmt.Fprintf(&buf, "owner:             %s\n", info.OwnerPK)                              //nolint:errcheck
-	fmt.Fprintf(&buf, "port:              %d\n", info.Port)                                 //nolint:errcheck
-	fmt.Fprintf(&buf, "mode:              %s\n", info.Mode)                                 //nolint:errcheck
+	fmt.Fprintf(&buf, "id:                %s\n", info.ID)      //nolint:errcheck
+	fmt.Fprintf(&buf, "name:              %s\n", info.Name)    //nolint:errcheck
+	fmt.Fprintf(&buf, "owner:             %s\n", info.OwnerPK) //nolint:errcheck
+	fmt.Fprintf(&buf, "port:              %d\n", info.Port)    //nolint:errcheck
+	fmt.Fprintf(&buf, "mode:              %s\n", info.Mode)    //nolint:errcheck
+	// Key generation, encrypted groups only. Advances on every rotation
+	// (each eviction, plus any manual `group rotate-key`), so comparing it
+	// across members is how an operator confirms a re-key converged.
+	if info.Mode == skychatgroup.ModePrivate {
+		fmt.Fprintf(&buf, "key_epoch:         %d\n", info.KeyEpoch) //nolint:errcheck
+		// Whether this group's roster/admin/mod leaves go onto the feed
+		// sealed or in the clear. Printed next to key_epoch because it is
+		// the same key doing the work, and because "the bans are private
+		// too" is a separate promise from "the messages are private".
+		fmt.Fprintf(&buf, "governance_sealed: %t\n", info.GovernanceSealed) //nolint:errcheck
+	}
+	// Who can serve this group's history — the difference between "goes
+	// dark when the admins are offline" and "any online member can catch a
+	// joiner up".
+	served := "admins only"
+	if info.PeerBackfill {
+		served = "any online member"
+	}
+	fmt.Fprintf(&buf, "history_served_by: %s\n", served) //nolint:errcheck
+	// The price of one identity. Zero means anyone can ask for free, which
+	// is what a flood exploits.
+	fmt.Fprintf(&buf, "join_cost_bits:    %d\n", info.JoinPoWBits)                          //nolint:errcheck
 	fmt.Fprintf(&buf, "role:              %s\n", info.Role)                                 //nolint:errcheck
 	fmt.Fprintf(&buf, "status:            %s\n", info.Status)                               //nolint:errcheck
 	fmt.Fprintf(&buf, "created_at:        %s\n", info.CreatedAt.UTC().Format(time.RFC3339)) //nolint:errcheck
@@ -290,8 +316,41 @@ var groupJoinCmd = &cobra.Command{
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		human := fmt.Sprintf("joined group %q\n  id:    %s\n  owner: %s\n  mode:  %s\n",
-			info.Name, info.ID, info.OwnerPK, info.Mode)
+		// A private group queues the request instead of admitting, so
+		// don't report a membership we don't have. The visor keeps
+		// re-asking every admin the invite named and flips the record to
+		// active on approval; `group list` shows the wait.
+		verb := "joined group"
+		if info.Status == skychatgroup.StatusAwaitingApproval {
+			verb = "requested to join group (waiting for an admin to approve)"
+		}
+		human := fmt.Sprintf("%s %q\n  id:    %s\n  owner: %s\n  mode:  %s\n",
+			verb, info.Name, info.ID, info.OwnerPK, info.Mode)
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+var groupAskAgainCmd = &cobra.Command{
+	Use:   "ask-again <group-id>",
+	Short: "Re-request to join a group after an admin declined",
+	Long: `Re-submit a join request an admin has declined (the "ask again" action).
+
+A passive re-join from a declined key stays terminal — that is what keeps a
+refused requester from refilling the approval queue by polling. This is the
+DELIBERATE retry: it replaces the denied record with a fresh pending one after
+paying the same proof-of-work and rate-limit gates as a first request. Against
+an admin running an older build the request is simply declined again.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupAskAgain(args[0])
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		human := fmt.Sprintf("re-requested to join group %q (waiting for an admin to approve)\n  id: %s\n", info.Name, info.ID)
 		internal.PrintOutput(cmd.Flags(), info, human)
 	},
 }
@@ -346,6 +405,99 @@ PR).`,
 		human := fmt.Sprintf("group %s now has %d admin(s)\n", args[0], len(info.Admins))
 		internal.PrintOutput(cmd.Flags(), info, human)
 	},
+}
+
+var groupPeerBackfillCmd = &cobra.Command{
+	Use:   "peer-backfill <group-id> <on|off>",
+	Short: "Admin: allow any online member (on) or only admins (off) to serve history",
+	Long: `Set who can serve this group's history and messages.
+
+on  — any online member. Every member mirrors the leaves it sees onto its
+      own feed and follows a couple of other members, so a joiner can be
+      caught up by whoever happens to be online. This is the default, and
+      it is what keeps a group readable while its admins are offline.
+
+off — admins only. The original topology: non-admins follow admins and
+      only admins mirror. Nothing is served, and no message passes between
+      two non-admins, while every admin is offline.
+
+The trade for "on" is storage and subscriptions on every member — each
+holds the room's history rather than just the admins. It does NOT widen
+who may read: every copy is the author's own signed leaf, still encrypted
+for private groups, and only members hold an allowlist seat.
+
+Admin-only. Converges to every member through signed gossip, and takes
+effect on live sessions immediately.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var enabled bool
+		switch strings.ToLower(args[1]) {
+		case "on", "true", "yes", "enable", "enabled":
+			enabled = true
+		case "off", "false", "no", "disable", "disabled":
+			enabled = false
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid state %q (use on or off)", args[1]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupSetPeerBackfill(args[0], enabled)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		state := "admins only"
+		if info.PeerBackfill {
+			state = "any online member"
+		}
+		human := fmt.Sprintf("group %s history served by: %s\n", args[0], state)
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+var groupRotateKeyCmd = &cobra.Command{
+	Use:   "rotate-key <group-id>",
+	Short: "Admin: mint a new group key and seal it to each current member",
+	Long: `Rotate the encryption key of a private group.
+
+A fresh key is generated and distributed on the group feed as one copy
+per member, each sealed to that member's own public key (secp256k1 ECDH).
+Members that are offline pick it up when they reconnect. From the moment
+it lands, new messages are encrypted with the new key; every message
+published before it stays readable, because each visor keeps the keys it
+has already held.
+
+Eviction rotates automatically — kicking or banning a member re-keys the
+group so that losing the seat also means losing the ability to read what
+comes next. Run this by hand when a member's device or key may have been
+exposed without them being evicted, or after someone left out of band.
+
+Admin-only, and only for private groups: a public group's message bodies
+are plaintext on the feed by design, so there is no key to rotate.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupRotateKey(args[0])
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		human := fmt.Sprintf("group %s re-keyed\n  key epoch: %d\n  sealed for: %d member(s)\n",
+			args[0], info.KeyEpoch, maxInt(len(info.Members)-1, 0))
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+// maxInt keeps the "sealed for" count honest: the rotating visor is in
+// Members but needs no copy of its own key.
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 var groupDemoteCmd = &cobra.Command{

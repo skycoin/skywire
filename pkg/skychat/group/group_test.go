@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/group_test.go: round-trip
+// Package group — pkg/skychat/group/group_test.go: round-trip
 // coverage for the invite + crypto + store code paths. The fan-out
 // CXO wiring lives in the manager and is exercised separately by
 // the manual E2E test plan (project memo).
@@ -261,7 +261,7 @@ func TestEncryptNonceUnique(t *testing.T) {
 func TestStoreCRUD(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "groups.db")
-	s, err := OpenStore(path)
+	s, err := OpenStore(path, testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}

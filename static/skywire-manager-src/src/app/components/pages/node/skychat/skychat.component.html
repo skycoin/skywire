@@ -284,7 +284,17 @@
               <span class="sc-room-name">{{ g.name }}</span>
               <span class="sc-room-meta mono small">
                 <mat-icon [inline]="true">{{ g.mode === 'private' ? 'lock' : 'public' }}</mat-icon>
-                {{ g.members }} · {{ g.role }}
+                @if (g.status === 'awaiting_approval') {
+                  <span class="sc-room-badge pending" title="waiting for an admin to approve your request">pending</span>
+                } @else if (g.status === 'denied') {
+                  <span class="sc-room-badge denied" title="an admin declined your request">declined</span>
+                  <button mat-button class="sc-ask-again" type="button" (click)="askAgain(g, $event)"
+                          [disabled]="groupSending" title="ask again — re-queues your request after the same checks as a first ask">
+                    {{ 'skychat.ask-again' | translate }}
+                  </button>
+                } @else {
+                  <ng-container>{{ g.members }} · {{ g.role }}</ng-container>
+                }
               </span>
             </div>
           }

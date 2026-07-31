@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/roster_reconcile.go c4-app-chat
+// Package group pkg/skychat/group/roster_reconcile.go c4-app-chat
 //
 // PublishRosterMutation/PublishAdminMutation write signed roster/<seq> and
 // admin/<seq> leaves onto the issuer's feed, but before this file NOTHING read
@@ -17,6 +17,7 @@ package group
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -28,10 +29,21 @@ import (
 const rosterBroadcastDelay = 3 * time.Second
 
 // subscribedPrefixes is the set of CXO path prefixes every group subscriber
-// watches: msgs/ (chat) plus roster/ and admin/ (signed membership + admin
-// gossip). Centralized so all SetPrefixes call sites stay in lockstep.
+// watches: msgs/ (chat) plus roster/, admin/, mod/ and keys/ (signed
+// membership, admin, moderation and key-rotation gossip). Centralized so
+// all SetPrefixes call sites stay in lockstep.
 func subscribedPrefixes() []string {
-	return []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix}
+	return []string{MessagePathPrefix, RosterPathPrefix, AdminPathPrefix, ModerationPathPrefix, KeyPathPrefix}
+}
+
+// isGossipPath reports whether a leaf path belongs to one of the signed
+// control subtrees rather than to chat. The inbox loop skips these — they
+// were already consumed by the reconciler pre-pass.
+func isGossipPath(path string) bool {
+	return strings.HasPrefix(path, RosterPathPrefix+"/") ||
+		strings.HasPrefix(path, AdminPathPrefix+"/") ||
+		strings.HasPrefix(path, ModerationPathPrefix+"/") ||
+		strings.HasPrefix(path, KeyPathPrefix+"/")
 }
 
 // SetRosterChangeHandler installs a callback invoked (with a snapshot of the
@@ -69,6 +81,13 @@ func removePK(list []cipher.PubKey, pk cipher.PubKey) []cipher.PubKey {
 // a current admin. Idempotent: an Add of an existing member (or Remove of an
 // absent one) is a no-op.
 func (s *Session) applyRosterLeaf(body []byte) {
+	// Unseal first: on an encrypted group the envelope arrives sealed
+	// under the group key. A leaf sealed under a key we do not hold yet
+	// is parked rather than dropped — see gossip_seal.go.
+	body, ok := s.openOrPark(familyRoster, body)
+	if !ok {
+		return
+	}
 	var m RosterMutation
 	if err := json.Unmarshal(body, &m); err != nil {
 		return
@@ -90,9 +109,35 @@ func (s *Session) applyRosterLeaf(body []byte) {
 			Debug("group: reconcile: rejecting roster mutation from non-admin issuer")
 		return
 	}
+	// FRESHNESS GATE: a signature stays valid forever, so authority alone
+	// does not make a leaf current. Without this, any member could replay
+	// an admin's old RosterOpAdd verbatim and undo a later eviction. See
+	// replay_guard.go.
+	wmKey := watermarkKey(familyRoster, m.PeerPK)
+	if ok, why := mutationFresh(s.mutationSeen, wmKey, m.IssuedAt, time.Now().UTC()); !ok {
+		s.membersMu.Unlock()
+		s.log.WithField("issuer", m.IssuerPK.String()).WithField("peer", m.PeerPK.String()).
+			WithField("reason", why).
+			Debug("group: reconcile: rejecting stale roster mutation")
+		return
+	}
+	s.mutationSeen = recordMutation(s.mutationSeen, wmKey, m.IssuedAt)
+	s.cfg.Record.MutationSeen = copyWatermarks(s.mutationSeen)
+	seenSnapshot := copyWatermarks(s.mutationSeen)
 	changed := false
 	switch m.Op {
 	case RosterOpAdd:
+		// Never let an add re-admit a banned PK. Independent of the
+		// freshness gate on purpose: ban is the strongest revocation the
+		// group has, and it should not depend on watermark bookkeeping
+		// being intact to hold.
+		if s.cfg.Record.IsBanned(m.PeerPK) {
+			s.membersMu.Unlock()
+			s.log.WithField("peer", m.PeerPK.String()).
+				Warn("group: reconcile: refusing to add a banned peer")
+			s.persistWatermarks(seenSnapshot)
+			return
+		}
 		if m.PeerPK != (cipher.PubKey{}) && !containsPK(s.cfg.Record.Members, m.PeerPK) {
 			s.cfg.Record.Members = append(s.cfg.Record.Members, m.PeerPK)
 			changed = true
@@ -109,6 +154,12 @@ func (s *Session) applyRosterLeaf(body []byte) {
 	admins := append([]cipher.PubKey(nil), s.cfg.Record.Admins...)
 	s.membersMu.Unlock()
 
+	// The watermark advanced even when the mutation was a no-op (an add
+	// of an existing member), so persist it regardless of `changed` —
+	// otherwise a restart would forget the advance and re-open the
+	// replay window for that target.
+	s.persistWatermarks(seenSnapshot)
+
 	if !changed {
 		return
 	}
@@ -120,6 +171,23 @@ func (s *Session) applyRosterLeaf(body []byte) {
 	if _, err := s.SetAllowlist(members); err != nil {
 		s.log.WithError(err).Debug("group: reconcile: SetAllowlist after roster change failed")
 	}
+	// SetAllowlist is owner-role only, so on a MEMBER session the call
+	// above did nothing and the subscription set was left untouched by a
+	// roster change. That was invisible while non-admins followed admins
+	// only — the set never depended on the plain-member roster — but it
+	// means a member-role admin never picked up a newly added member
+	// either, and with peer backfill it would leave a joiner unfollowed by
+	// everyone except the admins. SetAdminRoster is the role-agnostic
+	// re-evaluation of the same rule; it is idempotent, so running it on
+	// both paths is free.
+	// Async for the same reason as the backfill toggle: this opens peer
+	// subscriptions, and dialing a peer that is offline would otherwise
+	// block this subscriber's receive pump for the dial timeout.
+	go func() {
+		if _, err := s.SetAdminRoster(admins); err != nil {
+			s.log.WithError(err).Debug("group: reconcile: peer-sub re-evaluation after roster change failed")
+		}
+	}()
 	if s.onRosterChange != nil {
 		s.onRosterChange(members, admins)
 	}
@@ -129,6 +197,10 @@ func (s *Session) applyRosterLeaf(body []byte) {
 // (promote/demote). Same authority gate as applyRosterLeaf; the founder can
 // never be demoted.
 func (s *Session) applyAdminLeaf(body []byte) {
+	body, ok := s.openOrPark(familyAdmin, body)
+	if !ok {
+		return
+	}
 	var m AdminMutation
 	if err := json.Unmarshal(body, &m); err != nil {
 		return
@@ -148,6 +220,19 @@ func (s *Session) applyAdminLeaf(body []byte) {
 			Debug("group: reconcile: rejecting admin mutation from non-admin issuer")
 		return
 	}
+	// Freshness gate — without it, a replayed AdminOpPromote re-grants
+	// authority to an admin who was later demoted.
+	wmKey := watermarkKey(familyAdmin, m.PeerPK)
+	if ok, why := mutationFresh(s.mutationSeen, wmKey, m.IssuedAt, time.Now().UTC()); !ok {
+		s.membersMu.Unlock()
+		s.log.WithField("issuer", m.IssuerPK.String()).WithField("peer", m.PeerPK.String()).
+			WithField("reason", why).
+			Debug("group: reconcile: rejecting stale admin mutation")
+		return
+	}
+	s.mutationSeen = recordMutation(s.mutationSeen, wmKey, m.IssuedAt)
+	s.cfg.Record.MutationSeen = copyWatermarks(s.mutationSeen)
+	seenSnapshot := copyWatermarks(s.mutationSeen)
 	changed := false
 	switch m.Op {
 	case AdminOpPromote:
@@ -165,6 +250,8 @@ func (s *Session) applyAdminLeaf(body []byte) {
 	members := append([]cipher.PubKey(nil), s.cfg.Record.Members...)
 	admins := append([]cipher.PubKey(nil), s.cfg.Record.Admins...)
 	s.membersMu.Unlock()
+
+	s.persistWatermarks(seenSnapshot)
 
 	if !changed {
 		return
@@ -213,13 +300,25 @@ func (s *Session) BroadcastRoster() {
 	}
 	members := append([]cipher.PubKey(nil), s.cfg.Record.Members...)
 	admins := append([]cipher.PubKey(nil), s.cfg.Record.Admins...)
+	// Date each re-assertion by when we actually learned it, NOT by now.
+	// Stamping these with the current time would make a restarting admin
+	// out-rank every other admin's live decisions under the freshness
+	// rule — silently re-adding a member somebody else just evicted.
+	memberAt := make(map[cipher.PubKey]time.Time, len(members))
+	for _, pk := range members {
+		memberAt[pk] = s.assertionTimeLocked(familyRoster, pk)
+	}
+	adminAt := make(map[cipher.PubKey]time.Time, len(admins))
+	for _, pk := range admins {
+		adminAt[pk] = s.assertionTimeLocked(familyAdmin, pk)
+	}
 	s.membersMu.RUnlock()
 
 	for _, pk := range members {
 		if pk == self {
 			continue
 		}
-		if _, err := s.PublishRosterMutation(RosterOpAdd, pk, 0); err != nil {
+		if _, err := s.publishRosterMutationAt(RosterOpAdd, pk, 0, memberAt[pk]); err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Debug("group: BroadcastRoster: roster add publish failed")
 		}
@@ -228,7 +327,7 @@ func (s *Session) BroadcastRoster() {
 		if pk == self || pk == owner {
 			continue // owner is an implicit admin; self needs no promotion
 		}
-		if _, err := s.PublishAdminMutation(AdminOpPromote, pk, 0); err != nil {
+		if _, err := s.publishAdminMutationAt(AdminOpPromote, pk, 0, adminAt[pk]); err != nil {
 			s.log.WithError(err).WithField("peer", pk.String()).
 				Debug("group: BroadcastRoster: admin promote publish failed")
 		}

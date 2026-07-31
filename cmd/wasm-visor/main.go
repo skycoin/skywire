@@ -186,6 +186,7 @@ func main() {
 		// Federated group chat (in-memory over dmsg) — see group_js.go.
 		"skychatGroupCreate":    js.FuncOf(jsGroupCreate),
 		"skychatGroupJoin":      js.FuncOf(jsGroupJoin),
+		"skychatGroupAskAgain":  js.FuncOf(jsGroupAskAgain),
 		"skychatGroupSend":      js.FuncOf(jsGroupSend),
 		"skychatGroupAddMember": js.FuncOf(jsGroupAddMember),
 		"skychatGroupLeave":     js.FuncOf(jsGroupLeave),

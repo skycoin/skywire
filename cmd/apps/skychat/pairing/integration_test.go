@@ -61,11 +61,11 @@ func TestPairRoundTripOverDmsg(t *testing.T) {
 	dirA := t.TempDir()
 	dirB := t.TempDir()
 
-	storeA, err := OpenStore(filepath.Join(dirA, "pairs.db"))
+	storeA, err := OpenStore(filepath.Join(dirA, "pairs.db"), skA)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = storeA.Close() }) //nolint:errcheck
 
-	storeB, err := OpenStore(filepath.Join(dirB, "pairs.db"))
+	storeB, err := OpenStore(filepath.Join(dirB, "pairs.db"), skB)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = storeB.Close() }) //nolint:errcheck
 

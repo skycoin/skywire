@@ -49,28 +49,33 @@ type groupNode struct {
 // newGroupEnv brings up a dmsg env with two managers wired to it.
 func newGroupEnv(t *testing.T) (a, b *groupNode) {
 	t.Helper()
+	nodes := newGroupEnvN(t, 2)
+	return nodes[0], nodes[1]
+}
+
+// newGroupEnvN is the same harness for n visors, for the cases that need
+// a third party — a founder, a second admin, and someone trying to join.
+func newGroupEnvN(t *testing.T, n int) []*groupNode {
+	t.Helper()
 	if testing.Short() {
 		t.Skip("dmsg integration test; skipped under -short")
 	}
-
-	pkA, skA := cipher.GenerateKeyPair()
-	pkB, skB := cipher.GenerateKeyPair()
 
 	env := dmsgtest.NewEnv(t, dmsgtest.DefaultTimeout)
 	env.Discovery()
 	require.NoError(t, env.Startup(dmsgtest.DefaultTimeout, 1, 0, &dmsg.Config{MinSessions: 1}))
 	t.Cleanup(env.Shutdown)
 
-	dmsgA, err := env.NewClientWithKeys(pkA, skA, &dmsg.Config{MinSessions: 1})
-	require.NoError(t, err)
-	dmsgB, err := env.NewClientWithKeys(pkB, skB, &dmsg.Config{MinSessions: 1})
-	require.NoError(t, err)
-	waitDmsgClientReady(t, dmsgA)
-	waitDmsgClientReady(t, dmsgB)
+	nodes := make([]*groupNode, 0, n)
+	for i := 0; i < n; i++ {
+		tag := string(rune('A' + i))
+		pk, sk := cipher.GenerateKeyPair()
+		c, err := env.NewClientWithKeys(pk, sk, &dmsg.Config{MinSessions: 1})
+		require.NoError(t, err)
+		waitDmsgClientReady(t, c)
 
-	mk := func(pk cipher.PubKey, sk cipher.SecKey, c *dmsg.Client, tag string) *groupNode {
 		dir := t.TempDir()
-		st, serr := OpenStore(filepath.Join(dir, "groups.db"))
+		st, serr := OpenStore(filepath.Join(dir, "groups.db"), testStoreSK())
 		require.NoError(t, serr)
 		t.Cleanup(func() { _ = st.Close() }) //nolint:errcheck
 
@@ -84,10 +89,9 @@ func newGroupEnv(t *testing.T) (a, b *groupNode) {
 
 		box := &msgInbox{}
 		mgr.SetMessageHandler(box.deliver)
-		return &groupNode{pk: pk, sk: sk, dmsgC: c, store: st, dir: dir, mgr: mgr, inbox: box}
+		nodes = append(nodes, &groupNode{pk: pk, sk: sk, dmsgC: c, store: st, dir: dir, mgr: mgr, inbox: box})
 	}
-
-	return mk(pkA, skA, dmsgA, "A"), mk(pkB, skB, dmsgB, "B")
+	return nodes
 }
 
 func waitDmsgClientReady(t *testing.T, c *dmsg.Client) {
@@ -128,7 +132,7 @@ func hasText(text string) func([]Message) bool {
 func createAndJoin(t *testing.T, a, b *groupNode) string {
 	t.Helper()
 
-	rec, err := a.mgr.Create("integration room", ModePublic, nil)
+	rec, err := a.mgr.Create("integration room", KindPublic, nil)
 	require.NoError(t, err, "Create")
 	require.Equal(t, RoleOwner, rec.Role)
 	require.Equal(t, StatusActive, rec.Status)
@@ -200,25 +204,34 @@ func TestManagerIntegration_SendToGroupUnknownID(t *testing.T) {
 	require.Contains(t, err.Error(), "no live session")
 }
 
-// TestManagerIntegration_PrivateGroupRoundTrip — a ModePrivate group generates
-// an AES key at Create, ships it in the invite, and the joiner decrypts with it.
+// TestManagerIntegration_PrivateGroupRoundTrip — a private group generates an
+// AES key at Create and the joiner decrypts with it.
+//
+// The key does NOT ride the invite link: it is handed over in the admission
+// response, over the encrypted relay stream, to a PK the group has accepted.
+// This test asserts both halves — that the link is keyless, and that the
+// joiner nonetheless ends up able to read the feed.
 func TestManagerIntegration_PrivateGroupRoundTrip(t *testing.T) {
 	a, b := newGroupEnv(t)
 
-	rec, err := a.mgr.Create("private room", ModePrivate, nil)
+	rec, err := a.mgr.Create("private room", KindPrivate, nil)
 	require.NoError(t, err)
 	require.Len(t, rec.AESKey, 32, "a private group gets a 32-byte AES key at create time")
 
+	// Pre-admitting B means the join request is answered "admitted"
+	// immediately, so this exercises key delivery without the approval
+	// round trip (covered separately in the admission lane).
 	_, err = a.mgr.AddMember(rec.ID, b.pk)
 	require.NoError(t, err)
 	link, err := a.mgr.BuildInvite(rec.ID)
 	require.NoError(t, err)
 	inv, err := DecodeInvite(link)
 	require.NoError(t, err)
-	require.Equal(t, rec.AESKey, inv.AESKey, "the invite carries the group key")
+	require.Empty(t, inv.AESKey, "the invite link must not carry the group key")
 
-	_, err = b.mgr.Join(inv)
+	joined, err := b.mgr.Join(inv)
 	require.NoError(t, err)
+	require.Equal(t, rec.AESKey, joined.AESKey, "the key must arrive with the admission response")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -284,7 +297,7 @@ func TestManagerIntegration_RosterOps(t *testing.T) {
 // it on your own invite would subscribe a visor to itself.
 func TestManagerIntegration_JoinRejectsOwnGroup(t *testing.T) {
 	a, _ := newGroupEnv(t)
-	rec, err := a.mgr.Create("mine", ModePublic, nil)
+	rec, err := a.mgr.Create("mine", KindPublic, nil)
 	require.NoError(t, err)
 
 	link, err := a.mgr.BuildInvite(rec.ID)
@@ -307,7 +320,7 @@ func TestManagerIntegration_ResumeReopensStoredGroups(t *testing.T) {
 	id := createAndJoin(t, a, b)
 
 	// A revoked group must NOT come back.
-	revoked, err := a.mgr.Create("deleted room", ModePublic, nil)
+	revoked, err := a.mgr.Create("deleted room", KindPublic, nil)
 	require.NoError(t, err)
 	require.NoError(t, a.mgr.Delete(revoked.ID))
 

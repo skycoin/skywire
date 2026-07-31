@@ -91,7 +91,7 @@ func startGroupChat(sk cipher.SecKey, log *logging.Logger) {
 	if dmsgC == nil || selfPK.Null() {
 		return
 	}
-	store, err := group.OpenStore("") // js build -> in-memory (path ignored)
+	store, err := group.OpenStore("", sk) // js build -> in-memory (path ignored); sk seals key material
 	if err != nil {
 		vlog("group: store open failed: " + err.Error())
 		return
@@ -179,12 +179,12 @@ func jsGroupCreate(_ js.Value, args []js.Value) interface{} {
 		return errPromise("skychatGroupCreate(name[, mode])")
 	}
 	name := args[0].String()
-	mode := group.ModePublic
+	kind := group.KindPublic
 	if len(args) >= 2 && args[1].String() == "private" {
-		mode = group.ModePrivate
+		kind = group.KindPrivate
 	}
 	return promise(func() (interface{}, error) {
-		rec, err := groupMgr.Create(name, mode, nil)
+		rec, err := groupMgr.Create(name, kind, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -217,6 +217,26 @@ func jsGroupJoin(_ js.Value, args []js.Value) interface{} {
 		// Peer CXO feeds sync asynchronously after subscribe; pull their
 		// history into the buffer over the next few seconds.
 		backfillGroupHistory(rec.ID)
+		return map[string]interface{}{"id": rec.ID, "name": rec.Name}, nil
+	})
+}
+
+// jsGroupAskAgain(id) → Promise<{id,name}>. Deliberate retry after an admin
+// declined our join (the UI's "ask again" button). Derives everything from the
+// stored record and pays the same PoW + rate-limit gates as a first ask.
+func jsGroupAskAgain(_ js.Value, args []js.Value) interface{} {
+	if groupMgr == nil {
+		return errPromise("group chat not ready")
+	}
+	if len(args) < 1 || args[0].String() == "" {
+		return errPromise("skychatGroupAskAgain(groupID)")
+	}
+	id := args[0].String()
+	return promise(func() (interface{}, error) {
+		rec, err := groupMgr.AskAgain(id, "")
+		if err != nil {
+			return nil, err
+		}
 		return map[string]interface{}{"id": rec.ID, "name": rec.Name}, nil
 	})
 }

@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/crypto.go c4-app-chat
+// Package group pkg/skychat/group/crypto.go c4-app-chat
 // envelope helpers for ModePrivate groups.
 //
 // Why GCM (not ChaCha20-Poly1305 or noise): every visor binary

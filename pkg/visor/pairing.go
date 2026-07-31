@@ -37,6 +37,22 @@ type PairInfo struct {
 	Port          uint16         `json:"port"`
 	EstablishedAt time.Time      `json:"established_at"`
 	LastMessageAt time.Time      `json:"last_message_at,omitempty"`
+
+	// Epoch is the short-lived key this conversation currently seals
+	// under, as hex. Empty means the pair has not derived one yet and is
+	// still on the legacy static key — which is worth showing, because
+	// the two have materially different guarantees and nothing else in
+	// the UI would distinguish them.
+	Epoch string `json:"epoch,omitempty"`
+
+	// ForwardSecret is true once an epoch exists, i.e. once messages
+	// stop being openable with the two visors' identity keys alone.
+	ForwardSecret bool `json:"forward_secret"`
+
+	// KeyGeneration is how many ratchet keys this side has minted for
+	// the pair. Each one retires the previous secret, so it doubles as
+	// "how many times has the window closed behind us".
+	KeyGeneration uint64 `json:"key_generation,omitempty"`
 }
 
 // PairMessage is one inbound message delivered through the visor's
@@ -104,15 +120,32 @@ func (v *Visor) PairList() ([]PairInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+	mgr := v.pairManager()
 	out := make([]PairInfo, 0, len(records))
 	for _, r := range records {
-		out = append(out, PairInfo{
+		info := PairInfo{
 			PeerPK:        r.PeerPK,
 			Status:        r.Status,
 			Port:          r.Port,
 			EstablishedAt: r.EstablishedAt,
 			LastMessageAt: r.LastMessageAt,
-		})
+		}
+		// Epoch state comes from the LIVE pair, not the record: the
+		// record's ratchet is the last persisted snapshot, and the pair
+		// may have advanced since. A revoked or not-yet-resumed pair
+		// simply reports no epoch.
+		if r.Ratchet != nil {
+			info.KeyGeneration = r.Ratchet.Generation
+		}
+		if mgr != nil {
+			if p, live := mgr.Get(r.PeerPK); live {
+				if id, ok := p.EpochID(); ok {
+					info.Epoch = id.String()
+					info.ForwardSecret = true
+				}
+			}
+		}
+		out = append(out, info)
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].EstablishedAt.Before(out[j].EstablishedAt)

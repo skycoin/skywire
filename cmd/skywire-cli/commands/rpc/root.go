@@ -51,7 +51,8 @@ var (
 	CliSK string
 	// Via, when non-empty, requests proxy to a remote visor through
 	// the local visor named by --rpc. Supported schemes:
-	//   - "dmsg://<pk>" — local visor opens a dmsg stream to <pk>:57
+	//   - "dmsg://<pk>" — local visor opens a dmsg stream to
+	//     <pk>:DmsgVisorRPCPort
 	//     and bridges bytes back to this CLI (multiplexed onto the
 	//     existing --rpc port via cmux + magic-byte prefix).
 	//   - "skynet://<pk>" — local visor proxies via TransportRPCCall
@@ -333,7 +334,7 @@ func DmsgClient(cmdFlags *pflag.FlagSet) (visor.API, error) {
 	// Dial visor over dmsg at the visor-RPC port. Previously this
 	// dialed DmsgHypervisorPort 46 which is wrong-direction (visors
 	// DIAL hypervisors there; the hypervisor side runs rpc.Client,
-	// not rpc.Server). DmsgVisorRPCPort 57 is the correct port —
+	// not rpc.Server). DmsgVisorRPCPort is the correct port —
 	// visor runs rpc.Server.ServeConn on accepted streams there,
 	// gated by the same hypervisor + dmsgpty whitelist as
 	// TransportRPCServer.

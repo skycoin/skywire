@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/legacy_sub_liveness_test.go:
+// Package group — pkg/skychat/group/legacy_sub_liveness_test.go:
 // targeted coverage for the legacy s.sub liveness accessor +
 // reconnect wrapper added to extend the per-peerSub liveness machinery
 // (#2606) to cover the D1 owner-feed subscriber. The full reconnect
