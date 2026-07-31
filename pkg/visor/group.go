@@ -377,6 +377,22 @@ func (v *Visor) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
 	return toInfo(r), nil
 }
 
+// GroupAskAgain re-submits a join request an admin has DECLINED — the UI's
+// "ask again" action. Everything is derived from the stored record, so the
+// caller passes only the group id; the request pays the same PoW and
+// rate-limit gates as a first ask (see group.Manager.AskAgain).
+func (v *Visor) GroupAskAgain(id string) (GroupInfo, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupInfo{}, ErrGroupingDisabled
+	}
+	r, err := mgr.AskAgain(id, "")
+	if err != nil {
+		return GroupInfo{}, err
+	}
+	return toInfo(r), nil
+}
+
 // GroupList returns every persisted group on this visor. The
 // SubscriberAlive field is populated from the live session map —
 // the only API surface where that's needed (the chat-app's /status

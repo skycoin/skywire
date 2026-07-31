@@ -136,6 +136,17 @@ type GroupReadOnlyRequest struct {
 	ReadOnly bool   `json:"read_only"`
 }
 
+// GroupAskAgain re-submits a declined join request (the UI's "ask again").
+func (r *RPC) GroupAskAgain(id *string, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupAskAgain", id)(out, &err)
+	info, err := r.visor.GroupAskAgain(*id)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
 // GroupJoinRequests returns the admission queue for a group.
 func (r *RPC) GroupJoinRequests(id *string, out *[]GroupJoinRequest) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupJoinRequests", id)(out, &err)

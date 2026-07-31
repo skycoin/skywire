@@ -130,6 +130,45 @@ func TestAdmission_DeniedRequestIsTerminal(t *testing.T) {
 	}
 }
 
+// The "ask again" button: a DELIBERATE retry after a decline re-queues the
+// request (paying the same gates as a first ask), while the passive re-ask
+// above stays terminal. Approving the fresh request admits the requester.
+func TestAdmission_AskAgainRequeuesAfterDecline(t *testing.T) {
+	a, b := newGroupEnv(t)
+
+	rec, err := a.mgr.Create("private room", KindPrivate, nil)
+	require.NoError(t, err)
+	inv := inviteFor(t, a, rec.ID)
+
+	joined, err := b.mgr.Join(inv)
+	require.NoError(t, err)
+	require.Equal(t, StatusAwaitingApproval, joined.Status)
+
+	require.NoError(t, a.mgr.DenyJoin(rec.ID, b.pk), "DenyJoin")
+	waitStatus(t, b, rec.ID, StatusDenied, "B never observed the denial")
+
+	// The deliberate retry replaces the denied record with a fresh
+	// pending one in A's queue.
+	again, err := b.mgr.RequestJoinAgain(inv, "please reconsider")
+	require.NoError(t, err, "ask-again should re-queue, not bounce off the old denial")
+	require.Equal(t, StatusAwaitingApproval, again.Status)
+
+	reqs, err := a.mgr.PendingJoins(rec.ID)
+	require.NoError(t, err)
+	pending := false
+	for _, q := range reqs {
+		if q.PK == b.pk && q.IsPending() {
+			pending = true
+		}
+	}
+	require.True(t, pending, "ask-again request never reached A's approval queue")
+
+	// And this time A says yes.
+	_, err = a.mgr.ApproveJoin(rec.ID, b.pk)
+	require.NoError(t, err, "ApproveJoin after ask-again")
+	waitStatus(t, b, rec.ID, StatusActive, "B never became a member after the second ask")
+}
+
 // A ban must close the door even on an OPEN group, where the join gate
 // would otherwise admit anyone who asks.
 func TestAdmission_BannedPeerCannotRejoinOpenGroup(t *testing.T) {
