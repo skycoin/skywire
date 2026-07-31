@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 )
 
 func TestDeliverCountIncrementsOncePerDelivery(t *testing.T) {

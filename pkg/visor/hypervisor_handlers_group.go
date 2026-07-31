@@ -18,9 +18,9 @@ import (
 	"strconv"
 	"time"
 
-	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/httputil"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 )
 
 // getGroups → GET /skychat/groups : list every group this visor knows.

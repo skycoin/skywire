@@ -16,8 +16,8 @@ package visor
 import (
 	"testing"
 
-	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 )
 
 func TestGroupInbox_SubDropCount_DefaultsZero(t *testing.T) {

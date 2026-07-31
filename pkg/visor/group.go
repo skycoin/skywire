@@ -25,8 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
+	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 )
 
 // GroupInfo is the public summary of a chat group, returned by
