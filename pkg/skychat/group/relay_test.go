@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/relay_test.go
+// Package group pkg/skychat/group/relay_test.go
 //
 // Unit coverage for the owner-side relay path and its member-side ack reader —
 // handleRelay, writeAndReadAck, acceptRelayOn — plus the small Session

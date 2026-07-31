@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/pure_helpers_test.go
+// Package group pkg/skychat/group/pure_helpers_test.go
 //
 // Unit coverage for the package's pure helpers and record predicates
 // that the CXO-fixture tests only exercise transitively: Mode.IsValid,

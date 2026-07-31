@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/roster_authority_test.go
+// Package group pkg/skychat/group/roster_authority_test.go
 //
 // Unit coverage for the two Session methods that reshape who this visor
 // subscribes to: SetAllowlist (owner-role membership changes) and

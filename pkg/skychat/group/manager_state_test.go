@@ -1,4 +1,4 @@
-// Package group cmd/apps/skychat/group/manager_state_test.go
+// Package group pkg/skychat/group/manager_state_test.go
 //
 // Unit coverage for the parts of manager.go that do NOT need a dmsg mesh: the
 // session-level reconnect backoff, the warm-up cadence decision, the
