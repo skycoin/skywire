@@ -19,10 +19,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/skycoin/skywire/cmd/apps/skychat/group"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/skychat/group"
 )
 
 // cxoGroupNominalPort is a non-zero placeholder for group.Record.Port,
