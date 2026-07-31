@@ -517,6 +517,13 @@
   // the SAME PK — the A/B test harness. Lives here (not Angular) so it works in the
   // served PWA and under --harness alike, with no UI rebuild.
   function injectVariantToggle() {
+    // Only on the TOP-level page. When the app is iframed at ?embed=1 (the ☰
+    // chat/log WinBox windows host the Angular tab that way), this boot script
+    // runs inside the frame too — without this guard the Go/TinyGo selector
+    // renders a second time inside the chat iframe. The toggle belongs to the
+    // one shared visor, so one instance on the outermost page is correct.
+    try { if (window.top !== window.self) { return; } } catch (e) { return; } // cross-origin frame → treat as embedded
+    if ((location.hash || '').indexOf('embed=1') >= 0) { return; }
     try {
       fetch('wasm-variants.json', { cache: 'no-store' }).then(function (r) { return r.json(); }).then(function (info) {
         var avail = (info && info.available) || [];
