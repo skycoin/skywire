@@ -77,6 +77,16 @@ type GroupInfo struct {
 	// converged onto the same epoch.
 	KeyEpoch uint64 `json:"key_epoch,omitempty"`
 
+	// KeyAge is how long the current key has been in force, in seconds.
+	// The epoch number alone doesn't say whether it is a week old or a
+	// year; this is what makes "bounded in time" visible.
+	KeyAgeSeconds int64 `json:"key_age_seconds,omitempty"`
+
+	// KeyRotatesInSeconds is how long until this group's key is due for
+	// replacement on age. Negative means it is already due and the next
+	// background tick will re-key it. Zero for a plaintext group.
+	KeyRotatesInSeconds int64 `json:"key_rotates_in_seconds,omitempty"`
+
 	// CanPost / CannotPostReason answer "may THIS visor post into this
 	// group right now", pre-computed so the UI can disable the composer
 	// and explain why without duplicating the precedence rules
@@ -796,7 +806,7 @@ func (v *Visor) groupManager() *skychatgroup.Manager {
 }
 
 func toInfo(r skychatgroup.Record) GroupInfo {
-	return GroupInfo{
+	info := GroupInfo{
 		ID:            r.ID,
 		Name:          r.Name,
 		OwnerPK:       r.OwnerPK,
@@ -819,6 +829,15 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 		JoinedAt:      r.JoinedAt,
 		LastMessageAt: r.LastMessageAt,
 	}
+	// Key age / time-to-rotation, for encrypted groups whose key has a
+	// known issue time. A record from before KeyIssuedAt was stamped
+	// leaves both at zero rather than reporting a made-up age.
+	if r.Encrypted() && !r.KeyIssuedAt.IsZero() {
+		age := time.Since(r.KeyIssuedAt.UTC())
+		info.KeyAgeSeconds = int64(age / time.Second)
+		info.KeyRotatesInSeconds = int64((skychatgroup.DefaultKeyMaxAge - age) / time.Second)
+	}
+	return info
 }
 
 // toInfoFor is toInfo plus the fields that depend on who is asking:

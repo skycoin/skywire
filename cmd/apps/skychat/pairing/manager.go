@@ -271,6 +271,20 @@ func (m *Manager) Close() error {
 
 // openPair builds a Pair for peerPK. Caller must hold m.mu.
 func (m *Manager) openPair(peerPK cipher.PubKey) (*Pair, error) {
+	// Restore the ratchet from the store so a restart resumes on the
+	// epoch it was already using. A record with none (new pair, or one
+	// written before the ratchet existed) gets a fresh keypair from
+	// Open, and the peer picks it up from our next announcement.
+	var restored *RatchetState
+	if rec, ok, err := m.store.Get(peerPK); err == nil && ok {
+		restored = rec.Ratchet
+	} else if err != nil {
+		// Non-fatal: a pair that comes up with a fresh ratchet loses
+		// the epochs it had derived (so old leaves stop opening) but
+		// still works. Refusing to open the pair at all would be worse.
+		m.log.WithError(err).WithField("peer", peerPK.Hex()).
+			Warn("pairing: could not read stored ratchet state; starting a fresh ratchet for this pair")
+	}
 	p, err := Open(Config{
 		MyPK:    m.myPK,
 		MySK:    m.mySK,
@@ -278,6 +292,13 @@ func (m *Manager) openPair(peerPK cipher.PubKey) (*Pair, error) {
 		DmsgC:   m.dmsgC,
 		DataDir: m.dataDir,
 		Logger:  m.log,
+		Ratchet: restored,
+		OnRatchetChange: func(st RatchetState) {
+			if err := m.store.SetRatchet(peerPK, st); err != nil {
+				m.log.WithError(err).WithField("peer", peerPK.Hex()).
+					Warn("pairing: persisting ratchet state failed; a restart would strand this pair on a stale epoch")
+			}
+		},
 	})
 	if err != nil {
 		return nil, err
