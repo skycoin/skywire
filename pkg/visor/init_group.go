@@ -49,10 +49,20 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 	dataDir := filepath.Join(v.conf.LocalPath, "skychat")
 	storePath := filepath.Join(dataDir, "groups.db")
 
-	store, err := skychatgroup.OpenStore(storePath)
+	// The visor SK derives the key that seals each group's AES key inside
+	// groups.db. Without it the store refuses to open rather than writing
+	// group keys in the clear.
+	store, err := skychatgroup.OpenStore(storePath, v.conf.SK)
 	if err != nil {
 		log.WithError(err).Warn("Grouping: open store failed; group chat disabled this run")
 		return nil
+	}
+	// One-time on upgrade: records written by a build that kept keys in
+	// plaintext have just been re-sealed. Worth a line — it is the only
+	// visible evidence the migration ran.
+	if n := store.MigratedRecords(); n > 0 {
+		log.WithField("records", n).
+			Info("Grouping: re-sealed group keys that were stored in plaintext by a previous build")
 	}
 
 	mgr, err := skychatgroup.NewManager(skychatgroup.ManagerConfig{

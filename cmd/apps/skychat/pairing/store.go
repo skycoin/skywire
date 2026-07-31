@@ -12,7 +12,6 @@
 package pairing
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,6 +60,15 @@ type Record struct {
 	Status        Status    `json:"status"`
 	EstablishedAt time.Time `json:"established_at"`
 	LastMessageAt time.Time `json:"last_message_at,omitempty"`
+
+	// Ratchet is this pair's forward-secrecy state: our current ratchet
+	// keypair, the peer's latest announced key, and the ring of epoch
+	// keys that still open history. Nil for a record written before the
+	// ratchet existed — Open mints a fresh one in that case.
+	//
+	// Its secrets are sealed at rest (store_seal.go), so this pointer
+	// holds plaintext keys in memory and never on disk.
+	Ratchet *RatchetState `json:"ratchet,omitempty"`
 }
 
 const pairsBucket = "pairs"
@@ -69,12 +77,25 @@ const pairsBucket = "pairs"
 type Store struct {
 	db *bolt.DB
 
+	// sealer encrypts the ratchet secrets on the way to disk and opens
+	// them on the way back. Every read and every write goes through it —
+	// see store_seal.go for the construction and its limits.
+	sealer *recordSealer
+
 	mu sync.RWMutex
 }
 
 // OpenStore opens (or creates) the bolt file at path. The parent dir
 // is created if missing.
-func OpenStore(path string) (*Store, error) {
+//
+// sk is the visor's secret key and is REQUIRED: it derives the at-rest
+// key for the ratchet secrets this store now holds. Passing the zero key
+// is refused rather than silently degraded to plaintext.
+func OpenStore(path string, sk cipher.SecKey) (*Store, error) {
+	sealer, err := newRecordSealer(sk)
+	if err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, fmt.Errorf("pairing: mkdir parent: %w", err)
 	}
@@ -89,7 +110,7 @@ func OpenStore(path string) (*Store, error) {
 		_ = db.Close() //nolint:errcheck
 		return nil, fmt.Errorf("pairing: init bucket: %w", err)
 	}
-	return &Store{db: db}, nil
+	return &Store{db: db, sealer: sealer}, nil
 }
 
 // Close releases the bolt file handle.
@@ -107,7 +128,7 @@ func (s *Store) Put(r Record) error {
 	if r.PeerPK == (cipher.PubKey{}) {
 		return fmt.Errorf("pairing: Put: empty PeerPK")
 	}
-	body, err := json.Marshal(r)
+	body, err := s.sealer.encodeRecord(r)
 	if err != nil {
 		return fmt.Errorf("pairing: marshal record: %w", err)
 	}
@@ -132,7 +153,9 @@ func (s *Store) Get(peerPK cipher.PubKey) (Record, bool, error) {
 			return nil
 		}
 		found = true
-		return json.Unmarshal(raw, &r)
+		var derr error
+		r, derr = s.sealer.decodeRecord(raw)
+		return derr
 	})
 	return r, found, err
 }
@@ -146,9 +169,14 @@ func (s *Store) List() ([]Record, error) {
 	err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(pairsBucket))
 		return b.ForEach(func(_, v []byte) error {
-			var r Record
-			if err := json.Unmarshal(v, &r); err != nil {
-				return err
+			// A record whose ratchet secrets won't open still lists:
+			// decodeRecord returns the metadata alongside the error, and
+			// dropping the whole contact because one epoch key is
+			// unreadable would be a far worse failure than the one being
+			// reported. Resume mints a fresh ratchet for it.
+			r, derr := s.sealer.decodeRecord(v)
+			if derr != nil && r.PeerPK == (cipher.PubKey{}) {
+				return derr
 			}
 			out = append(out, r)
 			return nil
@@ -167,23 +195,28 @@ func (s *Store) Delete(peerPK cipher.PubKey) error {
 	})
 }
 
-// SetStatus updates only the Status field of an existing record.
-// Returns an error if no record exists for peerPK.
-func (s *Store) SetStatus(peerPK cipher.PubKey, status Status) error {
+// update is the read-modify-write helper every field setter goes
+// through. The whole cycle runs inside one bolt transaction, so two
+// concurrent setters can't lose each other's write — and, importantly,
+// it decodes and re-encodes through the sealer, so a setter that touches
+// one metadata field doesn't strip the ratchet secrets on the way back
+// out. Doing this by hand per setter was how the group store originally
+// lost key state on a roster write.
+func (s *Store) update(peerPK cipher.PubKey, who string, mutate func(*Record)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(pairsBucket))
 		raw := b.Get([]byte(peerPK.Hex()))
 		if raw == nil {
-			return fmt.Errorf("pairing: SetStatus: no record for %s", peerPK.Hex())
+			return fmt.Errorf("pairing: %s: no record for %s", who, peerPK.Hex())
 		}
-		var r Record
-		if err := json.Unmarshal(raw, &r); err != nil {
+		r, err := s.sealer.decodeRecord(raw)
+		if err != nil && r.PeerPK == (cipher.PubKey{}) {
 			return err
 		}
-		r.Status = status
-		body, err := json.Marshal(r)
+		mutate(&r)
+		body, err := s.sealer.encodeRecord(r)
 		if err != nil {
 			return err
 		}
@@ -191,26 +224,29 @@ func (s *Store) SetStatus(peerPK cipher.PubKey, status Status) error {
 	})
 }
 
+// SetStatus updates only the Status field of an existing record.
+// Returns an error if no record exists for peerPK.
+func (s *Store) SetStatus(peerPK cipher.PubKey, status Status) error {
+	return s.update(peerPK, "SetStatus", func(r *Record) { r.Status = status })
+}
+
 // MarkMessage updates LastMessageAt to the given timestamp without
 // touching other fields.
 func (s *Store) MarkMessage(peerPK cipher.PubKey, ts time.Time) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(pairsBucket))
-		raw := b.Get([]byte(peerPK.Hex()))
-		if raw == nil {
-			return fmt.Errorf("pairing: MarkMessage: no record for %s", peerPK.Hex())
-		}
-		var r Record
-		if err := json.Unmarshal(raw, &r); err != nil {
-			return err
-		}
-		r.LastMessageAt = ts
-		body, err := json.Marshal(r)
-		if err != nil {
-			return err
-		}
-		return b.Put([]byte(peerPK.Hex()), body)
+	return s.update(peerPK, "MarkMessage", func(r *Record) { r.LastMessageAt = ts })
+}
+
+// SetRatchet persists a pair's ratchet state.
+//
+// Called on every ratchet change — a rotation, an accepted peer
+// announcement, a newly derived epoch — because losing any of them is
+// not cosmetic. A visor that rotated and failed to save comes back
+// holding a secret the peer has never seen, so its own sends are
+// unopenable and the peer's are undecryptable until both sides rotate
+// past the gap.
+func (s *Store) SetRatchet(peerPK cipher.PubKey, st RatchetState) error {
+	return s.update(peerPK, "SetRatchet", func(r *Record) {
+		snap := st
+		r.Ratchet = &snap
 	})
 }

@@ -228,6 +228,31 @@
       color: var(--accent-green);
     }
 
+    /* Epoch tag: the forward-secrecy state of a paired DM. Deliberately
+       quiet — it is reassurance, not a call to action — and it only
+       appears at all when there is something true to say. */
+    .epoch-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+      cursor: help;
+    }
+
+    .epoch-tag.secret {
+      color: var(--accent-green);
+    }
+
+    .epoch-tag.hidden {
+      display: none;
+    }
+
+    .ga-key-age {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
     .presence-tag.hidden {
       display: none;
     }
@@ -1556,6 +1581,160 @@
       font-size: 14px;
     }
 
+    /* Explains what the selected group type actually does, so the
+       choice isn't two bare words the operator has to guess between. */
+    .cg-help {
+      margin: -4px 0 12px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--text-secondary);
+      text-align: left;
+    }
+    .cg-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: var(--text-primary);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    /* Group admin panel: members, join requests, moderation. Wider than
+       the default modal because each row carries a PK plus actions. */
+    .modal-wide { max-width: 560px; }
+    .ga-heading {
+      margin: 16px 0 8px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-secondary);
+      text-align: left;
+    }
+    .ga-row { text-align: left; margin-bottom: 8px; }
+    .ga-toggle {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+    .ga-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 220px;
+      overflow-y: auto;
+      text-align: left;
+    }
+    .ga-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 4px;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .ga-item:last-child { border-bottom: none; }
+    .ga-item-main { flex: 1; min-width: 0; }
+    .ga-pk {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: var(--text-primary);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .ga-meta { font-size: 11px; color: var(--text-secondary); }
+    .ga-actions { display: flex; gap: 4px; flex-shrink: 0; }
+    .ga-btn {
+      padding: 4px 8px;
+      font-size: 11px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+    .ga-btn:hover { background: var(--bg-primary); }
+    .ga-btn.danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
+    .ga-btn.primary { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
+    .ga-empty { padding: 8px 4px; font-size: 12px; color: var(--text-secondary); }
+    .ga-select {
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border-color);
+      background: var(--bg-tertiary);
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+    .ga-key-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+    .ga-key-note { font-size: 11px; color: var(--text-secondary); margin-top: 4px; line-height: 1.45; }
+    .ga-hint {
+      margin-top: 10px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--accent-orange);
+      background: rgba(249, 115, 22, 0.08);
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--text-secondary);
+      text-align: left;
+    }
+    .ga-hint.hidden { display: none; }
+    .ga-badge {
+      display: inline-block;
+      min-width: 18px;
+      padding: 1px 6px;
+      border-radius: 9px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 11px;
+      text-align: center;
+    }
+
+    /* Count of join requests waiting on the group header's members
+       button. Absolutely positioned so it rides the icon corner. */
+    .pending-badge {
+      position: absolute;
+      top: -4px;
+      right: -4px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      border-radius: 8px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 10px;
+      line-height: 16px;
+      text-align: center;
+      pointer-events: none;
+    }
+    #groupAdminBtn { position: relative; }
+
+    /* Composer lock: shown in place of the input when this visor may not
+       post (muted, read-only group, or still awaiting approval). The
+       reason comes from the server so the UI never re-derives the rules. */
+    .composer-locked {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: var(--bg-tertiary);
+      border: 1px dashed var(--border-color);
+      border-radius: 20px;
+      text-align: center;
+    }
+
     /* Notifications settings */
     .notif-body { text-align: left; }
     .notif-setting {
@@ -1700,6 +1879,10 @@
         </div>
         <div class="chat-header-pk" id="headerPk">-</div>
         <span id="headerPresence" class="presence-tag hidden"></span>
+        <!-- Forward-secrecy state for a paired (CXO) DM. Hidden for
+             unpaired chats, whose confidentiality is transport-only and
+             which have no epoch to report. -->
+        <span id="headerEpoch" class="epoch-tag hidden"></span>
       </div>
       <div class="chat-header-actions">
         <button id="dmCallBtn" class="icon-btn hidden" onclick="app.placeCall()" title="Start a voice call" aria-label="Voice call">&#x1F4DE;</button>
@@ -1730,6 +1913,9 @@
       <div class="chat-header-actions">
         <button id="groupPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
         <button id="groupMuteBtn" class="icon-btn" onclick="app.toggleMute()" title="Mute notifications for this group" aria-label="Mute notifications">&#x1F514;</button>
+        <button id="groupAdminBtn" class="icon-btn" onclick="app.openGroupAdmin()" title="Members and join requests" aria-label="Members and join requests">
+          &#x1F465;<span id="groupPendingBadge" class="pending-badge hidden">0</span>
+        </button>
         <button class="icon-btn" onclick="app.showGroupInvite()" title="Copy invite link">&#x1F517;</button>
         <button class="icon-btn" onclick="app.leaveGroup()" title="Leave group">&#x21AA;</button>
         <button class="icon-btn danger" onclick="app.deleteGroup()" title="Delete group (owner only)" aria-label="Delete group">
@@ -1904,10 +2090,23 @@
     <div class="modal">
       <h3>Create Group</h3>
       <input id="cgName" class="cg-input" type="text" placeholder="Group name" />
-      <select id="cgMode" class="cg-input">
-        <option value="public">Public</option>
-        <option value="private">Private (encrypted)</option>
+      <select id="cgMode" class="cg-input" onchange="app.describeGroupKind()">
+        <option value="public">Public — anyone with the link joins</option>
+        <option value="private">Private — you approve each request</option>
       </select>
+      <p id="cgKindHelp" class="cg-help"></p>
+      <!-- Who can catch a new member up. Checked by default: it is what
+           keeps the group readable when the admins happen to be offline. -->
+      <label class="cg-check">
+        <input type="checkbox" id="cgPeerBackfill" checked />
+        <span>Any member can share history with new members</span>
+      </label>
+      <p class="cg-help">
+        Off means only admins can — the group goes quiet for everyone else
+        whenever no admin is online. On costs each member some storage,
+        since they keep a copy of the room. Either way only members can
+        read it, and an admin can change this later.
+      </p>
       <div class="modal-actions">
         <button class="btn" onclick="app.createGroup()">Create</button>
         <button class="btn btn-secondary" onclick="app.closeModal('createGroupModal')">Cancel</button>
@@ -1923,6 +2122,119 @@
       <div class="modal-actions">
         <button class="btn" onclick="app.joinGroup()">Join</button>
         <button class="btn btn-secondary" onclick="app.closeModal('joinGroupModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Group Members / Admission Modal -->
+  <div id="groupAdminModal" class="modal-overlay">
+    <div class="modal modal-wide">
+      <h3>Group members</h3>
+      <div id="gaReadOnlyRow" class="ga-row hidden">
+        <label class="ga-toggle">
+          <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
+          <span>Read-only — only admins can send messages</span>
+        </label>
+      </div>
+      <!-- Flood protection. Public keys are free, so this is the only
+           thing that makes an identity cost anything. -->
+      <div id="gaJoinCostRow" class="ga-row hidden">
+        <div class="ga-key-line">
+          <span>Cost to ask to join</span>
+          <select id="gaJoinCost" class="ga-select" onchange="app.setGroupJoinCost()">
+            <option value="0">Free</option>
+            <option value="16">Low</option>
+            <option value="18">Normal</option>
+            <option value="22">High</option>
+            <option value="26">Maximum</option>
+          </select>
+        </div>
+        <div class="ga-key-note">
+          Anyone can make unlimited public keys, so a flood of join requests
+          costs an attacker nothing and costs you your attention. This makes
+          each request spend CPU first — unnoticeable once, expensive by the
+          thousand. Raise it while you are being flooded. Requests are also
+          rate-limited and the approval queue is capped regardless.
+        </div>
+      </div>
+      <!-- Who can catch a new member up, and who can serve the room while
+           the admins are offline. -->
+      <div id="gaBackfillRow" class="ga-row hidden">
+        <label class="ga-toggle">
+          <input type="checkbox" id="gaPeerBackfill" onchange="app.toggleGroupPeerBackfill()" />
+          <span>Any member can share history with new members</span>
+        </label>
+        <div class="ga-key-note">
+          Off means only admins can, so nothing reaches a new member — and
+          no message passes between two non-admins — while every admin is
+          offline. On, each member keeps a copy of the room; only members
+          can read it either way.
+        </div>
+      </div>
+      <!-- What an encrypted group hides beyond the message bodies. Shown
+           to every member, not only admins: "who was banned stays private"
+           is a promise about the members as much as about the moderators,
+           and the member is the one who cannot check it any other way. -->
+      <div id="gaPrivacyRow" class="ga-row hidden">
+        <div class="ga-key-line">
+          <span>Membership, moderation and files are encrypted</span>
+        </div>
+        <div class="ga-key-note">
+          Joins, removals, promotions, bans and mutes travel sealed under
+          the group key, exactly like the messages — so someone who can pull
+          this group's feed without being in it cannot read who was banned,
+          who was muted, or when. Key hand-offs no longer name who they are
+          addressed to either. Shared files are sealed under the same key
+          before they leave this device and stay sealed on every member's
+          disk, so a copy of the downloads folder — or a re-send to someone
+          outside the group — is bytes nobody can open. Such an observer can
+          still tell that an admin acted, roughly when, how many members the
+          group has, and the name and size of a file. Members still running
+          an older build publish these changes in the clear until they
+          update.
+        </div>
+      </div>
+      <!-- Encryption row: private groups only. Shows which key generation
+           the group is on (it advances on every eviction) and lets an
+           admin re-key on demand. -->
+      <div id="gaKeyRow" class="ga-row hidden">
+        <div class="ga-key-line">
+          <span id="gaKeyEpoch">Encryption: key #0</span>
+          <button id="gaRotateBtn" class="ga-btn" onclick="app.rotateGroupKey()">Rotate key</button>
+        </div>
+        <div id="gaKeyAge" class="ga-key-age"></div>
+        <div class="ga-key-note">
+          The key rotates on its own once it has covered a week or a few
+          thousand messages, so no single key covers the whole life of the
+          group. Evicting a member rotates it immediately. Rotate by hand if
+          a member's device or key may have been exposed — the new key is
+          sealed to each remaining member, so anyone outside the group stops
+          being able to read new messages. Older messages stay readable.
+          Each rotation seals with a throwaway key that is discarded on the
+          spot, so leaking an admin's identity key later does not re-open
+          past keys. Keys are stored encrypted on this device, tied to this
+          visor's identity.
+        </div>
+      </div>
+      <div id="gaRequestsWrap" class="hidden">
+        <h4 class="ga-heading">Join requests <span id="gaRequestsCount" class="ga-badge"></span></h4>
+        <ul id="gaRequests" class="ga-list"></ul>
+      </div>
+      <h4 class="ga-heading">Members</h4>
+      <ul id="gaMembers" class="ga-list"></ul>
+      <!-- Shown to admins of a group that has only one. An invite names
+           the group's admins, so with one admin the group can only be
+           joined while that one visor is online. -->
+      <div id="gaSoloAdminHint" class="ga-hint hidden">
+        You are this group's only admin — nobody can join while you are
+        offline. Make another member an admin so invites have a second door.
+      </div>
+      <div id="gaBannedWrap" class="hidden">
+        <h4 class="ga-heading">Banned</h4>
+        <ul id="gaBanned" class="ga-list"></ul>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="app.closeModal('groupAdminModal')">Close</button>
       </div>
     </div>
   </div>
@@ -1946,6 +2258,10 @@
         this.connected = false;
         this.pairedSet = new Set();
         this.pairAvailable = false;
+        // pairEpochs[pk] = {epoch, forwardSecret, generation} — the
+        // forward-secrecy state the header tag renders. Refreshed by the
+        // same /pair poll that maintains pairedSet.
+        this.pairEpochs = {};
         this.pendingInvites = new Set();
         this.groups = [];
         this.group = null;   // active group id (null when a DM is selected)
@@ -2065,6 +2381,12 @@
         // the latest sweep once a minute.
         this._pollPresence();
         setInterval(() => this._pollPresence(), this._presencePollMs());
+        // Epoch state converges a few seconds after both ends are up (the
+        // peer has to publish its rotating key and we have to see it), so
+        // the header tag would otherwise sit on "setting up keys" until
+        // the next reload. Cheap: one /pair read, same call the pair list
+        // already uses.
+        setInterval(() => this._pollPairEpochs(), 15000);
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -3185,6 +3507,18 @@
             this.handleGroupDelete(data);
             return;
           }
+          // Someone asked to join a group we admin. Re-sync so the badge
+          // counts update, and refresh the panel if it happens to be open.
+          if (data.channel === 'group-join-request') {
+            this.syncGroups();
+            if (document.getElementById('groupAdminModal').classList.contains('visible')) {
+              this.refreshGroupAdmin();
+            }
+            if (data.group_id !== this.group || !document.hasFocus()) {
+              this.showToast(`Join request for ${data.group_name || 'a group'}.`);
+            }
+            return;
+          }
           // A backfill re-send we requested has arrived — patch the existing
           // file bubble in place rather than appending a new message.
           if (data.channel === 'file-ready') {
@@ -3434,6 +3768,73 @@
           cxoOpt.classList.add('hidden');
           if (select.value === 'cxo') select.value = 'skynet';
         }
+        this._renderEpochTag(isPaired);
+      }
+
+      // _pollPairEpochs refreshes the per-peer forward-secrecy state.
+      // Read-only and failure-tolerant: a hiccup just leaves the tag
+      // showing what it last knew rather than blanking it, which would
+      // read as a downgrade that hasn't happened.
+      _pollPairEpochs() {
+        if (!this.pairAvailable) return;
+        fetch('/pair')
+          .then(res => (res.ok ? res.json() : null))
+          .then(pairs => {
+            if (!pairs) return;
+            this.pairEpochs = this.pairEpochs || {};
+            pairs.forEach(p => {
+              if (!p || !p.peer_pk) return;
+              this.pairEpochs[this.processPk(p.peer_pk)] = {
+                epoch: p.epoch || '',
+                forwardSecret: !!p.forward_secret,
+                generation: p.key_generation || 0,
+              };
+            });
+            const isPaired = this.recipient && this.pairedSet && this.pairedSet.has(this.recipient);
+            this._renderEpochTag(isPaired);
+          })
+          .catch(() => {});
+      }
+
+      // _renderEpochTag shows whether this conversation's messages are
+      // sealed under a short-lived key or still under the pair's static
+      // identity-derived one.
+      //
+      // Worth surfacing rather than assuming: the two look identical from
+      // the outside and differ in exactly the property a user would care
+      // about — whether a leak of the visor's identity key later would
+      // expose what was said today. It only appears for paired (CXO)
+      // chats; an unpaired chat has no epoch, and claiming one would be
+      // worse than saying nothing.
+      _renderEpochTag(isPaired) {
+        const el = document.getElementById('headerEpoch');
+        if (!el) return;
+        const state = isPaired && this.pairEpochs ? this.pairEpochs[this.recipient] : null;
+        if (!isPaired || !state) {
+          el.classList.add('hidden');
+          el.classList.remove('secret');
+          el.textContent = '';
+          return;
+        }
+        el.classList.remove('hidden');
+        if (state.forwardSecret) {
+          el.classList.add('secret');
+          el.textContent = `forward secret · key ${state.epoch.slice(0, 8)}`;
+          el.title =
+            'Messages are sealed with a short-lived key that is replaced daily. ' +
+            'The old key is destroyed on each rotation, so leaking this visor\'s ' +
+            'identity key later would not open what was said before.';
+        } else {
+          el.classList.remove('secret');
+          el.textContent = 'encrypted · keys not exchanged yet';
+          el.title =
+            'Still using the key derived from both identities. Each side ' +
+            'publishes its rotating key with its first message, so this ' +
+            'switches over once you have both said something (or sooner, ' +
+            'if the peer is offline or runs an older build, not at all). ' +
+            'Messages are encrypted either way, but under this key a later ' +
+            'leak of either identity key would open them.';
+        }
       }
 
       // togglePair flips the current recipient's CXO pair state via
@@ -3505,10 +3906,19 @@
           .then(pairs => {
             if (!pairs) return;
             this.pairAvailable = true;
+            this.pairEpochs = this.pairEpochs || {};
             (pairs || []).forEach(p => {
               if (p && p.peer_pk) {
                 const pk = this.processPk(p.peer_pk);
                 this.pairedSet.add(pk);
+                // Remember the forward-secrecy state per peer so the
+                // header can render it without another round trip when
+                // the user switches chats.
+                this.pairEpochs[pk] = {
+                  epoch: p.epoch || '',
+                  forwardSecret: !!p.forward_secret,
+                  generation: p.key_generation || 0,
+                };
                 if (!this.recipients.includes(pk)) {
                   this._addRecipient(pk);
                 } else {
@@ -4867,22 +5277,41 @@
         setTimeout(() => this.syncGroups(attempt + 1), Math.min(5000, 1000 * (attempt + 1)));
       }
 
+      // _groupSubtitle is the one-line summary under a group's name.
+      // Reports the type in plain language rather than echoing the raw
+      // enum, and surfaces the states that change what the operator can
+      // do right now (awaiting approval, read-only, restricted).
+      _groupSubtitle(g) {
+        const parts = [g.role || 'member', `${(g.members || []).length} members`];
+        parts.push(g.join_policy === 'approval' ? 'private' : 'public');
+        if (g.status === 'awaiting_approval') parts.push('waiting for approval');
+        else if (g.status === 'denied') parts.push('request declined');
+        else if (g.status === 'banned') parts.push('banned');
+        else if (g.read_only) parts.push('read-only');
+        else if (g.can_post === false) parts.push('restricted');
+        return parts.join(' · ');
+      }
+
       renderGroups() {
         const list = document.getElementById('groups');
         list.innerHTML = '';
         this.groups.forEach(g => {
           const li = document.createElement('li');
+          const pending = g.pending_joins || 0;
+          const badge = pending > 0 ? `<span class="ga-badge">${pending}</span>` : '';
           li.innerHTML = `
             <div class="group-item ${g.id === this.group ? 'active' : ''}" data-gid="${g.id}" onclick="app.selectGroup('${g.id}')">
               <div class="group-avatar-sm">#</div>
               <div class="recipient-info">
-                <div class="recipient-pk">${this.escapeHtml(g.name || g.id)}</div>
-                <div class="recipient-preview">${this.escapeHtml(g.role || 'member')} · ${(g.members || []).length} members</div>
+                <div class="recipient-pk">${this.escapeHtml(g.name || g.id)} ${badge}</div>
+                <div class="recipient-preview">${this.escapeHtml(this._groupSubtitle(g))}</div>
               </div>
             </div>`;
           list.appendChild(li);
         });
         this.renderPinned();
+        this._updatePendingBadge();
+        this._updateComposerLock();
       }
 
       // ---- Pin (one conversation, DM or group, on top) ---------------
@@ -5013,7 +5442,9 @@
         const info = this.groups.find(g => g.id === id);
         document.getElementById('groupHeaderName').textContent = info ? info.name : id;
         document.getElementById('groupHeaderSub').textContent = info
-          ? `${info.role} · ${(info.members || []).length} members · ${info.mode}` : '';
+          ? this._groupSubtitle(info) : '';
+        this._updateComposerLock();
+        this._updatePendingBadge();
 
         const msgEl = document.getElementById('messages');
         msgEl.innerHTML = '';
@@ -5193,7 +5624,25 @@
 
       openCreateGroup() {
         document.getElementById('cgName').value = '';
+        // Back to the default on every open: an unchecked box left over
+        // from a previous create would silently make the next group
+        // admins-only.
+        const backfill = document.getElementById('cgPeerBackfill');
+        if (backfill) backfill.checked = true;
+        this.describeGroupKind();
         document.getElementById('createGroupModal').classList.add('visible');
+      }
+
+      // describeGroupKind spells out the consequences of the selected
+      // group type. Both halves matter and neither is guessable from the
+      // word alone: public groups are plaintext on the feed (encrypting
+      // to a key handed to every stranger who asks protects nothing),
+      // and private groups hand the key over only once an admin approves.
+      describeGroupKind() {
+        const kind = document.getElementById('cgMode').value;
+        document.getElementById('cgKindHelp').textContent = kind === 'private'
+          ? 'Every join is a request you approve. Messages are encrypted, and the key is sent to a member only after you let them in — so a forwarded invite link on its own grants nothing. Membership, moderation and shared files are encrypted too: who you admit, remove, ban or mute is not readable from outside the group, and attachments are sealed on disk as well as in transit.'
+          : 'Anyone holding the invite link is admitted automatically. Messages are not encrypted on the feed: in an open group the key would go to anyone who asks, so it would protect nothing. Traffic is still encrypted in transit.';
       }
 
       openJoinGroup() {
@@ -5205,12 +5654,17 @@
 
       createGroup() {
         const name = document.getElementById('cgName').value.trim();
-        const mode = document.getElementById('cgMode').value;
+        const kind = document.getElementById('cgMode').value;
+        const backfillEl = document.getElementById('cgPeerBackfill');
+        // Default on when the element is somehow missing, matching the
+        // server-side default rather than silently creating a group that
+        // goes dark whenever its admins are offline.
+        const peer_backfill = backfillEl ? !!backfillEl.checked : true;
         if (!name) { this.showToast('Enter a group name.', 'error'); return; }
         fetch('/group', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, mode, members: [] })
+          body: JSON.stringify({ name, kind, members: [], peer_backfill })
         })
           .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
           .then(j => {
@@ -5234,10 +5688,381 @@
           .then(info => {
             this.closeModal('joinGroupModal');
             this.syncGroups();
+            // A private group queues the request instead of admitting, so
+            // don't claim we're in and don't open a room that has no
+            // messages yet — say what actually happened and let the
+            // background retry flip it to active on approval.
+            if (info && info.status === 'awaiting_approval') {
+              this.showToast('Request sent — waiting for an admin to approve.');
+              return;
+            }
             this.showToast('Joined group.');
             if (info && info.id) setTimeout(() => this.selectGroup(info.id), 300);
           })
           .catch(e => this.showToast(`Join failed: ${e}`, 'error'));
+      }
+
+      // ---- Group admission control -----------------------------------
+
+      // openGroupAdmin shows the members panel: the approval queue (admins
+      // only), the roster with per-member actions, the ban list, and the
+      // read-only toggle.
+      openGroupAdmin() {
+        if (!this.group) return;
+        document.getElementById('groupAdminModal').classList.add('visible');
+        this.refreshGroupAdmin();
+      }
+
+      // _groupInfo returns the cached GroupInfo for the open group.
+      _groupInfo() { return this.groups.find(g => g.id === this.group) || null; }
+
+      // _isGroupAdmin reports whether this visor can moderate the open
+      // group. The founder is always an admin, which the server also
+      // enforces — this only decides whether to render the controls.
+      _isGroupAdmin(info) {
+        if (!info) return false;
+        if (String(info.owner_pk || '').toLowerCase() === this.myPK) return true;
+        return (info.admins || []).some(a => String(a).toLowerCase() === this.myPK);
+      }
+
+      refreshGroupAdmin() {
+        const gid = this.group;
+        const info = this._groupInfo();
+        const isAdmin = this._isGroupAdmin(info);
+
+        const roRow = document.getElementById('gaReadOnlyRow');
+        roRow.classList.toggle('hidden', !isAdmin);
+        document.getElementById('gaReadOnly').checked = !!(info && info.read_only);
+
+        // Encryption / key generation. Only private groups have a key, and
+        // only admins can rotate it — a public group's bodies are plaintext
+        // on the feed by design, so offering a rotation there would imply a
+        // protection it doesn't have.
+        const costRow = document.getElementById('gaJoinCostRow');
+        costRow.classList.toggle('hidden', !isAdmin);
+        if (isAdmin) {
+          // Snap to the nearest preset so a value set from the CLI still
+          // shows something truthful rather than an empty select.
+          const bits = (info && typeof info.join_pow_bits === 'number') ? info.join_pow_bits : 18;
+          const presets = [0, 16, 18, 22, 26];
+          const nearest = presets.reduce((a, b) => Math.abs(b - bits) < Math.abs(a - bits) ? b : a, 0);
+          document.getElementById('gaJoinCost').value = String(nearest);
+        }
+
+        const backfillRow = document.getElementById('gaBackfillRow');
+        backfillRow.classList.toggle('hidden', !isAdmin);
+        document.getElementById('gaPeerBackfill').checked = !!(info && info.peer_backfill);
+
+        const encrypted = !!(info && (info.kind === 'private' || info.mode === 'private'));
+        // Governance privacy. Driven by the server's own flag rather than
+        // by `encrypted`, because the two are not the same claim: the
+        // visor computes whether it actually seals roster/admin/mod
+        // leaves, and a build that doesn't must not display the promise.
+        const privacyRow = document.getElementById('gaPrivacyRow');
+        if (privacyRow) {
+          privacyRow.classList.toggle('hidden', !(info && info.governance_sealed));
+        }
+        const keyRow = document.getElementById('gaKeyRow');
+        keyRow.classList.toggle('hidden', !(encrypted && isAdmin));
+        if (encrypted && isAdmin) {
+          document.getElementById('gaKeyEpoch').textContent =
+            `Encryption: key #${(info && info.key_epoch) || 0}`;
+          // Age + time-to-next-rotation. The epoch number alone doesn't
+          // tell you whether this key has been in force a day or a year,
+          // and "bounded in time" is the whole claim being made here.
+          const ageEl = document.getElementById('gaKeyAge');
+          const age = (info && info.key_age_seconds) || 0;
+          const due = (info && typeof info.key_rotates_in_seconds === 'number')
+            ? info.key_rotates_in_seconds : null;
+          if (age > 0) {
+            const parts = [`in use for ${this._humanDuration(age)}`];
+            if (due !== null) {
+              parts.push(due > 0
+                ? `rotates in ${this._humanDuration(due)}`
+                : 'rotation due — the next background pass will re-key');
+            }
+            ageEl.textContent = parts.join(' · ');
+          } else {
+            ageEl.textContent = '';
+          }
+        }
+
+        this._renderMemberList(info, isAdmin);
+
+        const banWrap = document.getElementById('gaBannedWrap');
+        const banned = (info && info.banned) || [];
+        banWrap.classList.toggle('hidden', banned.length === 0);
+        const banList = document.getElementById('gaBanned');
+        banList.innerHTML = '';
+        banned.forEach(pk => {
+          banList.appendChild(this._gaRow(String(pk), 'banned', isAdmin ? [
+            { label: 'Unban', cls: '', fn: `app.groupMemberAction('${gid}','members/unban','${pk}')` },
+          ] : []));
+        });
+
+        // Requests are admin-only and only meaningful for approval-type
+        // groups; an open group admits without ever queuing.
+        const reqWrap = document.getElementById('gaRequestsWrap');
+        if (!isAdmin) { reqWrap.classList.add('hidden'); return; }
+        fetch(`/group/${gid}/requests`)
+          .then(res => res.ok ? res.json() : [])
+          .then(reqs => {
+            reqs = reqs || [];
+            reqWrap.classList.toggle('hidden', reqs.length === 0);
+            document.getElementById('gaRequestsCount').textContent = reqs.length || '';
+            const list = document.getElementById('gaRequests');
+            list.innerHTML = '';
+            reqs.forEach(q => {
+              const pk = String(q.pk);
+              list.appendChild(this._gaRow(pk, q.note || 'wants to join', [
+                { label: 'Approve', cls: 'primary', fn: `app.groupMemberAction('${gid}','requests/approve','${pk}')` },
+                { label: 'Decline', cls: 'danger', fn: `app.groupMemberAction('${gid}','requests/deny','${pk}')` },
+              ]));
+            });
+          })
+          .catch(() => reqWrap.classList.add('hidden'));
+      }
+
+      _renderMemberList(info, isAdmin) {
+        const gid = this.group;
+        const list = document.getElementById('gaMembers');
+        list.innerHTML = '';
+        const muted = ((info && info.muted) || []).map(p => String(p).toLowerCase());
+        const admins = ((info && info.admins) || []).map(p => String(p).toLowerCase());
+        const ownerPK = String((info && info.owner_pk) || '').toLowerCase();
+        // The founder counts as an admin even on records whose admins list
+        // predates the field, so union it in before deciding we're alone.
+        const adminCount = new Set(admins.concat(ownerPK ? [ownerPK] : [])).size;
+        const members = (info && info.members) || [];
+        // Only worth saying when there is somebody to promote.
+        document.getElementById('gaSoloAdminHint').classList.toggle(
+          'hidden', !(isAdmin && adminCount <= 1 && members.length > 1));
+        if (!members.length) {
+          list.innerHTML = '<li class="ga-empty">No members yet.</li>';
+          return;
+        }
+        members.forEach(raw => {
+          const pk = String(raw);
+          const low = pk.toLowerCase();
+          const tags = [];
+          if (low === ownerPK) tags.push('founder');
+          else if (admins.includes(low)) tags.push('admin');
+          if (low === this.myPK) tags.push('you');
+          if (muted.includes(low)) tags.push('restricted');
+          // The founder can't be removed, banned or muted — the server
+          // refuses it, so offering the buttons would only produce errors.
+          //
+          // Promote comes first because it's the one constructive action
+          // here, and because it's what keeps the group joinable when the
+          // founder is offline: an invite names the group's admins, so a
+          // group with a single admin has a single door.
+          const actions = (isAdmin && low !== ownerPK) ? [
+            admins.includes(low)
+              ? { label: 'Demote', cls: '', fn: `app.groupMemberAction('${gid}','members/demote','${pk}')` }
+              : { label: 'Make admin', cls: 'primary', fn: `app.groupMemberAction('${gid}','members/promote','${pk}')` },
+            muted.includes(low)
+              ? { label: 'Unrestrict', cls: '', fn: `app.groupMemberAction('${gid}','members/unmute','${pk}')` }
+              : { label: 'Restrict', cls: '', fn: `app.groupMemberAction('${gid}','members/mute','${pk}')` },
+            { label: 'Remove', cls: '', fn: `app.groupMemberAction('${gid}','members/remove','${pk}')` },
+            { label: 'Ban', cls: 'danger', fn: `app.groupMemberAction('${gid}','members/ban','${pk}')` },
+          ] : [];
+          list.appendChild(this._gaRow(pk, tags.join(' · '), actions));
+        });
+      }
+
+      // _gaRow builds one row of the admin panel.
+      _gaRow(pk, meta, actions) {
+        const li = document.createElement('li');
+        li.className = 'ga-item';
+        const btns = (actions || []).map(a =>
+          `<button class="ga-btn ${a.cls}" onclick="${a.fn}">${this.escapeHtml(a.label)}</button>`).join('');
+        li.innerHTML = `
+          <div class="ga-item-main">
+            <div class="ga-pk" title="${this.escapeHtml(pk)}">${this.escapeHtml(this.shortPk(pk))}</div>
+            <div class="ga-meta">${this.escapeHtml(meta || '')}</div>
+          </div>
+          <div class="ga-actions">${btns}</div>`;
+        return li;
+      }
+
+      // groupMemberAction posts one admin command and re-syncs. Every
+      // command shares this shape; the server returns the updated group
+      // so the panel reflects the new state without a second round trip.
+      groupMemberAction(gid, action, pk) {
+        fetch(`/group/${gid}/${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            if (info && info.id) {
+              const i = this.groups.findIndex(g => g.id === info.id);
+              if (i >= 0) this.groups[i] = info;
+            }
+            this.refreshGroupAdmin();
+            this.renderGroups();
+            this._updateComposerLock();
+            this.showToast('Done.');
+          })
+          .catch(e => this.showToast(`Failed: ${e}`, 'error'));
+      }
+
+      // _humanDuration renders a second count as the coarsest unit that
+      // still says something useful. Key ages are days-to-weeks, so
+      // minute-level precision would be noise; anything under a minute is
+      // "just now" because a freshly rotated key is the common case right
+      // after clicking Rotate.
+      _humanDuration(seconds) {
+        const s = Math.abs(Math.round(seconds));
+        if (s < 60) return 'less than a minute';
+        if (s < 3600) return `${Math.round(s / 60)} min`;
+        if (s < 86400) {
+          const h = Math.round(s / 3600);
+          return `${h} hour${h === 1 ? '' : 's'}`;
+        }
+        const d = Math.round(s / 86400);
+        return `${d} day${d === 1 ? '' : 's'}`;
+      }
+
+      // rotateGroupKey re-keys an encrypted group on demand. The button is
+      // disabled for the round trip: rotation seals a copy of the new key
+      // per member, and a double-click would mint two generations back to
+      // back — harmless (both converge) but confusing to read afterwards.
+      rotateGroupKey() {
+        const gid = this.group;
+        if (!gid) return;
+        const btn = document.getElementById('gaRotateBtn');
+        if (btn) { btn.disabled = true; btn.textContent = 'Rotating…'; }
+        const restore = () => { if (btn) { btn.disabled = false; btn.textContent = 'Rotate key'; } };
+        fetch(`/group/${gid}/rotate-key`, { method: 'POST' })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            if (info && info.id) {
+              const i = this.groups.findIndex(g => g.id === info.id);
+              if (i >= 0) this.groups[i] = info;
+            }
+            restore();
+            this.refreshGroupAdmin();
+            this.showToast(`Group re-keyed — now on key #${(info && info.key_epoch) || 0}.`);
+          })
+          .catch(e => { restore(); this.showToast(`Rotate failed: ${e}`, 'error'); });
+      }
+
+      // setGroupJoinCost changes the proof-of-work price of a join request.
+      // Reverts the select on failure so the control never shows a setting
+      // the group didn't take.
+      setGroupJoinCost() {
+        const gid = this.group;
+        const sel = document.getElementById('gaJoinCost');
+        const bits = parseInt(sel.value, 10) || 0;
+        fetch(`/group/${gid}/join-pow`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bits })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            if (info && info.id) {
+              const i = this.groups.findIndex(g => g.id === info.id);
+              if (i >= 0) this.groups[i] = info;
+            }
+            this.showToast(bits === 0
+              ? 'Joining is free again — anyone can ask at no cost.'
+              : 'Join cost updated. New requests must do the work first.');
+          })
+          .catch(e => { this.refreshGroupAdmin(); this.showToast(`Failed: ${e}`, 'error'); });
+      }
+
+      // toggleGroupPeerBackfill flips who may serve the group's history.
+      // Reverts the checkbox on failure so the control never claims a
+      // setting the group didn't take.
+      toggleGroupPeerBackfill() {
+        const gid = this.group;
+        const on = document.getElementById('gaPeerBackfill').checked;
+        fetch(`/group/${gid}/peer-backfill`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: on })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            if (info && info.id) {
+              const i = this.groups.findIndex(g => g.id === info.id);
+              if (i >= 0) this.groups[i] = info;
+            }
+            this.showToast(on
+              ? 'Any member can now share history with new members.'
+              : 'Only admins can share history now.');
+          })
+          .catch(e => {
+            document.getElementById('gaPeerBackfill').checked = !on;
+            this.showToast(`Failed: ${e}`, 'error');
+          });
+      }
+
+      toggleGroupReadOnly() {
+        const gid = this.group;
+        const on = document.getElementById('gaReadOnly').checked;
+        fetch(`/group/${gid}/readonly`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ read_only: on })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(info => {
+            if (info && info.id) {
+              const i = this.groups.findIndex(g => g.id === info.id);
+              if (i >= 0) this.groups[i] = info;
+            }
+            this._updateComposerLock();
+            this.showToast(on ? 'Group is now read-only.' : 'Members can send again.');
+          })
+          .catch(e => {
+            document.getElementById('gaReadOnly').checked = !on;
+            this.showToast(`Failed: ${e}`, 'error');
+          });
+      }
+
+      // _updateComposerLock swaps the message field for an explanation
+      // when this visor may not post. The reason string comes from the
+      // server (GroupInfo.cannot_post_reason) rather than being rebuilt
+      // here, so the composer can never disagree with what the group
+      // would actually accept.
+      _updateComposerLock() {
+        const form = document.getElementById('msgForm');
+        if (!form) return;
+        let lock = document.getElementById('composerLock');
+        const field = document.getElementById('msgField');
+        const btn = document.getElementById('composerBtn');
+        const info = this.group ? this._groupInfo() : null;
+        const blocked = !!(info && info.can_post === false);
+        if (!blocked) {
+          if (lock) lock.remove();
+          if (field) field.classList.remove('hidden');
+          if (btn) btn.classList.remove('hidden');
+          return;
+        }
+        if (!lock) {
+          lock = document.createElement('div');
+          lock.id = 'composerLock';
+          lock.className = 'composer-locked';
+          form.appendChild(lock);
+        }
+        lock.textContent = info.cannot_post_reason || 'You cannot send messages in this group.';
+        if (field) field.classList.add('hidden');
+        if (btn) btn.classList.add('hidden');
+      }
+
+      // _updatePendingBadge shows how many join requests await this
+      // admin on the open group.
+      _updatePendingBadge() {
+        const badge = document.getElementById('groupPendingBadge');
+        if (!badge) return;
+        const info = this.group ? this._groupInfo() : null;
+        const n = (info && info.pending_joins) || 0;
+        badge.textContent = n;
+        badge.classList.toggle('hidden', n === 0);
       }
 
       showGroupInvite() {
@@ -6052,7 +6877,7 @@
     });
 
     // Close group modals on backdrop click.
-    ['createGroupModal', 'joinGroupModal'].forEach(function(id) {
+    ['createGroupModal', 'joinGroupModal', 'groupAdminModal'].forEach(function(id) {
       document.getElementById(id).addEventListener('click', function(e) {
         if (e.target === this) app.closeModal(id);
       });
@@ -6065,6 +6890,7 @@
         app.closeLightbox();
         app.closeModal('createGroupModal');
         app.closeModal('joinGroupModal');
+        app.closeModal('groupAdminModal');
       }
     });
   </script>

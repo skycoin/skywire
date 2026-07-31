@@ -55,7 +55,7 @@ var dmsgStub = new(dmsg.Client)
 // stops at the store or reads sessions the test installs directly.
 func newStateTestManager(t *testing.T, myPK cipher.PubKey) *Manager {
 	t.Helper()
-	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"), testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -341,7 +341,7 @@ func TestHasWarmingPeer_SkipsInactiveRecords(t *testing.T) {
 // --- NewManager -------------------------------------------------------------
 
 func TestNewManager_Validation(t *testing.T) {
-	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"), testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestNewManager_Validation(t *testing.T) {
 }
 
 func TestNewManager_Defaults(t *testing.T) {
-	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"))
+	st, err := OpenStore(filepath.Join(t.TempDir(), "groups.db"), testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
