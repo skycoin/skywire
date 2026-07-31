@@ -777,7 +777,7 @@ func downloadFileHandler(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, errNotSealed):
 		// Ordinary file — a DM attachment, a public-group one, or one from
 		// before sealing existed.
-		http.ServeFile(w, r, full)
+		http.ServeFile(w, r, full) //nolint:gosec
 		return
 	case os.IsNotExist(err):
 		http.NotFound(w, r)
