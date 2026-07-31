@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 )
@@ -23,6 +24,11 @@ type PKTable interface {
 }
 
 type memoryTable struct {
+	// mu guards entries/reverse: SetAddr is called at runtime from the
+	// autoconnect dialer, which now dials targets CONCURRENTLY — without this
+	// two dials writing different entries would race on the maps (the reason
+	// parallel autoconnect dialing was previously avoided).
+	mu      sync.RWMutex
 	entries map[cipher.PubKey]string
 	reverse map[string]cipher.PubKey
 }
@@ -90,23 +96,31 @@ func NewTableFromFile(path string) (PKTable, error) {
 
 // Addr obtains the address associated with the given public key.
 func (mt *memoryTable) Addr(pk cipher.PubKey) (string, bool) {
+	mt.mu.RLock()
+	defer mt.mu.RUnlock()
 	addr, ok := mt.entries[pk]
 	return addr, ok
 }
 
 // PubKey obtains the public key associated with the given public key.
 func (mt *memoryTable) PubKey(addr string) (cipher.PubKey, bool) {
+	mt.mu.RLock()
+	defer mt.mu.RUnlock()
 	pk, ok := mt.reverse[addr]
 	return pk, ok
 }
 
 // SetAddr associates a public key with an address at runtime.
 func (mt *memoryTable) SetAddr(pk cipher.PubKey, addr string) {
+	mt.mu.Lock()
+	defer mt.mu.Unlock()
 	mt.entries[pk] = addr
 	mt.reverse[addr] = pk
 }
 
 // Count returns the number of entries within the PKTable implementation.
 func (mt *memoryTable) Count() int {
+	mt.mu.RLock()
+	defer mt.mu.RUnlock()
 	return len(mt.entries)
 }

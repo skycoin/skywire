@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/big"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -54,14 +55,37 @@ func (c *Connector) ConnectToVisors(
 	currentCount int,
 	trackAll bool, // if true, add to result even on failure (for phase 1 → phase 2 handoff)
 ) (result ConnectPhaseResult, err error) {
+	// Dial the targets CONCURRENTLY (bounded). Each target costs a dmsg probe
+	// (up to HandshakeTimeout) plus a SaveTransport (up to perAttemptTransportTimeout,
+	// 30s), so dialing them sequentially made one slow/dead peer stall the whole
+	// phase for its full timeout — the measured cause of ~26s to the first
+	// autoconnect transport. A bounded worker pool overlaps the waits so the phase
+	// finishes in ~the slowest single dial rather than their sum, while the
+	// semaphore keeps a visor from opening dozens of handshakes at once.
+	//
+	// The read-only inputs (existingByPK, sudphCapable) are dialed without a lock;
+	// mu guards the mutated result (Count/Connected) and the budget read. The budget
+	// (maxCount) is still honored, but because successes register asynchronously the
+	// stop point can overshoot by up to dialConcurrency-1 in-flight dials — a couple
+	// of extra transports is harmless (and mildly beneficial for path diversity).
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+	sem := make(chan struct{}, dialConcurrency)
+
 	for _, pk := range ShufflePubKeys(targets) {
 		select {
 		case <-ctx.Done():
+			wg.Wait()
 			return result, context.Canceled
 		default:
 		}
 
-		if currentCount+result.Count >= maxCount {
+		mu.Lock()
+		reached := currentCount+result.Count >= maxCount
+		mu.Unlock()
+		if reached {
 			break
 		}
 
@@ -72,7 +96,9 @@ func (c *Connector) ConnectToVisors(
 		// Skip if we already have this transport type to this visor
 		if existingByPK[pk][tpType] {
 			if trackAll {
+				mu.Lock()
 				result.Connected = append(result.Connected, pk)
+				mu.Unlock()
 			}
 			continue
 		}
@@ -81,58 +107,81 @@ func (c *Connector) ConnectToVisors(
 		if tpType == tptypes.SUDPH && sudphCapable != nil {
 			if _, ok := sudphCapable[pk]; !ok {
 				if trackAll {
+					mu.Lock()
 					result.Connected = append(result.Connected, pk)
+					mu.Unlock()
 				}
 				continue
 			}
 		}
 
-		// Skip visors behind the same NAT
-		if c.ClientPublicIP != "" {
-			if sameLAN := c.isSameLAN(ctx, pk, tpType); sameLAN {
-				c.Log.WithField("pk", pk).Debugln("Skipping same-LAN visor")
-				continue
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(pk cipher.PubKey) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			// Recover per-dial so one bad AR reply / dial panic can't take down
+			// the whole autoconnect loop.
+			defer func() {
+				if r := recover(); r != nil {
+					c.Log.WithField("pk", pk).Errorf("autoconnect dial recovered panic: %v", r)
+				}
+			}()
+
+			// Skip visors behind the same NAT
+			if c.ClientPublicIP != "" {
+				if sameLAN := c.isSameLAN(ctx, pk, tpType); sameLAN {
+					c.Log.WithField("pk", pk).Debugln("Skipping same-LAN visor")
+					return
+				}
 			}
-		}
 
-		logger := c.Log.WithField("pk", pk).WithField("type", string(tpType))
+			logger := c.Log.WithField("pk", pk).WithField("type", string(tpType))
 
-		// Probe the candidate on dmsg port 136 before attempting SUDPH
-		// transports (which need DMSG for signaling). Skip the probe for
-		// STCPR — it uses direct TCP and doesn't depend on DMSG. The old
-		// blanket probe was filtering out visors reachable via STCPR but
-		// with broken DMSG paths, reducing public visor transport counts.
-		if tpType != tptypes.STCPR && c.DmsgC != nil {
-			probeCtx, probeCancel := context.WithTimeout(ctx, dmsg.HandshakeTimeout)
-			reachable := c.DmsgC.Probe(probeCtx, pk, skyenv.DmsgAwaitSetupPort)
-			probeCancel()
-			if !reachable {
-				logger.Debug("Skipping visor: dmsg probe failed (unreachable)")
+			// Probe the candidate on dmsg port 136 before attempting SUDPH
+			// transports (which need DMSG for signaling). Skip the probe for
+			// STCPR — it uses direct TCP and doesn't depend on DMSG. The old
+			// blanket probe was filtering out visors reachable via STCPR but
+			// with broken DMSG paths, reducing public visor transport counts.
+			if tpType != tptypes.STCPR && c.DmsgC != nil {
+				probeCtx, probeCancel := context.WithTimeout(ctx, dmsg.HandshakeTimeout)
+				reachable := c.DmsgC.Probe(probeCtx, pk, skyenv.DmsgAwaitSetupPort)
+				probeCancel()
+				if !reachable {
+					logger.Debug("Skipping visor: dmsg probe failed (unreachable)")
+					if trackAll {
+						mu.Lock()
+						result.Connected = append(result.Connected, pk)
+						mu.Unlock()
+					}
+					return
+				}
+			}
+
+			logger.Debugln("Trying to add transport")
+
+			if err := c.tryEstablishTransport(ctx, pk, tpType, logger); err != nil {
+				if isContextError(err) {
+					logger.WithError(err).Debugln("Transport creation canceled (shutdown)")
+				} else {
+					logger.WithError(err).Warnln("Failed to add transport")
+				}
 				if trackAll {
+					mu.Lock()
 					result.Connected = append(result.Connected, pk)
+					mu.Unlock()
 				}
-				continue
+				return
 			}
-		}
 
-		logger.Debugln("Trying to add transport")
-
-		if err := c.tryEstablishTransport(ctx, pk, tpType, logger); err != nil {
-			if isContextError(err) {
-				logger.WithError(err).Debugln("Transport creation canceled (shutdown)")
-			} else {
-				logger.WithError(err).Warnln("Failed to add transport")
-			}
-			if trackAll {
-				result.Connected = append(result.Connected, pk)
-			}
-			continue
-		}
-
-		result.Count++
-		result.Connected = append(result.Connected, pk)
+			mu.Lock()
+			result.Count++
+			result.Connected = append(result.Connected, pk)
+			mu.Unlock()
+		}(pk)
 	}
 
+	wg.Wait()
 	return result, nil
 }
 
@@ -162,6 +211,12 @@ func ShufflePubKeys(keys []cipher.PubKey) []cipher.PubKey {
 // webrtc awaitConn) honors ctx, so a bounded per-attempt deadline lets a stuck
 // dial return DeadlineExceeded and the loop advances to the next target/tick.
 const perAttemptTransportTimeout = 30 * time.Second
+
+// dialConcurrency bounds how many autoconnect dials run at once within a single
+// ConnectToVisors phase. Chosen to overlap the per-target waits (dmsg probe +
+// 30s SaveTransport) without letting a visor open an unbounded number of
+// simultaneous transport handshakes.
+const dialConcurrency = 8
 
 // tryEstablishTransport attempts to establish a transport of the specified type to the given public key, and return error.
 func (c *Connector) tryEstablishTransport(ctx context.Context, pk cipher.PubKey, netType tptypes.Type, logger *logrus.Entry) error {
