@@ -511,3 +511,20 @@
     &.muted { color: #f7768e; border-color: rgba(247, 118, 142, 0.6); }
   }
 }
+
+// Join-status badges + inline "ask again" on a room row (group admission).
+.sc-room-badge {
+  padding: 0 .4em;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1.5;
+  &.pending { background: rgba(224, 175, 104, .18); color: #e0af68; }
+  &.denied  { background: rgba(247, 118, 142, .18); color: #f7768e; }
+}
+.sc-ask-again {
+  min-width: 0;
+  padding: 0 .5em;
+  margin-left: .35em;
+  font-size: 11px;
+  line-height: 1.6;
+}

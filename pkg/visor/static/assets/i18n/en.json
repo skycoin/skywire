@@ -715,6 +715,7 @@
     "create": "Create",
     "join": "Join",
     "invite": "Invite",
+    "ask-again": "Ask again",
     "copy": "Copy",
     "members": "members",
     "add-member-pk": "Member public key (66-char hex)",

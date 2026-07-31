@@ -273,13 +273,27 @@ type API interface {
 	// allowlists. See pkg/visor/group.go.
 	GroupCreate(args GroupCreateArgs) (GroupInfo, string, error)
 	GroupJoin(args GroupJoinArgs) (GroupInfo, error)
+	GroupAskAgain(id string) (GroupInfo, error)
 	GroupList() ([]GroupInfo, error)
 	GroupGet(id string) (GroupInfo, error)
 	GroupInvite(id string) (string, error)
 	GroupAddMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupJoinRequests(id string) ([]GroupJoinRequest, error)
+	GroupApproveJoin(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupDenyJoin(id string, pk cipher.PubKey) error
+	GroupRemoveMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupBanMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupUnbanMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error)
 	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
+	GroupRotateKey(id string) (GroupInfo, error)
+	GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error)
+	GroupSetJoinPoW(id string, bits uint8) (GroupInfo, error)
 	GroupSend(args GroupSendArgs) error
+	GroupFileKey(args GroupFileKeyArgs) (GroupFileKeyResult, error)
 	GroupUnsend(args GroupUnsendArgs) error
 	GroupPoll(since time.Time) ([]GroupMessage, error)
 	GroupDelete(id string) error

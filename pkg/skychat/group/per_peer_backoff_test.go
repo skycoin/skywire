@@ -1,4 +1,4 @@
-// Package group — cmd/apps/skychat/group/per_peer_backoff_test.go:
+// Package group — pkg/skychat/group/per_peer_backoff_test.go:
 // targeted coverage for the per-(group, peer) reconnect backoff
 // added in T2b. The full reconnect loop wiring rides the manual E2E
 // plan (same convention as the rest of the manager.go tests in this

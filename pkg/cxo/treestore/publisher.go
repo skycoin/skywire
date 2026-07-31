@@ -688,16 +688,38 @@ func (p *Publisher) Walk(prefix string, fn func(path string, value []byte) bool)
 	walkLeaves(startNode, canonical, fn)
 }
 
+// flushTimeout bounds how long Flush waits for the publish loop to
+// clear the dirty flag.
+//
+// The wait used to be unbounded, which reads as "correct, just slow"
+// but isn't: publishIfDirty leaves dirty SET whenever publishRoot
+// returns an error, and a publisher whose CXO node or store has gone
+// away fails every attempt. So a Flush in that state spun the wakeup
+// loop forever, and since Close flushes first, Close never returned
+// either — one wedged publisher hung its whole process. Seen in the
+// skychat group tests: a failing test's t.Cleanup blocked in
+// Publisher.Close, which turned a readable assertion failure into a
+// package-wide "test timed out" panic with no failing test named.
+const flushTimeout = 5 * time.Second
+
 // Flush blocks until pending changes have been published, or
 // returns nil immediately if there are none. Useful in tests where
 // the caller wants deterministic post-Put state.
+//
+// Returns an error if the publish loop hasn't caught up within
+// flushTimeout — the pending changes stay pending, and it's the
+// caller's call whether that's fatal.
 func (p *Publisher) Flush() error {
+	deadline := time.Now().Add(flushTimeout)
 	for {
 		p.mu.Lock()
 		dirty := p.dirty
 		p.mu.Unlock()
 		if !dirty {
 			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("treestore: flush did not complete within %s; the publish loop is not clearing dirty state", flushTimeout)
 		}
 		// Trigger a wakeup and yield. The publish loop will clear
 		// dirty if Save succeeds.
@@ -715,8 +737,12 @@ func (p *Publisher) Flush() error {
 func (p *Publisher) Close() error {
 	var firstErr error
 	p.stopOnce.Do(func() {
-		// Best-effort flush before signaling stop.
-		firstErr = p.Flush()
+		// Best-effort flush before signaling stop — and best-effort
+		// means the timeout is logged, not returned: an unpublishable
+		// tree must not stop us from tearing the publisher down.
+		if err := p.Flush(); err != nil {
+			p.log.WithError(err).Warn("treestore: close: flushing pending changes failed; closing anyway")
+		}
 		close(p.done)
 		// Wait for the cleanup goroutine to drain its final sweep.
 		// Bounded since RemoveObjects is O(CXDS size), but for
