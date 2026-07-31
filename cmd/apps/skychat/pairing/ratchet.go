@@ -189,7 +189,7 @@ type epochEntry struct {
 //
 // Guarded by its own mutex rather than the Pair's, because Send (which
 // reads the current epoch) and onUpdate (which installs a new one) run
-// concurrently by construction and neither should serialise on anything
+// concurrently by construction and neither should serialize on anything
 // broader.
 type ratchetState struct {
 	mu sync.Mutex

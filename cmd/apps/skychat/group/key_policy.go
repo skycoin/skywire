@@ -92,7 +92,7 @@ const (
 // rotationJitter is this visor's deterministic offset into the rotation
 // window, in [0, rotationJitterWindow).
 //
-// Derived from the PK rather than randomised so it is stable across
+// Derived from the PK rather than randomized so it is stable across
 // restarts: a visor that re-rolled its jitter every boot would keep
 // leapfrogging its co-admins and could rotate twice in a window it should
 // have sat out.

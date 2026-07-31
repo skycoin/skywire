@@ -283,7 +283,7 @@ func TestEnvelopeRoundTripAndLegacyPassthrough(t *testing.T) {
 	require.NoError(t, err)
 
 	gotID, body, tagged := parseEnvelope(sealed)
-	require.True(t, tagged, "an epoch envelope was not recognised as one")
+	require.True(t, tagged, "an epoch envelope was not recognized as one")
 	require.Equal(t, id, gotID)
 	pt, err := openMessage(key, body)
 	require.NoError(t, err)
