@@ -1,25 +1,29 @@
 <!-- Use nodeLoaded boolean flag with if/else to avoid Angular @if detection issues -->
 @if (nodeLoaded) {
   <div class="row">
-    <div class="col-12">
-      <app-top-bar
-        [titleParts]="titleParts"
-        [pageHeaderLabel]="headerLabel"
-        [pageHeaderIdentifier]="headerIdentifier"
-        [tabsData]="tabsData"
-        [homeTabsData]="homeNavTabs"
-        [switcherTabsData]="switcherTabs"
-        [selectedTabIndex]="selectedTabIndex"
-        [secondsSinceLastUpdate]="secondsSinceLastUpdate"
-        [showLoading]="updating"
-        [showAlert]="errorsUpdating"
-        [refeshRate]="storageService.getRefreshTime()"
-        [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
-        [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
-        (optionSelected)="performAction($event)"
-        (refreshRequested)="forceDataRefresh(true)"
-      ></app-top-bar>
-    </div>
+    <!-- embed=1 (chrome-less single-tab mode for WinBox/iframe hosts, e.g. the
+    wasm desktop's ☰ Chat window) hides the top bar + tab rows. -->
+    @if (!embedMode) {
+      <div class="col-12">
+        <app-top-bar
+          [titleParts]="titleParts"
+          [pageHeaderLabel]="headerLabel"
+          [pageHeaderIdentifier]="headerIdentifier"
+          [tabsData]="tabsData"
+          [homeTabsData]="homeNavTabs"
+          [switcherTabsData]="switcherTabs"
+          [selectedTabIndex]="selectedTabIndex"
+          [secondsSinceLastUpdate]="secondsSinceLastUpdate"
+          [showLoading]="updating"
+          [showAlert]="errorsUpdating"
+          [refeshRate]="storageService.getRefreshTime()"
+          [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
+          [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
+          (optionSelected)="performAction($event)"
+          (refreshRequested)="forceDataRefresh(true)"
+        ></app-top-bar>
+      </div>
+    }
     <div class="col-12">
       <!-- Right-bar / split-view is gone. The active tab content
       is full-width; the visor's identity (label + PK) lives
@@ -55,19 +59,21 @@
   </div>
 } @else {
   <div class="d-flex flex-column h-100 w-100">
-    <div>
-      <app-top-bar
-        [titleParts]="titleParts"
-        [pageHeaderLabel]="headerLabel"
-        [pageHeaderIdentifier]="headerIdentifier"
-        [tabsData]="tabsData"
-        [selectedTabIndex]="selectedTabIndex"
-        [showUpdateButton]="false"
-        [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
-        [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
-        (optionSelected)="performAction($event)"
-      ></app-top-bar>
-    </div>
+    @if (!embedMode) {
+      <div>
+        <app-top-bar
+          [titleParts]="titleParts"
+          [pageHeaderLabel]="headerLabel"
+          [pageHeaderIdentifier]="headerIdentifier"
+          [tabsData]="tabsData"
+          [selectedTabIndex]="selectedTabIndex"
+          [showUpdateButton]="false"
+          [optionsData]="nodeActionsHelper ? nodeActionsHelper.options : null"
+          [returnText]="nodeActionsHelper ? nodeActionsHelper.returnButtonText : ''"
+          (optionSelected)="performAction($event)"
+        ></app-top-bar>
+      </div>
+    }
     @if (!notFound && !loadFailed) {
       <app-loading-indicator></app-loading-indicator>
     }
