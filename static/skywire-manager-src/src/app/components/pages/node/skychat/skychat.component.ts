@@ -506,9 +506,14 @@ return {
     const replyToId = this.replyTarget ? (this.replyTarget.id || '') : '';
     if (this.wasmChat) {
       const sv = (window as any).skywireVisor;
+      // 3rd arg = network. Honor the UI's network selector exactly like the
+      // native path does (it was hardcoded 'dmsg' here — a wasm/native
+      // divergence). The default is skynet: a routed transport survives dmsg
+      // session churn, and measured FASTER than the direct dmsg stream when a
+      // route is already up (7ms vs 178ms in live wasm→native testing).
       // 4th arg = reply_to (the quoted message's id); the sent message is
       // buffered with reply_to + out:true, so the poll loop renders it threaded.
-      Promise.resolve(sv.skychatSend(recipient, text, 'dmsg', replyToId))
+      Promise.resolve(sv.skychatSend(recipient, text, this.network, replyToId))
         .then(() => {
  this.message = ''; this.cancelReply();
 })

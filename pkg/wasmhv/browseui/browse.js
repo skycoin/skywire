@@ -1299,6 +1299,34 @@
   // Backward-compatible surface: returns { panel, browser, toggle, openWindow }
   // where toggle() shows/hides the desktop (opening a first window on demand), so
   // the existing skynet launcher button keeps working unchanged.
+  // resolveSelfPKAsync resolves this visor's PK for the embed-iframe windows,
+  // robust to BOTH skywireVisor API shapes: in-page status() returns the object
+  // synchronously; the SharedWorker proxy returns a Promise (every proxied call
+  // is a MessagePort round-trip). The sync opts.selfPK() getter is tried first
+  // but can legitimately be empty right after page load (the desktop attaches
+  // before CFG.ready resolves) — which made a freshly-opened chat/log window
+  // show "boot the visor first" on a fully-booted visor. Polls briefly so a
+  // window opened during boot fills in as soon as the visor is up.
+  function resolveSelfPKAsync(opts, timeoutMs) {
+    var deadline = Date.now() + (timeoutMs || 20000);
+    function attempt(resolve) {
+      var pk = "";
+      try { pk = (opts.selfPK && opts.selfPK()) || ""; } catch (_) {}
+      if (pk) { resolve(pk); return; }
+      var sv = globalThis.skywireVisor || {};
+      Promise.resolve(sv.status ? sv.status() : null).then(function (st) {
+        var p = (st && st.pk) || "";
+        if (p) { resolve(p); return; }
+        if (Date.now() > deadline) { resolve(""); return; }
+        setTimeout(function () { attempt(resolve); }, 500);
+      }).catch(function () {
+        if (Date.now() > deadline) { resolve(""); return; }
+        setTimeout(function () { attempt(resolve); }, 500);
+      });
+    }
+    return new Promise(attempt);
+  }
+
   // createLogWindow hosts the ONE Angular Logs tab — the same component the
   // node page's Logs tab renders — in a WinBox window, chrome-less via the
   // node page's ?embed=1 mode. This replaced a bespoke console-capture viewer
@@ -1316,14 +1344,18 @@
     }
     var wrap = doc.createElement("div");
     wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;display:flex;flex-direction:column;overflow:hidden";
-    if (!selfPK()) {
-      wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">boot the visor first</div>';
-    } else {
+    wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">connecting…</div>';
+    resolveSelfPKAsync(opts).then(function (pk) {
+      wrap.innerHTML = "";
+      if (!pk) {
+        wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">boot the visor first</div>';
+        return;
+      }
       var f = doc.createElement("iframe");
-      f.src = "/#/nodes/" + selfPK() + "/logs?embed=1";
+      f.src = "/#/nodes/" + pk + "/logs?embed=1";
       f.style.cssText = "border:0;width:100%;height:100%;flex:1;background:#0e0c14";
       wrap.appendChild(f);
-    }
+    });
     var wb = makeWin(doc, {
       title: "visor log", root: opts.root, top: opts.top, bottom: opts.bottom, width: "46%", height: "60%",
       mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); }
@@ -1493,20 +1525,26 @@
       try { var st = (globalThis.skywireVisor || {}).status; var o = st ? st() : null; return (o && o.pk) || ""; } catch (_) { return ""; }
     }
     function chatURL(peer) {
-      return "/#/nodes/" + selfPK() + "/chat?embed=1" + (peer ? "&peer=" + encodeURIComponent(peer) : "");
+      return "/#/nodes/" + (resolvedPK || (opts.selfPK && opts.selfPK()) || "") + "/chat?embed=1" + (peer ? "&peer=" + encodeURIComponent(peer) : "");
     }
     var wrap = doc.createElement("div");
     wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;display:flex;flex-direction:column;overflow:hidden";
+    wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">connecting…</div>';
     var frame = null;
-    if (!selfPK()) {
-      wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">boot the visor first</div>';
-    } else {
+    var resolvedPK = "";
+    resolveSelfPKAsync(opts).then(function (pk) {
+      wrap.innerHTML = "";
+      if (!pk) {
+        wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">boot the visor first</div>';
+        return;
+      }
+      resolvedPK = pk;
       frame = doc.createElement("iframe");
       frame.src = chatURL(opts.initialPeer || "");
       frame.style.cssText = "border:0;width:100%;height:100%;flex:1;background:#0e0c14";
       frame.setAttribute("allow", "microphone; autoplay"); // voice calls live in the component
       wrap.appendChild(frame);
-    }
+    });
     // Deep-link retarget: reload the embedded tab addressed to the new peer
     // (the component reads ?peer= once at init — a src swap re-inits it).
     function setPeer(pk) { if (frame && pk) { frame.src = chatURL(pk); } }
@@ -1807,6 +1845,67 @@
       track(chatWin, "skychat");
       return chatWin;
     }
+
+    // --- Desktop notifications for inbound skychat DMs (wasm visor only). ---
+    // The browser analogue of the native skychat app's --os-notify (osnotify.go
+    // fires when no browser UI is attached): notify when this tab is HIDDEN or
+    // no chat window is open — i.e. the operator isn't already looking at the
+    // conversation. Clicking the notification focuses the tab and opens the
+    // chat window addressed to the sender. Poll-based over skychatMessages()
+    // (the in-process buffer the Angular tab reads too — same source, no new
+    // surface). Baseline on start so history never re-notifies; ids are the
+    // stable envelope ids. Permission is requested lazily on the first user
+    // gesture on the taskbar (browsers reject requests without a gesture).
+    (function chatNotifier() {
+      var sv = globalThis.skywireVisor || {};
+      if (!sv.skychatMessages || typeof Notification === "undefined") { return; } // native HV desktop / no API → no-op
+      var seen = null; // null until baselined
+      function wantNotify() {
+        if (Notification.permission !== "granted") { return false; }
+        if (doc.hidden) { return true; }        // tab in background → notify
+        return !chatWin;                         // tab visible but no chat UI open
+      }
+      function shortPK(pk) { return pk && pk.length > 12 ? pk.slice(0, 8) + "…" : (pk || "peer"); }
+      function fire(m) {
+        try {
+          var n = new Notification("skychat — " + shortPK(m.from), {
+            body: (m.text || "").slice(0, 140), tag: "skychat-" + m.from, renotify: true
+          });
+          n.onclick = function () {
+            try { window.focus(); } catch (e) {}
+            try { openChat(m.from); } catch (e) {}
+            try { n.close(); } catch (e) {}
+          };
+        } catch (e) {}
+      }
+      function tick() {
+        Promise.resolve(sv.skychatMessages()).then(function (raw) {
+          var msgs = [];
+          try { msgs = typeof raw === "string" ? JSON.parse(raw) : (raw || []); } catch (e) { return; }
+          if (seen === null) { // first sample = baseline, never notify history
+            seen = {};
+            msgs.forEach(function (m) { if (m && m.id) { seen[m.id] = 1; } });
+            return;
+          }
+          msgs.forEach(function (m) {
+            if (!m || !m.id || seen[m.id]) { return; }
+            seen[m.id] = 1;
+            if (!m.out && !m.deleted && wantNotify()) { fire(m); }
+          });
+        }).catch(function () {});
+      }
+      setInterval(tick, 4000);
+      tick();
+      // Lazy permission request on the first taskbar interaction (a user gesture).
+      if (Notification.permission === "default") {
+        var asked = false;
+        bar.addEventListener("click", function () {
+          if (asked) { return; }
+          asked = true;
+          try { Notification.requestPermission().catch(function () {}); } catch (e) {}
+        }, { once: false });
+      }
+    })();
     var hostWin = null;
     function openHost() {
       if (focusExisting(hostWin)) { return; }
