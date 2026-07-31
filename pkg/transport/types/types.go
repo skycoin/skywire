@@ -105,3 +105,21 @@ func Valid(t Type) bool {
 		return false
 	}
 }
+
+// IsRelay reports whether t is a RELAY transport — one whose payload passes
+// through an intermediary service rather than over a direct visor↔visor pipe.
+// DMSG is the only relay type (it hops through a dmsg server that neither
+// endpoint can observe for path planning); every other known transport
+// (stcpr/sudph/stcp/squicr/swsr/swtr, and the genuinely-p2p webrtc) is direct.
+// This is the single predicate for the "dmsg is a relay, exempt it" rule that
+// was previously re-derived ad hoc at each call site. Alias-aware.
+func IsRelay(t Type) bool {
+	return NormalizeType(t) == DMSG
+}
+
+// IsDirect reports whether t is a DIRECT (non-relay) peer-to-peer transport
+// between two visors. It is the complement of IsRelay over the known types; an
+// unrecognized type is neither direct nor relay (returns false). Alias-aware.
+func IsDirect(t Type) bool {
+	return Valid(t) && !IsRelay(t)
+}

@@ -487,8 +487,14 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	}
 
 	var arLimit int
+	var noDirectTransports bool
+	var transportCreateDeny []types.Type
 	if v.conf.Transport != nil {
 		arLimit = v.conf.Transport.ARTransportLimit
+		noDirectTransports = v.conf.Transport.NoDirectTransports
+		for _, s := range v.conf.Transport.TransportCreateDeny {
+			transportCreateDeny = append(transportCreateDeny, types.NormalizeType(types.Type(s)))
+		}
 	}
 	tpMConf := transport.ManagerConfig{
 		PubKey: v.conf.PK,
@@ -503,6 +509,8 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		PersistentTransportsCache: pTps,
 		Version:                   buildinfo.Version(),
 		ARTransportLimit:          arLimit,
+		NoDirectTransports:        noDirectTransports,
+		TransportCreateDeny:       transportCreateDeny,
 	}
 
 	// todo: pass down configuration?

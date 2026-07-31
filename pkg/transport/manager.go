@@ -47,6 +47,18 @@ type ManagerConfig struct {
 	//   N > 0 = deregister after N transports
 	//   N < 0 = never register
 	ARTransportLimit int
+	// NoDirectTransports, when true, refuses to CREATE (dial out) any DIRECT
+	// peer-to-peer transport (stcpr/sudph/stcp/squicr/swsr/swtr/webrtc). DMSG — a
+	// relay through a dmsg server, not a direct p2p link — is still created, so
+	// the visor keeps its always-available baseline and can still reach peers
+	// over existing transports/routes. Gates only OUTBOUND creation; inbound
+	// (accepted) transports are unaffected.
+	NoDirectTransports bool
+	// TransportCreateDeny is an advanced/testing per-type deny list: creating any
+	// type listed here is refused, INCLUDING dmsg (so a test can force a
+	// pure-direct or fully-offline visor). Applied on top of NoDirectTransports;
+	// stored normalized (aliases resolved). Empty (default) denies nothing.
+	TransportCreateDeny []types.Type
 }
 
 // RouteChecker is called before tearing down an existing transport for re-creation.
@@ -981,6 +993,13 @@ var ErrNotFound = errors.New("transport not found")
 // ErrUnknownNetwork occurs on attempt to use an unknown network type.
 var ErrUnknownNetwork = errors.New("unknown network type")
 
+// ErrTransportCreateDisabled is returned when creating (dialing out) a transport
+// of a given type is forbidden by the manager's transport-creation policy
+// (NoDirectTransports / TransportCreateDeny). It gates only OUTBOUND creation;
+// inbound (accepted) transports and reachability over existing transports/routes
+// are unaffected.
+var ErrTransportCreateDisabled = errors.New("transport creation disabled for this type by policy")
+
 // IsKnownNetwork returns true when netName is a known
 // network type that we are able to operate in.
 //
@@ -1108,9 +1127,41 @@ func (tm *Manager) SaveTransportWithOptions(ctx context.Context, remote cipher.P
 	}
 }
 
+// transportCreateDenied reports whether CREATING (dialing out) a transport of
+// netType is forbidden by the manager's transport-creation policy. dmsg is
+// exempt from NoDirectTransports (it is a relay, not direct p2p) but NOT from an
+// explicit TransportCreateDeny entry. Alias-aware via NormalizeType. This is the
+// single chokepoint that covers every creation path — autoconnect, the on-demand
+// route-setup hook, `tp add`, and `--direct` all funnel through saveTransportInternal.
+func (tm *Manager) transportCreateDenied(netType types.Type) bool {
+	nt := types.NormalizeType(netType)
+	if tm.Conf.NoDirectTransports && types.IsDirect(nt) {
+		return true
+	}
+	for _, d := range tm.Conf.TransportCreateDeny {
+		if types.NormalizeType(d) == nt {
+			return true
+		}
+	}
+	return false
+}
+
+// CanCreateTransport reports whether the manager is permitted to CREATE (dial
+// out) a transport of netType under the current transport-creation policy. It is
+// the exported, affirmative form of transportCreateDenied — callers that decide
+// what to dial (e.g. autoconnect phases) use it to skip types they'd only be
+// refused at the funnel, avoiding wasted dials and log noise.
+func (tm *Manager) CanCreateTransport(netType types.Type) bool {
+	return !tm.transportCreateDenied(netType)
+}
+
 func (tm *Manager) saveTransportInternal(ctx context.Context, remote cipher.PubKey, netType types.Type, label Label, opts SaveTransportOptions) (*ManagedTransport, error) {
 	if !tm.IsKnownNetwork(netType) {
 		return nil, ErrUnknownNetwork
+	}
+	if tm.transportCreateDenied(netType) {
+		tm.Logger.Debugf("Refusing to create %s transport to %s: disabled by transport-creation policy", netType, remote)
+		return nil, ErrTransportCreateDisabled
 	}
 
 	tpID := tm.tpIDFromPK(remote, netType)

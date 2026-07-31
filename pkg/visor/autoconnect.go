@@ -147,10 +147,16 @@ func (a *autoconnector) Run(ctx context.Context, v *Visor) (err error) {
 			absent1 := a.filterDuplicates(addrs, a.tm.GetTransportsByLabel(transport.LabelAutomatic))
 
 			// Check which transport types are supported locally
-			localSupportsSUDPH := a.tm.IsKnownNetwork(tptypes.SUDPH)
-			localSupportsSTCPR := a.tm.IsKnownNetwork(tptypes.STCPR)
-			localSupportsSQUICR := a.tm.IsKnownNetwork(tptypes.QUIC)   // QUIC(squicr): 3rd distinct carrier family for route diversity
-			localSupportsWEBRTC := a.tm.IsKnownNetwork(tptypes.WEBRTC) // NAT-traversing (ICE/STUN); reaches more NAT types than sudph hole-punch
+			// Autoconnect only ever creates DIRECT transports (sudph/stcpr/squicr/
+			// webrtc), so honor the transport-creation policy here: with
+			// no_direct_transports (or a per-type deny) set, CanCreateTransport is
+			// false and the corresponding phase is skipped entirely — no wasted dials,
+			// no per-cycle "creation disabled" warnings from the funnel. dmsg is not an
+			// autoconnect phase, so the visor still keeps its dmsg baseline.
+			localSupportsSUDPH := a.tm.IsKnownNetwork(tptypes.SUDPH) && a.tm.CanCreateTransport(tptypes.SUDPH)
+			localSupportsSTCPR := a.tm.IsKnownNetwork(tptypes.STCPR) && a.tm.CanCreateTransport(tptypes.STCPR)
+			localSupportsSQUICR := a.tm.IsKnownNetwork(tptypes.QUIC) && a.tm.CanCreateTransport(tptypes.QUIC)     // QUIC(squicr): 3rd distinct carrier family for route diversity
+			localSupportsWEBRTC := a.tm.IsKnownNetwork(tptypes.WEBRTC) && a.tm.CanCreateTransport(tptypes.WEBRTC) // NAT-traversing (ICE/STUN); reaches more NAT types than sudph hole-punch
 			if !localSupportsSUDPH && !localSupportsSTCPR {
 				a.log.Warn("No supported network types available locally (SUDPH and STCPR both unavailable)")
 				continue
