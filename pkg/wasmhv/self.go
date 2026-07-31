@@ -130,11 +130,16 @@ func (c *Core) selfRoute(self SelfProvider, method, sub string, body []byte, que
 		return jsonResp([]string{"dmsg", "swsr", "swtr", "webrtc"})
 	case "host-stats":
 		// A browser tab has no host to measure (no CPU/RAM/disk/NIC of its own),
-		// so report the shape with zeros + js/wasm identity. This keeps the
-		// multi-visor resources page from 404-erroring on a serverless visor; it
-		// renders the row with empty gauges rather than failing the whole page.
+		// so report the shape + js/wasm identity but flag the hardware metrics as
+		// unmeasurable via "available": false — the honest signal so the UI can
+		// render N/A instead of treating 0% CPU / 0-byte RAM as a real reading
+		// (which made a browser visor look idle-but-fine rather than
+		// not-applicable). This keeps the multi-visor resources page from
+		// 404-erroring on a serverless visor. The zeros remain for older UI that
+		// reads the numbers directly.
 		return jsonResp(map[string]interface{}{
 			"hostname": "browser", "os": "js", "platform": "wasm", "arch": "wasm",
+			"available":      false,
 			"uptime_seconds": 0, "cpu_percent": 0, "cpu_count": 0, "cpu_logical_count": 0,
 			"mem_total": 0, "mem_used": 0, "mem_available": 0, "mem_percent": 0,
 			"disk_total": 0, "disk_used": 0, "disk_free": 0, "disk_percent": 0,
@@ -203,8 +208,17 @@ func (c *Core) selfRoute(self SelfProvider, method, sub string, body []byte, que
 // single app; PUT applies status (start/stop) and/or autostart via the
 // SelfProvider's in-process app control, then returns the fresh state.
 func (c *Core) selfAppRoute(self SelfProvider, method, appName string, body []byte) (int, []byte) {
-	// Only the bare app name; apps/<app>/logs|stats|connections aren't wired for
-	// the self visor (a browser tab has no per-app BoltDB log). Strip the tail.
+	// apps/<app>/logs: a browser tab has no per-app BoltDB log store, but the
+	// Angular app-detail page requests /logs and treats a 404 as an error
+	// dialog. Serve a valid, EMPTY LogsRes (the native shape) so the logs panel
+	// renders "no logs" cleanly instead of erroring — the same
+	// render-cleanly-don't-404 treatment routegroups/host-stats already get.
+	// (Richer in-process app logs on the wasm edge are a separate follow-up.)
+	if parts := strings.SplitN(appName, "/", 2); len(parts) == 2 && parts[1] == "logs" {
+		return jsonResp(map[string]interface{}{"last_log_timestamp": "", "logs": []string{}})
+	}
+	// Only the bare app name for the remaining GET/PUT; stats|connections aren't
+	// wired for the self visor either — strip the tail.
 	appName = strings.SplitN(appName, "/", 2)[0]
 	if method == "PUT" {
 		var req struct {

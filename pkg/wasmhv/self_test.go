@@ -155,3 +155,77 @@ func TestSelf_NodePageSubroutes(t *testing.T) {
 		t.Fatalf("runtime-logs since not threaded: got %d, want 42", gotSince)
 	}
 }
+
+// TestSelf_DmsgConnectAllRoute locks the "Connect to all servers" endpoint the
+// wasm core serves for the shared HV UI (it 404'd before #3632, so the button
+// errored on every browser visor): POST dispatches to the provider and returns
+// its result; other methods are rejected rather than silently no-oping.
+func TestSelf_DmsgConnectAllRoute(t *testing.T) {
+	pk := newSelfPK(t)
+	core := NewCore(pk, nil)
+	core.SetSelf(fakeSelf{pk: pk})
+
+	base := "/api/visors/" + pk.Hex()
+	status, body := core.ServeHTTP("POST", base+"/dmsg/connect-all", nil)
+	if status != 200 {
+		t.Fatalf("POST dmsg/connect-all status = %d (body %s)", status, body)
+	}
+	var res struct {
+		Total            *int `json:"total"`
+		AlreadyConnected *int `json:"already_connected"`
+		NewlyConnected   *int `json:"newly_connected"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil {
+		t.Fatalf("connect-all body not the DmsgConnectAllResult shape: %v (%s)", err, body)
+	}
+	if res.Total == nil || res.AlreadyConnected == nil || res.NewlyConnected == nil {
+		t.Fatalf("connect-all result missing fields: %s", body)
+	}
+
+	if status, _ := core.ServeHTTP("GET", base+"/dmsg/connect-all", nil); status != 405 {
+		t.Fatalf("GET dmsg/connect-all status = %d, want 405", status)
+	}
+}
+
+// TestSelf_AppLogsServesEmptyNot404 locks the fix that a self-app /logs request
+// returns a valid (empty) LogsRes instead of the generic subroute 404 — so the
+// Angular app-detail logs panel renders "no logs" instead of an error dialog.
+func TestSelf_AppLogsServesEmptyNot404(t *testing.T) {
+	pk := newSelfPK(t)
+	core := NewCore(pk, nil)
+	core.SetSelf(fakeSelf{pk: pk})
+
+	status, body := core.ServeHTTP("GET", "/api/visors/"+pk.Hex()+"/apps/skychat/logs", nil)
+	if status != 200 {
+		t.Fatalf("apps/<app>/logs status = %d (body %s), want 200", status, body)
+	}
+	var res struct {
+		LastLogTimestamp string   `json:"last_log_timestamp"`
+		Logs             []string `json:"logs"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil {
+		t.Fatalf("app logs body not a LogsRes: %v (%s)", err, body)
+	}
+	if res.Logs == nil {
+		t.Fatalf("logs should be an empty array, not null: %s", body)
+	}
+}
+
+// TestSelf_HostStatsFlagsUnavailable locks host-stats reporting available:false
+// (a browser tab can't measure its host — the UI must show N/A, not 0%).
+func TestSelf_HostStatsFlagsUnavailable(t *testing.T) {
+	pk := newSelfPK(t)
+	core := NewCore(pk, nil)
+	core.SetSelf(fakeSelf{pk: pk})
+
+	status, body := core.ServeHTTP("GET", "/api/visors/"+pk.Hex()+"/host-stats", nil)
+	if status != 200 {
+		t.Fatalf("host-stats status = %d", status)
+	}
+	var res struct {
+		Available *bool `json:"available"`
+	}
+	if err := json.Unmarshal(body, &res); err != nil || res.Available == nil || *res.Available {
+		t.Fatalf("host-stats must report available:false, got %s", body)
+	}
+}
