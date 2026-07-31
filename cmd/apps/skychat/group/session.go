@@ -514,6 +514,19 @@ type Session struct {
 	// keySeq is the same counter for KeyPathPrefix/<seq>.
 	keySeq atomic.Uint64
 
+	// msgsSealed counts messages this session has published under the
+	// CURRENT group key — the volume half of the key-rotation policy in
+	// key_policy.go. Bumped by publishAs on every encrypted body, reset
+	// to zero by installKeyLocal whenever a new key actually takes
+	// effect.
+	//
+	// Deliberately local rather than persisted or gossiped: it drives
+	// "have I, this admin, sealed enough under this key", and a count
+	// that reset on restart errs toward rotating LATER than due, never
+	// earlier. The age half of the policy is the one that has to survive
+	// restarts, and it does — it reads Record.KeyIssuedAt off the store.
+	msgsSealed atomic.Uint64
+
 	// Live moderation state, guarded by membersMu alongside members
 	// because every enforcement decision reads them together and a
 	// second lock would just create an ordering hazard. Seeded from
@@ -2301,6 +2314,19 @@ func (s *Session) publishAs(senderPK cipher.PubKey, text string, ts time.Time) e
 	path := MessagePathPrefix + "/" + senderPK.Hex() + "/" + strconv.FormatInt(ts.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
 	if err := s.pub.Put(path, body); err != nil {
 		return fmt.Errorf("group: publishAs: put %q: %w", path, err)
+	}
+	// Count only what the current key actually sealed, and only after
+	// the leaf lands: a failed Put sealed nothing that anyone can read,
+	// so charging it against the key's volume budget would rotate early
+	// for no reason.
+	//
+	// Heartbeats are excluded even though they go through this same
+	// path. They are liveness probes on a fixed timer, so counting them
+	// would make the volume threshold a second, much noisier AGE
+	// threshold — an idle group would rotate every DefaultKeyMaxMessages
+	// × HeartbeatInterval regardless of whether anyone said anything.
+	if len(msg.Ciphertext) > 0 && text != HeartbeatMarker {
+		s.msgsSealed.Add(1)
 	}
 
 	// Owner-side local echo: deliver to the local handler so the

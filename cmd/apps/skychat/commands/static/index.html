@@ -228,6 +228,31 @@
       color: var(--accent-green);
     }
 
+    /* Epoch tag: the forward-secrecy state of a paired DM. Deliberately
+       quiet — it is reassurance, not a call to action — and it only
+       appears at all when there is something true to say. */
+    .epoch-tag {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+      cursor: help;
+    }
+
+    .epoch-tag.secret {
+      color: var(--accent-green);
+    }
+
+    .epoch-tag.hidden {
+      display: none;
+    }
+
+    .ga-key-age {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
     .presence-tag.hidden {
       display: none;
     }
@@ -1854,6 +1879,10 @@
         </div>
         <div class="chat-header-pk" id="headerPk">-</div>
         <span id="headerPresence" class="presence-tag hidden"></span>
+        <!-- Forward-secrecy state for a paired (CXO) DM. Hidden for
+             unpaired chats, whose confidentiality is transport-only and
+             which have no epoch to report. -->
+        <span id="headerEpoch" class="epoch-tag hidden"></span>
       </div>
       <div class="chat-header-actions">
         <button id="dmCallBtn" class="icon-btn hidden" onclick="app.placeCall()" title="Start a voice call" aria-label="Voice call">&#x1F4DE;</button>
@@ -2150,13 +2179,18 @@
           <span id="gaKeyEpoch">Encryption: key #0</span>
           <button id="gaRotateBtn" class="ga-btn" onclick="app.rotateGroupKey()">Rotate key</button>
         </div>
+        <div id="gaKeyAge" class="ga-key-age"></div>
         <div class="ga-key-note">
-          Evicting a member rotates this automatically. Rotate by hand if a
-          member's device or key may have been exposed — the new key is
+          The key rotates on its own once it has covered a week or a few
+          thousand messages, so no single key covers the whole life of the
+          group. Evicting a member rotates it immediately. Rotate by hand if
+          a member's device or key may have been exposed — the new key is
           sealed to each remaining member, so anyone outside the group stops
           being able to read new messages. Older messages stay readable.
-          Keys are stored encrypted on this device, tied to this visor's
-          identity.
+          Each rotation seals with a throwaway key that is discarded on the
+          spot, so leaking an admin's identity key later does not re-open
+          past keys. Keys are stored encrypted on this device, tied to this
+          visor's identity.
         </div>
       </div>
       <div id="gaRequestsWrap" class="hidden">
@@ -2201,6 +2235,10 @@
         this.connected = false;
         this.pairedSet = new Set();
         this.pairAvailable = false;
+        // pairEpochs[pk] = {epoch, forwardSecret, generation} — the
+        // forward-secrecy state the header tag renders. Refreshed by the
+        // same /pair poll that maintains pairedSet.
+        this.pairEpochs = {};
         this.pendingInvites = new Set();
         this.groups = [];
         this.group = null;   // active group id (null when a DM is selected)
@@ -2320,6 +2358,12 @@
         // the latest sweep once a minute.
         this._pollPresence();
         setInterval(() => this._pollPresence(), this._presencePollMs());
+        // Epoch state converges a few seconds after both ends are up (the
+        // peer has to publish its rotating key and we have to see it), so
+        // the header tag would otherwise sit on "setting up keys" until
+        // the next reload. Cheap: one /pair read, same call the pair list
+        // already uses.
+        setInterval(() => this._pollPairEpochs(), 15000);
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -3701,6 +3745,73 @@
           cxoOpt.classList.add('hidden');
           if (select.value === 'cxo') select.value = 'skynet';
         }
+        this._renderEpochTag(isPaired);
+      }
+
+      // _pollPairEpochs refreshes the per-peer forward-secrecy state.
+      // Read-only and failure-tolerant: a hiccup just leaves the tag
+      // showing what it last knew rather than blanking it, which would
+      // read as a downgrade that hasn't happened.
+      _pollPairEpochs() {
+        if (!this.pairAvailable) return;
+        fetch('/pair')
+          .then(res => (res.ok ? res.json() : null))
+          .then(pairs => {
+            if (!pairs) return;
+            this.pairEpochs = this.pairEpochs || {};
+            pairs.forEach(p => {
+              if (!p || !p.peer_pk) return;
+              this.pairEpochs[this.processPk(p.peer_pk)] = {
+                epoch: p.epoch || '',
+                forwardSecret: !!p.forward_secret,
+                generation: p.key_generation || 0,
+              };
+            });
+            const isPaired = this.recipient && this.pairedSet && this.pairedSet.has(this.recipient);
+            this._renderEpochTag(isPaired);
+          })
+          .catch(() => {});
+      }
+
+      // _renderEpochTag shows whether this conversation's messages are
+      // sealed under a short-lived key or still under the pair's static
+      // identity-derived one.
+      //
+      // Worth surfacing rather than assuming: the two look identical from
+      // the outside and differ in exactly the property a user would care
+      // about — whether a leak of the visor's identity key later would
+      // expose what was said today. It only appears for paired (CXO)
+      // chats; an unpaired chat has no epoch, and claiming one would be
+      // worse than saying nothing.
+      _renderEpochTag(isPaired) {
+        const el = document.getElementById('headerEpoch');
+        if (!el) return;
+        const state = isPaired && this.pairEpochs ? this.pairEpochs[this.recipient] : null;
+        if (!isPaired || !state) {
+          el.classList.add('hidden');
+          el.classList.remove('secret');
+          el.textContent = '';
+          return;
+        }
+        el.classList.remove('hidden');
+        if (state.forwardSecret) {
+          el.classList.add('secret');
+          el.textContent = `forward secret · key ${state.epoch.slice(0, 8)}`;
+          el.title =
+            'Messages are sealed with a short-lived key that is replaced daily. ' +
+            'The old key is destroyed on each rotation, so leaking this visor\'s ' +
+            'identity key later would not open what was said before.';
+        } else {
+          el.classList.remove('secret');
+          el.textContent = 'encrypted · keys not exchanged yet';
+          el.title =
+            'Still using the key derived from both identities. Each side ' +
+            'publishes its rotating key with its first message, so this ' +
+            'switches over once you have both said something (or sooner, ' +
+            'if the peer is offline or runs an older build, not at all). ' +
+            'Messages are encrypted either way, but under this key a later ' +
+            'leak of either identity key would open them.';
+        }
       }
 
       // togglePair flips the current recipient's CXO pair state via
@@ -3772,10 +3883,19 @@
           .then(pairs => {
             if (!pairs) return;
             this.pairAvailable = true;
+            this.pairEpochs = this.pairEpochs || {};
             (pairs || []).forEach(p => {
               if (p && p.peer_pk) {
                 const pk = this.processPk(p.peer_pk);
                 this.pairedSet.add(pk);
+                // Remember the forward-secrecy state per peer so the
+                // header can render it without another round trip when
+                // the user switches chats.
+                this.pairEpochs[pk] = {
+                  epoch: p.epoch || '',
+                  forwardSecret: !!p.forward_secret,
+                  generation: p.key_generation || 0,
+                };
                 if (!this.recipients.includes(pk)) {
                   this._addRecipient(pk);
                 } else {
@@ -5616,6 +5736,24 @@
         if (encrypted && isAdmin) {
           document.getElementById('gaKeyEpoch').textContent =
             `Encryption: key #${(info && info.key_epoch) || 0}`;
+          // Age + time-to-next-rotation. The epoch number alone doesn't
+          // tell you whether this key has been in force a day or a year,
+          // and "bounded in time" is the whole claim being made here.
+          const ageEl = document.getElementById('gaKeyAge');
+          const age = (info && info.key_age_seconds) || 0;
+          const due = (info && typeof info.key_rotates_in_seconds === 'number')
+            ? info.key_rotates_in_seconds : null;
+          if (age > 0) {
+            const parts = [`in use for ${this._humanDuration(age)}`];
+            if (due !== null) {
+              parts.push(due > 0
+                ? `rotates in ${this._humanDuration(due)}`
+                : 'rotation due — the next background pass will re-key');
+            }
+            ageEl.textContent = parts.join(' · ');
+          } else {
+            ageEl.textContent = '';
+          }
         }
 
         this._renderMemberList(info, isAdmin);
@@ -5737,6 +5875,23 @@
             this.showToast('Done.');
           })
           .catch(e => this.showToast(`Failed: ${e}`, 'error'));
+      }
+
+      // _humanDuration renders a second count as the coarsest unit that
+      // still says something useful. Key ages are days-to-weeks, so
+      // minute-level precision would be noise; anything under a minute is
+      // "just now" because a freshly rotated key is the common case right
+      // after clicking Rotate.
+      _humanDuration(seconds) {
+        const s = Math.abs(Math.round(seconds));
+        if (s < 60) return 'less than a minute';
+        if (s < 3600) return `${Math.round(s / 60)} min`;
+        if (s < 86400) {
+          const h = Math.round(s / 3600);
+          return `${h} hour${h === 1 ? '' : 's'}`;
+        }
+        const d = Math.round(s / 86400);
+        return `${d} day${d === 1 ? '' : 's'}`;
       }
 
       // rotateGroupKey re-keys an encrypted group on demand. The button is

@@ -11,7 +11,7 @@ import (
 func newTestStore(t *testing.T) *Store {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "pairs.db")
-	s, err := OpenStore(path)
+	s, err := OpenStore(path, testStoreSK())
 	if err != nil {
 		t.Fatalf("OpenStore: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestStorePersistence(t *testing.T) {
 	path := filepath.Join(dir, "pairs.db")
 
 	r := sampleRecord(t)
-	s1, err := OpenStore(path)
+	s1, err := OpenStore(path, testStoreSK())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestStorePersistence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s2, err := OpenStore(path)
+	s2, err := OpenStore(path, testStoreSK())
 	if err != nil {
 		t.Fatal(err)
 	}

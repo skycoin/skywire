@@ -157,7 +157,17 @@ func (s *Session) installKeyLocal(epoch uint64, key []byte, issuedAt, at time.Ti
 	st := keyStateOf(s.cfg.Record)
 	f := s.onKeyChange
 	s.membersMu.Unlock()
-	if changed && f != nil {
+	if !changed {
+		return
+	}
+	// The volume budget belongs to the key, so a new current key starts
+	// a new count. Reset only on `changed`: installKey's loser branch
+	// (a same-epoch rotation that lost the IssuedAt tiebreak) files the
+	// key into the ring without making it current, and zeroing the
+	// counter there would let a losing admin's leaf reset the winner's
+	// budget and defer the next due rotation indefinitely.
+	s.msgsSealed.Store(0)
+	if f != nil {
 		f(st)
 	}
 }
@@ -229,7 +239,7 @@ func (s *Session) applyKeyLeaf(body []byte) {
 	mySK := s.cfg.MySK
 	s.membersMu.Unlock()
 
-	key, err := openGroupKey(mySK, m.IssuerPK, wrap.Sealed)
+	key, err := openGroupKey(mySK, wrap.sealerPK(m.IssuerPK), wrap.Sealed)
 	if err != nil {
 		// A wrap addressed to us that we cannot open is worth a warning,
 		// not a debug line: it means we are about to fall behind the
@@ -254,6 +264,9 @@ func (s *Session) applyKeyLeaf(body []byte) {
 	if !changed {
 		return
 	}
+	// A key we adopted from another admin starts its volume budget here,
+	// same as one we minted ourselves — see installKeyLocal.
+	s.msgsSealed.Store(0)
 	if f != nil {
 		f(st)
 	}

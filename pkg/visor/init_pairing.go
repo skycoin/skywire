@@ -40,7 +40,9 @@ func initPairing(_ context.Context, v *Visor, log *logging.Logger) error {
 	dataDir := filepath.Join(v.conf.LocalPath, "pairing")
 	storePath := filepath.Join(dataDir, "pairs.db")
 
-	store, err := pairing.OpenStore(storePath)
+	// The visor SK seals the ratchet secrets this store now holds — see
+	// cmd/apps/skychat/pairing/store_seal.go.
+	store, err := pairing.OpenStore(storePath, v.conf.SK)
 	if err != nil {
 		log.WithError(err).Warn("Pairing: open store failed; pairing disabled this run")
 		return nil
