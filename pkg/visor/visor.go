@@ -84,6 +84,19 @@ var mLog = initLogger()
 type Visor struct {
 	closeStack []closer
 
+	// Suspend/Resume state. Suspend tears down every network subsystem
+	// but keeps the local CLI RPC listener (cli.listener/cli.grpc) alive
+	// so Resume can arrive; Resume re-runs the module graph. See
+	// api_suspend.go. cliLocalUp guards initCLI's once-only local-listener
+	// setup so a Resume re-run only re-creates the dmsg/transport-bound
+	// RPC surfaces. networkCtx is a cancelable parent for all network
+	// modules; Suspend cancels it so ctx-honoring goroutines unwind.
+	suspendMu     sync.Mutex
+	suspended     bool
+	cliLocalUp    bool
+	networkCtx    context.Context
+	networkCancel context.CancelFunc
+
 	ctx      context.Context // stored so RPC handlers can derive child contexts
 	conf     *visorconfig.V1
 	log      *logging.Logger
@@ -679,6 +692,11 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 			ctx = context.WithValue(ctx, "dmsgServerAddr", dmsgServerAddr) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
 		}
 	}
+	// Wrap the fully value-decorated ctx in a cancelable child stored on
+	// the visor, so Suspend can cancel every network module's context
+	// without touching the process-level signal ctx. Resume rebuilds it.
+	v.networkCtx, v.networkCancel = context.WithCancel(ctx)
+	ctx = v.networkCtx
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
 	if v.conf.Hypervisor == nil {

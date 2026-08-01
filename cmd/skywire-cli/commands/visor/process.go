@@ -29,6 +29,9 @@ func init() {
 	}
 	RootCmd.AddCommand(startCmd)
 	RootCmd.AddCommand(reloadCmd)
+	RootCmd.AddCommand(suspendCmd)
+	RootCmd.AddCommand(resumeCmd)
+	RootCmd.AddCommand(isSuspendedCmd)
 	RootCmd.AddCommand(shutdownCmd)
 	startCmd.Flags().BoolVarP(&sourcerun, "src", "s", false, "'go run' external commands from the skywire sources")
 }
@@ -91,6 +94,61 @@ var reloadCmd = &cobra.Command{
 }
 
 func init() {
+}
+
+var suspendCmd = &cobra.Command{
+	Use:   "suspend",
+	Short: "Suspend visor (tear down networking, keep local RPC)",
+	Long: `Make the visor quiescent without stopping the process.
+
+Tears down all network subsystems — transports, routing, apps, dmsg,
+autoconnect, address-resolver/TPD registration and the reward heartbeat —
+keeping only the local RPC listener alive. The node stops earning, routing
+and serving apps and drops off dmsg discovery, but stays controllable on
+its local RPC so it can be resumed. Privilege-free alternative to stopping
+the service manager unit. Resume with 'skywire cli visor resume'.`,
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		if err := rpcClient.Suspend(); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error suspending visor: %v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), "Visor suspended", fmt.Sprintln("Visor suspended"))
+	},
+}
+
+var resumeCmd = &cobra.Command{
+	Use:   "resume",
+	Short: "Resume a suspended visor",
+	Long:  "Bring a suspended visor fully back online by re-running its module graph.",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		if err := rpcClient.Resume(); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error resuming visor: %v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), "Visor resumed", fmt.Sprintln("Visor resumed"))
+	},
+}
+
+var isSuspendedCmd = &cobra.Command{
+	Use:   "suspended",
+	Short: "Report whether the visor is suspended",
+	Run: func(cmd *cobra.Command, _ []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		suspended, err := rpcClient.IsSuspended()
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error querying suspend state: %v", err))
+		}
+		internal.PrintOutput(cmd.Flags(), suspended, fmt.Sprintln(suspended))
+	},
 }
 
 var shutdownCmd = &cobra.Command{
