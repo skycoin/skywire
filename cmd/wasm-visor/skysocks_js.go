@@ -238,7 +238,16 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 	}
 	return promise(func() (interface{}, error) {
 		var spk cipher.PubKey
-		if err := spk.UnmarshalText([]byte(serverPKHex)); err != nil {
+		if serverPKHex == "" {
+			// No exit pinned by the caller — use the default proxy instance's
+			// (auto-selected) exit. Lets the iframe browser / wallet "just
+			// work" once the default instance has picked a random exit.
+			pk, ok := proxyDefaultExit()
+			if !ok {
+				return nil, errors.New("no proxy exit configured (default instance has not selected one yet)")
+			}
+			spk = pk
+		} else if err := spk.UnmarshalText([]byte(serverPKHex)); err != nil {
 			return nil, fmt.Errorf("bad skysocks server pk: %w", err)
 		}
 		if _, err := url.ParseRequestURI(rawURL); err != nil {
