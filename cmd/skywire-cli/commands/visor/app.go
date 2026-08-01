@@ -46,6 +46,8 @@ func init() {
 		lsAppsCmd,
 		startAppCmd,
 		stopAppCmd,
+		restartAppCmd,
+		connsAppCmd,
 		addAppCmd,
 		rmAppCmd,
 		envAppCmd,
@@ -61,6 +63,7 @@ func init() {
 		setAppSecureCmd,
 		setAppWhitelistCmd,
 		setAppNetworkInterfaceCmd,
+		setAppPKCmd,
 	)
 	registerAppCmd.Flags().StringVarP(&appName, "appname", "a", "", "name of the app")
 	registerAppCmd.Flags().StringVarP(&localPath, "localpath", "p", "./local", "path of the local folder")
@@ -407,6 +410,77 @@ var setAppAutostartCmd = &cobra.Command{
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAutoStart(args[0], autostart))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+// setAppPKCmd wires the SetAppPK RPC into the generic app surface — the one
+// capability `cli proxy`/`cli vpn start <pk>` had that `cli visor app` lacked.
+// Sets the remote server/exit PK for any app (skysocks-client's --srv, vpn-
+// client's server key, etc.) without hand-editing args.
+var setAppPKCmd = &cobra.Command{
+	Use:   "pk <name> <public-key>",
+	Short: "Set an app's remote server/exit public key",
+	Long:  "\n  Set an app's remote server/exit public key (e.g. skysocks-client exit, vpn-client server)",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var pk cipher.PubKey
+		if err := pk.Set(args[1]); err != nil {
+			internal.Catch(cmd.Flags(), fmt.Errorf("invalid public key: %w", err))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppPK(args[0], pk))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+// restartAppCmd wires the RestartApp RPC (previously implemented but unreachable
+// from the CLI) into the generic app surface.
+var restartAppCmd = &cobra.Command{
+	Use:   "restart <name>",
+	Short: "Restart an app",
+	Long:  "\n  Restart an app",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.RestartApp(args[0]))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+// connsAppCmd wires the GetAppConnectionsSummary RPC (previously CLI-unreachable)
+// into the generic app surface, giving proxy/vpn/any app a per-connection
+// bytes/latency summary neither `cli proxy` nor `cli vpn` exposed.
+var connsAppCmd = &cobra.Command{
+	Use:   "conns <name>",
+	Short: "Show an app's connection summary (bytes, latency)",
+	Long:  "\n  Show an app's per-connection summary (bandwidth, latency)",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		summaries, err := rpcClient.GetAppConnectionsSummary(args[0])
+		internal.Catch(cmd.Flags(), err)
+		var b bytes.Buffer
+		if len(summaries) == 0 {
+			b.WriteString("(no active connections)\n") //nolint:errcheck,gosec
+		} else {
+			w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "alive\tlatency\tup/s\tdown/s\tsent\trecv\terror") //nolint:errcheck
+			for _, s := range summaries {
+				fmt.Fprintf(w, "%v\t%s\t%d\t%d\t%d\t%d\t%s\n", //nolint:errcheck
+					s.IsAlive, s.Latency, s.UploadSpeed, s.DownloadSpeed, s.BandwidthSent, s.BandwidthReceived, s.Error)
+			}
+			w.Flush() //nolint:errcheck,gosec
+		}
+		internal.PrintOutput(cmd.Flags(), summaries, b.String())
 	},
 }
 
