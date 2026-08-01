@@ -163,6 +163,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	// Transport ports
 	addInt("STCPRPORT", "stcpr", autoconfigVals.StcprPort)
 	addInt("SUDPHPORT", "sudph", autoconfigVals.SudphPort)
+	addInt("TRANSPORTPORT", "transport-port", autoconfigVals.TransportPort)
 	addInt("LANDMSGPORT", "lan-dmsg-port", autoconfigVals.LanDmsgPort)
 	addString("LANDMSGPUBLIC", "lan-dmsg-public", autoconfigVals.LanDmsgPublic)
 

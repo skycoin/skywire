@@ -18,7 +18,7 @@ var allFlags = []string{
 	// Service discovery / deployment
 	"testenv", "url", "svcconf", "minsess", "maxtransports", "stun",
 	// Transport ports
-	"stcpr", "sudph", "lan-dmsg-port", "lan-dmsg-public",
+	"stcpr", "sudph", "transport-port", "lan-dmsg-port", "lan-dmsg-public",
 	// Whitelists
 	"dmsgpty-pks", "survey", "routesetup", "tpsetup",
 	// Route calculation
@@ -116,6 +116,7 @@ func TestNew_BindingsTrackValues(t *testing.T) {
 		{"pk-endpoint", "true", func() bool { return v.PkEndpoint }},
 		{"no-pk-endpoint", "true", func() bool { return v.NoPkEndpoint }},
 		{"stcpr", "7777", func() bool { return v.StcprPort == 7777 }},
+		{"transport-port", "7777", func() bool { return v.TransportPort == 7777 }},
 		// New flags from the parity expansion: cover one per group.
 		{"testenv", "true", func() bool { return v.TestEnv }},
 		{"minsess", "5", func() bool { return v.MinSess == 5 }},
