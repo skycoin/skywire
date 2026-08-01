@@ -75,16 +75,14 @@ func (v *Visor) Suspend() error {
 	}
 	v.closeStack = kept
 
-	v.tpM = nil
-	v.router = nil
-	v.rfClient = nil
-	v.procM = nil
-	v.appL = nil
-	v.dmsgC = nil
-	v.dmsgDC = nil
-	v.dmsgHTTP = nil
-	v.arClient = nil
-	v.transportRPCMux = nil
+	// Deliberately DO NOT nil the torn-down subsystem fields (tpM, router,
+	// dmsgC, …). networkCancel() above signals their goroutines to stop, but
+	// some may still be mid-flight for a moment; nil'ing the field out from
+	// under such a goroutine turns a benign "operate on a closed object"
+	// (which returns an error) into a nil-pointer panic that crashes the whole
+	// live process. Leaving the closed-but-non-nil objects in place is safe:
+	// Resume re-runs the module graph, which reassigns each field to a fresh
+	// instance (the old closed object is then GC'd).
 
 	// dmsgHTTPReady is closed under a select/default guard (init_dmsg.go),
 	// so a fresh channel is enough. stun/dmsgTracker are closed via a
@@ -167,6 +165,15 @@ func (v *Visor) runCloser(phase string, cl closer) {
 	t := time.NewTimer(moduleShutdownTimeout)
 	log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:%s:%s", phase, cl.src))
 	go func(cl closer) {
+		// Recover a panicking closer. Unlike Close() (which runs at process
+		// exit, where a panic is harmless), Suspend runs closers on a LIVE
+		// process — an un-recovered panic here would crash the whole visor
+		// (e.g. a double-close). Log it and report as an error instead.
+		defer func() {
+			if r := recover(); r != nil {
+				errCh <- fmt.Errorf("panic: %v", r)
+			}
+		}()
 		errCh <- cl.fn()
 		close(errCh)
 	}(cl)
