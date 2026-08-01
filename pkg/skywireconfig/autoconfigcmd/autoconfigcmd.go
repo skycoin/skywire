@@ -128,6 +128,7 @@ type Values struct {
 	// --- Transport ports ---
 	StcprPort     int
 	SudphPort     int
+	TransportPort int
 	LanDmsgPort   int
 	LanDmsgPublic string
 
@@ -279,6 +280,7 @@ func New(v *Values) *cobra.Command {
 	// --- Transport ports ---
 	cmd.Flags().IntVar(&v.StcprPort, "stcpr", 0, "stcp transport listening port (0 = leave unchanged, random at runtime) — writes STCPRPORT in skywire.conf")
 	cmd.Flags().IntVar(&v.SudphPort, "sudph", 0, "sudp transport listening port (0 = leave unchanged, random at runtime) — writes SUDPHPORT in skywire.conf")
+	cmd.Flags().IntVar(&v.TransportPort, "transport-port", 0, "ONE shared master port for ALL transport types — stcpr+WS on <port>/tcp, sudph+quic+wt+webrtc on <port>/udp (0 = per-type ports) — writes TRANSPORTPORT in skywire.conf")
 	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "LAN dmsg-server listening port (0 = leave unchanged) — writes LANDMSGPORT in skywire.conf")
 	cmd.Flags().StringVar(&v.LanDmsgPublic, "lan-dmsg-public", "", "public host:port for the LAN dmsg-server entry in dmsg discovery — writes LANDMSGPUBLIC in skywire.conf")
 
@@ -423,6 +425,7 @@ var envMap = map[string]EnvMapping{
 	// non-zero value.
 	"stcpr":           {Key: "STCPRPORT", Format: EnvFormatInt, Default: "0 (random)"},
 	"sudph":           {Key: "SUDPHPORT", Format: EnvFormatInt, Default: "0 (random)"},
+	"transport-port":  {Key: "TRANSPORTPORT", Format: EnvFormatInt, Default: "0 (per-type ports)"},
 	"lan-dmsg-port":   {Key: "LANDMSGPORT", Format: EnvFormatInt, Default: "0 (random)"},
 	"lan-dmsg-public": {Key: "LANDMSGPUBLIC", Format: EnvFormatString},
 
