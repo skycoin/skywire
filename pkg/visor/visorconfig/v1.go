@@ -181,6 +181,21 @@ type Pty struct {
 	// web terminal degrades to fresh-shell-on-reconnect against hosts that
 	// have it off.
 	PersistentSessions bool `json:"persistent_sessions,omitempty"`
+
+	// AllowRPCExec gates the visor-RPC-initiated dmsgpty exec path
+	// (API.DmsgPtyExec, reached by `skywire cli dmsg pty` / `cli pty
+	// exec --via`). OFF by default: without it, any local process that
+	// can reach the visor's RPC socket (loopback :3435 on a root
+	// deployment — every local user) could borrow the visor's identity
+	// to open an authenticated dmsgpty stream to itself or to any peer
+	// that whitelists this visor, i.e. a local privilege-escalation /
+	// lateral-movement vector distinct from the whitelist-gated INBOUND
+	// dmsgpty host. Enabling it is an operator opt-in for a control /
+	// jump node that legitimately drives remote `cli pty exec` sessions.
+	// This gate does NOT affect the inbound dmsgpty host (the hypervisor
+	// web terminal and standalone dmsgpty-cli use separate, whitelist-
+	// gated paths), only the outbound RPC-initiated exec.
+	AllowRPCExec bool `json:"allow_rpc_exec,omitempty"`
 }
 
 // Dmsgscp configures the dmsgscp-host (scp-over-dmsg daemon).
