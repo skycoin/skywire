@@ -108,10 +108,19 @@
       'var cur=' + JSON.stringify(path) + ';' +
       'function pathOf(h){try{var u=new URL(h,"http://dmsg"+cur);return u.pathname+u.search;}catch(e){return h;}}' +
       'function same(u){return !!u&&u.charAt(0)!=="#"&&!/^https?:\\/\\//i.test(u)&&!/^\\/\\//.test(u)&&!/^[a-z][a-z0-9+.-]*:/i.test(u);}' +
+      // meshHost: an ABSOLUTE url whose host is a .dmsg/.skynet name or a bare
+      // 66-hex PK is a MESH target, not clearnet — regardless of http/https
+      // scheme. Without this, an absolute http://<name>.dmsg/ link/resource on an
+      // HTTPS page was misclassified as clearnet and handed to the browser, which
+      // blocked it as mixed content ("insecure resource http://skywire.dmsg/")
+      // instead of the gateway routing it over the mesh.
+      'function meshHost(u){try{var x=new URL(u,"http://dmsg"+cur);return /\\.(dmsg|skynet)$/i.test(x.hostname)||/^[0-9a-f]{66}$/i.test(x.hostname);}catch(e){return false;}}' +
+      'function meshAbs(u){try{return new URL(u,"http://dmsg"+cur).href;}catch(e){return u;}}' +
       'document.addEventListener("click",function(e){' +
       'var a=e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
-      'var h=a.getAttribute("href")||"";if(!same(h))return;' +
-      'e.preventDefault();parent.postMessage({type:"dmsgnav",path:pathOf(h)},"*");' +
+      'var h=a.getAttribute("href")||"";' +
+      'if(same(h)){e.preventDefault();parent.postMessage({type:"dmsgnav",path:pathOf(h)},"*");return;}' +      // same-site → dmsg path nav
+      'if(meshHost(h)){e.preventDefault();parent.postMessage({type:"dmsgnav",url:meshAbs(h)},"*");return;}' +  // cross-site .dmsg/.skynet → resolve+navigate in parent
       '},true);' +
       'var _rq=0,_pend={};' +
       'window.addEventListener("message",function(e){var d=e.data||{};if(d.type!=="dmsgreply")return;var p=_pend[d.id];if(!p)return;delete _pend[d.id];p(d);});' +
@@ -120,6 +129,11 @@
       'var CNMODE=' + JSON.stringify(cnMode || "block") + ';' +
       'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);var m=(init&&init.method)||"GET",b=(init&&init.body)||null;' +
       'if(same(u))return relay(pathOf(u),m,b,false).then(_toResp);' +           // same-site → dmsg
+      // A cross-site mesh (.dmsg/.skynet) resource must NOT reach the browser as
+      // http:// (mixed content on an HTTPS page). We don''t inline cross-site mesh
+      // subresources here — block it so the page degrades gracefully; a mesh LINK
+      // is instead routed via the click handler above.
+      'if(meshHost(u))return Promise.resolve(new Response("",{status:502,headers:{"Content-Type":"text/plain"}}));' +
       'if(!/^https?:\\/\\//i.test(u||""))return _f.apply(this,arguments);' +    // data:/blob:/etc → real
       'if(CNMODE==="direct")return _f.apply(this,arguments);' +                 // direct mode → real (CSP off)
       'if(CNMODE!=="proxy")return Promise.resolve(new Response("clearnet blocked: set an upstream proxy",{status:403}));' +
@@ -512,6 +526,17 @@
     // that are themselves absolute http(s):// — relative URLs there are same-site
     // dmsg, left to the caller's own inliner. Returns the jobs to await.
     function gateAllClearnet(doc, baseURL, policy, resolveRelative) {
+      // isMeshRes: an absolute .dmsg/.skynet/PK-host subresource. It's NOT
+      // clearnet — and it must never be left for the browser to load as http://
+      // (mixed content on the HTTPS page). We don't inline cross-site mesh
+      // subresources, so strip them (the element is removed / attr cleared).
+      function isMeshRes(href) {
+        if (!href) return false;
+        try { var x = new URL(href.trim(), baseURL); return /^https?:$/i.test(x.protocol) && (/\.(dmsg|skynet)$/i.test(x.hostname) || /^[0-9a-f]{66}$/i.test(x.hostname)); } catch (e) { return false; }
+      }
+      function stripMesh(el, attr) {
+        if (el.tagName === "SCRIPT" || el.tagName === "LINK") { el.remove(); } else { el.removeAttribute(attr); }
+      }
       function absC(href) {
         if (!href) return null; href = href.trim();
         if (resolveRelative) { try { var u = new URL(href, baseURL); return /^https?:$/i.test(u.protocol) ? u.href : null; } catch (e) { return null; } }
@@ -519,8 +544,8 @@
         try { return new URL(href).href; } catch (e) { return null; }
       }
       var jobs = [];
-      doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(function (el) { var a = absC(el.getAttribute("href")); if (a) { var j = gateClearnetResource(doc, el, "href", a, policy); if (j) jobs.push(j); } });
-      doc.querySelectorAll("img[src],source[src],script[src],audio[src],video[src]").forEach(function (el) { var a = absC(el.getAttribute("src")); if (a) { var j = gateClearnetResource(doc, el, "src", a, policy); if (j) jobs.push(j); } });
+      doc.querySelectorAll("link[rel~='stylesheet'][href]").forEach(function (el) { if (isMeshRes(el.getAttribute("href"))) { stripMesh(el, "href"); return; } var a = absC(el.getAttribute("href")); if (a) { var j = gateClearnetResource(doc, el, "href", a, policy); if (j) jobs.push(j); } });
+      doc.querySelectorAll("img[src],source[src],script[src],audio[src],video[src]").forEach(function (el) { if (isMeshRes(el.getAttribute("src"))) { stripMesh(el, "src"); return; } var a = absC(el.getAttribute("src")); if (a) { var j = gateClearnetResource(doc, el, "src", a, policy); if (j) jobs.push(j); } });
       return jobs;
     }
 
@@ -602,7 +627,28 @@
       // to THIS window's iframe.
       if (e.source !== frame.contentWindow) { return; }
       var d = e.data || {};
-      if (d.type === "dmsgnav" && currentSitePK) { browseTo(currentSitePK, d.path); return; }
+      if (d.type === "dmsgnav") {
+        // Cross-site mesh link (absolute .dmsg/.skynet/PK URL): resolve host+path
+        // +scheme and navigate to that site over the mesh — never let the browser
+        // load http://<name>.dmsg (mixed content). Mirrors the address-bar classifier.
+        if (d.url) {
+          try {
+            var mk = /^(dmsg|skynet):\/\//i.exec(d.url);
+            if (mk) {
+              var mrest = d.url.slice(mk[0].length), msl = mrest.indexOf("/");
+              browseTo(msl >= 0 ? mrest.slice(0, msl) : mrest, msl >= 0 ? mrest.slice(msl) : "/", mk[1].toLowerCase());
+              return;
+            }
+            var mu = new URL(d.url), mhost = mu.hostname;
+            if (/\.(dmsg|skynet)$/i.test(mhost) || /^[0-9a-f]{66}$/i.test(mhost)) {
+              browseTo(mhost + (mu.port ? ":" + mu.port : ""), (mu.pathname || "/") + (mu.search || ""), (mu.protocol || "http:").replace(":", ""));
+            }
+          } catch (_) {}
+          return;
+        }
+        if (currentSitePK) { browseTo(currentSitePK, d.path); return; }
+        return;
+      }
       if (d.type === "dmsgreq") {
         try {
           var r;
