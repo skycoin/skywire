@@ -95,6 +95,14 @@ type Config struct {
 	RulesGCInterval  time.Duration
 	MinHops          uint16
 	MaxHops          uint16
+	// DisableRaceRouteSetup turns OFF the app-dial race (default: race ON).
+	// Normally, when a dial would create a direct transport to the peer
+	// (min-hops==1, not existing-tp-only), DialRoutes runs that transport
+	// creation in the BACKGROUND and concurrently tries to route over EXISTING
+	// transports — returning as soon as either lands, instead of blocking on the
+	// (~20s worst-case) transport dial first. Set true to restore the legacy
+	// synchronous behavior (create-transport-then-route) as a safety valve.
+	DisableRaceRouteSetup bool
 	// AwaitSetupListener, if non-nil, is used instead of opening a fresh
 	// listener on DmsgAwaitSetupPort. This lets callers reserve the port
 	// earlier in init (before the transport manager is ready) so peers
