@@ -136,6 +136,7 @@ type Values struct {
 	MinHops            int  // MINHOPS (>=2 forces multihop for sender privacy)
 	ARTransportLimit   int  // ARTRANSPORTLIMIT (address-resolver registration policy)
 	NoDirectTransports bool // NODIRECTTRANSPORTS (never create direct p2p transports)
+	PtyRPCExec         bool // PTYRPCEXEC (allow visor-RPC-initiated dmsgpty exec)
 
 	// --- Whitelists ---
 	DmsgptyPks     string
@@ -289,6 +290,7 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().IntVar(&v.MinHops, "min-hops", 1, "minimum route hops — 1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy — writes MINHOPS in skywire.conf")
 	cmd.Flags().IntVar(&v.ARTransportLimit, "ar-transport-limit", 0, "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible) — writes ARTRANSPORTLIMIT in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoDirectTransports, "no-direct-transports", false, "never create direct p2p transports; dmsg relay still allowed — writes NODIRECTTRANSPORTS=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.PtyRPCExec, "pty-rpc-exec", false, "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off closes a local privilege-escalation vector) — writes PTYRPCEXEC=true in skywire.conf")
 	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "LAN dmsg-server listening port (0 = leave unchanged) — writes LANDMSGPORT in skywire.conf")
 	cmd.Flags().StringVar(&v.LanDmsgPublic, "lan-dmsg-public", "", "public host:port for the LAN dmsg-server entry in dmsg discovery — writes LANDMSGPUBLIC in skywire.conf")
 
@@ -439,6 +441,7 @@ var envMap = map[string]EnvMapping{
 	"min-hops":             {Key: "MINHOPS", Format: EnvFormatInt, Default: "1"},
 	"ar-transport-limit":   {Key: "ARTRANSPORTLIMIT", Format: EnvFormatInt, Default: "0 (stay registered)"},
 	"no-direct-transports": {Key: "NODIRECTTRANSPORTS", Format: EnvFormatBool},
+	"pty-rpc-exec":         {Key: "PTYRPCEXEC", Format: EnvFormatBool},
 	"lan-dmsg-port":        {Key: "LANDMSGPORT", Format: EnvFormatInt, Default: "0 (random)"},
 	"lan-dmsg-public":      {Key: "LANDMSGPUBLIC", Format: EnvFormatString},
 

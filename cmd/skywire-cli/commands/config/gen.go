@@ -206,6 +206,7 @@ func init() {
 	genConfigCmd.Flags().IntVar(&genMinHops, "min-hops", scriptExecInt("${MINHOPS:-1}"), "minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy)")
 	genConfigCmd.Flags().IntVar(&arTransportLimit, "ar-transport-limit", scriptExecInt("${ARTRANSPORTLIMIT:-0}"), "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)")
 	genConfigCmd.Flags().BoolVar(&noDirectTransports, "no-direct-transports", scriptExecBool("${NODIRECTTRANSPORTS:-false}"), "never create direct p2p transports; dmsg (relay) is still allowed")
+	genConfigCmd.Flags().BoolVar(&ptyRPCExec, "pty-rpc-exec", scriptExecBool("${PTYRPCEXEC:-false}"), "allow visor-RPC-initiated dmsgpty exec (control/jump node opt-in; off = closes a local privilege-escalation vector)")
 
 	// Routing flags
 	msg = "add route setup node PKs"
@@ -1312,9 +1313,10 @@ func configureLauncher(log *logging.Logger) {
 		dmsgptyAddr = filepath.Join(os.TempDir(), "dmsgpty-test.sock")
 	}
 	conf.Pty = &visorconfig.Pty{
-		DmsgPort: skyenv.DmsgPtyPort,
-		CLINet:   skyenv.DmsgPtyCLINet,
-		CLIAddr:  dmsgptyAddr,
+		DmsgPort:     skyenv.DmsgPtyPort,
+		CLINet:       skyenv.DmsgPtyCLINet,
+		CLIAddr:      dmsgptyAddr,
+		AllowRPCExec: ptyRPCExec,
 	}
 
 	conf.STCP = &network.STCPConfig{
@@ -2294,6 +2296,7 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 		"autoconn":             "DISABLEPUBLICAUTOCONN=true",
 		"publicip":             "DISPLAYNODEIP=true",
 		"no-direct-transports": "NODIRECTTRANSPORTS=true",
+		"pty-rpc-exec":         "PTYRPCEXEC=true",
 	}
 
 	// Also handle string/value flags

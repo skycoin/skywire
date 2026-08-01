@@ -31,6 +31,7 @@ var (
 	genMinHops                 int
 	arTransportLimit           int
 	noDirectTransports         bool
+	ptyRPCExec                 bool
 	sk                         cipher.SecKey
 	output                     string
 	confPath                   string
