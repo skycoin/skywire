@@ -554,6 +554,14 @@ func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error
 	if v.dmsgPty == nil {
 		return nil, fmt.Errorf("dmsgpty: not initialized on this visor")
 	}
+	// Gate the RPC-initiated exec path (see Pty.AllowRPCExec). OFF by
+	// default so a local process reaching the visor RPC socket cannot
+	// borrow this visor's identity to exec on itself or on peers that
+	// whitelist it. Opt in on a control/jump node that drives remote
+	// `cli pty exec` sessions.
+	if v.conf.Pty == nil || !v.conf.Pty.AllowRPCExec {
+		return nil, fmt.Errorf("dmsgpty: RPC-initiated exec is disabled; set pty.allow_rpc_exec=true (config gen --pty-rpc-exec) on this visor to enable it")
+	}
 	if args.RemotePK.Null() {
 		return nil, fmt.Errorf("dmsgpty: remote_pk required")
 	}
