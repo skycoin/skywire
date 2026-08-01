@@ -203,6 +203,9 @@ func init() {
 	// protocol). Per-type ports above override it. Visible because this is the
 	// recommended way to expose a public visor behind a single firewall rule.
 	genConfigCmd.Flags().IntVar(&transportPort, "transport-port", scriptExecInt("${TRANSPORTPORT:-0}"), "shared master transport port for all transport types (0 = per-type ports)")
+	genConfigCmd.Flags().IntVar(&genMinHops, "min-hops", scriptExecInt("${MINHOPS:-1}"), "minimum route hops (1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy)")
+	genConfigCmd.Flags().IntVar(&arTransportLimit, "ar-transport-limit", scriptExecInt("${ARTRANSPORTLIMIT:-0}"), "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible)")
+	genConfigCmd.Flags().BoolVar(&noDirectTransports, "no-direct-transports", scriptExecBool("${NODIRECTTRANSPORTS:-false}"), "never create direct p2p transports; dmsg (relay) is still allowed")
 
 	// Routing flags
 	msg = "add route setup node PKs"
@@ -1182,10 +1185,21 @@ func configureTransports() {
 			Location:         tpLogPath,
 			RotationInterval: visorconfig.DefaultLogRotationInterval,
 		},
-		SudphPort:     sudphPort,
-		StcprPort:     stcprPort,
-		TransportPort: transportPort,
+		SudphPort:          sudphPort,
+		StcprPort:          stcprPort,
+		TransportPort:      transportPort,
+		ARTransportLimit:   arTransportLimit,
+		NoDirectTransports: noDirectTransports,
 	}
+}
+
+// minHopsValue returns the --min-hops flag value clamped to a valid uint16.
+// Negative input (nonsensical for a hop count) is treated as 0 (no minimum).
+func minHopsValue() uint16 {
+	if genMinHops < 0 {
+		return 0
+	}
+	return uint16(genMinHops)
 }
 
 // configureRouting sets up routing configuration on conf, preserving MinHops
@@ -1195,7 +1209,7 @@ func configureRouting() {
 		RouteFinder:        services.RouteFinder,     //utilenv.RouteFinderAddr,
 		RouteSetupNodes:    services.RouteSetupNodes, //[]cipher.PubKey{utilenv.MustPK(utilenv.SetupPK)},
 		RouteFinderTimeout: visorconfig.DefaultTimeout,
-		MinHops:            1,
+		MinHops:            minHopsValue(),
 		CalculateRoutes:    enableCalculateRoutes,
 		// Cascade route setup is opt-in (--cascade); the legacy setup-node
 		// path stays the default until the cascade multihop data-plane bug
@@ -1208,7 +1222,10 @@ func configureRouting() {
 	}
 
 	if oldConfCache != nil && oldConfCache.Routing != nil {
-		if oldConfCache.Routing.MinHops != 0 {
+		// Preserve the previous min_hops across regen UNLESS --min-hops (or
+		// MINHOPS in skywire.conf) was set to a non-default value this run, in
+		// which case the new value already in the literal above wins.
+		if oldConfCache.Routing.MinHops != 0 && minHopsValue() == 1 {
 			conf.Routing.MinHops = oldConfCache.Routing.MinHops
 		}
 		// Preserve an opted-in cascade across regen (matches MinHops). To turn
@@ -2268,14 +2285,15 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 	// Map of flag names to the SKYENV variable they control.
 	// When a flag is explicitly set, uncomment the corresponding line.
 	flagToEnv := map[string]string{
-		"pkg":      "PKGENV=true",
-		"ishv":     "ISHYPERVISOR=true",
-		"testenv":  "TESTENV=true",
-		"dmsghttp": "DMSGHTTP=true",
-		"public":   "VISORISPUBLIC=true",
-		"servevpn": "VPNSERVER=true",
-		"autoconn": "DISABLEPUBLICAUTOCONN=true",
-		"publicip": "DISPLAYNODEIP=true",
+		"pkg":                  "PKGENV=true",
+		"ishv":                 "ISHYPERVISOR=true",
+		"testenv":              "TESTENV=true",
+		"dmsghttp":             "DMSGHTTP=true",
+		"public":               "VISORISPUBLIC=true",
+		"servevpn":             "VPNSERVER=true",
+		"autoconn":             "DISABLEPUBLICAUTOCONN=true",
+		"publicip":             "DISPLAYNODEIP=true",
+		"no-direct-transports": "NODIRECTTRANSPORTS=true",
 	}
 
 	// Also handle string/value flags
@@ -2290,9 +2308,11 @@ func applyFlagsToConf(conf string, cmd *cobra.Command) string {
 	// When the flag is explicitly set, uncomment + replace with the value so
 	// `config gen --transport-port 7777 -q` reflects it in the template.
 	intFlagToEnv := map[string]string{
-		"transport-port": "TRANSPORTPORT",
-		"stcpr":          "STCPRPORT",
-		"sudph":          "SUDPHPORT",
+		"transport-port":     "TRANSPORTPORT",
+		"stcpr":              "STCPRPORT",
+		"sudph":              "SUDPHPORT",
+		"min-hops":           "MINHOPS",
+		"ar-transport-limit": "ARTRANSPORTLIMIT",
 	}
 
 	// Array-shaped flags map to bash-array env vars of the form

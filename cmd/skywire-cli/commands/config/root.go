@@ -28,6 +28,9 @@ var (
 	stcprPort                  int
 	sudphPort                  int
 	transportPort              int
+	genMinHops                 int
+	arTransportLimit           int
+	noDirectTransports         bool
 	sk                         cipher.SecKey
 	output                     string
 	confPath                   string
