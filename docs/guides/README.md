@@ -29,6 +29,7 @@ cobra subcommand tree.
 ## Advanced
 
 - [manual-routing.md](manual-routing.md) — manual route creation, multi-hop routes, route-finder, troubleshooting
+- [privacy-and-performance.md](privacy-and-performance.md) — tuning the visor along the privacy ↔ performance spectrum: IP/data/metadata privacy, `min_hops`, multiplexed & rotating routes, `ar_transport_limit`, `no_direct_transports`, `persistent_transports`, and a maximum-privacy recipe
 
 ## Maintainer
 
