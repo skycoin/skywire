@@ -28,6 +28,7 @@ var (
 	commit    = unknown
 	date      = unknown
 	goversion = ""
+	buildtags = "" // build tags recorded by the toolchain (debug.BuildInfo "-tags")
 )
 
 // format hint: bi.Main.Version = v1.3.29-rc7.0.20250410212328-dc5d22b7ab2a
@@ -60,13 +61,37 @@ var dateRegex = regexp.MustCompile(`\d{14}`)           // <-- match date anywher
 func readDebugBuildInfo() {
 	var ok bool
 	bi, ok = debug.ReadBuildInfo()
+	if !ok {
+		return
+	}
 	if version == unknown || version == "" {
-		if ok {
-			if bi.Main.Version != "" {
-				parseVersionInfo(bi.Main.Version)
+		if bi.Main.Version != "" {
+			parseVersionInfo(bi.Main.Version)
+		}
+	}
+	if bi.GoVersion != "" {
+		goversion = bi.GoVersion
+	}
+	// Fall back to the VCS + build settings the Go toolchain records for
+	// every build (including `go install <pkg>@<version>`, which carries
+	// no ldflags) when the -X vars weren't injected. `vcs.revision` /
+	// `vcs.time` are present only for builds from a VCS working tree;
+	// `-tags` is present for any build. This lets `go install` binaries
+	// self-describe their commit / date / build tags without the Makefile.
+	for _, s := range bi.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if (commit == unknown || commit == "") && s.Value != "" {
+				commit = s.Value
 			}
-			if bi.GoVersion != "" {
-				goversion = bi.GoVersion
+		case "vcs.time":
+			// Already RFC3339 (e.g. 2026-08-01T12:00:00Z).
+			if (date == unknown || date == "") && s.Value != "" {
+				date = s.Value
+			}
+		case "-tags":
+			if s.Value != "" {
+				buildtags = s.Value
 			}
 		}
 	}
@@ -133,6 +158,12 @@ func Date() string {
 	return date
 }
 
+// BuildTags returns the build tags recorded by the Go toolchain (the
+// "-tags" build setting), or "" if none / unavailable.
+func BuildTags() string {
+	return buildtags
+}
+
 // DebugBuildInfo returns the raw debug.BuildInfo struct.
 func DebugBuildInfo() *debug.BuildInfo {
 	return bi
@@ -151,12 +182,13 @@ func Get() *Info {
 	}
 	// Note: Go's module system already adds +dirty to version when built from dirty repo
 	return &Info{
-		Version: ver,
-		Commit:  Commit(),
-		Date:    Date(),
-		Go:      Go(),
-		OS:      runtime.GOOS,
-		Arch:    runtime.GOARCH,
+		Version:   ver,
+		Commit:    Commit(),
+		Date:      Date(),
+		Go:        Go(),
+		OS:        runtime.GOOS,
+		Arch:      runtime.GOARCH,
+		BuildTags: BuildTags(),
 	}
 }
 
@@ -176,12 +208,13 @@ func DepVersion(modulePath string) string {
 
 // Info represents build metadata.
 type Info struct {
-	Go      string `json:"go,omitempty"`
-	Version string `json:"version"`
-	Commit  string `json:"commit"`
-	Date    string `json:"date"`
-	OS      string `json:"os"`
-	Arch    string `json:"arch"`
+	Go        string `json:"go,omitempty"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	Date      string `json:"date"`
+	OS        string `json:"os"`
+	Arch      string `json:"arch"`
+	BuildTags string `json:"build_tags,omitempty"`
 }
 
 // WriteTo writes build info summary to an io.Writer.
