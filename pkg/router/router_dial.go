@@ -150,17 +150,43 @@ func (r *router) DialRoutes(
 	// Only run route setup hooks (which may create new transports) if UseExistingTpOnly is false
 	// on both the router level and the dial options level
 	useExistingOnly := routerExistingTpOnly || (opts != nil && opts.UseExistingTpOnly)
+	// hookDone, when non-nil, signals completion of a BACKGROUND transport-
+	// creation hook (the race path). The fetch loop waits on it only if it can't
+	// find a route over existing transports (see the fetch-error branch below).
+	var hookDone chan struct{}
 	if baseMinHops == 1 && !useExistingOnly {
 		r.routeSetupHookMu.Lock()
-		if len(r.routeSetupHooks) != 0 {
-			for _, rsf := range r.routeSetupHooks {
-				if err := rsf(rPK, r.tm); err != nil {
-					r.routeSetupHookMu.Unlock()
-					return nil, err
+		hooks := r.routeSetupHooks
+		r.routeSetupHookMu.Unlock()
+		if len(hooks) != 0 {
+			if r.conf.DisableRaceRouteSetup {
+				// Legacy synchronous path: create the transport, THEN route.
+				for _, rsf := range hooks {
+					if err := rsf(rPK, r.tm); err != nil {
+						return nil, err
+					}
 				}
+			} else {
+				// RACE (thread 1): the transport-creation hook can block ~20s
+				// (STCPR→SUDPH→DMSG dial attempts) before we ever query the
+				// route-finder. Run it in the BACKGROUND and route over EXISTING
+				// transports meanwhile — whichever lands first wins. The hook still
+				// creates the direct transport regardless (it self-manages its own
+				// context, so it's NOT canceled when this dial returns): it's ready
+				// for the next dial / a later upgrade. The fetch loop waits on
+				// hookDone only when no existing route is found, so a cold peer
+				// still gets connectivity via the freshly-created transport.
+				hookDone = make(chan struct{})
+				go func() {
+					defer close(hookDone)
+					for _, rsf := range hooks {
+						if err := rsf(rPK, r.tm); err != nil {
+							log.WithError(err).Debug("background route-setup hook (transport creation) failed; relying on existing routes")
+						}
+					}
+				}()
 			}
 		}
-		r.routeSetupHookMu.Unlock()
 	} else if useExistingOnly {
 		log.Debug("UseExistingTpOnly is set, skipping transport creation hooks")
 	}
@@ -195,6 +221,23 @@ func (r *router) DialRoutes(
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts, baseMinHops)
 		if err != nil {
+			// RACE fallback: no route over existing transports (yet). If the
+			// background transport-creation hook is still running, wait for it
+			// ONCE — the direct transport it creates yields a 1-hop route on the
+			// next fetch. This is the cold-peer half of the race: when the shaped
+			// network has no usable route, we still get connectivity via the new
+			// transport, bounded by the dial ctx. A warm peer never reaches here
+			// (its fetch succeeded), so it never blocks on the hook.
+			if hookDone != nil {
+				log.Debug("No route over existing transports; waiting for background transport creation")
+				select {
+				case <-hookDone:
+					hookDone = nil // wait at most once
+					continue
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
 			if attempt < maxFetchAttempts {
 				log.WithError(err).Warnf("Route finder failed (attempt %d/%d), retrying with fresh query...", attempt, maxRetries)
 				continue
