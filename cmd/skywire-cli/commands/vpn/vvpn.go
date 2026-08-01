@@ -71,18 +71,18 @@ var startCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
 		}
 
-		// If --existing-tp flag is set, configure router to only use existing transports
+		// Apply the routing-session options via the shared helper (clirpc), the
+		// SAME path `cli proxy start` / `cli visor app start` use so the surfaces
+		// can't drift. vpn only offers existing-tp / local-route, applied when set.
+		routeOpts := clirpc.RoutingSessionOpts{}
 		if existingTpOnly {
-			if err := rpcClient.SetExistingTPOnly(true); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set existing transport only mode: %w", err))
-			}
+			routeOpts.ExistingTP = &existingTpOnly
 		}
-
-		// If --local-route flag is set, skip route finder and use local route calculation
 		if forceLocalRoutes {
-			if err := rpcClient.SetForceLocalRoutes(true); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set force local routes mode: %w", err))
-			}
+			routeOpts.LocalRoute = &forceLocalRoutes
+		}
+		if err := clirpc.ApplyRoutingSession(rpcClient, routeOpts); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
 		launcherMode := ""
