@@ -132,6 +132,11 @@ type Values struct {
 	LanDmsgPort   int
 	LanDmsgPublic string
 
+	// --- Privacy / routing knobs ---
+	MinHops            int  // MINHOPS (>=2 forces multihop for sender privacy)
+	ARTransportLimit   int  // ARTRANSPORTLIMIT (address-resolver registration policy)
+	NoDirectTransports bool // NODIRECTTRANSPORTS (never create direct p2p transports)
+
 	// --- Whitelists ---
 	DmsgptyPks     string
 	SurveyPks      string // SURVEYPKS
@@ -281,6 +286,9 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().IntVar(&v.StcprPort, "stcpr", 0, "stcp transport listening port (0 = leave unchanged, random at runtime) — writes STCPRPORT in skywire.conf")
 	cmd.Flags().IntVar(&v.SudphPort, "sudph", 0, "sudp transport listening port (0 = leave unchanged, random at runtime) — writes SUDPHPORT in skywire.conf")
 	cmd.Flags().IntVar(&v.TransportPort, "transport-port", 0, "ONE shared master port for ALL transport types — stcpr+WS on <port>/tcp, sudph+quic+wt+webrtc on <port>/udp (0 = per-type ports) — writes TRANSPORTPORT in skywire.conf")
+	cmd.Flags().IntVar(&v.MinHops, "min-hops", 1, "minimum route hops — 1 = allow direct 1-hop routes, >=2 = force multihop through intermediaries for sender privacy — writes MINHOPS in skywire.conf")
+	cmd.Flags().IntVar(&v.ARTransportLimit, "ar-transport-limit", 0, "address-resolver registration: 0 = stay registered, N>0 = deregister after N transports, N<0 = never register (inbound-invisible) — writes ARTRANSPORTLIMIT in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoDirectTransports, "no-direct-transports", false, "never create direct p2p transports; dmsg relay still allowed — writes NODIRECTTRANSPORTS=true in skywire.conf")
 	cmd.Flags().IntVar(&v.LanDmsgPort, "lan-dmsg-port", 0, "LAN dmsg-server listening port (0 = leave unchanged) — writes LANDMSGPORT in skywire.conf")
 	cmd.Flags().StringVar(&v.LanDmsgPublic, "lan-dmsg-public", "", "public host:port for the LAN dmsg-server entry in dmsg discovery — writes LANDMSGPUBLIC in skywire.conf")
 
@@ -423,11 +431,16 @@ var envMap = map[string]EnvMapping{
 	// Transport ports. 0 = OS-assigned random port at runtime;
 	// stays unchanged across visor restarts only when pinned to a
 	// non-zero value.
-	"stcpr":           {Key: "STCPRPORT", Format: EnvFormatInt, Default: "0 (random)"},
-	"sudph":           {Key: "SUDPHPORT", Format: EnvFormatInt, Default: "0 (random)"},
-	"transport-port":  {Key: "TRANSPORTPORT", Format: EnvFormatInt, Default: "0 (per-type ports)"},
-	"lan-dmsg-port":   {Key: "LANDMSGPORT", Format: EnvFormatInt, Default: "0 (random)"},
-	"lan-dmsg-public": {Key: "LANDMSGPUBLIC", Format: EnvFormatString},
+	"stcpr":          {Key: "STCPRPORT", Format: EnvFormatInt, Default: "0 (random)"},
+	"sudph":          {Key: "SUDPHPORT", Format: EnvFormatInt, Default: "0 (random)"},
+	"transport-port": {Key: "TRANSPORTPORT", Format: EnvFormatInt, Default: "0 (per-type ports)"},
+
+	// Privacy / routing knobs.
+	"min-hops":             {Key: "MINHOPS", Format: EnvFormatInt, Default: "1"},
+	"ar-transport-limit":   {Key: "ARTRANSPORTLIMIT", Format: EnvFormatInt, Default: "0 (stay registered)"},
+	"no-direct-transports": {Key: "NODIRECTTRANSPORTS", Format: EnvFormatBool},
+	"lan-dmsg-port":        {Key: "LANDMSGPORT", Format: EnvFormatInt, Default: "0 (random)"},
+	"lan-dmsg-public":      {Key: "LANDMSGPUBLIC", Format: EnvFormatString},
 
 	// Whitelists
 	"dmsgpty-pks": {Key: "DMSGPTYPKS", Format: EnvFormatBashArray},
