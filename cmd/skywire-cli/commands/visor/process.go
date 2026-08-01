@@ -122,16 +122,40 @@ the service manager unit. Resume with 'skywire cli visor resume'.`,
 var resumeCmd = &cobra.Command{
 	Use:   "resume",
 	Short: "Resume a suspended visor",
-	Long:  "Bring a suspended visor fully back online by re-running its module graph.",
+	Long: `Bring a suspended visor fully back online by re-running its module graph.
+
+Resume re-inits every network subsystem, which takes several seconds and
+severs the in-flight RPC connection mid-re-init (the same way 'reload'
+does — the local RPC LISTENER stays up, only this one call's connection
+drops). So it's fired in the background and the result is confirmed by
+polling the suspend state on fresh connections rather than waiting on the
+severed call.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			os.Exit(1)
 		}
-		if err := rpcClient.Resume(); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("error resuming visor: %v", err))
+		// Fire Resume; its own connection is expected to EOF during the
+		// re-init, so don't treat that as fatal — the state is polled below.
+		go func() { _ = rpcClient.Resume() }() //nolint:errcheck
+
+		// Poll IsSuspended on fresh connections until it clears (resume
+		// finished flipping state) or we give up waiting.
+		deadline := time.Now().Add(45 * time.Second)
+		for time.Now().Before(deadline) {
+			<-time.After(2 * time.Second)
+			rc, e := clirpc.Client(cmd.Flags())
+			if e != nil {
+				continue
+			}
+			suspended, e := rc.IsSuspended()
+			if e == nil && !suspended {
+				internal.PrintOutput(cmd.Flags(), "Visor resumed", fmt.Sprintln("Visor resumed"))
+				return
+			}
 		}
-		internal.PrintOutput(cmd.Flags(), "Visor resumed", fmt.Sprintln("Visor resumed"))
+		internal.PrintOutput(cmd.Flags(), "Visor resume initiated",
+			fmt.Sprintln("Visor resume initiated (still re-initializing; check 'visor suspended')"))
 	},
 }
 
