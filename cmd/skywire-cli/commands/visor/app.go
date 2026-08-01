@@ -216,22 +216,26 @@ var startAppCmd = &cobra.Command{
 
 		// Generic routing-session options — apply each only when the operator
 		// passed it, so a bare `visor app start <name>` doesn't silently flip
-		// visor-wide routing preferences. Same RPCs `cli proxy`/`cli vpn` call.
+		// visor-wide routing preferences. The shared helper applies the SAME
+		// sequence + quirks (mux sentinel, min-hops guard) as `cli proxy start`
+		// / `cli vpn start`, so the three surfaces can't drift.
+		o := clirpc.RoutingSessionOpts{}
 		if cmd.Flags().Changed("existing-tp") {
-			internal.Catch(cmd.Flags(), rpcClient.SetExistingTPOnly(appExistingTP))
+			o.ExistingTP = &appExistingTP
 		}
 		if cmd.Flags().Changed("local-route") {
-			internal.Catch(cmd.Flags(), rpcClient.SetForceLocalRoutes(appLocalRoute))
+			o.LocalRoute = &appLocalRoute
 		}
 		if cmd.Flags().Changed("mux") {
-			internal.Catch(cmd.Flags(), rpcClient.SetMuxRoutes(appMuxRoutes))
+			o.MuxRoutes = &appMuxRoutes
 		}
 		if cmd.Flags().Changed("mux-mode") {
-			internal.Catch(cmd.Flags(), rpcClient.SetMuxMode(appMuxMode))
+			o.MuxMode = &appMuxMode
 		}
 		if cmd.Flags().Changed("min-hops") {
-			internal.Catch(cmd.Flags(), rpcClient.SetMinHops(appMinHops))
+			o.MinHops = &appMinHops
 		}
+		internal.Catch(cmd.Flags(), clirpc.ApplyRoutingSession(rpcClient, o))
 
 		internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(args[0], launcherMode))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")

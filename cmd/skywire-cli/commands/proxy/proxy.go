@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net"
 	"net/http"
 	"os"
@@ -158,52 +157,25 @@ var startCmd = &cobra.Command{
 		// that constraint. Always SetExistingTPOnly / SetForceLocalRoutes
 		// to exactly the current flag value so the visor mirrors what
 		// the operator just typed.
-		if err := rpcClient.SetExistingTPOnly(existingTpOnly); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set existing transport only mode: %w", err))
+		// Apply the routing-session options via the shared helper (clirpc),
+		// the SAME sequence + quirks the generic `cli visor app start` and
+		// `cli vpn start` use, so the surfaces can't drift. existing-tp /
+		// local-route are always applied to the current flag value (so a later
+		// `proxy start <pk>` with no flags mirrors exactly what was typed and
+		// doesn't silently inherit stale state); mux/mux-mode carry their
+		// sentinel/skip semantics inside the helper; --min-hops only fires when
+		// explicitly set (0 is rejected there).
+		routeOpts := clirpc.RoutingSessionOpts{
+			ExistingTP: &existingTpOnly,
+			LocalRoute: &forceLocalRoutes,
+			MuxRoutes:  &muxRoutes,
+			MuxMode:    &muxMode,
 		}
-		if err := rpcClient.SetForceLocalRoutes(forceLocalRoutes); err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set force local routes mode: %w", err))
-		}
-
-		// If --mux flag is set, enable route multiplexing.
-		// 0 means "unlimited" — translate to a large sentinel that
-		// establishMuxRoutes (router_dial.go) iterates against; that
-		// loop already breaks on the first fetchBestRoutes error, so
-		// passing a high number stops naturally at the discoverable
-		// path count.
-		// 1 (default) means "no mux"; SetMuxRoutes is skipped so the
-		// router uses its existing single-route path.
-		// 2+ means N parallel routes, same as before.
-		muxArg := muxRoutes
-		if muxArg == 0 {
-			muxArg = math.MaxInt32
-		}
-		if muxArg > 1 {
-			if err := rpcClient.SetMuxRoutes(muxArg); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set mux routes: %w", err))
-			}
-		}
-
-		// Set mux weight mode if specified
-		if muxMode != "" && muxMode != "auto" {
-			if err := rpcClient.SetMuxMode(muxMode); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set mux mode: %w", err))
-			}
-		}
-
-		// --min-hops only fires when the user explicitly set it; we
-		// don't want to clobber visor's default just because the flag
-		// has a default value of 1. Reusing the existing global
-		// SetMinHops RPC (matches the SetMux*/SetExistingTPOnly idiom);
-		// changes the visor-wide setting, so a follow-up `proxy start
-		// --min-hops=1` is needed to revert.
 		if cmd.Flags().Changed("min-hops") {
-			if minHops == 0 {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("--min-hops=0 disables routing; pick at least 1"))
-			}
-			if err := rpcClient.SetMinHops(minHops); err != nil {
-				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to set min-hops: %w", err))
-			}
+			routeOpts.MinHops = &minHops
+		}
+		if err := clirpc.ApplyRoutingSession(rpcClient, routeOpts); err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
 		}
 
 		// In --verbose mode the SignalContext-driven cleanup path needs
