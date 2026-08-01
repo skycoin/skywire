@@ -161,6 +161,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	addInt("MINHOPS", "min-hops", autoconfigVals.MinHops)
 	addInt("ARTRANSPORTLIMIT", "ar-transport-limit", autoconfigVals.ARTransportLimit)
 	addSoloBool("NODIRECTTRANSPORTS", "no-direct-transports", autoconfigVals.NoDirectTransports)
+	addSoloBool("PTYRPCEXEC", "pty-rpc-exec", autoconfigVals.PtyRPCExec)
 	addArray("STUNSERVERS", "stun", autoconfigVals.StunServers)
 
 	// Transport ports
