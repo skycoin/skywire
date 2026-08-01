@@ -29,6 +29,11 @@ var localPath string
 var procKey string
 var useInternal bool
 var useExternal bool
+var appExistingTP bool
+var appLocalRoute bool
+var appMuxRoutes int
+var appMuxMode string
+var appMinHops uint16
 var lsAppsLive bool
 var startAppRoutingPolicy string
 
@@ -71,6 +76,14 @@ func init() {
 	startAppCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startAppCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startAppCmd.MarkFlagsMutuallyExclusive("internal", "external")
+	// Generic routing-session flags — the same ones `cli proxy start` / `cli vpn
+	// start` expose, lifted onto the generic surface so ANY app can use them.
+	// Applied (only when passed) before the app starts, matching proxy/vpn.
+	startAppCmd.Flags().BoolVar(&appExistingTP, "existing-tp", false, "only use existing transports, don't create new ones")
+	startAppCmd.Flags().BoolVar(&appLocalRoute, "local-route", false, "calculate routes locally instead of using the route finder")
+	startAppCmd.Flags().IntVar(&appMuxRoutes, "mux", 1, "parallel mux routes: 0=unlimited, 1=disabled (default), 2+=N routes")
+	startAppCmd.Flags().StringVar(&appMuxMode, "mux-mode", "auto", "mux weight mode: auto (latency-based) or equal (round-robin)")
+	startAppCmd.Flags().Uint16Var(&appMinHops, "min-hops", 0, "minimum route hops for this app's routes")
 	startAppCmd.Flags().StringVar(&startAppRoutingPolicy, "routing-policy", "",
 		"per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm. "+
 			"Installed before the app starts; backend dispatched by file extension. "+
@@ -199,6 +212,25 @@ var startAppCmd = &cobra.Command{
 		// installed runtime override.
 		if cmd.Flags().Changed("routing-policy") {
 			internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(args[0], startAppRoutingPolicy))
+		}
+
+		// Generic routing-session options — apply each only when the operator
+		// passed it, so a bare `visor app start <name>` doesn't silently flip
+		// visor-wide routing preferences. Same RPCs `cli proxy`/`cli vpn` call.
+		if cmd.Flags().Changed("existing-tp") {
+			internal.Catch(cmd.Flags(), rpcClient.SetExistingTPOnly(appExistingTP))
+		}
+		if cmd.Flags().Changed("local-route") {
+			internal.Catch(cmd.Flags(), rpcClient.SetForceLocalRoutes(appLocalRoute))
+		}
+		if cmd.Flags().Changed("mux") {
+			internal.Catch(cmd.Flags(), rpcClient.SetMuxRoutes(appMuxRoutes))
+		}
+		if cmd.Flags().Changed("mux-mode") {
+			internal.Catch(cmd.Flags(), rpcClient.SetMuxMode(appMuxMode))
+		}
+		if cmd.Flags().Changed("min-hops") {
+			internal.Catch(cmd.Flags(), rpcClient.SetMinHops(appMinHops))
 		}
 
 		internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(args[0], launcherMode))
