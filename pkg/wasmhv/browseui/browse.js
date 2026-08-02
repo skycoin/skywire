@@ -490,6 +490,10 @@
     function clearnetPolicy() {
       var up = upstream();
       if (!up) return { mode: "block" };
+      // "auto" → proxy through the DEFAULT skysocks-client-lite instance. Passing
+      // exit "" makes the wasm side resolve the current auto-selected (and
+      // failover-managed) pool exit per fetch, so browsing survives a dead exit.
+      if (up === "auto") return { mode: "proxy", exit: "" };
       if (up === localPK()) {
         // Local-visor upstream. With a backend that can egress clearnet (the native
         // HV UI, where the visor http.Gets directly), route through it as a
@@ -776,6 +780,8 @@
       '<span title="blank = clearnet blocked; this visor PK = direct (non-anonymous); another visor PK = via its skysocks server (IP-anonymous exit)">skysocks proxy:</span>' +
       '<input id="sb-proxy-pk" placeholder="skysocks PK · own PK (direct) · blank (blocked)" style="flex:1;min-width:140px;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.25em">' +
       '<button id="sb-proxy-self" title="use this visor (direct, non-anonymous)" style="cursor:pointer">self</button>' +
+      '<button id="sb-proxy-auto" title="auto: use the default skysocks-client-lite pool (IP-anonymous + automatic failover)" style="cursor:pointer">auto</button>' +
+      '<button id="sb-proxy-run" title="pick from skysocks-client-lite instances already running in this visor" style="cursor:pointer">⌄ running</button>' +
       '<button id="sb-proxy-list-btn" title="pick a public skysocks server from service discovery" style="cursor:pointer">⌄ servers</button>' +
       '<button id="sb-proxy-rnd" title="pick a random skysocks server from service discovery" style="cursor:pointer">🎲 random</button>' +
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
@@ -913,12 +919,28 @@
     $("sb-proxy-pk").value = browser.upstream();
     $("sb-proxy-t").onclick = function () { var h = $("sb-proxy"); h.style.display = h.style.display === "none" ? "flex" : "none"; $("sb-proxy-pk").value = browser.upstream(); };
     $("sb-proxy-self").onclick = function () { var pk = ""; try { pk = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {} $("sb-proxy-pk").value = pk; };
+    $("sb-proxy-auto").onclick = function () { $("sb-proxy-pk").value = "auto"; saveProxy(); };
+    $("sb-proxy-run").onclick = function () {
+      var sel = $("sb-proxy-list");
+      var v = globalThis.skywireVisor;
+      if (!v || !v.proxyInstances) { plog("● no in-tab visor here to list running instances"); return; }
+      Promise.resolve(v.proxyInstances()).then(function (s) {
+        var list = []; try { list = JSON.parse(s) || []; } catch (e) {}
+        list = list.filter(function (p) { return p.exit; });
+        sel.innerHTML = '<option value="">— ' + list.length + ' running instance(s) — pick one —</option>';
+        var oa = doc.createElement("option"); oa.value = "auto"; oa.textContent = "auto (default pool + failover)"; sel.appendChild(oa);
+        list.forEach(function (p) { var o = doc.createElement("option"); o.value = p.exit; o.textContent = (p.label || p.name) + " · " + p.exit.slice(0, 8) + "…"; sel.appendChild(o); });
+        sel.style.display = "";
+        plog("● " + list.length + " running skysocks-client-lite instance(s) — pick one (or auto)");
+      }).catch(function (e) { plog("● proxyInstances failed: " + String((e && e.message) || e)); });
+    };
     function saveProxy() {
       browser.setUpstream($("sb-proxy-pk").value);
       var up = browser.upstream(), self = ""; try { self = (opts.selfPK && opts.selfPK()) || ""; } catch (e) {}
       var mode = !up ? "clearnet BLOCKED (no upstream set)"
-        : (up === self ? "clearnet DIRECT via self " + up.slice(0, 8) + "… (non-anonymous)"
-          : "clearnet via skysocks " + up.slice(0, 8) + "… (IP-anonymous exit)");
+        : (up === "auto" ? "clearnet via the AUTO skysocks pool (default instance · IP-anonymous · failover)"
+          : (up === self ? "clearnet DIRECT via self " + up.slice(0, 8) + "… (non-anonymous)"
+            : "clearnet via skysocks " + up.slice(0, 8) + "… (IP-anonymous exit)"));
       plog("● upstream set → " + mode);
     }
     $("sb-proxy-save").onclick = saveProxy;

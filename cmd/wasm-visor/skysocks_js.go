@@ -128,6 +128,12 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
 	if err != nil {
 		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
+		// If this was the default instance's auto-selected active exit, hand it
+		// to the pool so a vetted standby is promoted (skip probe windows — a
+		// probe failure is the expected negative result, not a live-exit death).
+		if !strings.HasPrefix(winID, "pool-probe-") {
+			reportProxyExitDead(serverPK)
+		}
 		return nil, fmt.Errorf("dial skysocks route: %w", err)
 	}
 	sess, err := yamux.Client(conn, yamux.DefaultConfig())
@@ -238,7 +244,16 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 	}
 	return promise(func() (interface{}, error) {
 		var spk cipher.PubKey
-		if err := spk.UnmarshalText([]byte(serverPKHex)); err != nil {
+		if serverPKHex == "" {
+			// No exit pinned by the caller — use the default proxy instance's
+			// (auto-selected) exit. Lets the iframe browser / wallet "just
+			// work" once the default instance has picked a random exit.
+			pk, ok := proxyDefaultExit()
+			if !ok {
+				return nil, errors.New("no proxy exit configured (default instance has not selected one yet)")
+			}
+			spk = pk
+		} else if err := spk.UnmarshalText([]byte(serverPKHex)); err != nil {
 			return nil, fmt.Errorf("bad skysocks server pk: %w", err)
 		}
 		if _, err := url.ParseRequestURI(rawURL); err != nil {

@@ -73,7 +73,7 @@ button.rm{background:transparent;color:#9aa0a6;border:0;cursor:pointer;font:inhe
 <div class="hint">Wallets are created + stored in <b>this browser</b>. Each coin's <b>node</b> — including <b>Bitcoin's</b> <span class="mono">ssl://</span> electrum server — is set in the wallet's own <b>Settings → Nodes</b> (per coin: a mesh node <span class="mono">http://&lt;name&gt;.&lt;base32-pk&gt;.dmsg</span> or a clearnet URL). This panel keeps only the <b>skysocks exit</b> the visor routes that clearnet traffic through.</div>
 <div class="sec">
 <div class="hint"><b>Skysocks exit</b> <span id="proxyreq"></span>: the visor PK whose skysocks-server relays the clearnet connection — the BTC electrum egress AND the iframe browser share this exit. <span id="proxynote"></span></div>
-<div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex)"><button class="add" id="psrv" title="list skysocks-server PKs from service discovery">servers ▾</button><button class="add" id="prnd" title="pick a random skysocks server from service discovery">🎲 random</button></div>
+<div class="row"><label>proxy</label><input id="proxy" spellcheck="false" placeholder="skysocks exit PK (66 hex) — blank = auto"><button class="add" id="prun" title="pick from skysocks-client-lite instances already running in this visor">running ▾</button><button class="add" id="psrv" title="list skysocks-server PKs from service discovery">servers ▾</button><button class="add" id="prnd" title="pick a random skysocks server from service discovery">🎲 random</button></div>
 <div class="row" id="pselrow" style="display:none"><label></label><select id="psel"></select></div>
 <pre id="plog" class="plog" title="live: resolving proxy (dmsg) + skysocks-lite (clearnet)"></pre>
 </div>
@@ -130,6 +130,13 @@ $("psrv").onclick=function(){fetchProxies(function(list){
 var sel=$("psel");sel.innerHTML='<option value="">— '+list.length+' skysocks servers — pick one —</option>';
 list.forEach(function(s){var pk=String(s.address).split(":")[0];var geo=(s.geo&&s.geo.country)?" · "+s.geo.country:"";var o=document.createElement("option");o.value=pk;o.textContent=pk.slice(0,8)+"…"+geo+(s.version?" · "+s.version:"");sel.appendChild(o);});
 $("pselrow").style.display="";plog("● "+list.length+" skysocks server(s) from SD — pick one to set the exit");});};
+$("prun").onclick=function(){var v=visor();if(!v||!v.proxyInstances){plog("● open the wallet in the browser-tab (wasm) visor to list running instances");return;}
+Promise.resolve(v.proxyInstances()).then(function(s){var list=[];try{list=JSON.parse(s)||[];}catch(e){}
+list=list.filter(function(p){return p.exit;});
+if(!list.length){plog("● no running skysocks-client-lite instances yet (auto-select still warming up)");return;}
+var sel=$("psel");sel.innerHTML='<option value="">— '+list.length+' running instance(s) — pick one —</option>';
+list.forEach(function(p){var o=document.createElement("option");o.value=p.exit;o.textContent=(p.label||p.name)+" · "+p.exit.slice(0,8)+"…";sel.appendChild(o);});
+$("pselrow").style.display="";plog("● "+list.length+" running instance(s) — pick one to bind the exit");}).catch(function(e){plog("● proxyInstances failed: "+String((e&&e.message)||e));});};
 $("prnd").onclick=function(){fetchProxies(function(list){if(!list.length){plog("● no skysocks servers found");return;}
 var s=list[Math.floor(Math.random()*list.length)];var pk=String(s.address).split(":")[0];
 $("proxy").value=pk;plog("● 🎲 random exit → "+pk.slice(0,8)+"…"+((s.geo&&s.geo.country)?" · "+s.geo.country:"")+" (Apply to save)");});};

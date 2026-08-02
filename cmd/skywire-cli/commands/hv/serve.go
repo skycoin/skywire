@@ -151,8 +151,12 @@ func walletDmsgFetchShim() string {
 		`var ct=ctOf(input,init),hdrs=ct?{"Content-Type":ct}:null;` +
 		`if(/^https?:\/\//i.test(node)&&!/\.dmsg\b/i.test(node)){` +
 		`if(!v.fetchClearnet)return Promise.resolve(jr(503,{error:"skysocks clearnet gateway not available"}));` +
-		`var up=ls("skywire-upstream-proxy");if(!up)return Promise.resolve(jr(502,{error:"clearnet coin node needs a skysocks exit — set an upstream proxy"}));` +
-		`var full=node.replace(/\/+$/,"")+pth,ctag="node "+m+" "+full+" via skysocks "+up.slice(0,8);wlog(ctag);` +
+		// Empty upstream → pass "" so fetchClearnet uses the DEFAULT proxy
+		// instance's auto-selected (and failover-managed) exit — the clearnet coin
+		// node "just works" without hand-entering a skysocks exit. An explicit
+		// skywire-upstream-proxy still pins a specific exit.
+		`var up=ls("skywire-upstream-proxy")||"";` +
+		`var full=node.replace(/\/+$/,"")+pth,ctag="node "+m+" "+full+" via skysocks "+(up?up.slice(0,8):"auto");wlog(ctag);` +
 		`return Promise.resolve(v.fetchClearnet(up,m,full,init.body||null,"wallet",hdrs)).then(done(ctag)).catch(fail(ctag));` +
 		`}` +
 		`var host=node.replace(/^\w+:\/\//,""),dtag="node "+m+" dmsg://"+host+pth;wlog(dtag);` +
