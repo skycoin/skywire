@@ -417,6 +417,29 @@ func SkywireConfig() string {
 	return SkywirePath + "/" + ConfigJSON
 }
 
+// AppDisplayName maps an app's id to the human label a user-facing surface
+// shows for it — today the app name on a desktop notification.
+//
+// It lives here, beside the ids themselves, because more than one place needs
+// the same answer: the visor's notification hub posting locally, and the
+// `hv notify` bridge posting on a different machine. An unknown id passes
+// through unchanged, so a new app reads sensibly before it is listed.
+func AppDisplayName(app string) string {
+	switch app {
+	case SkychatName:
+		return "Skychat"
+	case SkysocksClientName:
+		return "Skysocks"
+	case VPNClientName:
+		return "SkyVPN"
+	case SkydexClientName:
+		return "SkyDEX"
+	case "":
+		return "Skywire"
+	}
+	return app
+}
+
 // PkgConfig struct contains paths specific to the installation
 type PkgConfig struct {
 	LauncherBinPath string `json:"launcher"`
