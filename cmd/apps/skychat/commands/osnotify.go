@@ -122,9 +122,29 @@ func logOSNotifyStartup() {
 // the suite from posting real notifications on a developer's desktop.
 func notifyOSInbound(title, body string) {
 	if !shouldNotifyOS(osNotify, uiCanNotify()) {
+		// The gate is the first place a "why did I get no notification?"
+		// investigation stops, and until now it left no trace at all — an
+		// attached-but-capable UI and a disabled flag look identical from
+		// outside. Debug only: this fires once per inbound message.
+		if chatLog != nil {
+			chatLog.WithField("os_notify", osNotify).
+				WithField("ui_capable", uiCanNotify()).
+				WithField("ui_clients", uiClientCount()).
+				Debug("skychat: host-OS notification suppressed")
+		}
 		return
 	}
 	go deliverNotification(title, body)
+}
+
+// uiClientCount reports how many browser UIs are attached, for the trace above:
+// "a UI is connected but says it cannot notify" and "no UI at all" are
+// different problems and the lease alone doesn't tell them apart.
+func uiClientCount() int {
+	if hub == nil {
+		return 0
+	}
+	return hub.clientCount()
 }
 
 // shouldNotifyOS is the no-double-fire rule, split out so it can be pinned
