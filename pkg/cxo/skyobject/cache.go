@@ -129,9 +129,13 @@ type Cache struct {
 	// Reads happen under c.mx (every Cache write/read path holds it),
 	// so concurrent Set/Get/Inc callers serialize their tx use through
 	// the mutex; the bbolt tx is never touched by two goroutines at
-	// once. WithBatch tears the pin down only after taking c.mx again
-	// to drain any in-flight CXDS user — see WithBatch for the full
-	// invariant.
+	// once.
+	//
+	// The pin is established and torn down so that EVERY goroutine
+	// holding c.mx during the tx's lifetime sees it. That is not a
+	// nicety: a c.mx holder that misses the pin falls through to the
+	// unpinned store and blocks on bbolt's writer lock, which the tx
+	// owns — while the tx owner blocks on c.mx. See WithBatch.
 	batchTx atomic.Pointer[data.CXDS]
 }
 
@@ -196,34 +200,78 @@ func (c *Cache) db() data.CXDS {
 // that one tx — replacing N per-leaf commits with a single one. fn
 // returning nil commits the tx; a non-nil return rolls it back.
 //
-// The pin lives in c.batchTx (atomic). Reads happen under c.mx, so
-// concurrent Cache writers/readers from outside fn naturally serialize
-// against fn's tx use through the mutex — the bbolt tx is never
-// touched by two goroutines at once. The tear-down sequence on the
-// way out:
+// LOCK ORDER — the reason this function is shaped the way it is.
 //
-//  1. Store nil into c.batchTx so any newly-arriving Cache.Set sees
-//     the untwisted CXDS (and will block in bbolt's writer mutex
-//     until our tx commits, as it would have pre-batch).
-//  2. Lock/unlock c.mx once to drain any in-flight Cache.Set that
-//     captured the now-stale tx pointer before step 1 — they finish
-//     their work under our serialization while we wait.
-//  3. Return; the bbolt tx commits at this point.
+// Two locks are in play: c.mx and bbolt's writer lock (held for the
+// whole of DB.Update / DB.Batch). Everywhere else in the Cache the
+// order is c.mx → writer: Cache.Get(key, inc != 0) and Cache.Set on a
+// miss take c.mx and then reach bbolt, which needs the writer for the
+// refcount bump. This function is the one place that would take them
+// the other way round — RunBatch opens the tx (writer) and fn then
+// calls back into Cache.Set (c.mx) — and that inversion deadlocked:
+//
+//	G1 fill:    holds c.mx        → waits for the writer (DB.Batch)
+//	G2 publish: holds the writer  → waits for c.mx (Cache.Set in fn)
+//
+// It wedged the node permanently: the publisher never cleared dirty,
+// every later send was silently lost, and teardown hung because the
+// cleanup sweep also wants c.mx. Windows CI hit it as a 25-minute
+// package timeout in cmd/apps/skychat/pairing, which publishes and
+// subscribes on one node by design.
+//
+// The fix is to make c.mx → writer hold here too, WITHOUT holding c.mx
+// across fn (fn's own Cache.Set needs it, and the mutex isn't
+// reentrant). Three windows, in order:
+//
+//  1. Take c.mx BEFORE opening the tx. Anyone already inside the Cache
+//     — possibly blocked in bbolt — finishes first, so we never open
+//     the writer underneath a c.mx holder that still needs it.
+//  2. Store the pin, then release c.mx. From here every arriving Cache
+//     op sees the pin and joins our tx, so none of them touches the
+//     writer while we own it. fn runs in this window.
+//  3. Re-take c.mx BEFORE clearing the pin. Taking it is safe (by (2)
+//     no c.mx holder is waiting on the writer) and it drains anyone
+//     mid-call on the scoped handle; clearing the pin only afterwards
+//     means no goroutine can pick the unpinned store up while the tx
+//     is still open. c.mx is released after RunBatch returns, i.e.
+//     after the commit.
+//
+// The cost of step (1) is that Cache operations now also queue behind
+// however long the writer takes to become free — including a long
+// RemoveObjects sweep. Before, an inc==0 read (bbolt View, no writer)
+// could slip past. That is latency, not a cycle: nothing that holds the
+// writer ever asks for c.mx (RemoveObjects deliberately snapshots
+// CachedKeys up front for this reason), so the wait always ends.
 //
 // fn must not retain the pinned handle past its return — the tx is
-// gone afterward.
+// gone afterward. WithBatch is not reentrant (step 1 would deadlock
+// against itself); it has a single caller, treestore.publishRoot.
 func (c *Cache) WithBatch(fn func() error) error {
+	// (1) Claim the Cache before the writer. RunBatch invokes fn
+	// synchronously on this goroutine, so this plain bool needs no
+	// synchronization of its own.
+	c.mx.Lock()
+	held := true
+	unlock := func() {
+		if held {
+			held = false
+			c.mx.Unlock()
+		}
+	}
+	// Covers step (3)'s re-lock, and the case where RunBatch fails
+	// before ever calling us back.
+	defer unlock()
+
 	return c.c.db.CXDS().RunBatch(func(scoped data.CXDS) (err error) {
 		c.batchTx.Store(&scoped)
+		// (2) The pin is visible to everyone who takes c.mx from here
+		// on; hand the Cache back to them.
+		unlock()
 		defer func() {
-			c.batchTx.Store(nil)
-			// Wait for any in-flight Cache operation that may still be
-			// using the scoped CXDS to finish before letting bbolt
-			// commit. Holding the mutex briefly is sufficient: every
-			// Cache CXDS call holds c.mx for its duration, so once we
-			// acquire it nobody else is mid-tx.
+			// (3) Drain in-flight scoped users, then retire the pin.
 			c.mx.Lock()
-			c.mx.Unlock() //nolint:staticcheck // intentional drain
+			held = true
+			c.batchTx.Store(nil)
 		}()
 		return fn()
 	})

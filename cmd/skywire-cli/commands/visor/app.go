@@ -29,6 +29,11 @@ var localPath string
 var procKey string
 var useInternal bool
 var useExternal bool
+var appExistingTP bool
+var appLocalRoute bool
+var appMuxRoutes int
+var appMuxMode string
+var appMinHops uint16
 var lsAppsLive bool
 var startAppRoutingPolicy string
 
@@ -46,6 +51,8 @@ func init() {
 		lsAppsCmd,
 		startAppCmd,
 		stopAppCmd,
+		restartAppCmd,
+		connsAppCmd,
 		addAppCmd,
 		rmAppCmd,
 		envAppCmd,
@@ -61,6 +68,7 @@ func init() {
 		setAppSecureCmd,
 		setAppWhitelistCmd,
 		setAppNetworkInterfaceCmd,
+		setAppPKCmd,
 	)
 	registerAppCmd.Flags().StringVarP(&appName, "appname", "a", "", "name of the app")
 	registerAppCmd.Flags().StringVarP(&localPath, "localpath", "p", "./local", "path of the local folder")
@@ -68,6 +76,14 @@ func init() {
 	startAppCmd.Flags().BoolVar(&useInternal, "internal", false, "force internal launcher")
 	startAppCmd.Flags().BoolVar(&useExternal, "external", false, "force external launcher")
 	startAppCmd.MarkFlagsMutuallyExclusive("internal", "external")
+	// Generic routing-session flags — the same ones `cli proxy start` / `cli vpn
+	// start` expose, lifted onto the generic surface so ANY app can use them.
+	// Applied (only when passed) before the app starts, matching proxy/vpn.
+	startAppCmd.Flags().BoolVar(&appExistingTP, "existing-tp", false, "only use existing transports, don't create new ones")
+	startAppCmd.Flags().BoolVar(&appLocalRoute, "local-route", false, "calculate routes locally instead of using the route finder")
+	startAppCmd.Flags().IntVar(&appMuxRoutes, "mux", 1, "parallel mux routes: 0=unlimited, 1=disabled (default), 2+=N routes")
+	startAppCmd.Flags().StringVar(&appMuxMode, "mux-mode", "auto", "mux weight mode: auto (latency-based) or equal (round-robin)")
+	startAppCmd.Flags().Uint16Var(&appMinHops, "min-hops", 0, "minimum route hops for this app's routes")
 	startAppCmd.Flags().StringVar(&startAppRoutingPolicy, "routing-policy", "",
 		"per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm. "+
 			"Installed before the app starts; backend dispatched by file extension. "+
@@ -197,6 +213,29 @@ var startAppCmd = &cobra.Command{
 		if cmd.Flags().Changed("routing-policy") {
 			internal.Catch(cmd.Flags(), rpcClient.SetAppRoutingPolicy(args[0], startAppRoutingPolicy))
 		}
+
+		// Generic routing-session options — apply each only when the operator
+		// passed it, so a bare `visor app start <name>` doesn't silently flip
+		// visor-wide routing preferences. The shared helper applies the SAME
+		// sequence + quirks (mux sentinel, min-hops guard) as `cli proxy start`
+		// / `cli vpn start`, so the three surfaces can't drift.
+		o := clirpc.RoutingSessionOpts{}
+		if cmd.Flags().Changed("existing-tp") {
+			o.ExistingTP = &appExistingTP
+		}
+		if cmd.Flags().Changed("local-route") {
+			o.LocalRoute = &appLocalRoute
+		}
+		if cmd.Flags().Changed("mux") {
+			o.MuxRoutes = &appMuxRoutes
+		}
+		if cmd.Flags().Changed("mux-mode") {
+			o.MuxMode = &appMuxMode
+		}
+		if cmd.Flags().Changed("min-hops") {
+			o.MinHops = &appMinHops
+		}
+		internal.Catch(cmd.Flags(), clirpc.ApplyRoutingSession(rpcClient, o))
 
 		internal.Catch(cmd.Flags(), rpcClient.StartAppWithMode(args[0], launcherMode))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
@@ -407,6 +446,77 @@ var setAppAutostartCmd = &cobra.Command{
 		}
 		internal.Catch(cmd.Flags(), rpcClient.SetAutoStart(args[0], autostart))
 		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+// setAppPKCmd wires the SetAppPK RPC into the generic app surface — the one
+// capability `cli proxy`/`cli vpn start <pk>` had that `cli visor app` lacked.
+// Sets the remote server/exit PK for any app (skysocks-client's --srv, vpn-
+// client's server key, etc.) without hand-editing args.
+var setAppPKCmd = &cobra.Command{
+	Use:   "pk <name> <public-key>",
+	Short: "Set an app's remote server/exit public key",
+	Long:  "\n  Set an app's remote server/exit public key (e.g. skysocks-client exit, vpn-client server)",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var pk cipher.PubKey
+		if err := pk.Set(args[1]); err != nil {
+			internal.Catch(cmd.Flags(), fmt.Errorf("invalid public key: %w", err))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.SetAppPK(args[0], pk))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+// restartAppCmd wires the RestartApp RPC (previously implemented but unreachable
+// from the CLI) into the generic app surface.
+var restartAppCmd = &cobra.Command{
+	Use:   "restart <name>",
+	Short: "Restart an app",
+	Long:  "\n  Restart an app",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		internal.Catch(cmd.Flags(), rpcClient.RestartApp(args[0]))
+		internal.PrintOutput(cmd.Flags(), "OK", "OK\n")
+	},
+}
+
+// connsAppCmd wires the GetAppConnectionsSummary RPC (previously CLI-unreachable)
+// into the generic app surface, giving proxy/vpn/any app a per-connection
+// bytes/latency summary neither `cli proxy` nor `cli vpn` exposed.
+var connsAppCmd = &cobra.Command{
+	Use:   "conns <name>",
+	Short: "Show an app's connection summary (bytes, latency)",
+	Long:  "\n  Show an app's per-connection summary (bandwidth, latency)",
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			os.Exit(1)
+		}
+		summaries, err := rpcClient.GetAppConnectionsSummary(args[0])
+		internal.Catch(cmd.Flags(), err)
+		var b bytes.Buffer
+		if len(summaries) == 0 {
+			b.WriteString("(no active connections)\n") //nolint:errcheck,gosec
+		} else {
+			w := tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "alive\tlatency\tup/s\tdown/s\tsent\trecv\terror") //nolint:errcheck
+			for _, s := range summaries {
+				fmt.Fprintf(w, "%v\t%s\t%d\t%d\t%d\t%d\t%s\n", //nolint:errcheck
+					s.IsAlive, s.Latency, s.UploadSpeed, s.DownloadSpeed, s.BandwidthSent, s.BandwidthReceived, s.Error)
+			}
+			w.Flush() //nolint:errcheck,gosec
+		}
+		internal.PrintOutput(cmd.Flags(), summaries, b.String())
 	},
 }
 

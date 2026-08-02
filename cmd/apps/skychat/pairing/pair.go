@@ -256,13 +256,13 @@ func Open(cfg Config) (*Pair, error) {
 //
 // # Why this hangs off Send instead of a timer
 //
-// The announcement is a CXO write, and pkg/cxo/skyobject has a
+// The announcement is a CXO write, and pkg/cxo/skyobject HAD a
 // lock-order inversion between a write and a fill on the SAME node:
-// Cache.Get holds Cache.mx and blocks on bbolt's writer lock, while
-// Cache.WithBatch (reached only from the publisher's tree walk) holds
-// bbolt's writer lock and blocks on Cache.mx. A pair puts its publisher
+// Cache.Get held Cache.mx and blocked on bbolt's writer lock, while
+// Cache.WithBatch (reached only from the publisher's tree walk) held
+// bbolt's writer lock and blocked on Cache.mx. A pair puts its publisher
 // and its subscriber on one node by design, so an announcement
-// published while the peer's tree is filling can wedge the node
+// published while the peer's tree was filling could wedge the node
 // permanently — the publish loop stops clearing its dirty flag and
 // every later send is silently lost.
 //
@@ -270,17 +270,16 @@ func Open(cfg Config) (*Pair, error) {
 // pairing suite ran 6/6 green, and with it a background announce timer
 // hung the suite roughly one run in four.
 //
-// Riding Send is what makes this safe by construction rather than by
-// timing. The Put lands in the same publisher batch as the message, so
+// That inversion is fixed — WithBatch now takes Cache.mx before the
+// writer, pinned by TestWithBatch_DoesNotInvertCacheAndWriterLocks — so
+// a timer is no longer unsafe. Riding Send is kept anyway, on its own
+// merits: the Put lands in the same publisher batch as the message, so
 // the pair performs exactly as many publishes as it did before this
-// feature existed — no new window is opened. The cost is that forward
-// secrecy engages once each side has sent at least once (the first
-// message from each side goes out under the legacy static key), which
-// for a conversation is the normal case.
-//
-// Removing this workaround is a one-line change once the CXO lock order
-// is fixed; the announcement can then go on a timer and cover pairs
-// where one side never speaks.
+// feature existed, and no timing assumption is involved at all. The
+// cost is that forward secrecy engages once each side has sent at least
+// once (the first message from each side goes out under the legacy
+// static key), which for a conversation is the normal case. A timer
+// would only add value for pairs where one side never speaks.
 func (p *Pair) maybeAnnounce(now time.Time) {
 	if p.pub == nil {
 		return
