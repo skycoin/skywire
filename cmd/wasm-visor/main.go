@@ -165,6 +165,9 @@ func main() {
 		"btcFetch":           js.FuncOf(jsBtcFetch),
 		"proxyVerbose":       js.FuncOf(jsProxyVerbose),
 		"closeWindow":        js.FuncOf(jsCloseWindow),
+		"proxyInstances":     js.FuncOf(jsProxyInstances),
+		"setProxyExit":       js.FuncOf(jsSetProxyExit),
+		"visorStats":         js.FuncOf(jsVisorStats),
 		"skychatSend":        js.FuncOf(jsSkychatSend),
 		"skychatMessages":    js.FuncOf(jsSkychatMessages),
 		"skychatHistory":     js.FuncOf(jsSkychatHistory),
@@ -505,6 +508,13 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// public autoconnect: dial WS transports to public visors (which expose WS on
 	// their stcpr port, phase 2) so this browser leaf joins the mesh + routes form.
 	startWSAutoconnect(ctx, svc.ServiceDiscoveryDmsg, svc.AddressResolverDmsg, pk, sk)
+
+	// default proxy instance: after transports come up, auto-select a random
+	// public proxy exit so the iframe browser + wallet clearnet paths work
+	// without the operator hand-entering an exit (skysocks-lite-as-app P1).
+	if sdPK, err := dmsgURLPK(svc.ServiceDiscoveryDmsg); err == nil {
+		go startDefaultProxyAuto(ctx, sdPK)
+	}
 
 	// wss → WebTransport convergence: the browser bootstraps its dmsg session over
 	// wss (the only carrier reachable before discovery), then prefers WT for

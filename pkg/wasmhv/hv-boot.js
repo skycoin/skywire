@@ -37,6 +37,15 @@
         kiosk: dlp.get('kiosk') === '1' || dlp.get('kiosk') === 'true',
       };
     }
+    // ?variant=go|tinygo force-selects the wasm-visor build variant (normally
+    // persisted per-origin in localStorage). Lets an operator / test harness
+    // pin a variant by URL — e.g. to A/B the std-Go vs TinyGo blob — without
+    // clearing storage. The SK/identity is variant-independent, so switching
+    // keeps the same PK.
+    var vparam = dlp.get('variant');
+    if (vparam === 'go' || vparam === 'tinygo') {
+      try { localStorage.setItem('skywire-visor-variant', vparam); } catch (e) {}
+    }
   } catch (e) {}
   // This tab is a full wasm-VISOR (edge + router + its own hypervisor); /api
   // resolves against the in-wasm core (globalThis.skywireVisor.hvApi).

@@ -33,7 +33,8 @@ const appSkychat = "skychat"
 var (
 	appAutoMu    sync.Mutex
 	appAutoStart = map[string]bool{
-		appSkychat: true,
+		appSkychat:     true,
+		defaultProxyID: true, // default skysocks-client-lite auto-selects an exit
 	}
 )
 
@@ -60,7 +61,7 @@ func selfAppStates() []wasmhv.AppState {
 	if skychatRunning() {
 		status, detail = 1, "Running"
 	}
-	return []wasmhv.AppState{
+	states := []wasmhv.AppState{
 		{
 			AppConfig: wasmhv.AppConfig{
 				Name: appSkychat, Port: skychatPort, LauncherMode: "internal",
@@ -69,6 +70,19 @@ func selfAppStates() []wasmhv.AppState {
 			Status: status, DetailedStatus: detail,
 		},
 	}
+	// skysocks-client-lite proxy instances (skysocks-lite-as-app P1) — listed
+	// under the same native app name so the shared Apps tab renders + controls
+	// them like a native visor's skysocks-client.
+	for _, inst := range proxyInstancesSnapshot() {
+		states = append(states, wasmhv.AppState{
+			AppConfig: wasmhv.AppConfig{
+				Name: inst.ID, Port: uint16(skysocksPort), LauncherMode: "internal",
+				AutoStart: autoStartPref(inst.ID),
+			},
+			Status: inst.Status, DetailedStatus: inst.Detail,
+		})
+	}
+	return states
 }
 
 // SelfApps returns the tab's in-process apps as the native []AppState JSON so
@@ -101,6 +115,17 @@ func (visorSelf) StartApp(name string) error {
 		})
 		return err
 	}
+	// A proxy instance "starts" by establishing its route/session to its exit
+	// (pre-dial), so status flips to running. If no exit is selected yet, the
+	// auto-selector is still working — report that rather than a hard error.
+	if isProxyInstance(name) {
+		exit, ok := proxyInstanceExit(name)
+		if !ok {
+			return errors.New("no exit selected yet (auto-selection in progress)")
+		}
+		_, err := skysocksSession(name, exit)
+		return err
+	}
 	return errors.New("unknown app: " + name)
 }
 
@@ -112,6 +137,13 @@ func (visorSelf) StopApp(name string) error {
 			return nil
 		}
 		return procM.Stop(appSkychat)
+	}
+	// A proxy instance "stops" by severing all sessions to its exit.
+	if isProxyInstance(name) {
+		if exit, ok := proxyInstanceExit(name); ok {
+			closeSkysocksExit(exit)
+		}
+		return nil
 	}
 	return errors.New("unknown app: " + name)
 }
