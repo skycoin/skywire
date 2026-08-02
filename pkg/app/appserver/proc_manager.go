@@ -82,6 +82,11 @@ type procManager struct {
 	// event broadcaster: broadcasts events to apps
 	eb *appevent.Broadcaster
 
+	// notifyHub receives user-facing notifications published by apps and
+	// routes them to whatever sink can reach the user. Nil is valid and
+	// means "drop them" — the browser wasm-visor and unit tests run that way.
+	notifyHub NotificationHub
+
 	mx   sync.RWMutex
 	done chan struct{}
 
@@ -89,7 +94,8 @@ type procManager struct {
 }
 
 // NewProcManager constructs `ProcManager`.
-func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster, addr, logStorePath string) (ProcManager, error) {
+func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appevent.Broadcaster,
+	hub NotificationHub, addr, logStorePath string) (ProcManager, error) {
 	if mLog == nil {
 		mLog = logging.NewMasterLogger()
 	}
@@ -118,6 +124,7 @@ func NewProcManager(mLog *logging.MasterLogger, discF *appdisc.Factory, eb *appe
 		procsByKey:   make(map[appcommon.ProcKey]*Proc),
 		errors:       make(map[string]string),
 		eb:           eb,
+		notifyHub:    hub,
 		done:         make(chan struct{}),
 		logStorePath: logStorePath,
 	}
@@ -244,6 +251,7 @@ func (m *procManager) Start(conf appcommon.ProcConfig) (appcommon.ProcID, error)
 	}
 
 	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
+	proc.notifyHub = m.notifyHub
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 
@@ -308,6 +316,7 @@ func (m *procManager) Register(conf appcommon.ProcConfig) (appcommon.ProcKey, er
 	}
 
 	proc := NewProc(nil, conf, disc, m, conf.AppName, m.logStorePath)
+	proc.notifyHub = m.notifyHub
 	m.procs[conf.AppName] = proc
 	m.procsByKey[conf.ProcKey] = proc
 

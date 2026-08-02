@@ -140,6 +140,31 @@ func (c *Client) SetOTPOrLog(otp string) {
 	}
 }
 
+// Notify publishes a user-facing notification to the visor's notification hub,
+// which decides which sink can actually reach the user (an attached UI, a
+// subscribed host app such as the Android service, the host-OS notification
+// center, or nowhere at all on a headless visor).
+//
+// The app decides *whether* to notify — it alone knows what is muted or already
+// on screen; the visor decides *where*. The visor stamps the App field from the
+// calling proc's identity, so callers leave it empty.
+func (c *Client) Notify(n appserver.NotifyReq) error {
+	return c.rpcC.Notify(n)
+}
+
+// NotifyOrLog publishes a notification, logging (without the body — it is
+// routinely untrusted peer text) if the visor can't be reached. Best-effort and
+// nil-safe like SetStatusOrLog, so apps that can run standalone don't have to
+// guard each call site.
+func (c *Client) NotifyOrLog(title, body, tag string) {
+	if c == nil {
+		return
+	}
+	if err := c.Notify(appserver.NotifyReq{Title: title, Body: body, Tag: tag}); err != nil {
+		c.Log().Errorf("Failed to publish notification: %v", err)
+	}
+}
+
 // SetErrorOrLog records an app error in the visor and logs the
 // failure to record (not the original error — that's already in
 // appErr). Best-effort and nil-safe like SetStatusOrLog. Replaces

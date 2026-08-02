@@ -671,20 +671,30 @@ e2e-config: ## E2E. Regenerate visor configs from template and deployment config
 	@# reach http://visor-x:8001 and a browser can reach the published
 	@# host ports. Regenerating drops that: re-apply the skychat args in
 	@# all three configs afterwards (see the note printed below).
+	@#
+	@# --pty-rpc-exec is required by TestEnv_DmsgPtyExec: #3658 gated the
+	@# RPC-initiated `cli pty exec` path behind pty.allow_rpc_exec, OFF by
+	@# default. Every visor needs it, not just the hypervisor — the test's
+	@# negative case drives visor-a as the CALLER to prove the remote's
+	@# whitelist rejects it, and without the flag that call dies on the
+	@# gate instead, which is a different (and untested) rejection.
 	@echo "Regenerating E2E visor configs..."
 	@# visor-A: skychat node with hypervisor set to visor-B
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
 		go run . cli config gen -f --nofetch --sk 42bca4df2f3189b28872d40e6c61aacd5e85b8e91f8fea65780af27c142419e5 \
 		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
+		--pty-rpc-exec \
 		-o docker/integration/visorA.json
 	@# visor-B: hypervisor
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
 		go run . cli config gen -f --nofetch --sk da4f48916e99aa3de794bffe1b5ecd465335e38b55457a9f78b411eb8585e36f \
+		--pty-rpc-exec \
 		-i -o docker/integration/visorB.json
 	@# visor-C: skychat node with hypervisor set to visor-B
 	SKYDEPLOY=docker/integration/services-config.json SKYENV=docker/integration/e2e.conf \
 		go run . cli config gen -f --nofetch --sk 0e17cd505d81f998950e22864ae4692249124441bd9148b801f76f1595ac688f \
 		-j 0348c941c5015a05c455ff238af2e57fb8f914c399aab604e9abb5b32b91a4c1fe \
+		--pty-rpc-exec \
 		-o docker/integration/visorC.json
 	@echo "E2E visor configs regenerated."
 	@echo ""

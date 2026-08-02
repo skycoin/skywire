@@ -26,6 +26,7 @@
 package group
 
 import (
+	"errors"
 	"sort"
 	"sync/atomic"
 	"testing"
@@ -494,4 +495,59 @@ func TestSetAdminRoster_PrefersLiveMembersSnapshot(t *testing.T) {
 	}
 	assertPKSet(t, "peerSubs after the admin recompute", peerSubPKs(s), []cipher.PubKey{fresh})
 	assertBookkeepingMatchesSubs(t, s)
+}
+
+// --- teardown races ---------------------------------------------------------
+
+// TestPeerSubReconcile_AfterCloseIsRefused pins the guard both reconcilers
+// need: Close() nils s.peerSubs under peerSubsMu, so a reconcile that arrives
+// afterwards used to reach `s.peerSubs[pk] = ps` and panic with "assignment to
+// entry in nil map" — which is exactly how Windows CI died, from a CXO fill
+// callback (applySnapshot → onUpdate → applyModLeaf → SetAdminRoster) landing
+// on a session that was being torn down.
+//
+// Both entry points are covered because both write the map, and a fix applied
+// to only one leaves the other panicking on the same race.
+func TestPeerSubReconcile_AfterCloseIsRefused(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		call func(s *Session, peer cipher.PubKey) ([]cipher.PubKey, error)
+	}{
+		{"SetAllowlist", func(s *Session, peer cipher.PubKey) ([]cipher.PubKey, error) {
+			return s.SetAllowlist([]cipher.PubKey{s.cfg.MyPK, peer})
+		}},
+		{"SetAdminRoster", func(s *Session, peer cipher.PubKey) ([]cipher.PubKey, error) {
+			return s.SetAdminRoster([]cipher.PubKey{peer})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			me, sk := cipher.GenerateKeyPair()
+			peer, _ := cipher.GenerateKeyPair()
+			s := newRosterSession(t, me, sk, Record{
+				OwnerPK: me,
+				Role:    RoleOwner,
+				Members: []cipher.PubKey{me, peer},
+			})
+
+			if err := s.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
+
+			evicted, err := tc.call(s, peer)
+			if !errors.Is(err, errSessionClosed) {
+				t.Fatalf("%s after Close = %v, want errSessionClosed", tc.name, err)
+			}
+			if evicted != nil {
+				t.Errorf("evicted = %v, want nil — a closed session has nothing to evict", hexes(evicted))
+			}
+			// And nothing was resurrected: the map stays nil, so a later
+			// reconcile can't find a subscriber attached to a dead node.
+			s.peerSubsMu.RLock()
+			resurrected := len(s.peerSubs)
+			s.peerSubsMu.RUnlock()
+			if resurrected != 0 {
+				t.Errorf("peerSubs has %d entries after Close, want none", resurrected)
+			}
+		})
+	}
 }

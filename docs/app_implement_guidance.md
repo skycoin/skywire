@@ -196,7 +196,94 @@ if err != nil {
 }
 ```
 
-### 5.3 Advanced Dialing Options
+### 5.3 User Notifications
+
+When something happens that deserves the user's attention while they are *not* looking at your app, publish a notification:
+
+```go
+// Best-effort and nil-safe: no-ops in standalone mode and on a headless visor.
+appCl.NotifyOrLog("MyApp", "Transfer finished", "myapp-transfers")
+```
+
+That is the entire API. No OS-specific code, no platform checks, no `runtime.GOOS`.
+
+#### The split: you decide *whether*, the visor decides *where*
+
+This division is the whole design, and getting it wrong is the main way apps misbehave.
+
+**Your app decides whether.** Only you know what the user has muted, which screen they have open, and whether this event matters. Nobody else can make that call for you.
+
+**The visor decides where.** It routes to the first delivery path that can actually reach the user:
+
+| | Sink | Wins when |
+|---|---|---|
+| a | An attached UI holding a capability lease | that UI will surface it itself |
+| b | A subscribed host app (Android service, `skywire-cli hv notify`) | one is connected |
+| c | The host OS notification centre (`pkg/osnotify`) | there is a desktop session |
+| d | Dropped | headless — the normal case for most of the fleet |
+
+First match wins, so an event surfaces **exactly once**. You never think about this — but knowing it exists explains why you must not double up at your end.
+
+#### The rules
+
+**1. Never notify about something the user is already looking at.** If your app has a UI and it is open and focused, that UI should show the event and your app should stay quiet. Otherwise the user gets it twice.
+
+**2. Notify sparingly.** A result the user is waiting for, on screen, is noise. A failure, or a result arriving long after they walked away, is not. When unsure, don't — a notification the user didn't want costs far more trust than one they didn't get.
+
+**3. Never set the app name.** The visor stamps it from your proc's identity and overwrites whatever you send. This is deliberate: an app must not be able to publish under another app's name.
+
+**4. Bodies may be untrusted, and are never logged.** If the body contains peer-supplied text, that is fine — it is passed to every sink as data, never as anything executable. Do not log it yourself either.
+
+**5. Use a tag for anything that supersedes.** Events sharing a tag *replace* one another in sinks that support it (an Android notification tag) instead of stacking. Status transitions for one connection should share a tag; independent events should not. `""` means no coalescing.
+
+#### Two worked patterns for rule 1
+
+Your app knows *something* about whether the user is watching. Use whatever signal you actually have:
+
+**If you own your UI — ask it.** skychat serves its own UI, so the UI heartbeats "I can show notifications myself" and the Go side stays silent while that lease is fresh:
+
+```go
+// cmd/apps/skychat/commands/osnotify.go
+func shouldNotifyOS(enabled, uiCapable bool) bool { return enabled && !uiCapable }
+```
+
+The lease must expire (skychat: 45s) so a UI that dies without saying goodbye can't silence notifications forever, and it must mean *"a UI that will really surface this"* — not merely "a UI is connected". A browser tab with notifications blocked, or a backgrounded mobile WebView, can show nothing and must stop claiming capability.
+
+**If you don't own your UI — use time.** skydex-client's UI belongs to a vendored engine it cannot query. But a market dial is always user-initiated, so for the first few seconds the user is still watching the form where the engine already renders the result:
+
+```go
+// cmd/apps/skydex-client/commands/skydex-client.go
+const notifyAttentionWindow = 3 * time.Second
+
+func (d appnetDialer) notifyIfUnwatched(waited time.Duration, body string) {
+    if waited < notifyAttentionWindow {
+        return
+    }
+    d.appCl.NotifyOrLog("SkyDEX", body, notifyTagMarket)
+}
+```
+
+#### Don't promise what you can't observe
+
+Before adding a notification, confirm the event actually reaches your Go code. skydex-client would love to announce "order filled", but the market protocol is strictly request/response with no unsolicited frames and order status is discovered only by the browser polling — so no Go layer ever learns it. A notification for an event you cannot observe is dead code that reads like a feature.
+
+Equally, check the *trigger* is real. An `if err != nil` guard is worthless if the function it wraps can only ever return `nil`.
+
+#### Testing
+
+Notifications are invisible on a headless box and in CI, so don't test through the OS. Two options:
+
+- **Unit-test the decision, not the delivery.** The interesting logic is your "should I notify?" gate — a pure function is trivial to pin exhaustively.
+- **Watch the stream.** `skywire-cli hv notify --print` subscribes to the visor and prints every event, which works headlessly and in containers:
+
+```
+$ skywire-cli hv notify --print
+20:17:49  [skychat] 024ec474…58c7 — hello there
+```
+
+Keep a global disable flag (skychat's `--os-notify`) that your `TestMain` can switch off, so a test suite never posts real notifications on a developer's desktop.
+
+### 5.4 Advanced Dialing Options
 For high-bandwidth or high-latency scenarios, you can use `DialWithOptions` to request multi-path routing (`muxRoutes`) or enforce a minimum number of hops for privacy (`minHops`).
 
 ```go
@@ -233,6 +320,7 @@ func init() {
 3. [ ] **Logging:** Replace `log.Println` with `appCl.Log().Info()`.
 4. [ ] **Networking:** Use `appCl.Listen()` to accept secure connections and `appCl.Dial()` to initiate them.
 5. [ ] **Status:** Call `SetStatusOrLog(Running)` on startup and `Stopped` on shutdown.
+6. [ ] **Notifications:** Use `NotifyOrLog` for events the user should see when they aren't watching your app (see 5.3).
 6. [ ] **Graceful Exit:** Listen for `os.Interrupt` to cancel your context and close listeners cleanly.
 7. [ ] **Registration:** Call `launcher.RegisterApp()` in `init()`.
 
