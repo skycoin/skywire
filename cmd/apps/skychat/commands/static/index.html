@@ -1751,6 +1751,31 @@
     .notif-perm { font-size: 13px; color: var(--text-secondary); padding: 10px 0; }
     .notif-perm.granted { color: var(--accent-green); }
     .notif-perm.denied { color: var(--accent-orange); }
+    .notif-allow-btn { display: inline-block; margin-top: 8px; padding: 6px 14px; font-size: 13px; }
+
+    /* First-run notification-permission nudge (sidebar header). */
+    .notif-nudge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+    .notif-nudge .nn-text { flex: 1; min-width: 0; font-size: 12px; color: var(--text-secondary); line-height: 1.35; }
+    .notif-nudge .nn-allow {
+      flex-shrink: 0; padding: 5px 12px; font-size: 12px; font-weight: 600;
+      color: #fff; background: var(--accent-blue);
+      border: none; border-radius: 6px; cursor: pointer;
+    }
+    .notif-nudge .nn-allow:hover { filter: brightness(1.1); }
+    .notif-nudge .nn-dismiss {
+      flex-shrink: 0; padding: 0 4px; font-size: 16px; line-height: 1;
+      color: var(--text-muted); background: none; border: none; cursor: pointer;
+    }
+    .notif-nudge .nn-dismiss:hover { color: var(--text-primary); }
     .notif-muted-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 4px; }
     .notif-muted-list { max-height: 160px; overflow-y: auto; }
     .notif-muted-empty { font-size: 13px; color: var(--text-muted); padding: 6px 0; }
@@ -1843,6 +1868,15 @@
           <span id="statusText">Connected</span>
         </div>
         <button class="icon-btn" style="margin-left:auto" onclick="app.openNotifSettings()" title="Notification settings" aria-label="Notification settings">&#x1F514;</button>
+      </div>
+      <!-- First-run permission nudge. Hidden by default and only shown by
+           _refreshNotifNudge when notifications are enabled but the browser has
+           never been asked — otherwise that state is completely invisible and
+           every notification is silently dropped. -->
+      <div id="notifNudge" class="notif-nudge" style="display:none">
+        <span class="nn-text">🔔 Allow notifications to be alerted about new messages.</span>
+        <button class="nn-allow" onclick="app.allowNotifFromNudge()">Allow</button>
+        <button class="nn-dismiss" onclick="app.dismissNotifNudge()" title="Don't ask again" aria-label="Dismiss">&times;</button>
       </div>
       <form class="recipient-form" onsubmit="app.createRecipient(this); return false;">
         <input id="destinationPk" type="text" placeholder="Enter public key..." />
@@ -2365,6 +2399,8 @@
         // disabled) the lease expires (~45s) and the Go side takes over.
         this._reportNotifCapability();
         setInterval(() => { if (this._notifCapable()) this._reportNotifCapability(); }, 20000);
+        // Surface the permission banner if this browser was never asked.
+        this._refreshNotifNudge();
         // Voice calls: the visor owns the call manager + host audio; this UI is a
         // control surface that polls /voice/{incoming,active} and drives
         // /voice/{call,answer,decline,hangup,mute,levels}. Auto-hides when voice
@@ -6254,9 +6290,10 @@
             enabled: raw.enabled !== false, // default ON
             preview: raw.preview !== false, // default ON (show text snippet)
             muted: (raw.muted && typeof raw.muted === 'object') ? raw.muted : {},
+            nudged: raw.nudged === true, // user dismissed the permission prompt banner
           };
         } catch (e) {
-          return { enabled: true, preview: true, muted: {} };
+          return { enabled: true, preview: true, muted: {}, nudged: false };
         }
       }
 
@@ -6265,6 +6302,7 @@
           enabled: this.notif.enabled,
           preview: this.notif.preview,
           muted: this.notif.muted,
+          nudged: this.notif.nudged,
         }));
       }
 
@@ -6318,6 +6356,58 @@
       openNotifSettings() {
         this._renderNotifModal();
         document.getElementById('notifModal').classList.add('visible');
+        // Opening the bell is a user gesture, so the browser lets us ask here.
+        // Without this the default-ON preference is a dead end: the permission
+        // request only ever fired on an off->on flip of a switch that is
+        // already on, so a fresh profile was never prompted and every
+        // notification was silently dropped by _shouldNotify.
+        this._ensureNotifPermission();
+      }
+
+      // _ensureNotifPermission asks the browser for permission when the user
+      // wants notifications but has never been asked. MUST be called from a
+      // user gesture (a click) — browsers ignore or quiet-UI an unsolicited
+      // prompt. Safe to call repeatedly: it is a no-op once the browser has
+      // made a decision either way.
+      _ensureNotifPermission() {
+        if (!this._notifSupported() || !this.notif.enabled) return;
+        if (Notification.permission !== 'default') return;
+        Notification.requestPermission().then(() => {
+          this._renderNotifModal();
+          this._refreshNotifNudge();
+          // Tell the server immediately rather than waiting out the lease, so
+          // the visor stops posting host-OS notifications the moment this UI
+          // becomes capable.
+          this._reportNotifCapability();
+        }).catch(() => {});
+      }
+
+      // _refreshNotifNudge shows or hides the first-run banner. It appears only
+      // when notifications are wanted but unasked-for — the exact state that
+      // used to be invisible — and a user who never opens the bell would
+      // otherwise never discover it.
+      _refreshNotifNudge() {
+        const el = document.getElementById('notifNudge');
+        if (!el) return;
+        const show = this._notifSupported() &&
+                     this.notif.enabled &&
+                     !this.notif.nudged &&
+                     Notification.permission === 'default';
+        el.style.display = show ? 'flex' : 'none';
+      }
+
+      // allowNotifFromNudge is the banner's Allow button: a direct click, which
+      // is the cleanest possible gesture for the browser prompt.
+      allowNotifFromNudge() {
+        this._ensureNotifPermission();
+      }
+
+      // dismissNotifNudge hides the banner for good on this browser. The bell
+      // still offers the prompt, so nothing becomes unreachable.
+      dismissNotifNudge() {
+        this.notif.nudged = true;
+        this._saveNotifPrefs();
+        this._refreshNotifNudge();
       }
 
       _renderNotifModal() {
@@ -6338,8 +6428,17 @@
             perm.className = 'notif-perm denied';
             perm.textContent = 'Blocked by the browser. Allow notifications for this site in your browser settings to receive alerts.';
           } else {
+            // permission === 'default'. The old copy read "Turn on 'Enable
+            // notifications' to grant browser permission" while that switch was
+            // already on — an instruction the user could not follow. Give them
+            // a button instead; openNotifSettings also prompts on its own.
             perm.className = 'notif-perm';
-            perm.textContent = 'Turn on “Enable notifications” to grant browser permission.';
+            perm.textContent = 'This browser hasn’t been asked yet — notifications won’t appear until you allow them. ';
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-secondary notif-allow-btn';
+            btn.textContent = 'Allow notifications';
+            btn.onclick = () => this._ensureNotifPermission();
+            perm.appendChild(btn);
           }
           enabledBox.disabled = false;
           enabledBox.checked = this.notif.enabled;
@@ -6376,12 +6475,11 @@
         this._saveNotifPrefs();
         // Enabling with no decision yet → ask the browser (this runs inside the
         // checkbox's user gesture, so the prompt is allowed).
-        if (on && this._notifSupported() && Notification.permission === 'default') {
-          Notification.requestPermission().then(() => { this._renderNotifModal(); this._reportNotifCapability(); });
-        }
+        this._ensureNotifPermission();
         // Reflect the new capability to the server immediately (esp. disabling,
         // so the Go side can take over without waiting for the lease to lapse).
         this._reportNotifCapability();
+        this._refreshNotifNudge();
       }
 
       toggleNotifPreview(on) {
