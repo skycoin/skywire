@@ -128,6 +128,12 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
 	if err != nil {
 		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
+		// If this was the default instance's auto-selected active exit, hand it
+		// to the pool so a vetted standby is promoted (skip probe windows — a
+		// probe failure is the expected negative result, not a live-exit death).
+		if !strings.HasPrefix(winID, "pool-probe-") {
+			reportProxyExitDead(serverPK)
+		}
 		return nil, fmt.Errorf("dial skysocks route: %w", err)
 	}
 	sess, err := yamux.Client(conn, yamux.DefaultConfig())

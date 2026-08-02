@@ -49,6 +49,26 @@ var (
 	}
 )
 
+// Warm-pool tuning. Rather than pick ONE random exit and hope it routes, the
+// default instance races several candidates from service discovery, keeps the
+// ones that actually establish a route ("vetted"), makes the first the active
+// exit, and holds the rest as pre-vetted standbys. If the active exit's route
+// later dies mid-use, a standby is promoted immediately (no re-probe) and the
+// pool is topped up in the background. This is what makes the wallet / iframe
+// browser "just work" AND survive a dead first pick.
+const (
+	proxyRaceN      = 3 // candidates probed concurrently each selection round
+	proxyPoolTarget = 2 // vetted exits kept: 1 active + up to 1 hot standby
+)
+
+var (
+	proxyPoolMu      sync.Mutex
+	proxyPool        []cipher.PubKey // vetted healthy exits; [0] is the active one
+	proxyAutoRunning bool            // a selection loop is in flight (single-flight)
+	proxyAutoCtx     context.Context // captured so failover can re-select
+	proxyAutoSDPK    cipher.PubKey
+)
+
 // proxyInstanceExit returns the configured exit for an instance id.
 func proxyInstanceExit(id string) (cipher.PubKey, bool) {
 	proxyRegMu.Lock()
@@ -105,11 +125,34 @@ func proxyInstanceRunning(pk cipher.PubKey) bool {
 func proxyInstancesSnapshot() []proxyInstance {
 	proxyRegMu.Lock()
 	out := make([]proxyInstance, 0, len(proxyReg))
+	known := map[string]bool{}
 	for _, inst := range proxyReg {
 		cp := *inst
+		if !cp.ExitPK.Null() {
+			known[cp.ExitPK.Hex()] = true
+		}
 		out = append(out, cp)
 	}
 	proxyRegMu.Unlock()
+	// Surface the vetted standby exits (pool[1:]) as selectable instances so the
+	// iframe-browser / wallet proxy pickers can bind to an already-running
+	// skysocks-client-lite rather than only "auto" or a hand-typed PK.
+	proxyPoolMu.Lock()
+	standbys := append([]cipher.PubKey(nil), proxyPool...)
+	proxyPoolMu.Unlock()
+	for i, pk := range standbys {
+		if i == 0 || pk.Null() || known[pk.Hex()] {
+			continue // [0] is the active default (already listed); skip dups
+		}
+		known[pk.Hex()] = true
+		out = append(out, proxyInstance{
+			ID:     defaultProxyID + "-standby-" + pk.Hex()[:8],
+			Label:  "Standby (auto)",
+			ExitPK: pk,
+			Exit:   pk.Hex(),
+			Auto:   true,
+		})
+	}
 	for i := range out {
 		if proxyInstanceRunning(out[i].ExitPK) {
 			out[i].Status, out[i].Detail = 1, "Running — exit "+exitShort(out[i].ExitPK)
@@ -161,14 +204,37 @@ func exitShort(pk cipher.PubKey) string {
 	return shortPK(pk.Hex())
 }
 
-// startDefaultProxyAuto waits for transports to come up, then auto-selects a
-// random public proxy exit for the default instance (unless the operator already
-// pinned one). Connection itself is lazy — the first clearnet fetch establishes
-// the route to the selected exit (skysocks_js.go). Retries while the SD list is
-// empty / until an exit is chosen.
+// reArmDefaultAuto re-flags the default instance as Auto after setProxyExit
+// (which clears Auto on any non-null set) — an auto-selected exit should stay
+// "auto" so only a later MANUAL change pins it.
+func reArmDefaultAuto() {
+	proxyRegMu.Lock()
+	if p := proxyReg[defaultProxyID]; p != nil {
+		p.Auto = true
+	}
+	proxyRegMu.Unlock()
+}
+
+// startDefaultProxyAuto waits for transports to come up, then fills the vetted
+// proxy pool (see selectProxyPool) so the default instance has a live, routable
+// exit — plus a standby for instant failover. Single-flight: a second call while
+// one is running (e.g. failover re-select) is a no-op. Returns once the pool has
+// an active exit; failover re-invokes it when the pool empties.
 func startDefaultProxyAuto(ctx context.Context, sdPK cipher.PubKey) {
-	// Only auto-select for the default instance while it's in Auto mode and
-	// hasn't already been given an exit.
+	proxyPoolMu.Lock()
+	if proxyAutoRunning {
+		proxyPoolMu.Unlock()
+		return
+	}
+	proxyAutoRunning = true
+	proxyAutoCtx, proxyAutoSDPK = ctx, sdPK
+	proxyPoolMu.Unlock()
+	defer func() {
+		proxyPoolMu.Lock()
+		proxyAutoRunning = false
+		proxyPoolMu.Unlock()
+	}()
+
 	settle := time.Now().Add(8 * time.Second)
 	for {
 		select {
@@ -176,66 +242,188 @@ func startDefaultProxyAuto(ctx context.Context, sdPK cipher.PubKey) {
 			return
 		case <-time.After(2 * time.Second):
 		}
+		// Stop if the operator pinned an exit (Auto off), or the pool already
+		// has a live active exit.
 		proxyRegMu.Lock()
 		inst := proxyReg[defaultProxyID]
-		done := inst == nil || !inst.Auto || !inst.ExitPK.Null()
+		pinned := inst != nil && !inst.Auto && !inst.ExitPK.Null()
 		proxyRegMu.Unlock()
-		if done {
+		if pinned {
 			return
 		}
-		// Wait for at least one transport (settle window) before picking.
+		proxyPoolMu.Lock()
+		haveActive := len(proxyPool) > 0
+		proxyPoolMu.Unlock()
+		if haveActive {
+			return
+		}
+		// Wait for at least one transport (settle window) before probing.
 		if tpM == nil || tpM.TransportCount() < 1 {
 			if time.Now().Before(settle) {
 				continue
 			}
 		}
-		if pk, ok := pickRandomProxyExit(ctx, sdPK); ok {
-			if err := setProxyExit(defaultProxyID, pk); err == nil {
-				// Re-arm Auto: setProxyExit clears it, but an auto-selected
-				// exit should remain "auto" so a later manual change is what
-				// pins it.
-				proxyRegMu.Lock()
-				if p := proxyReg[defaultProxyID]; p != nil {
-					p.Auto = true
-				}
-				proxyRegMu.Unlock()
-				vlog(fmt.Sprintf("[skysocks-lite] default proxy exit auto-selected: %s", exitShort(pk)))
-				return
-			}
+		if selectProxyPool(ctx, sdPK, cipher.PubKey{}) {
+			return
 		}
-		// SD empty / no reachable candidate yet — retry.
+		// SD empty / nothing routable yet — retry.
 	}
 }
 
-// pickRandomProxyExit fetches the public proxy list from service discovery over
-// dmsg and returns a pseudo-randomly chosen exit PK.
-func pickRandomProxyExit(ctx context.Context, sdPK cipher.PubKey) (cipher.PubKey, bool) {
-	if dmsgC == nil {
-		return cipher.PubKey{}, false
+// selectProxyPool races up to proxyRaceN random candidate exits from service
+// discovery, probing each concurrently (a real route establishment — the only
+// honest reachability test). The FIRST that routes becomes the active default
+// exit immediately (fast start); later successes fill standby slots up to
+// proxyPoolTarget. `avoid` is skipped (the just-failed exit on a re-select).
+// Returns true if at least one exit was installed.
+func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKey) bool {
+	cands := pickRandomProxyExits(ctx, sdPK, proxyRaceN, avoid)
+	if len(cands) == 0 {
+		return false
+	}
+	type probeRes struct {
+		pk cipher.PubKey
+		ok bool
+	}
+	resc := make(chan probeRes, len(cands))
+	for _, pk := range cands {
+		go func(pk cipher.PubKey) {
+			resc <- probeRes{pk, probeExit(pk)}
+		}(pk)
+	}
+	installed := false
+	for i := 0; i < len(cands); i++ {
+		r := <-resc
+		if !r.ok {
+			continue
+		}
+		if !installed {
+			installed = true
+			proxyPoolMu.Lock()
+			proxyPool = []cipher.PubKey{r.pk}
+			proxyPoolMu.Unlock()
+			_ = setProxyExit(defaultProxyID, r.pk) //nolint:errcheck
+			reArmDefaultAuto()
+			vlog(fmt.Sprintf("[skysocks-lite] active proxy exit: %s", exitShort(r.pk)))
+			continue
+		}
+		proxyPoolMu.Lock()
+		if len(proxyPool) < proxyPoolTarget {
+			proxyPool = append(proxyPool, r.pk)
+			vlog(fmt.Sprintf("[skysocks-lite] standby proxy exit ready: %s", exitShort(r.pk)))
+		}
+		proxyPoolMu.Unlock()
+	}
+	return installed
+}
+
+// probeExit confirms an exit is actually routable by establishing a skysocks
+// route to it (the 18s fast-fail dial in skysocksSession), then releasing the
+// probe route. Returns true only if the route + session came up.
+func probeExit(pk cipher.PubKey) bool {
+	if pk.Null() || pk == selfPK {
+		return false
+	}
+	win := "pool-probe-" + pk.Hex()[:8]
+	if _, err := skysocksSession(win, pk); err != nil {
+		return false
+	}
+	closeSkysocksWindow(win) // we only needed to confirm routability
+	return true
+}
+
+// reportProxyExitDead is called when a route/dial to an exit fails. If it is the
+// default instance's current AUTO-selected active exit, that exit is evicted, its
+// live sessions are severed, and the next vetted standby is promoted instantly;
+// if the pool empties, a fresh selection round is kicked off in the background.
+// No-op for operator-pinned exits or any non-active exit (so probe failures and
+// unrelated windows don't disturb the pool).
+func reportProxyExitDead(pk cipher.PubKey) {
+	if pk.Null() {
+		return
+	}
+	proxyRegMu.Lock()
+	inst := proxyReg[defaultProxyID]
+	isActiveAuto := inst != nil && inst.Auto && inst.ExitPK == pk
+	proxyRegMu.Unlock()
+	if !isActiveAuto {
+		return
+	}
+	proxyPoolMu.Lock()
+	kept := proxyPool[:0]
+	for _, e := range proxyPool {
+		if e != pk {
+			kept = append(kept, e)
+		}
+	}
+	proxyPool = kept
+	var next cipher.PubKey
+	if len(proxyPool) > 0 {
+		next = proxyPool[0]
+	}
+	ctx, sdPK := proxyAutoCtx, proxyAutoSDPK
+	proxyPoolMu.Unlock()
+
+	closeSkysocksExit(pk) // sever any live sessions to the dead exit
+	if !next.Null() {
+		_ = setProxyExit(defaultProxyID, next) //nolint:errcheck
+		reArmDefaultAuto()
+		vlog(fmt.Sprintf("[skysocks-lite] exit %s failed — promoted standby %s", exitShort(pk), exitShort(next)))
+		// Top the pool back up to target in the background.
+		if ctx != nil {
+			go func() { selectProxyPool(ctx, sdPK, pk) }()
+		}
+		return
+	}
+	// Pool empty — clear the exit and reselect from scratch.
+	_ = setProxyExit(defaultProxyID, cipher.PubKey{}) //nolint:errcheck
+	reArmDefaultAuto()
+	vlog(fmt.Sprintf("[skysocks-lite] exit %s failed — no standby, reselecting", exitShort(pk)))
+	if ctx != nil {
+		go startDefaultProxyAuto(ctx, sdPK)
+	}
+}
+
+// pickRandomProxyExits fetches the public proxy list from service discovery over
+// dmsg and returns up to n pseudo-randomly chosen exit PKs (self / null / avoid
+// / duplicates excluded). No math/rand import (TinyGo-friendly) — a time-derived
+// start offset spreads the choice across the list and across tabs.
+func pickRandomProxyExits(ctx context.Context, sdPK cipher.PubKey, n int, avoid cipher.PubKey) []cipher.PubKey {
+	if dmsgC == nil || n <= 0 {
+		return nil
 	}
 	fctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	status, _, body, err := dmsgclient.FetchOverDmsg(fctx, dmsgC, "GET", sdPK.Hex(), "/api/services?type=proxy", nil, nil)
 	cancel()
 	if err != nil || status != 200 {
-		return cipher.PubKey{}, false
+		return nil
 	}
 	var services []servicedisc.Service
 	if err := json.Unmarshal(body, &services); err != nil || len(services) == 0 {
-		return cipher.PubKey{}, false
+		return nil
 	}
-	// Pseudo-random start offset (no math/rand import; time is monotonic enough
-	// for exit spreading across tabs).
 	off := int(time.Now().UnixNano()) % len(services)
 	if off < 0 {
 		off += len(services)
 	}
-	for i := 0; i < len(services); i++ {
+	var cand []cipher.PubKey
+	for i := 0; i < len(services) && len(cand) < n; i++ {
 		pk := services[(off+i)%len(services)].Addr.PubKey()
-		if !pk.Null() && pk != selfPK {
-			return pk, true
+		if pk.Null() || pk == selfPK || pk == avoid {
+			continue
+		}
+		dup := false
+		for _, c := range cand {
+			if c == pk {
+				dup = true
+				break
+			}
+		}
+		if !dup {
+			cand = append(cand, pk)
 		}
 	}
-	return cipher.PubKey{}, false
+	return cand
 }
 
 // jsProxyInstances() → JSON array of the proxy instances (name/label/exit/auto/
