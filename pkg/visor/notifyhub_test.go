@@ -300,28 +300,6 @@ func TestNotifyHub_ConcurrentPublishSubscribeCancel(t *testing.T) {
 	}
 }
 
-func TestAppDisplayName(t *testing.T) {
-	// The label a notification center shows. skychat used to pass "Skychat"
-	// itself; now that the hub owns it, the visible name must not drift to the
-	// lowercase app id.
-	cases := []struct {
-		app  string
-		want string
-	}{
-		{"skychat", "Skychat"},
-		{"vpn-client", "SkyVPN"},
-		{"skysocks-client", "Skysocks"},
-		{"skydex-client", "SkyDEX"},
-		{"", "Skywire"},
-		{"some-future-app", "some-future-app"},
-	}
-	for _, c := range cases {
-		if got := appDisplayName(c.app); got != c.want {
-			t.Errorf("appDisplayName(%q) = %q, want %q", c.app, got, c.want)
-		}
-	}
-}
-
 func TestVisor_SubscribeNotifications_NilSafe(t *testing.T) {
 	// Bare &Visor{} fixtures are common in this package; the accessor must
 	// answer "unavailable" rather than panic so the SSE handler can 503.

@@ -219,30 +219,14 @@ func (h *NotifyHub) uiCapable() bool {
 // concept only the host-app sinks (Android notification tags) support.
 func osNotifySend(n appserver.NotifyReq) {
 	_ = osnotify.Notify(osnotify.Notification{ //nolint:errcheck // best-effort sink
-		Title:   n.Title,
-		Body:    n.Body,
-		AppName: appDisplayName(n.App),
+		Title: n.Title,
+		Body:  n.Body,
+		// Keeps the visible label stable now that apps no longer pass it
+		// themselves — skychat used to send "Skychat", and without this its
+		// notifications would silently start reading "skychat". Shared with
+		// the `hv notify` bridge, which posts the same events elsewhere.
+		AppName: skyenv.AppDisplayName(n.App),
 	})
-}
-
-// appDisplayName maps an app's id to the label a notification center shows
-// (the Linux --app-name). Keeps the visible label stable now that apps no
-// longer pass it themselves — skychat used to send "Skychat", and without this
-// its notifications would silently start reading "skychat".
-func appDisplayName(app string) string {
-	switch app {
-	case skyenv.SkychatName:
-		return "Skychat"
-	case skyenv.SkysocksClientName:
-		return "Skysocks"
-	case skyenv.VPNClientName:
-		return "SkyVPN"
-	case skyenv.SkydexClientName:
-		return "SkyDEX"
-	case "":
-		return "Skywire"
-	}
-	return app
 }
 
 // NotifyHub exposes the visor's notification hub. Nil-safe: a bare &Visor{}
