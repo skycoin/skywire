@@ -196,7 +196,24 @@ if err != nil {
 }
 ```
 
-### 5.3 Advanced Dialing Options
+### 5.3 User Notifications
+When something happens that deserves the user's attention while they are *not* looking at your app, publish a notification. Your app decides **whether** to notify; the visor decides **where** it lands — a subscribed host application (the Android service), the host OS notification centre, or nowhere at all on a headless visor. You write no OS-specific code and no platform checks.
+
+```go
+// Best-effort and nil-safe: works in standalone mode, no-ops on a headless visor.
+appCl.NotifyOrLog("MyApp", "Transfer finished", "myapp-transfers")
+```
+
+The third argument is an optional coalescing tag: events sharing a tag replace one another in sinks that support it (an Android notification tag) instead of stacking. Pass `""` for no coalescing.
+
+Two rules worth internalising:
+
+- **Only your app knows whether to notify.** If your app has its own UI and it is open and focused, it should surface the event itself and *not* publish — otherwise the user sees it twice. `cmd/apps/skychat/commands/osnotify.go` shows the pattern (a capability lease the UI heartbeats).
+- **Notify sparingly.** Something the user just triggered in a visible UI is noise; a failure, or a result arriving long after they walked away, is not.
+
+You never set the app name: the visor stamps it from your proc's identity, so an app cannot publish under another app's name.
+
+### 5.4 Advanced Dialing Options
 For high-bandwidth or high-latency scenarios, you can use `DialWithOptions` to request multi-path routing (`muxRoutes`) or enforce a minimum number of hops for privacy (`minHops`).
 
 ```go
@@ -233,6 +250,7 @@ func init() {
 3. [ ] **Logging:** Replace `log.Println` with `appCl.Log().Info()`.
 4. [ ] **Networking:** Use `appCl.Listen()` to accept secure connections and `appCl.Dial()` to initiate them.
 5. [ ] **Status:** Call `SetStatusOrLog(Running)` on startup and `Stopped` on shutdown.
+6. [ ] **Notifications:** Use `NotifyOrLog` for events the user should see when they aren't watching your app (see 5.3).
 6. [ ] **Graceful Exit:** Listen for `os.Interrupt` to cancel your context and close listeners cleanly.
 7. [ ] **Registration:** Call `launcher.RegisterApp()` in `init()`.
 
