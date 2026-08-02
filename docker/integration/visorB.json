@@ -24,7 +24,8 @@
     "dmsg_port": 22,
     "cli_network": "unix",
     "cli_address": "/tmp/dmsgpty.sock",
-    "whitelist": []
+    "whitelist": [],
+    "allow_rpc_exec": true
   },
   "ui_server": {
     "enable": false,
