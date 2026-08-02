@@ -88,14 +88,34 @@ func sendReadReceipt(ctx context.Context, peer cipher.PubKey, id string) error {
 	return chatCtrl.SendRaw(ctx, peer, payload)
 }
 
+// forgetPersisted erases the stored copy of message id in peer's conversation,
+// so a delete-for-everyone survives a reload instead of coming back the next
+// time a client hydrates from /history. Best-effort and symmetric: both the
+// deleter (deleteHandler) and the recipient (the controller's OnDelete) call
+// it, so neither side keeps bytes the author retracted. No-op when persistence
+// is off.
+func forgetPersisted(peer, id string) {
+	if historyStore == nil || id == "" {
+		return
+	}
+	switch found, err := historyStore.DeleteByID(peer, id); {
+	case err != nil:
+		appLog("skychat: history delete %s for %s failed: %v", id, peer, err)
+	case !found:
+		// Nothing stored under that id — persistence off when it arrived, or
+		// the record already aged out. The live tombstone still applies.
+		chatLog.Debugf("history: no stored copy of %s for %s", id, peer)
+	}
+}
+
 // readReceiptHandler serves POST /read-receipt {pk, ids:[...]} (or a single
 // id): the recipient's UI reports which inbound messages from pk it has now
 // displayed, and we send a chat-read envelope per id back to that peer so the
 // original sender's bubbles advance to "read".
 // deleteHandler serves POST /delete {pk, id}: the operator deletes their own
 // message for everyone. Sends a chat-delete to the peer (their UI tombstones it
-// via OnDelete) and broadcasts a dm-status "deleted" locally so the deleter's
-// own bubble tombstones immediately.
+// via OnDelete), drops our own stored copy, and broadcasts a dm-status
+// "deleted" locally so the deleter's own bubble tombstones immediately.
 func deleteHandler(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -128,6 +148,7 @@ func deleteHandler(ctx context.Context) http.HandlerFunc {
 			// Still tombstone locally — the operator's intent is recorded even if
 			// the peer is currently unreachable (they can't receive the delete).
 		}
+		forgetPersisted(peer.Hex(), body.ID)
 		broadcastDMStatus(body.ID, dmStatusDeleted, peer.Hex())
 		w.WriteHeader(http.StatusNoContent)
 	}

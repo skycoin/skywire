@@ -109,6 +109,17 @@ type Store interface {
 	// newest last.
 	ListRecent(limit int) ([]Message, error)
 
+	// DeleteByID erases the stored message with the given envelope ID from
+	// peer's conversation, in either direction. Reports whether a record
+	// actually matched; an unknown peer or id is not an error (a
+	// delete-for-everyone can name a message this side never persisted —
+	// persistence may be off, or the record may have aged out).
+	//
+	// This is the durable half of delete-for-everyone: without it the
+	// message survives in the store and comes back the next time a client
+	// hydrates from history instead of its local cache.
+	DeleteByID(peer, id string) (bool, error)
+
 	// Peers returns the set of peer PKs that have any stored messages.
 	Peers() ([]string, error)
 

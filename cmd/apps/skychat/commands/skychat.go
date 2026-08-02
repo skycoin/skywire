@@ -797,9 +797,12 @@ func RunSkychat(ctx context.Context, args []string) error {
 				broadcastDMStatus(id, dmStatusRead, peer)
 			}
 		},
-		// A peer deleted (for everyone) a message they sent us — tombstone it in
-		// our UI via the same dm-status channel.
+		// A peer deleted (for everyone) a message they sent us — drop our stored
+		// copy and tombstone it in our UI via the same dm-status channel. The
+		// store prune is what makes it stick: a UI-only hide would come back on
+		// the next client that hydrates from /history.
 		OnDelete: func(peer, id string) {
+			forgetPersisted(peer, id)
 			broadcastDMStatus(id, dmStatusDeleted, peer)
 		},
 		StaleAckWindow: staleAckWindow,
