@@ -125,7 +125,7 @@ func (s *redisStore) getDailyUptime(ctx context.Context, pkHex string, now time.
 			continue
 		}
 
-		pct := (count / expectedHeartbeatsPerDay) * 100
+		pct := (count / expectedVisorHeartbeatsPerDay) * 100
 		if pct > 100 {
 			pct = 100
 		}
