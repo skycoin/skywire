@@ -154,6 +154,41 @@ func TestUICanNotify(t *testing.T) {
 	}
 }
 
+// TestShouldNotifyOS pins the no-double-fire rule that survives the move to the
+// visor-global hub. skychat keeps deciding WHETHER (it alone knows the focused
+// thread and the per-thread mutes); the visor decides WHERE. If this gate ever
+// let both tiers through, one inbound message would surface twice — once from
+// the browser's Web Notification and once from whichever sink the hub picks.
+func TestShouldNotifyOS(t *testing.T) {
+	cases := []struct {
+		name             string
+		enabled, capable bool
+		want             bool
+	}{
+		{"capable UI attached → browser tier owns it", true, true, false},
+		{"no capable UI → Go side delivers", true, false, true},
+		{"notifications disabled", false, false, false},
+		{"disabled and a capable UI", false, true, false},
+	}
+	for _, c := range cases {
+		if got := shouldNotifyOS(c.enabled, c.capable); got != c.want {
+			t.Errorf("%s: shouldNotifyOS(%v, %v) = %v, want %v", c.name, c.enabled, c.capable, got, c.want)
+		}
+	}
+}
+
+// TestNotifyOSInboundRespectsDisableFlag guards the TestMain contract: the
+// suite flips the single osNotify flag to keep handleConn-driven tests from
+// posting real desktop notifications, so that flag must remain the first and
+// sufficient short-circuit.
+func TestNotifyOSInboundRespectsDisableFlag(t *testing.T) {
+	if osNotify {
+		t.Fatal("TestMain must leave osNotify=false, or the suite pops real notifications")
+	}
+	// Must be inert regardless of lease state.
+	notifyOSInbound("alice", "hi")
+}
+
 func TestShortHexPK(t *testing.T) {
 	pk, _ := cipher.GenerateKeyPair()
 	hex := pk.Hex()

@@ -188,6 +188,24 @@ func (_m *MockRPCIngressClient) Listen(local appnet.Addr) (uint16, error) {
 	return r0, r1
 }
 
+// Notify provides a mock function with given fields: n
+func (_m *MockRPCIngressClient) Notify(n NotifyReq) error {
+	ret := _m.Called(n)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Notify")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(NotifyReq) error); ok {
+		r0 = rf(n)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
 // Read provides a mock function with given fields: connID, b
 func (_m *MockRPCIngressClient) Read(connID uint16, b []byte) (int, error) {
 	ret := _m.Called(connID, b)

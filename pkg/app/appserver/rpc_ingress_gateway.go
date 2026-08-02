@@ -100,6 +100,34 @@ func (r *RPCIngressGateway) SetOTP(otp *string, _ *struct{}) (err error) {
 	return nil
 }
 
+// Notify publishes a user-facing notification to the visor's notification hub,
+// which routes it to whatever sink can actually reach the user.
+//
+// Like SetOTP the payload is withheld from rpcutil.LogCall (nil input): a body
+// is routinely UNTRUSTED peer text (a chat message), and app logs are
+// retrievable over the hypervisor API.
+//
+// The App field is overwritten from this proc's own identity rather than
+// trusted: the RPC service is registered per-proc and served on that proc's
+// private conn, so the visor already knows the caller for certain. Without the
+// override any app could publish under skychat's name — which on Android maps
+// to a per-app notification channel the user may have deliberately muted.
+func (r *RPCIngressGateway) Notify(req *NotifyReq, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "Notify", nil)(nil, &err)
+
+	if req == nil {
+		return errors.New("nil notification request")
+	}
+	// r.proc is nil in unit tests that construct a bare gateway; dropping is
+	// the correct best-effort behavior there.
+	if r.proc == nil {
+		return nil
+	}
+	r.proc.Notify(*req)
+
+	return nil
+}
+
 // SetConnectionDuration sets the connection duration of an app (vpn-client in this instance)
 func (r *RPCIngressGateway) SetConnectionDuration(dur int64, _ *struct{}) (err error) {
 	defer rpcutil.LogCall(r.log, "SetConnectionDuration", dur)(nil, &err)
