@@ -15,11 +15,20 @@
 //     (permission denied / notifications turned off) it stops (or posts
 //     capable:false) and the lease goes stale, so the Go side resumes.
 //
-// Delivery is best-effort: on a headless visor (server / router / daemon) there
-// is no desktop session, osnotify.Available() is false, and this all no-ops.
+// Once past that gate skychat is done deciding: it publishes to the VISOR's
+// notification hub (pkg/visor/notifyhub.go) and the hub picks the sink that can
+// actually reach the user — a subscribed host app (the Android service), the
+// host OS notification center, or nothing at all on a headless visor. The split
+// is deliberate: the app knows *whether* an event deserves attention (focus,
+// mutes), the visor knows *where* the user can be reached.
 //
-// This is intentionally a thin, reusable seam — the same pkg/osnotify backend
-// is meant to serve vpn-client / skydex notifications later.
+// Note the gate no longer consults osnotify.Available(). It cannot: on Android
+// there is no desktop session, yet the host-app sink is exactly the one that
+// must fire. Dropping it is behavior-neutral on the desktop because
+// osnotify.Notify re-checks availability itself.
+//
+// --standalone is the one exception: with no visor there is no hub to publish
+// to, so that mode keeps posting to the host OS directly.
 package commands
 
 import (
@@ -105,19 +114,62 @@ func logOSNotifyStartup() {
 	}
 }
 
-// notifyOSInbound posts a desktop notification for an inbound message when no
-// capable UI is attached (see the file header). Best-effort + async: the exec
-// runs in a goroutine so a slow notifier never delays message handling.
+// notifyOSInbound surfaces an inbound message when no capable UI is attached
+// (see the file header). Best-effort + async: delivery runs in a goroutine so
+// neither an RPC round-trip nor a slow notifier delays message handling.
+//
+// `!osNotify` stays the first clause — TestMain flips that single flag to keep
+// the suite from posting real notifications on a developer's desktop.
 func notifyOSInbound(title, body string) {
-	if !osNotify || uiCanNotify() || !osnotify.Available() {
+	if !shouldNotifyOS(osNotify, uiCanNotify()) {
+		// The gate is the first place a "why did I get no notification?"
+		// investigation stops, and until now it left no trace at all — an
+		// attached-but-capable UI and a disabled flag look identical from
+		// outside. Debug only: this fires once per inbound message.
+		if chatLog != nil {
+			chatLog.WithField("os_notify", osNotify).
+				WithField("ui_capable", uiCanNotify()).
+				WithField("ui_clients", uiClientCount()).
+				Debug("skychat: host-OS notification suppressed")
+		}
 		return
 	}
-	go func() {
-		err := osnotify.Notify(osnotify.Notification{Title: title, Body: body, AppName: "Skychat"})
-		if err != nil && !errors.Is(err, osnotify.ErrUnavailable) && appLog != nil {
-			appLog("skychat: os notification failed: %v", err)
-		}
-	}()
+	go deliverNotification(title, body)
+}
+
+// uiClientCount reports how many browser UIs are attached, for the trace above:
+// "a UI is connected but says it cannot notify" and "no UI at all" are
+// different problems and the lease alone doesn't tell them apart.
+func uiClientCount() int {
+	if hub == nil {
+		return 0
+	}
+	return hub.clientCount()
+}
+
+// shouldNotifyOS is the no-double-fire rule, split out so it can be pinned
+// exhaustively by a test: the Go side delivers only when notifications are
+// enabled AND no UI that can show them itself is attached. A capable UI owns
+// the notification because it alone knows the focused thread and the mutes.
+func shouldNotifyOS(enabled, uiCapable bool) bool {
+	return enabled && !uiCapable
+}
+
+// deliverNotification hands the notification to the visor, which routes it to
+// whichever sink can reach the user. In --standalone mode there is no visor
+// (appCl is nil), so it posts to the host OS itself — today's path, unchanged.
+func deliverNotification(title, body string) {
+	if appCl != nil {
+		appCl.NotifyOrLog(title, body, "")
+		return
+	}
+	if !osnotify.Available() {
+		return
+	}
+	err := osnotify.Notify(osnotify.Notification{Title: title, Body: body, AppName: "Skychat"})
+	if err != nil && !errors.Is(err, osnotify.ErrUnavailable) && appLog != nil {
+		appLog("skychat: os notification failed: %v", err)
+	}
 }
 
 // notifPreviewLen bounds the message snippet shown in an OS notification.

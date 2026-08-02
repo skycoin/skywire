@@ -38,6 +38,14 @@ func registerIngressRPC(s *rpc.Server, name string, gw *RPCIngressGateway) error
 		var r struct{}
 		return &r, gw.SetOTP(&a, &r)
 	})
+	h("Notify", func(dec *gob.Decoder) (interface{}, error) {
+		var a NotifyReq
+		if err := dec.Decode(&a); err != nil {
+			return nil, err
+		}
+		var r struct{}
+		return &r, gw.Notify(&a, &r)
+	})
 	h("SetConnectionDuration", func(dec *gob.Decoder) (interface{}, error) {
 		var a int64
 		if err := dec.Decode(&a); err != nil {

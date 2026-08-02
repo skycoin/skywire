@@ -64,6 +64,11 @@ type Proc struct {
 	m       ProcManager
 	appName string
 
+	// notifyHub routes notifications this app publishes (see Notify). Set by
+	// procManager at construction; nil on a bare &Proc{} and wherever the
+	// visor was built without a hub, in which case notifications drop.
+	notifyHub NotificationHub
+
 	startTimeMx sync.RWMutex
 	startTime   time.Time
 
@@ -477,6 +482,21 @@ func (p *Proc) DetailedStatus() string {
 	defer p.statusMx.RUnlock()
 
 	return p.status
+}
+
+// Notify forwards a notification the app published to the visor's notification
+// hub, which decides which sink (if any) can actually reach the user.
+//
+// Best-effort and total-no-op safe: the hub is nil on a bare &Proc{} (unit
+// tests) and on the browser wasm-visor, and a nil hub simply drops. The App
+// field is re-stamped from this proc's own config so the hub always attributes
+// the event correctly even if the caller left it empty or lied.
+func (p *Proc) Notify(n NotifyReq) {
+	if p.notifyHub == nil {
+		return
+	}
+	n.App = p.conf.AppName
+	p.notifyHub.Publish(n)
 }
 
 // SetOTP sets the proc's current one-time code. Apps that gate their own UI

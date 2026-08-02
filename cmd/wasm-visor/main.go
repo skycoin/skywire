@@ -531,7 +531,9 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP
 	// ingress.
 	vlog("proc_manager: New…")
-	pm, err := appserver.NewProcManager(mLog, &appdisc.Factory{}, eb, "", "")
+	// nil notification hub: a browser tab has no desktop notification centre
+	// and no host app subscribed over SSE, so app notifications simply drop.
+	pm, err := appserver.NewProcManager(mLog, &appdisc.Factory{}, eb, nil, "", "")
 	if err != nil {
 		return pk, fmt.Errorf("proc manager: %w", err)
 	}
