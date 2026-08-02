@@ -70,7 +70,7 @@ func (o *osRecorder) refuteOS(t *testing.T) {
 // newTestHub builds a hub whose host-OS tier is a recorder.
 func newTestHub(available bool) (*NotifyHub, *osRecorder) {
 	rec := newOSRecorder(available)
-	h := NewNotifyHub()
+	h := NewNotifyHub(nil)
 	h.osAvailable = rec.isAvailable
 	h.osSend = rec.send
 	return h, rec

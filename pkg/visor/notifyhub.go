@@ -29,10 +29,13 @@
 package visor
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
+
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/osnotify"
@@ -69,6 +72,13 @@ type NotifyHub struct {
 	// spawned. Both are injected so tests never post a real notification.
 	osAvailable func() bool
 	osSend      func(n appserver.NotifyReq)
+
+	// log traces which tier took each notification. Every outcome here is
+	// silent by design — a dropped event on a headless visor is normal, and
+	// the OS sink's errors are not actionable — which leaves an operator
+	// asking "why did nothing appear?" with nothing to read. One Debug line
+	// per publish answers it. Nil is valid (tests, a bare hub).
+	log logrus.FieldLogger
 }
 
 type notifySub struct {
@@ -89,13 +99,27 @@ type notifySub struct {
 // surfaces (lint and the amd64 test suite both stay silent).
 const _ = uint(0 - unsafe.Offsetof(notifySub{}.dropped)%8)
 
-// NewNotifyHub constructs an empty hub with the host-OS sink wired up.
-func NewNotifyHub() *NotifyHub {
-	return &NotifyHub{
+// NewNotifyHub constructs an empty hub with the host-OS sink wired up. log may
+// be nil; it only carries the per-publish trace.
+func NewNotifyHub(log logrus.FieldLogger) *NotifyHub {
+	h := &NotifyHub{
 		subs:        make(map[*notifySub]struct{}),
 		osAvailable: osnotify.Available,
-		osSend:      osNotifySend,
+		log:         log,
 	}
+	h.osSend = h.sendToOS
+	return h
+}
+
+// trace records the routing decision for one notification. Never the body —
+// that is routinely untrusted peer text — and not the title either, which is
+// app-controlled and can carry the same. The app name and the tier are what
+// answer "why didn't I get a notification?".
+func (h *NotifyHub) trace(app, outcome string) {
+	if h == nil || h.log == nil {
+		return
+	}
+	h.log.WithField("app", app).WithField("sink", outcome).Debug("notification routed")
 }
 
 // Publish routes n to the first tier that can deliver it (see the file header).
@@ -105,6 +129,7 @@ func (h *NotifyHub) Publish(n appserver.NotifyReq) {
 	// (a) A UI that can surface this itself owns the notification — staying
 	// quiet here is what stops an event appearing twice.
 	if h.uiCapable() {
+		h.trace(n.App, "attached-ui")
 		return
 	}
 
@@ -112,6 +137,7 @@ func (h *NotifyHub) Publish(n appserver.NotifyReq) {
 	// subscriber: a consumer that has stopped reading loses events rather than
 	// back-pressuring the publisher.
 	if h.fanout(n) {
+		h.trace(n.App, "subscriber")
 		return
 	}
 
@@ -119,12 +145,15 @@ func (h *NotifyHub) Publish(n appserver.NotifyReq) {
 	// and cheap, so it runs inline; the delivery shells out to a subprocess
 	// and so gets its own goroutine.
 	if h.osAvailable != nil && h.osSend != nil && h.osAvailable() {
+		h.trace(n.App, "host-os")
 		go h.osSend(n)
 		return
 	}
 
 	// (d) Headless: nowhere to put it. Dropping is the expected outcome on
-	// most of the fleet, so this is deliberately silent.
+	// most of the fleet, so this is not an error — but it IS the answer when
+	// someone asks why no notification appeared, so it gets a line too.
+	h.trace(n.App, "dropped-headless")
 }
 
 // fanout delivers n to every current subscriber, reporting whether there was at
@@ -211,14 +240,16 @@ func (h *NotifyHub) uiCapable() bool {
 	return !h.leaseAt.IsZero() && time.Since(h.leaseAt) < notifyCapableTTL
 }
 
-// osNotifySend posts n to the host OS notification center. Best-effort: the
-// error is deliberately discarded (osnotify itself distinguishes "no desktop
-// session" from a real failure and neither is actionable here).
+// sendToOS posts n to the host OS notification center. Best-effort: a failure
+// is not actionable and must not propagate, but it IS logged at Debug — this is
+// the last step before the user's screen, so "the notifier itself refused" and
+// "we never got here" have to be distinguishable when someone reports a missing
+// notification. ErrUnavailable is expected on a headless box and stays quiet.
 //
 // Tag is dropped: osnotify.Notification has no equivalent — coalescing is a
 // concept only the host-app sinks (Android notification tags) support.
-func osNotifySend(n appserver.NotifyReq) {
-	_ = osnotify.Notify(osnotify.Notification{ //nolint:errcheck // best-effort sink
+func (h *NotifyHub) sendToOS(n appserver.NotifyReq) {
+	err := osnotify.Notify(osnotify.Notification{
 		Title: n.Title,
 		Body:  n.Body,
 		// Keeps the visible label stable now that apps no longer pass it
@@ -227,6 +258,10 @@ func osNotifySend(n appserver.NotifyReq) {
 		// the `hv notify` bridge, which posts the same events elsewhere.
 		AppName: skyenv.AppDisplayName(n.App),
 	})
+	if err != nil && !errors.Is(err, osnotify.ErrUnavailable) && h != nil && h.log != nil {
+		// No body/title: the notifier's error text is ours, the payload is not.
+		h.log.WithError(err).WithField("app", n.App).Debug("host-OS notification failed")
+	}
 }
 
 // NotifyHub exposes the visor's notification hub. Nil-safe: a bare &Visor{}
