@@ -37,8 +37,9 @@ import (
 //
 // Only two events in this wrapper are worth notifying, because only these
 // reach the skywire side at all: the market dial (which the wrapper performs,
-// and which can outlive the user's attention because dmsg is slow) and an
-// abnormal engine exit. Everything a trader would actually want —
+// and only once it has outrun the user's attention — see
+// notifyAttentionWindow) and an abnormal engine exit. Everything a trader
+// would actually want —
 // order filled, trade executed — is invisible here: the market protocol is
 // strictly request/response with no unsolicited frames, the engine exposes no
 // event stream, and order status is discovered only by the UI polling in the
@@ -110,22 +111,46 @@ func (d appnetDialer) Dial(ref string) (*skymarket.Conn, error) {
 		// already renders this error inline there.
 		return nil, errors.New("invalid market public key")
 	}
+	started := time.Now()
 	raw, err := d.appCl.Dial(appnet.Addr{
 		Net:    appnet.TypeDmsg,
 		PubKey: pk,
 		Port:   d.marketPort,
 	})
+	waited := time.Since(started)
+
 	if err != nil {
-		// The transport failed — worth surfacing because a connect can be
-		// started from the UI and then left (backgrounded on a phone), so
-		// nobody may be looking at the screen when it fails.
-		d.appCl.NotifyOrLog("SkyDEX", "Could not reach market "+shortPK(ref), notifyTagMarket)
+		d.notifyIfUnwatched(waited, "Could not reach market "+shortPK(ref))
 		return nil, fmt.Errorf("dial market: %w", err)
 	}
-	// Same tag as the failure above so a sink that coalesces (Android) replaces
-	// a stale "could not reach" rather than stacking a second entry.
-	d.appCl.NotifyOrLog("SkyDEX", "Connected to market "+shortPK(ref), notifyTagMarket)
+	d.notifyIfUnwatched(waited, "Connected to market "+shortPK(ref))
 	return skymarket.NewConn(raw), nil
+}
+
+// notifyAttentionWindow is how long a user-initiated operation must run before
+// its outcome is worth a notification.
+//
+// It stands in for the focus signal this app cannot have. skychat suppresses
+// notifications for the thread you are looking at by asking its own UI; the
+// SkyDEX UI belongs to the vendored engine, so this wrapper cannot ask it
+// anything. What it does know is that a market dial is ALWAYS user-initiated —
+// the engine never connects on its own — so for the first few seconds after the
+// click the user is still watching the connect form, where the engine already
+// renders the outcome inline. A notification then is pure duplication.
+//
+// Past this window the dial has taken long enough (dmsg can be slow) that the
+// user may well have switched away, and the outcome becomes worth raising.
+const notifyAttentionWindow = 3 * time.Second
+
+// notifyIfUnwatched publishes body only when the operation ran long enough that
+// the user has plausibly stopped watching. All market events share one tag so a
+// sink that coalesces (an Android notification tag) replaces a stale entry
+// rather than stacking a second one.
+func (d appnetDialer) notifyIfUnwatched(waited time.Duration, body string) {
+	if waited < notifyAttentionWindow {
+		return
+	}
+	d.appCl.NotifyOrLog("SkyDEX", body, notifyTagMarket)
 }
 
 // shortPK renders a market public key as a compact 8…4 label for a
