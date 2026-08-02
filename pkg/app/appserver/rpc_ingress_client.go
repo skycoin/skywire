@@ -17,6 +17,10 @@ import (
 type RPCIngressClient interface {
 	SetDetailedStatus(status string) error
 	SetOTP(otp string) error
+	// Notify publishes a user-facing notification to the visor's
+	// notification hub. The visor overwrites the App field from the calling
+	// proc's identity, so it may be left empty.
+	Notify(n NotifyReq) error
 	SetConnectionDuration(dur int64) error
 	SetError(appErr string) error
 	SetAppPort(appPort routing.Port) error
@@ -63,6 +67,11 @@ func (c *rpcIngressClient) SetDetailedStatus(status string) error {
 // SetOTP sets the current one-time code of an app that gates its own UI.
 func (c *rpcIngressClient) SetOTP(otp string) error {
 	return c.rpc.Call(c.formatMethod("SetOTP"), &otp, nil)
+}
+
+// Notify publishes a user-facing notification to the visor's notification hub.
+func (c *rpcIngressClient) Notify(n NotifyReq) error {
+	return c.rpc.Call(c.formatMethod("Notify"), &n, nil)
 }
 
 // SetConnectionDuration sets the connection duration for an app

@@ -63,6 +63,13 @@ import (
 // each call site.
 var cryptoRandRead = cryptoRand.Read
 
+// errSessionClosed reports that a peer-sub reconciliation
+// (SetAllowlist / SetAdminRoster) arrived after teardown nil'd
+// s.peerSubs. Callers treat both functions as best-effort and log at
+// Debug, which is the right level for a closed session: there is
+// nothing left to reconcile.
+var errSessionClosed = errors.New("group: session closed")
+
 // MessagePathPrefix is the prefix used for message leaves within a
 // group feed. Matches the pairing analog so an operator who
 // understands one understands both.
@@ -1623,6 +1630,15 @@ func (s *Session) SetAllowlist(members []cipher.PubKey) ([]cipher.PubKey, error)
 	// attempts to a fresh peerSub.
 	var evicted []cipher.PubKey
 	s.peerSubsMu.Lock()
+	if s.peerSubs == nil {
+		// Close() nils the map under this same lock, so a nil map IS the
+		// teardown signal (see teardown's peer-sub block). Bail before the
+		// add loop below: assigning there panics with "assignment to entry
+		// in nil map", and any subscriber created would attach to an
+		// already-closed node and never be closed.
+		s.peerSubsMu.Unlock()
+		return nil, errSessionClosed
+	}
 	// Drop removed peers — close their subs while still holding the
 	// lock so a racing Connect doesn't pick up a half-torn sub.
 	for pk, ps := range s.peerSubs {
@@ -1865,6 +1881,15 @@ func (s *Session) SetAdminRoster(admins []cipher.PubKey) ([]cipher.PubKey, error
 
 	var evicted []cipher.PubKey
 	s.peerSubsMu.Lock()
+	if s.peerSubs == nil {
+		// Session closed concurrently — see the identical guard in
+		// SetAllowlist. This is the one CI actually caught: a CXO fill
+		// callback (Subscriber.applySnapshot → onUpdate → applyModLeaf)
+		// landed on a session whose teardown had already nil'd the map,
+		// and the add loop below panicked on the nil-map assignment.
+		s.peerSubsMu.Unlock()
+		return nil, errSessionClosed
+	}
 	// Drop peers no longer desired — close their subs while still
 	// holding the lock so a racing Connect doesn't pick up a
 	// half-torn sub (same pattern as SetAllowlist).

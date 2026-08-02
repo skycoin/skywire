@@ -20,6 +20,13 @@
 //
 // dmsgpty rides dmsg directly (no skywire transport), so no `tp add` is required —
 // only live dmsg sessions.
+//
+// CONFIG DEPENDENCY: #3658 gated the RPC-initiated exec path behind
+// pty.allow_rpc_exec (OFF by default), so all three e2e visor configs set it —
+// including visor-a, which is only ever the CALLER here (the negative case must
+// reach the remote's whitelist to be rejected BY IT, not die locally on the
+// gate). Without the flag every exec below fails with "RPC-initiated exec is
+// disabled" and this test times out.
 package integration_test
 
 import (
@@ -40,6 +47,36 @@ func (env *TestEnv) VisorPtyExec(callerVisor, remotePK string, cmdAndArgs ...str
 	full := fmt.Sprintf("/release/skywire cli --rpc %s:3435 pty exec %s -- %s",
 		callerVisor, remotePK, strings.Join(cmdAndArgs, " "))
 	return env.execResult(full)
+}
+
+// retryPtyExec polls exec until want accepts its result, returning the last
+// result and whether it ever passed.
+//
+// Why not require.Eventually: its message args are evaluated at CALL time, so a
+// failure printed the ZERO ExecResult — the previous CI failure here reported
+// `exit=0 stdout="<nil>"` for a run whose every attempt had actually failed with
+// "dmsgpty: RPC-initiated exec is disabled", and the real cause had to be dug
+// out of the source. Logging each attempt as it happens keeps the reason in the
+// CI log where the next person will look.
+func retryPtyExec(t *testing.T, timeout, interval time.Duration,
+	exec func() (ExecResult, error), want func(ExecResult, error) bool) (ExecResult, bool) {
+	t.Helper()
+
+	var res ExecResult
+	var err error
+	deadline := time.Now().Add(timeout)
+	for attempt := 1; ; attempt++ {
+		res, err = exec()
+		if want(res, err) {
+			return res, true
+		}
+		t.Logf("pty exec attempt %d: err=%v exit=%d stdout=%q stderr=%q",
+			attempt, err, res.ExitCode, strings.TrimSpace(res.Stdout()), strings.TrimSpace(res.Stderr()))
+		if time.Now().After(deadline) {
+			return res, false
+		}
+		time.Sleep(interval)
+	}
 }
 
 // TestEnv_DmsgPtyExec runs /bin/hostname on visor-a and visor-c over dmsgpty from
@@ -71,14 +108,12 @@ func TestEnv_DmsgPtyExec(t *testing.T) {
 	// first DialStream to a peer can return the transient dmsg-202).
 	for _, remote := range []string{visorA, visorC} {
 		pk := env.visorPKs[remote]
-		var res ExecResult
-		var err error
-		require.Eventually(t, func() bool {
-			res, err = env.VisorPtyExec(visorB, pk, "/bin/hostname")
+		res, ok := retryPtyExec(t, 60*time.Second, 3*time.Second, func() (ExecResult, error) {
+			return env.VisorPtyExec(visorB, pk, "/bin/hostname")
+		}, func(res ExecResult, err error) bool {
 			return err == nil && res.ExitCode == 0 && strings.TrimSpace(res.Stdout()) == remote
-		}, 60*time.Second, 3*time.Second,
-			"dmsgpty exec visor-b->%s did not return the remote hostname (last err=%v exit=%d stdout=%q stderr=%q)",
-			remote, err, res.ExitCode, strings.TrimSpace(res.Stdout()), strings.TrimSpace(res.Stderr()))
+		})
+		require.True(t, ok, "dmsgpty exec visor-b->%s did not return the remote hostname", remote)
 		t.Logf("dmsgpty exec visor-b->%s: hostname=%q exit=%d", remote, strings.TrimSpace(res.Stdout()), res.ExitCode)
 	}
 
@@ -86,14 +121,12 @@ func TestEnv_DmsgPtyExec(t *testing.T) {
 	// whitelist, so a pty exec visor-a->visor-c must be rejected by the remote
 	// dmsgpty host (non-zero exit + a "rejected" message). Retry past any cold-
 	// session transient until the deterministic rejection surfaces.
-	var neg ExecResult
-	var negErr error
-	require.Eventually(t, func() bool {
-		neg, negErr = env.VisorPtyExec(visorA, pkC, "/bin/hostname")
-		return negErr == nil && neg.ExitCode != 0 && strings.Contains(neg.Combined(), "reject")
-	}, 60*time.Second, 3*time.Second,
-		"expected non-whitelisted pty exec visor-a->visor-c to be rejected (last err=%v exit=%d out=%q)",
-		negErr, neg.ExitCode, strings.TrimSpace(neg.Combined()))
+	neg, ok := retryPtyExec(t, 60*time.Second, 3*time.Second, func() (ExecResult, error) {
+		return env.VisorPtyExec(visorA, pkC, "/bin/hostname")
+	}, func(res ExecResult, err error) bool {
+		return err == nil && res.ExitCode != 0 && strings.Contains(res.Combined(), "reject")
+	})
+	require.True(t, ok, "expected non-whitelisted pty exec visor-a->visor-c to be rejected")
 	t.Logf("dmsgpty whitelist gate held: visor-a->visor-c rejected (exit=%d)", neg.ExitCode)
 
 	t.Logf("TestEnv_DmsgPtyExec completed in %v", time.Since(start).Round(time.Second))
