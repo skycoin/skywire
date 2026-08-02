@@ -43,7 +43,7 @@ func (n *nonFlusher) Write(b []byte) (int, error) { return n.body.Write(b) }
 func (n *nonFlusher) WriteHeader(status int)      { n.status = status }
 
 func TestGetNotifyStream_NonFlusherIs500(t *testing.T) {
-	hv := &Hypervisor{visor: &Visor{notifyHub: NewNotifyHub()}}
+	hv := &Hypervisor{visor: &Visor{notifyHub: NewNotifyHub(nil)}}
 	w := &nonFlusher{}
 	r := httptest.NewRequest(http.MethodGet, "/api/notifications/stream", nil)
 
@@ -75,7 +75,7 @@ func TestGetNotifyStream_NoHubIs503(t *testing.T) {
 }
 
 func TestGetNotifyStream_StreamsEventAndEndsOnContextCancel(t *testing.T) {
-	hub := NewNotifyHub()
+	hub := NewNotifyHub(nil)
 	hv := &Hypervisor{visor: &Visor{notifyHub: hub}}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -219,7 +219,7 @@ func TestNotifyStreamPlacementRationale(t *testing.T) {
 
 func TestGetNotifyStream_OmitsEmptyTag(t *testing.T) {
 	// Tag is optional on the wire; skychat publishes without one.
-	hub := NewNotifyHub()
+	hub := NewNotifyHub(nil)
 	hv := &Hypervisor{visor: &Visor{notifyHub: hub}}
 
 	ctx, cancel := context.WithCancel(context.Background())
