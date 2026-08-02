@@ -1523,8 +1523,15 @@ func (rc *rpcClient) PairMarkActive(peerPK cipher.PubKey) error {
 }
 
 // PairSend implements API.
-func (rc *rpcClient) PairSend(peerPK cipher.PubKey, text string) error {
-	return rc.Call("PairSend", &PairSendRequest{PeerPK: peerPK, Text: text}, &struct{}{})
+func (rc *rpcClient) PairSend(peerPK cipher.PubKey, text string) (string, error) {
+	var id string
+	err := rc.Call("PairSend", &PairSendRequest{PeerPK: peerPK, Text: text}, &id)
+	return id, err
+}
+
+// PairDelete implements API.
+func (rc *rpcClient) PairDelete(peerPK cipher.PubKey, id string) error {
+	return rc.Call("PairDelete", &PairDeleteRequest{PeerPK: peerPK, ID: id}, &struct{}{})
 }
 
 // PairPoll implements API.

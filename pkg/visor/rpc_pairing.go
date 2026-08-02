@@ -23,6 +23,13 @@ type PairSendRequest struct {
 	Text   string        `json:"text"`
 }
 
+// PairDeleteRequest is the input to RPC.PairDelete.
+type PairDeleteRequest struct {
+	PeerPK cipher.PubKey `json:"peer_pk"`
+	// ID is the message id returned by PairSend.
+	ID string `json:"id"`
+}
+
 // PairPollRequest is the input to RPC.PairPoll.
 type PairPollRequest struct {
 	// Since is the lower bound (exclusive). Pass time.Time{} (zero)
@@ -69,13 +76,28 @@ func (r *RPC) PairMarkActive(peerPK *cipher.PubKey, _ *struct{}) (err error) {
 	return r.visor.PairMarkActive(*peerPK)
 }
 
-// PairSend publishes one message into the pair feed.
-func (r *RPC) PairSend(req *PairSendRequest, _ *struct{}) (err error) {
-	defer rpcutil.LogCall(r.log, "PairSend", req)(nil, &err)
+// PairSend publishes one message into the pair feed, replying with the
+// new message's id so the caller can later retract it.
+func (r *RPC) PairSend(req *PairSendRequest, out *string) (err error) {
+	defer rpcutil.LogCall(r.log, "PairSend", req)(out, &err)
 	if req == nil {
 		return fmt.Errorf("nil request")
 	}
-	return r.visor.PairSend(req.PeerPK, req.Text)
+	id, err := r.visor.PairSend(req.PeerPK, req.Text)
+	if err != nil {
+		return err
+	}
+	*out = id
+	return nil
+}
+
+// PairDelete retracts a previously sent message from the pair feed.
+func (r *RPC) PairDelete(req *PairDeleteRequest, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "PairDelete", req)(nil, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	return r.visor.PairDelete(req.PeerPK, req.ID)
 }
 
 // PairPoll drains inbound pair messages with TS strictly after Since.

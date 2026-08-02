@@ -266,7 +266,8 @@ type API interface {
 	PairList() ([]PairInfo, error)
 	PairRemove(peerPK cipher.PubKey) error
 	PairMarkActive(peerPK cipher.PubKey) error
-	PairSend(peerPK cipher.PubKey, text string) error
+	PairSend(peerPK cipher.PubKey, text string) (string, error)
+	PairDelete(peerPK cipher.PubKey, id string) error
 	PairPoll(since time.Time) ([]PairMessage, error)
 
 	// Chat-group feeds — D1 owner-centric CXO feeds with multi-PK
