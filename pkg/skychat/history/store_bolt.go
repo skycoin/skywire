@@ -219,6 +219,51 @@ func (s *BoltStore) ListByPeer(peer string, limit int) ([]Message, error) {
 	return out, err
 }
 
+// DeleteByID implements Store. Scans the peer bucket for the record carrying
+// the id and drops that key. The bucket is keyed by timestamp, not by id, so
+// this is a linear walk — bounded by PerPeerCap and only ever run on an
+// operator-initiated delete, so no id index is worth carrying for it.
+func (s *BoltStore) DeleteByID(peer, id string) (bool, error) {
+	if peer == "" {
+		return false, ErrEmptyPeer
+	}
+	if id == "" {
+		return false, nil
+	}
+	var found bool
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(messagesBucket))
+		peerBkt := root.Bucket([]byte(peer))
+		if peerBkt == nil {
+			return nil
+		}
+		// Collect first: cursor-returned slices are invalid after a Delete
+		// within the same iteration (same reason sweep copies its keys).
+		var victims [][]byte
+		c := peerBkt.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			var msg Message
+			if err := json.Unmarshal(v, &msg); err != nil {
+				continue
+			}
+			if msg.ID != id {
+				continue
+			}
+			kk := make([]byte, len(k))
+			copy(kk, k)
+			victims = append(victims, kk)
+		}
+		for _, k := range victims {
+			if err := peerBkt.Delete(k); err != nil {
+				return err
+			}
+			found = true
+		}
+		return nil
+	})
+	return found, err
+}
+
 // ListRecent implements Store. Walks every peer bucket and merges by timestamp.
 // For typical personal-use sizes (hundreds of peers, thousands of messages)
 // this is fast enough. For larger datasets, consider a global timestamp index.

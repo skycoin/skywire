@@ -151,6 +151,41 @@ func (s *MemStore) ListByPeer(peer string, limit int) ([]Message, error) {
 	return tailCopy(src, limit), nil
 }
 
+// DeleteByID implements Store.
+func (s *MemStore) DeleteByID(peer, id string) (bool, error) {
+	if peer == "" {
+		return false, ErrEmptyPeer
+	}
+	if id == "" {
+		return false, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	msgs := s.byPeer[peer]
+	if len(msgs) == 0 {
+		return false, nil
+	}
+	kept := msgs[:0:0]
+	found := false
+	for _, m := range msgs {
+		if m.ID == id {
+			s.totalBytes -= msgSize(m)
+			found = true
+			continue
+		}
+		kept = append(kept, m)
+	}
+	if !found {
+		return false, nil
+	}
+	if len(kept) == 0 {
+		delete(s.byPeer, peer)
+	} else {
+		s.byPeer[peer] = kept
+	}
+	return true, nil
+}
+
 // ListRecent implements Store.
 func (s *MemStore) ListRecent(limit int) ([]Message, error) {
 	s.mu.Lock()
