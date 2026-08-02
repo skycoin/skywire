@@ -168,7 +168,7 @@ func TestNewProc_ExternalWithLogDB(t *testing.T) {
 
 func newManager(t *testing.T) *procManager {
 	t.Helper()
-	mI, err := NewProcManager(nil, nil, nil, ":0", "")
+	mI, err := NewProcManager(nil, nil, nil, nil, ":0", "")
 	require.NoError(t, err)
 	m, ok := mI.(*procManager)
 	require.True(t, ok)

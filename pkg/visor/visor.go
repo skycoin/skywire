@@ -206,6 +206,10 @@ type Visor struct {
 	// so the sky-forwarding server can dispatch without localhost TCP.
 	services *ServiceRegistry
 
+	// Visor-global notification hub — apps publish user-facing
+	// notifications here and it picks the sink that can reach the user.
+	notifyHub *NotifyHub
+
 	// Skywire ping state
 	ping pingState
 
@@ -666,6 +670,10 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 	v.logBcast = logBcast
 	v.logstore = logStore
 	v.services = NewServiceRegistry()
+	// Constructed eagerly rather than as an init module: the hub has no
+	// dependencies and locks internally, and building it here removes any
+	// window where an app publishing early finds a nil hub.
+	v.notifyHub = NewNotifyHub(v.conf.MasterLogger().PackageLogger("visor:notify"))
 	v.startedAt = time.Now()
 	v.startupComplete = make(chan struct{})
 
