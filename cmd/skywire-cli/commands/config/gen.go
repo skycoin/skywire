@@ -1200,7 +1200,7 @@ func minHopsValue() uint16 {
 	if genMinHops < 0 {
 		return 0
 	}
-	return uint16(genMinHops)
+	return uint16(genMinHops) //nolint:gosec
 }
 
 // configureRouting sets up routing configuration on conf, preserving MinHops
