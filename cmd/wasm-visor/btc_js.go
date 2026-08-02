@@ -84,6 +84,13 @@ func jsBtcFetch(_ js.Value, args []js.Value) interface{} {
 				return nil, fmt.Errorf("bad skysocks exit pk: %w", err)
 			}
 			btcExitPK = pk
+		} else if btcExitPK == (cipher.PubKey{}) {
+			// No exit configured by the caller — fall back to the default proxy
+			// instance's auto-selected exit so BTC egress "just works" like
+			// clearnet browsing (and rides the same failover pool).
+			if pk, ok := proxyDefaultExit(); ok {
+				btcExitPK = pk
+			}
 		}
 		req, err := http.NewRequest(method, path, bytes.NewReader(body))
 		if err != nil {
