@@ -218,7 +218,7 @@ This division is the whole design, and getting it wrong is the main way apps mis
 | | Sink | Wins when |
 |---|---|---|
 | a | An attached UI holding a capability lease | that UI will surface it itself |
-| b | A subscribed host app (Android service, `skywire-cli hv notify`) | one is connected |
+| b | A subscribed host app (`skywire-cli hv notify`) | one is connected |
 | c | The host OS notification centre (`pkg/osnotify`) | there is a desktop session |
 | d | Dropped | headless — the normal case for most of the fleet |
 
