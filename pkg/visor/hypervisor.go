@@ -979,6 +979,20 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			})
 		}
 
+		// Notification stream for a host application (the Android foreground
+		// service; later the manager UI's bell). Registered here rather than
+		// inside the /api group on purpose: that group applies
+		// middleware.Timeout(httpTimeout), a 30s deadline on the whole
+		// request, which severs a long-lived SSE response — the same reason
+		// /pty sits out here. Auth is opted into explicitly instead.
+		r.Route("/api/notifications", func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+
+			r.Get("/stream", hv.getNotifyStream())
+		})
+
 		// we don't enable `dmsgpty` endpoints for Windows
 		r.Route("/pty", func(r chi.Router) {
 			if hv.c.EnableAuth {
