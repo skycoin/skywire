@@ -113,7 +113,22 @@ func (s *redisStore) Close() {
 
 const timelineSlots = 24 * 60 / 5
 const uptimeHistoryDays = 7
+
+// expectedHeartbeatsPerDay is the denominator for TRANSPORT uptime: transports
+// re-register on a ~90-second cadence (transport.Manager.runReRegisterTransports),
+// so a continuously-registered transport lands ~960 RecordHeartbeat calls/day.
 const expectedHeartbeatsPerDay = float64(24*60*60) / float64(90) // 960
+
+// expectedVisorHeartbeatsPerDay is the denominator for VISOR uptime. A visor's
+// dedicated presence heartbeat fires every 5 minutes (tickDuration in
+// pkg/visor/init_services.go), so a continuously-up visor lands 288 heartbeats/
+// day. Dividing visor uptime by the 90-second TRANSPORT figure (960) scored a
+// continuously-up NON-hub visor at 288/960 = 30% — below the 75% reward bar —
+// which is the v1.3.88+ fleet-wide reward-uptime regression (transport HUBS read
+// 100% only because their frequent re-registration also calls RecordHeartbeat).
+// Because the daily percentage is computed from the stored count at READ time,
+// correcting the divisor also fixes every day still in Redis retroactively.
+const expectedVisorHeartbeatsPerDay = float64(24*60*60) / float64(5*60) // 288
 
 // RecordHeartbeat records a visor heartbeat for uptime tracking.
 // Each heartbeat increments the daily counter and updates the version/last_seen.
