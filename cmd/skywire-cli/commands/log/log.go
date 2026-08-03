@@ -12,6 +12,7 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -326,6 +327,10 @@ var logCmd = &cobra.Command{
 			cleanupStart := time.Now()
 			log.Info("Running cleanup...")
 
+			// cwd is the collection dir here (Chdir(writeDir) above). Capture it before
+			// stepping back out, so we can stage its contents into the backup dir.
+			collectingDir, _ := os.Getwd() //nolint:errcheck
+
 			// Clean the collection directory (current working directory)
 			cleanupDirectory(log, ".", maxAgeDays, pruneBelowVer)
 
@@ -334,6 +339,19 @@ var logCmd = &cobra.Command{
 			if err := os.Chdir(".."); err == nil {
 				if _, err := os.Stat(backupDir); err == nil {
 					cleanupDirectory(log, backupDir, maxAgeDays, pruneBelowVer)
+				}
+				// Stage freshly-collected (and now pruned) surveys into the backup dir
+				// the reward calc reads — the Go replacement for getlogs.sh's
+				// `rsync -r log_collecting/ log_backups`. Additive merge (dst-only files
+				// are left intact); no separate uptime tracker / bash step needed.
+				backupAbs := backupDir
+				if !filepath.IsAbs(backupDir) {
+					if wd, e := os.Getwd(); e == nil {
+						backupAbs = filepath.Join(wd, backupDir)
+					}
+				}
+				if collectingDir != "" {
+					syncToBackup(log, collectingDir, backupAbs)
 				}
 			}
 
@@ -618,6 +636,53 @@ type httpError struct {
 
 func (e *httpError) Error() string {
 	return fmt.Sprintf("http error: %d", e.Status)
+}
+
+// syncToBackup recursively copies every file under src into dst (creating dirs and
+// overwriting existing files), mirroring `rsync -r src/ dst`: an additive merge that
+// leaves dst-only files intact. This is the Go replacement for getlogs.sh's
+// `rsync -r log_collecting/ log_backups`, staging freshly-collected surveys into the
+// directory the reward calc reads — so `skywire cli log --cleanup` fully replaces the
+// host's _getlogs + _cleanup bash without a separate sync step.
+func syncToBackup(log *logging.Logger, src, dst string) {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		log.WithError(err).Warnf("sync-to-backup: cannot read %s", src)
+		return
+	}
+	if err := os.MkdirAll(dst, 0750); err != nil {
+		log.WithError(err).Warnf("sync-to-backup: cannot create %s", dst)
+		return
+	}
+	for _, e := range entries {
+		s := filepath.Join(src, e.Name())
+		d := filepath.Join(dst, e.Name())
+		if e.IsDir() {
+			syncToBackup(log, s, d)
+			continue
+		}
+		if err := copyFile(s, d); err != nil {
+			log.WithError(err).Warnf("sync-to-backup: copy %s -> %s", s, d)
+		}
+	}
+}
+
+// copyFile copies src to dst, overwriting dst if it exists.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src) //nolint:gosec
+	if err != nil {
+		return err
+	}
+	defer in.Close()           //nolint:errcheck
+	out, err := os.Create(dst) //nolint:gosec
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close() //nolint:errcheck
+		return err
+	}
+	return out.Close()
 }
 
 // cleanupDirectory performs all cleanup operations on a directory.
