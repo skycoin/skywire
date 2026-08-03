@@ -1,0 +1,13 @@
+# Build outputs + machine-local config. Signing keys NEVER enter git
+# (release signing config arrives with release hardening).
+.gradle/
+build/
+app/build/
+local.properties
+.kotlin/
+captures/
+.idea/
+*.keystore
+*.jks
+# The Go payload is a build artifact — `make android-mobile` regenerates it.
+app/src/main/jniLibs/

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The visor talks to dmsg/transports; the app talks to its local API. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- SkywireCoreService runs the visor as a foreground service. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!-- allowBackup=false: the visor config (SK) and wallet seed must never
+         land in a cloud backup. -->
+    <application
+        android:name=".SkywireApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.Skywire.Splash">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Skywire.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- SkywireCoreService and SkyVpnService declarations land with
+             their features (core service; VPN). -->
+    </application>
+
+</manifest>
