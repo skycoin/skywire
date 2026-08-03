@@ -164,27 +164,123 @@ var logCmd = &cobra.Command{
 
 		start := time.Now()
 		var bulkFolders []string
-		// Get visors data
-		var wg sync.WaitGroup
-		for _, v := range uptimes {
-			// Attempt collection from EVERY visor the uptime tracker saw today, not
-			// only those currently flagged Online. A visor can meet the daily uptime
-			// bar yet read Online=false at the instant we poll (transient transport/
-			// heartbeat churn); gating on that instantaneous flag SILENTLY dropped such
-			// a visor from collection, so a demonstrably-up, reward-eligible visor could
-			// earn uptime but have no survey — and thus no reward — with nothing logged.
-			// The /health fetch below doubles as the reachability check (a genuinely
-			// offline visor just fails it) AND supplies the authoritative version, so the
-			// online flag is no longer load-bearing here. (The survey-push redesign will
-			// invert this entirely; this keeps the pull correct in the interim.)
+		var bulkMu sync.Mutex // bulkFolders is appended from concurrent fetch goroutines
 
-			// Omit the filters if a specific file was requested.
-			if fetchFile != "" {
-				wg.Add(1)
-				go func(key string, wg *sync.WaitGroup) {
+		// fetchVisorSurvey collects health + survey (+ optional tp logs) for one visor.
+		// Returns true when the visor was UNREACHABLE (its /health fetch failed) — a
+		// candidate for the retry pass: a cold dmsg session to a peer we've never dialed
+		// can exceed the per-request timeout on first contact yet succeed once the
+		// session is warm. quiet suppresses the per-visor "unreachable" line so the first
+		// pass stays silent and the operator only sees the final state.
+		//
+		// Attempts collection from EVERY visor the uptime tracker saw today, not only
+		// those currently flagged Online: a visor can meet the daily uptime bar yet read
+		// Online=false at the instant we poll (transient transport/heartbeat churn), and
+		// gating on that flag SILENTLY dropped it from collection — earned uptime, no
+		// survey, no reward, nothing logged. The /health fetch is the reachability gate
+		// (an offline visor fails it) AND supplies the authoritative version.
+		fetchVisorSurvey := func(key string, quiet bool) bool {
+			httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
+			defer httpC.CloseIdleConnections()
+
+			deleteOnError := false
+			if _, err := os.ReadDir(key); err != nil {
+				if err := os.Mkdir(key, 0750); err != nil {
+					log.Errorf("Unable to create directory for visor %s", key)
+					return false
+				}
+				deleteOnError = true
+			}
+			if err := download(ctx, log, httpC, "health", "health.json", key, maxFileSize); err != nil {
+				if !quiet {
+					log.Debugf("visor %s unreachable (health fetch failed) — skipping", key)
+				}
+				if deleteOnErrors && deleteOnError {
+					bulkMu.Lock()
+					bulkFolders = append(bulkFolders, key)
+					bulkMu.Unlock()
+				}
+				return true // retry candidate
+			}
+			// Authoritative version gate from the visor's OWN /health (build_info.version).
+			// Survey collection IS the version-eligibility gate downstream — version is
+			// not re-checked at calc time — so an ineligible-version visor must NOT have
+			// its survey stored.
+			healthVer := parseHealthVersion(key + "/health.json")
+			includeV := contains(incVerList, healthVer)
+			vver, verr := version.NewVersion(healthVer)
+			eligible := true
+			switch {
+			case healthVer == "" && !includeV:
+				log.Warnf("The version for visor %s is blank in /health — skipping survey", key)
+				eligible = false
+			case verr != nil && !includeV:
+				log.Warnf("The version %q for visor %s (from /health) is not valid — skipping survey", healthVer, key)
+				eligible = false
+			case verr == nil && !allVisors && vver.LessThan(minimumVersion) && !includeV:
+				log.Warnf("The version %s for visor %s does not satisfy our minimum version condition — skipping survey", healthVer, key)
+				eligible = false
+			}
+			if !logOnly && eligible {
+				// vver may be nil for unparseable versions included via
+				// --include-versions; then use the current node-info API.
+				if vver != nil && vver.LessThan(fver) {
+					download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
+				} else if !surveyUnchanged(ctx, log, &httpC, key) {
+					// checksum unchanged → skip; falls back to a full download if the
+					// visor doesn't support the checksum endpoint.
+					download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
+				}
+			}
+			if !surveyOnly {
+				for i := 0; i <= duration; i++ {
+					date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
+					download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint:errcheck,gosec
+				}
+			}
+			return false
+		}
+
+		// runPass fetches every pk concurrently in throttled batches (--batchSize per
+		// batch, 15s between batches) and returns the pks that were unreachable.
+		runPass := func(pks []string, quiet bool) []string {
+			var passWG sync.WaitGroup
+			var failedMu sync.Mutex
+			var failed []string
+			batch := batchSize
+			for _, pk := range pks {
+				passWG.Add(1)
+				go func(key string) {
+					defer passWG.Done()
+					if fetchVisorSurvey(key, quiet) {
+						failedMu.Lock()
+						failed = append(failed, key)
+						failedMu.Unlock()
+					}
+				}(pk)
+				if batch > 0 {
+					batch--
+					if batch == 0 {
+						time.Sleep(15 * time.Second)
+						batch = batchSize
+					}
+				}
+			}
+			passWG.Wait()
+			return failed
+		}
+
+		if fetchFile != "" {
+			// A specific file was requested: fetch it from every seen-today visor, no
+			// version gate and no retry pass (single explicit artifact).
+			var fileWG sync.WaitGroup
+			batch := batchSize
+			for _, v := range uptimes {
+				fileWG.Add(1)
+				go func(key string) {
+					defer fileWG.Done()
 					httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
 					defer httpC.CloseIdleConnections()
-					defer wg.Done()
 					if _, err := os.ReadDir(key); err != nil {
 						if err := os.Mkdir(key, 0750); err != nil {
 							log.Errorf("Unable to create directory for visor %s", key)
@@ -192,82 +288,32 @@ var logCmd = &cobra.Command{
 						}
 					}
 					_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize) //nolint:errcheck
-				}(v.PubKey, &wg)
-				continue
+				}(v.PubKey)
+				if batch > 0 {
+					batch--
+					if batch == 0 {
+						time.Sleep(15 * time.Second)
+						batch = batchSize
+					}
+				}
 			}
-
-			wg.Add(1)
-			go func(key string, wg *sync.WaitGroup) {
-				httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
-				defer httpC.CloseIdleConnections()
-				defer wg.Done()
-
-				deleteOnError := false
-				if _, err := os.ReadDir(key); err != nil {
-					if err := os.Mkdir(key, 0750); err != nil {
-						log.Errorf("Unable to create directory for visor %s", key)
-						return
-					}
-					deleteOnError = true
-				}
-				// Health check first — also the reachability gate. An unreachable or
-				// offline visor fails here and is skipped (nothing to collect, and we
-				// can't read its version). This replaces the old uptime-tracker online
-				// flag as the "is it up right now" signal.
-				if err := download(ctx, log, httpC, "health", "health.json", key, maxFileSize); err != nil {
-					log.Debugf("visor %s unreachable (health fetch failed) — skipping", key)
-					if deleteOnErrors && deleteOnError {
-						bulkFolders = append(bulkFolders, key)
-					}
-					return
-				}
-				// Authoritative version gate from the visor's OWN /health
-				// (build_info.version). Survey collection IS the version-eligibility gate
-				// downstream — version is not re-checked at calc time — so an ineligible-
-				// version visor must NOT have its survey stored. Reading the version here
-				// rather than from the uptime tracker keeps collection self-contained now
-				// that it no longer depends on the UT online snapshot.
-				healthVer := parseHealthVersion(key + "/health.json")
-				includeV := contains(incVerList, healthVer)
-				vver, verr := version.NewVersion(healthVer)
-				eligible := true
-				switch {
-				case healthVer == "" && !includeV:
-					log.Warnf("The version for visor %s is blank in /health — skipping survey", key)
-					eligible = false
-				case verr != nil && !includeV:
-					log.Warnf("The version %q for visor %s (from /health) is not valid — skipping survey", healthVer, key)
-					eligible = false
-				case verr == nil && !allVisors && vver.LessThan(minimumVersion) && !includeV:
-					log.Warnf("The version %s for visor %s does not satisfy our minimum version condition — skipping survey", healthVer, key)
-					eligible = false
-				}
-				if !logOnly && eligible {
-					// vver may be nil for unparseable versions included via
-					// --include-versions; then use the current node-info API.
-					if vver != nil && vver.LessThan(fver) {
-						download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
-					} else if !surveyUnchanged(ctx, log, &httpC, key) {
-						// checksum unchanged → skip; falls back to a full download if the
-						// visor doesn't support the checksum endpoint.
-						download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
-					}
-				}
-				if !surveyOnly {
-					for i := 0; i <= duration; i++ {
-						date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-						download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint:errcheck,gosec
-					}
-				}
-			}(v.PubKey, &wg)
-			batchSize--
-			if batchSize == 0 {
-				time.Sleep(15 * time.Second)
-				batchSize = 50
+			fileWG.Wait()
+		} else {
+			pks := make([]string, 0, len(uptimes))
+			for _, v := range uptimes {
+				pks = append(pks, v.PubKey)
+			}
+			// Two-pass collection, mirroring the live fetch_surveys.sh: pass 1 warms the
+			// dmsg sessions (silent), pass 2 retries only the visors that missed on a
+			// cold session — so a first-contact timeout no longer looks like an offline
+			// visor and silently drops its survey.
+			failed := runPass(pks, true)
+			if len(failed) > 0 {
+				log.Infof("Retrying %d visor(s) that failed the first pass (dmsg sessions now warm)", len(failed))
+				runPass(failed, false)
 			}
 		}
 
-		wg.Wait()
 		for _, key := range bulkFolders {
 			if err := os.RemoveAll(key); err != nil {
 				log.Warnf("Unable to remove directory %s", key)
