@@ -9,7 +9,7 @@
 // route-finding + per-hop rule setup (seconds). Direct routes re-set-up instantly,
 // which is why "it only worked for direct routes".
 //
-// Pool fixes that by holding ONE route group per destination open and multiplexing
+// Pool fixes that by holding ONE route group per route KEY open and multiplexing
 // many logical connections over it with yamux — exactly the shape skysocks-lite
 // already used privately. The held route group's keepalive keeps the multihop hops
 // warm, so subsequent connections reuse it with zero setup. The route lives on the
@@ -17,6 +17,12 @@
 // external-browser SOCKS5 case and the in-tab iframe case identically. An idle
 // route group is reclaimed after IdleTTL; a holder that knows it's done (an iframe
 // window closing) can Release it eagerly.
+//
+// The key is opaque to the pool: the resolving proxy keys the route-finder path on
+// the destination PK and the explicit source-route path on destination+hop-set, so
+// a `<pk>.skynet` fetch and a `<hop>.<pk>.skynet` fetch hold independent warm route
+// groups instead of one clobbering the other. The caller passes the dial closure
+// per OpenStream, so the pool needs no knowledge of how a given route is built.
 //
 // The far end must run the yamux-aware skyfwd server (skyenv.SkyForwardingMuxPort).
 // Against older visors that don't, the first dial fails, OpenStream returns
@@ -33,13 +39,12 @@ import (
 	"github.com/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 
-	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
 // ErrNoMux means the destination's visor does not serve the yamux forwarding port
 // (an older build). The caller should fall back to a 1:1 SkyForwardingServerPort
-// dial. The pool negative-caches this per destination so it isn't re-probed on
+// dial. The pool negative-caches this per route key so it isn't re-probed on
 // every request.
 var ErrNoMux = errors.New("skyroute: destination does not serve the mux forwarding port")
 
@@ -48,7 +53,7 @@ const (
 	// closes before the reaper reclaims it. The route's keepalive keeps the hops
 	// warm during this window so reconnects reuse it with no setup.
 	DefaultIdleTTL = 10 * time.Minute
-	// negativeCacheTTL is how long a destination found to lack mux support is
+	// negativeCacheTTL is how long a route key found to lack mux support is
 	// skipped (returns ErrNoMux without re-dialing) before being re-probed.
 	negativeCacheTTL = 5 * time.Minute
 	// firstStreamTimeout bounds the first yamux stream open, so a route dialed to a
@@ -58,31 +63,31 @@ const (
 )
 
 // DialRoute dials the destination's forwarding server on muxPort over a (possibly
-// multihop) route and returns the route-group net.Conn. The pool yamux-muxes over
-// whatever conn this returns; it can take several seconds (route setup) and is
-// always called without the pool lock held.
-type DialRoute func(ctx context.Context, dest cipher.PubKey, muxPort uint16) (net.Conn, error)
+// multihop) route and returns the route-group net.Conn. It captures whatever
+// destination / hop-set specifics it needs, so the pool stays route-agnostic. The
+// pool yamux-muxes over whatever conn this returns; it can take several seconds
+// (route setup) and is always called without the pool lock held.
+type DialRoute func(ctx context.Context, muxPort uint16) (net.Conn, error)
 
 type heldSession struct {
 	sess       *yamux.Session
 	lastActive time.Time // last time this route group had ≥1 stream (or was opened)
 }
 
-// Pool holds and reuses route groups keyed by destination PK.
+// Pool holds and reuses route groups keyed by an opaque route key.
 type Pool struct {
-	dial    DialRoute
 	idleTTL time.Duration
 	log     logrus.FieldLogger
 
 	mu       sync.Mutex
-	sessions map[cipher.PubKey]*heldSession
-	negative map[cipher.PubKey]time.Time // dest -> earliest re-probe time
+	sessions map[string]*heldSession
+	negative map[string]time.Time // key -> earliest re-probe time
 	closed   bool
 	stop     chan struct{}
 }
 
 // New builds a Pool. idleTTL ≤ 0 uses DefaultIdleTTL. A nil log discards output.
-func New(dial DialRoute, idleTTL time.Duration, log logrus.FieldLogger) *Pool {
+func New(idleTTL time.Duration, log logrus.FieldLogger) *Pool {
 	if idleTTL <= 0 {
 		idleTTL = DefaultIdleTTL
 	}
@@ -92,30 +97,30 @@ func New(dial DialRoute, idleTTL time.Duration, log logrus.FieldLogger) *Pool {
 		log = l
 	}
 	p := &Pool{
-		dial:     dial,
 		idleTTL:  idleTTL,
 		log:      log,
-		sessions: map[cipher.PubKey]*heldSession{},
-		negative: map[cipher.PubKey]time.Time{},
+		sessions: map[string]*heldSession{},
+		negative: map[string]time.Time{},
 		stop:     make(chan struct{}),
 	}
 	go p.reapLoop()
 	return p
 }
 
-// OpenStream returns a stream to dest's skyfwd server over a HELD, reused route
-// group, dialing + caching the route group on first use (or after the previous one
-// died). The caller then runs the skynet handshake (skynetweb.PerformHandshake) on
-// the returned conn exactly as it would on a fresh route. Returns ErrNoMux when
-// dest doesn't serve the mux port (caller should fall back to a 1:1 dial).
-func (p *Pool) OpenStream(ctx context.Context, dest cipher.PubKey) (net.Conn, error) {
+// OpenStream returns a stream to the route key's skyfwd server over a HELD, reused
+// route group, dialing (via the supplied closure) + caching the route group on
+// first use (or after the previous one died). The caller then runs the skynet
+// handshake (skynetweb.PerformHandshake) on the returned conn exactly as it would
+// on a fresh route. Returns ErrNoMux when the destination doesn't serve the mux
+// port (caller should fall back to a 1:1 dial).
+func (p *Pool) OpenStream(ctx context.Context, key string, dial DialRoute) (net.Conn, error) {
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
 		return nil, errors.New("skyroute: pool closed")
 	}
 	// Reuse an open session.
-	if s, ok := p.sessions[dest]; ok {
+	if s, ok := p.sessions[key]; ok {
 		if !s.sess.IsClosed() {
 			s.lastActive = time.Now()
 			sess := s.sess
@@ -125,27 +130,27 @@ func (p *Pool) OpenStream(ctx context.Context, dest cipher.PubKey) (net.Conn, er
 			}
 			// Session is up but won't yield a stream — drop it and redial below.
 			p.mu.Lock()
-			if cur, ok := p.sessions[dest]; ok && cur.sess == sess {
+			if cur, ok := p.sessions[key]; ok && cur.sess == sess {
 				_ = sess.Close() //nolint:errcheck
-				delete(p.sessions, dest)
+				delete(p.sessions, key)
 			}
 		} else {
 			_ = s.sess.Close() //nolint:errcheck
-			delete(p.sessions, dest)
+			delete(p.sessions, key)
 		}
 	}
-	// Skip destinations recently found to lack mux support.
-	if t, ok := p.negative[dest]; ok {
+	// Skip keys recently found to lack mux support.
+	if t, ok := p.negative[key]; ok {
 		if time.Now().Before(t) {
 			p.mu.Unlock()
 			return nil, ErrNoMux
 		}
-		delete(p.negative, dest)
+		delete(p.negative, key)
 	}
 	p.mu.Unlock()
 
 	// Dial the mux forwarding port over a route (may take seconds; no lock held).
-	conn, err := p.dial(ctx, dest, skyenv.SkyForwardingMuxPort)
+	conn, err := dial(ctx, skyenv.SkyForwardingMuxPort)
 	if err != nil {
 		return nil, err
 	}
@@ -161,11 +166,11 @@ func (p *Pool) OpenStream(ctx context.Context, dest cipher.PubKey) (net.Conn, er
 		_ = sess.Close() //nolint:errcheck
 		_ = conn.Close() //nolint:errcheck
 		p.mu.Lock()
-		p.negative[dest] = time.Now().Add(negativeCacheTTL)
+		p.negative[key] = time.Now().Add(negativeCacheTTL)
 		p.mu.Unlock()
 		return nil, ErrNoMux
 	}
-	// Publish, unless a concurrent dial for the same dest already won.
+	// Publish, unless a concurrent dial for the same key already won.
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
@@ -173,7 +178,7 @@ func (p *Pool) OpenStream(ctx context.Context, dest cipher.PubKey) (net.Conn, er
 		_ = sess.Close()   //nolint:errcheck
 		return nil, errors.New("skyroute: pool closed")
 	}
-	if cur, ok := p.sessions[dest]; ok && !cur.sess.IsClosed() {
+	if cur, ok := p.sessions[key]; ok && !cur.sess.IsClosed() {
 		other := cur.sess
 		p.mu.Unlock()
 		_ = stream.Close() //nolint:errcheck
@@ -183,19 +188,19 @@ func (p *Pool) OpenStream(ctx context.Context, dest cipher.PubKey) (net.Conn, er
 		}
 		return nil, errors.New("skyroute: raced session unusable")
 	}
-	p.sessions[dest] = &heldSession{sess: sess, lastActive: time.Now()}
+	p.sessions[key] = &heldSession{sess: sess, lastActive: time.Now()}
 	p.mu.Unlock()
 	return stream, nil
 }
 
-// Release eagerly closes and drops dest's held route group (e.g. an iframe window
-// that owned it has closed). Idempotent.
-func (p *Pool) Release(dest cipher.PubKey) {
+// Release eagerly closes and drops a route key's held route group (e.g. an iframe
+// window that owned it has closed). Idempotent.
+func (p *Pool) Release(key string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if s, ok := p.sessions[dest]; ok {
+	if s, ok := p.sessions[key]; ok {
 		_ = s.sess.Close() //nolint:errcheck
-		delete(p.sessions, dest)
+		delete(p.sessions, key)
 	}
 }
 
@@ -208,9 +213,9 @@ func (p *Pool) Close() error {
 	}
 	p.closed = true
 	close(p.stop)
-	for dest, s := range p.sessions {
+	for key, s := range p.sessions {
 		_ = s.sess.Close() //nolint:errcheck
-		delete(p.sessions, dest)
+		delete(p.sessions, key)
 	}
 	return nil
 }
@@ -235,9 +240,9 @@ func (p *Pool) reap() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now()
-	for dest, s := range p.sessions {
+	for key, s := range p.sessions {
 		if s.sess.IsClosed() {
-			delete(p.sessions, dest)
+			delete(p.sessions, key)
 			continue
 		}
 		if s.sess.NumStreams() > 0 {
@@ -246,13 +251,13 @@ func (p *Pool) reap() {
 		}
 		if now.Sub(s.lastActive) > p.idleTTL {
 			_ = s.sess.Close() //nolint:errcheck
-			delete(p.sessions, dest)
-			p.log.WithField("dest", dest.String()).Debug("skyroute: released idle route group")
+			delete(p.sessions, key)
+			p.log.WithField("key", key).Debug("skyroute: released idle route group")
 		}
 	}
-	for dest, t := range p.negative {
+	for key, t := range p.negative {
 		if now.After(t) {
-			delete(p.negative, dest)
+			delete(p.negative, key)
 		}
 	}
 }
