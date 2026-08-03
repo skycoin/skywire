@@ -133,6 +133,27 @@ type Store interface {
 	// group, newest last. If limit <= 0, returns all.
 	ListByGroup(groupID string, limit int) ([]GroupMessage, error)
 
+	// ListGroupBefore returns up to limit messages STRICTLY OLDER than
+	// before, newest last — the backward page cursor.
+	//
+	// This is what makes a large room readable at all. ListByGroup can
+	// only ever hand back the newest N, so without a way to ask for what
+	// came before them a client's options were "the tail" or "everything":
+	// a channel with fifty thousand posts had to ship all of them to a
+	// joiner before showing anything. With this, a joiner takes the newest
+	// chunk immediately and walks backwards as it reads.
+	//
+	// A zero `before` means "from the newest", so the first page is just
+	// ListGroupBefore(id, time.Time{}, n) and a caller needs no special
+	// case to start. The bound is exclusive for the same reason
+	// ListGroupSince's is: `before` is the oldest message the caller
+	// already holds, and returning it again would duplicate a row on every
+	// page boundary.
+	//
+	// Ordering matches ListByGroup (newest last) so a page can be
+	// prepended to what the caller has without re-sorting.
+	ListGroupBefore(groupID string, before time.Time, limit int) ([]GroupMessage, error)
+
 	// ListGroupSince returns every stored group message whose Timestamp
 	// is strictly after `since`, oldest first. Returns nil for an
 	// unknown group or for a group with no messages newer than `since`.

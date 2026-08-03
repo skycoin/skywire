@@ -129,6 +129,30 @@ const (
 	// exact port is confirmed in the signaling handshake so it can be varied.
 	SkychatVoiceMediaPort uint16 = 63
 
+	// SkychatGroupProbePort is the well-known dmsg port a visor answers
+	// group DESCRIBE requests on: "what is the group with this ID — a group
+	// or a channel, open or approval-gated, on which feed port?".
+	//
+	// It exists because a group's own admission listener sits at
+	// Record.Port+1, where Record.Port is allocated at random per group
+	// (see group.defaultPortAlloc) and is therefore unknowable to anyone
+	// who does not already hold an invite link. That made the short
+	// skychat://<pk>/<group-id> address unusable on its own — the whole
+	// point of which is to be short enough to scan or read aloud, which an
+	// invite link carrying port, mode, admin list and PoW price is not.
+	// One fixed port per visor closes that gap: dial it with a group ID and
+	// the answer carries everything a join needs.
+	//
+	// Describe ONLY. Admission decisions stay on the per-group listener,
+	// which the joiner can reach once the probe has told it the port — so
+	// this port never mutates state and a flood of probes costs a store
+	// read apiece.
+	//
+	// Deliberately not a small well-known number: 49–64 are fully assigned
+	// and the pair/group feed allocators own [10000, 65000). Same reasoning
+	// as SkydexMarketPort picking 8050.
+	SkychatGroupProbePort uint16 = 8060
+
 	// SkychatFilePort is the port skychat FILE TRANSFER listens on. A sender
 	// dials it (over dmsg OR skynet — same port on both, like voice) and streams
 	// one offer header + chunked, sha256-verified bytes. Files are conversation

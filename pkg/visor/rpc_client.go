@@ -1574,6 +1574,27 @@ func (rc *rpcClient) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
 	return resp, err
 }
 
+// GroupResolve implements API.
+func (rc *rpcClient) GroupResolve(args GroupResolveArgs) (GroupResolveResult, error) {
+	var resp GroupResolveResult
+	err := rc.Call("GroupResolve", &args, &resp)
+	return resp, err
+}
+
+// GroupSetListed implements API.
+func (rc *rpcClient) GroupSetListed(id string, listed bool) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupSetListed", &GroupSetListedRequest{ID: id, Listed: listed}, &resp)
+	return resp, err
+}
+
+// GroupCatalog implements API.
+func (rc *rpcClient) GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
+	var resp GroupCatalogResponse
+	err := rc.Call("GroupCatalog", &host, &resp)
+	return resp.Entries, resp.Truncated, err
+}
+
 // GroupAskAgain implements API.
 func (rc *rpcClient) GroupAskAgain(id string) (GroupInfo, error) {
 	var resp GroupInfo
@@ -1795,6 +1816,13 @@ func (rc *rpcClient) VoiceMute(callID string, mic, speaker bool) error {
 func (rc *rpcClient) GroupHistory(groupID string, limit int) ([]GroupMessage, error) {
 	var resp []GroupMessage
 	err := rc.Call("GroupHistory", &GroupHistoryRequest{GroupID: groupID, Limit: limit}, &resp)
+	return resp, err
+}
+
+// GroupHistoryPage implements API.
+func (rc *rpcClient) GroupHistoryPage(args GroupHistoryPageArgs) ([]GroupMessage, error) {
+	var resp []GroupMessage
+	err := rc.Call("GroupHistoryPage", &args, &resp)
 	return resp, err
 }
 

@@ -67,6 +67,7 @@ func reservedDmsgPorts() map[uint16]string {
 		DmsgForwardProxyPort:                 "dmsg-forward-proxy",
 		skyenv.DmsgDHTPort:                   "dht",
 		skyenv.DmsgAwaitSetupPort:            "await-setup",
+		skyenv.SkychatGroupProbePort:         "skychat-group-probe",
 	}
 }
 
