@@ -75,6 +75,7 @@ func init() {
 	ServerCmd.Flags().StringVar(&skycoinNode, "skycoin-node", scriptExecString("${SKYCOINNODE:-http://127.0.0.1:6420}"), "Skycoin mainnet node URL for reward transaction broadcasts")
 	ServerCmd.Flags().StringVar(&loginChainFlags, "login-chain-flags", scriptExecString("${LOGINCHAIN_FLAGS}"), "override flags for login chain skycoin daemon subprocess\n(default: --block-publisher --localhost-only --download-peerlist=false\n--disable-default-peers --disable-csrf --host-whitelist=fiber.skywire.dev)")
 	ServerCmd.Flags().BoolVar(&healthOnly, "health-only", false, "serve only /health endpoint for testing")
+	ServerCmd.Flags().StringVar(&surveyPushMinVersion, "survey-min-version", scriptExecString("${SURVEY_MIN_VERSION}"), "min skywire version a PUSHed survey may report to be stored/eligible\n(empty = accept any parseable version; the getlogs.sh prune over log_backups\nremains the authoritative floor). Set to the current reward floor to give\nvisors an accurate eligible/ineligible signal for the hypervisor UI.")
 	ServerCmd.Flags().StringVar(&canonicalDomain, "canonical", scriptExecString("${CANONICAL:-https://theskywirenetwork.net}"), "canonical domain for SEO (e.g. https://theskywirenetwork.net)")
 }
 
