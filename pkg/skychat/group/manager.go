@@ -85,6 +85,12 @@ type Manager struct {
 	// DefaultMaxPendingJoins.
 	maxPending int
 
+	// probe holds the well-known describe listeners — the port that
+	// makes a short skychat:// group address resolvable. Per-visor
+	// rather than per-session, because the whole point is to be
+	// reachable without knowing any group's port. See probe.go.
+	probe probeListener
+
 	// reconnect loop state — see runReconnectLoop.
 	reconnectCtx    context.Context
 	reconnectCancel context.CancelFunc
@@ -682,6 +688,12 @@ func (m *Manager) Resume() error {
 		m.replaySessionHistory(r.ID)
 	}
 	m.startReconnectLoop()
+	// The describe port is bound unconditionally, not only when this
+	// visor already hosts something: a group can be created at any point
+	// after startup, and a listener that only appeared for visors that
+	// happened to hold a group at boot would leave every freshly created
+	// group's short address dead until the next restart.
+	m.StartProbeListener()
 	return nil
 }
 
@@ -1412,6 +1424,7 @@ func (m *Manager) Close() error {
 		cancel()
 		m.reconnectWG.Wait()
 	}
+	m.StopProbeListener()
 	m.mu.Lock()
 	sessions := m.sessions
 	m.sessions = make(map[string]*Session)
@@ -1542,6 +1555,9 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 		OwnerPK: r.OwnerPK,
 		Port:    r.Port,
 		Mode:    r.Mode,
+		// Kind, so a channel arrives as a channel. Mode cannot express it
+		// — a channel and a public group share ModePublic.
+		Kind: r.Kind,
 		// Name the group's other admins so the founder isn't the only
 		// door in. Self first: whoever is minting this link is
 		// demonstrably alive and is the admin most likely to be watching

@@ -798,6 +798,10 @@ func (proxyDefaultAPI) GroupJoin(_ GroupJoinArgs) (GroupInfo, error) {
 	return GroupInfo{}, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, error) {
+	return GroupResolveResult{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupAskAgain(_ string) (GroupInfo, error) {
 	return GroupInfo{}, ErrProxyNotSupported
 }

@@ -21,11 +21,13 @@ package visor
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	skychataddr "github.com/skycoin/skywire/pkg/skychat/address"
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 )
 
@@ -245,14 +247,16 @@ type GroupMessage struct {
 type GroupCreateArgs struct {
 	Name string `json:"name"`
 
-	// Kind is the group type: "public" (open admission, plaintext) or
-	// "private" (admin-approved admission, encrypted). Preferred over
-	// Mode.
+	// Kind is the group type: "public" (open admission, plaintext),
+	// "private" (admin-approved admission, encrypted) or "channel"
+	// (open admission, plaintext, only admins may post). Preferred
+	// over Mode.
 	Kind skychatgroup.Kind `json:"kind,omitempty"`
 
 	// Mode is the legacy field, kept so an older RPC client keeps
 	// working: it carried the same two values and mapped onto the same
-	// two group types. Used only when Kind is empty.
+	// two group types. Used only when Kind is empty, and it cannot name
+	// a channel — public and channel share ModePublic.
 	Mode skychatgroup.Mode `json:"mode,omitempty"`
 
 	InitialMembers []cipher.PubKey `json:"initial_members,omitempty"`
@@ -277,9 +281,89 @@ func (a GroupCreateArgs) kind() skychatgroup.Kind {
 	return skychatgroup.KindPublic
 }
 
-// GroupJoinArgs is the RPC input for GroupJoin.
+// GroupJoinArgs is the RPC input for GroupJoin. Exactly one of the two
+// fields is used, Invite first.
 type GroupJoinArgs struct {
+	// Invite is a skychat:invite:<base64url> link. Self-contained: it
+	// works even while the group's host is offline, because it carries
+	// the port and mode inline.
 	Invite string `json:"invite"`
+
+	// Address is the short form — skychat://<host-pk>/<group-id>. Not
+	// self-contained: the host is asked what the group is (see
+	// group.Manager.JoinByAddress) before the ordinary join runs, so
+	// this needs the host reachable and an invite does not.
+	//
+	// Both are accepted because they trade against each other rather
+	// than one superseding the other: an address is short enough to scan
+	// or read aloud and stays correct as the group changes, a link keeps
+	// working when nobody is home.
+	Address string `json:"address,omitempty"`
+}
+
+// GroupResolveArgs is the RPC input for GroupResolve.
+type GroupResolveArgs struct {
+	// Address is any spelling the address parser accepts — a bare public
+	// key, skychat://<pk>, skychat://<pk>/<group-id> — or a
+	// skychat:invite: link, which is answered from the link itself
+	// without a round trip.
+	Address string `json:"address"`
+}
+
+// GroupResolveResult describes what an address points at, so a UI can
+// offer the one right action instead of making the user pick.
+//
+// The zero-ish DM case is deliberately cheap: a bare public key needs no
+// network at all to classify, because a key that names a person and a key
+// that hosts a channel are the same 66 characters — only the presence of
+// a group ID distinguishes them, and that is in the address.
+type GroupResolveResult struct {
+	// Target is "dm" or "group".
+	Target string `json:"target"`
+
+	// PK is the peer for a DM, the host for a group address.
+	PK cipher.PubKey `json:"pk"`
+
+	// Address is the canonical skychat:// form of what was resolved,
+	// suitable for display, copying, and QR encoding.
+	Address string `json:"address"`
+
+	// Group is populated for a group address: what the group is and what
+	// joining it will involve. Nil for a DM.
+	Group *GroupDescriptor `json:"group,omitempty"`
+
+	// Joined reports that this visor is already an active member, so the
+	// caller should open the group rather than offer to join it.
+	Joined bool `json:"joined,omitempty"`
+
+	// Status is this visor's own record status for the group when one
+	// exists — "awaiting_approval" and "denied" in particular, which are
+	// the difference between offering "Send request" and explaining that
+	// one was already refused.
+	Status skychatgroup.Status `json:"status,omitempty"`
+
+	// Invite carries the link back when the input WAS a link, so a
+	// caller that resolved one can hand it straight to GroupJoin without
+	// re-parsing.
+	Invite string `json:"invite,omitempty"`
+}
+
+// GroupDescriptor is the RPC-facing shape of group.GroupDescriptor.
+// Re-declared rather than aliased so the RPC surface can carry
+// display-oriented additions (a rendered kind label, later a price) that
+// the protocol type has no business knowing about.
+type GroupDescriptor struct {
+	ID        string                  `json:"id"`
+	HostPK    cipher.PubKey           `json:"host_pk"`
+	Name      string                  `json:"name"`
+	Kind      skychatgroup.Kind       `json:"kind"`
+	Mode      skychatgroup.Mode       `json:"mode"`
+	Policy    skychatgroup.JoinPolicy `json:"policy"`
+	Port      uint16                  `json:"port"`
+	PoWBits   uint8                   `json:"pow_bits,omitempty"`
+	ReadOnly  bool                    `json:"read_only,omitempty"`
+	PriceHint string                  `json:"price_hint,omitempty"`
+	Banned    bool                    `json:"banned,omitempty"`
 }
 
 // GroupSendArgs is the RPC input for GroupSend.
@@ -359,22 +443,158 @@ func (v *Visor) GroupCreate(args GroupCreateArgs) (GroupInfo, string, error) {
 	return toInfo(r), link, nil
 }
 
-// GroupJoin accepts an invite link, registers a member-side record,
-// and opens the subscriber. Returns the info on the joined group.
+// GroupJoin accepts an invite link OR a short skychat:// group address,
+// registers a member-side record, and opens the subscriber. Returns the
+// info on the joined group.
+//
+// An address route costs one extra round trip (the describe) before the
+// join proper; a link goes straight to the join. Both converge on
+// Manager.RequestJoin, so admission policy, proof of work and rate
+// limiting are identical either way — the address is a shorter way to
+// name the group, not a shortcut past its door.
 func (v *Visor) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
 	mgr := v.groupManager()
 	if mgr == nil {
 		return GroupInfo{}, ErrGroupingDisabled
 	}
-	inv, err := skychatgroup.DecodeInvite(args.Invite)
+	// An invite link is preferred when both are given: it needs no
+	// network to interpret and carries strictly more than an address.
+	raw := strings.TrimSpace(args.Invite)
+	if raw == "" {
+		raw = strings.TrimSpace(args.Address)
+	}
+	if raw == "" {
+		return GroupInfo{}, errors.New("grouping: join: invite or address required")
+	}
+	if skychataddr.IsInvite(raw) {
+		inv, err := skychatgroup.DecodeInvite(raw)
+		if err != nil {
+			return GroupInfo{}, err
+		}
+		r, err := mgr.Join(inv)
+		if err != nil {
+			return GroupInfo{}, err
+		}
+		return toInfo(r), nil
+	}
+	addr, err := skychataddr.Parse(raw)
 	if err != nil {
 		return GroupInfo{}, err
 	}
-	r, err := mgr.Join(inv)
+	if !addr.IsGroup() {
+		return GroupInfo{}, errors.New("grouping: join: that address names a person, not a group — open a direct message instead")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), groupJoinByAddressBudget)
+	defer cancel()
+	r, err := mgr.JoinByAddress(ctx, addr.PK, addr.GroupID)
 	if err != nil {
 		return GroupInfo{}, err
 	}
 	return toInfo(r), nil
+}
+
+// groupJoinByAddressBudget caps a join driven from a short address: one
+// describe round trip plus the join fan-out behind it. Generous, because
+// it is a deliberate user action where a spurious timeout is worse than a
+// slow success — the same reasoning as joinResponseReadTimeout.
+const groupJoinByAddressBudget = 45 * time.Second
+
+// GroupResolve says what a skychat address points at: a person, or a
+// group/channel and what joining it involves.
+//
+// This is what lets one input field accept anything a user can hold. A
+// bare public key is answered locally — a key naming a person and a key
+// hosting a channel are the same string, so only the address's shape can
+// distinguish them, and a DM needs no permission to open. A group address
+// is answered from this visor's own store when it already knows the
+// group, and otherwise by asking the host.
+func (v *Visor) GroupResolve(args GroupResolveArgs) (GroupResolveResult, error) {
+	raw := strings.TrimSpace(args.Address)
+	if raw == "" {
+		return GroupResolveResult{}, errors.New("grouping: resolve: address required")
+	}
+
+	// A pasted invite link is answered from the link itself. No round
+	// trip, and it works while the host is offline — which is the reason
+	// links still exist alongside addresses.
+	if skychataddr.IsInvite(raw) {
+		inv, err := skychatgroup.DecodeInvite(raw)
+		if err != nil {
+			return GroupResolveResult{}, err
+		}
+		res := GroupResolveResult{
+			Target:  string(skychataddr.KindGroup),
+			PK:      inv.OwnerPK,
+			Address: skychataddr.Group(inv.OwnerPK, inv.ID).String(),
+			Invite:  raw,
+			Group: &GroupDescriptor{
+				ID: inv.ID, HostPK: inv.OwnerPK, Name: inv.Name,
+				Kind: inv.InviteKind(), Mode: inv.Mode,
+				Policy:  inv.InviteKind().Policy(),
+				Port:    inv.Port,
+				PoWBits: inv.PoWBits,
+			},
+		}
+		v.fillGroupMembership(&res, inv.ID)
+		return res, nil
+	}
+
+	addr, err := skychataddr.Parse(raw)
+	if err != nil {
+		return GroupResolveResult{}, err
+	}
+	if !addr.IsGroup() {
+		return GroupResolveResult{
+			Target:  string(skychataddr.KindDM),
+			PK:      addr.PK,
+			Address: addr.String(),
+		}, nil
+	}
+
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupResolveResult{}, ErrGroupingDisabled
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), groupResolveBudget)
+	defer cancel()
+	d, err := mgr.ProbeGroup(ctx, addr.PK, addr.GroupID)
+	if err != nil {
+		return GroupResolveResult{}, err
+	}
+	res := GroupResolveResult{
+		Target:  string(skychataddr.KindGroup),
+		PK:      addr.PK,
+		Address: addr.String(),
+		Group: &GroupDescriptor{
+			ID: d.ID, HostPK: d.HostPK, Name: d.Name,
+			Kind: d.Kind, Mode: d.Mode, Policy: d.Policy,
+			Port: d.Port, PoWBits: d.PoWBits, ReadOnly: d.ReadOnly,
+			PriceHint: d.PriceHint, Banned: d.Banned,
+		},
+	}
+	v.fillGroupMembership(&res, d.ID)
+	return res, nil
+}
+
+// groupResolveBudget caps one describe. Sits directly under a user
+// watching a dialog, so it is deliberately tighter than the join budget.
+const groupResolveBudget = 15 * time.Second
+
+// fillGroupMembership annotates a resolve result with what this visor
+// already knows about the group. Without it the UI would offer "Join" for
+// a group the operator is already in, and would offer it again to someone
+// whose request is still queued.
+func (v *Visor) fillGroupMembership(res *GroupResolveResult, id string) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return
+	}
+	r, ok, err := mgr.Get(id)
+	if err != nil || !ok {
+		return
+	}
+	res.Status = r.Status
+	res.Joined = r.Status == skychatgroup.StatusActive || r.Status == skychatgroup.StatusPending
 }
 
 // GroupAskAgain re-submits a join request an admin has DECLINED — the UI's

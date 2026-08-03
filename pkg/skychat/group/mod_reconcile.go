@@ -178,6 +178,15 @@ func (s *Session) IsBanned(pk cipher.PubKey) bool {
 // Admins are exempt from read-only (they set it) but not from an
 // explicit mute, matching Record.CanPost so the local composer state
 // and the remote drop decision can never disagree.
+//
+// The channel gate is the one case that is NOT forward-only, and
+// deliberately so: "only admins publish here" is what the group IS, not
+// something that started at a moment in time. A non-admin leaf on a
+// channel feed is illegitimate whenever it was authored, so there is no
+// `since` to compare against. Admin status is read from
+// s.cfg.Record.Admins, which the admin reconciler keeps current under
+// this same lock (see SetAdminRoster) — so a freshly promoted admin's
+// posts are rendered rather than dropped.
 func (s *Session) senderAllowedToPost(senderPK cipher.PubKey, ts time.Time) (bool, string) {
 	s.membersMu.RLock()
 	defer s.membersMu.RUnlock()
@@ -186,6 +195,8 @@ func (s *Session) senderAllowedToPost(senderPK cipher.PubKey, ts time.Time) (boo
 		return false, "banned"
 	case s.isMutedLocked(senderPK) && afterOrEqual(ts, s.mutedSince[senderPK.Hex()]):
 		return false, "muted"
+	case s.cfg.Record.IsChannel() && !s.cfg.Record.IsAdmin(senderPK):
+		return false, "channel is admins-only"
 	case s.readOnly && !s.cfg.Record.IsAdmin(senderPK) && afterOrEqual(ts, s.readOnlySince):
 		return false, "group is read-only"
 	default:
