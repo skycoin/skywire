@@ -1816,6 +1816,14 @@ func serveStandalone(r1 *gin.Engine) {
 	}
 	defer stopDmsg()
 
+	// Give the stats handlers a dmsg-capable HTTP client so their TPD /metrics
+	// fetches resolve the deployment's dmsg://<pk>:80 URLs. Without this they used
+	// the default client and failed with `unsupported protocol scheme "dmsg"`.
+	statsDmsgHTTPClient = &http.Client{
+		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgClient),
+		Timeout:   45 * time.Second,
+	}
+
 	lis, err := dmsgClient.Listen(dmsgPort) //nolint: gosec
 	if err != nil {
 		log.WithError(err).Fatal("Failed to listen on DMSG port")
