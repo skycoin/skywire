@@ -802,6 +802,14 @@ func (proxyDefaultAPI) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, err
 	return GroupResolveResult{}, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GroupSetListed(_ string, _ bool) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupCatalog(_ cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
+	return nil, false, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupAskAgain(_ string) (GroupInfo, error) {
 	return GroupInfo{}, ErrProxyNotSupported
 }
@@ -939,6 +947,10 @@ func (proxyDefaultAPI) VoiceMute(_ string, _, _ bool) error {
 }
 
 func (proxyDefaultAPI) GroupHistory(_ string, _ int) ([]GroupMessage, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupHistoryPage(_ GroupHistoryPageArgs) ([]GroupMessage, error) {
 	return nil, ErrProxyNotSupported
 }
 

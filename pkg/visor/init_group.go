@@ -233,6 +233,42 @@ func (a *groupHistoryAdapter) Groups() ([]string, error) {
 	return a.store.Groups()
 }
 
+// ListGroupBefore implements GroupHistoryFetcher (backward page cursor).
+// Same invalid-PK-skip defense as ListByGroup.
+func (a *groupHistoryAdapter) ListGroupBefore(groupID string, before time.Time, limit int) ([]GroupMessage, error) {
+	hMsgs, err := a.store.ListGroupBefore(groupID, before, limit)
+	if err != nil {
+		return nil, err
+	}
+	return a.toVisorMessages(groupID, hMsgs, "history-before"), nil
+}
+
+// toVisorMessages converts store rows to the RPC shape, skipping any row
+// whose sender PK will not parse.
+//
+// Shared by the three read paths so they cannot drift on that skip: a
+// record written by a path that failed to validate should not be able to
+// fail one query and pass another. `what` names the caller in the debug
+// line so a bad row is traceable to the query that hit it.
+func (a *groupHistoryAdapter) toVisorMessages(groupID string, hMsgs []history.GroupMessage, what string) []GroupMessage {
+	out := make([]GroupMessage, 0, len(hMsgs))
+	for _, m := range hMsgs {
+		var senderPK cipher.PubKey
+		if err := senderPK.Set(m.SenderPK); err != nil {
+			a.log.WithError(err).WithField("group", groupID).
+				Debugf("grouping: %s skip bad pk", what)
+			continue
+		}
+		out = append(out, GroupMessage{
+			GroupID:  m.GroupID,
+			SenderPK: senderPK,
+			Text:     m.Text,
+			TS:       m.Timestamp,
+		})
+	}
+	return out
+}
+
 // ListGroupSince implements groupHistorySink (read path beyond the
 // inbox ring). Walks the bolt store from the first message with TS
 // strictly after `since`, returning visor-shaped GroupMessage values

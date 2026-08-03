@@ -53,6 +53,8 @@
 package group
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -387,6 +389,26 @@ type Record struct {
 	// are offline.
 	PeerBackfillDisabled bool `json:"peer_backfill_disabled,omitempty"`
 
+	// Listed opts this group into the visor's discovery catalog: with it
+	// set, anyone who knows the HOST's public key can ask for the group
+	// and be told it exists. Without it, the group is reachable only by
+	// its address or an invite link, both of which require the group ID —
+	// 122 bits nobody guesses.
+	//
+	// Opt-in, and the zero value is the private one. That direction is the
+	// whole point: a catalog is the only mechanism here that turns one
+	// public key into a LIST, so it must never acquire an entry because
+	// somebody didn't read a checkbox. Existing records stay unlisted
+	// through the upgrade for the same reason.
+	//
+	// Local, NOT gossiped. It says what THIS visor is willing to answer
+	// questions about, which is a hosting decision rather than a property
+	// of the group — two admins can legitimately differ on whether they
+	// advertise the same channel, and neither should be able to publish
+	// the other's copy. That also means an admin cannot un-list a channel
+	// somebody else is advertising, which is honest: they never could.
+	Listed bool `json:"listed,omitempty"`
+
 	// ReadOnlySince is when the current read-only period began, and
 	// exists for the same forward-only reason as MutedSince. Without
 	// it, flipping a busy group to read-only would make every prior
@@ -557,6 +579,40 @@ func (r Record) PostPolicy() PostPolicy {
 	return PostAll
 }
 
+// ErrKindImmutable is returned by the store when a write would change an
+// existing group's Kind.
+var ErrKindImmutable = errors.New("group: a group's kind cannot be changed after it is created")
+
+// checkKindStable rejects a write that would redefine what a persisted
+// group IS.
+//
+// The rule exists for channels specifically. Every other property of a
+// group is negotiable — a name, an admin set, a key, even whether it is
+// read-only — but "only admins may post here" is the promise a channel's
+// subscribers joined under, and flipping it to a public group would hand
+// the floor to thousands of people who were never admitted on those
+// terms. There is no legitimate migration: the honest way to change a
+// channel into a group is to create a group.
+//
+// An empty incoming Kind counts as a change, not as "no opinion". That is
+// the dangerous direction: EnsureKind re-derives an empty Kind from Mode
+// on the next read, and a channel and a public group share ModePublic — so
+// a write that merely FORGOT the kind would silently reopen the channel to
+// everyone. Rejecting it turns that class of bug into an error at the
+// boundary instead of a policy change nobody asked for.
+//
+// prev == "" is allowed through: that is a record written before Kind
+// existed, being normalized for the first time.
+func checkKindStable(id string, prev, next Kind) error {
+	if prev == "" || prev == next {
+		return nil
+	}
+	if next == "" {
+		return fmt.Errorf("%w: %s is %q and the write carried no kind", ErrKindImmutable, id, prev)
+	}
+	return fmt.Errorf("%w: %s is %q and cannot become %q", ErrKindImmutable, id, prev, next)
+}
+
 // IsChannel reports whether this group is a broadcast channel — open to
 // join, admins-only to post.
 //
@@ -581,7 +637,19 @@ func (r Record) JoinPoWRequired() uint8 {
 // group's history and messages, as opposed to admins only. The single
 // predicate every call site should consult — see PeerBackfillDisabled for
 // why the stored field is inverted.
-func (r Record) PeerBackfillEnabled() bool { return !r.PeerBackfillDisabled }
+//
+// Always false for a channel, whatever the stored flag says. In a channel
+// a non-admin has nothing of its own to serve — it cannot post — so
+// mirroring the room onto its feed would buy availability for nobody while
+// charging every subscriber the disk. It is also what the whole shape of a
+// channel implies: subscribers read, admins publish and serve. A channel
+// with 10,000 members would otherwise have 10,000 copies of itself.
+func (r Record) PeerBackfillEnabled() bool {
+	if r.IsChannel() {
+		return false
+	}
+	return !r.PeerBackfillDisabled
+}
 
 // IsBanned reports whether pk is barred from this group.
 func (r Record) IsBanned(pk cipher.PubKey) bool { return containsPK(r.Banned, pk) }

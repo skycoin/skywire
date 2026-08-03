@@ -10,6 +10,8 @@
 //	skywire cli skychat group invite  <group-id>           # re-emits the invite link
 //	skywire cli skychat group address <group-id>           # short skychat:// address
 //	skywire cli skychat group resolve <address>            # what does this address point at?
+//	skywire cli skychat group catalog [host-pk]            # what does a visor publish?
+//	skywire cli skychat group publish <group-id> <on|off>  # publish in the catalog
 //	skywire cli skychat group join    <invite-link|address>
 //	skywire cli skychat group add     <group-id> <pk>      # admin: extend allowlist
 //	skywire cli skychat group promote <group-id> <pk>      # admin: grant roster authority
@@ -49,6 +51,7 @@ var (
 	groupCreateName           string
 	groupCreateMode           string
 	groupCreateKind           string
+	groupCreateListed         bool
 	groupCreateMembers        []string
 	groupCreateNoPeerBackfill bool
 
@@ -69,6 +72,8 @@ func init() {
 	// scripts; --kind wins when both are given.
 	groupCreateCmd.Flags().StringVarP(&groupCreateMode, "mode", "m", "", "deprecated alias for --kind, accepts public | private only")
 	groupCreateCmd.Flags().StringSliceVar(&groupCreateMembers, "member", nil, "initial member PK; repeat for many (the owner is implicit)")
+	groupCreateCmd.Flags().BoolVar(&groupCreateListed, "listed", false,
+		"publish in this visor's discovery catalog, so anyone with this visor's key can find it; off by default")
 	groupCreateCmd.Flags().BoolVar(&groupCreateNoPeerBackfill, "no-peer-backfill", false,
 		"only admins may serve this group's history to a joiner; without this flag any online member can, so the group stays readable while admins are offline")
 	groupCreateCmd.MarkFlagRequired("name") //nolint:errcheck,gosec
@@ -86,7 +91,7 @@ func init() {
 
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
-		groupAddressCmd, groupResolveCmd,
+		groupAddressCmd, groupResolveCmd, groupCatalogCmd, groupPublishCmd,
 		groupJoinCmd, groupAskAgainCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd, groupRotateKeyCmd,
 		groupPeerBackfillCmd,
 		groupSendCmd, groupUnsendCmd, groupListenCmd, groupHistoryCmd,
@@ -136,6 +141,7 @@ var groupCreateCmd = &cobra.Command{
 			Kind:                kind,
 			InitialMembers:      members,
 			DisablePeerBackfill: groupCreateNoPeerBackfill,
+			Listed:              groupCreateListed,
 		})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -345,6 +351,101 @@ that is not a safe assumption.`,
 		}
 		addr := skychataddr.Group(info.OwnerPK, info.ID).String()
 		internal.PrintOutput(cmd.Flags(), addr, addr+"\n")
+	},
+}
+
+var groupCatalogCmd = &cobra.Command{
+	Use:   "catalog [host-pk]",
+	Short: "List the groups and channels a visor publishes",
+	Long: `Ask a visor what it publishes, or omit the key to see your own listing
+exactly as others would.
+
+Only groups an admin has explicitly published appear — see ` + "`group publish`" + `.
+There is no network-wide index: a catalog is served by the host itself and
+answers only for its own groups, so discovery still starts from a public key
+somebody gave you.`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var host cipher.PubKey
+		if len(args) == 1 {
+			if err := host.Set(args[0]); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid host pk: %w", err))
+			}
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		entries, truncated, err := rpcClient.GroupCatalog(host)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"entries": entries, "truncated": truncated},
+			humanCatalog(entries, truncated))
+	},
+}
+
+// humanCatalog renders a catalog as a table, leading with the kind so a
+// channel is distinguishable from a group at a glance.
+func humanCatalog(entries []visor.GroupCatalogEntry, truncated bool) string {
+	if len(entries) == 0 {
+		return "nothing published\n"
+	}
+	var b strings.Builder
+	w := tabwriter.NewWriter(&b, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "KIND\tNAME\tJOIN\tADDRESS")
+	for _, e := range entries {
+		join := "open"
+		if e.Policy == skychatgroup.JoinApproval {
+			join = "on approval"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Kind, e.Name, join, e.Address)
+	}
+	_ = w.Flush() //nolint:errcheck
+	if truncated {
+		fmt.Fprintf(&b, "\n(the host has more published than it will list at once)\n")
+	}
+	return b.String()
+}
+
+var groupPublishCmd = &cobra.Command{
+	Use:   "publish <group-id> <on|off>",
+	Short: "Publish a group or channel in this visor's discovery catalog",
+	Long: `Add a group or channel to this visor's catalog, so anyone holding this
+visor's public key can find it by asking.
+
+Off by default, and admin-only. This is a LOCAL hosting decision, not a
+property of the group: it is not gossiped, so it says what THIS visor is
+willing to answer questions about. Two admins of the same channel can
+legitimately differ on whether they advertise it, and neither can un-list
+the other's copy.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var listed bool
+		switch strings.ToLower(args[1]) {
+		case "on", "true", "yes":
+			listed = true
+		case "off", "false", "no":
+			listed = false
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("expected on or off, got %q", args[1]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupSetListed(args[0], listed)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		state := "not published"
+		if listed {
+			state = "published in this visor's catalog"
+		}
+		human := fmt.Sprintf("%q is now %s\n  address: %s\n",
+			info.Name, state, skychataddr.Group(info.OwnerPK, info.ID))
+		internal.PrintOutput(cmd.Flags(), info, human)
 	},
 }
 
