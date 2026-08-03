@@ -394,13 +394,13 @@ func humanCatalog(entries []visor.GroupCatalogEntry, truncated bool) string {
 	}
 	var b strings.Builder
 	w := tabwriter.NewWriter(&b, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "KIND\tNAME\tJOIN\tADDRESS")
+	fmt.Fprintln(w, "KIND\tNAME\tJOIN\tADDRESS") //nolint
 	for _, e := range entries {
 		join := "open"
 		if e.Policy == skychatgroup.JoinApproval {
 			join = "on approval"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Kind, e.Name, join, e.Address)
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Kind, e.Name, join, e.Address) //nolint
 	}
 	_ = w.Flush() //nolint:errcheck
 	if truncated {
@@ -505,7 +505,7 @@ func humanResolve(res visor.GroupResolveResult) string {
 		fmt.Fprintf(&b, "  action:  join (open admission)\n")
 	}
 	if g.PriceHint != "" {
-		// Labelled as claimed rather than stated: this is unverified text
+		// Labeled as claimed rather than stated: this is unverified text
 		// from a host that wants members.
 		fmt.Fprintf(&b, "  price:   %s (claimed by the host, unverified)\n", g.PriceHint)
 	}

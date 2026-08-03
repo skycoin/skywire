@@ -382,7 +382,7 @@ func (m *Manager) StartProbeListener() {
 	if m.probe.cancel != nil {
 		return // already running
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background()) //nolint
 	m.probe.ctx, m.probe.cancel = ctx, cancel
 
 	if m.dmsgC != nil {
