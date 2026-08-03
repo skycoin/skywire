@@ -241,6 +241,33 @@ func TestFetchPublicUDPAddr(t *testing.T) {
 		assert.Empty(t, c.fetchPublicUDPAddr(&http.Client{}))
 	})
 
+	t.Run("transient transport error is retried", func(t *testing.T) {
+		attempts := 0
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			attempts++
+			if attempts == 1 {
+				hijacker, ok := w.(http.Hijacker)
+				if !ok {
+					t.Error("response writer does not support hijacking")
+					return
+				}
+				conn, _, err := hijacker.Hijack()
+				if err != nil {
+					t.Errorf("hijack connection: %v", err)
+					return
+				}
+				_ = conn.Close()
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"udp_address": "5.6.7.8:30178"}) //nolint
+		}))
+		defer srv.Close()
+
+		c := &httpClient{log: logging.MustGetLogger("ar-udp"), remoteHTTPAddr: srv.URL}
+		assert.Equal(t, "5.6.7.8:30178", c.fetchPublicUDPAddr(&http.Client{}))
+		assert.GreaterOrEqual(t, attempts, 2)
+	})
+
 	t.Run("non-OK status yields empty", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			http.Error(w, "no", http.StatusInternalServerError)
