@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"mime"
 	"net"
+	nrpc "net/rpc"
 	"strings"
 	"sync"
 	"time"
@@ -521,36 +522,51 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		return nil
 	}
 
-	cliL, err := net.Listen("tcp", v.conf.CLIAddr)
-	if err != nil {
-		return err
-	}
-
-	v.pushCloseStack("cli.listener", cliL.Close)
-
-	// (Dmsg bridge was previously a dedicated localhost:3437
-	// listener. It's now multiplexed onto v.conf.CLIAddr via cmux
-	// — see the bridgeL match below. One local port for operators
-	// to think about, one config field. The bridge protocol /
-	// security model is unchanged; see pkg/visor/dmsg_bridge.go.)
-
-	rpcS, err := newRPCServer(v, "CLI")
-	if err != nil {
-		err := fmt.Errorf("failed to start rpc server for cli: %w", err)
-		return err
-	}
-
-	// Create gRPC server for streaming operations
-	grpcLog := v.MasterLogger().PackageLogger("cli_grpc")
-	grpcServer := grpc.NewServer()
+	// pingAdapter and grpcLog feed BOTH the local gRPC server (set up
+	// once, below) and the dmsg gRPC server (re-created on every init,
+	// further down), so they live outside the once-only local guard so
+	// Resume can re-wire the dmsg surfaces.
 	pingAdapter := &visorPingAdapter{v: v}
-	pingServer := rpcgrpc.NewPingServer(pingAdapter, grpcLog)
-	rpcgrpc.RegisterPingServiceServer(grpcServer, pingServer)
+	grpcLog := v.MasterLogger().PackageLogger("cli_grpc")
 
-	v.pushCloseStack("cli.grpc", func() error {
-		grpcServer.GracefulStop()
-		return nil
-	})
+	// LOCAL RPC surface (cli.listener + local gRPC + cmux + net/rpc
+	// accept loop, below). Set up ONCE and intentionally NOT torn down by
+	// Suspend, so operator/systray RPC on CLIAddr stays reachable to call
+	// Resume. On Resume initCLI runs again but skips this block
+	// (v.cliLocalUp); only the dmsg/transport-bound surfaces are
+	// re-created. cliL/rpcS/grpcServer are hoisted so the cmux/accept
+	// block (also guarded by cliLocalUp) can use them.
+	var cliL net.Listener
+	var rpcS *nrpc.Server
+	var grpcServer *grpc.Server
+	if !v.cliLocalUp {
+		var err error
+		cliL, err = net.Listen("tcp", v.conf.CLIAddr)
+		if err != nil {
+			return err
+		}
+		v.pushCloseStack("cli.listener", cliL.Close)
+
+		// (Dmsg bridge was previously a dedicated localhost:3437
+		// listener. It's now multiplexed onto v.conf.CLIAddr via cmux
+		// — see the bridgeL match below. One local port for operators
+		// to think about, one config field. The bridge protocol /
+		// security model is unchanged; see pkg/visor/dmsg_bridge.go.)
+
+		rpcS, err = newRPCServer(v, "CLI")
+		if err != nil {
+			return fmt.Errorf("failed to start rpc server for cli: %w", err)
+		}
+
+		// Create gRPC server for streaming operations
+		grpcServer = grpc.NewServer()
+		rpcgrpc.RegisterPingServiceServer(grpcServer, rpcgrpc.NewPingServer(pingAdapter, grpcLog))
+
+		v.pushCloseStack("cli.grpc", func() error {
+			grpcServer.GracefulStop()
+			return nil
+		})
+	}
 
 	// Start gRPC server on DMSG for remote access (gotop, stats, etc.)
 	// Access is restricted to hypervisor PKs and dmsgpty whitelist PKs.
@@ -741,131 +757,138 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 		}
 	}
 
-	// Use cmux to multiplex gRPC, the dmsg-bridge protocol, and
-	// standard RPC on the same port. The bridge matcher peeks for
-	// a fixed magic prefix; conns starting with it are dmsg-bridge
-	// requests, everything else falls through to gRPC or rpc.
-	mux := cmux.New(cliL)
-	grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
-	bridgeL := mux.Match(cmux.PrefixMatcher(bridgeMagic))
-	rpcL := mux.Match(cmux.Any()) // All other connections go to standard RPC
+	// The cmux + accept goroutines below drive the LOCAL cliL listener,
+	// so they belong to the once-only local surface and are skipped on
+	// Resume (cliL/rpcS/grpcServer are nil then and must not be touched).
+	if !v.cliLocalUp {
+		// Use cmux to multiplex gRPC, the dmsg-bridge protocol, and
+		// standard RPC on the same port. The bridge matcher peeks for
+		// a fixed magic prefix; conns starting with it are dmsg-bridge
+		// requests, everything else falls through to gRPC or rpc.
+		mux := cmux.New(cliL)
+		grpcL := mux.MatchWithWriters(cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"))
+		bridgeL := mux.Match(cmux.PrefixMatcher(bridgeMagic))
+		rpcL := mux.Match(cmux.Any()) // All other connections go to standard RPC
 
-	// Start the RPC bridge accept loop on the bridge-matched
-	// listener. Handles both `--via dmsg://<pk>` and `--via
-	// skynet://<pk>` — the header's scheme byte selects which
-	// stream type the visor opens to the target. Lets the CLI
-	// inherit the visor's dmsg/skynet identity (and its whitelist
-	// eligibility on remote peers) without needing a separate CLI
-	// keypair. Implementation in rpc_bridge.go.
-	bridgeLog := v.MasterLogger().PackageLogger("rpc_bridge")
-	go serveRPCBridge(ctx, bridgeLog, bridgeL, v)
-	bridgeLog.WithField("addr", v.conf.CLIAddr).
-		Info("RPC bridge multiplexed onto CLI RPC port (dmsg + skynet schemes)")
+		// Start the RPC bridge accept loop on the bridge-matched
+		// listener. Handles both `--via dmsg://<pk>` and `--via
+		// skynet://<pk>` — the header's scheme byte selects which
+		// stream type the visor opens to the target. Lets the CLI
+		// inherit the visor's dmsg/skynet identity (and its whitelist
+		// eligibility on remote peers) without needing a separate CLI
+		// keypair. Implementation in rpc_bridge.go.
+		bridgeLog := v.MasterLogger().PackageLogger("rpc_bridge")
+		go serveRPCBridge(ctx, bridgeLog, bridgeL, v)
+		bridgeLog.WithField("addr", v.conf.CLIAddr).
+			Info("RPC bridge multiplexed onto CLI RPC port (dmsg + skynet schemes)")
 
-	// Connection limiting and stats for standard RPC
-	const maxConcurrentConns = 50
-	stats := &cliRPCStats{
-		connSemaphore: make(chan struct{}, maxConcurrentConns),
-		maxConns:      maxConcurrentConns,
-	}
-
-	// Start gRPC server
-	go func() {
-		grpcLog.Infof("CLI gRPC server listening on %s (multiplexed)", v.conf.CLIAddr)
-		if err := grpcServer.Serve(grpcL); err != nil {
-			if !errors.Is(err, net.ErrClosed) &&
-				!strings.Contains(err.Error(), "mux: listener closed") {
-				grpcLog.WithError(err).Error("gRPC server error")
-			}
+		// Connection limiting and stats for standard RPC
+		const maxConcurrentConns = 50
+		stats := &cliRPCStats{
+			connSemaphore: make(chan struct{}, maxConcurrentConns),
+			maxConns:      maxConcurrentConns,
 		}
-	}()
 
-	// Run standard RPC accept loop with panic recovery, connection limiting, and logging
-	go func() {
-		rpcLog := v.MasterLogger().PackageLogger("cli_rpc")
-		rpcLog.Infof("CLI RPC server listening on %s (max %d concurrent connections, multiplexed)", v.conf.CLIAddr, maxConcurrentConns)
-
-		// Periodic stats logging
+		// Start gRPC server
 		go func() {
-			ticker := time.NewTicker(30 * time.Second)
-			defer ticker.Stop()
-			for range ticker.C {
-				active, total, errors, peak, lastErr, lastErrTime := stats.snapshot()
-				if total > 0 {
-					rpcLog.Debugf("CLI RPC stats: active=%d, total=%d, errors=%d, peak=%d", active, total, errors, peak)
-					if lastErr != "" && time.Since(lastErrTime) < time.Minute {
-						rpcLog.Debugf("CLI RPC last error (%s ago): %s", time.Since(lastErrTime).Round(time.Second), lastErr)
-					}
+			grpcLog.Infof("CLI gRPC server listening on %s (multiplexed)", v.conf.CLIAddr)
+			if err := grpcServer.Serve(grpcL); err != nil {
+				if !errors.Is(err, net.ErrClosed) &&
+					!strings.Contains(err.Error(), "mux: listener closed") {
+					grpcLog.WithError(err).Error("gRPC server error")
 				}
 			}
 		}()
 
-		var connID uint64
-		for {
-			conn, err := rpcL.Accept()
-			if err != nil {
-				// Check if listener was closed (normal shutdown)
-				if errors.Is(err, net.ErrClosed) ||
-					strings.Contains(err.Error(), "mux: listener closed") {
-					rpcLog.Debug("CLI RPC listener closed")
-					return
-				}
-				stats.recordError(fmt.Sprintf("accept: %v", err))
-				rpcLog.WithError(err).Warn("CLI RPC accept error, continuing...")
-				continue
-			}
+		// Run standard RPC accept loop with panic recovery, connection limiting, and logging
+		go func() {
+			rpcLog := v.MasterLogger().PackageLogger("cli_rpc")
+			rpcLog.Infof("CLI RPC server listening on %s (max %d concurrent connections, multiplexed)", v.conf.CLIAddr, maxConcurrentConns)
 
-			connID++
-			thisConnID := connID
-
-			// Try to acquire connection slot
-			if !stats.acquire() {
-				stats.recordError("connection limit reached")
-				active, _, _, _, _, _ := stats.snapshot()
-				rpcLog.Warnf("CLI RPC connection limit reached (%d/%d), rejecting connection", active, maxConcurrentConns)
-				conn.Close() //nolint:errcheck,gosec
-				continue
-			}
-
-			rpcLog.Debugf("CLI RPC conn #%d accepted from %s (active: %d)", thisConnID, conn.RemoteAddr(), stats.activeConns)
-
-			// Handle each connection in a goroutine with panic recovery
-			go func(c net.Conn, id uint64) {
-				startTime := time.Now()
-				defer func() {
-					if r := recover(); r != nil {
-						stats.recordError(fmt.Sprintf("panic: %v", r))
-						rpcLog.Errorf("CLI RPC conn #%d panic recovered: %v", id, r)
+			// Periodic stats logging
+			go func() {
+				ticker := time.NewTicker(30 * time.Second)
+				defer ticker.Stop()
+				for range ticker.C {
+					active, total, errors, peak, lastErr, lastErrTime := stats.snapshot()
+					if total > 0 {
+						rpcLog.Debugf("CLI RPC stats: active=%d, total=%d, errors=%d, peak=%d", active, total, errors, peak)
+						if lastErr != "" && time.Since(lastErrTime) < time.Minute {
+							rpcLog.Debugf("CLI RPC last error (%s ago): %s", time.Since(lastErrTime).Round(time.Second), lastErr)
+						}
 					}
-					c.Close() //nolint:errcheck,gosec
-					stats.release()
-					rpcLog.Debugf("CLI RPC conn #%d closed after %s (active: %d)", id, time.Since(startTime).Round(time.Millisecond), stats.activeConns)
-				}()
-
-				// Set keepalive and deadline to prevent hung connections.
-				// If an RPC method hangs (e.g., iterating corrupt routing rules),
-				// the deadline ensures the connection is killed after the timeout
-				// rather than blocking a connection slot forever.
-				if tc, ok := c.(*net.TCPConn); ok {
-					tc.SetKeepAlive(true)                   //nolint:errcheck,gosec
-					tc.SetKeepAlivePeriod(30 * time.Second) //nolint:errcheck,gosec
 				}
-				c.SetDeadline(time.Now().Add(5 * time.Minute)) //nolint:errcheck,gosec
+			}()
 
-				rpcS.ServeConn(c)
-			}(conn, thisConnID)
-		}
-	}()
+			var connID uint64
+			for {
+				conn, err := rpcL.Accept()
+				if err != nil {
+					// Check if listener was closed (normal shutdown)
+					if errors.Is(err, net.ErrClosed) ||
+						strings.Contains(err.Error(), "mux: listener closed") {
+						rpcLog.Debug("CLI RPC listener closed")
+						return
+					}
+					stats.recordError(fmt.Sprintf("accept: %v", err))
+					rpcLog.WithError(err).Warn("CLI RPC accept error, continuing...")
+					continue
+				}
 
-	// Start cmux - this must be called after setting up all listeners
-	go func() {
-		if err := mux.Serve(); err != nil {
-			if !errors.Is(err, net.ErrClosed) &&
-				!strings.Contains(err.Error(), "mux: listener closed") {
-				v.log.WithError(err).Error("cmux serve error")
+				connID++
+				thisConnID := connID
+
+				// Try to acquire connection slot
+				if !stats.acquire() {
+					stats.recordError("connection limit reached")
+					active, _, _, _, _, _ := stats.snapshot()
+					rpcLog.Warnf("CLI RPC connection limit reached (%d/%d), rejecting connection", active, maxConcurrentConns)
+					conn.Close() //nolint:errcheck,gosec
+					continue
+				}
+
+				rpcLog.Debugf("CLI RPC conn #%d accepted from %s (active: %d)", thisConnID, conn.RemoteAddr(), stats.activeConns)
+
+				// Handle each connection in a goroutine with panic recovery
+				go func(c net.Conn, id uint64) {
+					startTime := time.Now()
+					defer func() {
+						if r := recover(); r != nil {
+							stats.recordError(fmt.Sprintf("panic: %v", r))
+							rpcLog.Errorf("CLI RPC conn #%d panic recovered: %v", id, r)
+						}
+						c.Close() //nolint:errcheck,gosec
+						stats.release()
+						rpcLog.Debugf("CLI RPC conn #%d closed after %s (active: %d)", id, time.Since(startTime).Round(time.Millisecond), stats.activeConns)
+					}()
+
+					// Set keepalive and deadline to prevent hung connections.
+					// If an RPC method hangs (e.g., iterating corrupt routing rules),
+					// the deadline ensures the connection is killed after the timeout
+					// rather than blocking a connection slot forever.
+					if tc, ok := c.(*net.TCPConn); ok {
+						tc.SetKeepAlive(true)                   //nolint:errcheck,gosec
+						tc.SetKeepAlivePeriod(30 * time.Second) //nolint:errcheck,gosec
+					}
+					c.SetDeadline(time.Now().Add(5 * time.Minute)) //nolint:errcheck,gosec
+
+					rpcS.ServeConn(c)
+				}(conn, thisConnID)
 			}
-		}
-	}()
+		}()
+
+		// Start cmux - this must be called after setting up all listeners
+		go func() {
+			if err := mux.Serve(); err != nil {
+				if !errors.Is(err, net.ErrClosed) &&
+					!strings.Contains(err.Error(), "mux: listener closed") {
+					v.log.WithError(err).Error("cmux serve error")
+				}
+			}
+		}()
+
+		v.cliLocalUp = true
+	}
 
 	return nil
 }

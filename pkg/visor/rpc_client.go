@@ -935,6 +935,23 @@ func (rc *rpcClient) Reload() error {
 	return rc.Call("Reload", &struct{}{}, &struct{}{})
 }
 
+// Suspend calls Suspend.
+func (rc *rpcClient) Suspend() error {
+	return rc.Call("Suspend", &struct{}{}, &struct{}{})
+}
+
+// Resume calls Resume.
+func (rc *rpcClient) Resume() error {
+	return rc.Call("Resume", &struct{}{}, &struct{}{})
+}
+
+// IsSuspended calls IsSuspended.
+func (rc *rpcClient) IsSuspended() (bool, error) {
+	var suspended bool
+	err := rc.Call("IsSuspended", &struct{}{}, &suspended)
+	return suspended, err
+}
+
 // Shutdown calls Shutdown.
 func (rc *rpcClient) Shutdown() error {
 	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
