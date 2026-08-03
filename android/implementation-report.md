@@ -7,6 +7,34 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-03 — Brand assets: real logo, Skycoin typeface, designed top bar
+
+**Built:**
+
+- The real Skycoin cloud (`skywire-logo.png`, 1600², supplied by the project
+  owner) moved to `app/src/main/res/drawable-nodpi/skywire_logo.png` and wired
+  everywhere the placeholder mark lived: the bar's center slot (44 dp,
+  untinted — the selection pill signals the active state), the splash icon
+  (`ic_splash_mark.xml`, 53×40 dp layer-list inside the masked circle), and
+  the adaptive launcher icon foreground (white-tinted cloud on the brand-blue
+  background layer). The hand-drawn placeholder vector was deleted.
+- The Skycoin typeface (Light/Regular/Bold + italics, OTF) moved to
+  `app/src/main/res/font/` and applied across the entire Material 3 type scale
+  (`ui/theme/Type.kt`). Roles whose Material default weight is Medium (500)
+  are pinned to Bold — the family ships no 500 cut, and they would silently
+  fall back to Regular and flatten the emphasis hierarchy.
+- Designed shared top bar (`ui/components/SkyTopBar.kt`): centered bold title
+  in the brand typeface, tonal circular back button, container blending into
+  the background; takes an `actions` slot so app screens can add `Logs` etc.
+  All pushed routes use it via `AppRouteScaffold`.
+
+**Verified:** rebuilt + reinstalled on DM-B70104; screenshots confirm the
+cloud in the splash (light + dark backgrounds), the untinted cloud in the
+bar pill, the typeface on every label, and the new top bar on the SkySOCKS
+route — light and dark.
+
+---
+
 ## 2026-08-03 — Android app skeleton: theme, splash, bottom bar, apps hub
 
 **Built:** the `android/` Gradle project (this module) — Kotlin / Jetpack

@@ -69,6 +69,7 @@ fun SkywireTheme(
 ) {
     MaterialTheme(
         colorScheme = if (darkTheme) DarkColors else LightColors,
+        typography = SkywireTypography,
         content = content,
     )
 }

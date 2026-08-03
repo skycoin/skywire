@@ -136,7 +136,8 @@ android/
     │   └── ui/                         # theme/, navigation/, components/,
     │                                   # home/ chat/ hub/ socks/ vpn/ dex/
     │                                   # fleet/ wallet/ settings/
-    ├── res/                            # splash + mark vectors, adaptive icon
+    ├── res/                            # brand logo (drawable-nodpi), Skycoin
+    │                                   # fonts (font/), splash + adaptive icon
     └── jniLibs/arm64-v8a/              # Go payload (gitignored build artifact)
 ```
 

@@ -1,24 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Splash icon: the placeholder Skycoin mark in brand blue, scaled into the
-     center safe circle of the 108dp splash-icon canvas (Android 12+ masks it). -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <group
-        android:scaleX="2.4"
-        android:scaleY="2.4"
-        android:translateX="25.2"
-        android:translateY="25.2">
-        <path
-            android:fillColor="#FF0072FF"
-            android:pathData="M3,10 L12,3 L21,10 L17.4,10 L12,5.8 L6.6,10 Z" />
-        <path
-            android:fillColor="#FF0072FF"
-            android:pathData="M21,14 L12,21 L3,14 L6.6,14 L12,18.2 L17.4,14 Z" />
-        <path
-            android:fillColor="#FF0072FF"
-            android:pathData="M8.2,11 L15.8,11 L15.8,13 L8.2,13 Z" />
-    </group>
-</vector>
+<!-- Splash icon: the Skycoin cloud (brand-blue bitmap) scaled into the center
+     safe circle of the 108dp splash-icon canvas (Android 12+ masks it).
+     53x40dp keeps the logo's 4:3 box inside the 66dp circle. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="53dp"
+        android:height="40dp"
+        android:gravity="center"
+        android:drawable="@drawable/skywire_logo" />
+</layer-list>
