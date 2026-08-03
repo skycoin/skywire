@@ -38,6 +38,13 @@ func (c *Common) flush(v interface{}) (err error) {
 	if err != nil {
 		return err
 	}
-	const filePerm = 0644
+	// 0640, not 0644: this config file holds the visor's SECRET KEY (Common.SK).
+	// World-readable (0644) let any local user read the identity and impersonate
+	// the visor. The visor writes/reads it as its own service user (or root), so
+	// owner+group access is sufficient; unprivileged desktop helpers (the systray
+	// tray) talk to the visor over RPC by address and never read this file. Note
+	// os.WriteFile only applies this mode when CREATING the file — pre-existing
+	// 0644 configs must be tightened out-of-band (package postinstall chmod).
+	const filePerm = 0640
 	return os.WriteFile(c.path, raw, filePerm)
 }
