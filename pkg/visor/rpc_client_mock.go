@@ -868,6 +868,21 @@ func (mc *mockRPCClient) Reload() error {
 	return nil
 }
 
+// Suspend implements API.
+func (mc *mockRPCClient) Suspend() error {
+	return nil
+}
+
+// Resume implements API.
+func (mc *mockRPCClient) Resume() error {
+	return nil
+}
+
+// IsSuspended implements API.
+func (mc *mockRPCClient) IsSuspended() (bool, error) {
+	return false, nil
+}
+
 // Shutdown implements API.
 func (mc *mockRPCClient) Shutdown() error {
 	return nil
