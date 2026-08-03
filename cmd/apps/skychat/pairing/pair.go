@@ -50,12 +50,53 @@ const MessagePathPrefix = "msgs"
 // is a floor on retries, not a timer.
 const announceRetryAfter = 30 * time.Second
 
+// MessageTypeDelete marks a control record that retracts an earlier
+// message rather than carrying one: Type is set, ID names the target
+// (see Message.MsgID), and Text is empty.
+//
+// A peer running a build that predates this field decodes the record as
+// a Message with no text and no Type, and nothing on that path filters
+// empty text — so it won't apply the delete and may render a blank
+// bubble. Handlers on this side skip any record with a non-empty Type,
+// which is what keeps a future control type from doing the same to us.
+const MessageTypeDelete = "delete"
+
 // Message is the on-the-wire form of a chat message inside a pair
 // feed. Body encryption (PR-6) wraps Text into a ciphertext field;
 // for now Text is plaintext.
 type Message struct {
 	Text string    `json:"text"`
 	TS   time.Time `json:"ts"`
+
+	// Type is empty for a chat message, MessageTypeDelete for a
+	// retraction. Kept omitempty so the common record is unchanged
+	// on the wire.
+	Type string `json:"type,omitempty"`
+
+	// ID is the target of a MessageTypeDelete record — the MsgID of the
+	// message being retracted. Unused (and omitted) on a chat message,
+	// whose own id is derived from TS and Seq.
+	ID string `json:"id,omitempty"`
+
+	// Seq is the publisher's per-pair counter for this record, the same
+	// one that disambiguates the leaf path. It's in the body so MsgID can
+	// stay unique when two messages land on the same nanosecond — the
+	// case the path's seq already exists to cover. Absent on records from
+	// a peer that predates this field, which just means their ids end in
+	// -0; both ends still derive the id from the same bytes, so they
+	// agree either way.
+	Seq uint64 `json:"seq,omitempty"`
+}
+
+// MsgID is the identifier both ends use to name this message. It is
+// derived only from fields sealed into the body, so the peer computes
+// the same string from the record it receives — which is what lets a
+// delete published later name a message sent earlier.
+//
+// (timestamp, seq) is the same pair that keys the leaf path, so two
+// messages can share an id only if they'd have collided on the feed too.
+func (m Message) MsgID() string {
+	return strconv.FormatInt(m.TS.UnixNano(), 10) + "-" + strconv.FormatUint(m.Seq, 10)
 }
 
 // MessageHandler is invoked on every newly-arrived peer message.
@@ -432,8 +473,40 @@ var ErrPairClosed = errors.New("pairing: pair is closed")
 // Returns ErrPairClosed if Close has already torn down the
 // publisher. Pre-fix this nil-deref'd on p.pub.Put.
 func (p *Pair) Send(text string) error {
+	_, err := p.SendID(text)
+	return err
+}
+
+// SendID publishes text like Send and returns the new message's MsgID.
+// Callers that may later retract the message need this: the id is minted
+// here from the timestamp that goes into the sealed body, so it is the
+// only value that names the same message on both sides.
+func (p *Pair) SendID(text string) (string, error) {
+	return p.publish(Message{Text: text})
+}
+
+// SendDelete retracts an earlier message by publishing a delete record
+// naming its id. The record rides the same feed as the message it
+// retracts, so it is durable and ordered: a peer that is offline now
+// applies the delete when it next syncs, and a peer that has not yet
+// received the message gets both in the same batch.
+//
+// No authorship check is possible or needed — a pair feed is
+// single-writer, so this can only ever retract our own messages.
+func (p *Pair) SendDelete(id string) error {
+	if id == "" {
+		return errors.New("pairing: SendDelete: empty id")
+	}
+	_, err := p.publish(Message{Type: MessageTypeDelete, ID: id})
+	return err
+}
+
+// publish stamps msg with the current time, seals it and puts it on the
+// outbox feed, returning the record's own MsgID. Shared by SendID and
+// SendDelete so both go through the same announce/seal/put sequence.
+func (p *Pair) publish(msg Message) (string, error) {
 	if p.pub == nil {
-		return ErrPairClosed
+		return "", ErrPairClosed
 	}
 	now := time.Now().UTC()
 	// Announce (and rotate, if due) FIRST, so the ratchet leaf and this
@@ -441,10 +514,14 @@ func (p *Pair) Send(text string) error {
 	// two. See maybeAnnounce.
 	p.maybeAnnounce(now)
 
-	msg := Message{Text: text, TS: now}
+	// Take the seq before sealing: it goes into the body (so both ends
+	// derive the same MsgID) and into the leaf path, and the two must be
+	// the same number.
+	seq := p.seq.Add(1)
+	msg.TS, msg.Seq = now, seq
 	body, err := json.Marshal(msg)
 	if err != nil {
-		return fmt.Errorf("pairing: Send: marshal: %w", err)
+		return "", fmt.Errorf("pairing: Send: marshal: %w", err)
 	}
 	// Epoch key when we have one, legacy static key when we don't. The
 	// fallback fires only before the peer's first announcement reaches
@@ -454,21 +531,20 @@ func (p *Pair) Send(text string) error {
 	if id, key, ok := p.ratchet.currentEpoch(); ok {
 		sealed, err = sealEnvelope(id, key, body)
 		if err != nil {
-			return fmt.Errorf("pairing: Send: %w", err)
+			return "", fmt.Errorf("pairing: Send: %w", err)
 		}
 		p.ratchet.noteSent()
 	} else {
 		sealed, err = sealMessage(p.key, body)
 		if err != nil {
-			return fmt.Errorf("pairing: Send: %w", err)
+			return "", fmt.Errorf("pairing: Send: %w", err)
 		}
 	}
-	seq := p.seq.Add(1)
 	path := MessagePathPrefix + "/" + strconv.FormatInt(now.UnixNano(), 10) + "/" + strconv.FormatUint(seq, 10)
 	if err := p.pub.Put(path, sealed); err != nil {
-		return fmt.Errorf("pairing: Send: put %q: %w", path, err)
+		return "", fmt.Errorf("pairing: Send: put %q: %w", path, err)
 	}
-	return nil
+	return msg.MsgID(), nil
 }
 
 // Close tears down the subscriber + publisher (and the underlying

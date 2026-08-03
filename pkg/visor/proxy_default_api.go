@@ -778,7 +778,11 @@ func (proxyDefaultAPI) PairMarkActive(_ cipher.PubKey) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) PairSend(_ cipher.PubKey, _ string) error {
+func (proxyDefaultAPI) PairSend(_ cipher.PubKey, _ string) (string, error) {
+	return "", ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) PairDelete(_ cipher.PubKey, _ string) error {
 	return ErrProxyNotSupported
 }
 

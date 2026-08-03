@@ -41,6 +41,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/skycoin/skywire/cmd/apps/skychat/pairing"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -205,12 +206,31 @@ func startPairPoller(parent context.Context) {
 				if m.TS.After(since) {
 					since = m.TS
 				}
+				// A typed record is control traffic, not a chat line, and must
+				// never reach the browser as a message — an unrecognized one
+				// would render as an empty bubble.
+				if m.Type != "" {
+					// A retraction: the peer deleted a message they sent us,
+					// so drop our stored copy and tell the browser to remove
+					// the bubble. Same dm-status event the framed-conn
+					// OnDelete emits, so the UI has one code path for both.
+					if m.Type == pairing.MessageTypeDelete {
+						forgetPersisted(m.PeerPK.Hex(), m.ID)
+						broadcastDMStatus(m.ID, dmStatusDeleted, m.PeerPK.Hex())
+					} else {
+						appLog("Pairing: skipping unknown record type %q from %s", m.Type, m.PeerPK.Hex())
+					}
+					continue
+				}
 				envelope := map[string]string{
 					"sender":  m.PeerPK.Hex(),
 					"message": m.Text,
 					"peer":    m.PeerPK.Hex(),
 					"ts":      m.TS.Format(time.RFC3339Nano),
 					"channel": "pair",
+					// The feed-derived message id, so the browser can name
+					// this bubble for a later delete (and dedup on reload).
+					"id": m.ID,
 				}
 				body, err := json.Marshal(envelope)
 				if err != nil {
@@ -496,10 +516,41 @@ func pairItemHandler(ctx context.Context) http.HandlerFunc {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 				return
 			}
-			if err := pairRPCCall("PairSend", func(c visor.API) error { return c.PairSend(peer, body.Text) }); err != nil {
+			// The reply carries the message id — the same shape /message
+			// returns for a receipts send, and for the same reason: without
+			// it the browser has no name for this bubble and can't offer
+			// "delete for everyone" on it.
+			var msgID string
+			if err := pairRPCCall("PairSend", func(c visor.API) error {
+				id, e := c.PairSend(peer, body.Text)
+				msgID = id
+				return e
+			}); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{ //nolint:errcheck
+				"ok": true,
+				"id": msgID,
+			})
+
+		// DELETE /pair/<pk>/message?id=<id> — delete-for-everyone on the CXO
+		// path. Publishes a retraction onto the pair feed (durable, so an
+		// offline peer applies it on its next sync) and tombstones our own
+		// bubble via the same dm-status event the framed-conn path uses.
+		case len(segments) == 2 && segments[1] == "message" && r.Method == http.MethodDelete:
+			id := strings.TrimSpace(r.URL.Query().Get("id"))
+			if id == "" {
+				http.Error(w, "missing id", http.StatusBadRequest)
+				return
+			}
+			if err := pairRPCCall("PairDelete", func(c visor.API) error { return c.PairDelete(peer, id) }); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			forgetPersisted(peer.Hex(), id)
+			broadcastDMStatus(id, dmStatusDeleted, peer.Hex())
 			w.WriteHeader(http.StatusNoContent)
 
 		default:
