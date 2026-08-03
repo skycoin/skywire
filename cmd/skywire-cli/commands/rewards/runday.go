@@ -44,6 +44,7 @@ var (
 	runHwSurveyPath string
 	runMinVersion   string
 	runSkipCollect  bool
+	runProxy        string
 )
 
 func init() {
@@ -54,6 +55,7 @@ func init() {
 	runCmd.Flags().StringVarP(&runHwSurveyPath, "lpath", "p", "log_backups", "path to collected surveys")
 	runCmd.Flags().StringVar(&runMinVersion, "minv", "", "minimum skywire version to fetch from / keep surveys for")
 	runCmd.Flags().BoolVar(&runSkipCollect, "skip-collect", false, "skip survey/tp/bw collection (use existing data on disk)")
+	runCmd.Flags().StringVar(&runProxy, "proxy", "", "collect surveys via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)\ninstead of an own dmsg client — reuses a running `skywire dmsg web`'s warm sessions")
 }
 
 var runCmd = &cobra.Command{
@@ -97,7 +99,7 @@ Replaces the legacy 'script reward | bash' pipeline.`,
 		}
 
 		if !runSkipCollect {
-			collectAll(date, runMinVersion)
+			collectAll(date, runMinVersion, runProxy)
 		}
 
 		// Fetch & prune UT for this date.
@@ -129,9 +131,9 @@ Replaces the legacy 'script reward | bash' pipeline.`,
 // collectAll runs the three in-process collection steps. Failures are logged
 // but do not abort the cycle — the calculation can still proceed with whatever
 // data is already on disk (matching the previous bash pipeline's behavior).
-func collectAll(date, minVer string) {
+func collectAll(date, minVer, proxy string) {
 	log.Info("Collecting surveys (cli log --survey --cleanup)")
-	if err := runLogCollection(minVer); err != nil {
+	if err := runLogCollection(minVer, proxy); err != nil {
 		log.WithError(err).Warn("survey collection step reported errors; continuing")
 	}
 
@@ -146,7 +148,7 @@ func collectAll(date, minVer string) {
 
 // runLogCollection invokes the cli log subcommand in-process, configured for
 // surveys-only collection and post-cleanup with min-version pruning.
-func runLogCollection(minVer string) error {
+func runLogCollection(minVer, proxy string) error {
 	// Reach into clilog's exported root cmd — set its flag values rather
 	// than re-implementing the collection loop.
 	cmd := clilog.RootCmd
@@ -157,6 +159,13 @@ func runLogCollection(minVer string) error {
 	}
 	if err := flags.Set("cleanup", "true"); err != nil {
 		return fmt.Errorf("set --cleanup: %w", err)
+	}
+	// Fetch via the dmsgweb SOCKS5 resolving proxy (warm sessions) when configured,
+	// instead of cli log opening its own cold dmsg client.
+	if proxy != "" {
+		if err := flags.Set("proxy", proxy); err != nil {
+			return fmt.Errorf("set --proxy: %w", err)
+		}
 	}
 	if minVer != "" {
 		if err := flags.Set("minv", minVer); err != nil {
