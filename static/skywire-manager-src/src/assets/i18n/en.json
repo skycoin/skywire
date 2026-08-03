@@ -359,6 +359,7 @@
     "reward": "Reward",
     "reward-set": "Reward address set",
     "reward-not-set": "No reward address",
+    "reward-rejected": "Reward system rejected this visor's survey",
     "ip-location": "IP / Location",
     "visor-version": "Visor",
     "config-label": "Config",
