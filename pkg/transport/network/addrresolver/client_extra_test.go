@@ -256,7 +256,7 @@ func TestFetchPublicUDPAddr(t *testing.T) {
 					t.Errorf("hijack connection: %v", err)
 					return
 				}
-				_ = conn.Close()
+				_ = conn.Close() //nolint
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]string{"udp_address": "5.6.7.8:30178"}) //nolint
