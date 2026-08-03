@@ -944,8 +944,10 @@ func initHypervisor(ctx context.Context, v *Visor, log *logging.Logger) error {
 	conf.SK = v.conf.SK
 	conf.DmsgDiscovery = v.conf.Dmsg.Discovery
 
-	// Prepare hypervisor.
-	hv, err := NewHypervisor(conf, v, v.dmsgC)
+	// Prepare hypervisor. The dmsg client feeds the remote-visor RPC ingest;
+	// hypervisorIngestClient is tag-paired — desktop always passes it, the
+	// mobile build passes nil unless hypervisor.dmsg_ingest (Fleet) is set.
+	hv, err := NewHypervisor(conf, v, v.hypervisorIngestClient(&conf))
 	if err != nil {
 		return fmt.Errorf("failed to start hypervisor: %w", err)
 	}

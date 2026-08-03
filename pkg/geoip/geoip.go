@@ -5,47 +5,16 @@
 package geoip
 
 import (
-	"bytes"
-	"compress/gzip"
-	_ "embed"
 	"errors"
 	"fmt"
-	"io"
 	"net/netip"
-	"sync"
 
 	"github.com/oschwald/geoip2-golang/v2"
 )
 
-// The GeoLite2-City database is committed gzipped (~30 MB vs ~62 MB raw) to keep
-// the embedding binaries — every visor and dmsg-server — that much smaller. It
-// is decompressed once, lazily, on first EmbeddedDB() call and cached.
-//
-//go:embed GeoLite2-City.mmdb.gz
-var embeddedGz []byte
-
-var (
-	embeddedOnce sync.Once
-	embedded     []byte
-)
-
-// EmbeddedDB returns the raw bytes of the embedded GeoLite2-City database,
-// decompressed from the committed gzip on first call and cached thereafter.
-// The standalone geoip service uses this when no external `--db` path is
-// configured; the visor uses this for in-process lookups. Returns nil only if
-// the committed blob fails to decompress (build/repo corruption), which callers
-// surface as "database not initialized".
-func EmbeddedDB() []byte {
-	embeddedOnce.Do(func() {
-		zr, err := gzip.NewReader(bytes.NewReader(embeddedGz))
-		if err != nil {
-			return
-		}
-		defer zr.Close() //nolint:errcheck
-		embedded, _ = io.ReadAll(zr)
-	})
-	return embedded
-}
+// The embedded database and its accessors (EmbeddedDB, OpenEmbedded) live in
+// geoip_embedded.go; the `mobile` build variant replaces them with stubs
+// (geoip_embedded_mobile.go) so the ~30 MB blob never ships to the phone.
 
 // Result is the schema returned by both the in-process Lookup and the
 // HTTP geoip service. The JSON tags match what `cmd/svc/geoip` returns
@@ -102,17 +71,4 @@ func Lookup(db *geoip2.Reader, ipStr string) (*Result, error) {
 		res.RegionName = record.Subdivisions[0].Names.English
 	}
 	return res, nil
-}
-
-// OpenEmbedded returns a *geoip2.Reader backed by the embedded database.
-// Reuse the reader — it's safe for concurrent use.
-//
-// It calls EmbeddedDB() (not the bare `embedded` var) so the lazy gzip
-// decompress is guaranteed to have run: since #3500 the DB is decompressed
-// only inside EmbeddedDB()'s sync.Once, and a caller that reached
-// OpenEmbedded() first would otherwise get OpenBytes(nil) → no database →
-// empty geoip results (the regression that dropped every visor's country
-// code from the node list on v1.3.85).
-func OpenEmbedded() (*geoip2.Reader, error) {
-	return geoip2.OpenBytes(EmbeddedDB())
 }
