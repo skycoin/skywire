@@ -89,9 +89,14 @@ func (s *Store) Put(r Record) error {
 	defer s.mu.Unlock()
 	if raw, ok := s.kvs[r.ID]; ok {
 		var prev Record
-		// Watermarks are not sealed, so the raw JSON is enough here.
+		// Watermarks and Kind are not sealed, so the raw JSON is enough here.
 		if err := json.Unmarshal(raw, &prev); err == nil {
 			r.MutationSeen = mergeWatermarks(prev.MutationSeen, r.MutationSeen)
+			// Same invariant as the bbolt backend — the two must not
+			// disagree about what a group is allowed to become.
+			if err := checkKindStable(r.ID, prev.Kind, r.Kind); err != nil {
+				return err
+			}
 		}
 	}
 	body, err := s.encodeRecord(r)

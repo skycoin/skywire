@@ -112,6 +112,40 @@ the reversible `read_only` flag in being permanent — it is what the group
 *is*, not what an admin has currently switched on — which is why the
 reader-side gate drops a non-admin's leaves whatever their age.
 
+**A channel's kind is immutable.** The store refuses any write that would
+change a persisted group's `Kind`, including one that merely omits it —
+`EnsureKind` would re-derive an empty kind from `Mode`, and a channel shares
+`ModePublic` with a public group, so a forgetful write would silently hand
+the floor to every subscriber. There is no migration: the honest way to turn
+a channel into a group is to create a group.
+
+### What makes a channel scale
+
+Three things differ from a group, and all three follow from "the audience
+is unbounded and one-way":
+
+**Subscriptions are O(admins), not O(members).** Under the group rule an
+admin follows every member — an input pipe worth having when everyone can
+post. In a channel a subscriber's feed can never carry a message, so both
+roles follow only the admins. Without this, an admin of a 10,000-subscriber
+channel would open 10,000 CXO subscriptions to feeds guaranteed to stay
+empty.
+
+**History and files come from admins.** `PeerBackfillEnabled` is always
+false for a channel, whatever the stored flag says: a subscriber has nothing
+of its own to serve, so mirroring the room onto every follower would give a
+large channel one copy of itself per member. `SetPeerBackfill` is refused on
+a channel rather than accepted-and-ignored.
+
+**Backlog arrives in chunks, and files only on request.** A joiner takes the
+newest page immediately and walks backwards as it reads
+(`history.Store.ListGroupBefore`, `GET /group/<id>/history?before=<ts_nano>`)
+instead of pulling an entire archive before showing anything. Attachments
+are published as feed references and nothing more — `acceptInbound` refuses
+an unrequested file in a channel even from an admin, so one admin attaching
+a 2 GB file cannot land it on every subscriber's disk at once. Opening the
+card requests that one file from a host that has it.
+
 ### Addresses vs invite links
 
 Two ways to name a conversation, and they trade against each other rather
@@ -142,6 +176,50 @@ Whether a bare public key belongs to a person or to the host of a channel
 is not decidable by inspection — they are the same 66 characters. Only a
 group ID in the address distinguishes them, which is why `resolve` exists
 and why the UI asks before it offers an action.
+
+### Discovery catalog
+
+A channel is the one thing here that is useless without discovery: a group
+gets its members from people who already know each other, but a channel
+wants an audience it has not met. So a visor can publish a catalog of its
+own groups and channels, and anyone holding its public key can ask:
+
+```bash
+skywire cli skychat group publish <group-id> on   # opt in (admin-only)
+skywire cli skychat group catalog <host-pk>       # ask a visor
+skywire cli skychat group catalog                 # see your own listing
+```
+
+**Opt-in, off by default, and that direction is load-bearing.** The catalog
+is the only mechanism in skychat that turns one public key into a *list*, so
+an entry has to be asked for — nothing a visor hosts becomes enumerable
+because somebody didn't read a checkbox, and existing records stay unlisted
+across the upgrade.
+
+`Listed` is **local and not gossiped**: it says what *this* visor answers
+questions about, which is a hosting decision rather than a property of the
+group. Two admins of the same channel can legitimately differ on whether
+they advertise it, and neither can un-list the other's copy — which is
+honest, because they never could.
+
+It shares the well-known probe port but is a *separate frame*, not the same
+request with an empty field, because the two disclose different things: a
+probe confirms one 122-bit group ID the asker already held, while a catalog
+turns a key into a list. Entries carry no member count — a listing is an
+invitation to join, not a report on who already did.
+
+There is no network-wide index, no aggregator and no registration. A catalog
+is served by the host itself and answers only for the host's own groups, so
+discovering anything still starts from a public key a human gave you. That
+keeps the trust model identical to the rest of skychat while removing the
+part that was actually painful: needing a fresh invite link per person for
+something meant to be public.
+
+In the browser UI this surfaces where it is useful rather than as a separate
+screen — entering a public key in **Add by address** also lists the channels
+that visor publishes, and tapping one fills the field so it is confirmed
+through the same path as a pasted address. Nothing is joined by tapping a
+row in a list.
 
 Groups are built on top of CXO TreeStore feeds. The owner publishes
 the canonical group feed; members subscribe and (post-#2539)

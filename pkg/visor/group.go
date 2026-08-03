@@ -72,6 +72,11 @@ type GroupInfo struct {
 	// negative to render a checkbox.
 	PeerBackfill bool `json:"peer_backfill"`
 
+	// Listed reports whether THIS visor publishes the group in its
+	// discovery catalog. Local, not gossiped — another admin's copy of the
+	// same group carries its own answer. See skychatgroup.Record.Listed.
+	Listed bool `json:"listed,omitempty"`
+
 	// KeyEpoch is the generation of the key this group currently encrypts
 	// with — 0 for a plaintext group or one still on its create-time key,
 	// incremented by every rotation. Surfaced so an operator can see that
@@ -268,6 +273,11 @@ type GroupCreateArgs struct {
 	// own inverted field. An admin can change it later with
 	// GroupSetPeerBackfill.
 	DisablePeerBackfill bool `json:"disable_peer_backfill,omitempty"`
+
+	// Listed opts the new group into this visor's discovery catalog. The
+	// zero value keeps it unlisted, which is the private direction — see
+	// skychatgroup.Record.Listed for why that default matters.
+	Listed bool `json:"listed,omitempty"`
 }
 
 // kind resolves the group type from either field, defaulting to public.
@@ -432,7 +442,8 @@ func (v *Visor) GroupCreate(args GroupCreateArgs) (GroupInfo, string, error) {
 		return GroupInfo{}, "", ErrGroupingDisabled
 	}
 	r, err := mgr.Create(args.Name, args.kind(), args.InitialMembers,
-		skychatgroup.WithPeerBackfill(!args.DisablePeerBackfill))
+		skychatgroup.WithPeerBackfill(!args.DisablePeerBackfill),
+		skychatgroup.WithListed(args.Listed))
 	if err != nil {
 		return GroupInfo{}, "", err
 	}
@@ -908,6 +919,76 @@ func (v *Visor) GroupSetPeerBackfill(id string, enabled bool) (GroupInfo, error)
 	})
 }
 
+// GroupSetListed publishes (or un-publishes) a group in this visor's
+// discovery catalog. Admin-only, and local rather than gossiped — it says
+// what this visor answers questions about, not what the group is.
+func (v *Visor) GroupSetListed(id string, listed bool) (GroupInfo, error) {
+	return v.groupRosterOp(id, cipher.PubKey{}, func(mgr *skychatgroup.Manager) (skychatgroup.Record, error) {
+		return mgr.SetListed(id, listed)
+	})
+}
+
+// GroupCatalog asks a visor what groups and channels it publishes.
+//
+// Answered locally when host is this visor, so an operator can see their
+// own listing exactly as others would without a network round trip.
+func (v *Visor) GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return nil, false, ErrGroupingDisabled
+	}
+	var (
+		entries   []skychatgroup.CatalogEntry
+		truncated bool
+		err       error
+	)
+	if host == (cipher.PubKey{}) || host == v.conf.PK {
+		entries, truncated, err = mgr.Catalog()
+		// The local path returns records, which carry no Address — the
+		// remote path builds one from the host it dialed. Fill it in so
+		// both answers have the same shape.
+		for i := range entries {
+			entries[i].Address = skychataddr.Group(entries[i].HostPK, entries[i].ID).String()
+		}
+	} else {
+		ctx, cancel := context.WithTimeout(context.Background(), groupCatalogBudget)
+		defer cancel()
+		entries, truncated, err = mgr.FetchCatalog(ctx, host)
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	out := make([]GroupCatalogEntry, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, GroupCatalogEntry{
+			ID: e.ID, HostPK: e.HostPK, Name: e.Name, Kind: e.Kind,
+			Mode: e.Mode, Policy: e.Policy, PriceHint: e.PriceHint,
+			Address: e.Address,
+		})
+	}
+	return out, truncated, nil
+}
+
+// groupCatalogBudget caps one catalog fetch. Sits under a user watching a
+// list appear, so it is tight for the same reason groupResolveBudget is.
+const groupCatalogBudget = 15 * time.Second
+
+// GroupCatalogEntry is the RPC-facing shape of one discovered group.
+//
+// Port and PoWBits are deliberately absent: they are join mechanics the
+// visor uses internally, and a caller acts on Address, which carries
+// everything needed to join and nothing a UI has to understand.
+type GroupCatalogEntry struct {
+	ID        string                  `json:"id"`
+	HostPK    cipher.PubKey           `json:"host_pk"`
+	Name      string                  `json:"name"`
+	Kind      skychatgroup.Kind       `json:"kind"`
+	Mode      skychatgroup.Mode       `json:"mode"`
+	Policy    skychatgroup.JoinPolicy `json:"policy"`
+	PriceHint string                  `json:"price_hint,omitempty"`
+	Address   string                  `json:"address"`
+}
+
 // GroupRotateKey mints a new key for an encrypted group and hands it to
 // every current member, each copy sealed to that member's own PK.
 // Admin-only.
@@ -1048,6 +1129,12 @@ type GroupHistoryFetcher interface {
 	// ListByGroup returns up to limit most recent messages for the
 	// named group, newest last. Limit <= 0 returns all stored.
 	ListByGroup(groupID string, limit int) ([]GroupMessage, error)
+	// ListGroupBefore returns up to limit messages strictly older than
+	// `before`, newest last — the backward page cursor that lets a
+	// client walk a large channel's backlog a chunk at a time instead
+	// of pulling all of it to show anything. A zero `before` means
+	// "from the newest", so it doubles as the first page.
+	ListGroupBefore(groupID string, before time.Time, limit int) ([]GroupMessage, error)
 	// Groups returns the set of group IDs that have any stored
 	// messages — useful for operator inspection ('cli skychat group
 	// history --list-groups' style introspection).
@@ -1067,13 +1154,33 @@ type GroupHistoryFetcher interface {
 // in-memory ring buffer — operators can recover messages across visor
 // restarts.
 func (v *Visor) GroupHistory(groupID string, limit int) ([]GroupMessage, error) {
+	return v.GroupHistoryPage(GroupHistoryPageArgs{GroupID: groupID, Limit: limit})
+}
+
+// GroupHistoryPage is GroupHistory with a backward cursor: up to Limit
+// messages strictly older than Before, newest last.
+//
+// A zero Before asks for the newest page, so a client's first call and its
+// subsequent "older, please" calls are the same request with the oldest
+// timestamp it holds filled in. That is the whole mechanism behind reading
+// a channel's backlog in chunks — see history.Store.ListGroupBefore.
+func (v *Visor) GroupHistoryPage(args GroupHistoryPageArgs) ([]GroupMessage, error) {
 	v.initLock.RLock()
 	hist := v.grouping.history
 	v.initLock.RUnlock()
 	if hist == nil {
 		return nil, ErrGroupHistoryDisabled
 	}
-	return hist.ListByGroup(groupID, limit)
+	return hist.ListGroupBefore(args.GroupID, args.Before, args.Limit)
+}
+
+// GroupHistoryPageArgs is the RPC input for GroupHistoryPage.
+type GroupHistoryPageArgs struct {
+	GroupID string `json:"group_id"`
+	// Before is the exclusive upper bound — the oldest message the caller
+	// already has. Zero means "the newest page".
+	Before time.Time `json:"before,omitempty"`
+	Limit  int       `json:"limit,omitempty"`
 }
 
 // GroupHistoryGroups lists every group ID that has stored messages.
@@ -1128,6 +1235,7 @@ func toInfo(r skychatgroup.Record) GroupInfo {
 		Muted:         append([]cipher.PubKey(nil), r.Muted...),
 		ReadOnly:      r.ReadOnly,
 		PeerBackfill:  r.PeerBackfillEnabled(),
+		Listed:        r.Listed,
 		JoinPoWBits:   r.JoinPoWRequired(),
 		KeyEpoch:      r.KeyEpoch,
 		Role:          r.Role,
