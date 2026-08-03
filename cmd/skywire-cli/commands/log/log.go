@@ -167,93 +167,103 @@ var logCmd = &cobra.Command{
 		// Get visors data
 		var wg sync.WaitGroup
 		for _, v := range uptimes {
-			//only attempt to fetch from online visors
-			if v.Online {
-				if fetchFile == "" {
-					if v.Version == "" {
-						log.Warnf("The version for visor %s is blank", v.PubKey)
-						continue
-					}
-					includeV := contains(incVerList, v.Version)
-					visorVersion, err := version.NewVersion(v.Version)
-					if err != nil {
-						if !includeV {
-							log.Warnf("The version %s for visor %s is not valid", v.Version, v.PubKey)
-							continue
-						}
-						// Version in include list but can't be parsed - skip version comparison
-						log.Debugf("Including visor %s with unparseable version %s", v.PubKey, v.Version)
-					} else if !allVisors && visorVersion.LessThan(minimumVersion) && !includeV {
-						log.Warnf("The version %s for visor %s does not satisfy our minimum version condition", v.Version, v.PubKey)
-						continue
-					}
-					wg.Add(1)
-					go func(key string, wg *sync.WaitGroup, vver *version.Version) {
-						httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
-						defer httpC.CloseIdleConnections()
-						defer wg.Done()
+			// Attempt collection from EVERY visor the uptime tracker saw today, not
+			// only those currently flagged Online. A visor can meet the daily uptime
+			// bar yet read Online=false at the instant we poll (transient transport/
+			// heartbeat churn); gating on that instantaneous flag SILENTLY dropped such
+			// a visor from collection, so a demonstrably-up, reward-eligible visor could
+			// earn uptime but have no survey — and thus no reward — with nothing logged.
+			// The /health fetch below doubles as the reachability check (a genuinely
+			// offline visor just fails it) AND supplies the authoritative version, so the
+			// online flag is no longer load-bearing here. (The survey-push redesign will
+			// invert this entirely; this keeps the pull correct in the interim.)
 
-						deleteOnError := false
-						if _, err := os.ReadDir(key); err != nil {
-							if err := os.Mkdir(key, 0750); err != nil {
-								log.Errorf("Unable to create directory for visor %s", key)
-								return
-							}
-							deleteOnError = true
+			// Omit the filters if a specific file was requested.
+			if fetchFile != "" {
+				wg.Add(1)
+				go func(key string, wg *sync.WaitGroup) {
+					httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
+					defer httpC.CloseIdleConnections()
+					defer wg.Done()
+					if _, err := os.ReadDir(key); err != nil {
+						if err := os.Mkdir(key, 0750); err != nil {
+							log.Errorf("Unable to create directory for visor %s", key)
+							return
 						}
-						// health check before downloading anything else
-						// delete that folder if the health check fails
-						err = download(ctx, log, httpC, "health", "health.json", key, maxFileSize)
-						if err != nil {
-							if deleteOnErrors {
-								if deleteOnError {
-									bulkFolders = append(bulkFolders, key)
-								}
-								return
-							}
-						}
-						if !logOnly {
-							// vver may be nil for unparseable versions included via --include-versions flag
-							// In that case, skip version-based API selection and use the current API
-							if vver != nil && vver.LessThan(fver) {
-								download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
-							} else {
-								// Check survey checksum before downloading — skip if unchanged
-								// Falls back to full download if visor doesn't support checksum endpoint
-								if !surveyUnchanged(ctx, log, &httpC, key) {
-									download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
-								}
-							}
-						}
-						if !surveyOnly {
-							for i := 0; i <= duration; i++ {
-								date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
-								download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint:errcheck,gosec
-							}
-						}
-					}(v.PubKey, &wg, visorVersion)
-					batchSize--
-					if batchSize == 0 {
-						time.Sleep(15 * time.Second)
-						batchSize = 50
+					}
+					_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize) //nolint:errcheck
+				}(v.PubKey, &wg)
+				continue
+			}
+
+			wg.Add(1)
+			go func(key string, wg *sync.WaitGroup) {
+				httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
+				defer httpC.CloseIdleConnections()
+				defer wg.Done()
+
+				deleteOnError := false
+				if _, err := os.ReadDir(key); err != nil {
+					if err := os.Mkdir(key, 0750); err != nil {
+						log.Errorf("Unable to create directory for visor %s", key)
+						return
+					}
+					deleteOnError = true
+				}
+				// Health check first — also the reachability gate. An unreachable or
+				// offline visor fails here and is skipped (nothing to collect, and we
+				// can't read its version). This replaces the old uptime-tracker online
+				// flag as the "is it up right now" signal.
+				if err := download(ctx, log, httpC, "health", "health.json", key, maxFileSize); err != nil {
+					log.Debugf("visor %s unreachable (health fetch failed) — skipping", key)
+					if deleteOnErrors && deleteOnError {
+						bulkFolders = append(bulkFolders, key)
+					}
+					return
+				}
+				// Authoritative version gate from the visor's OWN /health
+				// (build_info.version). Survey collection IS the version-eligibility gate
+				// downstream — version is not re-checked at calc time — so an ineligible-
+				// version visor must NOT have its survey stored. Reading the version here
+				// rather than from the uptime tracker keeps collection self-contained now
+				// that it no longer depends on the UT online snapshot.
+				healthVer := parseHealthVersion(key + "/health.json")
+				includeV := contains(incVerList, healthVer)
+				vver, verr := version.NewVersion(healthVer)
+				eligible := true
+				switch {
+				case healthVer == "" && !includeV:
+					log.Warnf("The version for visor %s is blank in /health — skipping survey", key)
+					eligible = false
+				case verr != nil && !includeV:
+					log.Warnf("The version %q for visor %s (from /health) is not valid — skipping survey", healthVer, key)
+					eligible = false
+				case verr == nil && !allVisors && vver.LessThan(minimumVersion) && !includeV:
+					log.Warnf("The version %s for visor %s does not satisfy our minimum version condition — skipping survey", healthVer, key)
+					eligible = false
+				}
+				if !logOnly && eligible {
+					// vver may be nil for unparseable versions included via
+					// --include-versions; then use the current node-info API.
+					if vver != nil && vver.LessThan(fver) {
+						download(ctx, log, httpC, "node-info.json", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
+					} else if !surveyUnchanged(ctx, log, &httpC, key) {
+						// checksum unchanged → skip; falls back to a full download if the
+						// visor doesn't support the checksum endpoint.
+						download(ctx, log, httpC, "node-info", "node-info.json", key, maxFileSize) //nolint:errcheck,gosec
 					}
 				}
-				//omit the filters if a file was specified
-				if fetchFile != "" {
-					wg.Add(1)
-					go func(key string, wg *sync.WaitGroup) {
-						httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
-						defer httpC.CloseIdleConnections()
-						defer wg.Done()
-						if _, err := os.ReadDir(key); err != nil {
-							if err := os.Mkdir(key, 0750); err != nil {
-								log.Errorf("Unable to create directory for visor %s", key)
-								return
-							}
-						}
-						_ = download(ctx, log, httpC, fetchFile, fetchFile, key, maxFileSize) //nolint:errcheck
-					}(v.PubKey, &wg)
+				if !surveyOnly {
+					for i := 0; i <= duration; i++ {
+						date := time.Now().AddDate(0, 0, -i).UTC().Format("2006-01-02")
+						download(ctx, log, httpC, date+".csv", date+".csv", key, maxFileSize) //nolint:errcheck,gosec
+					}
 				}
+			}(v.PubKey, &wg)
+			batchSize--
+			if batchSize == 0 {
+				time.Sleep(15 * time.Second)
+				batchSize = 50
 			}
 		}
 
@@ -286,6 +296,26 @@ var logCmd = &cobra.Command{
 
 		log.Infof("Total Process Duration: %s", time.Since(start))
 	},
+}
+
+// parseHealthVersion reads a downloaded health.json and returns the visor's
+// build_info.version. Empty string on any read/parse failure. This is the
+// authoritative version for reward eligibility: it comes from the visor's own
+// running binary (/health), not the uptime tracker's possibly-stale report.
+func parseHealthVersion(path string) string {
+	data, err := os.ReadFile(path) //nolint:gosec
+	if err != nil {
+		return ""
+	}
+	var doc struct {
+		BuildInfo struct {
+			Version string `json:"version"`
+		} `json:"build_info"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return ""
+	}
+	return doc.BuildInfo.Version
 }
 
 // surveyUnchanged checks if the remote survey checksum matches the local file.
