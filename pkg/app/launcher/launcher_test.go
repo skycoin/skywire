@@ -69,10 +69,18 @@ func TestRegistry(t *testing.T) {
 	require.NoError(t, got(context.Background(), nil))
 	require.True(t, called)
 
-	// Re-registering the same name panics.
-	require.Panics(t, func() {
-		RegisterApp("registry-test-app", fn)
-	})
+	// Re-registering replaces the function so visor resume can initialize
+	// embedded apps again.
+	replacementCalled := false
+	replacement := func(_ context.Context, _ []string) error {
+		replacementCalled = true
+		return nil
+	}
+	RegisterApp("registry-test-app", replacement)
+	got, ok = GetApp("registry-test-app")
+	require.True(t, ok)
+	require.NoError(t, got(context.Background(), nil))
+	require.True(t, replacementCalled)
 }
 
 func TestExpandHome(t *testing.T) {

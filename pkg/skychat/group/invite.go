@@ -45,6 +45,19 @@ type Invite struct {
 	Port    uint16        `json:"port"`
 	Mode    Mode          `json:"mode"`
 
+	// Kind is the group type, carried because Mode alone can no longer
+	// name it: a public group and a channel are both ModePublic, and
+	// differ only in who may publish. Without this a channel joined
+	// from a link would come up as an ordinary public group and its
+	// members' composers would be unlocked.
+	//
+	// Absent in links minted before channels existed; a joiner reading
+	// one derives the kind from Mode, which is exactly the old
+	// behavior. Untrusted like the rest of the link, and cross-checked
+	// against Mode on decode — the group's own answer to the join
+	// request is what a joiner ultimately records.
+	Kind Kind `json:"kind,omitempty"`
+
 	// Admins are further PKs with roster authority that a joiner may ask
 	// for admission when the founder doesn't answer. Excludes OwnerPK,
 	// which is carried above and is always tried first.
@@ -111,6 +124,9 @@ func EncodeInvite(inv Invite) (string, error) {
 	if inv.Mode == ModePublic && len(inv.AESKey) > 0 {
 		return "", fmt.Errorf("group invite: public mode must not carry an AES key")
 	}
+	if err := checkInviteKind(inv); err != nil {
+		return "", err
+	}
 	body, err := json.Marshal(inv)
 	if err != nil {
 		return "", fmt.Errorf("group invite: marshal: %w", err)
@@ -144,6 +160,9 @@ func DecodeInvite(s string) (Invite, error) {
 	if inv.Mode == ModePublic && len(inv.AESKey) > 0 {
 		return Invite{}, fmt.Errorf("group invite: public mode must not carry an AES key")
 	}
+	if err := checkInviteKind(inv); err != nil {
+		return Invite{}, err
+	}
 	if inv.ID == "" {
 		return Invite{}, fmt.Errorf("group invite: empty ID")
 	}
@@ -155,6 +174,38 @@ func DecodeInvite(s string) (Invite, error) {
 	}
 	inv.PoWBits = clampJoinPoWBits(inv.PoWBits)
 	return inv, nil
+}
+
+// checkInviteKind validates the optional Kind field against Mode.
+//
+// An empty Kind is fine — that is a link from before channels existed,
+// and the reader derives the kind from Mode. A Kind that IS present has
+// to agree with Mode, because the two are read by different code paths:
+// Mode decides whether bodies are decrypted, Kind decides who may post.
+// A link asserting kind=private/mode=public would produce a record that
+// expects encrypted bodies on a plaintext feed and never renders
+// anything, so it is rejected here rather than persisted.
+func checkInviteKind(inv Invite) error {
+	if inv.Kind == "" {
+		return nil
+	}
+	if !inv.Kind.IsValid() {
+		return fmt.Errorf("group invite: invalid kind %q", inv.Kind)
+	}
+	if modeForKind(inv.Kind) != inv.Mode {
+		return fmt.Errorf("group invite: kind %q does not match mode %q", inv.Kind, inv.Mode)
+	}
+	return nil
+}
+
+// InviteKind returns the group type this invite names, falling back to
+// what Mode implies for links minted before Kind was carried. The single
+// accessor callers should use so the legacy fallback lives in one place.
+func (inv Invite) InviteKind() Kind {
+	if inv.Kind == "" {
+		return kindForMode(inv.Mode)
+	}
+	return inv.Kind
 }
 
 // GenerateAESKey returns a fresh 32-byte key sourced from

@@ -92,6 +92,27 @@ func (a *groupAPI) GroupHistory(id string, _ int) ([]visor.GroupMessage, error) 
 	return []visor.GroupMessage{{GroupID: id, Text: "old", TS: time.Now().UTC()}}, nil
 }
 
+// GroupHistoryPage is what the /group/<id>/history route actually calls now
+// that history is paged. Answered from the same `history` field, filtered by
+// the Before cursor so a test can exercise paging without a real store:
+// without the filter a scroll-back would return the same page forever.
+func (a *groupAPI) GroupHistoryPage(args visor.GroupHistoryPageArgs) ([]visor.GroupMessage, error) {
+	msgs, err := a.GroupHistory(args.GroupID, args.Limit)
+	if err != nil {
+		return nil, err
+	}
+	if args.Before.IsZero() {
+		return msgs, nil
+	}
+	out := make([]visor.GroupMessage, 0, len(msgs))
+	for _, m := range msgs {
+		if m.TS.Before(args.Before) {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
 func TestGroupRootHandler_ListAndCreate(t *testing.T) {
 	fake := &groupAPI{groups: []visor.GroupInfo{{ID: "a", Name: "one"}, {ID: "b", Name: "two"}}}
 	withFakePairRPC(t, fake)

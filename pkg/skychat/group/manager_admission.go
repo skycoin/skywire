@@ -374,9 +374,14 @@ func (m *Manager) admissionHandler(id string) JoinRequestHandler {
 // approved and nobody else.
 func (m *Manager) admittedResponse(r Record) JoinResponseMsg {
 	resp := JoinResponseMsg{
-		Status:               JoinStatusAdmitted,
-		GroupID:              r.ID,
-		Name:                 r.Name,
+		Status:  JoinStatusAdmitted,
+		GroupID: r.ID,
+		Name:    r.Name,
+		// Authoritative over the link. A channel admits like a public
+		// group, so without this the joiner would record KindPublic and
+		// come up with an unlocked composer on a feed whose other members
+		// drop non-admin leaves.
+		GroupKind:            r.Kind,
 		Members:              append([]cipher.PubKey(nil), r.Members...),
 		Admins:               append([]cipher.PubKey(nil), r.Admins...),
 		Muted:                append([]cipher.PubKey(nil), r.Muted...),
@@ -666,7 +671,16 @@ func (m *Manager) SetJoinPoW(id string, bits uint8) (Record, error) {
 //
 // The live session's subscription set is re-evaluated either way, so the
 // change takes effect now rather than at the next restart.
+//
+// Refused outright on a channel. PeerBackfillEnabled is unconditionally
+// false there (a subscriber has nothing of its own to serve), so accepting
+// the call would gossip a signed state change to every member and change
+// nothing — an admin would be told the setting took, and it would not
+// have. An error is the honest answer.
 func (m *Manager) SetPeerBackfill(id string, enabled bool) (Record, error) {
+	if r, ok, err := m.store.Get(id); err == nil && ok && r.IsChannel() {
+		return Record{}, errors.New("group: SetPeerBackfill: a channel always serves history from its admins; this setting does not apply")
+	}
 	op := ModOpPeerBackfillOff
 	if enabled {
 		op = ModOpPeerBackfillOn
@@ -878,7 +892,7 @@ func (m *Manager) recordFromInvite(inv Invite, resp JoinResponseMsg) Record {
 		AdmissionPKs:         append([]cipher.PubKey(nil), inv.Admins...),
 		Port:                 inv.Port,
 		Mode:                 inv.Mode,
-		Kind:                 kindForMode(inv.Mode),
+		Kind:                 joinedKind(inv, resp),
 		AESKey:               key,
 		KeyEpoch:             resp.KeyEpoch,
 		Members:              members,
@@ -891,6 +905,28 @@ func (m *Manager) recordFromInvite(inv Invite, resp JoinResponseMsg) Record {
 	}
 	r.EnsureFounderInAdmins()
 	return r
+}
+
+// joinedKind decides which Kind a freshly-joined member-side record
+// takes: the group's own answer first, then the invite link, then what
+// Mode implies for a responder and a link that both predate channels.
+//
+// Either source is only accepted when modeForKind agrees with the Mode
+// the record is actually being built with. Mode governs decryption and
+// Kind governs posting, and a record whose two halves disagree either
+// tries to decrypt a plaintext feed or posts into a channel — so a
+// mismatch falls back to the Mode-derived kind rather than being
+// persisted. The mismatch is unreachable through honest peers (both
+// sides compute Kind and Mode from the same table); this exists because
+// the invite is attacker-supplied text and the response arrives before
+// there is any group state to check it against.
+func joinedKind(inv Invite, resp JoinResponseMsg) Kind {
+	for _, k := range []Kind{resp.GroupKind, inv.Kind} {
+		if k.IsValid() && modeForKind(k) == inv.Mode {
+			return k
+		}
+	}
+	return kindForMode(inv.Mode)
 }
 
 // openAdmitted brings up the session for a freshly-admitted member and
@@ -939,7 +975,7 @@ func (m *Manager) legacyJoin(inv Invite) (Record, error) {
 		OwnerPK:   inv.OwnerPK,
 		Port:      inv.Port,
 		Mode:      inv.Mode,
-		Kind:      kindForMode(inv.Mode),
+		Kind:      joinedKind(inv, JoinResponseMsg{}),
 		AESKey:    inv.AESKey,
 		Members:   []cipher.PubKey{inv.OwnerPK, m.myPK},
 		Role:      RoleMember,

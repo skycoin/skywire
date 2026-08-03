@@ -189,10 +189,17 @@ func (s *Store) Put(r Record) error {
 		b := tx.Bucket([]byte(groupsBucket))
 		if raw := b.Get([]byte(r.ID)); raw != nil {
 			var prev Record
-			// Watermarks are not sealed, so the raw JSON is enough here and
-			// a record we cannot open still contributes its watermarks.
+			// Watermarks and Kind are not sealed, so the raw JSON is enough
+			// here and a record we cannot open still contributes its
+			// watermarks.
 			if err := json.Unmarshal(raw, &prev); err == nil {
 				r.MutationSeen = mergeWatermarks(prev.MutationSeen, r.MutationSeen)
+				// Enforced here rather than in each caller because this is
+				// the one chokepoint every write goes through — see
+				// checkKindStable for why a channel must stay one.
+				if err := checkKindStable(r.ID, prev.Kind, r.Kind); err != nil {
+					return err
+				}
 			}
 		}
 		body, err := s.encodeRecord(r)
