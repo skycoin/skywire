@@ -101,32 +101,6 @@
       animation: none;
     }
 
-    .recipient-form {
-      display: flex;
-      gap: 8px;
-    }
-
-    .recipient-form input[type="text"] {
-      flex: 1;
-      padding: 10px 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      color: var(--text-primary);
-      font-size: 13px;
-      transition: border-color 0.2s, box-shadow 0.2s;
-    }
-
-    .recipient-form input[type="text"]:focus {
-      outline: none;
-      border-color: var(--accent-blue);
-      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
-    }
-
-    .recipient-form input[type="text"]::placeholder {
-      color: var(--text-muted);
-    }
-
     .btn {
       padding: 10px 16px;
       background: var(--accent-blue);
@@ -144,11 +118,6 @@
 
     .btn:active {
       transform: scale(0.98);
-    }
-
-    .btn-icon {
-      padding: 10px 12px;
-      font-size: 16px;
     }
 
     /* Recipient List */
@@ -1479,8 +1448,201 @@
       background: var(--text-muted);
     }
 
-    /* Responsive */
-    @media (max-width: 768px) {
+    /* ---- Compose button + its three-option menu ------------------ */
+
+    .start-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      background: var(--accent-blue);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    .start-btn:hover { background: #0284c7; }
+    .start-btn:active { transform: scale(0.95); }
+
+    .start-menu {
+      position: fixed;
+      z-index: 120;
+      min-width: 250px;
+      padding: 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .start-menu.visible { display: flex; }
+
+    .start-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 10px 12px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: var(--text-primary);
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+
+    .start-item:hover { background: var(--bg-hover); }
+
+    .si-icon { font-size: 18px; line-height: 1; flex: 0 0 auto; }
+    .si-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .si-title { font-size: 14px; font-weight: 500; }
+    .si-sub { font-size: 11px; color: var(--text-muted); }
+
+    /* ---- Back button (one-pane layout only) ---------------------- */
+
+    .back-btn {
+      display: none;   /* shown by the one-pane media query */
+      align-items: center;
+      justify-content: center;
+      width: 34px;
+      height: 34px;
+      flex: 0 0 auto;
+      margin-right: 2px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    .back-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    /* ---- Add-by-address dialog ----------------------------------- */
+
+    .addr-scan-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .btn-slim {
+      flex: 1;
+      padding: 8px 10px;
+      font-size: 12px;
+      text-align: center;
+      /* The "From image" control is a <label> wrapping a hidden file
+         input, so it needs the pointer and centring a <button> gets for
+         free. */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .addr-scanner {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .addr-scanner.hidden { display: none; }
+
+    .addr-scanner video {
+      width: 100%;
+      max-height: 240px;
+      background: #000;
+      border-radius: 10px;
+      object-fit: cover;
+    }
+
+    .addr-result {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+    }
+
+    .addr-result.hidden { display: none; }
+    .addr-result.pending { opacity: 0.6; }
+    .addr-result.bad { border-color: var(--accent-red); }
+
+    .ar-avatar {
+      width: 40px;
+      height: 40px;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--bg-hover);
+      font-size: 18px;
+    }
+
+    .ar-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .ar-title { font-size: 14px; font-weight: 500; word-break: break-all; }
+    .ar-sub { font-size: 11px; color: var(--text-secondary); }
+    .ar-sub.warn { color: var(--accent-orange); }
+    .ar-sub.bad { color: var(--accent-red); }
+
+    /* ---- Address QR ---------------------------------------------- */
+
+    .qr-wrap {
+      display: flex;
+      justify-content: center;
+      padding: 14px;
+      margin-bottom: 14px;
+      /* White quiet zone regardless of theme: scanners expect a light
+         background around the modules, and the panel colour is dark. */
+      background: #fff;
+      border-radius: 12px;
+    }
+
+    #qrCanvas {
+      width: 100%;
+      max-width: 264px;
+      height: auto;
+      image-rendering: pixelated;   /* keep module edges crisp when scaled */
+    }
+
+    .qr-addr-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .qr-addr {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 12px;
+      background: var(--bg-tertiary);
+      border-radius: 8px;
+      font-family: 'Monaco', 'Menlo', monospace;
+      font-size: 11px;
+      color: var(--text-secondary);
+      word-break: break-all;
+      /* Selectable on purpose — copy-by-hand is the fallback when the
+         clipboard API is unavailable (it needs a secure context). */
+      user-select: all;
+    }
+
+    /* ---- Responsive ---------------------------------------------- */
+
+    @media (max-width: 900px) and (min-width: 761px) {
       .sidebar {
         width: 280px;
         min-width: 280px;
@@ -1489,6 +1651,57 @@
       .message-bubble {
         max-width: 85%;
       }
+    }
+
+    /* One-pane layout. Below this width the sidebar and the chat no
+       longer share the screen: the list IS the screen until a
+       conversation is opened, and the chat then replaces it with a back
+       button in its header. Two 300px-ish panes side by side on a phone
+       leaves neither usable.
+       761px rather than 768px so the common 768px tablet portrait width
+       keeps the two-pane layout it has room for. */
+    @media (max-width: 760px) {
+      .sidebar {
+        width: 100%;
+        min-width: 0;
+        border-right: none;
+      }
+
+      /* body.chat-open is set by the JS when a conversation is opened
+         and cleared on the way back, so exactly one pane is ever
+         displayed. Driven by a class rather than by which elements
+         happen to be hidden, because the chat pane's own children are
+         independently toggled by the existing DM/group logic. */
+      body.chat-open .sidebar { display: none; }
+      body:not(.chat-open) .chat-container { display: none; }
+
+      .back-btn { display: flex; }
+
+      .chat-header { padding: 10px 12px; }
+      .chat-header-actions { gap: 4px; }
+      .message-bubble { max-width: 90%; }
+
+      /* The action button leaves the header flow and becomes a
+         thumb-reachable floating button, bottom right. Same element — the
+         fixed positioning takes it out of the title row it sat in. */
+      .start-btn {
+        position: fixed;
+        right: 16px;
+        bottom: 20px;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        z-index: 90;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+      }
+
+      /* Hidden while a chat is open: the button starts things from the
+         list, and over a conversation it would cover the composer. */
+      body.chat-open .start-btn { display: none; }
+
+      .start-btn svg { width: 26px; height: 26px; }
+
+      .start-menu { min-width: 220px; }
     }
 
     /* Groups */
@@ -1506,22 +1719,6 @@
       text-transform: uppercase;
       color: var(--accent-green);
     }
-
-    .groups-actions { display: flex; gap: 4px; }
-
-    .group-hdr-btn {
-      background: transparent;
-      border: 1px solid var(--border-color);
-      color: var(--text-secondary);
-      font-size: 13px;
-      width: 22px;
-      height: 22px;
-      border-radius: 4px;
-      cursor: pointer;
-      line-height: 1;
-    }
-
-    .group-hdr-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
 
     .group-list { list-style: none; }
 
@@ -1868,6 +2065,21 @@
           <span id="statusText">Connected</span>
         </div>
         <button class="icon-btn" style="margin-left:auto" onclick="app.openNotifSettings()" title="Notification settings" aria-label="Notification settings">&#x1F514;</button>
+        <!-- The one entry point for starting anything: an address (person,
+             group or channel), a new group, or a new channel. Sits here on
+             a wide screen and becomes a fixed bottom-right action button
+             on a phone, where the top of the screen is the hardest place
+             to reach with a thumb — one element repositioned by the
+             one-pane media query, not two in the DOM. -->
+        <button id="startBtn" class="start-btn" onclick="app.toggleStartMenu(event)"
+                title="Start a chat, group or channel" aria-label="Start a chat, group or channel"
+                aria-haspopup="true" aria-expanded="false">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
+        </button>
       </div>
       <!-- First-run permission nudge. Hidden by default and only shown by
            _refreshNotifNudge when notifications are enabled but the browser has
@@ -1878,10 +2090,6 @@
         <button class="nn-allow" onclick="app.allowNotifFromNudge()">Allow</button>
         <button class="nn-dismiss" onclick="app.dismissNotifNudge()" title="Don't ask again" aria-label="Dismiss">&times;</button>
       </div>
-      <form class="recipient-form" onsubmit="app.createRecipient(this); return false;">
-        <input id="destinationPk" type="text" placeholder="Enter public key..." />
-        <button type="submit" class="btn btn-icon" title="Add contact">+</button>
-      </form>
     </div>
     <div id="pinnedSection" class="groups-section hidden">
       <div class="groups-header"><span>Pinned</span></div>
@@ -1893,11 +2101,7 @@
     </div>
     <div id="groupsSection" class="groups-section hidden">
       <div class="groups-header">
-        <span>Groups</span>
-        <div class="groups-actions">
-          <button class="group-hdr-btn" onclick="app.openCreateGroup()" title="Create group">+</button>
-          <button class="group-hdr-btn" onclick="app.openJoinGroup()" title="Join a group by invite">&#x2913;</button>
-        </div>
+        <span>Groups &amp; channels</span>
       </div>
       <ul id="groups" class="group-list"></ul>
     </div>
@@ -1907,6 +2111,14 @@
   <main class="chat-container">
     <div id="chatHeader" class="chat-header hidden">
       <div class="chat-header-info">
+        <!-- Shown only in the one-pane layout, where opening a chat
+             replaced the list and there is otherwise no way back to it. -->
+        <button class="back-btn" onclick="app.showChatList()" title="Back to chats" aria-label="Back to chats">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
         <div class="avatar-wrap">
           <img id="headerAvatar" class="chat-header-avatar" src="p.png" />
           <span id="headerPresenceDot" class="presence-dot"></span>
@@ -1923,6 +2135,11 @@
         <button id="dmPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
         <button id="dmMuteBtn" class="icon-btn" onclick="app.toggleMute()" title="Mute notifications for this chat" aria-label="Mute notifications">&#x1F514;</button>
         <button id="pairToggleBtn" class="icon-btn hidden" onclick="app.togglePair()" title="Pair / unpair via CXO">&#x29B5;</button>
+        <button class="icon-btn" onclick="app.showQr()" title="Show this chat's address as a QR code" aria-label="Show address QR code">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/>
+          </svg>
+        </button>
         <button class="icon-btn" onclick="app.copyPk()" title="Copy public key">&#x2398;</button>
         <button class="icon-btn" onclick="app.openSettings()" title="Contact settings">&#x2699;</button>
         <button class="icon-btn danger" onclick="app.deleteChat()" title="Delete chat" aria-label="Delete chat">
@@ -1938,7 +2155,13 @@
 
     <div id="groupHeader" class="chat-header hidden">
       <div class="chat-header-info">
-        <div class="group-avatar">#</div>
+        <button class="back-btn" onclick="app.showChatList()" title="Back to chats" aria-label="Back to chats">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <polyline points="15 18 9 12 15 6"></polyline>
+          </svg>
+        </button>
+        <div class="group-avatar" id="groupHeaderAvatar">#</div>
         <div>
           <div class="chat-header-pk" id="groupHeaderName">-</div>
           <div class="group-header-sub" id="groupHeaderSub"></div>
@@ -1946,6 +2169,11 @@
       </div>
       <div class="chat-header-actions">
         <button id="groupPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
+        <button class="icon-btn" onclick="app.showQr()" title="Show this group's address as a QR code" aria-label="Show address QR code">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/>
+          </svg>
+        </button>
         <button id="groupMuteBtn" class="icon-btn" onclick="app.toggleMute()" title="Mute notifications for this group" aria-label="Mute notifications">&#x1F514;</button>
         <button id="groupAdminBtn" class="icon-btn" onclick="app.openGroupAdmin()" title="Members and join requests" aria-label="Members and join requests">
           &#x1F465;<span id="groupPendingBadge" class="pending-badge hidden">0</span>
@@ -2020,6 +2248,34 @@
               oncontextmenu="return false"><span class="composer-icon">&#x27A4;</span></button>
     </form>
   </main>
+
+  <!-- Compose menu. A body-level child so nothing can clip it, and
+       positioned in JS from the button's own rect — that way the same
+       menu drops down from the sidebar header on a wide screen and rises
+       from the floating action button on a phone. -->
+  <div id="startMenu" class="start-menu" role="menu" aria-labelledby="startBtn">
+    <button class="start-item" role="menuitem" onclick="app.openAddressModal()">
+      <span class="si-icon">&#x1F517;</span>
+      <span class="si-text">
+        <span class="si-title">Add by address</span>
+        <span class="si-sub">Public key, skychat:// link, invite or QR</span>
+      </span>
+    </button>
+    <button class="start-item" role="menuitem" onclick="app.openCreateGroup()">
+      <span class="si-icon">&#x1F465;</span>
+      <span class="si-text">
+        <span class="si-title">New group</span>
+        <span class="si-sub">Everyone in it can post</span>
+      </span>
+    </button>
+    <button class="start-item" role="menuitem" onclick="app.openCreateChannel()">
+      <span class="si-icon">&#x1F4E3;</span>
+      <span class="si-text">
+        <span class="si-title">New channel</span>
+        <span class="si-sub">Open to join, only admins post</span>
+      </span>
+    </button>
+  </div>
 
   <!-- Settings Modal -->
   <div id="settingsModal" class="modal-overlay">
@@ -2148,14 +2404,95 @@
     </div>
   </div>
 
-  <!-- Join Group Modal -->
-  <div id="joinGroupModal" class="modal-overlay">
+  <!-- New Channel Modal. Separate from Create Group rather than a third
+       option in its mode select: a channel has no admission choice to
+       make (it is open by definition) and the thing an operator needs
+       told is who may post, which is a different sentence entirely. -->
+  <div id="createChannelModal" class="modal-overlay">
     <div class="modal">
-      <h3>Join Group</h3>
-      <input id="jgInvite" class="cg-input" type="text" placeholder="Paste invite link (skychat:invite:...)" />
+      <h3>New Channel</h3>
+      <input id="ccName" class="cg-input" type="text" placeholder="Channel name" />
+      <p class="cg-help">
+        Anyone with the address or invite link can join and read. Only
+        admins can post — members cannot reply on the channel itself.
+        Messages are not encrypted on the feed: admission is open, so the
+        key would go to anyone who asked and would protect nothing.
+        Traffic is still encrypted in transit.
+      </p>
+      <label class="cg-check">
+        <input type="checkbox" id="ccPeerBackfill" checked />
+        <span>Any member can share history with new members</span>
+      </label>
+      <p class="cg-help">
+        Off means only admins can, so the channel goes quiet for new
+        joiners whenever no admin is online.
+      </p>
       <div class="modal-actions">
-        <button class="btn" onclick="app.joinGroup()">Join</button>
-        <button class="btn btn-secondary" onclick="app.closeModal('joinGroupModal')">Cancel</button>
+        <button class="btn" onclick="app.createChannel()">Create</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('createChannelModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add by address: one field for every way of naming something —
+       a bare public key, a skychat:// address, an invite link, or a
+       scanned QR code. What it turns out to be decides which single
+       action button appears, so the user never has to pick the right
+       kind of thing first. -->
+  <div id="addressModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Add by address</h3>
+      <input id="addrInput" class="cg-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Public key, skychat://… or invite link"
+             oninput="app.onAddressInput()"
+             onkeydown="if (event.key === 'Enter') app.addressAction()" />
+      <div class="addr-scan-row">
+        <button class="btn btn-secondary btn-slim" onclick="app.startQrScan()">
+          &#x1F4F7; Scan QR code
+        </button>
+        <label class="btn btn-secondary btn-slim" title="Read a QR code from a saved image">
+          &#x1F5BC; From image
+          <input type="file" id="addrQrFile" accept="image/*" style="display:none"
+                 onchange="app.scanQrFile(event)" />
+        </label>
+      </div>
+
+      <!-- Live camera scanner. Collapsed until Scan is pressed so the
+           permission prompt only happens on a deliberate action. -->
+      <div id="addrScanner" class="addr-scanner hidden">
+        <video id="addrScanVideo" playsinline muted></video>
+        <button class="btn btn-secondary btn-slim" onclick="app.stopQrScan()">Stop scanning</button>
+      </div>
+
+      <!-- What the address resolved to, and the one action that follows. -->
+      <div id="addrResult" class="addr-result hidden"></div>
+      <p id="addrHint" class="cg-help"></p>
+
+      <div class="modal-actions">
+        <button id="addrActionBtn" class="btn hidden" onclick="app.addressAction()">Start Chat</button>
+        <button class="btn btn-secondary" onclick="app.closeAddressModal()">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Address QR. The plain text sits under the code and is selectable,
+       with a copy button beside it: a QR is unusable for anyone reading
+       over a screen share, pasting into a terminal, or on a device with
+       no camera. -->
+  <div id="qrModal" class="modal-overlay">
+    <div class="modal">
+      <h3 id="qrTitle">Address</h3>
+      <div class="qr-wrap">
+        <canvas id="qrCanvas" width="264" height="264" aria-label="Address QR code"></canvas>
+      </div>
+      <div class="qr-addr-row">
+        <code id="qrAddrText" class="qr-addr">-</code>
+        <button class="icon-btn" onclick="app.copyQrAddress()" title="Copy address" aria-label="Copy address">&#x2398;</button>
+      </div>
+      <p class="cg-help" id="qrHelp"></p>
+      <div class="modal-actions">
+        <button id="qrInviteBtn" class="btn btn-secondary hidden" onclick="app.showGroupInvite()">Copy invite link instead</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('qrModal')">Close</button>
       </div>
     </div>
   </div>
@@ -3630,31 +3967,6 @@
         };
       }
 
-      createRecipient(el) {
-        const recipient = this.processPk(el[0].value.trim());
-
-        if (recipient.length !== 66) {
-          this.showToast('Public keys must be 66 characters long.', 'error');
-          return;
-        }
-
-        if (!/^[0-9a-fA-F]+$/.test(recipient)) {
-          this.showToast('Invalid characters in public key.', 'error');
-          return;
-        }
-
-        if (this.recipients.includes(recipient)) {
-          this.selectRecipient(recipient);
-          el[0].value = '';
-          return;
-        }
-
-        el[0].value = '';
-        this._addRecipient(recipient);
-        this.selectRecipient(recipient);
-        this.showToast('Contact added successfully.');
-      }
-
       // syncHistoryPeers seeds the sidebar with peers the visor has
       // stored history for but localStorage doesn't know about (fresh
       // browser, new device, cleared cache). 404/503 means the visor
@@ -3752,6 +4064,10 @@
       }
 
       selectRecipient(pk) {
+        // Before the no-op guard below: on a phone the list and the chat
+        // are the same screen, so re-tapping the chat you already had open
+        // still has to switch panes to it.
+        this._enterChatPane();
         if (this.recipient === pk && !this.group) return;
         this.cancelReply(); // a reply armed in another thread must not follow
         this.group = null;
@@ -5335,7 +5651,10 @@
       // do right now (awaiting approval, read-only, restricted).
       _groupSubtitle(g) {
         const parts = [g.role || 'member', `${(g.members || []).length} members`];
-        parts.push(g.join_policy === 'approval' ? 'private' : 'public');
+        // A channel's defining property is who may post, not who may join
+        // — saying "public" about it would describe the uninteresting half.
+        if (g.kind === 'channel') parts.push('channel · admins post');
+        else parts.push(g.join_policy === 'approval' ? 'private' : 'public');
         if (g.status === 'awaiting_approval') parts.push('waiting for approval');
         else if (g.status === 'denied') parts.push('request declined');
         else if (g.status === 'banned') parts.push('banned');
@@ -5353,7 +5672,7 @@
           const badge = pending > 0 ? `<span class="ga-badge">${pending}</span>` : '';
           li.innerHTML = `
             <div class="group-item ${g.id === this.group ? 'active' : ''}" data-gid="${g.id}" onclick="app.selectGroup('${g.id}')">
-              <div class="group-avatar-sm">#</div>
+              <div class="group-avatar-sm">${g.kind === 'channel' ? '&#x1F4E3;' : '#'}</div>
               <div class="recipient-info">
                 <div class="recipient-pk">${this.escapeHtml(g.name || g.id)} ${badge}</div>
                 <div class="recipient-preview">${this.escapeHtml(this._groupSubtitle(g))}</div>
@@ -5472,6 +5791,7 @@
       }
 
       selectGroup(id) {
+        this._enterChatPane();   // see selectRecipient
         this.cancelReply(); // a reply armed in another thread must not follow
         this.group = id;
         this.recipient = null;
@@ -5492,6 +5812,8 @@
         if (attachBtn) attachBtn.classList.remove('hidden');
 
         const info = this.groups.find(g => g.id === id);
+        const avatar = document.getElementById('groupHeaderAvatar');
+        if (avatar) avatar.textContent = (info && info.kind === 'channel') ? '📣' : '#';
         document.getElementById('groupHeaderName').textContent = info ? info.name : id;
         document.getElementById('groupHeaderSub').textContent = info
           ? this._groupSubtitle(info) : '';
@@ -5675,6 +5997,7 @@
       }
 
       openCreateGroup() {
+        this.closeStartMenu();
         document.getElementById('cgName').value = '';
         // Back to the default on every open: an unchecked box left over
         // from a previous create would silently make the next group
@@ -5697,9 +6020,286 @@
           : 'Anyone holding the invite link is admitted automatically. Messages are not encrypted on the feed: in an open group the key would go to anyone who asks, so it would protect nothing. Traffic is still encrypted in transit.';
       }
 
-      openJoinGroup() {
-        document.getElementById('jgInvite').value = '';
-        document.getElementById('joinGroupModal').classList.add('visible');
+      openCreateChannel() {
+        this.closeStartMenu();
+        document.getElementById('ccName').value = '';
+        const backfill = document.getElementById('ccPeerBackfill');
+        if (backfill) backfill.checked = true;
+        document.getElementById('createChannelModal').classList.add('visible');
+      }
+
+      // createChannel creates a KindChannel group: open to join, admins
+      // only to post. Shares the /group endpoint with createGroup — the
+      // only difference on the wire is kind.
+      createChannel() {
+        const name = document.getElementById('ccName').value.trim();
+        const backfillEl = document.getElementById('ccPeerBackfill');
+        const peer_backfill = backfillEl ? !!backfillEl.checked : true;
+        if (!name) { this.showToast('Enter a channel name.', 'error'); return; }
+        fetch('/group', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, kind: 'channel', members: [], peer_backfill })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(j => {
+            this.closeModal('createChannelModal');
+            this.syncGroups();
+            if (j.invite) { navigator.clipboard.writeText(j.invite).catch(() => {}); this.showToast('Channel created — invite link copied.'); }
+            if (j.info && j.info.id) setTimeout(() => this.selectGroup(j.info.id), 300);
+          })
+          .catch(e => this.showToast(`Create failed: ${e}`, 'error'));
+      }
+
+      // ---- Compose menu ----------------------------------------------
+
+      toggleStartMenu(ev) {
+        if (ev) ev.stopPropagation();
+        const menu = document.getElementById('startMenu');
+        if (menu.classList.contains('visible')) { this.closeStartMenu(); return; }
+        this._positionStartMenu();
+        menu.classList.add('visible');
+        document.getElementById('startBtn').setAttribute('aria-expanded', 'true');
+      }
+
+      closeStartMenu() {
+        const menu = document.getElementById('startMenu');
+        if (!menu) return;
+        menu.classList.remove('visible');
+        const btn = document.getElementById('startBtn');
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+
+      // _positionStartMenu pins the menu to the button it belongs to.
+      //
+      // Measured rather than declared because the button moves: it is in
+      // the sidebar header on a wide screen and a floating button at the
+      // bottom of a phone screen. Opening downward from the header and
+      // upward from the floating button falls out of "is there room
+      // below", so neither case needs its own rule.
+      _positionStartMenu() {
+        const menu = document.getElementById('startMenu');
+        const btn = document.getElementById('startBtn');
+        if (!menu || !btn) return;
+        // Measure while displayed but still transparent to the user —
+        // offsetWidth is 0 on a display:none element.
+        menu.style.visibility = 'hidden';
+        menu.classList.add('visible');
+        const b = btn.getBoundingClientRect();
+        const w = menu.offsetWidth, h = menu.offsetHeight;
+        const gap = 8, pad = 8;
+        let left = Math.min(b.right - w, window.innerWidth - w - pad);
+        left = Math.max(pad, left);
+        let top = b.bottom + gap;
+        if (top + h > window.innerHeight - pad) top = b.top - h - gap;
+        top = Math.max(pad, top);
+        menu.style.left = `${Math.round(left)}px`;
+        menu.style.top = `${Math.round(top)}px`;
+        menu.classList.remove('visible');
+        menu.style.visibility = '';
+      }
+
+      // ---- Add by address --------------------------------------------
+
+      openAddressModal() {
+        this.closeStartMenu();
+        const input = document.getElementById('addrInput');
+        input.value = '';
+        this._addrResolved = null;
+        this._renderAddressResult(null);
+        document.getElementById('addrHint').textContent =
+          'Paste a public key to message someone, or a group or channel address to join it.';
+        document.getElementById('addressModal').classList.add('visible');
+        setTimeout(() => input.focus(), 50);
+      }
+
+      closeAddressModal() {
+        this.stopQrScan();
+        this.closeModal('addressModal');
+      }
+
+      // onAddressInput debounces the resolve so typing a 66-character key
+      // doesn't fire 66 requests, and so a half-typed key doesn't flash an
+      // error on every keystroke.
+      onAddressInput() {
+        clearTimeout(this._addrTimer);
+        this._addrResolved = null;
+        const raw = document.getElementById('addrInput').value.trim();
+        if (!raw) { this._renderAddressResult(null); return; }
+        this._addrTimer = setTimeout(() => this._resolveAddress(raw), 350);
+      }
+
+      // _resolveAddress asks the visor what an address points at.
+      //
+      // A bare public key is answered without the round trip: a key that
+      // names a person and a key that hosts a channel are the same 66
+      // characters, so only a group ID in the address can distinguish
+      // them — and opening a DM needs nobody's permission. That keeps the
+      // overwhelmingly common case instant and working offline.
+      _resolveAddress(raw) {
+        const seq = (this._addrSeq = (this._addrSeq || 0) + 1);
+        // Strip the scheme before the local test so a scanned contact code
+        // — skychat://<pk>, the exact thing showQr produces — resolves
+        // without a round trip too, not just a hand-typed bare key.
+        const bare = this.processPk(raw).replace(/^skychat:\/\//, '').replace(/\/$/, '');
+        if (/^[0-9a-f]{66}$/.test(bare)) {
+          this._addrResolved = { target: 'dm', pk: bare, address: `skychat://${bare}` };
+          this._renderAddressResult(this._addrResolved);
+          return;
+        }
+        this._renderAddressResult({ pending: true });
+        fetch(`/group/resolve?address=${encodeURIComponent(raw)}`)
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(res => {
+            // A slower earlier lookup must not overwrite a newer one.
+            if (seq !== this._addrSeq) return;
+            this._addrResolved = res;
+            if (res && res.invite) this._addrResolved.invite = res.invite;
+            this._renderAddressResult(res);
+          })
+          .catch(err => {
+            if (seq !== this._addrSeq) return;
+            this._addrResolved = null;
+            this._renderAddressResult({ error: String(err || 'could not resolve that address').trim() });
+          });
+      }
+
+      // _renderAddressResult draws the result card and decides the single
+      // action button. One button, never a choice: the whole point of
+      // resolving first is that the app knows which action applies.
+      _renderAddressResult(res) {
+        const box = document.getElementById('addrResult');
+        const btn = document.getElementById('addrActionBtn');
+        const hint = document.getElementById('addrHint');
+        box.className = 'addr-result';
+        btn.classList.add('hidden');
+
+        if (!res) { box.classList.add('hidden'); return; }
+
+        if (res.pending) {
+          box.classList.add('pending');
+          box.innerHTML = `<div class="ar-avatar">…</div><div class="ar-body">
+            <div class="ar-title">Looking it up…</div>
+            <div class="ar-sub">Asking the host what this address is</div></div>`;
+          return;
+        }
+
+        if (res.error) {
+          box.classList.add('bad');
+          box.innerHTML = `<div class="ar-avatar">!</div><div class="ar-body">
+            <div class="ar-title">Not resolved</div>
+            <div class="ar-sub bad">${this.escapeHtml(res.error)}</div></div>`;
+          hint.textContent = 'A group or channel address only works while its host is online. An invite link works either way.';
+          return;
+        }
+
+        if (res.target === 'dm') {
+          box.innerHTML = `<div class="ar-avatar">&#x1F464;</div><div class="ar-body">
+            <div class="ar-title">${this.escapeHtml(this.shortPk(res.pk))}</div>
+            <div class="ar-sub">Person · direct message</div></div>`;
+          hint.textContent = 'Messages to a person are encrypted end to end.';
+          btn.textContent = this.recipients.includes(res.pk) ? 'Open Chat' : 'Start Chat';
+          btn.classList.remove('hidden');
+          return;
+        }
+
+        const g = res.group || {};
+        const isChannel = g.kind === 'channel';
+        const noun = isChannel ? 'Channel' : 'Group';
+        const bits = [noun];
+        bits.push(g.policy === 'approval' ? 'approval needed' : 'open to join');
+        bits.push(isChannel ? 'only admins post' : (g.mode === 'private' ? 'encrypted' : 'not encrypted'));
+        let subClass = '';
+        let sub = bits.join(' · ');
+
+        if (g.banned) {
+          subClass = 'bad';
+          sub = `${noun} · this key is banned from it`;
+        } else if (res.joined) {
+          sub = `${noun} · you are already in it`;
+        } else if (res.status === 'awaiting_approval') {
+          subClass = 'warn';
+          sub = `${noun} · a request is already waiting for an admin`;
+        } else if (res.status === 'denied') {
+          subClass = 'warn';
+          sub = `${noun} · a previous request was declined`;
+        }
+
+        box.innerHTML = `<div class="ar-avatar">${isChannel ? '&#x1F4E3;' : '&#x1F465;'}</div>
+          <div class="ar-body">
+            <div class="ar-title">${this.escapeHtml(g.name || g.id || 'Unnamed')}</div>
+            <div class="ar-sub ${subClass}">${this.escapeHtml(sub)}</div>
+          </div>`;
+
+        // A host-stated price is shown as context, never as the button
+        // label: it is unverified text from a host that wants members.
+        hint.textContent = g.price_hint
+          ? `The host states a price of ${g.price_hint}. That is unverified — nothing is charged by this app.`
+          : (isChannel
+            ? 'Anyone can join and read a channel; only its admins can post.'
+            : (g.policy === 'approval'
+              ? 'An admin approves each request. You get in — and get the key — once they do.'
+              : 'Open admission: you are let in as soon as you ask.'));
+
+        if (g.banned) return;
+        if (res.joined) { btn.textContent = `Open ${noun}`; btn.classList.remove('hidden'); return; }
+        if (res.status === 'awaiting_approval') return;
+
+        btn.textContent = isChannel
+          ? 'Join Channel'
+          : (g.policy === 'approval' ? 'Send Request' : 'Join Group');
+        btn.classList.remove('hidden');
+      }
+
+      // addressAction performs whatever the resolved address implies.
+      addressAction() {
+        const res = this._addrResolved;
+        if (!res) {
+          // Enter pressed before the debounce fired: resolve now and let
+          // the user press again rather than guessing.
+          const raw = document.getElementById('addrInput').value.trim();
+          if (raw) { clearTimeout(this._addrTimer); this._resolveAddress(raw); }
+          return;
+        }
+        if (res.target === 'dm') {
+          const pk = res.pk;
+          this.closeAddressModal();
+          if (!this.recipients.includes(pk)) {
+            this._addRecipient(pk);
+            this.showToast('Contact added.');
+          }
+          this.selectRecipient(pk);
+          return;
+        }
+        const g = res.group || {};
+        if (res.joined) { this.closeAddressModal(); this.selectGroup(g.id); return; }
+
+        const body = res.invite ? { invite: res.invite } : { address: res.address };
+        const btn = document.getElementById('addrActionBtn');
+        const restore = btn.textContent;
+        btn.disabled = true;
+        btn.textContent = 'Working…';
+        fetch('/group/join', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        })
+          .then(res2 => res2.ok ? res2.json() : res2.text().then(t => Promise.reject(t)))
+          .then(info => {
+            this.closeAddressModal();
+            this.syncGroups();
+            // An approval-gated group queues the request instead of
+            // admitting, so don't claim membership we don't have and
+            // don't open a room with nothing in it.
+            if (info && info.status === 'awaiting_approval') {
+              this.showToast('Request sent — waiting for an admin to approve.');
+              return;
+            }
+            this.showToast(g.kind === 'channel' ? 'Joined channel.' : 'Joined group.');
+            if (info && info.id) setTimeout(() => this.selectGroup(info.id), 300);
+          })
+          .catch(e => this.showToast(`Join failed: ${e}`, 'error'))
+          .finally(() => { btn.disabled = false; btn.textContent = restore; });
       }
 
       closeModal(id) { document.getElementById(id).classList.remove('visible'); }
@@ -5728,30 +6328,242 @@
           .catch(e => this.showToast(`Create failed: ${e}`, 'error'));
       }
 
-      joinGroup() {
-        const invite = document.getElementById('jgInvite').value.trim();
-        if (!invite) { this.showToast('Paste an invite link.', 'error'); return; }
-        fetch('/group/join', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ invite })
-        })
-          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
-          .then(info => {
-            this.closeModal('joinGroupModal');
-            this.syncGroups();
-            // A private group queues the request instead of admitting, so
-            // don't claim we're in and don't open a room that has no
-            // messages yet — say what actually happened and let the
-            // background retry flip it to active on approval.
-            if (info && info.status === 'awaiting_approval') {
-              this.showToast('Request sent — waiting for an admin to approve.');
+      // joinByAddress opens the Add-by-address dialog pre-filled — the
+      // entry point for a skychat:// link or invite arriving from outside
+      // the UI. Joining itself lives in addressAction, so there is one
+      // code path for typed, pasted and scanned input alike.
+      joinByAddress(prefill) {
+        this.openAddressModal();
+        if (!prefill) return;
+        const input = document.getElementById('addrInput');
+        input.value = prefill;
+        this.onAddressInput();
+      }
+
+      // ---- Addresses + QR --------------------------------------------
+
+      // currentAddress describes the open conversation as a shareable
+      // skychat:// address. Null when nothing is open.
+      currentAddress() {
+        if (this.group) {
+          const info = this.groups.find(g => g.id === this.group);
+          if (!info) return null;
+          const host = String(info.owner_pk || '').toLowerCase();
+          const isChannel = info.kind === 'channel';
+          return {
+            address: `skychat://${host}/${info.id}`,
+            label: info.name || info.id,
+            noun: isChannel ? 'channel' : 'group',
+            isGroup: true,
+            isAdmin: this._isGroupAdmin(info),
+          };
+        }
+        if (this.recipient) {
+          return {
+            address: `skychat://${this.recipient}`,
+            label: this.shortPk(this.recipient),
+            noun: 'contact',
+            isGroup: false,
+            isAdmin: false,
+          };
+        }
+        return null;
+      }
+
+      // showQr renders the open conversation's address as a QR code.
+      //
+      // The address is also printed underneath as selectable text with a
+      // copy button: a code is useless to anyone reading over a screen
+      // share, pasting into a terminal, or on a device with no camera.
+      showQr() {
+        const cur = this.currentAddress();
+        if (!cur) { this.showToast('Open a chat first.', 'error'); return; }
+        document.getElementById('qrTitle').textContent =
+          cur.isGroup ? `${cur.label} — address` : 'Contact address';
+        document.getElementById('qrAddrText').textContent = cur.address;
+        this._qrAddress = cur.address;
+
+        const ok = QR.draw(document.getElementById('qrCanvas'), cur.address);
+        document.getElementById('qrHelp').textContent = !ok
+          ? 'This address is too long to encode as a QR code — copy the text instead.'
+          : (cur.isGroup
+            ? `Scanning this opens the ${cur.noun}. It stays valid as the ${cur.noun} changes, but whoever scans it needs this host reachable to join.`
+            : 'Scanning this starts a direct message with you.');
+
+        // The invite link is the offline-capable alternative, and only an
+        // admin can mint one — so only offer it when it is actually
+        // available.
+        document.getElementById('qrInviteBtn').classList.toggle('hidden', !(cur.isGroup && cur.isAdmin));
+        document.getElementById('qrModal').classList.add('visible');
+      }
+
+      copyQrAddress() {
+        const text = this._qrAddress || document.getElementById('qrAddrText').textContent;
+        if (!text) return;
+        // The clipboard API needs a secure context; the text is selectable
+        // so there is always a manual fallback to point at.
+        navigator.clipboard.writeText(text)
+          .then(() => this.showToast('Address copied.'))
+          .catch(() => this.showToast('Could not copy — select the text and copy it manually.', 'error'));
+      }
+
+      // ---- QR scanning -----------------------------------------------
+
+      // _qrDetector returns a BarcodeDetector for QR codes, or null where
+      // the browser has no such API.
+      //
+      // Native only, no bundled decoder: this covers Chrome, Edge and the
+      // Android WebView the mobile app runs in, and adds nothing to a page
+      // that is already embedded in the binary. Where it is missing
+      // (Safari, Firefox) scanning is declined in plain words and the
+      // paste field — which is the whole dialog's primary input anyway —
+      // still works.
+      _qrDetector() {
+        if (typeof window.BarcodeDetector !== 'function') return null;
+        try {
+          return new window.BarcodeDetector({ formats: ['qr_code'] });
+        } catch (e) {
+          console.debug('skychat: BarcodeDetector unavailable:', e && e.message);
+          return null;
+        }
+      }
+
+      _qrUnsupportedToast() {
+        this.showToast(
+          'QR scanning needs Chrome, Edge or the Android app. Paste the address instead.',
+          'error');
+      }
+
+      async startQrScan() {
+        const detector = this._qrDetector();
+        if (!detector) { this._qrUnsupportedToast(); return; }
+        if (!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) {
+          // Same secure-context rule the voice recorder documents: plain
+          // http only counts as secure on 127.0.0.1 / localhost.
+          this.showToast('The camera needs a secure page (https, or 127.0.0.1).', 'error');
+          return;
+        }
+        const box = document.getElementById('addrScanner');
+        const video = document.getElementById('addrScanVideo');
+        try {
+          // The rear camera is the one pointed at someone else's screen.
+          this._qrStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } }, audio: false,
+          });
+        } catch (e) {
+          this.showToast(`Camera unavailable: ${e && e.message ? e.message : e}`, 'error');
+          return;
+        }
+        video.srcObject = this._qrStream;
+        box.classList.remove('hidden');
+        try { await video.play(); } catch (e) { /* autoplay attribute covers this */ }
+
+        this._qrScanning = true;
+        const tick = async () => {
+          if (!this._qrScanning) return;
+          try {
+            const found = await detector.detect(video);
+            if (found && found.length && found[0].rawValue) {
+              this._onQrDecoded(found[0].rawValue);
               return;
             }
-            this.showToast('Joined group.');
-            if (info && info.id) setTimeout(() => this.selectGroup(info.id), 300);
-          })
-          .catch(e => this.showToast(`Join failed: ${e}`, 'error'));
+          } catch (e) {
+            // A transient detect failure (a frame arriving mid-resize) is
+            // normal; only stop if the stream itself is gone.
+            if (!this._qrStream) return;
+          }
+          this._qrTimer = setTimeout(tick, 220);
+        };
+        tick();
+      }
+
+      stopQrScan() {
+        this._qrScanning = false;
+        clearTimeout(this._qrTimer);
+        if (this._qrStream) {
+          this._qrStream.getTracks().forEach(t => t.stop());
+          this._qrStream = null;
+        }
+        const video = document.getElementById('addrScanVideo');
+        if (video) video.srcObject = null;
+        const box = document.getElementById('addrScanner');
+        if (box) box.classList.add('hidden');
+      }
+
+      // scanQrFile reads a code out of a saved image — a screenshot, or a
+      // photo of someone else's screen. Same detector as the camera path,
+      // and the only option on a device with no usable camera.
+      async scanQrFile(ev) {
+        const input = ev && ev.target;
+        const file = input && input.files && input.files[0];
+        // Cleared immediately so picking the same file twice re-fires.
+        if (input) input.value = '';
+        if (!file) return;
+        const detector = this._qrDetector();
+        if (!detector) { this._qrUnsupportedToast(); return; }
+        try {
+          const bitmap = await createImageBitmap(file);
+          const found = await detector.detect(bitmap);
+          bitmap.close();
+          if (!found || !found.length || !found[0].rawValue) {
+            this.showToast('No QR code found in that image.', 'error');
+            return;
+          }
+          this._onQrDecoded(found[0].rawValue);
+        } catch (e) {
+          this.showToast(`Could not read that image: ${e && e.message ? e.message : e}`, 'error');
+        }
+      }
+
+      // _onQrDecoded funnels a scan into the same field a paste lands in,
+      // so a scanned address is resolved and confirmed exactly like a
+      // typed one. Nothing is joined without the user pressing the button.
+      _onQrDecoded(text) {
+        this.stopQrScan();
+        const input = document.getElementById('addrInput');
+        input.value = String(text).trim();
+        this.showToast('Code scanned.');
+        this.onAddressInput();
+      }
+
+      // ---- One-pane (phone) layout -----------------------------------
+
+      // _isOnePane matches the CSS breakpoint. Read from matchMedia rather
+      // than tracked in JS so the two can never disagree about which
+      // layout is on screen.
+      _isOnePane() {
+        return window.matchMedia('(max-width: 760px)').matches;
+      }
+
+      // _enterChatPane switches a narrow screen from the list to the open
+      // conversation, and pushes a history entry so the device back button
+      // returns to the list instead of leaving the app.
+      //
+      // Replaces rather than pushes when a conversation is already open, so
+      // hopping between five chats leaves one entry to go back through
+      // rather than five.
+      _enterChatPane() {
+        if (!this._isOnePane()) return;
+        const wasOpen = document.body.classList.contains('chat-open');
+        document.body.classList.add('chat-open');
+        const state = { skychat: 'chat' };
+        if (wasOpen && history.state && history.state.skychat === 'chat') {
+          history.replaceState(state, '');
+        } else {
+          history.pushState(state, '');
+        }
+      }
+
+      // showChatList goes back to the conversation list.
+      //
+      // popHistory is false when this is *driven by* a popstate — the
+      // browser has already moved, and calling back() again would leave
+      // the app.
+      showChatList(popHistory = true) {
+        document.body.classList.remove('chat-open');
+        if (popHistory && history.state && history.state.skychat === 'chat') {
+          history.back();
+        }
       }
 
       // ---- Group admission control -----------------------------------
@@ -6151,6 +6963,9 @@
           document.getElementById('messages').classList.add('hidden');
           document.getElementById('msgForm').classList.add('hidden');
           document.getElementById('emptyState').classList.remove('hidden');
+          // On a phone the chat pane IS the screen, so leaving the group
+          // that was open would strand the user on a blank one.
+          this.showChatList();
         }
       }
 
@@ -6235,6 +7050,9 @@
         document.getElementById('messages').classList.add('hidden');
         document.getElementById('msgForm').classList.add('hidden');
         document.getElementById('emptyState').classList.remove('hidden');
+        // See _removeGroup: on a phone, deleting the open conversation has
+        // to hand the screen back to the list.
+        this.showChatList();
 
         this.saveRecipients();
         this.saveSeenList();
@@ -6983,6 +7801,429 @@
       }
     }
 
+    // -------------------------------------------------------------------
+    // QR encoder (byte mode, error-correction level M, versions 1–10).
+    //
+    // Written out rather than pulled from a library because this page is
+    // one //go:embed'ed file served by the app itself and a strict
+    // offline surface: there is no CDN to reach and no build step to
+    // bundle with. Ten versions is deliberate headroom — the longest
+    // thing encoded here is a group address at 113 characters
+    // ("skychat://" + 66-hex key + "/" + 36-char UUID), and version 10 at
+    // level M holds 213 bytes.
+    //
+    // Level M (~15% recovery) over L: these codes get scanned off
+    // screens at angles and under glare, where the extra redundancy is
+    // the difference between a scan and a retry.
+    // -------------------------------------------------------------------
+    const QR = (function () {
+      // Per version: [total codewords, EC codewords per block,
+      // group-1 blocks, group-1 data codewords, group-2 blocks,
+      // group-2 data codewords] at level M.
+      const SPEC = {
+        1:  [26,  10, 1, 16, 0, 0],
+        2:  [44,  16, 1, 28, 0, 0],
+        3:  [70,  26, 1, 44, 0, 0],
+        4:  [100, 18, 2, 32, 0, 0],
+        5:  [134, 24, 2, 43, 0, 0],
+        6:  [172, 16, 4, 27, 0, 0],
+        7:  [196, 18, 4, 31, 0, 0],
+        8:  [242, 22, 2, 38, 2, 39],
+        9:  [292, 22, 3, 36, 2, 37],
+        10: [346, 26, 4, 43, 1, 44],
+      };
+
+      // Alignment-pattern centre coordinates per version.
+      const ALIGN = {
+        1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30],
+        6: [6, 34], 7: [6, 22, 38], 8: [6, 24, 42], 9: [6, 26, 46],
+        10: [6, 28, 50],
+      };
+
+      // Pre-computed BCH(18,6) version information, needed from version 7.
+      const VERSION_BITS = { 7: 0x07C94, 8: 0x085BC, 9: 0x09A99, 10: 0x0A4D3 };
+
+      // GF(256) log/antilog tables, primitive polynomial 0x11D.
+      const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+      (function initGF() {
+        let x = 1;
+        for (let i = 0; i < 255; i++) {
+          EXP[i] = x;
+          LOG[x] = i;
+          x <<= 1;
+          if (x & 0x100) x ^= 0x11D;
+        }
+        for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+      })();
+
+      const mul = (a, b) => (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
+
+      // rsGenerator returns the generator polynomial for n EC codewords.
+      function rsGenerator(n) {
+        let g = [1];
+        for (let i = 0; i < n; i++) {
+          const next = new Array(g.length + 1).fill(0);
+          for (let j = 0; j < g.length; j++) {
+            next[j] ^= g[j];
+            next[j + 1] ^= mul(g[j], EXP[i]);
+          }
+          g = next;
+        }
+        return g;
+      }
+
+      // rsEncode returns the n EC codewords for one data block.
+      function rsEncode(data, n) {
+        const gen = rsGenerator(n);
+        const rem = new Array(n).fill(0);
+        for (const byte of data) {
+          const factor = byte ^ rem[0];
+          rem.shift();
+          rem.push(0);
+          for (let j = 0; j < n; j++) rem[j] ^= mul(gen[j + 1], factor);
+        }
+        return rem;
+      }
+
+      // byteCapacity is how many payload bytes a version holds: the data
+      // codewords, minus the mode indicator (4 bits) and character count
+      // (8 bits below version 10, 16 from it), rounded down.
+      function byteCapacity(version) {
+        const [, ec, b1, d1, b2, d2] = SPEC[version];
+        const dataCodewords = b1 * d1 + b2 * d2;
+        const overheadBits = 4 + (version >= 10 ? 16 : 8);
+        void ec;
+        return Math.floor((dataCodewords * 8 - overheadBits) / 8);
+      }
+
+      function pickVersion(len) {
+        for (let v = 1; v <= 10; v++) if (byteCapacity(v) >= len) return v;
+        return 0;
+      }
+
+      // buildCodewords produces the interleaved data+EC codeword stream.
+      function buildCodewords(bytes, version) {
+        const [, ecPerBlock, b1, d1, b2, d2] = SPEC[version];
+        const dataCodewords = b1 * d1 + b2 * d2;
+
+        // Bit stream: mode 0100 (byte), length, payload, terminator.
+        const bits = [];
+        const push = (value, n) => {
+          for (let i = n - 1; i >= 0; i--) bits.push((value >> i) & 1);
+        };
+        push(0b0100, 4);
+        push(bytes.length, version >= 10 ? 16 : 8);
+        for (const b of bytes) push(b, 8);
+        for (let i = 0; i < 4 && bits.length < dataCodewords * 8; i++) bits.push(0);
+        while (bits.length % 8 !== 0) bits.push(0);
+
+        const words = [];
+        for (let i = 0; i < bits.length; i += 8) {
+          let byte = 0;
+          for (let j = 0; j < 8; j++) byte = (byte << 1) | bits[i + j];
+          words.push(byte);
+        }
+        // Pad bytes alternate 0xEC / 0x11 per the spec.
+        const PAD = [0xEC, 0x11];
+        for (let i = 0; words.length < dataCodewords; i++) words.push(PAD[i % 2]);
+
+        // Split into blocks, compute EC per block, then interleave.
+        const blocks = [], ecBlocks = [];
+        let at = 0;
+        for (let i = 0; i < b1; i++) { blocks.push(words.slice(at, at + d1)); at += d1; }
+        for (let i = 0; i < b2; i++) { blocks.push(words.slice(at, at + d2)); at += d2; }
+        for (const blk of blocks) ecBlocks.push(rsEncode(blk, ecPerBlock));
+
+        const out = [];
+        const maxData = Math.max(d1, d2);
+        for (let i = 0; i < maxData; i++) {
+          for (const blk of blocks) if (i < blk.length) out.push(blk[i]);
+        }
+        for (let i = 0; i < ecPerBlock; i++) {
+          for (const blk of ecBlocks) out.push(blk[i]);
+        }
+        return out;
+      }
+
+      // bchFormat computes the 15-bit format information for a mask.
+      // Level M is 0b00, so the 5 data bits are just the mask pattern.
+      function bchFormat(mask) {
+        const data = (0b00 << 3) | mask;
+        let v = data << 10;
+        for (let i = 4; i >= 0; i--) {
+          if (v & (1 << (i + 10))) v ^= 0x537 << i;
+        }
+        return ((data << 10) | v) ^ 0x5412;
+      }
+
+      // newMatrix lays out everything except the data and format bits,
+      // returning the module grid plus a parallel "reserved" grid so the
+      // data walk knows which cells it may not use.
+      function newMatrix(version) {
+        const size = version * 4 + 17;
+        const m = [], reserved = [];
+        for (let i = 0; i < size; i++) {
+          m.push(new Array(size).fill(0));
+          reserved.push(new Array(size).fill(false));
+        }
+        const set = (r, c, v) => { m[r][c] = v; reserved[r][c] = true; };
+
+        // Finder patterns and their separators. A finder is 7x7:
+        //
+        //   1111111    dark at Chebyshev ring 3 (the outer border)
+        //   1000001    light at ring 2
+        //   1011101    dark at rings 0 and 1 (the 3x3 core)
+        //   1011101
+        //   1011101
+        //   1000001
+        //   1111111
+        //
+        // Note this is NOT the alignment pattern's rule, which is 5x5 with
+        // a single light ring — using that one here produces a filled
+        // square that no scanner will lock onto.
+        const finder = (r0, c0) => {
+          for (let r = -1; r <= 7; r++) {
+            for (let c = -1; c <= 7; c++) {
+              const r1 = r0 + r, c1 = c0 + c;
+              if (r1 < 0 || c1 < 0 || r1 >= size || c1 >= size) continue;
+              const ring = Math.max(Math.abs(r - 3), Math.abs(c - 3));
+              set(r1, c1, (ring <= 1 || ring === 3) ? 1 : 0);
+            }
+          }
+        };
+        finder(0, 0); finder(0, size - 7); finder(size - 7, 0);
+
+        // Timing patterns.
+        for (let i = 8; i < size - 8; i++) {
+          const v = i % 2 === 0 ? 1 : 0;
+          set(6, i, v);
+          set(i, 6, v);
+        }
+
+        // Alignment patterns, skipping the three finder corners.
+        const centres = ALIGN[version];
+        for (const r0 of centres) {
+          for (const c0 of centres) {
+            const nearFinder =
+              (r0 === 6 && c0 === 6) ||
+              (r0 === 6 && c0 === size - 7) ||
+              (r0 === size - 7 && c0 === 6);
+            if (nearFinder) continue;
+            for (let r = -2; r <= 2; r++) {
+              for (let c = -2; c <= 2; c++) {
+                const ring = Math.max(Math.abs(r), Math.abs(c));
+                set(r0 + r, c0 + c, ring === 1 ? 0 : 1);
+              }
+            }
+          }
+        }
+
+        // Dark module, then reserve the format-info cells.
+        set(size - 8, 8, 1);
+        for (let i = 0; i < 9; i++) {
+          if (!reserved[8][i]) set(8, i, 0);
+          if (!reserved[i][8]) set(i, 8, 0);
+        }
+        for (let i = 0; i < 8; i++) {
+          if (!reserved[8][size - 1 - i]) set(8, size - 1 - i, 0);
+          if (!reserved[size - 1 - i][8]) set(size - 1 - i, 8, 0);
+        }
+
+        // Version information (version 7 and up).
+        if (version >= 7) {
+          const bits = VERSION_BITS[version];
+          for (let i = 0; i < 18; i++) {
+            const bit = (bits >> i) & 1;
+            set(Math.floor(i / 3), size - 11 + (i % 3), bit);
+            set(size - 11 + (i % 3), Math.floor(i / 3), bit);
+          }
+        }
+        return { m, reserved, size };
+      }
+
+      // placeData walks the standard two-column zigzag from the bottom
+      // right, skipping reserved cells.
+      function placeData(grid, codewords) {
+        const { m, reserved, size } = grid;
+        let bit = 0;
+        const total = codewords.length * 8;
+        const nextBit = () => {
+          if (bit >= total) return 0;   // remainder bits are 0
+          const v = (codewords[bit >> 3] >> (7 - (bit & 7))) & 1;
+          bit++;
+          return v;
+        };
+        let upward = true;
+        for (let col = size - 1; col > 0; col -= 2) {
+          if (col === 6) col--;   // the vertical timing pattern is not a column
+          for (let i = 0; i < size; i++) {
+            const row = upward ? size - 1 - i : i;
+            for (const c of [col, col - 1]) {
+              if (reserved[row][c]) continue;
+              m[row][c] = nextBit();
+            }
+          }
+          upward = !upward;
+        }
+      }
+
+      const MASKS = [
+        (r, c) => (r + c) % 2 === 0,
+        (r) => r % 2 === 0,
+        (r, c) => c % 3 === 0,
+        (r, c) => (r + c) % 3 === 0,
+        (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+        (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+        (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+        (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0,
+      ];
+
+      // penalty scores a masked grid by the four standard rules. A poor
+      // mask still decodes in most readers, but the rules exist to avoid
+      // runs and blocks that look like finder patterns — exactly the
+      // failure a phone camera hits first.
+      function penalty(m, size) {
+        let score = 0;
+
+        // Rule 1: runs of five or more same-colour modules in a line.
+        const runs = (get) => {
+          for (let a = 0; a < size; a++) {
+            let run = 1;
+            for (let b = 1; b < size; b++) {
+              if (get(a, b) === get(a, b - 1)) {
+                run++;
+              } else {
+                if (run >= 5) score += 3 + (run - 5);
+                run = 1;
+              }
+            }
+            if (run >= 5) score += 3 + (run - 5);
+          }
+        };
+        runs((r, c) => m[r][c]);
+        runs((c, r) => m[r][c]);
+
+        // Rule 2: every 2x2 block of one colour.
+        for (let r = 0; r < size - 1; r++) {
+          for (let c = 0; c < size - 1; c++) {
+            const v = m[r][c];
+            if (v === m[r][c + 1] && v === m[r + 1][c] && v === m[r + 1][c + 1]) score += 3;
+          }
+        }
+
+        // Rule 3: the 1:1:3:1:1 finder-lookalike with four light modules
+        // on either side.
+        const A = [1, 0, 1, 1, 1, 0, 1, 0, 0, 0, 0];
+        const B = [0, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1];
+        const matches = (get, a, start) => {
+          for (let k = 0; k < 11; k++) {
+            if (get(a, start + k) !== A[k]) return false;
+          }
+          return true;
+        };
+        const matchesB = (get, a, start) => {
+          for (let k = 0; k < 11; k++) {
+            if (get(a, start + k) !== B[k]) return false;
+          }
+          return true;
+        };
+        for (const get of [(r, c) => m[r][c], (c, r) => m[r][c]]) {
+          for (let a = 0; a < size; a++) {
+            for (let s = 0; s + 11 <= size; s++) {
+              if (matches(get, a, s) || matchesB(get, a, s)) score += 40;
+            }
+          }
+        }
+
+        // Rule 4: deviation of the dark-module proportion from 50%.
+        let dark = 0;
+        for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) dark += m[r][c];
+        const pct = (dark * 100) / (size * size);
+        score += Math.floor(Math.abs(pct - 50) / 5) * 10;
+        return score;
+      }
+
+      // applyFormat writes the 15 format bits into their two copies.
+      //
+      // The split in copy 2 is 7 bits then 8, not 8 and 7: row size-8 in
+      // that column is the always-dark module, which the format must step
+      // over. Getting it wrong overwrites the dark module and shifts every
+      // remaining bit, which no scanner recovers from.
+      function applyFormat(m, size, mask) {
+        const bits = bchFormat(mask);
+        // Most significant bit first: position 0 of each copy carries bit
+        // 14. Placing it LSB-first instead yields a 15-bit value that is
+        // not in the format table at all, so a reader finds no valid
+        // (level, mask) pair and gives up before it ever looks at the
+        // data — which is indistinguishable from a corrupt image.
+        const at = (i) => (bits >> (14 - i)) & 1;
+        // Copy 1, around the top-left finder.
+        for (let i = 0; i <= 5; i++) m[8][i] = at(i);
+        m[8][7] = at(6);
+        m[8][8] = at(7);
+        m[7][8] = at(8);
+        for (let i = 9; i <= 14; i++) m[14 - i][8] = at(i);
+        // Copy 2: bits 0–6 up the bottom-left column, bits 7–14 along the
+        // top-right row.
+        for (let i = 0; i <= 6; i++) m[size - 1 - i][8] = at(i);
+        for (let i = 7; i <= 14; i++) m[8][size - 15 + i] = at(i);
+      }
+
+      // encode returns the finished module grid for text, or null when the
+      // text is too long for version 10.
+      function encode(text) {
+        const bytes = Array.from(new TextEncoder().encode(text));
+        const version = pickVersion(bytes.length);
+        if (!version) return null;
+        const codewords = buildCodewords(bytes, version);
+
+        let best = null, bestScore = Infinity;
+        for (let mask = 0; mask < 8; mask++) {
+          const grid = newMatrix(version);
+          placeData(grid, codewords);
+          const { m, reserved, size } = grid;
+          for (let r = 0; r < size; r++) {
+            for (let c = 0; c < size; c++) {
+              if (!reserved[r][c] && MASKS[mask](r, c)) m[r][c] ^= 1;
+            }
+          }
+          applyFormat(m, size, mask);
+          const score = penalty(m, size);
+          if (score < bestScore) { bestScore = score; best = { m, size }; }
+        }
+        return best;
+      }
+
+      // draw paints a grid onto a canvas with the mandatory 4-module
+      // quiet zone. Sized to whole pixels per module so the result stays
+      // crisp instead of blurring on a fractional scale.
+      function draw(canvas, text) {
+        const grid = encode(text);
+        const ctx = canvas.getContext('2d');
+        if (!grid) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          return false;
+        }
+        const quiet = 4;
+        const total = grid.size + quiet * 2;
+        const scale = Math.max(2, Math.floor(264 / total));
+        canvas.width = canvas.height = total * scale;
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#000';
+        for (let r = 0; r < grid.size; r++) {
+          for (let c = 0; c < grid.size; c++) {
+            if (grid.m[r][c]) {
+              ctx.fillRect((c + quiet) * scale, (r + quiet) * scale, scale, scale);
+            }
+          }
+        }
+        return true;
+      }
+
+      return { encode, draw };
+    })();
+
     window.app = new Chat();
 
     // Close modal on backdrop click
@@ -6990,11 +8231,43 @@
       if (e.target === this) app.closeSettings();
     });
 
-    // Close group modals on backdrop click.
-    ['createGroupModal', 'joinGroupModal', 'groupAdminModal'].forEach(function(id) {
+    // Close group modals on backdrop click. addressModal closes through
+    // its own helper so a running camera scan is always stopped.
+    ['createGroupModal', 'createChannelModal', 'groupAdminModal', 'qrModal'].forEach(function(id) {
       document.getElementById(id).addEventListener('click', function(e) {
         if (e.target === this) app.closeModal(id);
       });
+    });
+    document.getElementById('addressModal').addEventListener('click', function(e) {
+      if (e.target === this) app.closeAddressModal();
+    });
+
+    // Dismiss the start menu on any click outside it. Capture phase so
+    // it fires before a click lands on whatever is underneath.
+    document.addEventListener('click', function(e) {
+      const menu = document.getElementById('startMenu');
+      if (!menu.classList.contains('visible')) return;
+      if (menu.contains(e.target)) return;
+      if (document.getElementById('startBtn').contains(e.target)) return;
+      app.closeStartMenu();
+    }, true);
+
+    // Keep the open menu attached to its button when the viewport changes
+    // — a resize can move the button between the header and the floating
+    // position, and an orientation change moves it a long way.
+    window.addEventListener('resize', function() {
+      const menu = document.getElementById('startMenu');
+      if (!menu.classList.contains('visible')) return;
+      app.closeStartMenu();
+    });
+
+    // Device / browser back on a phone returns to the conversation list
+    // rather than leaving the app. Only meaningful in the one-pane layout,
+    // where opening a chat pushed the entry this pops.
+    window.addEventListener('popstate', function() {
+      // popHistory=false: the browser has already moved back, so calling
+      // history.back() again here would navigate away from the app.
+      app.showChatList(false);
     });
 
     // Keyboard shortcuts
@@ -7002,9 +8275,12 @@
       if (e.key === 'Escape') {
         app.closeSettings();
         app.closeLightbox();
+        app.closeStartMenu();
         app.closeModal('createGroupModal');
-        app.closeModal('joinGroupModal');
+        app.closeModal('createChannelModal');
         app.closeModal('groupAdminModal');
+        app.closeModal('qrModal');
+        app.closeAddressModal();
       }
     });
   </script>

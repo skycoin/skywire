@@ -56,6 +56,7 @@ func ReservedPorts() map[uint16]struct{} {
 		80:                                   {}, // dmsg-http
 		skyenv.DmsgDHTPort:                   {},
 		skyenv.DmsgAwaitSetupPort:            {},
+		skyenv.SkychatGroupProbePort:         {},
 	}
 }
 

@@ -125,6 +125,18 @@ const (
 	// throttled request is never stored, so a flood costs the admin one
 	// hash and one frame rather than a row and a notification.
 	JoinStatusThrottled JoinStatus = "throttled"
+
+	// JoinStatusInfo — the answer to a DESCRIBE (JoinRequestMsg.Probe):
+	// "here is what this group is". Carries the group's kind, admission
+	// policy, feed port and name, and grants nothing.
+	//
+	// A status of its own rather than a separate frame kind so the whole
+	// existing round trip — codec, deadlines, identity check — is reused.
+	// It is deliberately NOT a decision (see IsDecision) and NOT terminal:
+	// nothing in the join state machine may ever act on it, because a
+	// describe answer says nothing about whether the asker would be let
+	// in. See probe.go.
+	JoinStatusInfo JoinStatus = "info"
 )
 
 // IsTerminal reports whether the requester should stop re-asking.
@@ -181,6 +193,19 @@ type JoinRequestMsg struct {
 	// honestly.
 	AskAgain bool `json:"ask_again,omitempty"`
 
+	// Probe asks the group to DESCRIBE itself and decide nothing: no
+	// roster change, no queue entry, no notification. Answered with
+	// JoinStatusInfo.
+	//
+	// This is what makes a short skychat://<pk>/<group-id> address
+	// actionable — the sender cannot know the group's kind, admission
+	// policy or feed port until someone tells it, and it must be able to
+	// ask without that ask being read as "let me in". A build that
+	// predates this field ignores it and answers the request as a real
+	// join, so the requester only ever sends a probe to the well-known
+	// probe port, which no older build listens on at all.
+	Probe bool `json:"probe,omitempty"`
+
 	TS time.Time `json:"ts"`
 }
 
@@ -196,6 +221,18 @@ type JoinResponseMsg struct {
 	// Name lets the joiner display the real group name rather than
 	// whatever the invite link said, which may be stale.
 	Name string `json:"name,omitempty"`
+
+	// GroupKind is the group's type as the group itself reports it —
+	// authoritative over whatever the invite link claimed. Named
+	// GroupKind rather than Kind because Kind above is the frame
+	// discriminator.
+	//
+	// This is what stops a channel from being joined as an ordinary
+	// public group: both are ModePublic, so without it a member's
+	// composer would come up unlocked on a feed nobody else will render
+	// their leaves from. Empty from a responder predating channels, in
+	// which case the joiner falls back to the invite and then to Mode.
+	GroupKind Kind `json:"group_kind,omitempty"`
 
 	// AESKey is the group key, present iff Status is admitted AND the
 	// group is encrypted. This is the delivery channel that replaced
@@ -247,6 +284,36 @@ type JoinResponseMsg struct {
 
 	// Reason is operator-facing text for the non-admitted cases.
 	Reason string `json:"reason,omitempty"`
+
+	// ---- describe-only fields (Status == JoinStatusInfo) ------------
+	//
+	// These answer "what is this group", for a requester that holds a
+	// short address and therefore knows nothing but the group's ID. They
+	// are populated only on a probe answer; a real admission response
+	// leaves them zero, because by then the joiner has the invite link
+	// and the roster and needs none of them.
+
+	// Port is the group's CXO feed port — Record.Port. Without it a
+	// short address cannot be turned into a join at all: the admission
+	// listener is at Port+1 and Port is allocated at random per group.
+	Port uint16 `json:"port,omitempty"`
+
+	// Policy is the group's admission rule, so a UI can offer "Join" or
+	// "Send request" before spending a round trip to find out which it
+	// was. Derived, not stored — see Record.JoinPolicy.
+	Policy JoinPolicy `json:"policy,omitempty"`
+
+	// PriceHint is free text a group may state about what admission
+	// costs ("5 SKY", "5 SKY / month"). Reserved for paid channels,
+	// always empty today.
+	//
+	// A hint, and named as one: it is unverified text from a host that
+	// wants members, so it is display-only context and must never be
+	// treated as terms. A real payment flow will carry its own verified
+	// amounts; this field exists so introducing one does not require a
+	// wire change, and so a UI has somewhere to put the number. Bounded
+	// by maxPriceHintLen on receipt.
+	PriceHint string `json:"price_hint,omitempty"`
 }
 
 // maxJoinNoteLen bounds the free-text note. Long enough for a sentence
@@ -523,7 +590,7 @@ func decodeJoinResponse(b []byte) (JoinResponseMsg, error) {
 	}
 	switch m.Status {
 	case JoinStatusAdmitted, JoinStatusPending, JoinStatusDenied, JoinStatusBanned,
-		JoinStatusUnavailable, JoinStatusChallenge, JoinStatusThrottled:
+		JoinStatusUnavailable, JoinStatusChallenge, JoinStatusThrottled, JoinStatusInfo:
 	default:
 		return JoinResponseMsg{}, fmt.Errorf("group: decode join response: unknown status %q", m.Status)
 	}

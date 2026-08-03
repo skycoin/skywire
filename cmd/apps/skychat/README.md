@@ -74,12 +74,21 @@ don't lose data.
 ## Group chat
 
 ```bash
-# Owner: create a group, get an invite link
-skywire cli skychat group create my-room
-skywire cli skychat group invite <group-id>
+# Owner: create a group, a private group, or a broadcast channel
+skywire cli skychat group create --name my-room
+skywire cli skychat group create --name ops --kind private
+skywire cli skychat group create --name news --kind channel
 
-# Member: join via the invite link
+# Hand it out — as a link, or as a short address
+skywire cli skychat group invite  <group-id>   # skychat:invite:<base64url>
+skywire cli skychat group address <group-id>   # skychat://<host-pk>/<group-id>
+
+# Member: join by either form
 skywire cli skychat group join <invite-link>
+skywire cli skychat group join skychat://<host-pk>/<group-id>
+
+# "what is this thing someone sent me?"
+skywire cli skychat group resolve <address-or-link>
 
 # Send / read
 skywire cli skychat group send <group-id> "hi everyone"
@@ -87,6 +96,52 @@ skywire cli skychat group listen
 skywire cli skychat group info <group-id>
 skywire cli skychat group list
 ```
+
+### Group kinds
+
+| kind | admission | bodies | who posts |
+|---|---|---|---|
+| `public` | open — anyone who asks | plaintext on the feed | every member |
+| `private` | an admin approves each request | encrypted | every member |
+| `channel` | open — anyone who asks | plaintext on the feed | admins only |
+
+Public and channel bodies are plaintext for the same reason: admission is
+open, so the key would go to any stranger who asked and would protect
+nothing. Transport is Noise-encrypted regardless. A channel differs from
+the reversible `read_only` flag in being permanent — it is what the group
+*is*, not what an admin has currently switched on — which is why the
+reader-side gate drops a non-admin's leaves whatever their age.
+
+### Addresses vs invite links
+
+Two ways to name a conversation, and they trade against each other rather
+than one superseding the other:
+
+```
+skychat://<pk>                 a person — opens a DM
+skychat://<pk>/<group-id>      a group or channel
+skychat:invite:<base64url>     a group invite
+```
+
+An **address** is short enough to print, read aloud, or encode in a
+low-density QR code, and stays valid as the group changes. It is not
+self-contained: a group's feed port is allocated at random per group, so
+whoever holds an address asks the host what the group is before joining
+(one round trip on `skyenv.SkychatGroupProbePort`, describe-only — it
+decides nothing and mutates nothing). That means the host has to be
+reachable.
+
+An **invite link** carries the port, mode, admin list and proof-of-work
+price inline, so it works while the host is offline — at a few hundred
+characters, which is why it is not the thing you scan.
+
+Both go through the same admission gate. An address is a shorter way to
+name a group, not a way around its door.
+
+Whether a bare public key belongs to a person or to the host of a channel
+is not decidable by inspection — they are the same 66 characters. Only a
+group ID in the address distinguishes them, which is why `resolve` exists
+and why the UI asks before it offers an action.
 
 Groups are built on top of CXO TreeStore feeds. The owner publishes
 the canonical group feed; members subscribe and (post-#2539)
@@ -155,13 +210,35 @@ afterwards has a fallback door. The founder is still the group's
 immutable recovery anchor and is still asked first; it just isn't the
 only one who can let people in.
 
-The browser UI mirrors this with a Groups sidebar (create/join
-modals, per-sender message labels), backed by an HTTP proxy to the
-visor's group RPC — `GET/POST /group`, `POST /group/join`, and
+The browser UI mirrors this, backed by an HTTP proxy to the visor's
+group RPC — `GET/POST /group`, `POST /group/join` (which takes either
+`{invite}` or `{address}`), `GET /group/resolve?address=…`, and
 `/group/<id>/{invite,send,leave,history}`. It needs the visor RPC
 connection (`--pair-enable`); without it the Groups section stays
 hidden and the UI is DM-only. Group text is decrypted by the visor
 for private groups, so the browser never handles keys.
+
+Starting anything is one button — bottom-right on a phone, in the sidebar
+header otherwise — offering **Add by address**, **New group** and **New
+channel**. "Add by address" takes one field for every way of naming
+something: a bare public key, a `skychat://` address, an invite link, or a
+scanned QR code. It resolves the input first and then offers the single
+action that applies — Start Chat, Join Group, Send Request, or Join
+Channel — so nobody has to know which kind of thing they are holding.
+
+Every open conversation can show its own address as a QR code, with the
+address printed underneath as selectable text plus a copy button: a code
+is useless over a screen share, in a terminal, or on a device with no
+camera. Scanning uses the browser's own `BarcodeDetector` (Chrome, Edge,
+Android WebView) from the camera or from a chosen image; where the API is
+absent the dialog says so and the paste field — its primary input anyway —
+still works. The camera needs a secure context, which plain http only
+satisfies on `127.0.0.1`/`localhost`.
+
+Below 760px the sidebar and the chat stop sharing the screen: the list is
+the screen until a conversation is opened, which then replaces it and
+grows a back button. The device back button returns to the list rather
+than leaving the app.
 
 ## Media & files (browser UI)
 

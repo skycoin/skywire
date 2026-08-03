@@ -60,6 +60,21 @@ func (r *RPC) GroupJoin(req *GroupJoinArgs, out *GroupInfo) (err error) {
 	return nil
 }
 
+// GroupResolve reports what a skychat address points at — a person, or a
+// group/channel and what joining it involves.
+func (r *RPC) GroupResolve(req *GroupResolveArgs, out *GroupResolveResult) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupResolve", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	res, err := r.visor.GroupResolve(*req)
+	if err != nil {
+		return err
+	}
+	*out = res
+	return nil
+}
+
 // GroupList returns every persisted group on this visor.
 func (r *RPC) GroupList(_ *struct{}, out *[]GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupList", nil)(out, &err)

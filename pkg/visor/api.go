@@ -274,6 +274,7 @@ type API interface {
 	// allowlists. See pkg/visor/group.go.
 	GroupCreate(args GroupCreateArgs) (GroupInfo, string, error)
 	GroupJoin(args GroupJoinArgs) (GroupInfo, error)
+	GroupResolve(args GroupResolveArgs) (GroupResolveResult, error)
 	GroupAskAgain(id string) (GroupInfo, error)
 	GroupList() ([]GroupInfo, error)
 	GroupGet(id string) (GroupInfo, error)
