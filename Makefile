@@ -2,6 +2,7 @@
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
+.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
@@ -190,6 +191,44 @@ build-merged: ## Install dependencies, build apps and binaries. `go build` with 
 
 build-merged-cgo: ## Build with CGO optimization for faster DMSG handshakes (requires libsecp256k1-dev)
 	${OPTS} go build -tags=cgo ${BUILD_OPTS} -o $(BUILD_PATH)skywire .
+
+# ---- skywire-mobile: the lite multicall core for the Android app ----------
+# One binary: visor + cli `config` subtree + the 4 client apps (in-proc via the
+# launcher registry). The `mobile` tag strips the embedded desktop assets
+# (geoip db 30 MB, manager UI 6.8 MB, vendored browser wallet 11 MB, tpviz
+# legacy 2.8 MB). Output lands in the android project's jniLibs so Android
+# Studio picks it up directly. -checklinkname=0 is REQUIRED on GOOS=android:
+# the vendored wlynxg/anet uses //go:linkname into net (Go ≥1.23 blocks it).
+ANDROID_JNILIBS := android/app/src/main/jniLibs/arm64-v8a
+MOBILE_TAGS := mobile,withoutsystray
+# Size budget for the android payload, in bytes (80 MB). The CI lane fails
+# over it so the lite variant can't silently rot or regain the stripped fat.
+ANDROID_MOBILE_MAX_BYTES := 83886080
+
+build-mobile: ## Build the skywire-mobile lite core for the HOST OS (desktop smoke of the mobile build variant)
+	${OPTS} go build -tags $(MOBILE_TAGS) ${BUILD_OPTS} -o $(BUILD_PATH)skywire-mobile ./cmd/skywire-mobile
+
+android-mobile: ## Build libskywire-mobile.so (android/arm64) into android jniLibs — pure-Go lane (CI/emulator); use android-mobile-ndk for release (bionic DNS)
+	mkdir -p $(ANDROID_JNILIBS)
+	GOOS=android GOARCH=arm64 CGO_ENABLED=0 ${OPTS} go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile
+	@ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
+
+android-mobile-check: android-mobile ## CI lane: android-mobile + fail over the size budget
+	@size=$$(wc -c < $(ANDROID_JNILIBS)/libskywire-mobile.so | tr -d '[:space:]'); \
+	echo "libskywire-mobile.so: $$size bytes (budget $(ANDROID_MOBILE_MAX_BYTES))"; \
+	if [ "$$size" -gt "$(ANDROID_MOBILE_MAX_BYTES)" ]; then \
+		echo "ERROR: libskywire-mobile.so exceeds the size budget — the mobile variant regained fat"; \
+		exit 1; \
+	fi
+
+android-mobile-ndk: ## Release lane: NDK/cgo android build (DNS via bionic getaddrinfo); requires ANDROID_NDK_HOME
+	@set -e; \
+	test -n "$(ANDROID_NDK_HOME)" || { echo "ANDROID_NDK_HOME is not set"; exit 1; }; \
+	CC_BIN=$$(ls $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android26-clang 2>/dev/null | head -n1); \
+	test -n "$$CC_BIN" || { echo "aarch64-linux-android26-clang not found under ANDROID_NDK_HOME"; exit 1; }; \
+	mkdir -p $(ANDROID_JNILIBS); \
+	GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$$CC_BIN" go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile; \
+	ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
 
 build-merged-windows: clean-windows
 	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe .'

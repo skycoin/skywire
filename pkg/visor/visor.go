@@ -3,7 +3,6 @@ package visor
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -1044,8 +1043,9 @@ func (v *Visor) FetchAllTransportEntries(ctx context.Context) ([]*transport.Entr
 	return entries, nil
 }
 
-//go:embed static
-var ui embed.FS
+// The embedded manager UI (`//go:embed static` → var ui) lives in
+// static_embed.go; the `mobile` build variant replaces it with an empty FS
+// (static_mobile.go) so the ~6.8 MB bundle never ships to the phone.
 
 // HypervisorUIFS returns the embedded Angular hypervisor UI filesystem (the
 // built static/ assets). Exposed for consumers like the standalone-html

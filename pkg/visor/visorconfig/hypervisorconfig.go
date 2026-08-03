@@ -56,6 +56,12 @@ func (hk *Key) UnmarshalText(text []byte) error {
 // HypervisorConfig configures the hypervisor.
 type HypervisorConfig struct {
 	Enable bool `json:"enable"` // Whether the hypervisor is enabled (starts DMSG RPC + tracking + web UI on visor startup).
+	// DmsgIngest is read by MOBILE builds only: it opts in to the remote-visor
+	// dmsg RPC ingest — the listener other visors connect to when this PK is in
+	// their `hypervisors` list (the phone app's Fleet toggle). Off by default so
+	// the mobile core stays an API-only localhost surface. Desktop builds ignore
+	// it: there the ingest always starts with the hypervisor, as before.
+	DmsgIngest bool `json:"dmsg_ingest,omitempty"`
 	// UIDisable, when true, suppresses ONLY the web UI (HTTP) server while the
 	// hypervisor's DMSG-RPC listener + managed-visor tracking (and `hv ls` over
 	// the visor RPC) stay active. Toggled at runtime with `hv ui enable/disable`.
