@@ -4,6 +4,12 @@
 // ipFromRequest header/remote-addr precedence, the HTTP API server
 // (startAPIServer driven end-to-end and shut down via SIGTERM), the command
 // metadata/flags, and the CLI Run path (subprocess) plus Execute's --help.
+//
+// !mobile: these tests exercise the embedded GeoLite2 DB, which the `mobile`
+// build variant strips (pkg/geoip/geoip_embedded_mobile.go).
+
+//go:build !mobile
+
 package commands
 
 import (

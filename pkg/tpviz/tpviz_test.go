@@ -1,3 +1,5 @@
+//go:build !mobile
+
 // Package tpviz pkg/tpviz/tpviz_test.go
 package tpviz
 
