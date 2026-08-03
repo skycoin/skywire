@@ -245,6 +245,16 @@ func WithPeerBackfill(enabled bool) CreateOption {
 	return func(r *Record) { r.PeerBackfillDisabled = !enabled }
 }
 
+// WithListed opts the new group into this visor's discovery catalog, so
+// anyone holding the host's public key can find it.
+//
+// Off when the option is not passed, and that default is load-bearing:
+// the catalog is the only thing here that turns one key into a list, so an
+// entry has to be asked for. See Record.Listed.
+func WithListed(listed bool) CreateOption {
+	return func(r *Record) { r.Listed = listed }
+}
+
 // Create constructs a new owner-side group, persists it, and opens
 // the publisher. Returns the persisted Record (with ID + Port + key
 // populated) so the caller can build the invite link.

@@ -1618,6 +1618,58 @@
       image-rendering: pixelated;   /* keep module edges crisp when scaled */
     }
 
+    .addr-catalog {
+      margin-bottom: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .addr-catalog.hidden { display: none; }
+
+    .ac-head {
+      padding: 8px 12px;
+      background: var(--bg-tertiary);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: var(--accent-green);
+    }
+
+    .ac-list { max-height: 190px; overflow-y: auto; }
+
+    .ac-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 9px 12px;
+      background: transparent;
+      border: none;
+      border-top: 1px solid var(--border-color);
+      color: var(--text-primary);
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .ac-item:hover { background: var(--bg-hover); }
+    .ac-icon { font-size: 15px; flex: 0 0 auto; }
+    .ac-body { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+    .ac-name { font-size: 13px; }
+    .ac-meta { font-size: 10px; color: var(--text-muted); }
+    .ac-go { margin-left: auto; font-size: 11px; color: var(--accent-blue); flex: 0 0 auto; }
+
+    .hist-loading {
+      padding: 6px 20px;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border-color);
+      color: var(--text-muted);
+      font-size: 11px;
+      text-align: center;
+    }
+
     .qr-addr-row {
       display: flex;
       align-items: center;
@@ -2197,7 +2249,12 @@
       <p>Select a contact or add a new one by entering their public key to start messaging over the Skywire network.</p>
     </div>
 
-    <ul id="messages" class="messages-container hidden"></ul>
+    <!-- Shown while an older page of a group's backlog is on its way. Sits
+         outside the scroll container so appearing does not itself shift the
+         reader's position. -->
+    <div id="histLoading" class="hist-loading hidden">Loading earlier messages…</div>
+
+    <ul id="messages" class="messages-container hidden" onscroll="app._onMessagesScroll()"></ul>
 
     <div id="replyChip" class="reply-chip hidden"></div>
 
@@ -2419,13 +2476,23 @@
         key would go to anyone who asked and would protect nothing.
         Traffic is still encrypted in transit.
       </p>
+      <p class="cg-help">
+        History and files are served by the channel's admins, not by other
+        subscribers — a subscriber has nothing of its own to share, so a
+        large channel stays cheap to follow. New joiners receive the
+        backlog in chunks while an admin is online.
+      </p>
+      <!-- Unticked by default. Being findable is a decision, not a
+           default: nothing this visor hosts should become enumerable by
+           accident. -->
       <label class="cg-check">
-        <input type="checkbox" id="ccPeerBackfill" checked />
-        <span>Any member can share history with new members</span>
+        <input type="checkbox" id="ccListed" />
+        <span>List in the public catalog</span>
       </label>
       <p class="cg-help">
-        Off means only admins can, so the channel goes quiet for new
-        joiners whenever no admin is online.
+        On means anyone who knows this visor's public key can discover this
+        channel by asking it. Off keeps it reachable only by its address or
+        an invite link. An admin can change this later.
       </p>
       <div class="modal-actions">
         <button class="btn" onclick="app.createChannel()">Create</button>
@@ -2468,6 +2535,11 @@
       <div id="addrResult" class="addr-result hidden"></div>
       <p id="addrHint" class="cg-help"></p>
 
+      <!-- Channels and groups the entered visor publishes. A public key names
+           a person, but that person's visor may also host things worth
+           joining, and there is otherwise no way to find out. -->
+      <div id="addrCatalog" class="addr-catalog hidden"></div>
+
       <div class="modal-actions">
         <button id="addrActionBtn" class="btn hidden" onclick="app.addressAction()">Start Chat</button>
         <button class="btn btn-secondary" onclick="app.closeAddressModal()">Cancel</button>
@@ -2506,6 +2578,20 @@
           <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
           <span>Read-only — only admins can send messages</span>
         </label>
+      </div>
+      <!-- Discovery. Local to this visor rather than a property of the group:
+           it says what WE answer questions about, so another admin's copy is
+           unaffected either way. -->
+      <div id="gaListedRow" class="ga-row hidden">
+        <label class="ga-toggle">
+          <input type="checkbox" id="gaListed" onchange="app.toggleGroupListed()" />
+          <span>List in this visor's public catalog</span>
+        </label>
+        <p class="cg-help">
+          On means anyone holding this visor's public key can discover it by
+          asking. Off keeps it reachable only by address or invite link. Other
+          admins publish their own copies independently.
+        </p>
       </div>
       <!-- Flood protection. Public keys are free, so this is the only
            thing that makes an identity cost anything. -->
@@ -5825,6 +5911,7 @@
         this.messages[id].forEach(m => this._showMessage(m));
         msgEl.scrollTop = msgEl.scrollHeight;
         document.getElementById('msgField').focus();
+        this._setHistLoading(false);
 
         this.loadGroupHistory(id);
         this.renderPinned();
@@ -5832,58 +5919,186 @@
         this._updateMuteButtons();
       }
 
-      // loadGroupHistory backfills persisted messages when the local buffer is
-      // empty. Group messages aren't cached in localStorage (the visor's
-      // history store is the source of truth), so this runs on each open of an
-      // empty thread; returns silently if group history is disabled.
+      // groupHistoryChunk is how many messages one page of backlog carries.
+      //
+      // Small on purpose. A channel can hold years of posts, and the point of
+      // paging is that opening one shows something immediately instead of
+      // waiting on the whole archive; 50 fills a screen with room to spare and
+      // the next page arrives before the reader gets to the top of this one.
+      static get groupHistoryChunk() { return 50; }
+
+      // _histState returns the paging state for a group, creating it on first
+      // use. cursor is the ts_nano of the OLDEST row we hold — the exclusive
+      // bound for the next page. done means the server has told us there is
+      // nothing older, which is what stops the scroll handler asking forever.
+      _histState(id) {
+        this._hist = this._hist || {};
+        if (!this._hist[id]) this._hist[id] = { cursor: null, done: false, loading: false };
+        return this._hist[id];
+      }
+
+      // _groupHistoryRows converts persisted rows into render entries and
+      // returns them with the oldest row's cursor.
+      //
+      // Shared by the first page and every older page so the two cannot drift
+      // in how they interpret a file reference, a reply, or a local hide — a
+      // scroll-back that rendered attachments differently from the initial
+      // load would be a subtle, hard-to-spot bug.
+      //
+      // Date dividers are deliberately NOT inserted here: a page boundary is
+      // not a day boundary, and a divider decided per-page would repeat or go
+      // missing depending on where the split fell. _redrawGroup adds them once
+      // over the assembled list instead.
+      _groupHistoryRows(id, msgs) {
+        const rows = [];
+        let oldest = null;
+        msgs.forEach(m => {
+          const tsNano = m.ts_nano != null ? m.ts_nano : null;
+          const ts = new Date(m.ts);
+          // The cursor tracks the oldest row REGARDLESS of whether it is
+          // rendered: paging past a message hidden on this device must still
+          // advance, or the next page would return the same rows forever.
+          const cur = tsNano != null ? String(tsNano) : String(ts.getTime() * 1000000);
+          if (oldest === null) oldest = cur;
+          // Skip messages this device deleted-for-me (groups reload from
+          // history, so the local hide lives in hiddenGroup, not the cache).
+          if (this._isGroupHidden(id, tsNano != null ? String(tsNano) : '')) return;
+          const sender = String(m.sender_pk || '').toLowerCase();
+          const senderIsMe = sender === this.myPK;
+          // A file-reference row (file_id set) becomes a media bubble.
+          // file_url is present only when this visor already holds the
+          // bytes; otherwise it renders as a card with a re-request link
+          // (skipped on our own sends — no .from). Bytes then arrive via a
+          // file-ready patch. In a channel that card is the normal state:
+          // nothing is downloaded until somebody asks for it.
+          const file = m.file_id ? {
+            id: m.file_id,
+            name: m.file_name || 'file',
+            size: m.file_size || 0,
+            url: m.file_url || null,
+            from: senderIsMe ? null : sender,
+          } : null;
+          const reply = (m.reply_to_ts || m.reply_to_preview || m.reply_to_sender) ? {
+            sender: (m.reply_to_sender || '').toLowerCase(),
+            ts: m.reply_to_ts || '',
+            preview: m.reply_to_preview || '',
+          } : null;
+          rows.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file, reply, tsNano });
+        });
+        return { rows, oldest };
+      }
+
+      // _redrawGroup re-renders the open group from this.messages, inserting
+      // date dividers over the whole assembled list.
+      //
+      // keepAnchor preserves the reader's position when older messages have
+      // just been prepended: the content above them grew, so scrollTop is
+      // shifted by exactly that growth and the message under the cursor does
+      // not move. Without it, loading a page would yank the view to the top.
+      _redrawGroup(id, keepAnchor) {
+        const el = document.getElementById('messages');
+        if (!el || this.group !== id) return;
+        const beforeH = el.scrollHeight;
+        const beforeTop = el.scrollTop;
+        el.innerHTML = '';
+        let lastDay = null;
+        (this.messages[id] || []).forEach(m => {
+          if (m.date) return; // stale divider from an earlier render
+          const day = m.ts ? m.ts.toDateString() : null;
+          if (day && day !== lastDay) {
+            this._showMessage({ date: m.ts });
+            lastDay = day;
+          }
+          this._showMessage(m);
+        });
+        if (keepAnchor) {
+          el.scrollTop = el.scrollHeight - beforeH + beforeTop;
+        } else {
+          el.scrollTop = el.scrollHeight;
+        }
+      }
+
+      // loadGroupHistory loads the NEWEST page of a group's backlog when the
+      // local buffer is empty. Group messages aren't cached in localStorage
+      // (the visor's history store is the source of truth), so this runs on
+      // each open of an empty thread; silent if group history is disabled.
+      //
+      // Older pages are not fetched here. They arrive as the reader scrolls
+      // back — see _onMessagesScroll — which is what makes a channel with a
+      // deep backlog open instantly instead of pulling all of it first.
       loadGroupHistory(id) {
         if (this.messages[id] && this.messages[id].length > 0) return;
-        fetch(`/group/${id}/history?limit=100`)
+        const st = this._histState(id);
+        st.loading = true;
+        fetch(`/group/${id}/history?limit=${Chat.groupHistoryChunk}`)
           .then(res => res.ok ? res.json() : null)
           .then(msgs => {
-            if (!msgs || !msgs.length) return;
+            st.loading = false;
+            if (!msgs || !msgs.length) { st.done = true; return; }
             if (this.messages[id].length > 0) return;
-            const withDates = [];
-            let lastDay = null;
-            msgs.forEach(m => {
-              const tsNano = m.ts_nano != null ? m.ts_nano : null;
-              // Skip messages this device deleted-for-me (groups reload from
-              // history, so the local hide lives in hiddenGroup, not the cache).
-              if (this._isGroupHidden(id, tsNano != null ? String(tsNano) : '')) return;
-              const ts = new Date(m.ts);
-              const day = ts.toDateString();
-              if (day !== lastDay) { withDates.push({ date: ts }); lastDay = day; }
-              const sender = String(m.sender_pk || '').toLowerCase();
-              const senderIsMe = sender === this.myPK;
-              // A file-reference row (file_id set) becomes a media bubble.
-              // file_url is present only when this visor already holds the
-              // bytes; otherwise it renders as a card with a re-request link
-              // (skipped on our own sends — no .from). Bytes then arrive via a
-              // file-ready patch.
-              const file = m.file_id ? {
-                id: m.file_id,
-                name: m.file_name || 'file',
-                size: m.file_size || 0,
-                url: m.file_url || null,
-                from: senderIsMe ? null : sender,
-              } : null;
-              const reply = (m.reply_to_ts || m.reply_to_preview || m.reply_to_sender) ? {
-                sender: (m.reply_to_sender || '').toLowerCase(),
-                ts: m.reply_to_ts || '',
-                preview: m.reply_to_preview || '',
-              } : null;
-              withDates.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file, reply, tsNano });
-            });
-            this.messages[id] = withDates;
+            const { rows, oldest } = this._groupHistoryRows(id, msgs);
+            this.messages[id] = rows;
             this.messagesQuantity[id] = msgs.length;
-            if (this.group === id) {
-              const el = document.getElementById('messages');
-              el.innerHTML = '';
-              this.messages[id].forEach(m => this._showMessage(m));
-              el.scrollTop = el.scrollHeight;
-            }
+            st.cursor = oldest;
+            // A short page means the store had nothing more to give.
+            if (msgs.length < Chat.groupHistoryChunk) st.done = true;
+            this._redrawGroup(id, false);
           })
-          .catch(e => console.debug('group history skipped:', e.message));
+          .catch(e => {
+            st.loading = false;
+            console.debug('group history skipped:', e.message);
+          });
+      }
+
+      // loadOlderGroupHistory fetches the page before what we hold and
+      // prepends it. Idempotent while a request is in flight, and a no-op once
+      // the store has reported the start of history.
+      loadOlderGroupHistory(id) {
+        const st = this._histState(id);
+        if (st.loading || st.done || !st.cursor) return;
+        st.loading = true;
+        this._setHistLoading(true);
+        fetch(`/group/${id}/history?limit=${Chat.groupHistoryChunk}&before=${encodeURIComponent(st.cursor)}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(msgs => {
+            st.loading = false;
+            this._setHistLoading(false);
+            if (!msgs || !msgs.length) { st.done = true; return; }
+            const { rows, oldest } = this._groupHistoryRows(id, msgs);
+            if (oldest !== null) st.cursor = oldest;
+            if (msgs.length < Chat.groupHistoryChunk) st.done = true;
+            if (!rows.length) {
+              // Every row on this page was hidden locally. The cursor moved,
+              // so try the next page rather than stopping on a blank one.
+              if (!st.done) this.loadOlderGroupHistory(id);
+              return;
+            }
+            this.messages[id] = rows.concat(this.messages[id] || []);
+            this.messagesQuantity[id] = (this.messagesQuantity[id] || 0) + msgs.length;
+            this._redrawGroup(id, true);
+          })
+          .catch(e => {
+            st.loading = false;
+            this._setHistLoading(false);
+            console.debug('older group history skipped:', e.message);
+          });
+      }
+
+      _setHistLoading(on) {
+        const el = document.getElementById('histLoading');
+        if (el) el.classList.toggle('hidden', !on);
+      }
+
+      // _onMessagesScroll pulls the next page when the reader nears the top of
+      // the backlog. Bound once in the constructor path; harmless for DMs,
+      // which have no group paging state and fall out on the guard.
+      _onMessagesScroll() {
+        if (!this.group) return;
+        const el = document.getElementById('messages');
+        if (!el) return;
+        // A threshold rather than exactly zero so the next page is already
+        // arriving by the time the reader reaches the end of this one.
+        if (el.scrollTop <= 120) this.loadOlderGroupHistory(this.group);
       }
 
       sendGroupMessage(text) {
@@ -6023,8 +6238,8 @@
       openCreateChannel() {
         this.closeStartMenu();
         document.getElementById('ccName').value = '';
-        const backfill = document.getElementById('ccPeerBackfill');
-        if (backfill) backfill.checked = true;
+        const listed = document.getElementById('ccListed');
+        if (listed) listed.checked = false;
         document.getElementById('createChannelModal').classList.add('visible');
       }
 
@@ -6033,13 +6248,14 @@
       // only difference on the wire is kind.
       createChannel() {
         const name = document.getElementById('ccName').value.trim();
-        const backfillEl = document.getElementById('ccPeerBackfill');
-        const peer_backfill = backfillEl ? !!backfillEl.checked : true;
+        const listedEl = document.getElementById('ccListed');
+        // Off unless ticked: being findable is a decision, not a default.
+        const listed = listedEl ? !!listedEl.checked : false;
         if (!name) { this.showToast('Enter a channel name.', 'error'); return; }
         fetch('/group', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, kind: 'channel', members: [], peer_backfill })
+          body: JSON.stringify({ name, kind: 'channel', members: [], listed })
         })
           .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
           .then(j => {
@@ -6173,6 +6389,8 @@
         const hint = document.getElementById('addrHint');
         box.className = 'addr-result';
         btn.classList.add('hidden');
+        // Any re-render invalidates whatever the last key's catalog showed.
+        this._clearCatalog();
 
         if (!res) { box.classList.add('hidden'); return; }
 
@@ -6200,6 +6418,9 @@
           hint.textContent = 'Messages to a person are encrypted end to end.';
           btn.textContent = this.recipients.includes(res.pk) ? 'Open Chat' : 'Start Chat';
           btn.classList.remove('hidden');
+          // A key names a person, but their visor may also publish channels.
+          // Asking is the only way to find out — there is no index anywhere.
+          this._loadCatalogFor(res.pk);
           return;
         }
 
@@ -6249,6 +6470,66 @@
           ? 'Join Channel'
           : (g.policy === 'approval' ? 'Send Request' : 'Join Group');
         btn.classList.remove('hidden');
+      }
+
+      // ---- Discovery catalog -----------------------------------------
+
+      _clearCatalog() {
+        this._catalogSeq = (this._catalogSeq || 0) + 1;
+        const box = document.getElementById('addrCatalog');
+        if (box) { box.innerHTML = ''; box.classList.add('hidden'); }
+      }
+
+      // _loadCatalogFor asks a visor what it publishes and lists the result
+      // under the resolved contact.
+      //
+      // Best-effort and silent on failure: most visors publish nothing, and an
+      // error bar for "this person hosts no channels" would be noise on the
+      // common path. Only listed entries ever come back — see Record.Listed.
+      _loadCatalogFor(pk) {
+        const seq = (this._catalogSeq = (this._catalogSeq || 0) + 1);
+        fetch(`/group/catalog?pk=${encodeURIComponent(pk)}`)
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (seq !== this._catalogSeq) return;   // a newer input superseded us
+            const entries = (data && data.entries) || [];
+            if (!entries.length) return;
+            this._renderCatalog(entries, !!(data && data.truncated));
+          })
+          .catch(() => {});
+      }
+
+      _renderCatalog(entries, truncated) {
+        const box = document.getElementById('addrCatalog');
+        if (!box) return;
+        const rows = entries.map(e => {
+          const isChannel = e.kind === 'channel';
+          const bits = [isChannel ? 'Channel' : 'Group'];
+          bits.push(e.policy === 'approval' ? 'approval needed' : 'open to join');
+          if (e.price_hint) bits.push(`${e.price_hint} (claimed)`);
+          const already = this.groups.some(g => g.id === e.id);
+          return `<button class="ac-item" onclick="app.openCatalogEntry('${this.escapeAttr(e.address)}')">
+              <span class="ac-icon">${isChannel ? '&#x1F4E3;' : '&#x1F465;'}</span>
+              <span class="ac-body">
+                <span class="ac-name">${this.escapeHtml(e.name || e.id)}</span>
+                <span class="ac-meta">${this.escapeHtml(bits.join(' · '))}</span>
+              </span>
+              <span class="ac-go">${already ? 'open' : 'view'}</span>
+            </button>`;
+        }).join('');
+        const more = truncated ? ' (showing the first few)' : '';
+        box.innerHTML = `<div class="ac-head">Also published by this visor${more}</div>
+          <div class="ac-list">${rows}</div>`;
+        box.classList.remove('hidden');
+      }
+
+      // openCatalogEntry puts a discovered address into the field and resolves
+      // it, so a listed channel is confirmed through exactly the same path as
+      // a pasted one — nothing is joined by tapping a row in a list.
+      openCatalogEntry(addr) {
+        const input = document.getElementById('addrInput');
+        input.value = addr;
+        this.onAddressInput();
       }
 
       // addressAction performs whatever the resolved address implies.
@@ -6595,8 +6876,15 @@
         const isAdmin = this._isGroupAdmin(info);
 
         const roRow = document.getElementById('gaReadOnlyRow');
-        roRow.classList.toggle('hidden', !isAdmin);
+        // A channel is admins-only permanently, so a reversible "quiet the
+        // room" toggle has nothing left to say there.
+        const isChannel = !!(info && info.kind === 'channel');
+        roRow.classList.toggle('hidden', !isAdmin || isChannel);
         document.getElementById('gaReadOnly').checked = !!(info && info.read_only);
+
+        const listedRow = document.getElementById('gaListedRow');
+        listedRow.classList.toggle('hidden', !isAdmin);
+        document.getElementById('gaListed').checked = !!(info && info.listed);
 
         // Encryption / key generation. Only private groups have a key, and
         // only admins can rotate it — a public group's bodies are plaintext
@@ -6861,6 +7149,27 @@
           })
           .catch(e => {
             document.getElementById('gaPeerBackfill').checked = !on;
+            this.showToast(`Failed: ${e}`, 'error');
+          });
+      }
+
+      // toggleGroupListed publishes or un-publishes this group in the visor's
+      // discovery catalog.
+      toggleGroupListed() {
+        const gid = this.group;
+        const on = document.getElementById('gaListed').checked;
+        fetch(`/group/${gid}/listed`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ listed: on })
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(t)))
+          .then(() => {
+            this.syncGroups();
+            this.showToast(on ? 'Published in this visor\'s catalog.' : 'No longer published.');
+          })
+          .catch(e => {
+            document.getElementById('gaListed').checked = !on;
             this.showToast(`Failed: ${e}`, 'error');
           });
       }

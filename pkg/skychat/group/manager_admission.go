@@ -671,7 +671,16 @@ func (m *Manager) SetJoinPoW(id string, bits uint8) (Record, error) {
 //
 // The live session's subscription set is re-evaluated either way, so the
 // change takes effect now rather than at the next restart.
+//
+// Refused outright on a channel. PeerBackfillEnabled is unconditionally
+// false there (a subscriber has nothing of its own to serve), so accepting
+// the call would gossip a signed state change to every member and change
+// nothing — an admin would be told the setting took, and it would not
+// have. An error is the honest answer.
 func (m *Manager) SetPeerBackfill(id string, enabled bool) (Record, error) {
+	if r, ok, err := m.store.Get(id); err == nil && ok && r.IsChannel() {
+		return Record{}, errors.New("group: SetPeerBackfill: a channel always serves history from its admins; this setting does not apply")
+	}
 	op := ModOpPeerBackfillOff
 	if enabled {
 		op = ModOpPeerBackfillOn

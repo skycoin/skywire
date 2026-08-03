@@ -289,6 +289,8 @@ type API interface {
 	GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error)
+	GroupSetListed(id string, listed bool) (GroupInfo, error)
+	GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error)
 	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupRotateKey(id string) (GroupInfo, error)
@@ -301,6 +303,7 @@ type API interface {
 	GroupDelete(id string) error
 	GroupLeave(id string) error
 	GroupHistory(groupID string, limit int) ([]GroupMessage, error)
+	GroupHistoryPage(args GroupHistoryPageArgs) ([]GroupMessage, error)
 	GroupHistoryGroups() ([]string, error)
 
 	// Skychat 1:1 voice calls (pkg/skychat/call).
