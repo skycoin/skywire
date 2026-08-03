@@ -188,24 +188,39 @@ func (v *Visor) Summary() (*Summary, error) {
 		v.log.Warn(err)
 	}
 
+	// Reward-push verdict for the HV UI reward column (see reward_push.go).
+	var rewardEligible *bool
+	var rewardIneligibleReason string
+	v.survey.mu.RLock()
+	if v.survey.pushAttempted {
+		e := v.survey.pushEligible
+		rewardEligible = &e
+		if !e {
+			rewardIneligibleReason = v.survey.pushReason
+		}
+	}
+	v.survey.mu.RUnlock()
+
 	summary := &Summary{
-		Overview:             overview,
-		Health:               health,
-		Uptime:               uptime,
-		Routes:               extraRoutes,
-		RouteGroups:          routeGroups,
-		MinHops:              v.conf.Routing.MinHops,
-		PersistentTransports: pts,
-		BuildTag:             runtime.GOOS + "_" + runtime.GOARCH,
-		ConfigVersion:        v.conf.Common.Version,
-		RewardAddress:        rewardAddress,
-		PublicAutoconnect:    v.conf.Transport.PublicAutoconnect,
-		IsPublic:             v.conf.IsPublic,
-		DmsgStats:            dmsgStatValue,
-		ConnectedDmsgServers: connectedDmsgServers,
-		DMSGServers:          dmsgServers,
-		IsHypervisor:         v.IsHypervisorEnabled(),
-		Load:                 collectLoadStats(),
+		Overview:               overview,
+		Health:                 health,
+		Uptime:                 uptime,
+		Routes:                 extraRoutes,
+		RouteGroups:            routeGroups,
+		MinHops:                v.conf.Routing.MinHops,
+		PersistentTransports:   pts,
+		BuildTag:               runtime.GOOS + "_" + runtime.GOARCH,
+		ConfigVersion:          v.conf.Common.Version,
+		RewardAddress:          rewardAddress,
+		RewardEligible:         rewardEligible,
+		RewardIneligibleReason: rewardIneligibleReason,
+		PublicAutoconnect:      v.conf.Transport.PublicAutoconnect,
+		IsPublic:               v.conf.IsPublic,
+		DmsgStats:              dmsgStatValue,
+		ConnectedDmsgServers:   connectedDmsgServers,
+		DMSGServers:            dmsgServers,
+		IsHypervisor:           v.IsHypervisorEnabled(),
+		Load:                   collectLoadStats(),
 	}
 	if v.conf.Hypervisor != nil {
 		summary.HypervisorAddr = v.conf.Hypervisor.HTTPAddr

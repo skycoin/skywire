@@ -559,10 +559,16 @@ type Summary struct {
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version,omitempty"` // Deprecated
 	RewardAddress        string                           `json:"reward_address"`
-	BuildTag             string                           `json:"build_tag"`
-	ConfigVersion        string                           `json:"config_version"`
-	PublicAutoconnect    bool                             `json:"public_autoconnect"`
-	IsPublic             bool                             `json:"is_public"`
+	// RewardEligible reflects the reward system's verdict on this visor's most
+	// recent survey PUSH: non-nil false = REJECTED (e.g. version below the reward
+	// floor) — the hypervisor UI shows a red mark, distinct from the hyphen for no
+	// reward address. nil = no verdict yet (never pushed / no reward address).
+	RewardEligible         *bool  `json:"reward_eligible,omitempty"`
+	RewardIneligibleReason string `json:"reward_ineligible_reason,omitempty"`
+	BuildTag               string `json:"build_tag"`
+	ConfigVersion          string `json:"config_version"`
+	PublicAutoconnect      bool   `json:"public_autoconnect"`
+	IsPublic               bool   `json:"is_public"`
 	// Load is a lightweight resource snapshot (load average, mem %, disk %)
 	// for the `hv ls --load` view. omitempty so the field is absent on
 	// summaries from older visors that don't populate it.
