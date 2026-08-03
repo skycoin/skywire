@@ -529,7 +529,7 @@ func (p *pollAPI) signal() {
 // first returns no messages, so the goroutine touches no globals in those
 // iterations; receiving their signals therefore orders every hub access the
 // goroutine ever makes before the caller's cleanup.
-func (p *pollAPI) awaitQuiet(t *testing.T, n int) {
+func (p *pollAPI) awaitQuiet(t *testing.T, n int) { //nolint
 	t.Helper()
 	for i := 0; i < n; i++ {
 		select {

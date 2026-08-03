@@ -1268,7 +1268,10 @@ func (mc *mockRPCClient) PairRemove(_ cipher.PubKey) error { return nil }
 func (mc *mockRPCClient) PairMarkActive(_ cipher.PubKey) error { return nil }
 
 // PairSend implements API.
-func (mc *mockRPCClient) PairSend(_ cipher.PubKey, _ string) error { return nil }
+func (mc *mockRPCClient) PairSend(_ cipher.PubKey, _ string) (string, error) { return "", nil }
+
+// PairDelete implements API.
+func (mc *mockRPCClient) PairDelete(_ cipher.PubKey, _ string) error { return nil }
 
 // PairPoll implements API.
 func (mc *mockRPCClient) PairPoll(_ time.Time) ([]PairMessage, error) { return nil, nil }
