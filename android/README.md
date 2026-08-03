@@ -85,6 +85,33 @@ emulator -avd skywire
 Emulator networking is NATed — the core's outbound dmsg/transport dialing
 works out of the box.
 
+## How the app runs the core
+
+Home's **Connect** starts `SkywireCoreService` (a `specialUse` foreground
+service) which execs `libskywire-mobile.so` from `nativeLibraryDir` as a
+child process — the phone equivalent of `skywire visor -c skywire-config.json`
+under a supervisor:
+
+- **First run:** the service runs the payload's own `config gen` (keys made
+  on-device, never leave it), then applies the phone profile in Kotlin
+  (`core/ConfigManager.kt`): API pinned to `127.0.0.1:8000` with auth, RPC
+  listener off, `pty`/`skywire-tcp`/`lan_dmsg_server` removed, all paths
+  under `files/skywire/`, all apps in-proc with autostart off. The profile is
+  re-applied on every start, so the pins survive config rewrites and app
+  updates.
+- **Auth:** single `admin` account with a random device-local password
+  (AndroidKeyStore-encrypted at rest, `core/SecretStore.kt`); the client
+  (`api/VisorApi.kt`) creates the account on first run and re-logins on 401
+  (visor restarts invalidate sessions).
+- **Lifecycle:** crash → restart with backoff (1 s → 30 s, reset after a
+  stable minute); Disconnect → SIGTERM via `Os.kill` (Android's
+  `Process.destroy()` is SIGKILL and would skip the visor's graceful
+  shutdown), escalating only if it hangs. Swiping the app away does not stop
+  the core; Disconnect or Force stop does.
+- **Process log:** the child's combined output lands in
+  `files/skywire/skywire-process.log` (rotating) — readable in-app via the
+  log viewer's Process source, which works even when the visor won't start.
+
 ## Testing & debugging
 
 App logs:
@@ -92,6 +119,9 @@ App logs:
 ```sh
 adb logcat --pid=$(adb shell pidof -s com.skycoin.skywire)
 ```
+
+The visor's own logs, in-app: Home → **View logs** (core ring buffer while
+the API is up, the captured process output otherwise).
 
 The core's local API from your desk (once the app runs the core — or with the
 payload run manually, below):

@@ -7,6 +7,75 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-03 — Core service, on-device config, the Connect screen, log viewer
+
+**Built:**
+
+- `core/SkywireCoreService` — `specialUse` foreground service that execs the
+  Go payload from `nativeLibraryDir` as a child process: rotating capture of
+  its combined output (`files/skywire/skywire-process.log`), crash-restart
+  with backoff (1 s → 30 s, reset after a stable minute), graceful stop.
+- `core/ConfigManager` — first-run `config gen` run by the payload itself
+  (keys generated on-device, `-r` keeps them across regens) + the phone
+  profile applied in Kotlin on every start: API pinned `127.0.0.1:8000` with
+  auth, `cli_addr` emptied (no RPC), `pty`/`skywire-tcp`/`lan_dmsg_server`
+  dropped, `dmsgscp` disabled, absolute app-private paths, apps in-proc with
+  autostart off.
+- `core/SecretStore` — random API password satisfying the server policy,
+  AES-GCM-encrypted via AndroidKeyStore, stored in DataStore.
+- `api/VisorApi` — OkHttp client for the local API: `admin` account
+  bootstrap, transparent re-login on 401 (visor restarts drop sessions),
+  CSRF helper, summary/dmsg/service-health/runtime-logs/app-logs endpoints
+  (the app-logs 500 "no new available logs" is treated as an empty page).
+- Home: Connect/Disconnect state machine over the service state + live visor
+  card (PK tap-to-copy, version, uptime, transports, dmsg latencies, service
+  health) and log-viewer entry points. Disconnect stays reachable while the
+  core is still coming up or crash-looping.
+- `ui/logs/` — one viewer, three sources: core runtime ring (since-cursor
+  polling incl. reset detection across visor restarts), per-app feed
+  (RFC3339Nano cursor + boundary-line dedupe), and the captured process
+  output (UTF-8 byte tail, rotation-aware) — the only source that works when
+  the visor won't start. Follow/pause, level chips, search, tap-to-copy,
+  share (capped).
+- Manifest: `FOREGROUND_SERVICE_SPECIAL_USE` + `POST_NOTIFICATIONS`;
+  cleartext allowed for loopback only (`network_security_config.xml`).
+- Go core fixes for app-UID Android: `pkg/netutil` enumerates interfaces via
+  `anet` (Android 11+ denies the stdlib's netlink dump — "netlinkrib:
+  permission denied"), with the device API level passed as
+  `SKYWIRE_ANDROID_API_LEVEL` because a CGO-free process cannot detect it;
+  `DefaultNetworkInterface` falls back to the first routable interface when
+  `ip r` prints nothing; `Visor.Ports()` no longer panics on configs without
+  `pty`/`skywire-tcp`/`cli_addr`.
+
+**Hard-won facts:**
+
+- `launcher.bin_path` must never point into the install dir: the launcher
+  MkdirAlls it at startup and the native-library path is read-only *and*
+  changes on every app update — the visor then aborts ("failed to create
+  dir … permission denied"). It now points at an app-private dir and the
+  profile re-pins it on every launch.
+- Android's `Process.destroy()` sends SIGKILL, not SIGTERM — the graceful
+  stop finds the child's pid in `/proc` and delivers a real SIGTERM
+  (`Os.kill`), verified by "Shutdown complete. Goodbye!" and exit 0.
+- An adversarial review pass over the diff surfaced and fixed: Disconnect
+  unreachable during startup/crash-loop, the auth-recovery job cancelling
+  itself (it stops the core, which cancels the collector that launched it),
+  spawn-failure `Failed` state being overwritten by `Stopped`, the
+  runtime-log cursor silently skipping a restarted visor's lines, and the
+  log ring polluting itself via per-poll session probes.
+
+**Verified (fresh install each time, DM-B70104, Android 15, slow LTE):**
+config generated on-device in ~1 s (offline, `--nofetch`) with every pin
+checked field-by-field on the resulting JSON; Connect → API up in 20–120 s;
+card live with all service-health rows OK; `kill -9` of the visor →
+respawned in ≤ 4 s → reconnected without user action; `am kill` of the app →
+visor survived (same pid) behind the foreground service; Disconnect →
+SIGTERM → clean module unwind → exit 0 and the notification cleared; the
+viewer live-tailed the core ring during connection and the process capture
+during startup.
+
+---
+
 ## 2026-08-03 — Brand assets: real logo, Skycoin typeface, designed top bar
 
 **Built:**

@@ -15,7 +15,16 @@ import (
 	"io"
 	"net"
 	"net/http"
+
+	"github.com/wlynxg/anet"
 )
+
+// Interface enumeration goes through anet, not net, because Android 11+
+// denies unprivileged processes the netlink RIB dump the standard library
+// uses: net.Interfaces() there fails with "route ip+net: netlinkrib:
+// permission denied" and every caller of these helpers breaks. anet reads
+// the same data by other means on Android and is a straight pass-through to
+// the standard library everywhere else.
 
 // LocalNetworkInterfaceIPs gets IPs of all local interfaces.
 func LocalNetworkInterfaceIPs() ([]net.IP, error) {
@@ -34,7 +43,7 @@ func NetworkInterfaceIPs(name string) ([]net.IP, error) {
 func localNetworkInterfaceIPs(ifcName string) ([]net.IP, []net.IP, error) {
 	var ifcIPs []net.IP
 
-	ifaces, err := net.Interfaces()
+	ifaces, err := anet.Interfaces()
 	if err != nil {
 		return nil, nil, fmt.Errorf("error getting network interfaces: %w", err)
 	}
@@ -48,7 +57,7 @@ func localNetworkInterfaceIPs(ifcName string) ([]net.IP, []net.IP, error) {
 			continue // loopback interface
 		}
 
-		addrs, err := iface.Addrs()
+		addrs, err := anet.InterfaceAddrsByInterface(&iface)
 		if err != nil {
 			return nil, nil, fmt.Errorf("error getting addresses for interface %s: %w", iface.Name, err)
 		}
@@ -114,7 +123,7 @@ func HasPublicIP() (bool, error) {
 func LocalAddresses() ([]string, error) {
 	result := make([]string, 0)
 
-	ifaces, err := net.Interfaces()
+	ifaces, err := anet.Interfaces()
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +138,7 @@ func LocalAddresses() ([]string, error) {
 			continue
 		}
 
-		addrs, err := iface.Addrs()
+		addrs, err := anet.InterfaceAddrsByInterface(&iface)
 		if err != nil {
 			continue
 		}

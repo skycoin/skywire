@@ -17,6 +17,11 @@ object Routes {
     const val DEX = "dex"
     const val FLEET = "fleet"
 
+    /** Shared log viewer; {source} is core, process, or app:<name>. */
+    const val LOGS = "logs/{source}"
+
+    fun logs(source: String) = "logs/$source"
+
     /** Routes pushed from the hub; the bar keeps the hub slot highlighted. */
     val hubPushed = setOf(SOCKS, VPN, DEX, FLEET)
 }
