@@ -1174,12 +1174,27 @@ func formatBytesChart(b uint64) string {
 }
 
 // fetchTPDBandwidthMetrics fetches bandwidth metrics from TPD for the given number of days
+// statsDmsgHTTPClient carries a dmsghttp RoundTripper so the stats handlers can
+// fetch the deployment's dmsg://<pk>:80 service URLs (TPD /metrics, …). Set once the
+// reward server's dmsg client is up (see server.go). Nil in standalone/test
+// contexts, where statsHTTPGet falls back to the default client.
+var statsDmsgHTTPClient *http.Client
+
+// statsHTTPGet GETs url with the dmsg-capable client when available — required for
+// dmsg://<pk>:80 deployment URLs, which the default client rejects with
+// "unsupported protocol scheme dmsg" — otherwise the default client.
+func statsHTTPGet(url string) (*http.Response, error) {
+	if statsDmsgHTTPClient != nil {
+		return statsDmsgHTTPClient.Get(url) //nolint:noctx
+	}
+	return http.Get(url) //nolint:noctx,gosec
+}
+
 func fetchTPDBandwidthMetrics(days int) ([]tpdTransportMetric, error) {
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
 	url := fmt.Sprintf("%s/metrics?days=%d&bandwidth=true&latency=false", tpdURL, days)
 
-	//nolint:gosec
-	resp, err := http.Get(url)
+	resp, err := statsHTTPGet(url)
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request failed: %w", err)
 	}
@@ -1337,7 +1352,7 @@ func getTPDNetworkSummary() (*tpdNetworkSummary, error) {
 	tpdURL := strings.TrimSuffix(deployment.Prod.TransportDiscovery, "/")
 	url := fmt.Sprintf("%s/metrics?days=1&bandwidth=true&latency=true&edges=true", tpdURL)
 
-	resp, err := http.Get(url) //nolint:gosec
+	resp, err := statsHTTPGet(url)
 	if err != nil {
 		return nil, fmt.Errorf("TPD request failed: %w", err)
 	}
