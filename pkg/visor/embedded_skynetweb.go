@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -236,7 +237,7 @@ func (e *EmbeddedSkynetWeb) serve(ctx context.Context) {
 	// so multihop routes die and re-set-up each time (the "only works for direct
 	// routes" limitation). The pool keeps one route group per destination warm and
 	// yamux-muxes over it; idle groups reclaim after ~10 min. See pkg/skyroute.
-	dialer.pool = skyroute.New(dialer.dialRouteForPool, skyroute.DefaultIdleTTL, e.log)
+	dialer.pool = skyroute.New(skyroute.DefaultIdleTTL, e.log)
 	go func() {
 		<-ctx.Done()
 		_ = dialer.pool.Close() //nolint:errcheck
@@ -316,7 +317,12 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 	// multihop skynet routes dying under the resolving proxy. Falls back to a fresh
 	// 1:1 route dial only against older visors that don't serve the mux port.
 	if d.pool != nil {
-		stream, err := d.pool.OpenStream(ctx, remote)
+		// Key the pool on the destination PK: the route-finder picks the path, so all
+		// plain <pk>.skynet fetches to this dest share one warm route group.
+		dest := remote
+		stream, err := d.pool.OpenStream(ctx, dest.Hex(), func(ctx context.Context, muxPort uint16) (net.Conn, error) {
+			return d.dialRouteForPool(ctx, dest, muxPort)
+		})
 		if err == nil {
 			if hErr := skynetweb.PerformHandshake(stream, port); hErr != nil {
 				_ = stream.Close() //nolint:errcheck,gosec
@@ -349,11 +355,52 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 	return conn, nil
 }
 
-// dialSourceRoute builds explicit forward+reverse hops from a parsed route and
-// dials them with DialRoutes (route-finder bypassed). Single-path; the reverse
-// path mirrors the forward path (transport IDs are symmetric, so the same TpIDs
-// are reused with edges swapped).
+// dialSourceRoute dials an explicit forward+reverse hop-set parsed from the
+// hostname (route-finder bypassed). It first tries a HELD, yamux-muxed route via
+// the pool — keyed on destination+hops so it doesn't collide with the route-finder
+// path's per-dest group — so an explicit multihop source route stays warm across
+// short SOCKS5 connections instead of being re-set-up each time (the same decay the
+// plain path already fixed). It falls back to a fresh 1:1 dial against older far
+// ends that don't serve the mux forwarding port.
 func (d *routerSkynetDialer) dialSourceRoute(ctx context.Context, dest cipher.PubKey, port uint16, route []skynetweb.RouteLabel) (net.Conn, error) {
+	if d.pool != nil {
+		key := sourceRouteKey(dest, route)
+		stream, err := d.pool.OpenStream(ctx, key, func(ctx context.Context, muxPort uint16) (net.Conn, error) {
+			return d.dialSourceRouteConn(ctx, dest, route, muxPort)
+		})
+		if err == nil {
+			if hErr := skynetweb.PerformHandshake(stream, port); hErr != nil {
+				_ = stream.Close() //nolint:errcheck,gosec
+				return nil, hErr
+			}
+			return stream, nil
+		}
+		if !errors.Is(err, skyroute.ErrNoMux) {
+			// A real route-setup failure — the 1:1 path would fail identically.
+			return nil, err
+		}
+		d.log.WithField("dest", dest.String()).Debug("Skynet: source-route mux forwarding unavailable; using 1:1 route")
+	}
+
+	// 1:1 fallback (far ends without the mux forwarding port): dial the explicit
+	// hops to the single-connection forwarding port.
+	conn, err := d.dialSourceRouteConn(ctx, dest, route, skyenv.SkyForwardingServerPort)
+	if err != nil {
+		return nil, err
+	}
+	if err := skynetweb.PerformHandshake(conn, port); err != nil {
+		_ = conn.Close() //nolint:errcheck,gosec
+		return nil, err
+	}
+	return conn, nil
+}
+
+// dialSourceRouteConn builds explicit forward+reverse hops from the parsed route and
+// dials them to fwdPort with DialRoutes, returning the raw route-group conn with no
+// skynet handshake (the pool yamux-wraps it first; the 1:1 fallback handshakes
+// itself). Single-path; the reverse path mirrors the forward path (transport IDs
+// are symmetric, so the same TpIDs are reused with edges swapped).
+func (d *routerSkynetDialer) dialSourceRouteConn(ctx context.Context, dest cipher.PubKey, route []skynetweb.RouteLabel, fwdPort uint16) (net.Conn, error) {
 	fwd, rev, err := d.buildSourceRoute(ctx, dest, route)
 	if err != nil {
 		return nil, fmt.Errorf("skynet source-route to %s: %w", dest, err)
@@ -365,15 +412,27 @@ func (d *routerSkynetDialer) dialSourceRoute(ctx context.Context, dest cipher.Pu
 	opts.ForwardHops = fwd
 	opts.ReverseHops = rev
 	lPort := routing.Port(atomic.AddUint32(&d.nextPort, 1)) //nolint:gosec
-	conn, err := d.router.DialRoutes(ctx, dest, lPort, routing.Port(skyenv.SkyForwardingServerPort), opts)
-	if err != nil {
-		return nil, err
+	return d.router.DialRoutes(ctx, dest, lPort, routing.Port(fwdPort), opts)
+}
+
+// sourceRouteKey derives a stable pool key for an explicit source route: the
+// destination plus each hop label (PK or transport ID) in order. Distinct hop-sets
+// to the same destination get independent warm route groups, and neither collides
+// with the route-finder path (which keys on the bare destination hex).
+func sourceRouteKey(dest cipher.PubKey, route []skynetweb.RouteLabel) string {
+	var b strings.Builder
+	b.WriteString(dest.Hex())
+	for _, rl := range route {
+		b.WriteByte('|')
+		if rl.IsTpID {
+			b.WriteString("t:")
+			b.WriteString(rl.TpID.String())
+		} else {
+			b.WriteString("p:")
+			b.WriteString(rl.PK.Hex())
+		}
 	}
-	if err := skynetweb.PerformHandshake(conn, port); err != nil {
-		_ = conn.Close() //nolint:errcheck,gosec
-		return nil, err
-	}
-	return conn, nil
+	return b.String()
 }
 
 // buildSourceRoute turns the parsed route into forward+reverse routing hops. A
