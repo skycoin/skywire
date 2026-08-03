@@ -403,11 +403,12 @@
                     }
                   </td>
                   <td>
-                    @if (node.rewardsAddress) {
-                      <mat-icon style="color: #4caf50; font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
-                    }
                     @if (!node.rewardsAddress) {
-                      <mat-icon style="color: #f44336; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">cancel</mat-icon>
+                      <span style="color: #9e9e9e; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">&mdash;</span>
+                    } @else if (node.rewardEligible === false) {
+                      <mat-icon style="color: #f44336; font-size: 20px;" [matTooltip]="node.rewardIneligibleReason || ('nodes.reward-rejected' | translate)">cancel</mat-icon>
+                    } @else {
+                      <mat-icon style="color: #4caf50; font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
                     }
                   </td>
                   <td class="actions">
@@ -738,11 +739,12 @@
                           }
                         </td>
                         <td>
-                          @if (node.rewardsAddress) {
-                            <mat-icon style="color: #4caf50; font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
-                          }
                           @if (!node.rewardsAddress) {
-                            <mat-icon style="color: #f44336; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">cancel</mat-icon>
+                            <span style="color: #9e9e9e; font-size: 20px;" [matTooltip]="'nodes.reward-not-set' | translate">&mdash;</span>
+                          } @else if (node.rewardEligible === false) {
+                            <mat-icon style="color: #f44336; font-size: 20px;" [matTooltip]="node.rewardIneligibleReason || ('nodes.reward-rejected' | translate)">cancel</mat-icon>
+                          } @else {
+                            <mat-icon style="color: #4caf50; font-size: 20px;" [matTooltip]="node.rewardsAddress">check_circle</mat-icon>
                           }
                         </td>
                         <td class="actions">
