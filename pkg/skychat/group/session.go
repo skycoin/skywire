@@ -1774,6 +1774,20 @@ func (s *Session) shouldMirrorLeaves() bool {
 // the group stays readable when no admin is up. See defaultPeerFanout for
 // why the second term exists and why it is bounded.
 //
+// A CHANNEL collapses all of that to "follow the admins", for both roles:
+//
+//	desired = { pk in r.Admins : pk != myPK }
+//
+// A non-admin in a channel cannot publish, so a subscription to its feed
+// can never carry a message — and PeerBackfillEnabled is false for a
+// channel, so it carries no mirrored history either. Following members
+// there is not a small waste but the difference between a channel that
+// works and one that does not: under the group rule an admin of a
+// 10,000-subscriber channel would open 10,000 CXO subscriptions to feeds
+// that are guaranteed to stay empty. Subscriber cost stays O(admins)
+// regardless of how large the audience gets, which is the only shape a
+// broadcast medium can have.
+//
 // The legacy s.sub subscription to OwnerPK is independent of this set;
 // non-admins always have the owner covered via s.sub plus (transitively)
 // via owner-as-admin membership here.
@@ -1781,6 +1795,15 @@ func (s *Session) shouldMirrorLeaves() bool {
 // Pure function: no Session state, no CXO. Used at openMember and
 // SetAdminRoster so the rule has one source of truth.
 func desiredPeerSubsForRole(r Record, myPK cipher.PubKey, fanout int) map[cipher.PubKey]struct{} {
+	if r.IsChannel() {
+		out := make(map[cipher.PubKey]struct{}, len(r.Admins)+1)
+		for _, pk := range r.Members {
+			if pk != myPK && r.IsAdmin(pk) {
+				out[pk] = struct{}{}
+			}
+		}
+		return out
+	}
 	iAmAdmin := r.IsAdmin(myPK)
 	// The group's own setting is the ceiling. An admin turning backfill off
 	// means "members must not carry each other's history", and a member

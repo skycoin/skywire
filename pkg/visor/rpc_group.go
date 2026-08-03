@@ -60,6 +60,64 @@ func (r *RPC) GroupJoin(req *GroupJoinArgs, out *GroupInfo) (err error) {
 	return nil
 }
 
+// GroupResolve reports what a skychat address points at — a person, or a
+// group/channel and what joining it involves.
+func (r *RPC) GroupResolve(req *GroupResolveArgs, out *GroupResolveResult) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupResolve", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	res, err := r.visor.GroupResolve(*req)
+	if err != nil {
+		return err
+	}
+	*out = res
+	return nil
+}
+
+// GroupSetListedRequest is the input to RPC.GroupSetListed.
+type GroupSetListedRequest struct {
+	ID     string `json:"id"`
+	Listed bool   `json:"listed"`
+}
+
+// GroupCatalogResponse pairs the discovered entries with whether the host
+// had more than it sent.
+type GroupCatalogResponse struct {
+	Entries   []GroupCatalogEntry `json:"entries"`
+	Truncated bool                `json:"truncated,omitempty"`
+}
+
+// GroupSetListed publishes or un-publishes a group in this visor's
+// discovery catalog.
+func (r *RPC) GroupSetListed(req *GroupSetListedRequest, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupSetListed", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupSetListed(req.ID, req.Listed)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupCatalog asks a visor what groups and channels it publishes. A zero
+// host means this visor.
+func (r *RPC) GroupCatalog(host *cipher.PubKey, out *GroupCatalogResponse) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupCatalog", host)(out, &err)
+	if host == nil {
+		return fmt.Errorf("nil request")
+	}
+	entries, truncated, err := r.visor.GroupCatalog(*host)
+	if err != nil {
+		return err
+	}
+	*out = GroupCatalogResponse{Entries: entries, Truncated: truncated}
+	return nil
+}
+
 // GroupList returns every persisted group on this visor.
 func (r *RPC) GroupList(_ *struct{}, out *[]GroupInfo) (err error) {
 	defer rpcutil.LogCall(r.log, "GroupList", nil)(out, &err)
@@ -423,6 +481,23 @@ func (r *RPC) GroupHistory(req *GroupHistoryRequest, out *[]GroupMessage) (err e
 		return fmt.Errorf("nil request")
 	}
 	msgs, err := r.visor.GroupHistory(req.GroupID, req.Limit)
+	if err != nil {
+		return err
+	}
+	*out = msgs
+	return nil
+}
+
+// GroupHistoryPage is GroupHistory with a backward cursor — up to Limit
+// messages strictly older than Before, newest last. A zero Before asks for
+// the newest page, so the first request and every "older, please" request
+// have the same shape.
+func (r *RPC) GroupHistoryPage(req *GroupHistoryPageArgs, out *[]GroupMessage) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupHistoryPage", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	msgs, err := r.visor.GroupHistoryPage(*req)
 	if err != nil {
 		return err
 	}
