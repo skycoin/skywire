@@ -852,15 +852,27 @@ func (v *Visor) Close() error {
 		}
 	}
 
-	for i := len(v.closeStack) - 1; i >= 0; i-- {
-		cl := v.closeStack[i]
+	// Snapshot the close stack under initLock before iterating. Suspend/Resume
+	// mutate v.closeStack concurrently (Suspend replaces it with the kept set,
+	// Resume's re-init appends closers via pushCloseStack), so reading
+	// v.closeStack[i] against a recomputed len(v.closeStack) races and panics
+	// "index out of range" when the slice shrinks mid-loop (e.g. a shutdown
+	// signal arriving during a Suspend). Copy under the lock, then run the
+	// copied closers unlocked — their fns take time / may take the lock. Same
+	// snapshot pattern Suspend itself uses.
+	v.initLock.RLock()
+	closeStack := append([]closer(nil), v.closeStack...)
+	v.initLock.RUnlock()
+
+	for i := len(closeStack) - 1; i >= 0; i-- {
+		cl := closeStack[i]
 
 		start := time.Now()
 		errCh := make(chan error, 1)
 		t := time.NewTimer(moduleShutdownTimeout)
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
-			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))
+			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(closeStack)))
 		log.Debug("Shutting down module...")
 
 		go func(cl closer) {
