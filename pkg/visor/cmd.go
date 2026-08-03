@@ -44,6 +44,7 @@ var (
 	usr                  bool
 	runAsSystray         bool
 	runSystrayOnly       bool
+	systrayRPCAddr       string
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
@@ -123,6 +124,11 @@ func init() {
 	// changes. This is the decoupled model (Linux); --systray stays the coupled
 	// model used on macOS/Windows.
 	RootCmd.Flags().BoolVar(&runSystrayOnly, "systray-only", false, "run ONLY the systray, controlling a separately-running visor over RPC")
+	// The --systray-only tray connects to the visor by RPC ADDRESS, not by reading
+	// the visor's config file — that file holds the visor's secret key and should
+	// be root-only (0640). Default is the conventional cli_addr; override if the
+	// visor serves RPC elsewhere.
+	RootCmd.Flags().StringVar(&systrayRPCAddr, "rpc", skyenv.RPCAddr, "visor RPC address the --systray-only tray connects to")
 	// Note: -i/--hvui flag removed. Use `skywire cli visor hv enable -w` for runtime toggle.
 	// The hypervisor is now configured via the config file's hypervisor.enable field.
 	RootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")

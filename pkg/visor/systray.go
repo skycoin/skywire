@@ -8,6 +8,8 @@ import (
 	"context"
 
 	"fyne.io/systray"
+
+	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 func runAppSystray() {
@@ -52,7 +54,16 @@ func runTrayOnly() {
 		mLog.WithError(err).Fatalln("Failed to read system tray icon")
 	}
 
-	conf := initConfig()
+	// Build a minimal config from deployment defaults + the --rpc address rather
+	// than reading the visor's config file. That file holds the visor's secret key
+	// and should be root-only (0640) — the unprivileged tray must not depend on it.
+	// The tray talks to the visor purely over the local RPC at CLIAddr and never
+	// needs the visor identity. The Hypervisor-UI link defaults to the conventional
+	// web address and is enabled only after a live probe (initUIBtns / getHVAddr),
+	// so a wrong guess just leaves the link hidden instead of opening a dead page.
+	conf := visorconfig.MakeBaseConfig(nil, false, false, nil, nil)
+	conf.CLIAddr = systrayRPCAddr
+	conf.Hypervisor = &visorconfig.HypervisorConfig{HTTPAddr: ":8000"}
 
 	systray.Run(getOnGUIReady(sysTrayIcon, conf), onGUIQuit)
 }
