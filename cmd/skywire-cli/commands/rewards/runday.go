@@ -355,6 +355,15 @@ func calcDay(opts calcOpts) (*dayResult, error) {
 		survey, parseErr := parseSurvey(surveyPath)
 		if parseErr != nil {
 			log.Debug(parseErr.Error())
+			// This PK met the daily uptime bar (it's in _ut.txt) but its survey is
+			// missing or unreadable, so it can't be scored. Record it as ineligible
+			// with an explicit reason instead of silently dropping it: previously such
+			// a visor was an invisible dash in the reward tables — neither rewarded nor
+			// listed in the ineligible report — so operators had no way to see WHY a
+			// demonstrably-up visor wasn't paid. The usual cause is a survey-collection
+			// gap (the hourly collector gated on the UT online flag and skipped
+			// reachable-but-flag-offline visors); see the survey-push redesign.
+			grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: "survey not found"})
 			continue
 		}
 
