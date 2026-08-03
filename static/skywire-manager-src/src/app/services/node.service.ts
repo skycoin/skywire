@@ -96,6 +96,8 @@ export class NodeService {
           node.isPublic = response.is_public;
           node.buildTag = response.build_tag ? response.build_tag : '';
           node.rewardsAddress = response.reward_address;
+          node.rewardEligible = response.reward_eligible;
+          node.rewardIneligibleReason = response.reward_ineligible_reason;
 
           // Ip.
           if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
@@ -339,6 +341,8 @@ return {
       node.isPublic = response.is_public;
       node.buildTag = response.build_tag ? response.build_tag : '';
       node.rewardsAddress = response.reward_address;
+      node.rewardEligible = response.reward_eligible;
+      node.rewardIneligibleReason = response.reward_ineligible_reason;
 
       if (response.overview && response.overview.local_ip && (response.overview.local_ip as string).trim()) {
         node.ip = response.overview.local_ip;
@@ -463,6 +467,8 @@ return {
         node.autoconnectTransports = response.public_autoconnect;
         node.isPublic = response.is_public;
         node.rewardsAddress = response.reward_address;
+        node.rewardEligible = response.reward_eligible;
+        node.rewardIneligibleReason = response.reward_ineligible_reason;
 
         // Hypervisor relationships. `hypervisors` are the PKs the
         // visor was configured to report to (from skywire-config);
