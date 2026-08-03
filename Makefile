@@ -101,7 +101,13 @@ INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 # so the embedded blob carries a CLEAN version from a possibly-uncommitted tree
 # instead of Go's VCS "+dirty" stamp — and is deterministic (same source → same
 # blob), which matters for the committed pkg/wasmhv/wasmbin blob.
-WASM_BUILDINFO_PATH := $(PROJECT_BASE)/pkg/buildinfo
+# The repo's OWN pkg/buildinfo (vs skywire-utilities' above). Despite the
+# historical WASM_ prefix there is nothing wasm about the path — the wasm-visor
+# was simply the first target that needed to stamp it. The skywire-mobile
+# targets stamp it too (MOBILE_APPINFO below): /api/about + cobra --version
+# read this package.
+SKYWIRE_BUILDINFO_PATH := $(PROJECT_BASE)/pkg/buildinfo
+WASM_BUILDINFO_PATH := $(SKYWIRE_BUILDINFO_PATH)
 WASM_BUILDINFO := -X $(WASM_BUILDINFO_PATH).version=$(VERSION) -X $(WASM_BUILDINFO_PATH).commit=$(COMMIT) -X $(WASM_BUILDINFO_PATH).date=$(DATE)
 
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
@@ -205,12 +211,20 @@ MOBILE_TAGS := mobile,withoutsystray
 # over it so the lite variant can't silently rot or regain the stripped fat.
 ANDROID_MOBILE_MAX_BYTES := 83886080
 
+# Both buildinfo paths are stamped: the visor internals read skywire-utilities'
+# buildinfo ($(BUILDINFO)), but /api/about + cobra --version — what the phone
+# app's info card shows — read the repo-local pkg/buildinfo. That version MUST
+# parse as semver (visorconfig.Parse semver-checks it and FATALs otherwise), and
+# on a checkout with no reachable tag `git describe --always` is a bare hash —
+# so fall back to a v0.0.0-<sha> pseudo-version.
+MOBILE_VERSION := $(shell git describe --tags 2>/dev/null || echo "v0.0.0-$(VERSION)")
+MOBILE_APPINFO := -X $(SKYWIRE_BUILDINFO_PATH).version=$(MOBILE_VERSION) -X $(SKYWIRE_BUILDINFO_PATH).commit=$(COMMIT) -X $(SKYWIRE_BUILDINFO_PATH).date=$(DATE)
 build-mobile: ## Build the skywire-mobile lite core for the HOST OS (desktop smoke of the mobile build variant)
-	${OPTS} go build -tags $(MOBILE_TAGS) ${BUILD_OPTS} -o $(BUILD_PATH)skywire-mobile ./cmd/skywire-mobile
+	${OPTS} go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO)" -mod=vendor -o $(BUILD_PATH)skywire-mobile ./cmd/skywire-mobile
 
 android-mobile: ## Build libskywire-mobile.so (android/arm64) into android jniLibs — pure-Go lane (CI/emulator); use android-mobile-ndk for release (bionic DNS)
 	mkdir -p $(ANDROID_JNILIBS)
-	GOOS=android GOARCH=arm64 CGO_ENABLED=0 ${OPTS} go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile
+	GOOS=android GOARCH=arm64 CGO_ENABLED=0 ${OPTS} go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile
 	@ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
 
 android-mobile-check: android-mobile ## CI lane: android-mobile + fail over the size budget
@@ -227,7 +241,7 @@ android-mobile-ndk: ## Release lane: NDK/cgo android build (DNS via bionic getad
 	CC_BIN=$$(ls $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android26-clang 2>/dev/null | head -n1); \
 	test -n "$$CC_BIN" || { echo "aarch64-linux-android26-clang not found under ANDROID_NDK_HOME"; exit 1; }; \
 	mkdir -p $(ANDROID_JNILIBS); \
-	GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$$CC_BIN" go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile; \
+	GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$$CC_BIN" go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile; \
 	ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
 
 build-merged-windows: clean-windows
