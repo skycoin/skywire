@@ -43,6 +43,7 @@ var (
 	pkg                  bool
 	usr                  bool
 	runAsSystray         bool
+	runSystrayOnly       bool
 	// root indicates process is run with root permissions
 	root bool // nolint:unused
 	// visorBuildInfo holds information about the build
@@ -113,7 +114,15 @@ func init() {
 	}
 	hiddenflags = append(hiddenflags, "pkg")
 	hiddenflags = append(hiddenflags, "user")
-	RootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run as systray")
+	RootCmd.Flags().BoolVar(&runAsSystray, "systray", false, "run the visor WITH the systray in one process (coupled; needs a desktop session)")
+	// --systray-only runs ONLY the systray, controlling a visor that runs as a
+	// SEPARATE background service (systemd/launchd/Windows service) over its
+	// local RPC (cli_addr). Launch it in the user's desktop session — the visor
+	// itself stays a headless always-on service. The tray's buttons already talk
+	// to the visor purely over RPC, so nothing about how the visor is started
+	// changes. This is the decoupled model (Linux); --systray stays the coupled
+	// model used on macOS/Windows.
+	RootCmd.Flags().BoolVar(&runSystrayOnly, "systray-only", false, "run ONLY the systray, controlling a separately-running visor over RPC")
 	// Note: -i/--hvui flag removed. Use `skywire cli visor hv enable -w` for runtime toggle.
 	// The hypervisor is now configured via the config file's hypervisor.enable field.
 	RootCmd.Flags().BoolVarP(&noHypervisorUI, "nohvui", "x", false, "disable hypervisor \u001b[0m*")
@@ -295,9 +304,12 @@ var RootCmd = &cobra.Command{
 
 	},
 	Run: func(_ *cobra.Command, _ []string) {
-		if runAsSystray {
+		switch {
+		case runSystrayOnly:
+			runTrayOnly()
+		case runAsSystray:
 			runAppSystray()
-		} else {
+		default:
 			runApp()
 		}
 	},
