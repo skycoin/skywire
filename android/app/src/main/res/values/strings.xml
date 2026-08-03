@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Skywire</string>
+
+    <string name="tab_home">Home</string>
+    <string name="tab_chat">Chat</string>
+    <string name="tab_wallet">Wallet</string>
+    <string name="tab_settings">Settings</string>
+    <string name="tab_hub_description">Apps</string>
+
+    <string name="app_skysocks">SkySOCKS</string>
+    <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydex">SkyDEX</string>
+    <string name="app_skychat">SkyChat</string>
+    <string name="app_wallet">Wallet</string>
+    <string name="app_fleet">Fleet</string>
+    <string name="app_skymeet">SkyMeet</string>
+    <string name="app_paywithsky">Pay with Sky</string>
+
+    <string name="coming_soon">Coming soon</string>
+    <string name="connect">Connect</string>
+    <string name="back">Back</string>
+
+    <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
+    <string name="chat_placeholder">SkyChat is coming soon — the chat UI will load here.</string>
+    <string name="wallet_placeholder">The native Skycoin wallet is coming soon.</string>
+    <string name="settings_placeholder">Identity, config export, app lock and logs are coming soon.</string>
+    <string name="socks_placeholder">Server list and connect flow are coming soon.</string>
+    <string name="vpn_placeholder">Whole-phone VPN with killswitch is coming soon.</string>
+    <string name="dex_placeholder">Market connect and the SkyDEX UI are coming soon.</string>
+    <string name="fleet_placeholder">The opt-in Fleet status view is coming soon.</string>
+</resources>
