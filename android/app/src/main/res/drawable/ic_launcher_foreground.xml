@@ -1,23 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive-icon foreground: white placeholder mark inside the 66dp safe zone. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <group
-        android:scaleX="1.8"
-        android:scaleY="1.8"
-        android:translateX="32.4"
-        android:translateY="32.4">
-        <path
-            android:fillColor="#FFFFFFFF"
-            android:pathData="M3,10 L12,3 L21,10 L17.4,10 L12,5.8 L6.6,10 Z" />
-        <path
-            android:fillColor="#FFFFFFFF"
-            android:pathData="M21,14 L12,21 L3,14 L6.6,14 L12,18.2 L17.4,14 Z" />
-        <path
-            android:fillColor="#FFFFFFFF"
-            android:pathData="M8.2,11 L15.8,11 L15.8,13 L8.2,13 Z" />
-    </group>
-</vector>
+<!-- Adaptive-icon foreground: the Skycoin cloud tinted white over the
+     brand-blue background layer. 56x42dp centers the logo's 4:3 box in the
+     safe zone; the box corners that graze the 66dp circle are transparent
+     cloud edges, so nothing visible clips. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:width="56dp"
+        android:height="42dp"
+        android:gravity="center">
+        <bitmap
+            android:src="@drawable/skywire_logo"
+            android:tint="@android:color/white" />
+    </item>
+</layer-list>
