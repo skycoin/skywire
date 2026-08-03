@@ -52,6 +52,15 @@ func IsWhitelisted(c *gin.Context, wlkeys []cipher.PubKey) bool {
 	return false
 }
 
+// RemotePK returns the DMSG-authenticated source public key of the current
+// request (from RemoteAddr), or a null key if it can't be parsed. Exported for
+// handlers that must attribute a request to its sender — e.g. the survey-push
+// endpoint stores a pushed survey under the sender's own PK so a visor can only
+// write its own.
+func RemotePK(c *gin.Context) cipher.PubKey {
+	return extractPK(c)
+}
+
 func extractPK(c *gin.Context) cipher.PubKey {
 	host := c.Request.RemoteAddr
 	if h, _, err := net.SplitHostPort(host); err == nil {
