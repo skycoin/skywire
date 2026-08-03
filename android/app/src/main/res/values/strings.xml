@@ -19,7 +19,47 @@
 
     <string name="coming_soon">Coming soon</string>
     <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
     <string name="back">Back</string>
+
+    <!-- Core service / notification -->
+    <string name="core_channel_name">Skywire core</string>
+    <string name="core_channel_description">Shown while the Skywire visor is running.</string>
+    <string name="core_notification_title">Skywire running</string>
+    <string name="core_notification_starting">Starting the visor…</string>
+    <string name="core_notification_running">Connected to the Skywire network.</string>
+    <string name="core_notification_restarting">Visor crashed — restarting (attempt %1$d).</string>
+
+    <!-- Home / Connect -->
+    <string name="state_disconnected">Disconnected</string>
+    <string name="state_starting">Starting…</string>
+    <string name="state_connected">Connected</string>
+    <string name="state_stopping">Stopping…</string>
+    <string name="state_restarting">Restarting (attempt %1$d)…</string>
+    <string name="home_hint_disconnected">Connect starts the Skywire core on this phone.</string>
+    <string name="home_hint_starting">Joining the Skywire network. The first connection can take a few minutes.</string>
+    <string name="home_error_start">The core did not come up. Check the process log.</string>
+    <string name="visor_info_title">Visor</string>
+    <string name="visor_public_key">Public key</string>
+    <string name="visor_version">Version</string>
+    <string name="visor_uptime">Uptime</string>
+    <string name="visor_transports">Transports</string>
+    <string name="visor_dmsg_servers">DMSG servers</string>
+    <string name="visor_service_health">Service health</string>
+    <string name="copied_to_clipboard">Copied</string>
+    <string name="view_logs">View logs</string>
+
+    <!-- Log viewer -->
+    <string name="logs_title">Logs</string>
+    <string name="logs_source_core">Core</string>
+    <string name="logs_source_process">Process</string>
+    <string name="logs_follow">Follow</string>
+    <string name="logs_pause">Pause</string>
+    <string name="logs_share">Share</string>
+    <string name="logs_search_hint">Filter…</string>
+    <string name="logs_empty">No log entries yet.</string>
+    <string name="logs_dropped">%1$d lines missed (buffer wrapped)</string>
+    <string name="logs_api_down">Core API unreachable — showing nothing new. The Process source works even when the visor won\'t start.</string>
 
     <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
     <string name="chat_placeholder">SkyChat is coming soon — the chat UI will load here.</string>
