@@ -21,6 +21,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"golang.org/x/net/proxy"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
@@ -55,6 +56,7 @@ func init() {
 	logCmd.Flags().StringVar(&backupDir, "backup-dir", "log_backups", "backup directory to also clean")
 	logCmd.Flags().IntVar(&maxAgeDays, "max-age", 7, "maximum age in days for files before deletion")
 	logCmd.Flags().StringVar(&pruneBelowVer, "prune-below-version", "", "during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43)")
+	logCmd.Flags().StringVar(&proxyAddr, "proxy", "", "fetch via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)\ninstead of this command's own dmsg client — reuses the proxy's warm\ndmsg sessions (e.g. a running `skywire dmsg web`), avoiding cold first-contact timeouts")
 	logCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 }
 
@@ -93,63 +95,63 @@ var logCmd = &cobra.Command{
 			return
 		}
 
-		// Bootstrap DMSG using embedded prod server entries before anything
-		// else — the previous code path opened dmsgC via `dmsgcurl.StartDmsg`
-		// which hits the dmsg-discovery over plain HTTP, AND fetched the UT
-		// over plain HTTP before dmsgC existed. Pre-seeding from the
-		// embedded keyring lets us reach UT + every per-visor endpoint
-		// purely over dmsghttp from here on. Falls back to HTTP discovery
-		// only if the binary has no embedded server entries (out-of-prod
-		// builds). Server-type empty = no filtering (production default).
+		// visorTransport is the RoundTripper used to reach the uptime tracker and every
+		// per-visor endpoint. Two modes:
+		//   default  — open our OWN dmsg client (pre-seeded from the embedded prod server
+		//              entries) and dial visors directly as dmsg://<pk>:80/... . First
+		//              contact to a never-dialed peer is a COLD session that can exceed the
+		//              per-request timeout (hence the two-pass retry below).
+		//   --proxy  — fetch through an external dmsgweb SOCKS5 resolving proxy (e.g. a
+		//              running `skywire dmsg web` with a survey-whitelisted key) that
+		//              already holds WARM dmsg sessions; visors are reached as
+		//              http://<pk>.dmsg/... and the proxy resolves + dials them. No dmsg
+		//              bootstrap here — this is what the live reward host uses (it already
+		//              runs such a proxy), so cold-session first-contact timeouts vanish.
 		pk, err := sk.PubKey()
 		if err != nil {
 			pk, sk = cipher.GenerateKeyPair()
 		}
-		// Route the bootstrap's per-PK Entry() fallback over dmsg-HTTP
-		// by default. Plain-HTTP path is only taken when the operator
-		// explicitly passes a non-prod --dmsg-disc URL.
-		httpURL, dmsgURL := dmsgDiscArgs(dmsgDisc)
-		bootstrap, err := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers, httpURL, dmsgURL, "")
-		if err != nil {
-			log.WithError(err).Error("Failed to bootstrap dmsg client.")
-			return
-		}
-		defer bootstrap.Close()
-		dmsgC := bootstrap.Client
 
-		// One pooled dmsghttp client reused for both the UT fetch and the
-		// per-visor download loop below. The transport pools per-host
-		// streams internally so concurrent visor fetches share dmsg
-		// sessions instead of paying a fresh noise handshake each.
-		dmsgHTTPC := &http.Client{
-			Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC),
-			Timeout:   60 * time.Second,
-		}
-
-		// Connect dmsgC to any additional servers the dmsg-disc knows
-		// about beyond the embedded prod set. BootstrapDmsg already
-		// dials every embedded entry; this loop catches custom / test
-		// servers that operators may have configured but that aren't
-		// baked into the binary. Fetches over dmsghttp using dmsgHTTPC,
-		// not plain HTTP.
-		allServer := getAllDMSGServers(cmd.Flags())
-		for _, server := range allServer {
-			dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
+		var visorTransport http.RoundTripper
+		if proxyAddr != "" {
+			tr, perr := socks5Transport(proxyAddr)
+			if perr != nil {
+				log.WithError(perr).Errorf("Invalid --proxy %q", proxyAddr)
+				return
+			}
+			visorTransport = tr
+			log.Infof("Collecting via dmsgweb SOCKS5 proxy %s (http://<pk>.dmsg/...)", proxyAddr)
+		} else {
+			// Route the bootstrap's per-PK Entry() fallback over dmsg-HTTP by default;
+			// plain-HTTP discovery is only taken with a non-prod --dmsg-disc URL.
+			httpURL, dmsgURL := dmsgDiscArgs(dmsgDisc)
+			bootstrap, berr := cmdutil.BootstrapDmsg(ctx, log, pk, sk, dmsg.Prod.DmsgServers, httpURL, dmsgURL, "")
+			if berr != nil {
+				log.WithError(berr).Error("Failed to bootstrap dmsg client.")
+				return
+			}
+			defer bootstrap.Close()
+			dmsgC := bootstrap.Client
+			// Connect to any additional servers the dmsg-disc knows about beyond the
+			// embedded prod set (custom/test servers not baked into the binary).
+			for _, server := range getAllDMSGServers(cmd.Flags()) {
+				dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
+			}
+			visorTransport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
 		}
 
-		// Set the uptime tracker to fetch data from. We rewrite the
-		// HTTP base to its dmsg counterpart from the deployment map so
-		// the request rides over dmsghttp on dmsgC; if the operator
-		// passed a custom utAddr that has no known dmsg twin, the
-		// original HTTP URL is used as-is (the dmsghttp transport would
-		// reject it for being non-PK-host, so getUptimes falls back to
-		// a plain http.Client in that case).
+		// Shared clients over visorTransport: a 60s one for the UT fetch and a 10s one
+		// for per-visor fetches. The transport pools connections across the concurrent
+		// fetch goroutines below.
+		utClient := &http.Client{Transport: visorTransport, Timeout: 60 * time.Second}
+		visorClient := &http.Client{Transport: visorTransport, Timeout: 10 * time.Second}
+
 		endpoint := utAddr + "/uptimes?v=v2"
 		if fetchFrom != "" {
 			endpoint = utAddr + "&visors=" + fetchFrom
 		}
 
-		uptimes, err := getUptimes(ctx, endpoint, dmsgHTTPC, log)
+		uptimes, err := getUptimes(ctx, endpoint, utClient, log)
 		if err != nil {
 			log.WithError(err).Error("Unable to get data from uptime tracker.")
 			return
@@ -180,8 +182,7 @@ var logCmd = &cobra.Command{
 		// survey, no reward, nothing logged. The /health fetch is the reachability gate
 		// (an offline visor fails it) AND supplies the authoritative version.
 		fetchVisorSurvey := func(key string, quiet bool) bool {
-			httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
-			defer httpC.CloseIdleConnections()
+			httpC := *visorClient // shared transport (own dmsg client, or the SOCKS5 proxy)
 
 			deleteOnError := false
 			if _, err := os.ReadDir(key); err != nil {
@@ -279,8 +280,7 @@ var logCmd = &cobra.Command{
 				fileWG.Add(1)
 				go func(key string) {
 					defer fileWG.Done()
-					httpC := http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 10 * time.Second}
-					defer httpC.CloseIdleConnections()
+					httpC := *visorClient
 					if _, err := os.ReadDir(key); err != nil {
 						if err := os.Mkdir(key, 0750); err != nil {
 							log.Errorf("Unable to create directory for visor %s", key)
@@ -380,7 +380,7 @@ func surveyUnchanged(ctx context.Context, log *logging.Logger, httpC *http.Clien
 	localHex := hex.EncodeToString(localSum[:])
 
 	// Fetch remote checksum
-	target := fmt.Sprintf("dmsg://%s:80/node-info/checksum", pubkey)
+	target := visorURL(pubkey, "node-info/checksum")
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return false
@@ -409,8 +409,48 @@ func surveyUnchanged(ctx context.Context, log *logging.Logger, httpC *http.Clien
 	return false
 }
 
+// visorURL builds the URL to fetch `path` from visor `pubkey`, per collector mode:
+// through the SOCKS5 resolving proxy (http://<pk>.dmsg/<path>, resolved by the proxy)
+// when --proxy is set, else directly over the built-in dmsg client
+// (dmsg://<pk>:80/<path>).
+func visorURL(pubkey, path string) string {
+	if proxyAddr != "" {
+		return "http://" + pubkey + ".dmsg/" + path
+	}
+	return fmt.Sprintf("dmsg://%s:80/%s", pubkey, path)
+}
+
+// socks5Transport builds an http.Transport that dials through the SOCKS5 proxy at
+// addr, resolving hostnames REMOTELY (socks5h) so <pk>.dmsg names are resolved by the
+// proxy (e.g. a running `skywire dmsg web`) rather than locally.
+func socks5Transport(addr string) (*http.Transport, error) {
+	d, err := proxy.SOCKS5("tcp", addr, nil, proxy.Direct)
+	if err != nil {
+		return nil, err
+	}
+	cd, ok := d.(proxy.ContextDialer)
+	if !ok {
+		return nil, fmt.Errorf("socks5 dialer for %s does not support contexts", addr)
+	}
+	return &http.Transport{DialContext: cd.DialContext}, nil
+}
+
+// dmsgToProxyURL rewrites dmsg://<pk>:<port>/<path> to the http://<pk>.dmsg/<path>
+// form the SOCKS5 resolving proxy understands (it maps <pk>.dmsg to dmsg port 80).
+func dmsgToProxyURL(dmsgURL string) string {
+	s := strings.TrimPrefix(dmsgURL, "dmsg://")
+	host, rest := s, ""
+	if i := strings.IndexByte(s, '/'); i >= 0 {
+		host, rest = s[:i], s[i:]
+	}
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	return "http://" + host + ".dmsg" + rest
+}
+
 func download(ctx context.Context, log *logging.Logger, httpC http.Client, targetPath, fileName, pubkey string, maxSize int64) error {
-	target := fmt.Sprintf("dmsg://%s:80/%s", pubkey, targetPath)
+	target := visorURL(pubkey, targetPath)
 	//nolint:errcheck,gosec
 	file, _ := os.Create(pubkey + "/" + fileName)
 	//nolint:errcheck
@@ -510,8 +550,13 @@ func getUptimes(ctx context.Context, endpoint string, dmsgHTTPC *http.Client, lo
 	fetchURL := endpoint
 	client := dmsgHTTPC
 	if dmsgEquiv := clirpc.DmsgURLForHTTP(endpoint); dmsgEquiv != "" {
-		fetchURL = dmsgEquiv
-	} else {
+		if proxyAddr != "" {
+			// Reach the UT through the SOCKS5 resolving proxy as http://<pk>.dmsg/...
+			fetchURL = dmsgToProxyURL(dmsgEquiv)
+		} else {
+			fetchURL = dmsgEquiv
+		}
+	} else if proxyAddr == "" {
 		log.Debugf("No dmsg twin for %s; falling back to plain HTTP for UT fetch", endpoint)
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
