@@ -419,6 +419,14 @@ type allowedPortsState struct {
 type surveyState struct {
 	data visorconfig.Survey
 	mu   *sync.RWMutex
+	// Reward-push verdict: the outcome of the most recent survey PUSH to the reward
+	// system (see reward_push.go). Surfaced in Summary so the hypervisor UI can show
+	// reward eligibility — a rejected push is distinct from "no reward address set".
+	// Guarded by mu.
+	pushAttempted bool
+	pushEligible  bool
+	pushReason    string
+	pushAt        time.Time
 }
 
 // logServerState holds log server API references for health stats.
