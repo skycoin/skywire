@@ -8,6 +8,7 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -15,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.painterResource
@@ -57,8 +59,8 @@ fun SkywireApp() {
     val slots = listOf(
         BarSlot(Routes.HOME, stringResource(R.string.tab_home), { rememberVectorPainter(Icons.Outlined.Home) }),
         BarSlot(Routes.CHAT, stringResource(R.string.tab_chat), { rememberVectorPainter(Icons.AutoMirrored.Outlined.Chat) }),
-        // Center slot: the Skycoin mark only — no label — opens the apps hub.
-        BarSlot(Routes.HUB, null, { painterResource(R.drawable.ic_skycoin_mark) }, isLogo = true),
+        // Center slot: the Skycoin cloud only — no label — opens the apps hub.
+        BarSlot(Routes.HUB, null, { painterResource(R.drawable.skywire_logo) }, isLogo = true),
         BarSlot(Routes.WALLET, stringResource(R.string.tab_wallet), { rememberVectorPainter(Icons.Outlined.AccountBalanceWallet) }),
         BarSlot(Routes.SETTINGS, stringResource(R.string.tab_settings), { rememberVectorPainter(Icons.Outlined.Settings) }),
     )
@@ -79,9 +81,13 @@ fun SkywireApp() {
                                 painter = slot.icon(),
                                 contentDescription = slot.label
                                     ?: stringResource(R.string.tab_hub_description),
-                                // Logo slot slightly enlarged; tint = selected state
-                                // comes from NavigationBarItem's default colors.
-                                modifier = Modifier.size(if (slot.isLogo) 32.dp else 24.dp),
+                                // Logo slot: slightly enlarged and UNtinted — the
+                                // brand cloud keeps its color; the selection pill
+                                // alone signals the active state. Other slots get
+                                // the bar's default selected/unselected tint.
+                                modifier = Modifier.size(if (slot.isLogo) 44.dp else 24.dp),
+                                tint = if (slot.isLogo) Color.Unspecified
+                                else LocalContentColor.current,
                             )
                         },
                         label = slot.label?.let { { Text(it) } },
