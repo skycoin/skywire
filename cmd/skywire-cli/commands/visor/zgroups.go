@@ -27,6 +27,9 @@ const (
 var commandGroup = map[string]string{
 	"start":        groupLifecycle,
 	"halt":         groupLifecycle,
+	"suspend":      groupLifecycle,
+	"resume":       groupLifecycle,
+	"suspended":    groupLifecycle,
 	"reinit":       groupLifecycle,
 	"ready":        groupLifecycle,
 	"pk":           groupIdentity,

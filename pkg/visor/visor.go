@@ -84,6 +84,19 @@ var mLog = initLogger()
 type Visor struct {
 	closeStack []closer
 
+	// Suspend/Resume state. Suspend tears down every network subsystem
+	// but keeps the local CLI RPC listener (cli.listener/cli.grpc) alive
+	// so Resume can arrive; Resume re-runs the module graph. See
+	// api_suspend.go. cliLocalUp guards initCLI's once-only local-listener
+	// setup so a Resume re-run only re-creates the dmsg/transport-bound
+	// RPC surfaces. networkCtx is a cancelable parent for all network
+	// modules; Suspend cancels it so ctx-honoring goroutines unwind.
+	suspendMu     sync.Mutex
+	suspended     bool
+	cliLocalUp    bool
+	networkCtx    context.Context
+	networkCancel context.CancelFunc
+
 	ctx      context.Context // stored so RPC handlers can derive child contexts
 	conf     *visorconfig.V1
 	log      *logging.Logger
@@ -687,6 +700,11 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 			ctx = context.WithValue(ctx, "dmsgServerAddr", dmsgServerAddr) //nolint:staticcheck // SA1029: matches dmsg.Client's existing string key
 		}
 	}
+	// Wrap the fully value-decorated ctx in a cancelable child stored on
+	// the visor, so Suspend can cancel every network module's context
+	// without touching the process-level signal ctx. Resume rebuilds it.
+	v.networkCtx, v.networkCancel = context.WithCancel(ctx)
+	ctx = v.networkCtx
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
 	if v.conf.Hypervisor == nil {
@@ -834,15 +852,27 @@ func (v *Visor) Close() error {
 		}
 	}
 
-	for i := len(v.closeStack) - 1; i >= 0; i-- {
-		cl := v.closeStack[i]
+	// Snapshot the close stack under initLock before iterating. Suspend/Resume
+	// mutate v.closeStack concurrently (Suspend replaces it with the kept set,
+	// Resume's re-init appends closers via pushCloseStack), so reading
+	// v.closeStack[i] against a recomputed len(v.closeStack) races and panics
+	// "index out of range" when the slice shrinks mid-loop (e.g. a shutdown
+	// signal arriving during a Suspend). Copy under the lock, then run the
+	// copied closers unlocked — their fns take time / may take the lock. Same
+	// snapshot pattern Suspend itself uses.
+	v.initLock.RLock()
+	closeStack := append([]closer(nil), v.closeStack...)
+	v.initLock.RUnlock()
+
+	for i := len(closeStack) - 1; i >= 0; i-- {
+		cl := closeStack[i]
 
 		start := time.Now()
 		errCh := make(chan error, 1)
 		t := time.NewTimer(moduleShutdownTimeout)
 
 		log := v.MasterLogger().PackageLogger(fmt.Sprintf("visor:shutdown:%s", cl.src)).
-			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(v.closeStack)))
+			WithField("func", fmt.Sprintf("[%d/%d]", i+1, len(closeStack)))
 		log.Debug("Shutting down module...")
 
 		go func(cl closer) {

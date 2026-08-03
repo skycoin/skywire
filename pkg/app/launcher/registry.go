@@ -2,7 +2,6 @@
 package launcher
 
 import (
-	"fmt"
 	"net/http"
 	"sync"
 
@@ -12,18 +11,32 @@ import (
 // AppFunc is an alias for the app function type defined in appcommon.
 type AppFunc = appcommon.AppFunc
 
-var appRegistry = make(map[string]AppFunc)
+var (
+	appRegistryMu sync.Mutex
+	appRegistry   = make(map[string]AppFunc)
+)
 
 // RegisterApp registers an app function by name.
+//
+// Registration is mutex-guarded and idempotent. Guarded because module inits run
+// concurrently (visorinit.InitConcurrent), so several embedded-app modules call
+// this in parallel — an unsynchronized map write there is a data race that can
+// fatally crash the process. Idempotent because a visor Resume re-runs the whole
+// module-init graph after Suspend, so each embedded app re-registers its (same,
+// deterministic) func; the old hard panic on a duplicate name turned Resume into
+// a half-initialized, still-"suspended" state (dmsg_pty/dmsgweb/skynetweb panicked
+// on their already-registered names). Re-registering overwrites — the same
+// overwrite-on-re-register semantics RegisterHTTPHandler below already uses.
 func RegisterApp(name string, fn AppFunc) {
-	if _, exists := appRegistry[name]; exists {
-		panic(fmt.Sprintf("app %q already registered", name))
-	}
+	appRegistryMu.Lock()
+	defer appRegistryMu.Unlock()
 	appRegistry[name] = fn
 }
 
 // GetApp returns the app function for the given name, or nil if not found.
 func GetApp(name string) (AppFunc, bool) {
+	appRegistryMu.Lock()
+	defer appRegistryMu.Unlock()
 	fn, ok := appRegistry[name]
 	return fn, ok
 }

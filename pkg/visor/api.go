@@ -49,6 +49,9 @@ type API interface {
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
 	Reload() error
+	Suspend() error
+	Resume() error
+	IsSuspended() (bool, error)
 	Shutdown() error
 	RuntimeLogs() (string, error)
 	RuntimeLogsSince(since int64) (RuntimeLogsDelta, error)
