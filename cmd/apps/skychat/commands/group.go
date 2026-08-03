@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/address"
 	"github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -327,6 +328,9 @@ func registerGroupHTTPHandlers(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("/group", requireAuthFunc(groupRootHandler()))
 	mux.HandleFunc("/group/join", requireAuthFunc(groupJoinHandler()))
+	// Registered before the catch-all /group/ so it isn't swallowed by
+	// groupItemHandler, which reads the next path segment as a group ID.
+	mux.HandleFunc("/group/resolve", requireAuthFunc(groupResolveHandler()))
 	mux.HandleFunc("/group/", requireAuthFunc(groupItemHandler()))
 }
 
@@ -395,7 +399,7 @@ func groupRootHandler() http.HandlerFunc {
 				kind = group.KindPublic
 			}
 			if !kind.IsValid() {
-				http.Error(w, "invalid kind (use public or private)", http.StatusBadRequest)
+				http.Error(w, "invalid kind (use public, private or channel)", http.StatusBadRequest)
 				return
 			}
 			members, err := parsePKList(body.Members)
@@ -421,7 +425,12 @@ func groupRootHandler() http.HandlerFunc {
 	}
 }
 
-// groupJoinHandler serves POST /group/join {invite}.
+// groupJoinHandler serves POST /group/join {invite} or {address}.
+//
+// Both spellings are accepted because they are not interchangeable: an
+// invite link is self-contained and works while the group's host is
+// offline, and a skychat://<pk>/<group-id> address is short enough to
+// scan from a QR code but has to ask the host what the group is first.
 func groupJoinHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !pairRPCAlive() {
@@ -433,19 +442,27 @@ func groupJoinHandler() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Invite string `json:"invite"`
+			Invite  string `json:"invite"`
+			Address string `json:"address"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(body.Invite) == "" {
-			http.Error(w, "invite required", http.StatusBadRequest)
+		invite := strings.TrimSpace(body.Invite)
+		addr := strings.TrimSpace(body.Address)
+		if invite == "" && addr == "" {
+			http.Error(w, "invite or address required", http.StatusBadRequest)
 			return
+		}
+		// A single UI field takes either, so route by shape rather than
+		// trusting which key it arrived under.
+		if invite != "" && !address.IsInvite(invite) {
+			invite, addr = "", invite
 		}
 		var info visor.GroupInfo
 		if err := pairRPCCall("GroupJoin", func(c visor.API) error {
-			i, e := c.GroupJoin(visor.GroupJoinArgs{Invite: body.Invite})
+			i, e := c.GroupJoin(visor.GroupJoinArgs{Invite: invite, Address: addr})
 			info = i
 			return e
 		}); err != nil {
@@ -453,6 +470,57 @@ func groupJoinHandler() http.HandlerFunc {
 			return
 		}
 		writeJSON(w, info)
+	}
+}
+
+// groupResolveHandler serves GET|POST /group/resolve?address=… — "what is
+// this thing I just pasted or scanned".
+//
+// GET as well as POST because the UI calls this as the user types, and a
+// GET keeps that a plainly cacheless read with the address in the query
+// rather than a body. Nothing is mutated either way.
+//
+// A resolve failure is reported as 404 rather than 500: the overwhelmingly
+// common causes are a mistyped key and a group the host does not hold,
+// which are "not found", not "the visor broke". A UI showing a red error
+// bar for a half-typed key would be wrong every time.
+func groupResolveHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !pairRPCAlive() {
+			http.Error(w, "groups disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
+			return
+		}
+		var raw string
+		switch r.Method {
+		case http.MethodGet:
+			raw = r.URL.Query().Get("address")
+		case http.MethodPost:
+			var body struct {
+				Address string `json:"address"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			raw = body.Address
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if strings.TrimSpace(raw) == "" {
+			http.Error(w, "address required", http.StatusBadRequest)
+			return
+		}
+		var res visor.GroupResolveResult
+		if err := pairRPCCall("GroupResolve", func(c visor.API) error {
+			out, e := c.GroupResolve(visor.GroupResolveArgs{Address: raw})
+			res = out
+			return e
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, res)
 	}
 }
 

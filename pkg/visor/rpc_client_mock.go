@@ -1284,6 +1284,11 @@ func (mc *mockRPCClient) GroupCreate(_ GroupCreateArgs) (GroupInfo, string, erro
 // GroupJoin implements API.
 func (mc *mockRPCClient) GroupJoin(_ GroupJoinArgs) (GroupInfo, error) { return GroupInfo{}, nil }
 
+// GroupResolve implements API.
+func (mc *mockRPCClient) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, error) {
+	return GroupResolveResult{}, nil
+}
+
 // GroupAskAgain implements API.
 func (mc *mockRPCClient) GroupAskAgain(_ string) (GroupInfo, error) { return GroupInfo{}, nil }
 

@@ -1557,6 +1557,13 @@ func (rc *rpcClient) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
 	return resp, err
 }
 
+// GroupResolve implements API.
+func (rc *rpcClient) GroupResolve(args GroupResolveArgs) (GroupResolveResult, error) {
+	var resp GroupResolveResult
+	err := rc.Call("GroupResolve", &args, &resp)
+	return resp, err
+}
+
 // GroupAskAgain implements API.
 func (rc *rpcClient) GroupAskAgain(id string) (GroupInfo, error) {
 	var resp GroupInfo
