@@ -58,18 +58,25 @@ type pairHandlersAPI struct {
 	removed      []cipher.PubKey
 	markedActive []cipher.PubKey
 	sent         []pairSentMsg
+	deleted      []pairDeletedMsg
 	list         []visor.PairInfo
 
 	addErr        error
 	removeErr     error
 	markActiveErr error
 	sendErr       error
+	deleteErr     error
 	listErr       error
 }
 
 type pairSentMsg struct {
 	peer cipher.PubKey
 	text string
+}
+
+type pairDeletedMsg struct {
+	peer cipher.PubKey
+	id   string
 }
 
 func (a *pairHandlersAPI) PairAdd(pk cipher.PubKey) error {
@@ -102,13 +109,23 @@ func (a *pairHandlersAPI) PairMarkActive(pk cipher.PubKey) error {
 	return nil
 }
 
-func (a *pairHandlersAPI) PairSend(pk cipher.PubKey, text string) error {
+func (a *pairHandlersAPI) PairSend(pk cipher.PubKey, text string) (string, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.sendErr != nil {
-		return a.sendErr
+		return "", a.sendErr
 	}
 	a.sent = append(a.sent, pairSentMsg{peer: pk, text: text})
+	return "pair-msg-1", nil
+}
+
+func (a *pairHandlersAPI) PairDelete(pk cipher.PubKey, id string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.deleteErr != nil {
+		return a.deleteErr
+	}
+	a.deleted = append(a.deleted, pairDeletedMsg{peer: pk, id: id})
 	return nil
 }
 
@@ -471,12 +488,24 @@ func TestPairItemHandler_PostMessageSendsViaCXO(t *testing.T) {
 		strings.NewReader(`{"text":"hello over the feed"}`))
 	pairItemHandler(context.Background())(rr, req)
 
-	if rr.Code != http.StatusNoContent {
-		t.Fatalf("status = %d, want 204; body=%q", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%q", rr.Code, rr.Body.String())
 	}
 	_, _, _, sent := fake.snapshot()
 	if len(sent) != 1 || sent[0].peer != peer || sent[0].text != "hello over the feed" {
 		t.Errorf("PairSend calls = %+v, want one {%s, %q}", sent, peer.Hex(), "hello over the feed")
+	}
+	// The reply must carry the feed id — the browser needs it to name this
+	// bubble for a later delete-for-everyone.
+	var body struct {
+		OK bool   `json:"ok"`
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode response: %v (body=%q)", err, rr.Body.String())
+	}
+	if !body.OK || body.ID != "pair-msg-1" {
+		t.Errorf("response = %+v, want {ok:true id:pair-msg-1}", body)
 	}
 }
 
@@ -521,7 +550,11 @@ func TestPairItemHandler_RejectsBadPaths(t *testing.T) {
 		{"truncated pk", http.MethodDelete, "/pair/0281a1", http.StatusBadRequest},
 		{"get on item", http.MethodGet, "/pair/" + peer.Hex(), http.StatusMethodNotAllowed},
 		{"post without /message", http.MethodPost, "/pair/" + peer.Hex(), http.StatusMethodNotAllowed},
-		{"delete on /message", http.MethodDelete, "/pair/" + peer.Hex() + "/message", http.StatusMethodNotAllowed},
+		// DELETE /message is a real route now (retract-for-everyone); with no
+		// ?id it's a bad request, not an unknown method. Covered in full by
+		// TestPairItemHandler_DeleteMessage* in delete_persistence_test.go.
+		{"delete on /message without id", http.MethodDelete, "/pair/" + peer.Hex() + "/message", http.StatusBadRequest},
+		{"put on /message", http.MethodPut, "/pair/" + peer.Hex() + "/message", http.StatusMethodNotAllowed},
 		{"unknown subresource", http.MethodPost, "/pair/" + peer.Hex() + "/bogus", http.StatusMethodNotAllowed},
 	}
 	for _, c := range cases {

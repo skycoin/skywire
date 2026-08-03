@@ -2720,11 +2720,11 @@
       }
 
       // _deliverDM sends an already-composed DM bubble over the wire and advances
-      // its status: sent (frame left this machine) or failed. On the receipts
-      // path (non-cxo) it captures the server's wire id so later received/read
-      // receipts can match. Shared by the first send and resend.
+      // its status: sent (frame left this machine) or failed. Either path hands
+      // back the message's id, which it keeps so later received/read receipts
+      // can match and so the bubble can be retracted. Shared by the first send
+      // and resend.
       _deliverDM(destination, message, wireText, network) {
-        const useReceipts = network !== 'cxo';
         let url, body;
         if (network === 'cxo') {
           url = `/pair/${destination}/message`;
@@ -2742,7 +2742,11 @@
               });
             }
             return res.json().then(j => {
-              if (useReceipts && j && j.id) message.wireId = j.id;
+              // Both paths hand back an id now: the envelope id on the
+              // receipts path, the feed id on the CXO path. Either way it's
+              // the name the peer knows this message by, so keeping it is
+              // what makes "delete for everyone" available on the bubble.
+              if (j && j.id) message.wireId = j.id;
               this._setMsgStatus(destination, message, 'sent');
               // A receipt may already have come back for this id.
               this._claimOrphanStatus(destination, message, message.wireId);
@@ -2956,9 +2960,10 @@
       }
 
       // openMsgMenu shows the per-message actions (reply/delete). "Delete for
-      // me" is always available (local-only); "Delete for everyone" only on our
-      // own GROUP messages — it's sender-scoped on the feed, and DM has no
-      // shared message id to target across the two visors (a follow-up).
+      // me" is always available (local-only); "Delete for everyone" is offered
+      // on our own messages that carry an id both visors know — every transport
+      // supplies one now, so the only bubbles it skips are unconfirmed sends
+      // and old records persisted before ids were recorded.
       openMsgMenu(btn) {
         this.closeMsgMenu();
         const row = btn.closest('.message-row');
@@ -3042,18 +3047,24 @@
             .catch(e => this.showToast(e.message, 'error'));
           return;
         }
-        // DM (1:1) delete-for-everyone: POST /delete sends a chat-delete to the
-        // peer; both ends drop the bubble (the peer via handleDmStatus 'deleted',
-        // us optimistically here). Only messages carrying a wire id are eligible.
+        // DM (1:1) delete-for-everyone: both ends drop the bubble (the peer via
+        // handleDmStatus 'deleted', us optimistically here). Only messages
+        // carrying a wire id are eligible. The retraction follows the transport
+        // the message took — a chat-delete over the framed conn, or a delete
+        // record on the pair feed for a CXO message, which has no framed conn.
         const pk = this.recipient;
         const list = this.messages[pk] || [];
         const m = list.find(x => String(x.mid) === String(mid));
         if (!m || !m.wireId) { this.showToast('Message not yet confirmed — try again in a moment.', 'error'); return; }
         const id = m.wireId;
+        const viaPair = !!m.viaPair;
         this.messages[pk] = list.filter(x => String(x.mid) !== String(mid));
         this.saveChat(pk);
         this._rerenderActive();
-        fetch('/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pk, id }) })
+        const req = viaPair
+          ? fetch(`/pair/${pk}/message?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+          : fetch('/delete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pk, id }) });
+        req
           .then(res => { if (!res.ok) res.text().then(t => this.showToast(`Delete failed: ${t}`, 'error')); })
           .catch(e => this.showToast(e.message, 'error'));
       }
@@ -3688,6 +3699,11 @@
                 ts: ts,
                 from: m.outgoing ? 'me' : (m.from || m.peer),
                 text: m.text,
+                // The persisted envelope id. Without it a rehydrated bubble has
+                // no name the peer shares, so "delete for everyone" (and any
+                // late receipt) would silently skip every message restored from
+                // the store rather than localStorage.
+                wireId: m.id || null,
               };
               // A persisted file message carries file_* metadata; rebuild the
               // file descriptor so history re-renders the thumbnail/player.

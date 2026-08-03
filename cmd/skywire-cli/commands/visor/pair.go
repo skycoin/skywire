@@ -36,6 +36,7 @@ func init() {
 	pairCmd.AddCommand(pairLsCmd)
 	pairCmd.AddCommand(pairRmCmd)
 	pairCmd.AddCommand(pairSendCmd)
+	pairCmd.AddCommand(pairDeleteCmd)
 	pairCmd.AddCommand(pairPollCmd)
 	RootCmd.AddCommand(pairCmd)
 }
@@ -117,12 +118,37 @@ subscriber will see it on the next CXO publish-batch cycle.`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if err := rpcClient.PairSend(peer, text); err != nil {
+		id, err := rpcClient.PairSend(peer, text)
+		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("PairSend: %w", err))
 		}
 		internal.PrintOutput(cmd.Flags(),
-			map[string]any{"peer_pk": peer.Hex(), "sent": true},
-			fmt.Sprintf("Sent to %s: %s\n", peer.Hex(), text))
+			map[string]any{"peer_pk": peer.Hex(), "sent": true, "id": id},
+			fmt.Sprintf("Sent to %s: %s (id %s)\n", peer.Hex(), text, id))
+	},
+}
+
+var pairDeleteCmd = &cobra.Command{
+	Use:   "delete <peer-pk> <message-id>",
+	Short: "Retract a message previously sent into the pair feed",
+	Long: `Delete for everyone: publish a retraction naming a message this
+visor sent earlier, identified by the id that "pair send" printed. The
+retraction rides the same feed, so an offline peer applies it when it
+next syncs.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		peer := internal.ParsePK(cmd.Flags(), "peer-pk", args[0])
+		id := args[1]
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		if err := rpcClient.PairDelete(peer, id); err != nil {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("PairDelete: %w", err))
+		}
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"peer_pk": peer.Hex(), "id": id, "deleted": true},
+			fmt.Sprintf("Retracted %s in the pair with %s\n", id, peer.Hex()))
 	},
 }
 

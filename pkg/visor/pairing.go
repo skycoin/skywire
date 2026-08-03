@@ -62,6 +62,17 @@ type PairMessage struct {
 	PeerPK cipher.PubKey `json:"peer_pk"`
 	Text   string        `json:"text"`
 	TS     time.Time     `json:"ts"`
+
+	// ID names this message on both sides of the pair. On a chat message
+	// it is the message's own id (derived from the sender's timestamp);
+	// on a delete record it is the id of the message being retracted.
+	// Clients need it to correlate a delete with the bubble it removes.
+	ID string `json:"id,omitempty"`
+
+	// Type is empty for a chat message and pairing.MessageTypeDelete for
+	// a retraction. A client that only knows about chat messages should
+	// skip any record with a non-empty Type rather than render it.
+	Type string `json:"type,omitempty"`
 }
 
 // ErrPairingDisabled is returned by Visor pair methods when the
@@ -180,9 +191,38 @@ func (v *Visor) PairMarkActive(peerPK cipher.PubKey) error {
 	return mgr.MarkActive(peerPK)
 }
 
-// PairSend publishes one message to peerPK's pair feed. Returns
-// ErrNotFound if peerPK isn't a registered pair.
-func (v *Visor) PairSend(peerPK cipher.PubKey, text string) error {
+// PairSend publishes one message to peerPK's pair feed and returns the
+// new message's id — the same id the peer will see on it, so the caller
+// can later retract it with PairDelete. Returns ErrNotFound if peerPK
+// isn't a registered pair.
+func (v *Visor) PairSend(peerPK cipher.PubKey, text string) (string, error) {
+	mgr := v.pairManager()
+	if mgr == nil {
+		return "", ErrPairingDisabled
+	}
+	p, ok := mgr.Get(peerPK)
+	if !ok {
+		return "", errors.New("pairing: no live pair for peer")
+	}
+	id, err := p.SendID(text)
+	if err != nil {
+		return "", err
+	}
+	v.initLock.RLock()
+	store := v.pairing.store
+	v.initLock.RUnlock()
+	if store != nil {
+		_ = store.MarkMessage(peerPK, time.Now().UTC()) //nolint:errcheck
+	}
+	return id, nil
+}
+
+// PairDelete retracts a message we previously sent to peerPK, naming it
+// by the id PairSend returned. The retraction is published onto the pair
+// feed, so it reaches the peer even if they are offline right now —
+// delete-for-everyone over CXO, matching what a chat-delete envelope does
+// over a framed DM conn.
+func (v *Visor) PairDelete(peerPK cipher.PubKey, id string) error {
 	mgr := v.pairManager()
 	if mgr == nil {
 		return ErrPairingDisabled
@@ -191,16 +231,7 @@ func (v *Visor) PairSend(peerPK cipher.PubKey, text string) error {
 	if !ok {
 		return errors.New("pairing: no live pair for peer")
 	}
-	if err := p.Send(text); err != nil {
-		return err
-	}
-	v.initLock.RLock()
-	store := v.pairing.store
-	v.initLock.RUnlock()
-	if store != nil {
-		_ = store.MarkMessage(peerPK, time.Now().UTC()) //nolint:errcheck
-	}
-	return nil
+	return p.SendDelete(id)
 }
 
 // PairPoll returns inbound pair messages with TS strictly after
@@ -244,10 +275,18 @@ func newPairInbox(capacity int) *pairInbox {
 func (p *pairInbox) deliver(peerPK cipher.PubKey, msg pairing.Message) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// A chat message is named by its own id; a delete record carries the
+	// id of its target instead, which is the whole point of the record.
+	id := msg.ID
+	if msg.Type == "" {
+		id = msg.MsgID()
+	}
 	p.buf = append(p.buf, PairMessage{
 		PeerPK: peerPK,
 		Text:   msg.Text,
 		TS:     msg.TS,
+		ID:     id,
+		Type:   msg.Type,
 	})
 	if len(p.buf) > p.cap {
 		// Drop the oldest entries to fit the cap. Slice copy keeps
