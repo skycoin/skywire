@@ -2,7 +2,7 @@
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
-.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk
+.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-apk-debug
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
 .PHONY : docker-apps docker-bin docker-volume
@@ -243,6 +243,15 @@ android-mobile-ndk: ## Release lane: NDK/cgo android build (DNS via bionic getad
 	mkdir -p $(ANDROID_JNILIBS); \
 	GOOS=android GOARCH=arm64 CGO_ENABLED=1 CC="$$CC_BIN" go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile; \
 	ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
+
+# Android Studio's bundled JDK (gradle needs JDK 17+); override if yours differs.
+ANDROID_JAVA_HOME ?= /Applications/Android Studio.app/Contents/jbr/Contents/Home
+
+android-apk: ## Build the Android APK (release; unsigned until release signing lands) — run android-mobile-ndk first for a fresh Go payload
+	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleRelease
+
+android-apk-debug: ## Build + the debug-signed APK (installable via adb) — the dev loop's CLI twin of Android Studio Run
+	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleDebug
 
 build-merged-windows: clean-windows
 	powershell '${OPTS} go build ${BUILD_OPTS} -o $(BUILD_PATH)skywire.exe .'
