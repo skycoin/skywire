@@ -421,7 +421,7 @@ func (s *BoltStore) ListGroupBefore(groupID string, before time.Time, limit int)
 			// silently return nothing.
 			k, v = cur.Last()
 		} else {
-			k, v = cur.Seek(tsKey(before))
+			k, v = cur.Seek(tsKey(before)) //nolint
 			if k == nil {
 				k, v = cur.Last()
 			} else {
