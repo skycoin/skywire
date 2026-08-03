@@ -603,14 +603,25 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 	ctx := context.Background()
 	var ports = make(map[string]PortDetail)
 
+	// Every optional section really is optional here: mobile-profile configs
+	// ship without pty/skywire-tcp and with an empty cli_addr, and this
+	// endpoint must not panic on them.
 	if v.conf.Hypervisor != nil {
-		ports["hypervisor"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Hypervisor.HTTPAddr, ":")[1]), Type: "TCP"}
+		ports["hypervisor"] = PortDetail{Port: addrPort(v.conf.Hypervisor.HTTPAddr), Type: "TCP"}
 	}
 
-	ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Pty.DmsgPort), Type: "DMSG"}
-	ports["cli_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.CLIAddr, ":")[1]), Type: "TCP"}
-	ports["proc_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.Launcher.ServerAddr, ":")[1]), Type: "TCP"}
-	ports["stcp_addr"] = PortDetail{Port: fmt.Sprint(strings.Split(v.conf.STCP.ListeningAddress, ":")[1]), Type: "TCP"}
+	if v.conf.Pty != nil {
+		ports["dmsg_pty"] = PortDetail{Port: fmt.Sprint(v.conf.Pty.DmsgPort), Type: "DMSG"}
+	}
+	if v.conf.CLIAddr != "" {
+		ports["cli_addr"] = PortDetail{Port: addrPort(v.conf.CLIAddr), Type: "TCP"}
+	}
+	if v.conf.Launcher != nil {
+		ports["proc_addr"] = PortDetail{Port: addrPort(v.conf.Launcher.ServerAddr), Type: "TCP"}
+	}
+	if v.conf.STCP != nil {
+		ports["stcp_addr"] = PortDetail{Port: addrPort(v.conf.STCP.ListeningAddress), Type: "TCP"}
+	}
 
 	if v.arClient != nil {
 		sudphPort := v.arClient.Addresses(ctx)
@@ -651,6 +662,15 @@ func (v *Visor) Ports() (map[string]PortDetail, error) {
 		}
 	}
 	return ports, nil
+}
+
+// addrPort returns the port part of a host:port address, or "" when the
+// address has none — never panics on empty/portless input.
+func addrPort(addr string) string {
+	if i := strings.LastIndex(addr, ":"); i >= 0 {
+		return addr[i+1:]
+	}
+	return ""
 }
 
 // SetLogRotationInterval sets log_rotation_interval config of visor

@@ -24,16 +24,20 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.skycoin.skywire.R
 import com.skycoin.skywire.ui.chat.ChatScreen
 import com.skycoin.skywire.ui.dex.DexScreen
 import com.skycoin.skywire.ui.fleet.FleetScreen
 import com.skycoin.skywire.ui.home.HomeScreen
 import com.skycoin.skywire.ui.hub.HubScreen
+import com.skycoin.skywire.ui.logs.LogSources
+import com.skycoin.skywire.ui.logs.LogViewerScreen
 import com.skycoin.skywire.ui.navigation.Routes
 import com.skycoin.skywire.ui.settings.SettingsScreen
 import com.skycoin.skywire.ui.socks.SocksScreen
@@ -101,7 +105,15 @@ fun SkywireApp() {
             startDestination = Routes.HOME,
             modifier = Modifier.padding(innerPadding),
         ) {
-            composable(Routes.HOME) { HomeScreen() }
+            composable(Routes.HOME) {
+                HomeScreen(
+                    onOpenLogs = { source ->
+                        // singleTop: a double tap must not stack two viewers
+                        // (the hidden one would keep polling the API).
+                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
+                    },
+                )
+            }
             composable(Routes.CHAT) { ChatScreen() }
             composable(Routes.HUB) {
                 HubScreen(
@@ -117,6 +129,17 @@ fun SkywireApp() {
             composable(Routes.VPN) { VpnScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.DEX) { DexScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.FLEET) { FleetScreen(onBack = { navController.popBackStack() }) }
+
+            // One log viewer, reached from Home and (later) every app screen.
+            composable(
+                Routes.LOGS,
+                arguments = listOf(navArgument("source") { type = NavType.StringType }),
+            ) { entry ->
+                LogViewerScreen(
+                    source = entry.arguments?.getString("source") ?: LogSources.CORE,
+                    onBack = { navController.popBackStack() },
+                )
+            }
         }
     }
 }

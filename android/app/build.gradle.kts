@@ -67,5 +67,7 @@ dependencies {
     // Local-API client — declared now so the module dep set is final.
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
+    // The core service runs its own supervisor scope outside any lifecycle.
+    implementation(libs.kotlinx.coroutines.android)
     debugImplementation(libs.compose.ui.tooling)
 }
