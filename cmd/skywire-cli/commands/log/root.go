@@ -56,6 +56,7 @@ var (
 	backupDir      string
 	maxAgeDays     int
 	pruneBelowVer  string
+	proxyAddr      string
 )
 
 // RootCmd is logCmd
