@@ -17,8 +17,17 @@ import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
 import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode, setVoronoiOverlay } from './globe';
 import { showCosmos, hideCosmos, updateCosmosData, isCosmosActive, cosmosFit, cosmosZoomBy } from './cosmos-graph';
+import { restoreFilters, saveFilters, resetControls, getInitialView, saveView, ViewMode } from './persist';
 
 export function wireEventListeners(): void {
+    // Restore persisted filter/control state BEFORE the first render so the
+    // initial view honours the saved filters. Then a single delegated listener
+    // saves on any sidebar change (checkboxes, selects, search).
+    restoreFilters();
+    const sidebarEl = document.getElementById('sidebar');
+    sidebarEl?.addEventListener('change', saveFilters);
+    sidebarEl?.addEventListener('input', saveFilters);
+
     // Filter listeners
     document.getElementById('show-stcpr')!.addEventListener('change', applyFilters);
     document.getElementById('show-sudph')!.addEventListener('change', applyFilters);
@@ -207,37 +216,38 @@ export function wireEventListeners(): void {
         viewCosmosBtn?.classList.remove('active');
     };
 
-    if (viewGlobeBtn) {
-        viewGlobeBtn.addEventListener('click', () => {
-            clearViewButtons();
-            viewGlobeBtn.classList.add('active');
-            hideCosmos();
-            S.setGlobeViewActive(true);
-            setVoronoiMode(false);
-            showGlobe();
-        });
-    }
+    // activateView switches to one view (globe / flat=legacy / cosmos=WebGL) and
+    // persists it (localStorage + URL / host callback). Shared by the toggle
+    // buttons, the initial (deep-link/persisted) view, and reset.
+    const activateView = (v: ViewMode, persist = true) => {
+        clearViewButtons();
+        if (v === 'globe') {
+            viewGlobeBtn?.classList.add('active');
+            hideCosmos(); S.setGlobeViewActive(true); setVoronoiMode(false); showGlobe();
+        } else if (v === 'flat') {
+            viewFlatBtn?.classList.add('active');
+            hideCosmos(); S.setGlobeViewActive(false); hideGlobe();
+        } else {
+            viewCosmosBtn?.classList.add('active');
+            S.setGlobeViewActive(false); hideGlobe(); showCosmos();
+        }
+        if (persist) { saveView(v); }
+    };
 
-    if (viewFlatBtn) {
-        viewFlatBtn.addEventListener('click', () => {
-            clearViewButtons();
-            viewFlatBtn.classList.add('active');
-            hideCosmos();
-            S.setGlobeViewActive(false);
-            hideGlobe();
-        });
-    }
+    viewGlobeBtn?.addEventListener('click', () => activateView('globe'));
+    viewFlatBtn?.addEventListener('click', () => activateView('flat'));
+    viewCosmosBtn?.addEventListener('click', () => activateView('cosmos'));
+    // Expose the switcher so an embedding host (Angular tab reacting to a ?view=
+    // change on an already-open page) can drive the view without re-mounting.
+    (window as any).__tpvizSetView = (v: ViewMode) => activateView(v);
 
-    if (viewCosmosBtn) {
-        viewCosmosBtn.addEventListener('click', () => {
-            clearViewButtons();
-            viewCosmosBtn.classList.add('active');
-            // Leave the flat/globe state off; cosmos hides both containers.
-            S.setGlobeViewActive(false);
-            hideGlobe();
-            showCosmos();
-        });
-    }
+    // Reset: clear persisted filters + view, restore markup defaults, back to WebGL.
+    document.getElementById('reset-filters')?.addEventListener('click', () => {
+        resetControls();
+        applyFilters();
+        updateLegend();
+        activateView('cosmos');
+    });
 
     // Data initialization. WebGL is the default view — at the full
     // all-transports scale (~20k edges) the vis-network Flat view is unusable
@@ -247,9 +257,8 @@ export function wireEventListeners(): void {
     checkServer();
     fetchAllData();
     checkTPSStatus();
-    viewFlatBtn?.classList.remove('active');
-    viewCosmosBtn?.classList.add('active');
-    showCosmos();
+    // Initial view: ?view= / persisted / WebGL default (don't re-persist the seed).
+    activateView(getInitialView(), false);
 
     // Start data flow animation after a short delay (for flat view)
     setTimeout(() => {
