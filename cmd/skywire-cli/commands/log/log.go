@@ -113,8 +113,16 @@ var logCmd = &cobra.Command{
 			pk, sk = cipher.GenerateKeyPair()
 		}
 
+		endpoint := utAddr + "/uptimes?v=v2"
+		if fetchFrom != "" {
+			endpoint = utAddr + "&visors=" + fetchFrom
+		}
+
 		var visorTransport http.RoundTripper
+		var uptimes []VisorUptimeResponse
 		if proxyAddr != "" {
+			// Per-visor surveys ride the warm dmsgweb SOCKS5 resolving proxy
+			// (http://<pk>.dmsg/...); the proxy already holds warm sessions.
 			tr, perr := socks5Transport(proxyAddr)
 			if perr != nil {
 				log.WithError(perr).Errorf("Invalid --proxy %q", proxyAddr)
@@ -122,6 +130,21 @@ var logCmd = &cobra.Command{
 			}
 			visorTransport = tr
 			log.Infof("Collecting via dmsgweb SOCKS5 proxy %s (http://<pk>.dmsg/...)", proxyAddr)
+
+			// The uptime tracker is a *deployment service*, not a visor: the
+			// survey proxy's whitelist can't reach it. Fetch it the same way
+			// `cli ut tpd` does — the local visor's RPC → DMSG chain
+			// (FetchCachedServiceURL: CXO → visor DmsgHTTP RPC → dmsg), reusing
+			// the visor's warm sessions instead of a cold ephemeral client.
+			raw := clirpc.FetchCachedServiceURL(cmd.Flags(), "", endpoint, 0)
+			if raw == "" {
+				log.Error("Unable to get data from uptime tracker (RPC → DMSG path returned no data).")
+				return
+			}
+			if uerr := json.Unmarshal([]byte(raw), &uptimes); uerr != nil {
+				log.WithError(uerr).Error("Unable to parse uptime tracker data.")
+				return
+			}
 		} else {
 			// Route the bootstrap's per-PK Entry() fallback over dmsg-HTTP by default;
 			// plain-HTTP discovery is only taken with a non-prod --dmsg-disc URL.
@@ -139,24 +162,19 @@ var logCmd = &cobra.Command{
 				dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
 			}
 			visorTransport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
+			// 60s client for the UT fetch (a single large payload).
+			utClient := &http.Client{Transport: visorTransport, Timeout: 60 * time.Second}
+			us, uerr := getUptimes(ctx, endpoint, utClient, log)
+			if uerr != nil {
+				log.WithError(uerr).Error("Unable to get data from uptime tracker.")
+				return
+			}
+			uptimes = us
 		}
 
-		// Shared clients over visorTransport: a 60s one for the UT fetch and a 10s one
-		// for per-visor fetches. The transport pools connections across the concurrent
-		// fetch goroutines below.
-		utClient := &http.Client{Transport: visorTransport, Timeout: 60 * time.Second}
+		// 10s client for per-visor fetches. The transport pools connections
+		// across the concurrent fetch goroutines below.
 		visorClient := &http.Client{Transport: visorTransport, Timeout: 10 * time.Second}
-
-		endpoint := utAddr + "/uptimes?v=v2"
-		if fetchFrom != "" {
-			endpoint = utAddr + "&visors=" + fetchFrom
-		}
-
-		uptimes, err := getUptimes(ctx, endpoint, utClient, log)
-		if err != nil {
-			log.WithError(err).Error("Unable to get data from uptime tracker.")
-			return
-		}
 		//randomize the order of the survey collection - workaround for hanging
 		rand.Shuffle(len(uptimes), func(i, j int) {
 			uptimes[i], uptimes[j] = uptimes[j], uptimes[i]
