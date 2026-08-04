@@ -86,7 +86,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   // Bound to the compose form.
   toPK = '';
   message = '';
-  network = 'skynet';
+  network = 'auto';
   sending = false;
   // Display state.
   messages: ChatMessage[] = [];
