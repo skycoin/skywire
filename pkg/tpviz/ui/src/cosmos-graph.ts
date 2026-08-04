@@ -186,6 +186,12 @@ function edgeTypeVisible(type: string): boolean {
     default: return true;
   }
 }
+// dmsgServersVisible follows the show-dmsg-servers toggle. DMSG-server nodes are a
+// distinct class (Flat adds them via addDMSGGraphElements and hides them + their
+// client edges unless this is checked); default off.
+function dmsgServersVisible(): boolean {
+  return (document.getElementById('show-dmsg-servers') as HTMLInputElement)?.checked === true;
+}
 function statusVisible(status: string): boolean {
   const on = (id: string) => (document.getElementById(id) as HTMLInputElement)?.checked === true;
   if (status === 'online') return on('show-online');
@@ -362,6 +368,26 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
   const visibleNode = new Set<string>();
   const nodes: CosmosNode[] = [];
   for (const n of nodesRaw) {
+    if (n.isDMSGServer) {
+      // DMSG servers are a distinct node class. Flat adds them via
+      // addDMSGGraphElements and shows them only when show-dmsg-servers is on;
+      // previously cosmos leaked them in through the show-unknown status filter
+      // and drew them like visors. Gate on the toggle, colour them a distinct
+      // dmsg purple, and size by client count (encoded in n.size = 5..30). They
+      // keep their country in visorServices so country grouping places them.
+      if (!dmsgServersVisible()) { continue; }
+      visibleNode.add(n.id);
+      nodes.push({
+        id: n.id,
+        color: '#c9a8ff',
+        size: Math.max(3, Math.min(8, (n.size || 5) * 0.28)),
+        status: 'dmsg',
+        isLocal: false,
+        title: n.title || n.id,
+        label: n.id.replace('dmsg-srv-', '').substring(0, 8),
+      });
+      continue;
+    }
     if (!statusVisible(n.status)) { continue; }
     if (!versionVisible((S.visorVersions && S.visorVersions[n.id]) || n.version)) { continue; }
     visibleNode.add(n.id);
@@ -384,6 +410,15 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
   const connected = new Set<string>();
   for (const e of edgesRaw) {
     if (e.type === 'route') { continue; } // route overlays are a flat-view affordance
+    if (e.isDMSGConnection || e.type === 'dmsg-connection') {
+      // Client↔dmsg-server edges follow show-dmsg-servers (Flat sets
+      // hidden:!showDMSGServers on them), not the transport-type filters.
+      if (!dmsgServersVisible()) { continue; }
+      if (!visibleNode.has(e.from) || !visibleNode.has(e.to)) { continue; }
+      links.push({ source: e.from, target: e.to, color: '#e94560', type: 'dmsg-connection', live: true });
+      connected.add(e.from); connected.add(e.to);
+      continue;
+    }
     if (!edgeTypeVisible(e.type)) { continue; }
     if (!visibleNode.has(e.from) || !visibleNode.has(e.to)) { continue; }
     const c = e.isLocal || e.isLocalOnly ? LOCAL_EDGE_COLOR : (colors[e.type] || '#9aa0a6');
@@ -422,14 +457,18 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
     for (const n of nodes) {
       const p = pos.get(n.id);
       if (p) { const s = toSpace(p.x, p.y); n.x = s.x; n.y = s.y; }
-      // Recolor non-local nodes (the local visor stays cyan so "YOU" is findable).
-      if (!n.isLocal) {
+      // Recolor non-local nodes (the local visor stays cyan so "YOU" is findable;
+      // DMSG servers keep their distinct purple so they stay identifiable inside
+      // the country bubble).
+      if (!n.isLocal && n.status !== 'dmsg') {
         // Service/route recolor takes precedence over the group color (parity
         // with Flat, where getNodeColor's service/route branch wins regardless
         // of grouping); otherwise colour by group so the clusters read.
         const svcRouteColor = serviceRouteColorOf(n.id);
         if (svcRouteColor) { n.color = svcRouteColor; }
         else { const col = color.get(n.id); if (col) { n.color = col; } }
+      }
+      if (!n.isLocal) {
         // Gap #4: node positions get compressed by `scale`, but the dot pixel
         // size is fixed (scaleNodesOnZoom:false) — so in a dense group the dots
         // overlap and bleed past the (also-scaled) boundary ring. Shrink the dot
