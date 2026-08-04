@@ -5,6 +5,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -141,6 +143,7 @@ class ConfigManager(private val paths: SkywirePaths) {
                         key,
                         value.jsonObject.edit {
                             put("bin_path", JsonPrimitive(paths.binDir.absolutePath))
+                            this["apps"]?.let { apps -> this["apps"] = pinSocksArgs(apps) }
                         },
                     )
                     else -> put(key, value)
@@ -149,6 +152,53 @@ class ConfigManager(private val paths: SkywirePaths) {
             putObject("dmsgscp") { put("disabled", JsonPrimitive(true)) }
         }
         paths.configFile.writeText(json.encodeToString(JsonObject.serializer(), edited))
+    }
+
+    /**
+     * The two skysocks-client flags the phone must own, re-applied on every
+     * launch. Everything else in the argv — the server key the SkySOCKS
+     * screen writes, above all — passes through untouched, so this never
+     * undoes a user's choice.
+     */
+    private fun pinSocksArgs(apps: JsonElement): JsonElement {
+        val list = apps as? JsonArray ?: return apps
+        return JsonArray(
+            list.map { entry ->
+                val app = entry as? JsonObject ?: return@map entry
+                if ((app["name"] as? JsonPrimitive)?.content != SOCKS_APP) return@map entry
+                // On disk the argv is one space-joined string, not an array.
+                val args = (app["args"] as? JsonPrimitive)?.content.orEmpty().split(" ")
+                    .filter { it.isNotEmpty() }
+                app.edit { this["args"] = JsonPrimitive(phoneSocksArgs(args).joinToString(" ")) }
+            },
+        )
+    }
+
+    /**
+     * - `--addr` host forced to loopback: the generated `:1080` listens on
+     *   every interface, i.e. a SOCKS5 proxy any device on the same Wi-Fi
+     *   could use. Only the host is rewritten — the port is the one knob
+     *   the SkySOCKS screen exposes.
+     * - `--reconnect` always on: a phone loses mesh routes routinely (a
+     *   cell handover is enough), and without it the app *exits* the
+     *   moment its route group dies, leaving a dead proxy until the user
+     *   notices. With it, the client re-dials in place.
+     */
+    private fun phoneSocksArgs(args: List<String>): List<String> {
+        val pinned = args.toMutableList()
+        val flag = pinned.indexOfFirst { it == "--addr" || it == "-addr" }
+        when {
+            flag < 0 || flag + 1 >= pinned.size ->
+                pinned += listOf("--addr", "$LOOPBACK:$DEFAULT_SOCKS_PORT")
+            // A malformed value only gets worse from rewriting — leave it
+            // and let the visor report it.
+            else -> pinned[flag + 1].substringAfterLast(':').toIntOrNull()
+                ?.let { port -> pinned[flag + 1] = "$LOOPBACK:$port" }
+        }
+        if (pinned.none { it == "--reconnect" || it.startsWith("--reconnect=") }) {
+            pinned += "--reconnect"
+        }
+        return pinned
     }
 
     /**
@@ -194,6 +244,9 @@ class ConfigManager(private val paths: SkywirePaths) {
 
     private companion object {
         const val MAX_CAPTURE = 256 * 1024
+        const val SOCKS_APP = "skysocks-client"
+        const val LOOPBACK = "127.0.0.1"
+        const val DEFAULT_SOCKS_PORT = 1080
     }
 }
 

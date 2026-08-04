@@ -7,6 +7,78 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-04 — SkySOCKS screen: discovery list, connect, expose-port
+
+**Built:**
+
+- `ui/socks/` — the first real app screen, and the shape the other app
+  screens copy: server list → configure → start → observe, with a `Logs`
+  bar action opening the shared viewer scoped to `skysocks-client`.
+  - Server list from service discovery, ~1050 entries, each with flag,
+    country · region, short key and version; search over key/country/
+    region/version; pull-free refresh.
+  - Status card: state, the visor's own detailed status, selected server
+    (tap-to-copy), live transferred bytes, Connect/Disconnect/Reconnect.
+  - Helper card: *"SOCKS5 for other apps — 127.0.0.1:1080"*, tap-to-copy,
+    with the port editable in a bottom sheet.
+  - Last-used server persisted (`core/AppPreferences.kt`, plain DataStore
+    — separate from the encrypted `SecretStore`), so the screen opens on
+    a one-tap Reconnect.
+- `api/VisorApi` additions: `services(type)` over `/api/svc-fetch`,
+  `app(name)`, `appConnections(name)`, and a CSRF-signed `updateApp` that
+  carries only the fields given (`pk` / `args` / `status`).
+- `core/ConfigManager` now also pins two skysocks-client flags on every
+  launch (see below).
+
+**Hard-won facts:**
+
+- The proxy-server query is `/api/svc-fetch?service=sd&path=/api/services
+  ?type=proxy` (path URL-encoded). SD answers a bare `null`, not `[]`, for
+  an empty result, and labels the entries `type: "skysocks"` — `proxy` is
+  the filter, not the returned value.
+- `svc-fetch` needs its own HTTP client. The visor dials the service over
+  DMSG with a 15 s budget *per hop*, and the shared client's 15 s call
+  timeout aborted at exactly that moment — the first list load failed with
+  a bare "timeout" every time. It now uses a 50 s client, and the opening
+  load retries 3× (the API answers well before dmsg has a session).
+- `--addr` defaults to `:1080` — **every interface**, i.e. a SOCKS5 proxy
+  any device on the same Wi-Fi could use. The phone profile forces the
+  host to loopback and leaves the port alone (the one knob the screen
+  exposes). `SetAppAddress` is skychat-only, so the port is written by
+  replacing the whole argv via the `args` field.
+- `--reconnect` is now pinned on too. Caught live: a cell-network route
+  loss ("Liveness probe failed 2x; route group gone") makes the app *exit*
+  without it — `accept: use of closed network connection`, Errored, dead
+  proxy until the user notices. With it the client re-dials in place.
+- Configure/start must stop the app first. `PUT` with `pk` or `args`
+  triggers a server-side `RestartApp` that races the outgoing proc, whose
+  blocked `accept` returns "use of closed network connection" and sticks
+  the app in Errored; and `status: 1` on an already-running app is a 500
+  ("app already started"). The stop is unconditional and its failure
+  ignored — the polled snapshot can be a poll behind the visor.
+- A read-modify-write of the UI state across a suspension point silently
+  drops concurrent updates: the DataStore read of the last-used server
+  captured the state *before* it suspended and clobbered the core-state
+  collector's write, so the screen claimed the core was stopped while it
+  was running. Every write goes through `MutableStateFlow.update`.
+- `AppState.args` is a JSON **array** over the API; the space-joined
+  string is an on-disk-only rendering (`appConfigOnDisk`).
+
+**Verified (DM-B70104, Android 15, LTE, light + dark):** list loaded 1052
+entries; tapping a server connected (~10 s to route, up to ~9 min on a bad
+cell); `…/connections` drove the live byte counters; the port sheet moved
+the listener 1080 → 1085 → 1080 with the app staying Connected and no
+stale listener left behind; Disconnect closed the listener and kept the
+server for Reconnect; the saved server + port survived an app reinstall
+and a core restart. End-to-end, **from the phone itself** (adb shell, a
+different UID — same reachability a third-party app has):
+`curl https://api.ipify.org` → `5.208.36.94` (real), through
+`--socks5-hostname 127.0.0.1:1080` → `182.8.229.155` / `36.95.212.119`
+(ID exit) and `158.247.213.146` (KR exit), matching the flag shown for the
+selected server. Same fetch from the Mac over `adb forward` → HTTP 200.
+
+---
+
 ## 2026-08-03 — Core service, on-device config, the Connect screen, log viewer
 
 **Built:**
