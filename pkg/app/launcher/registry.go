@@ -42,13 +42,16 @@ func GetApp(name string) (AppFunc, bool) {
 }
 
 // httpHandlers holds in-process HTTP handlers published by internal
-// (in-process) apps, keyed by app name. A portless-internal app — one that
-// runs in the visor process with no TCP port of its own — registers its
-// http.Handler here so a same-process consumer (the visor's control surface,
-// which backs the hypervisor UI's /skychat/proxy/* routes) can serve it
-// directly via ServeHTTP with no loopback dial. When the app instead runs
-// externally on its own port, no handler is registered and the consumer falls
-// back to an HTTP proxy to that port.
+// (in-process) apps, keyed by app name. An app running in the visor process
+// registers its http.Handler here so a same-process consumer (the visor's
+// control surface, which backs the hypervisor UI's /skychat/proxy/* routes)
+// can serve it directly via ServeHTTP with no loopback dial.
+//
+// Registration says "this app runs in this process", not "this app has no
+// port": an in-process app may also bind a TCP listener for the same mux, and
+// the two surfaces coexist. What a missing entry means is that the app runs
+// somewhere else — a separate process, whose registry writes this one never
+// sees — so the consumer falls back to an HTTP proxy to its address.
 var (
 	httpHandlersMu sync.RWMutex
 	httpHandlers   = make(map[string]http.Handler)
@@ -73,4 +76,21 @@ func GetHTTPHandler(name string) http.Handler {
 	httpHandlersMu.RLock()
 	defer httpHandlersMu.RUnlock()
 	return httpHandlers[name]
+}
+
+// ClearHTTPHandler removes name's entry only if it currently holds h.
+//
+// This is what a shutting-down app should call instead of
+// RegisterHTTPHandler(name, nil). An app restart re-registers before the old
+// instance finishes unwinding, so a plain delete-by-name races: the old
+// instance's cleanup can land after the new one has published, taking a live
+// handler out of the registry and leaving the consumer with nothing to serve.
+// Compare-and-delete under the write lock closes that window — a Get followed
+// by a conditional Register would not, since the two are separate acquisitions.
+func ClearHTTPHandler(name string, h http.Handler) {
+	httpHandlersMu.Lock()
+	defer httpHandlersMu.Unlock()
+	if httpHandlers[name] == h {
+		delete(httpHandlers, name)
+	}
 }

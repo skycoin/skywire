@@ -662,15 +662,14 @@ e2e-test-local:  ## E2E. Run e2e-tests suite in Docker. Prepare e2e environment 
 		sh -c "go clean -testcache && go test -v -timeout=45m ./internal/integration"
 
 e2e-config: ## E2E. Regenerate visor configs from template and deployment config
-	@# HEADS UP: `config gen` emits skychat as an INTERNAL app with
-	@# `--portless` (no TCP port, served through the visor's control
-	@# surface). The committed e2e configs deliberately run it as
-	@# `--addr *:8001 --pair-enable` instead — still the in-process app
-	@# (no "binary" key; bin_path is "./", so an external launch could
-	@# not resolve one anyway), but bound to a port so the e2e suite can
-	@# reach http://visor-x:8001 and a browser can reach the published
-	@# host ports. Regenerating drops that: re-apply the skychat args in
-	@# all three configs afterwards (see the note printed below).
+	@# skychat comes out as `--addr *:8001 --pair-enable` on its own:
+	@# SKYCHATADDR in docker/integration/e2e.conf supplies the
+	@# all-interfaces bind (the suite reaches http://visor-x:8001 across
+	@# containers, and docker-compose publishes those ports to the host)
+	@# and SKYCHATPAIR defaults on. It is still the in-process app — no
+	@# "binary" key, bin_path is "./", so an external launch could not
+	@# resolve one anyway — just one that also listens. This used to need
+	@# a manual re-apply after every regeneration; it does not any more.
 	@#
 	@# --pty-rpc-exec is required by TestEnv_DmsgPtyExec: #3658 gated the
 	@# RPC-initiated `cli pty exec` path behind pty.allow_rpc_exec, OFF by
@@ -698,9 +697,10 @@ e2e-config: ## E2E. Regenerate visor configs from template and deployment config
 		-o docker/integration/visorC.json
 	@echo "E2E visor configs regenerated."
 	@echo ""
-	@echo "NOTE: skychat was regenerated as \"--portless\". For the e2e env + browser"
-	@echo "      testing, set its args back to \"--addr *:8001 --pair-enable\" in"
-	@echo "      docker/integration/visor{A,B,C}.json (see make e2e-skychat)."
+	@echo "NOTE: skychat should read \"--addr *:8001 --pair-enable\" in"
+	@echo "      docker/integration/visor{A,B,C}.json (from SKYCHATADDR in"
+	@echo "      docker/integration/e2e.conf). If it does not, the e2e suite"
+	@echo "      and the browser UIs cannot reach it — see make e2e-skychat."
 
 e2e-skychat: ## E2E. Wire transports between all three visors and print the skychat UIs + PKs
 	@# Manual/browser testing of the chat app against three real visors.

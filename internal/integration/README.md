@@ -89,12 +89,12 @@ PulseAudio/PipeWire daemon, so the call manager reports disabled and the UI
 hides its call controls. Voice/video *messages* are unaffected — the browser
 records them and they ship over the ordinary file-transfer path.
 
-**If you regenerate the visor configs**, keep skychat's args. `make e2e-config`
-emits it as `--portless` (no TCP port at all); the committed configs
-deliberately use `--addr *:8001 --pair-enable`, which is what both the test
-suite (`http://visor-a:8001`) and the published host ports depend on, and what
-enables groups and the `/voice` endpoints. Re-apply those args in
-`docker/integration/visor{A,B,C}.json` afterwards.
+**If you regenerate the visor configs**, check skychat's args still read
+`--addr *:8001 --pair-enable`. `make e2e-config` produces them itself —
+`SKYCHATADDR='*:8001'` in `docker/integration/e2e.conf` supplies the
+all-interfaces bind, and pairing is on by default — but they are what both the
+test suite (`http://visor-a:8001`) and the published host ports depend on, and
+what enables groups and the `/voice` endpoints, so it is worth a look.
 
 ## Test Structure
 

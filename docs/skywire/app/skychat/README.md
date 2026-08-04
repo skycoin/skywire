@@ -40,6 +40,7 @@ skywire app skychat
       --persist-ttl int               days to keep persisted messages before sweep (0 disables) (default 30)
       --persist-whitelist string      path to file with one peer PK per line; if set, only these peers are persisted
       --port uint16                   routing port for communication between app and visor
+      --portless                      don't bind a TCP port; reach the UI only through the visor's control surface (the in-process surface is published either way)
       --sk string                     identity SK for TCP-direct (hex). Overrides env + config.
       --skynet                        listen on skynet network (default true)
       --standalone                    run without a parent visor: skip PROC_CONFIG handshake, disable skynet/dmsg listenLoops, keep --tcp-listen/--tcp-peer + the HTTP control surface. Pair-RPC endpoints become 503 (no visor pair-rpc to relay through). Use this to run a long-lived chat-app that survives visor restarts — reachable via TCP-direct only.
