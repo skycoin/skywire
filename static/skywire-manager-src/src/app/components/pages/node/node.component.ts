@@ -205,7 +205,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     // WinBox window or external page can iframe a single tab — the wasm
     // desktop's ☰ Chat hosts #/nodes/<pk>/chat?embed=1 this way, making the
     // Angular skychat the ONE chat implementation on both surfaces.
-    this.embedMode = (this.lastUrl || '').includes('embed=1');
+    // Only suppress the chrome when actually iframed: opened as a standalone
+    // top-level tab the URL keeps its full navigation, so a stray embed=1 link
+    // can't trap the user in a chrome-less page with no way back to the nav.
+    this.embedMode = (this.lastUrl || '').includes('embed=1') && window.self !== window.top;
     NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
     if (this.nodeActionsHelper) {
       this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
