@@ -76,6 +76,12 @@ type SendOpts struct {
 	// received → read) as opposed to a CLI's synchronous --wait. Ignored when
 	// WaitAck is set, which already asks for the ack and waits for it.
 	RequestAck bool
+	// Auto picks the network automatically instead of using the netType arg:
+	// reuse a warm conn if one exists (so replies also follow the peer's chosen
+	// path), else send over dmsg immediately — no route setup, instant first
+	// contact — and warm a skynet route in the background so subsequent messages
+	// upgrade to the faster/steadier routed transport. netType is ignored.
+	Auto bool
 }
 
 // SendResult reports the outcome of a send.
@@ -143,6 +149,11 @@ type Controller struct {
 	mu    sync.Mutex
 	conns map[cipher.PubKey]*message.Conn
 
+	// warming guards the auto-mode background skynet upgrade so at most one
+	// warm-dial runs per peer at a time.
+	warmMu  sync.Mutex
+	warming map[cipher.PubKey]bool
+
 	ackMu      sync.Mutex
 	ackWaiters map[string]chan struct{}
 
@@ -189,6 +200,7 @@ func New(cfg Config) *Controller {
 		cfg:        cfg,
 		port:       port,
 		conns:      make(map[cipher.PubKey]*message.Conn),
+		warming:    make(map[cipher.PubKey]bool),
 		ackWaiters: make(map[string]chan struct{}),
 		done:       make(chan struct{}),
 	}
@@ -232,27 +244,36 @@ func (c *Controller) Start(ctx context.Context) error {
 	return nil
 }
 
+// acceptLoop runs every inbound conn through Serve, which caches it before
+// reading.
+//
+// The caching is the point. An accepted conn is a live connection to that peer
+// exactly as much as a dialed one is, but leaving it out of the cache made
+// HasConn mean "a peer we have dialed" rather than "a peer we are connected
+// to" — and the file-transfer accept policy reads HasConn as the latter (see
+// isEstablishedPeer in the skychat app). A peer who had only ever connected TO
+// us therefore had every file offer declined until we happened to dial them
+// back, while their text messages went through the whole time, since those
+// arrive on this very conn.
 func (c *Controller) acceptLoop(lis net.Listener) {
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
 			return
 		}
-		fc := message.NewConn(conn)
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			c.readConn(fc)
+			c.Serve(conn)
 		}()
 	}
 }
 
-// Serve runs an already-established conn (whose RemoteAddr() reports an
-// appnet.Addr) through the same cache + read loop as a dialed/accepted conn.
-// It exists for transports the Client seam doesn't cover — the native app's
-// TCP-direct entry points hand their handshaked conn here. Blocks until the
-// conn closes (the caller decides whether to run it in a goroutine), mirroring
-// the pre-extraction handleConn call it replaces.
+// Serve runs a conn (whose RemoteAddr() reports an appnet.Addr) through the
+// cache + read loop. It is the accept path above, and also the entry point for
+// transports the Client seam doesn't cover — the native app's TCP-direct
+// handshake hands its conn here. Blocks until the conn closes (the caller
+// decides whether to run it in a goroutine).
 func (c *Controller) Serve(conn net.Conn) {
 	fc := message.NewConn(conn)
 	if raddr, ok := conn.RemoteAddr().(appnet.Addr); ok {
@@ -332,6 +353,62 @@ func (c *Controller) hasNetwork(n appnet.Type) bool {
 	return false
 }
 
+// warmDialTimeout bounds the auto-mode background skynet dial (route setup can
+// take a few seconds; give up rather than hang a warm-goroutine indefinitely).
+const warmDialTimeout = 25 * time.Second
+
+// warmNetwork dials net→pk in the background (auto mode) and caches the conn on
+// success, so the next auto send upgrades from dmsg to the routed transport. A
+// per-peer guard keeps concurrent sends from stacking dials; on failure the
+// existing dmsg conn stays cached and the next send simply retries the warm.
+func (c *Controller) warmNetwork(pk cipher.PubKey, net appnet.Type) {
+	if c.cfg.Client == nil || !c.hasNetwork(net) {
+		return
+	}
+	select {
+	case <-c.done:
+		return
+	default:
+	}
+	c.warmMu.Lock()
+	if c.warming[pk] {
+		c.warmMu.Unlock()
+		return
+	}
+	c.warming[pk] = true
+	c.warmMu.Unlock()
+	defer func() {
+		c.warmMu.Lock()
+		delete(c.warming, pk)
+		c.warmMu.Unlock()
+	}()
+
+	// Already on the target network? nothing to do.
+	c.mu.Lock()
+	old := c.conns[pk]
+	c.mu.Unlock()
+	if old != nil {
+		if ra, ok := old.RemoteAddr().(appnet.Addr); ok && ra.Net == net {
+			return
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), warmDialTimeout)
+	defer cancel()
+	newConn, err := c.dialAndCache(ctx, pk, appnet.Addr{Net: net, PubKey: pk, Port: c.port})
+	if err != nil {
+		c.log("skychat/dm: auto warm %s dial to %s failed: %v", net, short(pk.Hex()), err)
+		return
+	}
+	// dialAndCache replaced c.conns[pk] with the upgraded conn. Close the
+	// superseded one so its read goroutine exits (a live one would block Close)
+	// and we don't keep a duplicate conn to the peer; a send racing on the old
+	// conn just fails its write and redials, which is already handled.
+	if old != nil && old != newConn {
+		_ = old.Close() //nolint
+	}
+}
+
 // readConn reads framed messages off one peer conn until it errors/closes.
 // Handles the pre-handler hook (pairing), the chat-msg/chat-ack/reply envelope
 // (sending a chat-ack back when requested), persistence, and surfacing.
@@ -402,6 +479,28 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 	}
 	var res SendResult
 	res.Network = netType
+
+	// Auto: pick the network. Reuse a warm conn if one exists (which also makes
+	// this side's replies follow the path the peer established); otherwise send
+	// over dmsg now and warm skynet in the background for the next message.
+	autoWarm := false
+	if opt.Auto {
+		c.mu.Lock()
+		cached := c.conns[pk]
+		c.mu.Unlock()
+		switch {
+		case cached != nil:
+			if ra, ok := cached.RemoteAddr().(appnet.Addr); ok && ra.Net != "" {
+				netType = ra.Net
+			}
+		case c.hasNetwork(appnet.TypeDmsg):
+			netType = appnet.TypeDmsg
+			autoWarm = c.hasNetwork(appnet.TypeSkynet)
+		default:
+			netType = appnet.TypeSkynet // dmsg not enabled; skynet is all we have
+		}
+		res.Network = netType
+	}
 
 	wire := []byte(text)
 	// Both ack modes put ack=true on the wire; they differ only in whether this
@@ -482,6 +581,12 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 	}
 
 	c.bump(func(s *Stats) { s.OutboundMsgs++; s.LastTxAt = time.Now().UTC() })
+
+	// auto mode: the message went out over dmsg (fast first contact); warm a
+	// skynet route in the background so the next message upgrades to it.
+	if autoWarm && res.Network == appnet.TypeDmsg {
+		go c.warmNetwork(pk, appnet.TypeSkynet) //nolint
+	}
 
 	c.persist(history.Message{
 		Peer: pk.Hex(), Outgoing: true, Text: text,
