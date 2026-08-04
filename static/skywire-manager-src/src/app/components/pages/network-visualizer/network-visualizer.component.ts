@@ -1,4 +1,6 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from 'src/app/utils/home-tabs';
@@ -29,10 +31,11 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
   error: string | null = null;
 
   private handle: { unmount(): void } | null = null;
+  private routeSub?: Subscription;
   private static readonly BUNDLE_ID = 'tpviz-bundle-script';
   private static readonly BUNDLE_SRC = 'tp-viz/bundle.js';
 
-  constructor() {
+  constructor(private route: ActivatedRoute, private router: Router) {
     super();
     this.tabsData = homeTabsData();
   }
@@ -43,6 +46,15 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
 
   ngAfterViewInit() {
     this.loadAndMount();
+    // React to ?view= changes while the tab stays mounted (Angular reuses the
+    // component, so a link to a different view wouldn't otherwise re-apply).
+    this.routeSub = this.route.queryParamMap.subscribe((pm) => {
+      const v = pm.get('view');
+      const w = window as any;
+      if (v && w.SkywireTpviz && typeof w.SkywireTpviz.setView === 'function') {
+        w.SkywireTpviz.setView(v);
+      }
+    });
   }
 
   private loadAndMount(): void {
@@ -54,7 +66,15 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
         return;
       }
       try {
-        this.handle = w.SkywireTpviz.mount(this.graphEl.nativeElement);
+        // Deep-linkable view: seed from ?view= and reflect switches back into the
+        // route query so a specific mode (globe/flat/webgl) is linkable.
+        const view = this.route.snapshot.queryParamMap.get('view') || undefined;
+        this.handle = w.SkywireTpviz.mount(this.graphEl.nativeElement, {
+          view,
+          onViewChange: (v: string) => {
+            this.router.navigate([], { relativeTo: this.route, queryParams: { view: v }, queryParamsHandling: 'merge', replaceUrl: true });
+          },
+        });
         this.loading = false;
       } catch (e: any) {
         this.error = e?.message || 'failed to mount transport-graph';
@@ -82,6 +102,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
   }
 
   ngOnDestroy(): void {
+    this.routeSub?.unsubscribe();
     if (this.handle) {
       try { this.handle.unmount(); } catch { /* ignore */ }
       this.handle = null;
