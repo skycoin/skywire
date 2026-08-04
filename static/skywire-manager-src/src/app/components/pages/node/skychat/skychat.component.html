@@ -167,6 +167,7 @@
             <mat-form-field appearance="outline" class="field-sm">
               <mat-label>{{ 'skychat.network' | translate }}</mat-label>
               <mat-select [(ngModel)]="network" panelClass="skynet-select-panel">
+                <mat-option value="auto">auto</mat-option>
                 <mat-option value="skynet">skynet</mat-option>
                 <mat-option value="dmsg">dmsg</mat-option>
               </mat-select>
