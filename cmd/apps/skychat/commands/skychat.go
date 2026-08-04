@@ -1049,16 +1049,19 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 			return
 		}
 
-		// Determine network type - default to skynet, allow dmsg
+		// Determine network type - default to skynet, allow dmsg or auto.
 		netType := appnet.TypeSkynet
+		autoNet := false
 		if data.Network != "" {
 			switch data.Network {
 			case "dmsg":
 				netType = appnet.TypeDmsg
 			case "skynet":
 				netType = appnet.TypeSkynet
+			case "auto":
+				autoNet = true // controller picks: reuse warm conn, else dmsg-now + warm skynet
 			default:
-				http.Error(w, "invalid network type: use 'skynet' or 'dmsg'", http.StatusBadRequest)
+				http.Error(w, "invalid network type: use 'auto', 'skynet' or 'dmsg'", http.StatusBadRequest)
 				return
 			}
 		}
@@ -1123,7 +1126,7 @@ func messageHandler(ctx context.Context) func(w http.ResponseWriter, rreq *http.
 		// envelope and blocks on the peer's chat-ack; for a receipts send it asks
 		// for the same ack but returns straight away, leaving the controller to
 		// watch for it (status arrives later as dm-status /sse events).
-		opt := dm.SendOpts{ReplyTo: data.ReplyTo}
+		opt := dm.SendOpts{ReplyTo: data.ReplyTo, Auto: autoNet}
 		switch {
 		case data.WaitMS > 0:
 			opt.WaitAck = clampAckWait(time.Duration(data.WaitMS) * time.Millisecond)
