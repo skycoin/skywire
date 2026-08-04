@@ -43,6 +43,14 @@ interface CosmosLink {
 // live inside [0, COSMOS_SPACE]; keep this in sync with the graph's spaceSize.
 const COSMOS_SPACE = 4096;
 
+// Cosmos renders nodes at a CONSTANT pixel size (scaleNodesOnZoom:false), while
+// the group boundary circles are drawn in scaled space. So at a zoomed-out fit a
+// snug ring clips the fixed-size dots sitting near its edge — nodes appear to
+// spill outside their country circle. Pad the DRAWN circle radius by (a bit more
+// than) the largest node pixel radius so the ring always encloses its dots. This
+// is purely a rendering pad; the packed layout stays tight.
+const BOUNDARY_NODE_PAD = 10;
+
 let graph: Graph<CosmosNode, CosmosLink> | null = null;
 let active = false;
 // PK of the node kept highlighted by a click (persistent selection, parity with Flat).
@@ -144,8 +152,15 @@ function drawBoundaries(): void {
   ctx.font = '13px system-ui, sans-serif';
   for (const b of boundaryCircles) {
     const [sx, sy] = graph.spaceToScreenPosition([b.x, b.y]);
-    const sr = graph.spaceToScreenRadius(b.r);
-    if (!isFinite(sx) || !isFinite(sy) || sr < 3) { continue; }
+    // Derive the screen radius from spaceToScreenPosition of a point on the
+    // circle's edge — NOT graph.spaceToScreenRadius(), which in this cosmos
+    // version returns a value ~3x smaller than the node rendering scale, so the
+    // ring was drawn far too small and its own nodes rendered outside it. Using
+    // the same projection as the nodes keeps circle and nodes consistent at any
+    // zoom. Pad by the node pixel radius so fixed-size dots at the edge stay in.
+    const [ex, ey] = graph.spaceToScreenPosition([b.x + b.r, b.y]);
+    const sr = Math.hypot(ex - sx, ey - sy) + BOUNDARY_NODE_PAD;
+    if (!isFinite(sx) || !isFinite(sy) || sr < 2) { continue; }
     ctx.beginPath();
     ctx.arc(sx, sy, sr, 0, 2 * Math.PI);
     ctx.globalAlpha = 0.07; ctx.fillStyle = b.color; ctx.fill();
@@ -275,7 +290,7 @@ interface GroupCircle { cx: number; cy: number; r: number; color: string; label:
 // returns each node's fixed position + its group color. Cosmos renders at these
 // positions with the simulation disabled, so WebGL groups by country/IP like Flat.
 function computeGroupedLayout(
-  nodeIds: string[], mode: 'country' | 'ip',
+  nodeIds: string[], mode: 'country' | 'ip', weightOf: (id: string) => number,
 ): { pos: Map<string, { x: number; y: number }>; color: Map<string, string>; groups: GroupCircle[] } {
   const buckets = new Map<string, string[]>();
   for (const id of nodeIds) {
@@ -284,18 +299,35 @@ function computeGroupedLayout(
     if (!arr) { arr = []; buckets.set(k, arr); }
     arr.push(id);
   }
-  // Derive each circle's radius FROM the node fill so the boundary hugs its
-  // nodes (previously radius and fill were sized independently — a big radius
-  // with a small fill left a large empty ring). fillRadius is the radius the
-  // nodes actually occupy; the circle is that plus a small margin.
+  // For each group, place the nodes in LOCAL coordinates first, then size the
+  // circle from the ACTUAL furthest node — so the ring is guaranteed to enclose
+  // every node in the country (no node ever spills out) without an oversized
+  // empty margin. Nodes are ordered by transport count descending so the
+  // best-connected sit at the centre and the fill spirals out to the least-
+  // connected (parity with the flat view's mass-weighted placement).
   const grouped = Array.from(buckets.entries())
     .map(([key, ids]) => {
-      const fill = fillRadiusForCount(ids.length);
-      return { key, ids, fill, radius: fill + GROUP_RING_MARGIN };
+      const sorted = ids.slice().sort((a, b) => weightOf(b) - weightOf(a));
+      const n = sorted.length;
+      const f = fillRadiusForCount(n);
+      const offsets = sorted.map((_, i) => {
+        if (n === 1 || i === 0) { return { x: 0, y: 0 }; } // most-connected at centre
+        if (n <= 6) {
+          const a = ((i - 1) / (n - 1)) * 2 * Math.PI; // remaining nodes on an even ring
+          return { x: f * Math.cos(a), y: f * Math.sin(a) };
+        }
+        const ga = Math.PI * (3 - Math.sqrt(5)); const a = i * ga;
+        const r = f * Math.sqrt(i / n);
+        return { x: r * Math.cos(a), y: r * Math.sin(a) };
+      });
+      let maxDist = 0;
+      for (const o of offsets) { const d = Math.hypot(o.x, o.y); if (d > maxDist) { maxDist = d; } }
+      const radius = maxDist + GROUP_RING_MARGIN;
+      return { key, ids: sorted, offsets, radius };
     })
     .sort((a, b) => b.radius - a.radius);
 
-  // Guaranteed non-overlapping placement (largest first).
+  // Guaranteed non-overlapping placement of the (real-extent) circles, largest first.
   const centers = packCircles(grouped.map(g => g.radius), GROUP_PACK_PADDING);
   const pos = new Map<string, { x: number; y: number }>();
   const color = new Map<string, string>();
@@ -303,26 +335,11 @@ function computeGroupedLayout(
   grouped.forEach((g, gi) => {
     const c = centers[gi];
     const col = groupColorOf(g.key, mode);
-    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode) });
-    // Place nodes out to ~fillRadius so they reach near the boundary (the circle
-    // = fillRadius + GROUP_RING_MARGIN, so the outermost node sits one margin
-    // inside the ring — a snug fit for any count). n==1 → center; 2..6 → an even
-    // ring at the edge; more → a Fibonacci spiral whose outermost point ≈ fill.
-    const f = g.fill;
-    const n = g.ids.length;
+    // Label includes the node count, matching the flat view's "DE (15)".
+    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode) + ' (' + g.ids.length + ')', flag: groupFlagOf(g.key, mode) });
     g.ids.forEach((id, i) => {
-      let x = c.x; let y = c.y;
-      if (n > 1) {
-        if (n <= 6) {
-          const a = (i / n) * 2 * Math.PI;
-          x = c.x + f * Math.cos(a); y = c.y + f * Math.sin(a);
-        } else {
-          const ga = Math.PI * (3 - Math.sqrt(5)); const a = i * ga;
-          const r = f * Math.sqrt(i / n);
-          x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
-        }
-      }
-      pos.set(id, { x, y });
+      const o = g.offsets[i];
+      pos.set(id, { x: c.x + o.x, y: c.y + o.y });
       color.set(id, col);
     });
   });
@@ -451,7 +468,18 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
 
   const mode = cosmosGroupMode();
   if (mode) {
-    const { pos, color, groups } = computeGroupedLayout(nodes.map(n => n.id), mode);
+    // Connection count per node drives the in-circle placement: best-connected
+    // toward the centre, like the flat view. Counts both transports AND dmsg
+    // connections (so a dmsg server, which links to many clients, sits near its
+    // country's centre alongside high-transport visors). Only route overlays —
+    // which aren't connectivity — are excluded.
+    const degree = new Map<string, number>();
+    for (const e of edgesRaw) {
+      if (e.type === 'route') { continue; }
+      degree.set(e.from, (degree.get(e.from) || 0) + 1);
+      degree.set(e.to, (degree.get(e.to) || 0) + 1);
+    }
+    const { pos, color, groups } = computeGroupedLayout(nodes.map(n => n.id), mode, (id) => degree.get(id) || 0);
     // The packed layout is centered on the origin (negative → positive). Cosmos
     // random-inits nodes in a [0, spaceSize] box and renders provided x/y in that
     // same space, so negative coords land off-screen. Translate + (only if needed)
@@ -630,11 +658,11 @@ export function updateCosmosData(): void {
   const { nodes, links, grouped, connectedIds } = buildData();
   if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
   if (grouped) {
-    // Fixed group-packed positions. disableSimulation keeps cosmos rendering the
-    // nodes at their x/y (so the country/IP clusters stay put, like the flat view)
-    // WITHOUT running the force layout — and, unlike pause(), leaves the render loop
-    // alive so pan/zoom still work. The boundary overlay loop draws the group
-    // circles + labels, tracking pan/zoom.
+    // Fixed group-packed positions. cosmos reads node x/y as the initial point
+    // positions; disableSimulation then keeps them there (no force layout) while
+    // leaving the render loop alive for pan/zoom. runSimulation stays default
+    // (true) — that's what makes cosmos initialise FROM the provided x/y; passing
+    // false skips that init and leaves points at cosmos' random grid.
     g.setConfig({ disableSimulation: true });
     g.setData(nodes, links);
     fitFrame(g, connectedIds);
