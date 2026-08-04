@@ -7,6 +7,91 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-04 — DMSG-servers card fixed; primary transport is now a choice
+
+**Built:**
+
+- **Home / DMSG servers** — the list was empty on every run. It was read
+  from `GET /api/dmsg`, which is the *round-trip tracker*: to report a
+  visor it must dial that visor's dmsgctrl port back over dmsg, and for
+  the local visor that self-dial never lands on this phone. It now reads
+  `dmsg_servers` out of the summary the card already fetches — the visor
+  answers that from its own live session list, no network involved. Each
+  row shows the session protocol always, plus latency when there is one.
+  `VisorApi.dmsg()` and the `DmsgClientSummary` DTO are gone with it.
+- **Primary transport** (`core/TransportPreference.kt`,
+  `ui/components/TransportPreferenceUi.kt`) — a card on SkySOCKS with a
+  sheet to pick which transport type the visor reaches for FIRST; the
+  others stay behind it as fallbacks. Visor-wide, not per-app, so SkyVPN
+  will show the same value from the same two composables. **dmsg is the
+  phone default.**
+  - Stored in `AppPreferences`, written into `routing.transport_preference`
+    by the phone profile on every launch, and applied live (no restart)
+    through `PUT …/router-settings` when the core is up. Changing it while
+    the client runs re-dials it, since the setting only steers route setup.
+- **Go core** — one order now governs both halves of "which transport":
+  - `tptypes.PreferredOrder(...)` / `PreferenceOrder()` (new) sort a
+    candidate list by the configured order;
+  - the route-setup hook (`getRouteSetupHooks`) and `EnsureDirectTransport`
+    both used a hardcoded STCPR → SUDPH → DMSG; they now walk
+    `PreferredOrder`. The built-in default reproduces the old sequence
+    exactly, so nothing changes for a visor that configures nothing.
+  - `RouterSettings` gained `transport_preference` (GET reports the order
+    in force; PUT applies + persists; `null` = leave alone, `[]` = revert
+    to default, unknown names rejected rather than silently dropped).
+  - The SUDPH gate — up to a 20 s wait on the STUN client — is now
+    evaluated lazily, only when SUDPH is actually the next type to try.
+    dmsg-first would otherwise still have paid it.
+
+**Hard-won facts:**
+
+- **`/api/dmsg` is empty forever on a phone, by design of what it is.**
+  Caught live: `GET /api/dmsg → 200, bytes=3` (`[]`) next to a 2375-byte
+  summary, with `dtm.establishTracker … client_pk=03704809…(self) error=
+  "dmsg error 202 - cannot connect to delegated server"` repeating every
+  ~5 min. The summary's `dmsg_servers` had entries the whole time
+  (`Measuring DMSG server latencies via self-ping servers=2`).
+- `DMSGServerInfo.latency` is a self-ping the visor runs 5 s after dmsg
+  comes up and then **hourly**, so a server that joined since the last
+  pass has `latency: 0`. On LTE the session set churns constantly (4 → 3
+  servers between two screenshots), so most rows have no latency. Rows
+  render `tcp · 1182 ms` when measured and `tcp` when not — never a
+  fabricated "0 ms".
+- **`PUT …/router-settings` applies every field of the struct**, so a
+  caller changing one knob must read-modify-write. Sending only
+  `transport_preference` would also send `min_hops: 0`, and the router
+  reads 0 as *routing disabled*. Verified the round trip leaves
+  `min_hops: 1` intact.
+- The transport-preference sheet is the first sheet tall enough to reach
+  the gesture bar: it needs `navigationBarsPadding()`, and even then the
+  trailing Cancel row was clipped — dropped it (selection applies and
+  dismisses; scrim/swipe/back cancel).
+
+**Verified** live on DM-B70104 (Android 15, LTE, dark):
+
+- Home now lists the dmsg servers after Connect — 4 rows, one with
+  `1182 ms`, the rest with their carrier.
+- Config written at launch carries
+  `"transport_preference": ["dmsg","stcpr","squicr","sudph","stcp","webrtc","swsr","swtr"]`,
+  and the visor logs `Applied configured transport preference order`.
+- SkySOCKS Reconnect with dmsg primary, from the log: dial at `08:07:23.6`
+  → `Dialing transport to 03b8ec58… via dmsg` at `:27.4` →
+  `saved transport … type(dmsg)` at `:29.2` →
+  `Found direct transport to destination … (type=dmsg)` at `:29.9` →
+  route group up at `:32.6`. **No STCPR/SUDPH attempt, no STUN wait.**
+  Screen went Connected with bytes flowing.
+- Live switch DMSG → STCPR → DMSG: each logged
+  `SetTransportPreference: [...]` and landed in the config file
+  immediately, `min_hops` untouched.
+- `go test ./pkg/visor/... ./pkg/router/... ./pkg/transport/types/...`
+  green; `go build` with the mobile tags green.
+
+**Left open:** the dmsg self-dial that fails with error 202 is the same
+one behind both the empty `/api/dmsg` and the missing latencies. Worth a
+look on its own; nothing on the phone depends on it now.
+
+---
+
 ## 2026-08-04 — SkySOCKS screen: discovery list, connect, expose-port
 
 **Built:**

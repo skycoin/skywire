@@ -10,6 +10,7 @@ import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.TransportPreference
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,6 +34,8 @@ data class SocksUiState(
     val serversError: String? = null,
     val query: String = "",
     val listenPort: Int = SocksArgs.DEFAULT_PORT,
+    /** Transport type the visor tries first — see [TransportPreference]. */
+    val transportPrimary: String = TransportPreference.DEFAULT,
     val lastServer: SavedServer? = null,
     /** A start/stop/settings call is in flight. */
     val busy: Boolean = false,
@@ -101,6 +104,12 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
             mutable.update { it.copy(lastServer = saved) }
         }
         viewModelScope.launch {
+            val primary = TransportPreference.sanitize(
+                prefs.string(TransportPreference.PREF_KEY).first(),
+            )
+            mutable.update { it.copy(transportPrimary = primary) }
+        }
+        viewModelScope.launch {
             CoreServiceState.state.collectLatest { core ->
                 mutable.update {
                     it.copy(coreState = core, apiUp = false, app = null, connection = null)
@@ -127,27 +136,8 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { loadServers() }
     }
 
-    /**
-     * Point the app at [server] and make sure it runs.
-     *
-     * The stop is unconditional and its failure ignored: stopping an
-     * already-stopped app is the harmless half of the trade, while
-     * *skipping* a needed stop is not — starting a running app is a
-     * server-side error, and the polled snapshot can be a poll behind
-     * what the visor actually has. With the app reliably stopped, the
-     * single PUT below is valid in every case: the key just rewrites the
-     * argv, then the status starts it with that key in place.
-     */
-    fun connect(server: SavedServer) = action {
-        runCatching { api.updateApp(SocksArgs.APP, status = VisorApi.APP_STOP) }
-        val updated = api.updateApp(
-            SocksArgs.APP,
-            pk = server.pk,
-            status = VisorApi.APP_START,
-        )
-        saveLastServer(server)
-        mutable.update { it.copy(app = updated, lastServer = server) }
-    }
+    /** Point the app at [server] and make sure it runs. */
+    fun connect(server: SavedServer) = action { startWith(server) }
 
     /**
      * The one-tap shortcut: reconnect to whatever the app is already
@@ -188,7 +178,57 @@ class SocksViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Change the transport type the visor tries first. Visor-wide, not
+     * SkySOCKS-only — SkyVPN will read the same value.
+     *
+     * Saved locally first: the phone profile writes it into the config on
+     * every launch ([TransportPreference]), so the choice holds even when
+     * it is made with the core down and there is nothing to PUT. When the
+     * core *is* up the visor takes it live, and a running client is
+     * re-dialed so the new route is actually built over the new primary —
+     * the setting only steers route setup, so an established route keeps
+     * whatever transport it already rides.
+     */
+    fun setTransportPrimary(type: String) = action {
+        prefs.putString(TransportPreference.PREF_KEY, type)
+        mutable.update { it.copy(transportPrimary = type) }
+        if (!mutable.value.coreReady) return@action
+        api.setTransportPreference(TransportPreference.order(type))
+        val state = mutable.value
+        if (state.running || state.starting) {
+            val pk = state.selectedPk ?: return@action
+            startWith(state.lastServer?.takeIf { it.pk == pk } ?: SavedServer(pk))
+        }
+    }
+
     // --- internals ---
+
+    /**
+     * Point the app at [server] and start it.
+     *
+     * The stop is unconditional and its failure ignored: stopping an
+     * already-stopped app is the harmless half of the trade, while
+     * *skipping* a needed stop is not — starting a running app is a
+     * server-side error, and the polled snapshot can be a poll behind
+     * what the visor actually has. With the app reliably stopped, the
+     * single PUT below is valid in every case: the key just rewrites the
+     * argv, then the status starts it with that key in place.
+     *
+     * A plain suspend function, not another [action]: the callers already
+     * run inside one, and re-entering `action` from within would cancel
+     * the very job making the call.
+     */
+    private suspend fun startWith(server: SavedServer) {
+        runCatching { api.updateApp(SocksArgs.APP, status = VisorApi.APP_STOP) }
+        val updated = api.updateApp(
+            SocksArgs.APP,
+            pk = server.pk,
+            status = VisorApi.APP_START,
+        )
+        saveLastServer(server)
+        mutable.update { it.copy(app = updated, lastServer = server) }
+    }
 
     /**
      * One user action at a time, with its failure surfaced on the screen.

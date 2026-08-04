@@ -97,6 +97,52 @@ func TestWSWTLegacyAlias(t *testing.T) {
 	}
 }
 
+// TestPreferredOrder covers the helper the transport-CREATION paths use to
+// decide which type to dial first: default order, a configured override
+// (the phone's "dmsg primary"), and non-mutation of the caller's slice.
+func TestPreferredOrder(t *testing.T) {
+	SetPreferenceOrder(nil)
+
+	got := PreferredOrder(DMSG, SUDPH, STCPR)
+	if got[0] != STCPR || got[1] != SUDPH || got[2] != DMSG {
+		t.Fatalf("default order: got %v, want [stcpr sudph dmsg]", got)
+	}
+
+	defer SetPreferenceOrder(nil)
+	SetPreferenceOrder([]Type{DMSG, STCPR, SUDPH})
+	in := []Type{STCPR, SUDPH, DMSG}
+	got = PreferredOrder(in...)
+	if got[0] != DMSG || got[1] != STCPR || got[2] != SUDPH {
+		t.Fatalf("dmsg-primary order: got %v, want [dmsg stcpr sudph]", got)
+	}
+	if in[0] != STCPR || in[1] != SUDPH || in[2] != DMSG {
+		t.Fatalf("PreferredOrder mutated its input: %v", in)
+	}
+}
+
+// TestPreferenceOrderReadback confirms the getter answers the active order —
+// the default when none was set, and the override afterwards — since the
+// router-settings API reports it to callers as "what is in force".
+func TestPreferenceOrderReadback(t *testing.T) {
+	SetPreferenceOrder(nil)
+	if got := PreferenceOrder(); len(got) != len(defaultPreference) || got[0] != STCPR {
+		t.Fatalf("default readback: got %v", got)
+	}
+
+	defer SetPreferenceOrder(nil)
+	want := []Type{DMSG, STCPR}
+	SetPreferenceOrder(want)
+	got := PreferenceOrder()
+	if len(got) != 2 || got[0] != DMSG || got[1] != STCPR {
+		t.Fatalf("override readback: got %v, want %v", got, want)
+	}
+	// The copy must not alias the stored order.
+	got[0] = STCP
+	if PreferenceOrder()[0] != DMSG {
+		t.Fatal("PreferenceOrder returned an aliased slice")
+	}
+}
+
 // TestSetPreferenceOrderSortsTransports verifies a configured override actually
 // reorders a slice the way the router's dial logic relies on.
 func TestSetPreferenceOrderSortsTransports(t *testing.T) {
