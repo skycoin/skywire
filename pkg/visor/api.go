@@ -273,6 +273,12 @@ type API interface {
 	PairDelete(peerPK cipher.PubKey, id string) error
 	PairPoll(since time.Time) ([]PairMessage, error)
 
+	// Skychat profile — this visor's published display name and avatar,
+	// and a peer's. See pkg/visor/profile.go.
+	ProfileGet() (Profile, error)
+	ProfileSet(args ProfileSetArgs) (Profile, error)
+	ProfileFetch(pk cipher.PubKey) (Profile, error)
+
 	// Chat-group feeds — D1 owner-centric CXO feeds with multi-PK
 	// allowlists. See pkg/visor/group.go.
 	GroupCreate(args GroupCreateArgs) (GroupInfo, string, error)
