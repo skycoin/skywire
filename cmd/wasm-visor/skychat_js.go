@@ -298,13 +298,16 @@ func sendChat(pkHex, text, network, replyTo string) error {
 		return fmt.Errorf("empty message")
 	}
 	var net appnet.Type
+	auto := false
 	switch network {
-	case "", "dmsg":
-		net = appnet.TypeDmsg
-	case "skynet":
+	case "", "skynet":
 		net = appnet.TypeSkynet
+	case "dmsg":
+		net = appnet.TypeDmsg
+	case "auto":
+		auto = true // controller picks: reuse warm conn, else dmsg-now + warm skynet
 	default:
-		return fmt.Errorf("unknown network %q (use dmsg or skynet)", network)
+		return fmt.Errorf("unknown network %q (use auto, dmsg or skynet)", network)
 	}
 	var pk cipher.PubKey
 	if err := pk.Set(pkHex); err != nil {
@@ -313,7 +316,7 @@ func sendChat(pkHex, text, network, replyTo string) error {
 	// RequestAck rides an id'd envelope with ack=true (non-blocking): the peer
 	// auto-acks, surfacing as a "received" receipt via OnReceipt so the bubble's
 	// tick advances. The peer's "read" receipt follows when its UI displays it.
-	_, err := chatCtrl.Send(context.Background(), pk, net, text, dm.SendOpts{ReplyTo: replyTo, RequestAck: true})
+	_, err := chatCtrl.Send(context.Background(), pk, net, text, dm.SendOpts{ReplyTo: replyTo, RequestAck: true, Auto: auto})
 	return err
 }
 
@@ -337,13 +340,13 @@ func shortPK(pk string) string {
 func nowMs() int64 { return time.Now().UnixMilli() }
 
 // jsSkychatSend(peerPkHex, text[, network[, replyToID]]) → Promise<null>.
-// network is "dmsg" (default) or "skynet".
+// network is "auto" (default), "skynet", or "dmsg".
 func jsSkychatSend(_ js.Value, args []js.Value) interface{} {
 	if len(args) < 2 {
 		return js.Global().Get("Error").New("skychatSend(peerPkHex, text[, network])")
 	}
 	pkHex, text := args[0].String(), args[1].String()
-	network := "dmsg"
+	network := "auto"
 	if len(args) >= 3 && args[2].Type() == js.TypeString {
 		network = args[2].String()
 	}

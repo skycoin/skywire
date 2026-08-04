@@ -383,3 +383,62 @@ func TestController_AckTimeoutNoPeer(t *testing.T) {
 		t.Error("send to a non-listening peer should error")
 	}
 }
+
+// TestController_AutoDmsgFirstThenSkynetUpgrade verifies auto mode: the first
+// send (no warm conn) goes over dmsg immediately, a background warm upgrades the
+// cached conn to skynet, and the next auto send reuses the skynet conn.
+func TestController_AutoDmsgFirstThenSkynetUpgrade(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	recB := &recorder{}
+	nets := []appnet.Type{appnet.TypeDmsg, appnet.TypeSkynet}
+
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: nets, OnEvent: recB.on})
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: nets, OnEvent: func(Event) {}})
+	if err := ctrlB.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrlA.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	defer ctrlA.Close()
+	defer ctrlB.Close()
+
+	// First auto send: no warm conn → dmsg (instant, no route setup).
+	res, err := ctrlA.Send(context.Background(), pkB, "", "hi", SendOpts{Auto: true})
+	if err != nil {
+		t.Fatalf("first auto send: %v", err)
+	}
+	if res.Network != appnet.TypeDmsg {
+		t.Fatalf("first auto send network = %q, want dmsg", res.Network)
+	}
+	waitFor(t, recB, func(e Event) bool { return e.Dir == "in" && e.Text == "hi" })
+
+	// Background warm should upgrade the cached conn to skynet.
+	cachedNet := func() appnet.Type {
+		ctrlA.mu.Lock()
+		defer ctrlA.mu.Unlock()
+		if conn := ctrlA.conns[pkB]; conn != nil {
+			if ra, ok := conn.RemoteAddr().(appnet.Addr); ok {
+				return ra.Net
+			}
+		}
+		return ""
+	}
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) && cachedNet() != appnet.TypeSkynet {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := cachedNet(); got != appnet.TypeSkynet {
+		t.Fatalf("cached conn network after warm = %q, want skynet", got)
+	}
+
+	// Second auto send reuses the warmed skynet conn.
+	res2, err := ctrlA.Send(context.Background(), pkB, "", "yo", SendOpts{Auto: true})
+	if err != nil {
+		t.Fatalf("second auto send: %v", err)
+	}
+	if res2.Network != appnet.TypeSkynet {
+		t.Fatalf("second auto send network = %q, want skynet", res2.Network)
+	}
+}

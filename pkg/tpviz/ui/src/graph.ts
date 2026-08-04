@@ -116,7 +116,15 @@ export function processDMSGData(): void {
 export function processData(): void {
     const visors = new Map<string, any>();
     setVisorConnections({} as Record<string, any[]>);
-    let countStcpr = 0, countSudph = 0, countDmsg = 0, totalTransports = 0;
+    let totalTransports = 0;
+    // Per-type transport counts, one bucket per canonical transport type (mirrors
+    // the Go tptypes.Known() set). bumpType folds legacy wire names into the
+    // canonical bucket so a type is never silently dropped from the stats.
+    const tc: Record<string, number> = { stcpr: 0, sudph: 0, dmsg: 0, stcp: 0, squicr: 0, swtr: 0, swsr: 0, webrtc: 0 };
+    const bumpType = (t: string) => {
+        const k = t === 'quic' || t === 'squic' ? 'squicr' : t === 'ws' ? 'swsr' : t === 'wt' ? 'swtr' : t;
+        if (k in tc) { tc[k]++; }
+    };
 
     const seenEdges = new Set<string>();
     const makeEdgeKey = (pk1: string, pk2: string, type: string) => {
@@ -132,9 +140,7 @@ export function processData(): void {
         seenEdges.add(makeEdgeKey(pk1, pk2, type));
 
         totalTransports++;
-        if (type === 'stcpr') countStcpr++;
-        else if (type === 'sudph') countSudph++;
-        else if (type === 'dmsg') countDmsg++;
+        bumpType(type);
 
         [pk1, pk2].forEach(pk => {
             if (!visors.has(pk)) visors.set(pk, { id: pk, connections: 0, types: new Set() });
@@ -186,9 +192,7 @@ export function processData(): void {
             });
 
             totalTransports++;
-            if (type === 'stcpr') countStcpr++;
-            else if (type === 'sudph') countSudph++;
-            else if (type === 'dmsg') countDmsg++;
+            bumpType(type);
 
             if (!visors.has(remotePK)) {
                 visors.set(remotePK, { id: remotePK, connections: 0, types: new Set() });
@@ -240,9 +244,10 @@ export function processData(): void {
     document.getElementById('count-online')!.textContent = String(S.onlineVisors.size);
     document.getElementById('count-offline')!.textContent = String(S.offlineVisors.size);
     document.getElementById('count-unknown')!.textContent = String(countUnknown);
-    document.getElementById('count-stcpr')!.textContent = String(countStcpr);
-    document.getElementById('count-sudph')!.textContent = String(countSudph);
-    document.getElementById('count-dmsg')!.textContent = String(countDmsg);
+    Object.keys(tc).forEach(k => {
+        const el = document.getElementById('count-' + k);
+        if (el) { el.textContent = String(tc[k]); }
+    });
 
     populateVisorList(visors);
 
