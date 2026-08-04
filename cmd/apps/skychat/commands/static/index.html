@@ -2384,6 +2384,18 @@
       line-height: 1.5;
     }
 
+    /* Heading inside the forward list. Same treatment as the sidebar's
+       section headers so the dialog reads as the same kind of list. */
+    .fwd-section {
+      padding: 12px 16px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--accent-green);
+      pointer-events: none;
+    }
+
     .contact-actions {
       display: flex;
       gap: 4px;
@@ -2894,7 +2906,7 @@
       </div>
       <div id="fwdOrigin" class="cg-help"></div>
       <input id="fwdSearch" class="cg-input" type="search" autocomplete="off"
-             placeholder="Search chats, groups and channels" oninput="app.renderForwardTargets()" />
+             placeholder="Search chats, contacts, groups and channels" oninput="app.renderForwardTargets()" />
       <div class="contacts-body">
         <ul id="fwdTargets" class="recipient-list"></ul>
         <div id="fwdEmpty" class="contacts-empty hidden">Nothing matches that.</div>
@@ -7355,21 +7367,46 @@
 
       // _forwardTargets is everywhere a message can go, in the order a user
       // is most likely to want: notes first (the "keep this" case), then
-      // conversations, then groups and channels.
+      // open conversations, then the rest of the address book, then groups
+      // and channels.
+      //
+      // Chats and the address book are two lists, not one, because they
+      // answer different questions. Somebody who messaged you once and was
+      // never saved has no address-book row at all — they exist only as a
+      // conversation — and a flat list rendered them as a bare hex string
+      // among named contacts, which is indistinguishable from noise. The
+      // person you want to forward to is, more often than not, exactly the
+      // one you were just talking to.
+      //
+      // A peer in both appears once, under Chats: it is the more specific
+      // fact about them.
       _forwardTargets() {
-        const out = [{ kind: 'saved', id: this.savedKey(), label: 'Saved Messages', sub: 'Notes on this device', icon: '\u{1F516}' }];
+        const out = [{
+          kind: 'saved', id: this.savedKey(), section: '',
+          label: 'Saved Messages', sub: 'Notes on this device', icon: '\u{1F516}',
+        }];
         const seen = new Set();
-        [...this.recipients, ...this.contacts].forEach(pk => {
+        const peer = (pk, section) => {
           if (seen.has(pk)) return;
           seen.add(pk);
-          out.push({ kind: 'dm', id: pk, label: this.shortPk(pk), sub: this.abbrevPk(pk), icon: '\u{1F464}' });
-        });
+          const name = this.peerName(pk);
+          out.push({
+            kind: 'dm', id: pk, section,
+            label: name || this.abbrevPk(pk),
+            // The key, but only when the label is a name — otherwise the
+            // label already IS the key and repeating it says nothing.
+            sub: name ? this.abbrevPk(pk) : '',
+            icon: '\u{1F464}',
+          });
+        };
+        this.recipients.filter(pk => pk !== this.savedKey()).forEach(pk => peer(pk, 'Chats'));
+        this.contacts.forEach(pk => peer(pk, 'Address book'));
         this.groups.forEach(g => {
           // A channel we cannot post in is not a destination.
           if (g.can_post === false || g.read_only) return;
           if (g.status && g.status !== 'active') return;
           out.push({
-            kind: 'group', id: g.id,
+            kind: 'group', id: g.id, section: 'Groups and channels',
             label: g.name || g.id,
             sub: g.kind === 'channel' ? 'Channel' : 'Group',
             icon: g.kind === 'channel' ? '\u{1F4E3}' : '#',
@@ -7387,17 +7424,30 @@
         const rows = this._forwardTargets().filter(t =>
           !q || t.label.toLowerCase().includes(q) || String(t.id).toLowerCase().includes(q));
         list.innerHTML = '';
+        // Headings are emitted from the rows that survived the search, so a
+        // section whose every row was filtered out does not leave its title
+        // standing over nothing.
+        let section = null;
         rows.forEach(t => {
+          if (t.section && t.section !== section) {
+            section = t.section;
+            const head = document.createElement('li');
+            head.className = 'fwd-section';
+            head.textContent = section;
+            list.appendChild(head);
+          }
           const li = document.createElement('li');
           const avatar = t.kind === 'dm'
             ? `<img class="recipient-avatar" src="${this.escapeAttr(localStorage.getItem(`i_${t.id}`) || 'p.png')}" alt="" />`
             : `<div class="saved-avatar">${t.icon}</div>`;
+          const sub = t.sub
+            ? `<div class="recipient-preview">${this.escapeHtml(t.sub)}</div>` : '';
           li.innerHTML = `
             <div class="recipient-item" onclick="app.doForward('${this.escapeAttr(t.kind)}', '${this.escapeAttr(t.id)}')">
               <div class="avatar-wrap">${avatar}</div>
               <div class="recipient-info">
                 <div class="recipient-pk">${this.escapeHtml(t.label)}</div>
-                <div class="recipient-preview">${this.escapeHtml(t.sub)}</div>
+                ${sub}
               </div>
             </div>`;
           list.appendChild(li);
