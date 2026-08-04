@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Skychat</title>
+  <title>SkyChat</title>
   <style>
     :root {
       --bg-primary: #1a1d24;
@@ -1062,9 +1062,27 @@
       color: var(--text-primary);
     }
 
+    /* A media bubble is exactly as wide as the media inside it. Laid out as
+       a one-column grid whose width is set by the picture/player alone: the
+       caption and any quote above it are pinned to that column (width:0 so
+       they contribute nothing to it, min-width:100% so they still fill it).
+       Without that, a long file name stretched the bubble to its 320px cap
+       while a portrait photo stayed 150px wide, leaving a blank strip beside
+       the picture. justify-items:start keeps a replaced element at its own
+       size instead of stretching it into a crop. */
     .message-bubble.media {
       padding: 6px;
       max-width: 320px;
+      display: grid;
+      grid-template-columns: minmax(0, max-content);
+      justify-items: start;
+    }
+
+    .message-bubble.media > .media-caption,
+    .message-bubble.media > .reply-quote,
+    .message-bubble.media > .fwd-chip {
+      width: 0;
+      min-width: 100%;
     }
 
     .media-image {
@@ -1076,11 +1094,56 @@
       object-fit: cover;
     }
 
+    /* No side margin: the caption is pinned to the media's width, so an
+       inset here would push it past the picture's edge instead of in from
+       the bubble's. */
     .media-caption {
       font-size: 11px;
       color: var(--text-secondary);
-      margin: 6px 4px 2px;
-      word-break: break-all;
+      margin: 6px 0 2px;
+      padding: 0 2px;
+    }
+
+    /* One line, and only the name gives: wrapping it was what widened the
+       bubble past the media it describes. The full name is in the title
+       attribute (and in the lightbox). */
+    .media-caption .mc-name {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .media-caption .mc-file {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .media-caption .mc-size {
+      flex-shrink: 0;
+    }
+
+    /* What you can do with the file, on its own line under the name — so a
+       long name can never push "download" out of reach. */
+    .mc-acts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 3px;
+    }
+
+    /* Our own bubbles are sent-blue, where the muted grey of a caption and
+       the blue of a link both go to read as smudges. Same treatment the
+       quoted-reply block already gets there. */
+    .message-row.sent .media-caption,
+    .message-row.sent .file-sub {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .message-row.sent .media-dl {
+      color: #fff;
+      text-decoration: underline;
     }
 
     .file-card {
@@ -1113,6 +1176,10 @@
       font-size: 11px;
       color: var(--text-secondary);
       margin-top: 2px;
+    }
+
+    .file-card .mc-acts {
+      font-size: 11px;
     }
 
     .file-card .file-dl {
@@ -1174,12 +1241,13 @@
       max-width: 100%;
     }
 
-    .media-caption .media-dl {
+    .media-dl {
       color: var(--accent-blue);
       text-decoration: none;
+      cursor: pointer;
     }
 
-    .media-caption .media-dl:hover {
+    .media-dl:hover {
       text-decoration: underline;
     }
 
@@ -1232,13 +1300,10 @@
       cursor: pointer;
     }
 
-    /* Overrides the shared .media-caption look for the one-line player meta. */
+    /* Overrides the shared .media-caption look for the player meta: the
+       clock and the size sit on one row, actions (if any) below it. */
     .vm-meta {
-      display: flex;
-      align-items: center;
-      gap: 4px;
       margin: 2px 0 0;
-      word-break: normal;
       font-variant-numeric: tabular-nums;
     }
 
@@ -1507,6 +1572,22 @@
 
     .start-btn:hover { background: #0284c7; }
     .start-btn:active { transform: scale(0.95); }
+
+    /* The dismiss layer for every popup menu. Invisible, but it is a real
+       element and that is the whole point: the tap that closes a menu lands
+       HERE and goes no further, instead of falling through onto the message
+       row / button underneath and doing a second thing the user never asked
+       for. Sits under every menu (120/1000/1100) and over the app; the
+       lightbox, toasts and the call banner stay above it, so an incoming
+       call is still answerable with a menu open. */
+    .menu-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 119;
+      display: none;
+    }
+
+    .menu-scrim.visible { display: block; }
 
     .start-menu {
       position: fixed;
@@ -1860,6 +1941,15 @@
       .chat-header { padding: 10px 12px; }
       .chat-header-actions { gap: 4px; }
       .message-bubble { max-width: 90%; }
+
+      /* Sidebar header budget. The name plus the status pill plus three
+         36px buttons is more than a 320px-wide header holds, and the
+         buttons are tap targets — so the wordmark is the one that goes.
+         In one-pane mode the list IS the app: nothing else is on screen to
+         mistake it for, and the tab already says SkyChat. */
+      .app-title h1 { display: none; }
+      .app-title { gap: 8px; }
+      .app-title .icon-btn { flex-shrink: 0; }
 
       /* Composer budget on a phone. Four controls and 40px of padding do
          not fit a ~400px row at desktop spacing: the fixed part alone
@@ -2392,9 +2482,9 @@
 
     /* ---- Contacts --------------------------------------------------- */
 
-    /* Above the other overlays: the address book is opened FROM the
-       add-by-address dialog in pick mode, and with equal z-index the one
-       later in the DOM would win — which is the dialog being picked into. */
+    /* Above the other overlays. Pick mode hands its choice to the
+       add-by-address dialog, and with equal z-index the one later in the DOM
+       would win — which is the dialog being picked into. */
     #contactsModal { z-index: 101; }
 
     .contacts-modal {
@@ -2625,17 +2715,29 @@
   <aside class="sidebar" id="sidebar" data-tab="all">
     <div class="sidebar-header">
       <div class="app-title">
-        <h1>Skychat</h1>
+        <h1>SkyChat</h1>
         <div class="status-badge">
           <div id="statusDot" class="status-dot"></div>
           <span id="statusText">Connected</span>
         </div>
+        <!-- Your own address, as a QR and as text. Left of the address book
+             because the two are the same question from opposite sides —
+             the people you have saved, and the thing you hand out. It lives
+             here rather than in the profile editor: an address is not
+             something you edit, and burying it behind "change your name and
+             picture" made the one value people ask for the hardest to find. -->
+        <button class="icon-btn" style="margin-left:auto" onclick="app.showMyQr()"
+                title="Your address" aria-label="Your address as a QR code">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/>
+          </svg>
+        </button>
         <!-- Address book. Beside the bell rather than inline in the list:
              a contact is a person you know, not a conversation you have, and
              the two lists answer different questions. Keeping the saved
              people out of the chat list also stops the sidebar being mostly
              rows with nothing in them. -->
-        <button class="icon-btn" style="margin-left:auto" onclick="app.openContacts()"
+        <button class="icon-btn" onclick="app.openContacts()"
                 title="Address book" aria-label="Address book">&#x1F4C7;</button>
         <button class="icon-btn" onclick="app.openNotifSettings()" title="Notification settings" aria-label="Notification settings">&#x1F514;</button>
         <!-- The one entry point for starting anything: an address (person,
@@ -2663,9 +2765,8 @@
         <button class="nn-allow" onclick="app.allowNotifFromNudge()">Allow</button>
         <button class="nn-dismiss" onclick="app.dismissNotifNudge()" title="Don't ask again" aria-label="Dismiss">&times;</button>
       </div>
-      <!-- Who this visor is, and the address to hand out. Opens the
-           profile editor; the address is also a QR from there, the same
-           treatment a group gets. -->
+      <!-- Who this visor is. Opens the profile editor; the address to hand
+           out is the QR button above, not in here. -->
       <button id="meRow" class="me-row" onclick="app.openMyProfile()"
               title="Your profile and address" aria-label="Your profile and address">
         <img id="meAvatar" class="me-avatar" src="p.png" alt="" />
@@ -2857,6 +2958,11 @@
     </form>
   </main>
 
+  <!-- Dismiss layer for the popup menus below. Shown by _syncMenuScrim
+       whenever one of them is open, so the tap that closes a menu is spent
+       closing it and nothing else. -->
+  <div id="menuScrim" class="menu-scrim" aria-hidden="true" onclick="app.dismissMenus(event)"></div>
+
   <!-- Compose menu. A body-level child so nothing can clip it, and
        positioned in JS from the button's own rect — that way the same
        menu drops down from the sidebar header on a wide screen and rises
@@ -3027,9 +3133,9 @@
     </div>
   </div>
 
-  <!-- My Profile. Two things that belong together and nowhere else: what
-       this visor tells other people about itself, and the address they need
-       in order to ask. -->
+  <!-- My Profile. One job only: what this visor tells other people about
+       itself. The address is not here — it is not editable, and it has its
+       own button in the sidebar header. -->
   <div id="myProfileModal" class="modal-overlay">
     <div class="modal">
       <h3>Your profile</h3>
@@ -3044,17 +3150,9 @@
       </p>
       <p id="myNoPublish" class="cg-help hidden">
         Publishing a name and picture needs the visor RPC — start skychat with
-        <code>--pair-enable</code>. Your address below works either way.
+        <code>--pair-enable</code>. Your address works either way: it is behind
+        the QR button in the header.
       </p>
-
-      <div class="qr-wrap">
-        <canvas id="myQrCanvas" width="220" height="220" aria-label="Your address as a QR code"></canvas>
-      </div>
-      <div class="qr-addr-row">
-        <code id="myAddrText" class="qr-addr">-</code>
-        <button class="icon-btn" onclick="app.copyMyAddress()" title="Copy your address" aria-label="Copy your address">&#x2398;</button>
-      </div>
-      <p class="cg-help">Scanning this starts a direct message with you.</p>
 
       <div class="modal-actions">
         <button class="btn publish-only" onclick="app.saveMyProfile()">Save</button>
@@ -3251,12 +3349,6 @@
           <input type="file" id="addrQrFile" accept="image/*" style="display:none"
                  onchange="app.scanQrFile(event)" />
         </label>
-        <!-- The fourth way to fill this field, alongside typing, scanning
-             and reading an image: pick one already saved. -->
-        <button class="btn btn-secondary btn-slim" onclick="app.openContacts('pick')"
-                title="Pick a saved contact">
-          &#x1F4C7; Address book
-        </button>
       </div>
 
       <!-- Live camera scanner. Collapsed until Scan is pressed so the
@@ -4210,15 +4302,12 @@
         const r = btn.getBoundingClientRect();
         menu.style.top = (r.bottom + 4) + 'px';
         menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, Math.max(8, r.left)) + 'px';
-        setTimeout(() => {
-          this._menuOutside = (e) => { if (!menu.contains(e.target)) this.closeMsgMenu(); };
-          document.addEventListener('click', this._menuOutside);
-        }, 0);
+        this._syncMenuScrim();
       }
       closeMsgMenu() {
         const m = document.getElementById('msgMenu');
         if (m) m.remove();
-        if (this._menuOutside) { document.removeEventListener('click', this._menuOutside); this._menuOutside = null; }
+        this._syncMenuScrim();
       }
 
       // deleteForMe removes the message from this device only. DM threads are
@@ -4388,7 +4477,7 @@
         // re-send if the local copy is gone (fresh device / pruned). data-* are
         // DOM-read by requestFile, so no interpolation/injection.
         const reqLink = (file.from && !file.local && file.id)
-          ? ` · <a class="media-dl file-req" data-from="${this.escapeAttr(file.from)}" data-fid="${this.escapeAttr(file.id)}" data-fname="${nameAttr}" onclick="app.requestFile(this)">re-request</a>`
+          ? `<a class="media-dl file-req" data-from="${this.escapeAttr(file.from)}" data-fid="${this.escapeAttr(file.id)}" data-fname="${nameAttr}" onclick="app.requestFile(this)">re-request</a>`
           : '';
         if (this.isImageFile(file) && urlAttr) {
           // src is a lightweight server-side thumbnail (received files);
@@ -4404,7 +4493,7 @@
           return `<img class="media-image" src="${thumb}" data-full="${full}" alt="${nameAttr}"
               loading="lazy" onclick="app.openLightbox(this.dataset.full)"
               onerror="this.onerror=null;this.src=this.dataset.full" />
-            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${reqLink}</div>`;
+            ${this._mediaCaption(name, nameAttr, sizeStr, [reqLink])}`;
         }
         if ((this.isVideoFile(file) || this.isAudioFile(file)) && urlAttr) {
           // Native inline player (browser handles its own preview/controls;
@@ -4412,18 +4501,18 @@
           // that would need server-side frame extraction (ffmpeg). A download
           // link is offered on received media so it can always be saved.
           const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
-            ? ` · <a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
+            ? `<a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
           // A clip recorded in the composer is a message, not an attachment:
           // it gets its own player, and its filename (a bare timestamp) is not
           // worth showing.
-          const links = `${dl}${reqLink}`;
-          if (this.isVoiceMessage(file)) return this._renderVoicePlayer(urlAttr, sizeStr, links);
-          if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, links);
+          const acts = this._mediaActs([dl, reqLink]);
+          if (this.isVoiceMessage(file)) return this._renderVoicePlayer(urlAttr, sizeStr, acts);
+          if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, acts);
           const isVideo = this.isVideoFile(file);
           const tag = isVideo ? 'video' : 'audio';
           const cls = isVideo ? 'media-video' : 'media-audio';
           return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"></${tag}>
-            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${dl}${reqLink}</div>`;
+            ${this._mediaCaption(name, nameAttr, sizeStr, [dl, reqLink])}`;
         }
         // No bytes to play (never received / pruned): fall through to the file
         // card, but still name a recorded clip for what it is.
@@ -4436,11 +4525,41 @@
         return `<div class="file-card">
             <div class="file-icon">&#x1F4CE;</div>
             <div class="file-meta">
-              <div class="file-name">${cardName}</div>
-              <div class="file-sub">${this.escapeHtml(sub)}${reqLink}</div>
+              <div class="file-name" title="${nameAttr}">${cardName}</div>
+              <div class="file-sub">${this.escapeHtml(sub)}</div>
+              ${this._mediaActs([reqLink])}
             </div>
             ${dl}
           </div>`;
+      }
+
+      // _mediaCaption is the strip under a picture or a player: what the file
+      // is on one clipped line, and what can be done with it on the next.
+      //
+      // Clipped rather than wrapped because the caption is pinned to the
+      // media's width (see .message-bubble.media) — a name long enough to
+      // wrap used to be what decided how wide the bubble was, which is how a
+      // 150px photo ended up in a 320px box. The whole name is still in the
+      // title attribute, and in the lightbox.
+      _mediaCaption(nameHtml, nameAttr, sizeStr, links) {
+        // The size is the part that never truncates: it is short, it is the
+        // one thing worth knowing before opening a file, and "2.4 MB" is
+        // useless as "2…".
+        return `<div class="media-caption">
+            <div class="mc-name" title="${nameAttr}">
+              <span class="mc-file">${nameHtml}</span>
+              <span class="mc-size">&middot; ${this.escapeHtml(sizeStr)}</span>
+            </div>
+            ${this._mediaActs(links)}
+          </div>`;
+      }
+
+      // _mediaActs is the row of file actions, or nothing at all when there
+      // are none — an empty row would still take its margin.
+      _mediaActs(links) {
+        const acts = (links || []).filter(Boolean);
+        if (!acts.length) return '';
+        return `<div class="mc-acts">${acts.join('')}</div>`;
       }
 
       // ---------------------------------------------------------------------
@@ -4458,21 +4577,24 @@
       // the rest of this UI does.
       // ---------------------------------------------------------------------
 
-      _renderVoicePlayer(urlAttr, sizeStr, links) {
+      _renderVoicePlayer(urlAttr, sizeStr, acts) {
         return `<div class="vm-player">
             <button type="button" class="vm-play" title="Play" aria-label="Play voice message"
                     onclick="app.vmToggle(this)"><span class="vm-icon">&#x25B6;</span></button>
             <div class="vm-body">
               <canvas class="vm-wave" title="Seek" onclick="app.vmSeek(event, this)"></canvas>
               <div class="media-caption vm-meta">
-                <span class="vm-time">0:00</span><span>&middot; ${this.escapeHtml(sizeStr)}${links}</span>
+                <div class="mc-name">
+                  <span class="vm-time">0:00</span><span>&middot; ${this.escapeHtml(sizeStr)}</span>
+                </div>
+                ${acts}
               </div>
             </div>
             <audio class="vm-media" src="${urlAttr}" preload="metadata"></audio>
           </div>`;
       }
 
-      _renderRoundPlayer(urlAttr, sizeStr, links) {
+      _renderRoundPlayer(urlAttr, sizeStr, acts) {
         // r=47 in a 100-unit box leaves room for the 4-unit ring stroke; the
         // circumference is set as the dash pattern in _vmPaint.
         return `<div class="vm-round">
@@ -4486,7 +4608,10 @@
               <span class="vm-badge"><span class="vm-icon">&#x25B6;</span></span>
               <span class="vm-time">0:00</span>
             </div>
-            <div class="media-caption vm-meta"><span>${this.escapeHtml(sizeStr)}${links}</span></div>
+            <div class="media-caption vm-meta">
+              <div class="mc-name"><span class="mc-size">${this.escapeHtml(sizeStr)}</span></div>
+              ${acts}
+            </div>
           </div>`;
       }
 
@@ -7031,22 +7156,16 @@
         return this.myPK ? `skychat://${this.myPK}` : '';
       }
 
-      // openMyProfile shows the address in every case and the editor only
-      // where publishing is possible.
-      //
-      // Splitting the two matters: the address is derived from the visor's
-      // own key and is correct with no RPC at all, so a build without
-      // --pair-enable must still be able to answer "what do I give people?".
-      // Refusing to open the dialog would withhold the half that works.
+      // openMyProfile shows the editor for what this visor publishes about
+      // itself. The address is deliberately not here: it is derived from the
+      // visor's own key, needs no RPC, and is never edited — it lives behind
+      // the header's QR button (see showMyQr), which is reachable whether or
+      // not publishing is available at all.
       openMyProfile() {
         const p = this.myProfile || {};
         const canPublish = this.profileAvailable !== false;
         document.getElementById('myName').value = p.name || '';
         document.getElementById('myAvatar').src = p.avatar || 'p.png';
-
-        const addr = this.myAddress();
-        document.getElementById('myAddrText').textContent = addr || 'address unavailable';
-        if (addr) QR.draw(document.getElementById('myQrCanvas'), addr);
 
         const modal = document.getElementById('myProfileModal');
         modal.querySelectorAll('.publish-only').forEach(el => el.classList.toggle('hidden', !canPublish));
@@ -7055,14 +7174,6 @@
 
         modal.classList.add('visible');
         if (canPublish) setTimeout(() => document.getElementById('myName').focus(), 50);
-      }
-
-      copyMyAddress() {
-        const text = this.myAddress();
-        if (!text) { this.showToast('Address not known yet.', 'error'); return; }
-        navigator.clipboard.writeText(text)
-          .then(() => this.showToast('Your address copied.'))
-          .catch(() => this.showToast('Could not copy — select the text and copy it manually.', 'error'));
       }
 
       // saveMyProfile publishes the name (and the picture, when one was just
@@ -8499,6 +8610,7 @@
         menu.classList.add('visible');
         const btn = document.getElementById(btnId);
         if (btn) btn.setAttribute('aria-expanded', 'true');
+        this._syncMenuScrim();
       }
 
       closeMenu(menuId, btnId) {
@@ -8507,10 +8619,43 @@
         menu.classList.remove('visible');
         const btn = document.getElementById(btnId);
         if (btn) btn.setAttribute('aria-expanded', 'false');
+        this._syncMenuScrim();
       }
 
       closeAllMenus() {
         this._menuPairs().forEach(p => p.btns.forEach(b => this.closeMenu(p.menu, b)));
+      }
+
+      // _syncMenuScrim raises the dismiss layer while any popup menu is open
+      // and drops it when the last one closes. Derived from what is actually
+      // on screen rather than counted as menus open and close: a miscounted
+      // scrim is either an invisible sheet of glass over the whole app or no
+      // protection at all, and neither failure announces itself.
+      _syncMenuScrim() {
+        // The bottom sheet stages a HIDDEN #msgMenu as its data carrier
+        // (see openMsgSheet), and that one must not raise a scrim — the
+        // sheet has its own backdrop, and a second invisible layer would
+        // outlive it. Same display test _dismissSheet uses.
+        const stage = document.getElementById('msgMenu');
+        const open = (!!stage && stage.style.display !== 'none')
+          || this._menuPairs().some(p => {
+            const m = document.getElementById(p.menu);
+            return !!m && m.classList.contains('visible');
+          });
+        const scrim = document.getElementById('menuScrim');
+        if (scrim) scrim.classList.toggle('visible', open);
+      }
+
+      // dismissMenus is the scrim's only handler. The tap that closes a menu
+      // must not ALSO do whatever it landed on — tapping past an open ⋮ used
+      // to close the menu and open the message sheet under it, because the
+      // dismissal was a document listener and the click carried on to its
+      // target. The scrim IS the target now, so there is nothing to carry on
+      // to; the stopPropagation is for any listener above us.
+      dismissMenus(ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        this.closeMsgMenu();
+        this.closeAllMenus();
       }
 
       toggleStartMenu(ev) {
@@ -8565,9 +8710,9 @@
 
       toggleHeaderMenu(ev) {
         if (ev) ev.stopPropagation();
-        // The per-message ⋯ menu dismisses itself from a BUBBLE-phase document
-        // listener, which the stopPropagation above would rob it of — so it is
-        // closed here rather than left hanging beside a second open menu.
+        // Two menus open at once is one too many: the per-message ⋯ is a
+        // separate element with its own trigger, so opening this one closes
+        // that one rather than leaving it hanging beside it.
         this.closeMsgMenu();
         const btnId = this.group ? 'groupMenuBtn' : 'dmMenuBtn';
         const menu = document.getElementById('hdrMenu');
@@ -8649,8 +8794,10 @@
             act: 'togglePair', on: isPaired,
           });
         }
+        // No "copy key" row: the QR dialog prints the same address as
+        // selectable text with a copy button beside it, and two ways to put
+        // one string on the clipboard is one too many.
         items.push({ icon: this._qrIcon(), label: 'QR code', act: 'showQr' });
-        items.push({ icon: '&#x2398;', label: 'Copy key', act: 'copyPk' });
         items.push({ icon: '&#x2699;', label: 'Settings', act: 'openSettings' });
         items.push({ sep: true });
         items.push({
@@ -9172,6 +9319,26 @@
         // admin can mint one — so only offer it when it is actually
         // available.
         document.getElementById('qrInviteBtn').classList.toggle('hidden', !(cur.isGroup && cur.isAdmin));
+        document.getElementById('qrModal').classList.add('visible');
+      }
+
+      // showMyQr is the same dialog for the one address that isn't a
+      // conversation: this visor's own. Shared markup rather than a second
+      // panel, so "an address" looks and copies the same way everywhere.
+      showMyQr() {
+        const addr = this.myAddress();
+        if (!addr) { this.showToast('Address not known yet.', 'error'); return; }
+        document.getElementById('qrTitle').textContent = 'Your address';
+        document.getElementById('qrAddrText').textContent = addr;
+        this._qrAddress = addr;
+
+        const ok = QR.draw(document.getElementById('qrCanvas'), addr);
+        document.getElementById('qrHelp').textContent = ok
+          ? 'Scanning this starts a direct message with you.'
+          : 'This address is too long to encode as a QR code — copy the text instead.';
+
+        // Never a group here, so the invite alternative can't apply.
+        document.getElementById('qrInviteBtn').classList.add('hidden');
         document.getElementById('qrModal').classList.add('visible');
       }
 
@@ -9850,12 +10017,6 @@
             if (el) el.textContent = arrow + msg.text;
           }
         });
-      }
-
-      copyPk() {
-        if (!this.recipient || this.isSaved()) return;
-        navigator.clipboard.writeText(this.recipient);
-        this.showToast('Public key copied to clipboard.');
       }
 
       deleteChat() {
@@ -11118,29 +11279,19 @@
       if (e.target === this) app.closeContacts();
     });
 
-    // Dismiss any open popup menu on a click outside it. Capture phase so
-    // it fires before the click lands on whatever is underneath — which is
-    // also why a click on a trigger has to be recognised here rather than
-    // left to the trigger's own stopPropagation: capture runs first.
-    document.addEventListener('click', function(e) {
-      app._menuPairs().forEach(function(p) {
-        const menu = document.getElementById(p.menu);
-        if (!menu || !menu.classList.contains('visible')) return;
-        if (menu.contains(e.target)) return;
-        const onTrigger = p.btns.some(function(id) {
-          const b = document.getElementById(id);
-          return b && b.contains(e.target);
-        });
-        if (onTrigger) return;
-        p.btns.forEach(function(id) { app.closeMenu(p.menu, id); });
-      });
-    }, true);
+    // Outside-click dismissal is the scrim's job (see .menu-scrim /
+    // dismissMenus), not a document listener's. A listener could only close
+    // the menu AFTER the click had already been aimed at something else;
+    // the scrim is what the click hits instead, which is the difference
+    // between "the menu closed" and "the menu closed and a message sheet
+    // opened underneath it". Tapping the trigger again lands on the scrim
+    // too, so a menu still toggles shut from its own button.
 
     // Keep the open menu attached to its button when the viewport changes
     // — a resize can move the compose button between the header and the
     // floating position, and an orientation change moves it a long way.
     window.addEventListener('resize', function() {
-      app.closeAllMenus();
+      app.dismissMenus();
     });
 
     // Device / browser back on a phone returns to the conversation list
@@ -11157,7 +11308,9 @@
       if (e.key === 'Escape') {
         app.closeSettings();
         app.closeLightbox();
-        app.closeAllMenus();
+        // Both the popup menus and the per-message ⋯, so Escape can never
+        // leave the scrim up over a page with no menu on it.
+        app.dismissMenus();
         app.closeModal('createGroupModal');
         app.closeModal('createChannelModal');
         app.closeModal('groupAdminModal');
