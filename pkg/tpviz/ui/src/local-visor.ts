@@ -6,7 +6,7 @@ import {
     setLocalVisorRefreshInterval, setPreviousRouteIds,
 } from './state';
 import { formatBytes, fetchWithTimeout, copyToClipboard } from './utils';
-import { colors, API_BASE, WS_MAX_RECONNECT_DELAY } from './constants';
+import { colors, API_BASE, WS_MAX_RECONNECT_DELAY, WS_MAX_RECONNECT_ATTEMPTS } from './constants';
 import { highlightRoute } from './node-info';
 import { localCreateTransport } from './tps';
 import { showAppsSection } from './apps';
@@ -367,6 +367,15 @@ export function connectLocalVisorWS(): void {
 
 export function scheduleWSReconnect(): void {
     setWSReconnectAttempts(S.wsReconnectAttempts + 1);
+    // After repeated failures the WS endpoint is almost certainly unreachable
+    // (e.g. tpviz served under a path prefix that only mounts the REST API).
+    // Stop the reconnect storm and fall back to the HTTP poll, which hits the
+    // same /api/local-visor data the WS carried.
+    if (S.wsReconnectAttempts > WS_MAX_RECONNECT_ATTEMPTS) {
+        console.log('local-visor WS unavailable after', WS_MAX_RECONNECT_ATTEMPTS, 'attempts; falling back to HTTP polling');
+        startLocalVisorFastRefreshHTTP();
+        return;
+    }
     const delay = Math.min(1000 * Math.pow(2, S.wsReconnectAttempts - 1), WS_MAX_RECONNECT_DELAY);
     console.log(`Scheduling WebSocket reconnect in ${delay}ms (attempt ${S.wsReconnectAttempts})`);
     setTimeout(() => {

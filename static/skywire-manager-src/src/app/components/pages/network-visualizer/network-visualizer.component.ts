@@ -1,41 +1,22 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, OnInit, ViewChild } from '@angular/core';
-import { Router } from '@angular/router';
-import { forkJoin, Subscription, interval, startWith } from 'rxjs';
-import { switchMap, catchError } from 'rxjs/operators';
-import { of } from 'rxjs';
-import { Network } from 'vis-network/standalone';
-import { DataSet } from 'vis-data/standalone';
+import { ActivatedRoute, Router } from '@angular/router';
+import { Subscription } from 'rxjs';
 
-import { NodeService } from '../../../services/node.service';
-import { ApiService } from '../../../services/api.service';
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from 'src/app/utils/home-tabs';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 
 /**
- * NetworkVisualizerComponent — the in-Angular network visualizer (the former
- * standalone Go-wasm /tp-viz page). Renders a vis-network force-graph of the
- * skywire network from data the visor already serves, so it works in BOTH the
- * native HV UI and the serverless wasm-visor (the old /tp-viz/ page escaped the
- * SPA in the wasm serving):
- *   - NODES: nodeService.getNetworkView() (per-PK: country/version/status/tp-counts)
- *   - EDGES: api.get('network/transports') — TPD transports, edges[0]<->edges[1]
+ * NetworkVisualizerComponent — hosts the shared `pkg/tpviz` transport-graph UI
+ * inside the SPA tab by MOUNTING its bundle into this component's <div> (no
+ * iframe, no /tp-viz/ break-out). This is the pilot for the GUI embedding
+ * standardization (docs/design/gui-embedding-standardization.md): one
+ * implementation of the visualizer (the tpviz renderer with its sidebar,
+ * filters, grouping and Globe/Flat/WebGL views), presented standalone at
+ * /tp-viz/ AND embedded here via SkywireTpviz.mount().
  *
- * First pass is a read-only graph (status-coloured nodes, type-coloured edges,
- * click-a-node -> that visor's detail). Geo grouping, physics tuning and
- * transport add/remove (the old /api/tps/*) are phased follow-ups.
+ * Replaces the former in-Angular vis-network reimplementation.
  */
-interface NetworkEntry {
-  pk: string;
-  country?: string;
-  version?: string;
-  services?: string;
-  stcpr: number; sudph: number; dmsg: number; stcp: number; total: number;
-  squicr?: number; webrtc?: number; swsr?: number; swtr?: number;
-  ut_status?: string;
-}
-interface TransportMetric { id: string; type: string; live: boolean; edges?: string[]; }
-
 @Component({
   selector: 'app-network-visualizer',
   templateUrl: './network-visualizer.component.html',
@@ -43,218 +24,98 @@ interface TransportMetric { id: string; type: string; live: boolean; edges?: str
   standalone: false,
 })
 export class NetworkVisualizerComponent extends PageBaseComponent implements OnInit, AfterViewInit, OnDestroy {
+  private static readonly BUNDLE_ID = 'tpviz-bundle-script';
+  private static readonly BUNDLE_SRC = 'tp-viz/bundle.js';
+
   @ViewChild('graph', { static: false }) graphEl!: ElementRef<HTMLDivElement>;
 
   tabsData: TabButtonData[] = [];
   loading = true;
   error: string | null = null;
-  lastUpdated: Date | null = null;
-  showOnlineOnly = false;
-  nodeCount = 0;
-  edgeCount = 0;
 
-  private network: Network | null = null;
-  private nodes = new DataSet<any>();
-  private edges = new DataSet<any>();
-  private sub?: Subscription;
-  private viewReady = false;
-  private pending: { entries: NetworkEntry[]; tps: TransportMetric[] } | null = null;
+  private handle: { unmount(): void } | null = null;
+  private routeSub?: Subscription;
 
-  constructor(private nodeService: NodeService, private api: ApiService, private router: Router) {
+  constructor(private route: ActivatedRoute, private router: Router) {
     super();
     this.tabsData = homeTabsData();
   }
 
   ngOnInit() {
-    this.sub = interval(300000)
-      .pipe(
-        startWith(0),
-        switchMap(() =>
-          forkJoin({
-            net: this.nodeService.getNetworkView().pipe(catchError(() => of({ entries: [] }))),
-            tps: this.api.get('network/transports?days=1').pipe(catchError(() => of([]))),
-          }),
-        ),
-      )
-      .subscribe({
-        next: (r: any) => this.onData(r?.net?.entries || [], r?.tps || []),
-        error: (e) => {
- this.loading = false; this.error = e?.message || 'Failed to load network data'; 
-},
-      });
-
     return super.ngOnInit();
   }
 
   ngAfterViewInit() {
-    this.viewReady = true;
-    if (this.pending) {
- this.render(this.pending.entries, this.pending.tps); this.pending = null; 
-}
+    this.loadAndMount();
+    // React to ?view= changes while the tab stays mounted (Angular reuses the
+    // component, so a link to a different view wouldn't otherwise re-apply).
+    this.routeSub = this.route.queryParamMap.subscribe((pm) => {
+      const v = pm.get('view');
+      const w = window as any;
+      if (v && w.SkywireTpviz && typeof w.SkywireTpviz.setView === 'function') {
+        w.SkywireTpviz.setView(v);
+      }
+    });
   }
 
-  refreshNow() {
-    this.loading = this.nodeCount === 0;
-    forkJoin({
-      net: this.nodeService.getNetworkView(true).pipe(catchError(() => of({ entries: [] }))),
-      tps: this.api.get('network/transports?days=1').pipe(catchError(() => of([]))),
-    }).subscribe((r: any) => this.onData(r?.net?.entries || [], r?.tps || []));
-  }
+  private loadAndMount(): void {
+    const w = window as any;
+    const doMount = () => {
+      if (!w.SkywireTpviz || !this.graphEl) {
+        this.error = 'transport-graph bundle unavailable';
+        this.loading = false;
 
-  private onData(entries: NetworkEntry[], tps: TransportMetric[]) {
-    this.loading = false;
-    this.error = null;
-    this.lastUpdated = new Date();
-    if (!this.viewReady) {
- this.pending = { entries: entries, tps: tps };
-
- return; 
-}
-    this.render(entries, tps);
-  }
-
-  private statusColor(s?: string): string {
-    if (s === 'online') {
- return '#3f8cff'; 
-}
-    if (s === 'offline') {
- return '#e05757'; 
-}
-
-    return '#888888'; // not in UT / unknown
-  }
-
-  // tpBreakdown renders the per-type transport counts for the node tooltip,
-  // listing only the types the visor actually has (all canonical types, not just
-  // the old stcpr/sudph/dmsg subset). Returns "" when there are none.
-  private tpBreakdown(e: NetworkEntry): string {
-    const parts: string[] = [];
-    const add = (label: string, n?: number) => {
-      if (n && n > 0) {
-        parts.push(`${label} ${n}`);
+        return;
+      }
+      try {
+        // Deep-linkable view: seed from ?view= and reflect switches back into the
+        // route query so a specific mode (globe/flat/webgl) is linkable.
+        const view = this.route.snapshot.queryParamMap.get('view') || undefined;
+        this.handle = w.SkywireTpviz.mount(this.graphEl.nativeElement, {
+          view: view,
+          onViewChange: (v: string) => {
+            this.router.navigate([], { relativeTo: this.route, queryParams: { view: v }, queryParamsHandling: 'merge', replaceUrl: true });
+          },
+        });
+        this.loading = false;
+      } catch (e: any) {
+        this.error = e?.message || 'failed to mount transport-graph';
+        this.loading = false;
       }
     };
 
-    add('stcpr', e.stcpr); add('sudph', e.sudph); add('stcp', e.stcp);
-    add('squicr', e.squicr); add('swtr', e.swtr); add('swsr', e.swsr);
-    add('webrtc', e.webrtc); add('dmsg', e.dmsg);
+    if (w.SkywireTpviz) {
+      doMount();
 
-    return parts.length ? ` (${parts.join(', ')})` : '';
-  }
-
-  // countryColor maps a country code to a stable hue so visors cluster visually
-  // by country (the node fill), the lightweight analogue of the reward viz's
-  // country grouping. Deterministic hash → HSL so the palette is stable per code.
-  private countryColor(country: string): string {
-    let h = 0;
-    for (let i = 0; i < country.length; i++) {
-      h = (h * 31 + country.charCodeAt(i)) & 0xffff;
+      return;
     }
+    const existing = document.getElementById(NetworkVisualizerComponent.BUNDLE_ID) as HTMLScriptElement | null;
+    if (existing) {
+      existing.addEventListener('load', doMount);
+      existing.addEventListener('error', () => {
+ this.error = 'could not load transport-graph bundle'; this.loading = false; 
+});
 
-    return `hsl(${h % 360}, 55%, 45%)`;
-  }
-
-  private render(entries: NetworkEntry[], tps: TransportMetric[]) {
-    const byPK = new Map<string, NetworkEntry>();
-    for (const e of entries) {
- byPK.set(e.pk, e); 
-}
-
-    const wantOnline = this.showOnlineOnly;
-    const include = (pk: string) => {
-      if (!wantOnline) {
- return true; 
-}
-      const e = byPK.get(pk);
-
-      return !!e && (e.ut_status || '') === 'online';
-    };
-
-    const nodeIds = new Set<string>();
-    const nodeArr: any[] = [];
-    const addNode = (pk: string) => {
-      if (nodeIds.has(pk) || !include(pk)) {
- return; 
-}
-      nodeIds.add(pk);
-      const e = byPK.get(pk);
-      const title = e
-        ? `${pk}\n${e.country || '?'} · ${e.version || '?'}\ntransports: ${e.total || 0}${this.tpBreakdown(e)}\nstatus: ${e.ut_status || 'unknown'}`
-        : pk;
-      // Fill = country (visual grouping), border = UT status — so a country reads
-      // at a glance while online/offline stays visible. Falls back to the status
-      // colour as fill when country is unknown.
-      const country = (e?.country || '').trim();
-      const fill = country ? this.countryColor(country) : this.statusColor(e?.ut_status);
-      nodeArr.push({
-        id: pk, label: pk.substring(0, 6) + '…', title: title,
-        color: { background: fill, border: this.statusColor(e?.ut_status) }, borderWidth: 3,
-      });
-    };
-
-    for (const e of entries) {
- addNode(e.pk); 
-}
-
-    const edgeColor = (t: TransportMetric) => {
-      if (!t.live) {
- return { color: '#b04a4a', opacity: 0.5 }; 
-}
-      switch ((t.type || '').toLowerCase()) {
-        case 'dmsg': return { color: '#9d7cff' };
-        case 'stcpr': case 'stcp': return { color: '#3f8cff' };
-        case 'sudph': return { color: '#3fb6a8' };
-        // Newer transport types — without these they render as the gray default.
-        case 'squicr': return { color: '#8b7cff' };
-        case 'swtr': return { color: '#ff7eb6' };
-        case 'swsr': return { color: '#c3e88d' };
-        case 'webrtc': return { color: '#ff9f43' };
-        default: return { color: '#9aa0a6' };
-      }
-    };
-    const edgeArr: any[] = [];
-    for (const t of tps) {
-      if (!t.edges || t.edges.length < 2) {
- continue; 
-}
-      const [a, b] = t.edges;
-      addNode(a); addNode(b);
-      if (!nodeIds.has(a) || !nodeIds.has(b)) {
- continue; 
-}
-      edgeArr.push({ id: t.id, from: a, to: b, color: edgeColor(t), title: `${t.type} ${t.live ? '' : '(offline)'}`.trim() });
+      return;
     }
-
-    this.nodes.clear(); this.edges.clear();
-    this.nodes.add(nodeArr); this.edges.add(edgeArr);
-    this.nodeCount = nodeArr.length;
-    this.edgeCount = edgeArr.length;
-
-    if (!this.network) {
-      this.network = new Network(this.graphEl.nativeElement, { nodes: this.nodes, edges: this.edges }, {
-        nodes: { shape: 'dot', size: 12, font: { color: '#bbb', size: 11, face: 'monospace' }, borderWidth: 0 },
-        edges: { width: 1, smooth: false },
-        physics: { barnesHut: { gravitationalConstant: -8000, springLength: 120, springConstant: 0.02 }, stabilization: { iterations: 200 } },
-        interaction: { hover: true, tooltipDelay: 120 },
-      });
-      this.network.on('doubleClick', (p: any) => {
-        if (p?.nodes?.length) {
- this.router.navigate(['/nodes', p.nodes[0], 'info']); 
-}
-      });
-    }
+    const s = document.createElement('script');
+    s.id = NetworkVisualizerComponent.BUNDLE_ID;
+    s.src = NetworkVisualizerComponent.BUNDLE_SRC;
+    s.async = true;
+    s.onload = () => doMount();
+    s.onerror = () => {
+ this.error = 'could not load transport-graph bundle'; this.loading = false; 
+};
+    document.body.appendChild(s);
   }
-
-  toggleOnline() {
- this.showOnlineOnly = !this.showOnlineOnly; this.refreshNow(); 
-}
 
   ngOnDestroy(): void {
-    if (this.sub) {
- this.sub.unsubscribe(); 
-}
-    if (this.network) {
- this.network.destroy(); this.network = null; 
-}
+    this.routeSub?.unsubscribe();
+    if (this.handle) {
+      try {
+ this.handle.unmount(); 
+} catch { /* ignore */ }
+      this.handle = null;
+    }
   }
 }
