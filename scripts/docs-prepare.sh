@@ -44,8 +44,12 @@ cat > docs/rewards/index.md <<'EOF'
 # Skywire Rewards
 
 Eligibility rules and operational details for the Skywire reward
-distribution. See [mainnet_rules](mainnet_rules.md) for the
-authoritative ruleset.
+distribution.
+
+- [mainnet_rules](mainnet_rules.md) — the authoritative eligibility ruleset.
+- [operations](operations.md) — how the reward system is built, collected,
+  calculated, deployed on the reward host, and validated (the Go pipeline that
+  replaces the host-only bash collection).
 EOF
 
 # --- Standalone repo-root files that the install guide references ---
