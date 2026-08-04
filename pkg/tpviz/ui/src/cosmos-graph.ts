@@ -284,12 +284,19 @@ function computeGroupedLayout(
     if (!arr) { arr = []; buckets.set(k, arr); }
     arr.push(id);
   }
+  // Derive each circle's radius FROM the node fill so the boundary hugs its
+  // nodes (previously radius and fill were sized independently — a big radius
+  // with a small fill left a large empty ring). fillRadius is the radius the
+  // nodes actually occupy; the circle is that plus a small margin.
   const grouped = Array.from(buckets.entries())
-    .map(([key, ids]) => ({ key, ids, radius: radiusForCount(ids.length) }))
+    .map(([key, ids]) => {
+      const fill = fillRadiusForCount(ids.length);
+      return { key, ids, fill, radius: fill + GROUP_RING_MARGIN };
+    })
     .sort((a, b) => b.radius - a.radius);
 
   // Guaranteed non-overlapping placement (largest first).
-  const centers = packCircles(grouped.map(g => g.radius), 46);
+  const centers = packCircles(grouped.map(g => g.radius), GROUP_PACK_PADDING);
   const pos = new Map<string, { x: number; y: number }>();
   const color = new Map<string, string>();
   const groups: GroupCircle[] = [];
@@ -297,21 +304,21 @@ function computeGroupedLayout(
     const c = centers[gi];
     const col = groupColorOf(g.key, mode);
     groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode) });
-    // Fill nodes inside the circle. inner is clamped so small circles (radius <
-    // ~60) never get a negative fill radius — that was throwing their nodes
-    // outside the ring (e.g. Indonesia). The Fibonacci fill stays at ≤0.92·inner
-    // so every node sits comfortably within the boundary.
-    const inner = Math.max(g.radius * 0.35, g.radius - 46);
+    // Place nodes out to ~fillRadius so they reach near the boundary (the circle
+    // = fillRadius + GROUP_RING_MARGIN, so the outermost node sits one margin
+    // inside the ring — a snug fit for any count). n==1 → center; 2..6 → an even
+    // ring at the edge; more → a Fibonacci spiral whose outermost point ≈ fill.
+    const f = g.fill;
     const n = g.ids.length;
     g.ids.forEach((id, i) => {
       let x = c.x; let y = c.y;
       if (n > 1) {
         if (n <= 6) {
-          const a = (i / n) * 2 * Math.PI; const r = inner * 0.55;
-          x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
+          const a = (i / n) * 2 * Math.PI;
+          x = c.x + f * Math.cos(a); y = c.y + f * Math.sin(a);
         } else {
           const ga = Math.PI * (3 - Math.sqrt(5)); const a = i * ga;
-          const r = inner * Math.sqrt(i / n) * 0.92;
+          const r = f * Math.sqrt(i / n);
           x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
         }
       }
@@ -322,12 +329,21 @@ function computeGroupedLayout(
   return { pos, color, groups };
 }
 
-// radiusForCount sizes a group circle so its AREA scales with node count, with
-// clearer contrast than the shared flat-view helper (lower floor, steeper slope)
-// so a 1-visor country reads as a small dot and a 200-visor country as clearly
-// huge — instead of everything hitting the same ~80px floor.
-function radiusForCount(n: number): number {
-  return Math.max(46, Math.sqrt(n) * 26 + 18);
+// Layout tunables for the grouped view. NODE_SPACING is the approximate gap (in
+// layout units) between adjacent nodes in a group; the whole layout is later
+// uniformly scaled to fit COSMOS_SPACE, so these are relative, not pixels.
+const NODE_SPACING = 9;
+const GROUP_RING_MARGIN = 12; // gap from the outermost node to the circle edge
+const GROUP_PACK_PADDING = 18; // gap between neighbouring group circles
+
+// fillRadiusForCount sizes the radius the nodes OCCUPY so a Fibonacci/ring fill
+// at ~NODE_SPACING between neighbours lands n nodes in a disk of this radius:
+// for n points spread over a disk of radius R the nearest-neighbour spacing is
+// ~R/sqrt(n), so R = NODE_SPACING*sqrt(n). Area ∝ n, so a 1-visor country reads
+// as a small dot and a 200-visor country as proportionally large — and the
+// circle (fill + margin) always hugs its contents instead of dwarfing them.
+function fillRadiusForCount(n: number): number {
+  return Math.max(6, NODE_SPACING * Math.sqrt(Math.max(1, n)));
 }
 
 // packCircles lays out circles (largest first) at the first slot on an outward
