@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Skychat</title>
+  <title>SkyChat</title>
   <style>
     :root {
       --bg-primary: #1a1d24;
@@ -1926,18 +1926,14 @@
       .chat-header-actions { gap: 4px; }
       .message-bubble { max-width: 90%; }
 
-      /* Sidebar header budget. Title + status + three 36px buttons is more
-         than a 320px-wide header holds at desktop spacing, and the buttons
-         are tap targets — so they keep their size and the status pill is
-         the one that gives. */
+      /* Sidebar header budget. The name plus the status pill plus three
+         36px buttons is more than a 320px-wide header holds, and the
+         buttons are tap targets — so the wordmark is the one that goes.
+         In one-pane mode the list IS the app: nothing else is on screen to
+         mistake it for, and the tab already says SkyChat. */
+      .app-title h1 { display: none; }
       .app-title { gap: 8px; }
       .app-title .icon-btn { flex-shrink: 0; }
-      .status-badge { min-width: 0; }
-      .status-badge span {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
 
       /* Composer budget on a phone. Four controls and 40px of padding do
          not fit a ~400px row at desktop spacing: the fixed part alone
@@ -2703,7 +2699,7 @@
   <aside class="sidebar" id="sidebar" data-tab="all">
     <div class="sidebar-header">
       <div class="app-title">
-        <h1>Skychat</h1>
+        <h1>SkyChat</h1>
         <div class="status-badge">
           <div id="statusDot" class="status-dot"></div>
           <span id="statusText">Connected</span>
