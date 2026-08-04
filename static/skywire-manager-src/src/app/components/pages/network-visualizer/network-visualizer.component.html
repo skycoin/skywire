@@ -21,6 +21,13 @@
         <span class="ml-2">{{ error }}</span>
       </div>
     }
+    @if (unavailable) {
+      <div class="error-row">
+        <mat-icon>info_outline</mat-icon>
+        <span class="ml-2">The network visualizer isn't available on this visor — the transport-graph
+          UI isn't served here. It's available in the native hypervisor.</span>
+      </div>
+    }
     <!-- The pkg/tpviz transport-graph UI mounts itself into this container
          (SkywireTpviz.mount) — sidebar, filters, grouping and Globe/Flat/WebGL
          views, in-context (no iframe). -->
