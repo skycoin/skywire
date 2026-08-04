@@ -18,6 +18,10 @@ const buildOptions = {
   sourcemap: isWatch,
   outfile: resolve(outdir, 'bundle.js'),
   logLevel: 'info',
+  // index.html is imported as text so mount() can inject the app DOM + scoped CSS
+  // into an arbitrary container (SPA tab / WinBox window), not just the standalone
+  // page. See docs/design/gui-embedding-standardization.md.
+  loader: { '.html': 'text' },
 };
 
 // Copy index.html to legacy/
