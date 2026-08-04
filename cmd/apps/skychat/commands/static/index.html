@@ -1062,9 +1062,27 @@
       color: var(--text-primary);
     }
 
+    /* A media bubble is exactly as wide as the media inside it. Laid out as
+       a one-column grid whose width is set by the picture/player alone: the
+       caption and any quote above it are pinned to that column (width:0 so
+       they contribute nothing to it, min-width:100% so they still fill it).
+       Without that, a long file name stretched the bubble to its 320px cap
+       while a portrait photo stayed 150px wide, leaving a blank strip beside
+       the picture. justify-items:start keeps a replaced element at its own
+       size instead of stretching it into a crop. */
     .message-bubble.media {
       padding: 6px;
       max-width: 320px;
+      display: grid;
+      grid-template-columns: minmax(0, max-content);
+      justify-items: start;
+    }
+
+    .message-bubble.media > .media-caption,
+    .message-bubble.media > .reply-quote,
+    .message-bubble.media > .fwd-chip {
+      width: 0;
+      min-width: 100%;
     }
 
     .media-image {
@@ -1076,11 +1094,56 @@
       object-fit: cover;
     }
 
+    /* No side margin: the caption is pinned to the media's width, so an
+       inset here would push it past the picture's edge instead of in from
+       the bubble's. */
     .media-caption {
       font-size: 11px;
       color: var(--text-secondary);
-      margin: 6px 4px 2px;
-      word-break: break-all;
+      margin: 6px 0 2px;
+      padding: 0 2px;
+    }
+
+    /* One line, and only the name gives: wrapping it was what widened the
+       bubble past the media it describes. The full name is in the title
+       attribute (and in the lightbox). */
+    .media-caption .mc-name {
+      display: flex;
+      align-items: baseline;
+      gap: 4px;
+      white-space: nowrap;
+    }
+
+    .media-caption .mc-file {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .media-caption .mc-size {
+      flex-shrink: 0;
+    }
+
+    /* What you can do with the file, on its own line under the name — so a
+       long name can never push "download" out of reach. */
+    .mc-acts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 3px;
+    }
+
+    /* Our own bubbles are sent-blue, where the muted grey of a caption and
+       the blue of a link both go to read as smudges. Same treatment the
+       quoted-reply block already gets there. */
+    .message-row.sent .media-caption,
+    .message-row.sent .file-sub {
+      color: rgba(255, 255, 255, 0.8);
+    }
+
+    .message-row.sent .media-dl {
+      color: #fff;
+      text-decoration: underline;
     }
 
     .file-card {
@@ -1113,6 +1176,10 @@
       font-size: 11px;
       color: var(--text-secondary);
       margin-top: 2px;
+    }
+
+    .file-card .mc-acts {
+      font-size: 11px;
     }
 
     .file-card .file-dl {
@@ -1174,12 +1241,13 @@
       max-width: 100%;
     }
 
-    .media-caption .media-dl {
+    .media-dl {
       color: var(--accent-blue);
       text-decoration: none;
+      cursor: pointer;
     }
 
-    .media-caption .media-dl:hover {
+    .media-dl:hover {
       text-decoration: underline;
     }
 
@@ -1232,13 +1300,10 @@
       cursor: pointer;
     }
 
-    /* Overrides the shared .media-caption look for the one-line player meta. */
+    /* Overrides the shared .media-caption look for the player meta: the
+       clock and the size sit on one row, actions (if any) below it. */
     .vm-meta {
-      display: flex;
-      align-items: center;
-      gap: 4px;
       margin: 2px 0 0;
-      word-break: normal;
       font-variant-numeric: tabular-nums;
     }
 
@@ -1861,6 +1926,19 @@
       .chat-header-actions { gap: 4px; }
       .message-bubble { max-width: 90%; }
 
+      /* Sidebar header budget. Title + status + three 36px buttons is more
+         than a 320px-wide header holds at desktop spacing, and the buttons
+         are tap targets — so they keep their size and the status pill is
+         the one that gives. */
+      .app-title { gap: 8px; }
+      .app-title .icon-btn { flex-shrink: 0; }
+      .status-badge { min-width: 0; }
+      .status-badge span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
       /* Composer budget on a phone. Four controls and 40px of padding do
          not fit a ~400px row at desktop spacing: the fixed part alone
          (select + attach + send + gaps + padding) is over half the width,
@@ -2392,9 +2470,9 @@
 
     /* ---- Contacts --------------------------------------------------- */
 
-    /* Above the other overlays: the address book is opened FROM the
-       add-by-address dialog in pick mode, and with equal z-index the one
-       later in the DOM would win — which is the dialog being picked into. */
+    /* Above the other overlays. Pick mode hands its choice to the
+       add-by-address dialog, and with equal z-index the one later in the DOM
+       would win — which is the dialog being picked into. */
     #contactsModal { z-index: 101; }
 
     .contacts-modal {
@@ -2630,12 +2708,24 @@
           <div id="statusDot" class="status-dot"></div>
           <span id="statusText">Connected</span>
         </div>
+        <!-- Your own address, as a QR and as text. Left of the address book
+             because the two are the same question from opposite sides —
+             the people you have saved, and the thing you hand out. It lives
+             here rather than in the profile editor: an address is not
+             something you edit, and burying it behind "change your name and
+             picture" made the one value people ask for the hardest to find. -->
+        <button class="icon-btn" style="margin-left:auto" onclick="app.showMyQr()"
+                title="Your address" aria-label="Your address as a QR code">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true">
+            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/>
+          </svg>
+        </button>
         <!-- Address book. Beside the bell rather than inline in the list:
              a contact is a person you know, not a conversation you have, and
              the two lists answer different questions. Keeping the saved
              people out of the chat list also stops the sidebar being mostly
              rows with nothing in them. -->
-        <button class="icon-btn" style="margin-left:auto" onclick="app.openContacts()"
+        <button class="icon-btn" onclick="app.openContacts()"
                 title="Address book" aria-label="Address book">&#x1F4C7;</button>
         <button class="icon-btn" onclick="app.openNotifSettings()" title="Notification settings" aria-label="Notification settings">&#x1F514;</button>
         <!-- The one entry point for starting anything: an address (person,
@@ -2663,9 +2753,8 @@
         <button class="nn-allow" onclick="app.allowNotifFromNudge()">Allow</button>
         <button class="nn-dismiss" onclick="app.dismissNotifNudge()" title="Don't ask again" aria-label="Dismiss">&times;</button>
       </div>
-      <!-- Who this visor is, and the address to hand out. Opens the
-           profile editor; the address is also a QR from there, the same
-           treatment a group gets. -->
+      <!-- Who this visor is. Opens the profile editor; the address to hand
+           out is the QR button above, not in here. -->
       <button id="meRow" class="me-row" onclick="app.openMyProfile()"
               title="Your profile and address" aria-label="Your profile and address">
         <img id="meAvatar" class="me-avatar" src="p.png" alt="" />
@@ -3027,9 +3116,9 @@
     </div>
   </div>
 
-  <!-- My Profile. Two things that belong together and nowhere else: what
-       this visor tells other people about itself, and the address they need
-       in order to ask. -->
+  <!-- My Profile. One job only: what this visor tells other people about
+       itself. The address is not here — it is not editable, and it has its
+       own button in the sidebar header. -->
   <div id="myProfileModal" class="modal-overlay">
     <div class="modal">
       <h3>Your profile</h3>
@@ -3044,17 +3133,9 @@
       </p>
       <p id="myNoPublish" class="cg-help hidden">
         Publishing a name and picture needs the visor RPC — start skychat with
-        <code>--pair-enable</code>. Your address below works either way.
+        <code>--pair-enable</code>. Your address works either way: it is behind
+        the QR button in the header.
       </p>
-
-      <div class="qr-wrap">
-        <canvas id="myQrCanvas" width="220" height="220" aria-label="Your address as a QR code"></canvas>
-      </div>
-      <div class="qr-addr-row">
-        <code id="myAddrText" class="qr-addr">-</code>
-        <button class="icon-btn" onclick="app.copyMyAddress()" title="Copy your address" aria-label="Copy your address">&#x2398;</button>
-      </div>
-      <p class="cg-help">Scanning this starts a direct message with you.</p>
 
       <div class="modal-actions">
         <button class="btn publish-only" onclick="app.saveMyProfile()">Save</button>
@@ -3251,12 +3332,6 @@
           <input type="file" id="addrQrFile" accept="image/*" style="display:none"
                  onchange="app.scanQrFile(event)" />
         </label>
-        <!-- The fourth way to fill this field, alongside typing, scanning
-             and reading an image: pick one already saved. -->
-        <button class="btn btn-secondary btn-slim" onclick="app.openContacts('pick')"
-                title="Pick a saved contact">
-          &#x1F4C7; Address book
-        </button>
       </div>
 
       <!-- Live camera scanner. Collapsed until Scan is pressed so the
@@ -4388,7 +4463,7 @@
         // re-send if the local copy is gone (fresh device / pruned). data-* are
         // DOM-read by requestFile, so no interpolation/injection.
         const reqLink = (file.from && !file.local && file.id)
-          ? ` · <a class="media-dl file-req" data-from="${this.escapeAttr(file.from)}" data-fid="${this.escapeAttr(file.id)}" data-fname="${nameAttr}" onclick="app.requestFile(this)">re-request</a>`
+          ? `<a class="media-dl file-req" data-from="${this.escapeAttr(file.from)}" data-fid="${this.escapeAttr(file.id)}" data-fname="${nameAttr}" onclick="app.requestFile(this)">re-request</a>`
           : '';
         if (this.isImageFile(file) && urlAttr) {
           // src is a lightweight server-side thumbnail (received files);
@@ -4404,7 +4479,7 @@
           return `<img class="media-image" src="${thumb}" data-full="${full}" alt="${nameAttr}"
               loading="lazy" onclick="app.openLightbox(this.dataset.full)"
               onerror="this.onerror=null;this.src=this.dataset.full" />
-            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${reqLink}</div>`;
+            ${this._mediaCaption(name, nameAttr, sizeStr, [reqLink])}`;
         }
         if ((this.isVideoFile(file) || this.isAudioFile(file)) && urlAttr) {
           // Native inline player (browser handles its own preview/controls;
@@ -4412,18 +4487,18 @@
           // that would need server-side frame extraction (ffmpeg). A download
           // link is offered on received media so it can always be saved.
           const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
-            ? ` · <a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
+            ? `<a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
           // A clip recorded in the composer is a message, not an attachment:
           // it gets its own player, and its filename (a bare timestamp) is not
           // worth showing.
-          const links = `${dl}${reqLink}`;
-          if (this.isVoiceMessage(file)) return this._renderVoicePlayer(urlAttr, sizeStr, links);
-          if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, links);
+          const acts = this._mediaActs([dl, reqLink]);
+          if (this.isVoiceMessage(file)) return this._renderVoicePlayer(urlAttr, sizeStr, acts);
+          if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, acts);
           const isVideo = this.isVideoFile(file);
           const tag = isVideo ? 'video' : 'audio';
           const cls = isVideo ? 'media-video' : 'media-audio';
           return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"></${tag}>
-            <div class="media-caption">${name} · ${this.escapeHtml(sizeStr)}${dl}${reqLink}</div>`;
+            ${this._mediaCaption(name, nameAttr, sizeStr, [dl, reqLink])}`;
         }
         // No bytes to play (never received / pruned): fall through to the file
         // card, but still name a recorded clip for what it is.
@@ -4436,11 +4511,41 @@
         return `<div class="file-card">
             <div class="file-icon">&#x1F4CE;</div>
             <div class="file-meta">
-              <div class="file-name">${cardName}</div>
-              <div class="file-sub">${this.escapeHtml(sub)}${reqLink}</div>
+              <div class="file-name" title="${nameAttr}">${cardName}</div>
+              <div class="file-sub">${this.escapeHtml(sub)}</div>
+              ${this._mediaActs([reqLink])}
             </div>
             ${dl}
           </div>`;
+      }
+
+      // _mediaCaption is the strip under a picture or a player: what the file
+      // is on one clipped line, and what can be done with it on the next.
+      //
+      // Clipped rather than wrapped because the caption is pinned to the
+      // media's width (see .message-bubble.media) — a name long enough to
+      // wrap used to be what decided how wide the bubble was, which is how a
+      // 150px photo ended up in a 320px box. The whole name is still in the
+      // title attribute, and in the lightbox.
+      _mediaCaption(nameHtml, nameAttr, sizeStr, links) {
+        // The size is the part that never truncates: it is short, it is the
+        // one thing worth knowing before opening a file, and "2.4 MB" is
+        // useless as "2…".
+        return `<div class="media-caption">
+            <div class="mc-name" title="${nameAttr}">
+              <span class="mc-file">${nameHtml}</span>
+              <span class="mc-size">&middot; ${this.escapeHtml(sizeStr)}</span>
+            </div>
+            ${this._mediaActs(links)}
+          </div>`;
+      }
+
+      // _mediaActs is the row of file actions, or nothing at all when there
+      // are none — an empty row would still take its margin.
+      _mediaActs(links) {
+        const acts = (links || []).filter(Boolean);
+        if (!acts.length) return '';
+        return `<div class="mc-acts">${acts.join('')}</div>`;
       }
 
       // ---------------------------------------------------------------------
@@ -4458,21 +4563,24 @@
       // the rest of this UI does.
       // ---------------------------------------------------------------------
 
-      _renderVoicePlayer(urlAttr, sizeStr, links) {
+      _renderVoicePlayer(urlAttr, sizeStr, acts) {
         return `<div class="vm-player">
             <button type="button" class="vm-play" title="Play" aria-label="Play voice message"
                     onclick="app.vmToggle(this)"><span class="vm-icon">&#x25B6;</span></button>
             <div class="vm-body">
               <canvas class="vm-wave" title="Seek" onclick="app.vmSeek(event, this)"></canvas>
               <div class="media-caption vm-meta">
-                <span class="vm-time">0:00</span><span>&middot; ${this.escapeHtml(sizeStr)}${links}</span>
+                <div class="mc-name">
+                  <span class="vm-time">0:00</span><span>&middot; ${this.escapeHtml(sizeStr)}</span>
+                </div>
+                ${acts}
               </div>
             </div>
             <audio class="vm-media" src="${urlAttr}" preload="metadata"></audio>
           </div>`;
       }
 
-      _renderRoundPlayer(urlAttr, sizeStr, links) {
+      _renderRoundPlayer(urlAttr, sizeStr, acts) {
         // r=47 in a 100-unit box leaves room for the 4-unit ring stroke; the
         // circumference is set as the dash pattern in _vmPaint.
         return `<div class="vm-round">
@@ -4486,7 +4594,10 @@
               <span class="vm-badge"><span class="vm-icon">&#x25B6;</span></span>
               <span class="vm-time">0:00</span>
             </div>
-            <div class="media-caption vm-meta"><span>${this.escapeHtml(sizeStr)}${links}</span></div>
+            <div class="media-caption vm-meta">
+              <div class="mc-name"><span class="mc-size">${this.escapeHtml(sizeStr)}</span></div>
+              ${acts}
+            </div>
           </div>`;
       }
 
@@ -7031,22 +7142,16 @@
         return this.myPK ? `skychat://${this.myPK}` : '';
       }
 
-      // openMyProfile shows the address in every case and the editor only
-      // where publishing is possible.
-      //
-      // Splitting the two matters: the address is derived from the visor's
-      // own key and is correct with no RPC at all, so a build without
-      // --pair-enable must still be able to answer "what do I give people?".
-      // Refusing to open the dialog would withhold the half that works.
+      // openMyProfile shows the editor for what this visor publishes about
+      // itself. The address is deliberately not here: it is derived from the
+      // visor's own key, needs no RPC, and is never edited — it lives behind
+      // the header's QR button (see showMyQr), which is reachable whether or
+      // not publishing is available at all.
       openMyProfile() {
         const p = this.myProfile || {};
         const canPublish = this.profileAvailable !== false;
         document.getElementById('myName').value = p.name || '';
         document.getElementById('myAvatar').src = p.avatar || 'p.png';
-
-        const addr = this.myAddress();
-        document.getElementById('myAddrText').textContent = addr || 'address unavailable';
-        if (addr) QR.draw(document.getElementById('myQrCanvas'), addr);
 
         const modal = document.getElementById('myProfileModal');
         modal.querySelectorAll('.publish-only').forEach(el => el.classList.toggle('hidden', !canPublish));
@@ -7055,14 +7160,6 @@
 
         modal.classList.add('visible');
         if (canPublish) setTimeout(() => document.getElementById('myName').focus(), 50);
-      }
-
-      copyMyAddress() {
-        const text = this.myAddress();
-        if (!text) { this.showToast('Address not known yet.', 'error'); return; }
-        navigator.clipboard.writeText(text)
-          .then(() => this.showToast('Your address copied.'))
-          .catch(() => this.showToast('Could not copy — select the text and copy it manually.', 'error'));
       }
 
       // saveMyProfile publishes the name (and the picture, when one was just
@@ -8649,8 +8746,10 @@
             act: 'togglePair', on: isPaired,
           });
         }
+        // No "copy key" row: the QR dialog prints the same address as
+        // selectable text with a copy button beside it, and two ways to put
+        // one string on the clipboard is one too many.
         items.push({ icon: this._qrIcon(), label: 'QR code', act: 'showQr' });
-        items.push({ icon: '&#x2398;', label: 'Copy key', act: 'copyPk' });
         items.push({ icon: '&#x2699;', label: 'Settings', act: 'openSettings' });
         items.push({ sep: true });
         items.push({
@@ -9172,6 +9271,26 @@
         // admin can mint one — so only offer it when it is actually
         // available.
         document.getElementById('qrInviteBtn').classList.toggle('hidden', !(cur.isGroup && cur.isAdmin));
+        document.getElementById('qrModal').classList.add('visible');
+      }
+
+      // showMyQr is the same dialog for the one address that isn't a
+      // conversation: this visor's own. Shared markup rather than a second
+      // panel, so "an address" looks and copies the same way everywhere.
+      showMyQr() {
+        const addr = this.myAddress();
+        if (!addr) { this.showToast('Address not known yet.', 'error'); return; }
+        document.getElementById('qrTitle').textContent = 'Your address';
+        document.getElementById('qrAddrText').textContent = addr;
+        this._qrAddress = addr;
+
+        const ok = QR.draw(document.getElementById('qrCanvas'), addr);
+        document.getElementById('qrHelp').textContent = ok
+          ? 'Scanning this starts a direct message with you.'
+          : 'This address is too long to encode as a QR code — copy the text instead.';
+
+        // Never a group here, so the invite alternative can't apply.
+        document.getElementById('qrInviteBtn').classList.add('hidden');
         document.getElementById('qrModal').classList.add('visible');
       }
 
@@ -9850,12 +9969,6 @@
             if (el) el.textContent = arrow + msg.text;
           }
         });
-      }
-
-      copyPk() {
-        if (!this.recipient || this.isSaved()) return;
-        navigator.clipboard.writeText(this.recipient);
-        this.showToast('Public key copied to clipboard.');
       }
 
       deleteChat() {
