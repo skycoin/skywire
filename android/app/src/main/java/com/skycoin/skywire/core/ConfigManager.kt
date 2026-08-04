@@ -20,7 +20,7 @@ import java.util.concurrent.TimeUnit
  * file, then [applyPhoneProfile] enforces the phone constraints the
  * generator has no flags for.
  */
-class ConfigManager(private val paths: SkywirePaths) {
+class ConfigManager(private val paths: SkywirePaths, private val secrets: SecretStore) {
 
     data class CommandResult(val exitCode: Int, val output: String, val timedOut: Boolean) {
         val ok get() = exitCode == 0 && !timedOut
@@ -53,7 +53,7 @@ class ConfigManager(private val paths: SkywirePaths) {
             }
         }
         try {
-            applyPhoneProfile(transportPrimary)
+            applyPhoneProfile(transportPrimary, ensureSkychatPassword())
             Result.success(paths.configFile)
         } catch (e: Exception) {
             // A file that exists but does not parse would otherwise crash-loop
@@ -102,7 +102,8 @@ class ConfigManager(private val paths: SkywirePaths) {
      *  - absolute `local_path` (+ the transport log location derived from
      *    it) and `hypervisor.db_path`, so nothing depends on the cwd the
      *    visor happens to get;
-     *  - `launcher.bin_path` pinned to an app-private writable dir;
+     *  - `launcher.bin_path` pinned to an app-private writable dir, and the
+     *    per-app flags the phone owns (see [pinAppArgs]);
      *  - drop `skywire-tcp` — skips the `:7777` STCP listener;
      *  - `dmsgscp.disabled` — on by default when absent, writes scp-root;
      *  - `tp_viz.enable=false` — cosmetic (field is never read) but keeps
@@ -113,7 +114,7 @@ class ConfigManager(private val paths: SkywirePaths) {
      *    persists its own copy when the setting is changed live, and this
      *    keeps the two from drifting apart.
      */
-    private fun applyPhoneProfile(transportPrimary: String) {
+    private fun applyPhoneProfile(transportPrimary: String, skychatPasswordFile: File) {
         val root = json.parseToJsonElement(paths.configFile.readText()).jsonObject
         val edited = buildJsonObject {
             for ((key, value) in root) {
@@ -148,7 +149,9 @@ class ConfigManager(private val paths: SkywirePaths) {
                         key,
                         value.jsonObject.edit {
                             put("bin_path", JsonPrimitive(paths.binDir.absolutePath))
-                            this["apps"]?.let { apps -> this["apps"] = pinSocksArgs(apps) }
+                            this["apps"]?.let { apps ->
+                                this["apps"] = pinAppArgs(apps, skychatPasswordFile)
+                            }
                         },
                     )
                     "routing" -> put(
@@ -168,23 +171,44 @@ class ConfigManager(private val paths: SkywirePaths) {
     }
 
     /**
-     * The two skysocks-client flags the phone must own, re-applied on every
-     * launch. Everything else in the argv — the server key the SkySOCKS
-     * screen writes, above all — passes through untouched, so this never
-     * undoes a user's choice.
+     * The app flags the phone must own, re-applied on every launch.
+     * Everything else in each argv — the server key the SkySOCKS screen
+     * writes, above all — passes through untouched, so this never undoes a
+     * user's choice.
      */
-    private fun pinSocksArgs(apps: JsonElement): JsonElement {
+    private fun pinAppArgs(apps: JsonElement, skychatPasswordFile: File): JsonElement {
         val list = apps as? JsonArray ?: return apps
         return JsonArray(
             list.map { entry ->
                 val app = entry as? JsonObject ?: return@map entry
-                if ((app["name"] as? JsonPrimitive)?.content != SOCKS_APP) return@map entry
                 // On disk the argv is one space-joined string, not an array.
                 val args = (app["args"] as? JsonPrimitive)?.content.orEmpty().split(" ")
                     .filter { it.isNotEmpty() }
-                app.edit { this["args"] = JsonPrimitive(phoneSocksArgs(args).joinToString(" ")) }
+                val pinned = when ((app["name"] as? JsonPrimitive)?.content) {
+                    SOCKS_APP -> phoneSocksArgs(args)
+                    SkychatProfile.APP -> SkychatProfile.phoneArgs(args, skychatPasswordFile)
+                    else -> return@map entry
+                }
+                app.edit { this["args"] = JsonPrimitive(pinned.joinToString(" ")) }
             },
         )
+    }
+
+    /**
+     * The skychat password file, kept in step with the stored secret. Written
+     * here rather than through the visor's `PUT …/skychat/password` route
+     * because it has to be in place *before* the app is first started —
+     * setting it afterwards leaves a window in which the chat surface is open
+     * to every app on the phone (see [SkychatProfile]).
+     */
+    private suspend fun ensureSkychatPassword(): File {
+        val file = SkychatProfile.passwordFile(paths)
+        val password = secrets.skychatPassword()
+        val current = runCatching { file.readText() }.getOrNull()
+        if (current == null || !SkychatProfile.matches(current, password)) {
+            file.writeText(SkychatProfile.passwordRecord(password))
+        }
+        return file
     }
 
     /**
