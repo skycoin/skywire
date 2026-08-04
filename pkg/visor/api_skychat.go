@@ -315,7 +315,7 @@ func readAppArg(v *Visor, appName, flag string) string {
 
 // appHasFlag reports whether an app's launcher config carries a valueless
 // flag such as "--portless". Separate from readAppArg because that one only
-// recognises a flag with a value after it, and would never see this one.
+// recognizes a flag with a value after it, and would never see this one.
 func appHasFlag(v *Visor, appName, flag string) bool {
 	if v.conf == nil || v.conf.Launcher == nil {
 		return false
