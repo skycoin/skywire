@@ -150,6 +150,56 @@ func TestController_SendReceive(t *testing.T) {
 	}
 }
 
+// TestController_AcceptedConnIsCached pins what HasConn answers: "are we
+// connected to this peer", not "have we dialed this peer".
+//
+// The skychat app's file-transfer policy asks exactly that question before
+// taking an inbound file (isEstablishedPeer → HasConn). While accepted conns
+// were left out of the cache, a peer who had only ever connected TO us was
+// invisible to it: every file they offered was declined as coming from a
+// stranger, while their text messages — which arrive on that very conn — kept
+// working, so nothing about the failure pointed at the connection.
+func TestController_AcceptedConnIsCached(t *testing.T) {
+	hub := newMemHub()
+	pkA, pkB := mustPK(t), mustPK(t)
+	recA, recB := &recorder{}, &recorder{}
+
+	ctrlB := New(Config{Client: &memClient{hub, pkB}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recB.on})
+	ctrlA := New(Config{Client: &memClient{hub, pkA}, Networks: []appnet.Type{appnet.TypeDmsg}, OnEvent: recA.on})
+	if err := ctrlB.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := ctrlA.Start(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ctrlA.Close(); _ = ctrlB.Close() }) //nolint
+
+	// A dials B. B never dials A — this is the receive-only case.
+	if _, err := ctrlA.Send(context.Background(), pkB, appnet.TypeDmsg, "inbound only", SendOpts{}); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+	// The conn is cached before its read loop starts, so observing the message
+	// means the cache write has already happened — no polling for it.
+	waitFor(t, recB, func(e Event) bool { return e.Dir == "in" && e.Text == "inbound only" })
+
+	if !ctrlB.HasConn(pkA) {
+		t.Error("a conn we accepted must count as a live conn to its peer")
+	}
+	if n := ctrlB.Conns(); n != 1 {
+		t.Errorf("Conns() = %d, want 1 after accepting one peer", n)
+	}
+
+	// And the cached conn has to be usable, not just counted: B's reply goes
+	// back over the accepted conn rather than a fresh dial.
+	if _, err := ctrlB.Send(context.Background(), pkA, appnet.TypeDmsg, "reply on the accepted conn", SendOpts{}); err != nil {
+		t.Fatalf("reply over the accepted conn: %v", err)
+	}
+	in := waitFor(t, recA, func(e Event) bool { return e.Dir == "in" && e.Text == "reply on the accepted conn" })
+	if in.Peer != pkB.Hex() {
+		t.Errorf("reply peer = %s, want %s", in.Peer, pkB.Hex())
+	}
+}
+
 func TestController_QuotedReply(t *testing.T) {
 	hub := newMemHub()
 	pkA, pkB := mustPK(t), mustPK(t)
@@ -351,8 +401,8 @@ func TestController_AutoDmsgFirstThenSkynetUpgrade(t *testing.T) {
 	if err := ctrlA.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	defer ctrlA.Close()
-	defer ctrlB.Close()
+	defer ctrlA.Close() //nolint
+	defer ctrlB.Close() //nolint
 
 	// First auto send: no warm conn → dmsg (instant, no route setup).
 	res, err := ctrlA.Send(context.Background(), pkB, "", "hi", SendOpts{Auto: true})
