@@ -125,7 +125,14 @@ fun SkywireApp() {
             composable(Routes.SETTINGS) { SettingsScreen() }
 
             // Full-screen routes pushed from the hub — back returns to the hub.
-            composable(Routes.SOCKS) { SocksScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.SOCKS) {
+                SocksScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenLogs = { source ->
+                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
+                    },
+                )
+            }
             composable(Routes.VPN) { VpnScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.DEX) { DexScreen(onBack = { navController.popBackStack() }) }
             composable(Routes.FLEET) { FleetScreen(onBack = { navController.popBackStack() }) }

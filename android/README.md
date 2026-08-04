@@ -112,6 +112,33 @@ under a supervisor:
   `files/skywire/skywire-process.log` (rotating) — readable in-app via the
   log viewer's Process source, which works even when the visor won't start.
 
+## App screens
+
+Each app screen drives one of the visor's apps over the local API — list,
+configure, start, observe — and carries a `Logs` action scoped to that app.
+
+**SkySOCKS** (`ui/socks/`) lists public proxy servers from service discovery
+(`/api/svc-fetch?service=sd&path=/api/services?type=proxy`, which the visor
+fetches over DMSG on the app's behalf), points `skysocks-client` at the tapped
+one (`PUT …/apps/skysocks-client` with `pk`, then `status`), and polls
+`…/apps/skysocks-client` + `…/connections` for state and traffic. The chosen
+server is remembered across restarts, so the screen opens on a one-tap
+**Reconnect**.
+
+Two of the app's flags are owned by the phone profile rather than the screen,
+and re-pinned on every launch (`core/ConfigManager.kt`):
+
+- `--addr` host is forced to `127.0.0.1` — the generated `:1080` listens on
+  every interface, which on a phone means any device on the same Wi-Fi could
+  use the proxy. The port stays editable from the screen.
+- `--reconnect` is always on. Phones lose mesh routes routinely (a cell
+  handover is enough); without it the app *exits* when its route group dies
+  and the proxy is silently dead until the user notices.
+
+Starting or reconfiguring goes through an explicit stop first: the visor's
+restart-on-args-change races the outgoing proc, whose blocked `accept` returns
+"use of closed network connection" and leaves the app stuck in `Errored`.
+
 ## Testing & debugging
 
 App logs:
@@ -130,6 +157,15 @@ payload run manually, below):
 adb forward tcp:8000 tcp:8000     # http://127.0.0.1:8000/api/ping → "PONG!"
 adb forward tcp:1080 tcp:1080     # your desktop browser rides the phone's SOCKS5
 curl --socks5-hostname 127.0.0.1:1080 https://example.com
+```
+
+SkySOCKS end-to-end, entirely on the phone (the device ships `curl`, and the
+shell runs as a different UID — so this is the same reachability a third-party
+app gets):
+
+```sh
+adb shell 'curl -s https://api.ipify.org; echo'                                  # your real IP
+adb shell 'curl -s --socks5-hostname 127.0.0.1:1080 https://api.ipify.org; echo' # the exit node's
 ```
 
 The API is authenticated (session cookie) and CSRF-protected: `GET /api/csrf`
@@ -163,7 +199,9 @@ android/
     ├── AndroidManifest.xml
     ├── java/com/skycoin/skywire/
     │   ├── MainActivity.kt             # the one Activity: splash → gate → scaffold
-    │   └── ui/                         # theme/, navigation/, components/,
+    │   ├── core/                       # foreground service, config, secrets, prefs
+    │   ├── api/                        # local-API client + DTOs
+    │   └── ui/                         # theme/, navigation/, components/, logs/,
     │                                   # home/ chat/ hub/ socks/ vpn/ dex/
     │                                   # fleet/ wallet/ settings/
     ├── res/                            # brand logo (drawable-nodpi), Skycoin

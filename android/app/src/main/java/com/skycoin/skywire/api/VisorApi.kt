@@ -6,7 +6,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -59,6 +62,18 @@ class VisorApi(context: Context) {
         .connectTimeout(2, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .callTimeout(15, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * For the routes the visor answers by going out over the network
+     * itself. `/api/svc-fetch` dials a deployment service over DMSG with
+     * its own 15-second budget per hop, so the loopback client has to
+     * outlast it — the default above would abort the call at the very
+     * moment the visor is still waiting on the first hop.
+     */
+    private val relayClient = client.newBuilder()
+        .readTimeout(45, TimeUnit.SECONDS)
+        .callTimeout(50, TimeUnit.SECONDS)
         .build()
 
     private val sessionMutex = Mutex()
@@ -152,6 +167,88 @@ class VisorApi(context: Context) {
         }
     }
 
+    // --- service discovery ---
+
+    /**
+     * Public servers of one service type, straight from service discovery.
+     *
+     * There is no dedicated REST route for this: `/api/svc-fetch` is the
+     * visor's generic deployment-service proxy (`service` picks the
+     * configured endpoint, `path` is passed through verbatim over
+     * DMSG-HTTP), and SD's own `/api/services` takes the `type` filter —
+     * `proxy` is the skysocks family, `vpn` is SkyVPN's.
+     */
+    suspend fun services(type: String): List<ServiceEntry> = withContext(Dispatchers.IO) {
+        val path = URLEncoder.encode("/api/services?type=$type", "UTF-8")
+        getWithRelogin("/api/svc-fetch?service=sd&path=$path", relayClient).use { resp ->
+            if (!resp.isSuccessful) {
+                throw IOException("service discovery failed (${resp.code}): ${errorBody(resp)}")
+            }
+            // The body is the upstream's payload verbatim, so it can be a
+            // bare `null` for an empty result set — not a JSON array.
+            val body = resp.body.string().trim()
+            if (body.isEmpty() || body == "null") {
+                emptyList()
+            } else {
+                json.decodeFromString(ListSerializer(ServiceEntry.serializer()), body)
+            }
+        }
+    }
+
+    // --- apps ---
+
+    suspend fun app(name: String): AppState = authedGet("/api/visors/${localPk()}/apps/$name")
+
+    /**
+     * Live connections of an app. The server answers 500 when the app has
+     * no running proc, and JSON `null` when it runs but holds no
+     * connection yet — both are "nothing to show", not errors.
+     */
+    suspend fun appConnections(name: String): List<AppConnection> = withContext(Dispatchers.IO) {
+        getWithRelogin("/api/visors/${localPk()}/apps/$name/connections").use { resp ->
+            if (resp.code == 500) return@withContext emptyList()
+            if (!resp.isSuccessful) {
+                throw IOException("app connections failed (${resp.code}): ${errorBody(resp)}")
+            }
+            val body = resp.body.string().trim()
+            if (body.isEmpty() || body == "null") {
+                emptyList()
+            } else {
+                json.decodeFromString(ListSerializer(AppConnection.serializer()), body)
+            }
+        }
+    }
+
+    /**
+     * One mutating PUT on an app, carrying only the fields given:
+     *  - [pk] sets the remote server (`--srv`),
+     *  - [args] replaces the whole argv (shell-quoted string, parsed
+     *    server-side),
+     *  - [status] 1 starts, 0 stops.
+     *
+     * Both [pk] and [args] restart a *running* app server-side; on a
+     * stopped one they only rewrite the config, so configure-then-start
+     * is a safe order in a single call.
+     */
+    suspend fun updateApp(
+        name: String,
+        pk: String? = null,
+        args: String? = null,
+        status: Int? = null,
+    ): AppState = withContext(Dispatchers.IO) {
+        val body = buildJsonObject {
+            pk?.let { put("pk", JsonPrimitive(it)) }
+            args?.let { put("args", JsonPrimitive(it)) }
+            status?.let { put("status", JsonPrimitive(it)) }
+        }
+        putWithRelogin("/api/visors/${localPk()}/apps/$name", body.toString()).use { resp ->
+            if (!resp.isSuccessful) {
+                throw IOException("app update failed (${resp.code}): ${errorBody(resp)}")
+            }
+            decode<AppState>(resp)
+        }
+    }
+
     /** Fresh 30-second CSRF token for a mutating `/api/visors/{pk}/…` call. */
     suspend fun csrfToken(): String = withContext(Dispatchers.IO) {
         get("/api/csrf").use { decode<CsrfToken>(it).token }
@@ -169,16 +266,40 @@ class VisorApi(context: Context) {
             }
         }
 
-    private suspend fun getWithRelogin(path: String): okhttp3.Response {
-        val first = get(path)
+    private suspend fun getWithRelogin(
+        path: String,
+        client: OkHttpClient = this.client,
+    ): okhttp3.Response {
+        val first = get(path, client)
         if (first.code != 401) return first
         first.close()
         ensureSession()
-        return get(path)
+        return get(path, client)
     }
 
-    private fun get(path: String): okhttp3.Response =
+    /**
+     * A mutation needs a fresh CSRF token per attempt — the token lives 30
+     * seconds and the retry happens after a full re-login round trip.
+     */
+    private suspend fun putWithRelogin(path: String, body: String): okhttp3.Response {
+        val first = put(path, body, csrfToken())
+        if (first.code != 401) return first
+        first.close()
+        ensureSession()
+        return put(path, body, csrfToken())
+    }
+
+    private fun get(path: String, client: OkHttpClient = this.client): okhttp3.Response =
         client.newCall(Request.Builder().url("$BASE$path").build()).execute()
+
+    private fun put(path: String, body: String, csrf: String): okhttp3.Response =
+        client.newCall(
+            Request.Builder()
+                .url("$BASE$path")
+                .header(CSRF_HEADER, csrf)
+                .put(body.toRequestBody("application/json".toMediaType()))
+                .build(),
+        ).execute()
 
     private inline fun <reified T> postJson(path: String, body: T): okhttp3.Response {
         val payload = json.encodeToString(
@@ -199,7 +320,12 @@ class VisorApi(context: Context) {
     }.getOrDefault("(no body)").take(500)
 
     companion object {
+        /** `status` values [updateApp] takes — start and stop an app. */
+        const val APP_STOP = 0
+        const val APP_START = 1
+
         private const val BASE = "http://127.0.0.1:8000"
+        private const val CSRF_HEADER = "X-CSRF-Token"
 
         @Volatile private var instance: VisorApi? = null
 
