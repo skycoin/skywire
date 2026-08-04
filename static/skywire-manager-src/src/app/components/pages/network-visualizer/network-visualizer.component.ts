@@ -24,6 +24,9 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
   standalone: false,
 })
 export class NetworkVisualizerComponent extends PageBaseComponent implements OnInit, AfterViewInit, OnDestroy {
+  private static readonly BUNDLE_ID = 'tpviz-bundle-script';
+  private static readonly BUNDLE_SRC = 'tp-viz/bundle.js';
+
   @ViewChild('graph', { static: false }) graphEl!: ElementRef<HTMLDivElement>;
 
   tabsData: TabButtonData[] = [];
@@ -32,8 +35,6 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
 
   private handle: { unmount(): void } | null = null;
   private routeSub?: Subscription;
-  private static readonly BUNDLE_ID = 'tpviz-bundle-script';
-  private static readonly BUNDLE_SRC = 'tp-viz/bundle.js';
 
   constructor(private route: ActivatedRoute, private router: Router) {
     super();
@@ -63,6 +64,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
       if (!w.SkywireTpviz || !this.graphEl) {
         this.error = 'transport-graph bundle unavailable';
         this.loading = false;
+
         return;
       }
       try {
@@ -70,7 +72,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
         // route query so a specific mode (globe/flat/webgl) is linkable.
         const view = this.route.snapshot.queryParamMap.get('view') || undefined;
         this.handle = w.SkywireTpviz.mount(this.graphEl.nativeElement, {
-          view,
+          view: view,
           onViewChange: (v: string) => {
             this.router.navigate([], { relativeTo: this.route, queryParams: { view: v }, queryParamsHandling: 'merge', replaceUrl: true });
           },
@@ -84,12 +86,16 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
 
     if (w.SkywireTpviz) {
       doMount();
+
       return;
     }
     const existing = document.getElementById(NetworkVisualizerComponent.BUNDLE_ID) as HTMLScriptElement | null;
     if (existing) {
       existing.addEventListener('load', doMount);
-      existing.addEventListener('error', () => { this.error = 'could not load transport-graph bundle'; this.loading = false; });
+      existing.addEventListener('error', () => {
+ this.error = 'could not load transport-graph bundle'; this.loading = false; 
+});
+
       return;
     }
     const s = document.createElement('script');
@@ -97,14 +103,18 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
     s.src = NetworkVisualizerComponent.BUNDLE_SRC;
     s.async = true;
     s.onload = () => doMount();
-    s.onerror = () => { this.error = 'could not load transport-graph bundle'; this.loading = false; };
+    s.onerror = () => {
+ this.error = 'could not load transport-graph bundle'; this.loading = false; 
+};
     document.body.appendChild(s);
   }
 
   ngOnDestroy(): void {
     this.routeSub?.unsubscribe();
     if (this.handle) {
-      try { this.handle.unmount(); } catch { /* ignore */ }
+      try {
+ this.handle.unmount(); 
+} catch { /* ignore */ }
       this.handle = null;
     }
   }
