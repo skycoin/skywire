@@ -228,6 +228,9 @@ func startGroupPoller(parent context.Context) {
 				} else if rmeta, ok := parseReplyText(m.Text); ok {
 					envelope["message"] = rmeta.Text
 					enrichReplyRow(envelope, rmeta)
+				} else if fmeta, ok := parseForwardText(m.Text); ok {
+					envelope["message"] = fmeta.Text
+					enrichForwardRow(envelope, fmeta)
 				}
 				body, mErr := json.Marshal(envelope)
 				if mErr != nil {
@@ -913,6 +916,9 @@ func groupItemHandler() http.HandlerFunc {
 				} else if rmeta, ok := parseReplyText(m.Text); ok {
 					row["text"] = rmeta.Text
 					enrichReplyRow(row, rmeta)
+				} else if fmeta, ok := parseForwardText(m.Text); ok {
+					row["text"] = fmeta.Text
+					enrichForwardRow(row, fmeta)
 				}
 				out = append(out, row)
 			}
