@@ -120,10 +120,10 @@
       transform: scale(0.98);
     }
 
-    /* Recipient List */
+    /* Recipient List. The scroll used to live here, when this was the
+       sidebar's only list; it now belongs to .sidebar-scroll, which holds
+       every section. */
     .recipient-list {
-      flex: 1;
-      overflow-y: auto;
       list-style: none;
     }
 
@@ -2102,13 +2102,353 @@
     .cp-spec-chan:hover { background: var(--bg-hover); color: var(--text-primary); }
     .cp-spec-canvas { width: 232px; max-width: 100%; height: 84px; display: block; background: #000; border-radius: 8px; image-rendering: pixelated; }
 
+    /* ---- Own identity row ----------------------------------------
+       The one place the user's OWN name, face and address are visible
+       without opening anything. It sits in the sidebar header rather
+       than in a settings menu because "what do I hand someone so they
+       can message me" is a question asked constantly and answered
+       nowhere else in this app — every other address in the UI belongs
+       to somebody else. */
+    .me-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      cursor: pointer;
+      text-align: left;
+      color: inherit;
+      font: inherit;
+      transition: background 0.2s;
+    }
+
+    .me-row:hover { background: var(--bg-hover); }
+
+    /* 32px on screen for a 32x32 source: the published avatar is exactly
+       this size, so it renders 1:1 and never gets the soft look an
+       upscaled thumbnail would have. */
+    .me-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--bg-secondary);
+      flex-shrink: 0;
+    }
+
+    .me-info { min-width: 0; flex: 1; }
+
+    .me-name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .me-sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-family: monospace;
+    }
+
+    .me-go { color: var(--text-muted); font-size: 13px; flex-shrink: 0; }
+
+    /* ---- Sidebar tabs ---------------------------------------------
+       Four filters over one list. The sections themselves are unchanged
+       — the tab only decides which are displayed — so a conversation
+       never has two renderings that can drift apart. */
+    .side-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border-color);
+      background: var(--bg-secondary);
+      flex-shrink: 0;
+    }
+
+    .side-tab {
+      flex: 1;
+      padding: 10px 4px;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .side-tab:hover { color: var(--text-primary); }
+
+    .side-tab.active {
+      color: var(--accent-blue);
+      border-bottom-color: var(--accent-blue);
+    }
+
+    /* The scroll container for every list. Before the tabs there was one
+       list, and it carried the scroll itself; with five sections stacked
+       the scroll has to belong to the thing that holds them all, or each
+       section gets its own useless scrollbar. min-height:0 because a
+       flex child's automatic minimum is its content, which would let the
+       lists push the sidebar taller than the viewport instead of
+       scrolling. */
+    .sidebar-scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    /* Tab filtering. A section declares which tab it belongs to and the
+       active tab hides the rest; data-scope="any" is always shown. Done
+       in CSS rather than by re-rendering so switching tabs cannot lose a
+       row's accumulated state (message previews, unread badges) the way
+       a rebuild would — the same reason _paintPeerLabel patches in
+       place. */
+    .sidebar[data-tab="dm"] [data-scope]:not([data-scope="dm"]):not([data-scope="any"]),
+    .sidebar[data-tab="groups"] [data-scope]:not([data-scope="groups"]):not([data-scope="any"]),
+    .sidebar[data-tab="channels"] [data-scope]:not([data-scope="channels"]):not([data-scope="any"]) {
+      display: none;
+    }
+
+    /* ---- Saved messages -------------------------------------------- */
+    .saved-avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    /* ---- Contacts --------------------------------------------------- */
+
+    /* Above the other overlays: the address book is opened FROM the
+       add-by-address dialog in pick mode, and with equal z-index the one
+       later in the DOM would win — which is the dialog being picked into. */
+    #contactsModal { z-index: 101; }
+
+    .contacts-modal {
+      display: flex;
+      flex-direction: column;
+      max-height: 78vh;
+    }
+
+    .contacts-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    /* The title takes the slack so the two buttons sit hard against the
+       right edge on every width. */
+    .contacts-head h3 { flex: 1; margin: 0; }
+
+    /* Only this scrolls: the title, the + button and the search field stay
+       put while a long address book moves under them. */
+    .contacts-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      margin-top: 10px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    /* Below the one-pane breakpoint the dialog stops being a dialog and
+       becomes the screen. Deliberately the SAME breakpoint the sidebar and
+       chat use (see the responsive block): a width where the app is already
+       one pane but a floating contact dialog was still centred would be a
+       band of screen sizes with two different ideas about what a phone is. */
+    @media (max-width: 760px) {
+      #contactsModal .contacts-modal {
+        max-height: none;
+        height: 100%;
+        width: 100%;
+        max-width: none;
+        border-radius: 0;
+        margin: 0;
+      }
+
+      #contactsModal.modal-overlay {
+        padding: 0;
+        align-items: stretch;
+        justify-content: stretch;
+      }
+    }
+
+    .contacts-empty {
+      padding: 10px 16px 14px;
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .contact-actions {
+      display: flex;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Only on hover/focus: a row is for opening a chat, and two buttons
+       sitting on every row all the time would compete with that. */
+    .contact-actions .icon-btn {
+      opacity: 0;
+      transition: opacity 0.15s;
+      padding: 4px 6px;
+    }
+
+    .recipient-item:hover .contact-actions .icon-btn,
+    .recipient-item:focus-within .contact-actions .icon-btn { opacity: 1; }
+
+    /* ---- Avatar cropper --------------------------------------------
+       Preview of what will actually be stored, at 3x so the pixels are
+       inspectable. Deliberately not an interactive crop box: the source
+       is centre-cropped square and scaled, which is right for the
+       overwhelming majority of pictures people pick, and a pan/zoom
+       surface would be a large amount of machinery to place a face in a
+       32-pixel circle. */
+    .av-preview {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      padding: 12px 0;
+    }
+
+    .av-preview img {
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+    }
+
+    .av-preview .av-lg { width: 96px; height: 96px; }
+    .av-preview .av-sm { width: 32px; height: 32px; }
+
+    .av-caption {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* ---- Forwarded marker ------------------------------------------
+       Quiet by design. Nothing about a forward is signed, so this is the
+       forwarder's claim about where something came from, exactly like a
+       pasted quotation — a loud badge would lend it authority it does not
+       have. */
+    .fwd-chip {
+      font-size: 11px;
+      font-style: italic;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      opacity: 0.85;
+    }
+
+    /* ---- Mobile message actions -------------------------------------
+       On a touch screen the hover-revealed Reply / ⋯ links are unreachable:
+       there is no hover, and the targets are far below the 44px a finger
+       needs. Below the one-pane breakpoint a tap on the message opens a
+       bottom sheet instead — the same actions, at a size a thumb can hit,
+       anchored where a thumb already is. */
+    .msg-sheet-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 150;
+      display: none;
+    }
+
+    .msg-sheet-backdrop.visible { display: block; }
+
+    .msg-sheet {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 151;
+      background: var(--bg-secondary);
+      border-top-left-radius: 16px;
+      border-top-right-radius: 16px;
+      padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
+      box-shadow: var(--shadow);
+      transform: translateY(100%);
+      transition: transform 0.18s ease-out;
+    }
+
+    .msg-sheet-backdrop.visible .msg-sheet { transform: translateY(0); }
+
+    /* The message the sheet is about, so a mis-tap is obvious before any
+       action is taken. */
+    .msg-sheet-preview {
+      padding: 10px 14px 12px;
+      font-size: 13px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border-color);
+      margin-bottom: 4px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .msg-sheet button {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      width: 100%;
+      /* 52px: comfortably over the ~44px minimum touch target, and tall
+         enough that the four rows cannot be hit by accident in sequence. */
+      min-height: 52px;
+      padding: 0 16px;
+      background: none;
+      border: none;
+      border-radius: 10px;
+      color: var(--text-primary);
+      font: inherit;
+      font-size: 15px;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .msg-sheet button:active { background: var(--bg-hover); }
+    .msg-sheet button.danger { color: var(--accent-red); }
+    .msg-sheet .ms-icon { width: 22px; text-align: center; font-size: 17px; }
+
+    /* The tap target is the whole row, not just the bubble: the empty space
+       beside a short message is the easiest place on the screen to hit, and
+       on a phone it is otherwise dead. Only below the breakpoint — on a
+       desktop that space is where a click deselects. */
+    @media (max-width: 760px) {
+      .message-row { cursor: pointer; }
+      /* The hover links have no hover to reveal them here, and the sheet
+         replaces them entirely. */
+      .message-meta .reply-link { display: none; }
+    }
+
+    /* The resolved-address card's avatar, when the peer published one. */
+    .ar-avatar img {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+    }
+
     .hidden {
       display: none !important;
     }
   </style>
 </head>
 <body>
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar" data-tab="all">
     <div class="sidebar-header">
       <div class="app-title">
         <h1>Skychat</h1>
@@ -2116,7 +2456,14 @@
           <div id="statusDot" class="status-dot"></div>
           <span id="statusText">Connected</span>
         </div>
-        <button class="icon-btn" style="margin-left:auto" onclick="app.openNotifSettings()" title="Notification settings" aria-label="Notification settings">&#x1F514;</button>
+        <!-- Address book. Beside the bell rather than inline in the list:
+             a contact is a person you know, not a conversation you have, and
+             the two lists answer different questions. Keeping the saved
+             people out of the chat list also stops the sidebar being mostly
+             rows with nothing in them. -->
+        <button class="icon-btn" style="margin-left:auto" onclick="app.openContacts()"
+                title="Address book" aria-label="Address book">&#x1F4C7;</button>
+        <button class="icon-btn" onclick="app.openNotifSettings()" title="Notification settings" aria-label="Notification settings">&#x1F514;</button>
         <!-- The one entry point for starting anything: an address (person,
              group or channel), a new group, or a new channel. Sits here on
              a wide screen and becomes a fixed bottom-right action button
@@ -2142,22 +2489,70 @@
         <button class="nn-allow" onclick="app.allowNotifFromNudge()">Allow</button>
         <button class="nn-dismiss" onclick="app.dismissNotifNudge()" title="Don't ask again" aria-label="Dismiss">&times;</button>
       </div>
+      <!-- Who this visor is, and the address to hand out. Opens the
+           profile editor; the address is also a QR from there, the same
+           treatment a group gets. -->
+      <button id="meRow" class="me-row" onclick="app.openMyProfile()"
+              title="Your profile and address" aria-label="Your profile and address">
+        <img id="meAvatar" class="me-avatar" src="p.png" alt="" />
+        <span class="me-info">
+          <span class="me-name" id="meName">Your profile</span>
+          <span class="me-sub" id="meAddr">—</span>
+        </span>
+        <span class="me-go">&#x2699;</span>
+      </button>
     </div>
-    <div id="pinnedSection" class="groups-section hidden">
-      <div class="groups-header"><span>Pinned</span></div>
-      <ul id="pinnedList" class="recipient-list"></ul>
-    </div>
-    <div id="invitesSection" class="invites-section hidden">
-      <div class="invites-header">Pending Pair Invites</div>
-      <div id="invitesList"></div>
-    </div>
-    <div id="groupsSection" class="groups-section hidden">
-      <div class="groups-header">
-        <span>Groups &amp; channels</span>
+
+    <!-- Four views over the same sections. "All" is the default and the
+         only one that shows everything; the rest narrow it. -->
+    <nav class="side-tabs" role="tablist" aria-label="Filter conversations">
+      <button class="side-tab active" role="tab" data-tab="all" aria-selected="true" onclick="app.setTab('all')">All</button>
+      <button class="side-tab" role="tab" data-tab="dm" aria-selected="false" onclick="app.setTab('dm')">DMs</button>
+      <button class="side-tab" role="tab" data-tab="groups" aria-selected="false" onclick="app.setTab('groups')">Groups</button>
+      <button class="side-tab" role="tab" data-tab="channels" aria-selected="false" onclick="app.setTab('channels')">Channels</button>
+    </nav>
+
+    <div class="sidebar-scroll">
+      <!-- Saved messages: a notes-to-self thread. Local to this browser and
+           never sent anywhere — see the SAVED_KEY comment in the app. -->
+      <div id="savedSection" class="groups-section" data-scope="dm">
+        <ul class="recipient-list">
+          <li>
+            <div class="recipient-item" id="savedItem" onclick="app.selectSaved()">
+              <div class="saved-avatar">&#x1F516;</div>
+              <div class="recipient-info">
+                <div class="recipient-pk">Saved Messages</div>
+                <div class="recipient-preview" id="savedPreview">Notes kept on this device</div>
+              </div>
+            </div>
+          </li>
+        </ul>
       </div>
-      <ul id="groups" class="group-list"></ul>
+      <div id="pinnedSection" class="groups-section hidden" data-scope="any">
+        <div class="groups-header"><span>Pinned</span></div>
+        <ul id="pinnedList" class="recipient-list"></ul>
+      </div>
+      <div id="invitesSection" class="invites-section hidden" data-scope="dm">
+        <div class="invites-header">Pending Pair Invites</div>
+        <div id="invitesList"></div>
+      </div>
+      <div id="groupsSection" class="groups-section hidden" data-scope="groups">
+        <div class="groups-header">
+          <span>Groups</span>
+        </div>
+        <ul id="groups" class="group-list"></ul>
+      </div>
+      <div id="channelsSection" class="groups-section hidden" data-scope="channels">
+        <div class="groups-header">
+          <span>Channels</span>
+        </div>
+        <ul id="channels" class="group-list"></ul>
+      </div>
+      <div id="chatsSection" class="groups-section" data-scope="dm">
+        <div class="groups-header"><span>Chats</span></div>
+        <ul id="recipients" class="recipient-list"></ul>
+      </div>
     </div>
-    <ul id="recipients" class="recipient-list"></ul>
   </aside>
 
   <main class="chat-container">
@@ -2318,6 +2713,17 @@
         <span class="si-sub">Public key, skychat:// link, invite or QR</span>
       </span>
     </button>
+    <!-- The address book as a starting point, not just a place to look
+         things up: the person you want to message next is usually someone
+         already saved, and re-pasting their key to reach them would be
+         asking for something the app is already holding. -->
+    <button class="start-item" role="menuitem" onclick="app.openContacts('pick')">
+      <span class="si-icon">&#x1F4C7;</span>
+      <span class="si-text">
+        <span class="si-title">Select from address book</span>
+        <span class="si-sub">Someone you already saved</span>
+      </span>
+    </button>
     <button class="start-item" role="menuitem" onclick="app.openCreateGroup()">
       <span class="si-icon">&#x1F465;</span>
       <span class="si-text">
@@ -2345,14 +2751,174 @@
       <input id="modalName" class="cg-input" type="text" maxlength="40" autocomplete="off"
              placeholder="Name for this contact (this device only)"
              onkeydown="if (event.key === 'Enter') app.savePeerName()" />
+      <p class="cg-help">
+        Saved here, on this device. It overrides whatever name this peer
+        publishes for themselves — a name you chose is never replaced by one
+        they changed.
+      </p>
       <div class="modal-actions">
         <button class="btn" onclick="app.savePeerName()">Save Name</button>
+        <button class="btn btn-secondary" onclick="app.fetchPeerProfileInto()">Get published name &amp; picture</button>
         <label class="btn btn-secondary" style="text-align: center;">
           Change Avatar
           <input type="file" id="profilePicture" accept="image/*" style="display: none;" onchange="app.updatePicture()">
         </label>
         <button class="btn btn-danger" onclick="app.removePicture()">Remove Avatar</button>
+        <button id="settingsContactBtn" class="btn btn-secondary" onclick="app.toggleContactFromSettings()">Save to contacts</button>
         <button class="btn btn-secondary" onclick="app.closeSettings()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Address book. A centred dialog on a desktop; below the one-pane
+       breakpoint the same markup becomes a full-screen list, because a
+       320px-wide dialog floating over a 360px-wide phone is a list with
+       margins, not a dialog. -->
+  <div id="contactsModal" class="modal-overlay">
+    <div class="modal modal-wide contacts-modal">
+      <div class="contacts-head">
+        <h3 id="contactsTitle">Address book</h3>
+        <button class="icon-btn" onclick="app.addContactFromBook()" title="Add a contact" aria-label="Add a contact">+</button>
+        <button class="icon-btn" onclick="app.closeContacts()" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <input id="contactSearch" class="cg-input" type="search" autocomplete="off"
+             placeholder="Search by name or key" oninput="app.renderContacts()" />
+      <div class="contacts-body">
+        <ul id="contacts" class="recipient-list"></ul>
+        <div id="contactsEmpty" class="contacts-empty">
+          No saved contacts yet. Add someone by their public key — their name
+          and picture, if they publish any, are saved with it.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Touch actions for one message. Populated per message by openMsgSheet,
+       because which actions apply depends on the message (only your own can
+       be deleted for everyone) and on where you are (no saving a note into
+       the notes thread). -->
+  <div id="msgSheetBackdrop" class="msg-sheet-backdrop" onclick="app.closeMsgSheet(event)">
+    <div id="msgSheet" class="msg-sheet" role="menu" aria-label="Message actions">
+      <div id="msgSheetPreview" class="msg-sheet-preview"></div>
+      <div id="msgSheetItems"></div>
+    </div>
+  </div>
+
+  <!-- Forward destination picker. One flat list of everywhere a message can
+       go — notes, people, groups, channels — because "where do I send this?"
+       is one question and making the user pick a category first would be
+       two. -->
+  <div id="forwardModal" class="modal-overlay">
+    <div class="modal modal-wide contacts-modal">
+      <div class="contacts-head">
+        <h3>Forward to…</h3>
+        <button class="icon-btn" onclick="app.closeModal('forwardModal')" title="Close" aria-label="Close">&times;</button>
+      </div>
+      <div id="fwdOrigin" class="cg-help"></div>
+      <input id="fwdSearch" class="cg-input" type="search" autocomplete="off"
+             placeholder="Search chats, groups and channels" oninput="app.renderForwardTargets()" />
+      <div class="contacts-body">
+        <ul id="fwdTargets" class="recipient-list"></ul>
+        <div id="fwdEmpty" class="contacts-empty hidden">Nothing matches that.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New address-book record. Deliberately NOT the add-by-address dialog:
+       that one resolves anything a user can paste and then acts on it —
+       start a chat, join a group — whereas this one files a person away and
+       does nothing else. Sharing a dialog between "reach this" and "remember
+       this" would make the primary action ambiguous in both. -->
+  <div id="newContactModal" class="modal-overlay">
+    <div class="modal">
+      <h3>New contact</h3>
+      <input id="ncPk" class="cg-input" type="text" autocomplete="off" spellcheck="false"
+             placeholder="Their public key (66 hex characters)"
+             oninput="app.onNewContactPk()" />
+
+      <!-- What their visor says about itself, once the key parses. Shown
+           before the name field so the user sees whether they need to invent
+           a name or just accept the published one. -->
+      <div id="ncLookup" class="addr-result hidden"></div>
+
+      <div class="av-preview">
+        <img id="ncAvatar" class="av-lg" src="p.png" alt="Contact picture" />
+      </div>
+
+      <input id="ncName" class="cg-input" type="text" maxlength="40" autocomplete="off"
+             placeholder="Nickname for this contact"
+             onkeydown="if (event.key === 'Enter') app.saveNewContact()" />
+      <p class="cg-help" id="ncHelp">
+        Paste their key. If they publish a name and picture, both are filled
+        in for you — otherwise give them a nickname so you can recognise them.
+      </p>
+
+      <div class="modal-actions">
+        <button class="btn" onclick="app.saveNewContact()">Save contact</button>
+        <label class="btn btn-secondary" style="text-align: center;">
+          Choose picture
+          <input type="file" id="ncPictureField" accept="image/*" style="display: none;" onchange="app.pickNewContactAvatar()">
+        </label>
+        <button class="btn btn-secondary" onclick="app.closeModal('newContactModal')">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- My Profile. Two things that belong together and nowhere else: what
+       this visor tells other people about itself, and the address they need
+       in order to ask. -->
+  <div id="myProfileModal" class="modal-overlay">
+    <div class="modal">
+      <h3>Your profile</h3>
+      <img id="myAvatar" class="modal-avatar publish-only" src="p.png" alt="" />
+      <input id="myName" class="cg-input publish-only" type="text" maxlength="40" autocomplete="off"
+             placeholder="Your display name"
+             onkeydown="if (event.key === 'Enter') app.saveMyProfile()" />
+      <p class="cg-help publish-only">
+        Anyone who has your public key can read this. It is not verified and
+        not private — treat it as a label, not an identity. Leave it blank to
+        publish nothing.
+      </p>
+      <p id="myNoPublish" class="cg-help hidden">
+        Publishing a name and picture needs the visor RPC — start skychat with
+        <code>--pair-enable</code>. Your address below works either way.
+      </p>
+
+      <div class="qr-wrap">
+        <canvas id="myQrCanvas" width="220" height="220" aria-label="Your address as a QR code"></canvas>
+      </div>
+      <div class="qr-addr-row">
+        <code id="myAddrText" class="qr-addr">-</code>
+        <button class="icon-btn" onclick="app.copyMyAddress()" title="Copy your address" aria-label="Copy your address">&#x2398;</button>
+      </div>
+      <p class="cg-help">Scanning this starts a direct message with you.</p>
+
+      <div class="modal-actions">
+        <button class="btn publish-only" onclick="app.saveMyProfile()">Save</button>
+        <label class="btn btn-secondary publish-only" style="text-align: center;">
+          Change picture
+          <input type="file" id="myPictureField" accept="image/*" style="display: none;" onchange="app.pickMyAvatar()">
+        </label>
+        <button class="btn btn-danger publish-only" onclick="app.clearMyProfile()">Stop publishing</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('myProfileModal')">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Avatar confirmation. Shows exactly what will be stored — the picture
+       has already been centre-cropped and scaled by the time this opens, so
+       there is nothing to accept that isn't on screen. -->
+  <div id="avatarModal" class="modal-overlay">
+    <div class="modal">
+      <h3 id="avatarTitle">Use this picture?</h3>
+      <div class="av-preview">
+        <img id="avPreviewLg" class="av-lg" src="p.png" alt="Avatar preview, enlarged" />
+        <img id="avPreviewSm" class="av-sm" src="p.png" alt="Avatar preview, actual size" />
+      </div>
+      <p class="av-caption" id="avCaption"></p>
+      <div class="modal-actions">
+        <button class="btn" onclick="app.confirmAvatar()">Use it</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('avatarModal')">Cancel</button>
       </div>
     </div>
   </div>
@@ -2522,6 +3088,12 @@
           <input type="file" id="addrQrFile" accept="image/*" style="display:none"
                  onchange="app.scanQrFile(event)" />
         </label>
+        <!-- The fourth way to fill this field, alongside typing, scanning
+             and reading an image: pick one already saved. -->
+        <button class="btn btn-secondary btn-slim" onclick="app.openContacts('pick')"
+                title="Pick a saved contact">
+          &#x1F4C7; Address book
+        </button>
       </div>
 
       <!-- Live camera scanner. Collapsed until Scan is pressed so the
@@ -2539,6 +3111,14 @@
            a person, but that person's visor may also host things worth
            joining, and there is otherwise no way to find out. -->
       <div id="addrCatalog" class="addr-catalog hidden"></div>
+
+      <!-- Offered only for a person. Checked by default: someone typing a
+           key by hand almost always means to keep it, and unticking is
+           cheaper than hunting for "add to contacts" afterwards. -->
+      <label id="addrSaveRow" class="notif-setting hidden" style="border:none;padding:8px 0">
+        <span class="notif-label">Save to contacts</span>
+        <input type="checkbox" id="addrSaveContact" checked />
+      </label>
 
       <div class="modal-actions">
         <button id="addrActionBtn" class="btn hidden" onclick="app.addressAction()">Start Chat</button>
@@ -2769,6 +3349,27 @@
         // Address book: local nicknames for public keys, this device only.
         this.nameMaxLen = 40;
         this.names = this._loadNames();
+        // Which of those keys are SAVED contacts, as opposed to keys we
+        // merely happen to have a name for. A separate list rather than a
+        // flag on `names` so the existing name/avatar storage — which every
+        // display path already reads — keeps working untouched: a contact is
+        // a name plus a deliberate "keep this person".
+        this.contacts = this._loadContacts();
+        // 'browse' (a row opens the chat) or 'pick' (a row goes back to the
+        // add-by-address dialog). See openContacts.
+        this._contactMode = 'browse';
+        // Which sidebar tab is showing. Persisted: a user who lives in
+        // Channels should not land in All on every reload.
+        this.tab = localStorage.getItem('skychat_tab') || 'all';
+        // This visor's own published profile ({name, avatar, address}),
+        // filled by syncMyProfile. profileAvailable stays null until the
+        // first answer; false means the endpoint isn't there (skychat was
+        // started without --pair-enable), in which case the address is still
+        // shown — it needs nothing but the key — and publishing is not.
+        this.myProfile = null;
+        this.profileAvailable = null;
+        // A pending avatar crop awaiting confirmation: {dataUrl, target}.
+        this._pendingAvatar = null;
         // Peer presence, refreshed from /presence: {pk: {online, rtt_ms, at}}.
         // presenceAvailable stays null until the first answer; false means the
         // endpoint isn't there (no --pair-enable) so the dots stay hidden.
@@ -2846,6 +3447,11 @@
         // the next reload. Cheap: one /pair read, same call the pair list
         // already uses.
         setInterval(() => this._pollPairEpochs(), 15000);
+        // Touch actions. Delegated on the container rather than bound per
+        // bubble: messages are appended with insertAdjacentHTML, so a
+        // per-row listener would have to be re-attached on every arrival.
+        const msgArea = document.getElementById('messages');
+        if (msgArea) msgArea.addEventListener('click', e => this.onMessageTap(e));
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -2855,6 +3461,10 @@
         this.syncMyPK();
         this.syncGroups();
         this.renderPinned();
+        this.renderContacts();
+        this.renderSavedPreview();
+        this.setTab(this.tab, { silent: true });
+        this.syncMyProfile();
         this.syncComposerBtn();
       }
 
@@ -2937,6 +3547,9 @@
           const bubbleClass = 'message-bubble' + (msg.file ? ' media' : '');
           const bubbleInner = msg.file ? this.renderFile(msg.file) : this.escapeHtml(msg.text);
           const quoteHtml = msg.reply ? this._renderQuote(msg.reply) : '';
+          // A message is a reply or a forward, never both — one envelope per
+          // body — so the two chips can share the slot above the text.
+          const fwdHtml = msg.forwarded ? this._renderForwardChip({ from: msg.forwardFrom }) : '';
           // Row identity (data-*) lets a later reply quote this message and
           // scroll back to it, and lets the menu act on it. senderAttr is 'me'
           // for our own messages, else the author PK; mid identifies the bubble
@@ -2950,7 +3563,7 @@
           msgArea.insertAdjacentHTML('beforeend', `
             <div class="message-row ${rowClass}" data-ts="${this.escapeAttr(tsIso)}" data-sender="${this.escapeAttr(senderAttr)}" data-preview="${this.escapeAttr(this._msgPreview(msg))}" data-mid="${msg.mid}" data-tsnano="${this.escapeAttr(msg.tsNano != null ? String(msg.tsNano) : '')}">
               ${senderLabel}
-              <div class="${bubbleClass}">${quoteHtml}${bubbleInner}</div>
+              <div class="${bubbleClass}">${quoteHtml}${fwdHtml}${bubbleInner}</div>
               <div class="message-meta">
                 <button class="reply-link" onclick="app.startReply(this)" title="Reply">&#x21A9; Reply</button>
                 <button class="reply-link msg-menu-btn" onclick="app.openMsgMenu(this)" title="More">&#x22EF;</button>
@@ -3410,7 +4023,13 @@
         menu.id = 'msgMenu';
         menu.dataset.mid = row.dataset.mid || '';
         menu.dataset.tsnano = row.dataset.tsnano || '';
-        let html = `<button onclick="app.deleteForMe()">Delete for me</button>`;
+        let html = `<button onclick="app.forwardMessage()">Forward</button>`;
+        // Not offered inside the notes thread itself, where it would copy a
+        // note onto the end of the list it is already in.
+        if (!this.isSaved()) {
+          html += `<button onclick="app.saveToSaved()">Save to Saved Messages</button>`;
+        }
+        html += `<button onclick="app.deleteForMe()">Delete for me</button>`;
         if (canDeleteAll) {
           html += `<button class="danger" onclick="app.deleteForAll()">Delete for everyone</button>`;
         }
@@ -4026,6 +4645,8 @@
             viaPair: data.channel === 'pair',
             file: this.fileFromSSE(data),
             reply: this.replyFromSSE(data),
+            forwarded: !!data.forwarded,
+            forwardFrom: data.forward_from || '',
             wireId: data.id, // sender-side id — referenced by the read receipt we send back
           };
           this.addMsgToList(data.sender, message);
@@ -4123,6 +4744,12 @@
                   preview: m.reply_to_preview || '',
                 };
               }
+              // A persisted forward carries the flag and, for a channel, the
+              // origin's name.
+              if (m.forwarded) {
+                entry.forwarded = true;
+                entry.forwardFrom = m.forward_from || '';
+              }
               withDates.push(entry);
             });
             this.messages[pk] = withDates;
@@ -4162,6 +4789,12 @@
         const attachBtn = document.querySelector('.attach-btn');
         if (attachBtn) attachBtn.classList.remove('hidden');
         document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
+        // selectSaved parks itself in `recipient` too, so leaving it has to
+        // clear its row and restore the call button it hid.
+        const savedRow = document.getElementById('savedItem');
+        if (savedRow) savedRow.classList.remove('active');
+        const callBtn = document.getElementById('dmCallBtn');
+        if (callBtn && this.voice && this.voice.available) callBtn.classList.remove('hidden');
 
         this.recipient = pk;
         this.loadHistoryFor(pk);
@@ -4206,6 +4839,11 @@
         const pairBtn = document.getElementById('pairToggleBtn');
         const cxoOpt = document.getElementById('cxoNetworkOption');
         const select = document.getElementById('networkSelect');
+        // Nothing to pair with in the notes thread.
+        if (this.isSaved()) {
+          pairBtn.classList.add('hidden');
+          return;
+        }
         if (!this.pairAvailable) {
           pairBtn.classList.add('hidden');
           cxoOpt.classList.add('hidden');
@@ -4507,6 +5145,9 @@
         document.querySelectorAll('.recipient-item').forEach(item => {
           const pk = item.dataset.pk;
           const badge = item.querySelector('.unread-badge');
+          // Contact rows and the notes row use the same row markup but are
+          // not conversations, so they carry no badge to update.
+          if (!pk || !badge) return;
           const seen = this.messagesSeen[pk] || 0;
           const total = this.messagesQuantity[pk] || 0;
           const unread = total - seen;
@@ -4532,6 +5173,18 @@
           this.sendGroupMessage(msg);
           msgField.value = '';
           this.syncComposerBtn();
+          return;
+        }
+
+        // A note goes straight into the local thread — there is no wire call,
+        // so there is also no pending/sent lifecycle to render.
+        if (this.isSaved()) {
+          this.cancelReply();
+          this.saveNote(msg);
+          msgField.value = '';
+          this.syncComposerBtn();
+          const area = document.getElementById('messages');
+          area.scrollTop = area.scrollHeight;
           return;
         }
 
@@ -5607,6 +6260,1094 @@
         el.title = pk;
       }
 
+      // ---- Contacts (the saved address book) ---------------------------
+      //
+      // A contact is a public key the user deliberately kept, and it is
+      // stored as exactly that: a list of keys. The name and the picture
+      // live where they already lived — `skychat_names` and `i_<pk>` — so
+      // every existing display path (shortPk, the chat header, notification
+      // icons) shows a contact's name and face without being told contacts
+      // exist. Adding a parallel record with its own copy of the name is
+      // how the two would end up disagreeing.
+      //
+      // Entirely local. Nothing here is sent anywhere, and a name set here
+      // always beats a name a peer publishes for themselves — a label the
+      // user chose must not be replaceable by the person it labels.
+
+      _loadContacts() {
+        try {
+          const raw = JSON.parse(localStorage.getItem('skychat_contacts') || '[]');
+          if (!Array.isArray(raw)) return [];
+          const seen = new Set();
+          return raw
+            .map(pk => String(pk || '').toLowerCase())
+            .filter(pk => /^[0-9a-f]{66}$/.test(pk) && !seen.has(pk) && seen.add(pk));
+        } catch (e) {
+          return [];
+        }
+      }
+
+      _saveContacts() {
+        localStorage.setItem('skychat_contacts', JSON.stringify(this.contacts));
+      }
+
+      isContact(pk) {
+        return !!pk && this.contacts.includes(String(pk).toLowerCase());
+      }
+
+      // addContact saves a key to the address book, optionally with a name
+      // and picture already in hand (the fetched-profile path). An existing
+      // contact is updated, not duplicated — and a name the user typed here
+      // before is never overwritten by a fetched one.
+      addContact(pk, opts = {}) {
+        const key = String(pk || '').toLowerCase();
+        if (!/^[0-9a-f]{66}$/.test(key)) return false;
+        if (opts.name && !this.peerName(key)) this.setPeerName(key, opts.name);
+        if (opts.avatar && !localStorage.getItem(`i_${key}`)) {
+          try {
+            localStorage.setItem(`i_${key}`, opts.avatar);
+            this.updateAvatarUI(key, opts.avatar);
+          } catch (e) {
+            // Quota. The contact is still worth saving without a picture.
+            console.debug('skychat: could not store contact avatar:', e && e.message);
+          }
+        }
+        if (!this.contacts.includes(key)) {
+          this.contacts.push(key);
+          this._saveContacts();
+        }
+        this.renderContacts();
+        return true;
+      }
+
+      removeContact(pk, ev) {
+        if (ev) ev.stopPropagation();
+        const key = String(pk || '').toLowerCase();
+        if (!this.isContact(key)) return;
+        if (!confirm('Remove this contact from your address book?\n\nThe conversation and its messages are kept.')) return;
+        this.contacts = this.contacts.filter(v => v !== key);
+        this._saveContacts();
+        this.renderContacts();
+        this._updateContactButton();
+        this.showToast('Contact removed.');
+      }
+
+      // editContact opens the existing Contact Settings dialog for a row in
+      // the address book, whether or not a conversation with that key has
+      // ever been opened. That modal edits `this.recipient`, so the key is
+      // parked there first — which also matches what a user expects after
+      // editing someone: their chat is what opens.
+      editContact(pk, ev) {
+        if (ev) ev.stopPropagation();
+        this.openContact(pk);
+        this.openSettings();
+      }
+
+      // openContact opens the chat with a contact, creating the thread if
+      // this is the first time. An address book entry with no conversation
+      // yet is the normal case for someone you have only just saved.
+      openContact(pk) {
+        const key = String(pk || '').toLowerCase();
+        if (!key) return;
+        // In pick mode a row is a CHOICE, not a destination: it goes back to
+        // the add-by-address dialog and resolves there, so a contact opened
+        // from a list passes the same confirmation step a pasted key does.
+        // Same rule openCatalogEntry follows, for the same reason.
+        if (this._contactMode === 'pick') { this.pickContact(key); return; }
+        this.closeContacts();
+        if (!this.recipients.includes(key)) this._addRecipient(key);
+        this.selectRecipient(key);
+      }
+
+      // ---- The address book view ---------------------------------------
+
+      // openContacts shows the address book: a centred dialog on a desktop,
+      // a full-screen list on a phone (CSS decides — see .contacts-modal).
+      //
+      // mode 'pick' turns every row into a chooser for the add-by-address
+      // dialog instead of a way into a conversation.
+      openContacts(mode) {
+        this.closeStartMenu();
+        this._contactMode = (mode === 'pick') ? 'pick' : 'browse';
+        const title = document.getElementById('contactsTitle');
+        if (title) title.textContent = this._contactMode === 'pick' ? 'Choose a contact' : 'Address book';
+        const search = document.getElementById('contactSearch');
+        if (search) search.value = '';
+        this.renderContacts();
+        document.getElementById('contactsModal').classList.add('visible');
+        if (search) setTimeout(() => search.focus(), 50);
+      }
+
+      closeContacts() {
+        this._contactMode = 'browse';
+        this.closeModal('contactsModal');
+      }
+
+      // addContactFromBook is the + in the address book's header: a form for
+      // filing someone away, not the add-by-address dialog.
+      //
+      // Those two do different things and the difference matters at the
+      // button: add-by-address resolves whatever is pasted and then ACTS on
+      // it (opens a chat, joins a group), while this one only writes a record.
+      // Pointing + at the former made the address book's add button start
+      // conversations, which is not what a user filling in an address book
+      // asked for.
+      addContactFromBook() {
+        this.closeContacts();
+        this.openNewContact();
+      }
+
+      openNewContact(pk) {
+        this._newContact = { pk: '', profile: null, avatar: '' };
+        document.getElementById('ncPk').value = pk || '';
+        document.getElementById('ncName').value = '';
+        document.getElementById('ncAvatar').src = 'p.png';
+        document.getElementById('ncLookup').classList.add('hidden');
+        document.getElementById('newContactModal').classList.add('visible');
+        setTimeout(() => document.getElementById(pk ? 'ncName' : 'ncPk').focus(), 50);
+        if (pk) this.onNewContactPk();
+      }
+
+      // onNewContactPk validates the key as it is typed and, once it is
+      // complete, asks that visor who it is.
+      //
+      // Debounced for the same reason the address dialog is: a 66-character
+      // key typed or pasted character by character would otherwise fire a
+      // lookup per keystroke, and a half-typed key would flash an error on
+      // every one of them.
+      onNewContactPk() {
+        clearTimeout(this._ncTimer);
+        const raw = document.getElementById('ncPk').value.trim();
+        // Accept a pasted skychat:// address too — it is the thing people
+        // actually have in hand, and rejecting it to demand the bare key
+        // would be pedantry.
+        const pk = this.processPk(raw).replace(/^skychat:\/\//, '').replace(/\/$/, '').toLowerCase();
+        const box = document.getElementById('ncLookup');
+        this._newContact = this._newContact || { pk: '', profile: null, avatar: '' };
+        this._newContact.pk = /^[0-9a-f]{66}$/.test(pk) ? pk : '';
+        this._newContact.profile = null;
+
+        if (!this._newContact.pk) {
+          box.classList.add('hidden');
+          return;
+        }
+        if (this.isContact(this._newContact.pk)) {
+          box.className = 'addr-result bad';
+          box.innerHTML = `<div class="ar-avatar">!</div><div class="ar-body">
+            <div class="ar-title">Already saved</div>
+            <div class="ar-sub bad">This key is already in your address book.</div></div>`;
+          box.classList.remove('hidden');
+          return;
+        }
+        box.className = 'addr-result pending';
+        box.innerHTML = `<div class="ar-avatar">…</div><div class="ar-body">
+          <div class="ar-title">Looking them up…</div>
+          <div class="ar-sub">Asking whether they publish a name</div></div>`;
+        box.classList.remove('hidden');
+        this._ncTimer = setTimeout(() => this._lookupNewContact(this._newContact.pk), 350);
+      }
+
+      _lookupNewContact(pk) {
+        const seq = (this._ncSeq = (this._ncSeq || 0) + 1);
+        this.fetchPeerProfile(pk).then(p => {
+          if (seq !== this._ncSeq || this._newContact.pk !== pk) return;
+          const box = document.getElementById('ncLookup');
+          const nameField = document.getElementById('ncName');
+          const published = p && (p.name || p.avatar) ? p : null;
+          this._newContact.profile = published;
+
+          if (!published) {
+            box.className = 'addr-result';
+            box.innerHTML = `<div class="ar-avatar">&#x1F464;</div><div class="ar-body">
+              <div class="ar-title">${this.escapeHtml(this.abbrevPk(pk))}</div>
+              <div class="ar-sub">They publish no name — give them one below.</div></div>`;
+            setTimeout(() => nameField.focus(), 0);
+            return;
+          }
+          // Prefilled, not forced: what a peer publishes is unverified text
+          // from a stranger, and the name that ends up saved should be the
+          // one the user accepted.
+          if (published.name && !nameField.value.trim()) nameField.value = published.name;
+          if (published.avatar && !this._newContact.avatar) {
+            this._newContact.avatar = published.avatar;
+            document.getElementById('ncAvatar').src = published.avatar;
+          }
+          box.className = 'addr-result';
+          box.innerHTML = `<div class="ar-avatar">${published.avatar
+            ? `<img src="${this.escapeAttr(published.avatar)}" alt="" />` : '&#x1F464;'}</div>
+            <div class="ar-body">
+              <div class="ar-title">${this.escapeHtml(published.name || this.abbrevPk(pk))}</div>
+              <div class="ar-sub">${published.name ? 'Name published by them — edit it if you like.' : 'They publish a picture but no name.'}</div>
+            </div>`;
+        });
+      }
+
+      pickNewContactAvatar() {
+        this._pickAvatar(document.getElementById('ncPictureField'), 'newcontact');
+      }
+
+      saveNewContact() {
+        const nc = this._newContact || {};
+        if (!nc.pk) {
+          this.showToast('Enter a valid 66-character public key.', 'error');
+          document.getElementById('ncPk').focus();
+          return;
+        }
+        if (this.isContact(nc.pk)) {
+          this.showToast('That key is already in your address book.', 'error');
+          return;
+        }
+        const name = document.getElementById('ncName').value.trim();
+        // A nickname is required only when there is nothing else to show. A
+        // contact with neither a name nor a published one is a row that reads
+        // as a hex string, which is the problem an address book exists to fix.
+        if (!name && !(nc.profile && nc.profile.name)) {
+          this.showToast('Give them a nickname so you can recognise them.', 'error');
+          document.getElementById('ncName').focus();
+          return;
+        }
+        const pk = nc.pk;
+        if (name) this.setPeerName(pk, name);
+        this.addContact(pk, {
+          name: name || (nc.profile && nc.profile.name) || '',
+          avatar: nc.avatar || (nc.profile && nc.profile.avatar) || '',
+        });
+        this.closeModal('newContactModal');
+        this._newContact = null;
+        this.showToast(`${this.escapeHtml(this.shortPk(pk))} saved to contacts.`);
+        this.openContacts();
+      }
+
+      // pickContact returns a chosen contact to the add-by-address dialog.
+      pickContact(pk) {
+        this.closeContacts();
+        const input = document.getElementById('addrInput');
+        if (!document.getElementById('addressModal').classList.contains('visible')) {
+          this.openAddressModal();
+        }
+        input.value = `skychat://${pk}`;
+        this.onAddressInput();
+      }
+
+      renderContacts() {
+        const list = document.getElementById('contacts');
+        const empty = document.getElementById('contactsEmpty');
+        if (!list) return;
+        list.innerHTML = '';
+
+        const searchEl = document.getElementById('contactSearch');
+        const q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+        // Named contacts first, then by name/key — an address book is read
+        // by looking for a person, so alphabetical beats insertion order.
+        const rows = this.contacts
+          .filter(pk => !q || pk.includes(q) || this.peerName(pk).toLowerCase().includes(q))
+          .sort((a, b) => {
+            const na = this.peerName(a), nb = this.peerName(b);
+            if (!!na !== !!nb) return na ? -1 : 1;
+            return (na || a).localeCompare(nb || b);
+          });
+
+        const picking = this._contactMode === 'pick';
+        rows.forEach(pk => {
+          const image = localStorage.getItem(`i_${pk}`) || 'p.png';
+          const li = document.createElement('li');
+          li.innerHTML = `
+            <div class="recipient-item ${pk === this.recipient && !this.group ? 'active' : ''}"
+                 data-pk="${this.escapeAttr(pk)}" data-contact="${this.escapeAttr(pk)}"
+                 onclick="app.openContact('${this.escapeAttr(pk)}')">
+              <div class="avatar-wrap">
+                <img class="contact-avatar recipient-avatar" src="${this.escapeAttr(image)}" alt="" />
+                <span class="presence-dot" data-presence="${this.escapeAttr(pk)}"></span>
+              </div>
+              <div class="recipient-info">
+                <div class="recipient-pk" title="${this.escapeAttr(pk)}"><span class="peer-label">${this.escapeHtml(this.shortPk(pk))}</span></div>
+                <div class="recipient-preview">${this.escapeHtml(this.abbrevPk(pk))}</div>
+              </div>
+              ${picking ? '' : `<div class="contact-actions">
+                <button class="icon-btn" onclick="app.editContact('${this.escapeAttr(pk)}', event)" title="Edit contact" aria-label="Edit contact">&#x270E;</button>
+                <button class="icon-btn danger" onclick="app.removeContact('${this.escapeAttr(pk)}', event)" title="Remove contact" aria-label="Remove contact">&times;</button>
+              </div>`}
+            </div>`;
+          list.appendChild(li);
+        });
+
+        if (empty) {
+          empty.classList.toggle('hidden', rows.length > 0);
+          // "Nothing saved" and "nothing matched" are different problems and
+          // want different next steps.
+          empty.textContent = q
+            ? 'No contact matches that name or key.'
+            : 'No saved contacts yet. Add someone by their public key — their name and picture, if they publish any, are saved with it.';
+        }
+        this._renderPresence();
+      }
+
+      // toggleContactFromSettings is the Contact Settings dialog's save/
+      // remove button for the address book.
+      toggleContactFromSettings() {
+        const pk = this.recipient;
+        if (!pk) return;
+        if (this.isContact(pk)) {
+          this.removeContact(pk);
+          return;
+        }
+        this.addContact(pk);
+        this._updateContactButton();
+        this.showToast('Saved to contacts.');
+      }
+
+      _updateContactButton() {
+        const btn = document.getElementById('settingsContactBtn');
+        if (!btn) return;
+        const saved = this.isContact(this.recipient);
+        btn.textContent = saved ? 'Remove from contacts' : 'Save to contacts';
+        btn.classList.toggle('btn-danger', saved);
+        btn.classList.toggle('btn-secondary', !saved);
+      }
+
+      // fetchPeerProfileInto pulls the open contact's PUBLISHED name and
+      // picture into the settings dialog.
+      //
+      // It fills the fields rather than saving: what a peer publishes is
+      // unverified text and an unverified image from a stranger, so it is
+      // offered as a suggestion the user accepts with the existing Save
+      // button, not applied behind their back.
+      fetchPeerProfileInto() {
+        const pk = this.recipient;
+        if (!pk) return;
+        this.showToast('Asking for their published profile…');
+        this.fetchPeerProfile(pk).then(p => {
+          if (!p || (!p.name && !p.avatar)) {
+            this.showToast('They publish no name or picture.', 'error');
+            return;
+          }
+          const field = document.getElementById('modalName');
+          if (p.name && field) field.value = p.name;
+          if (p.avatar) {
+            document.getElementById('modalAvatar').src = p.avatar;
+            try {
+              localStorage.setItem(`i_${pk}`, p.avatar);
+              this.updateAvatarUI(pk, p.avatar);
+              this.renderContacts();
+            } catch (e) {
+              console.debug('skychat: could not store fetched avatar:', e && e.message);
+            }
+          }
+          this.showToast(p.name ? `They call themselves "${this.escapeHtml(p.name)}". Press Save Name to keep it.`
+            : 'Picture updated.');
+        });
+      }
+
+      // fetchPeerProfile asks the visor for a peer's published profile.
+      //
+      // Resolves to null on every failure rather than rejecting: a peer with
+      // no profile, a peer who is offline, and a build without --pair-enable
+      // are the same fact to every caller — there is nothing to show, use the
+      // key. Callers that want to say something about it check for null.
+      fetchPeerProfile(pk) {
+        if (!pk || this.profileAvailable === false) return Promise.resolve(null);
+        return fetch(`/profile/peer?pk=${encodeURIComponent(pk)}`)
+          .then(res => (res.ok ? res.json() : null))
+          .catch(() => null);
+      }
+
+      // ---- My profile --------------------------------------------------
+      //
+      // What this visor tells other people about itself. One name, one small
+      // picture, and the address that lets them ask — published on the same
+      // read-only port that answers "what group is this?", so a stranger who
+      // holds the key can see it before any message is exchanged.
+
+      // syncMyProfile loads the published profile and paints the sidebar row.
+      // Retried the same way syncGroups is, for the same reason: the visor
+      // RPC is dialed in the background and may not be up yet.
+      syncMyProfile(attempt = 0) {
+        fetch('/profile')
+          .then(res => {
+            if (res.status === 404) return { off: true };
+            if (!res.ok) return { retry: true };
+            return res.json().then(p => ({ profile: p }));
+          })
+          .then(r => {
+            if (r.off) { this.profileAvailable = false; this._paintMeRow(); return; }
+            if (r.retry) {
+              if (attempt < 15) setTimeout(() => this.syncMyProfile(attempt + 1), Math.min(5000, 1000 * (attempt + 1)));
+              return;
+            }
+            this.profileAvailable = true;
+            this.myProfile = r.profile || {};
+            this._paintMeRow();
+          })
+          .catch(() => {
+            if (attempt < 15) setTimeout(() => this.syncMyProfile(attempt + 1), Math.min(5000, 1000 * (attempt + 1)));
+          });
+      }
+
+      // _paintMeRow draws the own-identity row in the sidebar header.
+      _paintMeRow() {
+        const p = this.myProfile || {};
+        const nameEl = document.getElementById('meName');
+        const addrEl = document.getElementById('meAddr');
+        const avEl = document.getElementById('meAvatar');
+        const pk = p.pk || this.myPK || '';
+        if (nameEl) nameEl.textContent = p.name || (pk ? 'Set your name' : 'Your profile');
+        if (addrEl) {
+          addrEl.textContent = pk ? this.abbrevPk(pk) : '—';
+          addrEl.title = p.address || (pk ? `skychat://${pk}` : '');
+        }
+        if (avEl) avEl.src = p.avatar || 'p.png';
+      }
+
+      myAddress() {
+        const p = this.myProfile || {};
+        if (p.address) return p.address;
+        return this.myPK ? `skychat://${this.myPK}` : '';
+      }
+
+      // openMyProfile shows the address in every case and the editor only
+      // where publishing is possible.
+      //
+      // Splitting the two matters: the address is derived from the visor's
+      // own key and is correct with no RPC at all, so a build without
+      // --pair-enable must still be able to answer "what do I give people?".
+      // Refusing to open the dialog would withhold the half that works.
+      openMyProfile() {
+        const p = this.myProfile || {};
+        const canPublish = this.profileAvailable !== false;
+        document.getElementById('myName').value = p.name || '';
+        document.getElementById('myAvatar').src = p.avatar || 'p.png';
+
+        const addr = this.myAddress();
+        document.getElementById('myAddrText').textContent = addr || 'address unavailable';
+        if (addr) QR.draw(document.getElementById('myQrCanvas'), addr);
+
+        const modal = document.getElementById('myProfileModal');
+        modal.querySelectorAll('.publish-only').forEach(el => el.classList.toggle('hidden', !canPublish));
+        const note = document.getElementById('myNoPublish');
+        if (note) note.classList.toggle('hidden', canPublish);
+
+        modal.classList.add('visible');
+        if (canPublish) setTimeout(() => document.getElementById('myName').focus(), 50);
+      }
+
+      copyMyAddress() {
+        const text = this.myAddress();
+        if (!text) { this.showToast('Address not known yet.', 'error'); return; }
+        navigator.clipboard.writeText(text)
+          .then(() => this.showToast('Your address copied.'))
+          .catch(() => this.showToast('Could not copy — select the text and copy it manually.', 'error'));
+      }
+
+      // saveMyProfile publishes the name (and the picture, when one was just
+      // chosen). The response is what was actually STORED, so the fields are
+      // repainted from it — the visor trims and collapses whitespace, and the
+      // user should see what their peers will see rather than what they typed.
+      saveMyProfile() {
+        const name = document.getElementById('myName').value;
+        const body = { name };
+        // Only send an avatar when one was picked in this dialog; an absent
+        // field leaves the stored picture alone rather than clearing it.
+        const pending = this._pendingAvatar;
+        if (pending && pending.target === 'me') body.avatar = pending.dataUrl;
+        this._postMyProfile(body, 'Profile published.');
+      }
+
+      clearMyProfile() {
+        if (!confirm('Stop publishing your name and picture?\n\nPeople who already saved them keep their local copy.')) return;
+        this._postMyProfile({ clear: true }, 'Profile cleared.');
+      }
+
+      _postMyProfile(body, okToast) {
+        fetch('/profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(new Error(t))))
+          .then(p => {
+            this.myProfile = p || {};
+            this._pendingAvatar = null;
+            this._paintMeRow();
+            document.getElementById('myName').value = p.name || '';
+            document.getElementById('myAvatar').src = p.avatar || 'p.png';
+            this.showToast(okToast);
+          })
+          .catch(e => this.showToast(String(e.message || e).trim() || 'Could not save profile.', 'error'));
+      }
+
+      // ---- Avatar cropping ---------------------------------------------
+      //
+      // Every picture the user picks — theirs or a contact's — goes through
+      // here, so nothing full-size is ever stored or published. The source is
+      // centre-cropped to a square and drawn into a canvas of the target
+      // size; what comes out is what gets saved.
+      //
+      // Two sizes, for two different constraints. A published avatar is 32x32
+      // because it travels inline in a response frame on a port any stranger
+      // may dial. A local contact picture has no wire cost but does share a
+      // ~5 MB localStorage quota with every cached conversation, so it is
+      // capped too — just at the size the sidebar actually renders it.
+
+      _avatarTargets() {
+        return {
+          me: { size: 32, label: 'Published at 32×32 pixels, the size your contacts see.' },
+          contact: { size: 96, label: 'Kept on this device only, at 96×96 pixels.' },
+          // Same picture as 'contact', staged in the new-contact form rather
+          // than written straight to storage — there is no contact to write
+          // it to until Save.
+          newcontact: { size: 96, label: 'Kept on this device only, at 96×96 pixels.' },
+        };
+      }
+
+      // pickMyAvatar / updatePicture are the two file inputs' handlers. Both
+      // end in the same confirmation dialog.
+      pickMyAvatar() {
+        this._pickAvatar(document.getElementById('myPictureField'), 'me');
+      }
+
+      _pickAvatar(input, target) {
+        if (!input || !input.files || !input.files.length) return;
+        const file = input.files[0];
+        input.value = ''; // so re-picking the same file fires change again
+        if (!file.type.startsWith('image/')) {
+          this.showToast('Please select an image file.', 'error');
+          return;
+        }
+        // A generous ceiling on the SOURCE, before any decoding: this only
+        // has to keep a video-sized file out of the decoder, since the
+        // output size is fixed by the crop regardless of what comes in.
+        if (file.size > 12 * 1024 * 1024) {
+          this.showToast('That image is very large — pick one under 12 MB.', 'error');
+          return;
+        }
+        const spec = this._avatarTargets()[target];
+        this._cropToSquare(file, spec.size)
+          .then(dataUrl => {
+            this._pendingAvatar = { dataUrl, target };
+            document.getElementById('avPreviewLg').src = dataUrl;
+            document.getElementById('avPreviewSm').src = dataUrl;
+            document.getElementById('avCaption').textContent = spec.label;
+            document.getElementById('avatarModal').classList.add('visible');
+          })
+          .catch(e => this.showToast(String(e.message || e) || 'Could not read that image.', 'error'));
+      }
+
+      // _cropToSquare centre-crops an image file and scales it to size×size,
+      // returning a PNG data URL.
+      //
+      // PNG rather than JPEG: at 32 pixels a JPEG's block artefacts are
+      // visible and the file is not meaningfully smaller, and a PNG keeps a
+      // transparent background transparent instead of turning it black.
+      //
+      // createImageBitmap where available — it decodes off the main thread
+      // and, unlike an <img>, does not need the picture attached to the
+      // document to have dimensions. The <img> path is the fallback.
+      _cropToSquare(file, size) {
+        const draw = src => {
+          const canvas = document.createElement('canvas');
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          const w = src.width, h = src.height;
+          if (!w || !h) throw new Error('That image has no dimensions.');
+          const edge = Math.min(w, h);
+          // Centre crop: the subject of a picture somebody picks as their
+          // face is, overwhelmingly, in the middle of it.
+          const sx = (w - edge) / 2, sy = (h - edge) / 2;
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(src, sx, sy, edge, edge, 0, 0, size, size);
+          return canvas.toDataURL('image/png');
+        };
+
+        if (typeof createImageBitmap === 'function') {
+          return createImageBitmap(file).then(bmp => {
+            try { return draw(bmp); } finally { if (bmp.close) bmp.close(); }
+          });
+        }
+        return new Promise((resolve, reject) => {
+          const url = URL.createObjectURL(file);
+          const img = new Image();
+          img.onload = () => {
+            try { resolve(draw(img)); } catch (e) { reject(e); } finally { URL.revokeObjectURL(url); }
+          };
+          img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not decode that image.')); };
+          img.src = url;
+        });
+      }
+
+      // confirmAvatar applies the cropped picture. For the local contact case
+      // that is the whole action; for the published one it only stages the
+      // bytes — Save in the profile dialog is what sends them, so a user who
+      // changes their mind can close the dialog instead.
+      confirmAvatar() {
+        const pending = this._pendingAvatar;
+        this.closeModal('avatarModal');
+        if (!pending) return;
+        if (pending.target === 'me') {
+          document.getElementById('myAvatar').src = pending.dataUrl;
+          this.showToast('Press Save to publish it.');
+          return;
+        }
+        if (pending.target === 'newcontact') {
+          this._newContact = this._newContact || { pk: '', profile: null, avatar: '' };
+          this._newContact.avatar = pending.dataUrl;
+          document.getElementById('ncAvatar').src = pending.dataUrl;
+          this._pendingAvatar = null;
+          return;
+        }
+        const pk = this.recipient;
+        this._pendingAvatar = null;
+        if (!pk) return;
+        try {
+          localStorage.setItem(`i_${pk}`, pending.dataUrl);
+        } catch (e) {
+          this.showToast('No room left in this browser\'s storage for another picture.', 'error');
+          return;
+        }
+        this.updateAvatarUI(pk, pending.dataUrl);
+        this.renderContacts();
+        this.closeSettings();
+        this.showToast('Avatar updated.');
+      }
+
+      // ---- Sidebar tabs ------------------------------------------------
+
+      setTab(tab, opts = {}) {
+        const valid = ['all', 'dm', 'groups', 'channels'];
+        if (!valid.includes(tab)) tab = 'all';
+        this.tab = tab;
+        if (!opts.silent) localStorage.setItem('skychat_tab', tab);
+        const bar = document.getElementById('sidebar');
+        if (bar) bar.dataset.tab = tab;
+        document.querySelectorAll('.side-tab').forEach(btn => {
+          const on = btn.dataset.tab === tab;
+          btn.classList.toggle('active', on);
+          btn.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        // The pin is the one row whose section is shown in every tab, so it
+        // is the one that has to decide for itself whether it belongs here.
+        this.renderPinned();
+      }
+
+      // _pinFitsTab reports whether the pinned conversation belongs in the
+      // active tab. Without this a pinned group would show under "DMs", and
+      // — worse — a pinned DM would VANISH from the DM tab, because its copy
+      // in the normal list is hidden as a duplicate of the pinned row.
+      _pinFitsTab(type, id) {
+        if (this.tab === 'all') return true;
+        if (type === 'dm') return this.tab === 'dm';
+        const g = this.groups.find(x => x.id === id);
+        const isChannel = !!g && g.kind === 'channel';
+        return this.tab === (isChannel ? 'channels' : 'groups');
+      }
+
+      // ---- Saved messages ----------------------------------------------
+      //
+      // A notes-to-self thread. Local to this browser and deliberately so:
+      // the alternative is a visor messaging itself over dmsg, which means
+      // dialing your own key, a route to nowhere, and a "delivered" tick that
+      // means nothing. Notes are kept in the same per-thread localStorage
+      // cache every DM uses, under a key that cannot collide with one — a
+      // public key is 66 hex characters and a group id is a UUID.
+
+      savedKey() { return 'saved'; }
+
+      isSaved() { return this.recipient === this.savedKey() && !this.group; }
+
+      // selectSaved opens the notes thread. Deliberately reuses the DM pane
+      // rather than getting one of its own: it is a conversation, it renders
+      // bubbles, and every message affordance already works on one.
+      selectSaved() {
+        const key = this.savedKey();
+        this._enterChatPane();
+        this.cancelReply();
+        this.group = null;
+        this.recipient = key;
+        if (!this.messages[key]) this.messages[key] = [];
+
+        document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.recipient-item').forEach(el => el.classList.remove('active'));
+        const row = document.getElementById('savedItem');
+        if (row) row.classList.add('active');
+
+        document.getElementById('emptyState').classList.add('hidden');
+        document.getElementById('groupHeader').classList.add('hidden');
+        document.getElementById('chatHeader').classList.remove('hidden');
+        document.getElementById('messages').classList.remove('hidden');
+        document.getElementById('msgForm').classList.remove('hidden');
+        // Nothing leaves this thread, so the affordances that ship bytes
+        // somewhere have nothing to do here.
+        document.getElementById('networkSelect').classList.add('hidden');
+        const attachBtn = document.querySelector('.attach-btn');
+        if (attachBtn) attachBtn.classList.add('hidden');
+
+        document.getElementById('headerAvatar').src = 'p.png';
+        const hdr = document.getElementById('headerPk');
+        if (hdr) { hdr.textContent = 'Saved Messages'; hdr.title = 'Notes kept on this device'; }
+        document.getElementById('headerPresence').classList.add('hidden');
+        document.getElementById('headerEpoch').classList.add('hidden');
+
+        const msgEl = document.getElementById('messages');
+        msgEl.innerHTML = '';
+        this.messages[key].forEach(m => this._showMessage(m));
+        msgEl.scrollTop = msgEl.scrollHeight;
+        document.getElementById('msgField').focus();
+
+        this.refreshPairControls();
+        this._updatePinButtons();
+        this._updateMuteButtons();
+        this._syncSavedControls();
+      }
+
+      // _syncSavedControls hides the chat-header buttons that make no sense
+      // for a thread with no peer at the other end.
+      _syncSavedControls() {
+        const saved = this.isSaved();
+        ['dmCallBtn', 'pairToggleBtn'].forEach(id => {
+          const el = document.getElementById(id);
+          if (el && saved) el.classList.add('hidden');
+        });
+        const dot = document.getElementById('headerPresenceDot');
+        if (dot && saved) { dot.classList.remove('online'); dot.classList.remove('offline'); }
+      }
+
+      // saveNote appends a note locally. No network call, no delivery status:
+      // a tick would be claiming something about a message that never left.
+      saveNote(text, extra = {}) {
+        const key = this.savedKey();
+        const message = { ts: new Date(), from: 'me', text, ...extra };
+        this.addMsgToList(key, message);
+        this.renderSavedPreview();
+        return message;
+      }
+
+      // saveToSaved copies the message the open bubble menu belongs to into
+      // the notes thread — the reason a Saved Messages section is worth
+      // having at all.
+      //
+      // The TEXT is copied, not the message: an attachment's bytes live with
+      // the conversation that carries them, and a note pointing at a file the
+      // user may later delete would be a broken card rather than a saved one.
+      saveToSaved() {
+        const menu = document.getElementById('msgMenu');
+        if (!menu) return;
+        const mid = menu.dataset.mid;
+        const key = this.activeKey();
+        this.closeMsgMenu();
+        const msg = (this.messages[key] || []).find(m => m && !m.date && String(m.mid) === String(mid));
+        if (!msg) { this.showToast('Could not find that message.', 'error'); return; }
+        const who = msg.from === 'me' ? 'You' : this.shortPk(msg.sender || msg.from);
+        const text = msg.text || (msg.file ? `📎 ${msg.file.name || 'attachment'}` : '');
+        if (!text) { this.showToast('Nothing to save from that message.', 'error'); return; }
+        this.saveNote(`${who}: ${text}`);
+        this.showToast('Saved to Saved Messages.');
+      }
+
+      renderSavedPreview() {
+        const el = document.getElementById('savedPreview');
+        if (!el) return;
+        const list = (this.messages[this.savedKey()] || []).filter(m => m && !m.date);
+        const last = list[list.length - 1];
+        el.textContent = last ? (last.text || '📎 attachment') : 'Notes kept on this device';
+      }
+
+      // ---- Touch message actions ---------------------------------------
+      //
+      // On a phone the desktop affordances do not exist: the Reply and ⋯
+      // links appear on hover, and there is no hover. A tap anywhere on the
+      // message — the bubble or the empty space beside it — opens a bottom
+      // sheet with the same actions at a size a thumb can hit.
+      //
+      // The sheet reuses the ⋯ menu's machinery rather than duplicating it:
+      // it stages the same #msgMenu dataset the desktop handlers read, so
+      // Reply / Forward / Save / Delete are one implementation with two
+      // presentations, and a change to what "delete for everyone" is allowed
+      // to do cannot end up true in one of them and false in the other.
+
+      _touchLayout() {
+        return window.matchMedia && window.matchMedia('(max-width: 760px)').matches;
+      }
+
+      // onMessageTap is the row's click handler. A no-op on a desktop, and on
+      // a phone it ignores taps that landed on something already interactive
+      // — a file card, an image, a play button, the quote's scroll-to link.
+      onMessageTap(ev) {
+        if (!this._touchLayout()) return;
+        const row = ev.target.closest('.message-row');
+        if (!row) return;
+        if (ev.target.closest('a, button, img, video, audio, canvas, input, .reply-quote')) return;
+        // A tap that ends a text selection is the user copying, not opening a
+        // menu.
+        const sel = window.getSelection && window.getSelection();
+        if (sel && String(sel).length > 0) return;
+        this.openMsgSheet(row);
+      }
+
+      openMsgSheet(row) {
+        this.closeMsgMenu();
+        const key = this.activeKey();
+        const mid = row.dataset.mid || '';
+        const msg = (this.messages[key] || []).find(m => m && !m.date && String(m.mid) === String(mid));
+        if (!msg) return;
+
+        // The desktop handlers read the open menu's dataset, so stage a
+        // hidden one rather than teaching each of them a second source.
+        const stage = document.createElement('div');
+        stage.id = 'msgMenu';
+        stage.style.display = 'none';
+        stage.dataset.mid = mid;
+        stage.dataset.tsnano = row.dataset.tsnano || '';
+        document.body.appendChild(stage);
+
+        const isOwn = row.dataset.sender === 'me' || (this.myPK && row.dataset.sender === this.myPK);
+        let canDeleteAll = false;
+        if (isOwn) {
+          canDeleteAll = this.group ? !!row.dataset.tsnano : !!msg.wireId;
+        }
+
+        document.getElementById('msgSheetPreview').textContent =
+          msg.text || (msg.file ? `📎 ${msg.file.name || 'attachment'}` : 'Message');
+
+        let html = `<button onclick="app.sheetAction('reply')"><span class="ms-icon">&#x21A9;</span>Reply</button>`;
+        html += `<button onclick="app.sheetAction('forward')"><span class="ms-icon">&#x21AA;</span>Forward</button>`;
+        if (!this.isSaved()) {
+          html += `<button onclick="app.sheetAction('save')"><span class="ms-icon">&#x1F516;</span>Save to Saved Messages</button>`;
+        }
+        html += `<button class="danger" onclick="app.sheetAction('delete')"><span class="ms-icon">&#x1F5D1;</span>Delete for me</button>`;
+        if (canDeleteAll) {
+          html += `<button class="danger" onclick="app.sheetAction('deleteAll')"><span class="ms-icon">&#x1F5D1;</span>Delete for everyone</button>`;
+        }
+        document.getElementById('msgSheetItems').innerHTML = html;
+        document.getElementById('msgSheetBackdrop').classList.add('visible');
+        this._sheetRow = row;
+      }
+
+      // closeMsgSheet also tears down the staged menu, so a dismissed sheet
+      // cannot leave a stray #msgMenu for the next desktop action to find.
+      closeMsgSheet(ev) {
+        // Only a tap on the backdrop itself dismisses; one inside the sheet
+        // is heading for a button.
+        if (ev && ev.target !== document.getElementById('msgSheetBackdrop')) return;
+        this._dismissSheet();
+      }
+
+      _dismissSheet() {
+        document.getElementById('msgSheetBackdrop').classList.remove('visible');
+        this._sheetRow = null;
+        const stage = document.getElementById('msgMenu');
+        if (stage && stage.style.display === 'none') stage.remove();
+      }
+
+      sheetAction(what) {
+        const row = this._sheetRow;
+        document.getElementById('msgSheetBackdrop').classList.remove('visible');
+        this._sheetRow = null;
+        // Each of these reads (and removes) the staged #msgMenu, except
+        // reply, which works off the row.
+        switch (what) {
+          case 'reply': {
+            this._dismissSheet();
+            // startReply takes anything with .closest, and closest() matches
+            // the element itself — so the row is its own reply button here.
+            if (row) this.startReply(row);
+            return;
+          }
+          case 'forward': this.forwardMessage(); return;
+          case 'save': this.saveToSaved(); return;
+          case 'delete': this.deleteForMe(); return;
+          case 'deleteAll': this.deleteForAll(); return;
+          default: this._dismissSheet();
+        }
+      }
+
+      // ---- Forwarding --------------------------------------------------
+      //
+      // What travels is the TEXT. Not the author, not their key, not the
+      // conversation it came from — with one exception, below.
+      //
+      // The exception is a channel. A channel post was published to an
+      // audience its author cannot enumerate, under the channel's identity
+      // rather than a person's, so naming the channel when a post travels
+      // further repeats something already public. A DM has exactly one
+      // intended reader and a group has a roster: in both, the author chose
+      // who would see it, and attaching their name to a forward would hand a
+      // stranger the content AND the fact that a particular person wrote it.
+      // The content leaving is the user's own decision to make; the identity
+      // is not theirs to give away.
+      //
+      // The envelope on the wire has no author field at all — see
+      // cmd/apps/skychat/commands/forward.go. This side cannot leak what it
+      // has nowhere to put.
+
+      // _forwardOrigin describes where the OPEN conversation is, for
+      // attribution purposes. Returns a channel's name, or '' for everything
+      // else.
+      _forwardOrigin() {
+        if (!this.group) return '';               // a DM, or the notes thread
+        const g = this.groups.find(x => x.id === this.group);
+        if (!g || g.kind !== 'channel') return ''; // a group: not disclosed
+        return g.name || '';
+      }
+
+      // forwardMessage opens the destination picker for the message the bubble
+      // menu belongs to.
+      forwardMessage() {
+        const menu = document.getElementById('msgMenu');
+        if (!menu) return;
+        const mid = menu.dataset.mid;
+        const key = this.activeKey();
+        this.closeMsgMenu();
+        const msg = (this.messages[key] || []).find(m => m && !m.date && String(m.mid) === String(mid));
+        if (!msg) { this.showToast('Could not find that message.', 'error'); return; }
+        // Text only. An attachment's bytes belong to the conversation that
+        // carries them: forwarding a reference would give the recipient a
+        // card they cannot open, and re-uploading the bytes on the user's
+        // behalf is a bigger promise than "forward" makes.
+        const text = msg.text || (msg.file ? `📎 ${msg.file.name || 'attachment'}` : '');
+        if (!text) { this.showToast('There is nothing to forward in that message.', 'error'); return; }
+        this.openForward(text, this._forwardOrigin());
+      }
+
+      openForward(text, from) {
+        this._forward = { text, from: from || '' };
+        const origin = document.getElementById('fwdOrigin');
+        if (origin) {
+          origin.textContent = this._forward.from
+            ? `Forwarded posts keep the channel's name (“${this._forward.from}”). Nothing identifies who wrote it.`
+            : 'Forwarded messages carry the text only — nothing says who wrote it or where it came from.';
+        }
+        const search = document.getElementById('fwdSearch');
+        if (search) search.value = '';
+        this.renderForwardTargets();
+        document.getElementById('forwardModal').classList.add('visible');
+        if (search) setTimeout(() => search.focus(), 50);
+      }
+
+      // _forwardTargets is everywhere a message can go, in the order a user
+      // is most likely to want: notes first (the "keep this" case), then
+      // conversations, then groups and channels.
+      _forwardTargets() {
+        const out = [{ kind: 'saved', id: this.savedKey(), label: 'Saved Messages', sub: 'Notes on this device', icon: '\u{1F516}' }];
+        const seen = new Set();
+        [...this.recipients, ...this.contacts].forEach(pk => {
+          if (seen.has(pk)) return;
+          seen.add(pk);
+          out.push({ kind: 'dm', id: pk, label: this.shortPk(pk), sub: this.abbrevPk(pk), icon: '\u{1F464}' });
+        });
+        this.groups.forEach(g => {
+          // A channel we cannot post in is not a destination.
+          if (g.can_post === false || g.read_only) return;
+          if (g.status && g.status !== 'active') return;
+          out.push({
+            kind: 'group', id: g.id,
+            label: g.name || g.id,
+            sub: g.kind === 'channel' ? 'Channel' : 'Group',
+            icon: g.kind === 'channel' ? '\u{1F4E3}' : '#',
+          });
+        });
+        return out;
+      }
+
+      renderForwardTargets() {
+        const list = document.getElementById('fwdTargets');
+        const empty = document.getElementById('fwdEmpty');
+        if (!list) return;
+        const searchEl = document.getElementById('fwdSearch');
+        const q = searchEl ? searchEl.value.trim().toLowerCase() : '';
+        const rows = this._forwardTargets().filter(t =>
+          !q || t.label.toLowerCase().includes(q) || String(t.id).toLowerCase().includes(q));
+        list.innerHTML = '';
+        rows.forEach(t => {
+          const li = document.createElement('li');
+          const avatar = t.kind === 'dm'
+            ? `<img class="recipient-avatar" src="${this.escapeAttr(localStorage.getItem(`i_${t.id}`) || 'p.png')}" alt="" />`
+            : `<div class="saved-avatar">${t.icon}</div>`;
+          li.innerHTML = `
+            <div class="recipient-item" onclick="app.doForward('${this.escapeAttr(t.kind)}', '${this.escapeAttr(t.id)}')">
+              <div class="avatar-wrap">${avatar}</div>
+              <div class="recipient-info">
+                <div class="recipient-pk">${this.escapeHtml(t.label)}</div>
+                <div class="recipient-preview">${this.escapeHtml(t.sub)}</div>
+              </div>
+            </div>`;
+          list.appendChild(li);
+        });
+        if (empty) empty.classList.toggle('hidden', rows.length > 0);
+      }
+
+      // doForward sends the staged text to one destination and opens it, so
+      // the user lands where the message went rather than being left guessing.
+      doForward(kind, id) {
+        const fwd = this._forward;
+        this.closeModal('forwardModal');
+        if (!fwd) return;
+        this._forward = null;
+
+        if (kind === 'saved') {
+          this.saveNote(fwd.text, { forwarded: true, forwardFrom: fwd.from });
+          this.showToast('Forwarded to Saved Messages.');
+          return;
+        }
+
+        const wireText = this._encodeForward(fwd.text, fwd.from);
+        if (kind === 'dm') {
+          if (!this.recipients.includes(id)) this._addRecipient(id);
+          const message = {
+            ts: new Date(), from: 'me', text: fwd.text, status: 'pending',
+            forwarded: true, forwardFrom: fwd.from,
+          };
+          this.addMsgToList(id, message);
+          // Whatever network the composer is set to — a forward is an
+          // ordinary send and should not quietly take a different path than a
+          // typed message to the same person. The one exception: CXO only
+          // works with a paired peer, and the composer may be set to it
+          // because the conversation we forwarded FROM is paired.
+          let network = document.getElementById('networkSelect').value;
+          if (network === 'cxo' && !(this.pairedSet && this.pairedSet.has(id))) network = 'skynet';
+          this._deliverDM(id, message, wireText, network);
+          this.selectRecipient(id);
+          this.showToast('Forwarded.');
+          return;
+        }
+
+        const message = {
+          ts: new Date(), from: 'me', text: fwd.text, group: true, sender: this.myPK,
+          status: 'pending', forwarded: true, forwardFrom: fwd.from,
+        };
+        this.addMsgToList(id, message, { group: true });
+        this._deliverGroup(id, message, wireText);
+        this.selectGroup(id);
+        this.showToast('Forwarded.');
+      }
+
+      // _encodeForward wraps the text in a {"skychat_forward":...} envelope.
+      // `from` is a channel name or empty — there is deliberately no field
+      // for an author.
+      _encodeForward(text, from) {
+        const meta = { text };
+        if (from) meta.from = String(from).slice(0, 64);
+        return JSON.stringify({ skychat_forward: meta });
+      }
+
+      // forwardFromSSE reads the additive forward fields off an inbound
+      // message. Returns null for an ordinary one.
+      forwardFromSSE(data) {
+        if (!data || !data.forwarded) return null;
+        return { from: data.forward_from || '' };
+      }
+
+      // _renderForwardChip draws the line above a forwarded bubble. Quiet, and
+      // never a badge: nothing here is signed, so this is the forwarder's
+      // claim about provenance in exactly the way a pasted quotation is.
+      _renderForwardChip(fwd) {
+        if (!fwd) return '';
+        const label = fwd.from
+          ? `↪ Forwarded from ${this.escapeHtml(fwd.from)}`
+          : '↪ Forwarded';
+        return `<div class="fwd-chip">${label}</div>`;
+      }
+
       // ---- Presence ----------------------------------------------------
       //
       // The dot next to a contact. The app asks the visor (via /presence,
@@ -5618,7 +7359,10 @@
 
       _pollPresence() {
         if (this.presenceAvailable === false) return;
-        const pks = (this.recipients || []).slice(0, 64);
+        // Saved contacts are probed too, not only open conversations: an
+        // address book row shows a presence dot, and a contact you have never
+        // messaged is exactly the one you want to know is reachable.
+        const pks = Array.from(new Set([...(this.recipients || []), ...(this.contacts || [])])).slice(0, 64);
         if (!pks.length) return;
         fetch('/presence', {
           method: 'POST',
@@ -5693,6 +7437,10 @@
             if (s && s.visor_pk) {
               this.myPK = String(s.visor_pk).toLowerCase();
               this._purgeSelfThread(); // one-time cleanup of the old self-mirror bug
+              // /status usually beats /profile home, and it already knows the
+              // key — so the address in the sidebar appears immediately
+              // instead of waiting for the profile round trip.
+              this._paintMeRow();
             }
           })
           .catch(() => {});
@@ -5715,7 +7463,9 @@
           .then(r => {
             if (r.off) return;
             if (r.retry) { this._retryGroups(attempt); return; }
-            document.getElementById('groupsSection').classList.remove('hidden');
+            // renderGroups owns the two sections' visibility — each is shown
+            // only when it has rows, so an operator in no channels never sees
+            // a Channels heading over an empty list.
             this.groups = r.groups || [];
             this.renderGroups();
           })
@@ -5749,10 +7499,28 @@
         return parts.join(' · ');
       }
 
+      // renderGroups draws the joined groups and channels into their two
+      // sections.
+      //
+      // Two lists rather than one with a filter applied at paint time: the
+      // tabs need to show one kind without the other, and a section that can
+      // be empty independently is also a section that can be HIDDEN
+      // independently — a Channels heading over nothing is worse than no
+      // heading. A group's kind is immutable (see the group package), so a
+      // row never has to migrate between them.
       renderGroups() {
-        const list = document.getElementById('groups');
-        list.innerHTML = '';
+        const lists = {
+          groups: document.getElementById('groups'),
+          channels: document.getElementById('channels'),
+        };
+        const counts = { groups: 0, channels: 0 };
+        Object.values(lists).forEach(l => { if (l) l.innerHTML = ''; });
+
         this.groups.forEach(g => {
+          const bucket = g.kind === 'channel' ? 'channels' : 'groups';
+          const list = lists[bucket];
+          if (!list) return;
+          counts[bucket]++;
           const li = document.createElement('li');
           const pending = g.pending_joins || 0;
           const badge = pending > 0 ? `<span class="ga-badge">${pending}</span>` : '';
@@ -5766,6 +7534,12 @@
             </div>`;
           list.appendChild(li);
         });
+
+        const gs = document.getElementById('groupsSection');
+        const cs = document.getElementById('channelsSection');
+        if (gs) gs.classList.toggle('hidden', counts.groups === 0);
+        if (cs) cs.classList.toggle('hidden', counts.channels === 0);
+
         this.renderPinned();
         this._updatePendingBadge();
         this._updateComposerLock();
@@ -5780,7 +7554,9 @@
       }
       _currentPinKey() {
         if (this.group) return 'grp:' + this.group;
-        if (this.recipient) return 'dm:' + this.recipient;
+        // The notes thread already sits at the top of the list; pinning it
+        // would render a second copy of a row that never moves.
+        if (this.recipient && !this.isSaved()) return 'dm:' + this.recipient;
         return null;
       }
 
@@ -5802,7 +7578,13 @@
         const section = document.getElementById('pinnedSection');
         const list = document.getElementById('pinnedList');
         list.innerHTML = '';
-        const [type, id] = this._pinParts();
+        let [type, id] = this._pinParts();
+        // A pin that does not belong in the active tab is not rendered AND
+        // not hidden in the normal list — see _pinFitsTab.
+        if (type && !this._pinFitsTab(type === 'grp' ? 'grp' : 'dm', id)) {
+          type = null;
+          id = null;
+        }
         let rendered = false;
         if (type === 'grp') {
           const g = this.groups.find(x => x.id === id);
@@ -5848,9 +7630,13 @@
         document.querySelectorAll('li.pin-dup').forEach(el => el.classList.remove('pin-dup'));
         const [type, id] = parts || [null, null];
         if (!type) return;
+        const esc = window.CSS && CSS.escape ? CSS.escape(id) : id;
+        // Groups and channels live in two lists now, so a pinned group is
+        // looked for in both — otherwise a pinned channel would be rendered
+        // twice, once in Pinned and once under Channels.
         const sel = type === 'grp'
-          ? `#groups .group-item[data-gid="${window.CSS && CSS.escape ? CSS.escape(id) : id}"]`
-          : `#recipients .recipient-item[data-pk="${window.CSS && CSS.escape ? CSS.escape(id) : id}"]`;
+          ? `#groups .group-item[data-gid="${esc}"], #channels .group-item[data-gid="${esc}"]`
+          : `#recipients .recipient-item[data-pk="${esc}"]`;
         const node = document.querySelector(sel);
         if (node && node.closest('li')) node.closest('li').classList.add('pin-dup');
       }
@@ -5983,7 +7769,10 @@
             ts: m.reply_to_ts || '',
             preview: m.reply_to_preview || '',
           } : null;
-          rows.push({ ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file, reply, tsNano });
+          rows.push({
+            ts, from: senderIsMe ? 'me' : sender, text: m.text, group: true, sender, file, reply, tsNano,
+            forwarded: !!m.forwarded, forwardFrom: m.forward_from || '',
+          });
         });
         return { rows, oldest };
       }
@@ -6151,7 +7940,10 @@
         // Use the feed timestamp (shared by all members) so a reply's scroll-to
         // resolves the same parent everywhere; fall back to now if absent.
         const ts = data.ts ? new Date(data.ts) : new Date();
-        this.addMsgToList(gid, { ts, from: sender, text: data.message, group: true, sender, file, reply, tsNano }, { group: true });
+        this.addMsgToList(gid, {
+          ts, from: sender, text: data.message, group: true, sender, file, reply, tsNano,
+          forwarded: !!data.forwarded, forwardFrom: data.forward_from || '',
+        }, { group: true });
         if (!this.groups.find(g => g.id === gid)) this.syncGroups();
 
         // Desktop notification for a background group message: "Group" title,
@@ -6322,6 +8114,7 @@
         const input = document.getElementById('addrInput');
         input.value = '';
         this._addrResolved = null;
+        this._addrProfile = null;
         this._renderAddressResult(null);
         document.getElementById('addrHint').textContent =
           'Paste a public key to message someone, or a group or channel address to join it.';
@@ -6389,8 +8182,13 @@
         const hint = document.getElementById('addrHint');
         box.className = 'addr-result';
         btn.classList.add('hidden');
-        // Any re-render invalidates whatever the last key's catalog showed.
+        // Any re-render invalidates whatever the last key's catalog showed —
+        // and whatever profile lookup was still in flight for it.
         this._clearCatalog();
+        this._profileSeq = (this._profileSeq || 0) + 1;
+        this._addrProfile = null;
+        const saveRowEl = document.getElementById('addrSaveRow');
+        if (saveRowEl) saveRowEl.classList.add('hidden');
 
         if (!res) { box.classList.add('hidden'); return; }
 
@@ -6412,18 +8210,29 @@
         }
 
         if (res.target === 'dm') {
-          box.innerHTML = `<div class="ar-avatar">&#x1F464;</div><div class="ar-body">
-            <div class="ar-title">${this.escapeHtml(this.shortPk(res.pk))}</div>
-            <div class="ar-sub">Person · direct message</div></div>`;
+          box.innerHTML = `<div class="ar-avatar" id="arAvatar">&#x1F464;</div><div class="ar-body">
+            <div class="ar-title" id="arTitle">${this.escapeHtml(this.shortPk(res.pk))}</div>
+            <div class="ar-sub" id="arSub">Person · direct message</div></div>`;
           hint.textContent = 'Messages to a person are encrypted end to end.';
           btn.textContent = this.recipients.includes(res.pk) ? 'Open Chat' : 'Start Chat';
           btn.classList.remove('hidden');
+          // Saving is offered for a person only — a group is joined, not
+          // filed in an address book.
+          const saveRow = document.getElementById('addrSaveRow');
+          const saveBox = document.getElementById('addrSaveContact');
+          if (saveRow) saveRow.classList.toggle('hidden', this.isContact(res.pk));
+          if (saveBox) saveBox.checked = !this.isContact(res.pk);
+          // Ask this visor who it is, so a pasted key shows a name and a face
+          // BEFORE the first message rather than after the tenth.
+          this._loadProfileFor(res.pk);
           // A key names a person, but their visor may also publish channels.
           // Asking is the only way to find out — there is no index anywhere.
           this._loadCatalogFor(res.pk);
           return;
         }
-
+        // Anything below here is a group or channel, which is joined rather
+        // than filed in an address book — the save row was already hidden at
+        // the top of this render and stays that way.
         const g = res.group || {};
         const isChannel = g.kind === 'channel';
         const noun = isChannel ? 'Channel' : 'Group';
@@ -6470,6 +8279,36 @@
           ? 'Join Channel'
           : (g.policy === 'approval' ? 'Send Request' : 'Join Group');
         btn.classList.remove('hidden');
+      }
+
+      // ---- Published profile lookup ------------------------------------
+
+      // _loadProfileFor asks a visor who it is and folds the answer into the
+      // resolved-address card.
+      //
+      // Best-effort and silent on failure, for the same reason the catalog is:
+      // most visors publish nothing, and the dialog is fully usable without a
+      // name. A LOCAL nickname wins over the published one where both exist —
+      // a label the user chose must not be overwritten by its subject.
+      _loadProfileFor(pk) {
+        const seq = (this._profileSeq = (this._profileSeq || 0) + 1);
+        this._addrProfile = null;
+        this.fetchPeerProfile(pk).then(p => {
+          if (seq !== this._profileSeq) return;      // a newer input superseded us
+          if (!p || (!p.name && !p.avatar)) return;
+          this._addrProfile = p;
+          const title = document.getElementById('arTitle');
+          const sub = document.getElementById('arSub');
+          const av = document.getElementById('arAvatar');
+          const local = this.peerName(pk);
+          if (title && p.name && !local) title.textContent = p.name;
+          if (av && p.avatar) av.innerHTML = `<img src="${this.escapeAttr(p.avatar)}" alt="" />`;
+          if (sub) {
+            sub.textContent = p.name
+              ? (local ? `Person · publishes the name "${p.name}"` : 'Person · name published by them')
+              : 'Person · direct message';
+          }
+        });
       }
 
       // ---- Discovery catalog -----------------------------------------
@@ -6544,10 +8383,17 @@
         }
         if (res.target === 'dm') {
           const pk = res.pk;
+          const saveBox = document.getElementById('addrSaveContact');
+          const wantSave = !!(saveBox && saveBox.checked) && !this.isContact(pk);
+          // Read the fetched profile before the dialog is torn down.
+          const fetched = this._addrProfile;
           this.closeAddressModal();
-          if (!this.recipients.includes(pk)) {
-            this._addRecipient(pk);
-            this.showToast('Contact added.');
+          if (!this.recipients.includes(pk)) this._addRecipient(pk);
+          if (wantSave) {
+            // The published name and picture ride along, and addContact
+            // refuses to overwrite anything the user set by hand.
+            this.addContact(pk, fetched ? { name: fetched.name, avatar: fetched.avatar } : {});
+            this.showToast('Saved to contacts.');
           }
           this.selectRecipient(pk);
           return;
@@ -6639,7 +8485,9 @@
             isAdmin: this._isGroupAdmin(info),
           };
         }
-        if (this.recipient) {
+        // The notes thread has no address: there is no second party to hand
+        // one to. "Your address" lives in the profile dialog instead.
+        if (this.recipient && !this.isSaved()) {
           return {
             address: `skychat://${this.recipient}`,
             label: this.shortPk(this.recipient),
@@ -7317,22 +9165,42 @@
         }
       }
 
+      // updatePreview writes the last message under a chat row.
+      //
+      // Scoped to the chat list on purpose: a contact row's second line is
+      // that person's key, which is what an address book entry is FOR, and a
+      // message preview there would replace the one identifier the row exists
+      // to show.
       updatePreview(remotePk, msg) {
-        document.querySelectorAll('.recipient-item').forEach(item => {
+        document.querySelectorAll('#recipients .recipient-item, #pinnedList .recipient-item').forEach(item => {
           if (item.dataset.pk === remotePk) {
             const arrow = msg.from === 'me' ? '↑ ' : '↓ ';
-            item.querySelector('.recipient-preview').textContent = arrow + msg.text;
+            const el = item.querySelector('.recipient-preview');
+            if (el) el.textContent = arrow + msg.text;
           }
         });
       }
 
       copyPk() {
-        if (!this.recipient) return;
+        if (!this.recipient || this.isSaved()) return;
         navigator.clipboard.writeText(this.recipient);
         this.showToast('Public key copied to clipboard.');
       }
 
       deleteChat() {
+        // The notes thread cannot be deleted — it is a fixed section, not a
+        // conversation — so the same button empties it instead.
+        if (this.isSaved()) {
+          if (!confirm('Delete every saved note?\n\nThis cannot be undone.')) return;
+          const key = this.savedKey();
+          this.messages[key] = [];
+          this.messagesQuantity[key] = 0;
+          localStorage.removeItem(`c_${key}`);
+          document.getElementById('messages').innerHTML = '';
+          this.renderSavedPreview();
+          this.showToast('Saved messages cleared.');
+          return;
+        }
         if (!this.recipient || !confirm('Delete this conversation?')) return;
 
         const pk = this.recipient;
@@ -7366,7 +9234,14 @@
         this.saveRecipients();
         this.saveSeenList();
         localStorage.removeItem(`c_${pk}`);
-        localStorage.removeItem(`i_${pk}`);
+        // The address-book entry outlives the conversation: deleting a chat
+        // is "I am done with these messages", not "I no longer know this
+        // person". A saved contact keeps its name and picture, and Remove
+        // from contacts is the action that discards them.
+        if (!this.isContact(pk)) {
+          localStorage.removeItem(`i_${pk}`);
+        }
+        this.renderContacts();
 
         this.recipient = null;
         this.showToast('Conversation deleted.');
@@ -7402,12 +9277,14 @@
       }
 
       openSettings() {
-        if (!this.recipient) return;
+        // The notes thread has no peer to have settings about.
+        if (!this.recipient || this.isSaved()) return;
         const image = localStorage.getItem(`i_${this.recipient}`) || 'p.png';
         document.getElementById('modalAvatar').src = image;
         document.getElementById('modalPk').textContent = this.recipient;
         const name = document.getElementById('modalName');
         if (name) name.value = this.peerName(this.recipient);
+        this._updateContactButton();
         document.getElementById('settingsModal').classList.add('visible');
       }
 
@@ -7990,29 +9867,13 @@
         return `rgb(${r * 255 | 0},${g * 255 | 0},${b * 255 | 0})`;
       }
 
+      // updatePicture handles a contact's picture. The file goes through the
+      // shared cropper (centre-crop, scale, preview) rather than being stored
+      // as picked: the old path kept up to 250 KB per contact in a
+      // localStorage quota that is ~5 MB for the whole app, cached
+      // conversations included.
       updatePicture() {
-        const input = document.getElementById('profilePicture');
-        if (!input.files.length) return;
-
-        const file = input.files[0];
-        if (!file.type.startsWith('image/')) {
-          this.showToast('Please select an image file.', 'error');
-          return;
-        }
-
-        if (file.size > 250 * 1024) {
-          this.showToast('Image must be smaller than 250KB.', 'error');
-          return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = () => {
-          localStorage.setItem(`i_${this.recipient}`, reader.result);
-          this.updateAvatarUI(this.recipient, reader.result);
-          this.closeSettings();
-          this.showToast('Avatar updated.');
-        };
-        reader.readAsDataURL(file);
+        this._pickAvatar(document.getElementById('profilePicture'), 'contact');
       }
 
       removePicture() {
@@ -8023,15 +9884,19 @@
 
         localStorage.removeItem(`i_${this.recipient}`);
         this.updateAvatarUI(this.recipient, 'p.png');
+        this.renderContacts();
         this.closeSettings();
         this.showToast('Avatar removed.');
       }
 
       updateAvatarUI(pk, image) {
+        // Matches contact rows as well as chat rows — both carry data-pk, so
+        // one person's picture is never stale in one list and fresh in
+        // another.
         document.querySelectorAll('.recipient-item').forEach(item => {
-          if (item.dataset.pk === pk) {
-            item.querySelector('.recipient-avatar').src = image;
-          }
+          if (item.dataset.pk !== pk) return;
+          const img = item.querySelector('.recipient-avatar');
+          if (img) img.src = image;
         });
         if (this.recipient === pk) {
           document.getElementById('headerAvatar').src = image;
@@ -8068,6 +9933,10 @@
       loadData() {
         const seen = localStorage.getItem('s');
         if (seen) this.messagesSeen = JSON.parse(seen);
+
+        // The notes thread is cached like a DM but is not a recipient, so it
+        // is rehydrated on its own rather than by the loop below.
+        this._loadThread(this.savedKey());
 
         const recipients = localStorage.getItem('r');
         if (recipients) {
@@ -8107,6 +9976,27 @@
             }
           });
         }
+      }
+
+      // _loadThread rehydrates one cached conversation's messages. Split out
+      // of loadData for the notes thread, which has the same cache shape and
+      // none of the recipient bookkeeping.
+      _loadThread(key) {
+        this.messages[key] = [];
+        this.messagesQuantity[key] = 0;
+        let saved = null;
+        try {
+          saved = JSON.parse(localStorage.getItem(`c_${key}`) || 'null');
+        } catch (e) {
+          saved = null;
+        }
+        if (!Array.isArray(saved)) return;
+        this.messages[key] = saved;
+        saved.forEach(m => {
+          if (!m) return;
+          if (m.date) m.date = new Date(m.date);
+          else { this.messagesQuantity[key]++; m.ts = new Date(m.ts); }
+        });
       }
     }
 
@@ -8542,13 +10432,19 @@
 
     // Close group modals on backdrop click. addressModal closes through
     // its own helper so a running camera scan is always stopped.
-    ['createGroupModal', 'createChannelModal', 'groupAdminModal', 'qrModal'].forEach(function(id) {
+    ['createGroupModal', 'createChannelModal', 'groupAdminModal', 'qrModal',
+     'myProfileModal', 'avatarModal', 'newContactModal', 'forwardModal'].forEach(function(id) {
       document.getElementById(id).addEventListener('click', function(e) {
         if (e.target === this) app.closeModal(id);
       });
     });
     document.getElementById('addressModal').addEventListener('click', function(e) {
       if (e.target === this) app.closeAddressModal();
+    });
+    // Its own helper so pick mode is always cleared — a stale 'pick' would
+    // make the next visit from the sidebar icon refuse to open chats.
+    document.getElementById('contactsModal').addEventListener('click', function(e) {
+      if (e.target === this) app.closeContacts();
     });
 
     // Dismiss the start menu on any click outside it. Capture phase so
@@ -8589,6 +10485,12 @@
         app.closeModal('createChannelModal');
         app.closeModal('groupAdminModal');
         app.closeModal('qrModal');
+        app.closeModal('myProfileModal');
+        app.closeModal('avatarModal');
+        app.closeModal('newContactModal');
+        app.closeModal('forwardModal');
+        app.closeContacts();
+        app._dismissSheet();
         app.closeAddressModal();
       }
     });

@@ -91,6 +91,12 @@ type Manager struct {
 	// reachable without knowing any group's port. See probe.go.
 	probe probeListener
 
+	// profileSrc is what this visor publishes about itself, served on
+	// the same describe port. Nil (the default) publishes nothing. See
+	// profile.go.
+	profileMu  sync.RWMutex
+	profileSrc ProfileProvider
+
 	// reconnect loop state — see runReconnectLoop.
 	reconnectCtx    context.Context
 	reconnectCancel context.CancelFunc
@@ -130,6 +136,12 @@ type ManagerConfig struct {
 	// filesystem). Required for the browser (js/wasm) visor. When set, DataDir
 	// may be empty. Forwarded to each group.Config the Manager opens.
 	InMemoryDB bool
+
+	// Profile is what this visor publishes about itself on the describe
+	// port — a display name and a small avatar. Optional: a nil provider
+	// answers every profile request empty, which is what a visor whose
+	// operator has set nothing should say. See profile.go.
+	Profile ProfileProvider
 
 	// HeartbeatInterval, when > 0, makes every owner-role session
 	// opened by this Manager emit a periodic no-op heartbeat probe.
@@ -193,6 +205,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		reconnectState:     make(map[string]*reconnectState),
 		peerReconnectState: make(map[string]map[cipher.PubKey]*reconnectState),
 		pendingJoinLast:    make(map[string]time.Time),
+		profileSrc:         cfg.Profile,
 	}, nil
 }
 

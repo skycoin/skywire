@@ -1574,6 +1574,27 @@ func (rc *rpcClient) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
 	return resp, err
 }
 
+// ProfileGet implements API.
+func (rc *rpcClient) ProfileGet() (Profile, error) {
+	var resp Profile
+	err := rc.Call("ProfileGet", &struct{}{}, &resp)
+	return resp, err
+}
+
+// ProfileSet implements API.
+func (rc *rpcClient) ProfileSet(args ProfileSetArgs) (Profile, error) {
+	var resp Profile
+	err := rc.Call("ProfileSet", &args, &resp)
+	return resp, err
+}
+
+// ProfileFetch implements API.
+func (rc *rpcClient) ProfileFetch(pk cipher.PubKey) (Profile, error) {
+	var resp Profile
+	err := rc.Call("ProfileFetch", &pk, &resp)
+	return resp, err
+}
+
 // GroupResolve implements API.
 func (rc *rpcClient) GroupResolve(args GroupResolveArgs) (GroupResolveResult, error) {
 	var resp GroupResolveResult
