@@ -375,6 +375,9 @@
             </div>
 
             <!-- TPD Statistics -->
+            <!-- Transport Discovery: per-type transport counts + the TPD-integrated
+                 uptime stats (the standalone uptime tracker is decommissioned; uptime
+                 now rides TPD, so the former "Uptime Tracker" section is folded in). -->
             <div class="section collapsed" id="section-tpd">
                 <div class="section-header" onclick="toggleSection('section-tpd')">
                     <span class="section-title">Transport Discovery</span>
@@ -386,24 +389,20 @@
                     <div class="stat" id="unique-ips-stat" style="display:none;"><span class="stat-label">Unique IPs</span><span class="stat-value" id="total-unique-ips">-</span></div>
                     <div class="stat"><span class="stat-label">STCPR</span><span class="stat-value" id="count-stcpr">-</span></div>
                     <div class="stat"><span class="stat-label">SUDPH</span><span class="stat-value" id="count-sudph">-</span></div>
+                    <div class="stat"><span class="stat-label">STCP</span><span class="stat-value" id="count-stcp">-</span></div>
+                    <div class="stat"><span class="stat-label">QUIC</span><span class="stat-value" id="count-squicr">-</span></div>
+                    <div class="stat"><span class="stat-label">WebTransport</span><span class="stat-value" id="count-swtr">-</span></div>
+                    <div class="stat"><span class="stat-label">WebSocket</span><span class="stat-value" id="count-swsr">-</span></div>
+                    <div class="stat"><span class="stat-label">WebRTC</span><span class="stat-value" id="count-webrtc">-</span></div>
                     <div class="stat"><span class="stat-label">DMSG</span><span class="stat-value" id="count-dmsg">-</span></div>
-                    <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
-                    <div class="visor-list" id="visor-list"></div>
-                </div>
-            </div>
-
-            <!-- Uptime Tracker - collapsed by default -->
-            <div class="section collapsed" id="section-ut">
-                <div class="section-header" onclick="toggleSection('section-ut')">
-                    <span class="section-title">Uptime Tracker</span>
-                    <span class="section-toggle">▼</span>
-                </div>
-                <div class="section-content">
+                    <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;font-size:0.8em;color:#888;">Uptime</div>
                     <div class="stat"><span class="stat-label">Online</span><span class="stat-value" id="count-online" style="color:#00d9a5">-</span></div>
                     <div class="stat"><span class="stat-label">Offline</span><span class="stat-value" id="count-offline" style="color:#e94560">-</span></div>
+                    <div class="stat"><span class="stat-label">Not in UT</span><span class="stat-value" id="count-unknown" style="color:#ffd166">-</span></div>
                     <div class="stat"><span class="stat-label">Not in DMSG</span><span class="stat-value" id="count-not-in-dmsg" style="color:#ff6b35">-</span></div>
                     <div style="margin-top:8px;padding-top:8px;border-top:1px solid #0f3460;font-size:0.8em;color:#888;">Versions</div>
                     <div id="version-stats"></div>
+                    <div class="visor-list" id="visor-list"></div>
                 </div>
             </div>
 
