@@ -401,8 +401,8 @@ func TestController_AutoDmsgFirstThenSkynetUpgrade(t *testing.T) {
 	if err := ctrlA.Start(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	defer ctrlA.Close()
-	defer ctrlB.Close()
+	defer ctrlA.Close() //nolint
+	defer ctrlB.Close() //nolint
 
 	// First auto send: no warm conn → dmsg (instant, no route setup).
 	res, err := ctrlA.Send(context.Background(), pkB, "", "hi", SendOpts{Auto: true})

@@ -405,7 +405,7 @@ func (c *Controller) warmNetwork(pk cipher.PubKey, net appnet.Type) {
 	// and we don't keep a duplicate conn to the peer; a send racing on the old
 	// conn just fails its write and redials, which is already handled.
 	if old != nil && old != newConn {
-		_ = old.Close()
+		_ = old.Close() //nolint
 	}
 }
 
@@ -585,7 +585,7 @@ func (c *Controller) Send(ctx context.Context, pk cipher.PubKey, netType appnet.
 	// auto mode: the message went out over dmsg (fast first contact); warm a
 	// skynet route in the background so the next message upgrades to it.
 	if autoWarm && res.Network == appnet.TypeDmsg {
-		go c.warmNetwork(pk, appnet.TypeSkynet)
+		go c.warmNetwork(pk, appnet.TypeSkynet) //nolint
 	}
 
 	c.persist(history.Message{
