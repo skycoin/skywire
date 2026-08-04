@@ -70,6 +70,10 @@ let tooltip: HTMLDivElement | null = null;
 let boundaryCircles: { x: number; y: number; r: number; color: string; label: string; flag: string }[] = [];
 let boundaryCanvas: HTMLCanvasElement | null = null;
 let boundaryRAF: number | null = null;
+// Fingerprint of the last-drawn view transform (zoom + pan). The boundary rAF
+// stays alive to track pan/zoom, but skips the actual canvas redraw when the
+// view hasn't moved — otherwise it burns ~60fps redrawing a static overlay.
+let lastBoundaryKey = '';
 
 // ensureTooltip creates the floating hover panel (cosmos renders points only —
 // no text — so node detail lives in a hover tooltip, the same info the flat
@@ -137,6 +141,13 @@ function clearBoundaryCanvas(): void {
 function drawBoundaries(): void {
   boundaryRAF = null;
   if (!active || !graph || boundaryCircles.length === 0) { clearBoundaryCanvas(); return; }
+  // Idle-skip: if the view transform is unchanged since the last drawn frame,
+  // reschedule without touching the canvas. Keeps the overlay glued to the graph
+  // during pan/zoom while cutting idle CPU (the grouped layout is static).
+  const [r0x, r0y] = graph.spaceToScreenPosition([0, 0]);
+  const key = graph.getZoomLevel() + ':' + Math.round(r0x) + ':' + Math.round(r0y);
+  if (key === lastBoundaryKey) { boundaryRAF = requestAnimationFrame(drawBoundaries); return; }
+  lastBoundaryKey = key;
   const canvas = ensureBoundaryCanvas();
   if (!canvas) { return; }
   const rect = canvas.getBoundingClientRect();
@@ -174,11 +185,13 @@ function drawBoundaries(): void {
 }
 
 function startBoundaries(): void {
+  lastBoundaryKey = ''; // force one redraw with the (possibly new) circles
   if (boundaryRAF == null) { boundaryRAF = requestAnimationFrame(drawBoundaries); }
 }
 
 function stopBoundaries(): void {
   if (boundaryRAF != null) { cancelAnimationFrame(boundaryRAF); boundaryRAF = null; }
+  lastBoundaryKey = '';
   clearBoundaryCanvas();
 }
 
