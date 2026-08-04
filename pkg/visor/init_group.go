@@ -17,6 +17,7 @@ import (
 	"github.com/skycoin/skywire/pkg/logging"
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/skychat/history"
+	skychatprofile "github.com/skycoin/skywire/pkg/skychat/profile"
 )
 
 // groupState holds the visor-side runtime state for chat groups.
@@ -25,6 +26,12 @@ type groupState struct {
 	store   *skychatgroup.Store
 	manager *skychatgroup.Manager
 	inbox   *groupInbox
+	// profile is this visor's published display name + avatar, served on
+	// the manager's describe port. Lives here rather than in its own
+	// Visor field because the describe port is the manager's, and a
+	// profile with nothing to serve it on is not a feature. nil when the
+	// file could not be opened; the RPC surfaces ErrProfileDisabled.
+	profile *skychatprofile.Store
 	// history is non-nil when group-message persistence is enabled.
 	// The visor's GroupHistory RPC reads from this; the inbox's
 	// deliver fans messages to it on the write side. nil when
@@ -65,6 +72,17 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 			Info("Grouping: re-sealed group keys that were stored in plaintext by a previous build")
 	}
 
+	// The published profile — a name and a 32x32 avatar this visor answers
+	// describes with. Best effort like everything else here: a store that
+	// will not open costs the profile feature for this run, not group chat.
+	// A nil provider answers every profile request empty, which is exactly
+	// what a visor with nothing to say should do.
+	profileStore, err := skychatprofile.OpenStore(filepath.Join(dataDir, "profile.json"))
+	if err != nil {
+		log.WithError(err).Warn("Grouping: open profile store failed; profile publishing disabled this run")
+		profileStore = nil
+	}
+
 	mgr, err := skychatgroup.NewManager(skychatgroup.ManagerConfig{
 		Store:   store,
 		DmsgC:   v.dmsgC,
@@ -72,6 +90,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 		MySK:    v.conf.SK,
 		DataDir: filepath.Join(dataDir, "cxo-groups"),
 		Logger:  log,
+		Profile: profileProvider(profileStore),
 		// Owner-side heartbeat emission. Every group this visor owns
 		// publishes a no-op probe every interval so members can detect
 		// a silently-stalled CXO subscriber via "no heartbeat in N
@@ -135,6 +154,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 	v.grouping.manager = mgr
 	v.grouping.inbox = inbox
 	v.grouping.history = histFetcher
+	v.grouping.profile = profileStore
 	v.initLock.Unlock()
 
 	if err := mgr.Resume(); err != nil {
@@ -158,6 +178,21 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 	})
 
 	return nil
+}
+
+// profileProvider adapts the profile store to the manager's interface,
+// returning a genuinely nil interface when there is no store.
+//
+// Spelled out rather than assigning the pointer straight into the config
+// field: a nil *Store in an interface is a NON-nil interface holding a nil
+// pointer, so `if src == nil` on the manager's side would be false and the
+// nil-store path would be reached only by the store's own nil-receiver
+// guards. Both work; only one of them is obvious at the call site.
+func profileProvider(s *skychatprofile.Store) skychatgroup.ProfileProvider {
+	if s == nil {
+		return nil
+	}
+	return s
 }
 
 // groupHistoryAdapter bridges the visor-side groupHistorySink (write)
