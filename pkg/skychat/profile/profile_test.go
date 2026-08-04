@@ -9,6 +9,8 @@ package profile
 import (
 	"bytes"
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/jpeg"
@@ -48,7 +50,7 @@ func jpegOf(t *testing.T, w, h int) []byte {
 func TestValidateAvatarAcceptsSmallPNGAndJPEG(t *testing.T) {
 	mime, err := ValidateAvatar(pngOf(t, MaxAvatarDim, MaxAvatarDim))
 	if err != nil {
-		t.Fatalf("32x32 png rejected: %v", err)
+		t.Fatalf("%dx%d png rejected: %v", MaxAvatarDim, MaxAvatarDim, err)
 	}
 	if mime != MimePNG {
 		t.Fatalf("mime = %q, want %q", mime, MimePNG)
@@ -65,15 +67,43 @@ func TestValidateAvatarAcceptsSmallPNGAndJPEG(t *testing.T) {
 
 // The size ceiling is the whole point of the format: it is what stops the
 // describe port becoming a way to make a visor serve arbitrary bytes.
+// Written against MaxAvatarDim rather than a literal: the cap is a product
+// decision that has moved once already, and a test that pins the number
+// pins the wrong thing — what must hold is "one pixel over is refused, and
+// the refusal says what the limit is".
 func TestValidateAvatarRejectsOversizeDimensions(t *testing.T) {
-	for _, dim := range [][2]int{{33, 32}, {32, 33}, {256, 256}} {
+	over := MaxAvatarDim + 1
+	limit := fmt.Sprintf("%dx%d", MaxAvatarDim, MaxAvatarDim)
+	for _, dim := range [][2]int{{over, MaxAvatarDim}, {MaxAvatarDim, over}, {over, over}} {
 		_, err := ValidateAvatar(pngOf(t, dim[0], dim[1]))
 		if err == nil {
 			t.Fatalf("%dx%d accepted, want rejection", dim[0], dim[1])
 		}
-		if !strings.Contains(err.Error(), "32x32") {
+		if !errors.Is(err, ErrAvatarDimensions) {
+			t.Fatalf("%dx%d: err = %v, want ErrAvatarDimensions", dim[0], dim[1], err)
+		}
+		if !strings.Contains(err.Error(), limit) {
 			t.Fatalf("%dx%d: error %q does not say what the limit is", dim[0], dim[1], err)
 		}
+	}
+}
+
+// The app-side HTTP handler maps a rejected picture to 400 by matching this
+// prefix across the net/rpc boundary, where the error is a plain string and
+// errors.Is cannot help. Rewording either sentinel past this point silently
+// turns a bad picture into a 500 — so the contract is pinned here, beside
+// the errors, rather than left to be discovered in the browser.
+func TestAvatarErrorsKeepTheirClassifiablePrefixes(t *testing.T) {
+	for _, err := range []error{ErrAvatarDimensions, ErrAvatarTooLarge} {
+		if !strings.HasPrefix(err.Error(), "skychat profile: avatar ") {
+			t.Fatalf("%q lost the prefix cmd/apps/skychat/commands/profile.go matches on", err)
+		}
+	}
+	if !strings.Contains(ErrAvatarDimensions.Error(), "avatar must be") {
+		t.Fatalf("ErrAvatarDimensions %q no longer matches isProfileInputError", ErrAvatarDimensions)
+	}
+	if !strings.Contains(ErrAvatarTooLarge.Error(), "avatar too large") {
+		t.Fatalf("ErrAvatarTooLarge %q no longer matches isProfileInputError", ErrAvatarTooLarge)
 	}
 }
 

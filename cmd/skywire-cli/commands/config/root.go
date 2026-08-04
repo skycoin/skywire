@@ -145,6 +145,15 @@ var (
 	// and #2585 admin mirror) to actually propagate messages, so this
 	// should rarely be off in practice.
 	isSkychatPairEnable bool
+	// isSkychatPortless drops --chataddr from the generated internal-apps
+	// config and emits --portless instead: skychat then binds no TCP port
+	// and its UI is reachable only through the hypervisor's control
+	// surface. Off by default — a chat app whose window you cannot open
+	// without the hypervisor is a deployment choice, not a starting point.
+	// Toggle via SKYCHATPORTLESS in /etc/skywire.conf or --chatportless.
+	// Ignored under --extapps, where skychat is a separate process and has
+	// nothing in-process to publish to.
+	isSkychatPortless bool
 	// Skycoin embedded apps — daemon (full node) + web (thin-client
 	// wallet). Default-off for both. SkycoinWebUser drops the wallet
 	// process to a different UID via the launcher's per-app

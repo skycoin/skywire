@@ -69,7 +69,8 @@ Flags:
       --serveproxy             autostart proxy server (default true)
       --proxywl string         proxy server whitelist
       --servechat              autostart skychat (default true)
-      --chataddr string        skychat local address (default ":8001")
+      --chataddr string        skychat local address (default "127.0.0.1:8001")
+      --chatportless           run skychat with no TCP port; reach its UI only through the hypervisor
       --rewardaddr string      skycoin reward address or xpub key
   -k, --os string              (linux / mac / win) paths (default "linux")
   -p, --pkg                    use path for package: /opt/skywire
@@ -232,7 +233,10 @@ SKYENV=/etc/skywire.conf skywire cli config gen
 #SKYCHAT=false
 
 #--	Skychat local address
-#SKYCHATADDR=':8001'
+#SKYCHATADDR='127.0.0.1:8001'
+
+#--	Run skychat with no TCP port (hypervisor-only access)
+#SKYCHATPORTLESS=false
 
 #--	Whitelist public keys for the proxy server (empty = allow all)
 #PROXYSERVERWL=('')
@@ -377,7 +381,8 @@ SKYENV=/etc/skywire.conf skywire cli config gen
 | `PROXYSERVER` | bool | true | Autostart proxy server (skysocks) |
 | `PROXYSERVERWL` | string | (empty) | Proxy server whitelist (comma-separated PKs) |
 | `SKYCHAT` | bool | true | Autostart skychat |
-| `SKYCHATADDR` | string | :8001 | Skychat local address |
+| `SKYCHATADDR` | string | 127.0.0.1:8001 | Skychat local address |
+| `SKYCHATPORTLESS` | bool | false | Run skychat with no TCP port (hypervisor-only access) |
 | `PROXYCLIENTPK` | string | | Proxy client server public key |
 | `STARTPROXYCLIENT` | bool | false | Autostart proxy client |
 | `ADDVPNPK` | string | | VPN client server public key |
