@@ -41,7 +41,7 @@ func init() {
 	logCmd.Flags().StringVarP(&fetchFrom, "pks", "k", "", "fetch only from specific public keys ; semicolon separated")
 	logCmd.Flags().StringVarP(&writeDir, "dir", "d", "log_collecting", "save files to specified dir")
 	logCmd.Flags().BoolVarP(&deleteOnErrors, "clean", "c", false, "delete files and folders on errors")
-	logCmd.Flags().StringVar(&minv, "minv", "v1.3.19", "minimum visor version to fetch from")
+	logCmd.Flags().StringVar(&minv, "minv", "v1.3.19", "minimum visor version to fetch from (\"auto\" = the dynamic 14-day reward-eligibility floor from GitHub releases)")
 	logCmd.Flags().StringVar(&incVer, "include-versions", "", "list of version that not satisfy our minimum version condition, but we want include them")
 	logCmd.Flags().IntVarP(&duration, "duration", "n", 0, "number of days before today to fetch transport logs for")
 	logCmd.Flags().BoolVar(&allVisors, "all", false, "consider all visors ; no version filtering")
@@ -56,7 +56,7 @@ func init() {
 	logCmd.Flags().BoolVar(&runCleanup, "cleanup", true, "run cleanup after collection (remove old/invalid files)")
 	logCmd.Flags().StringVar(&backupDir, "backup-dir", "log_backups", "backup directory to also clean")
 	logCmd.Flags().IntVar(&maxAgeDays, "max-age", 7, "maximum age in days for files before deletion")
-	logCmd.Flags().StringVar(&pruneBelowVer, "prune-below-version", "", "during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43)")
+	logCmd.Flags().StringVar(&pruneBelowVer, "prune-below-version", "", "during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43; \"auto\" = the dynamic 14-day reward floor)")
 	logCmd.Flags().StringVar(&proxyAddr, "proxy", "", "fetch via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)\ninstead of this command's own dmsg client — reuses the proxy's warm\ndmsg sessions (e.g. a running `skywire dmsg web`), avoiding cold first-contact timeouts")
 	logCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 }
@@ -161,6 +161,22 @@ var logCmd = &cobra.Command{
 		rand.Shuffle(len(uptimes), func(i, j int) {
 			uptimes[i], uptimes[j] = uptimes[j], uptimes[i]
 		})
+
+		// Resolve the dynamic reward-eligibility floor when requested (--minv auto /
+		// --prune-below-version auto): the latest skywire release published >= 14 days
+		// ago. Go port of getlogs.sh's _compute_minversion, so the collector enforces
+		// the floor itself — the reward calc does NOT re-gate on version, so the
+		// collect+prune floor is the sole version gate.
+		if minv == "auto" || pruneBelowVer == "auto" {
+			floor := minVersionFloor(log)
+			if minv == "auto" {
+				minv = floor
+			}
+			if pruneBelowVer == "auto" {
+				pruneBelowVer = floor
+			}
+			log.Infof("Reward min-version floor: %s (auto, 14-day)", floor)
+		}
 
 		minimumVersion, _ := version.NewVersion(minv) //nolint:errcheck
 		incVerList := strings.Split(incVer, ",")
@@ -425,6 +441,80 @@ func surveyUnchanged(ctx context.Context, log *logging.Logger, httpC *http.Clien
 		return true
 	}
 	return false
+}
+
+// minVersionFallback is the reward-eligibility floor used when the GitHub releases
+// API can't be reached. Keep it bumped to a recent known-good floor so the collector
+// never runs without a minimum. Mirrors getlogs.sh's _minversion_fallback.
+const minVersionFallback = "v1.3.53"
+
+// minVersionFloor returns the reward-eligibility minimum version: the latest
+// published skywire release whose published_at is at least 14 days old (per
+// rewards/mainnet_rules.md — a released version becomes required 2 weeks after
+// publication). Cached in $TMPDIR for 1h to respect GitHub's 60-req/hr
+// unauthenticated rate limit; falls back to minVersionFallback on any failure.
+// Go port of getlogs.sh's _compute_minversion so the collector enforces the floor
+// without host-only bash. Uses the default (clearnet) HTTP client regardless of
+// --proxy — GitHub is not a dmsg service.
+func minVersionFloor(log *logging.Logger) string {
+	cache := filepath.Join(os.TempDir(), "skywire_minversion.cache")
+	if fi, err := os.Stat(cache); err == nil && time.Since(fi.ModTime()) < time.Hour {
+		if b, err := os.ReadFile(cache); err == nil { //nolint:gosec
+			if v := strings.TrimSpace(string(b)); v != "" {
+				return v
+			}
+		}
+	}
+	v := fetchMinVersionFromGitHub()
+	if v == "" {
+		log.Warnf("Could not compute reward min-version from GitHub releases; using fallback %s", minVersionFallback)
+		return minVersionFallback
+	}
+	_ = os.WriteFile(cache, []byte(v+"\n"), 0644) //nolint:errcheck,gosec
+	return v
+}
+
+func fetchMinVersionFromGitHub() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/repos/skycoin/skywire/releases?per_page=100", nil)
+	if err != nil {
+		return ""
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	if resp.StatusCode != http.StatusOK {
+		return ""
+	}
+	var releases []struct {
+		TagName     string    `json:"tag_name"`
+		Draft       bool      `json:"draft"`
+		Prerelease  bool      `json:"prerelease"`
+		PublishedAt time.Time `json:"published_at"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&releases); err != nil {
+		return ""
+	}
+	cutoff := time.Now().Add(-14 * 24 * time.Hour)
+	var best *version.Version
+	var bestTag string
+	for _, r := range releases {
+		if r.Draft || r.Prerelease || r.PublishedAt.IsZero() || r.PublishedAt.After(cutoff) {
+			continue
+		}
+		v, err := version.NewVersion(r.TagName)
+		if err != nil {
+			continue
+		}
+		if best == nil || v.GreaterThan(best) {
+			best = v
+			bestTag = r.TagName
+		}
+	}
+	return bestTag
 }
 
 // visorURL builds the URL to fetch `path` from visor `pubkey`, per collector mode:
