@@ -53,6 +53,58 @@ data class AppState(
     @SerialName("detailed_status") val detailedStatus: String = "",
     @SerialName("auto_start") val autoStart: Boolean = false,
     @SerialName("port") val port: Int = 0,
+    /**
+     * Launcher argv. The API always sends the array form — the
+     * space-joined string in the config file is an on-disk-only
+     * rendering that never reaches this client.
+     */
+    @SerialName("args") val args: List<String> = emptyList(),
+) {
+    val running: Boolean get() = status == STATUS_RUNNING
+
+    companion object {
+        const val STATUS_RUNNING = 1
+        const val STATUS_ERRORED = 2
+        const val STATUS_STARTING = 3
+    }
+}
+
+/**
+ * One service-discovery entry, as proxied verbatim from SD by
+ * `/api/svc-fetch`. Only the fields the list renders are declared.
+ */
+@Serializable
+data class ServiceEntry(
+    /** `"<public key>:<port>"`. */
+    @SerialName("address") val address: String = "",
+    @SerialName("type") val type: String = "",
+    @SerialName("geo") val geo: GeoInfo? = null,
+    @SerialName("version") val version: String = "",
+) {
+    val pk: String get() = address.substringBefore(':')
+}
+
+@Serializable
+data class GeoInfo(
+    @SerialName("country") val country: String = "",
+    @SerialName("region") val region: String = "",
+)
+
+/**
+ * One live connection of an app, from `…/apps/{app}/connections`.
+ * skysocks-client holds a single connection to its server, so the
+ * first element is the one the screen renders.
+ */
+@Serializable
+data class AppConnection(
+    @SerialName("is_alive") val isAlive: Boolean = false,
+    /** Nanoseconds (Go time.Duration). */
+    @SerialName("latency") val latencyNs: Long = 0,
+    @SerialName("upload_speed") val uploadSpeed: Long = 0,
+    @SerialName("download_speed") val downloadSpeed: Long = 0,
+    @SerialName("bandwidth_sent") val bandwidthSent: Long = 0,
+    @SerialName("bandwidth_received") val bandwidthReceived: Long = 0,
+    @SerialName("error") val error: String = "",
 )
 
 @Serializable
