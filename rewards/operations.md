@@ -63,12 +63,15 @@ CSV-header strip) and then stages `log_collecting → log_backups` (Go-native, a
 merge). So:
 
 ```
-skywire cli log --proxy 127.0.0.1:4443 --cleanup
+skywire cli log --proxy 127.0.0.1:4443 --cleanup --minv auto --prune-below-version auto
 ```
 
 is a complete replacement for the legacy host-only `fetch_surveys.sh` + `getlogs.sh`
 `_getlogs`/`_cleanup` bash — collect + version-gate + retry + prune + stage-to-backups,
-all in Go.
+all in Go. `--minv auto` / `--prune-below-version auto` resolve the dynamic 14-day
+reward floor from GitHub releases (the Go port of `getlogs.sh`'s `_compute_minversion`),
+so the collector enforces the floor itself — **required**, because the calc does not
+re-gate on version (survey collection is the sole version-eligibility gate).
 
 ### 2. PUSH — visor → reward server (preferred, low-load)
 
@@ -140,7 +143,7 @@ Change `skywire-reward.service`'s `ExecStart` from the legacy bash pipeline:
 to the Go collector plus the (proven) calc:
 
 ```
-/bin/bash -c 'skywire cli log --proxy 127.0.0.1:4443 --cleanup && skywire cli rewards bw-collect && skywire cli rewards script reward | bash ; exit 0'
+/bin/bash -c 'skywire cli log --proxy 127.0.0.1:4443 --cleanup --minv auto --prune-below-version auto && skywire cli rewards bw-collect && skywire cli rewards script reward | bash ; exit 0'
 ```
 
 `systemctl daemon-reload`, then confirm the next hourly run populates
@@ -150,7 +153,7 @@ to the Go collector plus the (proven) calc:
 Later, once `rewards run` is validated (below), the whole `ExecStart` collapses to:
 
 ```
-/usr/bin/skywire cli rewards run --proxy 127.0.0.1:4443
+/usr/bin/skywire cli rewards run --proxy 127.0.0.1:4443 --minv auto
 ```
 
 ### Validating `rewards run` before switching the calc
