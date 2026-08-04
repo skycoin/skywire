@@ -30,8 +30,13 @@ func dmsgDiscArgs(val string) (httpURL, dmsgURL string) {
 }
 
 var (
-	dmsgDiscURL    = deployment.Prod.DmsgDiscovery
-	utURL          = deployment.Prod.UptimeTracker
+	dmsgDiscURL = deployment.Prod.DmsgDiscovery
+	// The standalone uptime tracker (deployment.Prod.UptimeTracker) is
+	// decommissioned; visor uptime now comes from the TPD-integrated
+	// /uptimes endpoint (same response shape), reachable via the local
+	// visor's CXO "tpd-uptime" feed / RPC→DMSG chain — the path
+	// `cli ut tpd` uses.
+	utURL          = deployment.Prod.TransportDiscovery
 	pubKey         string
 	duration       int
 	minv           string
