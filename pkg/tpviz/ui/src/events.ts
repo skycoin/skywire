@@ -16,7 +16,8 @@ import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
 import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode, setVoronoiOverlay } from './globe';
-import { showCosmos, hideCosmos, updateCosmosData, isCosmosActive, cosmosFit, cosmosZoomBy } from './cosmos-graph';
+import { showCosmos, hideCosmos, updateCosmosData, isCosmosActive, cosmosFit, cosmosZoomBy, cosmosFocusNode, cosmosSetPhysics } from './cosmos-graph';
+import { showNodeInfo } from './node-info';
 import { restoreFilters, saveFilters, resetControls, getInitialView, saveView, ViewMode } from './persist';
 
 export function wireEventListeners(): void {
@@ -172,6 +173,7 @@ export function wireEventListeners(): void {
 
     // Physics toggle
     document.getElementById('toggle-physics')!.addEventListener('change', function(this: HTMLInputElement) {
+        if (isCosmosActive()) { cosmosSetPhysics(this.checked); return; }
         if (!S.network) return;
         if (this.checked) {
             S.setUserPhysicsDisabled(false);
@@ -294,4 +296,22 @@ export function wireEventListeners(): void {
     document.getElementById('show-online')!.addEventListener('change', filterChangeHandler);
     document.getElementById('show-offline')!.addEventListener('change', filterChangeHandler);
     document.getElementById('show-unknown')!.addEventListener('change', filterChangeHandler);
+
+    // WebGL parity: filters that previously only touched the hidden flat network
+    // now also re-render the cosmos view.
+    document.getElementById('version-filter')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-services')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-routes')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-dmsg-servers')?.addEventListener('change', filterChangeHandler);
+    document.getElementById('show-flags')?.addEventListener('change', filterChangeHandler);
+    // Search focuses the matching visor in the active WebGL view (it otherwise
+    // only drove the hidden flat graph).
+    document.getElementById('search')?.addEventListener('input', () => {
+        if (!isCosmosActive()) { return; }
+        const q = ((document.getElementById('search') as HTMLInputElement)?.value || '').trim().toLowerCase();
+        if (q.length < 4) { return; }
+        const raw: any[] = S.nodesDataset ? S.nodesDataset.get() : [];
+        const hit = raw.find((n: any) => (((n.id as string) || '')).toLowerCase().startsWith(q));
+        if (hit) { cosmosFocusNode(hit.id); showNodeInfo(hit.id); }
+    });
 }
