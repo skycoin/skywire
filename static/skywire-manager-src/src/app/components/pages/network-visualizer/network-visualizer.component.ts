@@ -32,6 +32,11 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
   tabsData: TabButtonData[] = [];
   loading = true;
   error: string | null = null;
+  // Set when the transport-graph bundle isn't served on this surface (e.g. the
+  // in-browser wasm visor, which doesn't serve /tp-viz/). This is expected
+  // degradation, not a failure, so it renders as a calm info note rather than a
+  // red error.
+  unavailable = false;
 
   private handle: { unmount(): void } | null = null;
   private routeSub?: Subscription;
@@ -62,7 +67,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
     const w = window as any;
     const doMount = () => {
       if (!w.SkywireTpviz || !this.graphEl) {
-        this.error = 'transport-graph bundle unavailable';
+        this.unavailable = true;
         this.loading = false;
 
         return;
@@ -93,7 +98,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
     if (existing) {
       existing.addEventListener('load', doMount);
       existing.addEventListener('error', () => {
- this.error = 'could not load transport-graph bundle'; this.loading = false; 
+ this.unavailable = true; this.loading = false;
 });
 
       return;
@@ -104,7 +109,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
     s.async = true;
     s.onload = () => doMount();
     s.onerror = () => {
- this.error = 'could not load transport-graph bundle'; this.loading = false; 
+ this.unavailable = true; this.loading = false;
 };
     document.body.appendChild(s);
   }
