@@ -336,6 +336,10 @@ func init() {
 	gHiddenFlags = append(gHiddenFlags, "chataddr")
 	genConfigCmd.Flags().BoolVar(&isSkychatPairEnable, "servechatpair", scriptExecBool("${SKYCHATPAIR:-true}"), "skychat pair RPC channel (required for group chat)")
 	gHiddenFlags = append(gHiddenFlags, "servechatpair")
+	// Visible, unlike the other two: it is the one skychat knob that takes
+	// something away (the local UI on --chataddr), so an operator has to be
+	// able to find it without reading the source.
+	genConfigCmd.Flags().BoolVar(&isSkychatPortless, "chatportless", scriptExecBool("${SKYCHATPORTLESS:-false}"), "run skychat with no TCP port; reach its UI only through the hypervisor")
 
 	// Skycoin embedded apps. Default-off for both — operator opts in
 	// per-app via these flags or via SKYENV. The wallet's user-drop
@@ -1749,13 +1753,23 @@ func skychatExternalArgs(addr string, pair bool) []string {
 
 // skychatInternalArgs builds the launcher Args for skychat under the (default)
 // internal-apps mode: apps run inside the visor process. The external-mode
-// "app skychat" prefix is dropped (the launcher routes by app Name), and
-// --addr is replaced by --portless — the in-process skychat binds no TCP port
-// and instead publishes its HTTP surface to the visor's control surface (which
-// serves the hvui's /skychat/proxy/* routes directly). The dmsg/skynet mesh
-// listeners that carry actual chat traffic are unaffected.
-func skychatInternalArgs(pair bool) []string {
-	args := []string{"--portless"}
+// "app skychat" prefix is dropped (the launcher routes by app Name); the
+// --addr it binds is the same one the external form uses, so the local UI,
+// `skywire cli skychat`, and `skywire cli visor doctor` all find skychat in
+// the same place whichever mode the config was generated in.
+//
+// Running in-process does not require giving up the port: skychat publishes
+// its mux to the visor's control surface either way, so the hypervisor keeps
+// its no-loopback path to the same handler this listener serves.
+//
+// portless drops the listener entirely — no TCP port, hypervisor-only access.
+// Opt-in, because "the app is running but nothing answers on its address" is
+// a surprising default to hand someone.
+func skychatInternalArgs(addr string, pair, portless bool) []string {
+	args := []string{"--addr", addr}
+	if portless {
+		args = []string{"--portless"}
+	}
 	if pair {
 		args = append(args, "--pair-enable")
 	}
@@ -1934,9 +1948,9 @@ func configureApps(log *logging.Logger) {
 				// --pair-enable opens chat-app ↔ visor pair-RPC for
 				// group chat. See the external-apps branch above for
 				// the rationale; mirrored here so internal-apps
-				// generated configs behave the same. Portless: no TCP
-				// port — served in-process via the visor control surface.
-				Args: skychatInternalArgs(isSkychatPairEnable),
+				// generated configs behave the same — as is --addr,
+				// so skychat answers on the same place in both modes.
+				Args: skychatInternalArgs(chatAddr, isSkychatPairEnable, isSkychatPortless),
 			},
 			{
 				Name:      skyenv.SkysocksName,

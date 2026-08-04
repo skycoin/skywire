@@ -1506,6 +1506,94 @@
     .si-title { font-size: 14px; font-weight: 500; }
     .si-sub { font-size: 11px; color: var(--text-muted); }
 
+    /* ---- Chat-header overflow menu (the ⋮) ----------------------- */
+
+    /* Same shape as the compose menu — a body-level fixed panel placed
+       from its trigger's rect — but narrower and single-line, because
+       every row here is a verb on the open conversation rather than a
+       thing to start. Shares .start-menu's positioning code. */
+    .hdr-menu {
+      position: fixed;
+      /* Above the toast container (1000): a toast is transient and lands in
+         the same top-right corner the menu drops into, and it must not sit
+         over rows the user opened the menu to read. */
+      z-index: 1100;
+      min-width: 184px;
+      padding: 6px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      display: none;
+      flex-direction: column;
+      gap: 2px;
+      /* A phone in landscape is shorter than the DM menu is tall. Scroll the
+         rows rather than letting the last ones fall off the screen —
+         _positionMenu can only choose a side, not make room. */
+      max-height: calc(100vh - 24px);
+      overflow-y: auto;
+    }
+
+    .hdr-menu.visible { display: flex; }
+
+    .hdr-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      padding: 9px 12px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: var(--text-primary);
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .hdr-item:hover { background: var(--bg-hover); }
+
+    .hi-icon {
+      width: 18px;
+      flex: 0 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      line-height: 1;
+    }
+
+    .hi-label { flex: 1; min-width: 0; }
+
+    /* Row-level state, mirroring what the old icon buttons said with a
+       border colour: the row for an action already in effect is tinted
+       rather than relabelled twice. */
+    .hdr-item.on { color: var(--msg-sent); }
+    .hdr-item.warn { color: var(--accent-orange); }
+    .hdr-item.danger { color: var(--accent-red); }
+    .hdr-item.danger:hover { background: rgba(239, 68, 68, 0.1); }
+
+    /* Count of waiting join requests, shown inline on the Members row.
+       The same number rides the ⋮ trigger itself (see .pending-badge) —
+       a request the admin cannot see without opening a menu is a
+       request they will not answer. */
+    .hi-count {
+      flex: 0 0 auto;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 5px;
+      border-radius: 8px;
+      background: #ef4444;
+      color: #fff;
+      font-size: 10px;
+      line-height: 16px;
+      text-align: center;
+    }
+
+    .hdr-sep { height: 1px; margin: 4px 6px; background: var(--border-color); }
+
     /* ---- Back button (one-pane layout only) ---------------------- */
 
     .back-btn {
@@ -1777,7 +1865,6 @@
     /* A pinned conversation is rendered in #pinnedList; its copy in the normal
        list is hidden so it isn't shown twice. */
     li.pin-dup { display: none; }
-    .icon-btn.pinned-active { color: var(--msg-sent); border-color: var(--msg-sent); }
 
     .group-item {
       display: flex;
@@ -1951,8 +2038,10 @@
       text-align: center;
     }
 
-    /* Count of join requests waiting on the group header's members
-       button. Absolutely positioned so it rides the icon corner. */
+    /* Count of join requests waiting on the group header's ⋮ trigger.
+       Absolutely positioned so it rides the icon corner — the actions
+       themselves are a menu now, and an admin must be able to see that
+       something is waiting without opening it. */
     .pending-badge {
       position: absolute;
       top: -4px;
@@ -1968,7 +2057,7 @@
       text-align: center;
       pointer-events: none;
     }
-    #groupAdminBtn { position: relative; }
+    #groupMenuBtn { position: relative; }
 
     /* Composer lock: shown in place of the input when this visor may not
        post (muted, read-only group, or still awaiting approval). The
@@ -2052,7 +2141,10 @@
     .switch input:checked + .slider { background: var(--accent-blue); border-color: var(--accent-blue); }
     .switch input:checked + .slider::before { transform: translateX(18px); }
     .switch input:disabled + .slider { opacity: .5; cursor: not-allowed; }
-    /* Header mute-bell active (muted) state */
+    /* Muted state on the header ⋮ trigger. The bell itself lives in the
+       menu now, so without this the one piece of state a closed menu
+       still has to report — "this thread will not ring" — would be
+       invisible until you opened it. */
     .icon-btn.muted { color: var(--accent-orange); border-color: var(--accent-orange); }
 
     /* Voice call — incoming banner */
@@ -2127,9 +2219,9 @@
 
     .me-row:hover { background: var(--bg-hover); }
 
-    /* 32px on screen for a 32x32 source: the published avatar is exactly
-       this size, so it renders 1:1 and never gets the soft look an
-       upscaled thumbnail would have. */
+    /* The smallest place an avatar appears. The published picture is much
+       larger than this, so it is downscaled here — which is the direction
+       that stays sharp. */
     .me-avatar {
       width: 32px;
       height: 32px;
@@ -2292,6 +2384,18 @@
       line-height: 1.5;
     }
 
+    /* Heading inside the forward list. Same treatment as the sidebar's
+       section headers so the dialog reads as the same kind of list. */
+    .fwd-section {
+      padding: 12px 16px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--accent-green);
+      pointer-events: none;
+    }
+
     .contact-actions {
       display: flex;
       gap: 4px;
@@ -2310,12 +2414,13 @@
     .recipient-item:focus-within .contact-actions .icon-btn { opacity: 1; }
 
     /* ---- Avatar cropper --------------------------------------------
-       Preview of what will actually be stored, at 3x so the pixels are
-       inspectable. Deliberately not an interactive crop box: the source
-       is centre-cropped square and scaled, which is right for the
-       overwhelming majority of pictures people pick, and a pan/zoom
-       surface would be a large amount of machinery to place a face in a
-       32-pixel circle. */
+       Preview of what will actually be stored, shown at the two sizes
+       the app renders it: the profile dialog and a list row. Deliberately
+       not an interactive crop box — the source is centre-cropped square
+       and scaled, which is right for the overwhelming majority of
+       pictures people pick, and a pan/zoom surface would be a large
+       amount of machinery for a decision the centre of the frame already
+       makes correctly. */
     .av-preview {
       display: flex;
       align-items: center;
@@ -2331,8 +2436,8 @@
       border: 1px solid var(--border-color);
     }
 
-    .av-preview .av-lg { width: 96px; height: 96px; }
-    .av-preview .av-sm { width: 32px; height: 32px; }
+    .av-preview .av-lg { width: 120px; height: 120px; }
+    .av-preview .av-sm { width: 44px; height: 44px; }
 
     .av-caption {
       font-size: 11px;
@@ -2577,26 +2682,15 @@
              which have no epoch to report. -->
         <span id="headerEpoch" class="epoch-tag hidden"></span>
       </div>
+      <!-- Every per-conversation action lives behind this one control.
+           Eight 36px icons across the top of a phone left no room for the
+           name they act on, and a row of unlabelled glyphs makes the user
+           hover each one to find out what it is — a menu says it once, in
+           words. See app._dmMenuItems. -->
       <div class="chat-header-actions">
-        <button id="dmCallBtn" class="icon-btn hidden" onclick="app.placeCall()" title="Start a voice call" aria-label="Voice call">&#x1F4DE;</button>
-        <button id="dmPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
-        <button id="dmMuteBtn" class="icon-btn" onclick="app.toggleMute()" title="Mute notifications for this chat" aria-label="Mute notifications">&#x1F514;</button>
-        <button id="pairToggleBtn" class="icon-btn hidden" onclick="app.togglePair()" title="Pair / unpair via CXO">&#x29B5;</button>
-        <button class="icon-btn" onclick="app.showQr()" title="Show this chat's address as a QR code" aria-label="Show address QR code">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/>
-          </svg>
-        </button>
-        <button class="icon-btn" onclick="app.copyPk()" title="Copy public key">&#x2398;</button>
-        <button class="icon-btn" onclick="app.openSettings()" title="Contact settings">&#x2699;</button>
-        <button class="icon-btn danger" onclick="app.deleteChat()" title="Delete chat" aria-label="Delete chat">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
-          </svg>
-        </button>
+        <button id="dmMenuBtn" class="icon-btn" onclick="app.toggleHeaderMenu(event)"
+                title="Chat actions" aria-label="Chat actions"
+                aria-haspopup="true" aria-expanded="false">&#x22EE;</button>
       </div>
     </div>
 
@@ -2614,27 +2708,16 @@
           <div class="group-header-sub" id="groupHeaderSub"></div>
         </div>
       </div>
+      <!-- Same one control as the DM header; the rows differ by what is
+           open (see app._groupMenuItems), and their wording follows the
+           kind — a channel is not a group to the person reading it. The
+           join-request count rides the trigger so it is visible with the
+           menu shut. -->
       <div class="chat-header-actions">
-        <button id="groupPinBtn" class="icon-btn" onclick="app.togglePin()" title="Pin to top">&#x1F4CC;</button>
-        <button class="icon-btn" onclick="app.showQr()" title="Show this group's address as a QR code" aria-label="Show address QR code">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
-            <path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/>
-          </svg>
-        </button>
-        <button id="groupMuteBtn" class="icon-btn" onclick="app.toggleMute()" title="Mute notifications for this group" aria-label="Mute notifications">&#x1F514;</button>
-        <button id="groupAdminBtn" class="icon-btn" onclick="app.openGroupAdmin()" title="Members and join requests" aria-label="Members and join requests">
-          &#x1F465;<span id="groupPendingBadge" class="pending-badge hidden">0</span>
-        </button>
-        <button class="icon-btn" onclick="app.showGroupInvite()" title="Copy invite link">&#x1F517;</button>
-        <button class="icon-btn" onclick="app.leaveGroup()" title="Leave group">&#x21AA;</button>
-        <button class="icon-btn danger" onclick="app.deleteGroup()" title="Delete group (owner only)" aria-label="Delete group">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <polyline points="3 6 5 6 21 6"></polyline>
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-            <line x1="10" y1="11" x2="10" y2="17"></line>
-            <line x1="14" y1="11" x2="14" y2="17"></line>
-          </svg>
-        </button>
+        <button id="groupMenuBtn" class="icon-btn" onclick="app.toggleHeaderMenu(event)"
+                title="Group actions" aria-label="Group actions"
+                aria-haspopup="true" aria-expanded="false">&#x22EE;<span
+                id="groupPendingBadge" class="pending-badge hidden">0</span></button>
       </div>
     </div>
 
@@ -2740,6 +2823,13 @@
     </button>
   </div>
 
+  <!-- Chat-header overflow menu. One element for both headers: only one
+       conversation is ever open, so a second panel could only ever be the
+       stale copy. Rebuilt from app state on every open rather than kept in
+       sync — a row's label IS its state here ("Unpin", "Unmute"), and
+       deriving label and state together is what stops them disagreeing. -->
+  <div id="hdrMenu" class="hdr-menu" role="menu" aria-label="Conversation actions"></div>
+
   <!-- Settings Modal -->
   <div id="settingsModal" class="modal-overlay">
     <div class="modal">
@@ -2816,7 +2906,7 @@
       </div>
       <div id="fwdOrigin" class="cg-help"></div>
       <input id="fwdSearch" class="cg-input" type="search" autocomplete="off"
-             placeholder="Search chats, groups and channels" oninput="app.renderForwardTargets()" />
+             placeholder="Search chats, contacts, groups and channels" oninput="app.renderForwardTargets()" />
       <div class="contacts-body">
         <ul id="fwdTargets" class="recipient-list"></ul>
         <div id="fwdEmpty" class="contacts-empty hidden">Nothing matches that.</div>
@@ -2912,8 +3002,8 @@
     <div class="modal">
       <h3 id="avatarTitle">Use this picture?</h3>
       <div class="av-preview">
-        <img id="avPreviewLg" class="av-lg" src="p.png" alt="Avatar preview, enlarged" />
-        <img id="avPreviewSm" class="av-sm" src="p.png" alt="Avatar preview, actual size" />
+        <img id="avPreviewLg" class="av-lg" src="p.png" alt="Avatar preview at profile-dialog size" />
+        <img id="avPreviewSm" class="av-sm" src="p.png" alt="Avatar preview at list size" />
       </div>
       <p class="av-caption" id="avCaption"></p>
       <div class="modal-actions">
@@ -3370,6 +3460,10 @@
         this.profileAvailable = null;
         // A pending avatar crop awaiting confirmation: {dataUrl, target}.
         this._pendingAvatar = null;
+
+        // Which ⋮ the header menu is currently hanging from — 'dmMenuBtn'
+        // or 'groupMenuBtn'. Only meaningful while the menu is open.
+        this._hdrMenuBtn = 'dmMenuBtn';
         // Peer presence, refreshed from /presence: {pk: {online, rtt_ms, at}}.
         // presenceAvailable stays null until the first answer; false means the
         // endpoint isn't there (no --pair-enable) so the dots stay hidden.
@@ -4790,11 +4884,9 @@
         if (attachBtn) attachBtn.classList.remove('hidden');
         document.querySelectorAll('.group-item').forEach(el => el.classList.remove('active'));
         // selectSaved parks itself in `recipient` too, so leaving it has to
-        // clear its row and restore the call button it hid.
+        // clear its row.
         const savedRow = document.getElementById('savedItem');
         if (savedRow) savedRow.classList.remove('active');
-        const callBtn = document.getElementById('dmCallBtn');
-        if (callBtn && this.voice && this.voice.available) callBtn.classList.remove('hidden');
 
         this.recipient = pk;
         this.loadHistoryFor(pk);
@@ -4832,33 +4924,27 @@
         this._updateMuteButtons();
       }
 
-      // refreshPairControls toggles the pair button + the CXO option
-      // in the network select based on whether pairing is available
-      // and whether the current recipient is paired.
+      // refreshPairControls toggles the CXO option in the network select
+      // based on whether pairing is available and whether the current
+      // recipient is paired. The Pair/Unpair row itself is built by the
+      // header ⋮ menu from the same two facts.
       refreshPairControls() {
-        const pairBtn = document.getElementById('pairToggleBtn');
         const cxoOpt = document.getElementById('cxoNetworkOption');
         const select = document.getElementById('networkSelect');
+        this._refreshHeaderMenu();
         // Nothing to pair with in the notes thread.
-        if (this.isSaved()) {
-          pairBtn.classList.add('hidden');
-          return;
-        }
+        if (this.isSaved()) return;
         if (!this.pairAvailable) {
-          pairBtn.classList.add('hidden');
-          cxoOpt.classList.add('hidden');
-          if (select.value === 'cxo') select.value = 'skynet';
+          if (cxoOpt) cxoOpt.classList.add('hidden');
+          if (select && select.value === 'cxo') select.value = 'skynet';
           return;
         }
-        pairBtn.classList.remove('hidden');
         const isPaired = this.recipient && this.pairedSet && this.pairedSet.has(this.recipient);
-        pairBtn.title = isPaired ? 'Unpair via CXO' : 'Pair via CXO';
-        pairBtn.textContent = isPaired ? '✖' : '⦵';
         if (isPaired) {
-          cxoOpt.classList.remove('hidden');
+          if (cxoOpt) cxoOpt.classList.remove('hidden');
         } else {
-          cxoOpt.classList.add('hidden');
-          if (select.value === 'cxo') select.value = 'skynet';
+          if (cxoOpt) cxoOpt.classList.add('hidden');
+          if (select && select.value === 'cxo') select.value = 'skynet';
         }
         this._renderEpochTag(isPaired);
       }
@@ -6782,20 +6868,40 @@
       // centre-cropped to a square and drawn into a canvas of the target
       // size; what comes out is what gets saved.
       //
-      // Two sizes, for two different constraints. A published avatar is 32x32
-      // because it travels inline in a response frame on a port any stranger
-      // may dial. A local contact picture has no wire cost but does share a
-      // ~5 MB localStorage quota with every cached conversation, so it is
-      // capped too — just at the size the sidebar actually renders it.
+      // One size, two budgets. 256 is what covers the largest box the app
+      // renders an avatar in — the 120px profile dialog — on a retina
+      // screen; below that a face is visibly a thumbnail everywhere it
+      // appears, which is the thing "keep it small" was never asking for.
+      //
+      // The budgets differ because the constraints do. A published avatar
+      // travels inline in a response frame on a port any stranger may dial,
+      // so it must clear profile.MaxAvatarBytes (32 KB) or the visor refuses
+      // it. A local contact picture has no wire cost but does share a ~5 MB
+      // localStorage quota with every cached conversation, so it is bounded
+      // too — just more loosely.
+      //
+      // Note the crop is what makes the budget reachable at all: the encoder
+      // steps quality down until it fits (see _cropToSquare), so these are
+      // ceilings the user never has to think about, not limits they can hit.
 
       _avatarTargets() {
+        const dim = 256;
         return {
-          me: { size: 32, label: 'Published at 32×32 pixels, the size your contacts see.' },
-          contact: { size: 96, label: 'Kept on this device only, at 96×96 pixels.' },
+          me: {
+            size: dim, budget: 32 * 1024,
+            label: `Published at ${dim}×${dim}, the picture your contacts fetch with your name.`,
+          },
+          contact: {
+            size: dim, budget: 64 * 1024,
+            label: `Kept on this device only, at ${dim}×${dim}.`,
+          },
           // Same picture as 'contact', staged in the new-contact form rather
           // than written straight to storage — there is no contact to write
           // it to until Save.
-          newcontact: { size: 96, label: 'Kept on this device only, at 96×96 pixels.' },
+          newcontact: {
+            size: dim, budget: 64 * 1024,
+            label: `Kept on this device only, at ${dim}×${dim}.`,
+          },
         };
       }
 
@@ -6821,7 +6927,7 @@
           return;
         }
         const spec = this._avatarTargets()[target];
-        this._cropToSquare(file, spec.size)
+        this._cropToSquare(file, spec.size, spec.budget)
           .then(dataUrl => {
             this._pendingAvatar = { dataUrl, target };
             document.getElementById('avPreviewLg').src = dataUrl;
@@ -6832,17 +6938,42 @@
           .catch(e => this.showToast(String(e.message || e) || 'Could not read that image.', 'error'));
       }
 
-      // _cropToSquare centre-crops an image file and scales it to size×size,
-      // returning a PNG data URL.
+      // _dataUrlBytes reports how many bytes a data URL's payload decodes to
+      // — which is the number the visor checks, not the string's length.
+      _dataUrlBytes(dataUrl) {
+        const i = String(dataUrl).indexOf(',');
+        if (i < 0) return 0;
+        const b64 = dataUrl.slice(i + 1);
+        const pad = (b64.endsWith('==') ? 2 : (b64.endsWith('=') ? 1 : 0));
+        return Math.max(0, Math.floor(b64.length * 3 / 4) - pad);
+      }
+
+      // _cropToSquare centre-crops an image file, scales it to size×size and
+      // encodes it into `budget` bytes, returning a data URL.
       //
-      // PNG rather than JPEG: at 32 pixels a JPEG's block artefacts are
-      // visible and the file is not meaningfully smaller, and a PNG keeps a
-      // transparent background transparent instead of turning it black.
+      // PNG first, JPEG as the fallback — in that order, not either/or. A
+      // drawn avatar (a logo, a flat illustration) is both smaller and
+      // sharper as a PNG; a photograph at 256px is ~150 KB as a PNG and
+      // ~15 KB as a JPEG, so it has to be the latter. Trying PNG and
+      // measuring is how each picture gets the encoder it wants without
+      // asking the user what kind of picture they just chose.
+      //
+      // The canvas is filled opaque first. JPEG has no alpha and would turn
+      // a transparent background black; filling means the picture looks the
+      // same whichever encoder wins, rather than depending on a size race
+      // the user cannot see. White because it reads as a photo backdrop in
+      // both themes.
+      //
+      // Descending quality rather than one fixed setting: the budget is a
+      // promise to the visor (profile.MaxAvatarBytes), and a picture that
+      // busts it would otherwise surface as a 400 with a Go error string in
+      // a toast, at the end of a flow the user thought had succeeded.
       //
       // createImageBitmap where available — it decodes off the main thread
       // and, unlike an <img>, does not need the picture attached to the
       // document to have dimensions. The <img> path is the fallback.
-      _cropToSquare(file, size) {
+      _cropToSquare(file, size, budget) {
+        const cap = budget || 32 * 1024;
         const draw = src => {
           const canvas = document.createElement('canvas');
           canvas.width = size;
@@ -6854,10 +6985,21 @@
           // Centre crop: the subject of a picture somebody picks as their
           // face is, overwhelmingly, in the middle of it.
           const sx = (w - edge) / 2, sy = (h - edge) / 2;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, size, size);
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(src, sx, sy, edge, edge, 0, 0, size, size);
-          return canvas.toDataURL('image/png');
+
+          const png = canvas.toDataURL('image/png');
+          if (this._dataUrlBytes(png) <= cap) return png;
+          for (const q of [0.92, 0.85, 0.75, 0.65, 0.55, 0.45]) {
+            const jpg = canvas.toDataURL('image/jpeg', q);
+            if (this._dataUrlBytes(jpg) <= cap) return jpg;
+          }
+          // Unreachable for a 256px square at q=0.45; kept because the
+          // alternative is handing the visor something it will refuse.
+          throw new Error('That picture will not compress small enough — try a simpler one.');
         };
 
         if (typeof createImageBitmap === 'function') {
@@ -7000,14 +7142,13 @@
         this._syncSavedControls();
       }
 
-      // _syncSavedControls hides the chat-header buttons that make no sense
-      // for a thread with no peer at the other end.
+      // _syncSavedControls clears the header decoration that makes no sense
+      // for a thread with no peer at the other end. The actions themselves
+      // are the ⋮ menu's problem — _dmMenuItems simply does not build the
+      // rows that would need a peer.
       _syncSavedControls() {
         const saved = this.isSaved();
-        ['dmCallBtn', 'pairToggleBtn'].forEach(id => {
-          const el = document.getElementById(id);
-          if (el && saved) el.classList.add('hidden');
-        });
+        this._refreshHeaderMenu();
         const dot = document.getElementById('headerPresenceDot');
         if (dot && saved) { dot.classList.remove('online'); dot.classList.remove('offline'); }
       }
@@ -7226,21 +7367,46 @@
 
       // _forwardTargets is everywhere a message can go, in the order a user
       // is most likely to want: notes first (the "keep this" case), then
-      // conversations, then groups and channels.
+      // open conversations, then the rest of the address book, then groups
+      // and channels.
+      //
+      // Chats and the address book are two lists, not one, because they
+      // answer different questions. Somebody who messaged you once and was
+      // never saved has no address-book row at all — they exist only as a
+      // conversation — and a flat list rendered them as a bare hex string
+      // among named contacts, which is indistinguishable from noise. The
+      // person you want to forward to is, more often than not, exactly the
+      // one you were just talking to.
+      //
+      // A peer in both appears once, under Chats: it is the more specific
+      // fact about them.
       _forwardTargets() {
-        const out = [{ kind: 'saved', id: this.savedKey(), label: 'Saved Messages', sub: 'Notes on this device', icon: '\u{1F516}' }];
+        const out = [{
+          kind: 'saved', id: this.savedKey(), section: '',
+          label: 'Saved Messages', sub: 'Notes on this device', icon: '\u{1F516}',
+        }];
         const seen = new Set();
-        [...this.recipients, ...this.contacts].forEach(pk => {
+        const peer = (pk, section) => {
           if (seen.has(pk)) return;
           seen.add(pk);
-          out.push({ kind: 'dm', id: pk, label: this.shortPk(pk), sub: this.abbrevPk(pk), icon: '\u{1F464}' });
-        });
+          const name = this.peerName(pk);
+          out.push({
+            kind: 'dm', id: pk, section,
+            label: name || this.abbrevPk(pk),
+            // The key, but only when the label is a name — otherwise the
+            // label already IS the key and repeating it says nothing.
+            sub: name ? this.abbrevPk(pk) : '',
+            icon: '\u{1F464}',
+          });
+        };
+        this.recipients.filter(pk => pk !== this.savedKey()).forEach(pk => peer(pk, 'Chats'));
+        this.contacts.forEach(pk => peer(pk, 'Address book'));
         this.groups.forEach(g => {
           // A channel we cannot post in is not a destination.
           if (g.can_post === false || g.read_only) return;
           if (g.status && g.status !== 'active') return;
           out.push({
-            kind: 'group', id: g.id,
+            kind: 'group', id: g.id, section: 'Groups and channels',
             label: g.name || g.id,
             sub: g.kind === 'channel' ? 'Channel' : 'Group',
             icon: g.kind === 'channel' ? '\u{1F4E3}' : '#',
@@ -7258,17 +7424,30 @@
         const rows = this._forwardTargets().filter(t =>
           !q || t.label.toLowerCase().includes(q) || String(t.id).toLowerCase().includes(q));
         list.innerHTML = '';
+        // Headings are emitted from the rows that survived the search, so a
+        // section whose every row was filtered out does not leave its title
+        // standing over nothing.
+        let section = null;
         rows.forEach(t => {
+          if (t.section && t.section !== section) {
+            section = t.section;
+            const head = document.createElement('li');
+            head.className = 'fwd-section';
+            head.textContent = section;
+            list.appendChild(head);
+          }
           const li = document.createElement('li');
           const avatar = t.kind === 'dm'
             ? `<img class="recipient-avatar" src="${this.escapeAttr(localStorage.getItem(`i_${t.id}`) || 'p.png')}" alt="" />`
             : `<div class="saved-avatar">${t.icon}</div>`;
+          const sub = t.sub
+            ? `<div class="recipient-preview">${this.escapeHtml(t.sub)}</div>` : '';
           li.innerHTML = `
             <div class="recipient-item" onclick="app.doForward('${this.escapeAttr(t.kind)}', '${this.escapeAttr(t.id)}')">
               <div class="avatar-wrap">${avatar}</div>
               <div class="recipient-info">
                 <div class="recipient-pk">${this.escapeHtml(t.label)}</div>
-                <div class="recipient-preview">${this.escapeHtml(t.sub)}</div>
+                ${sub}
               </div>
             </div>`;
           list.appendChild(li);
@@ -7651,15 +7830,11 @@
         }
       }
 
+      // The pin row lives in the header ⋮ menu, which derives its own label
+      // when it opens; this only has to catch a menu that is open while the
+      // pin flips under it.
       _updatePinButtons() {
-        const key = this._currentPinKey();
-        const active = !!key && key === this.pinned;
-        ['dmPinBtn', 'groupPinBtn'].forEach(bid => {
-          const b = document.getElementById(bid);
-          if (!b) return;
-          b.classList.toggle('pinned-active', active);
-          b.title = active ? 'Unpin from top' : 'Pin to top';
-        });
+        this._refreshHeaderMenu();
       }
 
       selectGroup(id) {
@@ -8059,38 +8234,70 @@
           .catch(e => this.showToast(`Create failed: ${e}`, 'error'));
       }
 
-      // ---- Compose menu ----------------------------------------------
+      // ---- Popup menus ------------------------------------------------
+      //
+      // Two of them — the compose menu on the sidebar and the ⋮ on the chat
+      // header — sharing one set of primitives keyed by (menu id, trigger
+      // id). _menuPairs is the registry the document-level dismiss handlers
+      // walk, so a menu added later gets outside-click and Escape for free.
+
+      // A menu lists every id that can open it, not just the current one:
+      // the header ⋮ has two triggers (DM and group) and the dismiss
+      // handlers must recognise a click on either as "not outside".
+      _menuPairs() {
+        return [
+          { menu: 'startMenu', btns: ['startBtn'] },
+          { menu: 'hdrMenu', btns: ['dmMenuBtn', 'groupMenuBtn'] },
+        ];
+      }
+
+      openMenu(menuId, btnId) {
+        const menu = document.getElementById(menuId);
+        if (!menu) return;
+        this._positionMenu(menuId, btnId);
+        menu.classList.add('visible');
+        const btn = document.getElementById(btnId);
+        if (btn) btn.setAttribute('aria-expanded', 'true');
+      }
+
+      closeMenu(menuId, btnId) {
+        const menu = document.getElementById(menuId);
+        if (!menu) return;
+        menu.classList.remove('visible');
+        const btn = document.getElementById(btnId);
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+      }
+
+      closeAllMenus() {
+        this._menuPairs().forEach(p => p.btns.forEach(b => this.closeMenu(p.menu, b)));
+      }
 
       toggleStartMenu(ev) {
         if (ev) ev.stopPropagation();
         const menu = document.getElementById('startMenu');
         if (menu.classList.contains('visible')) { this.closeStartMenu(); return; }
-        this._positionStartMenu();
-        menu.classList.add('visible');
-        document.getElementById('startBtn').setAttribute('aria-expanded', 'true');
+        this.openMenu('startMenu', 'startBtn');
       }
 
-      closeStartMenu() {
-        const menu = document.getElementById('startMenu');
-        if (!menu) return;
-        menu.classList.remove('visible');
-        const btn = document.getElementById('startBtn');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-      }
+      closeStartMenu() { this.closeMenu('startMenu', 'startBtn'); }
 
-      // _positionStartMenu pins the menu to the button it belongs to.
+      // _positionMenu pins a menu to the button it belongs to.
       //
-      // Measured rather than declared because the button moves: it is in
-      // the sidebar header on a wide screen and a floating button at the
-      // bottom of a phone screen. Opening downward from the header and
-      // upward from the floating button falls out of "is there room
-      // below", so neither case needs its own rule.
-      _positionStartMenu() {
-        const menu = document.getElementById('startMenu');
-        const btn = document.getElementById('startBtn');
+      // Measured rather than declared because the button moves: the compose
+      // button is in the sidebar header on a wide screen and a floating
+      // button at the bottom of a phone screen. Opening downward from the
+      // header and upward from the floating button falls out of "is there
+      // room below", so neither case needs its own rule — and the chat
+      // header's ⋮, which never moves, needs no rule at all.
+      _positionMenu(menuId, btnId) {
+        const menu = document.getElementById(menuId);
+        const btn = document.getElementById(btnId);
         if (!menu || !btn) return;
         // Measure while displayed but still transparent to the user —
-        // offsetWidth is 0 on a display:none element.
+        // offsetWidth is 0 on a display:none element. An already-open menu
+        // is re-measured in place (its rows change as state does), so the
+        // display state is restored rather than assumed closed.
+        const wasVisible = menu.classList.contains('visible');
         menu.style.visibility = 'hidden';
         menu.classList.add('visible');
         const b = btn.getBoundingClientRect();
@@ -8103,8 +8310,209 @@
         top = Math.max(pad, top);
         menu.style.left = `${Math.round(left)}px`;
         menu.style.top = `${Math.round(top)}px`;
-        menu.classList.remove('visible');
+        if (!wasVisible) menu.classList.remove('visible');
         menu.style.visibility = '';
+      }
+
+      // ---- Chat-header ⋮ menu ------------------------------------------
+      //
+      // Every action that used to be an unlabelled icon in the header. The
+      // rows are derived from app state each time the menu opens, so a row
+      // whose label is its state ("Unpin", "Unmute") cannot drift from the
+      // thing it toggles, and a row that would silently do nothing for the
+      // open conversation is simply not built.
+
+      toggleHeaderMenu(ev) {
+        if (ev) ev.stopPropagation();
+        // The per-message ⋯ menu dismisses itself from a BUBBLE-phase document
+        // listener, which the stopPropagation above would rob it of — so it is
+        // closed here rather than left hanging beside a second open menu.
+        this.closeMsgMenu();
+        const btnId = this.group ? 'groupMenuBtn' : 'dmMenuBtn';
+        const menu = document.getElementById('hdrMenu');
+        if (!menu) return;
+        if (menu.classList.contains('visible') && this._hdrMenuBtn === btnId) {
+          this.closeHeaderMenu();
+          return;
+        }
+        this._hdrMenuBtn = btnId;
+        this._renderHeaderMenu();
+        this.openMenu('hdrMenu', btnId);
+        // The menu is a body-level child, so tabbing out of the trigger would
+        // walk the rest of the page before reaching it. Moving focus onto the
+        // first row is what makes the header's actions reachable from the
+        // keyboard at all, now that they are behind one control.
+        const first = menu.querySelector('.hdr-item');
+        if (first) first.focus();
+      }
+
+      closeHeaderMenu() {
+        const menu = document.getElementById('hdrMenu');
+        // Hand focus back to the trigger before the rows holding it vanish —
+        // otherwise Escape drops the caret on <body> and the next Tab starts
+        // from the top of the page. Only when focus is actually inside, so
+        // closing a menu nobody was keyboarding does not steal it.
+        if (menu && menu.contains(document.activeElement)) {
+          const btn = document.getElementById(this._hdrMenuBtn || 'dmMenuBtn');
+          if (btn) btn.focus();
+        }
+        // Both triggers are cleared: which one is "current" changes with the
+        // open conversation, and a stale aria-expanded="true" on the other
+        // one outlives the menu it described.
+        this.closeMenu('hdrMenu', 'dmMenuBtn');
+        this.closeMenu('hdrMenu', 'groupMenuBtn');
+      }
+
+      // _headerMenuItems returns the rows for whatever is open. A row is
+      // {icon, label, act} plus optional flags: `on` / `warn` / `danger`
+      // tint it, `count` puts a number on it, `sep: true` is a divider.
+      _headerMenuItems() {
+        return this.group ? this._groupMenuItems() : this._dmMenuItems();
+      }
+
+      // Saved Messages reuses the DM header but is not a conversation: no
+      // peer to call, pair with, copy a key for or hand an address to; it
+      // already sits at the top of the list, so it cannot be pinned (see
+      // _currentPinKey); and nothing arrives in it, so there is nothing to
+      // silence. Every one of those rows would be a row that does nothing
+      // when tapped, which is worse than an absent one — so the notes
+      // thread's menu is the single action it really has.
+      _dmMenuItems() {
+        if (this.isSaved()) {
+          return [{
+            icon: this._trashIcon(), label: 'Clear notes',
+            act: 'deleteChat', danger: true,
+          }];
+        }
+
+        const key = this._currentPinKey();
+        const pinned = !!key && key === this.pinned;
+        const muted = this._isMuted(this.activeKey());
+        const items = [];
+
+        if (this.voice && this.voice.available) {
+          items.push({ icon: '&#x1F4DE;', label: 'Voice call', act: 'placeCall' });
+        }
+        items.push({
+          icon: '&#x1F4CC;', label: pinned ? 'Unpin' : 'Pin',
+          act: 'togglePin', on: pinned,
+        });
+        items.push({
+          icon: muted ? '&#x1F515;' : '&#x1F514;', label: muted ? 'Unmute' : 'Mute',
+          act: 'toggleMute', warn: muted,
+        });
+        if (this.pairAvailable) {
+          const isPaired = !!(this.recipient && this.pairedSet && this.pairedSet.has(this.recipient));
+          items.push({
+            icon: isPaired ? '&#x2716;' : '&#x29B5;', label: isPaired ? 'Unpair' : 'Pair',
+            act: 'togglePair', on: isPaired,
+          });
+        }
+        items.push({ icon: this._qrIcon(), label: 'QR code', act: 'showQr' });
+        items.push({ icon: '&#x2398;', label: 'Copy key', act: 'copyPk' });
+        items.push({ icon: '&#x2699;', label: 'Settings', act: 'openSettings' });
+        items.push({ sep: true });
+        items.push({
+          icon: this._trashIcon(), label: 'Delete chat',
+          act: 'deleteChat', danger: true,
+        });
+        return items;
+      }
+
+      _groupMenuItems() {
+        const info = this._groupInfo();
+        const isChannel = !!(info && info.kind === 'channel');
+        const noun = isChannel ? 'channel' : 'group';
+        const key = this._currentPinKey();
+        const pinned = !!key && key === this.pinned;
+        const muted = this._isMuted(this.activeKey());
+        const pending = (info && info.pending_joins) || 0;
+
+        return [
+          { icon: '&#x1F4CC;', label: pinned ? 'Unpin' : 'Pin', act: 'togglePin', on: pinned },
+          {
+            icon: muted ? '&#x1F515;' : '&#x1F514;', label: muted ? 'Unmute' : 'Mute',
+            act: 'toggleMute', warn: muted,
+          },
+          { icon: '&#x1F465;', label: 'Members', act: 'openGroupAdmin', count: pending },
+          { icon: '&#x1F517;', label: 'Invite link', act: 'showGroupInvite' },
+          { icon: this._qrIcon(), label: 'QR code', act: 'showQr' },
+          { sep: true },
+          { icon: '&#x21AA;', label: `Leave ${noun}`, act: 'leaveGroup' },
+          { icon: this._trashIcon(), label: `Delete ${noun}`, act: 'deleteGroup', danger: true },
+        ];
+      }
+
+      // The two icons that are drawings rather than characters. Kept as
+      // markup so a menu row reads the same as the header button it
+      // replaced.
+      _qrIcon() {
+        return '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">' +
+          '<path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/></svg>';
+      }
+
+      _trashIcon() {
+        return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+          'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<polyline points="3 6 5 6 21 6"></polyline>' +
+          '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
+          '<line x1="10" y1="11" x2="10" y2="17"></line>' +
+          '<line x1="14" y1="11" x2="14" y2="17"></line></svg>';
+      }
+
+      // _renderHeaderMenu draws the rows. Returns the signature it drew so
+      // _refreshHeaderMenu can tell a real change from a poll that found
+      // nothing new — the voice poller calls in every couple of seconds and
+      // a menu that rebuilt itself under the cursor would drop the click.
+      _renderHeaderMenu() {
+        const menu = document.getElementById('hdrMenu');
+        if (!menu) return '';
+        const items = this._headerMenuItems();
+        const sig = JSON.stringify(items);
+        menu.innerHTML = items.map(it => {
+          if (it.sep) return '<div class="hdr-sep"></div>';
+          const cls = ['hdr-item'];
+          if (it.on) cls.push('on');
+          if (it.warn) cls.push('warn');
+          if (it.danger) cls.push('danger');
+          const count = it.count
+            ? `<span class="hi-count">${it.count}</span>` : '';
+          return `<button class="${cls.join(' ')}" role="menuitem" onclick="app.runHeaderAction('${it.act}')">` +
+            `<span class="hi-icon">${it.icon}</span>` +
+            `<span class="hi-label">${this.escapeHtml(it.label)}</span>${count}</button>`;
+        }).join('');
+        menu.dataset.sig = sig;
+        return sig;
+      }
+
+      // _refreshHeaderMenu re-derives an OPEN menu after something it shows
+      // changed. A no-op when the menu is shut (it is rebuilt on open) and
+      // when nothing it draws actually moved.
+      _refreshHeaderMenu() {
+        const menu = document.getElementById('hdrMenu');
+        if (!menu || !menu.classList.contains('visible')) return;
+        if (JSON.stringify(this._headerMenuItems()) === menu.dataset.sig) return;
+        this._renderHeaderMenu();
+        this._positionMenu('hdrMenu', this._hdrMenuBtn || 'dmMenuBtn');
+      }
+
+      // runHeaderAction dismisses the menu, then acts. Dismiss first so a
+      // handler that opens a dialog or tears the conversation down doesn't
+      // leave a menu floating over the result.
+      runHeaderAction(name) {
+        this.closeHeaderMenu();
+        if (typeof this[name] === 'function') this[name]();
+      }
+
+      // _updateHeaderTriggers reflects on the closed ⋮ the one piece of
+      // state the menu can no longer show at a glance: whether this thread
+      // is silenced.
+      _updateHeaderTriggers() {
+        const muted = this._isMuted(this.activeKey());
+        ['dmMenuBtn', 'groupMenuBtn'].forEach(id => {
+          const b = document.getElementById(id);
+          if (b) b.classList.toggle('muted', muted);
+        });
       }
 
       // ---- Add by address --------------------------------------------
@@ -8672,6 +9080,10 @@
       // hopping between five chats leaves one entry to go back through
       // rather than five.
       _enterChatPane() {
+        // The ⋮ menu is a body-level child, so it does not go away with the
+        // header it belongs to. Every conversation switch runs through here,
+        // which makes it the one place that has to say so.
+        this.closeHeaderMenu();
         if (!this._isOnePane()) return;
         const wasOpen = document.body.classList.contains('chat-open');
         document.body.classList.add('chat-open');
@@ -8689,6 +9101,7 @@
       // browser has already moved, and calling back() again would leave
       // the app.
       showChatList(popHistory = true) {
+        this.closeHeaderMenu();
         document.body.classList.remove('chat-open');
         if (popHistory && history.state && history.state.skychat === 'chat') {
           history.back();
@@ -9075,8 +9488,9 @@
         if (btn) btn.classList.add('hidden');
       }
 
-      // _updatePendingBadge shows how many join requests await this
-      // admin on the open group.
+      // _updatePendingBadge shows how many join requests await this admin on
+      // the open group — on the closed ⋮ as a corner count, and on the
+      // Members row inside it.
       _updatePendingBadge() {
         const badge = document.getElementById('groupPendingBadge');
         if (!badge) return;
@@ -9084,6 +9498,7 @@
         const n = (info && info.pending_joins) || 0;
         badge.textContent = n;
         badge.classList.toggle('hidden', n === 0);
+        this._refreshHeaderMenu();
       }
 
       showGroupInvite() {
@@ -9094,23 +9509,38 @@
           .catch(() => this.showToast('Could not get invite link.', 'error'));
       }
 
+      // _groupNoun is what the open room should be called in something the
+      // user reads. The menu row says "Leave channel"; a confirm that then
+      // asks about "this group" reads as being about something else.
+      _groupNoun() {
+        const info = this._groupInfo();
+        return (info && info.kind === 'channel') ? 'channel' : 'group';
+      }
+
       leaveGroup() {
-        if (!this.group || !confirm('Leave this group?')) return;
+        const noun = this._groupNoun();
+        if (!this.group || !confirm(`Leave this ${noun}?`)) return;
         const gid = this.group;
         fetch(`/group/${gid}/leave`, { method: 'POST' })
-          .then(res => { if (res.ok) { this._removeGroup(gid); this.showToast('Left group.'); } else res.text().then(t => this.showToast(t, 'error')); })
+          .then(res => { if (res.ok) { this._removeGroup(gid); this.showToast(`Left ${noun}.`); } else res.text().then(t => this.showToast(t, 'error')); })
           .catch(e => this.showToast(e.message, 'error'));
       }
 
       deleteGroup() {
-        if (!this.group || !confirm('Delete this group? (owner only)')) return;
+        const noun = this._groupNoun();
+        // The "(owner only)" qualifier lives here rather than in the menu
+        // label: the row has to stay short, and this is the last moment
+        // before a request the server will refuse for anyone else.
+        if (!this.group || !confirm(`Delete this ${noun}? (owner only)`)) return;
         const gid = this.group;
+        const done = noun.charAt(0).toUpperCase() + noun.slice(1);
         fetch(`/group/${gid}`, { method: 'DELETE' })
-          .then(res => { if (res.ok) { this._removeGroup(gid); this.showToast('Group deleted.'); } else res.text().then(t => this.showToast(t, 'error')); })
+          .then(res => { if (res.ok) { this._removeGroup(gid); this.showToast(`${done} deleted.`); } else res.text().then(t => this.showToast(t, 'error')); })
           .catch(e => this.showToast(e.message, 'error'));
       }
 
       _removeGroup(gid) {
+        this.closeHeaderMenu();
         this.groups = this.groups.filter(g => g.id !== gid);
         this._unpinIf('grp:' + gid);
         this.renderGroups();
@@ -9254,6 +9684,7 @@
       _purgeSelfThread() {
         const me = this.myPK;
         if (!me || !this.recipients.includes(me)) return;
+        this.closeHeaderMenu();
         this.recipients = this.recipients.filter(v => v !== me);
         this._unpinIf('dm:' + me);
         delete this.messages[me];
@@ -9526,17 +9957,12 @@
         this._updateMuteButtons();
       }
 
-      // _updateMuteButtons reflects the active thread's mute state on the DM and
-      // group header bells (🔕 muted / 🔔 unmuted).
+      // _updateMuteButtons reflects the active thread's mute state: the bell
+      // row inside the header ⋮ menu (🔕 muted / 🔔 unmuted) and the tint on
+      // the closed ⋮ itself.
       _updateMuteButtons() {
-        const muted = this._isMuted(this.activeKey());
-        ['dmMuteBtn', 'groupMuteBtn'].forEach(id => {
-          const btn = document.getElementById(id);
-          if (!btn) return;
-          btn.classList.toggle('muted', muted);
-          btn.innerHTML = muted ? '&#x1F515;' : '&#x1F514;';
-          btn.title = muted ? 'Unmute notifications for this chat' : 'Mute notifications for this chat';
-        });
+        this._updateHeaderTriggers();
+        this._refreshHeaderMenu();
       }
 
       // _notifCapable reports whether THIS browser can currently show a desktop
@@ -9582,8 +10008,10 @@
 
       _setVoiceAvailable(v) {
         this.voice.available = v;
-        const btn = document.getElementById('dmCallBtn');
-        if (btn) btn.classList.toggle('hidden', !v);
+        // The Call row appears and disappears with the visor's voice RPC;
+        // an open menu is re-derived, and the signature check in
+        // _refreshHeaderMenu keeps the poll from redrawing it every tick.
+        this._refreshHeaderMenu();
         if (!v) { // voice went away — tear down any UI
           this.voice.ring = null; this._renderIncoming();
           if (this.voice.activeId) this._endCallUI();
@@ -9868,10 +10296,12 @@
       }
 
       // updatePicture handles a contact's picture. The file goes through the
-      // shared cropper (centre-crop, scale, preview) rather than being stored
-      // as picked: the old path kept up to 250 KB per contact in a
-      // localStorage quota that is ~5 MB for the whole app, cached
-      // conversations included.
+      // shared cropper (centre-crop, scale, encode-to-budget) rather than
+      // being stored as picked: the old path kept up to 250 KB per contact
+      // in a localStorage quota that is ~5 MB for the whole app, cached
+      // conversations included. The budget is what holds that line — the
+      // crop dimension alone would not, since a 256px PNG is bigger than
+      // the 96px one this replaced.
       updatePicture() {
         this._pickAvatar(document.getElementById('profilePicture'), 'contact');
       }
@@ -10447,23 +10877,29 @@
       if (e.target === this) app.closeContacts();
     });
 
-    // Dismiss the start menu on any click outside it. Capture phase so
-    // it fires before a click lands on whatever is underneath.
+    // Dismiss any open popup menu on a click outside it. Capture phase so
+    // it fires before the click lands on whatever is underneath — which is
+    // also why a click on a trigger has to be recognised here rather than
+    // left to the trigger's own stopPropagation: capture runs first.
     document.addEventListener('click', function(e) {
-      const menu = document.getElementById('startMenu');
-      if (!menu.classList.contains('visible')) return;
-      if (menu.contains(e.target)) return;
-      if (document.getElementById('startBtn').contains(e.target)) return;
-      app.closeStartMenu();
+      app._menuPairs().forEach(function(p) {
+        const menu = document.getElementById(p.menu);
+        if (!menu || !menu.classList.contains('visible')) return;
+        if (menu.contains(e.target)) return;
+        const onTrigger = p.btns.some(function(id) {
+          const b = document.getElementById(id);
+          return b && b.contains(e.target);
+        });
+        if (onTrigger) return;
+        p.btns.forEach(function(id) { app.closeMenu(p.menu, id); });
+      });
     }, true);
 
     // Keep the open menu attached to its button when the viewport changes
-    // — a resize can move the button between the header and the floating
-    // position, and an orientation change moves it a long way.
+    // — a resize can move the compose button between the header and the
+    // floating position, and an orientation change moves it a long way.
     window.addEventListener('resize', function() {
-      const menu = document.getElementById('startMenu');
-      if (!menu.classList.contains('visible')) return;
-      app.closeStartMenu();
+      app.closeAllMenus();
     });
 
     // Device / browser back on a phone returns to the conversation list
@@ -10480,7 +10916,7 @@
       if (e.key === 'Escape') {
         app.closeSettings();
         app.closeLightbox();
-        app.closeStartMenu();
+        app.closeAllMenus();
         app.closeModal('createGroupModal');
         app.closeModal('createChannelModal');
         app.closeModal('groupAdminModal');

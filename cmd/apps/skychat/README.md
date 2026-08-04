@@ -402,12 +402,17 @@ the address other people need in order to ask.
   relationship exists, which is exactly what a per-group port cannot
   do. Stored in `<local>/skychat/profile.json`; a visor that has set
   nothing answers empty rather than refusing.
-- **The avatar is at most 32×32 pixels** and 8 KB. It travels inline in
-  one response frame on a port any stranger may dial, so an uncapped
+- **The avatar is at most 256×256 pixels and 32 KB.** It travels inline
+  in one response frame on a port any stranger may dial, so an uncapped
   picture would turn "ask who this is" into a way to make a visor serve
-  arbitrary bytes. The browser centre-crops and scales before upload;
-  the visor enforces the result by *decoding* the image (PNG or JPEG),
-  never by trusting a declared size or MIME type.
+  arbitrary bytes. 256 is what covers the largest box the UI renders it
+  in (the 120px profile dialog) on a retina screen; the byte cap is the
+  one that holds the wire promise, and it leaves ~21 KB of slack under
+  the 64 KB frame limit after base64. The browser centre-crops, scales,
+  and encodes down — PNG if it fits, otherwise JPEG at descending
+  quality — so the cap is never something the user has to hit. The visor
+  enforces the result by *decoding* the image (PNG or JPEG), never by
+  trusting a declared size or MIME type.
 - **Your address** — `skychat://<your-pk>` — is shown as a QR code and
   as selectable text with a copy button, the same treatment a group
   gets. This half works with no visor RPC at all, so it is still
