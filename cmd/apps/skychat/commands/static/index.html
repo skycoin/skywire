@@ -705,6 +705,17 @@
       padding: 16px 20px;
       background: var(--bg-secondary);
       border-top: 1px solid var(--border-color);
+      /* The field is the only control that changes height, so the row hangs
+         from its bottom edge: growing to three rows lifts the text away from
+         the send button instead of dragging every control taller with it. */
+      align-items: flex-end;
+    }
+
+    /* One height for every fixed control, matching the field's single-row
+       height so a one-line composer reads as a single bar. */
+    .network-select,
+    .attach-btn {
+      height: 42px;
     }
 
     .message-form.hidden {
@@ -729,6 +740,11 @@
 
     .message-input {
       flex: 1;
+      /* A flex item's automatic minimum is its content, and for the field
+         that is the placeholder — "Type a message..." is 227px wide, which
+         at a phone's ~400px viewport makes the row overflow and takes the
+         select and the send button off both edges with it. */
+      min-width: 0;
       padding: 10px 16px;
       background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
@@ -736,6 +752,22 @@
       color: var(--text-primary);
       font-size: 14px;
       transition: border-color 0.2s, box-shadow 0.2s;
+      /* Textarea bits. The whole-pixel line-height is what makes the row
+         count exact: one row is 20 + 20 padding + 2 border = 42px, and the
+         three-row cap below is the same sum with three rows. */
+      font-family: inherit;
+      line-height: 20px;
+      resize: none;
+      overflow-y: auto;
+      max-height: 82px;
+      /* The field still scrolls past three rows; it just doesn't draw a bar
+         to say so. A scrollbar inside a 42px pill is all chrome and no
+         information — the text moving under the caret already tells you. */
+      scrollbar-width: none;
+    }
+
+    .message-input::-webkit-scrollbar {
+      display: none;
     }
 
     .message-input:focus {
@@ -755,7 +787,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      align-self: center;
+      align-self: flex-end;
       flex-shrink: 0;
       width: 40px;
       height: 40px;
@@ -1117,6 +1149,14 @@
       max-height: 100%;
       border-radius: 8px;
       box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+      /* The viewer owns the gestures (see _lbInit): without this the browser
+         claims the pinch and the drag for its own scrolling and the image
+         cannot be zoomed at all inside an app that — rightly — has page zoom
+         switched off. transform-origin is the corner so the zoom maths can
+         work in plain untransformed offsets. */
+      touch-action: none;
+      transform-origin: 0 0;
+      will-change: transform;
     }
 
     /* Inline video & audio players */
@@ -1820,6 +1860,35 @@
       .chat-header { padding: 10px 12px; }
       .chat-header-actions { gap: 4px; }
       .message-bubble { max-width: 90%; }
+
+      /* Composer budget on a phone. Four controls and 40px of padding do
+         not fit a ~400px row at desktop spacing: the fixed part alone
+         (select + attach + send + gaps + padding) is over half the width,
+         and what is left has to stay a usable message field. The select is
+         the one that gives — it is a set-once control, and its widest
+         option ("CXO (paired)") is what was sizing it. */
+      .message-form {
+        gap: 8px;
+        padding: 12px;
+      }
+
+      .network-select {
+        min-width: 0;
+        max-width: 92px;
+        padding: 10px 6px;
+        font-size: 12px;
+      }
+
+      /* The desktop toast leaves room for the 320px sidebar beside it. There
+         is no sidebar beside anything here, so that reservation is most of
+         the screen — it squeezed every toast into a ~46px column of wrapped
+         words. One pane, one full-width toast. */
+      .toast-container {
+        left: 12px;
+        right: 12px;
+        max-width: none;
+        align-items: stretch;
+      }
 
       /* The action button leaves the header flow and becomes a
          thumb-reachable floating button, bottom right. Same element — the
@@ -2746,7 +2815,11 @@
         &#x1F4CE;
         <input type="file" id="fileField" style="display:none" onchange="app.sendFile()" />
       </label>
-      <input id="msgField" class="message-input" type="text" placeholder="Type a message..." oninput="app.syncComposerBtn()" />
+      <!-- A textarea, not a single-line input: a message is not one line.
+           It opens one row high, grows with the text to a three-row cap and
+           scrolls after that — see growComposer. -->
+      <textarea id="msgField" class="message-input" rows="1" placeholder="Type a message..."
+                oninput="app.syncComposerBtn()" onkeydown="app.onComposerKey(event)"></textarea>
       <!-- Takes the input's place while recording: elapsed time, the gesture
            hint (which slides with the pointer), and — once locked — a cancel
            button, since there's no pointer left to slide. -->
@@ -3370,11 +3443,15 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- Image Lightbox -->
-  <div id="lightbox" class="lightbox-overlay" onclick="app.closeLightbox()">
+  <div id="lightbox" class="lightbox-overlay" onclick="app.closeLightbox(event)">
     <img id="lightboxImg" class="lightbox-img" src="" alt="" />
   </div>
 
   <script>
+    // Window between the two taps of a double-tap, and the delay a single
+    // tap waits out before it counts as one (see _lbUp).
+    const DOUBLE_TAP_MS = 300;
+
     class Chat {
       constructor() {
         this.recipients = [];
@@ -3546,6 +3623,7 @@
         // per-row listener would have to be re-attached on every arrival.
         const msgArea = document.getElementById('messages');
         if (msgArea) msgArea.addEventListener('click', e => this.onMessageTap(e));
+        this._lbInit();
 
         this.loadData();
         this.recipients.forEach(r => this._addRecipient(r));
@@ -4643,11 +4721,136 @@
         if (!src) return;
         document.getElementById('lightboxImg').src = src;
         document.getElementById('lightbox').classList.add('visible');
+        this._lbReset();
       }
 
-      closeLightbox() {
+      // The overlay's click closes; a click that landed on the image is the
+      // image's own business (tap, double-tap or the end of a drag) and is
+      // handled in _lbUp.
+      closeLightbox(e) {
+        if (e && e.target && e.target.id === 'lightboxImg') return;
         document.getElementById('lightbox').classList.remove('visible');
         document.getElementById('lightboxImg').src = '';
+        this._lbReset();
+      }
+
+      // ---- Lightbox zoom -------------------------------------------------
+      //
+      // The viewer zooms itself rather than leaning on the browser's page
+      // zoom: inside the Android app page zoom is off (with it on, the whole
+      // chat could be pinched out of shape), and there is no other way to
+      // look closely at a photo someone sent. Pinch or double-tap to zoom,
+      // drag to pan, double-tap again — or reopen — to go back to fit.
+      _lbInit() {
+        const img = document.getElementById('lightboxImg');
+        if (!img) return;
+        img.addEventListener('pointerdown', e => this._lbDown(e));
+        img.addEventListener('pointermove', e => this._lbMove(e), { passive: false });
+        img.addEventListener('pointerup', e => this._lbUp(e));
+        img.addEventListener('pointercancel', e => this._lbUp(e));
+        img.addEventListener('wheel', e => {
+          e.preventDefault();
+          this._lbZoomAt(e.clientX, e.clientY, e.deltaY < 0 ? 1.15 : 1 / 1.15);
+        }, { passive: false });
+      }
+
+      _lbState() {
+        if (!this._lb) {
+          this._lb = { scale: 1, x: 0, y: 0, pts: new Map(), dist: 0, from: 1, tap: 0, moved: false };
+        }
+        return this._lb;
+      }
+
+      _lbApply() {
+        const s = this._lbState();
+        const img = document.getElementById('lightboxImg');
+        if (!img) return;
+        img.style.transform = `translate(${s.x}px, ${s.y}px) scale(${s.scale})`;
+        img.style.cursor = s.scale > 1 ? 'grab' : 'zoom-out';
+      }
+
+      _lbReset() {
+        const s = this._lbState();
+        s.scale = 1; s.x = 0; s.y = 0; s.pts.clear(); s.dist = 0;
+        this._lbApply();
+      }
+
+      // Scale by factor about the viewport point (cx, cy), keeping whatever
+      // is under that point exactly where it is.
+      _lbZoomAt(cx, cy, factor) {
+        const s = this._lbState();
+        const img = document.getElementById('lightboxImg');
+        if (!img) return;
+        const next = Math.min(6, Math.max(1, s.scale * factor));
+        if (next === s.scale) return;
+        const rect = img.getBoundingClientRect();
+        // Offset of the anchor point inside the *untransformed* image.
+        const ox = (cx - rect.left) / s.scale;
+        const oy = (cy - rect.top) / s.scale;
+        s.x += ox * (s.scale - next);
+        s.y += oy * (s.scale - next);
+        s.scale = next;
+        if (s.scale === 1) { s.x = 0; s.y = 0; }
+        this._lbApply();
+      }
+
+      _lbDown(e) {
+        const s = this._lbState();
+        // Capture keeps a drag alive when a finger leaves the image, but it
+        // throws for a pointer the element doesn't own — and losing the
+        // gesture entirely is a worse trade than losing the capture.
+        try { e.target.setPointerCapture(e.pointerId); } catch (err) { /* not captured */ }
+        s.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        s.moved = false;
+        if (s.pts.size === 2) {
+          const [a, b] = [...s.pts.values()];
+          s.dist = Math.hypot(a.x - b.x, a.y - b.y);
+          s.from = s.scale;
+        }
+      }
+
+      _lbMove(e) {
+        const s = this._lbState();
+        const prev = s.pts.get(e.pointerId);
+        if (!prev) return;
+        s.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (s.pts.size === 2 && s.dist) {
+          e.preventDefault();
+          const [a, b] = [...s.pts.values()];
+          const dist = Math.hypot(a.x - b.x, a.y - b.y);
+          const target = Math.min(6, Math.max(1, s.from * dist / s.dist));
+          this._lbZoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, target / s.scale);
+          s.moved = true;
+          return;
+        }
+        if (s.pts.size === 1 && s.scale > 1) {
+          e.preventDefault();
+          s.x += e.clientX - prev.x;
+          s.y += e.clientY - prev.y;
+          s.moved = true;
+          this._lbApply();
+        }
+      }
+
+      _lbUp(e) {
+        const s = this._lbState();
+        if (!s.pts.delete(e.pointerId)) return;
+        if (s.pts.size < 2) s.dist = 0;
+        if (s.pts.size || s.moved) return;
+        const now = Date.now();
+        if (now - s.tap < DOUBLE_TAP_MS) {
+          s.tap = 0;
+          if (s.scale > 1) this._lbReset();
+          else this._lbZoomAt(e.clientX, e.clientY, 2.5);
+          return;
+        }
+        // A single tap on an unzoomed image closes the viewer, as it always
+        // has — but only once the double-tap window has passed, or the first
+        // half of every double-tap would close it instead of zooming.
+        s.tap = now;
+        setTimeout(() => {
+          if (s.tap === now && s.scale === 1) this.closeLightbox();
+        }, DOUBLE_TAP_MS);
       }
 
       _sseSubscribe() {
@@ -5329,6 +5532,11 @@
       // syncComposerBtn repaints the button for the current mode. Cheap and
       // idempotent — called on every keystroke, so it no-ops when unchanged.
       syncComposerBtn() {
+        // Ahead of the early return below: the height has to follow the text
+        // on every keystroke, not only when the button changes mode. Every
+        // place that clears the field calls this, so the reset back to one
+        // row after a send comes for free.
+        this.growComposer();
         const btn = document.getElementById('composerBtn');
         if (!btn) return;
         const mode = this._composerMode();
@@ -5351,6 +5559,39 @@
           btn.classList.add('morphing');
         }
         btn.dataset.painted = '1';
+      }
+
+      // growComposer sizes the field to its content. Height is cleared first
+      // because scrollHeight only ever grows against a fixed height — without
+      // the reset the field would never shrink back after a delete. The
+      // three-row ceiling is the CSS max-height, which turns the overflow
+      // into a scroll on its own.
+      growComposer() {
+        const field = document.getElementById('msgField');
+        if (!field) return;
+        // The composer is hidden until a conversation is open, and a hidden
+        // element measures 0 — sizing to that would pin the field shut until
+        // the first keystroke re-measured it. Left alone it renders at its
+        // natural one-row height, which is exactly what it should be.
+        if (!field.scrollHeight) return;
+        // scrollHeight is content + padding; the field is border-box, so the
+        // border has to be added back or every row is 2px short — enough to
+        // clip the line and hand the field a scrollbar it doesn't need.
+        const border = field.offsetHeight - field.clientHeight;
+        field.style.height = 'auto';
+        field.style.height = (field.scrollHeight + border) + 'px';
+      }
+
+      // onComposerKey decides what Enter means. On a machine with a real
+      // keyboard it sends (Shift+Enter for a newline, the convention every
+      // desktop chat uses); on a touch device it inserts a newline, because
+      // there the Enter key is the only way to write a second line and the
+      // send button is already under the thumb.
+      onComposerKey(e) {
+        if (e.key !== 'Enter' || e.shiftKey || e.isComposing) return;
+        if (window.matchMedia('(pointer: coarse)').matches) return;
+        e.preventDefault();
+        this.sendMessage(document.getElementById('msgForm'));
       }
 
       // onComposerBtn handles the click. In send mode it steps aside and lets
