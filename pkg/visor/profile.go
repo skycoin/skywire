@@ -42,7 +42,8 @@ type Profile struct {
 
 	Name string `json:"name,omitempty"`
 
-	// Avatar is the encoded image, at most 32x32 pixels. Carried as a
+	// Avatar is the encoded image, bounded by profile.MaxAvatarDim and
+	// profile.MaxAvatarBytes on the way in. Carried as a
 	// data URI rather than raw bytes because the only consumer is a
 	// browser <img>, and building it here keeps the declared MIME type
 	// the one the visor actually decoded.
