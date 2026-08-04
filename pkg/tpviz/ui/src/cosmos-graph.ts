@@ -45,6 +45,15 @@ const COSMOS_SPACE = 4096;
 
 let graph: Graph<CosmosNode, CosmosLink> | null = null;
 let active = false;
+// PK of the node kept highlighted by a click (persistent selection, parity with Flat).
+let selectedNodeId: string | null = null;
+
+// cosmosSetPhysics starts/pauses the GPU force simulation (parity with the Flat
+// view's physics toggle). No-op in grouped mode, where positions are fixed.
+export function cosmosSetPhysics(on: boolean): void {
+  if (!graph) { return; }
+  if (on) { graph.setConfig({ disableSimulation: false }); graph.start(); } else { graph.pause(); }
+}
 let tooltip: HTMLDivElement | null = null;
 
 // Group-boundary overlay (grouping mode): the packed group circles + labels,
@@ -72,6 +81,8 @@ function ensureTooltip(): HTMLDivElement | null {
 }
 
 function showTooltip(node: CosmosNode, event: MouseEvent): void {
+  // Honor the "Show Tooltips on Hover" toggle (parity with the Flat view).
+  if ((document.getElementById('toggle-tooltips') as HTMLInputElement)?.checked === false) { return; }
   const t = ensureTooltip();
   const container = document.getElementById('cosmos-container');
   if (!t || !container) { return; }
@@ -180,6 +191,15 @@ function statusVisible(status: string): boolean {
   if (status === 'online') return on('show-online');
   if (status === 'offline') return on('show-offline');
   return on('show-unknown');
+}
+
+// versionVisible honors the sidebar version-filter <select> (parity with the Flat
+// view, which hid non-matching nodes). '' / 'all' = show everything.
+function versionVisible(version: string | undefined): boolean {
+  const sel = document.getElementById('version-filter') as HTMLSelectElement | null;
+  const want = sel?.value || '';
+  if (!want || want === 'all') return true;
+  return (version || '') === want;
 }
 
 // cosmosGroupMode reads the same cluster-country / cluster-ip checkboxes the flat
@@ -324,6 +344,7 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
   const nodes: CosmosNode[] = [];
   for (const n of nodesRaw) {
     if (!statusVisible(n.status)) { continue; }
+    if (!versionVisible((S.visorVersions && S.visorVersions[n.id]) || n.version)) { continue; }
     visibleNode.add(n.id);
     const bg = (n.color && n.color.background) || '#888888';
     const isLocal = !!(S.localVisorData && n.id === S.localVisorData.pub_key);
@@ -446,7 +467,17 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
     },
     events: {
       onClick: (node?: CosmosNode) => {
-        if (node && node.id) { handleGraphNodeClick(node.id); }
+        if (node && node.id) {
+          // Persistent selection (parity with Flat's click-to-isolate): keep this
+          // node's neighborhood highlighted after the pointer leaves, until another
+          // node or empty space is clicked.
+          selectedNodeId = node.id;
+          handleGraphNodeClick(node.id);
+          if (graph) { graph.selectNodeById(node.id, true); }
+        } else {
+          selectedNodeId = null;
+          if (graph) { graph.unselectNodes(); }
+        }
       },
       onNodeMouseOver: (node: CosmosNode, _i: number, _pos: [number, number], event: any) => {
         if (!node) { return; }
@@ -457,7 +488,10 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
       },
       onNodeMouseOut: () => {
         hideTooltip();
-        if (graph) { graph.unselectNodes(); }
+        // Restore the persistent click-selection instead of clearing everything.
+        if (graph) {
+          if (selectedNodeId) { graph.selectNodeById(selectedNodeId, true); } else { graph.unselectNodes(); }
+        }
       },
     },
   });
