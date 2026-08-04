@@ -13,7 +13,7 @@
 
 import { Graph } from '@cosmograph/cosmos';
 import * as S from './state';
-import { colors, LOCAL_EDGE_COLOR } from './constants';
+import { colors, LOCAL_EDGE_COLOR, ROUTE_DEST_COLOR } from './constants';
 import { handleGraphNodeClick } from './node-click';
 import { getCountryColor, getIPGroupColor, countryToFlag } from './utils';
 // (grouping geometry is computed locally below — packCircles / radiusForCount)
@@ -202,6 +202,25 @@ function versionVisible(version: string | undefined): boolean {
   return (version || '') === want;
 }
 
+// serviceRouteColorOf mirrors the flat view's getNodeColor service/route recolor:
+// with show-routes on, route destinations turn magenta; with show-services on, VPN
+// nodes turn purple and proxy nodes orange (routes take precedence, as in Flat).
+// Returns null when no override applies so the node keeps its status/group color.
+// The local visor is never recolored (stays cyan) — callers guard on isLocal.
+function serviceRouteColorOf(id: string): string | null {
+  const showRoutes = (document.getElementById('show-routes') as HTMLInputElement)?.checked === true;
+  if (showRoutes && S.routeDestinations.has(id)) { return ROUTE_DEST_COLOR.background; }
+  const showServices = (document.getElementById('show-services') as HTMLInputElement)?.checked === true;
+  if (showServices) {
+    const svc = S.visorServices[id];
+    if (svc && svc.services && svc.services.length) {
+      if (svc.services.includes('vpn')) { return '#9f6efc'; }
+      if (svc.services.includes('proxy')) { return '#ffa500'; }
+    }
+  }
+  return null;
+}
+
 // cosmosGroupMode reads the same cluster-country / cluster-ip checkboxes the flat
 // view uses, so the WebGL view groups identically. Returns the active single-level
 // grouping, or null for the free force layout. (Dual country+IP nesting is a
@@ -348,9 +367,10 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
     visibleNode.add(n.id);
     const bg = (n.color && n.color.background) || '#888888';
     const isLocal = !!(S.localVisorData && n.id === S.localVisorData.pub_key);
+    const svcRouteColor = isLocal ? null : serviceRouteColorOf(n.id);
     nodes.push({
       id: n.id,
-      color: isLocal ? '#00ffff' : bg,
+      color: isLocal ? '#00ffff' : (svcRouteColor || bg),
       // vis-network sizes (5..30) are far too big as cosmos pixel dots; map down.
       size: isLocal ? 8 : Math.max(2.5, Math.min(5, (n.size || 4) * 0.4)),
       status: n.status,
@@ -402,10 +422,14 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
     for (const n of nodes) {
       const p = pos.get(n.id);
       if (p) { const s = toSpace(p.x, p.y); n.x = s.x; n.y = s.y; }
-      // Colour by group so the clusters read at a glance (keep the local visor
-      // cyan so "YOU" stays findable).
+      // Recolor non-local nodes (the local visor stays cyan so "YOU" is findable).
       if (!n.isLocal) {
-        const col = color.get(n.id); if (col) { n.color = col; }
+        // Service/route recolor takes precedence over the group color (parity
+        // with Flat, where getNodeColor's service/route branch wins regardless
+        // of grouping); otherwise colour by group so the clusters read.
+        const svcRouteColor = serviceRouteColorOf(n.id);
+        if (svcRouteColor) { n.color = svcRouteColor; }
+        else { const col = color.get(n.id); if (col) { n.color = col; } }
         // Gap #4: node positions get compressed by `scale`, but the dot pixel
         // size is fixed (scaleNodesOnZoom:false) — so in a dense group the dots
         // overlap and bleed past the (also-scaled) boundary ring. Shrink the dot
