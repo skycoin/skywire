@@ -581,10 +581,17 @@ type Routing struct {
 	// MuxRoutes is the number of parallel routes to establish per connection.
 	// 0 or 1 = single route (default), >1 = route multiplexing across transports.
 	MuxRoutes int `json:"mux_routes,omitempty"`
-	// TransportPreference is the priority order applied when multiple transports
-	// exist between the same edges. Earlier entries are preferred. Valid values:
-	// "stcpr", "sudph", "stcp", "dmsg". If empty, the built-in default order
-	// (stcpr > sudph > stcp > dmsg) is used. Types not listed here sort last.
+	// TransportPreference is the transport-type priority order, most-preferred
+	// first. It decides both which existing transport a route rides when
+	// several reach the same peer, and which type the visor tries to CREATE
+	// first when a route needs a transport that isn't there yet — so the first
+	// entry is the primary transport and the rest are the fallbacks, in order.
+	// Valid values are the names in tptypes.Known() ("stcpr", "squicr",
+	// "sudph", "stcp", "webrtc", "swsr", "swtr", "dmsg"; the pre-rename
+	// "quic"/"ws"/"wt" are accepted too). If empty, the built-in default order
+	// (stcpr > squicr > sudph > stcp > webrtc > swsr > swtr > dmsg) is used.
+	// Types not listed here sort last. Settable at runtime, without a restart,
+	// via PUT /api/visors/{pk}/router-settings.
 	TransportPreference []string `json:"transport_preference,omitempty"`
 
 	// EnableCascadeRouteSetup opts INTO the source-driven cascade route-setup

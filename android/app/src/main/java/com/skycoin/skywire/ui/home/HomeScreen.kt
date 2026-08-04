@@ -299,14 +299,23 @@ private fun VisorInfoCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(4.dp))
-            val dmsgRows = state.dmsg.ifEmpty { null }
-            if (dmsgRows == null) {
+            val dmsgServers = summary.dmsgServers
+            if (dmsgServers.isEmpty()) {
                 Text("—", style = MaterialTheme.typography.bodyMedium)
             } else {
-                dmsgRows.take(4).forEach { session ->
+                dmsgServers.take(MAX_DMSG_ROWS).forEach { server ->
+                    // How the session is carried, always — plus the latency
+                    // when there is one. The visor measures that with a
+                    // self-ping through each server at startup and then
+                    // hourly, so a server that joined since the last pass
+                    // (or whose ping did not come back) has none, and every
+                    // row would otherwise read a bare, false "0 ms".
                     InfoRow(
-                        label = shortPk(session.serverPublicKey),
-                        value = "${session.roundTripNs / 1_000_000} ms",
+                        label = shortPk(server.pk),
+                        value = listOfNotNull(
+                            server.protocol.ifEmpty { server.carrier }.takeIf { it.isNotEmpty() },
+                            server.latencyNs.takeIf { it > 0 }?.let { "${it / 1_000_000} ms" },
+                        ).joinToString(" · ").ifEmpty { "—" },
                         mono = true,
                     )
                 }
@@ -383,6 +392,9 @@ private fun SectionDivider() {
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
     )
 }
+
+/** The visor keeps a handful of dmsg sessions; the card shows the first few. */
+private const val MAX_DMSG_ROWS = 4
 
 private fun shortPk(pk: String): String =
     if (pk.length <= 20) pk else pk.take(10) + "…" + pk.takeLast(8)

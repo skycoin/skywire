@@ -4,7 +4,6 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.api.AuthFailedException
-import com.skycoin.skywire.api.DmsgClientSummary
 import com.skycoin.skywire.api.ServiceHealthEntry
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.api.VisorSummary
@@ -30,7 +29,6 @@ data class HomeUiState(
     /** The local API answered /api/ping. */
     val apiUp: Boolean = false,
     val summary: VisorSummary? = null,
-    val dmsg: List<DmsgClientSummary> = emptyList(),
     val serviceHealth: List<ServiceHealthEntry> = emptyList(),
     val error: String? = null,
 ) {
@@ -51,7 +49,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     private data class LiveData(
         val apiUp: Boolean = false,
         val summary: VisorSummary? = null,
-        val dmsg: List<DmsgClientSummary> = emptyList(),
         val serviceHealth: List<ServiceHealthEntry> = emptyList(),
         val error: String? = null,
     )
@@ -62,7 +59,6 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
                 coreState = core,
                 apiUp = data.apiUp,
                 summary = data.summary,
-                dmsg = data.dmsg,
                 serviceHealth = data.serviceHealth,
                 error = data.error,
             )
@@ -97,13 +93,14 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         live.value = live.value.copy(apiUp = true)
         while (true) {
             try {
+                // The dmsg-server list rides along in the summary
+                // (`dmsg_servers`) — see DmsgServerInfo for why the
+                // dedicated /api/dmsg route is not the source here.
                 val summary = api.summary()
-                val dmsg = runCatching { api.dmsg() }.getOrDefault(emptyList())
                 val health = runCatching { api.serviceHealth() }.getOrDefault(emptyList())
                 live.value = LiveData(
                     apiUp = true,
                     summary = summary,
-                    dmsg = dmsg,
                     serviceHealth = health,
                 )
             } catch (e: AuthFailedException) {

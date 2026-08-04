@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import java.io.File
@@ -42,6 +43,7 @@ class SkywireCoreService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var paths: SkywirePaths
     private lateinit var configManager: ConfigManager
+    private lateinit var prefs: AppPreferences
     private var runner: Job? = null
 
     @Volatile private var child: Process? = null
@@ -52,6 +54,7 @@ class SkywireCoreService : Service() {
         super.onCreate()
         paths = SkywirePaths(this)
         configManager = ConfigManager(paths)
+        prefs = AppPreferences(this)
         createChannel()
     }
 
@@ -87,7 +90,10 @@ class SkywireCoreService : Service() {
             CoreServiceState.mutableState.value = CoreState.Starting(attempt = 1)
             val log = ProcessLog(paths.processLogFile)
             try {
-                val config = configManager.ensureConfig().getOrElse { err ->
+                val primary = TransportPreference.sanitize(
+                    prefs.string(TransportPreference.PREF_KEY).first(),
+                )
+                val config = configManager.ensureConfig(primary).getOrElse { err ->
                     log.line("=== config generation failed ===")
                     log.line(err.message ?: "unknown error")
                     CoreServiceState.mutableState.value =
