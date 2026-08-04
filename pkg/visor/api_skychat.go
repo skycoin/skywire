@@ -35,6 +35,7 @@ const (
 	skychatPasswordArg  = "--password-file"
 	skychatTokenArg     = "--internal-token"
 	skychatAddrArg      = "--addr"
+	skychatPortlessArg  = "--portless"
 
 	// passwordSaltLen mirrors the hypervisor user-store value so the
 	// hashing scheme is identical for both surfaces (see
@@ -137,9 +138,10 @@ func (v *Visor) ClearSkychatPassword(oldPassword string) error {
 // "history/peers"). The proxy attaches the internal token so the
 // password gate is bypassed for in-process hvui calls.
 func (v *Visor) SkychatProxy(method, path string, query string, headers http.Header, body io.Reader) (int, http.Header, []byte, error) {
-	// Portless-internal skychat publishes its mux to the in-process handler
-	// registry — serve it directly, no loopback dial. Falls through to the TCP
-	// proxy when skychat runs externally on its own port.
+	// An in-process skychat publishes its mux to the handler registry — serve
+	// it directly, no loopback dial, whether or not it also binds a TCP port
+	// for its own UI. Falls through to the TCP proxy only when skychat runs as
+	// a separate process, whose registry this one cannot see.
 	if h := launcher.GetHTTPHandler(skyenv.SkychatName); h != nil {
 		return v.serveSkychatInProcess(h, method, path, query, headers, body)
 	}
@@ -182,9 +184,9 @@ func (v *Visor) SkychatProxy(method, path string, query string, headers http.Hea
 	return resp.StatusCode, resp.Header, respBody, nil
 }
 
-// serveSkychatInProcess runs the portless-internal skychat mux directly (no
-// TCP), returning the buffered response — the no-loopback twin of the HTTP
-// proxy above. The streaming (SSE) path uses streamSkychatInProcess so the
+// serveSkychatInProcess runs the in-process skychat mux directly (no TCP),
+// returning the buffered response — the no-loopback twin of the HTTP proxy
+// above. The streaming (SSE) path uses streamSkychatInProcess so the
 // live message stream isn't buffered until an end that never comes.
 func (v *Visor) serveSkychatInProcess(h http.Handler, method, path, query string, headers http.Header, body io.Reader) (int, http.Header, []byte, error) {
 	target := "/" + strings.TrimPrefix(path, "/")
@@ -267,7 +269,14 @@ func (v *Visor) skychatInternalToken() string {
 // back to the env-configured default. The "*:PORT" form (used by
 // the docker integration configs) is rewritten to "0.0.0.0:PORT"
 // so a Go HTTP client can reach it from the visor process.
+//
+// Empty when skychat is configured --portless: it binds nothing, so
+// reporting the default here would hand the UI an address to link that
+// nothing answers on.
 func skychatLocalAddr(v *Visor) string {
+	if appHasFlag(v, skyenv.SkychatName, skychatPortlessArg) {
+		return ""
+	}
 	addr := readAppArg(v, skyenv.SkychatName, skychatAddrArg)
 	if addr == "" {
 		addr = skyenv.SkychatAddr
@@ -302,6 +311,27 @@ func readAppArg(v *Visor, appName, flag string) string {
 		}
 	}
 	return ""
+}
+
+// appHasFlag reports whether an app's launcher config carries a valueless
+// flag such as "--portless". Separate from readAppArg because that one only
+// recognises a flag with a value after it, and would never see this one.
+func appHasFlag(v *Visor, appName, flag string) bool {
+	if v.conf == nil || v.conf.Launcher == nil {
+		return false
+	}
+	short := "-" + strings.TrimPrefix(flag, "--")
+	for _, app := range v.conf.Launcher.Apps {
+		if app.Name != appName {
+			continue
+		}
+		for _, a := range app.Args {
+			if a == flag || a == short {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // readSkychatPassword reads the on-disk password record. Returns

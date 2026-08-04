@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -734,6 +735,41 @@ func (v *Visor) SetAppSecure(appName string, isSecure bool) error {
 	return nil
 }
 
+// validateAppAddress checks a bind address an operator asked an app to use.
+//
+// Three accepted forms, and the third is why this exists: ":PORT" (loopback)
+// and "*:PORT" (all interfaces) are what this setter has always written, but
+// config-gen writes the app's address as an explicit "HOST:PORT" — skychat's
+// default is skyenv.SkychatAddr, "127.0.0.1:8001". A validator that refused
+// what the generator produces would reject the value the UI had just read back
+// to the user, so saving the form without editing it would fail.
+//
+// A host that is neither an IP literal nor "localhost" is refused: resolving
+// it would be the only way to make it mean anything, and this is a bind
+// address — whatever a name resolves to when it is saved is not necessarily
+// what it resolves to when the app comes to bind it.
+func validateAppAddress(address string) error {
+	portStr := ""
+	switch {
+	case strings.HasPrefix(address, "*:"):
+		portStr = address[2:]
+	case strings.HasPrefix(address, ":"):
+		portStr = address[1:]
+	default:
+		host, port, err := net.SplitHostPort(address)
+		if err != nil || host == "" || (net.ParseIP(host) == nil && host != "localhost") {
+			return fmt.Errorf("invalid addr value: %s", address)
+		}
+		portStr = port
+	}
+
+	portNumber, err := strconv.Atoi(portStr)
+	if err != nil || portNumber < 1025 || portNumber > 65536 {
+		return fmt.Errorf("invalid port number: %s", portStr)
+	}
+	return nil
+}
+
 // SetAppAddress implements API.
 func (v *Visor) SetAppAddress(appName string, address string) error {
 	// check app launcher availability
@@ -745,19 +781,8 @@ func (v *Visor) SetAppAddress(appName string, address string) error {
 		return fmt.Errorf("app %s is not allowed to set addr", appName)
 	}
 
-	if len(address) < 5 || (address[:1] != ":" && address[:2] != "*:") {
-		return fmt.Errorf("invalid addr value: %s", address)
-	}
-
-	forLocalhostOnly := address[:1] == ":"
-	prefix := 2
-	if forLocalhostOnly {
-		prefix = 1
-	}
-
-	portNumber, err := strconv.Atoi(address[prefix:])
-	if err != nil || portNumber < 1025 || portNumber > 65536 {
-		return fmt.Errorf("invalid port number: %s", strconv.Itoa(portNumber))
+	if err := validateAppAddress(address); err != nil {
+		return err
 	}
 
 	v.log.Infof("Setting %s addr to %v", appName, address)

@@ -190,7 +190,9 @@ type Values struct {
 	Skychat         bool
 	NoSkychat       bool
 	ChatAddr        string // SKYCHATADDR
-	ServeChatPair   bool   // SKYCHATPAIR — default true in config gen
+	ChatPortless    bool   // SKYCHATPORTLESS — no TCP port, hypervisor-only
+	NoChatPortless  bool
+	ServeChatPair   bool // SKYCHATPAIR — default true in config gen
 	NoServeChatPair bool
 
 	// --- Skymail bridge (SMTP↔skywire) ---
@@ -346,6 +348,8 @@ func New(v *Values) *cobra.Command {
 	cmd.Flags().BoolVar(&v.Skychat, "skychat", false, "autostart skychat — writes SKYCHAT=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoSkychat, "no-skychat", false, "do not autostart skychat — writes SKYCHAT=false in skywire.conf")
 	cmd.Flags().StringVar(&v.ChatAddr, "chataddr", "", "skychat local address (host:port) — writes SKYCHATADDR in skywire.conf")
+	cmd.Flags().BoolVar(&v.ChatPortless, "chatportless", false, "run skychat with no TCP port, reachable only through the hypervisor — writes SKYCHATPORTLESS=true in skywire.conf")
+	cmd.Flags().BoolVar(&v.NoChatPortless, "no-chatportless", false, "let skychat bind its local address — writes SKYCHATPORTLESS=false in skywire.conf")
 	cmd.Flags().BoolVar(&v.ServeChatPair, "servechatpair", false, "enable skychat pair RPC channel (required for group chat) — writes SKYCHATPAIR=true in skywire.conf")
 	cmd.Flags().BoolVar(&v.NoServeChatPair, "no-servechatpair", false, "disable skychat pair RPC channel — writes SKYCHATPAIR=false in skywire.conf")
 
@@ -497,6 +501,8 @@ var envMap = map[string]EnvMapping{
 	"skychat":          {Key: "SKYCHAT", Format: EnvFormatBool},
 	"no-skychat":       {Key: "SKYCHAT", Format: EnvFormatBool, Negate: true},
 	"chataddr":         {Key: "SKYCHATADDR", Format: EnvFormatString, Default: skyenv.SkychatAddr},
+	"chatportless":     {Key: "SKYCHATPORTLESS", Format: EnvFormatBool},
+	"no-chatportless":  {Key: "SKYCHATPORTLESS", Format: EnvFormatBool, Negate: true},
 	"servechatpair":    {Key: "SKYCHATPAIR", Format: EnvFormatBool},
 	"no-servechatpair": {Key: "SKYCHATPAIR", Format: EnvFormatBool, Negate: true},
 

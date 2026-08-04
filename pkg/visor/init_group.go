@@ -72,7 +72,7 @@ func initGrouping(_ context.Context, v *Visor, log *logging.Logger) error {
 			Info("Grouping: re-sealed group keys that were stored in plaintext by a previous build")
 	}
 
-	// The published profile — a name and a 32x32 avatar this visor answers
+	// The published profile — a name and a small avatar this visor answers
 	// describes with. Best effort like everything else here: a store that
 	// will not open costs the profile feature for this run, not group chat.
 	// A nil provider answers every profile request empty, which is exactly

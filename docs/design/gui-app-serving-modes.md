@@ -32,11 +32,15 @@ An app's UI/API is reached in exactly one of two ways:
 
 - **Control-surface ("serverless")** — reached *through the visor*: the wasm
   visor's in-tab `skywireVisor.*` hooks, or the native HV's reverse-proxy /
-  RPC. **No separate HTTP port.** This is the default and it makes the wasm and
-  host-native visors behave identically.
+  RPC. This is what makes the wasm and host-native visors behave identically,
+  and every in-process app offers it.
 - **Own-port** — the app binds its own TCP listener (skychat `127.0.0.1:8001`,
   skycoin-web `127.0.0.1:8002`) that the browser/operator reaches directly.
-  Opt-in.
+
+The two are not exclusive. An in-process app publishes its mux to the control
+surface *and* may bind a port for the same mux; the HV prefers the in-process
+path (no loopback hop, no write deadline on SSE) regardless. Suppressing the
+listener is the opt-in — `--portless` for skychat.
 
 "Serverless" here means *no own HTTP port; reached via the visor control
 surface* — **not** "no process runs." Two sub-flavors, invisible to the user
@@ -91,15 +95,18 @@ so there's no control surface to use.
 
 ## Defaults
 
-Both apps default to **control-surface / no own port**, so native == wasm out
-of the box:
+Both apps are reachable through the control surface out of the box, so native
+== wasm without configuration:
 
 - **wallet** → **no-process serverless**: HV serves `/wallet/`, proxies the
   node over dmsg, wallets in the browser. Zero config, zero skycoin change.
-- **skychat** → **in-process, control-surface**: runs in the visor, reached
-  via the HV (RPC / appnet proxy), no `:8001`. The `:8001` HTTP server stays
-  available behind a flag for CI/E2E (and CI can increasingly use
-  `skywire cli skychat` / RPC instead of curling it).
+- **skychat** → **in-process, control-surface + own port**: runs in the visor
+  and publishes its mux to the HV, *and* binds `--chataddr` (default
+  `127.0.0.1:8001`). The HV path is what the chat tab uses; the port is what
+  `skywire cli skychat`, `skywire cli visor doctor`, the e2e suite and a plain
+  browser use. `--chatportless` drops the listener and leaves only the HV
+  path — worth choosing when nothing local should be able to reach the chat
+  app without authenticating to the hypervisor first.
 
 Opt into an **app with own-port** only when you want the full skycoin-web
 server (server-side multi-coin, disk wallets) or direct non-HV access.
