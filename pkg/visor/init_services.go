@@ -47,8 +47,12 @@ func initEventBroadcaster(ctx context.Context, v *Visor, log *logging.Logger) er
 	return nil
 }
 
-func initSystemSurvey(_ context.Context, v *Visor, log *logging.Logger) error {
+func initSystemSurvey(ctx context.Context, v *Visor, log *logging.Logger) error {
 	go GenerateSurvey(v, log, true) //nolint:gosec
+	// Push the survey to the reward system over dmsg (conditional on change). Tied to
+	// the module ctx so Suspend cancels it and Resume starts a fresh one. See
+	// reward_push.go.
+	go rewardSurveyPush(ctx, v, log)
 	return nil
 }
 

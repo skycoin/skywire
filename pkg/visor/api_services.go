@@ -554,16 +554,20 @@ func (v *Visor) DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error
 	if v.dmsgPty == nil {
 		return nil, fmt.Errorf("dmsgpty: not initialized on this visor")
 	}
-	// Gate the RPC-initiated exec path (see Pty.AllowRPCExec). OFF by
-	// default so a local process reaching the visor RPC socket cannot
-	// borrow this visor's identity to exec on itself or on peers that
-	// whitelist it. Opt in on a control/jump node that drives remote
-	// `cli pty exec` sessions.
-	if v.conf.Pty == nil || !v.conf.Pty.AllowRPCExec {
-		return nil, fmt.Errorf("dmsgpty: RPC-initiated exec is disabled; set pty.allow_rpc_exec=true (config gen --pty-rpc-exec) on this visor to enable it")
-	}
 	if args.RemotePK.Null() {
 		return nil, fmt.Errorf("dmsgpty: remote_pk required")
+	}
+	// Local-privesc gate (Pty.AllowRPCExec, default OFF) applies ONLY to exec
+	// targeting THIS visor's own PK: that loops back to the local dmsgpty host and
+	// yields a shell on THIS machine as the dmsgpty-host identity (root on a root
+	// deployment), so any local process reaching the visor RPC socket could
+	// self-escalate. Exec targeting a REMOTE visor is the legitimate hypervisor-
+	// control path (`cli pty exec <remote-pk>`) and is gated by the REMOTE's own
+	// dmsgpty whitelist — the target decides whether to trust this visor's PK — so it
+	// is always allowed. (Earlier this gate blanket-disabled the RPC method, which
+	// also broke a hypervisor driving the pty of the visors it manages.)
+	if args.RemotePK == v.conf.PK && (v.conf.Pty == nil || !v.conf.Pty.AllowRPCExec) {
+		return nil, fmt.Errorf("dmsgpty: RPC-initiated exec on this visor's OWN pk is disabled (local-privesc guard); set pty.allow_rpc_exec=true to allow self-exec. Remote targets are unaffected")
 	}
 	req := args.Req
 	// Bound the whole call: Req.TimeoutMS covers the remote command's

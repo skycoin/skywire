@@ -24,3 +24,8 @@ func runApp() {
 		mLog.WithError(err).Fatal("a fatal error occurred")
 	}
 }
+
+func runTrayOnly() {
+	// systray not available in this build (built with the 'withoutsystray' tag).
+	mLog.Fatal("this build has no systray support (built with the 'withoutsystray' tag); rebuild without it to use --systray-only")
+}

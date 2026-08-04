@@ -262,6 +262,38 @@ func (s *MemStore) ListByGroup(groupID string, limit int) ([]GroupMessage, error
 	return tailCopyGroup(s.byGroup[groupID], limit), nil
 }
 
+// ListGroupBefore implements Store. Returns up to limit messages strictly
+// older than `before`, newest last — matching BoltStore's exclusive-cursor
+// semantics so the two backends page identically.
+//
+// The slice is already in insertion (chronological) order, so this is a
+// filter plus a tail rather than a cursor walk. The mem store is bounded
+// by PerPeerCap anyway, which is why the linear scan the bolt backend
+// avoids is fine here.
+func (s *MemStore) ListGroupBefore(groupID string, before time.Time, limit int) ([]GroupMessage, error) {
+	if groupID == "" {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	src := s.byGroup[groupID]
+	if len(src) == 0 {
+		return nil, nil
+	}
+	// A zero cursor means "from the newest", so the whole slice is in
+	// scope and this degenerates to ListByGroup.
+	if before.IsZero() || before.UnixNano() <= 0 {
+		return tailCopyGroup(src, limit), nil
+	}
+	var older []GroupMessage
+	for _, m := range src {
+		if m.Timestamp.Before(before) {
+			older = append(older, m)
+		}
+	}
+	return tailCopyGroup(older, limit), nil
+}
+
 // ListGroupSince implements Store. Returns messages strictly newer than
 // `since`, oldest first — matching BoltStore's exclusive-cursor semantics.
 func (s *MemStore) ListGroupSince(groupID string, since time.Time) ([]GroupMessage, error) {

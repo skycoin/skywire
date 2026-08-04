@@ -42,7 +42,6 @@ var (
 	stopVisorFn   func()
 	closeDmsgDC   func()
 	rpcC          API
-	vpnLastStatus int
 )
 
 var (
@@ -51,14 +50,32 @@ var (
 
 var (
 	mOpenHypervisor *systray.MenuItem
-	mVPNClient      *systray.MenuItem
-	mVPNStatus      *systray.MenuItem
 	mVPNLink        *systray.MenuItem
-	mVPNButton      *systray.MenuItem
 	mUninstall      *systray.MenuItem
+	mSuspend        *systray.MenuItem // toggle: suspend / resume the visor
+	mAutoconnect    *systray.MenuItem // checkbox: public autoconnect on/off
 	mQuit           *systray.MenuItem
-	vpnStatusMx     sync.Mutex
+
+	vpnTray   *appTray
+	proxyTray *appTray
 )
+
+// appTray bundles the submenu items for a client app (VPN client or
+// skysocks proxy client) so the status poller, public-server list, and
+// connect/disconnect button can be shared between them instead of being
+// duplicated per app.
+type appTray struct {
+	name    string // launcher app name (skyenv.VPNClientName / SkysocksClientName)
+	svcType string // servicedisc.ServiceType* used to list public servers
+
+	menu    *systray.MenuItem
+	status  *systray.MenuItem
+	button  *systray.MenuItem
+	servers []*systray.MenuItem
+
+	mx         sync.Mutex
+	lastStatus int
+}
 
 // getOnGUIReady creates func to run on GUI startup.
 func getOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
@@ -68,22 +85,12 @@ func getOnGUIReady(icon []byte, conf *visorconfig.V1) func() {
 
 	httpC := getSystrayHTTPClient(context.Background(), conf, logger)
 
-	if isRoot() {
-		return func() {
-			systray.SetTemplateIcon(icon, icon)
-			systray.SetTooltip("Skywire")
-			initUIBtns(conf)
-			initVpnClientBtn(conf, httpC, logger)
-			initAdvancedButton()
-			initQuitBtn()
-			go handleRootInteraction(doneCh)
-		}
-	}
 	return func() {
 		systray.SetTemplateIcon(icon, icon)
 		systray.SetTooltip("Skywire")
 		initUIBtns(conf)
-		initVpnClientBtn(conf, httpC, logger)
+		initClientBtns(conf, httpC, logger)
+		initVisorControlBtns(conf)
 		initAdvancedButton()
 		initQuitBtn()
 		go handleUserInteraction(conf, doneCh)
@@ -129,16 +136,18 @@ func initUIBtns(vc *visorconfig.V1) {
 	mOpenHypervisor = systray.AddMenuItem("Open Hypervisor UI", "Open Hypervisor")
 	mVPNLink = systray.AddMenuItem("Open VPN UI", "Open VPN UI in browser")
 	hvAddr := getHVAddr(vc)
-	if isRoot() {
-		mVPNLink.Hide()
-		mOpenHypervisor.Hide()
-		return
-	}
 	mVPNLink.Disable()
 	mOpenHypervisor.Disable()
 
-	// if not hypervisor, both buttons no need to start
-	if hvAddr == "" {
+	// These two items open browser UIs. Hide them when there is no
+	// hypervisor to link to, or when the tray runs as root (a root
+	// process can't open the desktop user's browser). The RPC-driven
+	// controls — client connect/disconnect, suspend/resume, public
+	// autoconnect — stay available in every mode, so a root/headless
+	// visor still gets the full set of controls, just not the links.
+	if hvAddr == "" || isRoot() {
+		mOpenHypervisor.Hide()
+		mVPNLink.Hide()
 		return
 	}
 
@@ -165,63 +174,77 @@ func initUIBtns(vc *visorconfig.V1) {
 	}()
 }
 
-func initVpnClientBtn(conf *visorconfig.V1, httpClient *http.Client, logger *logging.MasterLogger) {
+// initClientBtns builds the VPN and skysocks-proxy client submenus. Both
+// share the same shape (status line, connect/disconnect button, public
+// server picker) via appTray, so the poller/servers/button logic below is
+// written once and driven for each.
+func initClientBtns(conf *visorconfig.V1, httpClient *http.Client, logger *logging.MasterLogger) {
 	rpcLogger := logger.PackageLogger("systray:rpc_client")
 	rpcC = rpcClientSystray(conf, rpcLogger)
 
-	mVPNClient = systray.AddMenuItem("VPN", "VPN Client Submenu")
-	// VPN Status
-	mVPNStatus = mVPNClient.AddSubMenuItem("Status: Disconnected", "VPN Client Status")
-	mVPNStatus.Disable()
-	go vpnStatusBtn(rpcC)
-	// VPN Connect/Disconnect Button
-	mVPNButton = mVPNClient.AddSubMenuItem("Connect", "VPN Client Switch Button")
-	// VPN Public Servers List
-	mVPNServersList := mVPNClient.AddSubMenuItem("Servers", "VPN Client Servers")
-	mVPNServers := []*systray.MenuItem{}
-	for _, server := range getAvailPublicVPNServers(conf, httpClient, logger.PackageLogger("systray:servers")) {
-		mVPNServers = append(mVPNServers, mVPNServersList.AddSubMenuItemCheckbox(server, "", false))
-	}
-	go serversBtn(mVPNServers, rpcC)
+	vpnTray = &appTray{name: skyenv.VPNClientName, svcType: servicedisc.ServiceTypeVPN}
+	proxyTray = &appTray{name: skyenv.SkysocksClientName, svcType: servicedisc.ServiceTypeProxy}
+
+	initClientTray(vpnTray, "VPN", "VPN client", conf, httpClient, logger)
+	initClientTray(proxyTray, "Proxy", "Skysocks proxy client", conf, httpClient, logger)
 }
 
-func vpnStatusBtn(rpcClient API) {
+// initClientTray wires one appTray's submenu items and starts its pollers.
+func initClientTray(t *appTray, label, desc string, conf *visorconfig.V1, httpClient *http.Client, logger *logging.MasterLogger) {
+	t.menu = systray.AddMenuItem(label, desc+" submenu")
+	t.status = t.menu.AddSubMenuItem("Status: Disconnected", desc+" status")
+	t.status.Disable()
+	t.button = t.menu.AddSubMenuItem("Connect", desc+" connect/disconnect")
+
+	serversList := t.menu.AddSubMenuItem("Servers", desc+" public servers")
+	for _, server := range getAvailPublicServers(conf, t.svcType, httpClient, logger.PackageLogger("systray:servers")) {
+		t.servers = append(t.servers, serversList.AddSubMenuItemCheckbox(server, "", false))
+	}
+
+	go appStatusBtn(t, rpcC)
+	go serversBtn(t, rpcC)
+}
+
+// appStatusBtn polls the client app's connection summary and reflects it
+// in the tray's status line + button title. lastStatus: 0=off, 1=alive,
+// 2=connecting, 3=just-requested.
+func appStatusBtn(t *appTray, rpcClient API) {
 	for {
-		vpnStatusMx.Lock()
-		stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint:errcheck
+		t.mx.Lock()
+		stats, _ := rpcClient.GetAppConnectionsSummary(t.name) //nolint:errcheck
 		if len(stats) == 1 {
 			if stats[0].IsAlive {
-				if vpnLastStatus != 1 {
-					mVPNStatus.SetTitle("Status: Connected")
-					mVPNButton.SetTitle("Disconnect")
-					vpnLastStatus = 1
+				if t.lastStatus != 1 {
+					t.status.SetTitle("Status: Connected")
+					t.button.SetTitle("Disconnect")
+					t.lastStatus = 1
 				}
 			} else {
-				if vpnLastStatus != 2 {
-					mVPNStatus.SetTitle("Status: Connecting")
-					mVPNButton.SetTitle("Disconnect")
-					vpnLastStatus = 2
+				if t.lastStatus != 2 {
+					t.status.SetTitle("Status: Connecting")
+					t.button.SetTitle("Disconnect")
+					t.lastStatus = 2
 				}
 			}
 		} else {
-			if vpnLastStatus != 0 {
-				if vpnLastStatus == 2 || vpnLastStatus == 3 {
-					mVPNStatus.SetTitle("Status: Errored")
+			if t.lastStatus != 0 {
+				if t.lastStatus == 2 || t.lastStatus == 3 {
+					t.status.SetTitle("Status: Errored")
 				} else {
-					mVPNStatus.SetTitle("Status: Disconnected")
+					t.status.SetTitle("Status: Disconnected")
 				}
-				mVPNButton.SetTitle("Connect")
-				vpnLastStatus = 0
+				t.button.SetTitle("Connect")
+				t.lastStatus = 0
 			}
 		}
-		vpnStatusMx.Unlock()
+		t.mx.Unlock()
 		time.Sleep(2 * time.Second)
 	}
 }
 
-func serversBtn(servers []*systray.MenuItem, rpcClient API) {
+func serversBtn(t *appTray, rpcClient API) {
 	btnChannel := make(chan int)
-	for index, server := range servers {
+	for index, server := range t.servers {
 		go func(chn chan int, server *systray.MenuItem, index int) {
 			for range server.ClickedCh {
 				chn <- index
@@ -230,10 +253,10 @@ func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 	}
 
 	for {
-		selectedServer := servers[<-btnChannel]
+		selectedServer := t.servers[<-btnChannel]
 		serverTempValue := strings.Split(selectedServer.String(), ",")[2]
 		serverPK := serverTempValue[2 : len(serverTempValue)-7]
-		for _, server := range servers {
+		for _, server := range t.servers {
 			server.Uncheck()
 			server.Enable()
 		}
@@ -244,24 +267,89 @@ func serversBtn(servers []*systray.MenuItem, rpcClient API) {
 			continue
 		}
 
-		rpcClient.StopApp(skyenv.VPNClientName)      //nolint:errcheck,gosec
-		rpcClient.SetAppPK(skyenv.VPNClientName, pk) //nolint:errcheck,gosec
-		vpnStatusMx.Lock()
-		vpnLastStatus = 3
-		vpnStatusMx.Unlock()
-		rpcClient.StartApp(skyenv.VPNClientName) //nolint:errcheck,gosec
+		rpcClient.StopApp(t.name)      //nolint:errcheck,gosec
+		rpcClient.SetAppPK(t.name, pk) //nolint:errcheck,gosec
+		t.mx.Lock()
+		t.lastStatus = 3
+		t.mx.Unlock()
+		rpcClient.StartApp(t.name) //nolint:errcheck,gosec
 	}
 }
 
-func handleVPNButton(rpcClient API) {
-	stats, _ := rpcClient.GetAppConnectionsSummary(skyenv.VPNClientName) //nolint:errcheck
+func handleAppButton(t *appTray, rpcClient API) {
+	stats, _ := rpcClient.GetAppConnectionsSummary(t.name) //nolint:errcheck
 	if len(stats) == 1 {
-		rpcClient.StopApp(skyenv.VPNClientName) //nolint:errcheck,gosec
+		rpcClient.StopApp(t.name) //nolint:errcheck,gosec
 	} else {
-		vpnStatusMx.Lock()
-		vpnLastStatus = 3
-		vpnStatusMx.Unlock()
-		rpcClient.StartApp(skyenv.VPNClientName) //nolint:errcheck,gosec
+		t.mx.Lock()
+		t.lastStatus = 3
+		t.mx.Unlock()
+		rpcClient.StartApp(t.name) //nolint:errcheck,gosec
+	}
+}
+
+// initVisorControlBtns adds the visor-level controls: a Suspend/Resume
+// toggle (pause the whole visor without stopping the service — see
+// API.Suspend) and a public-autoconnect checkbox.
+func initVisorControlBtns(conf *visorconfig.V1) {
+	mSuspend = systray.AddMenuItem("Suspend visor", "Tear down networking but keep the visor process (resume without root)")
+	mAutoconnect = systray.AddMenuItemCheckbox("Public autoconnect", "Automatically connect to public visors", conf.Transport != nil && conf.Transport.PublicAutoconnect)
+	go visorControlPoll(rpcC)
+}
+
+// visorControlPoll keeps the Suspend/Resume toggle label and the
+// autoconnect checkbox in sync with the visor's actual state.
+func visorControlPoll(rpcClient API) {
+	for {
+		if rpcClient != nil {
+			if suspended, err := rpcClient.IsSuspended(); err == nil {
+				if suspended {
+					mSuspend.SetTitle("Resume visor")
+				} else {
+					mSuspend.SetTitle("Suspend visor")
+				}
+			}
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+// handleSuspendButton toggles the visor between running and suspended.
+func handleSuspendButton(rpcClient API) {
+	if rpcClient == nil {
+		return
+	}
+	suspended, err := rpcClient.IsSuspended()
+	if err != nil {
+		mLog.WithError(err).Error("failed to query suspend state")
+		return
+	}
+	if suspended {
+		if err := rpcClient.Resume(); err != nil {
+			mLog.WithError(err).Error("failed to resume visor")
+		}
+		return
+	}
+	if err := rpcClient.Suspend(); err != nil {
+		mLog.WithError(err).Error("failed to suspend visor")
+	}
+}
+
+// handleAutoconnectButton toggles public autoconnect and reflects the new
+// state in the checkbox.
+func handleAutoconnectButton(rpcClient API) {
+	if rpcClient == nil {
+		return
+	}
+	enable := !mAutoconnect.Checked()
+	if err := rpcClient.SetPublicAutoconnect(enable); err != nil {
+		mLog.WithError(err).Error("failed to toggle public autoconnect")
+		return
+	}
+	if enable {
+		mAutoconnect.Check()
+	} else {
+		mAutoconnect.Uncheck()
 	}
 }
 
@@ -279,10 +367,11 @@ func handleVPNLinkButton(conf *visorconfig.V1) {
 	}
 }
 
-// getAvailPublicVPNServers gets all available public VPN server from service discovery URL
-func getAvailPublicVPNServers(conf *visorconfig.V1, httpC *http.Client, logger *logging.Logger) []string {
+// getAvailPublicServers gets all available public servers of the given
+// service type (VPN or proxy) from the service-discovery URL.
+func getAvailPublicServers(conf *visorconfig.V1, svcType string, httpC *http.Client, logger *logging.Logger) []string {
 	svrConfig := servicedisc.Config{
-		Type:     servicedisc.ServiceTypeVPN,
+		Type:     svcType,
 		PK:       conf.PK,
 		SK:       conf.SK,
 		DiscAddr: conf.Launcher.ServiceDisc,
@@ -365,24 +454,16 @@ func handleUserInteraction(conf *visorconfig.V1, doneCh chan<- bool) {
 		select {
 		case <-mOpenHypervisor.ClickedCh:
 			handleOpenHypervisor(conf)
-		case <-mVPNButton.ClickedCh:
-			handleVPNButton(rpcC)
+		case <-vpnTray.button.ClickedCh:
+			handleAppButton(vpnTray, rpcC)
+		case <-proxyTray.button.ClickedCh:
+			handleAppButton(proxyTray, rpcC)
 		case <-mVPNLink.ClickedCh:
 			handleVPNLinkButton(conf)
-		case <-mUninstall.ClickedCh:
-			handleUninstall()
-		case <-mQuit.ClickedCh:
-			doneCh <- true
-			Stop()
-		}
-	}
-}
-
-func handleRootInteraction(doneCh chan<- bool) {
-	for {
-		select {
-		case <-mVPNButton.ClickedCh:
-			handleVPNButton(rpcC)
+		case <-mSuspend.ClickedCh:
+			handleSuspendButton(rpcC)
+		case <-mAutoconnect.ClickedCh:
+			handleAutoconnectButton(rpcC)
 		case <-mUninstall.ClickedCh:
 			handleUninstall()
 		case <-mQuit.ClickedCh:

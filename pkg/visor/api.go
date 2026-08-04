@@ -49,6 +49,9 @@ type API interface {
 	UptimeHistory(args UptimeHistoryArgs) (*UptimeHistoryResponse, error)
 	RuntimeStats() (*RuntimeStatsInfo, error)
 	Reload() error
+	Suspend() error
+	Resume() error
+	IsSuspended() (bool, error)
 	Shutdown() error
 	RuntimeLogs() (string, error)
 	RuntimeLogsSince(since int64) (RuntimeLogsDelta, error)
@@ -270,10 +273,17 @@ type API interface {
 	PairDelete(peerPK cipher.PubKey, id string) error
 	PairPoll(since time.Time) ([]PairMessage, error)
 
+	// Skychat profile — this visor's published display name and avatar,
+	// and a peer's. See pkg/visor/profile.go.
+	ProfileGet() (Profile, error)
+	ProfileSet(args ProfileSetArgs) (Profile, error)
+	ProfileFetch(pk cipher.PubKey) (Profile, error)
+
 	// Chat-group feeds — D1 owner-centric CXO feeds with multi-PK
 	// allowlists. See pkg/visor/group.go.
 	GroupCreate(args GroupCreateArgs) (GroupInfo, string, error)
 	GroupJoin(args GroupJoinArgs) (GroupInfo, error)
+	GroupResolve(args GroupResolveArgs) (GroupResolveResult, error)
 	GroupAskAgain(id string) (GroupInfo, error)
 	GroupList() ([]GroupInfo, error)
 	GroupGet(id string) (GroupInfo, error)
@@ -288,6 +298,8 @@ type API interface {
 	GroupMuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error)
+	GroupSetListed(id string, listed bool) (GroupInfo, error)
+	GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error)
 	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupRotateKey(id string) (GroupInfo, error)
@@ -300,6 +312,7 @@ type API interface {
 	GroupDelete(id string) error
 	GroupLeave(id string) error
 	GroupHistory(groupID string, limit int) ([]GroupMessage, error)
+	GroupHistoryPage(args GroupHistoryPageArgs) ([]GroupMessage, error)
 	GroupHistoryGroups() ([]string, error)
 
 	// Skychat 1:1 voice calls (pkg/skychat/call).
@@ -552,10 +565,16 @@ type Summary struct {
 	PersistentTransports []transport.PersistentTransports `json:"persistent_transports"`
 	SkybianBuildVersion  string                           `json:"skybian_build_version,omitempty"` // Deprecated
 	RewardAddress        string                           `json:"reward_address"`
-	BuildTag             string                           `json:"build_tag"`
-	ConfigVersion        string                           `json:"config_version"`
-	PublicAutoconnect    bool                             `json:"public_autoconnect"`
-	IsPublic             bool                             `json:"is_public"`
+	// RewardEligible reflects the reward system's verdict on this visor's most
+	// recent survey PUSH: non-nil false = REJECTED (e.g. version below the reward
+	// floor) — the hypervisor UI shows a red mark, distinct from the hyphen for no
+	// reward address. nil = no verdict yet (never pushed / no reward address).
+	RewardEligible         *bool  `json:"reward_eligible,omitempty"`
+	RewardIneligibleReason string `json:"reward_ineligible_reason,omitempty"`
+	BuildTag               string `json:"build_tag"`
+	ConfigVersion          string `json:"config_version"`
+	PublicAutoconnect      bool   `json:"public_autoconnect"`
+	IsPublic               bool   `json:"is_public"`
 	// Load is a lightweight resource snapshot (load average, mem %, disk %)
 	// for the `hv ls --load` view. omitempty so the field is absent on
 	// summaries from older visors that don't populate it.

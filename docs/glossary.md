@@ -43,8 +43,11 @@ codebase evolved; this is the reference for "what we mean when we say X."
 - **serverless** — reached via the visor control surface, **no own HTTP port**
   — *not* "no process." skychat is serverless on the wasm visor even though its
   logic runs.
-- **portless-internal** — an in-process app whose UI/API is reached via the HV
-  / appnet rather than a TCP port.
+- **portless-internal** — an in-process app that binds *no* TCP port, so its
+  UI/API is reachable only via the HV / appnet. Opt-in (`--portless`): an
+  in-process app normally publishes to the control surface **and** binds its
+  own port, and registering with the control surface says "runs in this
+  process", not "has no port".
 
 ## wasm / PWA
 

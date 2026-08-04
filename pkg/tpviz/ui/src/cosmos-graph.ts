@@ -276,7 +276,7 @@ function computeGroupedLayout(
 // buildData projects the vis-network datasets into cosmos node/link arrays,
 // applying the active type/status filters, then — when country/IP grouping is on —
 // assigns fixed group-packed positions + per-group colors.
-function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boolean } {
+function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boolean; connectedIds: string[] } {
   const nodesRaw: any[] = S.nodesDataset ? S.nodesDataset.get() : [];
   const edgesRaw: any[] = S.edgesDataset ? S.edgesDataset.get() : [];
 
@@ -309,13 +309,17 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
     links.push({ source: e.from, target: e.to, color: c, type: e.type, live: e.live !== false });
     connected.add(e.from); connected.add(e.to);
   }
-  // Drop isolated nodes (no visible edge). Repulsion flings them far out, which
-  // stretches fitView so the main cluster ends up tiny and off-center.
-  const linkedNodes = nodes.filter(n => connected.has(n.id));
+  // Parity with the Flat view: filtering a transport type hides EDGES, not
+  // visors (Flat keeps every node and just toggles edge visibility). So keep
+  // every status-visible node here too. `connectedIds` (nodes with ≥1 visible
+  // edge) is used ONLY to frame the view via fitViewByNodeIds — isolated nodes
+  // get pulled into an outer ring by gravity (like Flat's orphan ring) instead
+  // of being dropped, and no longer stretch the fit so the cluster stays large.
+  const connectedIds = nodes.filter(n => connected.has(n.id)).map(n => n.id);
 
   const mode = cosmosGroupMode();
   if (mode) {
-    const { pos, color, groups } = computeGroupedLayout(linkedNodes.map(n => n.id), mode);
+    const { pos, color, groups } = computeGroupedLayout(nodes.map(n => n.id), mode);
     // The packed layout is centered on the origin (negative → positive). Cosmos
     // random-inits nodes in a [0, spaceSize] box and renders provided x/y in that
     // same space, so negative coords land off-screen. Translate + (only if needed)
@@ -334,12 +338,19 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
       x: COSMOS_SPACE / 2 + (x - cx) * scale,
       y: COSMOS_SPACE / 2 + (y - cy) * scale,
     });
-    for (const n of linkedNodes) {
+    for (const n of nodes) {
       const p = pos.get(n.id);
       if (p) { const s = toSpace(p.x, p.y); n.x = s.x; n.y = s.y; }
       // Colour by group so the clusters read at a glance (keep the local visor
       // cyan so "YOU" stays findable).
-      if (!n.isLocal) { const col = color.get(n.id); if (col) { n.color = col; } }
+      if (!n.isLocal) {
+        const col = color.get(n.id); if (col) { n.color = col; }
+        // Gap #4: node positions get compressed by `scale`, but the dot pixel
+        // size is fixed (scaleNodesOnZoom:false) — so in a dense group the dots
+        // overlap and bleed past the (also-scaled) boundary ring. Shrink the dot
+        // with the layout so the Fibonacci fill stays inside its bubble.
+        n.size = Math.max(1.5, n.size * scale);
+      }
     }
     // Group boundary circles in the SAME normalized space (drawn on the overlay).
     boundaryCircles = groups.map(g => {
@@ -349,7 +360,7 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
   } else {
     boundaryCircles = [];
   }
-  return { nodes: linkedNodes, links, grouped: !!mode };
+  return { nodes, links, grouped: !!mode, connectedIds };
 }
 
 function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
@@ -463,7 +474,7 @@ export function updateCosmosData(): void {
   if (!active) { return; }
   const g = ensureGraph();
   if (!g) { return; }
-  const { nodes, links, grouped } = buildData();
+  const { nodes, links, grouped, connectedIds } = buildData();
   if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
   if (grouped) {
     // Fixed group-packed positions. disableSimulation keeps cosmos rendering the
@@ -473,7 +484,7 @@ export function updateCosmosData(): void {
     // circles + labels, tracking pan/zoom.
     g.setConfig({ disableSimulation: true });
     g.setData(nodes, links);
-    g.fitView(500, 0.1);
+    fitFrame(g, connectedIds);
     startBoundaries();
     return;
   }
@@ -481,6 +492,12 @@ export function updateCosmosData(): void {
   g.setConfig({ disableSimulation: false });
   g.setData(nodes, links);
   settleTimer = setTimeout(() => {
-    if (graph && active) { graph.pause(); graph.fitView(500, 0.1); }
+    if (graph && active) { graph.pause(); fitFrame(graph, connectedIds); }
   }, 5000);
+}
+
+// fitFrame frames the connected subset when there is one (so a ring of isolated
+// visors — kept for Flat-parity — doesn't shrink the main cluster), else all nodes.
+function fitFrame(g: Graph<CosmosNode, CosmosLink>, connectedIds: string[]): void {
+  if (connectedIds.length > 0) { g.fitViewByNodeIds(connectedIds, 500, 0.1); } else { g.fitView(500, 0.1); }
 }

@@ -74,12 +74,21 @@ don't lose data.
 ## Group chat
 
 ```bash
-# Owner: create a group, get an invite link
-skywire cli skychat group create my-room
-skywire cli skychat group invite <group-id>
+# Owner: create a group, a private group, or a broadcast channel
+skywire cli skychat group create --name my-room
+skywire cli skychat group create --name ops --kind private
+skywire cli skychat group create --name news --kind channel
 
-# Member: join via the invite link
+# Hand it out — as a link, or as a short address
+skywire cli skychat group invite  <group-id>   # skychat:invite:<base64url>
+skywire cli skychat group address <group-id>   # skychat://<host-pk>/<group-id>
+
+# Member: join by either form
 skywire cli skychat group join <invite-link>
+skywire cli skychat group join skychat://<host-pk>/<group-id>
+
+# "what is this thing someone sent me?"
+skywire cli skychat group resolve <address-or-link>
 
 # Send / read
 skywire cli skychat group send <group-id> "hi everyone"
@@ -87,6 +96,130 @@ skywire cli skychat group listen
 skywire cli skychat group info <group-id>
 skywire cli skychat group list
 ```
+
+### Group kinds
+
+| kind | admission | bodies | who posts |
+|---|---|---|---|
+| `public` | open — anyone who asks | plaintext on the feed | every member |
+| `private` | an admin approves each request | encrypted | every member |
+| `channel` | open — anyone who asks | plaintext on the feed | admins only |
+
+Public and channel bodies are plaintext for the same reason: admission is
+open, so the key would go to any stranger who asked and would protect
+nothing. Transport is Noise-encrypted regardless. A channel differs from
+the reversible `read_only` flag in being permanent — it is what the group
+*is*, not what an admin has currently switched on — which is why the
+reader-side gate drops a non-admin's leaves whatever their age.
+
+**A channel's kind is immutable.** The store refuses any write that would
+change a persisted group's `Kind`, including one that merely omits it —
+`EnsureKind` would re-derive an empty kind from `Mode`, and a channel shares
+`ModePublic` with a public group, so a forgetful write would silently hand
+the floor to every subscriber. There is no migration: the honest way to turn
+a channel into a group is to create a group.
+
+### What makes a channel scale
+
+Three things differ from a group, and all three follow from "the audience
+is unbounded and one-way":
+
+**Subscriptions are O(admins), not O(members).** Under the group rule an
+admin follows every member — an input pipe worth having when everyone can
+post. In a channel a subscriber's feed can never carry a message, so both
+roles follow only the admins. Without this, an admin of a 10,000-subscriber
+channel would open 10,000 CXO subscriptions to feeds guaranteed to stay
+empty.
+
+**History and files come from admins.** `PeerBackfillEnabled` is always
+false for a channel, whatever the stored flag says: a subscriber has nothing
+of its own to serve, so mirroring the room onto every follower would give a
+large channel one copy of itself per member. `SetPeerBackfill` is refused on
+a channel rather than accepted-and-ignored.
+
+**Backlog arrives in chunks, and files only on request.** A joiner takes the
+newest page immediately and walks backwards as it reads
+(`history.Store.ListGroupBefore`, `GET /group/<id>/history?before=<ts_nano>`)
+instead of pulling an entire archive before showing anything. Attachments
+are published as feed references and nothing more — `acceptInbound` refuses
+an unrequested file in a channel even from an admin, so one admin attaching
+a 2 GB file cannot land it on every subscriber's disk at once. Opening the
+card requests that one file from a host that has it.
+
+### Addresses vs invite links
+
+Two ways to name a conversation, and they trade against each other rather
+than one superseding the other:
+
+```
+skychat://<pk>                 a person — opens a DM
+skychat://<pk>/<group-id>      a group or channel
+skychat:invite:<base64url>     a group invite
+```
+
+An **address** is short enough to print, read aloud, or encode in a
+low-density QR code, and stays valid as the group changes. It is not
+self-contained: a group's feed port is allocated at random per group, so
+whoever holds an address asks the host what the group is before joining
+(one round trip on `skyenv.SkychatGroupProbePort`, describe-only — it
+decides nothing and mutates nothing). That means the host has to be
+reachable.
+
+An **invite link** carries the port, mode, admin list and proof-of-work
+price inline, so it works while the host is offline — at a few hundred
+characters, which is why it is not the thing you scan.
+
+Both go through the same admission gate. An address is a shorter way to
+name a group, not a way around its door.
+
+Whether a bare public key belongs to a person or to the host of a channel
+is not decidable by inspection — they are the same 66 characters. Only a
+group ID in the address distinguishes them, which is why `resolve` exists
+and why the UI asks before it offers an action.
+
+### Discovery catalog
+
+A channel is the one thing here that is useless without discovery: a group
+gets its members from people who already know each other, but a channel
+wants an audience it has not met. So a visor can publish a catalog of its
+own groups and channels, and anyone holding its public key can ask:
+
+```bash
+skywire cli skychat group publish <group-id> on   # opt in (admin-only)
+skywire cli skychat group catalog <host-pk>       # ask a visor
+skywire cli skychat group catalog                 # see your own listing
+```
+
+**Opt-in, off by default, and that direction is load-bearing.** The catalog
+is the only mechanism in skychat that turns one public key into a *list*, so
+an entry has to be asked for — nothing a visor hosts becomes enumerable
+because somebody didn't read a checkbox, and existing records stay unlisted
+across the upgrade.
+
+`Listed` is **local and not gossiped**: it says what *this* visor answers
+questions about, which is a hosting decision rather than a property of the
+group. Two admins of the same channel can legitimately differ on whether
+they advertise it, and neither can un-list the other's copy — which is
+honest, because they never could.
+
+It shares the well-known probe port but is a *separate frame*, not the same
+request with an empty field, because the two disclose different things: a
+probe confirms one 122-bit group ID the asker already held, while a catalog
+turns a key into a list. Entries carry no member count — a listing is an
+invitation to join, not a report on who already did.
+
+There is no network-wide index, no aggregator and no registration. A catalog
+is served by the host itself and answers only for the host's own groups, so
+discovering anything still starts from a public key a human gave you. That
+keeps the trust model identical to the rest of skychat while removing the
+part that was actually painful: needing a fresh invite link per person for
+something meant to be public.
+
+In the browser UI this surfaces where it is useful rather than as a separate
+screen — entering a public key in **Add by address** also lists the channels
+that visor publishes, and tapping one fills the field so it is confirmed
+through the same path as a pasted address. Nothing is joined by tapping a
+row in a list.
 
 Groups are built on top of CXO TreeStore feeds. The owner publishes
 the canonical group feed; members subscribe and (post-#2539)
@@ -155,13 +288,35 @@ afterwards has a fallback door. The founder is still the group's
 immutable recovery anchor and is still asked first; it just isn't the
 only one who can let people in.
 
-The browser UI mirrors this with a Groups sidebar (create/join
-modals, per-sender message labels), backed by an HTTP proxy to the
-visor's group RPC — `GET/POST /group`, `POST /group/join`, and
+The browser UI mirrors this, backed by an HTTP proxy to the visor's
+group RPC — `GET/POST /group`, `POST /group/join` (which takes either
+`{invite}` or `{address}`), `GET /group/resolve?address=…`, and
 `/group/<id>/{invite,send,leave,history}`. It needs the visor RPC
 connection (`--pair-enable`); without it the Groups section stays
 hidden and the UI is DM-only. Group text is decrypted by the visor
 for private groups, so the browser never handles keys.
+
+Starting anything is one button — bottom-right on a phone, in the sidebar
+header otherwise — offering **Add by address**, **New group** and **New
+channel**. "Add by address" takes one field for every way of naming
+something: a bare public key, a `skychat://` address, an invite link, or a
+scanned QR code. It resolves the input first and then offers the single
+action that applies — Start Chat, Join Group, Send Request, or Join
+Channel — so nobody has to know which kind of thing they are holding.
+
+Every open conversation can show its own address as a QR code, with the
+address printed underneath as selectable text plus a copy button: a code
+is useless over a screen share, in a terminal, or on a device with no
+camera. Scanning uses the browser's own `BarcodeDetector` (Chrome, Edge,
+Android WebView) from the camera or from a chosen image; where the API is
+absent the dialog says so and the paste field — its primary input anyway —
+still works. The camera needs a secure context, which plain http only
+satisfies on `127.0.0.1`/`localhost`.
+
+Below 760px the sidebar and the chat stop sharing the screen: the list is
+the screen until a conversation is opened, which then replaces it and
+grows a back button. The device back button returns to the list rather
+than leaving the app.
 
 ## Media & files (browser UI)
 
@@ -231,9 +386,120 @@ the same boundary that already applies to message history. Public
 groups have no key and their attachments stay plaintext, for the same
 reason their message bodies do.
 
-## Replies, deletes & pinning (browser UI)
+## Identity, contacts & the sidebar (browser UI)
+
+### Your profile and your address
+
+The row at the top of the sidebar is you. Opening it gives two things
+that belong together: what this visor **publishes about itself**, and
+the address other people need in order to ask.
+
+- **Name and picture** are served on the same well-known describe port
+  as group probes and the discovery catalog (`profile_request` /
+  `profile_response`, a third frame kind — see `pkg/skychat/profile`
+  and `pkg/skychat/group/profile.go`). All three questions are
+  read-only, mutate nothing, and must be answerable *before* any
+  relationship exists, which is exactly what a per-group port cannot
+  do. Stored in `<local>/skychat/profile.json`; a visor that has set
+  nothing answers empty rather than refusing.
+- **The avatar is at most 256×256 pixels and 32 KB.** It travels inline
+  in one response frame on a port any stranger may dial, so an uncapped
+  picture would turn "ask who this is" into a way to make a visor serve
+  arbitrary bytes. 256 is what covers the largest box the UI renders it
+  in (the 120px profile dialog) on a retina screen; the byte cap is the
+  one that holds the wire promise, and it leaves ~21 KB of slack under
+  the 64 KB frame limit after base64. The browser centre-crops, scales,
+  and encodes down — PNG if it fits, otherwise JPEG at descending
+  quality — so the cap is never something the user has to hit. The visor
+  enforces the result by *decoding* the image (PNG or JPEG), never by
+  trusting a declared size or MIME type.
+- **Your address** — `skychat://<your-pk>` — is shown as a QR code and
+  as selectable text with a copy button, the same treatment a group
+  gets. This half works with no visor RPC at all, so it is still
+  available when profile publishing is not.
+
+Nothing here is signed or verified. A profile is a label on top of the
+key, not an identity: the UI keeps showing the abbreviated key beside a
+name, and a nickname you set locally always wins over a published one.
+
+### Address book
+
+The 📇 button beside the bell opens your contacts — a centred dialog on
+a desktop, a full-screen list on a phone. Entirely local; nothing is
+sent anywhere.
+
+- **+** opens a **New contact** form: paste a key, and if that visor
+  publishes a name and picture both are filled in for you to accept or
+  edit. If it publishes nothing, give them a nickname so the row reads
+  as a person rather than as hex.
+- Saved names live in the same store the chat header, group sender
+  labels, reply quotes and notifications already read, so a contact's
+  name appears everywhere without those paths knowing contacts exist.
+- **Add by address** also offers to save whoever you just pasted, and
+  the compose menu's **Select from address book** picks a saved contact
+  into that same dialog — a row in a list never starts a conversation
+  by itself, it goes through the same confirmation a pasted key does.
+
+### Sidebar tabs
+
+**All · DMs · Groups · Channels.** The tabs only decide which sections
+are displayed — there is one rendering of each conversation, so
+switching tabs cannot lose a row's accumulated message preview or
+unread badge. The selected tab persists across reloads. A pinned
+conversation is shown in whichever tab it belongs to.
+
+### Saved Messages
+
+A notes-to-self thread at the top of the DM list. Local to this browser
+by design: the alternative is a visor messaging itself over dmsg, which
+means dialing your own key for a "delivered" tick that means nothing.
+Type into it like any conversation, or send a message there from the
+per-message menu. The header's delete button empties it rather than
+removing it.
+
+## Replies, forwards, deletes & pinning (browser UI)
 
 These are browser-UI features; the CLI stays plain send/listen.
+
+### Forwarding
+
+The per-message menu's **Forward** offers every destination in one
+list — Saved Messages, people, groups, channels. What travels is the
+**text**, wrapped in a `{"skychat_forward":{...}}` envelope that rides
+the ordinary message body (same pattern as replies: no new endpoint, no
+wire-version bump, and an older build sees the plain text).
+
+**A forward out of a DM or a group carries nothing about who wrote
+it.** Not the name, not the key, not the conversation. The envelope has
+no author field at all — that absence is the design, because a rule
+spelled "remember not to fill this in" survives until the first person
+forgets, while a field that does not exist cannot be populated by any
+future call site. A test asserts the envelope's key set for exactly
+this reason.
+
+**A forward out of a channel may name the channel.** A channel post was
+broadcast to an audience its author cannot enumerate, under the
+channel's identity rather than a person's, so naming it repeats
+something already public. A DM has one intended reader and a group has
+a roster: in both, the author chose their audience, and attribution
+would hand a stranger the content *and* who said it. The content
+leaving is the forwarder's decision to make; the identity is not
+theirs to give away.
+
+Forwarded messages render a quiet "↪ Forwarded" (or "↪ Forwarded from
+*channel*") line above the bubble — never a badge, since nothing here
+is signed and the claim is worth exactly what a pasted quotation is.
+
+### Touch message actions
+
+On a narrow screen the hover-revealed **↩ Reply** and **⋯** links are
+unreachable — there is no hover, and the targets are far below the
+~44px a finger needs. Below the one-pane breakpoint, tapping a message
+(the bubble *or* the empty space beside it) opens a bottom sheet with
+**Reply**, **Forward**, **Save to Saved Messages** and **Delete**, plus
+*Delete for everyone* where it applies. It stages the same state the
+desktop **⋯** menu uses, so the two presentations cannot drift on what
+an action is allowed to do.
 
 ### Quoted replies
 

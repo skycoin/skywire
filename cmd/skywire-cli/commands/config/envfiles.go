@@ -200,7 +200,11 @@ const envfileLinux = `#
 #SKYCHAT=false
 
 #--	Skychat local address
-#SKYCHATADDR=':8001'
+#SKYCHATADDR='127.0.0.1:8001'
+
+#--	Run skychat with no TCP port at all: the UI is then reachable only
+#--	through the hypervisor. Default: false (skychat binds SKYCHATADDR).
+#SKYCHATPORTLESS=false
 
 #--	Skychat pair-RPC channel to visor (required for group chat).
 #--	Default: true. Set to false to disable group-chat plumbing.
@@ -514,7 +518,11 @@ const envfileWindows = `#
 #$SKYCHAT=$false
 
 #--	Skychat local address
-#$SKYCHATADDR=':8001'
+#$SKYCHATADDR='127.0.0.1:8001'
+
+#--	Run skychat with no TCP port at all: the UI is then reachable only
+#--	through the hypervisor. Default: false (skychat binds SKYCHATADDR).
+#$SKYCHATPORTLESS=$false
 
 #--	Skychat pair-RPC channel to visor (required for group chat).
 #--	Default: true. Set to false to disable group-chat plumbing.

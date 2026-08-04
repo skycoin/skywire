@@ -4,11 +4,15 @@
 //
 // Subcommands:
 //
-//	skywire cli skychat group create  --name <name> [--mode public|private] [--member <pk> ...]
+//	skywire cli skychat group create  --name <name> [--kind public|private|channel] [--member <pk> ...]
 //	skywire cli skychat group list
 //	skywire cli skychat group info    <group-id>
 //	skywire cli skychat group invite  <group-id>           # re-emits the invite link
-//	skywire cli skychat group join    <invite-link>
+//	skywire cli skychat group address <group-id>           # short skychat:// address
+//	skywire cli skychat group resolve <address>            # what does this address point at?
+//	skywire cli skychat group catalog [host-pk]            # what does a visor publish?
+//	skywire cli skychat group publish <group-id> <on|off>  # publish in the catalog
+//	skywire cli skychat group join    <invite-link|address>
 //	skywire cli skychat group add     <group-id> <pk>      # admin: extend allowlist
 //	skywire cli skychat group promote <group-id> <pk>      # admin: grant roster authority
 //	skywire cli skychat group demote  <group-id> <pk>      # admin: revoke roster authority (founder is immutable)
@@ -37,6 +41,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
+	skychataddr "github.com/skycoin/skywire/pkg/skychat/address"
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
@@ -45,6 +50,8 @@ import (
 var (
 	groupCreateName           string
 	groupCreateMode           string
+	groupCreateKind           string
+	groupCreateListed         bool
 	groupCreateMembers        []string
 	groupCreateNoPeerBackfill bool
 
@@ -59,8 +66,14 @@ var (
 
 func init() {
 	groupCreateCmd.Flags().StringVarP(&groupCreateName, "name", "n", "", "human-readable group name (required)")
-	groupCreateCmd.Flags().StringVarP(&groupCreateMode, "mode", "m", "public", "public | private — private encrypts feed messages with an AES key shipped in the invite link")
+	groupCreateCmd.Flags().StringVarP(&groupCreateKind, "kind", "k", "", "public | private | channel — private is admin-approved and encrypted; a channel is open to join but only admins may post (default public)")
+	// --mode predates --kind and cannot name a channel (public and
+	// channel share the same encryption mode). Kept working for existing
+	// scripts; --kind wins when both are given.
+	groupCreateCmd.Flags().StringVarP(&groupCreateMode, "mode", "m", "", "deprecated alias for --kind, accepts public | private only")
 	groupCreateCmd.Flags().StringSliceVar(&groupCreateMembers, "member", nil, "initial member PK; repeat for many (the owner is implicit)")
+	groupCreateCmd.Flags().BoolVar(&groupCreateListed, "listed", false,
+		"publish in this visor's discovery catalog, so anyone with this visor's key can find it; off by default")
 	groupCreateCmd.Flags().BoolVar(&groupCreateNoPeerBackfill, "no-peer-backfill", false,
 		"only admins may serve this group's history to a joiner; without this flag any online member can, so the group stays readable while admins are offline")
 	groupCreateCmd.MarkFlagRequired("name") //nolint:errcheck,gosec
@@ -78,6 +91,7 @@ func init() {
 
 	groupCmd.AddCommand(
 		groupCreateCmd, groupListCmd, groupInfoCmd, groupInviteCmd,
+		groupAddressCmd, groupResolveCmd, groupCatalogCmd, groupPublishCmd,
 		groupJoinCmd, groupAskAgainCmd, groupAddCmd, groupPromoteCmd, groupDemoteCmd, groupRotateKeyCmd,
 		groupPeerBackfillCmd,
 		groupSendCmd, groupUnsendCmd, groupListenCmd, groupHistoryCmd,
@@ -102,9 +116,17 @@ var groupCreateCmd = &cobra.Command{
 	Use:   "create",
 	Short: "Create a new group (this visor becomes the owner)",
 	Run: func(cmd *cobra.Command, _ []string) {
-		mode := skychatgroup.Mode(groupCreateMode)
-		if !mode.IsValid() {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --mode %q (use public or private)", groupCreateMode))
+		// --kind first, then the legacy --mode, then the public default.
+		raw := groupCreateKind
+		if raw == "" {
+			raw = groupCreateMode
+		}
+		if raw == "" {
+			raw = string(skychatgroup.KindPublic)
+		}
+		kind := skychatgroup.Kind(raw)
+		if !kind.IsValid() {
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid group kind %q (use public, private or channel)", raw))
 		}
 		members, err := parsePKs(groupCreateMembers)
 		if err != nil {
@@ -115,9 +137,11 @@ var groupCreateCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
 		info, link, err := rpcClient.GroupCreate(visor.GroupCreateArgs{
-			Name:           groupCreateName,
-			Mode:           mode,
-			InitialMembers: members,
+			Name:                groupCreateName,
+			Kind:                kind,
+			InitialMembers:      members,
+			DisablePeerBackfill: groupCreateNoPeerBackfill,
+			Listed:              groupCreateListed,
 		})
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
@@ -303,16 +327,214 @@ var groupInviteCmd = &cobra.Command{
 	},
 }
 
-var groupJoinCmd = &cobra.Command{
-	Use:   "join <invite-link>",
-	Short: "Join a group by invite link",
-	Args:  cobra.ExactArgs(1),
+var groupAddressCmd = &cobra.Command{
+	Use:   "address <group-id>",
+	Short: "Print the short skychat:// address of a group",
+	Long: `Print the short address of a group or channel.
+
+	skychat://<host-pk>/<group-id>
+
+Shorter than an invite link and stable as the group changes, so it is the
+form to print on a card, read aloud, or encode in a QR code. It is not
+self-contained: whoever uses it asks the host what the group is before
+joining, so the host must be reachable. Use ` + "`group invite`" + ` when
+that is not a safe assumption.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		info, err := rpcClient.GroupJoin(visor.GroupJoinArgs{Invite: args[0]})
+		info, err := rpcClient.GroupGet(args[0])
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		addr := skychataddr.Group(info.OwnerPK, info.ID).String()
+		internal.PrintOutput(cmd.Flags(), addr, addr+"\n")
+	},
+}
+
+var groupCatalogCmd = &cobra.Command{
+	Use:   "catalog [host-pk]",
+	Short: "List the groups and channels a visor publishes",
+	Long: `Ask a visor what it publishes, or omit the key to see your own listing
+exactly as others would.
+
+Only groups an admin has explicitly published appear — see ` + "`group publish`" + `.
+There is no network-wide index: a catalog is served by the host itself and
+answers only for its own groups, so discovery still starts from a public key
+somebody gave you.`,
+	Args: cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		var host cipher.PubKey
+		if len(args) == 1 {
+			if err := host.Set(args[0]); err != nil {
+				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid host pk: %w", err))
+			}
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		entries, truncated, err := rpcClient.GroupCatalog(host)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(),
+			map[string]any{"entries": entries, "truncated": truncated},
+			humanCatalog(entries, truncated))
+	},
+}
+
+// humanCatalog renders a catalog as a table, leading with the kind so a
+// channel is distinguishable from a group at a glance.
+func humanCatalog(entries []visor.GroupCatalogEntry, truncated bool) string {
+	if len(entries) == 0 {
+		return "nothing published\n"
+	}
+	var b strings.Builder
+	w := tabwriter.NewWriter(&b, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "KIND\tNAME\tJOIN\tADDRESS") //nolint
+	for _, e := range entries {
+		join := "open"
+		if e.Policy == skychatgroup.JoinApproval {
+			join = "on approval"
+		}
+		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", e.Kind, e.Name, join, e.Address) //nolint
+	}
+	_ = w.Flush() //nolint:errcheck
+	if truncated {
+		fmt.Fprintf(&b, "\n(the host has more published than it will list at once)\n")
+	}
+	return b.String()
+}
+
+var groupPublishCmd = &cobra.Command{
+	Use:   "publish <group-id> <on|off>",
+	Short: "Publish a group or channel in this visor's discovery catalog",
+	Long: `Add a group or channel to this visor's catalog, so anyone holding this
+visor's public key can find it by asking.
+
+Off by default, and admin-only. This is a LOCAL hosting decision, not a
+property of the group: it is not gossiped, so it says what THIS visor is
+willing to answer questions about. Two admins of the same channel can
+legitimately differ on whether they advertise it, and neither can un-list
+the other's copy.`,
+	Args: cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		var listed bool
+		switch strings.ToLower(args[1]) {
+		case "on", "true", "yes":
+			listed = true
+		case "off", "false", "no":
+			listed = false
+		default:
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("expected on or off, got %q", args[1]))
+		}
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		info, err := rpcClient.GroupSetListed(args[0], listed)
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		state := "not published"
+		if listed {
+			state = "published in this visor's catalog"
+		}
+		human := fmt.Sprintf("%q is now %s\n  address: %s\n",
+			info.Name, state, skychataddr.Group(info.OwnerPK, info.ID))
+		internal.PrintOutput(cmd.Flags(), info, human)
+	},
+}
+
+var groupResolveCmd = &cobra.Command{
+	Use:   "resolve <address|invite-link>",
+	Short: "Report what a skychat address points at",
+	Long: `Say whether an address names a person, a group, or a channel — and
+for a group, whether joining it means walking in or asking.
+
+Accepts a bare public key, skychat://<pk>, skychat://<pk>/<group-id>, or a
+skychat:invite: link. A bare key is answered locally: a key that names a
+person and a key that hosts a channel are the same 66 characters, so only
+the presence of a group ID can tell them apart. A group address is answered
+from this visor's own records when it knows the group, and otherwise by
+asking the host.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		res, err := rpcClient.GroupResolve(visor.GroupResolveArgs{Address: args[0]})
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		internal.PrintOutput(cmd.Flags(), res, humanResolve(res))
+	},
+}
+
+// humanResolve renders a resolve result for a terminal, leading with the
+// action the operator would take next.
+func humanResolve(res visor.GroupResolveResult) string {
+	var b strings.Builder
+	if res.Group == nil {
+		fmt.Fprintf(&b, "direct message with %s\n  address: %s\n", res.PK, res.Address)
+		return b.String()
+	}
+	g := res.Group
+	noun := "group"
+	if g.Kind == skychatgroup.KindChannel {
+		noun = "channel"
+	}
+	fmt.Fprintf(&b, "%s %q\n", noun, g.Name)
+	fmt.Fprintf(&b, "  address: %s\n", res.Address)
+	fmt.Fprintf(&b, "  host:    %s\n", g.HostPK)
+	fmt.Fprintf(&b, "  kind:    %s (%s)\n", g.Kind, g.Mode)
+	switch {
+	case g.Banned:
+		fmt.Fprintf(&b, "  action:  none — this public key is banned from it\n")
+	case res.Joined:
+		fmt.Fprintf(&b, "  action:  none — already a member (%s)\n", res.Status)
+	case res.Status == skychatgroup.StatusAwaitingApproval:
+		fmt.Fprintf(&b, "  action:  none — a request is already queued for an admin\n")
+	case g.Policy == skychatgroup.JoinApproval:
+		fmt.Fprintf(&b, "  action:  send a join request (an admin approves each one)\n")
+	default:
+		fmt.Fprintf(&b, "  action:  join (open admission)\n")
+	}
+	if g.PriceHint != "" {
+		// Labeled as claimed rather than stated: this is unverified text
+		// from a host that wants members.
+		fmt.Fprintf(&b, "  price:   %s (claimed by the host, unverified)\n", g.PriceHint)
+	}
+	return b.String()
+}
+
+var groupJoinCmd = &cobra.Command{
+	Use:   "join <invite-link|address>",
+	Short: "Join a group by invite link or short skychat:// address",
+	Long: `Join a group or channel.
+
+Takes either form:
+
+	skychat:invite:<base64url>      self-contained; works while the host is offline
+	skychat://<host-pk>/<group-id>  short; asks the host what the group is first
+
+Both go through the same admission gate — an address is a shorter way to
+name the group, not a way around its door.`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		rpcClient, err := clirpc.Client(cmd.Flags())
+		if err != nil {
+			internal.PrintFatalError(cmd.Flags(), err)
+		}
+		join := visor.GroupJoinArgs{Invite: args[0]}
+		if !skychataddr.IsInvite(args[0]) {
+			join = visor.GroupJoinArgs{Address: args[0]}
+		}
+		info, err := rpcClient.GroupJoin(join)
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}

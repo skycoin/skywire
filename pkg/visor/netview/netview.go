@@ -1,15 +1,18 @@
 // Package netview pkg/visor/netview/netview.go c3-vis-core
 // all-transports + UT uptimes aggregated per-PK), shared by the native visor
-// (pkg/visor) and the wasm-visor (cmd/wasm-visor). It is a dependency-free leaf
-// (only encoding/json + strings + time) so the wasm-visor can import it —
-// pkg/visor itself does NOT compile for js/wasm. Keeping the aggregation here
-// means the native and browser visors can't drift on how the table is built.
+// (pkg/visor) and the wasm-visor (cmd/wasm-visor). It is a near-leaf — only the
+// stdlib (encoding/json + strings + time) plus the wasm-safe tptypes leaf (the
+// canonical transport-type list) — so the wasm-visor can import it; pkg/visor
+// itself does NOT compile for js/wasm. Keeping the aggregation here means the
+// native and browser visors can't drift on how the table is built.
 package netview
 
 import (
 	"encoding/json"
 	"strings"
 	"time"
+
+	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 // Entry is one row of the combined network table. JSON tags match what
@@ -23,6 +26,10 @@ type Entry struct {
 	SUDPH    int    `json:"sudph"`
 	DMSG     int    `json:"dmsg"`
 	STCP     int    `json:"stcp"`
+	SQUICR   int    `json:"squicr"`
+	WEBRTC   int    `json:"webrtc"`
+	SWSR     int    `json:"swsr"`
+	SWTR     int    `json:"swtr"`
 	Total    int    `json:"total"`
 	UTStatus string `json:"ut_status,omitempty"` // "online" | "offline" | "" (not in UT)
 }
@@ -110,8 +117,11 @@ func Compute(fetch func(service, path string) ([]byte, error)) *Response {
 		}
 	}
 
-	// TPD — all-transports → count by type per edge.
-	type tpCount struct{ STCPR, SUDPH, DMSG, STCP, Total int }
+	// TPD — all-transports → count by type per edge. Every canonical transport
+	// type (tptypes.Known()) gets its own counter; NormalizeType folds legacy
+	// wire names (quic/squic→squicr, ws→swsr, wt→swtr) into the canonical bucket
+	// so the breakdown never silently drops a type as new ones are added.
+	type tpCount struct{ STCPR, SUDPH, DMSG, STCP, SQUICR, WEBRTC, SWSR, SWTR, Total int }
 	tpMap := make(map[string]*tpCount)
 	if body, err := fetch("tpd", "/all-transports"); err == nil {
 		var tps []struct {
@@ -124,15 +134,23 @@ func Compute(fetch func(service, path string) ([]byte, error)) *Response {
 					if tpMap[edge] == nil {
 						tpMap[edge] = &tpCount{}
 					}
-					switch tp.Type {
-					case "stcpr":
+					switch tptypes.NormalizeType(tptypes.Type(tp.Type)) {
+					case tptypes.STCPR:
 						tpMap[edge].STCPR++
-					case "sudph":
+					case tptypes.SUDPH:
 						tpMap[edge].SUDPH++
-					case "dmsg":
+					case tptypes.DMSG:
 						tpMap[edge].DMSG++
-					case "stcp":
+					case tptypes.STCP:
 						tpMap[edge].STCP++
+					case tptypes.QUIC:
+						tpMap[edge].SQUICR++
+					case tptypes.WEBRTC:
+						tpMap[edge].WEBRTC++
+					case tptypes.WS:
+						tpMap[edge].SWSR++
+					case tptypes.WT:
+						tpMap[edge].SWTR++
 					}
 					tpMap[edge].Total++
 				}
@@ -153,7 +171,8 @@ func Compute(fetch func(service, path string) ([]byte, error)) *Response {
 		out = append(out, Entry{
 			PK: display, Country: info.Country, Version: info.Version,
 			Services: strings.Join(info.Services, ","),
-			STCPR:    c.STCPR, SUDPH: c.SUDPH, DMSG: c.DMSG, STCP: c.STCP, Total: c.Total,
+			STCPR:    c.STCPR, SUDPH: c.SUDPH, DMSG: c.DMSG, STCP: c.STCP,
+			SQUICR: c.SQUICR, WEBRTC: c.WEBRTC, SWSR: c.SWSR, SWTR: c.SWTR, Total: c.Total,
 			UTStatus: utStatus[pk],
 		})
 	}
@@ -163,6 +182,7 @@ func Compute(fetch func(service, path string) ([]byte, error)) *Response {
 		}
 		out = append(out, Entry{
 			PK: pk, STCPR: c.STCPR, SUDPH: c.SUDPH, DMSG: c.DMSG, STCP: c.STCP,
+			SQUICR: c.SQUICR, WEBRTC: c.WEBRTC, SWSR: c.SWSR, SWTR: c.SWTR,
 			Total: c.Total, UTStatus: utStatus[pk],
 		})
 	}
