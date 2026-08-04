@@ -118,11 +118,14 @@ var logCmd = &cobra.Command{
 			endpoint = utAddr + "&visors=" + fetchFrom
 		}
 
+		// Both the uptime tracker and per-visor surveys are reached over dmsg.
+		// --proxy routes everything through a warm dmsgweb SOCKS5 resolving proxy
+		// (http://<pk>.dmsg/..., resolved + dialed by the proxy — which holds warm
+		// sessions and, for a survey-whitelisted key, reaches deployment services
+		// like the TPD-integrated uptime tracker too); default mode opens this
+		// command's own dmsg client and dials dmsg://<pk>:80/... directly.
 		var visorTransport http.RoundTripper
-		var uptimes []VisorUptimeResponse
 		if proxyAddr != "" {
-			// Per-visor surveys ride the warm dmsgweb SOCKS5 resolving proxy
-			// (http://<pk>.dmsg/...); the proxy already holds warm sessions.
 			tr, perr := socks5Transport(proxyAddr)
 			if perr != nil {
 				log.WithError(perr).Errorf("Invalid --proxy %q", proxyAddr)
@@ -130,21 +133,6 @@ var logCmd = &cobra.Command{
 			}
 			visorTransport = tr
 			log.Infof("Collecting via dmsgweb SOCKS5 proxy %s (http://<pk>.dmsg/...)", proxyAddr)
-
-			// The uptime tracker is a *deployment service*, not a visor: the
-			// survey proxy's whitelist can't reach it. Fetch it the same way
-			// `cli ut tpd` does — the local visor's RPC → DMSG chain
-			// (FetchCachedServiceURL: CXO → visor DmsgHTTP RPC → dmsg), reusing
-			// the visor's warm sessions instead of a cold ephemeral client.
-			raw := clirpc.FetchCachedServiceURL(cmd.Flags(), "", endpoint, 0)
-			if raw == "" {
-				log.Error("Unable to get data from uptime tracker (RPC → DMSG path returned no data).")
-				return
-			}
-			if uerr := json.Unmarshal([]byte(raw), &uptimes); uerr != nil {
-				log.WithError(uerr).Error("Unable to parse uptime tracker data.")
-				return
-			}
 		} else {
 			// Route the bootstrap's per-PK Entry() fallback over dmsg-HTTP by default;
 			// plain-HTTP discovery is only taken with a non-prod --dmsg-disc URL.
@@ -162,19 +150,19 @@ var logCmd = &cobra.Command{
 				dmsgC.EnsureAndObtainSession(ctx, server.PK) //nolint:errcheck,gosec
 			}
 			visorTransport = dmsghttp.MakeHTTPTransport(ctx, dmsgC)
-			// 60s client for the UT fetch (a single large payload).
-			utClient := &http.Client{Transport: visorTransport, Timeout: 60 * time.Second}
-			us, uerr := getUptimes(ctx, endpoint, utClient, log)
-			if uerr != nil {
-				log.WithError(uerr).Error("Unable to get data from uptime tracker.")
-				return
-			}
-			uptimes = us
 		}
 
-		// 10s client for per-visor fetches. The transport pools connections
-		// across the concurrent fetch goroutines below.
+		// Shared clients over visorTransport: a 60s one for the UT fetch (a single
+		// large payload) and a 10s one for per-visor fetches. The transport pools
+		// connections across the concurrent fetch goroutines below.
+		utClient := &http.Client{Transport: visorTransport, Timeout: 60 * time.Second}
 		visorClient := &http.Client{Transport: visorTransport, Timeout: 10 * time.Second}
+
+		uptimes, err := getUptimes(ctx, endpoint, utClient, log)
+		if err != nil {
+			log.WithError(err).Error("Unable to get data from uptime tracker.")
+			return
+		}
 		//randomize the order of the survey collection - workaround for hanging
 		rand.Shuffle(len(uptimes), func(i, j int) {
 			uptimes[i], uptimes[j] = uptimes[j], uptimes[i]
@@ -675,14 +663,23 @@ func getUptimes(ctx context.Context, endpoint string, dmsgHTTPC *http.Client, lo
 	var results []VisorUptimeResponse
 	fetchURL := endpoint
 	client := dmsgHTTPC
-	if dmsgEquiv := clirpc.DmsgURLForHTTP(endpoint); dmsgEquiv != "" {
+	switch {
+	case strings.HasPrefix(endpoint, "dmsg://"):
+		// utAddr is already a dmsg URL (the deployment's dmsg-only config, e.g. the
+		// TPD-integrated uptime endpoint). --proxy reaches it as http://<pk>.dmsg/...;
+		// otherwise the dmsghttp transport dials the dmsg:// URL directly.
+		if proxyAddr != "" {
+			fetchURL = dmsgToProxyURL(endpoint)
+		}
+	case clirpc.DmsgURLForHTTP(endpoint) != "":
+		dmsgEquiv := clirpc.DmsgURLForHTTP(endpoint)
 		if proxyAddr != "" {
 			// Reach the UT through the SOCKS5 resolving proxy as http://<pk>.dmsg/...
 			fetchURL = dmsgToProxyURL(dmsgEquiv)
 		} else {
 			fetchURL = dmsgEquiv
 		}
-	} else if proxyAddr == "" {
+	case proxyAddr == "":
 		log.Debugf("No dmsg twin for %s; falling back to plain HTTP for UT fetch", endpoint)
 		client = &http.Client{Timeout: 60 * time.Second}
 	}
