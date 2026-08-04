@@ -802,6 +802,18 @@ func (proxyDefaultAPI) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, err
 	return GroupResolveResult{}, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) ProfileGet() (Profile, error) {
+	return Profile{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ProfileSet(_ ProfileSetArgs) (Profile, error) {
+	return Profile{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) ProfileFetch(_ cipher.PubKey) (Profile, error) {
+	return Profile{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupSetListed(_ string, _ bool) (GroupInfo, error) {
 	return GroupInfo{}, ErrProxyNotSupported
 }
