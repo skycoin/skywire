@@ -124,6 +124,57 @@ An Angular side hosts it with one generic wrapper: load the bundle script once,
 4. **`?embed=1` WinBox windows** → Angular CDK portal.
 5. (Large, separate) **skycoin-web** convergence into the SPA as a lazy module.
 
+## Implementation findings (2026-08-04, from a full code inventory)
+
+The pilot (network-visualizer → tpviz mount) is landed (#3709/#3713). Before the
+rest can proceed, the SPA's structure imposes a **foundational prerequisite** that
+this doc originally understated:
+
+- **The SPA is a single monolithic NgModule** (`app.module.ts` declares ~169
+  components/pipes/directives). There is **no `SharedModule`**, **no feature
+  module**, and **every route is eager** (`app-routing.module.ts` uses `component:`
+  everywhere; zero `loadChildren`/`loadComponent`). **Zero components are
+  `standalone: true`** — including the shared bases `PageBaseComponent` and
+  `TopBarComponent`.
+- Because it's one module, every feature template implicitly sees every shared
+  declaration. E.g. the VPN templates use `<app-button>`, `<app-dialog>`,
+  `<app-top-bar>`, `<app-paginator>`, `<app-loading-indicator>`, `<app-line-chart>`,
+  `<app-copy-to-clipboard-text>` and pipes `autoScale`/`dataFilterer`/
+  `loadingBackendData`/`currentRemoteServer`/`name`/`translate`.
+
+**Therefore lazy-loading ANY feature (VPN, skychat, …) is gated on first extracting
+a `SharedModule`** that declares+exports the cross-feature UI components, pipes and
+directives; then `app.module` imports it (and drops those declarations) and each new
+lazy feature module (`loadChildren`) imports it too. This is high-blast-radius (the
+whole UI depends on those shared pieces) and must be done carefully with iterative
+`make build-ui` verification on all three surfaces (native HV, `hv serve`, wasm
+visor — note `useHash:true` + lazy-chunk serving, `serve.go:189-193`).
+
+**Recommended sequence:**
+1. **SharedModule extraction** (prerequisite; own PR). Identify every declaration
+   used by ≥2 features, move to `SharedModule`, verify no shared piece imports a
+   feature component. Keep everything eager for this PR — pure refactor, no route
+   changes — so it's independently verifiable.
+2. **A generic external-bundle mount host** (`<app-bundle-mount [src] [globalName]>`)
+   factored from `network-visualizer.component.ts` for the `window.SkywireUI[...]`
+   contract above.
+3. **A WinBox↔Angular CDK-portal bridge** (`window.SkywireNg.mountComponent(el,
+   token, opts)`), so the `?embed=1` self-iframe WinBox windows (chat, logs —
+   `browse.js:1590-1624`, `:1407-1429`) mount the real Angular component instead of
+   iframing the SPA into itself.
+4. **VPN → `loadChildren` feature module** (first lazy conversion; `loadChildren`
+   "Lane A", not `loadComponent`, to avoid the standalone migration).
+5. skychat WinBox → CDK portal; wallet `/wallet/config` iframe → mounted panel;
+   then web-proxy/skysocks/skynet/logs lazy-load.
+
+**Corrections to the "Per-UI target" table below:** skychat should **NOT** be
+rebuilt as a vanilla `mount()` bundle — it's a rich 1500-line Angular component and
+the WinBox window already reuses it via `?embed=1`; rebuilding it as a bundle would
+re-introduce the dual-surface divergence that #3641/#3596 removed. Keep the one
+Angular component and host it in WinBox via the CDK-portal bridge (step 3). The pty
+terminal stays iframed (self-contained xterm+WS runtime, deliberately parked in
+`NodeComponent` so its WS survives tab switches).
+
 ## Non-goals
 
 - Rewriting server-rendered (reward server) or own-runtime (`skywire web`,
