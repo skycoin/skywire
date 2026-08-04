@@ -1573,6 +1573,22 @@
     .start-btn:hover { background: #0284c7; }
     .start-btn:active { transform: scale(0.95); }
 
+    /* The dismiss layer for every popup menu. Invisible, but it is a real
+       element and that is the whole point: the tap that closes a menu lands
+       HERE and goes no further, instead of falling through onto the message
+       row / button underneath and doing a second thing the user never asked
+       for. Sits under every menu (120/1000/1100) and over the app; the
+       lightbox, toasts and the call banner stay above it, so an incoming
+       call is still answerable with a menu open. */
+    .menu-scrim {
+      position: fixed;
+      inset: 0;
+      z-index: 119;
+      display: none;
+    }
+
+    .menu-scrim.visible { display: block; }
+
     .start-menu {
       position: fixed;
       z-index: 120;
@@ -2942,6 +2958,11 @@
     </form>
   </main>
 
+  <!-- Dismiss layer for the popup menus below. Shown by _syncMenuScrim
+       whenever one of them is open, so the tap that closes a menu is spent
+       closing it and nothing else. -->
+  <div id="menuScrim" class="menu-scrim" aria-hidden="true" onclick="app.dismissMenus(event)"></div>
+
   <!-- Compose menu. A body-level child so nothing can clip it, and
        positioned in JS from the button's own rect — that way the same
        menu drops down from the sidebar header on a wide screen and rises
@@ -4281,15 +4302,12 @@
         const r = btn.getBoundingClientRect();
         menu.style.top = (r.bottom + 4) + 'px';
         menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, Math.max(8, r.left)) + 'px';
-        setTimeout(() => {
-          this._menuOutside = (e) => { if (!menu.contains(e.target)) this.closeMsgMenu(); };
-          document.addEventListener('click', this._menuOutside);
-        }, 0);
+        this._syncMenuScrim();
       }
       closeMsgMenu() {
         const m = document.getElementById('msgMenu');
         if (m) m.remove();
-        if (this._menuOutside) { document.removeEventListener('click', this._menuOutside); this._menuOutside = null; }
+        this._syncMenuScrim();
       }
 
       // deleteForMe removes the message from this device only. DM threads are
@@ -8592,6 +8610,7 @@
         menu.classList.add('visible');
         const btn = document.getElementById(btnId);
         if (btn) btn.setAttribute('aria-expanded', 'true');
+        this._syncMenuScrim();
       }
 
       closeMenu(menuId, btnId) {
@@ -8600,10 +8619,43 @@
         menu.classList.remove('visible');
         const btn = document.getElementById(btnId);
         if (btn) btn.setAttribute('aria-expanded', 'false');
+        this._syncMenuScrim();
       }
 
       closeAllMenus() {
         this._menuPairs().forEach(p => p.btns.forEach(b => this.closeMenu(p.menu, b)));
+      }
+
+      // _syncMenuScrim raises the dismiss layer while any popup menu is open
+      // and drops it when the last one closes. Derived from what is actually
+      // on screen rather than counted as menus open and close: a miscounted
+      // scrim is either an invisible sheet of glass over the whole app or no
+      // protection at all, and neither failure announces itself.
+      _syncMenuScrim() {
+        // The bottom sheet stages a HIDDEN #msgMenu as its data carrier
+        // (see openMsgSheet), and that one must not raise a scrim — the
+        // sheet has its own backdrop, and a second invisible layer would
+        // outlive it. Same display test _dismissSheet uses.
+        const stage = document.getElementById('msgMenu');
+        const open = (!!stage && stage.style.display !== 'none')
+          || this._menuPairs().some(p => {
+            const m = document.getElementById(p.menu);
+            return !!m && m.classList.contains('visible');
+          });
+        const scrim = document.getElementById('menuScrim');
+        if (scrim) scrim.classList.toggle('visible', open);
+      }
+
+      // dismissMenus is the scrim's only handler. The tap that closes a menu
+      // must not ALSO do whatever it landed on — tapping past an open ⋮ used
+      // to close the menu and open the message sheet under it, because the
+      // dismissal was a document listener and the click carried on to its
+      // target. The scrim IS the target now, so there is nothing to carry on
+      // to; the stopPropagation is for any listener above us.
+      dismissMenus(ev) {
+        if (ev) { ev.preventDefault(); ev.stopPropagation(); }
+        this.closeMsgMenu();
+        this.closeAllMenus();
       }
 
       toggleStartMenu(ev) {
@@ -8658,9 +8710,9 @@
 
       toggleHeaderMenu(ev) {
         if (ev) ev.stopPropagation();
-        // The per-message ⋯ menu dismisses itself from a BUBBLE-phase document
-        // listener, which the stopPropagation above would rob it of — so it is
-        // closed here rather than left hanging beside a second open menu.
+        // Two menus open at once is one too many: the per-message ⋯ is a
+        // separate element with its own trigger, so opening this one closes
+        // that one rather than leaving it hanging beside it.
         this.closeMsgMenu();
         const btnId = this.group ? 'groupMenuBtn' : 'dmMenuBtn';
         const menu = document.getElementById('hdrMenu');
@@ -11227,29 +11279,19 @@
       if (e.target === this) app.closeContacts();
     });
 
-    // Dismiss any open popup menu on a click outside it. Capture phase so
-    // it fires before the click lands on whatever is underneath — which is
-    // also why a click on a trigger has to be recognised here rather than
-    // left to the trigger's own stopPropagation: capture runs first.
-    document.addEventListener('click', function(e) {
-      app._menuPairs().forEach(function(p) {
-        const menu = document.getElementById(p.menu);
-        if (!menu || !menu.classList.contains('visible')) return;
-        if (menu.contains(e.target)) return;
-        const onTrigger = p.btns.some(function(id) {
-          const b = document.getElementById(id);
-          return b && b.contains(e.target);
-        });
-        if (onTrigger) return;
-        p.btns.forEach(function(id) { app.closeMenu(p.menu, id); });
-      });
-    }, true);
+    // Outside-click dismissal is the scrim's job (see .menu-scrim /
+    // dismissMenus), not a document listener's. A listener could only close
+    // the menu AFTER the click had already been aimed at something else;
+    // the scrim is what the click hits instead, which is the difference
+    // between "the menu closed" and "the menu closed and a message sheet
+    // opened underneath it". Tapping the trigger again lands on the scrim
+    // too, so a menu still toggles shut from its own button.
 
     // Keep the open menu attached to its button when the viewport changes
     // — a resize can move the compose button between the header and the
     // floating position, and an orientation change moves it a long way.
     window.addEventListener('resize', function() {
-      app.closeAllMenus();
+      app.dismissMenus();
     });
 
     // Device / browser back on a phone returns to the conversation list
@@ -11266,7 +11308,9 @@
       if (e.key === 'Escape') {
         app.closeSettings();
         app.closeLightbox();
-        app.closeAllMenus();
+        // Both the popup menus and the per-message ⋯, so Escape can never
+        // leave the scrim up over a page with no menu on it.
+        app.dismissMenus();
         app.closeModal('createGroupModal');
         app.closeModal('createChannelModal');
         app.closeModal('groupAdminModal');
