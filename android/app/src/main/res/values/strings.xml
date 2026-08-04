@@ -88,6 +88,20 @@
     <string name="socks_retry">Retry</string>
     <string name="socks_refresh">Refresh</string>
 
+    <!-- Primary transport (visor-wide; shown on SkySOCKS, later SkyVPN) -->
+    <string name="transport_title">Transport</string>
+    <string name="transport_change">Change</string>
+    <string name="transport_hint">Tried first when building the route to a server. The others stay as fallbacks.</string>
+    <string name="transport_sheet_title">Primary transport</string>
+    <string name="transport_sheet_hint">Skywire tries this type first when it connects, and falls back to the others when it can\'t. Takes effect on the next connection.</string>
+    <string name="transport_recommended">Recommended on mobile</string>
+    <string name="transport_dmsg">DMSG</string>
+    <string name="transport_dmsg_hint">Relayed through a DMSG server. Works behind any carrier NAT — the connection a phone can always make.</string>
+    <string name="transport_stcpr">STCPR</string>
+    <string name="transport_stcpr_hint">Direct TCP to the server. Fastest when it works, but needs reachability a mobile network rarely gives.</string>
+    <string name="transport_sudph">SUDPH</string>
+    <string name="transport_sudph_hint">Direct UDP with hole punching. Needs a NAT that allows it — many carriers do not.</string>
+
     <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
     <string name="chat_placeholder">SkyChat is coming soon — the chat UI will load here.</string>
     <string name="wallet_placeholder">The native Skycoin wallet is coming soon.</string>

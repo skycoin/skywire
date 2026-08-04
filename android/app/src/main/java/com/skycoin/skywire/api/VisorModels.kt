@@ -115,20 +115,42 @@ data class HealthInfo(
     @SerialName("transportability_health") val transportabilityHealth: String = "",
 )
 
+/**
+ * One dmsg server this visor holds a session with, from the summary's
+ * `dmsg_servers`. The visor answers it from its own live session list, so
+ * it is populated whenever dmsg is up — unlike `/api/dmsg`, whose entries
+ * come from the round-trip tracker and need a dmsgctrl dial back to the
+ * tracked visor (for the local one, a self-dial that the phone never wins:
+ * "dmsg error 202 — cannot connect to delegated server").
+ */
 @Serializable
 data class DmsgServerInfo(
     @SerialName("pk") val pk: String = "",
-    /** Nanoseconds (Go time.Duration). */
+    /**
+     * Nanoseconds (Go time.Duration). Measured by a self-ping through the
+     * server, hourly — 0 until the first one lands, and it can stay 0 on a
+     * phone, so it is only rendered when > 0.
+     */
     @SerialName("latency") val latencyNs: Long = 0,
+    /** Raw session carrier: tcp | ws | wt | quic. */
+    @SerialName("carrier") val carrier: String = "",
+    /** Human-readable form of [carrier] (e.g. "tcp", "wss", "quic"). */
+    @SerialName("protocol") val protocol: String = "",
 )
 
-/** GET /api/dmsg element — per-session round trip. */
+/**
+ * GET/PUT …/router-settings — the visor-wide router knobs, as one struct.
+ * The PUT applies *every* field, so a caller changing one must send the
+ * others back unchanged (see [VisorApi.setTransportPreference]).
+ */
 @Serializable
-data class DmsgClientSummary(
-    @SerialName("public_key") val publicKey: String = "",
-    @SerialName("server_public_key") val serverPublicKey: String = "",
-    /** Nanoseconds (Go time.Duration). */
-    @SerialName("round_trip") val roundTripNs: Long = 0,
+data class RouterSettings(
+    @SerialName("force_local_routes") val forceLocalRoutes: Boolean = false,
+    @SerialName("existing_tp_only") val existingTpOnly: Boolean = false,
+    @SerialName("mux_routes") val muxRoutes: Int = 0,
+    @SerialName("min_hops") val minHops: Int = 0,
+    /** Transport-type priority order, most-preferred first. */
+    @SerialName("transport_preference") val transportPreference: List<String> = emptyList(),
 )
 
 @Serializable

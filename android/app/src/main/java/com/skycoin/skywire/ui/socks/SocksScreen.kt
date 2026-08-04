@@ -59,6 +59,8 @@ import com.skycoin.skywire.api.AppConnection
 import com.skycoin.skywire.api.ServiceEntry
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.components.TransportPreferenceCard
+import com.skycoin.skywire.ui.components.TransportPreferenceSheet
 import com.skycoin.skywire.ui.logs.LogSources
 import java.util.Locale
 
@@ -76,6 +78,7 @@ fun SocksScreen(
 ) {
     val state by viewModel.uiState.collectAsState()
     var portSheetOpen by remember { mutableStateOf(false) }
+    var transportSheetOpen by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -97,6 +100,15 @@ fun SocksScreen(
         ) {
             item { StatusCard(state, viewModel) }
             item { ProxyAddressCard(state, onChangePort = { portSheetOpen = true }) }
+            item {
+                TransportPreferenceCard(
+                    primary = state.transportPrimary,
+                    // Changeable with the core down too — it is stored on the
+                    // phone and applied when the visor next starts.
+                    enabled = !state.busy,
+                    onClick = { transportSheetOpen = true },
+                )
+            }
 
             if (state.coreReady) {
                 item { ServersHeader(state, viewModel) }
@@ -120,6 +132,17 @@ fun SocksScreen(
             onSave = { port ->
                 viewModel.setListenPort(port)
                 portSheetOpen = false
+            },
+        )
+    }
+
+    if (transportSheetOpen) {
+        TransportPreferenceSheet(
+            current = state.transportPrimary,
+            onDismiss = { transportSheetOpen = false },
+            onSelect = { type ->
+                viewModel.setTransportPrimary(type)
+                transportSheetOpen = false
             },
         )
     }

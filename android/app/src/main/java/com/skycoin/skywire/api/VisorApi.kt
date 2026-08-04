@@ -138,8 +138,6 @@ class VisorApi(context: Context) {
 
     suspend fun summary(): VisorSummary = authedGet("/api/visors/${localPk()}/summary")
 
-    suspend fun dmsg(): List<DmsgClientSummary> = authedGet("/api/dmsg")
-
     suspend fun serviceHealth(): List<ServiceHealthEntry> = authedGet("/api/service-health")
 
     suspend fun runtimeLogs(since: Long): RuntimeLogsDelta =
@@ -248,6 +246,36 @@ class VisorApi(context: Context) {
             decode<AppState>(resp)
         }
     }
+
+    // --- router settings ---
+
+    suspend fun routerSettings(): RouterSettings =
+        authedGet("/api/visors/${localPk()}/router-settings")
+
+    /**
+     * Install [order] as the transport-type priority order, live — the
+     * visor applies it without a restart and persists it to its config.
+     *
+     * Read-modify-write, and it has to be: the PUT applies every field of
+     * the settings struct, so sending the preference alone would also send
+     * `min_hops: 0` — which the router reads as *routing disabled* — along
+     * with a zeroed mux_routes.
+     */
+    suspend fun setTransportPreference(order: List<String>): RouterSettings =
+        withContext(Dispatchers.IO) {
+            val body = json.encodeToString(
+                RouterSettings.serializer(),
+                routerSettings().copy(transportPreference = order),
+            )
+            putWithRelogin("/api/visors/${localPk()}/router-settings", body).use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IOException(
+                        "router settings update failed (${resp.code}): ${errorBody(resp)}",
+                    )
+                }
+                decode<RouterSettings>(resp)
+            }
+        }
 
     /** Fresh 30-second CSRF token for a mutating `/api/visors/{pk}/…` call. */
     suspend fun csrfToken(): String = withContext(Dispatchers.IO) {

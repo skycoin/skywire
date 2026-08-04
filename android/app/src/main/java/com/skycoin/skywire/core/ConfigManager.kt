@@ -34,7 +34,7 @@ class ConfigManager(private val paths: SkywirePaths) {
      * idempotent) so the security-relevant pins survive any config rewrite
      * the visor itself performs at runtime.
      */
-    suspend fun ensureConfig(): Result<File> = withContext(Dispatchers.IO) {
+    suspend fun ensureConfig(transportPrimary: String): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
         if (!paths.visorBinary.canExecute()) {
             return@withContext Result.failure(
@@ -53,7 +53,7 @@ class ConfigManager(private val paths: SkywirePaths) {
             }
         }
         try {
-            applyPhoneProfile()
+            applyPhoneProfile(transportPrimary)
             Result.success(paths.configFile)
         } catch (e: Exception) {
             // A file that exists but does not parse would otherwise crash-loop
@@ -106,9 +106,14 @@ class ConfigManager(private val paths: SkywirePaths) {
      *  - drop `skywire-tcp` — skips the `:7777` STCP listener;
      *  - `dmsgscp.disabled` — on by default when absent, writes scp-root;
      *  - `tp_viz.enable=false` — cosmetic (field is never read) but keeps
-     *    the config honest about what the phone uses.
+     *    the config honest about what the phone uses;
+     *  - `routing.transport_preference` — the primary transport the app
+     *    owns (see [TransportPreference]). Written on every launch because
+     *    the app, not the config file, is the source of truth: the visor
+     *    persists its own copy when the setting is changed live, and this
+     *    keeps the two from drifting apart.
      */
-    private fun applyPhoneProfile() {
+    private fun applyPhoneProfile(transportPrimary: String) {
         val root = json.parseToJsonElement(paths.configFile.readText()).jsonObject
         val edited = buildJsonObject {
             for ((key, value) in root) {
@@ -144,6 +149,14 @@ class ConfigManager(private val paths: SkywirePaths) {
                         value.jsonObject.edit {
                             put("bin_path", JsonPrimitive(paths.binDir.absolutePath))
                             this["apps"]?.let { apps -> this["apps"] = pinSocksArgs(apps) }
+                        },
+                    )
+                    "routing" -> put(
+                        key,
+                        value.jsonObject.edit {
+                            this["transport_preference"] = JsonArray(
+                                TransportPreference.order(transportPrimary).map(::JsonPrimitive),
+                            )
                         },
                     )
                     else -> put(key, value)
