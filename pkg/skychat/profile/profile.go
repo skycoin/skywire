@@ -21,15 +21,25 @@
 // field as untrusted display text from a stranger, because that is exactly
 // what it is.
 //
-// # Why the avatar is 32x32
+// # Why the avatar is capped, and where the cap comes from
 //
 // Two reasons, and the small one is bandwidth. The real one is that this
 // travels inline in a single response frame on a read-only port that any
 // stranger may dial: a picture with no size ceiling turns "ask who this is"
 // into a way to make a visor serve arbitrary bytes to anybody who asks.
-// 32x32 is the size the UI actually renders a contact row at, it re-encodes
-// to a couple of kilobytes, and it is small enough that the cap can be
-// enforced by decoding the image rather than trusting a declared size.
+// So there is a ceiling, and it is enforced by decoding the image rather
+// than by trusting a declared size.
+//
+// The number itself is set by the largest box the UI ever renders a
+// published avatar in — the 120px profile dialog — doubled for a retina
+// screen. That is the whole justification: 256 is small, not tiny. An
+// earlier cap of 32 was small enough to be visibly a thumbnail everywhere
+// it appeared, which is not what "keep it small" was asking for.
+//
+// The byte cap is the one that actually holds the wire promise, and it is
+// the tighter of the two: a photographic 256x256 PNG is ~150 KB and would
+// never fit, so the browser encodes JPEG and re-encodes down until it does.
+// See MaxAvatarBytes for the frame arithmetic.
 //
 // Cropping and scaling happen in the browser before upload — the user is
 // the one who knows which part of their photo is their face. This package
@@ -61,12 +71,28 @@ const (
 
 	// MaxAvatarDim is the edge length an avatar may not exceed, in pixels.
 	// Enforced by decoding the image, never by trusting a caller.
-	MaxAvatarDim = 32
+	//
+	// 256 covers the largest box the UI renders a published avatar in (the
+	// 120px profile dialog) at 2x, so a picture is never visibly upscaled
+	// on the screens people actually use.
+	MaxAvatarDim = 256
 
-	// MaxAvatarBytes bounds the encoded image. A 32x32 PNG is ~1-3 KB;
-	// this leaves generous room for an inefficient encoder while keeping a
-	// profile response far below the 64 KB frame limit even after base64.
-	MaxAvatarBytes = 8 * 1024
+	// MaxAvatarBytes bounds the encoded image, and it is the cap that does
+	// the real work: dimensions alone say nothing about how many bytes a
+	// stranger can make this visor send.
+	//
+	// The arithmetic: the profile answer is one message.MaxFrameSize (64 KB)
+	// frame of JSON, and Avatar is []byte, so it rides as base64 at 4/3 the
+	// raw size. 32 KB raw is ~44 KB of frame, leaving ~21 KB of slack for the
+	// name and the envelope. An oversize frame is not an error the asker can
+	// see — WriteFrame refuses and the peer looks like it has no profile at
+	// all — so the slack is deliberate, not spare.
+	//
+	// 32 KB also holds a 256x256 JPEG at a quality nobody squints at
+	// (~10-25 KB for a photograph). It does not hold a 256x256 photographic
+	// PNG, which is why the browser tries PNG first and falls back to JPEG
+	// rather than committing to either.
+	MaxAvatarBytes = 32 * 1024
 )
 
 // Avatar MIME types. Derived from the decoded image rather than taken from
@@ -83,7 +109,13 @@ var (
 	// ErrAvatarDimensions means the image is bigger than MaxAvatarDim on
 	// one or both edges. Reported separately from ErrAvatarTooLarge
 	// because the fixes differ: one is "crop it", the other "compress it".
-	ErrAvatarDimensions = errors.New("skychat profile: avatar must be at most 32x32 pixels")
+	//
+	// Formatted from the constant so the two cannot drift apart. The
+	// "avatar must be" prefix is load-bearing: the app-side handler
+	// classifies a bad picture as HTTP 400 by matching it across the
+	// net/rpc boundary, where errors.Is cannot reach (see
+	// cmd/apps/skychat/commands/profile.go, isProfileInputError).
+	ErrAvatarDimensions = fmt.Errorf("skychat profile: avatar must be at most %dx%d pixels", MaxAvatarDim, MaxAvatarDim)
 
 	// ErrAvatarFormat means the bytes did not decode as PNG or JPEG.
 	ErrAvatarFormat = errors.New("skychat profile: avatar must be a PNG or JPEG image")

@@ -575,7 +575,7 @@ func parseEventChannels(csv string) map[string]bool {
 func init() {
 	launcher.RegisterApp("skychat", RunSkychat)
 	RootCmd.Flags().StringVar(&addr, "addr", ":8001", "address to bind (default: localhost-only); use \"*:PORT\" to bind on all interfaces")
-	RootCmd.Flags().BoolVar(&portless, "portless", false, "portless-internal: don't bind a TCP port; publish the HTTP surface in-process for the visor's control surface to serve (default for internal-app deployments)")
+	RootCmd.Flags().BoolVar(&portless, "portless", false, "don't bind a TCP port; reach the UI only through the visor's control surface (the in-process surface is published either way)")
 	RootCmd.Flags().Uint16Var(&appPort, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().BoolVar(&useSkynet, "skynet", true, "listen on skynet network")
 	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", true, "listen on dmsg network")
@@ -651,7 +651,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 		// Create independent FlagSet for parsing without initialization cycle
 		fs := pflag.NewFlagSet("skychat", pflag.ContinueOnError)
 		fs.StringVar(&addr, "addr", ":8001", "address to bind")
-		fs.BoolVar(&portless, "portless", false, "portless-internal: no TCP port; publish HTTP surface in-process")
+		fs.BoolVar(&portless, "portless", false, "no TCP port; reach the UI only through the visor's control surface")
 		fs.Uint16Var(&appPort, "port", 0, "routing port")
 		fs.BoolVar(&useSkynet, "skynet", true, "listen on skynet")
 		fs.BoolVar(&useDmsg, "dmsg", true, "listen on dmsg")
@@ -894,16 +894,31 @@ func RunSkychat(ctx context.Context, args []string) error {
 	registerPresenceHTTPHandlers(mux)
 	startPresenceLoop(ctx)
 
-	// Portless-internal mode: no TCP port. Publish the mux to the visor's
-	// in-process HTTP-handler registry so the hypervisor's control surface
-	// (Visor.SkychatProxy) serves it directly via ServeHTTP — no loopback dial,
-	// and no http.Server WriteTimeout to strangle the SSE stream. The dmsg:1 /
-	// skynet:1 mesh listeners (the actual chat transport, started above) run
-	// regardless. This is the native twin of the wasm visor's in-process
-	// skychat, and the default for an internal-app deployment.
+	// Publish the mux to the visor's in-process HTTP-handler registry so the
+	// hypervisor's control surface (Visor.SkychatProxy) serves it directly via
+	// ServeHTTP — no loopback dial, and no http.Server WriteTimeout to strangle
+	// the SSE stream.
+	//
+	// This happens whether or not a TCP port is also bound. The two are not
+	// alternatives: it is the same mux either way, and registering it costs a
+	// map entry while NOT registering it would push the hypervisor onto the
+	// loopback path with the 10s write deadline the in-process path exists to
+	// avoid. When skychat runs as a separate process (external-apps mode) this
+	// registers into that process's own registry, where nothing reads it — an
+	// inert write, not a wrong one.
+	//
+	// The clear on the way out is identity-checked: an app restart re-registers
+	// before the old instance's defer runs, and an unconditional delete-by-name
+	// would take the new instance's handler down with it.
+	launcher.RegisterHTTPHandler(skyenv.SkychatName, mux)
+	defer launcher.ClearHTTPHandler(skyenv.SkychatName, mux)
+
+	// Portless-internal mode: no TCP port at all, so the registration above is
+	// the only way in. The dmsg:1 / skynet:1 mesh listeners (the actual chat
+	// transport, started above) run regardless. This is the native twin of the
+	// wasm visor's in-process skychat; opt-in, since a visor whose chat UI has
+	// no address of its own is a deployment choice.
 	if portless {
-		launcher.RegisterHTTPHandler(skyenv.SkychatName, mux)
-		defer launcher.RegisterHTTPHandler(skyenv.SkychatName, nil)
 		appLog("Serving skychat in-process (portless) via the visor control surface")
 		appCl.SetStatusOrLog(appserver.AppDetailedStatusRunning)
 		<-ctx.Done()
@@ -966,9 +981,19 @@ func RunSkychat(ctx context.Context, args []string) error {
 	select {
 	case err := <-errCh:
 		if err != nil {
-			appLog("HTTP server error: %v", err)
-			appCl.SetErrorOrLog(err)
-			return err
+			// A port that will not bind — almost always a second visor, a
+			// stale skychat, or a docker publish already holding it — costs
+			// the local UI and nothing else. The mesh listeners carrying
+			// actual chat traffic are already running, and the mux is already
+			// published to the visor's control surface, so the hypervisor's
+			// chat tab still works. Killing the app over the loss of one of
+			// its two front doors would take the conversation down with it.
+			appLog("HTTP server error on %s: %v — continuing without the local "+
+				"UI port; reach skychat through the hypervisor, or set a free "+
+				"address with --addr", url, err)
+			<-ctx.Done()
+			appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)
+			return nil
 		}
 	case <-ctx.Done():
 		appCl.SetStatusOrLog(appserver.AppDetailedStatusStopped)

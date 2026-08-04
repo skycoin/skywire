@@ -137,9 +137,11 @@ func (hv *Hypervisor) skychatProxyHandler() http.HandlerFunc {
 // (r.Context()). Local visor only, same internal-token bypass as the buffered
 // path.
 func (hv *Hypervisor) streamSkychatProxy(w http.ResponseWriter, r *http.Request, skychatPath string) {
-	// Portless-internal skychat: serve the registered mux directly, streaming
-	// to the client with no loopback dial. Falls through to the TCP proxy when
-	// skychat runs externally on its own port.
+	// In-process skychat: serve the registered mux directly, streaming to the
+	// client with no loopback dial — and so with no http.Server write deadline
+	// on the SSE stream, which is why this path is preferred even when skychat
+	// is also listening on a port. Falls through to the TCP proxy only when
+	// skychat runs as a separate process.
 	if h := launcher.GetHTTPHandler(skyenv.SkychatName); h != nil {
 		hv.streamSkychatInProcess(h, w, r, skychatPath)
 		return
@@ -207,7 +209,7 @@ func (hv *Hypervisor) streamSkychatProxy(w http.ResponseWriter, r *http.Request,
 }
 
 // streamSkychatInProcess serves a long-lived (SSE) request against the
-// portless-internal skychat mux directly. The mux's SSE handler writes and
+// in-process skychat mux directly. The mux's SSE handler writes and
 // flushes events to the client's ResponseWriter, so passing it straight
 // through streams live with no loopback hop — and, since there is no
 // intermediate http.Server, no WriteTimeout to strangle it (the very bug the
