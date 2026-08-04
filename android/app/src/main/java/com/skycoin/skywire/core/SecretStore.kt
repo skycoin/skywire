@@ -20,7 +20,7 @@ import javax.crypto.spec.GCMParameterSpec
 private val Context.coreDataStore by preferencesDataStore(name = "core")
 
 /**
- * The local-API password: generated once, kept only on this device.
+ * The device-local passwords the app generates for the services it starts.
  * The plaintext never touches disk — DataStore holds an AES-GCM ciphertext
  * whose key lives in AndroidKeyStore (non-exportable). allowBackup=false
  * keeps even the ciphertext out of cloud backups.
@@ -29,22 +29,35 @@ class SecretStore(private val context: Context) {
 
     private val mutex = Mutex()
 
-    suspend fun apiPassword(): String = mutex.withLock {
-        val prefs = context.coreDataStore.data.first()
-        prefs[KEY_API_PASSWORD]?.let { stored ->
-            decrypt(stored)?.let { return it }
-            // Undecryptable (keystore wiped): fall through and rotate. The
-            // visor's users.db is then stale too — ConfigManager resets it
-            // when authentication bootstrap fails.
+    /** Password of the visor's single `admin` account on 127.0.0.1:8000. */
+    suspend fun apiPassword(): String = secret(KEY_API_PASSWORD)
+
+    /**
+     * Password gating skychat's own HTTP surface. Separate from the API
+     * password because the two are handed to different servers — and this
+     * one is the whole reason the chat port is not readable by every other
+     * app on the phone (see [SkychatProfile]).
+     */
+    suspend fun skychatPassword(): String = secret(KEY_SKYCHAT_PASSWORD)
+
+    private suspend fun secret(key: androidx.datastore.preferences.core.Preferences.Key<String>): String =
+        mutex.withLock {
+            val prefs = context.coreDataStore.data.first()
+            prefs[key]?.let { stored ->
+                decrypt(stored)?.let { return it }
+                // Undecryptable (keystore wiped): fall through and rotate. The
+                // visor's users.db is then stale too — ConfigManager resets it
+                // when authentication bootstrap fails.
+            }
+            val fresh = generatePassword()
+            context.coreDataStore.edit { it[key] = encrypt(fresh) }
+            fresh
         }
-        val fresh = generatePassword()
-        context.coreDataStore.edit { it[KEY_API_PASSWORD] = encrypt(fresh) }
-        fresh
-    }
 
     /**
      * Random password satisfying the API's policy: 6–64 chars, at least one
-     * upper/lower/digit/special, ASCII, every rune ≥ '!' (no spaces).
+     * upper/lower/digit/special, ASCII, every rune ≥ '!' (no spaces). The
+     * same shape is valid for skychat, whose policy is a subset of it.
      */
     private fun generatePassword(): String {
         val upper = "ABCDEFGHJKLMNPQRSTUVWXYZ"
@@ -112,5 +125,6 @@ class SecretStore(private val context: Context) {
         const val KEY_ALIAS = "skywire_api_password"
         const val TRANSFORM = "AES/GCM/NoPadding"
         val KEY_API_PASSWORD = stringPreferencesKey("api_password")
+        val KEY_SKYCHAT_PASSWORD = stringPreferencesKey("skychat_password")
     }
 }

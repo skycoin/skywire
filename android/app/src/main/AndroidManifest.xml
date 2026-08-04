@@ -11,6 +11,21 @@
     <!-- Runtime-granted on API 33+; the FGS notification is invisible without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- Voice messages (and the video messages the chat UI already renders a
+         player for) go through getUserMedia inside the embedded SkyChat page;
+         the WebChromeClient maps its request onto these. Both are optional
+         features so a device without a camera still installs. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Not optional and not obvious: WebView's audio manager refuses to open
+         a capture device without it, even with RECORD_AUDIO granted, and
+         getUserMedia fails with a bare "NotReadableError: Could not start
+         audio source" while logcat says "Requires MODIFY_AUDIO_SETTINGS and
+         RECORD_AUDIO". Install-time permission — no runtime prompt. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <!-- allowBackup=false: the visor config (SK) and wallet seed must never
          land in a cloud backup. -->
     <application
