@@ -1299,6 +1299,15 @@ func (mc *mockRPCClient) GroupCreate(_ GroupCreateArgs) (GroupInfo, string, erro
 // GroupJoin implements API.
 func (mc *mockRPCClient) GroupJoin(_ GroupJoinArgs) (GroupInfo, error) { return GroupInfo{}, nil }
 
+// ProfileGet implements API.
+func (mc *mockRPCClient) ProfileGet() (Profile, error) { return Profile{}, nil }
+
+// ProfileSet implements API.
+func (mc *mockRPCClient) ProfileSet(_ ProfileSetArgs) (Profile, error) { return Profile{}, nil }
+
+// ProfileFetch implements API.
+func (mc *mockRPCClient) ProfileFetch(_ cipher.PubKey) (Profile, error) { return Profile{}, nil }
+
 // GroupResolve implements API.
 func (mc *mockRPCClient) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, error) {
 	return GroupResolveResult{}, nil

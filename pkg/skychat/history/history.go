@@ -74,6 +74,19 @@ type Message struct {
 	ReplyToSender  string `json:"reply_to_sender,omitempty"`
 	ReplyToTS      string `json:"reply_to_ts,omitempty"`
 	ReplyToPreview string `json:"reply_to_preview,omitempty"`
+
+	// Forward marks — set only when this message was forwarded from
+	// somewhere else (a {"skychat_forward":...} body). Populated at serve
+	// time from the stored envelope, the same way the reply fields are.
+	//
+	// Forwarded is separate from ForwardFrom because the common case has no
+	// origin to name: a forward out of a DM or a group carries the content
+	// and nothing about where it came from (see cmd/apps/skychat/commands/
+	// forward.go), so the flag is the only thing distinguishing it from
+	// text the forwarder wrote themselves. ForwardFrom, when present, is a
+	// channel's display name — never a public key, and never a person.
+	Forwarded   bool   `json:"forwarded,omitempty"`
+	ForwardFrom string `json:"forward_from,omitempty"`
 }
 
 // GroupMessage is a single group-chat message record. Mirrors Message

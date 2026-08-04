@@ -516,14 +516,21 @@ func (m *Manager) handleProbe(c net.Conn) {
 		m.log.Debug("group: probe: refusing request with no authenticated peer identity")
 		return
 	}
-	// Two questions arrive on this port: "describe this group ID" and
-	// "what do you publish?". They are separate frames rather than one
-	// with an empty field because they disclose different things — see
-	// catalog.go — and the discriminator keeps them from being confused.
+	// Three questions arrive on this port: "describe this group ID",
+	// "what do you publish?" and "who are you?". They are separate frames
+	// rather than one with an empty field because they disclose different
+	// things — see catalog.go and profile.go — and the discriminator keeps
+	// them from being confused.
 	var probeKind relayFrameProbe
-	if err := json.Unmarshal(frame, &probeKind); err == nil && probeKind.Kind == frameKindCatalogRequest {
-		m.handleCatalogRequest(c, asker)
-		return
+	if err := json.Unmarshal(frame, &probeKind); err == nil {
+		switch probeKind.Kind {
+		case frameKindCatalogRequest:
+			m.handleCatalogRequest(c, asker)
+			return
+		case frameKindProfileRequest:
+			m.handleProfileRequest(c, asker)
+			return
+		}
 	}
 	req, err := decodeJoinRequest(frame)
 	if err != nil {

@@ -456,6 +456,12 @@ func renderLegacySSE(ev chatEvent) string {
 	if meta, ok := parseReplyText(ev.Text); ok {
 		m["message"] = meta.Text
 		enrichReplyRow(m, meta)
+	} else if fmeta, ok := parseForwardText(ev.Text); ok {
+		// Same unwrap for a forward. Mutually exclusive with a reply by
+		// construction: a message body carries one envelope or none, and the
+		// composer never wraps one in the other.
+		m["message"] = fmeta.Text
+		enrichForwardRow(m, fmeta)
 	}
 	if ev.ReplyToID != "" {
 		// Surface the quoted-reply target on the legacy /sse shape too, so the
@@ -883,6 +889,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/notify-capable", requireAuthFunc(notifyCapableHandler))
 	registerPairHTTPHandlers(ctx, mux)
 	registerGroupHTTPHandlers(mux)
+	registerProfileHTTPHandlers(mux)
 	registerVoiceHTTPHandlers(mux)
 	registerPresenceHTTPHandlers(mux)
 	startPresenceLoop(ctx)
@@ -1347,11 +1354,14 @@ func historyHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Surface quoted-reply metadata: a reply is stored raw as a
-	// {"skychat_reply":...} body; rewrite each in place to the clean text +
-	// reply_to_* fields the browser renders on reload.
+	// Surface quoted-reply and forward metadata: both are stored raw as a
+	// {"skychat_reply":...} / {"skychat_forward":...} body; rewrite each in
+	// place to the clean text + the additive fields the browser renders on
+	// reload. A body carries at most one envelope, so both passes are safe
+	// to run over every message.
 	for i := range msgs {
 		enrichReplyMessage(&msgs[i])
+		enrichForwardMessage(&msgs[i])
 	}
 
 	w.Header().Set("Content-Type", "application/json")

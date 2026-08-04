@@ -386,9 +386,115 @@ the same boundary that already applies to message history. Public
 groups have no key and their attachments stay plaintext, for the same
 reason their message bodies do.
 
-## Replies, deletes & pinning (browser UI)
+## Identity, contacts & the sidebar (browser UI)
+
+### Your profile and your address
+
+The row at the top of the sidebar is you. Opening it gives two things
+that belong together: what this visor **publishes about itself**, and
+the address other people need in order to ask.
+
+- **Name and picture** are served on the same well-known describe port
+  as group probes and the discovery catalog (`profile_request` /
+  `profile_response`, a third frame kind — see `pkg/skychat/profile`
+  and `pkg/skychat/group/profile.go`). All three questions are
+  read-only, mutate nothing, and must be answerable *before* any
+  relationship exists, which is exactly what a per-group port cannot
+  do. Stored in `<local>/skychat/profile.json`; a visor that has set
+  nothing answers empty rather than refusing.
+- **The avatar is at most 32×32 pixels** and 8 KB. It travels inline in
+  one response frame on a port any stranger may dial, so an uncapped
+  picture would turn "ask who this is" into a way to make a visor serve
+  arbitrary bytes. The browser centre-crops and scales before upload;
+  the visor enforces the result by *decoding* the image (PNG or JPEG),
+  never by trusting a declared size or MIME type.
+- **Your address** — `skychat://<your-pk>` — is shown as a QR code and
+  as selectable text with a copy button, the same treatment a group
+  gets. This half works with no visor RPC at all, so it is still
+  available when profile publishing is not.
+
+Nothing here is signed or verified. A profile is a label on top of the
+key, not an identity: the UI keeps showing the abbreviated key beside a
+name, and a nickname you set locally always wins over a published one.
+
+### Address book
+
+The 📇 button beside the bell opens your contacts — a centred dialog on
+a desktop, a full-screen list on a phone. Entirely local; nothing is
+sent anywhere.
+
+- **+** opens a **New contact** form: paste a key, and if that visor
+  publishes a name and picture both are filled in for you to accept or
+  edit. If it publishes nothing, give them a nickname so the row reads
+  as a person rather than as hex.
+- Saved names live in the same store the chat header, group sender
+  labels, reply quotes and notifications already read, so a contact's
+  name appears everywhere without those paths knowing contacts exist.
+- **Add by address** also offers to save whoever you just pasted, and
+  the compose menu's **Select from address book** picks a saved contact
+  into that same dialog — a row in a list never starts a conversation
+  by itself, it goes through the same confirmation a pasted key does.
+
+### Sidebar tabs
+
+**All · DMs · Groups · Channels.** The tabs only decide which sections
+are displayed — there is one rendering of each conversation, so
+switching tabs cannot lose a row's accumulated message preview or
+unread badge. The selected tab persists across reloads. A pinned
+conversation is shown in whichever tab it belongs to.
+
+### Saved Messages
+
+A notes-to-self thread at the top of the DM list. Local to this browser
+by design: the alternative is a visor messaging itself over dmsg, which
+means dialing your own key for a "delivered" tick that means nothing.
+Type into it like any conversation, or send a message there from the
+per-message menu. The header's delete button empties it rather than
+removing it.
+
+## Replies, forwards, deletes & pinning (browser UI)
 
 These are browser-UI features; the CLI stays plain send/listen.
+
+### Forwarding
+
+The per-message menu's **Forward** offers every destination in one
+list — Saved Messages, people, groups, channels. What travels is the
+**text**, wrapped in a `{"skychat_forward":{...}}` envelope that rides
+the ordinary message body (same pattern as replies: no new endpoint, no
+wire-version bump, and an older build sees the plain text).
+
+**A forward out of a DM or a group carries nothing about who wrote
+it.** Not the name, not the key, not the conversation. The envelope has
+no author field at all — that absence is the design, because a rule
+spelled "remember not to fill this in" survives until the first person
+forgets, while a field that does not exist cannot be populated by any
+future call site. A test asserts the envelope's key set for exactly
+this reason.
+
+**A forward out of a channel may name the channel.** A channel post was
+broadcast to an audience its author cannot enumerate, under the
+channel's identity rather than a person's, so naming it repeats
+something already public. A DM has one intended reader and a group has
+a roster: in both, the author chose their audience, and attribution
+would hand a stranger the content *and* who said it. The content
+leaving is the forwarder's decision to make; the identity is not
+theirs to give away.
+
+Forwarded messages render a quiet "↪ Forwarded" (or "↪ Forwarded from
+*channel*") line above the bubble — never a badge, since nothing here
+is signed and the claim is worth exactly what a pasted quotation is.
+
+### Touch message actions
+
+On a narrow screen the hover-revealed **↩ Reply** and **⋯** links are
+unreachable — there is no hover, and the targets are far below the
+~44px a finger needs. Below the one-pane breakpoint, tapping a message
+(the bubble *or* the empty space beside it) opens a bottom sheet with
+**Reply**, **Forward**, **Save to Saved Messages** and **Delete**, plus
+*Delete for everyone* where it applies. It stages the same state the
+desktop **⋯** menu uses, so the two presentations cannot drift on what
+an action is allowed to do.
 
 ### Quoted replies
 
