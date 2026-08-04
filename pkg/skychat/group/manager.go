@@ -85,6 +85,18 @@ type Manager struct {
 	// DefaultMaxPendingJoins.
 	maxPending int
 
+	// probe holds the well-known describe listeners — the port that
+	// makes a short skychat:// group address resolvable. Per-visor
+	// rather than per-session, because the whole point is to be
+	// reachable without knowing any group's port. See probe.go.
+	probe probeListener
+
+	// profileSrc is what this visor publishes about itself, served on
+	// the same describe port. Nil (the default) publishes nothing. See
+	// profile.go.
+	profileMu  sync.RWMutex
+	profileSrc ProfileProvider
+
 	// reconnect loop state — see runReconnectLoop.
 	reconnectCtx    context.Context
 	reconnectCancel context.CancelFunc
@@ -124,6 +136,12 @@ type ManagerConfig struct {
 	// filesystem). Required for the browser (js/wasm) visor. When set, DataDir
 	// may be empty. Forwarded to each group.Config the Manager opens.
 	InMemoryDB bool
+
+	// Profile is what this visor publishes about itself on the describe
+	// port — a display name and a small avatar. Optional: a nil provider
+	// answers every profile request empty, which is what a visor whose
+	// operator has set nothing should say. See profile.go.
+	Profile ProfileProvider
 
 	// HeartbeatInterval, when > 0, makes every owner-role session
 	// opened by this Manager emit a periodic no-op heartbeat probe.
@@ -187,6 +205,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		reconnectState:     make(map[string]*reconnectState),
 		peerReconnectState: make(map[string]map[cipher.PubKey]*reconnectState),
 		pendingJoinLast:    make(map[string]time.Time),
+		profileSrc:         cfg.Profile,
 	}, nil
 }
 
@@ -237,6 +256,16 @@ type CreateOption func(*Record)
 // Record.PeerBackfillDisabled for what the setting costs and protects.
 func WithPeerBackfill(enabled bool) CreateOption {
 	return func(r *Record) { r.PeerBackfillDisabled = !enabled }
+}
+
+// WithListed opts the new group into this visor's discovery catalog, so
+// anyone holding the host's public key can find it.
+//
+// Off when the option is not passed, and that default is load-bearing:
+// the catalog is the only thing here that turns one key into a list, so an
+// entry has to be asked for. See Record.Listed.
+func WithListed(listed bool) CreateOption {
+	return func(r *Record) { r.Listed = listed }
 }
 
 // Create constructs a new owner-side group, persists it, and opens
@@ -682,6 +711,12 @@ func (m *Manager) Resume() error {
 		m.replaySessionHistory(r.ID)
 	}
 	m.startReconnectLoop()
+	// The describe port is bound unconditionally, not only when this
+	// visor already hosts something: a group can be created at any point
+	// after startup, and a listener that only appeared for visors that
+	// happened to hold a group at boot would leave every freshly created
+	// group's short address dead until the next restart.
+	m.StartProbeListener()
 	return nil
 }
 
@@ -1412,6 +1447,7 @@ func (m *Manager) Close() error {
 		cancel()
 		m.reconnectWG.Wait()
 	}
+	m.StopProbeListener()
 	m.mu.Lock()
 	sessions := m.sessions
 	m.sessions = make(map[string]*Session)
@@ -1542,6 +1578,9 @@ func (m *Manager) BuildInvite(id string) (string, error) {
 		OwnerPK: r.OwnerPK,
 		Port:    r.Port,
 		Mode:    r.Mode,
+		// Kind, so a channel arrives as a channel. Mode cannot express it
+		// — a channel and a public group share ModePublic.
+		Kind: r.Kind,
 		// Name the group's other admins so the founder isn't the only
 		// door in. Self first: whoever is minting this link is
 		// demonstrably alive and is the admin most likely to be watching

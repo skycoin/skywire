@@ -305,10 +305,12 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   }
 
   /** In-browser wasm skychat: poll skychatMessages() (JSON [{from,text,ts,out}],
-   *  newest last) and mirror it into the message list. The in-process skychat
-   *  rides dmsg:1, so force the network label to dmsg. */
+   *  newest last) and mirror it into the message list. Sends honor the UI's
+   *  network selector (skychatSend's 3rd arg), whose default is skynet — a routed
+   *  transport survives dmsg session churn and measured faster than direct dmsg
+   *  when a route is up — so DON'T clobber this.network here (was forced to dmsg,
+   *  a stale wasm/native divergence). */
   private connectWasm(sv: any) {
-    this.network = 'dmsg';
     const handle = (raw: any) => {
       let arr: any[];
       // skychatMessages() returns the JSON of the message buffer, which is the

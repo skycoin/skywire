@@ -50,6 +50,12 @@ export class Node {
   autoconnectTransports: boolean;
   isPublic?: boolean;
   rewardsAddress: string;
+  // Reward-system verdict on this visor's most recent survey push (see the visor
+  // reward_push loop). false = the reward system REJECTED it (e.g. version below the
+  // reward floor) → red mark, distinct from the hyphen for no reward address.
+  // undefined = no verdict yet (never pushed / no reward address).
+  rewardEligible?: boolean;
+  rewardIneligibleReason?: string;
   countryCode?: string;
   regionName?: string;
   cityName?: string;

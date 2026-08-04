@@ -950,6 +950,11 @@ Architectures:
 			survey, parseErr := parseSurvey(surveyPath)
 			if parseErr != nil {
 				log.Debug(parseErr.Error())
+				// Met uptime but no usable survey — record it as ineligible with a
+				// reason instead of a silent drop, so a survey-collection gap surfaces
+				// in the ineligible report rather than an invisible dash. Mirrors the
+				// same fix in runday.go's calcDay.
+				grrInfos = append(grrInfos, nodeinfo{PK: pk, Reason: "survey not found"})
 				continue
 			}
 

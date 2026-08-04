@@ -45,17 +45,18 @@ func TestSkyForwardingMux_PoolReuseOverRealServer(t *testing.T) {
 	go serveSkyForwardingMuxSession(log, serverConn, v)
 
 	var dials int32
-	pool := skyroute.New(func(_ context.Context, _ cipher.PubKey, _ uint16) (net.Conn, error) {
+	dial := func(_ context.Context, _ uint16) (net.Conn, error) {
 		atomic.AddInt32(&dials, 1)
 		return clientConn, nil // the single held route group
-	}, time.Minute, nil)
+	}
+	pool := skyroute.New(time.Minute, nil)
 	defer pool.Close() //nolint:errcheck
 
 	dest, _ := cipher.GenerateKeyPair()
 
 	for i := 0; i < 5; i++ {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		stream, err := pool.OpenStream(ctx, dest)
+		stream, err := pool.OpenStream(ctx, dest.Hex(), dial)
 		require.NoError(t, err, "open stream %d", i)
 		require.NoError(t, skynetweb.PerformHandshake(stream, echoPort), "handshake %d", i)
 

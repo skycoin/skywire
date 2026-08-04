@@ -2,7 +2,6 @@
 package launcher
 
 import (
-	"fmt"
 	"net/http"
 	"sync"
 
@@ -12,30 +11,47 @@ import (
 // AppFunc is an alias for the app function type defined in appcommon.
 type AppFunc = appcommon.AppFunc
 
-var appRegistry = make(map[string]AppFunc)
+var (
+	appRegistryMu sync.Mutex
+	appRegistry   = make(map[string]AppFunc)
+)
 
 // RegisterApp registers an app function by name.
+//
+// Registration is mutex-guarded and idempotent. Guarded because module inits run
+// concurrently (visorinit.InitConcurrent), so several embedded-app modules call
+// this in parallel — an unsynchronized map write there is a data race that can
+// fatally crash the process. Idempotent because a visor Resume re-runs the whole
+// module-init graph after Suspend, so each embedded app re-registers its (same,
+// deterministic) func; the old hard panic on a duplicate name turned Resume into
+// a half-initialized, still-"suspended" state (dmsg_pty/dmsgweb/skynetweb panicked
+// on their already-registered names). Re-registering overwrites — the same
+// overwrite-on-re-register semantics RegisterHTTPHandler below already uses.
 func RegisterApp(name string, fn AppFunc) {
-	if _, exists := appRegistry[name]; exists {
-		panic(fmt.Sprintf("app %q already registered", name))
-	}
+	appRegistryMu.Lock()
+	defer appRegistryMu.Unlock()
 	appRegistry[name] = fn
 }
 
 // GetApp returns the app function for the given name, or nil if not found.
 func GetApp(name string) (AppFunc, bool) {
+	appRegistryMu.Lock()
+	defer appRegistryMu.Unlock()
 	fn, ok := appRegistry[name]
 	return fn, ok
 }
 
 // httpHandlers holds in-process HTTP handlers published by internal
-// (in-process) apps, keyed by app name. A portless-internal app — one that
-// runs in the visor process with no TCP port of its own — registers its
-// http.Handler here so a same-process consumer (the visor's control surface,
-// which backs the hypervisor UI's /skychat/proxy/* routes) can serve it
-// directly via ServeHTTP with no loopback dial. When the app instead runs
-// externally on its own port, no handler is registered and the consumer falls
-// back to an HTTP proxy to that port.
+// (in-process) apps, keyed by app name. An app running in the visor process
+// registers its http.Handler here so a same-process consumer (the visor's
+// control surface, which backs the hypervisor UI's /skychat/proxy/* routes)
+// can serve it directly via ServeHTTP with no loopback dial.
+//
+// Registration says "this app runs in this process", not "this app has no
+// port": an in-process app may also bind a TCP listener for the same mux, and
+// the two surfaces coexist. What a missing entry means is that the app runs
+// somewhere else — a separate process, whose registry writes this one never
+// sees — so the consumer falls back to an HTTP proxy to its address.
 var (
 	httpHandlersMu sync.RWMutex
 	httpHandlers   = make(map[string]http.Handler)
@@ -60,4 +76,21 @@ func GetHTTPHandler(name string) http.Handler {
 	httpHandlersMu.RLock()
 	defer httpHandlersMu.RUnlock()
 	return httpHandlers[name]
+}
+
+// ClearHTTPHandler removes name's entry only if it currently holds h.
+//
+// This is what a shutting-down app should call instead of
+// RegisterHTTPHandler(name, nil). An app restart re-registers before the old
+// instance finishes unwinding, so a plain delete-by-name races: the old
+// instance's cleanup can land after the new one has published, taking a live
+// handler out of the registry and leaving the consumer with nothing to serve.
+// Compare-and-delete under the write lock closes that window — a Get followed
+// by a conditional Register would not, since the two are separate acquisitions.
+func ClearHTTPHandler(name string, h http.Handler) {
+	httpHandlersMu.Lock()
+	defer httpHandlersMu.Unlock()
+	if httpHandlers[name] == h {
+		delete(httpHandlers, name)
+	}
 }

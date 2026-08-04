@@ -391,6 +391,63 @@ func (s *BoltStore) ListByGroup(groupID string, limit int) ([]GroupMessage, erro
 	return msgs, err
 }
 
+// ListGroupBefore implements Store. Mirror of ListGroupSince in the other
+// direction: Seek to before's tsKey and walk BACKWARDS, so the cost is
+// O(limit) rather than O(all-messages-in-group) however deep into a large
+// channel's backlog the caller has read.
+//
+// The boundary is exclusive. cursor.Seek lands on the first key >= the
+// target, so one Prev() from there is the newest key strictly older than
+// before — and when Seek runs off the end (before is newer than every
+// stored message) the newest key is simply Last(). Both cases collapse to
+// "start from the newest thing older than the cursor".
+func (s *BoltStore) ListGroupBefore(groupID string, before time.Time, limit int) ([]GroupMessage, error) {
+	if groupID == "" {
+		return nil, nil
+	}
+	var msgs []GroupMessage
+	err := s.db.View(func(tx *bolt.Tx) error {
+		root := tx.Bucket([]byte(groupsBucket))
+		gBkt := root.Bucket([]byte(groupID))
+		if gBkt == nil {
+			return nil
+		}
+		cur := gBkt.Cursor()
+		var k, v []byte
+		if before.IsZero() || before.UnixNano() <= 0 {
+			// "From the newest" — the first page. Also the guard the
+			// forward walk documents: uint64(negative nano) wraps to a huge
+			// value whose tsKey sorts after every real key, which would
+			// silently return nothing.
+			k, v = cur.Last()
+		} else {
+			k, v = cur.Seek(tsKey(before)) //nolint
+			if k == nil {
+				k, v = cur.Last()
+			} else {
+				k, v = cur.Prev()
+			}
+		}
+		for ; k != nil; k, v = cur.Prev() {
+			var m GroupMessage
+			if err := json.Unmarshal(v, &m); err != nil {
+				continue
+			}
+			msgs = append(msgs, m)
+			if limit > 0 && len(msgs) >= limit {
+				break
+			}
+		}
+		// Collected newest-first by the backward walk; flip so newest is
+		// last, matching ListByGroup.
+		for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+			msgs[i], msgs[j] = msgs[j], msgs[i]
+		}
+		return nil
+	})
+	return msgs, err
+}
+
 // ListGroupSince implements Store. The bolt bucket is keyed by
 // tsKey(Timestamp), so we Seek to since's tsKey and walk forward —
 // O(messages-since) instead of O(all-messages-in-group). Returns

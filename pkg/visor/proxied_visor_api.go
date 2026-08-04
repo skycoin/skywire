@@ -225,6 +225,21 @@ func (p *proxiedVisorAPI) Reload() error {
 	return p.hvAPI.HVReload(p.targetPK)
 }
 
+// Suspend/Resume/IsSuspended are LOCAL-ONLY: a suspended visor drops off
+// dmsg, so it cannot be reached — let alone resumed — over the hypervisor.
+// They must be invoked on the target's own host RPC (CLIAddr).
+func (p *proxiedVisorAPI) Suspend() error {
+	return errors.New("suspend is local-only: a suspended visor drops off dmsg and cannot be reached or resumed via the hypervisor")
+}
+
+func (p *proxiedVisorAPI) Resume() error {
+	return errors.New("resume is local-only: a suspended visor is unreachable over dmsg; resume it from its own host RPC")
+}
+
+func (p *proxiedVisorAPI) IsSuspended() (bool, error) {
+	return false, errors.New("suspend state is not queryable over the hypervisor: a suspended visor is unreachable over dmsg")
+}
+
 func (p *proxiedVisorAPI) Shutdown() error {
 	return p.hvAPI.HVShutdown(p.targetPK)
 }

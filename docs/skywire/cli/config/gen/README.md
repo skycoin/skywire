@@ -82,6 +82,7 @@ skywire cli config gen
       --skynetweb-upstream string   upstream SOCKS5 for non .skynet traffic
       --servechat                   autostart skychat (default true)
       --chataddr string             skychat local address (default "127.0.0.1:8001")
+      --chatportless                run skychat with no TCP port; reach its UI only through the hypervisor
       --servechatpair               skychat pair RPC channel (required for group chat) (default true)
       --skycoind                    autostart skycoin daemon (legacy single instance)
       --skycoindfiber string        legacy FIBER_TOML path (single instance)

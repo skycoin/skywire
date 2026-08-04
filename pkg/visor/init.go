@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/rand"
 	"net/http"
+	"runtime/debug"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
@@ -272,7 +273,7 @@ var ErrNoErrorsCtx = errors.New("errors not set in module initialization context
 // Passed context should have errors channel for module runtime errors. It can be accessed
 // through a function call
 func withInitCtx(f initFn) vinit.Hook {
-	return func(ctx context.Context, log *logging.Logger) error {
+	return func(ctx context.Context, log *logging.Logger) (err error) {
 		val := ctx.Value(visorKey)
 		v, ok := val.(*Visor)
 		if !ok && v == nil {
@@ -283,6 +284,19 @@ func withInitCtx(f initFn) vinit.Hook {
 		if !ok && errs == nil {
 			return ErrNoErrorsCtx
 		}
+		// Recover a panicking module init so one bad module can't crash the
+		// whole visor process. This matters most during Resume (Suspend/Resume,
+		// api_suspend.go), which RE-RUNS the module graph and can hit
+		// non-idempotent init (a module init runs in its own goroutine under
+		// InitConcurrent, so an un-recovered panic there kills the process, not
+		// just the module). Convert it to an error the init system reports, and
+		// log the stack so the offending module is identifiable.
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("module init panicked: %v", r)
+				log.WithField("stack", string(debug.Stack())).Errorf("module init panic recovered: %v", r)
+			}
+		}()
 		return f(ctx, v, log)
 	}
 }
