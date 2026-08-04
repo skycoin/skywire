@@ -232,27 +232,36 @@ func (c *Controller) Start(ctx context.Context) error {
 	return nil
 }
 
+// acceptLoop runs every inbound conn through Serve, which caches it before
+// reading.
+//
+// The caching is the point. An accepted conn is a live connection to that peer
+// exactly as much as a dialed one is, but leaving it out of the cache made
+// HasConn mean "a peer we have dialed" rather than "a peer we are connected
+// to" — and the file-transfer accept policy reads HasConn as the latter (see
+// isEstablishedPeer in the skychat app). A peer who had only ever connected TO
+// us therefore had every file offer declined until we happened to dial them
+// back, while their text messages went through the whole time, since those
+// arrive on this very conn.
 func (c *Controller) acceptLoop(lis net.Listener) {
 	for {
 		conn, err := lis.Accept()
 		if err != nil {
 			return
 		}
-		fc := message.NewConn(conn)
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			c.readConn(fc)
+			c.Serve(conn)
 		}()
 	}
 }
 
-// Serve runs an already-established conn (whose RemoteAddr() reports an
-// appnet.Addr) through the same cache + read loop as a dialed/accepted conn.
-// It exists for transports the Client seam doesn't cover — the native app's
-// TCP-direct entry points hand their handshaked conn here. Blocks until the
-// conn closes (the caller decides whether to run it in a goroutine), mirroring
-// the pre-extraction handleConn call it replaces.
+// Serve runs a conn (whose RemoteAddr() reports an appnet.Addr) through the
+// cache + read loop. It is the accept path above, and also the entry point for
+// transports the Client seam doesn't cover — the native app's TCP-direct
+// handshake hands its conn here. Blocks until the conn closes (the caller
+// decides whether to run it in a goroutine).
 func (c *Controller) Serve(conn net.Conn) {
 	fc := message.NewConn(conn)
 	if raddr, ok := conn.RemoteAddr().(appnet.Addr); ok {
