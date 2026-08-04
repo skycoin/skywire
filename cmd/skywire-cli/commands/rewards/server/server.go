@@ -118,6 +118,12 @@ func buildRouter() *gin.Engine {
 	r1.GET("/health", healthHandler)
 	r1.GET("/health/health", healthHandler) // accessible when visor's /health takes priority
 	if !healthOnly {
+		// Visor survey PUSH ingest (POST /node-info + GET /node-info/stored-checksum),
+		// served over the same dmsg listener a visor already reaches. A visor stores
+		// its own survey here instead of the reward system pulling it. See
+		// survey_ingest.go.
+		registerSurveyIngestRoutes(r1, wd)
+
 		// endpoint for testing minimum response time of curl via socks5 proxy / stand-in for latency test
 		// https://dev.to/tigt/making-the-worlds-fastest-website-and-other-mistakes-56na
 		// This is the fastest web page. You may not like it, but this is what peak performance looks like.
@@ -1815,6 +1821,14 @@ func serveStandalone(r1 *gin.Engine) {
 		log.WithError(err).Fatal("Failed to start DMSG client")
 	}
 	defer stopDmsg()
+
+	// Give the stats handlers a dmsg-capable HTTP client so their TPD /metrics
+	// fetches resolve the deployment's dmsg://<pk>:80 URLs. Without this they used
+	// the default client and failed with `unsupported protocol scheme "dmsg"`.
+	statsDmsgHTTPClient = &http.Client{
+		Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgClient),
+		Timeout:   45 * time.Second,
+	}
 
 	lis, err := dmsgClient.Listen(dmsgPort) //nolint: gosec
 	if err != nil {

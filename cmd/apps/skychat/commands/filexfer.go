@@ -35,9 +35,11 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/routing"
+	"github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/skychat/history"
 	"github.com/skycoin/skywire/pkg/skychat/xfer"
 	"github.com/skycoin/skywire/pkg/skyenv"
+	"github.com/skycoin/skywire/pkg/visor"
 )
 
 // fileMgr is the process-wide file-transfer manager, initialized by startFileXfer.
@@ -88,20 +90,31 @@ func fileDialFunc(ctx context.Context, peer cipher.PubKey, port uint16) (net.Con
 func acceptInbound(from cipher.PubKey, offer xfer.Offer) (io.WriteCloser, bool) {
 	// Group files: accepted when we share the offered group. 1:1 files: accepted
 	// when a chat is already established with the sender.
+	//
+	// A CHANNEL is the exception: nothing is accepted there unless this visor
+	// asked for it by file id. Sharing a group is consent to receive what its
+	// members send; subscribing to a broadcast channel is not, because the
+	// relationship is one-way and the audience is unbounded — one admin
+	// deciding to attach a 2 GB file would otherwise land it on every
+	// subscriber's disk at once. So a channel's files are references until
+	// somebody opens one. See sendFileToVisorGroup, which already publishes
+	// only the reference; this is the receiving half of the same rule, and it
+	// holds even against an admin that pushes anyway.
 	accept := false
 	switch {
 	case offer.Group != "":
-		accept = isGroupMember(offer.Group, from)
+		accept = isGroupMember(offer.Group, from) && !isChannelGroup(offer.Group)
 	default:
 		accept = isEstablishedPeer(from)
 	}
 	// A file we explicitly requested (backfill) is accepted even from a peer we
-	// haven't otherwise established a chat with — we asked for it.
+	// haven't otherwise established a chat with — we asked for it. This is also
+	// the only door a channel's files come through.
 	if !accept && isRequestedFile(offer.ID, from) {
 		accept = true
 	}
 	if !accept {
-		appLog("skychat: declining file %q from unestablished peer %s", offer.Name, from)
+		appLog("skychat: declining unrequested file %q from %s", offer.Name, from)
 		return nil, false
 	}
 	dir, err := downloadsDir()
@@ -462,6 +475,32 @@ func isGroupMember(groupID string, pk cipher.PubKey) bool {
 		}
 	}
 	return false
+}
+
+// isChannelGroup reports whether groupID is a broadcast channel.
+//
+// Asked of the visor, which owns the record; a failure answers false, which
+// degrades to the ordinary group rule rather than refusing files outright —
+// the conservative direction for a transient RPC hiccup on a normal group,
+// and a channel's bytes still only ever arrive by request in practice
+// because its sender publishes a reference and nothing else.
+//
+// The standalone --cxo-group path is not consulted: it builds its record
+// with a hardcoded public mode and every member an admin (see cxo_tcp.go),
+// so it cannot host a channel at all.
+func isChannelGroup(groupID string) bool {
+	if groupID == "" || !pairEnable || !pairRPCAlive() {
+		return false
+	}
+	var kind string
+	if err := pairRPCCall("GroupGet", func(c visor.API) error {
+		info, err := c.GroupGet(groupID)
+		kind = string(info.Kind)
+		return err
+	}); err != nil {
+		return false
+	}
+	return kind == string(group.KindChannel)
 }
 
 // sendFileToGroup fans the file at path out to every current member of the

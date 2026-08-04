@@ -868,6 +868,21 @@ func (mc *mockRPCClient) Reload() error {
 	return nil
 }
 
+// Suspend implements API.
+func (mc *mockRPCClient) Suspend() error {
+	return nil
+}
+
+// Resume implements API.
+func (mc *mockRPCClient) Resume() error {
+	return nil
+}
+
+// IsSuspended implements API.
+func (mc *mockRPCClient) IsSuspended() (bool, error) {
+	return false, nil
+}
+
 // Shutdown implements API.
 func (mc *mockRPCClient) Shutdown() error {
 	return nil
@@ -1284,6 +1299,28 @@ func (mc *mockRPCClient) GroupCreate(_ GroupCreateArgs) (GroupInfo, string, erro
 // GroupJoin implements API.
 func (mc *mockRPCClient) GroupJoin(_ GroupJoinArgs) (GroupInfo, error) { return GroupInfo{}, nil }
 
+// ProfileGet implements API.
+func (mc *mockRPCClient) ProfileGet() (Profile, error) { return Profile{}, nil }
+
+// ProfileSet implements API.
+func (mc *mockRPCClient) ProfileSet(_ ProfileSetArgs) (Profile, error) { return Profile{}, nil }
+
+// ProfileFetch implements API.
+func (mc *mockRPCClient) ProfileFetch(_ cipher.PubKey) (Profile, error) { return Profile{}, nil }
+
+// GroupResolve implements API.
+func (mc *mockRPCClient) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, error) {
+	return GroupResolveResult{}, nil
+}
+
+// GroupSetListed implements API.
+func (mc *mockRPCClient) GroupSetListed(_ string, _ bool) (GroupInfo, error) { return GroupInfo{}, nil }
+
+// GroupCatalog implements API.
+func (mc *mockRPCClient) GroupCatalog(_ cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
+	return nil, false, nil
+}
+
 // GroupAskAgain implements API.
 func (mc *mockRPCClient) GroupAskAgain(_ string) (GroupInfo, error) { return GroupInfo{}, nil }
 
@@ -1417,6 +1454,11 @@ func (mc *mockRPCClient) VoiceMute(_ string, _, _ bool) error {
 
 // GroupHistory implements API.
 func (mc *mockRPCClient) GroupHistory(_ string, _ int) ([]GroupMessage, error) { return nil, nil }
+
+// GroupHistoryPage implements API.
+func (mc *mockRPCClient) GroupHistoryPage(_ GroupHistoryPageArgs) ([]GroupMessage, error) {
+	return nil, nil
+}
 
 // GroupHistoryGroups implements API.
 func (mc *mockRPCClient) GroupHistoryGroups() ([]string, error) { return nil, nil }

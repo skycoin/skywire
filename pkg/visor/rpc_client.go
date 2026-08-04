@@ -935,6 +935,23 @@ func (rc *rpcClient) Reload() error {
 	return rc.Call("Reload", &struct{}{}, &struct{}{})
 }
 
+// Suspend calls Suspend.
+func (rc *rpcClient) Suspend() error {
+	return rc.Call("Suspend", &struct{}{}, &struct{}{})
+}
+
+// Resume calls Resume.
+func (rc *rpcClient) Resume() error {
+	return rc.Call("Resume", &struct{}{}, &struct{}{})
+}
+
+// IsSuspended calls IsSuspended.
+func (rc *rpcClient) IsSuspended() (bool, error) {
+	var suspended bool
+	err := rc.Call("IsSuspended", &struct{}{}, &suspended)
+	return suspended, err
+}
+
 // Shutdown calls Shutdown.
 func (rc *rpcClient) Shutdown() error {
 	return rc.Call("Shutdown", &struct{}{}, &struct{}{})
@@ -1557,6 +1574,48 @@ func (rc *rpcClient) GroupJoin(args GroupJoinArgs) (GroupInfo, error) {
 	return resp, err
 }
 
+// ProfileGet implements API.
+func (rc *rpcClient) ProfileGet() (Profile, error) {
+	var resp Profile
+	err := rc.Call("ProfileGet", &struct{}{}, &resp)
+	return resp, err
+}
+
+// ProfileSet implements API.
+func (rc *rpcClient) ProfileSet(args ProfileSetArgs) (Profile, error) {
+	var resp Profile
+	err := rc.Call("ProfileSet", &args, &resp)
+	return resp, err
+}
+
+// ProfileFetch implements API.
+func (rc *rpcClient) ProfileFetch(pk cipher.PubKey) (Profile, error) {
+	var resp Profile
+	err := rc.Call("ProfileFetch", &pk, &resp)
+	return resp, err
+}
+
+// GroupResolve implements API.
+func (rc *rpcClient) GroupResolve(args GroupResolveArgs) (GroupResolveResult, error) {
+	var resp GroupResolveResult
+	err := rc.Call("GroupResolve", &args, &resp)
+	return resp, err
+}
+
+// GroupSetListed implements API.
+func (rc *rpcClient) GroupSetListed(id string, listed bool) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupSetListed", &GroupSetListedRequest{ID: id, Listed: listed}, &resp)
+	return resp, err
+}
+
+// GroupCatalog implements API.
+func (rc *rpcClient) GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
+	var resp GroupCatalogResponse
+	err := rc.Call("GroupCatalog", &host, &resp)
+	return resp.Entries, resp.Truncated, err
+}
+
 // GroupAskAgain implements API.
 func (rc *rpcClient) GroupAskAgain(id string) (GroupInfo, error) {
 	var resp GroupInfo
@@ -1778,6 +1837,13 @@ func (rc *rpcClient) VoiceMute(callID string, mic, speaker bool) error {
 func (rc *rpcClient) GroupHistory(groupID string, limit int) ([]GroupMessage, error) {
 	var resp []GroupMessage
 	err := rc.Call("GroupHistory", &GroupHistoryRequest{GroupID: groupID, Limit: limit}, &resp)
+	return resp, err
+}
+
+// GroupHistoryPage implements API.
+func (rc *rpcClient) GroupHistoryPage(args GroupHistoryPageArgs) ([]GroupMessage, error) {
+	var resp []GroupMessage
+	err := rc.Call("GroupHistoryPage", &args, &resp)
 	return resp, err
 }
 

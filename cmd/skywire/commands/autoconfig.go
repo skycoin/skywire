@@ -218,6 +218,7 @@ func collectSkyenvEdits(cmd *cobra.Command) []skyenvEdit {
 	// Skychat
 	addBool("SKYCHAT", "skychat", "no-skychat", autoconfigVals.Skychat, autoconfigVals.NoSkychat)
 	addString("SKYCHATADDR", "chataddr", autoconfigVals.ChatAddr)
+	addBool("SKYCHATPORTLESS", "chatportless", "no-chatportless", autoconfigVals.ChatPortless, autoconfigVals.NoChatPortless)
 	addBool("SKYCHATPAIR", "servechatpair", "no-servechatpair", autoconfigVals.ServeChatPair, autoconfigVals.NoServeChatPair)
 
 	// Skymail bridge

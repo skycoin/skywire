@@ -276,23 +276,32 @@ func (c *httpClient) initHTTPClient(httpC, httpCV6 *http.Client) {
 	close(c.ready)
 }
 
-// fetchPublicUDPAddr does a single unauthenticated GET /health using
-// the underlying HTTP client (which carries the dmsghttp transport)
-// and returns the udp_address advertised by the AR. Returns "" on any
-// failure — the caller treats that as "SUDPH not available via this AR".
+// fetchPublicUDPAddr does an unauthenticated GET /health using the underlying
+// HTTP client (which carries the dmsghttp transport) and returns the UDP address
+// advertised by the AR. Transient transport errors are retried because visor
+// restarts can briefly race DMSG server reconnection. Valid responses are not
+// retried: an AR without udp_address intentionally does not support SUDPH.
 func (c *httpClient) fetchPublicUDPAddr(httpC *http.Client) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.remoteHTTPAddr+"/health", nil)
-	if err != nil {
-		c.log.WithError(err).Debug("Failed to build /health request for udp_address lookup")
-		return ""
-	}
-	resp, err := httpC.Do(req)
-	if err != nil {
-		c.log.WithError(err).Debug("Failed to GET /health for udp_address lookup")
-		return ""
+	var resp *http.Response
+	for {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.remoteHTTPAddr+"/health", nil)
+		if err != nil {
+			c.log.WithError(err).Debug("Failed to build /health request for udp_address lookup")
+			return ""
+		}
+		resp, err = httpC.Do(req)
+		if err == nil {
+			break
+		}
+		c.log.WithError(err).Debug("Failed to GET /health for udp_address lookup; retrying")
+		select {
+		case <-ctx.Done():
+			return ""
+		case <-time.After(250 * time.Millisecond):
+		}
 	}
 	defer func() {
 		if cerr := resp.Body.Close(); cerr != nil {

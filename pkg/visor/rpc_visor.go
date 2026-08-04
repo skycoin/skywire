@@ -187,6 +187,25 @@ func (r *RPC) Reload(_ *struct{}, _ *struct{}) (err error) {
 	return r.visor.Reload()
 }
 
+// Suspend tears down all network subsystems, keeping the local RPC alive.
+func (r *RPC) Suspend(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "Suspend", nil)(nil, &err)
+	return r.visor.Suspend()
+}
+
+// Resume re-runs the module graph to bring a suspended visor back online.
+func (r *RPC) Resume(_ *struct{}, _ *struct{}) (err error) {
+	defer rpcutil.LogCall(r.log, "Resume", nil)(nil, &err)
+	return r.visor.Resume()
+}
+
+// IsSuspended reports whether the visor is currently suspended.
+func (r *RPC) IsSuspended(_ *struct{}, out *bool) (err error) {
+	defer rpcutil.LogCall(r.log, "IsSuspended", nil)(out, &err)
+	*out, err = r.visor.IsSuspended()
+	return err
+}
+
 // Shutdown shuts down visor.
 func (r *RPC) Shutdown(_ *struct{}, _ *struct{}) (err error) {
 	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.

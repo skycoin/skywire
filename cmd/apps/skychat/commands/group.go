@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/skychat/address"
 	"github.com/skycoin/skywire/pkg/skychat/group"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -227,6 +228,9 @@ func startGroupPoller(parent context.Context) {
 				} else if rmeta, ok := parseReplyText(m.Text); ok {
 					envelope["message"] = rmeta.Text
 					enrichReplyRow(envelope, rmeta)
+				} else if fmeta, ok := parseForwardText(m.Text); ok {
+					envelope["message"] = fmeta.Text
+					enrichForwardRow(envelope, fmeta)
 				}
 				body, mErr := json.Marshal(envelope)
 				if mErr != nil {
@@ -327,6 +331,10 @@ func registerGroupHTTPHandlers(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("/group", requireAuthFunc(groupRootHandler()))
 	mux.HandleFunc("/group/join", requireAuthFunc(groupJoinHandler()))
+	// Registered before the catch-all /group/ so it isn't swallowed by
+	// groupItemHandler, which reads the next path segment as a group ID.
+	mux.HandleFunc("/group/resolve", requireAuthFunc(groupResolveHandler()))
+	mux.HandleFunc("/group/catalog", requireAuthFunc(groupCatalogHandler()))
 	mux.HandleFunc("/group/", requireAuthFunc(groupItemHandler()))
 }
 
@@ -377,6 +385,10 @@ func groupRootHandler() http.HandlerFunc {
 				// field — still gets the default (enabled) rather than
 				// silently creating admins-only groups.
 				PeerBackfill *bool `json:"peer_backfill"`
+				// Listed opts the group into this visor's discovery
+				// catalog. Absent means unlisted — see Record.Listed for
+				// why the default has to be the private one.
+				Listed bool `json:"listed"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
@@ -395,7 +407,7 @@ func groupRootHandler() http.HandlerFunc {
 				kind = group.KindPublic
 			}
 			if !kind.IsValid() {
-				http.Error(w, "invalid kind (use public or private)", http.StatusBadRequest)
+				http.Error(w, "invalid kind (use public, private or channel)", http.StatusBadRequest)
 				return
 			}
 			members, err := parsePKList(body.Members)
@@ -406,7 +418,11 @@ func groupRootHandler() http.HandlerFunc {
 			var info visor.GroupInfo
 			var link string
 			if err := pairRPCCall("GroupCreate", func(c visor.API) error {
-				i, l, e := c.GroupCreate(visor.GroupCreateArgs{Name: body.Name, Kind: kind, InitialMembers: members})
+				i, l, e := c.GroupCreate(visor.GroupCreateArgs{
+					Name: body.Name, Kind: kind, InitialMembers: members,
+					DisablePeerBackfill: body.PeerBackfill != nil && !*body.PeerBackfill,
+					Listed:              body.Listed,
+				})
 				info, link = i, l
 				return e
 			}); err != nil {
@@ -421,7 +437,12 @@ func groupRootHandler() http.HandlerFunc {
 	}
 }
 
-// groupJoinHandler serves POST /group/join {invite}.
+// groupJoinHandler serves POST /group/join {invite} or {address}.
+//
+// Both spellings are accepted because they are not interchangeable: an
+// invite link is self-contained and works while the group's host is
+// offline, and a skychat://<pk>/<group-id> address is short enough to
+// scan from a QR code but has to ask the host what the group is first.
 func groupJoinHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !pairRPCAlive() {
@@ -433,19 +454,27 @@ func groupJoinHandler() http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Invite string `json:"invite"`
+			Invite  string `json:"invite"`
+			Address string `json:"address"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		if strings.TrimSpace(body.Invite) == "" {
-			http.Error(w, "invite required", http.StatusBadRequest)
+		invite := strings.TrimSpace(body.Invite)
+		addr := strings.TrimSpace(body.Address)
+		if invite == "" && addr == "" {
+			http.Error(w, "invite or address required", http.StatusBadRequest)
 			return
+		}
+		// A single UI field takes either, so route by shape rather than
+		// trusting which key it arrived under.
+		if invite != "" && !address.IsInvite(invite) {
+			invite, addr = "", invite
 		}
 		var info visor.GroupInfo
 		if err := pairRPCCall("GroupJoin", func(c visor.API) error {
-			i, e := c.GroupJoin(visor.GroupJoinArgs{Invite: body.Invite})
+			i, e := c.GroupJoin(visor.GroupJoinArgs{Invite: invite, Address: addr})
 			info = i
 			return e
 		}); err != nil {
@@ -456,12 +485,111 @@ func groupJoinHandler() http.HandlerFunc {
 	}
 }
 
+// groupCatalogHandler serves GET /group/catalog?pk=… — "what does this
+// visor publish?". An absent or empty pk asks this visor about itself, so
+// an operator can see their own listing exactly as others would.
+//
+// Read-only and answers only what the host chose to publish; a visor that
+// has listed nothing returns an empty list rather than an error, because
+// "nothing here" is a legitimate answer and not a failure.
+func groupCatalogHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !pairRPCAlive() {
+			http.Error(w, "groups disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
+			return
+		}
+		if r.Method != http.MethodGet {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		var host cipher.PubKey
+		if raw := strings.TrimSpace(r.URL.Query().Get("pk")); raw != "" {
+			// Accept a full skychat:// address as well as a bare key: the UI
+			// hands over whatever the user typed.
+			if addr, err := address.Parse(raw); err == nil {
+				host = addr.PK
+			} else if err := host.Set(raw); err != nil {
+				http.Error(w, "invalid pk: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+		}
+		var (
+			entries   []visor.GroupCatalogEntry
+			truncated bool
+		)
+		if err := pairRPCCall("GroupCatalog", func(c visor.API) error {
+			e, t, cerr := c.GroupCatalog(host)
+			entries, truncated = e, t
+			return cerr
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		if entries == nil {
+			entries = []visor.GroupCatalogEntry{}
+		}
+		writeJSON(w, map[string]any{"entries": entries, "truncated": truncated})
+	}
+}
+
+// groupResolveHandler serves GET|POST /group/resolve?address=… — "what is
+// this thing I just pasted or scanned".
+//
+// GET as well as POST because the UI calls this as the user types, and a
+// GET keeps that a plainly cacheless read with the address in the query
+// rather than a body. Nothing is mutated either way.
+//
+// A resolve failure is reported as 404 rather than 500: the overwhelmingly
+// common causes are a mistyped key and a group the host does not hold,
+// which are "not found", not "the visor broke". A UI showing a red error
+// bar for a half-typed key would be wrong every time.
+func groupResolveHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !pairRPCAlive() {
+			http.Error(w, "groups disabled (visor RPC unavailable)", http.StatusServiceUnavailable)
+			return
+		}
+		var raw string
+		switch r.Method {
+		case http.MethodGet:
+			raw = r.URL.Query().Get("address")
+		case http.MethodPost:
+			var body struct {
+				Address string `json:"address"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			raw = body.Address
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if strings.TrimSpace(raw) == "" {
+			http.Error(w, "address required", http.StatusBadRequest)
+			return
+		}
+		var res visor.GroupResolveResult
+		if err := pairRPCCall("GroupResolve", func(c visor.API) error {
+			out, e := c.GroupResolve(visor.GroupResolveArgs{Address: raw})
+			res = out
+			return e
+		}); err != nil {
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		}
+		writeJSON(w, res)
+	}
+}
+
 // groupItemHandler serves the per-group subtree:
 //
 //	GET    /group/<id>          → info
 //	DELETE /group/<id>          → delete (owner)
 //	GET    /group/<id>/invite   → invite link
 //	POST   /group/<id>/send     → publish a message
+//	POST   /group/<id>/listed   → publish in the discovery catalog
 //	POST   /group/<id>/leave    → leave (member)
 //	GET    /group/<id>/history  → persisted history (?limit=N)
 func groupItemHandler() http.HandlerFunc {
@@ -695,6 +823,25 @@ func groupItemHandler() http.HandlerFunc {
 			}
 			writeJSON(w, info)
 
+		case action == "listed" && r.Method == http.MethodPost:
+			var body struct {
+				Listed bool `json:"listed"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupSetListed", func(c visor.API) error {
+				i, e := c.GroupSetListed(id, body.Listed)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
 		case action == "leave" && r.Method == http.MethodPost:
 			if err := pairRPCCall("GroupLeave", func(c visor.API) error { return c.GroupLeave(id) }); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -709,9 +856,23 @@ func groupItemHandler() http.HandlerFunc {
 					limit = n
 				}
 			}
+			// before is the backward page cursor: the ts_nano of the oldest
+			// message the caller already holds. Absent means "the newest
+			// page", so a first load and a scroll-back are the same request.
+			// Unparseable is treated as absent rather than an error — a
+			// client that lost its cursor should get the newest page, not a
+			// failure.
+			var before time.Time
+			if s := r.URL.Query().Get("before"); s != "" {
+				if ns, err := strconv.ParseInt(s, 10, 64); err == nil && ns > 0 {
+					before = time.Unix(0, ns).UTC()
+				}
+			}
 			var msgs []visor.GroupMessage
-			if err := pairRPCCall("GroupHistory", func(c visor.API) error {
-				out, e := c.GroupHistory(id, limit)
+			if err := pairRPCCall("GroupHistoryPage", func(c visor.API) error {
+				out, e := c.GroupHistoryPage(visor.GroupHistoryPageArgs{
+					GroupID: id, Before: before, Limit: limit,
+				})
 				msgs = out
 				return e
 			}); err != nil {
@@ -755,6 +916,9 @@ func groupItemHandler() http.HandlerFunc {
 				} else if rmeta, ok := parseReplyText(m.Text); ok {
 					row["text"] = rmeta.Text
 					enrichReplyRow(row, rmeta)
+				} else if fmeta, ok := parseForwardText(m.Text); ok {
+					row["text"] = fmeta.Text
+					enrichForwardRow(row, fmeta)
 				}
 				out = append(out, row)
 			}
