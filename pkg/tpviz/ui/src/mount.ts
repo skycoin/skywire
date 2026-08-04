@@ -9,6 +9,7 @@
 
 import indexHtml from '../index.html';
 import { wireEventListeners } from './events';
+import { setHostOpts } from './persist';
 
 // scopeSelector rewrites one selector so it only matches inside `scope`. Global
 // selectors (body/html/:root/*) become the scope root itself so the tpviz reset
@@ -70,8 +71,11 @@ let mountedStyle: HTMLStyleElement | null = null;
 export interface TpvizMountHandle { unmount(): void }
 
 // mount renders the transport-graph UI into `root` (in the host's own document/JS
-// context — no iframe). Returns a handle whose unmount() clears the DOM + styles.
-export function mount(root: HTMLElement): TpvizMountHandle {
+// context — no iframe). opts.view seeds the initial view (globe/flat/webgl);
+// opts.onViewChange lets the host reflect view switches into its own URL. Returns
+// a handle whose unmount() clears the DOM + styles.
+export function mount(root: HTMLElement, opts?: { view?: string; onViewChange?: (v: string) => void }): TpvizMountHandle {
+  setHostOpts(opts);
   const doc = new DOMParser().parseFromString(indexHtml, 'text/html');
 
   // Scope the app's <style> to the container and inject it once.
