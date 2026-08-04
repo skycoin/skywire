@@ -16,7 +16,7 @@ import * as S from './state';
 import { colors, LOCAL_EDGE_COLOR } from './constants';
 import { handleGraphNodeClick } from './node-click';
 import { getCountryColor, getIPGroupColor, countryToFlag } from './utils';
-import { calculateGroupRadius, findNonOverlappingPosition } from './grouping';
+// (grouping geometry is computed locally below — packCircles / radiusForCount)
 
 interface CosmosNode {
   id: string;
@@ -240,37 +240,77 @@ function computeGroupedLayout(
     arr.push(id);
   }
   const grouped = Array.from(buckets.entries())
-    .map(([key, ids]) => ({ key, ids, radius: calculateGroupRadius(ids.length) }))
+    .map(([key, ids]) => ({ key, ids, radius: radiusForCount(ids.length) }))
     .sort((a, b) => b.radius - a.radius);
 
-  const placed: { x: number; y: number; radius: number }[] = [];
+  // Guaranteed non-overlapping placement (largest first).
+  const centers = packCircles(grouped.map(g => g.radius), 46);
   const pos = new Map<string, { x: number; y: number }>();
   const color = new Map<string, string>();
   const groups: GroupCircle[] = [];
-  for (const g of grouped) {
-    const c = findNonOverlappingPosition(g.radius, placed, 60);
-    placed.push({ x: c.x, y: c.y, radius: g.radius });
+  grouped.forEach((g, gi) => {
+    const c = centers[gi];
     const col = groupColorOf(g.key, mode);
     groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode) });
-    const inner = g.radius - 50;
+    // Fill nodes inside the circle. inner is clamped so small circles (radius <
+    // ~60) never get a negative fill radius — that was throwing their nodes
+    // outside the ring (e.g. Indonesia). The Fibonacci fill stays at ≤0.92·inner
+    // so every node sits comfortably within the boundary.
+    const inner = Math.max(g.radius * 0.35, g.radius - 46);
     const n = g.ids.length;
     g.ids.forEach((id, i) => {
-      let x: number; let y: number;
-      if (n === 1) {
-        x = c.x; y = c.y;
-      } else if (n <= 6) {
-        const a = (i / n) * 2 * Math.PI; const r = inner * 0.5;
-        x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
-      } else {
-        const ga = Math.PI * (3 - Math.sqrt(5)); const a = i * ga;
-        const r = inner * Math.sqrt(i / n) * 0.9;
-        x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
+      let x = c.x; let y = c.y;
+      if (n > 1) {
+        if (n <= 6) {
+          const a = (i / n) * 2 * Math.PI; const r = inner * 0.55;
+          x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
+        } else {
+          const ga = Math.PI * (3 - Math.sqrt(5)); const a = i * ga;
+          const r = inner * Math.sqrt(i / n) * 0.92;
+          x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
+        }
       }
       pos.set(id, { x, y });
       color.set(id, col);
     });
-  }
+  });
   return { pos, color, groups };
+}
+
+// radiusForCount sizes a group circle so its AREA scales with node count, with
+// clearer contrast than the shared flat-view helper (lower floor, steeper slope)
+// so a 1-visor country reads as a small dot and a 200-visor country as clearly
+// huge — instead of everything hitting the same ~80px floor.
+function radiusForCount(n: number): number {
+  return Math.max(46, Math.sqrt(n) * 26 + 18);
+}
+
+// packCircles lays out circles (largest first) at the first slot on an outward
+// spiral that clears every already-placed circle — a guaranteed non-overlapping
+// pack (the shared ring-search fell back to an overlapping hex grid at scale).
+function packCircles(radii: number[], padding: number): { x: number; y: number }[] {
+  const placed: { x: number; y: number; r: number }[] = [];
+  const out: { x: number; y: number }[] = [];
+  for (const r of radii) {
+    let best = { x: 0, y: 0 };
+    if (placed.length) {
+      const step = Math.max(10, r * 0.2);
+      let found = false;
+      for (let rad = 0; rad < 200000 && !found; rad += step) {
+        const count = Math.max(1, Math.floor((2 * Math.PI * rad) / step));
+        for (let k = 0; k < count; k++) {
+          const a = (k / count) * 2 * Math.PI;
+          const x = Math.cos(a) * rad; const y = Math.sin(a) * rad;
+          if (placed.every(p => Math.hypot(p.x - x, p.y - y) >= p.r + r + padding)) {
+            best = { x, y }; found = true; break;
+          }
+        }
+      }
+    }
+    placed.push({ x: best.x, y: best.y, r });
+    out.push(best);
+  }
+  return out;
 }
 
 // buildData projects the vis-network datasets into cosmos node/link arrays,
