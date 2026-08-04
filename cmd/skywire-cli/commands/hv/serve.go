@@ -29,7 +29,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsgclient"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
+	"github.com/skycoin/skywire/pkg/logging"
+	"github.com/skycoin/skywire/pkg/tpviz"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/wallet/coins"
 	"github.com/skycoin/skywire/pkg/wasmhv"
@@ -379,6 +384,38 @@ page never asks anyone to type a secret key.`,
 				}
 				walletFiles.ServeHTTP(w, r) // /wallet/<asset> → vendored dist/<asset>
 			})
+		}
+
+		// Transport-graph visualizer (pkg/tpviz): the Angular network-visualizer
+		// tab mounts /tp-viz/bundle.js and fetches /api/transports|services|
+		// uptimes|local-visor|ip-groups|dmsg/servers. The native HV serves these
+		// (pkg/visor/hypervisor.go); mirror that wiring here so the wasm visor's
+		// visualizer tab renders the real graph instead of 404ing. The wasm core
+		// answers Angular's own /api via its js seam (not this mux), and these
+		// tpviz paths are exactly the ones it 404s on, so there is no conflict.
+		// An ephemeral dmsg client (async, best-effort) sources the dmsg-only
+		// deployment discovery — clearnet SD is dead, so without it the graph has
+		// no country/service data; the UI still serves immediately and populates
+		// once dmsg connects. Mirrors `skywire-cli tp viz` standalone mode.
+		tpvSrv := tpviz.NewServer(tpviz.DefaultConfig())
+		go tpvSrv.Start()
+		go func() {
+			dlog := logging.MustGetLogger("hv-serve-tpviz")
+			pk, sk := cipher.GenerateKeyPair()
+			dmsgC, _, dErr := dmsgclient.StartDmsgEmbedded(cmd.Context(), dlog, pk, sk, false)
+			if dErr != nil {
+				dlog.WithError(dErr).Warn("tpviz dmsg client failed to start; network-graph data unavailable")
+				return
+			}
+			tpvSrv.SetDmsgHTTPClient(&http.Client{Transport: dmsghttp.MakeHTTPTransport(cmd.Context(), dmsgC)})
+			tpvSrv.SetCXOSubMgrFromDmsg(dmsgC)
+			dlog.Info("tpviz deployment discovery sourced over dmsg")
+		}()
+		tpvH := tpvSrv.Handler()
+		mux.Handle("/tp-viz/", http.StripPrefix("/tp-viz", tpvH))
+		mux.Handle("/tp-viz", http.StripPrefix("/tp-viz", tpvH))
+		for _, p := range []string{"/api/transports", "/api/services", "/api/uptimes", "/api/local-visor", "/api/ip-groups", "/api/dmsg/servers"} {
+			mux.Handle(p, tpvH)
 		}
 
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
