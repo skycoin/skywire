@@ -48,7 +48,7 @@ func init() {
 	logCmd.Flags().IntVar(&batchSize, "batchSize", 50, "number of visor in each batch")
 	logCmd.Flags().Int64Var(&maxFileSize, "maxfilesize", 1024, "maximum file size allowed to download during collecting logs, in KB")
 	logCmd.Flags().StringVarP(&dmsgDisc, "dmsg-disc", "D", dmsgDiscURL, "dmsg discovery url\n")
-	logCmd.Flags().StringVarP(&utAddr, "ut", "u", utURL, "uptime tracker url\n")
+	logCmd.Flags().StringVarP(&utAddr, "ut", "u", utURL, "uptime tracker url (default: TPD-integrated /uptimes)\n")
 	if os.Getenv("DMSGCURL_SK") != "" {
 		sk.Set(os.Getenv("DMSGCURL_SK")) //nolint:errcheck,gosec
 	}
@@ -64,7 +64,7 @@ func init() {
 var logCmd = &cobra.Command{
 	Use:   "log",
 	Short: "survey & transport log collection",
-	Long:  fmt.Sprintf("Fetch health, survey, and transport logging from visors which are online in the uptime tracker\n%[1]s/uptimes?v=v2\n%[1]s/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>", deployment.Prod.UptimeTracker),
+	Long:  fmt.Sprintf("Fetch health, survey, and transport logging from visors which are online in the uptime tracker\n%[1]s/uptimes?v=v2\n%[1]s/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>", deployment.Prod.TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
 		log := logging.MustGetLogger("log-collecting")
 		fver, err := version.NewVersion("v1.3.17")
