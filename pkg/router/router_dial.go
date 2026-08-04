@@ -219,7 +219,55 @@ func (r *router) DialRoutes(
 		maxFetchAttempts = 1
 	}
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		forwardPath, reversePath, err := r.fetchBestRoutes(ctx, log, lPK, rPK, opts, baseMinHops)
+		var forwardPath, reversePath []routing.Hop
+		var err error
+		if hookDone != nil {
+			// RACE the background direct-transport creation against the
+			// route-finder. At cold start (visor restart) the finder query blocks
+			// on its full HTTP-over-dmsg timeout (RouteFinderTimeout, ~10s while the
+			// dmsg path to the finder is still warming) AND can only ever return a
+			// MULTIHOP path — a direct 1-hop route requires the transport already be
+			// in TPD, which it isn't yet. Meanwhile the background hook is building
+			// exactly that direct transport (ready in a few seconds). So run the
+			// finder in a goroutine and take whichever lands first: if the direct
+			// transport comes up, use it immediately via the cheap in-memory
+			// directRoute probe (no TPD bulk fetch, no multihop calc) and abandon
+			// the finder; otherwise fall back to the finder's (multihop) result.
+			// This is consumed at most once — later attempts use the sync path.
+			fetchCtx, cancelFetch := context.WithCancel(ctx)
+			type fetchRes struct {
+				fwd, rev []routing.Hop
+				err      error
+			}
+			resCh := make(chan fetchRes, 1)
+			go func() {
+				f, rv, e := r.fetchBestRoutes(fetchCtx, log, lPK, rPK, opts, baseMinHops)
+				resCh <- fetchRes{f, rv, e}
+			}()
+			select {
+			case <-hookDone:
+				hookDone = nil // consume the race signal once
+				if f, rv, ok := r.directRoute(lPK, rPK); ok {
+					cancelFetch() // direct transport up → abandon the finder query
+					log.Debug("Direct transport ready; using 1-hop route (route-finder query abandoned)")
+					forwardPath, reversePath, err = f, rv, nil
+				} else {
+					// Hook finished but no direct transport (dst not directly
+					// reachable) — we genuinely need the finder's multihop route.
+					res := <-resCh
+					forwardPath, reversePath, err = res.fwd, res.rev, res.err
+				}
+			case res := <-resCh:
+				// Finder (or a route over existing transports) returned first.
+				forwardPath, reversePath, err = res.fwd, res.rev, res.err
+			case <-ctx.Done():
+				cancelFetch()
+				return nil, ctx.Err()
+			}
+			cancelFetch()
+		} else {
+			forwardPath, reversePath, err = r.fetchBestRoutes(ctx, log, lPK, rPK, opts, baseMinHops)
+		}
 		if err != nil {
 			// RACE fallback: no route over existing transports (yet). If the
 			// background transport-creation hook is still running, wait for it
@@ -822,6 +870,14 @@ fetchRoutesAgain:
 	}
 
 	if err != nil {
+		// If the dial context was canceled, the finder error is just fallout from
+		// that cancellation (e.g. a faster path — a freshly-created direct
+		// transport — won the DialRoutes race and abandoned this query). Return
+		// immediately instead of misreporting a "route finder timed out" and
+		// burning a redundant local calc.
+		if ctx.Err() != nil {
+			return nil, nil, ctx.Err()
+		}
 		select {
 		case <-timer.C:
 			// Try local route calculation as fallback
@@ -1253,6 +1309,46 @@ func pathTouchesIntermediate(path []routing.Hop, exclude map[cipher.PubKey]struc
 		}
 	}
 	return false
+}
+
+// directRoute returns a 1-hop route over an existing OPEN local transport to dst,
+// or ok=false if none exists. It is the cheap in-memory half of
+// calculateLocalRoutes (the direct probe) WITHOUT the GetAllTransports() bulk
+// fetch the multihop BFS needs. The race path in DialRoutes uses it to prefer a
+// freshly-created direct transport the instant it lands, instead of either
+// waiting out the route-finder timeout OR prematurely pulling (and blocking on)
+// the full TPD dataset for a multihop calc at cold start — when that dataset is
+// exactly what isn't warm yet. When several direct transports to dst exist the
+// most-preferred type wins (STCPR > SUDPH > STCP > … > DMSG).
+func (r *router) directRoute(src, dst cipher.PubKey) (fwd, rev []routing.Hop, ok bool) {
+	if r.tm == nil {
+		return nil, nil, false
+	}
+	type cand struct {
+		id     uuid.UUID
+		tpType string
+	}
+	var cands []cand
+	r.tm.WalkTransports(func(tp *transport.ManagedTransport) bool {
+		// Mirror calculateLocalRoutes' direct probe: skip closed / pong-dead legs
+		// and setup-labeled (RSN control-plane) transports, and match dst.
+		if tp == nil || tp.IsClosed() || tp.Entry.Label == transport.LabelSetup {
+			return true
+		}
+		if tp.Entry.RemoteEdge(src) == dst {
+			cands = append(cands, cand{id: tp.Entry.ID, tpType: string(tp.Entry.Type)})
+		}
+		return true
+	})
+	if len(cands) == 0 {
+		return nil, nil, false
+	}
+	sort.SliceStable(cands, func(i, j int) bool {
+		return tptypes.TypePreference(tptypes.Type(cands[i].tpType)) <
+			tptypes.TypePreference(tptypes.Type(cands[j].tpType))
+	})
+	id := cands[0].id
+	return []routing.Hop{{TpID: id, From: src, To: dst}}, []routing.Hop{{TpID: id, From: dst, To: src}}, true
 }
 
 // calculateLocalRoutes attempts to calculate routes locally using the transport manager
