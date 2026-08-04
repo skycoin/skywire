@@ -5,6 +5,11 @@ export const API_BASE = window.location.hostname === '' || window.location.proto
     : '';
 
 export const WS_MAX_RECONNECT_DELAY = 30000;
+// Give up on the /ws/local-visor upgrade after this many failed attempts and
+// fall back to HTTP polling. Prevents an endless reconnect storm when the WS
+// endpoint isn't reachable (e.g. tpviz embedded/served under a path prefix
+// where only the REST endpoints are mounted).
+export const WS_MAX_RECONNECT_ATTEMPTS = 5;
 
 export const colors: Record<string, string> = {
     stcpr: '#00d9a5',
