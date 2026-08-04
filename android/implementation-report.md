@@ -7,6 +7,134 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-04 — Chat tab: skychat embedded, gated, and made to fit a phone
+
+**Built:**
+
+- `ui/chat/` — the Chat tab is now skychat's own web UI in a WebView, not a
+  placeholder. `ChatViewModel` waits for the visor API, starts the `skychat`
+  app (autostart is off for every app on the phone), then polls the app's own
+  HTTP surface until it answers; only then is the WebView created, so the
+  chat never opens on Chromium's error page. `ChatWebView` holds the Android
+  half: the password gate, media permissions, uploads, downloads, and the
+  rule for what may leave the page.
+  - Android back ↔ page history. The UI already pushes a history entry when a
+    conversation opens (`_enterChatPane`) and answers `popstate` by going back
+    to the list, so `BackHandler(enabled = canGoBack)` → `goBack()` lands
+    exactly on Telegram behaviour: back closes the chat, back again leaves the
+    tab.
+  - Top bar overflow: **Reload** and **Logs**, the shared viewer scoped to
+    `skychat`.
+  - Uploads via `onShowFileChooser` → `StartActivityForResult`; the callback
+    is answered on cancel too, or the page's file input is dead for good.
+  - Downloads: the page's `<a download>` is on renderable media, which WebView
+    ignores and *renders in place of the chat*. Same-origin main-frame
+    navigations are turned into DownloadManager jobs carrying the gate's
+    Authorization header; anything off-origin goes to the browser.
+- **skychat now runs password-gated on the phone** (`core/SkychatProfile.kt`,
+  `api/SkychatApi.kt`, `SecretStore.skychatPassword`). See below — this is the
+  security-relevant part of the step.
+- `core/ConfigManager` pins skychat's argv on every launch the way it already
+  pinned skysocks-client's: `--addr` host forced to loopback, `--portless`
+  stripped, `--password-file` pointed at a record it writes itself.
+- **Web UI (`cmd/apps/skychat`), the phone pass.** The one-pane breakpoint
+  already existed; what did not survive contact with a 406px viewport:
+  - the composer needed 489px and overflowed by 62px, which scrolled the
+    header's back button off screen — `.message-input` had `flex:1` with no
+    `min-width:0`, so it refused to shrink below its placeholder's intrinsic
+    width. Fixed generally, plus a tighter composer at the breakpoint.
+  - `<input>` → `<textarea>`: one row, grows to three, then scrolls
+    (`growComposer`), scrollbar hidden. Enter sends on a real keyboard,
+    inserts a newline on a touch device (`onComposerKey`).
+  - the toast reserved `100vw - 360px` for a sidebar that isn't there in one
+    pane — every toast was a ~46px column of wrapped words.
+  - the image lightbox had no zoom of its own and the app has page zoom off:
+    added pinch, double-tap and drag-to-pan (`_lbInit`/`_lbZoomAt`).
+
+**Hard-won facts:**
+
+- **A `wrap_content` WebView breaks every percentage height in the page.**
+  Compose's `AndroidView` measures a view with default layout params using an
+  AT_MOST spec, and Chromium then treats the layout viewport height as
+  *indefinite*: measured live, `innerHeight` was 777 while
+  `getComputedStyle(html).height` and `body` were **0px**. Every flex column
+  collapsed — the conversation list rendered nothing below the tabs and the
+  composer sat under the header instead of at the bottom. `layoutParams =
+  MATCH_PARENT` on the WebView is the whole fix.
+- **WebView needs `MODIFY_AUDIO_SETTINGS`, not just `RECORD_AUDIO`.** With
+  RECORD_AUDIO granted (verified in `dumpsys package`), `getUserMedia` still
+  failed with a bare `NotReadableError: Could not start audio source`; logcat
+  named it: `cr_media: Requires MODIFY_AUDIO_SETTINGS and RECORD_AUDIO. No
+  audio device will be available for recording`. It is an install-time
+  permission — no prompt, just the declaration.
+- **An unauthenticated loopback port is not private on Android.** There is no
+  per-app network namespace: any app holding INTERNET can reach
+  `127.0.0.1:8001`, and skychat's surface is the whole account — history,
+  contacts, sending. So the phone profile turns on the gate skychat already
+  ships: a second device-local secret, hashed the way `commands/auth.go`
+  verifies (`<hex salt>:<hex sha256(password‖salt)>`, 16-byte salt) into
+  `<local_path>/skychat-password`, written **before** the app is ever started
+  so there is no open window. The WebView answers the challenge in
+  `onReceivedHttpAuthRequest`; Chromium then reuses the credential for every
+  subresource, XHR and the SSE stream (confirmed live — the page loads and
+  streams with no second challenge).
+  - The record is re-checked, not blindly rewritten: the salt is read back and
+    the stored secret re-hashed against it, so a rotated keystore rewrites the
+    file instead of the app 401-ing against its own gate. A running skychat
+    holding a stale file is self-healed once (stop → start reloads
+    `--password-file`) before the failure is reported.
+- **`--portless` must never be set on the phone.** The visor's
+  `/skychat/proxy/…` mount serves the same handler under a path prefix, but
+  every fetch in the page is root-absolute (`/history`, `/sse`, `/message`),
+  so the UI cannot run there without rewriting all of them. The port is the
+  only way in, so the profile strips the flag.
+- Composer sizing: `scrollHeight` is content+padding and the field is
+  `border-box`, so the border has to be added back or every row is 2px short
+  and the field grows a scrollbar it doesn't need. And sizing a *hidden*
+  composer (the form is hidden until a conversation opens) measures 0 and pins
+  it shut until the first keystroke — `growComposer` returns early instead.
+
+**Verified** live on DM-B70104 (Android 15, LTE, dark) against a desktop
+visor (`02870fd1…4570`), with Chrome DevTools attached over
+`adb forward … webview_devtools_remote_<pid>` for the measurements:
+
+- Core down → the tab explains it; Connect → "Waiting for the Skywire core",
+  then the list. Config carries
+  `skychat --pair-enable --addr 127.0.0.1:8001 --password-file …/local/skychat-password`
+  and the record file is `-rw------- 97 bytes`.
+- Text both ways; a 96 KB PNG sent (✓✓) and a 196 KB PNG + 3.2 MB MP3
+  received, both rendering inline with a working player.
+- list → chat → Android back → list, with the chat's unread badge intact.
+- `getUserMedia({audio:true})` → OK; `{video:true,audio:true}` → `video=1
+  audio=1` (both were `NotReadableError` before the permission fix).
+- Composer at rest 42px, no inline height, `msgForm` overflow **0** at a 406px
+  viewport (was 62px); toast 383px wide on one 40px row (was ~46px).
+- Lightbox double-tap on a received screenshot → `scale 2.5` with the
+  transform anchored on the tap; a synthetic two-finger pinch drove it 1 → 3.
+- Attach → `com.android.documentsui.picker.PickActivity`; cancel returns with
+  the conversation still open.
+- Overflow → Logs opens the shared viewer live-tailing `skychat`.
+
+**Left open:**
+
+- **Duplicate delivery, seen once and not reproduced since.** One send arrived
+  three times on the desktop and one reply arrived twice on the phone; a
+  retest delivered once. The log around it is full of route-group churn
+  between the two visors (`Failed to send periodic SACK … transport is not set
+  up`, a new route group per message), which is the shape of a retransmit
+  after an unacked send. Nothing in the embed sends twice — the page holds one
+  EventSource and ignores the server's history replay. Worth chasing on the
+  skychat/transport side with a reproduction.
+- Leaving the Chat tab (or opening Logs) destroys the WebView, so returning
+  reloads the page and loses which conversation was open. The WebView has to
+  be Activity-scoped (an application-context one crashes on the composer's
+  `<select>` popup), so a persistent host is its own change.
+- Native notifications are their own piece of work: `pkg/osnotify` is a
+  harmless no-op on Android, so the phone relies on the in-page experience
+  until the notification wiring lands.
+
+---
+
 ## 2026-08-04 — DMSG-servers card fixed; primary transport is now a choice
 
 **Built:**

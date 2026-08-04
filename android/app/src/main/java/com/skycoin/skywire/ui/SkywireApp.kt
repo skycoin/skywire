@@ -1,5 +1,6 @@
 package com.skycoin.skywire.ui
 
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -103,7 +104,13 @@ fun SkywireApp() {
         NavHost(
             navController = navController,
             startDestination = Routes.HOME,
-            modifier = Modifier.padding(innerPadding),
+            // consumeWindowInsets so a destination can still ask for the
+            // insets it needs — the Chat WebView's imePadding would otherwise
+            // count the navigation bar twice, once here and once in the
+            // keyboard inset it is measured from.
+            modifier = Modifier
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding),
         ) {
             composable(Routes.HOME) {
                 HomeScreen(
@@ -114,7 +121,13 @@ fun SkywireApp() {
                     },
                 )
             }
-            composable(Routes.CHAT) { ChatScreen() }
+            composable(Routes.CHAT) {
+                ChatScreen(
+                    onOpenLogs = { source ->
+                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
+                    },
+                )
+            }
             composable(Routes.HUB) {
                 HubScreen(
                     onOpenRoute = { navController.navigate(it) },

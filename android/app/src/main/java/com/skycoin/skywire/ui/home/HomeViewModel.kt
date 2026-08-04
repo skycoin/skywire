@@ -10,6 +10,7 @@ import com.skycoin.skywire.api.VisorSummary
 import com.skycoin.skywire.core.ConfigManager
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.SecretStore
 import com.skycoin.skywire.core.SkywireCoreService
 import com.skycoin.skywire.core.SkywirePaths
 import kotlinx.coroutines.delay
@@ -133,7 +134,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             SkywireCoreService.stop(app)
             CoreServiceState.state.first { it is CoreState.Stopped }
-            ConfigManager(SkywirePaths(app)).deleteUsersDb()
+            ConfigManager(SkywirePaths(app), SecretStore(app)).deleteUsersDb()
             // Give the stopping service instance a beat to finish stopSelf so
             // the fresh start command lands on a clean instance.
             delay(SERVICE_RESTART_GRACE_MS)

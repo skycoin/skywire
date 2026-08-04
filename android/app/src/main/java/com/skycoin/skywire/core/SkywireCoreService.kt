@@ -53,7 +53,7 @@ class SkywireCoreService : Service() {
     override fun onCreate() {
         super.onCreate()
         paths = SkywirePaths(this)
-        configManager = ConfigManager(paths)
+        configManager = ConfigManager(paths, SecretStore(this))
         prefs = AppPreferences(this)
         createChannel()
     }
