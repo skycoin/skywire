@@ -129,10 +129,16 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
   // the old stcpr/sudph/dmsg subset). Returns "" when there are none.
   private tpBreakdown(e: NetworkEntry): string {
     const parts: string[] = [];
-    const add = (label: string, n?: number) => { if (n && n > 0) { parts.push(`${label} ${n}`); } };
+    const add = (label: string, n?: number) => {
+      if (n && n > 0) {
+        parts.push(`${label} ${n}`);
+      }
+    };
+
     add('stcpr', e.stcpr); add('sudph', e.sudph); add('stcp', e.stcp);
     add('squicr', e.squicr); add('swtr', e.swtr); add('swsr', e.swsr);
     add('webrtc', e.webrtc); add('dmsg', e.dmsg);
+
     return parts.length ? ` (${parts.join(', ')})` : '';
   }
 
@@ -141,7 +147,10 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
   // country grouping. Deterministic hash → HSL so the palette is stable per code.
   private countryColor(country: string): string {
     let h = 0;
-    for (let i = 0; i < country.length; i++) { h = (h * 31 + country.charCodeAt(i)) & 0xffff; }
+    for (let i = 0; i < country.length; i++) {
+      h = (h * 31 + country.charCodeAt(i)) & 0xffff;
+    }
+
     return `hsl(${h % 360}, 55%, 45%)`;
   }
 
@@ -178,7 +187,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
       const country = (e?.country || '').trim();
       const fill = country ? this.countryColor(country) : this.statusColor(e?.ut_status);
       nodeArr.push({
-        id: pk, label: pk.substring(0, 6) + '…', title,
+        id: pk, label: pk.substring(0, 6) + '…', title: title,
         color: { background: fill, border: this.statusColor(e?.ut_status) }, borderWidth: 3,
       });
     };
