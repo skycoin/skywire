@@ -9,70 +9,40 @@ import { StartComponent } from './components/pages/start/start.component';
 import { LoginComponent } from './components/pages/login/login.component';
 import { NodeListComponent } from './components/pages/node-list/node-list.component';
 import { NodeComponent } from './components/pages/node/node.component';
-import { ReactiveFormsModule } from '@angular/forms';
-import { FormsModule } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
-import { MatCheckboxModule } from '@angular/material/checkbox';
+import { SharedModule } from './shared/shared.module';
+import { AppTranslationModule } from './app-translation.module';
 import { ErrorStateMatcher, ShowOnDirtyErrorStateMatcher, RippleGlobalOptions, MAT_RIPPLE_GLOBAL_OPTIONS } from '@angular/material/core';
-import { MAT_DIALOG_DEFAULT_OPTIONS, MatDialogModule } from '@angular/material/dialog';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule, MatIconRegistry } from '@angular/material/icon';
-import { MatInputModule } from '@angular/material/input';
-import { MatMenuModule } from '@angular/material/menu';
-import { MatProgressBarModule } from '@angular/material/progress-bar';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatSelectModule } from '@angular/material/select';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
-import { MatSnackBarModule, MAT_SNACK_BAR_DEFAULT_OPTIONS } from '@angular/material/snack-bar';
-import { MatTabsModule } from '@angular/material/tabs';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { DragDropModule } from '@angular/cdk/drag-drop';
+import { MAT_DIALOG_DEFAULT_OPTIONS } from '@angular/material/dialog';
+import { MatIconRegistry } from '@angular/material/icon';
+import { MAT_SNACK_BAR_DEFAULT_OPTIONS } from '@angular/material/snack-bar';
 import { TransportListComponent } from './components/pages/node/routing/transport-list/transport-list.component';
 import { NodeAppsListComponent } from './components/pages/node/apps/node-apps-list/node-apps-list.component';
-import { CopyToClipboardTextComponent } from './components/layout/copy-to-clipboard-text/copy-to-clipboard-text.component';
 import { LogComponent } from './components/pages/node/apps/node-apps-list/log/log.component';
 import { SettingsComponent } from './components/pages/settings/settings.component';
 import { PasswordComponent } from './components/pages/settings/password/password.component';
 import { ClipboardService } from './services/clipboard.service';
 import { ClientErrorHandler } from './services/client-error-reporter';
-import { ClipboardDirective } from './directives/clipboard.directive';
-import { AppTranslationModule } from './app-translation.module';
-import { ButtonComponent } from './components/layout/button/button.component';
-import { EditLabelComponent } from './components/layout/edit-label/edit-label.component';
-import { DialogComponent } from './components/layout/dialog/dialog.component';
-import { LineChartComponent } from './components/layout/line-chart/line-chart.component';
 import { ChartsComponent } from './components/pages/node/charts/charts.component';
 import { RouteListComponent } from './components/pages/node/routing/route-list/route-list.component';
 import { RoutingComponent } from './components/pages/node/routing/routing.component';
 import { AppsComponent } from './components/pages/node/apps/apps.component';
 import { CreateTransportComponent } from './components/pages/node/routing/transport-list/create-transport/create-transport.component';
-import { AutoScalePipe } from './pipes/auto-scale.pipe';
 import { BasicTerminalComponent } from './components/pages/node/actions/basic-terminal/basic-terminal.component';
 import { RouteDetailsComponent } from './components/pages/node/routing/route-list/route-details/route-details.component';
 import { RefreshRateComponent } from './components/pages/settings/refresh-rate/refresh-rate.component';
-import { LoadingIndicatorComponent } from './components/layout/loading-indicator/loading-indicator.component';
-import { RefreshButtonComponent } from './components/layout/refresh-button/refresh-button.component';
-import { ViewAllLinkComponent } from './components/layout/view-all-link/view-all-link.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
 import { NodeRewardsComponent } from './components/pages/node/rewards/node-rewards.component';
 import { ServicesHealthComponent } from './components/pages/services-health/services-health.component';
 import { DmsgSettingsComponent } from './components/pages/dmsg-settings/dmsg-settings.component';
-import { PaginatorComponent } from './components/layout/paginator/paginator.component';
 import { AllRoutesComponent } from './components/pages/node/routing/all-routes/all-routes.component';
 import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps.component';
-import { TopBarComponent } from './components/layout/top-bar/top-bar.component';
 import { RouteReuseStrategy } from '@angular/router';
 import { AppReuseStrategy } from './app.reuse-strategy';
-import { ConfirmationComponent } from './components/layout/confirmation/confirmation.component';
 import { TransportDetailsComponent } from './components/pages/node/routing/transport-list/transport-details/transport-details.component';
 import { LogFilterComponent } from './components/pages/node/apps/node-apps-list/log/log-filter/log-filter.component';
-import { SnackbarComponent } from './components/layout/snack-bar/snack-bar.component';
 import { InitialSetupComponent } from './components/pages/login/initial-setup/initial-setup.component';
 import { ProxySettingsComponent } from './components/pages/node/actions/proxy-settings/proxy-settings.component';
 import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
-import { SelectLanguageComponent } from './components/layout/select-language/select-language.component';
-import { LangButtonComponent } from './components/layout/lang-button/lang-button.component';
-import { TruncatedTextComponent } from './components/layout/truncated-text/truncated-text.component';
 import { NodeInfoContentComponent } from './components/pages/node/node-info/node-info-content/node-info-content.component';
 import { ResourceMonitorComponent } from './components/pages/node/resource-monitor/resource-monitor.component';
 import { NodeResourcesComponent } from './components/pages/node/node-resources/node-resources.component';
@@ -92,27 +62,12 @@ import { MultiVisorResourcesComponent } from './components/pages/multi-visor-res
 import { MultiVisorUptimeComponent } from './components/pages/multi-visor-uptime/multi-visor-uptime.component';
 import { NetworkTransportsComponent } from './components/pages/network-transports/network-transports.component';
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
-import { SelectOptionComponent } from './components/layout/select-option/select-option.component';
-import { FiltersSelectionComponent } from './components/layout/filters-selection/filters-selection.component';
-import { LabeledElementTextComponent } from './components/layout/labeled-element-text/labeled-element-text.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
 import { LabelListComponent } from './components/pages/settings/all-labels/label-list/label-list.component';
-import { UpdateComponent } from './components/layout/update/update.component';
 import { UpdaterConfigComponent } from './components/pages/settings/updater-config/updater-config.component';
 import { RouterConfigComponent } from './components/pages/node/node-info/node-info-content/router-config/router-config.component';
-import { VpnServerListComponent } from './components/vpn/pages/vpn-server-list/vpn-server-list.component';
-import { AddVpnServerComponent } from './components/vpn/pages/vpn-server-list/add-vpn-server/add-vpn-server.component';
-import { EditVpnServerValueComponent } from './components/vpn/pages/vpn-server-list/edit-vpn-server-value/edit-vpn-server-value.component';
-import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
-import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
-import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
-import { VpnServerNameComponent } from './components/vpn/layout/vpn-server-name/vpn-server-name.component';
-import { UpdateAllComponent } from './components/layout/update-all/update-all.component';
-import { VpnDnsConfigComponent } from './components/vpn/layout/vpn-dns-config/vpn-dns-config.component';
 import { RewardsAddressComponent } from './components/pages/node/node-info/node-info-content/rewards-address-config/rewards-address-config.component';
-import { BulkRewardAddressChangerComponent } from './components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
 import { NodeLogsComponent } from './components/pages/node/actions/node-logs/node-logs.component';
-import { TabSelectorComponent } from './components/layout/tab-selector/tab-selector.component';
 
 const globalRippleConfig: RippleGlobalOptions = {
   disabled: true,
@@ -124,18 +79,11 @@ const globalRippleConfig: RippleGlobalOptions = {
         LoginComponent,
         NodeListComponent,
         NodeComponent,
-        AutoScalePipe,
         LogComponent,
         TransportListComponent,
         NodeAppsListComponent,
-        CopyToClipboardTextComponent,
         SettingsComponent,
         PasswordComponent,
-        ClipboardDirective,
-        ButtonComponent,
-        EditLabelComponent,
-        DialogComponent,
-        LineChartComponent,
         ChartsComponent,
         RouteListComponent,
         RoutingComponent,
@@ -144,27 +92,17 @@ const globalRippleConfig: RippleGlobalOptions = {
         BasicTerminalComponent,
         RouteDetailsComponent,
         RefreshRateComponent,
-        LoadingIndicatorComponent,
-        RefreshButtonComponent,
-        ViewAllLinkComponent,
         AllTransportsComponent,
         AllRoutesComponent,
         NodeRewardsComponent,
         ServicesHealthComponent,
         DmsgSettingsComponent,
         AllAppsComponent,
-        PaginatorComponent,
-        TopBarComponent,
-        ConfirmationComponent,
         TransportDetailsComponent,
         LogFilterComponent,
-        SnackbarComponent,
         InitialSetupComponent,
         ProxySettingsComponent,
         SkynetComponent,
-        SelectLanguageComponent,
-        LangButtonComponent,
-        TruncatedTextComponent,
         NodeInfoContentComponent,
         ResourceMonitorComponent,
         NodeResourcesComponent,
@@ -184,49 +122,23 @@ const globalRippleConfig: RippleGlobalOptions = {
         MultiVisorUptimeComponent,
         NetworkTransportsComponent,
         NodeInfoComponent,
-        SelectOptionComponent,
-        FiltersSelectionComponent,
-        LabeledElementTextComponent,
         AllLabelsComponent,
         LabelListComponent,
-        UpdateComponent,
         UpdaterConfigComponent,
         RouterConfigComponent,
-        VpnServerListComponent,
-        VpnStatusComponent,
-        VpnErrorComponent,
-        AddVpnServerComponent,
-        VpnSettingsComponent,
-        EditVpnServerValueComponent,
-        VpnServerNameComponent,
-        UpdateAllComponent,
-        VpnDnsConfigComponent,
         RewardsAddressComponent,
-        BulkRewardAddressChangerComponent,
         NodeLogsComponent,
-        TabSelectorComponent,
     ],
     bootstrap: [AppComponent], imports: [BrowserModule,
         BrowserAnimationsModule,
-        ReactiveFormsModule,
         AppRoutingModule,
+        // Root translation setup (TranslateModule.forRoot: loader + service).
         AppTranslationModule,
-        MatSnackBarModule,
-        MatDialogModule,
-        MatFormFieldModule,
-        MatInputModule,
-        MatTabsModule,
-        MatButtonModule,
-        MatIconModule,
-        MatTooltipModule,
-        MatMenuModule,
-        FormsModule,
-        MatProgressBarModule,
-        MatSelectModule,
-        MatProgressSpinnerModule,
-        MatCheckboxModule,
-        MatSlideToggleModule,
-        DragDropModule], providers: [
+        // SharedModule re-exports CommonModule, the forms modules, the common
+        // Material list and the bare TranslateModule, plus the shared layout
+        // components/pipe/directive — so the feature components declared here
+        // (and future lazy feature modules) get them by importing it alone.
+        SharedModule], providers: [
         ClipboardService,
         { provide: ErrorHandler, useClass: ClientErrorHandler },
         { provide: MAT_SNACK_BAR_DEFAULT_OPTIONS, useValue: { duration: 3000, verticalPosition: 'top' } },
