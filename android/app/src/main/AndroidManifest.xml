@@ -47,6 +47,21 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- skychat:// addresses and skychat:invite: links — a scanned QR,
+                 a link in another chat, a contact card. The app opens the Chat
+                 tab's Add-by-address dialog on it and resolves it; acting on
+                 the result stays a tap. BROWSABLE is what makes a link in a
+                 browser or another app reach us at all.
+
+                 Only this scheme is claimed. skycoin:// belongs to the Skycoin
+                 wallet app, which is already installed on the same phones. -->
+            <intent-filter android:label="@string/app_skychat">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="skychat" />
+            </intent-filter>
         </activity>
 
         <!-- The visor core: execs libskywire-mobile.so as a child process and

@@ -712,6 +712,14 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 	// without touching the process-level signal ctx. Resume rebuilds it.
 	v.networkCtx, v.networkCancel = context.WithCancel(ctx)
 	ctx = v.networkCtx
+	// Publish this visor to the apps that will run inside its process, BEFORE
+	// module init starts them: the launcher autostarts internal apps during
+	// init, and one that looked for the in-process API a moment too early
+	// would fall back to dialing cli_addr for the rest of its life. Individual
+	// API methods nil-guard the subsystems they read, so being reachable
+	// before those exist answers "not ready" rather than crashing.
+	RegisterLocalAPI(v)
+	v.pushCloseStack("visor.local_api", func() error { UnregisterLocalAPI(v); return nil })
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
 	if v.conf.Hypervisor == nil {

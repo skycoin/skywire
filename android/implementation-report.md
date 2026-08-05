@@ -7,6 +7,98 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-05 — `skychat://` links open the phone; voice calls come back
+
+**Built:**
+
+- **`skychat://` deep links.** `MainActivity` now answers `ACTION_VIEW` for the
+  `skychat` scheme (both `skychat://<pk>[/<group-id>]` and the opaque
+  `skychat:invite:<…>` form) and parks the link in `core/DeepLinks`. The app
+  navigates to the Chat tab and hands the address to the page, which opens
+  **Add by address** with the field filled and the lookup already run.
+  - It stops at the resolve. No contact is added, no chat opened, no group
+    joined — a link that arrived from outside gets the user a *look* at who or
+    what it points at, and the tap that follows is the consent.
+  - Only `skychat` is claimed. `skycoin://` is deliberately left alone: the
+    Skycoin wallet app already answers it on the same phones, and a second
+    filter would put a disambiguation chooser in front of all of its links.
+- **Voice calls work on the phone** — the Call row in a conversation's ⋮ menu,
+  the incoming-call banner, answer/decline, and the active-call panel. Two
+  separate defects had to be fixed; see below.
+- Hub: **Pay-with-Sky tile removed.** At most one "coming soon" tile at a time
+  (now SkyMeet alone) — several of them read as an unfinished app, one reads
+  as the next thing being built.
+- Naming: the menu row is **"Call"**, the banner **"Incoming call"** (was
+  "Voice call" / "Incoming voice call").
+
+**Why voice was missing — two independent bugs, both outside the Android app:**
+
+1. **The phone runs no visor RPC port, and skychat could only reach the visor
+   through one.** Everything skychat relays to the visor — pairing, group
+   chat, and all of `/voice/*` — goes through its pair-RPC client, which dials
+   `cli_addr`. The phone profile sets `cli_addr: ""` on purpose: on Android any
+   installed app holding INTERNET can connect to another app's loopback
+   listener, and the visor RPC has no authentication of its own. So the dial
+   always failed, `/voice/incoming` answered 503, and the page hid the Call row
+   (it polls that endpoint every 3 s and degrades when it 503s). Everything was
+   working exactly as designed and the feature was invisible.
+   - Fix: `pkg/visor/local_api.go` — a visor running internal-mode apps
+     publishes itself, and skychat's `connectPairRPCLocked` prefers that over
+     dialing. The mirror image already existed (an internal app publishes its
+     HTTP handler and the visor serves it in-process rather than dialing its
+     port); this is the same trade in the other direction.
+   - What the registry hands out is a wrapper whose **`Close` is a no-op**. The
+     caller treats it as an RPC *client* and closes it on every redial —
+     closing the live visor there would shut the process down.
+   - Unregistration is compare-and-clear, and the test that covers it needed a
+     stub with a real field: `proxyDefaultAPI` is an empty struct, and two
+     pointers to distinct **zero-size** allocations may compare equal in Go, so
+     with an empty stub "a different visor unregistered" and "this visor
+     unregistered" are literally the same test.
+2. **A call to a phone timed out without ever trying the carrier that works.**
+   `initVoice`'s dialer prefers skynet and falls back to dmsg, but handed the
+   skynet attempt the caller's whole 30 s. Route setup to an unreachable peer
+   does not fail fast — setup nodes, then a local BFS, then a direct-transport
+   dial — and a phone accepts no inbound connections, so it consumed the entire
+   budget and dmsg was never reached. Measured live: `local BFS found no path`,
+   then `stcpr` dialing the emulator's egress IP, then `context deadline
+   exceeded`. The skynet leg now gets its own 10 s slice (`dialSkynetBounded`),
+   which is what preferring a carrier has to mean if the fallback is to matter.
+
+**Verified** — Android Studio emulator `skywire` (arm64, 1080×2400), pure-Go
+payload lane, plus a desktop visor on the Mac as the second party:
+
+- `adb shell am start -a android.intent.action.VIEW -d "skychat://03565f7a…9ce3"`
+  from Home → app switched to Chat → **Add by address** open, field prefilled,
+  resolved to "Person · direct message", `Start Chat` waiting, nothing added.
+  No keyboard: `openAddressModal({focus:false})` on the link path, or it would
+  have risen over the result the dialog exists to show.
+- ⋮ in a conversation → **Call** present (it was absent before the seam fix).
+- Device log: `[skychat]: Pairing: using the in-process visor API (startup)`.
+  Confirmed the config it ran against: `cli_addr ''` with skychat still carrying
+  `--pair-enable` — i.e. the exact configuration that was silently dead.
+- Desktop → phone call (`skywire cli skychat voice call <phone-pk>`): phone
+  logged `voice: INCOMING CALL … RINGING`, the **Incoming call** banner appeared
+  with Decline/Answer, Answer connected, and the active-call panel ran with a
+  live timer (00:04) and You/Peer level meters. Same call before the dial fix:
+  `context deadline exceeded`, no ring.
+- Hub screenshot: SkyMeet is the only "coming soon" tile.
+- `go test ./pkg/visor/ ./cmd/apps/skychat/...` pass; golangci-lint clean on
+  both. `pkg/visor/rpcgrpc` `TestSystemStatsCollect` fails, and fails the same
+  way on a stashed tree — pre-existing, unrelated.
+
+**Not done (agreed as its own piece):** the phone still has no audio device for
+a call. `pkg/skychat/call` on Android compiles the **PulseAudio** backend
+(GOOS=android satisfies the `linux` build tag), which has nothing to talk to, so
+capture and playback degrade to silence and the call connects mute in both
+directions. Real audio needs a bridge — either the Android app capturing with
+AudioRecord/AudioTrack and shipping PCM over new endpoints, or the WebView page
+doing it with getUserMedia (already permitted here for voice messages). The
+first also allows a call to survive the Chat tab being closed and can back a
+proper incoming-call notification.
+
+---
+
 ## 2026-08-04 — Chat tab: skychat embedded, gated, and made to fit a phone
 
 **Built:**
