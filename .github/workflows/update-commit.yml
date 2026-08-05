@@ -1,4 +1,8 @@
 name: Update Commit
+
+permissions:
+  contents: read
+
 on:
   workflow_run:
     workflows: ["Test"]
