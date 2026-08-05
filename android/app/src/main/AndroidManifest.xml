@@ -105,7 +105,30 @@
             android:exported="false"
             android:foregroundServiceType="microphone|mediaPlayback" />
 
-        <!-- SkyVpnService declaration lands with the VPN feature. -->
+        <!-- Owns the phone's VPN interface and hands its descriptor to the
+             visor.
+
+             exported + BIND_VPN_SERVICE is the sanctioned pair, not a
+             contradiction: the intent filter is what puts Skywire in
+             Android's "Always-on VPN" list (the strongest form of the
+             killswitch, and where the SkyVPN screen sends you), and the
+             system can only reach it if the component is exported. The
+             permission is the gate — it is signature-level and held by the
+             system alone, so nothing else can bind or start this. Our own
+             startService is unaffected: same-UID callers skip the check.
+
+             No foregroundServiceType: this is a plain service sharing a
+             process with the always-on core service — the VPN cannot outlive
+             the visor that carries it — and the platform draws its own VPN
+             indicator while an interface is up. -->
+        <service
+            android:name=".core.SkyVpnService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

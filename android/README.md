@@ -139,6 +139,31 @@ Starting or reconfiguring goes through an explicit stop first: the visor's
 restart-on-args-change races the outgoing proc, whose blocked `accept` returns
 "use of closed network connection" and leaves the app stuck in `Errored`.
 
+**SkyVPN** (`ui/vpn/` + `core/SkyVpnService.kt`) repeats that shape against
+`type=vpn` and routes the **whole phone**. An app may never open
+`/dev/net/tun`, so the interface is created by `SkyVpnService` through
+`VpnService.Builder` and its file descriptor is passed to the visor process
+over an abstract unix socket as `SCM_RIGHTS` ancillary data. The Go end is
+`pkg/vpn/tun_device_android.go`, which documents the (newline-delimited JSON)
+protocol; `pkg/vpn/os_client_android.go` is the Android spelling of the route
+and DNS calls the shared client makes — `Builder` declares all of it, so
+`SetupTUN` *is* the whole configuration and deleting the default route means
+dropping the interface.
+
+Three things are worth knowing before changing any of it:
+
+- **`addDisallowedApplication(self)` is not optional.** The visor is a child of
+  this app and shares its UID, so without the exclusion its dmsg traffic — the
+  traffic *carrying* the tunnel — would be routed into the tunnel.
+- **The service keeps its own copy of the descriptor**, so the interface
+  outlives the core closing its copy. That is what makes `--killswitch` real:
+  the tunnel drops, nothing drains the interface, packets go nowhere. It is
+  released on an explicit `down`, on a control-socket EOF *with the killswitch
+  off*, or on disconnect — never on a visor crash-restart.
+- **The killswitch is set through the API's `killswitch` field**, not by
+  rewriting argv; the visor owns both spellings. The phone's stored preference
+  wins and is re-applied whenever the core comes up.
+
 **SkyDEX** (`ui/dex/`) is native above, embedded below. The market public key
 is a native field with a recent-markets dropdown; connecting writes
 `--market-pk` into the app's argv (`PUT …/apps/skydex-client` with `args`,

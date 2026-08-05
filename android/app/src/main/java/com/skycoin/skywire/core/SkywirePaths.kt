@@ -56,10 +56,14 @@ class SkywirePaths(context: Context) {
  * enumerate network interfaces at all: Android 11+ denies app processes the
  * netlink dump Go's standard library uses, and the workaround only engages
  * when the core knows the device API level — which a CGO-free build cannot
- * discover for itself.
+ * discover for itself. `SKYWIRE_ANDROID_VPN_SOCKET` is where vpn-client asks
+ * for a TUN: the app owns the interface, so it also owns the name of the
+ * socket it hands descriptors out on. The leading `@` is Go's spelling of the
+ * abstract namespace [SkyVpnService] binds in.
  */
 internal fun coreEnv(paths: SkywirePaths): Map<String, String> = mapOf(
     "HOME" to paths.dataDir.absolutePath,
     "TMPDIR" to paths.tmpDir.absolutePath,
     "SKYWIRE_ANDROID_API_LEVEL" to android.os.Build.VERSION.SDK_INT.toString(),
+    "SKYWIRE_ANDROID_VPN_SOCKET" to "@" + SkyVpnService.SOCKET_NAME,
 )

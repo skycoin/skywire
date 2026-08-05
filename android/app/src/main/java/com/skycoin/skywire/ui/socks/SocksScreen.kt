@@ -22,8 +22,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -56,13 +54,20 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.api.AppConnection
-import com.skycoin.skywire.api.ServiceEntry
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.ui.components.CONNECTED_GREEN
+import com.skycoin.skywire.ui.components.InfoRow
+import com.skycoin.skywire.ui.components.PENDING_AMBER
+import com.skycoin.skywire.ui.components.SavedServer
+import com.skycoin.skywire.ui.components.SectionCard
+import com.skycoin.skywire.ui.components.ServerRow
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.TransportPreferenceCard
 import com.skycoin.skywire.ui.components.TransportPreferenceSheet
+import com.skycoin.skywire.ui.components.flagEmoji
+import com.skycoin.skywire.ui.components.formatBytes
+import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.ui.logs.LogSources
-import java.util.Locale
 
 /**
  * SkySOCKS: pick a public proxy server, point skysocks-client at it, and
@@ -229,10 +234,10 @@ private fun StatusCard(state: SocksUiState, viewModel: SocksViewModel) {
 private fun ConnectionRows(connection: AppConnection) {
     // skysocks-client never measures round trips, so its latency is a
     // constant zero — showing "0 ms" would just be wrong.
-    connection.latencyNs.takeIf { it > 0 }?.let { latency ->
+    connection.latencyMs.takeIf { it > 0 }?.let { latency ->
         InfoRow(
             label = stringResource(R.string.socks_latency),
-            value = "${latency / 1_000_000} ms",
+            value = "$latency ms",
         )
     }
     InfoRow(
@@ -449,103 +454,7 @@ private fun ServersFooter(state: SocksUiState, viewModel: SocksViewModel) {
     }
 }
 
-@Composable
-private fun ServerRow(
-    server: ServiceEntry,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.secondaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            },
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled, onClick = onClick),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-        ) {
-            flagEmoji(server.geo?.country.orEmpty())?.let { flag ->
-                Text(flag, style = MaterialTheme.typography.titleLarge)
-                Spacer(Modifier.width(12.dp))
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    listOfNotNull(
-                        server.geo?.country?.uppercase()?.takeIf { it.isNotEmpty() },
-                        server.geo?.region?.takeIf { it.isNotEmpty() },
-                    ).joinToString(" · ").ifEmpty { stringResource(R.string.socks_location_unknown) },
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Text(
-                    shortPk(server.pk),
-                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            server.version.takeIf { it.isNotEmpty() }?.let { version ->
-                Spacer(Modifier.width(12.dp))
-                Text(
-                    version,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
-
 // --- small shared pieces ---
-
-@Composable
-private fun SectionCard(content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(20.dp), content = content)
-    }
-}
-
-@Composable
-private fun InfoRow(
-    label: String,
-    value: String,
-    mono: Boolean = false,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            softWrap = false,
-        )
-        Spacer(Modifier.width(16.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium.let {
-                if (mono) it.copy(fontFamily = FontFamily.Monospace) else it
-            },
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
 
 @Composable
 private fun statusLabel(state: SocksUiState): Pair<String, Color> = when {
@@ -558,20 +467,6 @@ private fun statusLabel(state: SocksUiState): Pair<String, Color> = when {
         MaterialTheme.colorScheme.onSurfaceVariant
 }
 
-private fun formatBytes(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    var value = bytes.toDouble() / 1024
-    val units = listOf("KB", "MB", "GB", "TB")
-    var unit = 0
-    while (value >= 1024 && unit < units.lastIndex) {
-        value /= 1024
-        unit++
-    }
-    return String.format(Locale.US, "%.1f %s", value, units[unit])
-}
-
-private val CONNECTED_GREEN = Color(0xFF16A34A)
-private val PENDING_AMBER = Color(0xFFF59E0B)
 private const val RUNNING_STATUS = "Running"
 private const val MIN_PORT = 1024
 private const val MAX_PORT = 65535

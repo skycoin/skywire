@@ -1,24 +1,5 @@
 package com.skycoin.skywire.ui.socks
 
-import com.skycoin.skywire.api.ServiceEntry
-import kotlinx.serialization.Serializable
-
-/** The last server the user connected to, kept across app restarts. */
-@Serializable
-data class SavedServer(
-    val pk: String,
-    val country: String = "",
-    val version: String = "",
-) {
-    companion object {
-        fun of(entry: ServiceEntry) = SavedServer(
-            pk = entry.pk,
-            country = entry.geo?.country.orEmpty(),
-            version = entry.version,
-        )
-    }
-}
-
 /**
  * The two skysocks-client flags this screen owns. The visor exposes the
  * app's argv over the API, so the flags are read from there and written
@@ -80,14 +61,3 @@ object SocksArgs {
         return null
     }
 }
-
-/** Two-letter ISO country code → flag emoji; null for anything else. */
-fun flagEmoji(country: String): String? {
-    if (country.length != 2 || !country.all { it.isLetter() }) return null
-    val code = country.uppercase()
-    val base = 0x1F1E6 // REGIONAL INDICATOR SYMBOL LETTER A
-    return String(Character.toChars(base + (code[0] - 'A'))) +
-        String(Character.toChars(base + (code[1] - 'A')))
-}
-
-fun shortPk(pk: String): String = if (pk.length <= 20) pk else pk.take(10) + "…" + pk.takeLast(8)
