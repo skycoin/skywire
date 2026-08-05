@@ -23,6 +23,7 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
+	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/httputil"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
@@ -258,7 +259,20 @@ func (hv *Hypervisor) startUI() error {
 	// on a double close. It's a cheap background cache refresher, so leaving it
 	// running across UI toggles (and until process exit) is fine.
 	if hv.tpvizServer != nil {
-		hv.tpvizStartOnce.Do(func() { go hv.tpvizServer.Start() })
+		hv.tpvizStartOnce.Do(func() {
+			// Give tpviz an HTTP-over-dmsg client so its deployment-discovery
+			// fetches (notably /api/services → service-discovery, the source of
+			// per-visor country/geo) resolve over dmsg instead of the dead
+			// clearnet SD frontend. Without this the SD CXO feed is the only
+			// source, and when it's empty the network view loses all country
+			// grouping. Mirrors `cli tp viz` / the reward server.
+			if hv.visor != nil && hv.visor.dmsgC != nil {
+				hv.tpvizServer.SetDmsgHTTPClient(&http.Client{
+					Transport: dmsghttp.MakeHTTPTransport(context.Background(), hv.visor.dmsgC),
+				})
+			}
+			go hv.tpvizServer.Start()
+		})
 	}
 	hv.uiServing = true
 	return nil

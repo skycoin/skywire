@@ -1,0 +1,21 @@
+// The host component sizes the <app-bundle-mount> element (e.g. a height/border
+// via its own class); this only makes it a block so that class takes effect.
+:host {
+  display: block;
+  width: 100%;
+}
+
+// The embedded bundle renders into this; it fills whatever box the host
+// component sizes <app-bundle-mount> to.
+.bundle-mount-root {
+  width: 100%;
+  height: 100%;
+}
+
+.bundle-mount-loading,
+.bundle-mount-error {
+  display: flex;
+  align-items: center;
+  padding: 16px 0;
+  color: #aaa;
+}

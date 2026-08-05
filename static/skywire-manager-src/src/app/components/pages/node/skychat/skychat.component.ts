@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef, Input } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
@@ -81,6 +81,14 @@ interface GroupMsg {
 })
 export class SkychatComponent extends PageBaseComponent implements OnInit, OnDestroy, AfterViewChecked {
   @ViewChild('logEl') logEl: ElementRef<HTMLDivElement>;
+
+  // Set when this component is mounted OUTSIDE the router — via
+  // window.SkywireNg.mountComponent() into a WinBox window (the wasm desktop's
+  // ☰ Chat). There is no NodeComponent parent route to supply the node, so the
+  // host passes the visor PK (and optionally a peer to preselect) directly.
+  // Unset for the normal routed tab, which keeps using NodeComponent.currentNode.
+  @Input() embeddedNodeKey?: string;
+  @Input() embeddedPeer?: string;
 
   node: Node;
   // Bound to the compose form.
@@ -224,21 +232,32 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     // it directly rather than via ActivatedRoute (which only sees the primary
     // outlet's params for the embedded case).
     const hashQuery = (window.location.hash.split('?')[1] || '');
-    const peerParam = new URLSearchParams(hashQuery).get('peer') || '';
+    const peerParam = this.embeddedPeer || new URLSearchParams(hashQuery).get('peer') || '';
     if (/^[0-9a-fA-F]{66}$/.test(peerParam)) {
       this.toPK = peerParam;
     }
 
-    this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
-      const wasUnset = !this.node;
-      this.node = node;
-      if (wasUnset) {
-        this.connectSSE();
-        this.tryLoadPeers();
-        this.refreshPasswordState();
-        this.startVoicePoll();
-      }
-    });
+    if (this.embeddedNodeKey) {
+      // Portal-mounted (no NodeComponent parent): synthesize the node from the
+      // provided key — the component only reads node.localPk — and start the
+      // same data flows the routed subscription would have kicked off.
+      this.node = { localPk: this.embeddedNodeKey } as Node;
+      this.connectSSE();
+      this.tryLoadPeers();
+      this.refreshPasswordState();
+      this.startVoicePoll();
+    } else {
+      this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
+        const wasUnset = !this.node;
+        this.node = node;
+        if (wasUnset) {
+          this.connectSSE();
+          this.tryLoadPeers();
+          this.refreshPasswordState();
+          this.startVoicePoll();
+        }
+      });
+    }
 
     return super.ngOnInit();
   }

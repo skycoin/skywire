@@ -13,10 +13,10 @@
 
 import { Graph } from '@cosmograph/cosmos';
 import * as S from './state';
-import { colors, LOCAL_EDGE_COLOR } from './constants';
+import { colors, LOCAL_EDGE_COLOR, ROUTE_DEST_COLOR } from './constants';
 import { handleGraphNodeClick } from './node-click';
 import { getCountryColor, getIPGroupColor, countryToFlag } from './utils';
-import { calculateGroupRadius, findNonOverlappingPosition } from './grouping';
+// (grouping geometry is computed locally below — packCircles / radiusForCount)
 
 interface CosmosNode {
   id: string;
@@ -43,8 +43,25 @@ interface CosmosLink {
 // live inside [0, COSMOS_SPACE]; keep this in sync with the graph's spaceSize.
 const COSMOS_SPACE = 4096;
 
+// Cosmos renders nodes at a CONSTANT pixel size (scaleNodesOnZoom:false), while
+// the group boundary circles are drawn in scaled space. So at a zoomed-out fit a
+// snug ring clips the fixed-size dots sitting near its edge — nodes appear to
+// spill outside their country circle. Pad the DRAWN circle radius by (a bit more
+// than) the largest node pixel radius so the ring always encloses its dots. This
+// is purely a rendering pad; the packed layout stays tight.
+const BOUNDARY_NODE_PAD = 10;
+
 let graph: Graph<CosmosNode, CosmosLink> | null = null;
 let active = false;
+// PK of the node kept highlighted by a click (persistent selection, parity with Flat).
+let selectedNodeId: string | null = null;
+
+// cosmosSetPhysics starts/pauses the GPU force simulation (parity with the Flat
+// view's physics toggle). No-op in grouped mode, where positions are fixed.
+export function cosmosSetPhysics(on: boolean): void {
+  if (!graph) { return; }
+  if (on) { graph.setConfig({ disableSimulation: false }); graph.start(); } else { graph.pause(); }
+}
 let tooltip: HTMLDivElement | null = null;
 
 // Group-boundary overlay (grouping mode): the packed group circles + labels,
@@ -53,6 +70,10 @@ let tooltip: HTMLDivElement | null = null;
 let boundaryCircles: { x: number; y: number; r: number; color: string; label: string; flag: string }[] = [];
 let boundaryCanvas: HTMLCanvasElement | null = null;
 let boundaryRAF: number | null = null;
+// Fingerprint of the last-drawn view transform (zoom + pan). The boundary rAF
+// stays alive to track pan/zoom, but skips the actual canvas redraw when the
+// view hasn't moved — otherwise it burns ~60fps redrawing a static overlay.
+let lastBoundaryKey = '';
 
 // ensureTooltip creates the floating hover panel (cosmos renders points only —
 // no text — so node detail lives in a hover tooltip, the same info the flat
@@ -72,6 +93,8 @@ function ensureTooltip(): HTMLDivElement | null {
 }
 
 function showTooltip(node: CosmosNode, event: MouseEvent): void {
+  // Honor the "Show Tooltips on Hover" toggle (parity with the Flat view).
+  if ((document.getElementById('toggle-tooltips') as HTMLInputElement)?.checked === false) { return; }
   const t = ensureTooltip();
   const container = document.getElementById('cosmos-container');
   if (!t || !container) { return; }
@@ -118,6 +141,13 @@ function clearBoundaryCanvas(): void {
 function drawBoundaries(): void {
   boundaryRAF = null;
   if (!active || !graph || boundaryCircles.length === 0) { clearBoundaryCanvas(); return; }
+  // Idle-skip: if the view transform is unchanged since the last drawn frame,
+  // reschedule without touching the canvas. Keeps the overlay glued to the graph
+  // during pan/zoom while cutting idle CPU (the grouped layout is static).
+  const [r0x, r0y] = graph.spaceToScreenPosition([0, 0]);
+  const key = graph.getZoomLevel() + ':' + Math.round(r0x) + ':' + Math.round(r0y);
+  if (key === lastBoundaryKey) { boundaryRAF = requestAnimationFrame(drawBoundaries); return; }
+  lastBoundaryKey = key;
   const canvas = ensureBoundaryCanvas();
   if (!canvas) { return; }
   const rect = canvas.getBoundingClientRect();
@@ -133,8 +163,15 @@ function drawBoundaries(): void {
   ctx.font = '13px system-ui, sans-serif';
   for (const b of boundaryCircles) {
     const [sx, sy] = graph.spaceToScreenPosition([b.x, b.y]);
-    const sr = graph.spaceToScreenRadius(b.r);
-    if (!isFinite(sx) || !isFinite(sy) || sr < 3) { continue; }
+    // Derive the screen radius from spaceToScreenPosition of a point on the
+    // circle's edge — NOT graph.spaceToScreenRadius(), which in this cosmos
+    // version returns a value ~3x smaller than the node rendering scale, so the
+    // ring was drawn far too small and its own nodes rendered outside it. Using
+    // the same projection as the nodes keeps circle and nodes consistent at any
+    // zoom. Pad by the node pixel radius so fixed-size dots at the edge stay in.
+    const [ex, ey] = graph.spaceToScreenPosition([b.x + b.r, b.y]);
+    const sr = Math.hypot(ex - sx, ey - sy) + BOUNDARY_NODE_PAD;
+    if (!isFinite(sx) || !isFinite(sy) || sr < 2) { continue; }
     ctx.beginPath();
     ctx.arc(sx, sy, sr, 0, 2 * Math.PI);
     ctx.globalAlpha = 0.07; ctx.fillStyle = b.color; ctx.fill();
@@ -148,11 +185,13 @@ function drawBoundaries(): void {
 }
 
 function startBoundaries(): void {
+  lastBoundaryKey = ''; // force one redraw with the (possibly new) circles
   if (boundaryRAF == null) { boundaryRAF = requestAnimationFrame(drawBoundaries); }
 }
 
 function stopBoundaries(): void {
   if (boundaryRAF != null) { cancelAnimationFrame(boundaryRAF); boundaryRAF = null; }
+  lastBoundaryKey = '';
   clearBoundaryCanvas();
 }
 
@@ -175,11 +214,45 @@ function edgeTypeVisible(type: string): boolean {
     default: return true;
   }
 }
+// dmsgServersVisible follows the show-dmsg-servers toggle. DMSG-server nodes are a
+// distinct class (Flat adds them via addDMSGGraphElements and hides them + their
+// client edges unless this is checked); default off.
+function dmsgServersVisible(): boolean {
+  return (document.getElementById('show-dmsg-servers') as HTMLInputElement)?.checked === true;
+}
 function statusVisible(status: string): boolean {
   const on = (id: string) => (document.getElementById(id) as HTMLInputElement)?.checked === true;
   if (status === 'online') return on('show-online');
   if (status === 'offline') return on('show-offline');
   return on('show-unknown');
+}
+
+// versionVisible honors the sidebar version-filter <select> (parity with the Flat
+// view, which hid non-matching nodes). '' / 'all' = show everything.
+function versionVisible(version: string | undefined): boolean {
+  const sel = document.getElementById('version-filter') as HTMLSelectElement | null;
+  const want = sel?.value || '';
+  if (!want || want === 'all') return true;
+  return (version || '') === want;
+}
+
+// serviceRouteColorOf mirrors the flat view's getNodeColor service/route recolor:
+// with show-routes on, route destinations turn magenta; with show-services on, VPN
+// nodes turn purple and proxy nodes orange (routes take precedence, as in Flat).
+// Returns null when no override applies so the node keeps its status/group color.
+// The local visor is never recolored (stays cyan) — callers guard on isLocal.
+function serviceRouteColorOf(id: string): string | null {
+  const showRoutes = (document.getElementById('show-routes') as HTMLInputElement)?.checked === true;
+  if (showRoutes && S.routeDestinations.has(id)) { return ROUTE_DEST_COLOR.background; }
+  const showServices = (document.getElementById('show-services') as HTMLInputElement)?.checked === true;
+  if (showServices) {
+    const svc = S.visorServices[id];
+    if (svc && svc.services && svc.services.length) {
+      if (svc.services.includes('vpn')) { return '#9f6efc'; }
+      if (svc.services.includes('proxy')) { return '#ffa500'; }
+    }
+  }
+  return null;
 }
 
 // cosmosGroupMode reads the same cluster-country / cluster-ip checkboxes the flat
@@ -230,7 +303,7 @@ interface GroupCircle { cx: number; cy: number; r: number; color: string; label:
 // returns each node's fixed position + its group color. Cosmos renders at these
 // positions with the simulation disabled, so WebGL groups by country/IP like Flat.
 function computeGroupedLayout(
-  nodeIds: string[], mode: 'country' | 'ip',
+  nodeIds: string[], mode: 'country' | 'ip', weightOf: (id: string) => number,
 ): { pos: Map<string, { x: number; y: number }>; color: Map<string, string>; groups: GroupCircle[] } {
   const buckets = new Map<string, string[]>();
   for (const id of nodeIds) {
@@ -239,38 +312,96 @@ function computeGroupedLayout(
     if (!arr) { arr = []; buckets.set(k, arr); }
     arr.push(id);
   }
+  // For each group, place the nodes in LOCAL coordinates first, then size the
+  // circle from the ACTUAL furthest node — so the ring is guaranteed to enclose
+  // every node in the country (no node ever spills out) without an oversized
+  // empty margin. Nodes are ordered by transport count descending so the
+  // best-connected sit at the centre and the fill spirals out to the least-
+  // connected (parity with the flat view's mass-weighted placement).
   const grouped = Array.from(buckets.entries())
-    .map(([key, ids]) => ({ key, ids, radius: calculateGroupRadius(ids.length) }))
+    .map(([key, ids]) => {
+      const sorted = ids.slice().sort((a, b) => weightOf(b) - weightOf(a));
+      const n = sorted.length;
+      const f = fillRadiusForCount(n);
+      const offsets = sorted.map((_, i) => {
+        if (n === 1 || i === 0) { return { x: 0, y: 0 }; } // most-connected at centre
+        if (n <= 6) {
+          const a = ((i - 1) / (n - 1)) * 2 * Math.PI; // remaining nodes on an even ring
+          return { x: f * Math.cos(a), y: f * Math.sin(a) };
+        }
+        const ga = Math.PI * (3 - Math.sqrt(5)); const a = i * ga;
+        const r = f * Math.sqrt(i / n);
+        return { x: r * Math.cos(a), y: r * Math.sin(a) };
+      });
+      let maxDist = 0;
+      for (const o of offsets) { const d = Math.hypot(o.x, o.y); if (d > maxDist) { maxDist = d; } }
+      const radius = maxDist + GROUP_RING_MARGIN;
+      return { key, ids: sorted, offsets, radius };
+    })
     .sort((a, b) => b.radius - a.radius);
 
-  const placed: { x: number; y: number; radius: number }[] = [];
+  // Guaranteed non-overlapping placement of the (real-extent) circles, largest first.
+  const centers = packCircles(grouped.map(g => g.radius), GROUP_PACK_PADDING);
   const pos = new Map<string, { x: number; y: number }>();
   const color = new Map<string, string>();
   const groups: GroupCircle[] = [];
-  for (const g of grouped) {
-    const c = findNonOverlappingPosition(g.radius, placed, 60);
-    placed.push({ x: c.x, y: c.y, radius: g.radius });
+  grouped.forEach((g, gi) => {
+    const c = centers[gi];
     const col = groupColorOf(g.key, mode);
-    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode), flag: groupFlagOf(g.key, mode) });
-    const inner = g.radius - 50;
-    const n = g.ids.length;
+    // Label includes the node count, matching the flat view's "DE (15)".
+    groups.push({ cx: c.x, cy: c.y, r: g.radius, color: col, label: groupLabelOf(g.key, mode) + ' (' + g.ids.length + ')', flag: groupFlagOf(g.key, mode) });
     g.ids.forEach((id, i) => {
-      let x: number; let y: number;
-      if (n === 1) {
-        x = c.x; y = c.y;
-      } else if (n <= 6) {
-        const a = (i / n) * 2 * Math.PI; const r = inner * 0.5;
-        x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
-      } else {
-        const ga = Math.PI * (3 - Math.sqrt(5)); const a = i * ga;
-        const r = inner * Math.sqrt(i / n) * 0.9;
-        x = c.x + r * Math.cos(a); y = c.y + r * Math.sin(a);
-      }
-      pos.set(id, { x, y });
+      const o = g.offsets[i];
+      pos.set(id, { x: c.x + o.x, y: c.y + o.y });
       color.set(id, col);
     });
-  }
+  });
   return { pos, color, groups };
+}
+
+// Layout tunables for the grouped view. NODE_SPACING is the approximate gap (in
+// layout units) between adjacent nodes in a group; the whole layout is later
+// uniformly scaled to fit COSMOS_SPACE, so these are relative, not pixels.
+const NODE_SPACING = 9;
+const GROUP_RING_MARGIN = 12; // gap from the outermost node to the circle edge
+const GROUP_PACK_PADDING = 18; // gap between neighbouring group circles
+
+// fillRadiusForCount sizes the radius the nodes OCCUPY so a Fibonacci/ring fill
+// at ~NODE_SPACING between neighbours lands n nodes in a disk of this radius:
+// for n points spread over a disk of radius R the nearest-neighbour spacing is
+// ~R/sqrt(n), so R = NODE_SPACING*sqrt(n). Area ∝ n, so a 1-visor country reads
+// as a small dot and a 200-visor country as proportionally large — and the
+// circle (fill + margin) always hugs its contents instead of dwarfing them.
+function fillRadiusForCount(n: number): number {
+  return Math.max(6, NODE_SPACING * Math.sqrt(Math.max(1, n)));
+}
+
+// packCircles lays out circles (largest first) at the first slot on an outward
+// spiral that clears every already-placed circle — a guaranteed non-overlapping
+// pack (the shared ring-search fell back to an overlapping hex grid at scale).
+function packCircles(radii: number[], padding: number): { x: number; y: number }[] {
+  const placed: { x: number; y: number; r: number }[] = [];
+  const out: { x: number; y: number }[] = [];
+  for (const r of radii) {
+    let best = { x: 0, y: 0 };
+    if (placed.length) {
+      const step = Math.max(10, r * 0.2);
+      let found = false;
+      for (let rad = 0; rad < 200000 && !found; rad += step) {
+        const count = Math.max(1, Math.floor((2 * Math.PI * rad) / step));
+        for (let k = 0; k < count; k++) {
+          const a = (k / count) * 2 * Math.PI;
+          const x = Math.cos(a) * rad; const y = Math.sin(a) * rad;
+          if (placed.every(p => Math.hypot(p.x - x, p.y - y) >= p.r + r + padding)) {
+            best = { x, y }; found = true; break;
+          }
+        }
+      }
+    }
+    placed.push({ x: best.x, y: best.y, r });
+    out.push(best);
+  }
+  return out;
 }
 
 // buildData projects the vis-network datasets into cosmos node/link arrays,
@@ -283,13 +414,35 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
   const visibleNode = new Set<string>();
   const nodes: CosmosNode[] = [];
   for (const n of nodesRaw) {
+    if (n.isDMSGServer) {
+      // DMSG servers are a distinct node class. Flat adds them via
+      // addDMSGGraphElements and shows them only when show-dmsg-servers is on;
+      // previously cosmos leaked them in through the show-unknown status filter
+      // and drew them like visors. Gate on the toggle, colour them a distinct
+      // dmsg purple, and size by client count (encoded in n.size = 5..30). They
+      // keep their country in visorServices so country grouping places them.
+      if (!dmsgServersVisible()) { continue; }
+      visibleNode.add(n.id);
+      nodes.push({
+        id: n.id,
+        color: '#c9a8ff',
+        size: Math.max(3, Math.min(8, (n.size || 5) * 0.28)),
+        status: 'dmsg',
+        isLocal: false,
+        title: n.title || n.id,
+        label: n.id.replace('dmsg-srv-', '').substring(0, 8),
+      });
+      continue;
+    }
     if (!statusVisible(n.status)) { continue; }
+    if (!versionVisible((S.visorVersions && S.visorVersions[n.id]) || n.version)) { continue; }
     visibleNode.add(n.id);
     const bg = (n.color && n.color.background) || '#888888';
     const isLocal = !!(S.localVisorData && n.id === S.localVisorData.pub_key);
+    const svcRouteColor = isLocal ? null : serviceRouteColorOf(n.id);
     nodes.push({
       id: n.id,
-      color: isLocal ? '#00ffff' : bg,
+      color: isLocal ? '#00ffff' : (svcRouteColor || bg),
       // vis-network sizes (5..30) are far too big as cosmos pixel dots; map down.
       size: isLocal ? 8 : Math.max(2.5, Math.min(5, (n.size || 4) * 0.4)),
       status: n.status,
@@ -303,6 +456,15 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
   const connected = new Set<string>();
   for (const e of edgesRaw) {
     if (e.type === 'route') { continue; } // route overlays are a flat-view affordance
+    if (e.isDMSGConnection || e.type === 'dmsg-connection') {
+      // Client↔dmsg-server edges follow show-dmsg-servers (Flat sets
+      // hidden:!showDMSGServers on them), not the transport-type filters.
+      if (!dmsgServersVisible()) { continue; }
+      if (!visibleNode.has(e.from) || !visibleNode.has(e.to)) { continue; }
+      links.push({ source: e.from, target: e.to, color: '#e94560', type: 'dmsg-connection', live: true });
+      connected.add(e.from); connected.add(e.to);
+      continue;
+    }
     if (!edgeTypeVisible(e.type)) { continue; }
     if (!visibleNode.has(e.from) || !visibleNode.has(e.to)) { continue; }
     const c = e.isLocal || e.isLocalOnly ? LOCAL_EDGE_COLOR : (colors[e.type] || '#9aa0a6');
@@ -319,7 +481,18 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
 
   const mode = cosmosGroupMode();
   if (mode) {
-    const { pos, color, groups } = computeGroupedLayout(nodes.map(n => n.id), mode);
+    // Connection count per node drives the in-circle placement: best-connected
+    // toward the centre, like the flat view. Counts both transports AND dmsg
+    // connections (so a dmsg server, which links to many clients, sits near its
+    // country's centre alongside high-transport visors). Only route overlays —
+    // which aren't connectivity — are excluded.
+    const degree = new Map<string, number>();
+    for (const e of edgesRaw) {
+      if (e.type === 'route') { continue; }
+      degree.set(e.from, (degree.get(e.from) || 0) + 1);
+      degree.set(e.to, (degree.get(e.to) || 0) + 1);
+    }
+    const { pos, color, groups } = computeGroupedLayout(nodes.map(n => n.id), mode, (id) => degree.get(id) || 0);
     // The packed layout is centered on the origin (negative → positive). Cosmos
     // random-inits nodes in a [0, spaceSize] box and renders provided x/y in that
     // same space, so negative coords land off-screen. Translate + (only if needed)
@@ -341,10 +514,18 @@ function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boole
     for (const n of nodes) {
       const p = pos.get(n.id);
       if (p) { const s = toSpace(p.x, p.y); n.x = s.x; n.y = s.y; }
-      // Colour by group so the clusters read at a glance (keep the local visor
-      // cyan so "YOU" stays findable).
+      // Recolor non-local nodes (the local visor stays cyan so "YOU" is findable;
+      // DMSG servers keep their distinct purple so they stay identifiable inside
+      // the country bubble).
+      if (!n.isLocal && n.status !== 'dmsg') {
+        // Service/route recolor takes precedence over the group color (parity
+        // with Flat, where getNodeColor's service/route branch wins regardless
+        // of grouping); otherwise colour by group so the clusters read.
+        const svcRouteColor = serviceRouteColorOf(n.id);
+        if (svcRouteColor) { n.color = svcRouteColor; }
+        else { const col = color.get(n.id); if (col) { n.color = col; } }
+      }
       if (!n.isLocal) {
-        const col = color.get(n.id); if (col) { n.color = col; }
         // Gap #4: node positions get compressed by `scale`, but the dot pixel
         // size is fixed (scaleNodesOnZoom:false) — so in a dense group the dots
         // overlap and bleed past the (also-scaled) boundary ring. Shrink the dot
@@ -406,7 +587,17 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
     },
     events: {
       onClick: (node?: CosmosNode) => {
-        if (node && node.id) { handleGraphNodeClick(node.id); }
+        if (node && node.id) {
+          // Persistent selection (parity with Flat's click-to-isolate): keep this
+          // node's neighborhood highlighted after the pointer leaves, until another
+          // node or empty space is clicked.
+          selectedNodeId = node.id;
+          handleGraphNodeClick(node.id);
+          if (graph) { graph.selectNodeById(node.id, true); }
+        } else {
+          selectedNodeId = null;
+          if (graph) { graph.unselectNodes(); }
+        }
       },
       onNodeMouseOver: (node: CosmosNode, _i: number, _pos: [number, number], event: any) => {
         if (!node) { return; }
@@ -417,7 +608,10 @@ function ensureGraph(): Graph<CosmosNode, CosmosLink> | null {
       },
       onNodeMouseOut: () => {
         hideTooltip();
-        if (graph) { graph.unselectNodes(); }
+        // Restore the persistent click-selection instead of clearing everything.
+        if (graph) {
+          if (selectedNodeId) { graph.selectNodeById(selectedNodeId, true); } else { graph.unselectNodes(); }
+        }
       },
     },
   });
@@ -477,11 +671,11 @@ export function updateCosmosData(): void {
   const { nodes, links, grouped, connectedIds } = buildData();
   if (settleTimer) { clearTimeout(settleTimer); settleTimer = null; }
   if (grouped) {
-    // Fixed group-packed positions. disableSimulation keeps cosmos rendering the
-    // nodes at their x/y (so the country/IP clusters stay put, like the flat view)
-    // WITHOUT running the force layout — and, unlike pause(), leaves the render loop
-    // alive so pan/zoom still work. The boundary overlay loop draws the group
-    // circles + labels, tracking pan/zoom.
+    // Fixed group-packed positions. cosmos reads node x/y as the initial point
+    // positions; disableSimulation then keeps them there (no force layout) while
+    // leaving the render loop alive for pan/zoom. runSimulation stays default
+    // (true) — that's what makes cosmos initialise FROM the provided x/y; passing
+    // false skips that init and leaves points at cosmos' random grid.
     g.setConfig({ disableSimulation: true });
     g.setData(nodes, links);
     fitFrame(g, connectedIds);

@@ -75,6 +75,28 @@ func (w *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 // public key from it's context, stored in the value ContextAuthKey.
 func WithAuth(store NonceStore, original http.Handler, shouldVerifyAuth bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Over DMSG the caller PK is authenticated by the noise-KK handshake and
+		// carried in RemoteAddr ("<pk>:<port>"), and the stream is ordered +
+		// replay-proof. So the HTTP-layer signature AND the SW-Nonce
+		// (replay/ordering) checks are redundant — the authenticated identity is
+		// that PK. Take it from RemoteAddr and skip both.
+		//
+		// This is also the SECURE choice, not just an optimization: the previous
+		// behaviour skipped only the signature over dmsg yet still acted on the
+		// UNVERIFIED SW-Public header, which let any dmsg peer impersonate any PK
+		// by forging SW-Public (e.g. bind another visor's AR record). Binding the
+		// identity to the noise-authenticated RemoteAddr closes that. Plain-HTTP
+		// requests still run the full SW-Nonce + signature verification below.
+		if shouldVerifyAuth {
+			if pk, ok := dmsgRemotePK(r); ok {
+				httputil.LogEntrySetField(r, LogAuthKey, pk)
+				//nolint:staticcheck
+				original.ServeHTTP(w, r.WithContext(context.WithValue(
+					r.Context(), ContextAuthKey, pk)))
+				return
+			}
+		}
+
 		auth, err := AuthFromHeaders(r.Header, shouldVerifyAuth)
 		if err != nil {
 			httputil.WriteJSON(w, r, http.StatusUnauthorized,
