@@ -20,7 +20,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 // vlogHook mirrors every Go subsystem log line (dmsg / transport / router / …)
@@ -237,7 +236,9 @@ func (s visorSelf) SelfRouterSettings() []byte {
 // exclude js/wasm, so it can't be imported into the wasm blob. The `sk` field is
 // deliberately never included (never expose the secret key from a served view).
 func (s visorSelf) SelfRuntimeConfig() []byte {
-	svc := visorcore.ResolveServices(nil)
+	// effectiveSvc = deployment defaults with any boot-time page override applied
+	// (configoverride_js.go), so this view matches what the runtime is wired to.
+	svc := effectiveSvc
 	pkHexes := func(pks []cipher.PubKey) []string {
 		out := make([]string, 0, len(pks))
 		for _, p := range pks {
@@ -260,9 +261,10 @@ func (s visorSelf) SelfRuntimeConfig() []byte {
 	}
 
 	out := map[string]interface{}{
-		"version": buildinfo.Version(),
-		"pk":      selfPK.Hex(),
-		"note":    "browser wasm-visor — no on-disk config; this MIRRORS the native config shape (config gen). Applicable sections are populated from resolved services + this tab's runtime; platform_omitted lists sections a browser tab can't have. Settings are ephemeral to this tab; the secret key is never shown.",
+		"version":          buildinfo.Version(),
+		"pk":               selfPK.Hex(),
+		"note":             "browser wasm-visor — no on-disk config, but this IS the config the runtime uses (it mirrors the native config-gen shape). Service endpoints are runtime-reconfigurable: editing + Save persists an override in this browser and reloads the visor with it. config_overrides lists the currently pinned fields (empty = pure deployment defaults). platform_omitted lists sections a browser tab can't have; the secret key is never shown.",
+		"config_overrides": cfgOverride,
 		// --- applicable sections (populated) ---
 		"dmsg": map[string]interface{}{
 			"discovery": svc.DmsgDiscoveryDmsg,
@@ -276,20 +278,20 @@ func (s visorSelf) SelfRuntimeConfig() []byte {
 			// stcpr_port / sudph_port are raw-socket only → see platform_omitted.
 		},
 		"routing": map[string]interface{}{
-			"route_finder":       svc.RouteFinderDmsg,
-			"route_setup_nodes":  pkHexes(svc.RouteSetupNodes),
-			"min_hops":           svc.MinHops,
+			"route_finder":         svc.RouteFinderDmsg,
+			"route_setup_nodes":    pkHexes(svc.RouteSetupNodes),
+			"min_hops":             svc.MinHops,
 			"route_finder_timeout": "10s",
 		},
 		"launcher": map[string]interface{}{
 			"service_discovery": svc.ServiceDiscoveryDmsg,
 			"apps":              apps,
 		},
-		"stun_servers":        svc.StunServers, // WebRTC ICE
-		"conf_service":        svc.ConfDmsg,
-		"uptime_tracker":      svc.UptimeTrackerDmsg,
-		"reward_system":       svc.RewardSystemDmsg,
-		"is_public":           false,
+		"stun_servers":          svc.StunServers, // WebRTC ICE
+		"conf_service":          svc.ConfDmsg,
+		"uptime_tracker":        svc.UptimeTrackerDmsg,
+		"reward_system":         svc.RewardSystemDmsg,
+		"is_public":             false,
 		"persistent_transports": nil,
 		// --- sections a browser tab cannot have (kept as no-op stubs for shape parity) ---
 		"pty":         map[string]interface{}{},
@@ -298,12 +300,12 @@ func (s visorSelf) SelfRuntimeConfig() []byte {
 		"hypervisor":  map[string]interface{}{"enable": false},
 		"hypervisors": []string{},
 		"platform_omitted": map[string]string{
-			"pty":         "no unix socket / child processes in a browser tab",
-			"skywire-tcp": "no raw TCP listener (stcpr) in a browser",
+			"pty":                             "no unix socket / child processes in a browser tab",
+			"skywire-tcp":                     "no raw TCP listener (stcpr) in a browser",
 			"transport.stcpr_port/sudph_port": "no raw TCP/UDP sockets in a browser (direct p2p is WebRTC; carriers are ws/wt/dmsg)",
-			"ui_server/hypervisor": "no local HTTP server or users.db in a tab",
-			"local_path/log_store/bin_path": "no filesystem; apps run in-process, logs live in an in-memory ring",
-			"sk": "never exposed from a served view",
+			"ui_server/hypervisor":            "no local HTTP server or users.db in a tab",
+			"local_path/log_store/bin_path":   "no filesystem; apps run in-process, logs live in an in-memory ring",
+			"sk":                              "never exposed from a served view",
 		},
 	}
 	b, err := json.Marshal(out)
@@ -311,6 +313,66 @@ func (s visorSelf) SelfRuntimeConfig() []byte {
 		return nil
 	}
 	return b
+}
+
+// SelfSetRuntimeConfig applies an edit from the UI's runtime-config editor (the
+// native PUT /visors/{pk}/runtime-config). The edited JSON has the
+// SelfRuntimeConfig shape; extract the reconfigurable service fields into the
+// flat override contract (configoverride_js.go), reject any identity change, then
+// hand the override to the page — which owns localStorage + the reload — via the
+// worker's __skywireSaveConfig bridge. So the same editor Saves on both surfaces.
+func (s visorSelf) SelfSetRuntimeConfig(raw []byte) (int, []byte) {
+	var in map[string]interface{}
+	if err := json.Unmarshal(raw, &in); err != nil {
+		return 400, []byte(`{"error":"invalid runtime config json"}`)
+	}
+	if pk, ok := in["pk"].(string); ok && pk != "" && pk != selfPK.Hex() {
+		return 400, []byte(`{"error":"public key is not editable via runtime config"}`)
+	}
+
+	ov := map[string]interface{}{}
+	sub := func(section string) map[string]interface{} {
+		m, _ := in[section].(map[string]interface{})
+		return m
+	}
+	str := func(dst string, m map[string]interface{}, key string) {
+		if m != nil {
+			if v, ok := m[key].(string); ok && v != "" {
+				ov[dst] = v
+			}
+		}
+	}
+	raw2 := func(dst string, m map[string]interface{}, key string) {
+		if m != nil {
+			if v, ok := m[key]; ok && v != nil {
+				ov[dst] = v
+			}
+		}
+	}
+	dmsg, transport, routing, launcher := sub("dmsg"), sub("transport"), sub("routing"), sub("launcher")
+	str("dmsg_discovery", dmsg, "discovery")
+	str("transport_discovery", transport, "discovery")
+	str("address_resolver", transport, "address_resolver")
+	raw2("transport_setup_nodes", transport, "transport_setup")
+	str("route_finder", routing, "route_finder")
+	raw2("route_setup_nodes", routing, "route_setup_nodes")
+	raw2("min_hops", routing, "min_hops")
+	str("service_discovery", launcher, "service_discovery")
+	str("conf_service", in, "conf_service")
+	str("uptime_tracker", in, "uptime_tracker")
+	str("reward_system", in, "reward_system")
+	raw2("stun_servers", in, "stun_servers")
+
+	ovJSON, err := json.Marshal(ov)
+	if err != nil {
+		return 500, []byte(`{"error":"marshal override"}`)
+	}
+	saver := js.Global().Get("__skywireSaveConfig")
+	if saver.Type() != js.TypeFunction {
+		return 501, []byte(`{"error":"config save bridge unavailable in this context"}`)
+	}
+	saver.Invoke(string(ovJSON))
+	return 200, []byte(`{"ok":true,"note":"configuration saved; reloading the visor to apply"}`)
 }
 
 // SelfRuntimeLogs serves /visors/<pk>/runtime-logs?since=<cursor> from the in-tab
