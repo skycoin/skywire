@@ -36,7 +36,7 @@ func TestSetRuntimeConfig_SKRedactionRoundTrip(t *testing.T) {
 
 	initial, err := json.MarshalIndent(conf, "", "  ")
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(path, initial, 0o644))
+	require.NoError(t, os.WriteFile(path, initial, 0o600))
 
 	v := &Visor{conf: conf}
 
@@ -49,7 +49,7 @@ func TestSetRuntimeConfig_SKRedactionRoundTrip(t *testing.T) {
 
 	// SET the redacted view back (blank sk, unchanged pk): real SK preserved on disk.
 	require.NoError(t, v.SetRuntimeConfig(got))
-	onDisk, err := os.ReadFile(path)
+	onDisk, err := os.ReadFile(path) //nolint:gosec
 	require.NoError(t, err)
 	require.Contains(t, string(onDisk), sk.Hex(), "real SK must be re-injected on save")
 
