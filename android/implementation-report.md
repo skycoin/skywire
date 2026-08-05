@@ -81,12 +81,63 @@ strip; the banner's *Open Settings* now a full-width button instead of a word
 wedged in a corner; the page's padding no longer spending an eighth of the
 screen; and the Settings form one full-width column.
 
-**Written but not exercised:** the rules for tables (`white-space: nowrap`
-inside the existing `.table-wrap` scroller) and for the sell-order trade
-builder (its 84px + 140px + 140px row stacked). Both need a market with live
-listings and a registered wallet: the public market had no products, and the
-throwaway local one cannot enable a sell coin without a chain node. They sit
-in the same `@media` block whose other rules are demonstrably applying.
+### 3. Tables became cards, because they were unreadable and unreachable
+
+With a live listing on screen the tables turned out to be worse than cramped.
+My Listings is **ten columns**; a phone showed the first five and cut the rest
+off, and the column past the edge was **Actions** — the one holding Cancel. A
+sideways scroller does not fix that: nobody scrolls a table they cannot see
+the end of, to reach a button they do not know is there.
+
+Each row is now a card. What a closed card shows is chosen by column *name*,
+not position: `Type`, `Amount`, `Price`, `Status`/`Lifecycle`, capped at four,
+plus the Actions cell, always, as a full-width button. Everything else — the
+id, the escrow address, the transaction hashes, the timestamps — is behind a
+**Details** toggle on the card. Amount and Price take the weight the market's
+own product card gives them (plain and accent), so a row reads as a trade
+rather than a grid.
+
+Two judgement calls worth recording:
+
+- **A closed card shows one status badge, not the chain.** The lifecycle is
+  three badges and two arrows — "Pending deposit → Confirmed → Listed as
+  product" — of which only the last is news. The completed and future steps
+  come back on open, where "why is my deposit still pending" is actually the
+  question. The current step is the one the page paints `bg-info`.
+- **An Actions cell with no button is removed**, not left as a labelless "—"
+  floating on its own line, which is what a finished order produced.
+
+This is the one part that cannot be pure CSS: a `<td>` carries no clue which
+column it is in, so the labels are copied off `<thead>`, and the choices above
+need to be made per cell. The page re-renders its tables **every eight seconds**
+while polling, so a MutationObserver re-applies all of it and the open cards
+are remembered outside the DOM — otherwise every card snaps shut mid-read.
+
+**Also fixed, and it was a real bug:** a WebView with no `onJsConfirm`
+silently suppresses `window.confirm()` and hands the page `false`. The page
+guards cancelling a listing or an order behind exactly that call, so **Cancel
+did nothing at all** — the worst possible failure on a screen holding escrowed
+coins. `chromeClient` now answers `onJsConfirm`/`onJsAlert` with a native
+dialog; verified by tapping Cancel on a live listing and dismissing it.
+
+**Verified on the emulator against a live market**, with a listing, two
+cancelled orders and a history entry present: all three tables render as
+cards; Details expands to all ten fields and survives the eight-second
+re-render; Cancel raises its confirmation.
+
+**Not exercised:** the sell-order trade builder's stacking rules — reaching it
+needs a market that has enabled a sell coin, which the throwaway local one
+cannot do without a chain node.
+
+**Worth knowing before upstream changes:** everything in this section binds to
+names inside a *vendored, pre-built* bundle — `.app-container > header.header`,
+`.panel.table-wrap`, `.table`/`thead th`, `.badge.bg-info`, and the header
+texts `Actions`/`Amount`/`Price`/`Type`/`Status`/`Lifecycle`. If the skycoin
+repo rebuilds that bundle with different markup, none of it errors: the page
+just quietly returns to a duplicated header and clipped tables. skychat has no
+such exposure because its UI source lives in this repo. The durable fix is to
+land these breakpoints upstream; until then a build-time assertion over the
+vendored assets would turn a silent regression into a failed build.
 
 ---
 
