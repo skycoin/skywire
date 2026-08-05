@@ -22,8 +22,22 @@ if (!wasmPath || !execPath || !seedPk || !seedWs) {
 }
 
 const BOOT_TIMEOUT_MS = 90_000;
+const DMSG_TIMEOUT_MS = 60_000;
 const die = (msg) => { console.error('FAIL:', msg); process.exit(1); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Race a promise against a timeout so a never-settling call fails loudly here
+// instead of leaving Node with an unsettled top-level await (which exits with an
+// opaque "Detected unsettled top-level await" / code 13 and no diagnostic).
+const withTimeout = (p, ms, what) => Promise.race([
+  Promise.resolve(p),
+  sleep(ms).then(() => { throw new Error(`${what} did not settle within ${ms}ms`); }),
+]);
+const safeStatus = () => {
+  try {
+    const st = globalThis.skywireVisor.status();
+    return typeof st === 'string' ? st : JSON.stringify(st);
+  } catch (e) { return `<status() threw: ${e}>`; }
+};
 
 // wasm_exec.js is a classic script that attaches `Go` to globalThis.
 vm.runInThisContext(fs.readFileSync(execPath, 'utf8'), { filename: 'wasm_exec.js' });
@@ -45,11 +59,25 @@ console.log('wasm loaded; skywireVisor API present');
 
 // Boot with a fresh key against the local seed; empty disc ⇒ the deployment
 // default is tried and degrades to seed-only (non-fatal) in this offline run.
-const pk = await globalThis.skywireVisor.boot('', seedPk, seedWs, '');
+// boot() must be raced against a timeout: if a discovered deployment dmsg server
+// is dialed and hangs (unreachable from CI), the promise can stay pending
+// forever and Node would exit with an opaque unsettled-top-level-await (code 13)
+// instead of a diagnosable failure.
+let pk;
+try {
+  pk = await withTimeout(globalThis.skywireVisor.boot('', seedPk, seedWs, ''), BOOT_TIMEOUT_MS, 'skywireVisor.boot()');
+} catch (e) {
+  die(`${e.message} — likely a dmsg session dial hang (a discovered deployment ` +
+      `server unreachable from this environment); the local ws seed alone should ` +
+      `let boot() settle. last status=${safeStatus()}`);
+}
 console.log('booted as', pk);
 if (!/^[0-9a-f]{66}$/.test(String(pk))) die(`boot returned a non-PK: ${pk}`);
 
-// The critical-path assertion: a live dmsg session over the ws seed.
+// The critical-path assertion: a live dmsg session over the ws seed. Give this
+// its own budget rather than sharing the boot deadline (which boot() may have
+// mostly consumed).
+const dmsgDeadline = Date.now() + DMSG_TIMEOUT_MS;
 for (;;) {
   const st = globalThis.skywireVisor.status();
   const o = typeof st === 'string' ? JSON.parse(st) : st;
@@ -57,7 +85,7 @@ for (;;) {
     console.log(`dmsg connected (${o.dmsg_sessions} session[s])`);
     break;
   }
-  if (Date.now() > deadline) die(`dmsg never connected: ${JSON.stringify(o)}`);
+  if (Date.now() > dmsgDeadline) die(`dmsg never connected within ${DMSG_TIMEOUT_MS}ms: ${JSON.stringify(o)}`);
   await sleep(250);
 }
 
@@ -67,7 +95,12 @@ const dec = (b) => {
   if (typeof b === 'string') return b;
   try { return new TextDecoder().decode(b); } catch { return String(b); }
 };
-const about = await globalThis.skywireVisor.hvApi('GET', '/api/about', null);
+let about;
+try {
+  about = await withTimeout(globalThis.skywireVisor.hvApi('GET', '/api/about', null), DMSG_TIMEOUT_MS, 'hvApi(/api/about)');
+} catch (e) {
+  die(`${e.message} — the in-wasm hypervisor core did not answer. last status=${safeStatus()}`);
+}
 const aboutBody = dec(about?.body ?? about);
 let aboutObj;
 try { aboutObj = JSON.parse(aboutBody); } catch { die(`/api/about not JSON: ${aboutBody.slice(0, 120)}`); }
