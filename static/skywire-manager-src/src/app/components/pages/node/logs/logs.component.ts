@@ -235,12 +235,26 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
     this.scheduleNext();
   }
 
+  // Some visor log lines arrive with the message field already carrying a
+  // fully-rendered logrus prefix ("[<RFC3339>] LEVEL [module]: <msg>"). Since
+  // the UI renders its own time + level chips, that prefix would double up the
+  // timestamp and level on every such line. Strip only the leading
+  // "[<timestamp>] LEVEL " so the module (kept as "[module]: ...") and message
+  // survive; lines without the prefix are left untouched.
+  private stripDupPrefix(msg: string): string {
+    if (!msg) {
+      return msg;
+    }
+
+    return msg.replace(/^\[\d{4}-\d{2}-\d{2}T[0-9:.,+\-Z]*\]\s+(PANIC|FATAL|ERROR|WARN(?:ING)?|INFO|DEBUG|TRACE)\s+/i, '');
+  }
+
   private appendParsed(rows: any[]) {
     for (const e of rows) {
       const entry: LogEntry = {
         time: e.time,
         level: this.parseLevel(e.level),
-        msg: e.msg,
+        msg: this.stripDupPrefix(e.msg),
         func: e.func,
         module: e._module,
         extra: [],
