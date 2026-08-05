@@ -29,6 +29,10 @@ import (
 	"github.com/skycoin/skywire/pkg/wasmrpc"
 )
 
+// maxTabLogs bounds a tab's retained log lines (a dev-harness ring); the tail is
+// kept so recent failures survive.
+const maxTabLogs = 3000
+
 type tab struct {
 	id      string
 	events  chan string // SSE command frames queued for this tab
@@ -194,6 +198,12 @@ func (b *Bridge) handleLog(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body) //nolint:errcheck // best-effort read of a log line
 		t.mu.Lock()
 		t.logs = append(t.logs, string(raw))
+		// Bound the per-tab buffer: now that the WARN+ subsystem firehose is
+		// mirrored here (not just vlog markers), a long-lived tab would otherwise
+		// grow it without limit. Keep the most recent maxTabLogs lines.
+		if len(t.logs) > maxTabLogs {
+			t.logs = append([]string(nil), t.logs[len(t.logs)-maxTabLogs:]...)
+		}
 		t.mu.Unlock()
 		w.WriteHeader(204)
 		return

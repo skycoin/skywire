@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"syscall/js"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -38,6 +39,18 @@ func (vlogHook) Fire(e *logrus.Entry) error {
 		line = strings.TrimRight(s, "\n")
 	}
 	vlogRing.appendLevel(e.Level.String(), line)
+	// Mirror WARN+ from EVERY subsystem (transport dial, route setup, dmsg
+	// session, skysocks) out through the __skylog bridge so the dev harness's
+	// shell-readable /ctl/log carries the FAILURE firehose — not just vlog()
+	// step markers. Previously these lived only in the in-tab ring
+	// (/runtime-logs) and the browser console, so route/exit/transport failures
+	// weren't diagnosable from a shell. Gated to warn+ so the info firehose
+	// doesn't flood the bridge, and to __skylog's presence (harness/dev only).
+	if e.Level <= logrus.WarnLevel {
+		if h := js.Global().Get("__skylog"); h.Type() == js.TypeFunction {
+			h.Invoke("[" + e.Level.String() + "] " + line)
+		}
+	}
 	return nil
 }
 
