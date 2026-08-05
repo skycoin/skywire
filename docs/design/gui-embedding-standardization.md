@@ -122,7 +122,102 @@ An Angular side hosts it with one generic wrapper: load the bundle script once,
 2. **skychat**: `mount()` entry for the standalone UI; Angular tab hosts it.
 3. **pty terminal**, **wallet-config**: same contract.
 4. **`?embed=1` WinBox windows** → Angular CDK portal.
-5. (Large, separate) **skycoin-web** convergence into the SPA as a lazy module.
+5. ~~(Large, separate) **skycoin-web** convergence into the SPA as a lazy
+   module.~~ **Superseded** (see the progress note below): skycoin-web stays
+   iframed — a separate upstream-owned Angular app + the wallet custody boundary.
+
+## Implementation findings (2026-08-04, from a full code inventory)
+
+The pilot (network-visualizer → tpviz mount) is landed (#3709/#3713). Before the
+rest can proceed, the SPA's structure imposes a **foundational prerequisite** that
+this doc originally understated:
+
+- **The SPA is a single monolithic NgModule** (`app.module.ts` declares ~169
+  components/pipes/directives). There is **no `SharedModule`**, **no feature
+  module**, and **every route is eager** (`app-routing.module.ts` uses `component:`
+  everywhere; zero `loadChildren`/`loadComponent`). **Zero components are
+  `standalone: true`** — including the shared bases `PageBaseComponent` and
+  `TopBarComponent`.
+- Because it's one module, every feature template implicitly sees every shared
+  declaration. E.g. the VPN templates use `<app-button>`, `<app-dialog>`,
+  `<app-top-bar>`, `<app-paginator>`, `<app-loading-indicator>`, `<app-line-chart>`,
+  `<app-copy-to-clipboard-text>` and pipes `autoScale`/`dataFilterer`/
+  `loadingBackendData`/`currentRemoteServer`/`name`/`translate`.
+
+**Therefore lazy-loading ANY feature (VPN, skychat, …) is gated on first extracting
+a `SharedModule`** that declares+exports the cross-feature UI components, pipes and
+directives; then `app.module` imports it (and drops those declarations) and each new
+lazy feature module (`loadChildren`) imports it too. This is high-blast-radius (the
+whole UI depends on those shared pieces) and must be done carefully with iterative
+`make build-ui` verification on all three surfaces (native HV, `hv serve`, wasm
+visor — note `useHash:true` + lazy-chunk serving, `serve.go:189-193`).
+
+**Recommended sequence:**
+1. **SharedModule extraction** (prerequisite; own PR). Identify every declaration
+   used by ≥2 features, move to `SharedModule`, verify no shared piece imports a
+   feature component. Keep everything eager for this PR — pure refactor, no route
+   changes — so it's independently verifiable.
+2. **A generic external-bundle mount host** (`<app-bundle-mount [src] [globalName]>`)
+   factored from `network-visualizer.component.ts` for the `window.SkywireUI[...]`
+   contract above.
+3. **A WinBox↔Angular CDK-portal bridge** (`window.SkywireNg.mountComponent(el,
+   token, opts)`), so the `?embed=1` self-iframe WinBox windows (chat, logs —
+   `browse.js:1590-1624`, `:1407-1429`) mount the real Angular component instead of
+   iframing the SPA into itself.
+4. **VPN → `loadChildren` feature module** (first lazy conversion; `loadChildren`
+   "Lane A", not `loadComponent`, to avoid the standalone migration).
+5. skychat WinBox → CDK portal; wallet `/wallet/config` iframe → mounted panel;
+   then web-proxy/skysocks/skynet/logs lazy-load.
+
+**Corrections to the "Per-UI target" table below:** skychat should **NOT** be
+rebuilt as a vanilla `mount()` bundle — it's a rich 1500-line Angular component and
+the WinBox window already reuses it via `?embed=1`; rebuilding it as a bundle would
+re-introduce the dual-surface divergence that #3641/#3596 removed. Keep the one
+Angular component and host it in WinBox via the CDK-portal bridge (step 3). The pty
+terminal stays iframed (self-contained xterm+WS runtime, deliberately parked in
+`NodeComponent` so its WS survives tab switches).
+
+## Progress + findings (2026-08-05)
+
+Steps 1, 2 and 4 have landed and were each live-validated (native HV + a fresh
+`hv serve --harness` over CDP):
+
+- **Step 1 — SharedModule extraction (#3715):** the ~22 layout components, the
+  `autoScale` pipe and the `clipboard` directive now live in a `SharedModule`
+  that also re-exports `CommonModule`, the forms modules, the common Material
+  list, and the **bare** `RouterModule` / `TranslateModule` (root `forRoot`
+  configs stay in `AppModule`, so future lazy modules share the single router +
+  translate service).
+- **Step 2 — generic `<app-bundle-mount>` host (#3716):** the script-load +
+  `mount()`/`unmount()` lifecycle + loading/unavailable/error states, factored
+  out of `NetworkVisualizerComponent`, which now delegates to it (tpviz mounts
+  through it with the `?view=` deep-link preserved).
+- **Step 4 — VPN lazy module (#3717):** the eight VPN components moved into a
+  lazy `VpnModule`; `/vpn` uses `loadChildren`, shipping VPN as its own ~100 KB
+  chunk fetched on demand (out of `main.js`). Confirmed the chunk loads on
+  demand over `hv serve` and renders. Caveat: the single-file `hv gen` build
+  can't serve dynamic-import chunks (documented in `serve.go`/`generate.go`), so
+  `/vpn` degrades there — acceptable, since VPN is non-functional on a
+  browser/wasm visor anyway.
+
+**Steps 3 + 5 — skychat/logs WinBox windows now mount the real Angular component
+(#3720).** The concern below turned out tractable: `SkychatComponent` and
+`LogsComponent` both read only `node.localPk`, and neither injects
+`ActivatedRoute`/`Router`/`NodeComponent`. So the decoupling is small — each gains
+an optional `embeddedNodeKey` input (+ `embeddedPeer` for chat); when set (portal
+mount) it synthesizes the node from the key instead of subscribing to
+`NodeComponent.currentNode`, and the routed path is unchanged. A `NgBridgeService`
+exposes `window.SkywireNg.mountComponent(el, name, opts)` (CDK `DomPortalOutlet` in
+the root injector); `browse.js`'s chat/logs windows prefer it and fall back to the
+`?embed=1` iframe if the bridge is absent. Validated live: ☰ Logs opens a WinBox
+hosting `app-logs` with no iframe. The vanilla `wallet/config` page remains a
+smaller future candidate for the `<app-bundle-mount>` host.
+
+**skycoin-web stays iframed (not converged).** It is a separate, upstream-owned
+(`skycoin/skycoin`) Angular application; merging two Angular runtimes into one
+document is not viable, and the iframe is also the wallet's custody/isolation
+boundary. Tighter integration, if wanted, is via the iframe (theme/session/
+deep-link bridges) — not by converging the apps.
 
 ## Non-goals
 

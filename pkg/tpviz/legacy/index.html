@@ -54,6 +54,8 @@
         input[type="text"]:focus, select:focus { outline: none; border-color: #e94560; }
         #btn-fit { width: 100%; padding: 8px; margin-top: 8px; background: #e94560; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85em; }
         #btn-fit:hover { background: #ff6b6b; }
+        #reset-filters { width: 100%; padding: 6px; margin-top: 6px; background: #2a3b5c; color: #cdd2da; border: 1px solid #0f3460; border-radius: 4px; cursor: pointer; font-size: 0.8em; }
+        #reset-filters:hover { background: #34507a; }
         button:disabled { background: #555; cursor: not-allowed; }
 
         /* Visor list */
@@ -501,6 +503,7 @@
             </div>
 
             <button id="btn-fit">Fit to Screen</button>
+            <button id="reset-filters" title="Reset all filters + view to defaults">Reset Filters</button>
             <div id="cache-info"></div>
 
             <div id="selected-info">

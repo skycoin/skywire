@@ -23,6 +23,11 @@ const STATUS_INFO: Record<number, { label: string; color: string; bg: string }> 
 let appsData: AppState[] = [];
 let appsRefreshInterval: ReturnType<typeof setInterval> | null = null;
 let appsInitialized = false;
+// Consecutive fetch failures. The /api/apps endpoint isn't mounted on every
+// tpviz deployment (e.g. embedded under a path prefix), so after a few 404s we
+// stop the poll instead of spamming the console every refresh interval.
+let appsFetchFailures = 0;
+const APPS_MAX_FETCH_FAILURES = 3;
 
 /**
  * Fetches the list of apps from the visor.
@@ -30,15 +35,25 @@ let appsInitialized = false;
 export async function fetchApps(): Promise<AppState[]> {
     try {
         const resp = await fetchWithTimeout(`${API_BASE}/api/apps`, 10000);
+        if (!resp.ok) { throw new Error('HTTP ' + resp.status); }
         const data = await resp.json();
         if (data.error) {
             console.error('Apps fetch error:', data.error);
             return [];
         }
+        appsFetchFailures = 0;
         appsData = data;
         return data;
     } catch (err) {
-        console.error('Failed to fetch apps:', err);
+        appsFetchFailures++;
+        if (appsFetchFailures <= APPS_MAX_FETCH_FAILURES) {
+            console.error('Failed to fetch apps:', err);
+        }
+        if (appsFetchFailures === APPS_MAX_FETCH_FAILURES && appsRefreshInterval) {
+            console.warn('/api/apps unavailable; stopping apps refresh poll');
+            clearInterval(appsRefreshInterval);
+            appsRefreshInterval = null;
+        }
         return [];
     }
 }

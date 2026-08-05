@@ -7,6 +7,7 @@ import { StorageService } from './services/storage.service';
 import { SnackbarService } from './services/snackbar.service';
 import { LanguageService } from './services/language.service';
 import { ApiService } from './services/api.service';
+import { NgBridgeService } from './shared/ng-bridge.service';
 import { processServiceError } from './utils/errors';
 
 /**
@@ -44,8 +45,13 @@ export class AppComponent {
     private snackbarService: SnackbarService,
     private languageService: LanguageService,
     private apiService: ApiService,
+    ngBridge: NgBridgeService,
   ) {
     AppComponent.currentInstance = this;
+
+    // Publish window.SkywireNg so the wasm desktop's WinBox windows can mount
+    // real Angular components (skychat/logs) instead of iframing the SPA.
+    ngBridge.install();
 
     // Close the snackbar when opening a modal window.
     dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());

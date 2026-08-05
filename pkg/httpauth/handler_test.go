@@ -285,3 +285,65 @@ func TestSignatureVerification(t *testing.T) {
 	require.NoError(t, Verify(payload, nonce, pub, sig))
 	require.Error(t, Verify(payload, nonce+1, pub, sig))
 }
+
+// TestServer_Wrap_DmsgIdentity locks in the DMSG auth contract: over dmsg the
+// authenticated identity is the noise-KK RemoteAddr PK — NOT the SW-Public header
+// — so a forged SW-Public cannot impersonate another visor, and no HTTP-layer
+// signature/nonce is required. Plain-HTTP requests still enforce the signature.
+func TestServer_Wrap_DmsgIdentity(t *testing.T) {
+	storeConfig := storeconfig.Config{Type: storeconfig.Memory}
+	ctx := context.TODO()
+
+	sessionPK, _ := cipher.GenerateKeyPair() // the noise-authenticated dmsg peer
+	forgedPK, _ := cipher.GenerateKeyPair()  // a different PK an attacker claims
+
+	newHandler := func(t *testing.T, gotPK *cipher.PubKey) http.Handler {
+		mock, err := NewNonceStore(ctx, storeConfig, "")
+		require.NoError(t, err)
+		m := chi.NewRouter()
+		m.Use(MakeMiddleware(mock))
+		m.Post("/foo", func(w http.ResponseWriter, r *http.Request) {
+			pk, _ := r.Context().Value(ContextAuthKey).(cipher.PubKey)
+			*gotPK = pk
+			httputil.WriteJSON(w, r, http.StatusOK, "")
+		})
+		return m
+	}
+
+	t.Run("dmsg: identity is RemoteAddr PK, forged SW-Public ignored, no valid sig", func(t *testing.T) {
+		var got cipher.PubKey
+		h := newHandler(t, &got)
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/foo", bytes.NewReader([]byte("hi")))
+		r.RemoteAddr = sessionPK.Hex() + ":12345" // dmsghttp sets RemoteAddr to the PK
+		// Attacker forges SW-Public = a different visor, with a garbage signature.
+		r.Header.Set("SW-Public", forgedPK.Hex())
+		r.Header.Set("SW-Sig", cipher.Sig{}.Hex())
+		r.Header.Set("SW-Nonce", "999")
+		h.ServeHTTP(w, r)
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Equal(t, sessionPK, got, "identity must be the dmsg session PK, not the forged SW-Public")
+		assert.NotEqual(t, forgedPK, got)
+	})
+
+	t.Run("dmsg: authenticates with no SW-* headers at all", func(t *testing.T) {
+		var got cipher.PubKey
+		h := newHandler(t, &got)
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/foo", bytes.NewReader([]byte("hi")))
+		r.RemoteAddr = sessionPK.Hex() + ":40000"
+		h.ServeHTTP(w, r)
+		assert.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		assert.Equal(t, sessionPK, got)
+	})
+
+	t.Run("http: invalid signature still 401 (HTTP path unchanged)", func(t *testing.T) {
+		var got cipher.PubKey
+		h := newHandler(t, &got)
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/foo", bytes.NewReader([]byte("hi")))
+		r.Header = invalidHeaders(t, []byte("hi")) // default RemoteAddr is IP:port → HTTP path
+		h.ServeHTTP(w, r)
+		assert.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	})
+}
