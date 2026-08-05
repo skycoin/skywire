@@ -79,6 +79,28 @@ func (v *Visor) VoiceIncoming() ([]string, error) {
 	return out, nil
 }
 
+// VoiceDialingInfo is one call this visor is placing, before it is answered.
+type VoiceDialingInfo struct {
+	CallID string `json:"call_id"`
+	Peer   string `json:"peer"`
+}
+
+// VoiceDialing returns the calls being placed right now.
+//
+// Deliberately NOT on the API interface: it exists for a UI running beside
+// this visor to show "calling…", and a caller's own dial state is of no use to
+// a remote operator. The local HTTP route reads it directly.
+func (v *Visor) VoiceDialing() []VoiceDialingInfo {
+	if v.voice == nil {
+		return nil
+	}
+	out := make([]VoiceDialingInfo, 0)
+	for _, d := range v.voice.Dialing() {
+		out = append(out, VoiceDialingInfo{CallID: d.CallID, Peer: d.Peer.Hex()})
+	}
+	return out
+}
+
 // VoiceCallAudio returns the most recent buffered sent + received PCM for an
 // active call (only when the visor runs with real audio, which taps call audio).
 // The CLI polls this to draw a live two-panel spectrogram.
