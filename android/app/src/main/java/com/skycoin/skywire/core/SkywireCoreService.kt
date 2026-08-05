@@ -46,7 +46,7 @@ class SkywireCoreService : Service() {
     private lateinit var prefs: AppPreferences
     private var runner: Job? = null
     private var callWatcher: Job? = null
-    private var messageWatcher: Job? = null
+    private var notifyBridge: Job? = null
 
     @Volatile private var child: Process? = null
 
@@ -126,9 +126,9 @@ class SkywireCoreService : Service() {
                     // API of the process that just started.
                     callWatcher?.cancel()
                     callWatcher = VoiceCallWatcher(this@SkywireCoreService).watch(scope)
-                    messageWatcher?.cancel()
-                    messageWatcher =
-                        MessageNotifications(this@SkywireCoreService).watch(scope)
+                    notifyBridge?.cancel()
+                    notifyBridge =
+                        NotificationBridge(this@SkywireCoreService).watch(scope)
 
                     val pump = launch(Dispatchers.IO) {
                         process.inputStream.bufferedReader().forEachLine { log.line(it) }
@@ -138,8 +138,8 @@ class SkywireCoreService : Service() {
                     child = null
                     callWatcher?.cancel()
                     callWatcher = null
-                    messageWatcher?.cancel()
-                    messageWatcher = null
+                    notifyBridge?.cancel()
+                    notifyBridge = null
 
                     val ranMs = SystemClock.elapsedRealtime() - startedAt
                     log.line("=== visor exited with code $exit after ${ranMs / 1000}s ===")
