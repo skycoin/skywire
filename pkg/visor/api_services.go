@@ -683,10 +683,16 @@ func (v *Visor) GetIsPublic() bool {
 	return v.conf.IsPublic
 }
 
-// GetRuntimeConfig returns the visor's running config as JSON bytes.
-// The SK is included — callers should consider access control.
+// GetRuntimeConfig returns the visor's running config as JSON bytes with the
+// secret key redacted — it never leaves the process via this view (matching the
+// browser wasm-visor). The PK is kept but is not editable on save; see
+// SetRuntimeConfig, which preserves and re-injects the real SK.
 func (v *Visor) GetRuntimeConfig() ([]byte, error) {
-	return json.MarshalIndent(v.conf, "", "  ")
+	b, err := json.MarshalIndent(v.conf, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return redactTopLevelSK(b), nil
 }
 
 // GetConfigPath returns the filesystem path the visor loaded its config
