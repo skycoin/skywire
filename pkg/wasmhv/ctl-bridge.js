@@ -43,5 +43,25 @@
     catch (e) { post('/ctl/result', { id: c.id, ok: false, error: e.message || String(e) }); }
   };
   es.onerror = function () {};
+
+  // RPC bridge: dial /ctl/rpc so a shell can drive THIS tab's visor with the
+  // ordinary CLI (skywire cli --rpc <addr> visor info). skywireVisor.serveRPC
+  // opens the WebSocket, wraps it as a yamux session and serves the tab's
+  // net/rpc surface over it; the host fronts it with a local 127.0.0.1:<port>
+  // that shows up as the tab's "rpc" field in /ctl/tabs. Retry until the visor
+  // exposes serveRPC (worker proxy installs it on boot).
+  var rpcBridged = false;
+  function dialRPCBridge() {
+    if (rpcBridged) { return; }
+    var v = window.skywireVisor;
+    if (!v || typeof v.serveRPC !== 'function') { setTimeout(dialRPCBridge, 300); return; }
+    rpcBridged = true;
+    var url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ctl/rpc?tab=' + tabId;
+    Promise.resolve(v.serveRPC(url))
+      .then(function () { post('/ctl/log?tab=' + tabId, 'rpc bridge up: ' + url); })
+      .catch(function (e) { rpcBridged = false; post('/ctl/log?tab=' + tabId, 'rpc bridge error: ' + (e && e.message || e)); setTimeout(dialRPCBridge, 2000); });
+  }
+  dialRPCBridge();
+
   post('/ctl/log?tab=' + tabId, 'ctl-bridge ready ' + tabId);
 })();
