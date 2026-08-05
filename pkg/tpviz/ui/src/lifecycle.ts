@@ -45,6 +45,12 @@ export function teardown(): void {
     S.setLocalVisorWS(null);
   }
   S.setVisorConnected(false);
+
+  // Remove all window/document-level listeners registered with the shared signal
+  // (they live outside the mounted DOM, so clearing root doesn't drop them), then
+  // reset a fresh controller for the next mount.
+  S.globalListeners.abort();
+  S.resetGlobalListeners();
 }
 
 // pauseWhileHidden suspends the visualizer's ongoing work while it isn't visible

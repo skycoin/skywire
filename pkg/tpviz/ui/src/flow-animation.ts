@@ -198,7 +198,7 @@ export function startFlowAnimation(): void {
         flowSpawnInterval = setInterval(() => { spawnFlowParticles(); }, 500);
     }
 
-    window.addEventListener('resize', resizeFlowCanvas);
+    window.addEventListener('resize', resizeFlowCanvas, { signal: S.globalListeners.signal });
 }
 
 export function clearFlowAnimation(): void {

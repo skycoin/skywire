@@ -658,7 +658,7 @@ export function initGlobe(): void {
     container.addEventListener('mouseup', onMouseUp);
     container.addEventListener('wheel', onWheel);
     container.addEventListener('click', onGlobeClick);
-    window.addEventListener('resize', onWindowResize);
+    window.addEventListener('resize', onWindowResize, { signal: S.globalListeners.signal });
 
     // Start animation
     animate();
