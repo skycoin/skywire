@@ -175,6 +175,47 @@ Angular component and host it in WinBox via the CDK-portal bridge (step 3). The 
 terminal stays iframed (self-contained xterm+WS runtime, deliberately parked in
 `NodeComponent` so its WS survives tab switches).
 
+## Progress + findings (2026-08-05)
+
+Steps 1, 2 and 4 have landed and were each live-validated (native HV + a fresh
+`hv serve --harness` over CDP):
+
+- **Step 1 — SharedModule extraction (#3715):** the ~22 layout components, the
+  `autoScale` pipe and the `clipboard` directive now live in a `SharedModule`
+  that also re-exports `CommonModule`, the forms modules, the common Material
+  list, and the **bare** `RouterModule` / `TranslateModule` (root `forRoot`
+  configs stay in `AppModule`, so future lazy modules share the single router +
+  translate service).
+- **Step 2 — generic `<app-bundle-mount>` host (#3716):** the script-load +
+  `mount()`/`unmount()` lifecycle + loading/unavailable/error states, factored
+  out of `NetworkVisualizerComponent`, which now delegates to it (tpviz mounts
+  through it with the `?view=` deep-link preserved).
+- **Step 4 — VPN lazy module (#3717):** the eight VPN components moved into a
+  lazy `VpnModule`; `/vpn` uses `loadChildren`, shipping VPN as its own ~100 KB
+  chunk fetched on demand (out of `main.js`). Confirmed the chunk loads on
+  demand over `hv serve` and renders. Caveat: the single-file `hv gen` build
+  can't serve dynamic-import chunks (documented in `serve.go`/`generate.go`), so
+  `/vpn` degrades there — acceptable, since VPN is non-functional on a
+  browser/wasm visor anyway.
+
+**Step 3/5 finding — the skychat/logs `?embed=1` WinBox windows are a larger,
+deliberate refactor, deferred.** The CDK-portal bridge (step 3) is not just a
+generic `mountComponent` helper: `SkychatComponent` and `LogsComponent` both
+depend on `NodeComponent.currentNode` (a static observable set by the parent
+`NodeComponent` route) and on `ActivatedRoute` params. The `?embed=1`
+self-iframe (`browse.js` logs `:1423`, chat `:1596`) exists *precisely* to reuse
+that route context cheaply — see the comment in `skychat.component.ts` noting it
+reads `?peer=` directly because `ActivatedRoute` "only sees the primary outlet's
+params for the embedded case." A bare CDK-portal mount outside the router would
+have no `NodeComponent` parent, so `currentNode` never fires and the component
+breaks. Converting therefore requires **decoupling these 1500-line, recently
+converged (#3641/#3596/#3633/#3642) components from the route hierarchy** (feed
+the node context via `@Input` or a shared service) — a high-blast-radius refactor
+that should be its own deliberate, live-validated pass, not folded into the
+standardization's clean-win phase. Until then the `?embed=1` self-iframe stays
+(it is a justified, working design). The vanilla `wallet/config` page remains a
+smaller future candidate for the `<app-bundle-mount>` host.
+
 ## Non-goals
 
 - Rewriting server-rendered (reward server) or own-runtime (`skywire web`,
