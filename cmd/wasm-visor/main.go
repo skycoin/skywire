@@ -525,6 +525,9 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	// without the operator hand-entering an exit (skysocks-lite-as-app P1).
 	if sdPK, err := dmsgURLPK(svc.ServiceDiscoveryDmsg); err == nil {
 		go startDefaultProxyAuto(ctx, sdPK)
+		// Proactively ping the active exit (and keep standbys warm) so a dead route
+		// triggers the retry policy instead of only being noticed on the next fetch.
+		go proxyKeepaliveLoop(ctx)
 	}
 
 	// wss → WebTransport convergence: the browser bootstraps its dmsg session over
