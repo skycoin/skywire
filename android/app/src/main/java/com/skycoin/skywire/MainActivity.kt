@@ -6,6 +6,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.ui.SkywireApp
 import com.skycoin.skywire.ui.components.BiometricGate
@@ -41,6 +42,16 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AppVisibility.set(true)
+    }
+
+    override fun onStop() {
+        AppVisibility.set(false)
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {

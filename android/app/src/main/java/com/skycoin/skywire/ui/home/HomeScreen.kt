@@ -22,18 +22,25 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -244,6 +251,7 @@ private fun VisorInfoCard(
     val context = LocalContext.current
     val copiedText = stringResource(R.string.copied_to_clipboard)
     val pk = summary.overview.localPk
+    var expanded by rememberSaveable { mutableStateOf(false) }
 
     Card(
         colors = CardDefaults.cardColors(
@@ -287,61 +295,111 @@ private fun VisorInfoCard(
                 label = stringResource(R.string.visor_uptime),
                 value = formatUptime(summary.uptime),
             )
-            InfoRow(
-                label = stringResource(R.string.visor_transports),
-                value = summary.overview.transports.size.toString(),
-            )
-
-            SectionDivider()
-            Text(
-                stringResource(R.string.visor_dmsg_servers),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(4.dp))
-            val dmsgServers = summary.dmsgServers
-            if (dmsgServers.isEmpty()) {
-                Text("—", style = MaterialTheme.typography.bodyMedium)
-            } else {
-                dmsgServers.take(MAX_DMSG_ROWS).forEach { server ->
-                    // How the session is carried, always — plus the latency
-                    // when there is one. The visor measures that with a
-                    // self-ping through each server at startup and then
-                    // hourly, so a server that joined since the last pass
-                    // (or whose ping did not come back) has none, and every
-                    // row would otherwise read a bare, false "0 ms".
+            // Everything above is what someone checks at a glance — am I who I
+            // think I am, on what build, for how long. What follows is
+            // diagnostics: real when you need it, and a wall of keys and health
+            // rows when you don't. Collapsed by default, one tap away.
+            if (expanded) {
+                SectionDivider()
+                Text(
+                    stringResource(R.string.visor_transports),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                val transports = summary.overview.transports
+                if (transports.isEmpty()) {
+                    Text("—", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    // Grouped by carrier rather than listed one per remote: on
+                    // a phone the interesting fact is WHICH carriers came up
+                    // (dmsg always, stcpr/sudph almost never behind carrier
+                    // NAT), and a bare total said nothing about that.
+                    transports
+                        .groupBy { it.type.ifEmpty { "?" } }
+                        .toSortedMap()
+                        .forEach { (type, entries) ->
+                            InfoRow(
+                                label = type,
+                                value = entries.size.toString(),
+                            )
+                        }
                     InfoRow(
-                        label = shortPk(server.pk),
-                        value = listOfNotNull(
-                            server.protocol.ifEmpty { server.carrier }.takeIf { it.isNotEmpty() },
-                            server.latencyNs.takeIf { it > 0 }?.let { "${it / 1_000_000} ms" },
-                        ).joinToString(" · ").ifEmpty { "—" },
-                        mono = true,
+                        label = stringResource(R.string.visor_transports_total),
+                        value = transports.size.toString(),
                     )
+                }
+
+                SectionDivider()
+                Text(
+                    stringResource(R.string.visor_dmsg_servers),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                val dmsgServers = summary.dmsgServers
+                if (dmsgServers.isEmpty()) {
+                    Text("—", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    dmsgServers.take(MAX_DMSG_ROWS).forEach { server ->
+                        // How the session is carried, always — plus the latency
+                        // when there is one. The visor measures that with a
+                        // self-ping through each server at startup and then
+                        // hourly, so a server that joined since the last pass
+                        // (or whose ping did not come back) has none, and every
+                        // row would otherwise read a bare, false "0 ms".
+                        InfoRow(
+                            label = shortPk(server.pk),
+                            value = listOfNotNull(
+                                server.protocol.ifEmpty { server.carrier }
+                                    .takeIf { it.isNotEmpty() },
+                                server.latencyNs.takeIf { it > 0 }
+                                    ?.let { "${it / 1_000_000} ms" },
+                            ).joinToString(" · ").ifEmpty { "—" },
+                            mono = true,
+                        )
+                    }
+                }
+
+                SectionDivider()
+                Text(
+                    stringResource(R.string.visor_service_health),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                if (state.serviceHealth.isEmpty()) {
+                    Text("—", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    state.serviceHealth.forEach { entry ->
+                        InfoRow(
+                            label = entry.name,
+                            value = entry.status.ifEmpty { entry.error.ifEmpty { "?" } },
+                            valueColor = if (entry.status.equals("healthy", ignoreCase = true)) {
+                                Color(0xFF16A34A)
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
                 }
             }
 
-            SectionDivider()
-            Text(
-                stringResource(R.string.visor_service_health),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
             Spacer(Modifier.height(4.dp))
-            if (state.serviceHealth.isEmpty()) {
-                Text("—", style = MaterialTheme.typography.bodyMedium)
-            } else {
-                state.serviceHealth.forEach { entry ->
-                    InfoRow(
-                        label = entry.name,
-                        value = entry.status.ifEmpty { entry.error.ifEmpty { "?" } },
-                        valueColor = if (entry.status.equals("healthy", ignoreCase = true)) {
-                            Color(0xFF16A34A)
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
+            TextButton(
+                onClick = { expanded = !expanded },
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            ) {
+                Text(
+                    stringResource(
+                        if (expanded) R.string.visor_show_less else R.string.visor_show_more,
+                    ),
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess
+                    else Icons.Default.ExpandMore,
+                    contentDescription = null,
+                )
             }
         }
     }

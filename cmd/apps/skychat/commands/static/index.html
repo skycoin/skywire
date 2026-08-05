@@ -2463,8 +2463,31 @@
        place. */
     .sidebar[data-tab="dm"] [data-scope]:not([data-scope="dm"]):not([data-scope="any"]),
     .sidebar[data-tab="groups"] [data-scope]:not([data-scope="groups"]):not([data-scope="any"]),
-    .sidebar[data-tab="channels"] [data-scope]:not([data-scope="channels"]):not([data-scope="any"]) {
+    .sidebar[data-tab="channels"] [data-scope]:not([data-scope="channels"]):not([data-scope="any"]),
+    /* Calls is the one tab that is NOT a view of the conversation list, so it
+       hides everything else — including data-scope="any" — and is itself
+       hidden everywhere else, All included. */
+    .sidebar[data-tab="all"] [data-scope="calls"],
+    .sidebar[data-tab="calls"] [data-scope]:not([data-scope="calls"]) {
       display: none;
+    }
+
+    /* ---- Calls tab -------------------------------------------------- */
+    .call-row { cursor: pointer; }
+    .call-arrow {
+      width: 44px;
+      text-align: center;
+      font-size: 20px;
+      color: var(--text-secondary);
+      flex: none;
+    }
+    .call-row.missed .call-arrow { color: var(--accent-red, #e5484d); }
+    .call-dial { opacity: .55; font-size: 18px; padding-left: 8px; }
+    .calls-empty {
+      padding: 24px 16px;
+      color: var(--text-secondary);
+      font-size: 14px;
+      text-align: center;
     }
 
     /* ---- Saved messages -------------------------------------------- */
@@ -2785,9 +2808,17 @@
       <button class="side-tab" role="tab" data-tab="dm" aria-selected="false" onclick="app.setTab('dm')">DMs</button>
       <button class="side-tab" role="tab" data-tab="groups" aria-selected="false" onclick="app.setTab('groups')">Groups</button>
       <button class="side-tab" role="tab" data-tab="channels" aria-selected="false" onclick="app.setTab('channels')">Channels</button>
+      <button class="side-tab" role="tab" data-tab="calls" aria-selected="false" onclick="app.setTab('calls')">Calls</button>
     </nav>
 
     <div class="sidebar-scroll">
+      <!-- Calls: every call this visor has had, newest first. Server-built
+           from message history (GET /calls), so it is whole on first open. -->
+      <div id="callsSection" class="groups-section" data-scope="calls">
+        <ul class="recipient-list" id="callsList"></ul>
+        <p id="callsEmpty" class="calls-empty hidden">No calls yet.</p>
+      </div>
+
       <!-- Saved messages: a notes-to-self thread. Local to this browser and
            never sent anywhere — see the SAVED_KEY comment in the app. -->
       <div id="savedSection" class="groups-section" data-scope="dm">
@@ -7408,7 +7439,7 @@
       // ---- Sidebar tabs ------------------------------------------------
 
       setTab(tab, opts = {}) {
-        const valid = ['all', 'dm', 'groups', 'channels'];
+        const valid = ['all', 'dm', 'groups', 'channels', 'calls'];
         if (!valid.includes(tab)) tab = 'all';
         this.tab = tab;
         if (!opts.silent) localStorage.setItem('skychat_tab', tab);
@@ -7419,6 +7450,10 @@
           btn.classList.toggle('active', on);
           btn.setAttribute('aria-selected', on ? 'true' : 'false');
         });
+        // Refetched on every open rather than cached: a call can be logged
+        // while another tab is showing, and a stale log is worse than a
+        // moment's wait.
+        if (tab === 'calls') this.loadCalls();
         // The pin is the one row whose section is shown in every tab, so it
         // is the one that has to decide for itself whether it belongs here.
         this.renderPinned();
@@ -10535,6 +10570,97 @@
           if (s) s.style.width = Math.min(100, (lv.sent || 0) * 140) + '%';
           if (rc) rc.style.width = Math.min(100, (lv.recv || 0) * 140) + '%';
         } catch (e) { /* transient */ }
+      }
+
+      // callPeer dials a peer directly — what a row in the Calls tab does.
+      // Split out of placeCall because that one is about the conversation on
+      // screen, and a call log is a list of people you are not looking at.
+      async callPeer(peer) {
+        if (!peer || !this.voice.available) return;
+        if (this.voice.activeId) { this.showToast('Already in a call.', 'error'); return; }
+        this.showToast('Calling ' + this.shortPk(peer) + '…');
+        try {
+          const r = await fetch('/voice/call', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ peer }),
+          });
+          if (!r.ok) { this.showToast('Call failed: ' + (await r.text()).trim(), 'error'); return; }
+          const d = await r.json();
+          this._enterCall(d.call_id, peer);
+        } catch (e) {
+          this.showToast('Call failed.', 'error');
+        }
+      }
+
+      // ---- Calls tab ---------------------------------------------------
+      //
+      // The log is message history read back by the server (GET /calls), not
+      // a list this page accumulates: a call that arrived while the page was
+      // closed — the common case for a missed one — has to be there when it
+      // opens.
+      async loadCalls() {
+        const list = document.getElementById('callsList');
+        const empty = document.getElementById('callsEmpty');
+        if (!list) return;
+        try {
+          const r = await fetch('/calls');
+          if (!r.ok) throw new Error(String(r.status));
+          const rows = await r.json();
+          list.innerHTML = (rows || []).map(rec => this._callRow(rec)).join('');
+          if (empty) empty.classList.toggle('hidden', (rows || []).length > 0);
+        } catch (e) {
+          list.innerHTML = '';
+          if (empty) {
+            empty.textContent = 'Could not load the call log.';
+            empty.classList.remove('hidden');
+          }
+        }
+      }
+
+      _callRow(rec) {
+        const missed = rec.outcome === 'Missed call';
+        const arrow = rec.direction === 'out' ? '↗' : '↙';
+        // shortPk already resolves a saved contact name, falling back to the key.
+        const name = this.shortPk(rec.peer);
+        const meta = [this._callWhen(rec.at), this._callLength(rec.seconds)]
+          .filter(Boolean).join(' · ');
+        return `
+          <li>
+            <div class="recipient-item call-row${missed ? ' missed' : ''}"
+                 onclick="app.callPeer('${this.escapeHtml(rec.peer)}')"
+                 title="Call ${this.escapeHtml(this.shortPk(rec.peer))}">
+              <div class="call-arrow">${arrow}</div>
+              <div class="recipient-info">
+                <div class="recipient-pk">${this.escapeHtml(name)}</div>
+                <div class="recipient-preview">${this.escapeHtml(rec.outcome)}${meta ? ' · ' + this.escapeHtml(meta) : ''}</div>
+              </div>
+              <div class="call-dial">&#x1F4DE;</div>
+            </div>
+          </li>`;
+      }
+
+      // Today shows a time, this week a weekday, older a date — the same
+      // shortening every call log does, because "which call was that" is
+      // answered by the nearest distinguishing unit, not by a full timestamp.
+      _callWhen(iso) {
+        const at = new Date(iso);
+        if (isNaN(at.getTime())) return '';
+        const now = new Date();
+        const sameDay = at.toDateString() === now.toDateString();
+        if (sameDay) {
+          return at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        if (now - at < 7 * 24 * 3600 * 1000) {
+          return at.toLocaleDateString([], { weekday: 'short' }) + ' ' +
+            at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        return at.toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+      }
+
+      _callLength(seconds) {
+        if (!seconds) return '';
+        const m = Math.floor(seconds / 60), s = seconds % 60;
+        return m ? `${m}m ${s}s` : `${s}s`;
       }
 
       // placeCall dials the open DM's peer. The request blocks (in the visor)

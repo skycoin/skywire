@@ -8,8 +8,25 @@
          the visor is an always-on network node while connected. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- A connected call records while the app is in the background, which
+         only a foreground service typed `microphone` may do. Kept OFF the
+         always-on core service: that one runs for hours and would hold the
+         claim (and the status-bar indicator) the whole time.
+
+         mediaPlayback is the SAME service before the microphone is granted:
+         the platform rejects a `microphone` service outright while RECORD_AUDIO
+         is missing, so a call that arrives before the user was ever asked has
+         to start as what it honestly is — audio coming out and none going in —
+         and promote itself once the grant lands. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Runtime-granted on API 33+; the FGS notification is invisible without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- An incoming call is shown as the call SCREEN, not as something to read
+         in the shade. An app may not start an Activity from the background, so
+         the full-screen intent is how the system is asked to raise one on our
+         behalf — the same mechanism every dialer uses. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <!-- Voice messages (and the video messages the chat UI already renders a
          player for) go through getUserMedia inside the embedded SkyChat page;
@@ -38,10 +55,15 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/Theme.Skywire.Splash">
 
+        <!-- showWhenLocked/turnScreenOn: a call raised by its full-screen
+             intent has to be answerable without unlocking first, which is what
+             makes it a call screen rather than a reminder to go and look. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/Theme.Skywire.Splash">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -74,6 +96,14 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Runs the Skywire visor — the peer-to-peer networking core the user explicitly connects to and disconnects from; it must stay up while apps use the mesh." />
         </service>
+
+        <!-- Lends the visor this phone's microphone and speaker for the
+             duration of a connected call. Starts when a call connects and
+             stops when it ends — see VoiceCallService. -->
+        <service
+            android:name=".core.VoiceCallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaPlayback" />
 
         <!-- SkyVpnService declaration lands with the VPN feature. -->
     </application>

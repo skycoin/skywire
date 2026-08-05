@@ -31,6 +31,25 @@
     <string name="core_notification_running">Connected to the Skywire network.</string>
     <string name="core_notification_restarting">Visor crashed — restarting (attempt %1$d).</string>
 
+    <!-- Voice calls -->
+    <string name="call_channel_incoming">Incoming calls</string>
+    <string name="call_channel_ongoing">Call in progress</string>
+    <string name="call_incoming_title">Incoming call</string>
+    <string name="call_answer">Answer</string>
+    <string name="call_decline">Decline</string>
+    <string name="call_ongoing_title">Call in progress</string>
+    <string name="call_ongoing_text">SkyChat is using the microphone.</string>
+    <string name="call_mic_rationale">Allow the microphone so the other side can hear you.</string>
+    <string name="call_hang_up">Hang up</string>
+    <string name="call_mute">Mute</string>
+    <string name="call_unmute">Unmute</string>
+    <string name="call_speaker">Speaker</string>
+    <string name="call_missed_title">Missed call</string>
+
+    <!-- Message notifications -->
+    <string name="message_channel">Messages</string>
+    <string name="message_channel_description">New SkyChat messages.</string>
+
     <!-- Home / Connect -->
     <string name="state_disconnected">Disconnected</string>
     <string name="state_starting">Starting…</string>
@@ -44,7 +63,10 @@
     <string name="visor_public_key">Public key</string>
     <string name="visor_version">Version</string>
     <string name="visor_uptime">Uptime</string>
+    <string name="visor_show_more">More info</string>
+    <string name="visor_show_less">Less info</string>
     <string name="visor_transports">Transports</string>
+    <string name="visor_transports_total">Total</string>
     <string name="visor_dmsg_servers">DMSG servers</string>
     <string name="visor_service_health">Service health</string>
     <string name="copied_to_clipboard">Copied</string>
