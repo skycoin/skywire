@@ -254,6 +254,11 @@
             clearTimeout(upTimer);
             reject(new Error(m.msg));
             break;
+          case 'cfg-save':
+            // The runtime-config editor Saved: persist the override + reload the
+            // visor with it applied (skywireConfig.set does both).
+            try { if (window.skywireConfig) window.skywireConfig.set(JSON.parse(m.cfg || '{}')); } catch (e) {}
+            break;
           case 'stun-ip':
             // This tab is the elected agent: run STUN here and return the public IP.
             runStunIP(m.ice).then(function (ip) {
@@ -356,6 +361,9 @@
           case 'fatal':
             clearTimeout(upTimer);
             reject(new Error(m.msg));
+            break;
+          case 'cfg-save':
+            try { if (window.skywireConfig) window.skywireConfig.set(JSON.parse(m.cfg || '{}')); } catch (e) {}
             break;
           case 'stun-ip':
             // The worker has no RTCPeerConnection; run STUN here (main thread) and

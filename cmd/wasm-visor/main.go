@@ -1076,6 +1076,7 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 		//   - RewardAddress: genuinely none (no on-disk config; earns no rewards),
 		//     left empty rather than faked.
 		Uptime:            uptimeSeconds(),
+		MinHops:           effectiveSvc.MinHops,
 		PublicAutoconnect: true,
 		IsPublic:          false,
 	}

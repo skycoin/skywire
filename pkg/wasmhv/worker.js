@@ -151,6 +151,14 @@
     });
   };
 
+  // The Go runtime calls self.__skywireSaveConfig(overrideJSON) when the UI's
+  // runtime-config editor Saves. localStorage + reload are the page's job (a
+  // worker can't touch either), so broadcast the override to every connected
+  // tab; hv-boot.js persists it and reloads the visor with it applied.
+  self.__skywireSaveConfig = function (cfgJSON) {
+    broadcast({ t: 'cfg-save', cfg: cfgJSON });
+  };
+
   // ----- Voice audio bridge (delegated to the agent tab) -----
   // getUserMedia/AudioContext are main-thread-only. The Go voice Sink calls
   // self.__skyvoiceEmit(bytes) with each decoded frame; we forward it to the agent
