@@ -18,7 +18,6 @@ import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.AltRoute
 import androidx.compose.material.icons.outlined.CandlestickChart
-import androidx.compose.material.icons.outlined.Contactless
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.VpnLock
@@ -40,8 +39,11 @@ import com.skycoin.skywire.ui.navigation.Routes
 
 /**
  * The apps hub behind the center Skycoin-logo slot: adaptive grid of rounded
- * tiles. SkyMeet and Pay-with-Sky are greyed "coming soon" tiles with no click
- * action. Tiles accept any [Painter] so the designed logos are a drop-in later.
+ * tiles. Tiles accept any [Painter] so the designed logos are a drop-in later.
+ *
+ * At most ONE greyed "coming soon" tile at a time — currently SkyMeet. A hub
+ * with several of them reads as an unfinished app; a single one reads as the
+ * next thing being built. The rest arrive as they ship.
  */
 private data class HubTile(
     val name: String,
@@ -64,7 +66,6 @@ fun HubScreen(
         HubTile(stringResource(R.string.app_wallet), { rememberVectorPainter(Icons.Outlined.AccountBalanceWallet) }, { onOpenTab(Routes.WALLET) }),
         HubTile(stringResource(R.string.app_fleet), { rememberVectorPainter(Icons.Outlined.Hub) }, { onOpenRoute(Routes.FLEET) }),
         HubTile(stringResource(R.string.app_skymeet), { rememberVectorPainter(Icons.Outlined.Videocam) }, onClick = null, comingSoon = true),
-        HubTile(stringResource(R.string.app_paywithsky), { rememberVectorPainter(Icons.Outlined.Contactless) }, onClick = null, comingSoon = true),
     )
 
     LazyVerticalGrid(

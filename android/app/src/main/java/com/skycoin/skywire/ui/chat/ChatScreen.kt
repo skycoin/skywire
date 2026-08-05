@@ -30,6 +30,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,6 +47,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.core.SkychatProfile
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.logs.LogSources
@@ -69,6 +71,10 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
     var loadedUrl by remember { mutableStateOf<String?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
+    // The page is loaded and can be driven. Distinct from "the WebView
+    // exists": a link handed to a page that is still loading would be
+    // evaluated against the document it is replacing.
+    var pageReady by remember { mutableStateOf(false) }
     // The page's own error, kept apart from the view model's: one is "the
     // surface never came up", the other "it came up and then broke".
     var pageError by remember { mutableStateOf<String?>(null) }
@@ -105,6 +111,20 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
 
     BackHandler(enabled = canGoBack) { webView?.goBack() }
 
+    // A skychat:// link another app opened us for. It waits here rather than
+    // at the Activity for as long as it has to: the core may still be
+    // connecting, and skychat only answers once it is. Cleared once the page
+    // has it — including when the page declines it, since retrying a link the
+    // page has already refused would only loop.
+    val chatLink by DeepLinks.pendingChatLink.collectAsState()
+    LaunchedEffect(chatLink, pageReady) {
+        val link = chatLink ?: return@LaunchedEffect
+        val view = webView
+        if (!pageReady || view == null) return@LaunchedEffect
+        ChatWebView.openAddress(view, link.address)
+        DeepLinks.chatLinkHandled(link)
+    }
+
     Scaffold(
         topBar = {
             SkyTopBar(
@@ -122,6 +142,7 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
                             onClick = {
                                 menuOpen = false
                                 pageError = null
+                                pageReady = false
                                 webView?.reload()
                             },
                         )
@@ -160,6 +181,7 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
                                 baseUrl = { url.value },
                                 password = { password.value },
                                 onHistoryChanged = { canGoBack = it },
+                                onPageReady = { pageReady = true },
                                 onError = { pageError = it },
                             )
                             view.webChromeClient = ChatWebView.chromeClient(
@@ -198,6 +220,7 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
                         val target = state.url
                         if (target != null && target != loadedUrl) {
                             loadedUrl = target
+                            pageReady = false
                             view.loadUrl(target)
                         }
                     },
@@ -207,6 +230,7 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
                         webView = null
                         loadedUrl = null
                         canGoBack = false
+                        pageReady = false
                     },
                 )
             } else {
