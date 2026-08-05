@@ -17,7 +17,6 @@ import { UptimeComponent } from './components/pages/node/uptime/uptime.component
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
-import { VpnComponent } from './components/pages/node/vpn/vpn.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { AllTransportsComponent } from './components/pages/node/routing/all-transports/all-transports.component';
@@ -34,10 +33,6 @@ import { AllAppsComponent } from './components/pages/node/apps/all-apps/all-apps
 import { NodeInfoComponent } from './components/pages/node/node-info/node-info.component';
 import { SkynetComponent } from './components/pages/node/skynet/skynet.component';
 import { AllLabelsComponent } from './components/pages/settings/all-labels/all-labels.component';
-import { VpnServerListComponent } from './components/vpn/pages/vpn-server-list/vpn-server-list.component';
-import { VpnStatusComponent } from './components/vpn/pages/vpn-status/vpn-status.component';
-import { VpnErrorComponent } from './components/vpn/pages/vpn-error/vpn-error.component';
-import { VpnSettingsComponent } from './components/vpn/pages/vpn-settings/vpn-settings.component';
 import { VpnAuthGuardService } from './services/vpn-auth-guard.service';
 
 const routes: Routes = [
@@ -267,45 +262,12 @@ const routes: Routes = [
     component: LoginComponent
   },
   {
+    // Lazy-loaded VPN feature module (docs/design/gui-embedding-standardization.md
+    // step 4). canActivate stays here so the guard runs before the chunk is even
+    // fetched; the module keeps canActivateChild for navigation between VPN pages.
     path: 'vpn',
     canActivate: [VpnAuthGuardService],
-    canActivateChild: [VpnAuthGuardService],
-    children: [
-      {
-        path: 'unavailable',
-        component: VpnErrorComponent
-      },
-      {
-        path: ':key',
-        children: [
-          {
-            path: 'status',
-            component: VpnStatusComponent
-          },
-          {
-            path: 'servers',
-            redirectTo: 'servers/public/1',
-            pathMatch: 'full'
-          },
-          {
-            path: 'servers/:type/:page',
-            component: VpnServerListComponent
-          },
-          {
-            path: 'settings',
-            component: VpnSettingsComponent
-          },
-          {
-            path: '**',
-            redirectTo: 'status'
-          }
-        ]
-      },
-      {
-        path: '**',
-        redirectTo: '/vpn/unavailable?problem=pk'
-      }
-    ],
+    loadChildren: () => import('./components/vpn/vpn.module').then(m => m.VpnModule),
   },
   {
     path: '**',
