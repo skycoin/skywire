@@ -424,9 +424,9 @@ name, and a nickname you set locally always wins over a published one.
 
 ### Address book
 
-The 📇 button beside the bell opens your contacts — a centred dialog on
-a desktop, a full-screen list on a phone. Entirely local; nothing is
-sent anywhere.
+The 📇 button in the sidebar header opens your contacts — a centred
+dialog on a desktop, a full-screen list on a phone. Entirely local;
+nothing is sent anywhere.
 
 - **+** opens a **New contact** form: paste a key, and if that visor
   publishes a name and picture both are filled in for you to accept or
@@ -439,6 +439,71 @@ sent anywhere.
   the compose menu's **Select from address book** picks a saved contact
   into that same dialog — a row in a list never starts a conversation
   by itself, it goes through the same confirmation a pasted key does.
+
+### Settings
+
+The ⚙ button in the sidebar header. Two sections, and they are the whole
+of it — everything else in this UI is a conversation, not a preference.
+
+**Notifications.** Whether new messages raise a desktop alert, whether
+the alert shows a snippet, and the list of muted chats and groups.
+Opening Settings is also when the browser is asked for notification
+permission: that request is only honoured from a user gesture, and the
+preference defaults to on, so without an ask on open a fresh profile
+would silently drop every notification.
+
+**Import / export chat** — see below.
+
+### Moving a chat to another device
+
+Nothing here syncs. Two visors are two identities with two stores, and
+a message addressed to one was never addressed to the other, so a
+desktop's history simply does not exist on a phone. The honest
+alternative is a file you carry across yourself:
+
+| Route | |
+|---|---|
+| `GET /export` | the archive: address book + message history |
+| `GET /export/<name>` | the same; the path suffix only names the download |
+| `POST /import` | merge an archive into this visor |
+
+```bash
+curl -sO -J http://127.0.0.1:8001/export          # write skychat-<date>.json
+curl -s -X POST --data-binary @skychat-2026-08-06.json \
+     http://127.0.0.1:8001/import
+```
+
+What travels is what is **data**: the messages this visor kept and the
+names you gave to keys. What does not travel is anything that is an
+**identity or a key** — the visor's keypair, group membership and its
+key material, pairing ratchets, transfers in flight. Importing a
+group's messages puts the conversation on the new device to read; it
+does not make that device a member, which still means rejoining.
+
+Import is not `Append` in a loop, and the difference matters:
+
+- **It is not rate limited.** The per-peer limit exists to stop a peer
+  filling your disk over the network at twenty messages a minute. An
+  operator restoring their own archive is not that, and applying it
+  would have delivered a handful of messages per conversation.
+- **Records already present are skipped**, so importing the same file
+  twice changes nothing — the property you lean on when you are not
+  sure the first attempt worked. Identity is the envelope ID where
+  there is one, and timestamp + direction + text where there is not.
+- **Every other guardrail stands.** Oversized messages are rejected,
+  the whitelist still filters, a full store takes nothing, and the
+  per-peer cap still evicts oldest-first.
+
+The reply counts what it stored *and what it will not keep* — how many
+records fall outside `--persist-ttl` (the sweep is about to take them)
+and how many the per-peer cap pushed back out. Both are silent losses
+otherwise, and finding out after wiping the old device is too late. A
+long history needs `--persist-ttl 0` and a `--persist-per-peer-cap` to
+match before it is imported.
+
+The address book half works with persistence off entirely; the messages
+then have nowhere to go, and the reply says so rather than reporting
+zero.
 
 ### Sidebar tabs
 
