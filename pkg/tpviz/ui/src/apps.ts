@@ -274,6 +274,18 @@ export function initApps(): void {
 }
 
 /**
+ * stopAppsRefresh halts the 5s apps poll. Called from the bundle teardown so the
+ * timer doesn't keep fetching /api/apps against a torn-down DOM after unmount.
+ */
+export function stopAppsRefresh(): void {
+    if (appsRefreshInterval) {
+        clearInterval(appsRefreshInterval);
+        appsRefreshInterval = null;
+    }
+    appsInitialized = false;
+}
+
+/**
  * Shows or hides the apps section based on visor connection.
  */
 export function showAppsSection(show: boolean): void {

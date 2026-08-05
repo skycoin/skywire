@@ -195,6 +195,21 @@ function stopBoundaries(): void {
   clearBoundaryCanvas();
 }
 
+// cosmosTeardown stops the WebGL renderer + the boundary-overlay rAF and releases
+// the GPU graph, so unmounting the tab doesn't leave the cosmos render loop /
+// force simulation running against a detached canvas. Idempotent + null-safe.
+export function cosmosTeardown(): void {
+  stopBoundaries();
+  if (graph) {
+    // Prefer a full destroy() if the cosmos build exposes one; otherwise pause()
+    // (which stops scheduling frames) is enough to halt the render loop.
+    try { (graph as unknown as { destroy?: () => void }).destroy?.(); } catch { /* noop */ }
+    try { graph.pause(); } catch { /* noop */ }
+    graph = null;
+  }
+  active = false;
+}
+
 export function isCosmosActive(): boolean {
   return active;
 }

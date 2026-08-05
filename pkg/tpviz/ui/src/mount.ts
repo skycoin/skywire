@@ -10,6 +10,7 @@
 import indexHtml from '../index.html';
 import { wireEventListeners } from './events';
 import { setHostOpts } from './persist';
+import { teardown } from './lifecycle';
 
 // scopeSelector rewrites one selector so it only matches inside `scope`. Global
 // selectors (body/html/:root/*) become the scope root itself so the tpviz reset
@@ -99,6 +100,9 @@ export function mount(root: HTMLElement, opts?: { view?: string; onViewChange?: 
   wireEventListeners();
   return {
     unmount() {
+      // Stop every timer / rAF loop / WebSocket the app started BEFORE ripping
+      // out the DOM — otherwise they keep firing against a detached document.
+      teardown();
       root.innerHTML = '';
       root.classList.remove(SCOPE_CLASS);
       if (mountedStyle) { mountedStyle.remove(); mountedStyle = null; }
