@@ -1413,11 +1413,23 @@
     var wrap = doc.createElement("div");
     wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">connecting…</div>';
+    var ngHandle = null;
     resolveSelfPKAsync(opts).then(function (pk) {
       wrap.innerHTML = "";
       if (!pk) {
         wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">boot the visor first</div>';
         return;
+      }
+      // Prefer mounting the real Angular LogsComponent in-context (ONE Angular
+      // runtime, no self-iframe) via the SkywireNg bridge; fall back to the
+      // ?embed=1 iframe if the bridge isn't present (e.g. a non-Angular host).
+      var ng = globalThis.SkywireNg;
+      if (ng && typeof ng.mountComponent === "function") {
+        var host = doc.createElement("div");
+        host.style.cssText = "width:100%;height:100%;flex:1;overflow:auto;background:#0e0c14";
+        wrap.appendChild(host);
+        ngHandle = ng.mountComponent(host, "logs", { nodeKey: pk });
+        if (ngHandle) return;
       }
       var f = doc.createElement("iframe");
       f.src = "/#/nodes/" + pk + "/logs?embed=1";
@@ -1426,7 +1438,7 @@
     });
     var wb = makeWin(doc, {
       title: "visor log", root: opts.root, top: opts.top, bottom: opts.bottom, width: "46%", height: "60%",
-      mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); }
+      mount: wrap, onclose: function () { if (ngHandle) { try { ngHandle.dispose(); } catch (_) {} } if (opts.onClose) opts.onClose(); }
     });
     return { wb: wb, close: function () { wb.close(); } };
   }
@@ -1598,8 +1610,24 @@
     var wrap = doc.createElement("div");
     wrap.style.cssText = "position:absolute;inset:0;background:#0e0c14;display:flex;flex-direction:column;overflow:hidden";
     wrap.innerHTML = '<div style="margin:auto;color:#9aa0a6;font:12px monospace">connecting…</div>';
-    var frame = null;
+    var frame = null;      // iframe-fallback element
+    var ngHandle = null;   // SkywireNg bridge mount handle
+    var ngHost = null;     // container the component mounts into
     var resolvedPK = "";
+    // Bridge path: (re)mount the real Angular SkychatComponent in-context, with
+    // the peer preselected. skychat reads its peer once at init, so retargeting
+    // re-mounts (dispose + mount) rather than reloading an iframe.
+    function mountChat(peer) {
+      if (!(globalThis.SkywireNg && typeof globalThis.SkywireNg.mountComponent === "function")) return false;
+      if (ngHandle) { try { ngHandle.dispose(); } catch (_) {} ngHandle = null; }
+      if (!ngHost) {
+        ngHost = doc.createElement("div");
+        ngHost.style.cssText = "width:100%;height:100%;flex:1;overflow:auto;background:#0e0c14";
+        wrap.appendChild(ngHost);
+      } else { ngHost.innerHTML = ""; }
+      ngHandle = globalThis.SkywireNg.mountComponent(ngHost, "skychat", { nodeKey: resolvedPK, peer: peer || "" });
+      return !!ngHandle;
+    }
     resolveSelfPKAsync(opts).then(function (pk) {
       wrap.innerHTML = "";
       if (!pk) {
@@ -1607,18 +1635,25 @@
         return;
       }
       resolvedPK = pk;
+      // Prefer the in-context Angular mount (ONE Angular runtime, no self-iframe);
+      // fall back to the ?embed=1 iframe if the bridge isn't present.
+      if (mountChat(opts.initialPeer || "")) return;
       frame = doc.createElement("iframe");
       frame.src = chatURL(opts.initialPeer || "");
       frame.style.cssText = "border:0;width:100%;height:100%;flex:1;background:#0e0c14";
       frame.setAttribute("allow", "microphone; autoplay"); // voice calls live in the component
       wrap.appendChild(frame);
     });
-    // Deep-link retarget: reload the embedded tab addressed to the new peer
-    // (the component reads ?peer= once at init — a src swap re-inits it).
-    function setPeer(pk) { if (frame && pk) { frame.src = chatURL(pk); } }
+    // Deep-link retarget: bridge path re-mounts with the new peer; iframe path
+    // reloads the embedded tab (the component reads ?peer= once at init).
+    function setPeer(pk) {
+      if (!pk) return;
+      if (ngHost) { mountChat(pk); }
+      else if (frame) { frame.src = chatURL(pk); }
+    }
     var wb = makeWin(doc, {
       title: "skychat", root: opts.root, top: opts.top, bottom: opts.bottom, width: "42%", height: "62%",
-      mount: wrap, onclose: function () { if (opts.onClose) opts.onClose(); }
+      mount: wrap, onclose: function () { if (ngHandle) { try { ngHandle.dispose(); } catch (_) {} } if (opts.onClose) opts.onClose(); }
     });
     return { wb: wb, close: function () { wb.close(); }, setPeer: setPeer };
   }
