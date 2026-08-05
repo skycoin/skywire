@@ -152,6 +152,40 @@
     );
   }
 
+  // clearnetShimSrc is JS injected at the top of a PROXY-rendered clearnet page.
+  // Clearnet scripts are stripped (static render), so the page's own JS never
+  // runs — this restores the two things a reader needs: (1) link clicks navigate
+  // to the resolved absolute URL through the proxy (parent "cnnav"); (2) form
+  // submits (search boxes!) are serialized and routed through the proxy —
+  // method=GET → action?query, method=POST → body — since the CSP's
+  // form-action 'none' + the sandbox otherwise make a submit a no-op. Relative
+  // URLs resolve against the page's real URL (BASE).
+  function clearnetShimSrc(baseUrl) {
+    return (
+      'var BASE=' + JSON.stringify(baseUrl) + ';' +
+      'function abs(h){try{return new URL(h,BASE).href;}catch(e){return "";}}' +
+      'document.addEventListener("click",function(e){' +
+      'var a=e.target.closest?e.target.closest("a[href]"):null;if(!a)return;' +
+      'var h=a.getAttribute("href")||"";if(!h||h.charAt(0)==="#")return;' +
+      'var u=abs(h);if(/^https?:\\/\\//i.test(u)){e.preventDefault();parent.postMessage({type:"cnnav",url:u},"*");}' +
+      '},true);' +
+      'document.addEventListener("submit",function(e){' +
+      'var f=e.target;if(!f||f.tagName!=="FORM")return;e.preventDefault();' +
+      'var method=((f.getAttribute("method")||"GET")).toUpperCase();' +
+      'var action=abs(f.getAttribute("action")||BASE)||BASE;' +
+      'var fd=new URLSearchParams();' +
+      'var sub=e.submitter;if(sub&&sub.name)fd.append(sub.name,sub.value||"");' +
+      'for(var i=0;i<f.elements.length;i++){var el=f.elements[i];' +
+      'if(!el.name||el.disabled)continue;' +
+      'if((el.type==="checkbox"||el.type==="radio")&&!el.checked)continue;' +
+      'if(el.type==="submit"||el.type==="button"||el.type==="file"||el.type==="image")continue;' +
+      'fd.append(el.name,el.value);}' +
+      'if(method==="POST"){parent.postMessage({type:"cnnav",url:action,method:"POST",body:fd.toString()},"*");}' +
+      'else{try{var uo=new URL(action);uo.search=fd.toString();parent.postMessage({type:"cnnav",url:uo.href},"*");}catch(_){}}' +
+      '},true);'
+    );
+  }
+
   // createBrowser drives one iframe against one "current site". opts:
   //   frame      — the <iframe> element to render into (sandbox allow-scripts).
   //   fetchDmsg  — (pkHost, method, path, body) => Promise<{status,body,headers}>.
@@ -183,6 +217,26 @@
       return Promise.all(uniq.map(function (u) {
         return fetchDmsg(pk, "GET", resolvePath(u, base), null)
           .then(function (r) { map[u] = "data:" + ctOf(r.headers, u) + ";base64," + bytesToB64(r.body); })
+          .catch(function () {});
+      })).then(function () {
+        return css.replace(CSS_URL, function (m, q, u) { return map[u] ? 'url("' + map[u] + '")' : m; });
+      });
+    }
+
+    // Clearnet analogue of inlineCss: rewrite url(...) refs in a fetched clearnet
+    // stylesheet by re-fetching each through the SAME skysocks exit and inlining
+    // as data: — so CSS background-images and fonts (e.g. a site's logo drawn via
+    // background-image) survive the strict CSP instead of being blocked.
+    function inlineCssClearnet(exit, baseURL, css) {
+      var uniq = [...new Set([...css.matchAll(CSS_URL)].map(function (m) { return m[2]; })
+        .filter(function (u) { return u && !/^data:/i.test(u); }))];
+      if (!uniq.length) return Promise.resolve(css);
+      var map = {};
+      return Promise.all(uniq.map(function (u) {
+        var abs; try { abs = new URL(u, baseURL).href; } catch (e) { return; }
+        if (!/^https?:\/\//i.test(abs)) return;
+        return fetchClearnet(exit, "GET", abs, null)
+          .then(function (r) { if (r && r.body && (r.status || 200) < 400) map[u] = "data:" + ctOf(r.headers, abs) + ";base64," + bytesToB64(r.body); })
           .catch(function () {});
       })).then(function () {
         return css.replace(CSS_URL, function (m, q, u) { return map[u] ? 'url("' + map[u] + '")' : m; });
@@ -519,8 +573,14 @@
       // proxy: clearnet scripts are dropped (static render); css/img/media inlined.
       if (el.tagName === "SCRIPT") { el.remove(); return null; }
       return fetchClearnet(policy.exit, "GET", absURL, null).then(function (r) {
-        if (el.tagName === "LINK") { var s = doc.createElement("style"); s.textContent = new TextDecoder().decode(r.body); el.replaceWith(s); }
-        else el.setAttribute(attr, "data:" + ctOf(r.headers, absURL) + ";base64," + bytesToB64(r.body));
+        if (el.tagName === "LINK") {
+          // Rewrite url() refs inside the fetched stylesheet (background-images,
+          // fonts, @import assets) through the same exit before inlining it.
+          return inlineCssClearnet(policy.exit, absURL, new TextDecoder().decode(r.body)).then(function (css) {
+            var s = doc.createElement("style"); s.textContent = css; el.replaceWith(s);
+          });
+        }
+        el.setAttribute(attr, "data:" + ctOf(r.headers, absURL) + ";base64," + bytesToB64(r.body));
       }).catch(function () { if (el.tagName === "LINK") el.remove(); else el.removeAttribute(attr); });
     }
 
@@ -566,9 +626,26 @@
         var doc = new DOMParser().parseFromString(html, "text/html");
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("href", url); base.setAttribute("target", "_self");
+        // Nav/form shim: clearnet scripts are stripped, so this restores link
+        // navigation and (search) form submission through the proxy.
+        var sc = doc.createElement("script"); sc.textContent = clearnetShimSrc(url);
+        // Light canvas default so an unstyled/partly-styled page stays legible —
+        // the sandboxed iframe otherwise inherits the HV UI's dark color-scheme.
+        // Inserted FIRST so the page's own (inlined) CSS overrides it.
+        var baseStyle = doc.createElement("style");
+        baseStyle.textContent = ":root{color-scheme:light}html{background:#fff;color:#111}";
+        head.insertBefore(sc, head.firstChild);
         head.insertBefore(base, head.firstChild);
+        head.insertBefore(baseStyle, head.firstChild);
         applyCSP(doc); // proxy mode: everything is inlined; block any direct egress
-        await Promise.all(gateAllClearnet(doc, url, { mode: "proxy", exit: exit }, true));
+        var cnJobs = gateAllClearnet(doc, url, { mode: "proxy", exit: exit }, true);
+        // Inline <style> url() refs (background-images/fonts) through the exit too,
+        // so CSS-referenced assets (e.g. a logo drawn via background-image) load.
+        doc.querySelectorAll("style").forEach(function (el) {
+          if (el === baseStyle || !/url\(/i.test(el.textContent || "")) return;
+          cnJobs.push(inlineCssClearnet(exit, url, el.textContent).then(function (css) { el.textContent = css; }).catch(function () {}));
+        });
+        await Promise.all(cnJobs);
         docHtml = "<!doctype html>" + doc.documentElement.outerHTML;
       } catch (e) { docHtml = html; }
       frame.srcdoc = docHtml;
@@ -651,6 +728,24 @@
           return;
         }
         if (currentSitePK) { browseTo(currentSitePK, d.path); return; }
+        return;
+      }
+      if (d.type === "cnnav" && d.url) {
+        // A link click / form submit inside a proxy-rendered clearnet page.
+        var cpol = clearnetPolicy();
+        if (cpol.mode === "block") { log("clearnet nav blocked (no upstream): " + d.url); return; }
+        if (d.method === "POST") {
+          if (cpol.mode !== "proxy") { log("clearnet POST needs a proxy upstream: " + d.url); return; }
+          loadGen++; var pg = loadGen; setLoading(true);
+          fetchClearnet(cpol.exit, "POST", d.url, d.body || null).then(function (r) {
+            if (pg !== loadGen) return;
+            log("clearnet POST " + d.url + " via " + cpol.exit.slice(0, 8) + "… → " + r.status);
+            renderClearnet(cpol.exit, d.url, new TextDecoder().decode(r.body || new Uint8Array()));
+            setLoading(false);
+          }).catch(function (err) { if (pg === loadGen) { setLoading(false); showError("POST failed", d.url, String((err && err.message) || err)); } });
+          return;
+        }
+        browseToClearnet(d.url); // GET → normal clearnet navigation (history-tracked)
         return;
       }
       if (d.type === "dmsgreq") {
