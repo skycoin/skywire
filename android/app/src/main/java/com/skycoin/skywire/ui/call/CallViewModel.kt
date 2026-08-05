@@ -24,6 +24,8 @@ data class CallUiState(
     val peer: String? = null,
     val callId: String? = null,
     val connected: Boolean = false,
+    /** Placing a call, waiting for the other side to pick up. */
+    val dialing: Boolean = false,
     val micMuted: Boolean = false,
     val speakerphone: Boolean = false,
     /** `m:ss`, counted from when this device saw the call connect. */
@@ -55,6 +57,7 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             VoiceCalls.state.collect { calls ->
                 val invite = calls.invite
+                val outgoing = calls.outgoing
                 val active = calls.activeIds.firstOrNull()
                 val connected = active != null
                 if (connected && connectedAt == 0L) connectedAt = SystemClock.elapsedRealtime()
@@ -62,19 +65,28 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
                 mutable.update {
                     it.copy(
+                        // Once connected the peer is kept from whichever side
+                        // named it: the active list carries ids only, so
+                        // re-deriving it every poll would blank the name the
+                        // moment the call was answered.
                         peer = when {
-                            connected -> it.peer ?: invite?.fromPk?.let(::short)
+                            connected -> it.peer
+                                ?: invite?.fromPk?.let(::short)
+                                ?: outgoing?.fromPk?.let(::short)
                             invite != null -> short(invite.fromPk)
+                            outgoing != null -> short(outgoing.fromPk)
                             else -> null
                         },
-                        callId = active ?: invite?.callId,
+                        callId = active ?: invite?.callId ?: outgoing?.callId,
                         connected = connected,
+                        dialing = !connected && outgoing != null,
                         // A call that ended takes its mute state with it.
-                        micMuted = if (calls.inCall || invite != null) it.micMuted else false,
+                        micMuted = if (calls.busy) it.micMuted else false,
                     )
                 }
-                // Ring only while ringing, and only here: the point of the
-                // full-screen UI is that it, not a notification, is the call.
+                // Ring only for a call coming IN, and only here: the point of
+                // the full-screen UI is that it, not a notification, is the
+                // call. A call we are placing rings at the other end.
                 if (invite != null && !connected) startRinging() else stopRinging()
             }
         }

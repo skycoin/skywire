@@ -301,6 +301,27 @@ class VisorApi(context: Context) {
     /** Ids of calls that are connected. */
     suspend fun voiceActive(): List<String> = voiceList("active")
 
+    /**
+     * Calls this phone is PLACING and that have not been answered yet — the
+     * caller's half of the picture. A call being dialed is in neither the
+     * ringing list (that is the callee's) nor the active list (that starts at
+     * "answered"), so without this there is nothing to show for the whole ring.
+     */
+    suspend fun voiceDialing(): List<VoiceInvite> = withContext(Dispatchers.IO) {
+        getWithRelogin("/api/visors/${localPk()}/skychat/voice/dialing").use { resp ->
+            if (resp.code == HTTP_UNAVAILABLE || !resp.isSuccessful) {
+                return@withContext emptyList()
+            }
+            val body = resp.body.string().trim()
+            if (body.isEmpty() || body == "null") {
+                emptyList()
+            } else {
+                json.decodeFromString(ListSerializer(VoiceDialing.serializer()), body)
+                    .map { VoiceInvite(it.callId, it.peer) }
+            }
+        }
+    }
+
     suspend fun voiceAnswer(callId: String) = voiceAction("answer", callId)
 
     suspend fun voiceDecline(callId: String) = voiceAction("decline", callId)

@@ -147,6 +147,27 @@ func (hv *Hypervisor) getVoiceLevels() http.HandlerFunc {
 	})
 }
 
+// getVoiceDialing → GET /skychat/voice/dialing : calls this visor is placing
+// and that have not been answered yet.
+//
+// The caller's missing half of the picture: a call being dialed is in neither
+// the ringing list (that is the callee's) nor the active list (that starts at
+// "answered"), so without this a UI has nothing to show for the whole ring.
+// Local visor only — see (*Visor).VoiceDialing.
+func (hv *Hypervisor) getVoiceDialing() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		if ctx.isRemote || hv.visor == nil {
+			httputil.WriteJSON(w, r, http.StatusOK, []VoiceDialingInfo{})
+			return
+		}
+		out := hv.visor.VoiceDialing()
+		if out == nil {
+			out = []VoiceDialingInfo{}
+		}
+		httputil.WriteJSON(w, r, http.StatusOK, out)
+	})
+}
+
 // getVoiceAudio → GET /skychat/voice/audio?call=<id> : recent sent/received PCM
 // (int16) of a call, for the spectrogram. Heavier — the UI only polls it while
 // the spectrogram view is open.

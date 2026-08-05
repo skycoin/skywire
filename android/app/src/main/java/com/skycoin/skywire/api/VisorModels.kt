@@ -189,6 +189,13 @@ data class AppLogs(
     @SerialName("logs") val logs: List<String> = emptyList(),
 )
 
+/** One call being placed, from `…/skychat/voice/dialing`. */
+@Serializable
+internal data class VoiceDialing(
+    @SerialName("call_id") val callId: String = "",
+    @SerialName("peer") val peer: String = "",
+)
+
 /**
  * A ringing inbound call. The visor formats these as `"<call-id> from <pk>"`
  * — one string, because the surface it was built for is a CLI listing — so the

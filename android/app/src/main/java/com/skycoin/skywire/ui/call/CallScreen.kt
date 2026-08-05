@@ -38,14 +38,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 
 /**
- * The call, full screen.
+ * The call, full screen — in either direction, on every tab.
  *
- * Shown whenever a call is ringing or connected and the user is NOT on the
- * Chat tab — there, the embedded chat page draws its own banner and call
- * panel, and two call UIs on one screen is worse than either. Off that tab
- * (any other tab, or the app brought up from the background for the call)
- * this is the whole screen, because a call is not something to notice in a
- * corner.
+ * Placing one, being rung, and being in one are the same screen because they
+ * are the same event seen at three moments; the controls are what changes.
+ * It covers the Chat tab too: the embedded page has its own banner and panel,
+ * but a call is not something to notice inside a conversation list, it is what
+ * the phone is doing.
  */
 @Composable
 fun CallScreen(viewModel: CallViewModel = viewModel()) {
@@ -94,6 +93,7 @@ fun CallScreen(viewModel: CallViewModel = viewModel()) {
                 Text(
                     text = when {
                         state.connected -> state.elapsed
+                        state.dialing -> stringResource(R.string.call_dialing)
                         else -> stringResource(R.string.call_incoming_title)
                     },
                     style = MaterialTheme.typography.bodyLarge,
@@ -101,16 +101,21 @@ fun CallScreen(viewModel: CallViewModel = viewModel()) {
                 )
             }
 
-            if (state.connected) {
-                ConnectedControls(
+            when {
+                state.connected -> ConnectedControls(
                     micMuted = state.micMuted,
                     speakerphone = state.speakerphone,
                     onToggleMic = viewModel::toggleMic,
                     onToggleSpeaker = viewModel::toggleSpeakerphone,
                     onHangUp = viewModel::hangUp,
                 )
-            } else {
-                RingingControls(onDecline = viewModel::decline, onAnswer = viewModel::answer)
+                // Placing a call: the only thing to offer is giving up on it,
+                // which cancels the invite rather than closing a session.
+                state.dialing -> DialingControls(onCancel = viewModel::hangUp)
+                else -> RingingControls(
+                    onDecline = viewModel::decline,
+                    onAnswer = viewModel::answer,
+                )
             }
         }
     }
@@ -133,6 +138,21 @@ private fun RingingControls(onDecline: () -> Unit, onAnswer: () -> Unit) {
             label = stringResource(R.string.call_answer),
             background = AnswerGreen,
             onClick = onAnswer,
+        )
+    }
+}
+
+@Composable
+private fun DialingControls(onCancel: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        CallButton(
+            icon = Icons.Default.CallEnd,
+            label = stringResource(R.string.call_hang_up),
+            background = DeclineRed,
+            onClick = onCancel,
         )
     }
 }

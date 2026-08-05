@@ -35,6 +35,7 @@
     <string name="call_channel_incoming">Incoming calls</string>
     <string name="call_channel_ongoing">Call in progress</string>
     <string name="call_incoming_title">Incoming call</string>
+    <string name="call_dialing">Calling…</string>
     <string name="call_answer">Answer</string>
     <string name="call_decline">Decline</string>
     <string name="call_ongoing_title">Call in progress</string>

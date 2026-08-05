@@ -16,10 +16,19 @@ was actually performed (commands, devices, measured numbers — not intentions).
   ordinary Source/Sink pair; `VoiceAudioEngine` (AudioRecord/AudioTrack) plays
   the device and carries PCM over two long-lived streams on the visor's local
   API. `VoiceCallService` runs them for exactly as long as a call is connected.
-- **A call is a screen, not a notification.** Ringing or connected and not on
-  the Chat tab → `ui/call/CallScreen` takes the whole display (answer, decline,
-  mute, speaker, hang up, live timer, ringtone). With the app backgrounded the
-  system is asked to raise it via a full-screen intent.
+- **A call is a screen, not a notification** — in either direction, on every
+  tab, the Chat tab included. `ui/call/CallScreen` takes the whole display for
+  all three moments of the same event: placing one (Calling… / hang up), being
+  rung (answer / decline / ringtone), and being in one (mute, speaker, hang up,
+  live timer). With the app backgrounded the system is asked to raise it via a
+  full-screen intent.
+  - **A call being placed had no state anywhere.** It is in neither the ringing
+    list (that is the callee's) nor the active list (that starts at
+    "answered"), so the caller saw nothing for the whole ring. The call manager
+    now tracks outbound invites in flight and the visor serves them at
+    `…/skychat/voice/dialing`. The same registration makes hanging up DURING
+    the ring possible: there is no session to close, so cancelling the invite
+    is the hang-up — before, a caller could only wait out the dial timeout.
 - **Message notifications**, for every kind of message, from the visor's
   existing `/api/notifications/stream` — which turned out to have been built
   for exactly this consumer and never had one.
@@ -70,6 +79,11 @@ was actually performed (commands, devices, measured numbers — not intentions).
   call continues (receive-only) while it is outstanding.
 - Full-screen call UI on the Home tab with Decline/Answer; ringing notification
   confirmed posted with `category=call`, `importance=4`, full-screen intent.
+- Phone → desktop, placed from the chat page's ⋮ Call while ON the Chat tab:
+  full-screen `Calling…` with Hang up, then the connected screen with the timer
+  and mute/speaker/hang-up when the desktop answered, then
+  `Outgoing call · 03:40 PM · 1m 4s` in the Calls tab beside the earlier
+  `Missed call · 03:01 PM`.
 - Missed call: `Voice: missed call with 037f16ce…ecf2 logged`, an Android
   notification on `channel=messages` `category=msg`, a `📞 Missed call` row in
   the conversation, and the record in the Calls tab as
