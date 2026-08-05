@@ -53,7 +53,17 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
             }
         }
         try {
-            applyPhoneProfile(transportPrimary, ensureSkychatPassword())
+            applyPhoneProfile(
+                transportPrimary,
+                skychatPasswordFile = ensureGatePassword(
+                    SkychatProfile.passwordFile(paths),
+                    secrets.skychatPassword(),
+                ),
+                skydexPasswordFile = ensureGatePassword(
+                    SkydexProfile.passwordFile(paths),
+                    secrets.skydexPassword(),
+                ),
+            )
             Result.success(paths.configFile)
         } catch (e: Exception) {
             // A file that exists but does not parse would otherwise crash-loop
@@ -114,7 +124,11 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      *    persists its own copy when the setting is changed live, and this
      *    keeps the two from drifting apart.
      */
-    private fun applyPhoneProfile(transportPrimary: String, skychatPasswordFile: File) {
+    private fun applyPhoneProfile(
+        transportPrimary: String,
+        skychatPasswordFile: File,
+        skydexPasswordFile: File,
+    ) {
         val root = json.parseToJsonElement(paths.configFile.readText()).jsonObject
         val edited = buildJsonObject {
             for ((key, value) in root) {
@@ -150,7 +164,8 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                         value.jsonObject.edit {
                             put("bin_path", JsonPrimitive(paths.binDir.absolutePath))
                             this["apps"]?.let { apps ->
-                                this["apps"] = pinAppArgs(apps, skychatPasswordFile)
+                                this["apps"] =
+                                    pinAppArgs(apps, skychatPasswordFile, skydexPasswordFile)
                             }
                         },
                     )
@@ -176,7 +191,11 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      * writes, above all — passes through untouched, so this never undoes a
      * user's choice.
      */
-    private fun pinAppArgs(apps: JsonElement, skychatPasswordFile: File): JsonElement {
+    private fun pinAppArgs(
+        apps: JsonElement,
+        skychatPasswordFile: File,
+        skydexPasswordFile: File,
+    ): JsonElement {
         val list = apps as? JsonArray ?: return apps
         return JsonArray(
             list.map { entry ->
@@ -187,6 +206,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                 val name = (app["name"] as? JsonPrimitive)?.content
                 val pinned = when (name) {
                     SOCKS_APP -> phoneSocksArgs(args)
+                    SkydexProfile.APP -> SkydexProfile.phoneArgs(args, skydexPasswordFile)
                     SkychatProfile.APP -> SkychatProfile.phoneArgs(
                         args,
                         skychatPasswordFile,
@@ -211,18 +231,20 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
     }
 
     /**
-     * The skychat password file, kept in step with the stored secret. Written
-     * here rather than through the visor's `PUT …/skychat/password` route
-     * because it has to be in place *before* the app is first started —
-     * setting it afterwards leaves a window in which the chat surface is open
-     * to every app on the phone (see [SkychatProfile]).
+     * A gated app's password file, kept in step with the stored secret.
+     * Written here rather than through any API route because it has to be in
+     * place *before* the app is first started — setting it afterwards leaves a
+     * window in which that app's surface is open to every app on the phone
+     * (see [SkychatProfile], [SkydexProfile]).
+     *
+     * Rewritten only when it does not already stand for [password], so a
+     * normal launch leaves it alone and a rotated secret (a wiped keystore)
+     * does not leave the app 401-ing against its own gate.
      */
-    private suspend fun ensureSkychatPassword(): File {
-        val file = SkychatProfile.passwordFile(paths)
-        val password = secrets.skychatPassword()
+    private fun ensureGatePassword(file: File, password: String): File {
         val current = runCatching { file.readText() }.getOrNull()
-        if (current == null || !SkychatProfile.matches(current, password)) {
-            file.writeText(SkychatProfile.passwordRecord(password))
+        if (current == null || !PasswordFile.matches(current, password)) {
+            file.writeText(PasswordFile.record(password))
         }
         return file
     }
@@ -239,15 +261,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      */
     private fun phoneSocksArgs(args: List<String>): List<String> {
         val pinned = args.toMutableList()
-        val flag = pinned.indexOfFirst { it == "--addr" || it == "-addr" }
-        when {
-            flag < 0 || flag + 1 >= pinned.size ->
-                pinned += listOf("--addr", "$LOOPBACK:$DEFAULT_SOCKS_PORT")
-            // A malformed value only gets worse from rewriting — leave it
-            // and let the visor report it.
-            else -> pinned[flag + 1].substringAfterLast(':').toIntOrNull()
-                ?.let { port -> pinned[flag + 1] = "$LOOPBACK:$port" }
-        }
+        pinned.pinValue(ADDR) { current -> loopbackAddr(current, DEFAULT_SOCKS_PORT) }
         if (pinned.none { it == "--reconnect" || it.startsWith("--reconnect=") }) {
             pinned += "--reconnect"
         }
@@ -298,8 +312,8 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
     private companion object {
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"
-        const val LOOPBACK = "127.0.0.1"
         const val DEFAULT_SOCKS_PORT = 1080
+        val ADDR = listOf("--addr", "-addr")
     }
 }
 

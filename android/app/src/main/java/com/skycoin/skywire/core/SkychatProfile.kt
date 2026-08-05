@@ -1,7 +1,6 @@
 package com.skycoin.skywire.core
 
 import java.io.File
-import java.security.SecureRandom
 
 /**
  * The phone's profile for the skychat app: the argv [ConfigManager] pins on
@@ -22,7 +21,7 @@ object SkychatProfile {
     const val APP = "skychat"
 
     /** Loopback-only by design; the port stays whatever the config says. */
-    const val HOST = "127.0.0.1"
+    const val HOST = LOOPBACK_HOST
     const val DEFAULT_PORT = 8001
 
     /**
@@ -53,7 +52,7 @@ object SkychatProfile {
     fun baseUrl(port: Int): String = "http://$HOST:$port/"
 
     fun listenPort(args: List<String>): Int =
-        value(args, ADDR)?.substringAfterLast(':')?.toIntOrNull() ?: DEFAULT_PORT
+        argValue(args, ADDR)?.substringAfterLast(':')?.toIntOrNull() ?: DEFAULT_PORT
 
     /**
      * The argv the phone owns, re-applied on every launch. Everything else —
@@ -83,81 +82,8 @@ object SkychatProfile {
             pinned += "--persist"
         }
         pinned.pinValue(PERSIST_DB) { historyFile.absolutePath }
-        pinned.pinValue(ADDR) { current ->
-            val port = current?.substringAfterLast(':')?.toIntOrNull()
-            when {
-                port != null -> "$HOST:$port"
-                current == null -> "$HOST:$DEFAULT_PORT"
-                // A malformed value only gets worse from rewriting — leave it
-                // and let the visor report it.
-                else -> null
-            }
-        }
+        pinned.pinValue(ADDR) { current -> loopbackAddr(current, DEFAULT_PORT) }
         pinned.pinValue(PASSWORD_FILE_FLAG) { passwordFile.absolutePath }
         return pinned
     }
-
-    /**
-     * The on-disk form of [password], in the scheme `auth.go` verifies:
-     * `"<hex salt>:<hex sha256(password || salt)>"`, 16-byte salt — the same
-     * hashing the hypervisor's user store uses.
-     */
-    fun passwordRecord(password: String): String {
-        val salt = ByteArray(SALT_LEN).also { SecureRandom().nextBytes(it) }
-        return salt.toHex() + ":" + hash(password, salt).toHex()
-    }
-
-    /**
-     * Whether an existing record still stands for [password] — re-hashed with
-     * the record's own salt. The check is what lets the file be left alone on
-     * a normal launch and rewritten when the stored secret has rotated (a
-     * wiped keystore), instead of the app 401-ing against its own gate.
-     */
-    fun matches(record: String, password: String): Boolean {
-        val (saltHex, hashHex) = record.trim().split(":", limit = 2)
-            .takeIf { it.size == 2 } ?: return false
-        val salt = runCatching { saltHex.fromHex() }.getOrNull() ?: return false
-        return hash(password, salt).toHex() == hashHex.lowercase()
-    }
-
-    private fun hash(password: String, salt: ByteArray): ByteArray =
-        java.security.MessageDigest.getInstance("SHA-256")
-            .digest(password.toByteArray(Charsets.UTF_8) + salt)
-
-    /**
-     * Set `flag`'s value to what [next] returns for the current one (null when
-     * the flag is absent), appending the flag if it wasn't there. Returning
-     * null leaves the existing value untouched.
-     */
-    private fun MutableList<String>.pinValue(flag: List<String>, next: (String?) -> String?) {
-        val i = indexOfFirst { token -> flag.any { token == it || token.startsWith("$it=") } }
-        when {
-            i < 0 -> next(null)?.let { this += listOf(flag.first(), it) }
-            this[i].contains('=') ->
-                next(this[i].substringAfter('='))?.let { this[i] = flag.first() + "=" + it }
-            i + 1 < size -> next(this[i + 1])?.let { this[i + 1] = it }
-            // Trailing flag with no value: a broken argv the visor would
-            // reject anyway — complete it rather than shifting everything.
-            else -> next(null)?.let { this += it }
-        }
-    }
-
-    /** Accepts both `--flag value` and `--flag=value`. */
-    private fun value(args: List<String>, flags: List<String>): String? {
-        args.forEachIndexed { i, token ->
-            flags.forEach { flag ->
-                if (token.startsWith("$flag=")) return token.substringAfter('=')
-                if (token == flag && i + 1 < args.size) return args[i + 1]
-            }
-        }
-        return null
-    }
-
-    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
-
-    private fun String.fromHex(): ByteArray = ByteArray(length / 2) { i ->
-        substring(i * 2, i * 2 + 2).toInt(16).toByte()
-    }
-
-    private const val SALT_LEN = 16
 }
