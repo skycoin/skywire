@@ -113,10 +113,11 @@ fun SkywireApp() {
         if (inCall.inCall && !granted) micPermission.launch(Manifest.permission.RECORD_AUDIO)
     }
 
-    // A ringing or connected call owns the whole screen — except on the Chat
-    // tab, where the embedded chat page already draws its own banner and call
-    // panel and a second call UI on top of it would be one too many.
-    if ((inCall.invite != null || inCall.inCall) && currentRoute != Routes.CHAT) {
+    // A call owns the whole screen, in either direction and on every tab —
+    // the Chat tab included. The embedded page draws its own banner and panel
+    // underneath, but a call is not a thing to notice inside a list: it is
+    // what the phone is doing.
+    if (inCall.busy) {
         CallScreen()
         return
     }

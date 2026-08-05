@@ -27,12 +27,19 @@ import kotlin.coroutines.coroutineContext
 /** What the phone knows about calls right now. */
 data class VoiceCallState(
     val ringing: List<VoiceInvite> = emptyList(),
+    val dialing: List<VoiceInvite> = emptyList(),
     val activeIds: List<String> = emptyList(),
 ) {
     val inCall: Boolean get() = activeIds.isNotEmpty()
 
     /** The call to offer an answer for — one at a time is all a phone shows. */
     val invite: VoiceInvite? get() = ringing.firstOrNull()
+
+    /** The call being placed, if any. */
+    val outgoing: VoiceInvite? get() = dialing.firstOrNull()
+
+    /** True whenever there is a call to put on screen, in either direction. */
+    val busy: Boolean get() = inCall || invite != null || outgoing != null
 }
 
 /**
@@ -47,8 +54,12 @@ object VoiceCalls {
     private val mutable = MutableStateFlow(VoiceCallState())
     val state: StateFlow<VoiceCallState> = mutable.asStateFlow()
 
-    internal fun set(ringing: List<VoiceInvite>, activeIds: List<String>) {
-        mutable.update { it.copy(ringing = ringing, activeIds = activeIds) }
+    internal fun set(
+        ringing: List<VoiceInvite>,
+        dialing: List<VoiceInvite>,
+        activeIds: List<String>,
+    ) {
+        mutable.update { it.copy(ringing = ringing, dialing = dialing, activeIds = activeIds) }
     }
 
     internal fun clear() = mutable.update { VoiceCallState() }
@@ -76,11 +87,12 @@ internal class VoiceCallWatcher(context: Context) {
             while (coroutineContext.isActive) {
                 val ringing = runCatching { api.voiceIncoming() }.getOrNull()
                 val active = runCatching { api.voiceActive() }.getOrNull()
+                val dialing = runCatching { api.voiceDialing() }.getOrNull().orEmpty()
                 // A failed poll is left alone rather than reported as "no
                 // calls": the visor restarting mid-call would otherwise cancel
                 // a live call's notification and drop the audio service.
                 if (ringing != null && active != null) {
-                    VoiceCalls.set(ringing, active)
+                    VoiceCalls.set(ringing, dialing, active)
                     showRinging(ringing.firstOrNull())
                     val inCall = active.isNotEmpty()
                     if (inCall != wasInCall) {

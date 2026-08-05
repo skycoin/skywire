@@ -935,6 +935,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				// wasm visor's skychatVoice* JS hooks).
 				r.Get("/visors/{pk}/skychat/voice/active", hv.getVoiceActive())
 				r.Get("/visors/{pk}/skychat/voice/incoming", hv.getVoiceIncoming())
+				r.Get("/visors/{pk}/skychat/voice/dialing", hv.getVoiceDialing())
 				r.Post("/visors/{pk}/skychat/voice/call", hv.postVoiceCall())
 				r.Post("/visors/{pk}/skychat/voice/answer", hv.postVoiceAnswer())
 				r.Post("/visors/{pk}/skychat/voice/decline", hv.postVoiceDecline())
