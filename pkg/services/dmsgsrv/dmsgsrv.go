@@ -319,10 +319,29 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
+	// dmsg-over-WebTransport advert (DEFAULT-ON). WT is HTTP/3-over-QUIC, so it
+	// rides the SAME UDP socket as dmsg-over-QUIC (ALPN-demuxed in
+	// ServeUnifiedQUIC) — like WS on the main TCP port, it needs no extra port and
+	// no discovery topology change. Advertise https://<public host:port>/dmsg (the
+	// same host:port as the QUIC/TCP endpoint). An explicit public_address_wt
+	// overrides; disable_wt opts out; a bare ":port"/empty advertised address
+	// (unknown public endpoint) skips it. A browser prefers this over wss and drops
+	// the redundant TLS-over-Noise once the WT session is up.
+	// Only default-on the SHARED-socket WT when no explicit WTAddress is set — a
+	// server configured with its own separate WT UDP socket keeps that path below.
+	mainWTURL := ""
+	if !cfg.DisableWT && cfg.WTAddress == "" && primaryAdvertised != "" && !strings.HasPrefix(primaryAdvertised, ":") {
+		mainWTURL = "https://" + primaryAdvertised + "/dmsg"
+		if cfg.PublicAddressWT != "" {
+			mainWTURL = cfg.PublicAddressWT
+		}
+		log.WithField("wt_url", mainWTURL).Info("dmsg-wt: advertising WebTransport on the main UDP port (shared with QUIC).")
+	}
+
 	go srvAPI.RunBackgroundTasks(runCtx)
 	log.WithField("addr", cfg.HTTPAddress).Info("Serving server API...")
 	go func() {
-		if err := srvAPI.ListenAndServe(cfg.LocalAddress, primaryAdvertised, cfg.HTTPAddress, mainWSURL); err != nil {
+		if err := srvAPI.ListenAndServe(cfg.LocalAddress, primaryAdvertised, cfg.HTTPAddress, mainWSURL, mainWTURL); err != nil {
 			log.Errorf("Serve: %v", err)
 			cancel()
 		}
