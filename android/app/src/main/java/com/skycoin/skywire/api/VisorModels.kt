@@ -33,9 +33,22 @@ data class Overview(
     @SerialName("local_pk") val localPk: String = "",
     @SerialName("build_info") val buildInfo: BuildInfo? = null,
     @SerialName("apps") val apps: List<AppState> = emptyList(),
-    @SerialName("transports") val transports: List<JsonElement> = emptyList(),
+    @SerialName("transports") val transports: List<TransportSummary> = emptyList(),
     @SerialName("local_ip") val localIp: String = "",
     @SerialName("public_ip") val publicIp: String = "",
+)
+
+/**
+ * One live transport. A phone's are almost always dmsg, but which carrier
+ * actually came up is the first thing to look at when a route won't build —
+ * hence the type, not just a count.
+ */
+@Serializable
+data class TransportSummary(
+    @SerialName("id") val id: String = "",
+    @SerialName("remote_pk") val remotePk: String = "",
+    @SerialName("type") val type: String = "",
+    @SerialName("latency_ms") val latencyMs: Double = 0.0,
 )
 
 @Serializable
@@ -175,6 +188,26 @@ data class AppLogs(
     @SerialName("last_log_timestamp") val lastLogTimestamp: String = "",
     @SerialName("logs") val logs: List<String> = emptyList(),
 )
+
+/**
+ * A ringing inbound call. The visor formats these as `"<call-id> from <pk>"`
+ * — one string, because the surface it was built for is a CLI listing — so the
+ * shape is parsed here rather than deserialized.
+ */
+data class VoiceInvite(val callId: String, val fromPk: String) {
+    companion object {
+        private const val SEPARATOR = " from "
+
+        /** null when the line isn't the expected shape, so a poll can skip it. */
+        fun parse(line: String): VoiceInvite? {
+            val at = line.indexOf(SEPARATOR)
+            if (at <= 0) return null
+            val id = line.substring(0, at).trim()
+            val pk = line.substring(at + SEPARATOR.length).trim()
+            return if (id.isEmpty() || pk.isEmpty()) null else VoiceInvite(id, pk)
+        }
+    }
+}
 
 @Serializable
 internal data class Credentials(

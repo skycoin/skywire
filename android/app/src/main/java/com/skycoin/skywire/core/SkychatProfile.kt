@@ -39,8 +39,15 @@ object SkychatProfile {
     private val ADDR = listOf("--addr", "-addr")
     private val PASSWORD_FILE_FLAG = listOf("--password-file", "-password-file")
     private val PORTLESS = listOf("--portless", "-portless")
+    private val PERSIST = listOf("--persist", "-persist")
+    private val PERSIST_DB = listOf("--persist-db", "-persist-db")
+
+    /** Where the phone keeps its chat history, under [SkywirePaths.localDir]. */
+    private const val HISTORY_FILE = "skychat-history.db"
 
     fun passwordFile(paths: SkywirePaths): File = File(paths.localDir, PASSWORD_FILE)
+
+    fun historyFile(paths: SkywirePaths): File = File(paths.localDir, HISTORY_FILE)
 
     /** Where the WebView loads the chat UI from. */
     fun baseUrl(port: Int): String = "http://$HOST:$port/"
@@ -60,11 +67,22 @@ object SkychatProfile {
      *    without rewriting all of them.
      *  - `--addr` host forced to loopback (the port is left alone).
      *  - `--password-file` pinned at [passwordFile] — see the class comment.
+     *  - `--persist` ON, at [historyFile]. It is off by default because a
+     *    desktop can be left with an ephemeral chat, but on a phone that
+     *    default means every conversation is erased the next time the core
+     *    restarts — which it does on every crash, every reconnect and every
+     *    app update. It is also what the call log reads back (the Calls tab
+     *    is call records recovered from history), so without it a missed
+     *    call notifies once and then never happened.
      */
-    fun phoneArgs(args: List<String>, passwordFile: File): List<String> {
+    fun phoneArgs(args: List<String>, passwordFile: File, historyFile: File): List<String> {
         val pinned = args.filterNot { token ->
             PORTLESS.any { token == it || token.startsWith("$it=") }
         }.toMutableList()
+        if (pinned.none { token -> PERSIST.any { token == it || token.startsWith("$it=") } }) {
+            pinned += "--persist"
+        }
+        pinned.pinValue(PERSIST_DB) { historyFile.absolutePath }
         pinned.pinValue(ADDR) { current ->
             val port = current?.substringAfterLast(':')?.toIntOrNull()
             when {

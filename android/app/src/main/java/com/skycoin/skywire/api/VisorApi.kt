@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -16,6 +17,7 @@ import okhttp3.HttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.net.URLEncoder
@@ -74,6 +76,19 @@ class VisorApi(context: Context) {
     private val relayClient = client.newBuilder()
         .readTimeout(45, TimeUnit.SECONDS)
         .callTimeout(50, TimeUnit.SECONDS)
+        .build()
+
+    /**
+     * For the two voice-audio streams, which last as long as the call does.
+     * Every timeout is off: a call is minutes, and a quiet moment is not a
+     * dead connection. Liveness is the server's business — each stream
+     * re-arms its own deadline per frame — and on this side the loops stop
+     * when the call does.
+     */
+    private val streamClient = client.newBuilder()
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .writeTimeout(0, TimeUnit.MILLISECONDS)
+        .callTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
     private val sessionMutex = Mutex()
@@ -277,6 +292,99 @@ class VisorApi(context: Context) {
             }
         }
 
+    // --- voice calls ---
+
+    /** Calls ringing right now, awaiting an answer. */
+    suspend fun voiceIncoming(): List<VoiceInvite> =
+        voiceList("incoming").mapNotNull(VoiceInvite::parse)
+
+    /** Ids of calls that are connected. */
+    suspend fun voiceActive(): List<String> = voiceList("active")
+
+    suspend fun voiceAnswer(callId: String) = voiceAction("answer", callId)
+
+    suspend fun voiceDecline(callId: String) = voiceAction("decline", callId)
+
+    suspend fun voiceHangup(callId: String) = voiceAction("hangup", callId)
+
+    /** [mic] silences what the peer hears from us; [speaker] what we hear. */
+    suspend fun voiceMute(callId: String, mic: Boolean, speaker: Boolean): Unit =
+        withContext(Dispatchers.IO) {
+            val body = buildJsonObject {
+                put("call_id", JsonPrimitive(callId))
+                put("mic", JsonPrimitive(mic))
+                put("speaker", JsonPrimitive(speaker))
+            }.toString()
+            postWithRelogin("/api/visors/${localPk()}/skychat/voice/mute", body).use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IOException("voice mute failed (${resp.code}): ${errorBody(resp)}")
+                }
+            }
+        }
+
+    /**
+     * Opens the microphone stream: the visor reads captured PCM from the
+     * request body until [body] stops producing.
+     *
+     * [body] is a factory, not a body: a request body can only be written
+     * once, so the re-login retry needs a fresh one. The caller owns closing
+     * the returned response.
+     */
+    suspend fun voiceMicStream(body: () -> RequestBody): okhttp3.Response =
+        withContext(Dispatchers.IO) {
+            val path = "/api/voice-audio/${localPk()}/mic"
+            val first = post(path, body(), csrfToken(), streamClient)
+            if (first.code != 401) return@withContext first
+            first.close()
+            ensureSession()
+            post(path, body(), csrfToken(), streamClient)
+        }
+
+    /**
+     * Opens the playback stream: the response body is PCM to play, for as long
+     * as it is read. The caller owns closing the returned response.
+     */
+    suspend fun voiceSpeakerStream(): okhttp3.Response = withContext(Dispatchers.IO) {
+        getWithRelogin("/api/voice-audio/${localPk()}/speaker", streamClient)
+    }
+
+    /**
+     * Opens the visor's notification stream (SSE): everything its apps
+     * publish, for as long as the response is read. The caller owns closing it.
+     */
+    suspend fun notificationStream(): okhttp3.Response = withContext(Dispatchers.IO) {
+        getWithRelogin("/api/notifications/stream", streamClient)
+    }
+
+    /**
+     * 503 means the visor has voice off (or opens its own audio device) — a
+     * state the poller lives with, not an error to raise every two seconds.
+     */
+    private suspend fun voiceList(name: String): List<String> = withContext(Dispatchers.IO) {
+        getWithRelogin("/api/visors/${localPk()}/skychat/voice/$name").use { resp ->
+            if (resp.code == HTTP_UNAVAILABLE) return@withContext emptyList()
+            if (!resp.isSuccessful) {
+                throw IOException("voice $name failed (${resp.code}): ${errorBody(resp)}")
+            }
+            val body = resp.body.string().trim()
+            if (body.isEmpty() || body == "null") {
+                emptyList()
+            } else {
+                json.decodeFromString(ListSerializer(String.serializer()), body)
+            }
+        }
+    }
+
+    private suspend fun voiceAction(name: String, callId: String): Unit =
+        withContext(Dispatchers.IO) {
+            val body = buildJsonObject { put("call_id", JsonPrimitive(callId)) }.toString()
+            postWithRelogin("/api/visors/${localPk()}/skychat/voice/$name", body).use { resp ->
+                if (!resp.isSuccessful) {
+                    throw IOException("voice $name failed (${resp.code}): ${errorBody(resp)}")
+                }
+            }
+        }
+
     /** Fresh 30-second CSRF token for a mutating `/api/visors/{pk}/…` call. */
     suspend fun csrfToken(): String = withContext(Dispatchers.IO) {
         get("/api/csrf").use { decode<CsrfToken>(it).token }
@@ -317,8 +425,31 @@ class VisorApi(context: Context) {
         return put(path, body, csrfToken())
     }
 
+    private suspend fun postWithRelogin(path: String, body: String): okhttp3.Response {
+        val payload = { body.toRequestBody("application/json".toMediaType()) }
+        val first = post(path, payload(), csrfToken())
+        if (first.code != 401) return first
+        first.close()
+        ensureSession()
+        return post(path, payload(), csrfToken())
+    }
+
     private fun get(path: String, client: OkHttpClient = this.client): okhttp3.Response =
         client.newCall(Request.Builder().url("$BASE$path").build()).execute()
+
+    private fun post(
+        path: String,
+        body: RequestBody,
+        csrf: String,
+        client: OkHttpClient = this.client,
+    ): okhttp3.Response =
+        client.newCall(
+            Request.Builder()
+                .url("$BASE$path")
+                .header(CSRF_HEADER, csrf)
+                .post(body)
+                .build(),
+        ).execute()
 
     private fun put(path: String, body: String, csrf: String): okhttp3.Response =
         client.newCall(
@@ -354,6 +485,9 @@ class VisorApi(context: Context) {
 
         private const val BASE = "http://127.0.0.1:8000"
         private const val CSRF_HEADER = "X-CSRF-Token"
+
+        /** The visor's "that feature is off here" answer. */
+        private const val HTTP_UNAVAILABLE = 503
 
         @Volatile private var instance: VisorApi? = null
 

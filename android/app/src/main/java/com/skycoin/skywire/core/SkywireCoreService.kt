@@ -45,6 +45,8 @@ class SkywireCoreService : Service() {
     private lateinit var configManager: ConfigManager
     private lateinit var prefs: AppPreferences
     private var runner: Job? = null
+    private var callWatcher: Job? = null
+    private var messageWatcher: Job? = null
 
     @Volatile private var child: Process? = null
 
@@ -119,6 +121,14 @@ class SkywireCoreService : Service() {
                     CoreServiceState.mutableState.value =
                         CoreState.Running(System.currentTimeMillis(), attempt)
                     notify(getString(R.string.core_notification_running))
+                    // Calls are watched for as long as this visor runs, and
+                    // the watcher is rebuilt with it: its poll targets the
+                    // API of the process that just started.
+                    callWatcher?.cancel()
+                    callWatcher = VoiceCallWatcher(this@SkywireCoreService).watch(scope)
+                    messageWatcher?.cancel()
+                    messageWatcher =
+                        MessageNotifications(this@SkywireCoreService).watch(scope)
 
                     val pump = launch(Dispatchers.IO) {
                         process.inputStream.bufferedReader().forEachLine { log.line(it) }
@@ -126,6 +136,10 @@ class SkywireCoreService : Service() {
                     val exit = runInterruptible(Dispatchers.IO) { process.waitFor() }
                     pump.join()
                     child = null
+                    callWatcher?.cancel()
+                    callWatcher = null
+                    messageWatcher?.cancel()
+                    messageWatcher = null
 
                     val ranMs = SystemClock.elapsedRealtime() - startedAt
                     log.line("=== visor exited with code $exit after ${ranMs / 1000}s ===")
@@ -253,6 +267,7 @@ class SkywireCoreService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val ACTION_START = "com.skycoin.skywire.core.START"
         private const val ACTION_STOP = "com.skycoin.skywire.core.STOP"
+
         private const val INITIAL_BACKOFF_MS = 1_000L
         private const val MAX_BACKOFF_MS = 30_000L
         private const val BACKOFF_SLICE_MS = 250L

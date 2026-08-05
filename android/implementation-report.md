@@ -7,6 +7,85 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-05 — Calls have audio, a screen, a log, and messages have notifications
+
+**Built:**
+
+- **Real audio on a call.** The visor has no audio device on Android, so it
+  borrows the phone's. `pkg/skychat/call.Bridge` presents the host app as an
+  ordinary Source/Sink pair; `VoiceAudioEngine` (AudioRecord/AudioTrack) plays
+  the device and carries PCM over two long-lived streams on the visor's local
+  API. `VoiceCallService` runs them for exactly as long as a call is connected.
+- **A call is a screen, not a notification.** Ringing or connected and not on
+  the Chat tab → `ui/call/CallScreen` takes the whole display (answer, decline,
+  mute, speaker, hang up, live timer, ringtone). With the app backgrounded the
+  system is asked to raise it via a full-screen intent.
+- **Message notifications**, for every kind of message, from the visor's
+  existing `/api/notifications/stream` — which turned out to have been built
+  for exactly this consumer and never had one.
+- **A missed call is a message**, in the conversation it belongs to, with the
+  notification that follows from being one.
+- **A Calls tab** beside Channels: every call — incoming, outgoing, missed —
+  with the time, the duration, and a tap to call back.
+- Home: the visor card now shows public key / version / uptime, with
+  everything else (transports **by type**, DMSG servers, service health) behind
+  **More info**.
+
+**Two defaults that were wrong for a phone, both found by testing:**
+
+1. **skychat only ran while its tab was open** (autostart off, like every other
+   app on the phone). A chat app that runs only while you are looking at it
+   cannot receive anything — no message notification, no ringing call, no
+   missed call recorded. `auto_start` is now pinned on for skychat alone.
+2. **`--persist` is off by default**, so nothing was ever stored: every
+   conversation was erased on the next core restart, which happens on every
+   crash, reconnect and app update. Now pinned on with the DB under the app's
+   local dir. The Calls tab depends on it too — the call log is call records
+   read back out of message history, which is why it needs no store of its own.
+
+**Traps worth keeping:**
+
+- **The `/api` route group applies `middleware.Timeout(30s)`** — a deadline on
+  the whole request, which silently severs any long-lived one. The microphone
+  stream broke and reopened every 30 s for a whole call with no error anywhere;
+  the fix is to register outside that group, as the notification stream already
+  documents. Both audio routes now live at `/api/voice-audio/{pk}/…`.
+- **A foreground service typed `microphone` is REFUSED** — SecurityException,
+  crashing the app — unless RECORD_AUDIO is already granted. A call can arrive
+  before the user has ever been asked, so the service starts as `mediaPlayback`
+  (honest: audio out, none in) and promotes itself the moment the grant lands,
+  before a single frame is recorded.
+- The visor's skynet-first voice dial had to be given a bounded slice of the
+  call's budget or dmsg — the carrier that actually works to a phone — was
+  never reached. (Landed with the earlier voice work; the audio only made it
+  visible.)
+
+**Verified** on the `skywire` emulator with an audio-capable desktop visor
+(`-tags voiceaudio`, cgo) as the second party:
+
+- Desktop → phone call, answered on the phone: `MODE_IN_COMMUNICATION` with
+  `Recording active: true` in `dumpsys audio`, both streams live, the chat
+  page's call panel running with a timer and level meters on both sides.
+- Microphone permission is requested exactly when a call connects, and the
+  call continues (receive-only) while it is outstanding.
+- Full-screen call UI on the Home tab with Decline/Answer; ringing notification
+  confirmed posted with `category=call`, `importance=4`, full-screen intent.
+- Missed call: `Voice: missed call with 037f16ce…ecf2 logged`, an Android
+  notification on `channel=messages` `category=msg`, a `📞 Missed call` row in
+  the conversation, and the record in the Calls tab as
+  `Missed call · 03:01 PM` with a call-back tap.
+- `skychat-history.db` created on device; skychat autostarts with the core.
+- `go test ./cmd/apps/skychat/... ./pkg/skychat/call/`, golangci-lint clean on
+  every touched package. `pkg/skychat/group` hits the 10-minute test timeout —
+  untouched by this work.
+
+**Still open:** *declined* is not distinguishable from *no answer* in the log —
+both are a call that rang and stopped, and telling them apart needs a decline
+signal shared by the chat page's `/voice/decline` and the phone's visor API.
+Speakerphone uses the deprecated `AudioManager.isSpeakerphoneOn`.
+
+---
+
 ## 2026-08-05 — `skychat://` links open the phone; voice calls come back
 
 **Built:**

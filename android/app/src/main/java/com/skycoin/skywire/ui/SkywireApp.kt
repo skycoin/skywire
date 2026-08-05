@@ -1,5 +1,9 @@
 package com.skycoin.skywire.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,9 +26,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -35,6 +41,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.DeepLinks
+import com.skycoin.skywire.core.VoiceCalls
+import com.skycoin.skywire.ui.call.CallScreen
 import com.skycoin.skywire.ui.chat.ChatScreen
 import com.skycoin.skywire.ui.dex.DexScreen
 import com.skycoin.skywire.ui.fleet.FleetScreen
@@ -85,6 +93,32 @@ fun SkywireApp() {
         if (chatLink != null && currentRoute != Routes.CHAT) {
             navController.navigateToTab(Routes.CHAT)
         }
+    }
+
+    // A connected call needs the microphone, and a call can be answered from
+    // the notification with no screen in front of the user — so the ask
+    // happens here, app-wide, the moment there IS one. Until it is granted the
+    // call runs receive-only rather than failing, and the capture loop picks
+    // the grant up whenever it lands.
+    val context = LocalContext.current
+    val inCall by VoiceCalls.state.collectAsState()
+    val micPermission = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { /* Granted or not, the call carries on; the engine re-checks. */ }
+    LaunchedEffect(inCall.inCall) {
+        val granted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO,
+        ) == PackageManager.PERMISSION_GRANTED
+        if (inCall.inCall && !granted) micPermission.launch(Manifest.permission.RECORD_AUDIO)
+    }
+
+    // A ringing or connected call owns the whole screen — except on the Chat
+    // tab, where the embedded chat page already draws its own banner and call
+    // panel and a second call UI on top of it would be one too many.
+    if ((inCall.invite != null || inCall.inCall) && currentRoute != Routes.CHAT) {
+        CallScreen()
+        return
     }
 
     Scaffold(
