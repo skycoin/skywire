@@ -23,6 +23,16 @@
       </div>
     }
 
+    @if (reloadWorkerAvailable) {
+      <div class="d-flex align-items-center mb-4">
+        <button mat-raised-button color="primary" (click)="reloadWorker()">
+          <mat-icon [inline]="true">refresh</mat-icon>
+          {{ 'settings.reload-worker.label' | translate }}
+        </button>
+        <mat-icon [inline]="true" class="info-tip ml-2" [matTooltip]="'settings.reload-worker.info' | translate">info</mat-icon>
+      </div>
+    }
+
     @if (authChecked && authActive) {
       <app-password></app-password>
     }
