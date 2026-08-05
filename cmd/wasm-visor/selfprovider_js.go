@@ -20,7 +20,6 @@ import (
 
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 // vlogHook mirrors every Go subsystem log line (dmsg / transport / router / …)
@@ -237,7 +236,9 @@ func (s visorSelf) SelfRouterSettings() []byte {
 // exclude js/wasm, so it can't be imported into the wasm blob. The `sk` field is
 // deliberately never included (never expose the secret key from a served view).
 func (s visorSelf) SelfRuntimeConfig() []byte {
-	svc := visorcore.ResolveServices(nil)
+	// effectiveSvc = deployment defaults with any boot-time page override applied
+	// (configoverride_js.go), so this view matches what the runtime is wired to.
+	svc := effectiveSvc
 	pkHexes := func(pks []cipher.PubKey) []string {
 		out := make([]string, 0, len(pks))
 		for _, p := range pks {
@@ -262,7 +263,8 @@ func (s visorSelf) SelfRuntimeConfig() []byte {
 	out := map[string]interface{}{
 		"version": buildinfo.Version(),
 		"pk":      selfPK.Hex(),
-		"note":    "browser wasm-visor — no on-disk config; this MIRRORS the native config shape (config gen). Applicable sections are populated from resolved services + this tab's runtime; platform_omitted lists sections a browser tab can't have. Settings are ephemeral to this tab; the secret key is never shown.",
+		"note":    "browser wasm-visor — no on-disk config, but this IS the config the runtime uses (it mirrors the native config-gen shape). Service endpoints are runtime-reconfigurable: editing + Save persists an override in this browser and reloads the visor with it. config_overrides lists the currently pinned fields (empty = pure deployment defaults). platform_omitted lists sections a browser tab can't have; the secret key is never shown.",
+		"config_overrides": cfgOverride,
 		// --- applicable sections (populated) ---
 		"dmsg": map[string]interface{}{
 			"discovery": svc.DmsgDiscoveryDmsg,

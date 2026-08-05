@@ -127,7 +127,7 @@
   function tryBoot() {
     if (!api || !bootParams || bootPromise) { return; }
     bootPromise = Promise.resolve(
-      api.boot(bootParams.sk, bootParams.seedpk || '', bootParams.seedws || '', bootParams.disc || '')
+      api.boot(bootParams.sk, bootParams.seedpk || '', bootParams.seedws || '', bootParams.disc || '', bootParams.cfg || '')
     );
     bootPromise.then(function (pk) {
       bootedPK = (pk === undefined || pk === null) ? '' : pk;
@@ -283,7 +283,7 @@
     if (!m) { return; }
     switch (m.t) {
       case 'init':
-        if (!bootParams) { bootParams = { sk: m.sk, seedpk: m.seedpk, seedws: m.seedws, disc: m.disc }; tryBoot(); }
+        if (!bootParams) { bootParams = { sk: m.sk, seedpk: m.seedpk, seedws: m.seedws, disc: m.disc, cfg: m.cfg }; tryBoot(); }
         // If already booted, this tab was told 'up' on connect; nothing more to do.
         return;
       case 'shutdown':
