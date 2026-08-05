@@ -233,25 +233,43 @@ class VisorApi(context: Context) {
     }
 
     /**
+     * Runtime stats of an app. Same "500 means no running proc" contract as
+     * [appConnections]; an empty [AppStats] stands for it.
+     */
+    suspend fun appStats(name: String): AppStats = withContext(Dispatchers.IO) {
+        getWithRelogin("/api/visors/${localPk()}/apps/$name/stats").use { resp ->
+            if (resp.code == 500) return@withContext AppStats()
+            if (!resp.isSuccessful) {
+                throw IOException("app stats failed (${resp.code}): ${errorBody(resp)}")
+            }
+            decode<AppStats>(resp)
+        }
+    }
+
+    /**
      * One mutating PUT on an app, carrying only the fields given:
      *  - [pk] sets the remote server (`--srv`),
      *  - [args] replaces the whole argv (shell-quoted string, parsed
      *    server-side),
+     *  - [killswitch] adds or removes vpn-client's `--killswitch` flag (the
+     *    visor rejects it for any other app),
      *  - [status] 1 starts, 0 stops.
      *
-     * Both [pk] and [args] restart a *running* app server-side; on a
-     * stopped one they only rewrite the config, so configure-then-start
+     * [pk], [args] and [killswitch] all restart a *running* app server-side;
+     * on a stopped one they only rewrite the config, so configure-then-start
      * is a safe order in a single call.
      */
     suspend fun updateApp(
         name: String,
         pk: String? = null,
         args: String? = null,
+        killswitch: Boolean? = null,
         status: Int? = null,
     ): AppState = withContext(Dispatchers.IO) {
         val body = buildJsonObject {
             pk?.let { put("pk", JsonPrimitive(it)) }
             args?.let { put("args", JsonPrimitive(it)) }
+            killswitch?.let { put("killswitch", JsonPrimitive(it)) }
             status?.let { put("status", JsonPrimitive(it)) }
         }
         putWithRelogin("/api/visors/${localPk()}/apps/$name", body.toString()).use { resp ->
