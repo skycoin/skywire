@@ -7,6 +7,57 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-05 — The address book moves to the visor, so names reach every surface
+
+**Why:** a nickname lived in the chat page's `localStorage`, which meant the
+two places a name matters most could not see it — a notification title, which
+skychat composes in Go before any UI is involved, and the phone's native call
+screen, which is Kotlin and cannot read a WebView's storage. Both showed 66 hex
+characters for someone the user had already named. (The profile package's own
+header had flagged this: *"the address book … fixed that one device at a time"*.)
+
+**Built:**
+
+- `pkg/skychat/contacts` — the address book as one small JSON file beside the
+  profile, written temp-then-rename so a crash mid-write cannot turn a power cut
+  into "all my contacts are gone and the app won't start the feature".
+- skychat serves it: `GET/POST /contacts`, plus `POST /contacts/import` for
+  migration. Import **fills gaps only** — it can never revert a rename made
+  since, which is what makes running it on every page load safe.
+- `displayName(pk)` is now the single answer to "what do we call this key",
+  used by every notification title (DM, group, file, missed call).
+- The page reads and writes the server book, keeping its in-memory map for the
+  synchronous render paths, and pushes any surviving `localStorage` names up
+  once before dropping them.
+- The Android side caches the book (30 s) and resolves it for the ringing
+  notification and the full-screen call screen.
+
+**Resolution order, now the same everywhere:** the operator's nickname → the
+name the peer publishes about itself → the shortened key. The published name is
+never consulted in the notification path (it is a network fetch); the UI writes
+one into the book when there is no nickname yet, so by the time it matters it is
+already a nickname. A name the user chose is never replaceable by the person it
+labels.
+
+**Verified** on the emulator, naming the desktop peer "Alice" in Contact
+Settings:
+
+- `skychat-contacts.json` on device: `{"037f16ce…": "Alice"}` — server-side,
+  and it now survives a WebView cache clear and is shared by every UI of this
+  visor.
+- Message notification title: **Alice** (was `037f16ce…ecf2`).
+- Ringing notification: **Incoming call / Alice**.
+- Full-screen call screen: **Alice**.
+
+**Also:** the Contact Settings copy said "Saved here, on this device", which
+stopped being true — corrected rather than left to mislead.
+
+**Not moved:** contact *membership* (`skychat_contacts`) and avatars (`i_<pk>`)
+are still per-browser. Only the name is needed outside the page, and avatars are
+data-URL blobs that would want a different store.
+
+---
+
 ## 2026-08-05 — The phone is a generic sink for the notification hub
 
 **Why:** the hub was decoupled from skychat so anything — an app, the visor,
