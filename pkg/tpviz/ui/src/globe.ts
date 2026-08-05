@@ -670,6 +670,9 @@ function animate(): void {
 
     animationId = requestAnimationFrame(animate);
 
+    // Suspended (visualizer not visible): keep the loop alive but skip rendering.
+    if (S.renderPaused) return;
+
     // Auto-rotate using quaternion
     if (globe && autoRotate && !isDragging) {
         const autoRotateQuat = new THREE.Quaternion().setFromAxisAngle(
