@@ -133,6 +133,8 @@ function spawnFlowParticles(): void {
 }
 
 function animateFlow(): void {
+    // Suspended (visualizer not visible): keep the loop alive but skip the draw.
+    if (S.renderPaused) { setFlowAnimationId(requestAnimationFrame(animateFlow)); return; }
     const showDataflow = (document.getElementById('show-dataflow') as HTMLInputElement)?.checked;
 
     flowCtx.clearRect(0, 0, flowCanvas.width, flowCanvas.height);
@@ -172,6 +174,10 @@ function animateFlow(): void {
     setFlowAnimationId(requestAnimationFrame(animateFlow));
 }
 
+// Particle-spawn timer, tracked so teardown can clear it (was previously an
+// anonymous setInterval that leaked across mount cycles).
+let flowSpawnInterval: ReturnType<typeof setInterval> | null = null;
+
 export function startFlowAnimation(): void {
     flowCanvas = document.getElementById('flow-canvas') as HTMLCanvasElement;
     if (!flowCanvas) {
@@ -188,15 +194,16 @@ export function startFlowAnimation(): void {
     if (!S.flowAnimationId) {
         animateFlow();
     }
-    setInterval(() => {
-        spawnFlowParticles();
-    }, 500);
+    if (!flowSpawnInterval) {
+        flowSpawnInterval = setInterval(() => { spawnFlowParticles(); }, 500);
+    }
 
     window.addEventListener('resize', resizeFlowCanvas);
 }
 
 export function clearFlowAnimation(): void {
     setFlowParticles([]);
+    if (flowSpawnInterval) { clearInterval(flowSpawnInterval); flowSpawnInterval = null; }
     if (flowCtx && flowCanvas) {
         flowCtx.clearRect(0, 0, flowCanvas.width, flowCanvas.height);
     }

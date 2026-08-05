@@ -168,3 +168,11 @@ export const ipGroupColors: Record<number, string> = {};
 // Globe view state
 export let globeViewActive = false;
 export function setGlobeViewActive(active: boolean) { globeViewActive = active; }
+
+// Visibility gate — true while the visualizer isn't visible (backgrounded browser
+// tab, or the mount element off-screen/hidden). The self-rescheduling rAF render
+// loops check this and skip their draw (keeping the loop alive so they auto-resume
+// when it clears); the data-sync loops are cleared/re-armed around it. See
+// lifecycle.pauseWhileHidden/resumeWhenVisible + mount.ts.
+export let renderPaused = false;
+export function setRenderPaused(p: boolean) { renderPaused = p; }

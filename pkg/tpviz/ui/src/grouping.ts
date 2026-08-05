@@ -279,6 +279,8 @@ function applySatelliteStyles(): void {
 
 /** Animation loop for satellite orbits */
 function animateSatelliteOrbit(): void {
+    // Suspended (visualizer not visible): keep the loop alive but skip the update.
+    if (S.renderPaused) { S.setSatelliteOrbitAnimId(requestAnimationFrame(animateSatelliteOrbit)); return; }
     if (S.satelliteNodeIds.size === 0) return;
 
     const updates: { id: string; x: number; y: number }[] = [];
