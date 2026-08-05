@@ -23,6 +23,8 @@ import { TranslateModule } from '@ngx-translate/core';
 import { AutoScalePipe } from '../pipes/auto-scale.pipe';
 import { ClipboardDirective } from '../directives/clipboard.directive';
 
+import { BundleMountComponent } from './bundle-mount/bundle-mount.component';
+
 import { BulkRewardAddressChangerComponent } from '../components/layout/bulk-reward-address-changer/bulk-reward-address-changer.component';
 import { ButtonComponent } from '../components/layout/button/button.component';
 import { ConfirmationComponent } from '../components/layout/confirmation/confirmation.component';
@@ -94,6 +96,7 @@ const SHARED_ANGULAR_MODULES = [
 const SHARED_DECLARATIONS = [
   AutoScalePipe,
   ClipboardDirective,
+  BundleMountComponent,
   BulkRewardAddressChangerComponent,
   ButtonComponent,
   ConfirmationComponent,

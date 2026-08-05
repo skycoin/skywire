@@ -9,28 +9,18 @@
   </div>
 
   <div class="content col-12 mt-4.5">
-    @if (loading && !error) {
-      <div class="loading-row">
-        <mat-spinner [diameter]="16"></mat-spinner>
-        <span class="ml-2">loading network visualizer…</span>
-      </div>
-    }
-    @if (error) {
-      <div class="error-row">
-        <mat-icon>error_outline</mat-icon>
-        <span class="ml-2">{{ error }}</span>
-      </div>
-    }
-    @if (unavailable) {
-      <div class="error-row">
-        <mat-icon>info_outline</mat-icon>
-        <span class="ml-2">The network visualizer isn't available on this visor — the transport-graph
-          UI isn't served here. It's available in the native hypervisor.</span>
-      </div>
-    }
-    <!-- The pkg/tpviz transport-graph UI mounts itself into this container
-         (SkywireTpviz.mount) — sidebar, filters, grouping and Globe/Flat/WebGL
-         views, in-context (no iframe). -->
-    <div #graph class="viz-graph"></div>
+    <!-- The pkg/tpviz transport-graph UI (sidebar, filters, grouping and
+         Globe/Flat/WebGL views) mounts itself into the generic bundle host, in
+         the SPA's own context — no iframe, no /tp-viz/ break-out. -->
+    <app-bundle-mount
+      class="viz-graph"
+      [src]="bundleSrc"
+      [scriptId]="bundleId"
+      globalName="SkywireTpviz"
+      [opts]="mountOpts"
+      loadingText="loading network visualizer…"
+      unavailableText="The network visualizer isn't available on this visor — the transport-graph UI isn't served here. It's available in the native hypervisor."
+      (ready)="onReady($event)"
+    ></app-bundle-mount>
   </div>
 </div>

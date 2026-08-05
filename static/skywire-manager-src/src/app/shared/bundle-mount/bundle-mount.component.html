@@ -1,0 +1,21 @@
+@if (loading && !error) {
+  <div class="bundle-mount-loading">
+    <mat-spinner [diameter]="16"></mat-spinner>
+    <span class="ml-2">{{ loadingText }}</span>
+  </div>
+}
+@if (error) {
+  <div class="bundle-mount-error">
+    <mat-icon>error_outline</mat-icon>
+    <span class="ml-2">{{ error }}</span>
+  </div>
+}
+@if (unavailable) {
+  <div class="bundle-mount-error">
+    <mat-icon>info_outline</mat-icon>
+    <span class="ml-2">{{ unavailableText }}</span>
+  </div>
+}
+<!-- The embedded bundle mounts all of its own DOM into this container via its
+     mount(root, opts) entry — in the host's own JS/DOM context, no iframe. -->
+<div #mountRoot class="bundle-mount-root"></div>
