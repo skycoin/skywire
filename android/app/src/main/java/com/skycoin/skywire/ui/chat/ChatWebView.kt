@@ -22,6 +22,10 @@ import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.skycoin.skywire.core.SkychatProfile
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import org.json.JSONObject
+import kotlin.coroutines.resume
 
 /**
  * The Android glue around skychat's embedded web UI. Kept out of the Compose
@@ -101,6 +105,7 @@ internal object ChatWebView {
         baseUrl: () -> String?,
         password: () -> String?,
         onHistoryChanged: (Boolean) -> Unit,
+        onPageReady: () -> Unit,
         onError: (String) -> Unit,
     ): WebViewClient = object : WebViewClient() {
 
@@ -146,6 +151,8 @@ internal object ChatWebView {
         override fun onPageFinished(view: WebView, url: String) {
             authAttempts = 0
             onHistoryChanged(view.canGoBack())
+            // about:blank is the teardown load, not a chat page.
+            if (url != "about:blank") onPageReady()
         }
 
         override fun onReceivedError(
@@ -188,6 +195,51 @@ internal object ChatWebView {
             return true
         }
     }
+
+    /**
+     * Show [address] in the page's Add-by-address dialog: the field is filled
+     * and the lookup runs, and that is where it stops — the page deliberately
+     * does not add, open or join on a link's say-so.
+     *
+     * Driving the page rather than loading a URL for it is what keeps a link
+     * arriving mid-session from throwing away what is on screen: this is one
+     * document, and reloading it would drop the open conversation, the scroll
+     * position, and the live event stream with it.
+     *
+     * The retry covers the gap between "the document finished loading" and
+     * "the page's own object exists" — the caller only has the first signal.
+     * Returns false if the page never became ready, or had nothing to do with
+     * the address.
+     */
+    suspend fun openAddress(view: WebView, address: String): Boolean {
+        val script = """
+            (function () {
+              var chat = window.app;
+              if (!chat || typeof chat.openAddressFromLink !== 'function') return 'wait';
+              return chat.openAddressFromLink(${JSONObject.quote(address)}) ? 'ok' : 'ignored';
+            })()
+        """.trimIndent()
+        repeat(ADDRESS_ATTEMPTS) {
+            // evaluateJavascript answers with the JSON encoding of the value,
+            // so a string result comes back quoted.
+            when (evaluate(view, script)) {
+                "\"ok\"" -> return true
+                "\"wait\"" -> delay(ADDRESS_RETRY_MS)
+                else -> return false
+            }
+        }
+        Log.w(TAG, "chat page never exposed its address dialog")
+        return false
+    }
+
+    private suspend fun evaluate(view: WebView, script: String): String? =
+        suspendCancellableCoroutine { continuation ->
+            view.evaluateJavascript(script) { result -> continuation.resume(result) }
+        }
+
+    /** ~3 s; the page builds its object synchronously with the document. */
+    private const val ADDRESS_ATTEMPTS = 20
+    private const val ADDRESS_RETRY_MS = 150L
 
     /**
      * Hand an attachment to the system downloader. The Authorization header

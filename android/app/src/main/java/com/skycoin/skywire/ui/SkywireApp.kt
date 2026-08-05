@@ -15,6 +15,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,6 +34,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.ui.chat.ChatScreen
 import com.skycoin.skywire.ui.dex.DexScreen
 import com.skycoin.skywire.ui.fleet.FleetScreen
@@ -72,6 +75,17 @@ fun SkywireApp() {
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+
+    // A skychat link opened from elsewhere belongs on the Chat tab. Only the
+    // navigation happens here — the link stays pending until the chat surface
+    // is up and has shown it, which can be a while after the tab is on screen
+    // (the core may still be connecting).
+    val chatLink by DeepLinks.pendingChatLink.collectAsState()
+    LaunchedEffect(chatLink) {
+        if (chatLink != null && currentRoute != Routes.CHAT) {
+            navController.navigateToTab(Routes.CHAT)
+        }
+    }
 
     Scaffold(
         bottomBar = {

@@ -23,6 +23,27 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
+// voiceSkynetDialBudget caps one skynet signaling attempt. Long enough for
+// route setup on a mesh that has a path, short enough that the dmsg fallback
+// still has most of the caller's 30 s to place the call.
+const voiceSkynetDialBudget = 10 * time.Second
+
+// dialSkynetBounded makes one skynet dial under its own deadline and reports
+// nil rather than an error: the caller has a fallback and nothing to decide
+// from the reason it failed. Never outlives ctx — a shorter caller deadline
+// still wins.
+func dialSkynetBounded(ctx context.Context, addr appnet.Addr) net.Conn {
+	dctx, cancel := context.WithTimeout(ctx, voiceSkynetDialBudget)
+	// Safe on the success path too: the context governs route setup, not the
+	// conn it produced, which is exactly how net.Dialer.DialContext behaves.
+	defer cancel()
+	c, err := appnet.DialContext(dctx, addr)
+	if err != nil {
+		return nil
+	}
+	return c
+}
+
 // initVoice wires the voice manager. Best-effort: with no dmsg client it's a
 // no-op (voice disabled), like grouping/pairing.
 func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
@@ -34,10 +55,19 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	// Dial prefers skynet (on-mesh, IP-anonymous, multi-hop) when its networker
 	// is up, and falls back to a direct dmsg stream. Both target the SAME port.
+	//
+	// The skynet attempt is given its OWN slice of the caller's budget rather
+	// than the whole of it. Preferring skynet only makes sense if failing at it
+	// still leaves time to try dmsg, and route setup to an unreachable peer
+	// does not fail fast: it asks the setup nodes, falls back to a local BFS,
+	// then tries to build a direct transport, and burns the entire deadline
+	// getting there. That is the ordinary state of a phone — no inbound
+	// reachability, so no direct transport and no route — and it meant a call
+	// to one timed out having never tried the carrier that does work.
 	dial := func(dctx context.Context, peer cipher.PubKey, p uint16) (net.Conn, error) {
 		if _, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
 			addr := appnet.Addr{Net: appnet.TypeSkynet, PubKey: peer, Port: routing.Port(p)}
-			if c, derr := appnet.DialContext(dctx, addr); derr == nil {
+			if c := dialSkynetBounded(dctx, addr); c != nil {
 				return c, nil
 			}
 		}

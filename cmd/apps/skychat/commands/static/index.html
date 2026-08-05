@@ -3184,12 +3184,12 @@
     </div>
   </div>
 
-  <!-- Incoming voice call banner -->
+  <!-- Incoming call banner -->
   <div id="incomingCall" class="incoming-call hidden">
     <div class="ic-info">
       <div class="ic-avatar">&#x1F4DE;</div>
       <div>
-        <div class="ic-title">Incoming voice call</div>
+        <div class="ic-title">Incoming call</div>
         <div class="ic-from" id="icFrom">-</div>
       </div>
     </div>
@@ -8777,7 +8777,7 @@
         const items = [];
 
         if (this.voice && this.voice.available) {
-          items.push({ icon: '&#x1F4DE;', label: 'Voice call', act: 'placeCall' });
+          items.push({ icon: '&#x1F4DE;', label: 'Call', act: 'placeCall' });
         }
         items.push({
           icon: '&#x1F4CC;', label: pinned ? 'Unpin' : 'Pin',
@@ -8905,7 +8905,10 @@
 
       // ---- Add by address --------------------------------------------
 
-      openAddressModal() {
+      // focus is skipped when the field is being filled for the user
+      // (openAddressFromLink): there is nothing left to type, and on a phone
+      // the keyboard would rise over the result the dialog was opened to show.
+      openAddressModal({ focus = true } = {}) {
         this.closeStartMenu();
         const input = document.getElementById('addrInput');
         input.value = '';
@@ -8915,12 +8918,40 @@
         document.getElementById('addrHint').textContent =
           'Paste a public key to message someone, or a group or channel address to join it.';
         document.getElementById('addressModal').classList.add('visible');
-        setTimeout(() => input.focus(), 50);
+        if (focus) setTimeout(() => input.focus(), 50);
       }
 
       closeAddressModal() {
         this.stopQrScan();
         this.closeModal('addressModal');
+      }
+
+      // openAddressFromLink opens Add-by-address on an address handed in from
+      // OUTSIDE the page — a skychat:// link the host opened us for, whether
+      // that host is a phone app resolving the intent or a desktop browser
+      // following a link.
+      //
+      // It goes exactly as far as the resolve and no further: the field is
+      // filled and the lookup runs, so the user sees WHO or WHAT the link
+      // points at, and then the one action button waits. A link that arrived
+      // from outside must never add a contact, open a chat or join a group on
+      // its own — the tap that follows is the consent.
+      //
+      // Returns false when there is nothing to resolve, so a caller can tell
+      // "opened" from "ignored an empty link".
+      openAddressFromLink(raw) {
+        const addr = String(raw == null ? '' : raw).trim();
+        if (!addr) return false;
+        this.openAddressModal({ focus: false });
+        const input = document.getElementById('addrInput');
+        if (!input) return false;
+        input.value = addr;
+        // Resolve now rather than through onAddressInput: nobody is typing, so
+        // the debounce it exists for would only add 350ms of "Looking it up…".
+        clearTimeout(this._addrTimer);
+        this._addrResolved = null;
+        this._resolveAddress(addr);
+        return true;
       }
 
       // onAddressInput debounces the resolve so typing a 66-character key
