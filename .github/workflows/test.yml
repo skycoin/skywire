@@ -5,6 +5,14 @@ on:
       - 'docs/**'
       - 'LICENSE'
       - '.gitignore'
+  push:
+    branches: [develop]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'LICENSE'
+      - '.gitignore'
+  workflow_dispatch:
 name: Test
 
 jobs:
