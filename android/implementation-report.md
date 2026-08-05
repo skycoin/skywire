@@ -7,6 +7,55 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-05 — The phone is a generic sink for the notification hub
+
+**Why:** the hub was decoupled from skychat so anything — an app, the visor,
+later the hypervisor — can publish. The phone consumed it but presented every
+event as a SkyChat message, which quietly undid that: one `messages` channel,
+`CATEGORY_MESSAGE`, a SkyChat title fallback, and a single notification id for
+all tagged events. skydex-client already publishes (market alerts, lifecycle),
+so this was not hypothetical — its alerts would have landed in "Messages", and
+its `skydex-lifecycle` tag could overwrite a chat notification.
+
+**Built:**
+
+- `MessageNotifications` → **`NotificationBridge`**: app-agnostic, and named
+  for what it is. Presentation is now driven by the hub's `app` field.
+- **Per-app Android channels**, created on first use. An app the phone has
+  never heard of is not dropped and needs no code: it gets a channel named
+  after itself at default importance, so the user has a real switch for it in
+  system settings the day it first appears. The `CHANNELS` table only gives
+  known apps a nicer label and a deliberate importance (SkyChat interrupts,
+  SkyDEX doesn't, visor events are quieter still) — adding a row tunes an app,
+  adding a *notification* needs no row at all.
+- **Tags namespaced by app**, so two publishers that both say "lifecycle"
+  cannot replace each other's alerts. Untagged events stack.
+- **`(*Visor).Notify(title, body, tag)`** — so a visor-side notification is one
+  line at the place that already knows the thing happened, with the `visor` app
+  name (`NotifyAppVisor`) stamped for sinks to key on. Intentionally unused
+  today; it is the seam the next notification is written against.
+
+**What this buys:** a new notification — "peer went offline", say — is now one
+`v.Notify("Peer offline", …, peerPK)` at the point of detection. No Android
+change, no new endpoint, no channel to register; the phone shows it under a
+"Skywire" channel the user can silence on its own.
+
+**Verified** on the emulator: a missed call published by skychat arrived as
+`channel=app_skychat category=msg importance=4` — routed from the event's app
+field into a channel created at run time, where it previously landed on the
+hardcoded `messages` channel. The unknown-app fallback is the same call minus
+the table hit and is not separately exercised on device.
+
+**Worth knowing (hub-side, not changed here):** the stream is **live-only, no
+replay** — anything published while the phone's SSE connection is down (visor
+restart, doze, a network flap) is gone, since with zero subscribers the hub
+falls through to the host-OS tier, which on Android is nothing. The bridge
+reconnects within ~2 s, which is the whole mitigation. A small ring buffer plus
+`?since=` on the stream would close it, and would matter more for a
+notification the user is expected to act on than it does for chat.
+
+---
+
 ## 2026-08-05 — Calls have audio, a screen, a log, and messages have notifications
 
 **Built:**

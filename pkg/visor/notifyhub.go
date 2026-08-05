@@ -273,6 +273,36 @@ func (v *Visor) NotifyHub() *NotifyHub {
 	return v.notifyHub
 }
 
+// NotifyAppVisor is the App name the visor stamps on notifications it raises
+// itself, as opposed to relaying for an app. Sinks key their presentation off
+// it (the Android bridge gives it its own, quieter channel), so it is part of
+// the contract rather than a label.
+const NotifyAppVisor = "visor"
+
+// Notify raises a notification from the VISOR itself — a transport that went
+// down, a peer that came back, an update that landed — as opposed to relaying
+// one an app published.
+//
+// It exists so that adding a notification is one line at the place that already
+// knows the thing happened, with no plumbing: the hub picks the tier that can
+// reach the user, and every sink (a phone, the desktop notification center, a
+// future manager-UI bell) already handles an event it has never seen before.
+//
+// tag groups related notifications so a newer one replaces its predecessor —
+// pass a stable string per subject (a peer's key, a service name) and leave it
+// empty for one-offs that should stack. Nil-safe and non-blocking, like the hub.
+func (v *Visor) Notify(title, body, tag string) {
+	if v == nil || v.notifyHub == nil {
+		return
+	}
+	v.notifyHub.Publish(appserver.NotifyReq{
+		App:   NotifyAppVisor,
+		Title: title,
+		Body:  body,
+		Tag:   tag,
+	})
+}
+
 // SubscribeNotifications registers a host-app subscriber on the visor's hub,
 // mirroring SubscribeLogs. Returns a nil channel when there is no hub so
 // callers can answer "unavailable" rather than panic.

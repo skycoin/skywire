@@ -47,10 +47,6 @@
     <string name="call_speaker">Speaker</string>
     <string name="call_missed_title">Missed call</string>
 
-    <!-- Message notifications -->
-    <string name="message_channel">Messages</string>
-    <string name="message_channel_description">New SkyChat messages.</string>
-
     <!-- Home / Connect -->
     <string name="state_disconnected">Disconnected</string>
     <string name="state_starting">Starting…</string>
