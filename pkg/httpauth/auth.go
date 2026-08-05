@@ -102,33 +102,28 @@ func verifyAuth(store NonceStore, r *http.Request, auth *Auth) error {
 
 	r.Body = io.NopCloser(&buf)
 
-	// Optimization: skip the expensive secp256k1 signature
-	// verification for DMSG connections. The DMSG noise handshake
-	// (KK pattern) already authenticated the remote PK at the
-	// transport layer — verifying the HTTP-layer signature is
-	// redundant. The nonce check above still runs for replay /
-	// ordering protection.
-	//
-	// Detection: DMSG HTTP transport sets RemoteAddr to the PK hex
-	// (not an IP:port). If it parses as a valid PK, we know the
-	// connection arrived via an authenticated DMSG stream.
-	if isDmsgConnection(r) {
-		return nil
-	}
-
+	// NOTE: verifyAuth now runs ONLY for plain-HTTP requests. DMSG requests are
+	// authenticated earlier (WithAuth) from the noise-authenticated RemoteAddr PK
+	// and never reach here, so the full signature verification below is correct
+	// for the HTTP path (no dmsg short-circuit — that skip used to trust the
+	// unverified SW-Public header over dmsg, an impersonation hole).
 	return auth.Verify(payload)
 }
 
-// isDmsgConnection checks whether the request arrived over a DMSG
-// connection by inspecting RemoteAddr. DMSG HTTP transport uses the
-// remote PK as the address; regular HTTP connections use IP:port.
-func isDmsgConnection(r *http.Request) bool {
+// dmsgRemotePK returns the noise-authenticated peer public key when the request
+// arrived over a DMSG HTTP transport — dmsghttp sets RemoteAddr to "<pk>:<port>"
+// (a regular HTTP connection uses "ip:port"), and that PK was proven by the
+// dmsg noise-KK handshake at the transport layer. ok=false for plain HTTP.
+func dmsgRemotePK(r *http.Request) (cipher.PubKey, bool) {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
 	}
 	var pk cipher.PubKey
-	return pk.Set(host) == nil
+	if pk.Set(host) != nil {
+		return cipher.PubKey{}, false
+	}
+	return pk, true
 }
 
 // PayloadWithNonce returns the concatenation of payload and nonce.
