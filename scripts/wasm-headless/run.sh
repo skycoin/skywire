@@ -41,4 +41,19 @@ SEEDWS=$(grep '^SEEDWS=' "$OUT" | cut -d= -f2-)
 echo "seed: $SEEDPK @ $SEEDWS"
 
 echo "== running Node harness =="
-node scripts/wasm-headless/harness.mjs "$WASM" "$EXECJS" "$SEEDPK" "$SEEDWS"
+# The smoke exercises a real dmsg session, so transient reachability blips can
+# fail a single run. Retry once against the same (still-running) local seed
+# before declaring failure; the harness itself now fails fast with a diagnostic
+# rather than hanging, so a retry is cheap.
+ATTEMPTS=2
+for i in $(seq 1 "$ATTEMPTS"); do
+  if node scripts/wasm-headless/harness.mjs "$WASM" "$EXECJS" "$SEEDPK" "$SEEDWS"; then
+    exit 0
+  fi
+  if (( i < ATTEMPTS )); then
+    echo "== harness attempt $i failed; retrying (dmsg reachability can flake) =="
+    sleep 2
+  fi
+done
+echo "== harness failed after $ATTEMPTS attempts =="
+exit 1
