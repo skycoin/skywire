@@ -163,7 +163,12 @@ func (ce *Client) UpgradeBrowserSessions() int {
 		case CarrierWT:
 			hasWT = true
 		case CarrierWS:
-			wsSessions = append(wsSessions, s)
+			// Only converge wss → WT for servers that actually advertise WT. A wss
+			// to a non-WT server has no WT to converge to — dropping it just re-dials
+			// wss next tick (the churn when only a few of N servers advertise WT).
+			if s.wtCapable {
+				wsSessions = append(wsSessions, s)
+			}
 		}
 	}
 	remaining := len(ce.sessions)
@@ -415,6 +420,10 @@ func (ce *Client) dialSession(ctx context.Context, entry *disc.Entry) (cs Client
 	// exact protocol used to reach this server (and ws:// from wss://).
 	dSes.carrier = network
 	dSes.carrierAddr = dialAddr
+	// Whether this server can be upgraded wss → WT. Only these should have their
+	// bootstrap wss dropped by UpgradeBrowserSessions; a non-WT server's wss just
+	// re-dials wss on the next tick, churning the session (the 8/9-servers case).
+	dSes.wtCapable = entry.Server.AddressWT != ""
 
 	ce.sessionsMx.Lock()
 	if ce.closed {
