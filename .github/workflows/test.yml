@@ -306,7 +306,7 @@ jobs:
           cache: npm
           cache-dependency-path: static/skywire-manager-src/package-lock.json
 
-      - uses: browser-actions/setup-chrome@v1
+      - uses: browser-actions/setup-chrome@v2
         id: setup-chrome
 
       - name: Install UI dependencies
