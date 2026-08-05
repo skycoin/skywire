@@ -176,3 +176,11 @@ export function setGlobeViewActive(active: boolean) { globeViewActive = active; 
 // lifecycle.pauseWhileHidden/resumeWhenVisible + mount.ts.
 export let renderPaused = false;
 export function setRenderPaused(p: boolean) { renderPaused = p; }
+
+// Global (window/document) event listeners the app registers live OUTSIDE the
+// mounted DOM, so root.innerHTML='' on unmount does not remove them and they
+// accumulate across mount cycles. Register every such listener with this
+// controller's signal; teardown() aborts it (removing them all at once) and
+// resets a fresh controller for the next mount.
+export let globalListeners = new AbortController();
+export function resetGlobalListeners() { globalListeners = new AbortController(); }
