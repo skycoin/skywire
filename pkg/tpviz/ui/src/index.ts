@@ -5,6 +5,7 @@ import { toggleSection, focusVisor } from './sidebar';
 import { showGlobe, hideGlobe, toggleGlobeView, setVoronoiMode, isVoronoiModeActive } from './globe';
 
 import { mount } from './mount';
+import { installVisibilityGate } from './lifecycle';
 import { normalizeView } from './persist';
 
 // Expose functions needed by inline onclick handlers in HTML
@@ -34,4 +35,6 @@ import { normalizeView } from './persist';
 // this no-ops and the host drives mount() instead.
 if (document.getElementById('container')) {
   wireEventListeners();
+  // Standalone page: suspend data sync + rendering while the tab is backgrounded.
+  installVisibilityGate(document.getElementById('container'));
 }
