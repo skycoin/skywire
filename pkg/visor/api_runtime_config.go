@@ -79,7 +79,7 @@ func (v *Visor) SetRuntimeConfig(rawJSON []byte) error {
 
 	// Preserve the running SK when the editor submitted a blank one (the common
 	// case, since the SK is redacted). Re-marshal below so the real key — not the
-	// redacted blank — lands on disk. A deliberately-typed SK is honoured but must
+	// redacted blank — lands on disk. A deliberately-typed SK is honored but must
 	// still derive the current PK (checked next).
 	preservedSK := false
 	if newConf.SK.Null() && !v.conf.SK.Null() {
