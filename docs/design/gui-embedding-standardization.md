@@ -122,7 +122,9 @@ An Angular side hosts it with one generic wrapper: load the bundle script once,
 2. **skychat**: `mount()` entry for the standalone UI; Angular tab hosts it.
 3. **pty terminal**, **wallet-config**: same contract.
 4. **`?embed=1` WinBox windows** → Angular CDK portal.
-5. (Large, separate) **skycoin-web** convergence into the SPA as a lazy module.
+5. ~~(Large, separate) **skycoin-web** convergence into the SPA as a lazy
+   module.~~ **Superseded** (see the progress note below): skycoin-web stays
+   iframed — a separate upstream-owned Angular app + the wallet custody boundary.
 
 ## Implementation findings (2026-08-04, from a full code inventory)
 
@@ -198,23 +200,24 @@ Steps 1, 2 and 4 have landed and were each live-validated (native HV + a fresh
   `/vpn` degrades there — acceptable, since VPN is non-functional on a
   browser/wasm visor anyway.
 
-**Step 3/5 finding — the skychat/logs `?embed=1` WinBox windows are a larger,
-deliberate refactor, deferred.** The CDK-portal bridge (step 3) is not just a
-generic `mountComponent` helper: `SkychatComponent` and `LogsComponent` both
-depend on `NodeComponent.currentNode` (a static observable set by the parent
-`NodeComponent` route) and on `ActivatedRoute` params. The `?embed=1`
-self-iframe (`browse.js` logs `:1423`, chat `:1596`) exists *precisely* to reuse
-that route context cheaply — see the comment in `skychat.component.ts` noting it
-reads `?peer=` directly because `ActivatedRoute` "only sees the primary outlet's
-params for the embedded case." A bare CDK-portal mount outside the router would
-have no `NodeComponent` parent, so `currentNode` never fires and the component
-breaks. Converting therefore requires **decoupling these 1500-line, recently
-converged (#3641/#3596/#3633/#3642) components from the route hierarchy** (feed
-the node context via `@Input` or a shared service) — a high-blast-radius refactor
-that should be its own deliberate, live-validated pass, not folded into the
-standardization's clean-win phase. Until then the `?embed=1` self-iframe stays
-(it is a justified, working design). The vanilla `wallet/config` page remains a
+**Steps 3 + 5 — skychat/logs WinBox windows now mount the real Angular component
+(#3720).** The concern below turned out tractable: `SkychatComponent` and
+`LogsComponent` both read only `node.localPk`, and neither injects
+`ActivatedRoute`/`Router`/`NodeComponent`. So the decoupling is small — each gains
+an optional `embeddedNodeKey` input (+ `embeddedPeer` for chat); when set (portal
+mount) it synthesizes the node from the key instead of subscribing to
+`NodeComponent.currentNode`, and the routed path is unchanged. A `NgBridgeService`
+exposes `window.SkywireNg.mountComponent(el, name, opts)` (CDK `DomPortalOutlet` in
+the root injector); `browse.js`'s chat/logs windows prefer it and fall back to the
+`?embed=1` iframe if the bridge is absent. Validated live: ☰ Logs opens a WinBox
+hosting `app-logs` with no iframe. The vanilla `wallet/config` page remains a
 smaller future candidate for the `<app-bundle-mount>` host.
+
+**skycoin-web stays iframed (not converged).** It is a separate, upstream-owned
+(`skycoin/skycoin`) Angular application; merging two Angular runtimes into one
+document is not viable, and the iframe is also the wallet's custody/isolation
+boundary. Tighter integration, if wanted, is via the iframe (theme/session/
+deep-link bridges) — not by converging the apps.
 
 ## Non-goals
 
