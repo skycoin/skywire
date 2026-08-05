@@ -70,6 +70,39 @@
   function loadStoredSK() { try { return localStorage.getItem(SK_KEY) || ''; } catch (e) { return ''; } }
   function storeSK(hex) { try { localStorage.setItem(SK_KEY, hex); } catch (e) {} }
 
+  // RUNTIME RECONFIG: a browser edge has no on-disk config, so service-endpoint
+  // overrides live here (page-owned — the SharedWorker can't read localStorage)
+  // and travel to the visor at boot as the `cfg` init field (worker.js →
+  // skywireVisor.boot arg 5 → applyCfgOverride in configoverride_js.go). Editing
+  // is Save-and-reload: skywireConfig.set persists the override, shuts the worker
+  // down (a plain reload would reconnect to the still-booted stale runtime), and
+  // reloads so a fresh visor reads it. get()/set(obj)/reset() are the API; the
+  // Angular config tab drives them, and they're usable from the console too.
+  var CFG_OVERRIDE_KEY = 'skywire-cfg-override';
+  function loadCfgOverride() { try { return localStorage.getItem(CFG_OVERRIDE_KEY) || ''; } catch (e) { return ''; } }
+  function reloadFreshWorker() {
+    try {
+      if (typeof SharedWorker !== 'undefined') {
+        var w = new SharedWorker('worker.js' + variantQS());
+        if (w.port.start) { w.port.start(); }
+        w.port.postMessage({ t: 'shutdown' });
+      }
+    } catch (e) { /* dedicated-worker fallback dies with the page */ }
+    setTimeout(function () { try { location.reload(); } catch (e) {} }, 200);
+  }
+  window.skywireConfig = {
+    get: function () { try { return JSON.parse(loadCfgOverride() || '{}'); } catch (e) { return {}; } },
+    raw: loadCfgOverride,
+    set: function (obj) {
+      try { localStorage.setItem(CFG_OVERRIDE_KEY, typeof obj === 'string' ? obj : JSON.stringify(obj || {})); } catch (e) {}
+      reloadFreshWorker();
+    },
+    reset: function () {
+      try { localStorage.removeItem(CFG_OVERRIDE_KEY); } catch (e) {}
+      reloadFreshWorker();
+    }
+  };
+
   // Go<->TinyGo wasm-visor selection. The chosen variant is persisted per-origin
   // in localStorage; the SK above is variant-INDEPENDENT, so switching keeps the
   // same identity/PK. Workers can't read localStorage, so the variant travels to
@@ -221,6 +254,11 @@
             clearTimeout(upTimer);
             reject(new Error(m.msg));
             break;
+          case 'cfg-save':
+            // The runtime-config editor Saved: persist the override + reload the
+            // visor with it applied (skywireConfig.set does both).
+            try { if (window.skywireConfig) window.skywireConfig.set(JSON.parse(m.cfg || '{}')); } catch (e) {}
+            break;
           case 'stun-ip':
             // This tab is the elected agent: run STUN here and return the public IP.
             runStunIP(m.ice).then(function (ip) {
@@ -244,7 +282,7 @@
       globalThis.__skyvoiceToWorker = function (bytes) { try { port.postMessage({ t: 'voiceMic', b: bytes }); } catch (e) {} };
 
       // First tab supplies the key + seed config; the worker boots the visor once.
-      try { port.postMessage({ t: 'init', sk: sk, seedpk: CFG.seedpk || '', seedws: CFG.seedws || '', disc: CFG.disc || '' }); }
+      try { port.postMessage({ t: 'init', sk: sk, seedpk: CFG.seedpk || '', seedws: CFG.seedws || '', disc: CFG.disc || '', cfg: loadCfgOverride() }); }
       catch (e) { clearTimeout(upTimer); reject(e); return; }
 
       // Report visibility so the worker prefers a foreground tab as WebRTC/STUN
@@ -324,6 +362,9 @@
             clearTimeout(upTimer);
             reject(new Error(m.msg));
             break;
+          case 'cfg-save':
+            try { if (window.skywireConfig) window.skywireConfig.set(JSON.parse(m.cfg || '{}')); } catch (e) {}
+            break;
           case 'stun-ip':
             // The worker has no RTCPeerConnection; run STUN here (main thread) and
             // return the discovered public IP so the visor learns it on HTTPS.
@@ -349,7 +390,7 @@
       };
       // Supply the key + seed config; the worker boots the visor once, then reports
       // 'up' with the booted PK. Same protocol as the SharedWorker path.
-      try { worker.postMessage({ t: 'init', sk: sk, seedpk: CFG.seedpk || '', seedws: CFG.seedws || '', disc: CFG.disc || '' }); }
+      try { worker.postMessage({ t: 'init', sk: sk, seedpk: CFG.seedpk || '', seedws: CFG.seedws || '', disc: CFG.disc || '', cfg: loadCfgOverride() }); }
       catch (e) { clearTimeout(upTimer); reject(e); }
     });
   }

@@ -210,8 +210,14 @@ func jsBoot(_ js.Value, args []js.Value) interface{} {
 	seedPKHex := args[1].String()
 	seedWSURL := args[2].String()
 	discDmsgAddr := args[3].String()
+	// arg 5 (optional): a JSON service-config override the page persisted in
+	// localStorage — how the browser edge is made runtime-reconfigurable.
+	cfgOverrideJSON := ""
+	if len(args) > 4 && args[4].Type() == js.TypeString {
+		cfgOverrideJSON = args[4].String()
+	}
 	return promise(func() (interface{}, error) {
-		pk, err := bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr)
+		pk, err := bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +269,7 @@ func jsStatus(js.Value, []js.Value) interface{} {
 
 // bootEdge wires the edge: dmsg client → transport.Manager → edge router →
 // in-process app ProcManager.
-func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, error) {
+func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string) (cipher.PubKey, error) {
 	pk, sk, err := keysFromHex(skHex)
 	if err != nil {
 		return pk, err
@@ -276,6 +282,11 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// visors can't drift on config sourcing. nil V1 → pure deployment defaults
 	// (a browser edge has no operator config file).
 	svc := visorcore.ResolveServices(nil)
+	// Merge any page-supplied override (localStorage → boot arg 5) onto the
+	// deployment defaults, then publish the result as the effective config so
+	// SelfRuntimeConfig renders exactly what dmsg / router / autoconnect use.
+	applyCfgOverride(&svc, cfgOverrideJSON)
+	effectiveSvc = svc
 
 	// Default the discovery to the deployment's dmsg-discovery when the caller
 	// didn't pass one. Without a discDmsgAddr, StartDmsgSeeded skips the discovery
@@ -1065,6 +1076,7 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 		//   - RewardAddress: genuinely none (no on-disk config; earns no rewards),
 		//     left empty rather than faked.
 		Uptime:            uptimeSeconds(),
+		MinHops:           effectiveSvc.MinHops,
 		PublicAutoconnect: true,
 		IsPublic:          false,
 	}
