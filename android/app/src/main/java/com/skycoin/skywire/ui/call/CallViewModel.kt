@@ -9,7 +9,6 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.api.VisorApi
-import com.skycoin.skywire.core.VoiceCallWatcher
 import com.skycoin.skywire.core.VoiceCalls
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -155,7 +154,8 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         super.onCleared()
     }
 
-    private fun short(pk: String) = VoiceCallWatcher.shortPk(pk)
+    /** The operator's name for the key when there is one — see VoiceCalls. */
+    private fun short(pk: String) = VoiceCalls.displayName(pk)
 
     private companion object {
         const val TAG = "SkywireVoice"

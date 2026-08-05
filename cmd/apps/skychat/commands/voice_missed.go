@@ -269,7 +269,7 @@ func recordCall(peer, outcome string, duration time.Duration) {
 	// Only a missed call is worth interrupting for. The other two are records
 	// of something the user was already part of.
 	if outcome == callMissed {
-		notifyOSInbound(shortHexPK(peer), text)
+		notifyOSInbound(displayName(peer), text)
 	}
 	appLog("Voice: %s with %s logged", strings.ToLower(outcome), shortHexPK(peer))
 }

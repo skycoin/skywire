@@ -725,6 +725,11 @@ func RunSkychat(ctx context.Context, args []string) error {
 		appLog("Successfully started skychat.")
 	}
 
+	// The address book is opened whether or not history persistence is on: a
+	// nickname is not a message, and a user who has turned history off still
+	// expects to see names rather than keys.
+	openContactStore(contactStorePath())
+
 	if persistEnabled {
 		if err := openHistoryStore(); err != nil {
 			appLog("Failed to open history store: %v — continuing in ephemeral mode", err)
@@ -894,6 +899,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	registerProfileHTTPHandlers(mux)
 	registerVoiceHTTPHandlers(mux)
 	registerCallLogHandler(mux)
+	registerContactHandlers(mux)
 	registerPresenceHTTPHandlers(mux)
 	startPresenceLoop(ctx)
 
@@ -1679,7 +1685,7 @@ func onChatEvent(ev dm.Event) {
 	// Host-OS notification when no capable browser UI is showing it. Inbound
 	// only — our own outbound mirror is not news to this host.
 	if ev.Dir == "in" {
-		notifyOSInbound(shortHexPK(ev.Peer), notifPreview(ev.Text))
+		notifyOSInbound(displayName(ev.Peer), notifPreview(ev.Text))
 	}
 }
 

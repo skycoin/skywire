@@ -3046,15 +3046,16 @@
       <h3>Contact Settings</h3>
       <img id="modalAvatar" class="modal-avatar" src="p.png" />
       <div id="modalPk" class="modal-pk">-</div>
-      <!-- Address book: a name for this key, kept on this device only (nothing
-           is sent to the peer). Empty clears it and the key shows again. -->
+      <!-- Address book: a name for this key, kept by this visor and never
+           sent to the peer. Empty clears it and the key shows again. -->
       <input id="modalName" class="cg-input" type="text" maxlength="40" autocomplete="off"
-             placeholder="Name for this contact (this device only)"
+             placeholder="Name for this contact"
              onkeydown="if (event.key === 'Enter') app.savePeerName()" />
       <p class="cg-help">
-        Saved here, on this device. It overrides whatever name this peer
-        publishes for themselves — a name you chose is never replaced by one
-        they changed.
+        Kept by your visor, so it shows everywhere you use it — including
+        notifications and call screens — and never reaches the peer. It
+        overrides whatever name they publish for themselves: a name you chose
+        is never replaced by one they changed.
       </p>
       <div class="modal-actions">
         <button class="btn" onclick="app.savePeerName()">Save Name</button>
@@ -3636,7 +3637,8 @@
         // visor history, so a local hide needs to survive here, not in the cache).
         this.hiddenGroup = new Set(this._loadHiddenGroup());
         this.pinned = localStorage.getItem('skychat_pinned') || null; // "dm:<pk>" | "grp:<gid>" | null
-        // Address book: local nicknames for public keys, this device only.
+        // Address book: nicknames for public keys, kept by the visor so every
+        // surface (notifications, the phone's call screen) shows the same name.
         this.nameMaxLen = 40;
         this.names = this._loadNames();
         // Which of those keys are SAVED contacts, as opposed to keys we
@@ -3729,6 +3731,9 @@
         this._specTimer = null;
         this._specCanvas = null;
         this._specCtx = null;
+        // The address book comes from the server now; every name shown before
+        // it lands is the shortened key, and _syncNames repaints once it does.
+        this._syncNames();
         this._pollVoice();
         setInterval(() => this._pollVoice(), 3000);
         // Peer presence: the visor probes in the background, this just reads
@@ -6666,10 +6671,63 @@
 
       // ---- Address book ------------------------------------------------
       //
-      // Local nicknames for public keys: a map of pk -> name in localStorage,
-      // never sent anywhere. Purely this device's view of who a key is.
+      // Nicknames for public keys — this operator's private view of who a key
+      // is, never published to anyone.
+      //
+      // They live on the SERVER (GET/POST /contacts), not in localStorage,
+      // because the two places a name matters most are outside this page: a
+      // notification title, composed in Go before any UI is involved, and the
+      // phone app's native call screen, which is Kotlin and cannot read a
+      // WebView's storage. Both used to show 66 hex characters for someone the
+      // user had already named. Keeping them server-side also means a nickname
+      // survives a cache clear and is the same in every UI of this visor.
+      //
+      // `this.names` stays an in-memory map because every display path
+      // (shortPk, the header, sender labels) reads it synchronously while
+      // rendering; the server is the source of truth behind it.
 
       _loadNames() {
+        // Synchronous callers need something immediately; _syncNames fills
+        // this in and repaints once the server answers.
+        return {};
+      }
+
+      // _syncNames pulls the book, then pushes up anything this browser still
+      // has from the localStorage era. The push is fill-the-gaps only (the
+      // server never overwrites), so a rename made on another device wins
+      // over a stale local copy — and running it on every load is harmless.
+      async _syncNames() {
+        try {
+          const r = await fetch('/contacts');
+          if (!r.ok) return;
+          this.names = await r.json() || {};
+        } catch (e) {
+          return;
+        }
+        const legacy = this._legacyNames();
+        if (Object.keys(legacy).length) {
+          try {
+            const r = await fetch('/contacts/import', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ names: legacy }),
+            });
+            if (r.ok) {
+              // Re-read rather than merging locally: the server decided what
+              // it kept, and guessing here is how the two drift apart.
+              const back = await fetch('/contacts');
+              if (back.ok) this.names = await back.json() || {};
+              localStorage.removeItem('skychat_names');
+            }
+          } catch (e) {
+            // Keep the local copy for the next attempt.
+          }
+        }
+        this._repaintNames();
+      }
+
+      // _legacyNames reads the pre-server address book, if this browser still
+      // holds one.
+      _legacyNames() {
         try {
           const raw = JSON.parse(localStorage.getItem('skychat_names') || '{}');
           const out = {};
@@ -6683,8 +6741,24 @@
         }
       }
 
-      _saveNames() {
-        localStorage.setItem('skychat_names', JSON.stringify(this.names));
+      // _repaintNames refreshes everywhere a name is shown, after the book
+      // arrives or changes wholesale.
+      _repaintNames() {
+        Object.keys(this.names).forEach(pk => this._paintPeerLabel(pk));
+        if (this.recipient && !this.group) this._paintHeaderPeer(this.recipient);
+        if (this.activeKey()) this._rerenderActive();
+        if (this.tab === 'calls') this.loadCalls();
+      }
+
+      // _saveNames persists one entry. Fire-and-forget: the in-memory map is
+      // already updated and the UI has already repainted, so a failed write
+      // costs the nickname on the next load, not the interaction now.
+      _saveNames(pk, name) {
+        if (!pk) return;
+        fetch('/contacts', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk: String(pk).toLowerCase(), name: String(name || '') }),
+        }).catch(() => {});
       }
 
       peerName(pk) {
@@ -6700,7 +6774,7 @@
         const clean = String(name || '').trim().replace(/\s+/g, ' ').slice(0, this.nameMaxLen);
         if (clean) this.names[key] = clean;
         else delete this.names[key];
-        this._saveNames();
+        this._saveNames(key, clean);
         this._paintPeerLabel(pk);
         if (this.recipient === pk && !this.group) this._paintHeaderPeer(pk);
         // Sender labels and reply quotes are baked into rendered bubbles.

@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.skycoin.skywire.MainActivity
 import com.skycoin.skywire.R
+import com.skycoin.skywire.api.SkychatApi
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.api.VoiceInvite
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +55,28 @@ object VoiceCalls {
     private val mutable = MutableStateFlow(VoiceCallState())
     val state: StateFlow<VoiceCallState> = mutable.asStateFlow()
 
+    /**
+     * The operator's names for public keys, from skychat's address book.
+     *
+     * Held here rather than fetched per screen because a call screen has to
+     * name its peer the instant it appears — a name that arrives a second
+     * later, after the user has already read a wall of hex, is not much of an
+     * improvement. Refreshed by the watcher on the same tick as the calls.
+     */
+    private val names = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    internal fun setNames(book: Map<String, String>) {
+        names.value = book.mapKeys { (pk, _) -> pk.lowercase() }
+    }
+
+    /**
+     * What to call [pk]: the operator's name for it, else the shortened key.
+     * The same order skychat uses for a notification title, so the two never
+     * disagree about who called.
+     */
+    fun displayName(pk: String): String =
+        names.value[pk.lowercase()]?.takeIf { it.isNotEmpty() } ?: VoiceCallWatcher.shortPk(pk)
+
     internal fun set(
         ringing: List<VoiceInvite>,
         dialing: List<VoiceInvite>,
@@ -78,13 +101,19 @@ internal class VoiceCallWatcher(context: Context) {
 
     private val app = context.applicationContext
     private val api = VisorApi.get(app)
+    private val skychat = SkychatApi.get(app)
     private val notifications = NotificationManagerCompat.from(app)
+    private var namesAt = 0L
 
     fun watch(scope: CoroutineScope): Job = scope.launch(Dispatchers.IO) {
         ensureChannels(app)
         var wasInCall = false
         try {
             while (coroutineContext.isActive) {
+                // Before the calls, so a name is already in hand when one
+                // arrives — a call screen that shows hex and corrects itself a
+                // moment later is barely better than one that never knew.
+                refreshNames()
                 val ringing = runCatching { api.voiceIncoming() }.getOrNull()
                 val active = runCatching { api.voiceActive() }.getOrNull()
                 val dialing = runCatching { api.voiceDialing() }.getOrNull().orEmpty()
@@ -109,6 +138,19 @@ internal class VoiceCallWatcher(context: Context) {
             notifications.cancel(RINGING_NOTIFICATION_ID)
             if (wasInCall) VoiceCallService.stop(app)
         }
+    }
+
+    /**
+     * Re-read the address book, rarely. Names change when a human edits one,
+     * so polling it at the call rate would be a request every two seconds for
+     * a file that changes twice a month.
+     */
+    private suspend fun refreshNames() {
+        val now = System.currentTimeMillis()
+        if (now - namesAt < NAMES_REFRESH_MS) return
+        namesAt = now
+        val url = SkychatProfile.baseUrl(SkychatProfile.DEFAULT_PORT)
+        VoiceCalls.setNames(skychat.contacts(url))
     }
 
     /**
@@ -142,7 +184,7 @@ internal class VoiceCallWatcher(context: Context) {
         val note = NotificationCompat.Builder(app, CHANNEL_RINGING)
             .setSmallIcon(R.drawable.skywire_logo)
             .setContentTitle(app.getString(R.string.call_incoming_title))
-            .setContentText(shortPk(invite.fromPk))
+            .setContentText(VoiceCalls.displayName(invite.fromPk))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
@@ -157,6 +199,7 @@ internal class VoiceCallWatcher(context: Context) {
     companion object {
         private const val TAG = "SkywireVoice"
         private const val POLL_MS = 2_000L
+        private const val NAMES_REFRESH_MS = 30_000L
         const val RINGING_NOTIFICATION_ID = 2
 
         const val CHANNEL_RINGING = "call_incoming"
