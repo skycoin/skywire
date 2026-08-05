@@ -196,7 +196,14 @@ fun SkywireApp() {
                 )
             }
             composable(Routes.VPN) { VpnScreen(onBack = { navController.popBackStack() }) }
-            composable(Routes.DEX) { DexScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.DEX) {
+                DexScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenLogs = { source ->
+                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
+                    },
+                )
+            }
             composable(Routes.FLEET) { FleetScreen(onBack = { navController.popBackStack() }) }
 
             // One log viewer, reached from Home and (later) every app screen.

@@ -40,6 +40,14 @@ class SecretStore(private val context: Context) {
      */
     suspend fun skychatPassword(): String = secret(KEY_SKYCHAT_PASSWORD)
 
+    /**
+     * Password gating skydex-client's trading UI — same reasoning as
+     * [skychatPassword], with a market session and a wallet behind the port
+     * instead of a chat history (see [SkydexProfile]). Its own secret, so one
+     * app's surface can never be opened with another's credential.
+     */
+    suspend fun skydexPassword(): String = secret(KEY_SKYDEX_PASSWORD)
+
     private suspend fun secret(key: androidx.datastore.preferences.core.Preferences.Key<String>): String =
         mutex.withLock {
             val prefs = context.coreDataStore.data.first()
@@ -126,5 +134,6 @@ class SecretStore(private val context: Context) {
         const val TRANSFORM = "AES/GCM/NoPadding"
         val KEY_API_PASSWORD = stringPreferencesKey("api_password")
         val KEY_SKYCHAT_PASSWORD = stringPreferencesKey("skychat_password")
+        val KEY_SKYDEX_PASSWORD = stringPreferencesKey("skydex_password")
     }
 }

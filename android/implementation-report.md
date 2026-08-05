@@ -7,6 +7,191 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-05 — SkyDEX: a gate on the trading UI, and a phone layout for it
+
+The two things the SkyDEX screen shipped without, both now closed as far as
+this side of the repo can close them.
+
+### 1. The trading UI is no longer open to every app on the phone
+
+**Why it was:** skydex-client's UI and control API had no authentication of
+any kind, and Android has no per-app network namespace — a loopback listener
+is reachable by every installed app holding INTERNET. Behind that port sit the
+live market session, the registered wallet addresses, and placing or
+cancelling orders. skychat solved the same exposure with `--password-file`;
+skydex-client had no equivalent because the server that serves the UI comes
+from the skycoin repo and takes an address, not a listener or a handler.
+
+**Built** (`cmd/apps/skydex-client/commands/auth.go`, new):
+
+- `--password-file`, reading the format skychat already uses — one line of
+  `"<hex salt>:<hex sha256(password || salt)>"` — so one writer serves both
+  gates. Empty (the default) still serves ungated: **the desktop shape does
+  not change**, one server on the configured port.
+- With a password set, the wrapper takes over `--addr` with a basic-auth
+  reverse proxy and moves the engine to a loopback port drawn fresh at every
+  start. The credential is stripped before the request is forwarded.
+- Fails **closed**: `--password-file` pointing at something unreadable or
+  empty refuses to start rather than quietly serving the surface open.
+- Android side: `core/SkydexProfile` (mirroring `SkychatProfile`) pins
+  `--password-file` next to the loopback `--addr`, `SecretStore` grows its own
+  skydex secret, `SkydexApi` sends the credential on every call, and the
+  WebView answers the challenge.
+
+**Verified on the emulator**, with the phone connected and trading:
+
+- From `adb forward` — a different UID, the same reachability another app has
+  — `GET http://127.0.0.1:8051/api/status` → **401** with
+  `WWW-Authenticate: Basic realm="skydex-client"`; a wrong password → **401**.
+- The app's own listeners, read from `/proc/net/tcp` for its uid: 8000
+  (visor), 8001 (skychat), **8051 (the gate)**, and a random high port — 33043
+  on that run — where the engine actually is.
+- Go tests (`auth_test.go`): the record formats that do and do not gate, the
+  middleware's three answers, that `gatedServer` moves the engine and proxies
+  the path through only with the credential, and that with no password it
+  returns the configured address untouched.
+
+**What this does not close, precisely:** the engine's own port answers
+ungated — measured, not assumed: `curl` to 33043 returned the full market
+status. An attacker must now scan ~28k ephemeral ports, re-rolled at every
+app start, instead of connecting to a documented one. The operating system
+offers no way to bind a socket only this UID may connect to, so **closing the
+last gap needs one upstream change**: `skydexclient.Run` accepting a
+`net.Listener` (or exposing its handler). At that point the proxy here
+collapses into wrapping a handler and no second port exists at all.
+
+### 2. The page has a phone layout
+
+**Why:** the trading UI declares `width=device-width` and is built on
+Bootstrap, but its own ~10 kB of CSS contains **no media query at all** —
+every padding, grid minimum and flex basis in it was measured on a desktop.
+(The earlier entry called it "desktop-width"; that was wrong in a way worth
+correcting — it renders at the real width, it just has no breakpoint.)
+
+It is a built bundle from another repo, so the lever is a stylesheet layered
+on top, injected exactly like the header hide and scoped to
+`max-width: 600px` so a tablet keeps the layout the page intends
+(`ui/dex/DexWebView.kt`). The WebView stopped zooming out to fit
+(`loadWithOverviewMode = false`) since the page now has a layout at the real
+width; pinch-zoom stays on, because this is a screen full of hex.
+
+**Seen working on the emulator:** all five tabs on one line — **Settings**,
+which holds the wallet addresses, was previously off the end of a scroll
+strip; the banner's *Open Settings* now a full-width button instead of a word
+wedged in a corner; the page's padding no longer spending an eighth of the
+screen; and the Settings form one full-width column.
+
+**Written but not exercised:** the rules for tables (`white-space: nowrap`
+inside the existing `.table-wrap` scroller) and for the sell-order trade
+builder (its 84px + 140px + 140px row stacked). Both need a market with live
+listings and a registered wallet: the public market had no products, and the
+throwaway local one cannot enable a sell coin without a chain node. They sit
+in the same `@media` block whose other rules are demonstrably applying.
+
+---
+
+## 2026-08-05 — SkyDEX screen: native market entry, embedded trading UI
+
+**Why:** SkyDEX is the desktop flow — market public key → connect → the
+trading UI — and the only part of it that does not belong in a WebView is the
+key. Sixty-six hex characters want the phone's own field, its paste
+behaviour, and a list of the markets this phone has already used. Everything
+past the handshake is the page the desktop already serves.
+
+**Built** (`ui/dex/`, `api/SkydexApi.kt`):
+
+- Native header: market-key field with validation, a recent-markets dropdown
+  (names learned from the handshake, in `AppPreferences`/DataStore), and
+  Connect. Once there is a market it collapses to one row — dot, market name,
+  shortened key (tap to copy), **Disconnect** — and the page takes the screen.
+- Connect is three steps in one action: `PUT …/apps/skydex-client` with the
+  argv carrying `--market-pk`, then `status: 1`, then a `POST /api/connect`
+  on the app's *own* control API once its listener answers.
+- The trading UI in a WebView below, with the page's own header suppressed
+  (see below). `Logs` in the bar, scoped to `skydex-client`, like every app
+  screen.
+- `core/ConfigManager` now pins a third app's flags on every launch, and the
+  loopback-address rewrite it shared with SkySOCKS is one helper.
+
+**Hard-won facts:**
+
+- **`SetAppPK` refuses this app.** `PUT …/apps/{app}` with a `pk` field is
+  allow-listed to `skysocks-client` and `vpn-client` (`api_apps.go`), and the
+  flag is `--srv` regardless. The market key therefore goes through the
+  `args` field — the whole argv, rewritten.
+- **`--market-pk` connects nothing.** It is the value the page pre-fills its
+  connect form with; the engine dials only when something POSTs
+  `/api/connect` (`skydex-client/commands/api.go`: *"The client never
+  connects automatically"*). Setting the flag and starting the app would have
+  left the user typing the key a second time into the page — exactly what
+  entering it natively was meant to avoid. The native side POSTs it, and the
+  page, which reads `/api/status` on load, comes up already on the market.
+- **Two servers answer different questions.** The visor (`:8000`) owns the
+  app — argv, running or not. skydex-client (`:8051`) owns the market
+  session. The screen polls both: an app that reports a market is by
+  definition an app whose UI is up, so one `/api/status` call is also the
+  readiness probe.
+- **`--addr` defaults to `:8051` — every interface.** Same exposure the proxy
+  had, with a worse payload: the trading UI has **no gate at all**. (The
+  one-time-code scheme in the app list is `skydex-market`'s operator panel,
+  not this.) The profile pins the host to loopback. That closes the Wi-Fi
+  side; it cannot close the on-device side, since Android has no per-app
+  network namespace and the app exposes no auth flag to pin — noted below.
+- **The page drew the same header we did** — brand, connected dot, market
+  name, shortened key, Disconnect — two identical bars costing a fifth of a
+  phone screen. It is hidden with a stylesheet injected at page-finished, not
+  by removing the node: the page is React and would put it straight back. The
+  native row is the keeper because it stays reachable whatever the page's own
+  layout does.
+- Stop-before-configure carries over from SkySOCKS unchanged. The `args`
+  field triggers a server-side `RestartApp`, which is a no-op when no proc is
+  running (`api_apps.go:577`) — so with the app reliably stopped first, one
+  PUT carrying `args` + `status: 1` is correct in every case.
+- **Ship-blocker checked, and it is already clear:** `go.mod` has no
+  `replace` to a local skycoin checkout. The engine comes from the pinned
+  `github.com/skycoin/skycoin v0.28.6-0.20260730141451-1bb474401424` and is
+  vendored, so a release build needs nothing resolved here.
+
+**Verified** on the emulator (`sdk_gphone64_arm64`, Android 17 / API 37,
+light + dark), against the market `024a37ba…43bdb9` ("Unofficial Skycoin
+Market"):
+
+- Typed key → **Connect** → *"Reaching the market over Skywire…"* → the
+  trading UI rendered, connected, in ~20 s: Market / My Orders / My Listings
+  / History, the wallet-address prompt, and *"No products available right
+  now"* (the market had no live listings).
+- On-device config after connecting:
+  `--addr 127.0.0.1:8051 --market-port 8050 --market-pk 024a37bae6…` — the
+  loopback pin held and the key was appended, clobbering nothing.
+- **Disconnect** dropped the session and stopped the app
+  (`skydex-client: Context canceled, shutting down`), and the panel returned
+  with the key still in the field.
+- The recents dropdown offered *"Unofficial Skycoin Market · 024a37ba…43bdb9"*
+  — the name came from the connect handshake, not the user. Picking it and
+  reconnecting took ~25 s on a warm route.
+- `Logs` opened the shared viewer titled **skydex-client**.
+- Recents and the argv survived an APK reinstall: reopening the screen
+  pre-filled the key with no typing.
+- The page's own header is gone; the embedded UI now starts at its tab bar.
+
+**Control test** (that the flow, not the market, was being measured): a
+desktop visor built here with `skydex-market` autostarted answered its own
+`skydex-client` over loopback with
+`{"connected":true,"currencies":["BTC","LTC"]}`.
+
+**A first-connection transient, not a fault:** the phone's first target was a
+freshly-stood-up desktop market. Its visor logged the accept, but the
+client's `get_currencies` came back `read response: EOF` and the following
+dmsg dial to `…205ee:8050` timed out. Retried against the same market later
+the same day, it connected normally — so the first dial to a market whose
+route has never been built can fail once and is worth simply repeating.
+
+**Deferred at the time, done the next day** (see the entry above): the
+trading UI's phone layout, and closing the trading UI to other apps on the
+device.
+
+---
+
 ## 2026-08-05 — The address book moves to the visor, so names reach every surface
 
 **Why:** a nickname lived in the chat page's `localStorage`, which meant the

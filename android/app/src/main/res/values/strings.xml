@@ -127,10 +127,19 @@
     <string name="chat_core_starting">Waiting for the Skywire core to come up…</string>
     <string name="chat_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
 
+    <!-- SkyDEX (native market entry + embedded trading UI) -->
+    <string name="dex_market_title">Market</string>
+    <string name="dex_market_label">Market public key</string>
+    <string name="dex_market_hint">The market to trade on. Connecting dials it over Skywire and opens its trading screen below.</string>
+    <string name="dex_market_invalid">A market public key is 66 hex characters starting with 02 or 03.</string>
+    <string name="dex_recents">Recent markets</string>
+    <string name="dex_connecting">Reaching the market over Skywire…</string>
+    <string name="dex_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="dex_core_starting">Waiting for the Skywire core to come up…</string>
+
     <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
     <string name="wallet_placeholder">The native Skycoin wallet is coming soon.</string>
     <string name="settings_placeholder">Identity, config export, app lock and logs are coming soon.</string>
     <string name="vpn_placeholder">Whole-phone VPN with killswitch is coming soon.</string>
-    <string name="dex_placeholder">Market connect and the SkyDEX UI are coming soon.</string>
     <string name="fleet_placeholder">The opt-in Fleet status view is coming soon.</string>
 </resources>
