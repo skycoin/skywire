@@ -139,6 +139,41 @@ Starting or reconfiguring goes through an explicit stop first: the visor's
 restart-on-args-change races the outgoing proc, whose blocked `accept` returns
 "use of closed network connection" and leaves the app stuck in `Errored`.
 
+**SkyDEX** (`ui/dex/`) is native above, embedded below. The market public key
+is a native field with a recent-markets dropdown; connecting writes
+`--market-pk` into the app's argv (`PUT …/apps/skydex-client` with `args`,
+then `status` — `pk` is allow-listed to skysocks/vpn and would be rejected),
+starts the app, and then POSTs `/api/connect` on **skydex-client's own** API
+at `127.0.0.1:8051`. That last call is what makes it one step: the flag alone
+only pre-fills the page's connect form, because the engine never dials on its
+own. The trading UI then loads in a WebView already connected, and
+`/api/status` is polled so the native header mirrors the app rather than
+guessing.
+
+A stylesheet is injected at page-finished (again at `onPageFinished`, because
+the page is React and a removed node comes back on the next render). It drops
+the page's own header — brand, connected dot, market name and key, Disconnect
+— which duplicated the native row exactly, and adds the phone breakpoint the
+page never shipped: its own ~10 kB of CSS has no media query at all, so the
+tab strip hid *Settings* off the end of a scroll, banners kept their actions
+in a corner, and the grids held desktop column minimums.
+
+`core/SkydexProfile` pins two flags on every launch:
+
+- `--addr` host to `127.0.0.1`, as for the proxy.
+- `--password-file`, holding a device-local secret. The trading UI ships with
+  no authentication, and on Android a loopback listener is reachable by every
+  app holding INTERNET — with the live market session, the registered wallet
+  addresses and order placement behind it. The gate is skywire's own
+  (`cmd/apps/skydex-client/commands/auth.go`): with a password set the wrapper
+  serves basic auth on `--addr` and moves the vendored engine to a loopback
+  port drawn fresh at every start. Off by default, so desktop is unchanged.
+
+  It closes the documented port, not the engine's own: that answers ungated to
+  anything that scans for it. Closing it fully needs `skydexclient.Run` to
+  accept a `net.Listener` upstream, after which the proxy becomes a handler
+  wrapper and the second port disappears.
+
 ## Testing & debugging
 
 App logs:

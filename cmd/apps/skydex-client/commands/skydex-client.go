@@ -62,6 +62,10 @@ var (
 	// marketPort is the market's dmsg routing port the client dials. It must
 	// match the market's --port; defaults to skyenv.SkydexMarketPort.
 	marketPort uint16
+	// passwordFile holds the credential guarding the trading UI, in skychat's
+	// "<hex-salt>:<hex-hash>" format. Empty (the default) serves it ungated,
+	// which is the desktop behaviour; see auth.go for who needs the gate.
+	passwordFile string
 )
 
 func init() {
@@ -70,6 +74,7 @@ func init() {
 	RootCmd.Flags().Uint16Var(&port, "port", 0, "routing port for communication between app and visor")
 	RootCmd.Flags().StringVar(&marketPK, "market-pk", "", "default skydex-market public key (pre-filled in the UI; not auto-connected)")
 	RootCmd.Flags().Uint16Var(&marketPort, "market-port", skyenv.SkydexMarketPort, "market dmsg routing port to dial (must match the market's --port)")
+	RootCmd.Flags().StringVar(&passwordFile, "password-file", "", "file holding the trading UI's basic-auth credential (empty = ungated)")
 }
 
 // RootCmd is the root command for skydex-client.
@@ -171,6 +176,7 @@ func RunSkydexClient(ctx context.Context, args []string) error {
 		fs.Uint16Var(&port, "port", 0, "routing port")
 		fs.StringVar(&marketPK, "market-pk", "", "default market public key")
 		fs.Uint16Var(&marketPort, "market-port", skyenv.SkydexMarketPort, "market dmsg routing port to dial")
+		fs.StringVar(&passwordFile, "password-file", "", "trading UI basic-auth credential file")
 		if err := fs.Parse(args); err != nil {
 			return err
 		}
@@ -209,7 +215,25 @@ func RunSkydexClient(ctx context.Context, args []string) error {
 		}
 	}()
 
-	cfg := skydexclient.Config{UIAddr: uiAddr, DefaultPK: marketPK}
+	// The gate, when one is asked for, takes over uiAddr and moves the engine
+	// to a private port. Failure is fatal rather than a fallback to serving
+	// ungated: a caller that passed --password-file wants the surface closed,
+	// and quietly opening it is the one outcome worse than not starting.
+	if err := loadUIPassword(passwordFile); err != nil {
+		return fmt.Errorf("password file %s: %w", passwordFile, err)
+	}
+	if passwordFile != "" && !uiPasswordSet() {
+		return fmt.Errorf(
+			"password file %s holds no usable credential; refusing to serve the trading UI ungated",
+			passwordFile,
+		)
+	}
+	engineAddr, err := gatedServer(ctx, uiAddr, appCl.Log())
+	if err != nil {
+		return fmt.Errorf("serve trading UI gate: %w", err)
+	}
+
+	cfg := skydexclient.Config{UIAddr: engineAddr, DefaultPK: marketPK}
 	errCh := make(chan error, 1)
 	go func() { errCh <- skydexclient.Run(ctx, cfg, dialer, appCl.Log()) }()
 
