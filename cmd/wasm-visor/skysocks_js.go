@@ -128,10 +128,11 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
 	if err != nil {
 		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
-		// If this was the default instance's auto-selected active exit, hand it
-		// to the pool so a vetted standby is promoted (skip probe windows — a
-		// probe failure is the expected negative result, not a live-exit death).
-		if !strings.HasPrefix(winID, "pool-probe-") {
+		// If this was the default instance's auto-selected active exit, hand it to
+		// the retry policy (sticky-same-key when it had connected, else rotate).
+		// Skip the visor's OWN internal windows (probe / sticky / keepalive / warm)
+		// — each manages its own failure so they don't re-enter the policy.
+		if !isInternalProxyWindow(winID) {
 			reportProxyExitDead(serverPK)
 		}
 		return nil, fmt.Errorf("dial skysocks route: %w", err)
@@ -151,6 +152,11 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	}
 	skysocksSessions[key] = sess
 	skysocksMu.Unlock()
+	// Record that a REAL route to this exit came up (probe windows excluded), so a
+	// later drop is retried with the same key rather than rotated to a new random.
+	if !isProbeProxyWindow(winID) {
+		markProxyExitConnected(serverPK)
+	}
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route+session to exit %s established (%dms)", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds()))
 	return sess, nil
 }
