@@ -900,6 +900,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	registerVoiceHTTPHandlers(mux)
 	registerCallLogHandler(mux)
 	registerContactHandlers(mux)
+	registerTransferHandlers(mux)
 	registerPresenceHTTPHandlers(mux)
 	startPresenceLoop(ctx)
 
