@@ -7,6 +7,109 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-06 — SkyChat Settings, and a chat that can move to the phone
+
+The phone app embeds skychat's own page, so this is a change in
+`cmd/apps/skychat` that the phone gets for free — and it is the phone that
+needed it. A new visor is a new identity with an empty store: install the app
+and every conversation you have had is simply not there, because none of those
+messages were ever addressed to this key. Nothing syncs, and pretending
+otherwise would need an identity that spans devices. So: a file.
+
+### 1. Settings
+
+The sidebar header had a bell for notification preferences and nowhere for
+anything else. It now has a **⚙ Settings** dialog with two sections —
+Notifications (the bell's whole contents, moved: permission line, the two
+switches, the muted list) and **Import / export chat**. The bell is gone;
+it was a second entry point to half of one screen.
+
+Opening Settings still carries the notification permission ask, which is the
+one thing about the old bell that was load-bearing: browsers only honour that
+request from a user gesture, and the preference defaults to on, so without an
+ask on open a fresh profile silently drops every notification.
+
+The dialog is the one that can outgrow a phone viewport (the muted list has no
+fixed length), so it caps at `86vh` and scrolls its body with the title and
+Close pinned.
+
+### 2. What an archive is
+
+`GET /export` → one JSON file: the address book and every stored message, 1:1
+and group. `POST /import` merges one back. `cmd/apps/skychat/commands/transfer.go`.
+
+The line drawn is **data vs identity**. Messages and the names you gave to
+keys travel. The visor's keypair, group membership and its key material,
+pairing ratchets and in-flight transfers do not — importing a group's messages
+puts the conversation on the phone to read; it does not make the phone a
+member, which still means rejoining. The UI says so rather than leaving it to
+be discovered.
+
+Two details that are Android's, not skychat's:
+
+- **Export is a navigation, not a fetch-and-blob.** `ChatWebView`'s
+  `shouldOverrideUrlLoading` already turns a same-origin main-frame navigation
+  into a `DownloadManager` request *with the basic-auth header attached* — a
+  blob URL built inside the WebView would not get that. Zero new Android code.
+- **The filename is in the URL** (`/export/skychat-<date>.json`, a prefix
+  route whose suffix the handler ignores). That same path never sees
+  `Content-Disposition`, so it names the download from the URL:
+  `URLUtil.guessFileName` on a bare `/export` yields `export.bin`, which the
+  import picker's `accept="application/json"` then filters out. Import needed
+  nothing new either — `onShowFileChooser` was already wired for attachments.
+
+### 3. Import is not Append in a loop
+
+This is the part with a real decision in it. `history.Store` grew
+`Import(msgs, groups) (ImportResult, error)`, implemented in both backends:
+
+- **No per-peer rate limit.** It exists to stop a peer filling the disk over
+  the network at 20 messages/minute. An operator restoring their own archive
+  is not that, and applying it would have delivered a handful of messages per
+  conversation — the failure would have looked like a successful import.
+- **Duplicates are skipped**, so importing the same file twice changes
+  nothing. Identity is the envelope ID where there is one and
+  (timestamp, direction, text) where there is not — older plain-text messages
+  carry no ID.
+- **Every other guardrail stands**: size cap, whitelist, total-bytes cap, and
+  the per-peer FIFO cap.
+- **It reports what it will not keep.** `Expiring` counts records already
+  outside `--persist-ttl` (default 30 days — the sweep takes them within the
+  hour) and `Evicted` counts what the per-peer cap pushed back out (default
+  500). Both are silent losses otherwise, and "imported 2000" while 500
+  survive is the number that sends someone to wipe their old device too early.
+  The UI names the flag to change in each case.
+
+`evictOldest` now returns how many it removed, for that last count.
+
+### Verified
+
+`cmd/apps/skychat` standalone on `127.0.0.1:8801` with `--persist`, driven
+through the page in a browser:
+
+- Import → export → import round trip: an archive of 2 messages + 1 group
+  message + 1 contact imports as `{messages:2, group_messages:1, contacts:1}`;
+  exporting reproduces it byte-for-byte in content; re-importing **the
+  exported file** reports `{duplicates:3}` and stores nothing.
+- The imported contact appears in the sidebar as a conversation (the page's
+  `syncHistoryPeers` is re-run after an import).
+- Refusals reach the user as the server's own words, not a status code:
+  "not a SkyChat archive" (400), "archive is version 99; this SkyChat reads up
+  to 1" (400), unreadable JSON (400), `POST /export` (405), `GET /import` (405).
+- Settings renders both sections and scrolls; the file input is cleared after
+  each pick so choosing the *same* file again still fires.
+- Go tests: `pkg/skychat/history` (import table across both backends — not
+  rate limited, idempotent, ID-less dedup, cap eviction counted, TTL counted,
+  limits rejected, full store) and `cmd/apps/skychat/commands`
+  (export contents, persistence-off export, round trip, no-overwrite of a
+  local name, the three refusals, method guards). Both pass.
+
+**Pre-existing and unrelated:** `pkg/skychat/group` hangs its test binary past
+600 s in cxo connection code. Confirmed on a clean HEAD as well — it is not
+this change.
+
+---
+
 ## 2026-08-06 — SkyVPN: the phone's TUN, on loan from Android
 
 The whole phone now exits through a Skywire visor. This is the one part of the

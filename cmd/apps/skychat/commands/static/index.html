@@ -2245,6 +2245,49 @@
     .notif-setting:last-child { border-bottom: none; }
     .notif-setting .notif-label { font-size: 14px; color: var(--text-primary); }
     .notif-setting .notif-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    /* Settings holds two sections now, so it is the one modal that can
+       outgrow the viewport — the muted list has no fixed length. Cap it
+       against the short side and scroll the body, keeping the title and
+       the Close button in place. */
+    .settings-modal { display: flex; flex-direction: column; max-height: 86vh; }
+    .settings-body { overflow-y: auto; flex: 1; min-height: 0; }
+    .settings-section {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin: 18px 0 6px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-color);
+    }
+    .settings-body > .settings-section:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: none;
+    }
+
+    /* Settings → import/export. The two buttons are one choice, so they
+       share a row and split it; a file input is invisible and its <label>
+       is the button, which is why .xfer-import needs the button's own
+       centring back. */
+    .xfer-actions { display: flex; gap: 10px; margin-top: 14px; }
+    .xfer-actions > * { flex: 1; margin: 0; }
+    .xfer-import { text-align: center; cursor: pointer; }
+    /* Side by side, the two labels wrap to two lines on a phone and read as
+       four fragments. One per row below the one-pane breakpoint. */
+    @media (max-width: 420px) {
+      .xfer-actions { flex-direction: column; }
+    }
+    .xfer-status {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 10px;
+      min-height: 1.2em;
+      white-space: pre-line;
+    }
+    .xfer-status.ok { color: var(--accent-green); }
+    .xfer-status.warn { color: var(--accent-orange); }
+    .xfer-status.err { color: var(--accent-red); }
     .notif-perm { font-size: 13px; color: var(--text-secondary); padding: 10px 0; }
     .notif-perm.granted { color: var(--accent-green); }
     .notif-perm.denied { color: var(--accent-orange); }
@@ -2762,7 +2805,18 @@
              rows with nothing in them. -->
         <button class="icon-btn" onclick="app.openContacts()"
                 title="Address book" aria-label="Address book">&#x1F4C7;</button>
-        <button class="icon-btn" onclick="app.openNotifSettings()" title="Notification settings" aria-label="Notification settings">&#x1F514;</button>
+        <!-- Settings: notification preferences and moving a chat to another
+             device. One button rather than one per preference — the bell
+             that used to sit here was a second entry point to half of the
+             same screen. -->
+        <button class="icon-btn" onclick="app.openAppSettings()"
+                title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
         <!-- The one entry point for starting anything: an address (person,
              group or channel), a new group, or a new channel. Sits here on
              a wide screen and becomes a fixed bottom-right action button
@@ -3256,11 +3310,15 @@
     </div>
   </div>
 
-  <!-- Notifications Settings Modal -->
-  <div id="notifModal" class="modal-overlay">
-    <div class="modal">
-      <h3>Notifications</h3>
-      <div class="notif-body">
+  <!-- Settings. Everything about this install that is a preference rather
+       than a conversation: what gets announced, and how a chat moves to
+       another device. Scrolls, because the muted list has no fixed length
+       and the modal must not grow past the viewport on a phone. -->
+  <div id="appSettingsModal" class="modal-overlay">
+    <div class="modal settings-modal">
+      <h3>Settings</h3>
+      <div class="notif-body settings-body">
+        <div class="settings-section">Notifications</div>
         <div id="notifPerm" class="notif-perm"></div>
         <div class="notif-setting">
           <div>
@@ -3284,9 +3342,32 @@
         </div>
         <div class="notif-muted-title">Muted chats &amp; groups</div>
         <div id="notifMutedList" class="notif-muted-list"></div>
+
+        <div class="settings-section">Import / export chat</div>
+        <div class="notif-desc">
+          SkyChat does not sync between devices: each visor is its own
+          identity with its own store. Export writes your messages and your
+          address book to one file; import merges that file into this
+          device — so a desktop's history can move to the phone app.
+        </div>
+        <div class="xfer-actions">
+          <button class="btn btn-secondary" onclick="app.exportArchive()">Export to a file</button>
+          <label class="btn btn-secondary xfer-import">
+            Import from a file
+            <input type="file" id="xferFile" accept=".json,application/json"
+                   style="display:none" onchange="app.importArchive(event)" />
+          </label>
+        </div>
+        <div id="xferStatus" class="xfer-status"></div>
+        <p class="cg-help">
+          Messages and names travel. Keys do not: this device keeps its own
+          identity, so importing a group's messages puts the conversation
+          here to read but does not make this visor a member — that still
+          means joining. Importing the same file twice changes nothing.
+        </p>
       </div>
       <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="app.closeModal('notifModal')">Close</button>
+        <button class="btn btn-secondary" onclick="app.closeModal('appSettingsModal')">Close</button>
       </div>
     </div>
   </div>
@@ -6667,6 +6748,131 @@
       abbrevPk(pk) {
         if (!pk) return '?';
         return pk.length >= 14 ? pk.substring(0, 8) + '…' + pk.substring(pk.length - 4) : pk;
+      }
+
+      // ---- Settings: moving a chat between devices -----------------------
+      //
+      // Nothing syncs, so this is the manual path: one file out of the old
+      // device, into the new one. See cmd/apps/skychat/commands/transfer.go
+      // for what does and does not travel.
+
+      // Opening Settings is a user gesture, which is the only moment a
+      // browser will honour a permission request — so the notification ask
+      // rides on it. Without that the default-ON preference is a dead end:
+      // the request used to fire only on an off->on flip of a switch that
+      // was already on, so a fresh profile was never prompted and every
+      // notification was silently dropped by _shouldNotify.
+      openAppSettings() {
+        this._xferStatus('');
+        this._renderNotifModal();
+        document.getElementById('appSettingsModal').classList.add('visible');
+        this._ensureNotifPermission();
+      }
+
+      // Export is a plain navigation, not a fetch + blob download, and that
+      // is deliberate: the phone app turns a same-origin navigation into a
+      // real download with the basic-auth header attached, which a blob URL
+      // built inside the WebView would not get. The date is in the URL
+      // because a client that names the file from the path (that same
+      // WebView, which never sees Content-Disposition) would otherwise save
+      // it as "export.bin" — and the import picker filters for JSON.
+      exportArchive() {
+        const name = 'skychat-' + new Date().toISOString().slice(0, 10) + '.json';
+        this._xferStatus('Preparing the archive…');
+        window.location.href = '/export/' + encodeURIComponent(name);
+        // There is no completion event for a navigation-download, so this
+        // says what was asked for, not what arrived.
+        setTimeout(() => this._xferStatus('Archive requested — check your downloads.', 'ok'), 1200);
+      }
+
+      async importArchive(event) {
+        const input = event && event.target;
+        const file = input && input.files && input.files[0];
+        if (!file) return;
+        // Clear the input straight away so picking the SAME file again
+        // still fires a change event.
+        input.value = '';
+
+        this._xferStatus('Reading ' + file.name + '…');
+        let text;
+        try {
+          text = await file.text();
+        } catch (e) {
+          this._xferStatus('Could not read that file.', 'err');
+          return;
+        }
+
+        try {
+          const r = await fetch('/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: text,
+          });
+          // A refusal ("not a SkyChat archive") is plain text, not JSON —
+          // and it is the message that tells someone they picked the wrong
+          // file, so it must not be swallowed for a bare status code.
+          const raw = await r.text();
+          let body = null;
+          try {
+            body = JSON.parse(raw);
+          } catch (e) {
+            body = null;
+          }
+          if (!body) {
+            this._xferStatus(
+              r.ok ? 'Imported.' : (raw.trim() || 'Import failed (' + r.status + ').'),
+              r.ok ? 'ok' : 'err');
+            return;
+          }
+          this._xferStatus(this._importSummary(body), r.ok ? 'ok' : 'warn');
+          // The address book and the set of conversations both changed
+          // underneath the page; re-reading is cheaper than working out
+          // what moved. The message buffers are not refilled here —
+          // loadHistoryFor deliberately leaves a non-empty conversation
+          // alone — so the summary says to reload for those.
+          await this._syncNames();
+          this.syncHistoryPeers();
+        } catch (e) {
+          this._xferStatus('Import failed: ' + e.message, 'err');
+        }
+      }
+
+      // _importSummary turns the server's counts into the two things the
+      // operator actually needs to know: what arrived, and what will not
+      // survive. Both retention and the per-peer cap silently drop history,
+      // and finding that out after wiping the old device is too late.
+      _importSummary(report) {
+        if (!report) return 'Imported.';
+        if (report.error) return 'Import stopped: ' + report.error;
+
+        const got = [];
+        if (report.messages) got.push(report.messages + ' message' + (report.messages === 1 ? '' : 's'));
+        if (report.group_messages) got.push(report.group_messages + ' group message' + (report.group_messages === 1 ? '' : 's'));
+        if (report.contacts) got.push(report.contacts + ' name' + (report.contacts === 1 ? '' : 's'));
+
+        const lines = [got.length ? 'Imported ' + got.join(', ') + '.' : 'Nothing new to import.'];
+        if (report.messages || report.group_messages) {
+          lines.push('Reload the page to see them inside each conversation.');
+        }
+        if (report.duplicates) lines.push(report.duplicates + ' already here.');
+        if (report.persistence === false) {
+          lines.push('Messages were skipped: this visor keeps no history (start it with --persist).');
+        }
+        if (report.evicted) {
+          lines.push(report.evicted + ' dropped by the per-conversation limit (--persist-per-peer-cap keeps the newest).');
+        }
+        if (report.expiring) {
+          lines.push(report.expiring + ' are older than the retention window and will be swept (--persist-ttl 0 keeps them).');
+        }
+        if (report.rejected) lines.push(report.rejected + ' could not be stored.');
+        return lines.join('\n');
+      }
+
+      _xferStatus(text, kind) {
+        const el = document.getElementById('xferStatus');
+        if (!el) return;
+        el.textContent = text || '';
+        el.className = 'xfer-status' + (kind ? ' ' + kind : '');
       }
 
       // ---- Address book ------------------------------------------------
@@ -10346,17 +10552,6 @@
         }
       }
 
-      openNotifSettings() {
-        this._renderNotifModal();
-        document.getElementById('notifModal').classList.add('visible');
-        // Opening the bell is a user gesture, so the browser lets us ask here.
-        // Without this the default-ON preference is a dead end: the permission
-        // request only ever fired on an off->on flip of a switch that is
-        // already on, so a fresh profile was never prompted and every
-        // notification was silently dropped by _shouldNotify.
-        this._ensureNotifPermission();
-      }
-
       // _ensureNotifPermission asks the browser for permission when the user
       // wants notifications but has never been asked. MUST be called from a
       // user gesture (a click) — browsers ignore or quiet-UI an unsolicited
@@ -10424,7 +10619,7 @@
             // permission === 'default'. The old copy read "Turn on 'Enable
             // notifications' to grant browser permission" while that switch was
             // already on — an instruction the user could not follow. Give them
-            // a button instead; openNotifSettings also prompts on its own.
+            // a button instead; openAppSettings also prompts on its own.
             perm.className = 'notif-perm';
             perm.textContent = 'This browser hasn’t been asked yet — notifications won’t appear until you allow them. ';
             const btn = document.createElement('button');
@@ -11496,7 +11691,8 @@
     // Close group modals on backdrop click. addressModal closes through
     // its own helper so a running camera scan is always stopped.
     ['createGroupModal', 'createChannelModal', 'groupAdminModal', 'qrModal',
-     'myProfileModal', 'avatarModal', 'newContactModal', 'forwardModal'].forEach(function(id) {
+     'myProfileModal', 'avatarModal', 'newContactModal', 'forwardModal',
+     'appSettingsModal'].forEach(function(id) {
       document.getElementById(id).addEventListener('click', function(e) {
         if (e.target === this) app.closeModal(id);
       });

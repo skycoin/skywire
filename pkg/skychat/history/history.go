@@ -181,8 +181,84 @@ type Store interface {
 	// Groups returns the set of group IDs that have any stored messages.
 	Groups() ([]string, error)
 
+	// Import merges an archive exported from another device — the only way
+	// chat data moves between a desktop and a phone, since nothing here
+	// syncs. It is deliberately NOT Append in a loop:
+	//
+	//   - The per-peer rate limit does not apply. It exists to stop a peer
+	//     filling the disk over the network at 20 messages a minute; an
+	//     operator restoring their own archive is not that, and applying it
+	//     would silently drop all but a handful of every conversation.
+	//   - Records already present are skipped, so importing the same file
+	//     twice changes nothing. Identity is the envelope ID where there is
+	//     one and (timestamp, direction, text) where there is not.
+	//
+	// Every other guardrail stands: oversized messages are rejected, the
+	// whitelist still filters, the total-bytes cap still stops the write,
+	// and the per-peer cap still evicts oldest-first — so an archive larger
+	// than the cap lands as its newest N messages rather than as an error.
+	//
+	// Records older than the retention window are stored and counted in
+	// ImportResult.Expiring: the next sweep will remove them, and the
+	// operator wants to know that before they wipe the source device.
+	Import(msgs []Message, groups []GroupMessage) (ImportResult, error)
+
 	// Close releases the underlying storage.
 	Close() error
+}
+
+// ImportResult reports what Import did with an archive.
+type ImportResult struct {
+	// Messages and GroupMessages are the records actually stored.
+	Messages      int `json:"messages"`
+	GroupMessages int `json:"group_messages"`
+	// Duplicates were already present and were skipped.
+	Duplicates int `json:"duplicates"`
+	// Rejected failed a limit — too large, not whitelisted, or the store
+	// is full. They are counted rather than returned as an error: one bad
+	// record must not abandon the rest of a migration.
+	Rejected int `json:"rejected"`
+	// Expiring were stored but already fall outside Limits.TTL, so the
+	// next sweep removes them. Non-zero means the operator needs a longer
+	// retention window (--persist-ttl) to keep this history.
+	Expiring int `json:"expiring"`
+	// Evicted were pushed back out by the per-peer cap, which drops
+	// oldest-first — so importing an archive larger than the cap keeps its
+	// newest end. Counted because "imported 2000" while 500 survive is a
+	// number that would send someone to wipe their old device too early.
+	Evicted int `json:"evicted"`
+}
+
+// messageKey identifies a 1:1 message for de-duplication.
+//
+// The envelope ID is the real identity and is used wherever it exists. Older
+// plain-text messages have none, and for those the timestamp, direction and
+// body together are as close as this can get: two distinct messages sharing
+// all three in one conversation are indistinguishable to a reader too.
+func messageKey(m Message) string {
+	if m.ID != "" {
+		return "i\x00" + m.ID
+	}
+	dir := "in"
+	if m.Outgoing {
+		dir = "out"
+	}
+	return "t\x00" + m.Timestamp.UTC().Format(time.RFC3339Nano) + "\x00" + dir + "\x00" + m.Text
+}
+
+// groupMessageKey identifies a group message for de-duplication. Group
+// records carry no ID, so the sender, the timestamp and the body are it.
+func groupMessageKey(m GroupMessage) string {
+	return m.SenderPK + "\x00" + m.Timestamp.UTC().Format(time.RFC3339Nano) + "\x00" + m.Text
+}
+
+// expiryCutoff is the timestamp below which a record is already doomed by the
+// TTL sweep. Zero TTL means nothing expires.
+func (l Limits) expiryCutoff(now time.Time) (time.Time, bool) {
+	if l.TTL <= 0 {
+		return time.Time{}, false
+	}
+	return now.Add(-l.TTL), true
 }
 
 // Limits configures the anti-abuse guardrails on the persistence layer.
