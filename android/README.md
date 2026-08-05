@@ -158,6 +158,26 @@ page never shipped: its own ~10 kB of CSS has no media query at all, so the
 tab strip hid *Settings* off the end of a scroll, banners kept their actions
 in a corner, and the grids held desktop column minimums.
 
+Its tables become cards. My Listings is ten columns wide; a phone showed five
+and cut off the rest, including **Actions** — the column holding Cancel. A
+closed card shows the fields named `Type`/`Amount`/`Price`/`Status` (four at
+most) plus the action button, one status badge rather than the whole lifecycle
+chain, and everything else behind a *Details* toggle. That part needs script,
+not just CSS — a `<td>` carries no clue which column it is in — and a
+MutationObserver re-applies it, because the page re-renders its tables every
+eight seconds while polling.
+
+`chromeClient` answers `onJsConfirm`/`onJsAlert` with a native dialog. Without
+that, a WebView suppresses `window.confirm()` and returns `false`, and the
+page guards cancelling a listing or an order behind exactly that call — so
+Cancel silently did nothing.
+
+All of the above binds to class names inside a **vendored, pre-built** bundle.
+If upstream rebuilds it with different markup nothing errors — the page just
+returns to being unusable on a phone. The durable fix is landing these
+breakpoints in the skycoin repo; skychat has no such exposure because its UI
+source lives here.
+
 `core/SkydexProfile` pins two flags on every launch:
 
 - `--addr` host to `127.0.0.1`, as for the proxy.
