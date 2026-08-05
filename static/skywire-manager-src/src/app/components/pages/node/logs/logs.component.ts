@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewChild, ElementRef, NgZone, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, ElementRef, NgZone, ChangeDetectorRef, Input } from '@angular/core';
 import { Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
@@ -55,6 +55,12 @@ interface LogEntry {
 export class LogsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   @ViewChild('content') content: ElementRef;
 
+  // Set when mounted OUTSIDE the router via window.SkywireNg.mountComponent()
+  // (the wasm desktop's ☰ Logs WinBox window): no NodeComponent parent route to
+  // supply the node, so the host passes the visor PK directly. Unset for the
+  // routed tab, which keeps using NodeComponent.currentNode.
+  @Input() embeddedNodeKey?: string;
+
   node: Node;
   loading = true;
   liveTail = true;
@@ -104,13 +110,20 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
 }
 
   ngOnInit() {
-    this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
-      const wasUnset = !this.node;
-      this.node = node;
-      if (wasUnset && node) {
- this.loadData(0); 
-}
-    });
+    if (this.embeddedNodeKey) {
+      // Portal-mounted (no NodeComponent parent): synthesize the node from the
+      // provided key — the component only reads node.localPk.
+      this.node = { localPk: this.embeddedNodeKey } as Node;
+      this.loadData(0);
+    } else {
+      this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
+        const wasUnset = !this.node;
+        this.node = node;
+        if (wasUnset && node) {
+          this.loadData(0);
+        }
+      });
+    }
 
     return super.ngOnInit();
   }
