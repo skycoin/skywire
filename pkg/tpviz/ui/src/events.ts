@@ -92,7 +92,7 @@ export function wireEventListeners(): void {
         if (newWidth >= 200 && newWidth <= 600) {
             sidebar.style.width = newWidth + 'px';
         }
-    });
+    }, { signal: S.globalListeners.signal });
 
     document.addEventListener('mouseup', () => {
         if (isResizing) {
@@ -102,7 +102,7 @@ export function wireEventListeners(): void {
             if (truncationTimeout) clearTimeout(truncationTimeout);
             truncationTimeout = setTimeout(updatePkTruncation, 100);
         }
-    });
+    }, { signal: S.globalListeners.signal });
 
     // TPS button event listeners
     document.getElementById('tps-pick-target-btn')!.addEventListener('click', () => {
