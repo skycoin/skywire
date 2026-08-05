@@ -102,9 +102,45 @@
     <string name="socks_search_hint">Search by key, country or version</string>
     <string name="socks_servers_empty">No server matched your search.</string>
     <string name="socks_servers_none">Service discovery returned no proxy servers.</string>
-    <string name="socks_location_unknown">Unknown location</string>
     <string name="socks_retry">Retry</string>
     <string name="socks_refresh">Refresh</string>
+
+    <!-- Shared server-list pieces (SkySOCKS, SkyVPN) -->
+    <string name="server_location_unknown">Unknown location</string>
+
+    <!-- SkyVPN -->
+    <string name="vpn_state_connecting">Connecting…</string>
+    <string name="vpn_state_error">Connection failed</string>
+    <string name="vpn_state_blocked">Blocked by killswitch</string>
+    <string name="vpn_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="vpn_core_starting">Waiting for the Skywire core to come up…</string>
+    <string name="vpn_server">Exit</string>
+    <string name="vpn_reconnect">Reconnect</string>
+    <string name="vpn_pick_server">Pick an exit below to route this phone through it.</string>
+    <string name="vpn_hint_blocked">The tunnel is down and the killswitch is holding every other app offline. Disconnect to restore normal networking.</string>
+    <string name="vpn_hint_excluded">Skywire\'s own traffic stays outside the tunnel — that is what carries it.</string>
+    <string name="vpn_servers">Exits (%1$d)</string>
+    <string name="vpn_servers_empty">No exit matched your search.</string>
+    <string name="vpn_servers_none">Service discovery returned no VPN servers.</string>
+    <string name="vpn_search_hint">Search by key, country or version</string>
+
+    <string name="vpn_stats_title">This session</string>
+    <string name="vpn_stats_ping">Ping</string>
+    <string name="vpn_stats_transferred">Transferred</string>
+    <string name="vpn_stats_speed">Speed</string>
+    <string name="vpn_stats_session">Session</string>
+    <string name="vpn_stats_total">Total on this phone</string>
+    <string name="vpn_stats_interface">Interface</string>
+
+    <string name="vpn_killswitch_title">Killswitch</string>
+    <string name="vpn_killswitch_hint">Keeps the network interface in place while the tunnel is down, so nothing leaks out around it. Other apps have no connection until it comes back.</string>
+    <string name="vpn_killswitch_always_on">Always-on VPN settings</string>
+    <string name="vpn_killswitch_always_on_hint">For the strongest guarantee — blocking even before the app starts — turn on “Always-on VPN” and “Block connections without VPN” for Skywire in Android\'s settings.</string>
+
+    <string name="vpn_error_no_consent">Android has not granted the VPN permission.</string>
+    <string name="vpn_error_socket">The VPN service could not open its handoff socket: %1$s</string>
+    <string name="vpn_error_consent_denied">The VPN permission is required to route this phone through Skywire.</string>
+    <string name="vpn_error_settings">Android has no VPN settings screen to open.</string>
 
     <!-- Primary transport (visor-wide; shown on SkySOCKS, later SkyVPN) -->
     <string name="transport_title">Transport</string>
@@ -140,6 +176,5 @@
     <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
     <string name="wallet_placeholder">The native Skycoin wallet is coming soon.</string>
     <string name="settings_placeholder">Identity, config export, app lock and logs are coming soon.</string>
-    <string name="vpn_placeholder">Whole-phone VPN with killswitch is coming soon.</string>
     <string name="fleet_placeholder">The opt-in Fleet status view is coming soon.</string>
 </resources>

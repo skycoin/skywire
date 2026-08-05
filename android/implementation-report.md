@@ -7,6 +7,145 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-06 — SkyVPN: the phone's TUN, on loan from Android
+
+The whole phone now exits through a Skywire visor. This is the one part of the
+app that needed new Go, because the thing vpn-client wants — `/dev/net/tun` —
+is the one thing an Android app may never open.
+
+### 1. The handoff: Android owns the interface, the core borrows the descriptor
+
+Android hands out a TUN only through `VpnService`, and only after the user has
+granted the system's VPN consent. The core runs as a **child process** of the
+app, so it cannot inherit the descriptor either; it has to be sent.
+
+**Go** (`pkg/vpn/tun_device_android.go`, new — the only new Go in the app):
+
+- `newTUNDevice()` returns a device with **no descriptor yet**. It cannot have
+  one: the shared client calls it before it knows the address the exit will
+  assign, and on Android the address is an argument to creating the interface,
+  not something set afterwards.
+- `Client.SetupTUN` (`pkg/vpn/os_client_android.go`, new) is therefore where
+  the interface actually appears. It sends
+  `{"op":"establish","addr":"172.16.0.12/29","gateway":…,"mtu":…,"dns":…}` over
+  an abstract unix socket and reads back the descriptor as `SCM_RIGHTS`
+  ancillary data (`ReadMsgUnix` + `ParseUnixRights`).
+- The descriptor is put in **non-blocking** mode before `os.NewFile`, which is
+  what registers it with the Go runtime's netpoller. A blocking one parks a
+  `Read` in the kernel with no way out, so replacing the interface — or a
+  killswitched stop — would hang the copy goroutine forever. Non-blocking,
+  `Close` unblocks it with `os.ErrClosed`.
+- Reconnecting to the same exit lands the same address, and then the request is
+  satisfied by the interface already up: it is left alone rather than swapped,
+  so a killswitched reconnect has no seam.
+
+**Kotlin** (`core/SkyVpnService.kt`, new) is the server on that socket. The
+abstract namespace has no filesystem permissions to lean on, so the peer's UID
+is the whole gate — `peerCredentials.uid != Process.myUid()` is refused before
+a line is read.
+
+### 2. The route calls became Android, not no-ops
+
+`os_linux.go` shelled out to `ip`/`nmcli` and raised capabilities. None of that
+exists for an app process, and none of it is needed — `VpnService.Builder`
+declares the address, MTU, DNS and routes and the system installs them. So the
+client half of `os_linux.go` moved into `os_client_linux.go` (now
+`linux && !android`) and `os_client_android.go` says the same intentions the
+way Android allows:
+
+| Shared client calls | On Android |
+|---|---|
+| `SetupTUN` | establish the interface with these parameters, take the descriptor |
+| `AddRoute` / `ChangeRoute` | already declared by `establish()` |
+| `DeleteRoute` (the two half-space routes) | drop the interface — the interface *is* the route |
+| `DeleteRoute` (a `/32` direct route) | nothing: our UID never entered the tunnel |
+| `SetupDNS` / `RevertDNS` | travels with the interface |
+
+`DeleteRoute` on the default route is not a shortcut: it is exactly where the
+shared client says "stop carrying traffic", and it is only reached with the
+killswitch **off**. `tun_device_unix.go` is now `!windows && !android` so the
+`water` path stays untouched everywhere else.
+
+### 3. What makes the killswitch real
+
+The service keeps **its own** copy of the descriptor. The core closing its copy
+does not take the interface down, so when the tunnel drops there is a live
+interface with nobody draining it and the packets go nowhere. Releasing it is
+an explicit decision in exactly three places: a `down` from the core (killswitch
+off), a control-socket EOF with the killswitch off (the core was *killed*, not
+stopped), and the user disconnecting. A crash-restart of the visor
+(`CoreState.Restarting`) deliberately keeps blocking; a terminal core stop does
+not, because a phone blocked with nothing left to reconnect is a bug, not a
+killswitch.
+
+`--killswitch` is set through the visor's own `killswitch` PUT field rather
+than by rewriting argv — it is a first-class setter (`SetAppKillswitch`) that
+adds the bare flag or strips it. Like the transport preference, the **phone's**
+stored value is authoritative and is re-applied to the config whenever the core
+comes up.
+
+### 4. Screen
+
+`ui/vpn/` repeats the SkySOCKS shape — service discovery (`type=vpn`), tap an
+exit, `PUT pk + killswitch + status`, poll — and adds the killswitch toggle
+(with a deep link to Android's own Always-on VPN settings, the stronger
+guarantee this app cannot provide itself) and a live stats card from
+`…/apps/vpn-client/connections` + `…/stats`. A lifetime byte counter is kept in
+DataStore, written in 8 MB chunks rather than on every 2 s poll.
+
+The list/status pieces both screens now share moved to
+`ui/components/ServerUi.kt` (`SavedServer`, `ServerRow`, `SectionCard`,
+`InfoRow`, the formatters, the status colors).
+
+**One unit bug fixed on the way:** `AppConnection.latency` was decoded as
+nanoseconds and divided by 1e6. The visor already converts —
+`ConnectionSummary` in `pkg/app/appserver/proc.go` stores
+`time.Duration(…Milliseconds())` — so the wire value is milliseconds. Harmless
+on SkySOCKS (whose latency is always 0, so the row never renders); it would
+have shown every VPN ping as `0 ms`. Field renamed `latencyMs`.
+
+### Verified
+
+Real device (`DM_B70104`, Android 15, LTE): consent → connect to a US exit →
+**Connected**, interface `172.16.0.12/29`, stats ticking (↑118.9 KB ↓198.8 KB,
+session 55 s). Stopped there — the tunnel takes over the phone's networking and
+the device was needed.
+
+Emulator (arm64, API 37), full pass against a Singapore exit
+`036433b792…83c74724`:
+
+- **Whole-phone traffic exits at the visor.** From the emulator shell (uid
+  2000, inside the tunnel's UID range): `ip-api.com` → **207.148.77.89,
+  Singapore, VULTR**. Host egress without the tunnel is `45.56.79.245`.
+- **The visor stays outside it.** `ip rule` routes uid ranges
+  `0-10230`, `10232-20230`, `20232-99999` into `tun0`'s table — a
+  one-UID hole at **10231**, which `pm list packages -U` confirms is
+  `com.skycoin.skywire`. That hole is `addDisallowedApplication(self)`, and it
+  is what keeps the dmsg traffic carrying the tunnel out of the tunnel.
+  `ip route show table 1019`: `default dev tun0`.
+- **Killswitch on.** Visor `kill -9`'d (an unclean loss — no `down` sent):
+  `tun0` still up at `172.16.0.20/29`, HTTP from a routed UID **times out after
+  20 s**. Screen reads *Blocked by killswitch*.
+- **Killswitch off.** Same `kill -9`: `tun0` gone within seconds, traffic
+  immediately direct again (`45.56.79.245`).
+- **Disconnect** releases the interface and restores networking.
+- Toggling the switch rewrites the config as expected: `--killswitch` appears
+  in and disappears from vpn-client's `args`, and the re-dial establishes a new
+  interface (`tun0` index 19 → 20 → 21 across the run).
+- Builds: `make android-mobile-check` (63,766,824 B, budget 83,886,080),
+  `make android-apk-debug`; `pkg/vpn` compiles for android/linux/darwin/windows
+  and `go test ./pkg/vpn/...` passes.
+
+**Not verified, and it needs a real device:** killswitch behaviour under Doze
+and OEM background kills, and whether a plain (non-foreground) `VpnService`
+sharing the core service's process survives long idle periods on aggressive
+OEM ROMs. Also unverified: `adb shell` on the physical device reported the
+carrier IP with the tunnel up, i.e. that ROM appears to exclude the shell UID
+from VPN routing — the emulator does not, which is why the routing evidence
+above was taken there.
+
+---
+
 ## 2026-08-05 — SkyDEX: a gate on the trading UI, and a phone layout for it
 
 The two things the SkyDEX screen shipped without, both now closed as far as

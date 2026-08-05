@@ -195,7 +195,14 @@ fun SkywireApp() {
                     },
                 )
             }
-            composable(Routes.VPN) { VpnScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.VPN) {
+                VpnScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenLogs = { source ->
+                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
+                    },
+                )
+            }
             composable(Routes.DEX) {
                 DexScreen(
                     onBack = { navController.popBackStack() },

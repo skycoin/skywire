@@ -105,19 +105,39 @@ data class GeoInfo(
 
 /**
  * One live connection of an app, from `…/apps/{app}/connections`.
- * skysocks-client holds a single connection to its server, so the
- * first element is the one the screen renders.
+ * skysocks-client and vpn-client each hold a single connection to their
+ * server, so the first element is the one the screens render.
  */
 @Serializable
 data class AppConnection(
     @SerialName("is_alive") val isAlive: Boolean = false,
-    /** Nanoseconds (Go time.Duration). */
-    @SerialName("latency") val latencyNs: Long = 0,
+    /**
+     * Milliseconds, despite the field being a Go `time.Duration`: the visor
+     * converts before serializing (`ConnectionsSummary` in
+     * pkg/app/appserver/proc.go), so the number on the wire is already a
+     * millisecond count and must not be divided again.
+     */
+    @SerialName("latency") val latencyMs: Long = 0,
+    /** Bytes per second. */
     @SerialName("upload_speed") val uploadSpeed: Long = 0,
     @SerialName("download_speed") val downloadSpeed: Long = 0,
     @SerialName("bandwidth_sent") val bandwidthSent: Long = 0,
     @SerialName("bandwidth_received") val bandwidthReceived: Long = 0,
+    /** Seconds the tunnel has been carrying traffic; 0 when it is not. */
+    @SerialName("connection_duration") val connectionSeconds: Long = 0,
     @SerialName("error") val error: String = "",
+)
+
+/**
+ * GET …/apps/{app}/stats. [startTime] is when the app's process started —
+ * absent while it isn't running, and earlier than the tunnel's own uptime
+ * ([AppConnection.connectionSeconds]), which only starts at "connected".
+ */
+@Serializable
+data class AppStats(
+    @SerialName("connections") val connections: List<AppConnection>? = null,
+    /** RFC 3339, as Go renders a `*time.Time`. */
+    @SerialName("start_time") val startTime: String? = null,
 )
 
 @Serializable
