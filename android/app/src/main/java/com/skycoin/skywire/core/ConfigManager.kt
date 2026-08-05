@@ -184,12 +184,28 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                 // On disk the argv is one space-joined string, not an array.
                 val args = (app["args"] as? JsonPrimitive)?.content.orEmpty().split(" ")
                     .filter { it.isNotEmpty() }
-                val pinned = when ((app["name"] as? JsonPrimitive)?.content) {
+                val name = (app["name"] as? JsonPrimitive)?.content
+                val pinned = when (name) {
                     SOCKS_APP -> phoneSocksArgs(args)
-                    SkychatProfile.APP -> SkychatProfile.phoneArgs(args, skychatPasswordFile)
+                    SkychatProfile.APP -> SkychatProfile.phoneArgs(
+                        args,
+                        skychatPasswordFile,
+                        SkychatProfile.historyFile(paths),
+                    )
                     else -> return@map entry
                 }
-                app.edit { this["args"] = JsonPrimitive(pinned.joinToString(" ")) }
+                app.edit {
+                    this["args"] = JsonPrimitive(pinned.joinToString(" "))
+                    // skychat is the ONE app that must run whether or not the
+                    // user is looking at it. Everything else here is started by
+                    // opening its screen, but a chat app that only runs while
+                    // its tab is open cannot receive anything: no message
+                    // notification, no ringing call, no missed call recorded —
+                    // the phone would simply be offline for chat until tapped.
+                    if (name == SkychatProfile.APP) {
+                        this["auto_start"] = JsonPrimitive(true)
+                    }
+                }
             },
         )
     }

@@ -851,6 +851,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 
 	connectPairRPC()
 	startPairRPCWatchdog(ctx)
+	startVoiceMissedWatcher(ctx)
+	defer stopVoiceMissedWatcher()
 	defer stopPairRPCWatchdog()
 	startPairPoller(ctx)
 	defer stopPairPoller()
@@ -891,6 +893,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	registerGroupHTTPHandlers(mux)
 	registerProfileHTTPHandlers(mux)
 	registerVoiceHTTPHandlers(mux)
+	registerCallLogHandler(mux)
 	registerPresenceHTTPHandlers(mux)
 	startPresenceLoop(ctx)
 

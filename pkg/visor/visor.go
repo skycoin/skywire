@@ -274,6 +274,12 @@ type Visor struct {
 	// conn). Brought up by init_voice.go; nil when dmsg is unavailable.
 	voice *skycall.Manager
 
+	// voiceAudio is the host app's microphone and speaker, borrowed over the
+	// local API, when this visor has no audio device of its own to open — the
+	// default on Android. nil when the visor uses a real local device (or
+	// none at all); see init_voice.go.
+	voiceAudio *skycall.Bridge
+
 	// groupStreamSendCounter ticks once per successful stream.Send on
 	// any rpcgrpc.StreamGroupMessages stream. Bumped from the gRPC
 	// adapter (visorPingAdapter.IncGroupStreamSend) so the counter

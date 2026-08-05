@@ -96,6 +96,10 @@ func voiceCallHandler() http.HandlerFunc {
 			http.Error(w, err.Error(), voiceErrStatus(err))
 			return
 		}
+		// The call log's only chance to learn who an OUTGOING call is with:
+		// VoiceActive answers with bare ids, and a call we placed never
+		// appears in the ringing list that carries a peer.
+		noteOutgoingCall(callID, body.Peer)
 		writeJSON(w, map[string]string{"call_id": callID})
 	}
 }

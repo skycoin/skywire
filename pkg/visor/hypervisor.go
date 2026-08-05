@@ -993,6 +993,28 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			r.Get("/stream", hv.getNotifyStream())
 		})
 
+		// A call's audio, for a visor whose device belongs to the app that
+		// started it (Android) — see hypervisor_handlers_voice_audio.go.
+		//
+		// Out here for the same reason the notification stream is, and it cost
+		// a debugging session to find out: inside /api these carry
+		// middleware.Timeout(httpTimeout), which cancels the request context
+		// 30 s in. The symptom is not an error anywhere — the microphone
+		// stream simply broke and silently reopened every 30 seconds, for the
+		// whole call.
+		//
+		// The path shape differs from the sibling /api/visors/{pk}/skychat/
+		// voice/* routes because it has to; {pk} is kept so the same
+		// withCtx(visorCtx) auth + CSRF + local-visor checks apply.
+		r.Route("/api/voice-audio", func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+
+			r.Post("/{pk}/mic", hv.postVoiceMic())
+			r.Get("/{pk}/speaker", hv.getVoiceSpeaker())
+		})
+
 		// we don't enable `dmsgpty` endpoints for Windows
 		r.Route("/pty", func(r chi.Router) {
 			if hv.c.EnableAuth {
