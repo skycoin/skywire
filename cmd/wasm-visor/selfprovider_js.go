@@ -224,21 +224,86 @@ func (s visorSelf) SelfRouterSettings() []byte {
 
 // SelfRuntimeConfig serves /visors/<pk>/runtime-config. A browser edge has no
 // on-disk config file — its config IS its build — so serve a representative,
-// read-only view (identity + build + the resolved deployment service endpoints).
+// read-only view that MIRRORS the native `skywire cli config gen` (visorconfig.V1)
+// SHAPE section-for-section, so the Runtime Configuration expander shows the same
+// surface on both. Every section the wasm visor genuinely has is populated from
+// the resolved deployment services + the in-tab runtime state; sections that
+// can't exist in a browser tab (raw sockets, on-disk paths, local HTTP servers)
+// are present as no-op stubs (so nothing silently disappears) and enumerated in
+// platform_omitted with the reason.
+//
+// We hand-build the shape rather than marshal a real visorconfig.V1: that package
+// transitively pulls modernc.org/libc (sqlite/bbolt), whose build constraints
+// exclude js/wasm, so it can't be imported into the wasm blob. The `sk` field is
+// deliberately never included (never expose the secret key from a served view).
 func (s visorSelf) SelfRuntimeConfig() []byte {
 	svc := visorcore.ResolveServices(nil)
+	pkHexes := func(pks []cipher.PubKey) []string {
+		out := make([]string, 0, len(pks))
+		for _, p := range pks {
+			out = append(out, p.Hex())
+		}
+		return out
+	}
+	// launcher.apps — the in-tab app registry (skychat + skysocks-client-lite
+	// instances) in the native launcher.apps config shape, so the wasm visor's
+	// Apps tab and its config agree (these are real, controllable apps).
+	apps := []map[string]interface{}{
+		{"name": appSkychat, "auto_start": autoStartPref(appSkychat), "port": skychatPort},
+	}
+	for _, inst := range proxyInstancesSnapshot() {
+		app := map[string]interface{}{"name": inst.ID, "auto_start": autoStartPref(inst.ID), "port": skysocksPort}
+		if inst.Exit != "" {
+			app["args"] = "--srv " + inst.Exit
+		}
+		apps = append(apps, app)
+	}
+
 	out := map[string]interface{}{
 		"version": buildinfo.Version(),
 		"pk":      selfPK.Hex(),
-		"note":    "browser wasm-visor — no on-disk config; settings are ephemeral to this tab",
+		"note":    "browser wasm-visor — no on-disk config; this MIRRORS the native config shape (config gen). Applicable sections are populated from resolved services + this tab's runtime; platform_omitted lists sections a browser tab can't have. Settings are ephemeral to this tab; the secret key is never shown.",
+		// --- applicable sections (populated) ---
 		"dmsg": map[string]interface{}{
 			"discovery": svc.DmsgDiscoveryDmsg,
+			"protocol":  "yamux",
 		},
 		"transport": map[string]interface{}{
-			"discovery": svc.TransportDiscoveryDmsg,
+			"discovery":          svc.TransportDiscoveryDmsg,
+			"address_resolver":   svc.AddressResolverDmsg,
+			"public_autoconnect": true, // startWSAutoconnect dials public WS transports
+			"transport_setup":    pkHexes(svc.TransportSetupNodes),
+			// stcpr_port / sudph_port are raw-socket only → see platform_omitted.
 		},
 		"routing": map[string]interface{}{
-			"route_finder": svc.RouteFinderDmsg,
+			"route_finder":       svc.RouteFinderDmsg,
+			"route_setup_nodes":  pkHexes(svc.RouteSetupNodes),
+			"min_hops":           svc.MinHops,
+			"route_finder_timeout": "10s",
+		},
+		"launcher": map[string]interface{}{
+			"service_discovery": svc.ServiceDiscoveryDmsg,
+			"apps":              apps,
+		},
+		"stun_servers":        svc.StunServers, // WebRTC ICE
+		"conf_service":        svc.ConfDmsg,
+		"uptime_tracker":      svc.UptimeTrackerDmsg,
+		"reward_system":       svc.RewardSystemDmsg,
+		"is_public":           false,
+		"persistent_transports": nil,
+		// --- sections a browser tab cannot have (kept as no-op stubs for shape parity) ---
+		"pty":         map[string]interface{}{},
+		"ui_server":   map[string]interface{}{"enable": false},
+		"skywire-tcp": map[string]interface{}{},
+		"hypervisor":  map[string]interface{}{"enable": false},
+		"hypervisors": []string{},
+		"platform_omitted": map[string]string{
+			"pty":         "no unix socket / child processes in a browser tab",
+			"skywire-tcp": "no raw TCP listener (stcpr) in a browser",
+			"transport.stcpr_port/sudph_port": "no raw TCP/UDP sockets in a browser (direct p2p is WebRTC; carriers are ws/wt/dmsg)",
+			"ui_server/hypervisor": "no local HTTP server or users.db in a tab",
+			"local_path/log_store/bin_path": "no filesystem; apps run in-process, logs live in an in-memory ring",
+			"sk": "never exposed from a served view",
 		},
 	}
 	b, err := json.Marshal(out)
