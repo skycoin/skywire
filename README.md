@@ -1,4 +1,3 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/skycoin/skywire)](https://goreportcard.com/report/github.com/skycoin/skywire)
 ![Test](https://github.com/skycoin/skywire/actions/workflows/test.yml/badge.svg)
 ![Deploy](https://github.com/skycoin/skywire/actions/workflows/deploy.yml/badge.svg)
 [![GitHub release](https://img.shields.io/github/release/skycoin/skywire.svg)](https://github.com/skycoin/skywire/releases/)
