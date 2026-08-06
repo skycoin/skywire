@@ -390,7 +390,13 @@ func (c *Conn) sendLastRoot(pk cipher.PubKey) {
 		return
 	}
 
-	c.n.Printf("[WARN] [%s] sendLastRoot %s: %v (activeHead=%d)",
+	// A peer subscribed to a feed we don't have a Root for yet
+	// (activeHead=0 / "no such head") — benign and expected during
+	// startup and for any feed we haven't published to. There's
+	// nothing to send and nothing actionable; the peer receives the
+	// Root once we publish one. Pin-gated debug instead of an always-on
+	// [WARN] so it stops spamming the visor's log at INFO.
+	c.n.Debugf(MsgSendPin, "[%s] sendLastRoot %s: %v (activeHead=%d)",
 		c.String(), pk.Hex(), err, activeHead)
 
 }
