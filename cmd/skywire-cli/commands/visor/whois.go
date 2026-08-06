@@ -48,8 +48,8 @@ func init() {
 		"per-service request timeout")
 	whoisCmd.Flags().StringVar(&whoisTpdURL, "tpd", deployment.Prod.TransportDiscovery,
 		"transport-discovery URL")
-	whoisCmd.Flags().StringVar(&whoisUtURL, "ut", deployment.Prod.UptimeTracker,
-		"uptime-tracker URL")
+	whoisCmd.Flags().StringVar(&whoisUtURL, "ut", deployment.Prod.TransportDiscovery,
+		"TPD-integrated uptime-tracker URL")
 	whoisCmd.Flags().StringVar(&whoisSdURL, "sd", deployment.Prod.ServiceDiscovery,
 		"service-discovery URL")
 	RootCmd.AddCommand(whoisCmd)

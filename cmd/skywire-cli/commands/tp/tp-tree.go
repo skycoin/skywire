@@ -152,7 +152,10 @@ var treeCmd = &cobra.Command{
 		versionFilteredSet := make(map[string]bool) // pk -> true if passes version filter
 
 		if !noFilterOnline || filterByVersion {
-			utsRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileUT, utURL+"/uptimes?v=v2", cacheFilesAge)
+			utsRaw := clirpc.FetchIntegratedUptimes(cmd.Flags(), utURL, cacheFileUT, cacheFilesAge)
+			if utsRaw == "" {
+				utsRaw = "[]"
+			}
 			var uptimes []uptimeEntry
 			if err := json.Unmarshal([]byte(utsRaw), &uptimes); err != nil {
 				internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse uptime data: %w", err))

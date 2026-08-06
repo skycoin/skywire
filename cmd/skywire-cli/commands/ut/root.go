@@ -130,10 +130,10 @@ func init() {
 	utCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "count the number of results")
 	utCmd.Flags().BoolVarP(&isMoreStats, "stats2", "t", false, "count of versions")
 	utCmd.Flags().IntVarP(&minUT, "min", "n", 75, "list visors meeting minimum uptime percentage\n\r")
-	utCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.UptimeTracker), "UT cache dir (\"\" to disable)\n\r")
+	utCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.TransportDiscovery), "UT cache dir (\"\" to disable)\n\r")
 	utCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)\n\r")
 	utCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes\n\r")
-	utCmd.Flags().StringVarP(&utURL, "url", "u", dep.UptimeTracker, "specify alternative uptime tracker url\n\r")
+	utCmd.Flags().StringVarP(&utURL, "url", "u", dep.TransportDiscovery, "specify alternative (TPD-integrated) uptime tracker url\n\r")
 	utCmd.Flags().StringVar(&tpdURL, "tpdurl", dep.TransportDiscovery, "transport discovery url")
 	utCmd.Flags().StringVarP(&versionFilter, "version", "v", "", "filter visors by exact version")
 	utCmd.Flags().StringVar(&minVersion, "min-version", "", "filter visors with version >= specified (e.g. v1.3.34)")
@@ -147,18 +147,18 @@ func init() {
 var utCmd = &cobra.Command{
 	Use:   "ut",
 	Short: "Query uptime tracker",
-	Long:  fmt.Sprintf("query uptime tracker\n\n%v/uptimes?v=v2\n\nCheck local visor daily uptime percent with:\n\n$ skywire-cli ut -n0 -k $(skywire-cli visor pk)\n\nSet cache dir to \"\" to avoid using cache files\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", getDeployment().UptimeTracker),
+	Long:  fmt.Sprintf("query the TPD-integrated uptime tracker\n\n%v/uptimes?v=v3\n\nCheck local visor daily uptime percent with:\n\n$ skywire-cli ut -n0 -k $(skywire-cli visor pk)\n\nSet cache dir to \"\" to avoid using cache files\n\nUse --testenv or SKYWIRETEST=1 to use test deployment services.", getDeployment().TransportDiscovery),
 	Run: func(cmd *cobra.Command, _ []string) {
 		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
 		if testEnv && !isTestEnv() {
 			if !cmd.Flags().Changed("url") {
-				utURL = deployment.Test.UptimeTracker
+				utURL = deployment.Test.TransportDiscovery
 			}
 			if !cmd.Flags().Changed("tpdurl") {
 				tpdURL = deployment.Test.TransportDiscovery
 			}
 			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.UptimeTracker)
+				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
 			}
 			if !cmd.Flags().Changed("cdt") {
 				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
@@ -166,7 +166,7 @@ var utCmd = &cobra.Command{
 		}
 
 		// Build full URLs
-		utFullURL := utURL + "/uptimes?v=v2"
+		utFullURL := clirpc.IntegratedUptimeURL(utURL)
 		tpdFullURL := tpdURL + "/all-transports"
 
 		// Resolve cache file paths up-front so we can mirror response bodies

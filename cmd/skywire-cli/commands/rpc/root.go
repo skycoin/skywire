@@ -795,6 +795,38 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 	return string(body)
 }
 
+// IntegratedUptimeURL builds the URL for the TPD-integrated uptime
+// tracker's visor-uptime endpoint: the transport-discovery base with
+// ?v=v3. v3 is the version cxoFeedForURL mirrors over CXO (feed
+// "tpd-uptime", path uptimes/days/30), so a fetch through
+// FetchCachedServiceURL / FetchIntegratedUptimes flows over the
+// CXO→DMSG→HTTP chain and NEVER dials the deprecated standalone uptime
+// tracker. An empty tpdBase falls back to
+// deployment.Prod.TransportDiscovery.
+//
+// v3 is a strict superset of v2: every entry still carries {pk, on,
+// version, daily}, with the per-day timeline bitmap added. Consumers
+// that only read the online flag or the daily percentages therefore
+// work against the v3 payload unchanged.
+func IntegratedUptimeURL(tpdBase string) string {
+	if tpdBase == "" {
+		tpdBase = deployment.Prod.TransportDiscovery
+	}
+	return strings.TrimRight(tpdBase, "/") + "/uptimes?v=v3"
+}
+
+// FetchIntegratedUptimes fetches the []VisorSummary v3 payload from the
+// TPD-integrated uptime tracker via the shared cached fetch chain
+// (CXO→DMSG→HTTP + disk cache). tpdBase is the transport-discovery base
+// URL (empty = prod). The returned JSON has the same {pk, on, ...}
+// shape v2 had, so existing jq filters keep working. Returns "" only
+// when every fetch path failed AND there was no cache to fall back on;
+// callers must treat "" as "no online data" and must not build JSON
+// from it (an empty string is not valid JSON).
+func FetchIntegratedUptimes(cmdFlags *pflag.FlagSet, tpdBase, cachefile string, cacheFilesAge int) string {
+	return FetchCachedServiceURL(cmdFlags, cachefile, IntegratedUptimeURL(tpdBase), cacheFilesAge)
+}
+
 var (
 	cliCacheOnce sync.Once
 	cliCache     *clicache.Cache
