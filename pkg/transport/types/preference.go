@@ -38,6 +38,19 @@ func TypePreference(t Type) int {
 	return len(*order)
 }
 
+// PreferenceOrder returns the active transport-type preference order (the
+// built-in default unless overridden via SetPreferenceOrder), most-preferred
+// first, DMSG last. Callers that create transports "automatically" (no explicit
+// type) iterate this to try the best direct type first and fall back to the DMSG
+// relay only as a last resort. Returns a copy — safe to mutate/filter.
+func PreferenceOrder() []Type {
+	order := preferenceOrder.Load()
+	if order == nil {
+		return append([]Type(nil), defaultPreference...)
+	}
+	return append([]Type(nil), (*order)...)
+}
+
 // SetPreferenceOrder overrides the active transport-type preference order.
 // Pass nil or an empty slice to revert to the built-in default. Unknown
 // or unspecified types implicitly sort after listed types.
