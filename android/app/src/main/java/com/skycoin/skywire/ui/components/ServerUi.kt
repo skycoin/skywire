@@ -72,6 +72,24 @@ fun formatBytes(bytes: Long): String {
     return String.format(Locale.US, "%.1f %s", value, units[unit])
 }
 
+/**
+ * `2d 3h 4m 5s` — a visor's uptime, which is measured in days rather than the
+ * minutes a tunnel session lasts, so the days unit is worth its width and the
+ * seconds keep ticking visibly.
+ */
+fun formatUptime(seconds: Double): String {
+    val total = seconds.toLong()
+    val days = total / 86_400
+    val hours = (total % 86_400) / 3_600
+    val minutes = (total % 3_600) / 60
+    return buildString {
+        if (days > 0) append("${days}d ")
+        if (hours > 0 || days > 0) append("${hours}h ")
+        if (minutes > 0 || hours > 0 || days > 0) append("${minutes}m ")
+        append("${total % 60}s")
+    }
+}
+
 /** `1h 04m 12s`, dropping the leading units that are still zero. */
 fun formatDuration(seconds: Long): String {
     val h = seconds / 3600
@@ -103,6 +121,7 @@ fun InfoRow(
     label: String,
     value: String,
     mono: Boolean = false,
+    valueColor: Color = MaterialTheme.colorScheme.onSurface,
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -112,6 +131,9 @@ fun InfoRow(
             .fillMaxWidth()
             .padding(vertical = 4.dp),
     ) {
+        // The label keeps its intrinsic width (softWrap off) so a long value
+        // can never squeeze it down to one character per line; the value takes
+        // the rest and wraps right-aligned.
         Text(
             label,
             style = MaterialTheme.typography.bodyMedium,
@@ -125,6 +147,7 @@ fun InfoRow(
             style = MaterialTheme.typography.bodyMedium.let {
                 if (mono) it.copy(fontFamily = FontFamily.Monospace) else it
             },
+            color = valueColor,
             textAlign = TextAlign.End,
             modifier = Modifier.weight(1f),
         )

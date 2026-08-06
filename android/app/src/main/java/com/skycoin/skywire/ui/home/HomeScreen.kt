@@ -57,6 +57,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.api.VisorSummary
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.ui.components.InfoRow
+import com.skycoin.skywire.ui.components.formatUptime
+import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.ui.logs.LogSources
 
 /**
@@ -406,44 +409,6 @@ private fun VisorInfoCard(
 }
 
 @Composable
-private fun InfoRow(
-    label: String,
-    value: String,
-    mono: Boolean = false,
-    valueColor: Color = MaterialTheme.colorScheme.onSurface,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-    ) {
-        // The label keeps its intrinsic width (softWrap off) so a long value
-        // can never squeeze it down to one character per line; the value
-        // takes the rest and wraps right-aligned.
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            softWrap = false,
-        )
-        Spacer(Modifier.width(16.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium.let {
-                if (mono) it.copy(fontFamily = FontFamily.Monospace) else it
-            },
-            color = valueColor,
-            textAlign = TextAlign.End,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-@Composable
 private fun SectionDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(vertical = 10.dp),
@@ -453,20 +418,3 @@ private fun SectionDivider() {
 
 /** The visor keeps a handful of dmsg sessions; the card shows the first few. */
 private const val MAX_DMSG_ROWS = 4
-
-private fun shortPk(pk: String): String =
-    if (pk.length <= 20) pk else pk.take(10) + "…" + pk.takeLast(8)
-
-private fun formatUptime(seconds: Double): String {
-    val total = seconds.toLong()
-    val days = total / 86_400
-    val hours = (total % 86_400) / 3_600
-    val minutes = (total % 3_600) / 60
-    val secs = total % 60
-    return buildString {
-        if (days > 0) append("${days}d ")
-        if (hours > 0 || days > 0) append("${hours}h ")
-        if (minutes > 0 || hours > 0 || days > 0) append("${minutes}m ")
-        append("${secs}s")
-    }
-}

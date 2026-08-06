@@ -17,6 +17,13 @@ import java.io.RandomAccessFile
 
 data class LogUiState(
     val entries: List<LogEntry> = emptyList(),
+    /**
+     * The first fetch for this source has not come back yet. Worth its own
+     * state because one source is slow enough to matter: a remote visor's
+     * buffer travels the whole ring over dmsg and takes several seconds, and
+     * "No log entries yet." during that wait reads as "this is broken".
+     */
+    val loading: Boolean = false,
     val following: Boolean = true,
     val levels: Set<LogLevel> = emptySet(),
     val query: String = "",
@@ -69,12 +76,17 @@ class LogViewModel(app: Application) : AndroidViewModel(app) {
         appSince = null
         fileOffset = 0L
         filePendingTail = ""
-        mutable.value = LogUiState(following = mutable.value.following)
+        mutable.value = LogUiState(loading = true, following = mutable.value.following)
         pump = viewModelScope.launch {
             while (true) {
                 if (mutable.value.following) {
                     runCatching { poll() }
                         .onFailure { e -> mutable.value = mutable.value.copy(error = e.message) }
+                    // Whatever the first round did, the wait is over — an empty
+                    // list from here on really is an empty list.
+                    if (mutable.value.loading) {
+                        mutable.value = mutable.value.copy(loading = false)
+                    }
                 }
                 delay(POLL_INTERVAL_MS)
             }
@@ -98,15 +110,17 @@ class LogViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun poll() = when {
         source == LogSources.PROCESS -> pollProcessFile()
         LogSources.isApp(source) -> pollAppLogs(LogSources.appName(source))
+        LogSources.isVisor(source) -> pollRuntimeLogs(LogSources.visorPk(source))
         else -> pollRuntimeLogs()
     }
 
-    private suspend fun pollRuntimeLogs() {
+    /** [pk] null tails this phone's visor; Fleet passes a remote one. */
+    private suspend fun pollRuntimeLogs(pk: String? = null) {
         // No explicit session bootstrap: the client re-logins on 401 by
         // itself, and probing /api/user each poll would spam the very ring
         // buffer this feed displays.
         val firstPoll = runtimeSince == 0L
-        val delta = api.runtimeLogs(runtimeSince)
+        val delta = api.runtimeLogs(runtimeSince, pk)
         if (delta.latest < runtimeSince) {
             // The visor restarted (its line counter reset) — start over so
             // the new process's startup lines aren't silently skipped.

@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,19 +34,3 @@ fun PlaceholderTab(title: String, subtitle: String) {
     }
 }
 
-/**
- * Shared scaffold for the full-screen app routes pushed from the hub
- * (SkySOCKS / SkyVPN / SkyDEX / Fleet): [SkyTopBar] with back, placeholder
- * body. Feature work replaces the body; a `Logs` app-bar action joins every
- * app screen so each app's log feed is one tap away.
- */
-@Composable
-fun AppRouteScaffold(title: String, subtitle: String, onBack: () -> Unit) {
-    Scaffold(
-        topBar = { SkyTopBar(title = title, onBack = onBack) },
-    ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
-            PlaceholderTab(title, subtitle)
-        }
-    }
-}

@@ -17,7 +17,10 @@ object Routes {
     const val DEX = "dex"
     const val FLEET = "fleet"
 
-    /** Shared log viewer; {source} is core, process, or app:<name>. */
+    /**
+     * Shared log viewer; {source} is core, process, `app-<name>`, or
+     * `visor-<pk>` for a remote visor's feed (Fleet).
+     */
     const val LOGS = "logs/{source}"
 
     fun logs(source: String) = "logs/$source"

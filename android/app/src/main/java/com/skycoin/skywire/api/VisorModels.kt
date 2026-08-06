@@ -26,6 +26,18 @@ data class VisorSummary(
     @SerialName("dmsg_servers") val dmsgServers: List<DmsgServerInfo> = emptyList(),
     @SerialName("build_tag") val buildTag: String = "",
     @SerialName("config_version") val configVersion: String = "",
+    /**
+     * Whether this visor answered the summary RPC. Only meaningful in the
+     * `/api/visors-summary` list, where an offline visor is still listed —
+     * served from the last snapshot, with every other field stale.
+     */
+    @SerialName("online") val online: Boolean = false,
+    /** True for the visor serving the API — this phone, in the Fleet list. */
+    @SerialName("is_hypervisor") val isHypervisor: Boolean = false,
+    /** RFC 3339. Last successful summary; absent for a never-seen visor. */
+    @SerialName("last_seen_at") val lastSeenAt: String? = null,
+    /** RFC 3339, set only while [online] is false. */
+    @SerialName("offline_since") val offlineSince: String? = null,
 )
 
 @Serializable
