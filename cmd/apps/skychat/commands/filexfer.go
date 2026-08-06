@@ -579,9 +579,10 @@ const maxUploadMemory = 8 << 20 // 8 MiB
 
 // sendFileHandler serves POST /send-file. It sends a file either 1:1 (form field
 // "pk"=recipient hex) or to the active group (form field "group"=group id or
-// "1"). The file bytes come from a multipart "file" upload (browser) or, when no
-// upload is present, a local "path" on the host (CLI). Responds with JSON
-// {"id":...} on a dispatched send.
+// "1"), or keeps it without sending it at all (form field "local"=1, for the
+// notes thread — see the case below). The file bytes come from a multipart
+// "file" upload (browser) or, when no upload is present, a local "path" on the
+// host (CLI). Responds with JSON {"id":...} on a dispatched send.
 func sendFileHandler(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -608,6 +609,7 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 
 		pkHex := strings.TrimSpace(r.FormValue("pk"))       //nolint
 		groupVal := strings.TrimSpace(r.FormValue("group")) //nolint
+		localVal := strings.TrimSpace(r.FormValue("local")) //nolint
 
 		// Resolve the source file: uploaded bytes take priority over a host path.
 		path, cleanup, name, err := resolveUploadOrPath(r)
@@ -670,8 +672,37 @@ func sendFileHandler(ctx context.Context) http.HandlerFunc {
 				resp["file_url"] = url
 			}
 			writeJSON(w, resp)
+		case localVal != "":
+			// Keep the bytes, send nothing. This is the notes thread ("Saved
+			// Messages"), which is a conversation with no peer: there is
+			// nobody to offer the file to, and asking this handler to send it
+			// anyway is what used to answer "bad pk: Invalid public key" — the
+			// UI had no destination to put in the pk field, so it put the
+			// thread's own name there.
+			//
+			// The copy is kept exactly the way a DM send keeps one, under the
+			// same name and served from the same /files/ URL, so everything
+			// downstream — the player, the waveform decode, /thumb, download —
+			// treats a note's attachment as it treats any other kept file.
+			// That is also what makes it survive a reload: the browser renders
+			// its own attachment from a blob: URL, which dies with the page.
+			//
+			// Deliberately independent of the transfer manager: keeping a file
+			// for yourself has no reason to require that file transfer is
+			// enabled at all.
+			cancel()
+			id := newEventID()
+			if cerr := saveSentCopy(path, xfer.Offer{ID: id, Name: filepath.Base(path)}); cerr != nil {
+				http.Error(w, "keep file: "+cerr.Error(), http.StatusInternalServerError)
+				return
+			}
+			resp := map[string]any{"id": id, "local": true}
+			if url := sentCopyURL(id, path); url != "" {
+				resp["file_url"] = url
+			}
+			writeJSON(w, resp)
 		default:
-			http.Error(w, "specify pk (1:1) or group", http.StatusBadRequest)
+			http.Error(w, "specify pk (1:1), group, or local", http.StatusBadRequest)
 		}
 	}
 }

@@ -4073,6 +4073,9 @@
         if (fs === 'sending') return 'pending';
         if (fs === 'failed') return 'failed';
         if (fs === 'received') return 'received';
+        // A note was never sent anywhere, so there is no delivery to report —
+        // one tick, the same as the text notes it sits among.
+        if (fs === 'stored') return 'sent';
         return msg.group ? 'sent' : 'received';
       }
 
@@ -4278,11 +4281,11 @@
         if (!message || !message._file || message.file.status !== 'failed') return;
 
         const isGroup = !!message.group;
+        const note = this._isNoteThread(key, isGroup);
         message.file.status = 'sending';
         this._patchStatusTick(message);
         const form = new FormData();
-        if (isGroup) form.append('group', key);
-        else form.append('pk', key);
+        this._fileDest(form, key, isGroup);
         form.append('file', message._file);
 
         fetch('/send-file', { method: 'POST', body: form })
@@ -4290,14 +4293,22 @@
             if (!res.ok) {
               message.file.status = 'failed';
               this._patchStatusTick(message);
-              res.text().then(t => this.showToast(`File send failed: ${t}`, 'error'));
+              const what = note ? 'Could not save that file' : 'File send failed';
+              res.text().then(t => this.showToast(`${what}: ${t}`, 'error'));
               return;
             }
-            message.file.status = 'sent';
+            message.file.status = note ? 'stored' : 'sent';
             this._patchStatusTick(message);
-            this.showToast('File sent.');
+            this.showToast(note ? 'Saved.' : 'File sent.');
             res.json().then(j => {
               if (j && j.id) message.file.id = j.id;
+              // Same re-point as the first attempt: the bubble is showing an
+              // object URL, which dies with the page, and the kept copy is
+              // what makes it come back.
+              if (j && j.file_url && !this.isImageFile(message.file)) {
+                message.file.url = j.file_url;
+                message.file.local = false;
+              }
               if (!isGroup) this.saveChat(key);
             }).catch(() => { if (!isGroup) this.saveChat(key); });
           })
@@ -6883,6 +6894,7 @@
             dest: take.dest,
             text: `${spec.icon} ${spec.noun}`,
             sentToast: `${spec.noun} sent.`,
+            savedToast: `${spec.noun} saved.`,
           });
         });
       }
@@ -6981,6 +6993,25 @@
         this._uploadFile(file);
       }
 
+      // A thread with no peer to send to: Saved Messages. Its attachments are
+      // kept, never offered — the whole point of the notes thread is that it
+      // does not leave this device.
+      _isNoteThread(key, isGroup) { return !isGroup && key === this.savedKey(); }
+
+      // _fileDest names the destination field /send-file expects for a thread,
+      // for every caller that posts to it. It exists because getting this
+      // wrong is silent until the server answers: the notes thread has no
+      // public key, so putting its own name ("saved") in the pk field is a
+      // request the server can only reject with "bad pk: Invalid public key" —
+      // which is exactly what a file or a recording in Saved Messages used to
+      // do. The server's `local` branch keeps the bytes and offers them to
+      // nobody.
+      _fileDest(form, key, isGroup) {
+        if (isGroup) form.append('group', key);
+        else if (this._isNoteThread(key, isGroup)) form.append('local', '1');
+        else form.append('pk', key);
+      }
+
       // _uploadFile ships one File (a picked attachment or a recorded voice/
       // video clip — same wire path either way) to the active conversation.
       // opts.text overrides the bubble's caption/preview line; opts.dest
@@ -6993,10 +7024,10 @@
           this.showToast('Select a conversation first.', 'error');
           return;
         }
+        const note = this._isNoteThread(destination, isGroup);
 
         const form = new FormData();
-        if (isGroup) form.append('group', destination);
-        else form.append('pk', destination);
+        this._fileDest(form, destination, isGroup);
         form.append('file', file);
 
         const localUrl = URL.createObjectURL(file);
@@ -7033,13 +7064,18 @@
             if (!res.ok) {
               message.file.status = 'failed';
               this._patchStatusTick(message);
-              res.text().then(t => this.showToast(`File send failed: ${t}`, 'error'));
+              const what = note ? 'Could not save that file' : 'File send failed';
+              res.text().then(t => this.showToast(`${what}: ${t}`, 'error'));
               if (!isGroup) this.saveChat(destination);
               return;
             }
-            message.file.status = 'sent';
+            // 'stored' is a note's whole lifecycle: kept here, offered to
+            // nobody, so there is no delivery to confirm afterwards.
+            message.file.status = note ? 'stored' : 'sent';
             this._patchStatusTick(message);
-            this.showToast(opts.sentToast || 'File sent.');
+            this.showToast(note
+              ? (opts.savedToast || 'Saved.')
+              : (opts.sentToast || 'File sent.'));
             // The response carries the server-assigned file id so a re-request
             // can locate the bytes and the id matches the feed reference other
             // members see. It also carries file_url — the copy the visor kept
@@ -8145,11 +8181,16 @@
         document.getElementById('chatHeader').classList.remove('hidden');
         document.getElementById('messages').classList.remove('hidden');
         document.getElementById('msgForm').classList.remove('hidden');
-        // Nothing leaves this thread, so the affordances that ship bytes
-        // somewhere have nothing to do here.
+        // Nothing leaves this thread, so the network picker has nothing to
+        // choose between. The paperclip stays: attaching to Saved Messages is
+        // "keep this file with my notes", which is a thing worth doing — the
+        // bytes are kept by the visor and offered to nobody (see the `local`
+        // branch of /send-file). It used to be hidden here because a file in
+        // this thread could only be *sent*, which is also why the only way to
+        // hit that was the mic button, which was never hidden.
         document.getElementById('networkSelect').classList.add('hidden');
         const attachBtn = document.querySelector('.attach-btn');
-        if (attachBtn) attachBtn.classList.add('hidden');
+        if (attachBtn) attachBtn.classList.remove('hidden');
 
         document.getElementById('headerAvatar').src = 'p.png';
         const hdr = document.getElementById('headerPk');
