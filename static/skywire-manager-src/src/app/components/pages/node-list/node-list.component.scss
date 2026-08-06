@@ -88,8 +88,54 @@
   }
 }
 
+.dmsg-column {
+  width: 9%;
+}
+
+// Per-carrier dmsg-server counts in the DMSG column, laid out as a 2-column
+// grid (carrier · count) so the numbers line up vertically across rows the
+// same way the Transports column's per-type grid does. Mirrors .tp-counts so
+// the two connectivity columns read as a consistent pair; dmsg has no
+// incoming/outgoing direction, hence two columns instead of four.
+.dmsg-counts {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  column-gap: 6px;
+  row-gap: 1px;
+  font-size: 0.85em;
+  line-height: 1.35;
+  text-align: right; // numeric column right-aligned so digits stack
+
+  .dmsg-type {
+    text-align: left;
+  }
+
+  .dmsg-count {
+    opacity: 0.85;
+  }
+
+  // The Total row: a hairline separator above it so it reads as a summary,
+  // matching the Transports column's Total line.
+  .dmsg-total {
+    padding-top: 2px;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    font-weight: 600;
+  }
+}
+
 .key-column {
   width: 25%;
+}
+
+// A visor public key is 66 hex chars; on desktop (the wide table is md+ only)
+// keep it on ONE line instead of wrapping mid-key, which looked broken. The
+// fixed table-layout column clips the overflow with an ellipsis; the full key
+// stays reachable via the row's copy-key action.
+.key-cell {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0; // let the fixed column width, not content, drive the cell
 }
 
 .version-column {
