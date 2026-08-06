@@ -1255,19 +1255,31 @@
     // Resolve THIS visor's PK so navigating steps can open the local visor's own
     // tabs (#/nodes/<pk>/info|transports|routing|apps). The top-bar always carries
     // the local visor's chip whose href holds the 66-hex PK; fall back to the URL.
+    // resolveSelfPK finds THIS visor's PK from any /nodes/<pk>/ link in the DOM (the
+    // visor-list rows, the top-bar chip, or the URL) — robust to whatever page the
+    // tour is opened from (the chip is absent on the list page). Re-tried lazily so
+    // a step still resolves it even if the DOM wasn't ready at tour start. The
+    // single-visor wasm PWA has exactly one such PK; the native hypervisor uses the
+    // first listed visor.
     var SELFPK = "";
-    try {
-      var _m = (win.location.hash || "").match(/nodes\/([0-9a-fA-F]{66})/);
-      if (_m) { SELFPK = _m[1]; }
-      else {
-        var _chip = doc.querySelector('app-top-bar a.tab-button[href*="/info"]');
-        var _mm = _chip && (_chip.getAttribute("href") || "").match(/([0-9a-fA-F]{66})/);
-        if (_mm) { SELFPK = _mm[1]; }
-      }
-    } catch (e) {}
-    // nodePath(tab) → the local visor's tab hash; visorList is the mesh overview.
-    function nodePath(tab) { return SELFPK ? "#/nodes/" + SELFPK + "/" + tab : ""; }
     var visorList = "#/nodes/list/1";
+    function resolveSelfPK() {
+      if (SELFPK) { return SELFPK; }
+      try {
+        var m = (win.location.hash || "").match(/nodes\/([0-9a-fA-F]{66})/);
+        if (m) { SELFPK = m[1]; return SELFPK; }
+        var links = doc.querySelectorAll('a[href*="/nodes/"]');
+        for (var k = 0; k < links.length; k++) {
+          var mm = (links[k].getAttribute("href") || "").match(/nodes\/([0-9a-fA-F]{66})/);
+          if (mm) { SELFPK = mm[1]; return SELFPK; }
+        }
+      } catch (e) {}
+      return SELFPK;
+    }
+    resolveSelfPK();
+    // nodePath(tab) → the local visor's tab hash (falls back to the overview if the
+    // PK can't be resolved, so a step navigates somewhere valid rather than skipping).
+    function nodePath(tab) { var pk = resolveSelfPK(); return pk ? "#/nodes/" + pk + "/" + tab : visorList; }
     var steps = [
       { title: "This is not a normal web page",
         body: {
@@ -1329,20 +1341,23 @@
         more: { summary: "skysocks-client vs. skysocks-client-lite",
           panel: "<b>skysocks-client</b> (native) runs as an app process and serves a local <b>SOCKS5 port</b> other programs point at. <b>skysocks-client-lite</b> (browser) has no process and no port — it lives in this tab and proxies only this visor's own browse windows and wallet. Both dial an <b>exit</b> visor that does the clearnet egress, so a site sees the exit's IP, not yours. (Naming: the browser one is the <i>lite</i> client — same idea, no listener.)" } },
 
-      // The network, live — sweep each top-bar overview tab individually.
-      { route: visorList, sel: "app-top-bar a.tab-button", has: "Visor list",
+      // The network, live — VISIT each overview tab (not just point at it), so the
+      // tour actually demonstrates the UI and doubles as a functional check.
+      { route: visorList, sel: "app-node-list",
         title: "The network, live: visors",
-        body: "This top row is the whole-mesh overview — every view fetched <b>peer-to-peer over dmsg</b>, never from a web server. <b>Visor list</b>: every visor visible on the network right now." },
-      { sel: "app-top-bar a.tab-button", has: "Rewards", title: "The network, live: rewards",
-        body: "<b>Rewards</b> — the Skycoin paid out to visors that stay online and reachable, and where you'd appear once your visor qualifies." },
-      { sel: "app-top-bar a.tab-button", has: "Transports", title: "The network, live: transports",
-        body: "<b>Transports</b> — every direct link across the <i>whole</i> mesh, not just yours: the live edge list the route-finder draws on." },
-      { sel: "app-top-bar a.tab-button", has: "Network Visualizer", title: "The network, live: the map",
-        body: "<b>Network Visualizer</b> — an interactive, geographic view of the mesh: visors and the transports between them, in Flat, Globe and WebGL renders." },
-      { sel: "app-top-bar a.tab-button", has: "Uptime", title: "The network, live: uptime",
-        body: "<b>Uptime</b> — how consistently each visor has stayed online, the basis for rewards." },
-      { sel: "app-top-bar a.tab-button", has: "Deployment", title: "The network, live: services",
-        body: "<b>Deployment</b> — the health of the shared services (discovery, route-finder, address resolver, dmsg servers) that make the mesh work. All of it, fetched over dmsg — a browser tab talking directly to visors around the world." },
+        body: "This top row is the whole-mesh overview, every view fetched <b>peer-to-peer over dmsg</b>, never from a web server. The <b>Visor list</b>: every visor visible on the network right now, each addressable by its public key." },
+      { route: "#/nodes/rewards", sel: "app-node-list", title: "The network, live: rewards",
+        body: "<b>Rewards</b> — the Skycoin paid out to visors that stay online and reachable. This is where your visor appears once it qualifies." },
+      { route: "#/nodes/transports", title: "The network, live: transports",
+        body: "<b>Transports</b> — every direct link across the <i>whole</i> mesh (thousands of them), with per-type bandwidth: the live edge list the route-finder draws on. Toggle Compact / Tree to explore it." },
+      { route: "#/nodes/network", sel: "app-network-view", title: "The network, live: the map",
+        body: "<b>Network</b> — the mesh drawn as a graph: visors, and the transports between them." },
+      { route: "#/nodes/visualizer", sel: "app-network-visualizer", title: "The network, live: visualizer",
+        body: "<b>Network Visualizer</b> — an interactive, geographic render of the same graph (Flat, Globe and WebGL views)." },
+      { route: "#/nodes/uptime", sel: "app-multi-visor-uptime", title: "The network, live: uptime",
+        body: "<b>Uptime</b> — how consistently each visor has stayed online over 1d / 7d / 30d, the basis for rewards." },
+      { route: "#/nodes/services-health", sel: "app-services-health", title: "The network, live: services",
+        body: "<b>Deployment</b> — the health of the shared services (discovery, route-finder, address resolver, dmsg servers) that keep the mesh working. All of it fetched over dmsg — a browser tab talking directly to visors around the world." },
 
       { sel: ".visor-switcher-row", title: "Every peer is addressable",
         body: "Each chip is a visor on the network, shown by label and public key. Click one to inspect its transports, routes, and apps. There are no usernames here — only keys." },
@@ -1440,9 +1455,10 @@
     // drawing the callout + spotlight. Steps with no route/target render at once.
     function go() {
       var s = steps[i];
+      var navigated = false;
       if (s.route) {
         var target = (typeof s.route === "function") ? s.route(SELFPK) : s.route;
-        if (target && win.location.hash !== target) { try { win.location.hash = target; } catch (e) {} }
+        if (target && win.location.hash !== target) { try { win.location.hash = target; navigated = true; } catch (e) {} }
       }
       if (s.sel) {
         var t0 = Date.now();
@@ -1451,6 +1467,10 @@
           if (pickTarget(s.sel, s.has) || Date.now() - t0 > 3000) { render(); return; }
           setTimeout(poll, 150);
         })();
+      } else if (navigated) {
+        // A "visit" step (route, no specific target): give the routed view a beat
+        // to render behind the callout before we describe it.
+        setTimeout(function () { if (!closed) { render(); } }, 550);
       } else {
         render();
       }
