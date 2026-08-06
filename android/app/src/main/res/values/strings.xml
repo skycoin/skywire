@@ -163,6 +163,8 @@
     <string name="chat_starting">Starting SkyChat…</string>
     <string name="chat_core_starting">Waiting for the Skywire core to come up…</string>
     <string name="chat_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="chat_media_channel_name">SkyChat playback</string>
+    <string name="chat_media_channel_description">Play, pause and skip a voice message or clip while it is playing.</string>
 
     <!-- SkyDEX (native market entry + embedded trading UI) -->
     <string name="dex_market_title">Market</string>
