@@ -605,11 +605,28 @@ func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver
 	cfg := &s.cfg.Config
 	log := s.log
 
+	// The transit client (MinSessions:0) connects to ALL servers in this list,
+	// INCLUDING itself. Point its OWN entry at the LOOPBACK listener, not the
+	// public address: dialing the public address is a NAT hairpin (a container
+	// dialing its own external IP:port back into itself), which fails on typical
+	// Docker/NAT hosts — so the server held no session for its own co-located
+	// transit client, and a remote dial to <serverPK>:80 relayed through THIS
+	// server (the discovery-resolved path svc-health uses) found no local client
+	// session and timed out (blank version column). Loopback is in-kernel — no
+	// NAT, no external port, no hairpin — so the self-session forms and the
+	// server can relay its own dmsg-side surfaces (/health, pprof, route-setup)
+	// to the co-located transit client. Reachability via the 8 peer servers is
+	// unchanged; this only ADDS the local path. Falls back to the public address
+	// if LocalAddress has no parseable port.
+	selfAddr := cfg.PublicAddress
+	if _, port, perr := net.SplitHostPort(cfg.LocalAddress); perr == nil && port != "" {
+		selfAddr = net.JoinHostPort("127.0.0.1", port)
+	}
 	serverEntry := &disc.Entry{
 		Version: "0.0.1",
 		Static:  cfg.PubKey,
 		Server: &disc.Server{
-			Address:           cfg.PublicAddress,
+			Address:           selfAddr,
 			AvailableSessions: cfg.MaxSessions,
 		},
 	}
