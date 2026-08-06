@@ -78,8 +78,9 @@
     <string name="logs_share">Share</string>
     <string name="logs_search_hint">Filter…</string>
     <string name="logs_empty">No log entries yet.</string>
+    <string name="logs_loading">Fetching the log…</string>
     <string name="logs_dropped">%1$d lines missed (buffer wrapped)</string>
-    <string name="logs_api_down">Core API unreachable — showing nothing new. The Process source works even when the visor won\'t start.</string>
+    <string name="logs_api_down">Core API unreachable — showing nothing new. The Process source works even when the visor won’t start.</string>
 
     <!-- SkySOCKS -->
     <string name="socks_state_connecting">Connecting…</string>
@@ -118,7 +119,7 @@
     <string name="vpn_reconnect">Reconnect</string>
     <string name="vpn_pick_server">Pick an exit below to route this phone through it.</string>
     <string name="vpn_hint_blocked">The tunnel is down and the killswitch is holding every other app offline. Disconnect to restore normal networking.</string>
-    <string name="vpn_hint_excluded">Skywire\'s own traffic stays outside the tunnel — that is what carries it.</string>
+    <string name="vpn_hint_excluded">Skywire’s own traffic stays outside the tunnel — that is what carries it.</string>
     <string name="vpn_servers">Exits (%1$d)</string>
     <string name="vpn_servers_empty">No exit matched your search.</string>
     <string name="vpn_servers_none">Service discovery returned no VPN servers.</string>
@@ -135,7 +136,7 @@
     <string name="vpn_killswitch_title">Killswitch</string>
     <string name="vpn_killswitch_hint">Keeps the network interface in place while the tunnel is down, so nothing leaks out around it. Other apps have no connection until it comes back.</string>
     <string name="vpn_killswitch_always_on">Always-on VPN settings</string>
-    <string name="vpn_killswitch_always_on_hint">For the strongest guarantee — blocking even before the app starts — turn on “Always-on VPN” and “Block connections without VPN” for Skywire in Android\'s settings.</string>
+    <string name="vpn_killswitch_always_on_hint">For the strongest guarantee — blocking even before the app starts — turn on “Always-on VPN” and “Block connections without VPN” for Skywire in Android’s settings.</string>
 
     <string name="vpn_error_no_consent">Android has not granted the VPN permission.</string>
     <string name="vpn_error_socket">The VPN service could not open its handoff socket: %1$s</string>
@@ -147,7 +148,7 @@
     <string name="transport_change">Change</string>
     <string name="transport_hint">Tried first when building the route to a server. The others stay as fallbacks.</string>
     <string name="transport_sheet_title">Primary transport</string>
-    <string name="transport_sheet_hint">Skywire tries this type first when it connects, and falls back to the others when it can\'t. Takes effect on the next connection.</string>
+    <string name="transport_sheet_hint">Skywire tries this type first when it connects, and falls back to the others when it can’t. Takes effect on the next connection.</string>
     <string name="transport_recommended">Recommended on mobile</string>
     <string name="transport_dmsg">DMSG</string>
     <string name="transport_dmsg_hint">Relayed through a DMSG server. Works behind any carrier NAT — the connection a phone can always make.</string>
@@ -173,8 +174,46 @@
     <string name="dex_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
     <string name="dex_core_starting">Waiting for the Skywire core to come up…</string>
 
+    <!-- Fleet (opt-in, status-only view of the user's other visors) -->
+    <string name="fleet_enable">Enable Fleet</string>
+    <string name="fleet_enable_hint">Lets your own visors reach this phone over DMSG and report their status here. Off by default.</string>
+    <string name="fleet_core_restarting">Restarting the Skywire core so the change takes effect…</string>
+    <string name="fleet_confirm_on_title">Turn Fleet on?</string>
+    <string name="fleet_confirm_off_title">Turn Fleet off?</string>
+    <string name="fleet_confirm_restart_body">The Skywire core reads this setting only when it starts, so it has to be restarted. Any SkySOCKS or SkyVPN connection drops and has to be reconnected.</string>
+    <string name="fleet_confirm_restart_action">Restart core</string>
+
+    <string name="fleet_off_title">Your other visors, from here</string>
+    <string name="fleet_off_body">Fleet lists the visors you run elsewhere — whether each one is up, what it is running, and for how long. You can restart one. Nothing else: no transports, no apps, no settings.</string>
+    <string name="fleet_off_reachable">Turning it on makes this phone reachable over DMSG as a status endpoint, so those visors can connect in. Only visors that already carry this phone’s key connect — and they still cannot control anything here.</string>
+
+    <string name="fleet_add_title">Add a visor</string>
+    <string name="fleet_add_body">On the other machine, add this phone’s key to that visor’s config:</string>
+    <string name="fleet_this_phone">This phone</string>
+    <string name="fleet_add_pk_pending">Waiting for the core to report this phone’s key…</string>
+    <string name="fleet_add_command">skywire cli config update hv --add-pks %1$s</string>
+    <string name="fleet_add_tap_to_copy">Tap to copy.</string>
+    <string name="fleet_add_then_restart">Run it where that visor’s skywire-config.json lives, then restart that visor. It appears in the list once it connects.</string>
+
+    <string name="fleet_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="fleet_core_starting">Waiting for the Skywire core to come up…</string>
+    <string name="fleet_visors">Visors (%1$d)</string>
+    <string name="fleet_visors_none">No visor has connected yet. Tap ? above to see how to add one.</string>
+    <string name="fleet_refresh">Refresh</string>
+    <string name="fleet_state_offline">Offline</string>
+    <string name="fleet_health">Health</string>
+    <string name="fleet_health_unknown">Unknown</string>
+    <string name="fleet_last_seen">Last answered %1$s ago — everything above is from then</string>
+    <string name="fleet_restart">Restart</string>
+    <string name="fleet_rename">Name this visor</string>
+    <string name="fleet_rename_label">Name</string>
+    <string name="fleet_rename_hint">A name for %1$s, so you know which machine it is. Kept on this phone only — the visor is never written to. Clear the field to remove it.</string>
+    <string name="fleet_restart_confirm">Restart %1$s? It closes everything it is running, re-reads its config and starts again — offline for a few seconds, and anything routed through it drops.</string>
+    <string name="fleet_restart_sent">Restart sent to %1$s. It goes offline and comes back on its own.</string>
+
+    <string name="core_restart_failed">The core could not be started again: %1$s</string>
+
     <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
     <string name="wallet_placeholder">The native Skycoin wallet is coming soon.</string>
     <string name="settings_placeholder">Identity, config export, app lock and logs are coming soon.</string>
-    <string name="fleet_placeholder">The opt-in Fleet status view is coming soon.</string>
 </resources>

@@ -3,6 +3,7 @@ package com.skycoin.skywire.api
 import android.content.Context
 import com.skycoin.skywire.core.SecretStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -155,8 +156,53 @@ class VisorApi(context: Context) {
 
     suspend fun serviceHealth(): List<ServiceHealthEntry> = authedGet("/api/service-health")
 
-    suspend fun runtimeLogs(since: Long): RuntimeLogsDelta =
-        authedGet("/api/visors/${localPk()}/runtime-logs?since=$since")
+    /**
+     * Runtime-log page of [pk], defaulting to this phone's own visor. Fleet
+     * passes a remote key: the same route resolves it through the hypervisor
+     * mux and answers from that visor's ring buffer.
+     */
+    suspend fun runtimeLogs(since: Long, pk: String? = null): RuntimeLogsDelta =
+        authedGet("/api/visors/${pk ?: localPk()}/runtime-logs?since=$since")
+
+    // --- fleet (remote visors that dialed in over dmsg) ---
+
+    /**
+     * Every visor this one knows about — the local visor first, then each
+     * remote that connected in over dmsg. Offline remotes stay in the list,
+     * served from the last snapshot with `online: false`.
+     *
+     * The list is only ever longer than one when the Fleet opt-in is on: with
+     * the ingest off there is no listener for a remote visor to reach.
+     */
+    suspend fun visorsSummary(): List<VisorSummary> = authedGet("/api/visors-summary")
+
+    /**
+     * Restart [pk] — the visor closes its module stack, re-reads its config and
+     * runs again, in the same process.
+     *
+     * The server answers 202 without waiting, and it has to: the restart tears
+     * down the RPC connection carrying the request, so there is no success to
+     * report. What actually happened shows up in the next [visorsSummary] —
+     * the visor drops to offline and comes back.
+     */
+    suspend fun restartVisor(pk: String): Unit = withContext(Dispatchers.IO) {
+        repeat(RESTART_ATTEMPTS) { attempt ->
+            postWithRelogin("/api/visors/$pk/restart", "{}").use { resp ->
+                if (resp.isSuccessful) return@withContext
+                // 503 means "known but not connected right now, retrying" —
+                // and that is a window the phone hits routinely, not an error:
+                // a managed visor's RPC connection idle-closes after about two
+                // minutes and redials within seconds, while the summary this
+                // screen was drawn from still reports it online. The server
+                // says "retrying" and expects the caller to; failing the tap
+                // for a visor that is fine would be the wrong answer.
+                if (resp.code != HTTP_UNAVAILABLE || attempt == RESTART_ATTEMPTS - 1) {
+                    throw IOException("visor restart failed (${resp.code}): ${errorBody(resp)}")
+                }
+            }
+            delay(RESTART_RETRY_MS)
+        }
+    }
 
     /**
      * Per-app log page. The server answers HTTP 500 `"no new available
@@ -525,8 +571,15 @@ class VisorApi(context: Context) {
         private const val BASE = "http://127.0.0.1:8000"
         private const val CSRF_HEADER = "X-CSRF-Token"
 
-        /** The visor's "that feature is off here" answer. */
+        /**
+         * The visor's "that feature is off here" answer — and, on the
+         * `/visors/{pk}/…` routes, "that visor is reconnecting".
+         */
         private const val HTTP_UNAVAILABLE = 503
+
+        /** Enough to outlast a hypervisor-client redial (measured ~4 s). */
+        private const val RESTART_ATTEMPTS = 4
+        private const val RESTART_RETRY_MS = 3_000L
 
         @Volatile private var instance: VisorApi? = null
 

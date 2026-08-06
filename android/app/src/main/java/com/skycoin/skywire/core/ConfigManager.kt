@@ -34,7 +34,10 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      * idempotent) so the security-relevant pins survive any config rewrite
      * the visor itself performs at runtime.
      */
-    suspend fun ensureConfig(transportPrimary: String): Result<File> = withContext(Dispatchers.IO) {
+    suspend fun ensureConfig(
+        transportPrimary: String,
+        fleetEnabled: Boolean,
+    ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
         if (!paths.visorBinary.canExecute()) {
             return@withContext Result.failure(
@@ -55,6 +58,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         try {
             applyPhoneProfile(
                 transportPrimary,
+                fleetEnabled,
                 skychatPasswordFile = ensureGatePassword(
                     SkychatProfile.passwordFile(paths),
                     secrets.skychatPassword(),
@@ -109,6 +113,9 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      *    system temp dir, and the phone has no use for it;
      *  - drop `hypervisor.lan_dmsg_server` — force-enabled by `-i`, opens a
      *    LAN-reachable listener;
+     *  - `hypervisor.dmsg_ingest` — the Fleet opt-in (see [Fleet]), written
+     *    from the app's preference on every launch for the same reason the
+     *    transport order is: the phone, not the file, decides;
      *  - absolute `local_path` (+ the transport log location derived from
      *    it) and `hypervisor.db_path`, so nothing depends on the cwd the
      *    visor happens to get;
@@ -126,6 +133,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      */
     private fun applyPhoneProfile(
         transportPrimary: String,
+        fleetEnabled: Boolean,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
     ) {
@@ -152,6 +160,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                         value.jsonObject.edit {
                             remove("lan_dmsg_server")
                             put("db_path", JsonPrimitive(File(paths.dataDir, "users.db").absolutePath))
+                            put(Fleet.CONFIG_KEY, JsonPrimitive(fleetEnabled))
                             putObject("tp_viz") { put("enable", JsonPrimitive(false)) }
                         },
                     )
