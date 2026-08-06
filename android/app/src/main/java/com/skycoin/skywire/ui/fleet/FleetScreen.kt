@@ -105,13 +105,14 @@ fun FleetScreen(
             SkyTopBar(
                 title = stringResource(R.string.app_fleet),
                 onBack = onBack,
-                // How to add a visor is read once and then never again, so it
-                // does not get a permanent card — it waits behind the ?.
+                // Fleet's help is a sheet of its own (see AddVisorSheet): it
+                // ends in a command with a copy button, which a plain help
+                // dialog has nowhere to put.
                 actions = {
                     IconButton(onClick = { addVisorOpen = true }) {
                         Icon(
                             Icons.AutoMirrored.Outlined.HelpOutline,
-                            contentDescription = stringResource(R.string.fleet_add_title),
+                            contentDescription = stringResource(R.string.help_open),
                         )
                     }
                 },
@@ -317,6 +318,21 @@ private fun AddVisorSheet(state: FleetUiState, onDismiss: () -> Unit) {
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 24.dp),
         ) {
+            // Fleet's ? is the only one that opens a sheet rather than a
+            // dialog, because unlike the other tabs its guidance ends in a
+            // command the user has to copy. It answers the same question
+            // first — what is this tab — before getting to the command.
+            Text(
+                stringResource(R.string.help_fleet_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                stringResource(R.string.help_fleet_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(20.dp))
             Text(
                 stringResource(R.string.fleet_add_title),
                 style = MaterialTheme.typography.titleMedium,

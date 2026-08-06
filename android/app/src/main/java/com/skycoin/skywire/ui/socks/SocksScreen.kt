@@ -61,13 +61,13 @@ import com.skycoin.skywire.ui.components.PENDING_AMBER
 import com.skycoin.skywire.ui.components.SavedServer
 import com.skycoin.skywire.ui.components.SectionCard
 import com.skycoin.skywire.ui.components.ServerRow
+import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.TransportPreferenceCard
 import com.skycoin.skywire.ui.components.TransportPreferenceSheet
 import com.skycoin.skywire.ui.components.flagEmoji
 import com.skycoin.skywire.ui.components.formatBytes
 import com.skycoin.skywire.ui.components.shortPk
-import com.skycoin.skywire.ui.logs.LogSources
 
 /**
  * SkySOCKS: pick a public proxy server, point skysocks-client at it, and
@@ -78,7 +78,6 @@ import com.skycoin.skywire.ui.logs.LogSources
 @Composable
 fun SocksScreen(
     onBack: () -> Unit,
-    onOpenLogs: (String) -> Unit,
     viewModel: SocksViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -90,11 +89,7 @@ fun SocksScreen(
             SkyTopBar(
                 title = stringResource(R.string.app_skysocks),
                 onBack = onBack,
-                actions = {
-                    TextButton(onClick = { onOpenLogs(LogSources.app(SocksArgs.APP)) }) {
-                        Text(stringResource(R.string.logs_title))
-                    }
-                },
+                help = HelpTopic(R.string.help_socks_title, R.string.help_socks_body),
             )
         },
     ) { padding ->

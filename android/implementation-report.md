@@ -7,6 +7,123 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — SkyChat wears the Wallet's design; one header for every tab
+
+Three things, all cosmetic in the sense that no protocol changed, and none of
+them cosmetic in the sense that anyone using the app will notice all three.
+
+**SkyChat is redesigned onto the Wallet's palette, in both themes.** The chat
+UI is one 12k-line HTML file served by the Go app and shared with the desktop,
+and it was a single dark theme built on its own token set — slate greys, a
+cyan-ish `#0ea5e9` accent, green section headings. It now carries the exact
+tokens from the Wallet design: `#0072FF` on `#000000`/`#FFFFFF`, the same
+surface ladder, the same status colours. The old token names are kept as
+aliases pointing at the wallet ones, which is what let the whole app re-skin
+at once instead of rule by rule.
+
+Light arrives through `prefers-color-scheme`, and either theme can be forced
+with `data-theme` on `<html>`. The phone forces it: the app has a
+Light/Dark/System setting the WebView knows nothing about, so a phone set to
+System-dark with the app pinned to Light was opening a black chat inside a
+white app. The theme is named in the URL query (`?theme=dark`) and read by a
+script in `<head>` before the stylesheet is reached, so there is no flash of
+the wrong theme. `ChatWebView.applyTheme` sets the same attribute on an
+already-built document, for the case where the app recomposes without the
+WebView being recreated; note the Activity declares no `configChanges`, so a
+*system* uiMode change recreates it and takes the URL path instead —
+applyTheme is the narrower belt-and-braces path, not the main one.
+`loadedUrl` deliberately stores the address without the query, so the theme
+is never mistaken for a new URL.
+
+`LocalDarkTheme` is new in `ui/theme/Theme.kt`: `isSystemInDarkTheme()` is the
+wrong question once a user override exists, and anything handing a scheme to
+something outside Compose needs the answer *after* that override.
+
+Type is the Skycoin face, shipped: `skycoin-regular.otf` and
+`skycoin-bold.otf` now sit in the app's own static dir and are `@font-face`d,
+so the page needs no network to look right and the desktop chat gets the brand
+face too. The family has no 500 cut, so every weight in the file is now 400 or
+700 — an unpinned 500 silently resolves to Regular and flattens the hierarchy.
+Numerals are tabular throughout. The `'Monaco', 'Menlo', monospace` stack that
+public keys used is gone: the Wallet renders addresses in the brand face and
+this now matches it.
+
+**Icons: 49 drawn glyphs replace the emoji.** Nearly every icon in the chat
+was a platform emoji pasted in as an HTML entity — 📎, 📣, 🔔, ⋮. Three
+problems. They are rendered by the platform's font, so the same button was a
+flat glyph on one machine and a glossy cartoon on the next. They ignore
+`currentColor`, so a menu row that tints itself orange to say "muted" kept a
+yellow bell. And they sit on a different baseline at a different weight from
+the hand-drawn SVGs the file already had. One `ICON_PATHS` table, one
+`icon(name, size)` helper, 24-unit grid, 2-unit stroke, round caps — the
+Wallet's drawing. A missing name returns `''` rather than throwing, because an
+icon is decoration and a typo in one must not take a menu down.
+
+Four plain-text strings lost their glyph rather than gaining a drawing, since
+no markup reaches them: file previews now read as the file name, and the
+"attachment" preview as *Attachment*. `_msgPreview` is one of them, and it is
+protocol-visible — it rides inside a reply so the quote renders for a peer who
+lacks the parent.
+
+**No scrollbars anywhere.** The `::-webkit-scrollbar` block that drew an 8px
+bar down every list is replaced by a global `width:0; display:none` plus
+`scrollbar-width:none`. Every container still scrolls; only the indicator is
+gone. It also reclaims the width, which is why a narrow column used to reflow
+the moment its content passed the fold.
+
+**One header on every tab except Home.** Back at the left, the name centred, a
+circled ? at the right, and the two round buttons are the same size so the
+title sits still as you move between screens. Back on a tab root goes to Home;
+on a pushed screen it pops as before. The ? opens a few sentences about that
+screen. Fleet's ? keeps opening its own sheet rather than a dialog, because
+its guidance ends in a command with a copy button — it just answers "what is
+this tab" first now.
+
+The ? replaced the per-screen **Logs** action on SkyChat, SkySOCKS, SkyVPN and
+SkyDEX, and each of those help texts says where the logs went. A log viewer is
+not wanted from the screen being used; it is wanted when something is wrong,
+and then all of them are wanted, which is the list Settings ▸ Diagnostics
+already keeps (it lists exactly these four app sources plus core and process).
+Fleet keeps its per-visor Logs button: that feed is a remote machine's,
+arriving over dmsg, and Diagnostics only knows about this phone. SkyChat's
+overflow menu is gone entirely — with Logs moved it held only Reload, and a
+wedged page is reloaded from the Retry the error state already offers.
+
+**One bug found while testing, one fixed.** The recording lock pill — the
+target a finger slides up onto to record hands-free — was pinned at
+`right: 20px` while the composer row's own padding was 16px on a desktop and
+12px on a phone, putting a 40px pill 4px and 8px to the left of the 40px
+button it is supposed to sit above. On a phone that is a finger sliding past
+the target. The row now names its padding (`--composer-pad`) and the pill and
+the video self-view are inset by it, so all three are concentric at every
+width. The lock threshold itself is a pure 56px vertical distance and never
+hit-tested the pill, which is why the gesture still worked while looking
+wrong. The phone misalignment predates this redesign.
+
+**Verified on the emulator (Pixel, arm64, `make android-mobile` + a fresh
+APK).** Core connected, Chat opened: header shows back / SkyChat / ?, and the
+page renders the redesign — drawn QR, address-book and gear icons, the
+Connected pill, filter chips with All filled blue, Saved Messages behind a
+drawn bookmark on a tinted circle, a grey CHATS label, no scrollbar. Settings
+▸ Theme ▸ Light and back to Chat rendered the page in the light theme, every
+icon inverting with `currentColor` and the drawn set holding up on white; the
+app was pinned to `theme_mode=DARK` beforehand, so a system night-mode flip
+correctly did nothing. That path exercises the URL query, since returning to
+the tab rebuilds the WebView — `applyTheme` itself is not separately covered. The Chat ? dialog renders its copy and the Settings ▸ Diagnostics
+pointer. A conversation shows blue sent bubbles with the tail corner, drawn
+delivery ticks, the waveform player, and the touch action sheet with drawn
+reply / forward / trash. Go builds clean; a temporary test confirmed both OTFs
+and the page are reachable through the embedded FS (549,375 / 67,292 / 74,840
+bytes). The lock-pill fix was confirmed on device by the user.
+
+**Not covered:** the desktop chat has not been opened against this build (same
+file, so the redesign lands there too, including the light theme on a
+light-set desktop); no screenshots of the light theme inside a *conversation*;
+the icon set is our own drawing, not the design team's — `android/icon-brief.md`
+is the brief for replacing it.
+
+---
+
 ## 2026-08-07 — Wallet: SKY, fiber coins and BTC, keys never leaving the phone
 
 The Wallet tab is no longer a placeholder. It is a native Compose wallet for
