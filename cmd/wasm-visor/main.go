@@ -1268,7 +1268,7 @@ func probeServiceHealth(name, dmsgURL string) serviceHealthEntry {
 		e.Status = "N/A"
 		return e
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	start := time.Now()
 	status, _, body, ferr := dmsgclient.FetchOverDmsg(ctx, dmsgC, "GET", pk.Hex(), "/health", nil, nil)
@@ -1323,16 +1323,41 @@ func (visorSelf) SelfServiceHealth() []byte {
 		{"Uptime Tracker", svc.UptimeTrackerDmsg},
 	}
 	entries := make([]serviceHealthEntry, len(probes))
+	// Pre-seed each row so a probe that hasn't returned by the overall deadline
+	// still yields a sensible entry: a configured service shows TIMEOUT, an
+	// unconfigured one N/A. This is what keeps the table from hanging on a single
+	// slow/dead service (e.g. the decommissioned standalone uptime tracker).
+	for i, p := range probes {
+		st := "N/A"
+		if p.dmsgURL != "" {
+			st = "TIMEOUT"
+		}
+		entries[i] = serviceHealthEntry{Name: p.name, URL: p.dmsgURL, Transport: "dmsg", Status: st}
+	}
+	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for i, p := range probes {
 		wg.Add(1)
 		go func(i int, name, url string) {
 			defer wg.Done()
-			entries[i] = probeServiceHealth(name, url)
+			e := probeServiceHealth(name, url)
+			mu.Lock()
+			entries[i] = e
+			mu.Unlock()
 		}(i, p.name, p.dmsgURL)
 	}
-	wg.Wait()
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	// Overall deadline. Every reachable deployment service answers /health in well
+	// under a second over dmsg, so 9s never truncates a healthy one; it only caps
+	// how long an unreachable service can hold up the whole table.
+	select {
+	case <-done:
+	case <-time.After(9 * time.Second):
+	}
+	mu.Lock()
 	b, err := json.Marshal(entries)
+	mu.Unlock()
 	if err != nil {
 		return nil
 	}
