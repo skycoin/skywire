@@ -438,37 +438,14 @@ func (v *Visor) refreshDmsgServersCacheLoop(ctx context.Context, discURL string,
 // so DialStream for e.g. TPD hit the HTTP discovery, found no entry (TPD
 // is direct-client by design), and bailed with "entry not found".
 func (v *Visor) dmsgServicePKs() cipher.PubKeys {
-	// Resolve the deployment service endpoints through the SHARED resolver
-	// (pkg/visor/visorcore) — the same one the browser wasm-visor uses — so the two
-	// visors can't drift on the operator-override-else-deployment-default rule. This
-	// replaced six inline pick() calls; ResolveServices applies identical semantics
-	// (and handles the nullable UptimeTracker/Launcher blocks).
-	svc := visorcore.ResolveServices(v.conf)
-	dmsgURLs := []string{
-		svc.DmsgDiscoveryDmsg,
-		svc.TransportDiscoveryDmsg,
-		svc.AddressResolverDmsg,
-		svc.RouteFinderDmsg,
-		svc.ServiceDiscoveryDmsg,
-		svc.ConfDmsg,
-		svc.UptimeTrackerDmsg,
-	}
-	var pks cipher.PubKeys
-	for _, rawURL := range dmsgURLs {
-		if rawURL == "" {
-			continue
-		}
-		var addr dmsg.Addr
-		trimmed := rawURL
-		if len(trimmed) > 7 && trimmed[:7] == "dmsg://" {
-			trimmed = trimmed[7:]
-		}
-		if err := addr.Set(trimmed); err != nil {
-			continue
-		}
-		pks = append(pks, addr.PK)
-	}
-	return pks
+	// Resolve the deployment service endpoints through the SHARED resolver and
+	// derive the direct-client dmsg service PKs through the SHARED derivation
+	// (pkg/visor/visorcore) — the same both used by the browser wasm-visor — so
+	// the two visors can't drift on the operator-override-else-deployment-default
+	// rule NOR on which services get seeded. The wasm edge appends
+	// svc.RouteSetupNodes on top of this set; the native visor seeds those
+	// separately, so they're intentionally not included here.
+	return visorcore.DmsgServicePKs(visorcore.ResolveServices(v.conf))
 }
 
 // seedDmsgServiceEntries injects synthetic client entries for deployment
