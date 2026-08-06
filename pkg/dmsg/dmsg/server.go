@@ -34,6 +34,16 @@ type ServerConfig struct {
 	AuthPassphrase string
 	Peers          []PeerEntry
 
+	// Version, when non-empty, is advertised as this server's discovery
+	// entry Version (disc.Entry.Version) in place of the vestigial "0.0.1"
+	// protocol constant — nothing checks the entry version for protocol
+	// compatibility (only that it is non-empty), so the field is free to
+	// carry the server's real build version, which then shows in the
+	// discovery /all_servers listing and `skywire cli mdisc servers`. The
+	// caller (pkg/services/dmsgsrv) sets it to buildinfo.Version(), keeping
+	// pkg/dmsg decoupled from skywire's buildinfo. Empty preserves "0.0.1".
+	Version string
+
 	// AnnounceAsPeer makes this server send a signed PeerAnnounce on
 	// every outbound peer link it dials, asking the remote to treat
 	// this server as a forwardable peer. Used by a non-public server
@@ -128,6 +138,7 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 
 	s := new(Server)
 	s.EntityCommon.init(pk, sk, dc, log, conf.UpdateInterval)
+	s.EntityCommon.serverVersion = conf.Version
 	s.m = m
 	s.ready = make(chan struct{})
 	s.done = make(chan struct{})
