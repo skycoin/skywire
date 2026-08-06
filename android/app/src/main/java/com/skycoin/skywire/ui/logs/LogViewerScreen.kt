@@ -51,6 +51,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.VisorNames
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.components.appProductName
 import com.skycoin.skywire.ui.components.shortPk
 
 /**
@@ -272,7 +273,11 @@ private fun LogRow(entry: LogEntry, onClick: () -> Unit) {
 @Composable
 private fun titleFor(source: String): String = when {
     source == LogSources.PROCESS -> stringResource(R.string.logs_source_process)
+    // The product name alone here, unlike the diagnostics list: a centered
+    // app-bar title has no room for "SkySOCKS (skysocks-client)", and the row
+    // that opened this screen already showed both.
     LogSources.isApp(source) -> LogSources.appName(source)
+        .let { name -> appProductName(name) ?: name }
     // A remote visor's feed. Titled with the name the user gave it in Fleet —
     // the same store, read straight from here rather than threaded through the
     // navigation route — and its key when they have not named it.

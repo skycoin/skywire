@@ -17,6 +17,9 @@ object Routes {
     const val DEX = "dex"
     const val FLEET = "fleet"
 
+    /** Logs & diagnostics — pushed from Settings. */
+    const val DIAGNOSTICS = "diagnostics"
+
     /**
      * Shared log viewer; {source} is core, process, `app-<name>`, or
      * `visor-<pk>` for a remote visor's feed (Fleet).
@@ -27,4 +30,7 @@ object Routes {
 
     /** Routes pushed from the hub; the bar keeps the hub slot highlighted. */
     val hubPushed = setOf(SOCKS, VPN, DEX, FLEET)
+
+    /** Same, for the Settings tab. */
+    val settingsPushed = setOf(DIAGNOSTICS)
 }

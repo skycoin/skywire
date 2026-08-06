@@ -19,6 +19,7 @@ import (
 	"github.com/sirupsen/logrus"
 	coinCipher "github.com/skycoin/skycoin/src/cipher"
 	"github.com/spf13/cobra"
+	"github.com/wlynxg/anet"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/deployment"
@@ -2259,7 +2260,16 @@ func writeConfigOutput(log *logging.Logger) {
 }
 
 func getInterfaceNames() string { //nolint Note: pending implementation for config gen
-	interfaces, err := net.Interfaces()
+	// anet, not net — the same reason as everywhere else in this repo
+	// (pkg/netutil/net_native.go): Android 11+ denies unprivileged processes
+	// the netlink RIB dump the standard library uses, so net.Interfaces()
+	// there fails with "route ip+net: netlinkrib: permission denied". This
+	// runs at flag-registration time, i.e. on EVERY invocation of this
+	// binary, so on Android the standard library put that error on stdout
+	// ahead of the output of whatever command was actually asked for —
+	// including the `config pk` output the Android app parses. anet is a
+	// straight pass-through to the standard library off Android.
+	interfaces, err := anet.Interfaces()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return ""

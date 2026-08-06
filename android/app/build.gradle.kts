@@ -64,6 +64,10 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.datastore.preferences)
+    // App lock + every secret-revealing confirmation. Brings androidx.fragment
+    // with it, which is why MainActivity is a FragmentActivity: BiometricPrompt
+    // hosts itself in a fragment and takes nothing less.
+    implementation(libs.androidx.biometric)
     // Local-API client — declared now so the module dep set is final.
     implementation(libs.okhttp)
     implementation(libs.kotlinx.serialization.json)
