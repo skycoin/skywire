@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -55,6 +56,7 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.ui.components.Biometrics
 import com.skycoin.skywire.ui.components.InfoRow
+import com.skycoin.skywire.ui.components.SecureWindow
 import com.skycoin.skywire.ui.components.SectionCard
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
@@ -148,6 +150,20 @@ fun SettingsScreen(
                 ConfigCard(
                     state = state,
                     onExport = { dialog = SettingsDialog.ExportWarning },
+                    onToggleEncryption = { wanted ->
+                        // Turning it ON is not destructive and needs no
+                        // ceremony. Turning it OFF puts the secret key back on
+                        // the disk in the clear, which is a security decision
+                        // being reversed — so it is confirmed the same way the
+                        // app lock's own reversal is.
+                        if (wanted) {
+                            viewModel.setConfigEncrypted(true)
+                        } else {
+                            confirmBiometrically(R.string.settings_encrypt_disable_prompt) {
+                                viewModel.setConfigEncrypted(false)
+                            }
+                        }
+                    },
                 )
             }
             item {
@@ -164,6 +180,13 @@ fun SettingsScreen(
                             context.startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS))
                         }.onFailure { viewModel.report(context.getString(R.string.settings_no_security_screen)) }
                     },
+                )
+            }
+            item {
+                BatteryCard(
+                    state = state,
+                    onGrant = viewModel::requestBatteryExemption,
+                    onDismiss = viewModel::dismissBatteryPrompt,
                 )
             }
             item { ThemeCard(state, viewModel::setThemeMode) }
@@ -329,7 +352,11 @@ private fun IdentityCard(
 }
 
 @Composable
-private fun ConfigCard(state: SettingsUiState, onExport: () -> Unit) {
+private fun ConfigCard(
+    state: SettingsUiState,
+    onExport: () -> Unit,
+    onToggleEncryption: (Boolean) -> Unit,
+) {
     SectionCard {
         Text(stringResource(R.string.settings_config), style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(4.dp))
@@ -341,6 +368,40 @@ private fun ConfigCard(state: SettingsUiState, onExport: () -> Unit) {
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = onExport, enabled = state.hasIdentity && !state.busy) {
             Text(stringResource(R.string.settings_export))
+        }
+
+        // Encryption at rest sits in this card rather than its own, because it
+        // is a property of the file the card is already about.
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider()
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.settings_encrypt),
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.settings_encrypt_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = state.configEncrypted,
+                onCheckedChange = onToggleEncryption,
+                enabled = !state.busy,
+            )
+        }
+        if (state.configEncrypted) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                stringResource(R.string.settings_encrypt_warning),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -459,12 +520,60 @@ private fun AboutCard(state: SettingsUiState) {
 // --- dialogs ---
 
 /** Paste the key. Nothing is validated here — the core binary is asked. */
+/**
+ * Doze, and what to do about it. Shown in both states rather than only when
+ * something is wrong: "the system may pause Skywire in the background" is
+ * worth knowing even once it has been dealt with, and a card that vanishes on
+ * success leaves a user who granted it wondering whether it took.
+ *
+ * The "Not now" button is what stops this being a nag — it silences the Home
+ * prompt too. The card itself stays, because Settings is where you go looking.
+ */
+@Composable
+private fun BatteryCard(
+    state: SettingsUiState,
+    onGrant: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    SectionCard {
+        Text(stringResource(R.string.settings_battery), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(
+                if (state.batteryExempt) R.string.settings_battery_exempt_hint
+                else R.string.settings_battery_hint,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (!state.batteryExempt) {
+            Spacer(Modifier.height(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = onGrant) {
+                    Text(stringResource(R.string.settings_battery_allow))
+                }
+                if (!state.batteryPromptDismissed) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.settings_battery_not_now))
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SecretKeyDialog(
     busy: Boolean,
     onDismiss: () -> Unit,
     onSubmit: (String) -> Unit,
 ) {
+    // The field below holds a visor secret key in the clear. That is the same
+    // class of secret as the wallet's twelve words — it *is* the identity,
+    // it cannot be reissued, and anyone who reads it owns this visor — so it
+    // gets the same screenshot and recents-thumbnail block the seed screens
+    // have always had. It did not, until this audit.
+    SecureWindow()
     var text by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,

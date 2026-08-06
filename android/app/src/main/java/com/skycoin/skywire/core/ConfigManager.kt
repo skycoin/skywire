@@ -22,6 +22,15 @@ import java.util.concurrent.TimeUnit
  */
 class ConfigManager(private val paths: SkywirePaths, private val secrets: SecretStore) {
 
+    /**
+     * Opens the config when it is sealed at rest. Held here rather than passed
+     * in because *every* path that touches the config has to go through it:
+     * [ensureConfig] treats a missing file as first-run and would generate a
+     * fresh identity over a sealed one, which is the single worst thing this
+     * class could do.
+     */
+    private val vault = ConfigVault(paths)
+
     data class CommandResult(val exitCode: Int, val output: String, val timedOut: Boolean) {
         val ok get() = exitCode == 0 && !timedOut
     }
@@ -40,6 +49,9 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         logLevel: String,
     ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
+        // Before the existence check below, which is what decides whether to
+        // generate a new identity.
+        vault.unseal().getOrElse { return@withContext Result.failure(it) }
         if (!paths.visorBinary.canExecute()) {
             return@withContext Result.failure(
                 IllegalStateException("core binary missing or not executable: ${paths.visorBinary}"),
@@ -363,6 +375,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      */
     suspend fun replaceSecretKey(secretKey: String): Result<String> {
         val pk = derivePublicKey(secretKey).getOrElse { return Result.failure(it) }
+        vault.unseal().getOrElse { return Result.failure(it) }
         return withContext(Dispatchers.IO) {
             runCatching {
                 paths.ensureDirs()
@@ -395,6 +408,9 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      */
     fun resetIdentity() {
         paths.configFile.delete()
+        // Both forms go: a sealed config left behind would be adopted by the
+        // next start as the identity the user just threw away.
+        paths.sealedConfigFile.delete()
         clearIdentityData()
     }
 
@@ -422,7 +438,12 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
     // --- export ---
 
     /** The config exactly as the visor reads it — secret key included. */
-    fun configJson(): String = paths.configFile.readText()
+    /**
+     * The config as text for export. Reads the sealed form when that is what
+     * exists, decrypting into this string alone — exporting a config the user
+     * asked to keep encrypted must not put a plaintext copy back on the disk.
+     */
+    suspend fun configJson(): String = vault.readText()
 
     /**
      * The config with the secret key removed, for the diagnostics bundle.
@@ -437,8 +458,13 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         return json.encodeToString(JsonObject.serializer(), redacted)
     }
 
+    /**
+     * Reads whichever form is on disk. Through the vault, so the identity
+     * screen still shows a public key — and a diagnostics bundle still carries
+     * a redacted config — while the config is sealed and the core is down.
+     */
     private fun readConfig(): JsonObject =
-        json.parseToJsonElement(paths.configFile.readText()).jsonObject
+        json.parseToJsonElement(vault.readTextSync()).jsonObject
 
     private suspend fun runCommand(argv: List<String>, timeoutSeconds: Long): CommandResult =
         withContext(Dispatchers.IO) {
