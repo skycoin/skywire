@@ -1252,6 +1252,22 @@
       if (v && typeof v === "object" && !v.nodeType) { return v[mode] != null ? v[mode] : (v.both != null ? v.both : ""); }
       return v == null ? "" : v;
     }
+    // Resolve THIS visor's PK so navigating steps can open the local visor's own
+    // tabs (#/nodes/<pk>/info|transports|routing|apps). The top-bar always carries
+    // the local visor's chip whose href holds the 66-hex PK; fall back to the URL.
+    var SELFPK = "";
+    try {
+      var _m = (win.location.hash || "").match(/nodes\/([0-9a-fA-F]{66})/);
+      if (_m) { SELFPK = _m[1]; }
+      else {
+        var _chip = doc.querySelector('app-top-bar a.tab-button[href*="/info"]');
+        var _mm = _chip && (_chip.getAttribute("href") || "").match(/([0-9a-fA-F]{66})/);
+        if (_mm) { SELFPK = _mm[1]; }
+      }
+    } catch (e) {}
+    // nodePath(tab) → the local visor's tab hash; visorList is the mesh overview.
+    function nodePath(tab) { return SELFPK ? "#/nodes/" + SELFPK + "/" + tab : ""; }
+    var visorList = "#/nodes/list/1";
     var steps = [
       { title: "This is not a normal web page",
         body: {
@@ -1260,10 +1276,11 @@
         disc: { summary: "Open-source, no warranty — your keys are yours",
           details: "Skywire and the Skycoin wallet are experimental, open-source software, provided as-is and without warranty. You run this visor yourself and hold your own keys and coins; no one else can access or recover them. Understand the risks before relying on it or storing value." } },
 
-      { title: "How you're connected: dmsg",
+      { route: function () { return nodePath("info"); }, sel: "app-node-info-content .info-line", has: "DMSG servers",
+        title: "How you're connected: dmsg",
         body: {
-          wasm: "Before anything else, your visor joins <b>dmsg</b> — an encrypted relay network. Any two visors reach each other through dmsg servers without knowing each other's location. Your browser can't open raw TCP, so it connects over <b>WebSocket</b> (<code>wss://</code> on an https page, <code>ws://</code> otherwise), plus WebTransport where available.",
-          native: "Before anything else, your visor joins <b>dmsg</b> — an encrypted relay network. Any two visors reach each other through dmsg servers without knowing each other's location. On a native visor these are plain <b>TCP</b> connections (plus direct stcpr/sudph links)." },
+          wasm: "This is your visor's <b>Info</b> tab — <b>DMSG servers</b> shows how many you're connected to right now. dmsg is an encrypted relay network: any two visors reach each other through these servers without knowing each other's location. Your browser can't open raw TCP, so it joins over <b>WebSocket</b> (<code>wss://</code>) plus <b>WebTransport</b> where a server offers it.",
+          native: "This is your visor's <b>Info</b> tab — <b>DMSG servers</b> shows how many you're connected to. dmsg is an encrypted relay network: any two visors reach each other through these servers without knowing each other's location. A native visor joins over plain <b>TCP</b> (plus direct stcpr/sudph links)." },
         more: { summary: "Protocols, and why the browser is different",
           panel: "dmsg carries the control plane and a fallback data path. The <b>carrier</b> — how a visor reaches a dmsg server — depends on the host:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
@@ -1274,10 +1291,15 @@
             '</ul>' +
             "A wasm visor in a tab has no raw sockets, so it leans on <b>wss + WebTransport</b>; a native visor can also make direct TCP/UDP transports. These four carriers are the <i>same four protocols</i> Skywire uses for direct transports (next step) — dmsg is simply the <b>relayed</b> version: same wire, reached through a server instead of directly." } },
 
-      { title: "Direct links: transports",
+      { route: visorList, sel: "app-node-list td", has: "Total",
+        title: "Direct links: transports",
+        body: "Back on the visor list, this column is your visor's <b>live transports</b> — direct links to peers, counted by type (STCPR, SUDPH, SWTR, WEBRTC…). It's already dialing peers around the world; the total climbs as it settles in." },
+
+      { route: function () { return nodePath("transports"); }, sel: "app-transport-list",
+        title: "Direct links: transports",
         body: {
-          wasm: "Once it's on dmsg, your visor builds <b>direct transports</b> to peers where the browser allows — mostly <b>WebTransport</b> and dmsg itself. This tab is already dialing peers around the world.",
-          native: "Once it's on dmsg, your visor builds <b>direct transports</b> to peers — stcpr, sudph, dmsg, quic — punching through NATs where needed, so traffic can take the shortest path instead of always relaying." },
+          wasm: "Your visor's <b>Transports</b> tab: each row is a direct link to a peer. In a browser that's mostly <b>WebTransport</b> and dmsg; a native visor also builds stcpr/sudph/quic. More direct transports = less relaying = lower latency.",
+          native: "Your visor's <b>Transports</b> tab: each row is a direct link to a peer — stcpr, sudph, dmsg, quic — punching through NATs where needed, so traffic takes the shortest path instead of always relaying." },
         more: { summary: "Transport types, and how they mirror dmsg",
           panel: "A transport is a direct link between two visors. <b>Four mirror the dmsg carriers exactly</b> — same wire, dialed peer-to-peer instead of to a server:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
@@ -1293,18 +1315,34 @@
             '</ul>' +
             "And <b>dmsg</b> itself is a transport — the <i>relayed</i> one. Most transports hand up a reliable stream; QUIC (direct or over dmsg) can also carry true unreliable UDP end-to-end. More direct transports = less relaying = lower latency." } },
 
-      { title: "Going further: routing",
-        body: "Traffic doesn't have to go straight to a peer — it can take a <b>multi-hop route</b> through several visors, so no single hop sees both ends. The route-finder picks paths across the transports above.",
+      { route: function () { return nodePath("routing"); }, sel: "app-route-list",
+        title: "Going further: routing",
+        body: "Your visor's <b>Routing</b> tab shows the paths traffic takes across those transports. A route can be <b>DIRECT</b> (a single hop straight to the peer), <b>MULTIHOP</b> (through several visors, so no single hop sees both ends), or <b>MULTIPLEXED</b> (spread across parallel paths for resilience and throughput). The route-finder builds them on demand.",
         more: { summary: "Hops &amp; the privacy trade-off",
           panel: "A route is an ordered path of transports. One hop is fastest; more hops mean no single intermediary knows both source and destination, at the cost of latency. Skywire's route-finder builds these paths on demand, and apps like the skynet browser ride them." } },
 
-      { sel: "#tb-menu", title: "Your apps",
-        body: "Everything opens from here: a browser for the mesh, encrypted 1:1 chat, a live log, a command console, your <b>Skycoin wallet</b>, and your visor's cryptographic identity." },
-
-      { sel: "app-top-bar", title: "The network, live",
+      { route: function () { return nodePath("apps"); }, sel: "app-node-app-list tr", has: "skysocks",
+        title: "Your apps: skysocks-client-lite",
         body: {
-          wasm: "Visor list, rewards, transports, and a live map of the mesh — all fetched <b>peer-to-peer over dmsg</b>, never from a web server. A browser tab, talking directly to other visors around the world.",
-          native: "Visor list, rewards, transports, and a live map of the mesh — all fetched <b>peer-to-peer over dmsg</b>, never from a web server. This visor is talking directly to peers around the world." } },
+          wasm: "Your visor's <b>Apps</b>. The default is <b>skysocks-client-lite</b> — an in-browser proxy client that routes a browse window's clearnet fetches out through an <b>exit</b> visor, IP-anonymously. Unlike the native <b>skysocks-client</b>, it serves <i>no local port</i> — it works only inside this tab. The rest of the tour's demos are optional to try: a mesh <b>browser</b>, encrypted <b>skychat</b>, and the <b>Skycoin wallet</b> — each opened from the ☰ menu, each running over the mesh.",
+          native: "Your visor's <b>Apps</b> — start, stop and configure them here: the <b>skysocks</b> proxy client + server, <b>VPN</b> client + server, and <b>skychat</b>. On a native visor these bind real local ports and can serve other machines on your network." },
+        more: { summary: "skysocks-client vs. skysocks-client-lite",
+          panel: "<b>skysocks-client</b> (native) runs as an app process and serves a local <b>SOCKS5 port</b> other programs point at. <b>skysocks-client-lite</b> (browser) has no process and no port — it lives in this tab and proxies only this visor's own browse windows and wallet. Both dial an <b>exit</b> visor that does the clearnet egress, so a site sees the exit's IP, not yours. (Naming: the browser one is the <i>lite</i> client — same idea, no listener.)" } },
+
+      // The network, live — sweep each top-bar overview tab individually.
+      { route: visorList, sel: "app-top-bar a.tab-button", has: "Visor list",
+        title: "The network, live: visors",
+        body: "This top row is the whole-mesh overview — every view fetched <b>peer-to-peer over dmsg</b>, never from a web server. <b>Visor list</b>: every visor visible on the network right now." },
+      { sel: "app-top-bar a.tab-button", has: "Rewards", title: "The network, live: rewards",
+        body: "<b>Rewards</b> — the Skycoin paid out to visors that stay online and reachable, and where you'd appear once your visor qualifies." },
+      { sel: "app-top-bar a.tab-button", has: "Transports", title: "The network, live: transports",
+        body: "<b>Transports</b> — every direct link across the <i>whole</i> mesh, not just yours: the live edge list the route-finder draws on." },
+      { sel: "app-top-bar a.tab-button", has: "Network Visualizer", title: "The network, live: the map",
+        body: "<b>Network Visualizer</b> — an interactive, geographic view of the mesh: visors and the transports between them, in Flat, Globe and WebGL renders." },
+      { sel: "app-top-bar a.tab-button", has: "Uptime", title: "The network, live: uptime",
+        body: "<b>Uptime</b> — how consistently each visor has stayed online, the basis for rewards." },
+      { sel: "app-top-bar a.tab-button", has: "Deployment", title: "The network, live: services",
+        body: "<b>Deployment</b> — the health of the shared services (discovery, route-finder, address resolver, dmsg servers) that make the mesh work. All of it, fetched over dmsg — a browser tab talking directly to visors around the world." },
 
       { sel: ".visor-switcher-row", title: "Every peer is addressable",
         body: "Each chip is a visor on the network, shown by label and public key. Click one to inspect its transports, routes, and apps. There are no usernames here — only keys." },
@@ -1353,7 +1391,7 @@
     // reposition keeps the ring glued to its target when the page scrolls/resizes
     // behind the (now non-modal) window; per-step positioning happens in render().
     function reposition() {
-      var s = steps[i], el = s && pickTarget(s.sel);
+      var s = steps[i], el = s && pickTarget(s.sel, s.has);
       if (el && spot.style.display === "block") {
         var r = el.getBoundingClientRect(), pad = 6;
         spot.style.left = (r.left - pad) + "px"; spot.style.top = (r.top - pad) + "px";
@@ -1382,19 +1420,45 @@
     // pickTarget returns the first VISIBLE, non-tiny element matching sel (there
     // can be hidden/collapsed duplicates — e.g. a loading vs loaded top-bar — and
     // spotlighting a 1px ghost looks broken).
-    function pickTarget(sel) {
+    function pickTarget(sel, has) {
       if (!sel) { return null; }
       var cand = doc.querySelectorAll(sel);
       for (var j = 0; j < cand.length; j++) {
-        var cr = cand[j].getBoundingClientRect();
-        if (cr.width >= 24 && cr.height >= 10 && getComputedStyle(cand[j]).visibility !== "hidden") { return cand[j]; }
+        var el = cand[j], cr = el.getBoundingClientRect();
+        if (cr.width >= 24 && cr.height >= 10 && getComputedStyle(el).visibility !== "hidden") {
+          // `has` disambiguates when a selector matches several elements (e.g. the
+          // DMSG line among many .info-line rows, or the skysocks app row).
+          if (has && (el.innerText || "").indexOf(has) < 0) { continue; }
+          return el;
+        }
       }
       return null;
     }
+    // go() runs a step: navigate to its HV route (s.route, a hash — the local
+    // visor's info/transports/routing/apps tabs live at #/nodes/<pk>/<tab>), then
+    // wait for its target to appear (Angular renders the view async) before
+    // drawing the callout + spotlight. Steps with no route/target render at once.
+    function go() {
+      var s = steps[i];
+      if (s.route) {
+        var target = (typeof s.route === "function") ? s.route(SELFPK) : s.route;
+        if (target && win.location.hash !== target) { try { win.location.hash = target; } catch (e) {} }
+      }
+      if (s.sel) {
+        var t0 = Date.now();
+        (function poll() {
+          if (closed) { return; }
+          if (pickTarget(s.sel, s.has) || Date.now() - t0 > 3000) { render(); return; }
+          setTimeout(poll, 150);
+        })();
+      } else {
+        render();
+      }
+    }
     function render() {
       var s = steps[i];
-      var el = pickTarget(s.sel);
-      if (s.sel && !el && i < steps.length - 1) { i++; showMore = false; return render(); } // absent/hidden target → skip
+      var el = pickTarget(s.sel, s.has);
+      if (s.sel && !el && i < steps.length - 1) { i++; showMore = false; return go(); } // absent/hidden target → skip (navigate for the next step)
       var last = (i === steps.length - 1);
       var btn = 'cursor:pointer;border-radius:6px;padding:.4em .85em';
       if (showMore && s.more) {
@@ -1441,8 +1505,8 @@
       if ((b = call.querySelector("#tour-skip"))) b.onclick = done;
       if ((b = call.querySelector("#tour-more"))) b.onclick = function () { showMore = true; render(); };
       if ((b = call.querySelector("#tour-moreback"))) b.onclick = function () { showMore = false; render(); };
-      if ((b = call.querySelector("#tour-back"))) b.onclick = function () { showMore = false; if (i > 0) i--; render(); };
-      if ((b = call.querySelector("#tour-next"))) b.onclick = function () { showMore = false; if (last) { done(); } else { i++; render(); } };
+      if ((b = call.querySelector("#tour-back"))) b.onclick = function () { showMore = false; if (i > 0) i--; go(); };
+      if ((b = call.querySelector("#tour-next"))) b.onclick = function () { showMore = false; if (last) { done(); } else { i++; go(); } };
       // Fit the window to the step's content: no dead space on short steps, no
       // nested scroll on long "more" panels. Cap to 82vh (the body scrolls, and
       // the button row is sticky, so controls stay reachable past the cap).
@@ -1451,7 +1515,7 @@
         wb.resize(380, Math.max(170, Math.min(call.scrollHeight + 38, Math.round(vpH * 0.82))));
       } catch (e) {}
     }
-    render();
+    go();
   }
   globalThis.skywireStartTour = function () { startTour(document); };
 
