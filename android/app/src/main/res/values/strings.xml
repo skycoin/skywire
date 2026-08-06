@@ -302,5 +302,191 @@
     <string name="diag_level_confirm_body">The Skywire core reads this only when it starts, so it has to be restarted. Any SkySOCKS or SkyVPN connection drops and has to be reconnected.</string>
 
     <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
-    <string name="wallet_placeholder">The native Skycoin wallet is coming soon.</string>
+
+    <!-- Wallet — native SKY / fiber / BTC wallet. Keys are created and kept on
+         this device; the network is only asked for balances, history and
+         broadcast. -->
+    <string name="wallet_intro_title">Set up your %1$s wallet</string>
+    <string name="wallet_intro_body">Your keys are created on this device and stay on this device. Skywire never sees them, and they are never sent to the network.</string>
+    <string name="wallet_intro_create">Create a new wallet</string>
+    <string name="wallet_intro_create_sub">Generate a new recovery phrase</string>
+    <string name="wallet_intro_restore">Restore from seed</string>
+    <string name="wallet_intro_restore_sub">Enter an existing 12 word phrase</string>
+
+    <string name="wallet_seed_title">Recovery phrase</string>
+    <string name="wallet_seed_body">Write these twelve words down in order and keep them offline. Anyone who has them can spend your coins.</string>
+    <string name="wallet_seed_secure">Screenshots are disabled on this screen. There is no copy button.</string>
+    <string name="wallet_seed_continue">Continue</string>
+
+    <string name="wallet_verify_title">Confirm phrase</string>
+    <string name="wallet_verify_body">Enter three words from the phrase you just wrote down. The wallet activates once they match.</string>
+    <string name="wallet_verify_word">Word %1$d</string>
+    <string name="wallet_verify_hint">type the word</string>
+    <string name="wallet_verify_wrong">That is not word %1$d. Check your written copy.</string>
+    <string name="wallet_verify_missing">Enter word %1$d.</string>
+    <string name="wallet_verify_activate">Activate wallet</string>
+    <string name="wallet_verify_again">Show the phrase again</string>
+    <string name="wallet_verify_done">Wallet activated</string>
+
+    <string name="wallet_restore_title">Restore wallet</string>
+    <string name="wallet_restore_progress">Word %1$d of %2$d</string>
+    <string name="wallet_restore_paste">Paste whole seed</string>
+    <string name="wallet_restore_pasted">Twelve words read from the clipboard</string>
+    <string name="wallet_restore_hint">Next word</string>
+    <string name="wallet_restore_wordlist_note">Suggestions come from the BIP39 wordlist held on the device. Nothing you type is sent anywhere.</string>
+    <string name="wallet_restore_action">Restore wallet</string>
+    <string name="wallet_restore_checksum">This phrase fails its checksum. One of the twelve words is wrong or out of order.</string>
+    <string name="wallet_restore_short">Only %1$d of 12 words entered. A seed is restored in full or not at all.</string>
+    <string name="wallet_restore_done">Wallet restored. Scanning for balances.</string>
+    <string name="wallet_restore_scanning">Restoring and scanning for balances…</string>
+
+    <string name="wallet_coin_chip_description">Choose a coin</string>
+    <string name="wallet_coins_title">Choose a coin</string>
+    <string name="wallet_coins_search">Search %1$d coins</string>
+    <!-- Skycoin is the original chain — fiber coins are separate chains
+         built from its codebase, so only they carry the fiber label. -->
+    <string name="wallet_coin_native">Skycoin mainnet · native</string>
+    <string name="wallet_coin_fiber">Fiber coin</string>
+    <string name="wallet_coin_btc">Bitcoin mainnet</string>
+    <string name="wallet_coins_add">Add a fiber coin</string>
+    <string name="wallet_hours_sub">%1$s Coin Hours</string>
+    <string name="wallet_btc_sub">%1$d confirmed outputs · no Coin Hours on this chain</string>
+    <string name="wallet_stale_banner">Node unreachable. Balance and history last updated at %1$s, %2$s ago. Sending is off until the node answers.</string>
+    <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
+    <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>
+    <string name="wallet_receive">Receive</string>
+    <string name="wallet_send">Send</string>
+    <string name="wallet_recent">Recent activity</string>
+    <string name="wallet_see_all">See all</string>
+    <string name="wallet_no_activity_title">No activity yet</string>
+    <string name="wallet_no_activity_body">Coins you receive on this wallet will appear here.</string>
+    <string name="wallet_wallets_row">Wallets</string>
+    <string name="wallet_received_verb">Received</string>
+    <string name="wallet_sent_verb">Sent</string>
+    <string name="wallet_from_line">from %1$s · %2$s</string>
+    <string name="wallet_to_line">to %1$s · %2$s</string>
+    <string name="wallet_self_line">within this wallet · %1$s</string>
+
+    <string name="wallet_receive_title">Receive</string>
+    <string name="wallet_receive_only">Send only %1$s to this address.</string>
+    <string name="wallet_receive_tap_copy">Tap to copy the full address</string>
+    <string name="wallet_copy">Copy</string>
+    <string name="wallet_share">Share</string>
+    <string name="wallet_address_copied">Address copied to the clipboard</string>
+    <string name="wallet_other_addresses">Other addresses in this wallet</string>
+    <string name="wallet_addresses_in">Addresses in %1$s</string>
+    <string name="wallet_addresses_note">All of them belong to the same seed. Using a fresh one makes your balance harder to follow.</string>
+    <string name="wallet_address_default">Default · in use</string>
+    <string name="wallet_address_unused">Never used</string>
+    <string name="wallet_address_new">Generate a new address</string>
+    <string name="wallet_address_generated">New address generated in %1$s</string>
+    <string name="wallet_address_picked">Receiving on the selected address</string>
+
+    <string name="wallet_send_title">Send</string>
+    <string name="wallet_send_to">To</string>
+    <string name="wallet_send_to_hint_fiber">%1$s address</string>
+    <string name="wallet_send_to_hint_btc">bc1… or 1… address</string>
+    <string name="wallet_paste">Paste</string>
+    <string name="wallet_scan_description">Scan a QR code</string>
+    <string name="wallet_send_amount">Amount</string>
+    <string name="wallet_send_available">Available %1$s %2$s</string>
+    <string name="wallet_max">Max</string>
+    <string name="wallet_max_note_fiber">Max sends every %1$s. Coin Hours are not sent — a share of them is burned as the fee.</string>
+    <string name="wallet_max_note_btc">Max spends every confirmed output and subtracts the miner fee, so the amount moves with the rate.</string>
+    <string name="wallet_fee">Fee</string>
+    <string name="wallet_hours_burned">Coin Hours burned</string>
+    <string name="wallet_hours_after">Coin Hours after</string>
+    <string name="wallet_fee_note_fiber">%1$s transactions cost no %1$s. One tenth of the Coin Hours entering the transaction is burned as the fee, and half of what remains moves on with the coins.</string>
+    <string name="wallet_fee_rate">Fee rate</string>
+    <string name="wallet_fee_rate_value">%1$d sat/vB</string>
+    <string name="wallet_fee_estimate">Estimated fee, %1$d vB</string>
+    <string name="wallet_fee_economy">Economy</string>
+    <string name="wallet_fee_normal">Normal</string>
+    <string name="wallet_fee_priority">Priority</string>
+    <string name="wallet_fee_eta_economy">~2 h</string>
+    <string name="wallet_fee_eta_normal">~30 min</string>
+    <string name="wallet_fee_eta_priority">~10 min</string>
+    <string name="wallet_review">Review</string>
+    <string name="wallet_review_title">You are about to send</string>
+    <!-- %2$s is the coin's own name: Skycoin is the original chain, each
+         fiber coin is its own network — never conflate them. -->
+    <string name="wallet_review_dest">to %1$s on the %2$s network. Nothing is signed until you confirm.</string>
+    <string name="wallet_review_amount">Amount</string>
+    <string name="wallet_review_miner_fee">Miner fee at %1$d sat/vB</string>
+    <string name="wallet_review_total">Total leaving the wallet</string>
+    <string name="wallet_review_balance_after">%1$s balance after</string>
+    <string name="wallet_review_hours_after">Coin Hours after</string>
+    <string name="wallet_review_back">Back</string>
+    <string name="wallet_review_sign">Sign and send</string>
+    <string name="wallet_bio_send_title">Sign this transaction</string>
+    <string name="wallet_bio_send_subtitle">Signing happens on this device. Your key is never sent anywhere.</string>
+    <string name="wallet_result_title">Broadcast to the network</string>
+    <string name="wallet_result_body">%1$s %2$s is on its way to %3$s. It stays pending until the network confirms it.</string>
+    <string name="wallet_result_done">Done</string>
+    <string name="wallet_result_history">View in history</string>
+    <string name="wallet_txid_copied">Transaction id copied</string>
+
+    <string name="wallet_history_title">History</string>
+    <string name="wallet_filter_all">All</string>
+    <string name="wallet_filter_sent">Sent</string>
+    <string name="wallet_filter_received">Received</string>
+    <string name="wallet_filter_pending">Pending</string>
+    <string name="wallet_history_empty_title">Nothing here yet</string>
+    <string name="wallet_history_empty_all">No %1$s has moved in or out of this wallet.</string>
+    <string name="wallet_history_empty_filter">No %1$s transactions match this filter.</string>
+    <string name="wallet_history_show_address">Show my address</string>
+    <string name="wallet_day_today">Today</string>
+    <string name="wallet_day_yesterday">Yesterday</string>
+
+    <string name="wallet_tx_title">Transaction</string>
+    <string name="wallet_tx_confirmed">Confirmed</string>
+    <string name="wallet_tx_pending_long">Pending · waiting for the first confirmation</string>
+    <string name="wallet_tx_from">From</string>
+    <string name="wallet_tx_to">To</string>
+    <string name="wallet_tx_wallet">Wallet</string>
+    <string name="wallet_tx_date">Date</string>
+    <string name="wallet_tx_fee">Fee</string>
+    <string name="wallet_tx_confirmations">Confirmations</string>
+    <string name="wallet_tx_id">Transaction id</string>
+    <string name="wallet_tx_explorer">Open in explorer</string>
+    <string name="wallet_tx_explorer_note">Opens %1$s in your browser. The explorer will see this transaction id.</string>
+    <string name="wallet_fee_hours_value">%1$s Coin Hours</string>
+
+    <string name="wallet_wallets_title">Wallets</string>
+    <string name="wallet_active_badge">ACTIVE</string>
+    <string name="wallet_address_count_one">1 address</string>
+    <string name="wallet_address_count_many">%1$d addresses</string>
+    <string name="wallet_add_wallet">Add a wallet</string>
+    <string name="wallet_count_one">1 wallet</string>
+    <string name="wallet_count_many">%1$d wallets</string>
+    <string name="wallet_manage_create">Create new</string>
+    <string name="wallet_created_on">%1$s · created %2$s</string>
+    <string name="wallet_use">Use this wallet</string>
+    <string name="wallet_rename">Rename</string>
+    <string name="wallet_rename_title">Rename wallet</string>
+    <string name="wallet_reveal_action">Reveal recovery phrase</string>
+    <string name="wallet_reveal_action_sub">Shows all twelve words in the clear. Asks for your fingerprint first.</string>
+    <string name="wallet_remove_action">Remove from this device</string>
+    <string name="wallet_remove_action_sub">Deletes the keys here. Without the phrase the coins are gone for good.</string>
+    <string name="wallet_remove_title">Remove %1$s from this device?</string>
+    <string name="wallet_remove_body">The keys stored here are deleted. If you do not have the twelve recovery words written down, the coins in this wallet cannot be reached again by anyone, including you.</string>
+    <string name="wallet_remove_confirm">Remove</string>
+    <string name="wallet_remove_keep">Keep it</string>
+    <string name="wallet_removed">%1$s removed from this device</string>
+    <string name="wallet_bio_reveal_title">Confirm it is you</string>
+    <string name="wallet_bio_reveal_subtitle">The words of %1$s will be shown in the clear on the next screen.</string>
+    <string name="wallet_reveal_warning">Anyone who reads these twelve words can move every coin in %1$s, from any device, without your phone. Only reveal them somewhere no one can see your screen.</string>
+    <string name="wallet_reveal_autohide">Screenshots are disabled. This screen closes on its own in %1$s.</string>
+    <string name="wallet_reveal_hide">Hide the phrase</string>
+
+    <string name="wallet_add_coin_title">Add a fiber coin</string>
+    <string name="wallet_add_coin_body">Every fiber coin runs the same node software as Skycoin. Name the coin and point the wallet at a node you trust — balances, fees and precision come from that node.</string>
+    <string name="wallet_add_coin_name">Coin name</string>
+    <string name="wallet_add_coin_name_hint">e.g. MDL Talent Hub</string>
+    <string name="wallet_add_coin_ticker">Ticker</string>
+    <string name="wallet_add_coin_ticker_hint">e.g. MDL</string>
+    <string name="wallet_add_coin_node">Node address</string>
+    <string name="wallet_add_coin_node_hint">http://node.example.com:6420</string>
+    <string name="wallet_add_coin_save">Add coin</string>
+    <string name="wallet_seed_unavailable">The phrase cannot be read — the phone’s keystore has changed since this wallet was created.</string>
 </resources>
