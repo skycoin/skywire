@@ -17,6 +17,7 @@ import com.skycoin.skywire.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
@@ -25,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -46,6 +48,7 @@ class SkywireCoreService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var paths: SkywirePaths
     private lateinit var configManager: ConfigManager
+    private lateinit var vault: ConfigVault
     private lateinit var prefs: AppPreferences
     private var runner: Job? = null
     private var callWatcher: Job? = null
@@ -59,6 +62,7 @@ class SkywireCoreService : Service() {
         super.onCreate()
         paths = SkywirePaths(this)
         configManager = ConfigManager(paths, SecretStore(this))
+        vault = ConfigVault(paths)
         prefs = AppPreferences(this)
         createChannel()
     }
@@ -170,6 +174,16 @@ class SkywireCoreService : Service() {
                 CoreServiceState.mutableState.value =
                     CoreState.Failed(e.message ?: "core service error")
             } finally {
+                // The visor has exited, so the config on disk is final —
+                // including anything the visor rewrote while it ran, which is
+                // why this is here and not at generation. Runs in the finally
+                // so a crashed or failed core still leaves the identity
+                // sealed; NonCancellable because a cancelled scope must not be
+                // able to skip it and leave the secret key in the clear.
+                withContext(NonCancellable) {
+                    val encrypt = prefs.boolean(ConfigVault.PREF_KEY, ConfigVault.DEFAULT).first()
+                    vault.seal(encrypt).onFailure { log.line("=== config seal failed: ${'$'}it ===") }
+                }
                 // Terminal Failed states survive; everything else is Stopped.
                 if (CoreServiceState.mutableState.value !is CoreState.Failed) {
                     CoreServiceState.mutableState.value = CoreState.Stopped

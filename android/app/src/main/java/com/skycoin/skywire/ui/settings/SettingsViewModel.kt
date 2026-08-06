@@ -8,7 +8,10 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppLock
 import com.skycoin.skywire.core.AppPreferences
+import com.skycoin.skywire.core.AppVisibility
+import com.skycoin.skywire.core.BatteryOptimization
 import com.skycoin.skywire.core.ConfigManager
+import com.skycoin.skywire.core.ConfigVault
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.SecretStore
@@ -36,6 +39,12 @@ data class SettingsUiState(
     /** False when the phone has no screen lock and no enrolled biometric. */
     val biometricsAvailable: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** The visor config is encrypted at rest while the core is down. */
+    val configEncrypted: Boolean = ConfigVault.DEFAULT,
+    /** Whether Doze has been told to leave this app's network alone. */
+    val batteryExempt: Boolean = true,
+    /** The user has already declined the exemption once; stop offering. */
+    val batteryPromptDismissed: Boolean = false,
     val appVersion: String = "",
     /** From the running visor's own summary; empty while the core is down. */
     val coreVersion: String = "",
@@ -65,6 +74,7 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = AppPreferences(app)
     private val paths = SkywirePaths(app)
     private val config = ConfigManager(paths, SecretStore(app))
+    private val vault = ConfigVault(paths)
     private val api = VisorApi.get(app)
 
     private val mutable = MutableStateFlow(SettingsUiState())
@@ -93,7 +103,73 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update { it.copy(themeMode = ThemeMode.of(stored)) }
             }
         }
+        viewModelScope.launch {
+            prefs.boolean(ConfigVault.PREF_KEY, ConfigVault.DEFAULT).collectLatest { on ->
+                mutable.update { it.copy(configEncrypted = on) }
+            }
+        }
+        viewModelScope.launch {
+            prefs.boolean(BatteryOptimization.PREF_DISMISSED, false).collectLatest { dismissed ->
+                mutable.update { it.copy(batteryPromptDismissed = dismissed) }
+            }
+        }
+        // The exemption is granted in a system screen, not in this app, so the
+        // only reliable moment to re-read it is when the user comes back from
+        // there. Every return to the foreground counts as that moment.
+        viewModelScope.launch {
+            AppVisibility.isForeground.collectLatest { visible ->
+                if (visible) refreshBatteryExemption()
+            }
+        }
+        refreshBatteryExemption()
         viewModelScope.launch { loadVersions() }
+    }
+
+    // --- config at rest ---
+
+    /**
+     * Turn encryption of the config on or off.
+     *
+     * Turning it **on** with the core running only records the choice: the
+     * visor holds that file open and rewrites it, so the sealing happens when
+     * it next exits (see [SkywireCoreService]). Turning it **off** unseals
+     * straight away — a user who just switched encryption off should not be
+     * left with an encrypted config until the next disconnect.
+     */
+    fun setConfigEncrypted(enabled: Boolean) = action {
+        val running = CoreServiceState.state.value is CoreState.Running
+        vault.applyPreference(enabled, running).getOrThrow()
+        prefs.putBoolean(ConfigVault.PREF_KEY, enabled)
+        val message = when {
+            !enabled -> R.string.settings_encrypt_off_done
+            running -> R.string.settings_encrypt_on_pending
+            else -> R.string.settings_encrypt_on_done
+        }
+        mutable.update { it.copy(message = getApplication<Application>().getString(message)) }
+    }
+
+    // --- battery ---
+
+    fun refreshBatteryExemption() {
+        val exempt = BatteryOptimization.isExempt(getApplication())
+        mutable.update { it.copy(batteryExempt = exempt) }
+    }
+
+    /**
+     * Hand the user to the system's own dialog. Nothing is recorded here: the
+     * answer lives in the platform, and [refreshBatteryExemption] reads it back
+     * when they return.
+     */
+    fun requestBatteryExemption() {
+        val context = getApplication<Application>()
+        if (!BatteryOptimization.openRequest(context)) {
+            report(context.getString(R.string.settings_battery_no_screen))
+        }
+    }
+
+    /** "Not now" — stop offering, in Settings and on Home. */
+    fun dismissBatteryPrompt() {
+        viewModelScope.launch { prefs.putBoolean(BatteryOptimization.PREF_DISMISSED, true) }
     }
 
     // --- identity ---

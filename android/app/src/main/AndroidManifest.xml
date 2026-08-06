@@ -22,6 +22,14 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Runtime-granted on API 33+; the FGS notification is invisible without it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets Settings offer the one-tap "don't optimise this app" dialog. The
+         foreground service keeps the visor alive; this is about Doze, which
+         suspends the *network* of non-exempt apps once the screen has been off
+         a while — so without it a phone left alone stops receiving until it
+         next wakes. Offered behind an explanation, never asked for on launch,
+         and the app is fully functional if it is refused. See
+         [com.skycoin.skywire.core.BatteryOptimization]. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- An incoming call is shown as the call SCREEN, not as something to read
          in the shade. An app may not start an Activity from the background, so
          the full-screen intent is how the system is asked to raise one on our
@@ -43,11 +51,24 @@
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
-    <!-- allowBackup=false: the visor config (SK) and wallet seed must never
-         land in a cloud backup. -->
+    <!-- Nothing this app stores may leave the device by itself.
+
+         Three declarations rather than one, because they cover three
+         different exits. allowBackup=false refuses Google Drive.
+         dataExtractionRules refuses it again on Android 12+ AND refuses the
+         device-to-device transfer that runs when a new phone is set up from
+         an old one — which allowBackup does not cover, and which is the path
+         that would otherwise carry the visor's secret key and the wallet's
+         recovery phrases onto a second handset. fullBackupContent is the same
+         refusal for Android 11 and earlier, which ignores the newer file.
+
+         The identity is meant to move deliberately, through Export config;
+         the wallet is meant to be restored from its twelve words. -->
     <application
         android:name=".SkywireApplication"
         android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:label="@string/app_name"

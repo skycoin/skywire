@@ -7,6 +7,9 @@ import com.skycoin.skywire.api.AuthFailedException
 import com.skycoin.skywire.api.ServiceHealthEntry
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.api.VisorSummary
+import com.skycoin.skywire.core.AppPreferences
+import com.skycoin.skywire.core.AppVisibility
+import com.skycoin.skywire.core.BatteryOptimization
 import com.skycoin.skywire.core.ConfigManager
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
@@ -31,6 +34,8 @@ data class HomeUiState(
     val summary: VisorSummary? = null,
     val serviceHealth: List<ServiceHealthEntry> = emptyList(),
     val error: String? = null,
+    /** Doze will pause this app's network; the user has not been asked yet. */
+    val offerBatteryExemption: Boolean = false,
 ) {
     val connected: Boolean get() = coreState is CoreState.Running && apiUp
 }
@@ -43,8 +48,16 @@ data class HomeUiState(
 class HomeViewModel(app: Application) : AndroidViewModel(app) {
 
     private val api = VisorApi.get(app)
+    private val prefs = AppPreferences(app)
     private val live = MutableStateFlow(LiveData())
     private var authResetAttempted = false
+
+    /**
+     * Whether to offer the battery-optimisation exemption on this screen.
+     * Re-evaluated on every return to the foreground, because the answer is
+     * held by the system and can be changed in a screen that is not ours.
+     */
+    private val batteryOffer = MutableStateFlow(false)
 
     private data class LiveData(
         val apiUp: Boolean = false,
@@ -54,23 +67,52 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     )
 
     val uiState: StateFlow<HomeUiState> =
-        combine(CoreServiceState.state, live.asStateFlow()) { core, data ->
+        combine(
+            CoreServiceState.state,
+            live.asStateFlow(),
+            batteryOffer.asStateFlow(),
+        ) { core, data, offerBattery ->
             HomeUiState(
                 coreState = core,
                 apiUp = data.apiUp,
                 summary = data.summary,
                 serviceHealth = data.serviceHealth,
                 error = data.error,
+                // Only once the core is actually up: before that the question
+                // is about a background problem the user has not got yet.
+                offerBatteryExemption = offerBattery && core is CoreState.Running,
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
 
     init {
+        // The exemption is granted in a system screen and the prompt can be
+        // silenced from Settings, so neither answer is ours to cache. Both are
+        // re-read whenever the app comes back to the front.
+        viewModelScope.launch {
+            combine(
+                AppVisibility.isForeground,
+                prefs.boolean(BatteryOptimization.PREF_DISMISSED, false),
+            ) { foreground, dismissed -> foreground && !dismissed }
+                .collectLatest { askable ->
+                    batteryOffer.value =
+                        askable && !BatteryOptimization.isExempt(getApplication())
+                }
+        }
         viewModelScope.launch {
             CoreServiceState.state.collectLatest { core ->
                 live.value = LiveData()
                 if (core is CoreState.Running) pollWhileRunning()
             }
         }
+    }
+
+    /** "Not now" on the Home prompt — silences it here and in Settings. */
+    fun dismissBatteryPrompt() {
+        viewModelScope.launch { prefs.putBoolean(BatteryOptimization.PREF_DISMISSED, true) }
+    }
+
+    fun requestBatteryExemption() {
+        BatteryOptimization.openRequest(getApplication())
     }
 
     fun connect() {

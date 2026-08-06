@@ -1,7 +1,6 @@
 package com.skycoin.skywire.ui.wallet
 
 import android.graphics.Bitmap
-import android.view.WindowManager
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -20,11 +19,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,8 +37,6 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import com.skycoin.skywire.R
-import com.skycoin.skywire.core.AppLock
-import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.ui.components.Biometrics
 import com.skycoin.skywire.ui.components.CONNECTED_GREEN
 import com.skycoin.skywire.ui.components.PENDING_AMBER
@@ -53,27 +48,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
-
-/**
- * FLAG_SECURE for the life of this composable — seed backup, restore, reveal.
- * On dispose the flag is cleared only if the app lock is not holding it
- * session-wide (MainActivity sets it whenever the lock preference is on).
- */
-@Composable
-fun SecureWindow() {
-    val context = LocalContext.current
-    val prefs = remember(context) { AppPreferences(context) }
-    // initial=true errs on the safe side: never clear a flag we might need.
-    val lockEnabled by prefs.boolean(AppLock.PREF_KEY, AppLock.DEFAULT).collectAsState(initial = true)
-    val lockHeld = rememberUpdatedState(lockEnabled)
-    DisposableEffect(Unit) {
-        val window = context.findFragmentActivity()?.window
-        window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        onDispose {
-            if (!lockHeld.value) window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        }
-    }
-}
 
 /** "2GgFvq…7uQ" — how every address is shown outside copy/share. */
 fun shortAddress(address: String, head: Int = 8, tail: Int = 6): String =
