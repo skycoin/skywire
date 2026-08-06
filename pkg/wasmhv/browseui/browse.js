@@ -1375,8 +1375,8 @@
       { route: visorList, sel: "app-node-list",
         title: "Your cluster, live",
         body: {
-          wasm: "Back at the top level. Right now this list is just <b>your</b> visor — but a hypervisor manages a whole <b>cluster</b>. Attach a remote visor (by its public key) and it appears here, fully controllable from this browser tab; or point another hypervisor at this visor and <i>it</i> shows up over there. Every row is a peer addressed by public key, its transports and routes inspectable from here.",
-          native: "This list is your <b>cluster</b> — every visor this hypervisor manages. Attach more by adding a remote visor's public key, or let another hypervisor manage this one. Each row is a peer addressed by its key, its transports, routes and apps controllable from right here." },
+          wasm: "Back at the top level — and for this tour the list is populated with a <b>demo cluster</b> (the extra rows vanish when the tour closes). A hypervisor manages a whole cluster: <b>demo-frankfurt-hv</b> is a remote visor this hypervisor manages — and it's <i>itself</i> a hypervisor, shown in its own section below with its own connected visor, <b>demo-paris-visor</b>. That's the real shape: attach a remote visor by its public key and it appears here fully controllable from this browser tab, or point another hypervisor at this visor and <i>it</i> shows up over there. Every row is a peer addressed by public key, its transports and routes inspectable from here.",
+          native: "This list is your <b>cluster</b> — every visor this hypervisor manages, grouped by the hypervisor that manages it (a connected visor that is itself a hypervisor gets its own section, with its connected visors under it). Attach more by adding a remote visor's public key, or let another hypervisor manage this one. Each row is a peer addressed by its key, its transports, routes and apps controllable from right here." },
         more: { summary: "Hypervisor ⇄ visor: who manages whom",
           panel: "A <b>hypervisor</b> is just a visor that also serves this management UI and holds the keys of the visors it manages. The relationship is set in config (or at runtime): give this hypervisor a remote visor's PK and address to <i>manage</i> it, or set a remote hypervisor's PK on this visor to be <i>managed</i> by it. Management runs over the same encrypted mesh — a hypervisor in a browser tab can drive a native visor on the other side of the world, and vice-versa." } },
 
@@ -1418,6 +1418,95 @@
     // where those tabs are hidden — see home-tabs.ts isWasmHvCore(). Filtering
     // here (rather than skipping at render time) keeps the "N / total" count right.
     steps = steps.filter(function (s) { return !(s.nativeOnly && mode !== "native"); });
+
+    // --- tour-only simulated cluster (wasm visor demo) ---
+    // A fresh browser visor manages no one, so "Your cluster, live" would show a
+    // one-row list. For the tour we splice in synthetic visors so it SHOWS what a
+    // managed cluster looks like: a remote visor this hypervisor manages, which is
+    // itself a hypervisor with its own connected visor (mirrors how the native HV
+    // renders attached visors + nested hypervisors). Done by wrapping the wasm
+    // core's JS data bridge (skywireVisor.hvApi) — the same path Angular's
+    // SkywireHttpBackend fetches through — so the rows flow through the real render
+    // pipeline (list + tree) and survive Angular's refresh poll. Torn down (hvApi
+    // restored) in cleanup(), so the next poll drops the rows. Wasm-only: a native
+    // HV serves its data over real HTTP, not hvApi, and has real peers to show.
+    var MOCK_REMOTE_PK = "03" + "a7f3c9d1e2b4f608".repeat(4).slice(0, 64);
+    var MOCK_SUB_PK = "02" + "5b8e1d4a7c0f36e9".repeat(4).slice(0, 64);
+    var MOCK_D1 = "02" + "0281a102c82820e8".repeat(4).slice(0, 64);
+    var MOCK_D2 = "03" + "0326978fa1b2c3d4".repeat(4).slice(0, 64);
+    function mockTp(local, remote, type) { return { id: "", local_pk: local, remote_pk: remote, type: type, is_setup: false, label: "automatic", initiator: true }; }
+    function mockDs(pk, carrier, proto) { return { pk: pk, latency: 0, carrier: carrier, protocol: proto }; }
+    function mockEntry(o) {
+      return {
+        overview: {
+          local_pk: o.pk, hostname: o.host || "",
+          build_info: { version: o.version || "v1.3.91", os: o.os || "linux", arch: o.arch || "amd64", commit: "", date: "" },
+          app_protocol_version: "", routes_count: o.routes || 2,
+          local_ip: "", public_ip: o.ip || "", is_symmetic_nat: false,
+          country_code: o.cc || "", region_name: o.region || "", city_name: o.city || "",
+          hypervisors: null, connected_hypervisor: null, apps: o.apps || [], transports: o.transports || []
+        },
+        health: { services_health: "healthy" },
+        dmsg_stats: { public_key: o.pk, server_public_key: (o.dmsg && o.dmsg[0] ? o.dmsg[0].pk : ""), round_trip: 0 },
+        dmsg_servers: o.dmsg || [], uptime: o.uptime || 86400, online: true, min_hops: o.minHops || 1,
+        reward_address: o.reward || "", build_tag: o.buildTag || "", config_version: o.version || "v1.3.91",
+        public_autoconnect: true, is_public: !!o.isPublic, is_hypervisor: !!o.isHv
+      };
+    }
+    function buildMockCluster() {
+      var remote = mockEntry({
+        pk: MOCK_REMOTE_PK, host: "demo-frankfurt-hv", version: "v1.3.91", os: "linux", arch: "arm64",
+        ip: "185.130.44.12", cc: "DE", region: "Hesse", city: "Frankfurt", isHv: true, uptime: 1209600,
+        reward: "2RkZ7wFm3nDqA8sT1yV6bXcJ9pLhGw4uEo",
+        transports: [mockTp(MOCK_REMOTE_PK, SELFPK || "", "stcpr"), mockTp(MOCK_REMOTE_PK, MOCK_SUB_PK, "dmsg"), mockTp(MOCK_REMOTE_PK, MOCK_SUB_PK, "sudph")],
+        dmsg: [mockDs(MOCK_D1, "tcp", "tcp"), mockDs(MOCK_D2, "tcp", "tcp")]
+      });
+      var sub = mockEntry({
+        pk: MOCK_SUB_PK, host: "demo-paris-visor", version: "v1.3.91", os: "linux", arch: "amd64",
+        ip: "51.75.20.7", cc: "FR", region: "Île-de-France", city: "Paris", uptime: 432000,
+        reward: "2Hn9dQ4vC7bR2xW8yK1mF6tL3sA5gZ9jUe",
+        transports: [mockTp(MOCK_SUB_PK, MOCK_REMOTE_PK, "stcpr")],
+        dmsg: [mockDs(MOCK_D1, "tcp", "tcp")]
+      });
+      return { remote: remote, sub: sub };
+    }
+    function spliceMock(path, data) {
+      var m = buildMockCluster();
+      if (/visors-tree-summary/.test(path)) {
+        if (data && data.sections && data.sections[0] && Array.isArray(data.sections[0].visors)) {
+          data.sections[0].visors = data.sections[0].visors.concat([m.remote]);
+          data.sections.push({ hypervisor_pk: MOCK_REMOTE_PK, via_chain: [MOCK_REMOTE_PK], visors: [m.remote, m.sub] });
+        }
+      } else if (Array.isArray(data)) { // visors-summary (flat)
+        data = data.concat([m.remote, m.sub]);
+      }
+      return data;
+    }
+    function installClusterMock() {
+      if (mode !== "wasm") { return; }
+      var v = win.skywireVisor;
+      if (!v || typeof v.hvApi !== "function" || v.__tourMockOn) { return; }
+      var orig = v.hvApi.bind(v);
+      v.__tourOrigHvApi = orig; v.__tourMockOn = true;
+      v.hvApi = function (method, path, body) {
+        var pr = orig(method, path, body);
+        if ((method || "GET").toUpperCase() !== "GET" || !/\/(visors-tree-summary|visors-summary)(\?|$)/.test(path || "")) { return pr; }
+        return pr.then(function (r) {
+          try {
+            var data = JSON.parse(new TextDecoder().decode((r && r.body) || new Uint8Array()));
+            return { status: r.status, body: new TextEncoder().encode(JSON.stringify(spliceMock(path, data))) };
+          } catch (e) { return r; }
+        });
+      };
+    }
+    function removeClusterMock() {
+      var v = win.skywireVisor;
+      if (!v || !v.__tourMockOn) { return; }
+      try { v.hvApi = v.__tourOrigHvApi; } catch (e) {}
+      v.__tourMockOn = false; v.__tourOrigHvApi = null;
+    }
+    installClusterMock();
+
     var host = doc.body || doc.documentElement;
     // Ensure the WinBox dark chrome exists even if the skynet desktop (which
     // normally injects it) hasn't mounted yet. Distinct id from mountPanel's
@@ -1455,6 +1544,7 @@
     function cleanup() {
       if (closed) { return; }
       closed = true;
+      removeClusterMock(); // drop the tour-only synthetic cluster rows (next poll refetches real data)
       try { localStorage.setItem(TOUR_SEEN_KEY, "1"); } catch (e) {}
       try { win.removeEventListener("scroll", reposition, true); win.removeEventListener("resize", reposition); } catch (e) {}
       if (spot.parentNode) { spot.parentNode.removeChild(spot); }
