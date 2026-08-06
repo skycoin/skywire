@@ -56,8 +56,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.SkydexProfile
+import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
-import com.skycoin.skywire.ui.logs.LogSources
 
 /**
  * SkyDEX: pick a market, dial it over Skywire, trade in the page the desktop
@@ -73,7 +73,6 @@ import com.skycoin.skywire.ui.logs.LogSources
 @Composable
 fun DexScreen(
     onBack: () -> Unit,
-    onOpenLogs: (String) -> Unit,
     viewModel: DexViewModel = viewModel(),
 ) {
     val state by viewModel.uiState.collectAsState()
@@ -92,11 +91,7 @@ fun DexScreen(
             SkyTopBar(
                 title = stringResource(R.string.app_skydex),
                 onBack = onBack,
-                actions = {
-                    TextButton(onClick = { onOpenLogs(LogSources.app(SkydexProfile.APP)) }) {
-                        Text(stringResource(R.string.logs_title))
-                    }
-                },
+                help = HelpTopic(R.string.help_dex_title, R.string.help_dex_body),
             )
         },
         // The system bars belong to the app scaffold this route sits in and

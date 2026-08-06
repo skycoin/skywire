@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.Videocam
 import androidx.compose.material.icons.outlined.VpnLock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -35,6 +36,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
+import com.skycoin.skywire.ui.components.HelpTopic
+import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.navigation.Routes
 
 /**
@@ -54,6 +57,7 @@ private data class HubTile(
 
 @Composable
 fun HubScreen(
+    onBack: () -> Unit,
     onOpenRoute: (String) -> Unit,
     onOpenTab: (String) -> Unit,
 ) {
@@ -68,14 +72,28 @@ fun HubScreen(
         HubTile(stringResource(R.string.app_skymeet), { rememberVectorPainter(Icons.Outlined.Videocam) }, onClick = null, comingSoon = true),
     )
 
-    LazyVerticalGrid(
-        columns = GridCells.Adaptive(minSize = 104.dp),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(tiles) { tile -> AppTile(tile) }
+    // The hub had no header at all — it was the one destination you could
+    // land on with nothing at the top of the screen naming it.
+    Scaffold(
+        topBar = {
+            SkyTopBar(
+                title = stringResource(R.string.tab_hub_description),
+                onBack = onBack,
+                help = HelpTopic(R.string.help_hub_title, R.string.help_hub_body),
+            )
+        },
+    ) { padding ->
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 104.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(tiles) { tile -> AppTile(tile) }
+        }
     }
 }
 
