@@ -57,7 +57,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
+import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.PENDING_AMBER
+import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
 import java.time.Instant
@@ -72,6 +74,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun WalletScreen(
     viewModel: WalletViewModel,
+    onBack: () -> Unit,
     onCreate: () -> Unit,
     onRestore: () -> Unit,
     onReceive: () -> Unit,
@@ -92,7 +95,19 @@ fun WalletScreen(
         }
     }
 
-    Scaffold(snackbarHost = { SnackbarHost(snackbar) }) { padding ->
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        // The wallet design left the tab root bare and opened straight into
+        // the balance. It carries the shared header now, so every tab but
+        // Home is topped by the same three things in the same places.
+        topBar = {
+            SkyTopBar(
+                title = stringResource(R.string.tab_wallet),
+                onBack = onBack,
+                help = HelpTopic(R.string.help_wallet_title, R.string.help_wallet_body),
+            )
+        },
+    ) { padding ->
         if (!state.ready) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)

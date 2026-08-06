@@ -18,13 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -49,9 +43,9 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.core.ChatMedia
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
-import com.skycoin.skywire.core.SkychatProfile
+import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
-import com.skycoin.skywire.ui.logs.LogSources
+import com.skycoin.skywire.ui.theme.LocalDarkTheme
 
 /**
  * Chat tab — skychat's own web UI, embedded.
@@ -64,14 +58,13 @@ import com.skycoin.skywire.ui.logs.LogSources
  * back gesture — is what [ChatWebView] adds around it.
  */
 @Composable
-fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewModel()) {
+fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
     var webView by remember { mutableStateOf<WebView?>(null) }
     var loadedUrl by remember { mutableStateOf<String?>(null) }
     var canGoBack by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
     // The page is loaded and can be driven. Distinct from "the WebView
     // exists": a link handed to a page that is still loading would be
     // evaluated against the document it is replacing.
@@ -126,36 +119,27 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
         DeepLinks.chatLinkHandled(link)
     }
 
+    // The app's own Light/Dark/System choice, after that choice is resolved —
+    // not the system's, which is only one of its three inputs. Changing it
+    // while the chat is open moves the page over with the rest of the app
+    // instead of leaving one screen in the other theme until it reloads.
+    val darkTheme = LocalDarkTheme.current
+    LaunchedEffect(darkTheme, pageReady) {
+        val view = webView
+        if (pageReady && view != null) ChatWebView.applyTheme(view, darkTheme)
+    }
+
     Scaffold(
         topBar = {
+            // Back, title, ? — the same three as every other tab. The
+            // overflow menu that used to sit here held Reload and Logs:
+            // Logs moved to Settings ▸ Diagnostics with the other apps',
+            // and a one-item menu is not worth a button, so a wedged page
+            // is reloaded from the Retry the error state already offers.
             SkyTopBar(
                 title = stringResource(R.string.app_skychat),
-                actions = {
-                    IconButton(onClick = { menuOpen = true }) {
-                        Icon(
-                            Icons.Default.MoreVert,
-                            contentDescription = stringResource(R.string.chat_menu),
-                        )
-                    }
-                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.chat_reload)) },
-                            onClick = {
-                                menuOpen = false
-                                pageError = null
-                                pageReady = false
-                                webView?.reload()
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.logs_title)) },
-                            onClick = {
-                                menuOpen = false
-                                onOpenLogs(LogSources.app(SkychatProfile.APP))
-                            },
-                        )
-                    }
-                },
+                onBack = onBack,
+                help = HelpTopic(R.string.help_chat_title, R.string.help_chat_body),
             )
         },
         // The system bars belong to the app scaffold this tab sits in, and
@@ -226,7 +210,13 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
                         if (target != null && target != loadedUrl) {
                             loadedUrl = target
                             pageReady = false
-                            view.loadUrl(target)
+                            // The theme rides in the URL so the page can pick
+                            // one before it paints; `loadedUrl` deliberately
+                            // holds the address *without* it, so flipping the
+                            // app's theme never looks like a new URL and
+                            // never reloads the conversation out from under
+                            // the reader. Live changes go through applyTheme.
+                            view.loadUrl(target + ChatWebView.themeQuery(darkTheme))
                         }
                     },
                     onRelease = { view ->

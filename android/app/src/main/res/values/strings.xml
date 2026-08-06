@@ -489,4 +489,35 @@
     <string name="wallet_add_coin_node_hint">http://node.example.com:6420</string>
     <string name="wallet_add_coin_save">Add coin</string>
     <string name="wallet_seed_unavailable">The phrase cannot be read — the phone’s keystore has changed since this wallet was created.</string>
+
+    <!-- Screen help. One ? per tab, in the header, opening a few sentences
+         about what the screen is for. The apps that used to carry their own
+         Logs action point at Settings instead. Typographic apostrophes
+         throughout: the Skycoin face has broken sidebearings on the straight
+         one and renders "phone's" as three tokens. -->
+    <string name="help_open">About this screen</string>
+    <string name="help_close">Got it</string>
+
+    <string name="help_chat_title">About SkyChat</string>
+    <string name="help_chat_body">Messages, calls, groups and channels that travel over Skywire rather than a company\u2019s servers. Your identity here is this visor\u2019s public key — hand it out with the QR button and anyone holding it can reach you.\n\nThis is the same chat the desktop runs, laid out for a phone. It keeps its own history on this device; there is no account and nothing syncs on its own, so moving to another phone means exporting from Settings inside the chat and importing there.\n\nLogs for SkyChat live in Settings \u25b8 Diagnostics, together with every other log this app keeps.</string>
+
+    <string name="help_hub_title">About Apps</string>
+    <string name="help_hub_body">Everything your visor can run, in one place. A tile opens the app\u2019s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages and Fleet watches the visors you run elsewhere. A greyed tile is not built yet.</string>
+
+    <string name="help_wallet_title">About Wallet</string>
+    <string name="help_wallet_body">Skycoin, the fiber coins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send.</string>
+
+    <string name="help_settings_title">About Settings</string>
+    <string name="help_settings_body">Who this phone is on the network, and how the app behaves. The identity is a keypair in a file — back it up before you need it, because losing it loses your address, your chat history\u2019s other half and any rewards tied to the key.\n\nDiagnostics is where every log lives: the visor core, the app process, and each app that runs under it. That is the place to look when something will not connect.</string>
+
+    <string name="help_socks_title">About SkySOCKS</string>
+    <string name="help_socks_body">A SOCKS5 proxy that comes out somewhere else. Pick a server and this phone offers a local proxy port; anything you point at that port leaves the network from the server you chose rather than from here.\n\nIt proxies only what you configure to use it — it does not capture the whole phone. SkyVPN is the one that does that.\n\nLogs for SkySOCKS live in Settings \u25b8 Diagnostics.</string>
+
+    <string name="help_vpn_title">About SkyVPN</string>
+    <string name="help_vpn_body">The whole phone\u2019s traffic, through a server you choose. Android will ask to add a VPN configuration the first time; while it is on, every app\u2019s traffic leaves from the exit server instead of from here.\n\nThe key stays on this device and the exit server sees the traffic it forwards, exactly as any VPN exit does. Turning it off restores normal routing immediately.\n\nLogs for SkyVPN live in Settings \u25b8 Diagnostics.</string>
+
+    <string name="help_dex_title">About SkyDEX</string>
+    <string name="help_dex_body">Trading against a market maker reached over Skywire rather than over the open internet. The screen is the exchange\u2019s own, running against the market you are connected to.\n\nOrders and balances belong to that market, not to the wallet on the Wallet tab — the two are separate.\n\nLogs for SkyDEX live in Settings \u25b8 Diagnostics.</string>
+    <string name="help_fleet_title">About Fleet</string>
+    <string name="help_fleet_body">The visors you run on other machines — a desktop, a server, a Skyminer — seen from this phone. It is a window onto them, not a remote control: what arrives is status, and the one action is a restart.\n\nOff by default. Turning it on restarts this phone\u2019s core, because the setting is read once while the visor builds itself.\n\nA visor\u2019s own log is on its card here, since that feed travels from the remote machine; this app\u2019s logs are in Settings \u25b8 Diagnostics. Names you give a visor are kept on this phone and do not travel with it.</string>
 </resources>

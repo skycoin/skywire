@@ -191,14 +191,11 @@ fun SkywireApp() {
                 )
             }
             composable(Routes.CHAT) {
-                ChatScreen(
-                    onOpenLogs = { source ->
-                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
-                    },
-                )
+                ChatScreen(onBack = { navController.navigateToTab(Routes.HOME) })
             }
             composable(Routes.HUB) {
                 HubScreen(
+                    onBack = { navController.navigateToTab(Routes.HOME) },
                     onOpenRoute = { navController.navigate(it) },
                     onOpenTab = { navController.navigateToTab(it) },
                 )
@@ -209,6 +206,7 @@ fun SkywireApp() {
             composable(Routes.WALLET) {
                 WalletScreen(
                     viewModel = walletViewModel,
+                    onBack = { navController.navigateToTab(Routes.HOME) },
                     onCreate = { navController.navigate(Routes.WALLET_CREATE) { launchSingleTop = true } },
                     onRestore = { navController.navigate(Routes.WALLET_RESTORE) { launchSingleTop = true } },
                     onReceive = { navController.navigate(Routes.WALLET_RECEIVE) { launchSingleTop = true } },
@@ -317,6 +315,7 @@ fun SkywireApp() {
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(
+                    onBack = { navController.navigateToTab(Routes.HOME) },
                     onOpenDiagnostics = {
                         navController.navigate(Routes.DIAGNOSTICS) { launchSingleTop = true }
                     },
@@ -333,28 +332,13 @@ fun SkywireApp() {
 
             // Full-screen routes pushed from the hub — back returns to the hub.
             composable(Routes.SOCKS) {
-                SocksScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenLogs = { source ->
-                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
-                    },
-                )
+                SocksScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.VPN) {
-                VpnScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenLogs = { source ->
-                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
-                    },
-                )
+                VpnScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.DEX) {
-                DexScreen(
-                    onBack = { navController.popBackStack() },
-                    onOpenLogs = { source ->
-                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
-                    },
-                )
+                DexScreen(onBack = { navController.popBackStack() })
             }
             composable(Routes.FLEET) {
                 FleetScreen(

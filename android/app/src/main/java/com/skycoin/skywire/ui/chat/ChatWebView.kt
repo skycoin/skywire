@@ -211,6 +211,30 @@ internal object ChatWebView {
      * Returns false if the page never became ready, or had nothing to do with
      * the address.
      */
+    /**
+     * The query the page reads on its very first line to pick a theme. Handed
+     * over in the URL rather than injected after load because injection can
+     * only run once there is a document to inject into, and by then the page
+     * has already painted — a light-themed phone would show a black flash on
+     * every open. Changes *after* that go through [applyTheme].
+     */
+    fun themeQuery(dark: Boolean): String = if (dark) "?theme=dark" else "?theme=light"
+
+    /**
+     * Move the open page to the other theme, for when the app's own setting
+     * changes while the chat is on screen. Sets the same attribute the URL
+     * above does, so there is one mechanism and the CSS has one thing to
+     * react to. Silent if the page has not built its document yet: the next
+     * load will carry the theme in its URL anyway.
+     */
+    fun applyTheme(view: WebView, dark: Boolean) {
+        val value = if (dark) "dark" else "light"
+        view.evaluateJavascript(
+            "document.documentElement.dataset.theme = ${JSONObject.quote(value)};",
+            null,
+        )
+    }
+
     suspend fun openAddress(view: WebView, address: String): Boolean {
         val script = """
             (function () {

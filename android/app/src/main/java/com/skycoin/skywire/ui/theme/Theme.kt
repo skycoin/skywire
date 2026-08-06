@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 /**
@@ -62,14 +64,26 @@ private val DarkColors = darkColorScheme(
     surfaceContainerHighest = Color(0xFF1A1E24),
 )
 
+/**
+ * Whether the app resolved to its dark half. `isSystemInDarkTheme()` is not
+ * the same question — the user's own Light/Dark override sits on top of it —
+ * and screens that hand a colour scheme to something outside Compose need the
+ * answer after that override, not before. The embedded SkyChat page is the
+ * one caller today: it has a matching pair of themes and no way to know which
+ * one the app is in.
+ */
+val LocalDarkTheme = staticCompositionLocalOf { true }
+
 @Composable
 fun SkywireTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = SkywireTypography,
-        content = content,
-    )
+    CompositionLocalProvider(LocalDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColors else LightColors,
+            typography = SkywireTypography,
+            content = content,
+        )
+    }
 }

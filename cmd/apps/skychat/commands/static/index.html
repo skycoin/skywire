@@ -4,23 +4,250 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SkyChat</title>
+  <script>
+    /* Theme, chosen before the first byte of CSS is applied.
+
+       The page has a light and a dark set and picks between them with the
+       browser's own preference. That is the right answer in a browser, and
+       the wrong one inside the Skywire phone app, which has a Light / Dark /
+       System setting of its own that the WebView knows nothing about — a
+       phone set to System-dark with the app forced to Light would open a
+       black chat inside a white app.
+
+       So the host names the theme in the URL it loads, and this runs at
+       parse time, before <style> below is reached, so there is no flash of
+       the wrong one. Anything else — a desktop browser, a bare URL — sets
+       nothing and falls through to prefers-color-scheme. Later changes come
+       through the same data-theme attribute (see ChatWebView.applyTheme). */
+    (function () {
+      var m = /[?&]theme=(dark|light)/.exec(location.search);
+      if (m) document.documentElement.dataset.theme = m[1];
+    })();
+  </script>
   <style>
+    /* The Skycoin brand face, served from this app's own static dir so the
+       page needs no network to look right. Two cuts only — the family ships
+       no 500, and asking for one silently synthesises a fake bold. Every
+       weight in this file is therefore 400 or 700 and nothing between. */
+    @font-face {
+      font-family: 'Skycoin';
+      src: url('skycoin-regular.otf') format('opentype');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    @font-face {
+      font-family: 'Skycoin';
+      src: url('skycoin-bold.otf') format('opentype');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    /* ---- Palette -----------------------------------------------------
+       Lifted wholesale from the Skywire Wallet design so the two halves of
+       the phone app are one product: same blue, same surface ladder, same
+       status colours. Names are the wallet's; the older --bg-primary /
+       --accent-blue names below are kept as aliases so every rule in this
+       file — and any rule a later change adds — resolves to the same ink.
+
+       :root is the dark set: this app was dark-only, and a browser that
+       reports no preference keeps the look it had. Light arrives through
+       the media query, and either can be forced with data-theme on <html>,
+       which is what the Android host does so the page follows the app's
+       own theme setting rather than the system's. The attribute selectors
+       outrank the media query on specificity, so source order is not load
+       bearing here. */
     :root {
-      --bg-primary: #1a1d24;
-      --bg-secondary: #252a34;
-      --bg-tertiary: #2d333f;
-      --bg-hover: #353c4a;
-      --accent-blue: #0ea5e9;
-      --accent-green: #22c55e;
-      --accent-orange: #f59e0b;
-      --accent-red: #ef4444;
-      --text-primary: #f1f5f9;
-      --text-secondary: #94a3b8;
-      --text-muted: #64748b;
-      --border-color: #374151;
-      --msg-sent: #0369a1;
-      --msg-received: #374151;
-      --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+      color-scheme: dark;
+      --bg: #000000;
+      --surf: #101216;
+      --surf2: #1A1D22;
+      --surf3: #22262B;
+      --line: #282C33;
+      --fg: #FFFFFF;
+      --fg2: #9EA5AD;
+      --fg3: #6B7279;
+      --pri: #0072FF;
+      --priTx: #5AA5FF;
+      --onpri: #FFFFFF;
+      --prictr: #0C2340;
+      --ok: #3FD07E;
+      --okbg: #0D2418;
+      --warn: #F0A93B;
+      --warnbg: #2A1F09;
+      --bad: #FF6B5E;
+      --badbg: #2C1210;
+      --scrim: rgba(0, 0, 0, .62);
+      --snackBg: #22262B;
+      --snackFg: #F2F3F5;
+      --snackAct: #5AA5FF;
+      /* Translucent washes for hover/pressed states, where an opaque
+         --badbg would paint a block over whatever it sits on. Given per
+         theme rather than mixed at runtime: color-mix is newer than some
+         of the WebViews this ships to. */
+      --priHov: #3388FF;
+      --pritint: rgba(0, 114, 255, .18);
+      --badtint: rgba(255, 107, 94, .14);
+      --oktint: rgba(63, 208, 126, .14);
+      --shadow: 0 12px 28px rgba(0, 0, 0, .45);
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --bg: #FFFFFF;
+        --surf: #F6F7F9;
+        --surf2: #EDEFF3;
+        --surf3: #E4E7EC;
+        --line: #E3E6EB;
+        --fg: #000000;
+        --fg2: #565C64;
+        --fg3: #8A9099;
+        --pri: #0072FF;
+        --priTx: #0064DF;
+        --onpri: #FFFFFF;
+        --prictr: #E5F0FF;
+        --ok: #0B7A3E;
+        --okbg: #E4F5EB;
+        --warn: #8A5600;
+        --warnbg: #FBF0DA;
+        --bad: #C42B1C;
+        --badbg: #FBE8E6;
+        --scrim: rgba(0, 0, 0, .4);
+        --snackBg: #1F2225;
+        --snackFg: #F2F3F5;
+        --snackAct: #7FB6FF;
+        --priHov: #005FD6;
+        --pritint: rgba(0, 114, 255, .10);
+        --badtint: rgba(196, 43, 28, .10);
+        --oktint: rgba(11, 122, 62, .10);
+        --shadow: 0 12px 28px rgba(16, 24, 40, .12);
+      }
+    }
+
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: #FFFFFF;
+      --surf: #F6F7F9;
+      --surf2: #EDEFF3;
+      --surf3: #E4E7EC;
+      --line: #E3E6EB;
+      --fg: #000000;
+      --fg2: #565C64;
+      --fg3: #8A9099;
+      --pri: #0072FF;
+      --priTx: #0064DF;
+      --onpri: #FFFFFF;
+      --prictr: #E5F0FF;
+      --ok: #0B7A3E;
+      --okbg: #E4F5EB;
+      --warn: #8A5600;
+      --warnbg: #FBF0DA;
+      --bad: #C42B1C;
+      --badbg: #FBE8E6;
+      --scrim: rgba(0, 0, 0, .4);
+      --snackBg: #1F2225;
+      --snackFg: #F2F3F5;
+      --snackAct: #7FB6FF;
+      --priHov: #005FD6;
+      --pritint: rgba(0, 114, 255, .10);
+      --badtint: rgba(196, 43, 28, .10);
+      --oktint: rgba(11, 122, 62, .10);
+      --shadow: 0 12px 28px rgba(16, 24, 40, .12);
+    }
+
+    :root[data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #000000;
+      --surf: #101216;
+      --surf2: #1A1D22;
+      --surf3: #22262B;
+      --line: #282C33;
+      --fg: #FFFFFF;
+      --fg2: #9EA5AD;
+      --fg3: #6B7279;
+      --pri: #0072FF;
+      --priTx: #5AA5FF;
+      --onpri: #FFFFFF;
+      --prictr: #0C2340;
+      --ok: #3FD07E;
+      --okbg: #0D2418;
+      --warn: #F0A93B;
+      --warnbg: #2A1F09;
+      --bad: #FF6B5E;
+      --badbg: #2C1210;
+      --scrim: rgba(0, 0, 0, .62);
+      --snackBg: #22262B;
+      --snackFg: #F2F3F5;
+      --snackAct: #5AA5FF;
+      --priHov: #3388FF;
+      --pritint: rgba(0, 114, 255, .18);
+      --badtint: rgba(255, 107, 94, .14);
+      --oktint: rgba(63, 208, 126, .14);
+      --shadow: 0 12px 28px rgba(0, 0, 0, .45);
+    }
+
+    /* Text that sits ON a status fill. The wallet never needed these — it
+       tints status colours onto surfaces and never fills a shape with one.
+       A chat does: unread counts, Answer and Decline. The dark theme's
+       status colours are the light ones, so white on them is unreadable,
+       and each theme names its own ink rather than assuming white. */
+    :root {
+      --onbad: #2A0E0B;
+      --onok: #062012;
+      --onwarn: #241703;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --onbad: #FFFFFF;
+        --onok: #FFFFFF;
+        --onwarn: #FFFFFF;
+      }
+    }
+
+    :root[data-theme="light"] {
+      --onbad: #FFFFFF;
+      --onok: #FFFFFF;
+      --onwarn: #FFFFFF;
+    }
+
+    :root[data-theme="dark"] {
+      --onbad: #2A0E0B;
+      --onok: #062012;
+      --onwarn: #241703;
+    }
+
+    /* Aliases. The rules below were written against these names; pointing
+       them at the wallet tokens is what re-skins the whole app at once. */
+    :root {
+      /* Washes over the sent bubble, which is the brand blue on both
+         themes — so the overlay is white either way and these two do not
+         belong in the per-theme blocks above. */
+      --onprisoft: rgba(255, 255, 255, .18);
+      --onprisofter: rgba(255, 255, 255, .28);
+      /* Halos for the two pulsing states — recording, and a call ringing.
+         Decorative rather than informational (the fill underneath carries
+         the meaning), so one value reads correctly over either theme. */
+      --badglow: rgba(255, 107, 94, .45);
+      --okglow: rgba(63, 208, 126, .35);
+      --bg-primary: var(--bg);
+      --bg-secondary: var(--surf);
+      --bg-tertiary: var(--surf2);
+      --bg-hover: var(--surf3);
+      --accent-blue: var(--pri);
+      --accent-green: var(--ok);
+      --accent-orange: var(--warn);
+      --accent-red: var(--bad);
+      --danger: var(--bad);
+      --text-primary: var(--fg);
+      --text-secondary: var(--fg2);
+      --text-muted: var(--fg3);
+      --border-color: var(--line);
+      --msg-sent: var(--pri);
+      --msg-received: var(--surf2);
     }
 
     * {
@@ -31,29 +258,35 @@
 
     html, body {
       height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Skycoin', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
+      /* Figures line up in columns — timers, durations, byte counts and the
+         64-character ids that sit above and below each other in lists. */
+      font-variant-numeric: tabular-nums;
       background: var(--bg-primary);
       color: var(--text-primary);
+      -webkit-font-smoothing: antialiased;
     }
 
     body {
       display: flex;
     }
 
-    /* Sidebar */
+    /* Sidebar. Sits on --bg, the same plane as the conversation beside it,
+       with a hairline between them: in the wallet a screen is one surface
+       and only cards lift off it, so two different greys meeting down the
+       middle of the window would be a seam this design does not have. */
     .sidebar {
       width: 320px;
       min-width: 320px;
-      background: var(--bg-secondary);
+      background: var(--bg);
       display: flex;
       flex-direction: column;
       border-right: 1px solid var(--border-color);
     }
 
     .sidebar-header {
-      padding: 16px;
-      border-bottom: 1px solid var(--border-color);
+      padding: 14px 16px 12px;
     }
 
     .app-title {
@@ -63,13 +296,15 @@
       margin-bottom: 12px;
     }
 
+    /* The wordmark was a blue-to-green gradient clipped to the text. The
+       wallet has exactly one accent and spends it on things you can press,
+       so the name is plain foreground and the blue is left to mean
+       "actionable". Tight tracking is the wallet's heading treatment. */
     .app-title h1 {
-      font-size: 20px;
-      font-weight: 600;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      font-size: 21px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--fg);
     }
 
     .status-badge {
@@ -77,10 +312,12 @@
       align-items: center;
       gap: 6px;
       font-size: 11px;
-      color: var(--text-muted);
-      padding: 4px 8px;
-      background: var(--bg-tertiary);
-      border-radius: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      padding: 5px 10px;
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 14px;
     }
 
     .status-dot {
@@ -101,19 +338,24 @@
       animation: none;
     }
 
+    /* The wallet's one button shape: a full pill, brand blue, bold label.
+       Everything the user can commit to looks like this, at every size —
+       which is what lets the secondary and danger variants below say what
+       they are purely by colour, without a second silhouette to learn. */
     .btn {
-      padding: 10px 16px;
+      padding: 13px 18px;
       background: var(--accent-blue);
-      border: none;
-      border-radius: 8px;
-      color: white;
-      font-weight: 500;
+      border: 1px solid transparent;
+      border-radius: 26px;
+      color: var(--onpri);
+      font-size: 15px;
+      font-weight: 700;
       cursor: pointer;
       transition: background 0.2s, transform 0.1s;
     }
 
     .btn:hover {
-      background: #0284c7;
+      background: var(--priHov);
     }
 
     .btn:active {
@@ -127,23 +369,34 @@
       list-style: none;
     }
 
+    /* A row is an inset rounded block rather than a full-bleed band with a
+       rule under it. Two reasons it changed: the wallet groups rows into
+       cards with hairlines *inside* them, so a separator that runs edge to
+       edge belongs to no card and reads as a table; and the selected row
+       used to be marked by a 3px blue stripe grafted onto its left edge,
+       which shifted the avatar 3px whenever selection moved. The tinted
+       fill says the same thing and moves nothing. */
     .recipient-item {
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 12px 16px;
+      padding: 11px 12px;
+      margin: 2px 8px;
+      border-radius: 14px;
       cursor: pointer;
-      border-bottom: 1px solid var(--border-color);
-      transition: background 0.2s;
+      transition: background 0.15s;
     }
 
     .recipient-item:hover {
-      background: var(--bg-hover);
+      background: var(--surf);
     }
 
     .recipient-item.active {
-      background: var(--bg-tertiary);
-      border-left: 3px solid var(--accent-blue);
+      background: var(--prictr);
+    }
+
+    .recipient-item.active .recipient-pk {
+      color: var(--priTx);
     }
 
     .recipient-avatar {
@@ -233,12 +486,11 @@
 
     .recipient-pk {
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 700;
       color: var(--text-primary);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-family: 'Monaco', 'Menlo', monospace;
     }
 
     .recipient-preview {
@@ -252,11 +504,11 @@
 
     .unread-badge {
       background: var(--accent-blue);
-      color: white;
+      color: var(--onpri);
       font-size: 11px;
-      font-weight: 600;
+      font-weight: 700;
       padding: 2px 8px;
-      border-radius: 10px;
+      border-radius: 12px;
       flex-shrink: 0;
     }
 
@@ -276,7 +528,7 @@
       letter-spacing: 0.5px;
       border: 1px solid var(--accent-orange);
       padding: 1px 6px;
-      border-radius: 8px;
+      border-radius: 12px;
       flex-shrink: 0;
       margin-right: 6px;
     }
@@ -294,7 +546,7 @@
 
     /* Pending invites — distinct section above the recipient list. */
     .invites-section {
-      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 4px;
     }
 
     .invites-section.hidden {
@@ -302,12 +554,12 @@
     }
 
     .invites-header {
-      padding: 10px 16px 6px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
+      padding: 16px 20px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--accent-orange);
+      color: var(--fg3);
     }
 
     .invite-item {
@@ -321,7 +573,6 @@
     .invite-pk {
       flex: 1;
       min-width: 0;
-      font-family: 'Monaco', 'Menlo', monospace;
       font-size: 12px;
       color: var(--text-primary);
       white-space: nowrap;
@@ -341,7 +592,7 @@
       color: var(--text-secondary);
       font-size: 11px;
       padding: 3px 8px;
-      border-radius: 4px;
+      border-radius: 12px;
       cursor: pointer;
     }
 
@@ -352,7 +603,7 @@
 
     .invite-btn.accept:hover {
       background: var(--accent-green);
-      color: white;
+      color: var(--onok);
     }
 
     .invite-btn.decline {
@@ -362,7 +613,7 @@
 
     .invite-btn.decline:hover {
       background: var(--accent-red);
-      color: white;
+      color: var(--onbad);
     }
 
     /* Chat Area */
@@ -383,8 +634,9 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 20px;
-      background: var(--bg-secondary);
+      gap: 8px;
+      padding: 12px 16px;
+      background: var(--bg);
       border-bottom: 1px solid var(--border-color);
       min-height: 65px;
     }
@@ -405,7 +657,6 @@
     }
 
     .chat-header-pk {
-      font-family: 'Monaco', 'Menlo', monospace;
       font-size: 13px;
       color: var(--text-secondary);
       white-space: nowrap;
@@ -418,18 +669,24 @@
       gap: 8px;
     }
 
+    /* A round, borderless, filled target — the wallet's back button and its
+       Paste/Scan controls are all this one shape. Dropping the border is
+       what stops a header of four of them reading as a toolbar grille;
+       40px is the wallet's size and clears the 44px touch guidance once
+       the gap between them is counted. */
     .icon-btn {
-      width: 36px;
-      height: 36px;
+      width: 40px;
+      height: 40px;
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      color: var(--text-secondary);
+      background: var(--surf2);
+      border: 1px solid transparent;
+      border-radius: 20px;
+      color: var(--text-primary);
       cursor: pointer;
-      transition: all 0.2s;
+      transition: background 0.2s, color 0.2s;
       font-size: 14px;
     }
 
@@ -438,8 +695,62 @@
       color: var(--text-primary);
     }
 
+    /* ---- Icon boxes --------------------------------------------------
+       Every drawn icon carries its own width and height, so the slots that
+       used to size an emoji with font-size now only have to centre one.
+       Kept together rather than repeated per component: they are all the
+       same instruction, and one of them drifting is how an icon ends up
+       half a pixel off the label beside it. */
+    .ic {
+      display: block;
+      flex: 0 0 auto;
+    }
+
+    .si-icon,
+    .ms-icon,
+    .hi-icon,
+    .ac-icon,
+    .vm-icon,
+    .me-go,
+    .lock-icon,
+    .lock-arrow,
+    .composer-icon,
+    .file-card .file-icon,
+    .file-card .file-dl,
+    .call-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Icons that sit inline with text — the pin on a pinned row, the arrow
+       on a forwarded chip, a delivery tick — ride the text baseline rather
+       than the line box, which is what stops them sitting a touch high. */
+    .recipient-pk .ic,
+    .fwd-chip .ic,
+    .msg-status .ic,
+    .rec-hint .ic,
+    .reply-link .ic,
+    .btn-slim .ic,
+    .invite-btn .ic {
+      display: inline-block;
+      vertical-align: -0.18em;
+    }
+
+    .msg-status { display: inline-flex; align-items: center; gap: 3px; }
+
+    /* The empty state's mark was a 64px emoji at half opacity. A drawn one
+       needs neither — it is already the quiet foreground, and fading a line
+       drawing only makes it thin. */
+    .empty-state-icon {
+      display: flex;
+      justify-content: center;
+      color: var(--fg3);
+      margin-bottom: 18px;
+    }
+
     .icon-btn.danger:hover {
-      background: rgba(239, 68, 68, 0.1);
+      background: var(--badtint);
       color: var(--accent-red);
       border-color: var(--accent-red);
     }
@@ -476,7 +787,7 @@
     .message-bubble {
       max-width: 70%;
       padding: 10px 14px;
-      border-radius: 16px;
+      border-radius: 20px;
       font-size: 14px;
       line-height: 1.4;
       /* Break long words/URLs instead of overflowing the bubble. */
@@ -498,14 +809,14 @@
 
     .message-row.sent .message-bubble {
       background: var(--msg-sent);
-      color: white;
-      border-bottom-right-radius: 4px;
+      color: var(--onpri);
+      border-bottom-right-radius: 6px;
     }
 
     .message-row.received .message-bubble {
       background: var(--msg-received);
       color: var(--text-primary);
-      border-bottom-left-radius: 4px;
+      border-bottom-left-radius: 6px;
     }
 
     .message-meta {
@@ -537,8 +848,8 @@
       font-family: inherit;
     }
     .msg-status.pending { opacity: 0.6; }
-    .msg-status.read { color: #4aa3ff; }
-    .msg-status.failed { color: var(--danger, #e5484d); font-weight: 600; }
+    .msg-status.read { color: var(--priTx); }
+    .msg-status.failed { color: var(--bad); font-weight: 700; }
     /* The failed tick is a click-to-resend button. */
     button.msg-status.failed { cursor: pointer; }
     button.msg-status.failed:hover { text-decoration: underline; }
@@ -561,8 +872,8 @@
       border-left: 3px solid var(--msg-sent);
       padding: 3px 8px;
       margin-bottom: 6px;
-      background: rgba(127, 127, 127, 0.15);
-      border-radius: 4px;
+      background: var(--surf3);
+      border-radius: 12px;
       cursor: pointer;
       font-size: 12px;
       line-height: 1.3;
@@ -572,7 +883,7 @@
       max-width: 100%;
       overflow: hidden;
     }
-    .reply-quote-who { font-weight: 600; font-size: 11px; color: var(--msg-sent); }
+    .reply-quote-who { font-weight: 700; font-size: 11px; color: var(--msg-sent); }
     .reply-quote-text {
       color: var(--text-secondary);
       white-space: nowrap;
@@ -580,7 +891,7 @@
       text-overflow: ellipsis;
     }
     .message-row.sent .reply-quote {
-      background: rgba(255, 255, 255, 0.18);
+      background: var(--onprisoft);
       border-left-color: rgba(255, 255, 255, 0.6);
     }
     .message-row.sent .reply-quote-who,
@@ -595,10 +906,10 @@
       background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
       border-left: 3px solid var(--msg-sent);
-      border-radius: 8px;
+      border-radius: 12px;
     }
     .reply-chip-body { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
-    .reply-chip-who { font-size: 11px; font-weight: 600; color: var(--msg-sent); }
+    .reply-chip-who { font-size: 11px; font-weight: 700; color: var(--msg-sent); }
     .reply-chip-text {
       font-size: 12px;
       color: var(--text-secondary);
@@ -626,10 +937,10 @@
     .msg-menu {
       position: fixed;
       z-index: 1000;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
       padding: 4px;
       display: flex;
       flex-direction: column;
@@ -640,14 +951,14 @@
       border: none;
       text-align: left;
       padding: 8px 12px;
-      border-radius: 6px;
+      border-radius: 12px;
       font-size: 13px;
       color: var(--text-primary);
       cursor: pointer;
     }
     .msg-menu button:hover { background: var(--bg-hover); }
     .msg-menu button.danger { color: var(--accent-red); }
-    .msg-menu button.danger:hover { background: rgba(239, 68, 68, 0.1); }
+    .msg-menu button.danger:hover { background: var(--badtint); }
 
     .date-divider {
       display: flex;
@@ -657,11 +968,13 @@
     }
 
     .date-divider span {
-      background: var(--bg-tertiary);
-      color: var(--text-muted);
+      background: var(--surf);
+      border: 1px solid var(--line);
+      color: var(--text-secondary);
       font-size: 12px;
+      font-weight: 700;
       padding: 6px 14px;
-      border-radius: 14px;
+      border-radius: 16px;
     }
 
     /* Empty State */
@@ -676,16 +989,11 @@
       text-align: center;
     }
 
-    .empty-state-icon {
-      font-size: 64px;
-      margin-bottom: 16px;
-      opacity: 0.5;
-    }
-
     .empty-state h2 {
-      font-size: 20px;
-      font-weight: 500;
-      color: var(--text-secondary);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
       margin-bottom: 8px;
     }
 
@@ -701,9 +1009,12 @@
       /* Diameter of the round video-message self-view; the lock pill clears it
          by this much when a video take is running. */
       --rec-bubble: min(200px, 55vw);
-      gap: 12px;
-      padding: 16px 20px;
-      background: var(--bg-secondary);
+      /* The row's own side padding, named because two absolutely-positioned
+         children have to line up with the button it insets. See .lock-pill. */
+      --composer-pad: 16px;
+      gap: 10px;
+      padding: 14px var(--composer-pad);
+      background: var(--bg);
       border-top: 1px solid var(--border-color);
       /* The field is the only control that changes height, so the row hangs
          from its bottom edge: growing to three rows lifts the text away from
@@ -724,9 +1035,9 @@
 
     .network-select {
       padding: 10px 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 14px;
       color: var(--text-primary);
       font-size: 13px;
       cursor: pointer;
@@ -746,9 +1057,9 @@
          select and the send button off both edges with it. */
       min-width: 0;
       padding: 10px 16px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 20px;
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 22px;
       color: var(--text-primary);
       font-size: 14px;
       transition: border-color 0.2s, box-shadow 0.2s;
@@ -773,7 +1084,7 @@
     .message-input:focus {
       outline: none;
       border-color: var(--accent-blue);
-      box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+      box-shadow: 0 0 0 3px var(--pritint);
     }
 
     .message-input::placeholder {
@@ -795,7 +1106,7 @@
       background: var(--accent-blue);
       border: 1px solid transparent;
       border-radius: 50%;
-      color: white;
+      color: var(--onpri);
       font-size: 17px;
       line-height: 1;
       cursor: pointer;
@@ -803,7 +1114,7 @@
     }
 
     .composer-btn:hover {
-      background: #0284c7;
+      background: var(--priHov);
     }
 
     .composer-btn:active {
@@ -837,14 +1148,14 @@
     .composer-btn.recording:hover {
       background: var(--accent-red);
       border-color: transparent;
-      color: white;
+      color: var(--onbad);
       transform: scale(1.08);
       animation: rec-pulse 1.4s ease-in-out infinite;
     }
 
     @keyframes rec-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
-      50%      { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+      0%, 100% { box-shadow: 0 0 0 0 var(--badglow); }
+      50%      { box-shadow: 0 0 0 8px transparent; }
     }
 
     /* Recording indicator — stands in for the text input while recording. */
@@ -855,9 +1166,9 @@
       align-items: center;
       gap: 10px;
       padding: 10px 16px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 20px;
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 22px;
       font-size: 14px;
       color: var(--text-primary);
     }
@@ -903,7 +1214,7 @@
        gesture's outcome is obvious before the user commits to it. */
     .rec-bar.near-cancel {
       border-color: var(--accent-red);
-      background: rgba(239, 68, 68, 0.12);
+      background: var(--badtint);
     }
 
     .rec-bar.near-cancel .rec-hint {
@@ -938,7 +1249,7 @@
 
     .rec-cancel:hover {
       background: var(--accent-red);
-      color: white;
+      color: var(--onbad);
     }
 
     .rec-cancel.hidden {
@@ -946,11 +1257,19 @@
     }
 
     /* Lock target: floats just above the mic button during an unlocked hold. */
+    /* Directly above the button it locks, and that is load-bearing: the
+       gesture is a finger sliding straight up off the record button onto
+       this pill, so a pill that is not centred on the button is a pill the
+       finger slides past. It was pinned at right:20px while the row's own
+       padding was 16px on a desktop and 12px on a phone, which put it 4px
+       and 8px to the left of a 40px target. Both are the same 40px wide, so
+       insetting both by the row's padding is what makes them concentric —
+       at every width, and after any future change to that padding. */
     .lock-pill {
       position: absolute;
-      right: 20px;
+      right: var(--composer-pad);
       bottom: 100%;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
       width: 40px;
       display: flex;
       flex-direction: column;
@@ -983,7 +1302,7 @@
       transform: scale(1.15);
       background: var(--accent-blue);
       border-color: var(--accent-blue);
-      color: white;
+      color: var(--onpri);
     }
 
     /* A video take fills the space above the button with the round self-view,
@@ -1002,7 +1321,9 @@
        on top of it is dragging the composer button underneath (lock/cancel). */
     .video-bubble {
       position: absolute;
-      right: 20px;
+      /* Same inset as the button and the lock pill above it, so the circle's
+         right edge lines up with theirs rather than floating 4px inboard. */
+      right: var(--composer-pad);
       bottom: 100%;
       margin-bottom: 10px;
       width: var(--rec-bubble);
@@ -1048,9 +1369,9 @@
       align-items: center;
       justify-content: center;
       padding: 10px 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 20px;
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 22px;
       color: var(--text-secondary);
       cursor: pointer;
       font-size: 16px;
@@ -1089,7 +1410,7 @@
       display: block;
       max-width: 100%;
       max-height: 320px;
-      border-radius: 12px;
+      border-radius: 14px;
       cursor: pointer;
       object-fit: cover;
     }
@@ -1142,20 +1463,20 @@
     }
 
     .message-row.sent .media-dl {
-      color: #fff;
+      color: var(--onpri);
       text-decoration: underline;
     }
 
     /* Same reason as .media-dl above: on sent-blue, the accent blue reads as
        a smudge. The filled state has to give up its blue too — it would be
        invisible against the bubble. */
-    .message-row.sent .mc-speed { color: #fff; }
+    .message-row.sent .mc-speed { color: var(--onpri); }
     .message-row.sent .mc-speed:hover { background: rgba(255, 255, 255, 0.16); }
 
     .message-row.sent .mc-speed.on {
-      background: rgba(255, 255, 255, 0.28);
+      background: var(--onprisofter);
       border-color: transparent;
-      color: #fff;
+      color: var(--onpri);
     }
 
     .file-card {
@@ -1178,7 +1499,7 @@
 
     .file-card .file-name {
       font-size: 13px;
-      font-weight: 500;
+      font-weight: 700;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -1226,7 +1547,7 @@
     .lightbox-img {
       max-width: 100%;
       max-height: 100%;
-      border-radius: 8px;
+      border-radius: 12px;
       box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
       /* The viewer owns the gestures (see _lbInit): without this the browser
          claims the pinch and the drag for its own scrolling and the image
@@ -1243,7 +1564,7 @@
       display: block;
       max-width: 100%;
       max-height: 360px;
-      border-radius: 12px;
+      border-radius: 14px;
       background: #000;
     }
 
@@ -1281,7 +1602,7 @@
       cursor: pointer;
     }
 
-    .mc-speed:hover { background: rgba(0, 122, 255, 0.12); }
+    .mc-speed:hover { background: var(--pritint); }
 
     .mc-speed.on {
       background: var(--accent-blue);
@@ -1417,7 +1738,7 @@
       transform: translateX(-50%);
       padding: 1px 8px;
       background: rgba(0, 0, 0, 0.55);
-      border-radius: 10px;
+      border-radius: 12px;
       color: #fff;
       font-size: 11px;
       font-variant-numeric: tabular-nums;
@@ -1448,10 +1769,10 @@
     }
 
     .toast {
-      background: var(--bg-tertiary);
-      color: var(--text-primary);
-      padding: 12px 20px;
-      border-radius: 8px;
+      background: var(--snackBg);
+      color: var(--snackFg);
+      padding: 13px 18px;
+      border-radius: 14px;
       margin-top: 8px;
       max-width: 100%;
       box-shadow: var(--shadow);
@@ -1488,7 +1809,7 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.7);
+      background: var(--scrim);
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1503,9 +1824,14 @@
       visibility: visible;
     }
 
+    /* A dialog is the background colour with a hairline, not a lighter
+       slab: on the dark theme a #101216 panel over a black page is a grey
+       rectangle floating in the dark, where the wallet's dialogs read as
+       the page itself brought forward. The scrim does the separating. */
     .modal {
-      background: var(--bg-secondary);
-      border-radius: 16px;
+      background: var(--bg);
+      border: 1px solid var(--line);
+      border-radius: 26px;
       padding: 24px;
       max-width: 400px;
       width: 90%;
@@ -1519,7 +1845,9 @@
     }
 
     .modal h3 {
-      font-size: 18px;
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
       margin-bottom: 16px;
     }
 
@@ -1533,7 +1861,6 @@
     }
 
     .modal-pk {
-      font-family: 'Monaco', 'Menlo', monospace;
       font-size: 11px;
       color: var(--text-muted);
       word-break: break-all;
@@ -1541,7 +1868,7 @@
       margin-bottom: 20px;
       padding: 12px;
       background: var(--bg-tertiary);
-      border-radius: 8px;
+      border-radius: 12px;
     }
 
     .modal-actions {
@@ -1554,15 +1881,24 @@
       width: 100%;
     }
 
+    /* Same pill, no fill: the wallet's second-rank action is the surface
+       colour with the foreground's ink, so a stack of them under one blue
+       button reads as one primary choice and several ways out of it. */
     .btn-secondary {
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
+      background: var(--surf2);
+      border: 1px solid transparent;
+      color: var(--fg);
     }
 
     .btn-secondary:hover {
       background: var(--bg-hover);
     }
 
+    /* Destructive actions are never filled. In the wallet a red fill is
+       reserved for a thing that already went wrong; a red *label* is a
+       thing that will go wrong if you press it, and the difference is
+       worth keeping — the button that deletes your history should not
+       look like the banner that says a transfer failed. */
     .btn-danger {
       background: transparent;
       border: 1px solid var(--accent-red);
@@ -1570,25 +1906,32 @@
     }
 
     .btn-danger:hover {
-      background: rgba(239, 68, 68, 0.1);
+      background: var(--badtint);
     }
 
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-      width: 8px;
+    /* ---- Scrollbars -------------------------------------------------
+       There are none. Every scrolling surface here is a list that fills a
+       panel — the sidebar, the message river, a modal body — and a bar
+       drawn down the edge of each one is a second rule about where that
+       panel ends, drawn in a colour the layout never asked for. It also
+       costs width, which is why a narrow column would reflow its text the
+       moment its content grew past the fold.
+
+       Scrolling itself is untouched: the containers still scroll, by
+       finger, wheel, trackpad and keyboard. Only the indicator is gone,
+       and the thing it indicated — that there is more below — is already
+       said by the content running off the edge. Both properties are
+       needed: the standard one for Firefox, the pseudo-element for every
+       WebKit and Blink engine, which is what this app actually runs in. */
+    * {
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     }
 
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: var(--border-color);
-      border-radius: 4px;
-    }
-
-    ::-webkit-scrollbar-thumb:hover {
-      background: var(--text-muted);
+    *::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
     }
 
     /* ---- Compose button + its three-option menu ------------------ */
@@ -1602,13 +1945,13 @@
       flex: 0 0 auto;
       background: var(--accent-blue);
       border: none;
-      border-radius: 10px;
-      color: #fff;
+      border-radius: 12px;
+      color: var(--onpri);
       cursor: pointer;
       transition: background 0.2s, transform 0.1s;
     }
 
-    .start-btn:hover { background: #0284c7; }
+    .start-btn:hover { background: var(--priHov); }
     .start-btn:active { transform: scale(0.95); }
 
     /* The dismiss layer for every popup menu. Invisible, but it is a real
@@ -1632,10 +1975,10 @@
       z-index: 120;
       min-width: 250px;
       padding: 6px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
       display: none;
       flex-direction: column;
       gap: 2px;
@@ -1651,7 +1994,7 @@
       padding: 10px 12px;
       background: transparent;
       border: none;
-      border-radius: 8px;
+      border-radius: 12px;
       color: var(--text-primary);
       text-align: left;
       cursor: pointer;
@@ -1662,7 +2005,7 @@
 
     .si-icon { font-size: 18px; line-height: 1; flex: 0 0 auto; }
     .si-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    .si-title { font-size: 14px; font-weight: 500; }
+    .si-title { font-size: 14px; font-weight: 700; }
     .si-sub { font-size: 11px; color: var(--text-muted); }
 
     /* ---- Chat-header overflow menu (the ⋮) ----------------------- */
@@ -1679,10 +2022,10 @@
       z-index: 1100;
       min-width: 184px;
       padding: 6px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
       display: none;
       flex-direction: column;
       gap: 2px;
@@ -1703,7 +2046,7 @@
       padding: 9px 12px;
       background: transparent;
       border: none;
-      border-radius: 8px;
+      border-radius: 12px;
       color: var(--text-primary);
       text-align: left;
       cursor: pointer;
@@ -1732,7 +2075,7 @@
     .hdr-item.on { color: var(--msg-sent); }
     .hdr-item.warn { color: var(--accent-orange); }
     .hdr-item.danger { color: var(--accent-red); }
-    .hdr-item.danger:hover { background: rgba(239, 68, 68, 0.1); }
+    .hdr-item.danger:hover { background: var(--badtint); }
 
     /* Count of waiting join requests, shown inline on the Members row.
        The same number rides the ⋮ trigger itself (see .pending-badge) —
@@ -1743,9 +2086,8 @@
       min-width: 16px;
       height: 16px;
       padding: 0 5px;
-      border-radius: 8px;
-      background: #ef4444;
-      color: #fff;
+      border-radius: 12px;
+      color: var(--onbad);
       font-size: 10px;
       line-height: 16px;
       text-align: center;
@@ -1765,7 +2107,7 @@
       margin-right: 2px;
       background: transparent;
       border: none;
-      border-radius: 8px;
+      border-radius: 12px;
       color: var(--text-secondary);
       cursor: pointer;
     }
@@ -1808,7 +2150,7 @@
       width: 100%;
       max-height: 240px;
       background: #000;
-      border-radius: 10px;
+      border-radius: 12px;
       object-fit: cover;
     }
 
@@ -1820,7 +2162,7 @@
       margin-bottom: 10px;
       background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
-      border-radius: 10px;
+      border-radius: 12px;
     }
 
     .addr-result.hidden { display: none; }
@@ -1840,7 +2182,7 @@
     }
 
     .ar-body { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-    .ar-title { font-size: 14px; font-weight: 500; word-break: break-all; }
+    .ar-title { font-size: 14px; font-weight: 700; word-break: break-all; }
     .ar-sub { font-size: 11px; color: var(--text-secondary); }
     .ar-sub.warn { color: var(--accent-orange); }
     .ar-sub.bad { color: var(--accent-red); }
@@ -1855,7 +2197,7 @@
       /* White quiet zone regardless of theme: scanners expect a light
          background around the modules, and the panel colour is dark. */
       background: #fff;
-      border-radius: 12px;
+      border-radius: 14px;
     }
 
     #qrCanvas {
@@ -1868,20 +2210,20 @@
     .addr-catalog {
       margin-bottom: 12px;
       border: 1px solid var(--border-color);
-      border-radius: 10px;
+      border-radius: 12px;
       overflow: hidden;
     }
 
     .addr-catalog.hidden { display: none; }
 
     .ac-head {
-      padding: 8px 12px;
-      background: var(--bg-tertiary);
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.4px;
+      padding: 10px 14px;
+      background: var(--surf2);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--accent-green);
+      color: var(--fg3);
     }
 
     .ac-list { max-height: 190px; overflow-y: auto; }
@@ -1929,8 +2271,7 @@
       min-width: 0;
       padding: 10px 12px;
       background: var(--bg-tertiary);
-      border-radius: 8px;
-      font-family: 'Monaco', 'Menlo', monospace;
+      border-radius: 12px;
       font-size: 11px;
       color: var(--text-secondary);
       word-break: break-all;
@@ -1996,8 +2337,9 @@
          the one that gives — it is a set-once control, and its widest
          option ("CXO (paired)") is what was sizing it. */
       .message-form {
+        --composer-pad: 12px;
         gap: 8px;
-        padding: 12px;
+        padding: 12px var(--composer-pad);
       }
 
       .network-select {
@@ -2029,7 +2371,7 @@
         height: 56px;
         border-radius: 50%;
         z-index: 90;
-        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        box-shadow: var(--shadow);
       }
 
       /* Hidden while a chat is open: the button starts things from the
@@ -2042,19 +2384,19 @@
     }
 
     /* Groups */
-    .groups-section { border-bottom: 1px solid var(--border-color); }
+    .groups-section { padding-bottom: 4px; }
     .groups-section.hidden { display: none; }
 
     .groups-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 10px 16px 6px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
+      padding: 16px 20px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--accent-green);
+      color: var(--fg3);
     }
 
     .group-list { list-style: none; }
@@ -2067,26 +2409,31 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      padding: 10px 16px;
+      padding: 10px 12px;
+      margin: 2px 8px;
+      border-radius: 14px;
       cursor: pointer;
-      border-bottom: 1px solid var(--border-color);
-      transition: background 0.2s;
+      transition: background 0.15s;
     }
 
-    .group-item:hover { background: var(--bg-hover); }
-    .group-item.active { background: var(--bg-tertiary); border-left: 3px solid var(--accent-green); }
+    .group-item:hover { background: var(--surf); }
+    /* Selection is the same blue wash a DM gets. It used to be green here,
+       to match the green "Groups" heading — but a colour that means "this
+       is the open conversation" cannot also mean "this is a group", and
+       the row already says which it is. */
+    .group-item.active { background: var(--prictr); }
 
     .group-avatar-sm, .group-avatar {
       width: 44px;
       height: 44px;
-      border-radius: 12px;
+      border-radius: 16px;
       flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: var(--bg-tertiary);
-      color: var(--accent-green);
-      font-size: 20px;
+      background: var(--prictr);
+      color: var(--pri);
+      font-size: 19px;
       font-weight: 700;
     }
 
@@ -2095,23 +2442,34 @@
 
     .msg-sender {
       font-size: 11px;
-      font-weight: 600;
-      color: var(--accent-green);
+      font-weight: 700;
+      color: var(--priTx);
       margin: 0 4px 2px;
-      font-family: 'Monaco', 'Menlo', monospace;
     }
 
     .message-row.sent .msg-sender { display: none; }
 
     .cg-input {
       width: 100%;
-      padding: 10px 12px;
+      padding: 13px 15px;
       margin-bottom: 12px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 14px;
       color: var(--text-primary);
-      font-size: 14px;
+      font-family: inherit;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .cg-input:focus {
+      outline: none;
+      border-color: var(--pri);
+    }
+
+    .cg-input::placeholder {
+      color: var(--fg3);
+      font-weight: 400;
     }
 
     /* Explains what the selected group type actually does, so the
@@ -2138,11 +2496,12 @@
        the default modal because each row carries a PK plus actions. */
     .modal-wide { max-width: 560px; }
     .ga-heading {
-      margin: 16px 0 8px;
+      margin: 18px 0 8px;
       font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--text-secondary);
+      color: var(--fg3);
       text-align: left;
     }
     .ga-row { text-align: left; margin-bottom: 8px; }
@@ -2172,7 +2531,6 @@
     .ga-item:last-child { border-bottom: none; }
     .ga-item-main { flex: 1; min-width: 0; }
     .ga-pk {
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 12px;
       color: var(--text-primary);
       overflow: hidden;
@@ -2184,20 +2542,20 @@
     .ga-btn {
       padding: 4px 8px;
       font-size: 11px;
-      border-radius: 6px;
+      border-radius: 12px;
       border: 1px solid var(--border-color);
       background: var(--bg-tertiary);
       color: var(--text-primary);
       cursor: pointer;
     }
     .ga-btn:hover { background: var(--bg-primary); }
-    .ga-btn.danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.4); }
-    .ga-btn.primary { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
+    .ga-btn.danger { color: var(--bad); border-color: var(--bad); }
+    .ga-btn.primary { color: var(--ok); border-color: var(--ok); }
     .ga-empty { padding: 8px 4px; font-size: 12px; color: var(--text-secondary); }
     .ga-select {
       padding: 4px 8px;
       font-size: 12px;
-      border-radius: 6px;
+      border-radius: 12px;
       border: 1px solid var(--border-color);
       background: var(--bg-tertiary);
       color: var(--text-primary);
@@ -2215,9 +2573,9 @@
     .ga-hint {
       margin-top: 10px;
       padding: 8px 10px;
-      border-radius: 8px;
+      border-radius: 12px;
       border: 1px solid var(--accent-orange);
-      background: rgba(249, 115, 22, 0.08);
+      background: var(--warnbg);
       font-size: 12px;
       line-height: 1.45;
       color: var(--text-secondary);
@@ -2228,9 +2586,8 @@
       display: inline-block;
       min-width: 18px;
       padding: 1px 6px;
-      border-radius: 9px;
-      background: #ef4444;
-      color: #fff;
+      border-radius: 12px;
+      color: var(--onbad);
       font-size: 11px;
       text-align: center;
     }
@@ -2246,9 +2603,8 @@
       min-width: 16px;
       height: 16px;
       padding: 0 4px;
-      border-radius: 8px;
-      background: #ef4444;
-      color: #fff;
+      border-radius: 12px;
+      color: var(--onbad);
       font-size: 10px;
       line-height: 16px;
       text-align: center;
@@ -2261,12 +2617,12 @@
        reason comes from the server so the UI never re-derives the rules. */
     .composer-locked {
       flex: 1;
-      padding: 10px 14px;
+      padding: 12px 14px;
       font-size: 13px;
       color: var(--text-secondary);
-      background: var(--bg-tertiary);
-      border: 1px dashed var(--border-color);
-      border-radius: 20px;
+      background: var(--surf);
+      border: 1px dashed var(--line);
+      border-radius: 22px;
       text-align: center;
     }
 
@@ -2291,11 +2647,12 @@
     .settings-body { overflow-y: auto; flex: 1; min-height: 0; }
     .settings-section {
       font-size: 12px;
-      color: var(--text-muted);
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      letter-spacing: .04em;
-      margin: 18px 0 6px;
-      padding-top: 12px;
+      color: var(--fg3);
+      margin: 20px 0 8px;
+      padding-top: 16px;
       border-top: 1px solid var(--border-color);
     }
     .settings-body > .settings-section:first-child {
@@ -2340,13 +2697,13 @@
       padding: 8px 10px;
       background: var(--bg-tertiary);
       border: 1px solid var(--border-color);
-      border-radius: 8px;
+      border-radius: 12px;
     }
     .notif-nudge .nn-text { flex: 1; min-width: 0; font-size: 12px; color: var(--text-secondary); line-height: 1.35; }
     .notif-nudge .nn-allow {
-      flex-shrink: 0; padding: 5px 12px; font-size: 12px; font-weight: 600;
-      color: #fff; background: var(--accent-blue);
-      border: none; border-radius: 6px; cursor: pointer;
+      flex-shrink: 0; padding: 5px 12px; font-size: 12px; font-weight: 700;
+      color: var(--onpri); background: var(--accent-blue);
+      border: none; border-radius: 12px; cursor: pointer;
     }
     .notif-nudge .nn-allow:hover { filter: brightness(1.1); }
     .notif-nudge .nn-dismiss {
@@ -2354,7 +2711,14 @@
       color: var(--text-muted); background: none; border: none; cursor: pointer;
     }
     .notif-nudge .nn-dismiss:hover { color: var(--text-primary); }
-    .notif-muted-title { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 14px 0 4px; }
+    .notif-muted-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--fg3);
+      margin: 16px 0 6px;
+    }
     .notif-muted-list { max-height: 160px; overflow-y: auto; }
     .notif-muted-empty { font-size: 13px; color: var(--text-muted); padding: 6px 0; }
     .notif-muted-item {
@@ -2364,7 +2728,7 @@
     .notif-muted-item .nm-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .notif-muted-item .nm-unmute {
       flex: 0 0 auto; background: var(--bg-tertiary); border: 1px solid var(--border-color);
-      color: var(--text-secondary); border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+      color: var(--text-secondary); border-radius: 12px; padding: 4px 10px; font-size: 12px; cursor: pointer;
     }
     .notif-muted-item .nm-unmute:hover { background: var(--bg-hover); color: var(--text-primary); }
     /* On/off switch */
@@ -2374,12 +2738,15 @@
       position: absolute; inset: 0; cursor: pointer; border-radius: 24px;
       background: var(--bg-tertiary); border: 1px solid var(--border-color); transition: .2s;
     }
+    /* The knob is the theme's foreground when the switch is off — a white
+       one vanished into the light theme's near-white track — and the
+       primary's ink once the track fills blue. */
     .switch .slider::before {
       content: ''; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px;
-      background: #fff; border-radius: 50%; transition: .2s;
+      background: var(--fg3); border-radius: 50%; transition: .2s;
     }
     .switch input:checked + .slider { background: var(--accent-blue); border-color: var(--accent-blue); }
-    .switch input:checked + .slider::before { transform: translateX(18px); }
+    .switch input:checked + .slider::before { transform: translateX(18px); background: var(--onpri); }
     .switch input:disabled + .slider { opacity: .5; cursor: not-allowed; }
     /* Muted state on the header ⋮ trigger. The bell itself lives in the
        menu now, so without this the one piece of state a closed menu
@@ -2395,15 +2762,19 @@
       border-radius: 14px; padding: 14px 18px; box-shadow: var(--shadow);
       animation: ic-pulse 1.4s ease-in-out infinite;
     }
-    @keyframes ic-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(34,197,94,.35); } 50% { box-shadow: 0 0 0 8px rgba(34,197,94,0); } }
+    @keyframes ic-pulse { 0%,100% { box-shadow: 0 0 0 0 var(--okglow); } 50% { box-shadow: 0 0 0 8px transparent; } }
     .incoming-call .ic-info { display: flex; align-items: center; gap: 12px; }
     .incoming-call .ic-avatar { font-size: 24px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: var(--bg-tertiary); border-radius: 50%; }
     .incoming-call .ic-title { font-size: 13px; color: var(--text-secondary); }
-    .incoming-call .ic-from { font-size: 14px; color: var(--text-primary); font-weight: 600; }
+    .incoming-call .ic-from { font-size: 14px; color: var(--text-primary); font-weight: 700; }
     .incoming-call .ic-actions { display: flex; gap: 8px; }
-    .ic-btn { border: none; border-radius: 8px; padding: 9px 16px; font-size: 14px; font-weight: 600; cursor: pointer; color: #fff; }
-    .ic-btn.answer { background: var(--accent-green); }
-    .ic-btn.decline { background: var(--accent-red); }
+    /* Answer and Decline are the two buttons in this app that fill a shape
+       with a status colour, so each takes that colour's own ink: on the
+       dark theme green and red ARE the light tones, and white on them is
+       the one pair here that fails to read. */
+    .ic-btn { border: none; border-radius: 24px; padding: 11px 20px; font-size: 14px; font-weight: 700; cursor: pointer; }
+    .ic-btn.answer { background: var(--accent-green); color: var(--onok); }
+    .ic-btn.decline { background: var(--accent-red); color: var(--onbad); }
     .ic-btn:hover { filter: brightness(1.1); }
 
     /* Voice call — active-call panel */
@@ -2413,7 +2784,7 @@
       border-radius: 14px; padding: 14px; box-shadow: var(--shadow);
     }
     .call-panel .cp-top { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
-    .call-panel .cp-peer { font-size: 14px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .call-panel .cp-peer { font-size: 14px; font-weight: 700; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .call-panel .cp-timer { font-size: 13px; color: var(--accent-green); font-variant-numeric: tabular-nums; }
     .cp-meter { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
     .cp-meter-row { display: flex; align-items: center; gap: 8px; }
@@ -2424,15 +2795,15 @@
     .cp-ctl { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); font-size: 18px; cursor: pointer; transition: all .15s; }
     .cp-ctl:hover { background: var(--bg-hover); }
     .cp-ctl.muted { background: var(--accent-orange); border-color: var(--accent-orange); }
-    .cp-ctl.active { background: var(--accent-blue); border-color: var(--accent-blue); color: #fff; }
+    .cp-ctl.active { background: var(--accent-blue); border-color: var(--accent-blue); color: var(--onpri); }
     .cp-ctl.hangup { background: var(--accent-red); border-color: var(--accent-red); }
     .cp-ctl.hangup:hover { filter: brightness(1.1); }
     /* In-call spectrogram */
     .cp-spec { margin-bottom: 12px; }
     .cp-spec-head { display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-    .cp-spec-chan { background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 6px; padding: 2px 10px; font-size: 11px; cursor: pointer; }
+    .cp-spec-chan { background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: 12px; padding: 2px 10px; font-size: 11px; cursor: pointer; }
     .cp-spec-chan:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .cp-spec-canvas { width: 232px; max-width: 100%; height: 84px; display: block; background: #000; border-radius: 8px; image-rendering: pixelated; }
+    .cp-spec-canvas { width: 232px; max-width: 100%; height: 84px; display: block; background: #000; border-radius: 12px; image-rendering: pixelated; }
 
     /* ---- Own identity row ----------------------------------------
        The one place the user's OWN name, face and address are visible
@@ -2446,10 +2817,10 @@
       align-items: center;
       gap: 10px;
       width: 100%;
-      padding: 8px;
-      background: var(--bg-tertiary);
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
+      padding: 10px;
+      background: var(--surf);
+      border: 1px solid var(--line);
+      border-radius: 16px;
       cursor: pointer;
       text-align: left;
       color: inherit;
@@ -2475,7 +2846,7 @@
 
     .me-name {
       font-size: 13px;
-      font-weight: 600;
+      font-weight: 700;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -2487,7 +2858,6 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-family: monospace;
     }
 
     .me-go { color: var(--text-muted); font-size: 13px; flex-shrink: 0; }
@@ -2496,31 +2866,45 @@
        Four filters over one list. The sections themselves are unchanged
        — the tab only decides which are displayed — so a conversation
        never has two renderings that can drift apart. */
+    /* The five filters are chips, not underlined tabs. Straight from the
+       wallet's history filters, and for the reason that design gives them:
+       a chip states its own selected state with a fill, so it needs no rule
+       running under the whole row to hang an indicator off — which is one
+       less full-bleed line in a sidebar that no longer has any. They also
+       stay legible at five across a 320px column, where a 2px underline
+       under a 12px word is most of what you can see. */
     .side-tabs {
       display: flex;
-      border-bottom: 1px solid var(--border-color);
-      background: var(--bg-secondary);
+      gap: 6px;
+      padding: 4px 12px 10px;
+      background: var(--bg);
       flex-shrink: 0;
+      /* Five chips overflow a narrow sidebar; let them scroll sideways
+         rather than shrink the words to nothing. The bar is hidden, as
+         everywhere else. */
+      overflow-x: auto;
     }
 
     .side-tab {
-      flex: 1;
-      padding: 10px 4px;
-      background: none;
-      border: none;
-      border-bottom: 2px solid transparent;
-      color: var(--text-muted);
-      font-size: 12px;
-      font-weight: 600;
+      flex: 0 0 auto;
+      padding: 8px 14px;
+      background: transparent;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
       cursor: pointer;
-      transition: color 0.2s, border-color 0.2s;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
 
     .side-tab:hover { color: var(--text-primary); }
 
     .side-tab.active {
-      color: var(--accent-blue);
-      border-bottom-color: var(--accent-blue);
+      background: var(--prictr);
+      border-color: var(--pri);
+      color: var(--priTx);
     }
 
     /* The scroll container for every list. Before the tabs there was one
@@ -2562,7 +2946,7 @@
       color: var(--text-secondary);
       flex: none;
     }
-    .call-row.missed .call-arrow { color: var(--accent-red, #e5484d); }
+    .call-row.missed .call-arrow { color: var(--bad); }
     .call-dial { opacity: .55; font-size: 18px; padding-left: 8px; }
     .calls-empty {
       padding: 24px 16px;
@@ -2576,11 +2960,11 @@
       width: 44px;
       height: 44px;
       border-radius: 50%;
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent-green));
+      background: var(--prictr);
+      color: var(--pri);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
       flex-shrink: 0;
     }
 
@@ -2650,12 +3034,12 @@
     /* Heading inside the forward list. Same treatment as the sidebar's
        section headers so the dialog reads as the same kind of list. */
     .fwd-section {
-      padding: 12px 16px 4px;
-      font-size: 11px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
+      padding: 16px 20px 6px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: var(--accent-green);
+      color: var(--fg3);
       pointer-events: none;
     }
 
@@ -2730,7 +3114,7 @@
     .msg-sheet-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0.5);
+      background: var(--scrim);
       z-index: 150;
       display: none;
     }
@@ -2743,9 +3127,10 @@
       right: 0;
       bottom: 0;
       z-index: 151;
-      background: var(--bg-secondary);
-      border-top-left-radius: 16px;
-      border-top-right-radius: 16px;
+      background: var(--bg);
+      border-top: 1px solid var(--line);
+      border-top-left-radius: 28px;
+      border-top-right-radius: 28px;
       padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px));
       box-shadow: var(--shadow);
       transform: translateY(100%);
@@ -2779,7 +3164,7 @@
       padding: 0 16px;
       background: none;
       border: none;
-      border-radius: 10px;
+      border-radius: 12px;
       color: var(--text-primary);
       font: inherit;
       font-size: 15px;
@@ -2842,7 +3227,7 @@
              people out of the chat list also stops the sidebar being mostly
              rows with nothing in them. -->
         <button class="icon-btn" onclick="app.openContacts()"
-                title="Address book" aria-label="Address book">&#x1F4C7;</button>
+                title="Address book" aria-label="Address book"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.8A1.8 1.8 0 0 1 6.8 3H19v18H6.8A1.8 1.8 0 0 1 5 19.2z"/><path d="M5 17.2h14M9 7.5h6M9 11h6"/></svg></button>
         <!-- Settings: notification preferences and moving a chat to another
              device. One button rather than one per preference — the bell
              that used to sit here was a second entry point to half of the
@@ -2876,9 +3261,9 @@
            never been asked — otherwise that state is completely invisible and
            every notification is silently dropped. -->
       <div id="notifNudge" class="notif-nudge" style="display:none">
-        <span class="nn-text">🔔 Allow notifications to be alerted about new messages.</span>
+        <span class="nn-text">Allow notifications to be alerted about new messages.</span>
         <button class="nn-allow" onclick="app.allowNotifFromNudge()">Allow</button>
-        <button class="nn-dismiss" onclick="app.dismissNotifNudge()" title="Don't ask again" aria-label="Dismiss">&times;</button>
+        <button class="nn-dismiss" onclick="app.dismissNotifNudge()" title="Don't ask again" aria-label="Dismiss"><svg class="ic" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
       <!-- Who this visor is. Opens the profile editor; the address to hand
            out is the QR button above, not in here. -->
@@ -2889,7 +3274,7 @@
           <span class="me-name" id="meName">Your profile</span>
           <span class="me-sub" id="meAddr">—</span>
         </span>
-        <span class="me-go">&#x2699;</span>
+        <span class="me-go"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 5.5 16 12l-6.5 6.5"/></svg></span>
       </button>
     </div>
 
@@ -2917,7 +3302,7 @@
         <ul class="recipient-list">
           <li>
             <div class="recipient-item" id="savedItem" onclick="app.selectSaved()">
-              <div class="saved-avatar">&#x1F516;</div>
+              <div class="saved-avatar"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 4.5a1.5 1.5 0 0 1 1.5-1.5h8a1.5 1.5 0 0 1 1.5 1.5V21l-5.5-3.6L6.5 21z"/></svg></div>
               <div class="recipient-info">
                 <div class="recipient-pk">Saved Messages</div>
                 <div class="recipient-preview" id="savedPreview">Notes kept on this device</div>
@@ -2983,7 +3368,7 @@
       <div class="chat-header-actions">
         <button id="dmMenuBtn" class="icon-btn" onclick="app.toggleHeaderMenu(event)"
                 title="Chat actions" aria-label="Chat actions"
-                aria-haspopup="true" aria-expanded="false">&#x22EE;</button>
+                aria-haspopup="true" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg></button>
       </div>
     </div>
 
@@ -3009,13 +3394,13 @@
       <div class="chat-header-actions">
         <button id="groupMenuBtn" class="icon-btn" onclick="app.toggleHeaderMenu(event)"
                 title="Group actions" aria-label="Group actions"
-                aria-haspopup="true" aria-expanded="false">&#x22EE;<span
+                aria-haspopup="true" aria-expanded="false"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/></svg><span
                 id="groupPendingBadge" class="pending-badge hidden">0</span></button>
       </div>
     </div>
 
     <div id="emptyState" class="empty-state">
-      <div class="empty-state-icon">&#x1F4AC;</div>
+      <div class="empty-state-icon"><svg class="ic" viewBox="0 0 24 24" width="56" height="56" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 11.5a8 8 0 0 1-11.7 7.1L3.5 20.5l1.4-5A8 8 0 1 1 20.5 11.5z"/></svg></div>
       <h2>Welcome to Skychat</h2>
       <p>Select a contact or add a new one by entering their public key to start messaging over the Skywire network.</p>
     </div>
@@ -3036,7 +3421,7 @@
         <option value="cxo" id="cxoNetworkOption" class="hidden">CXO (paired)</option>
       </select>
       <label class="attach-btn" title="Attach a file">
-        &#x1F4CE;
+        <svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19.5 11.7 12 19.2a4.5 4.5 0 0 1-6.4-6.4l8.2-8.2a3 3 0 1 1 4.3 4.3l-8.2 8.2a1.5 1.5 0 0 1-2.2-2.1l7.4-7.4"/></svg>
         <input type="file" id="fileField" style="display:none" onchange="app.sendFile()" />
       </label>
       <!-- A textarea, not a single-line input: a message is not one line.
@@ -3049,11 +3434,11 @@
            button, since there's no pointer left to slide. -->
       <div id="recBar" class="rec-bar hidden">
         <button type="button" id="recCancel" class="rec-cancel hidden" title="Delete recording"
-                aria-label="Delete recording" onclick="app.cancelRecording()">&#x1F5D1;</button>
+                aria-label="Delete recording" onclick="app.cancelRecording()"><svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5h16M9.5 6.5V4.8A1.8 1.8 0 0 1 11.3 3h1.4a1.8 1.8 0 0 1 1.8 1.8v1.7"/><path d="M6.5 6.5 7.4 19a2 2 0 0 0 2 1.9h5.2a2 2 0 0 0 2-1.9l.9-12.5"/><path d="M10.5 10.5v6M13.5 10.5v6"/></svg></button>
         <span class="rec-dot"></span>
         <span id="recTime" class="rec-time">0:00</span>
         <canvas id="recWave" class="rec-wave"></canvas>
-        <span id="recHint" class="rec-hint">&#x25C0; slide to cancel</span>
+        <span id="recHint" class="rec-hint"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14.5 5.5 8 12l6.5 6.5"/></svg> slide to cancel</span>
       </div>
       <!-- Round self-view, shown above the composer while a video message
            records. Muted: the microphone is in the same stream, so playing it
@@ -3064,8 +3449,8 @@
       <!-- Floats above the mic button while recording unlocked; slide the
            pointer up onto it to go hands-free. -->
       <div id="lockPill" class="lock-pill hidden" aria-hidden="true">
-        <span class="lock-icon">&#x1F512;</span>
-        <span class="lock-arrow">&#x2303;</span>
+        <span class="lock-icon"><svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4.5" y="10" width="15" height="10.5" rx="2.6"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></span>
+        <span class="lock-arrow"><svg class="ic" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5.5 14.5 12 8l6.5 6.5"/></svg></span>
       </div>
       <!-- Morphing button: submits when there is text, otherwise a tap toggles
            the voice/video recording mode and a press-and-hold records a voice
@@ -3077,7 +3462,7 @@
               onpointermove="app._onComposerMove(event)"
               onpointerup="app._onComposerUp(event)"
               onpointercancel="app._onComposerUp(event)"
-              oncontextmenu="return false"><span class="composer-icon">&#x27A4;</span></button>
+              oncontextmenu="return false"><span class="composer-icon"><svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 3.5 10 14M20.5 3.5l-6.6 17.4-3.7-7.1-7.1-3.7z"/></svg></span></button>
     </form>
   </main>
 
@@ -3092,7 +3477,7 @@
        from the floating action button on a phone. -->
   <div id="startMenu" class="start-menu" role="menu" aria-labelledby="startBtn">
     <button class="start-item" role="menuitem" onclick="app.openAddressModal()">
-      <span class="si-icon">&#x1F517;</span>
+      <span class="si-icon"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.2 13.8a4.2 4.2 0 0 0 6 0l3-3a4.2 4.2 0 1 0-6-6l-1.7 1.7"/><path d="M13.8 10.2a4.2 4.2 0 0 0-6 0l-3 3a4.2 4.2 0 1 0 6 6l1.7-1.7"/></svg></span>
       <span class="si-text">
         <span class="si-title">Add by address</span>
         <span class="si-sub">Public key, skychat:// link, invite or QR</span>
@@ -3103,21 +3488,21 @@
          already saved, and re-pasting their key to reach them would be
          asking for something the app is already holding. -->
     <button class="start-item" role="menuitem" onclick="app.openContacts('pick')">
-      <span class="si-icon">&#x1F4C7;</span>
+      <span class="si-icon"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.8A1.8 1.8 0 0 1 6.8 3H19v18H6.8A1.8 1.8 0 0 1 5 19.2z"/><path d="M5 17.2h14M9 7.5h6M9 11h6"/></svg></span>
       <span class="si-text">
         <span class="si-title">Select from address book</span>
         <span class="si-sub">Someone you already saved</span>
       </span>
     </button>
     <button class="start-item" role="menuitem" onclick="app.openCreateGroup()">
-      <span class="si-icon">&#x1F465;</span>
+      <span class="si-icon"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15.5 20.5v-1.8a3.6 3.6 0 0 0-3.6-3.6H6.6A3.6 3.6 0 0 0 3 18.7v1.8"/><circle cx="9.2" cy="7.6" r="3.6"/><path d="M21 20.5v-1.8a3.6 3.6 0 0 0-2.7-3.5M16.4 4.2a3.6 3.6 0 0 1 0 6.9"/></svg></span>
       <span class="si-text">
         <span class="si-title">New group</span>
         <span class="si-sub">Everyone in it can post</span>
       </span>
     </button>
     <button class="start-item" role="menuitem" onclick="app.openCreateChannel()">
-      <span class="si-icon">&#x1F4E3;</span>
+      <span class="si-icon"><svg class="ic" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10.5v3a1 1 0 0 0 1 1H7l6.5 4V5.5L7 9.5H4.5a1 1 0 0 0-1 1z"/><path d="M7 14.5V19a1.5 1.5 0 0 0 3 0v-3.2"/><path d="M17 9a4 4 0 0 1 0 6"/><path d="M19.5 6.5a7.5 7.5 0 0 1 0 11"/></svg></span>
       <span class="si-text">
         <span class="si-title">New channel</span>
         <span class="si-sub">Open to join, only admins post</span>
@@ -3171,8 +3556,8 @@
     <div class="modal modal-wide contacts-modal">
       <div class="contacts-head">
         <h3 id="contactsTitle">Address book</h3>
-        <button class="icon-btn" onclick="app.addContactFromBook()" title="Add a contact" aria-label="Add a contact">+</button>
-        <button class="icon-btn" onclick="app.closeContacts()" title="Close" aria-label="Close">&times;</button>
+        <button class="icon-btn" onclick="app.addContactFromBook()" title="Add a contact" aria-label="Add a contact"><svg class="ic" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button>
+        <button class="icon-btn" onclick="app.closeContacts()" title="Close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
       <input id="contactSearch" class="cg-input" type="search" autocomplete="off"
              placeholder="Search by name or key" oninput="app.renderContacts()" />
@@ -3205,7 +3590,7 @@
     <div class="modal modal-wide contacts-modal">
       <div class="contacts-head">
         <h3>Forward to…</h3>
-        <button class="icon-btn" onclick="app.closeModal('forwardModal')" title="Close" aria-label="Close">&times;</button>
+        <button class="icon-btn" onclick="app.closeModal('forwardModal')" title="Close" aria-label="Close"><svg class="ic" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
       </div>
       <div id="fwdOrigin" class="cg-help"></div>
       <input id="fwdSearch" class="cg-input" type="search" autocomplete="off"
@@ -3311,7 +3696,7 @@
   <!-- Incoming call banner -->
   <div id="incomingCall" class="incoming-call hidden">
     <div class="ic-info">
-      <div class="ic-avatar">&#x1F4DE;</div>
+      <div class="ic-avatar"><svg class="ic" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 16.9v2.4a1.8 1.8 0 0 1-2 1.8 17.4 17.4 0 0 1-7.6-2.7 17.1 17.1 0 0 1-5.3-5.3A17.4 17.4 0 0 1 3 5.5a1.8 1.8 0 0 1 1.8-2h2.4a1.8 1.8 0 0 1 1.8 1.5c.1.9.3 1.7.6 2.5a1.8 1.8 0 0 1-.4 1.9l-1 1a14 14 0 0 0 5.3 5.3l1-1a1.8 1.8 0 0 1 1.9-.4c.8.3 1.6.5 2.5.6a1.8 1.8 0 0 1 1.6 1.9z"/></svg></div>
       <div>
         <div class="ic-title">Incoming call</div>
         <div class="ic-from" id="icFrom">-</div>
@@ -3341,10 +3726,10 @@
       <canvas id="specCanvas" class="cp-spec-canvas" width="232" height="84"></canvas>
     </div>
     <div class="cp-actions">
-      <button id="cpMicBtn" class="cp-ctl" onclick="app.toggleCallMic()" title="Mute microphone">&#x1F3A4;</button>
-      <button id="cpSpkBtn" class="cp-ctl" onclick="app.toggleCallSpk()" title="Mute speaker">&#x1F50A;</button>
-      <button id="cpSpecBtn" class="cp-ctl" onclick="app.toggleSpectrogram()" title="Show spectrogram">&#x1F4CA;</button>
-      <button class="cp-ctl hangup" onclick="app.hangupCall()" title="Hang up">&#x1F4F4;</button>
+      <button id="cpMicBtn" class="cp-ctl" onclick="app.toggleCallMic()" title="Mute microphone"><svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5"/></svg></button>
+      <button id="cpSpkBtn" class="cp-ctl" onclick="app.toggleCallSpk()" title="Mute speaker"><svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4.8 6.6 8.5H3.2v7h3.4L11 19.2z"/><path d="M15.2 9.4a3.6 3.6 0 0 1 0 5.2"/><path d="M17.8 6.8a7.2 7.2 0 0 1 0 10.4"/></svg></button>
+      <button id="cpSpecBtn" class="cp-ctl" onclick="app.toggleSpectrogram()" title="Show spectrogram"><svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 20.5V11M9.5 20.5V4M14.5 20.5v-6.5M19.5 20.5V8"/></svg></button>
+      <button class="cp-ctl hangup" onclick="app.hangupCall()" title="Hang up"><svg class="ic" viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5a13 13 0 0 1 18 0l-2 2.4a2 2 0 0 1-2.4.4l-1.5-.8a1.4 1.4 0 0 1-.7-1.5l.2-1.2a11 11 0 0 0-5.2 0l.2 1.2a1.4 1.4 0 0 1-.7 1.5l-1.5.8a2 2 0 0 1-2.4-.4z"/><path d="M4 20 20 4"/></svg></button>
     </div>
   </div>
 
@@ -3493,10 +3878,10 @@
              onkeydown="if (event.key === 'Enter') app.addressAction()" />
       <div class="addr-scan-row">
         <button class="btn btn-secondary btn-slim" onclick="app.startQrScan()">
-          &#x1F4F7; Scan QR code
+          <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.5 18.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2H8L9.5 5h5L16 7.5h2.5a2 2 0 0 1 2 2z"/><circle cx="12" cy="13.5" r="3.4"/></svg> Scan QR code
         </button>
         <label class="btn btn-secondary btn-slim" title="Read a QR code from a saved image">
-          &#x1F5BC; From image
+          <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4.5" width="18" height="15" rx="2.6"/><circle cx="8.6" cy="10" r="1.7"/><path d="m3.5 17.6 4.9-4.9 4.4 4.4 3.1-2.6 5.1 4.3"/></svg> From image
           <input type="file" id="addrQrFile" accept="image/*" style="display:none"
                  onchange="app.scanQrFile(event)" />
         </label>
@@ -3545,7 +3930,7 @@
       </div>
       <div class="qr-addr-row">
         <code id="qrAddrText" class="qr-addr">-</code>
-        <button class="icon-btn" onclick="app.copyQrAddress()" title="Copy address" aria-label="Copy address">&#x2398;</button>
+        <button class="icon-btn" onclick="app.copyQrAddress()" title="Copy address" aria-label="Copy address"><svg class="ic" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8.5" y="8.5" width="12" height="12" rx="2.6"/><path d="M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7a2.5 2.5 0 0 0 2.5 2.5h2.5"/></svg></button>
       </div>
       <p class="cg-help" id="qrHelp"></p>
       <div class="modal-actions">
@@ -3694,6 +4079,104 @@
     // Window between the two taps of a double-tap, and the delay a single
     // tap waits out before it counts as one (see _lbUp).
     const DOUBLE_TAP_MS = 300;
+
+    /* ---- Icons ---------------------------------------------------------
+       Every icon in this app is drawn here. It used to be emoji — a
+       paperclip, a megaphone, a bell — pasted straight into the markup as
+       HTML entities, and that had three problems worth the code below.
+
+       They are not ours. An emoji is rendered by the platform's own font,
+       so the same button was a flat grey glyph on one machine, a glossy
+       full-colour cartoon on the next, and a hollow rectangle on a visor
+       running a stripped-down image. Nothing about it could be made to
+       match the rest of a design.
+
+       They do not take a colour. A menu row tints itself when the action
+       it names is already in effect, and a coloured emoji ignored that
+       completely — the bell stayed yellow in a row that had gone orange to
+       say "muted". These take currentColor, so an icon is always the exact
+       ink of the text beside it, in either theme, in every state.
+
+       They are not one weight. Mixed among the hand-drawn SVGs the app
+       already had, emoji read heavier and sat on a different baseline.
+       These are one grid (24), one stroke (2, round-capped), one optical
+       size — the wallet's drawing, so the two halves of the phone app are
+       drawn by the same hand.
+
+       Paths only: `icon()` supplies the wrapper. A name that does not
+       exist returns an empty string rather than throwing, because an icon
+       is decoration and a typo in one must never take a menu down. */
+    const ICON_PATHS = {
+      qr: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><path d="M14 14h2.5M20 14v2.5M14 17.5v3M17.5 20.5h3M17.5 17.5h0"/>',
+      book: '<path d="M5 4.8A1.8 1.8 0 0 1 6.8 3H19v18H6.8A1.8 1.8 0 0 1 5 19.2z"/><path d="M5 17.2h14M9 7.5h6M9 11h6"/>',
+      gear: '<circle cx="12" cy="12" r="3"/><path d="M19.1 14.8a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5v.2a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1.1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H2.8a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1.1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5V2.8a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.2a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/>',
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      bookmark: '<path d="M6.5 4.5a1.5 1.5 0 0 1 1.5-1.5h8a1.5 1.5 0 0 1 1.5 1.5V21l-5.5-3.6L6.5 21z"/>',
+      chat: '<path d="M20.5 11.5a8 8 0 0 1-11.7 7.1L3.5 20.5l1.4-5A8 8 0 1 1 20.5 11.5z"/>',
+      paperclip: '<path d="M19.5 11.7 12 19.2a4.5 4.5 0 0 1-6.4-6.4l8.2-8.2a3 3 0 1 1 4.3 4.3l-8.2 8.2a1.5 1.5 0 0 1-2.2-2.1l7.4-7.4"/>',
+      trash: '<path d="M4 6.5h16M9.5 6.5V4.8A1.8 1.8 0 0 1 11.3 3h1.4a1.8 1.8 0 0 1 1.8 1.8v1.7"/><path d="M6.5 6.5 7.4 19a2 2 0 0 0 2 1.9h5.2a2 2 0 0 0 2-1.9l.9-12.5"/><path d="M10.5 10.5v6M13.5 10.5v6"/>',
+      left: '<path d="M14.5 5.5 8 12l6.5 6.5"/>',
+      right: '<path d="M9.5 5.5 16 12l-6.5 6.5"/>',
+      up: '<path d="M5.5 14.5 12 8l6.5 6.5"/>',
+      lock: '<rect x="4.5" y="10" width="15" height="10.5" rx="2.6"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>',
+      send: '<path d="M20.5 3.5 10 14M20.5 3.5l-6.6 17.4-3.7-7.1-7.1-3.7z"/>',
+      link: '<path d="M10.2 13.8a4.2 4.2 0 0 0 6 0l3-3a4.2 4.2 0 1 0-6-6l-1.7 1.7"/><path d="M13.8 10.2a4.2 4.2 0 0 0-6 0l-3 3a4.2 4.2 0 1 0 6 6l1.7-1.7"/>',
+      unlink: '<path d="M9.5 14.5a4.2 4.2 0 0 0 5.3.5M18.5 13l.7-.7a4.2 4.2 0 0 0-5.4-6.4"/><path d="M5.5 11l-.7.7a4.2 4.2 0 0 0 5.4 6.4"/><path d="M4 4l16 16"/>',
+      users: '<path d="M15.5 20.5v-1.8a3.6 3.6 0 0 0-3.6-3.6H6.6A3.6 3.6 0 0 0 3 18.7v1.8"/><circle cx="9.2" cy="7.6" r="3.6"/><path d="M21 20.5v-1.8a3.6 3.6 0 0 0-2.7-3.5M16.4 4.2a3.6 3.6 0 0 1 0 6.9"/>',
+      user: '<path d="M19 20.5v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+      megaphone: '<path d="M3.5 10.5v3a1 1 0 0 0 1 1H7l6.5 4V5.5L7 9.5H4.5a1 1 0 0 0-1 1z"/><path d="M7 14.5V19a1.5 1.5 0 0 0 3 0v-3.2"/><path d="M17 9a4 4 0 0 1 0 6"/><path d="M19.5 6.5a7.5 7.5 0 0 1 0 11"/>',
+      phone: '<path d="M20.5 16.9v2.4a1.8 1.8 0 0 1-2 1.8 17.4 17.4 0 0 1-7.6-2.7 17.1 17.1 0 0 1-5.3-5.3A17.4 17.4 0 0 1 3 5.5a1.8 1.8 0 0 1 1.8-2h2.4a1.8 1.8 0 0 1 1.8 1.5c.1.9.3 1.7.6 2.5a1.8 1.8 0 0 1-.4 1.9l-1 1a14 14 0 0 0 5.3 5.3l1-1a1.8 1.8 0 0 1 1.9-.4c.8.3 1.6.5 2.5.6a1.8 1.8 0 0 1 1.6 1.9z"/>',
+      hangup: '<path d="M3 10.5a13 13 0 0 1 18 0l-2 2.4a2 2 0 0 1-2.4.4l-1.5-.8a1.4 1.4 0 0 1-.7-1.5l.2-1.2a11 11 0 0 0-5.2 0l.2 1.2a1.4 1.4 0 0 1-.7 1.5l-1.5.8a2 2 0 0 1-2.4-.4z"/><path d="M4 20 20 4"/>',
+      mic: '<rect x="9" y="2.5" width="6" height="11.5" rx="3"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5"/>',
+      micOff: '<path d="M15 5.2V5.5a3 3 0 0 0-6 0v5.2M9 13.6a3 3 0 0 0 5.1 1.1"/><path d="M5.5 11.5a6.5 6.5 0 0 0 9.6 5.7M18.5 11.5a6.4 6.4 0 0 1-.3 2M12 18v3.5"/><path d="M4 4l16 16"/>',
+      video: '<rect x="2.5" y="6" width="13" height="12" rx="2.6"/><path d="m15.5 12 6-3.6v7.2z"/>',
+      volume: '<path d="M11 4.8 6.6 8.5H3.2v7h3.4L11 19.2z"/><path d="M15.2 9.4a3.6 3.6 0 0 1 0 5.2"/><path d="M17.8 6.8a7.2 7.2 0 0 1 0 10.4"/>',
+      volumeOff: '<path d="M11 4.8 6.6 8.5H3.2v7h3.4L11 19.2z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/>',
+      bell: '<path d="M18 9.2a6 6 0 1 0-12 0c0 5.8-2.4 7.3-2.4 7.3h16.8S18 15 18 9.2z"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/>',
+      bellOff: '<path d="M17.9 12.3c.1-1 .1-2.1.1-3.1a6 6 0 0 0-8.5-5.5M6.2 6.9A6 6 0 0 0 6 9.2c0 5.8-2.4 7.3-2.4 7.3h13.2"/><path d="M13.7 20a2 2 0 0 1-3.4 0"/><path d="M4 4l16 16"/>',
+      chart: '<path d="M4.5 20.5V11M9.5 20.5V4M14.5 20.5v-6.5M19.5 20.5V8"/>',
+      camera: '<path d="M20.5 18.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2H8L9.5 5h5L16 7.5h2.5a2 2 0 0 1 2 2z"/><circle cx="12" cy="13.5" r="3.4"/>',
+      image: '<rect x="3" y="4.5" width="18" height="15" rx="2.6"/><circle cx="8.6" cy="10" r="1.7"/><path d="m3.5 17.6 4.9-4.9 4.4 4.4 3.1-2.6 5.1 4.3"/>',
+      copy: '<rect x="8.5" y="8.5" width="12" height="12" rx="2.6"/><path d="M15.5 8.5V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7a2.5 2.5 0 0 0 2.5 2.5h2.5"/>',
+      reply: '<path d="M9.5 15.5 4 10l5.5-5.5"/><path d="M4 10h9a7 7 0 0 1 7 7v2.5"/>',
+      forward: '<path d="m14.5 15.5 5.5-5.5-5.5-5.5"/><path d="M20 10h-9a7 7 0 0 0-7 7v2.5"/>',
+      pin: '<path d="M9 3.5h6l-.9 5.6 3.4 3.4H6.5l3.4-3.4z"/><path d="M12 12.5v8"/>',
+      edit: '<path d="m14.5 4.5 5 5"/><path d="M4 20.5h5l11-11-5-5-11 11z"/>',
+      play: '<path d="M7.5 4.6 19.5 12l-12 7.4z"/>',
+      pause: '<path d="M9 4.5v15M15 4.5v15"/>',
+      download: '<path d="M12 3.5v12"/><path d="m7.5 11 4.5 4.5L16.5 11"/><path d="M4 20.5h16"/>',
+      check: '<path d="m4.5 12.5 5 5 10-11"/>',
+      checkDouble: '<path d="m2 12.5 4.5 4.5 9-10"/><path d="m10.5 15.7 1.3 1.3 9-10"/>',
+      close: '<path d="M6 6l12 12M18 6 6 18"/>',
+      alert: '<path d="M12 3.6 21.2 19.6H2.8z"/><path d="M12 9.8v4.3M12 17.2v.1"/>',
+      circle: '<circle cx="12" cy="12" r="6.8"/>',
+      leave: '<path d="M14.5 20.5H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h8.5"/><path d="m15 8 4 4-4 4M19 12H9.5"/>',
+      dots: '<circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/>',
+      dotsH: '<circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/>',
+      callOut: '<path d="M6 18 18 6"/><path d="M10.5 6H18v7.5"/>',
+      callIn: '<path d="M18 6 6 18"/><path d="M13.5 18H6v-7.5"/>',
+      hash: '<path d="M5 9h14M5 15h14M10 4 8.5 20M15.5 4 14 20"/>',
+    };
+
+    /* Icons that are a solid shape rather than a line drawing: a play
+       triangle outlined in 2px stroke has a hole in the middle and reads
+       as a signpost. */
+    const ICON_FILLED = new Set(['play', 'dots', 'dotsH']);
+
+    /* icon renders one by name. `size` is the rendered box in px; the grid
+       is always 24, so a 15px icon and a 20px icon are the same drawing at
+       two scales rather than two drawings. */
+    function icon(name, size) {
+      const d = ICON_PATHS[name];
+      if (!d) return '';
+      const s = size || 18;
+      const paint = ICON_FILLED.has(name)
+        ? 'fill="currentColor" stroke="none"'
+        : 'fill="none" stroke="currentColor" stroke-width="2" ' +
+          'stroke-linecap="round" stroke-linejoin="round"';
+      return '<svg class="ic" viewBox="0 0 24 24" width="' + s + '" height="' + s +
+        '" ' + paint + ' aria-hidden="true">' + d + '</svg>';
+    }
 
     class Chat {
       constructor() {
@@ -3989,8 +4472,8 @@
               ${senderLabel}
               <div class="${bubbleClass}">${quoteHtml}${fwdHtml}${bubbleInner}</div>
               <div class="message-meta">
-                <button class="reply-link" onclick="app.startReply(this)" title="Reply">&#x21A9; Reply</button>
-                <button class="reply-link msg-menu-btn" onclick="app.openMsgMenu(this)" title="More">&#x22EF;</button>
+                <button class="reply-link" onclick="app.startReply(this)" title="Reply">${icon('reply', 13)} Reply</button>
+                <button class="reply-link msg-menu-btn" onclick="app.openMsgMenu(this)" title="More">${icon('dotsH', 14)}</button>
                 <span class="message-time">${time}</span>
                 ${statusTick}
               </div>
@@ -4035,18 +4518,18 @@
         // action (e.g. a failed file after reload, whose bytes are gone).
         if (status === 'failed') {
           if (mode === 'text') {
-            return `<button type="button" class="msg-status failed" onclick="app.resendMessage(this)" title="Failed to send — click to resend">⚠ Resend</button>`;
+            return `<button type="button" class="msg-status failed" onclick="app.resendMessage(this)" title="Failed to send — click to resend">${icon('alert', 12)} Resend</button>`;
           }
           if (mode === 'file') {
-            return `<button type="button" class="msg-status failed" onclick="app.resendFile(this)" title="Transfer failed — click to retry">⚠ Retry</button>`;
+            return `<button type="button" class="msg-status failed" onclick="app.resendFile(this)" title="Transfer failed — click to retry">${icon('alert', 12)} Retry</button>`;
           }
-          return `<span class="msg-status failed" title="Transfer failed">⚠</span>`;
+          return `<span class="msg-status failed" title="Transfer failed">${icon('alert', 12)}</span>`;
         }
         const map = {
-          pending:  { cls: 'pending',  txt: '○',       title: 'Sending…' }, // ○
-          sent:     { cls: 'sent',     txt: '✓',       title: 'Sent' },          // ✓
-          received: { cls: 'received', txt: '✓✓', title: 'Received' },       // ✓✓
-          read:     { cls: 'read',     txt: '✓✓', title: 'Read' },           // ✓✓ (blue)
+          pending:  { cls: 'pending',  txt: icon('circle', 11),      title: 'Sending…' },
+          sent:     { cls: 'sent',     txt: icon('check', 12),       title: 'Sent' },
+          received: { cls: 'received', txt: icon('checkDouble', 14), title: 'Received' },
+          read:     { cls: 'read',     txt: icon('checkDouble', 14), title: 'Read' },
         };
         const s = map[status] || map.sent;
         return `<span class="msg-status ${s.cls}" title="${s.title}">${s.txt}</span>`;
@@ -4324,7 +4807,7 @@
       // _msgPreview builds a short, single-line snippet of a message, embedded
       // in a reply so the quote renders even for a reader who lacks the parent.
       _msgPreview(msg) {
-        if (msg.file) return '📎 ' + ((msg.file.name) || 'file');
+        if (msg.file) return (msg.file.name) || 'Attachment';
         return String(msg.text || '').replace(/\s+/g, ' ').trim().slice(0, 120);
       }
 
@@ -4697,10 +5180,10 @@
           : this.isVideoMessage(file) ? 'Video message' : name;
         const sub = file.status === 'failed' ? 'transfer failed' : sizeStr;
         const dl = urlAttr
-          ? `<a class="file-dl" href="${urlAttr}" download="${nameAttr}" title="Download">&#x2B07;</a>`
+          ? `<a class="file-dl" href="${urlAttr}" download="${nameAttr}" title="Download">${icon('download', 18)}</a>`
           : '';
         return `<div class="file-card">
-            <div class="file-icon">&#x1F4CE;</div>
+            <div class="file-icon">${icon('paperclip', 22)}</div>
             <div class="file-meta">
               <div class="file-name" title="${nameAttr}">${cardName}</div>
               <div class="file-sub">${this.escapeHtml(sub)}</div>
@@ -5059,7 +5542,7 @@
       _renderVoicePlayer(urlAttr, sizeStr, acts) {
         return `<div class="vm-player">
             <button type="button" class="vm-play" title="Play" aria-label="Play voice message"
-                    onclick="app.vmToggle(this)"><span class="vm-icon">&#x25B6;</span></button>
+                    onclick="app.vmToggle(this)"><span class="vm-icon">${icon('play', 13)}</span></button>
             <div class="vm-body">
               <canvas class="vm-wave" title="Seek" onclick="app.vmSeek(event, this)"></canvas>
               <div class="media-caption vm-meta">
@@ -5086,7 +5569,7 @@
                 <circle class="vm-ring-track" cx="50" cy="50" r="47"></circle>
                 <circle class="vm-ring-fill" cx="50" cy="50" r="47"></circle>
               </svg>
-              <span class="vm-badge"><span class="vm-icon">&#x25B6;</span></span>
+              <span class="vm-badge"><span class="vm-icon">${icon('play', 17)}</span></span>
               <span class="vm-time">0:00</span>
             </div>
             <div class="media-caption vm-meta">
@@ -5209,8 +5692,10 @@
         const playing = !media.paused && !media.ended;
         box.classList.toggle('playing', playing);
 
-        const icon = box.querySelector('.vm-icon');
-        if (icon) icon.innerHTML = playing ? '&#x23F8;' : '&#x25B6;';
+        // Named `glyph`, not `icon`: a local of that name would shadow the
+        // icon() helper this line calls.
+        const glyph = box.querySelector('.vm-icon');
+        if (glyph) glyph.innerHTML = playing ? icon('pause', 13) : icon('play', 13);
         const btn = box.querySelector('.vm-play');
         if (btn) {
           const label = playing ? 'Pause voice message' : 'Play voice message';
@@ -5968,8 +6453,8 @@
           item.innerHTML = `
             <div class="invite-pk" title="${pk}">${shortPk}</div>
             <div class="invite-actions">
-              <button class="invite-btn accept" onclick="app.acceptInvite('${pk}')" title="Accept pair invite">✓</button>
-              <button class="invite-btn decline" onclick="app.declineInvite('${pk}')" title="Decline pair invite">✕</button>
+              <button class="invite-btn accept" onclick="app.acceptInvite('${pk}')" title="Accept pair invite">${icon('check', 13)}</button>
+              <button class="invite-btn decline" onclick="app.declineInvite('${pk}')" title="Decline pair invite">${icon('close', 13)}</button>
             </div>`;
           list.appendChild(item);
         });
@@ -6130,9 +6615,9 @@
 
       _composerModes() {
         return {
-          send:  { icon: '➤',    label: 'Send',          title: 'Send message' },
-          mic:   { icon: '\u{1F3A4}', label: 'Voice message', title: 'Voice message mode — tap to switch to video' },
-          video: { icon: '\u{1F4F9}', label: 'Video message', title: 'Video message mode — tap to switch to voice' },
+          send:  { icon: icon('send', 19),  label: 'Send',          title: 'Send message' },
+          mic:   { icon: icon('mic', 19),   label: 'Voice message', title: 'Voice message mode — tap to switch to video' },
+          video: { icon: icon('video', 19), label: 'Video message', title: 'Video message mode — tap to switch to voice' },
         };
       }
 
@@ -6162,7 +6647,7 @@
         btn.type = mode === 'send' ? 'submit' : 'button';
         btn.title = spec.title;
         btn.setAttribute('aria-label', spec.label);
-        btn.querySelector('.composer-icon').textContent = spec.icon;
+        btn.querySelector('.composer-icon').innerHTML = spec.icon;
 
         // Restart the pop animation on each swap (reflow forces a replay), but
         // not on the first paint — the button shouldn't twitch on page load.
@@ -6239,8 +6724,8 @@
         localStorage.setItem('skychat_media_mode', this.mediaMode);
         this.syncComposerBtn();
         this.showToast(this.mediaMode === 'video'
-          ? '&#x1F4F9; Video message mode'
-          : '&#x1F3A4; Voice message mode');
+          ? 'Video message mode'
+          : 'Voice message mode');
       }
 
       // ---------------------------------------------------------------------
@@ -6808,7 +7293,7 @@
         const cancel = document.getElementById('recCancel');
         const btn = document.getElementById('composerBtn');
         if (bar) bar.classList.remove('near-cancel');
-        if (hint) hint.textContent = 'tap ➤ to send';
+        if (hint) hint.textContent = 'tap send';
         if (pill) pill.classList.add('hidden');
         if (cancel) cancel.classList.remove('hidden');
         if (btn) {
@@ -6820,7 +7305,7 @@
           btn.type = 'button';
           btn.title = label;
           btn.setAttribute('aria-label', label);
-          btn.querySelector('.composer-icon').textContent = '➤';
+          btn.querySelector('.composer-icon').innerHTML = icon('send', 19);
         }
       }
 
@@ -6955,7 +7440,7 @@
         }
         if (hint) {
           hint.style.transform = '';
-          hint.innerHTML = '&#x25C0; slide to cancel';
+          hint.innerHTML = icon('left', 13) + ' slide to cancel';
         }
         if (!on) {
           this.syncComposerBtn(); // restore the mic icon after a locked take
@@ -7034,7 +7519,7 @@
         const message = {
           ts: new Date(),
           from: 'me',
-          text: opts.text || ('📎 ' + file.name),
+          text: opts.text || file.name,
           file: { name: file.name, size: file.size, status: 'sending', url: localUrl, local: true },
           _file: file, // retained in-session so a failed transfer can be retried (see resendFile); stripped on save
           group: isGroup || undefined,
@@ -7617,7 +8102,7 @@
 
           if (!published) {
             box.className = 'addr-result';
-            box.innerHTML = `<div class="ar-avatar">&#x1F464;</div><div class="ar-body">
+            box.innerHTML = `<div class="ar-avatar">${icon('user', 20)}</div><div class="ar-body">
               <div class="ar-title">${this.escapeHtml(this.abbrevPk(pk))}</div>
               <div class="ar-sub">They publish no name — give them one below.</div></div>`;
             setTimeout(() => nameField.focus(), 0);
@@ -7633,7 +8118,7 @@
           }
           box.className = 'addr-result';
           box.innerHTML = `<div class="ar-avatar">${published.avatar
-            ? `<img src="${this.escapeAttr(published.avatar)}" alt="" />` : '&#x1F464;'}</div>
+            ? `<img src="${this.escapeAttr(published.avatar)}" alt="" />` : icon('user', 20)}</div>
             <div class="ar-body">
               <div class="ar-title">${this.escapeHtml(published.name || this.abbrevPk(pk))}</div>
               <div class="ar-sub">${published.name ? 'Name published by them — edit it if you like.' : 'They publish a picture but no name.'}</div>
@@ -7723,7 +8208,7 @@
                 <div class="recipient-preview">${this.escapeHtml(this.abbrevPk(pk))}</div>
               </div>
               ${picking ? '' : `<div class="contact-actions">
-                <button class="icon-btn" onclick="app.editContact('${this.escapeAttr(pk)}', event)" title="Edit contact" aria-label="Edit contact">&#x270E;</button>
+                <button class="icon-btn" onclick="app.editContact('${this.escapeAttr(pk)}', event)" title="Edit contact" aria-label="Edit contact">${icon('edit', 15)}</button>
                 <button class="icon-btn danger" onclick="app.removeContact('${this.escapeAttr(pk)}', event)" title="Remove contact" aria-label="Remove contact">&times;</button>
               </div>`}
             </div>`;
@@ -8247,7 +8732,7 @@
         const msg = (this.messages[key] || []).find(m => m && !m.date && String(m.mid) === String(mid));
         if (!msg) { this.showToast('Could not find that message.', 'error'); return; }
         const who = msg.from === 'me' ? 'You' : this.shortPk(msg.sender || msg.from);
-        const text = msg.text || (msg.file ? `📎 ${msg.file.name || 'attachment'}` : '');
+        const text = msg.text || (msg.file ? (msg.file.name || 'Attachment') : '');
         if (!text) { this.showToast('Nothing to save from that message.', 'error'); return; }
         this.saveNote(`${who}: ${text}`);
         this.showToast('Saved to Saved Messages.');
@@ -8258,7 +8743,7 @@
         if (!el) return;
         const list = (this.messages[this.savedKey()] || []).filter(m => m && !m.date);
         const last = list[list.length - 1];
-        el.textContent = last ? (last.text || '📎 attachment') : 'Notes kept on this device';
+        el.textContent = last ? (last.text || 'Attachment') : 'Notes kept on this device';
       }
 
       // ---- Touch message actions ---------------------------------------
@@ -8316,16 +8801,16 @@
         }
 
         document.getElementById('msgSheetPreview').textContent =
-          msg.text || (msg.file ? `📎 ${msg.file.name || 'attachment'}` : 'Message');
+          msg.text || (msg.file ? (msg.file.name || 'Attachment') : 'Message');
 
-        let html = `<button onclick="app.sheetAction('reply')"><span class="ms-icon">&#x21A9;</span>Reply</button>`;
-        html += `<button onclick="app.sheetAction('forward')"><span class="ms-icon">&#x21AA;</span>Forward</button>`;
+        let html = `<button onclick="app.sheetAction('reply')"><span class="ms-icon">${icon('reply', 19)}</span>Reply</button>`;
+        html += `<button onclick="app.sheetAction('forward')"><span class="ms-icon">${icon('forward', 19)}</span>Forward</button>`;
         if (!this.isSaved()) {
-          html += `<button onclick="app.sheetAction('save')"><span class="ms-icon">&#x1F516;</span>Save to Saved Messages</button>`;
+          html += `<button onclick="app.sheetAction('save')"><span class="ms-icon">${icon('bookmark', 19)}</span>Save to Saved Messages</button>`;
         }
-        html += `<button class="danger" onclick="app.sheetAction('delete')"><span class="ms-icon">&#x1F5D1;</span>Delete for me</button>`;
+        html += `<button class="danger" onclick="app.sheetAction('delete')"><span class="ms-icon">${icon('trash', 19)}</span>Delete for me</button>`;
         if (canDeleteAll) {
-          html += `<button class="danger" onclick="app.sheetAction('deleteAll')"><span class="ms-icon">&#x1F5D1;</span>Delete for everyone</button>`;
+          html += `<button class="danger" onclick="app.sheetAction('deleteAll')"><span class="ms-icon">${icon('trash', 19)}</span>Delete for everyone</button>`;
         }
         document.getElementById('msgSheetItems').innerHTML = html;
         document.getElementById('msgSheetBackdrop').classList.add('visible');
@@ -8413,7 +8898,7 @@
         // carries them: forwarding a reference would give the recipient a
         // card they cannot open, and re-uploading the bytes on the user's
         // behalf is a bigger promise than "forward" makes.
-        const text = msg.text || (msg.file ? `📎 ${msg.file.name || 'attachment'}` : '');
+        const text = msg.text || (msg.file ? (msg.file.name || 'Attachment') : '');
         if (!text) { this.showToast('There is nothing to forward in that message.', 'error'); return; }
         this.openForward(text, this._forwardOrigin());
       }
@@ -8590,8 +9075,8 @@
       _renderForwardChip(fwd) {
         if (!fwd) return '';
         const label = fwd.from
-          ? `↪ Forwarded from ${this.escapeHtml(fwd.from)}`
-          : '↪ Forwarded';
+          ? `${icon('forward', 12)} Forwarded from ${this.escapeHtml(fwd.from)}`
+          : `${icon('forward', 12)} Forwarded`;
         return `<div class="fwd-chip">${label}</div>`;
       }
 
@@ -8773,7 +9258,7 @@
           const badge = pending > 0 ? `<span class="ga-badge">${pending}</span>` : '';
           li.innerHTML = `
             <div class="group-item ${g.id === this.group ? 'active' : ''}" data-gid="${g.id}" onclick="app.selectGroup('${g.id}')">
-              <div class="group-avatar-sm">${g.kind === 'channel' ? '&#x1F4E3;' : '#'}</div>
+              <div class="group-avatar-sm">${g.kind === 'channel' ? icon('megaphone', 20) : icon('hash', 20)}</div>
               <div class="recipient-info">
                 <div class="recipient-pk">${this.escapeHtml(g.name || g.id)} ${badge}</div>
                 <div class="recipient-preview">${this.escapeHtml(this._groupSubtitle(g))}</div>
@@ -8839,7 +9324,7 @@
             const li = document.createElement('li');
             li.innerHTML = `
               <div class="group-item ${id === this.group ? 'active' : ''}" data-gid="${id}" onclick="app.selectGroup('${id}')">
-                <div class="group-avatar-sm">📌</div>
+                <div class="group-avatar-sm">${icon('pin', 20)}</div>
                 <div class="recipient-info">
                   <div class="recipient-pk">${this.escapeHtml(g.name || g.id)}</div>
                   <div class="recipient-preview">${this.escapeHtml(g.role || 'member')} · ${(g.members || []).length} members</div>
@@ -8859,7 +9344,7 @@
                 <span class="presence-dot" data-presence="${this.escapeAttr(r)}"></span>
               </div>
               <div class="recipient-info">
-                <div class="recipient-pk" title="${this.escapeAttr(r)}">📌 <span class="peer-label">${this.escapeHtml(this.shortPk(r))}</span></div>
+                <div class="recipient-pk" title="${this.escapeAttr(r)}">${icon('pin', 13)} <span class="peer-label">${this.escapeHtml(this.shortPk(r))}</span></div>
                 <div class="recipient-preview">Pinned</div>
               </div>
             </div>`;
@@ -8928,7 +9413,7 @@
 
         const info = this.groups.find(g => g.id === id);
         const avatar = document.getElementById('groupHeaderAvatar');
-        if (avatar) avatar.textContent = (info && info.kind === 'channel') ? '📣' : '#';
+        if (avatar) avatar.innerHTML = icon((info && info.kind === 'channel') ? 'megaphone' : 'hash', 19);
         document.getElementById('groupHeaderName').textContent = info ? info.name : id;
         document.getElementById('groupHeaderSub').textContent = info
           ? this._groupSubtitle(info) : '';
@@ -9493,20 +9978,20 @@
         const items = [];
 
         if (this.voice && this.voice.available) {
-          items.push({ icon: '&#x1F4DE;', label: 'Call', act: 'placeCall' });
+          items.push({ icon: icon('phone', 16), label: 'Call', act: 'placeCall' });
         }
         items.push({
-          icon: '&#x1F4CC;', label: pinned ? 'Unpin' : 'Pin',
+          icon: icon('pin', 16), label: pinned ? 'Unpin' : 'Pin',
           act: 'togglePin', on: pinned,
         });
         items.push({
-          icon: muted ? '&#x1F515;' : '&#x1F514;', label: muted ? 'Unmute' : 'Mute',
+          icon: icon(muted ? 'bellOff' : 'bell', 16), label: muted ? 'Unmute' : 'Mute',
           act: 'toggleMute', warn: muted,
         });
         if (this.pairAvailable) {
           const isPaired = !!(this.recipient && this.pairedSet && this.pairedSet.has(this.recipient));
           items.push({
-            icon: isPaired ? '&#x2716;' : '&#x29B5;', label: isPaired ? 'Unpair' : 'Pair',
+            icon: icon(isPaired ? 'unlink' : 'link', 16), label: isPaired ? 'Unpair' : 'Pair',
             act: 'togglePair', on: isPaired,
           });
         }
@@ -9514,7 +9999,7 @@
         // selectable text with a copy button beside it, and two ways to put
         // one string on the clipboard is one too many.
         items.push({ icon: this._qrIcon(), label: 'QR code', act: 'showQr' });
-        items.push({ icon: '&#x2699;', label: 'Settings', act: 'openSettings' });
+        items.push({ icon: icon('gear', 16), label: 'Settings', act: 'openSettings' });
         items.push({ sep: true });
         items.push({
           icon: this._trashIcon(), label: 'Delete chat',
@@ -9533,16 +10018,16 @@
         const pending = (info && info.pending_joins) || 0;
 
         return [
-          { icon: '&#x1F4CC;', label: pinned ? 'Unpin' : 'Pin', act: 'togglePin', on: pinned },
+          { icon: icon('pin', 16), label: pinned ? 'Unpin' : 'Pin', act: 'togglePin', on: pinned },
           {
-            icon: muted ? '&#x1F515;' : '&#x1F514;', label: muted ? 'Unmute' : 'Mute',
+            icon: icon(muted ? 'bellOff' : 'bell', 16), label: muted ? 'Unmute' : 'Mute',
             act: 'toggleMute', warn: muted,
           },
-          { icon: '&#x1F465;', label: 'Members', act: 'openGroupAdmin', count: pending },
-          { icon: '&#x1F517;', label: 'Invite link', act: 'showGroupInvite' },
+          { icon: icon('users', 16), label: 'Members', act: 'openGroupAdmin', count: pending },
+          { icon: icon('link', 16), label: 'Invite link', act: 'showGroupInvite' },
           { icon: this._qrIcon(), label: 'QR code', act: 'showQr' },
           { sep: true },
-          { icon: '&#x21AA;', label: `Leave ${noun}`, act: 'leaveGroup' },
+          { icon: icon('leave', 16), label: `Leave ${noun}`, act: 'leaveGroup' },
           { icon: this._trashIcon(), label: `Delete ${noun}`, act: 'deleteGroup', danger: true },
         ];
       }
@@ -9550,19 +10035,9 @@
       // The two icons that are drawings rather than characters. Kept as
       // markup so a menu row reads the same as the header button it
       // replaced.
-      _qrIcon() {
-        return '<svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" aria-hidden="true">' +
-          '<path d="M3 3h7v7H3V3zm2 2v3h3V5H5zM14 3h7v7h-7V3zm2 2v3h3V5h-3zM3 14h7v7H3v-7zm2 2v3h3v-3H5zM14 14h2v2h-2v-2zm3 0h2v2h-2v-2zm2 2h2v2h-2v-2zm-2 2h2v2h-2v-2zm-3 0h2v3h-2v-3zm4 3h4v-2h-2v-1h-2v3z"/></svg>';
-      }
+      _qrIcon() { return icon('qr', 16); }
 
-      _trashIcon() {
-        return '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-          'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-          '<polyline points="3 6 5 6 21 6"></polyline>' +
-          '<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>' +
-          '<line x1="10" y1="11" x2="10" y2="17"></line>' +
-          '<line x1="14" y1="11" x2="14" y2="17"></line></svg>';
-      }
+      _trashIcon() { return icon('trash', 16); }
 
       // _renderHeaderMenu draws the rows. Returns the signature it drew so
       // _refreshHeaderMenu can tell a real change from a poll that found
@@ -9753,7 +10228,7 @@
         }
 
         if (res.target === 'dm') {
-          box.innerHTML = `<div class="ar-avatar" id="arAvatar">&#x1F464;</div><div class="ar-body">
+          box.innerHTML = `<div class="ar-avatar" id="arAvatar">${icon('user', 20)}</div><div class="ar-body">
             <div class="ar-title" id="arTitle">${this.escapeHtml(this.shortPk(res.pk))}</div>
             <div class="ar-sub" id="arSub">Person · direct message</div></div>`;
           hint.textContent = 'Messages to a person are encrypted end to end.';
@@ -9798,7 +10273,7 @@
           sub = `${noun} · a previous request was declined`;
         }
 
-        box.innerHTML = `<div class="ar-avatar">${isChannel ? '&#x1F4E3;' : '&#x1F465;'}</div>
+        box.innerHTML = `<div class="ar-avatar">${icon(isChannel ? 'megaphone' : 'users', 20)}</div>
           <div class="ar-body">
             <div class="ar-title">${this.escapeHtml(g.name || g.id || 'Unnamed')}</div>
             <div class="ar-sub ${subClass}">${this.escapeHtml(sub)}</div>
@@ -9891,7 +10366,7 @@
           if (e.price_hint) bits.push(`${e.price_hint} (claimed)`);
           const already = this.groups.some(g => g.id === e.id);
           return `<button class="ac-item" onclick="app.openCatalogEntry('${this.escapeAttr(e.address)}')">
-              <span class="ac-icon">${isChannel ? '&#x1F4E3;' : '&#x1F465;'}</span>
+              <span class="ac-icon">${icon(isChannel ? 'megaphone' : 'users', 16)}</span>
               <span class="ac-body">
                 <span class="ac-name">${this.escapeHtml(e.name || e.id)}</span>
                 <span class="ac-meta">${this.escapeHtml(bits.join(' · '))}</span>
@@ -10924,7 +11399,7 @@
       // body: a file shows its name; text is collapsed + trimmed to
       // notifPreviewLen chars. Returns '' for an empty/whitespace text.
       _previewText(text, file) {
-        if (file) return '📎 ' + (file.name || 'file');
+        if (file) return file.name || 'Attachment';
         const t = String(text || '').replace(/\s+/g, ' ').trim();
         if (!t) return '';
         return t.length > this.notifPreviewLen ? t.slice(0, this.notifPreviewLen) + '…' : t;
@@ -11012,7 +11487,7 @@
           const p = Notification.permission;
           if (p === 'granted') {
             perm.className = 'notif-perm granted';
-            perm.textContent = '✓ Browser notifications are allowed.';
+            perm.textContent = 'Browser notifications are allowed.';
           } else if (p === 'denied') {
             perm.className = 'notif-perm denied';
             perm.textContent = 'Blocked by the browser. Allow notifications for this site in your browser settings to receive alerts.';
@@ -11289,7 +11764,7 @@
 
       _callRow(rec) {
         const missed = rec.outcome === 'Missed call';
-        const arrow = rec.direction === 'out' ? '↗' : '↙';
+        const arrow = icon(rec.direction === 'out' ? 'callOut' : 'callIn', 20);
         // shortPk already resolves a saved contact name, falling back to the key.
         const name = this.shortPk(rec.peer);
         const meta = [this._callWhen(rec.at), this._callLength(rec.seconds)]
@@ -11304,7 +11779,7 @@
                 <div class="recipient-pk">${this.escapeHtml(name)}</div>
                 <div class="recipient-preview">${this.escapeHtml(rec.outcome)}${meta ? ' · ' + this.escapeHtml(meta) : ''}</div>
               </div>
-              <div class="call-dial">&#x1F4DE;</div>
+              <div class="call-dial">${icon('phone', 18)}</div>
             </div>
           </li>`;
       }
@@ -11403,8 +11878,8 @@
 
       _syncCallCtls() {
         const mic = document.getElementById('cpMicBtn'); const spk = document.getElementById('cpSpkBtn');
-        if (mic) { mic.classList.toggle('muted', this.voice.micMuted); mic.innerHTML = this.voice.micMuted ? '&#x1F507;' : '&#x1F3A4;'; mic.title = this.voice.micMuted ? 'Unmute microphone' : 'Mute microphone'; }
-        if (spk) { spk.classList.toggle('muted', this.voice.spkMuted); spk.innerHTML = this.voice.spkMuted ? '&#x1F515;' : '&#x1F50A;'; spk.title = this.voice.spkMuted ? 'Unmute speaker' : 'Mute speaker'; }
+        if (mic) { mic.classList.toggle('muted', this.voice.micMuted); mic.innerHTML = icon(this.voice.micMuted ? 'micOff' : 'mic', 19); mic.title = this.voice.micMuted ? 'Unmute microphone' : 'Mute microphone'; }
+        if (spk) { spk.classList.toggle('muted', this.voice.spkMuted); spk.innerHTML = icon(this.voice.spkMuted ? 'volumeOff' : 'volume', 19); spk.title = this.voice.spkMuted ? 'Unmute speaker' : 'Mute speaker'; }
       }
 
       // ---- In-call spectrogram ----

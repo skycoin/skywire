@@ -56,6 +56,7 @@ import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.ui.components.Biometrics
 import com.skycoin.skywire.ui.components.InfoRow
 import com.skycoin.skywire.ui.components.SectionCard
+import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.findFragmentActivity
 import com.skycoin.skywire.ui.components.shortPk
@@ -74,6 +75,7 @@ import kotlinx.coroutines.launch
  */
 @Composable
 fun SettingsScreen(
+    onBack: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     viewModel: SettingsViewModel = viewModel(),
 ) {
@@ -122,7 +124,13 @@ fun SettingsScreen(
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbar) },
-        topBar = { SkyTopBar(title = stringResource(R.string.tab_settings)) },
+        topBar = {
+            SkyTopBar(
+                title = stringResource(R.string.tab_settings),
+                onBack = onBack,
+                help = HelpTopic(R.string.help_settings_title, R.string.help_settings_body),
+            )
+        },
     ) { padding ->
         LazyColumn(
             modifier = Modifier.padding(padding),
