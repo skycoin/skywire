@@ -53,6 +53,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall/js"
 	"time"
@@ -1237,6 +1238,101 @@ func (visorSelf) SelfNetworkView() []byte {
 		return body, nil
 	}
 	b, err := json.Marshal(netview.Compute(fetch))
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// serviceHealthEntry mirrors pkg/visor.ServiceHealthEntry's JSON shape (the
+// /api/service-health element) so the HV-UI Services-Health tab parses a browser
+// edge's probe results exactly like a native visor's.
+type serviceHealthEntry struct {
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Status    string `json:"status"`
+	Version   string `json:"version,omitempty"`
+	Error     string `json:"error,omitempty"`
+	LatencyMs int64  `json:"latency_ms"`
+	Transport string `json:"transport,omitempty"`
+	IP        string `json:"ip,omitempty"`
+}
+
+// probeServiceHealth GETs <service>/health over dmsg (net/http-free) and fills a
+// serviceHealthEntry, mirroring the native visor's doHealthProbe: measure
+// latency, read build_info.version (or top-level version). Unconfigured → N/A.
+func probeServiceHealth(name, dmsgURL string) serviceHealthEntry {
+	e := serviceHealthEntry{Name: name, URL: dmsgURL, Transport: "dmsg"}
+	pk, err := dmsgURLPK(dmsgURL)
+	if dmsgURL == "" || err != nil {
+		e.Status = "N/A"
+		return e
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	start := time.Now()
+	status, _, body, ferr := dmsgclient.FetchOverDmsg(ctx, dmsgC, "GET", pk.Hex(), "/health", nil, nil)
+	e.LatencyMs = time.Since(start).Milliseconds()
+	if ferr != nil {
+		e.Status = "DOWN"
+		e.Error = ferr.Error()
+		return e
+	}
+	if status != 200 {
+		e.Status = fmt.Sprintf("ERROR(%d)", status)
+		return e
+	}
+	var health map[string]interface{}
+	if json.Unmarshal(body, &health) == nil {
+		if bi, ok := health["build_info"].(map[string]interface{}); ok {
+			if ver, ok := bi["version"].(string); ok {
+				e.Version = ver
+			}
+		}
+		if e.Version == "" {
+			if ver, ok := health["version"].(string); ok {
+				e.Version = ver
+			}
+		}
+	}
+	e.Status = "OK"
+	return e
+}
+
+// SelfServiceHealth probes each deployment service's /health over the tab's dmsg
+// client and returns the native /api/service-health shape ([]ServiceHealthEntry)
+// pre-marshaled — so the HV-UI Services-Health tab populates on a browser edge
+// instead of degrading to "not available on a browser visor". Same service set
+// the native visor's ServiceHealth reports (Config, Transport Discovery, DMSG
+// Discovery, Address Resolver, Route Finder, Service Discovery, Uptime Tracker),
+// probed concurrently; each is a dmsg round-trip. (The dmsg-SERVER rows the
+// native visor also reports are a follow-up — they need the transit-client
+// loopback fix deployed across the fleet to be reachable.)
+func (visorSelf) SelfServiceHealth() []byte {
+	if dmsgC == nil {
+		return nil
+	}
+	svc := visorcore.ResolveServices(nil)
+	probes := []struct{ name, dmsgURL string }{
+		{"Config Service", svc.ConfDmsg},
+		{"Transport Discovery", svc.TransportDiscoveryDmsg},
+		{"DMSG Discovery", svc.DmsgDiscoveryDmsg},
+		{"Address Resolver", svc.AddressResolverDmsg},
+		{"Route Finder", svc.RouteFinderDmsg},
+		{"Service Discovery", svc.ServiceDiscoveryDmsg},
+		{"Uptime Tracker", svc.UptimeTrackerDmsg},
+	}
+	entries := make([]serviceHealthEntry, len(probes))
+	var wg sync.WaitGroup
+	for i, p := range probes {
+		wg.Add(1)
+		go func(i int, name, url string) {
+			defer wg.Done()
+			entries[i] = probeServiceHealth(name, url)
+		}(i, p.name, p.dmsgURL)
+	}
+	wg.Wait()
+	b, err := json.Marshal(entries)
 	if err != nil {
 		return nil
 	}
