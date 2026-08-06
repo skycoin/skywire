@@ -313,7 +313,7 @@ var listCmd = &cobra.Command{
 
 		// Build full URLs
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
-		utFullURL := clirpc.IntegratedUptimeURL(utURL)
+		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, 1)
 
 		// --- Fetch SD ---
 		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
