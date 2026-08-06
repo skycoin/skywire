@@ -168,7 +168,9 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 		// TPD-integrated (CXO-backed v3), so there is no separate uptime
 		// endpoint or cache — never the deprecated standalone tracker.
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
-		utFullURL := clirpc.IntegratedUptimeURL(tpdURL)
+		// pv only filters by the online flag, so request the 1-day uptime
+		// window (still carries .on) instead of the 30-day daily bitmap.
+		utFullURL := clirpc.IntegratedUptimeURLDays(tpdURL, 1)
 		tpdFullURL := tpdURL + "/all-transports"
 
 		// Fetch SD
