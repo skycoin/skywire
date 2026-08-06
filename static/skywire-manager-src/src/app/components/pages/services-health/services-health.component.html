@@ -9,6 +9,14 @@
   </div>
 
   <div class="content col-12 mt-4.5">
+    @if (notAvailable) {
+      <div class="info-row">
+        <mat-icon>info_outline</mat-icon>
+        <span class="ml-2">{{ 'services-health.not-available-wasm' | translate }}</span>
+      </div>
+    }
+
+    @if (!notAvailable) {
     @if (loading && entries.length === 0) {
       <div class="loading-row">
         <mat-spinner [diameter]="16"></mat-spinner>
@@ -225,5 +233,6 @@
         </div>
       }
     </div>
+    }
   </div>
 </div>

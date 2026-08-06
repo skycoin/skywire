@@ -60,6 +60,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   // filterer/sorter pipeline.
   ipLocationSortData = new SortingColumn(['countryCode'], 'nodes.ip-location', SortingModes.Text);
   transportsCountSortData = new SortingColumn(['transportsCount'], 'nodes.transports', SortingModes.Number);
+  dmsgServerCountSortData = new SortingColumn(['dmsgServerCount'], 'nodes.dmsg-servers', SortingModes.Number);
   servicesCountSortData = new SortingColumn(['servicesCount'], 'nodes.services', SortingModes.Number);
   rewardAddressSortData = new SortingColumn(['rewardsAddress'], 'nodes.reward', SortingModes.Text);
 
@@ -233,6 +234,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.labelSortData,
       this.ipLocationSortData,
       this.transportsCountSortData,
+      this.dmsgServerCountSortData,
       this.keySortData,
       this.versionSortData,
       this.configVersionSortData,
@@ -648,6 +650,62 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   private annotateForSort(node: Node): void {
     node.transportsCount = node.transports ? node.transports.length : 0;
     node.servicesCount = this.getNodeServices(node).length;
+    node.dmsgServerCount = this.getDmsgServerCount(node);
+  }
+
+  /**
+   * Total count of dmsg servers this visor is connected to. Prefers the
+   * rich dmsgServers list (per-server pk + carrier), falls back to the
+   * legacy connectedDmsgServers array, then to a single server if only a
+   * primary dmsgServerPk is known. Used both by the sort column and as
+   * the "Total" line in the DMSG cell.
+   */
+  getDmsgServerCount(node: Node): number {
+    if (node.dmsgServers && node.dmsgServers.length > 0) {
+      return node.dmsgServers.length;
+    }
+    if (node.connectedDmsgServers && node.connectedDmsgServers.length > 0) {
+      return node.connectedDmsgServers.length;
+    }
+
+    return node.dmsgServerPk ? 1 : 0;
+  }
+
+  /**
+   * Maps a dmsg server's transport protocol (as reported by the visor:
+   * tcp | ws | wss | webtransport | quic) to the short carrier label
+   * shown in the DMSG cell, mirroring how the Transports cell shows a
+   * short uppercase type. Unknown/blank protocols fall back to "?".
+   */
+  private dmsgCarrierLabel(protocol: string): string {
+    switch ((protocol || '').toLowerCase()) {
+      case 'wss': return 'WSS';
+      case 'ws': return 'WS';
+      case 'webtransport': return 'WT';
+      case 'tcp': return 'TCP';
+      case 'quic': return 'QUIC';
+      default: return '?';
+    }
+  }
+
+  /**
+   * Returns per-carrier counts of the dmsg servers a node is connected to
+   * ({type, count}), so the DMSG cell breaks its total down by carrier the
+   * same way the Transports cell breaks its total down by transport type.
+   * Only available when the rich dmsgServers list carries per-server
+   * protocols; empty otherwise (the cell then shows just the total).
+   */
+  getDmsgCounts(node: Node): {type: string, count: number}[] {
+    if (!node.dmsgServers || node.dmsgServers.length === 0) {
+      return [];
+    }
+    const counts: {[key: string]: number} = {};
+    node.dmsgServers.forEach(s => {
+      const carrier = this.dmsgCarrierLabel(s.protocol);
+      counts[carrier] = (counts[carrier] || 0) + 1;
+    });
+
+    return Object.keys(counts).sort().map(k => ({ type: k, count: counts[k] }));
   }
 
   /**
