@@ -29,6 +29,7 @@ func (f fakeSelf) SelfTransports() []*TransportSummary { return f.tps }
 func (f fakeSelf) SelfRoutes() []byte                  { return []byte("[]") }
 func (f fakeSelf) SelfNetworkView() []byte             { return nil }
 func (f fakeSelf) SelfNetworkTransports(int) []byte    { return nil }
+func (f fakeSelf) SelfServiceHealth() []byte           { return nil }
 func (f fakeSelf) SelfDmsgSessions() []byte {
 	return []byte(`{"main":{"pk":"","role":"main","count":1,"servers":[]}}`)
 }
