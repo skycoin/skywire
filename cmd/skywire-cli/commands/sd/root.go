@@ -173,7 +173,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		sdVpnURL := sdURL + "/api/services?type=" + servicedisc.ServiceTypeVPN
 		sdVisorURL := sdURL + "/api/services?type=" + servicedisc.ServiceTypeVisor
 		tpdFullURL := tpdURL + "/all-transports"
-		utFullURL := clirpc.IntegratedUptimeURL(utURL)
+		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, 1)
 
 		// Fetch service discovery data for all service types
 		proxyData := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdProxyURL), sdProxyURL, cacheFilesAge)
