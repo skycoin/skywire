@@ -705,7 +705,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       counts[carrier] = (counts[carrier] || 0) + 1;
     });
 
-    return Object.keys(counts).sort().map(k => ({ type: k, count: counts[k] }));
+    return Object.keys(counts).sort().map(k => {
+      return { type: k, count: counts[k] };
+    });
   }
 
   /**
