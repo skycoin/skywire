@@ -1409,8 +1409,8 @@
         body: "<b>Uptime</b> — how consistently each visor has stayed online over 1d / 7d / 30d, the basis for rewards." },
       { route: "#/nodes/services-health", sel: "app-services-health", title: "The mesh: services",
         body: {
-          wasm: "<b>Deployment</b> — the health of the shared services (discovery, route-finder, address resolver, dmsg servers) that keep the mesh working. This probe isn't run in a browser tab, so the panel notes it's unavailable here; a native visor fills it in live over dmsg.",
-          native: "<b>Deployment</b> — the health of the shared services (discovery, route-finder, address resolver, dmsg servers) that keep the mesh working. All of it fetched over dmsg — a visor talking directly to visors around the world." } },
+          wasm: "<b>Deployment</b> — the health of the shared services (config, discovery, route-finder, address resolver, uptime tracker) that keep the mesh working. <b>This browser tab probes each one live over dmsg</b> — status, version and latency — right here, the same reach a native visor has. Green is up; a red row is a service that didn't answer.",
+          native: "<b>Deployment</b> — the health of the shared services (config, discovery, route-finder, address resolver, uptime tracker) that keep the mesh working. All of it fetched over dmsg — a visor talking directly to visors around the world." } },
 
       { sel: "#skywire-skynet-taskbar", title: "The mesh desktop",
         body: "Tool windows float above the UI. The <b>skynet browser</b> fetches sites over dmsg — anonymous, no DNS, no certificate authorities; sites are addressed by public key (e.g. <code>&lt;pk&gt;.dmsg</code>).",
@@ -1421,7 +1421,9 @@
       // Angular tabs). Each step OPENS the app window and spotlights it; go()
       // closes it again when the tour moves to a non-app step.
       { wasmOnly: true, action: "browse", sel: "@appwin", title: "App: the mesh browser",
-        body: "The tour just opened the <b>skynet browser</b> — a window that fetches sites <b>over dmsg</b>, addressed by public key (<code>&lt;pk&gt;.dmsg</code>), with no DNS and no certificate authority. It's landed on this visor's own page, served from the tab over the mesh. Type a <code>&lt;pk&gt;.dmsg</code> address to visit any mesh site." },
+        body: "The tour just opened the <b>skynet browser</b> — a window that fetches sites <b>over dmsg</b>, addressed by public key (<code>&lt;pk&gt;.dmsg</code>), with no DNS and no certificate authority. It's landed on <b>home.dmsg</b>, a start page this visor serves from the tab — and it lists <b>named</b> mesh sites you can click: <code>skywire.dmsg</code>, <code>tpd.dmsg</code>, and more. A name like <code>skywire.dmsg</code> is just a friendly alias the resolver maps to a public key; type any <code>&lt;pk&gt;.dmsg</code> or <code>&lt;name&gt;.dmsg</code> in the bar to visit a mesh site.",
+        more: { summary: "Named .dmsg sites, no DNS",
+          panel: "There's no DNS on the mesh — a public key is the real address. But typing 66 hex characters is unfriendly, so the resolving proxy keeps a small <b>alias</b> table (<code>skywire.dmsg</code>, <code>tpd.dmsg</code>, <code>home.dmsg</code>, …) that maps a readable name to a PK, exactly like the native socks5 resolving proxy. Resolution is local to your visor's alias set, not a global namespace anyone can squat — and in this tab <code>skywire.dmsg</code> resolves to <i>this</i> visor, so the page you're seeing is served from the browser you're reading this in." } },
       { wasmOnly: true, action: "chat", sel: "@appwin", title: "App: encrypted chat",
         body: "<b>Skychat</b> — end-to-end encrypted messaging straight between visors over dmsg, with no server storing your messages. Address a peer by public key and type; delivery rides the same mesh your visor is already on." },
       { wasmOnly: true, action: "wallet", sel: "@appwin", title: "App: Skycoin wallet",
