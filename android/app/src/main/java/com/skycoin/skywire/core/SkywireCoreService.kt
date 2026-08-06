@@ -23,6 +23,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.TimeUnit
 
@@ -95,7 +98,8 @@ class SkywireCoreService : Service() {
                 val primary = TransportPreference.sanitize(
                     prefs.string(TransportPreference.PREF_KEY).first(),
                 )
-                val config = configManager.ensureConfig(primary).getOrElse { err ->
+                val fleet = prefs.boolean(Fleet.PREF_KEY, Fleet.DEFAULT).first()
+                val config = configManager.ensureConfig(primary, fleet).getOrElse { err ->
                     log.line("=== config generation failed ===")
                     log.line(err.message ?: "unknown error")
                     CoreServiceState.mutableState.value =
@@ -286,6 +290,60 @@ class SkywireCoreService : Service() {
                 Intent(context, SkywireCoreService::class.java).setAction(ACTION_STOP),
             )
         }
+
+        /**
+         * Stop the core and bring it straight back up. The visor reads its
+         * config once, while it builds its module graph, so a config change the
+         * app makes — the Fleet opt-in is one — reaches it no other way.
+         *
+         * Deliberately NOT a suspend function on the caller's scope. The
+         * screens that change the config are pushed routes, and a back press
+         * would cancel their view-model scope somewhere between the stop and
+         * the start — leaving the phone with no core at all. This runs on a
+         * process-scoped job instead, serialized so two restarts cannot
+         * interleave, and callers follow it through [CoreServiceState] like any
+         * other lifecycle change.
+         *
+         * The wait before restarting is not politeness: the child holds :8000,
+         * and a spawn that races it dies on the bind. [CoreState.Failed] is
+         * terminal and never becomes Stopped, so it ends the wait too, and the
+         * timeout covers a child that ignores SIGTERM and has to be killed.
+         * [between] runs with the core down, for callers that need to touch
+         * its files.
+         */
+        fun restart(context: Context, between: suspend () -> Unit = {}) {
+            val app = context.applicationContext
+            restarts.launch {
+                restartMutex.withLock {
+                    stop(app)
+                    withTimeoutOrNull(STOP_WAIT_MS) {
+                        CoreServiceState.state.first {
+                            it is CoreState.Stopped || it is CoreState.Failed
+                        }
+                    }
+                    between()
+                    // A beat for the stopping instance to finish stopSelf, so
+                    // the start lands on a clean service instance, not the
+                    // dying one.
+                    delay(RESTART_GRACE_MS)
+                    // Android 12+ refuses a background startForegroundService,
+                    // and stopping our own FGS is exactly what can cost us the
+                    // exemption. Say so — silently having no core is worse than
+                    // an error the user can act on with Connect.
+                    runCatching { start(app) }.onFailure { e ->
+                        CoreServiceState.mutableState.value = CoreState.Failed(
+                            app.getString(R.string.core_restart_failed, e.message.orEmpty()),
+                        )
+                    }
+                }
+            }
+        }
+
+        private val restarts = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        private val restartMutex = Mutex()
+
+        private const val STOP_WAIT_MS = 20_000L
+        private const val RESTART_GRACE_MS = 400L
     }
 }
 

@@ -16,9 +16,21 @@ object LogSources {
     // Dash, not colon: the value travels inside a navigation route path.
     const val APP_PREFIX = "app-"
 
+    /**
+     * [VISOR_PREFIX] + public key: the runtime buffer of a *remote* visor, the
+     * one Fleet reads. Same route and same shape as [CORE] — the hypervisor
+     * mux resolves the key and fetches over dmsg — so the viewer needs nothing
+     * beyond knowing whose logs to ask for.
+     */
+    const val VISOR_PREFIX = "visor-"
+
     fun app(name: String) = APP_PREFIX + name
     fun appName(source: String) = source.removePrefix(APP_PREFIX)
     fun isApp(source: String) = source.startsWith(APP_PREFIX)
+
+    fun visor(pk: String) = VISOR_PREFIX + pk
+    fun visorPk(source: String) = source.removePrefix(VISOR_PREFIX)
+    fun isVisor(source: String) = source.startsWith(VISOR_PREFIX)
 }
 
 enum class LogLevel { TRACE, DEBUG, INFO, WARN, ERROR, FATAL, UNKNOWN }

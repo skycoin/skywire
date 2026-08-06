@@ -7,6 +7,167 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-06 — Fleet: the visors you run elsewhere, seen from the phone
+
+Off by default, and that is the feature. The phone's core ships API-only — the
+visor's local HTTP API on loopback and nothing else. The config section it
+lives under is historically called `hypervisor`, but on this build it is just
+the API. **Enable Fleet** hands that hypervisor its dmsg client, which starts
+the RPC listener other visors dial in on; from then on any visor carrying this
+phone's key in its own `hypervisors` list connects and reports status here.
+
+The bool (`hypervisor.dmsg_ingest`) already existed from the lite-core work.
+What was missing was everything around it.
+
+### 1. The one piece of Go: a restart route
+
+The hypervisor mux had `POST /visors/{pk}/shutdown` and `RestartApp`, but no
+way to restart a whole visor. The visor's own `Reload` RPC is exactly that —
+close the module stack, re-read the config, run again, same process — and it
+was already in the `API` interface and the RPC client. So the route is a
+wrapper: `POST /api/visors/{pk}/restart` → `ctx.API.Reload()`.
+
+**It answers 202 without waiting, and it has to.** `Reload` cannot return: it
+tears down the RPC transport the call is riding, so the caller's outcome is an
+EOF whether the restart worked or the visor died. `cli visor reload` has always
+handled it the same way (goroutine, fixed pause, then "Visor reloaded"). The
+route reports *dispatched*, not *completed*; the real outcome is the visor
+dropping out of `/api/visors-summary` and coming back. Whether the visor was
+reachable at all is already settled before the handler runs — `visorCtx`
+answers 404/503 for a PK this hypervisor cannot reach.
+
+### 2. The toggle, and what it costs
+
+`hypervisor.dmsg_ingest` is read once, while the visor builds its module graph,
+so flipping it means restarting the core. The preference is the source of
+truth and `ConfigManager.applyPhoneProfile` writes it into the config on every
+launch — same arrangement as the transport order, for the same reason.
+
+`SkywireCoreService.restart()` is **not** a suspend function on the caller's
+scope. Fleet is a pushed route: a back press would cancel its view-model scope
+somewhere between the stop and the start and leave the phone with no core at
+all. It runs on a process-scoped job, serialized behind a mutex, and callers
+follow it through `CoreServiceState` like any other lifecycle change. The wait
+before restarting is not politeness — the child holds `:8000` and a racing
+spawn dies on the bind. `HomeViewModel`'s auth-recovery path (stop → drop
+users.db → start) now goes through the same helper via its `between` hook; its
+old inline version waited only for `Stopped`, which `Failed` never becomes.
+
+Android 12+ refuses a background `startForegroundService`, and stopping our own
+FGS is exactly what can cost us the exemption — so a failed re-start lands in
+`CoreState.Failed` with the reason, where Home shows it and Connect recovers.
+
+### 3. What a row says
+
+`/api/visors-summary` per visor: online/offline, version, uptime, **transports
+broken down by carrier type** with the total under them (a bare "24" says
+nothing; "stcpr 10 / webrtc 14" is the diagnosis on a visor that is reachable
+but unroutable), and health. The local visor is filtered out — it is not part
+of anyone's fleet and it has the whole Home tab.
+
+Actions: **Restart**, and **Logs** — `/api/visors/{pk}/runtime-logs` resolves
+remote visors through the same mux, so the existing viewer got a `visor-<pk>`
+source and nothing else changed.
+
+Three things came from using it:
+
+- **Naming.** A row that says 66 hex characters does not tell you which
+  machine it is. Names live on the phone (`core/VisorNames.kt`, one JSON map in
+  DataStore), not on the visor: Fleet is a read-only window onto those
+  machines and a label would be a strange first exception. The cost is honest
+  and stated in the dialog — names do not travel to another device.
+- **The "Add a visor" instructions are behind the app bar's `?`**, not a
+  permanent card. They are read once. The empty list points at it.
+- **A snackbar, not a card, for action outcomes.** A restart is fired from a
+  card that can be anywhere in a scrolling list and its outcome arrives seconds
+  later; the card is the wrong place to say it.
+
+### 4. The bug that mattered: a 5-second poll broke the thing it polled
+
+First cut polled `/api/visors-summary` every 5 s. Every poll makes the visor
+fire a `Summary` RPC to each remote over dmsg, and from a phone those routinely
+exceed the server's own 5-second budget for them. Polling faster than they
+complete stacks calls onto one dmsg stream until it breaks. Measured on the
+emulator: the peer cycled `summary RPC slow (>5s)` → `connection is shut down`
+→ evicted from `remoteVisors` → redialed, roughly once a minute, forever.
+
+The screen looked *fine* through all of it, because the server keeps serving an
+evicted visor from its summary cache for three minutes and renders it
+`online: true` — deliberately, so slow peers don't flicker. But `visorCtx`
+resolves actions against `remoteVisors`, which no longer had it. So every row
+said **Connected** and every Restart answered **503 "currently disconnected
+(last seen 1m45s ago) — retrying"**. Two green screens, one broken button.
+
+Three changes, in order of how much they fix:
+
+- **Poll every 15 s.** Nothing here is second-by-second data. This alone ends
+  the eviction cycle.
+- **Retry a 503 restart** three times at 3 s. The server's message says
+  "retrying" and its code comments expect the UI to; a hypervisor client's RPC
+  conn idle-closes after ~2 minutes and redials within seconds, so a tap can
+  legitimately land in that gap.
+- **Say how old the numbers are.** `last_seen_at` is now rendered whenever the
+  snapshot is over 45 s old — including under a green dot. An uptime can be
+  minutes stale while the row reads Connected, and that is exactly the window
+  where actions fail.
+
+### 5. Two things fixed on the way
+
+- **The straight apostrophe is broken in the Skycoin typeface** — huge
+  sidebearings render "this phone's key" as `phone ' s`. All of `strings.xml`
+  now uses U+2019, which the family has and kerns correctly. Verified by
+  screenshot at 2× crop.
+- **The log viewer claimed "No log entries yet." while it was still
+  fetching.** Harmless for local sources, wrong for a remote visor whose first
+  page travels the whole ring buffer over dmsg — measured 8.1 s, then 3.8 s.
+  It has a loading state now. The remote feed is also titled with the visor's
+  name when it has one, read from the same store.
+
+`AppRouteScaffold` is deleted — Fleet was its last user, every hub route now
+has a real screen. `InfoRow` and `formatUptime` were duplicated in HomeScreen
+only because the shared `InfoRow` lacked a `valueColor`; it has one now.
+
+### Verified
+
+Emulator `skywire` (1080×2400) + a desktop visor on the Mac
+(`02acc53c3d…48c56fd6`), phone `03202fd6a2…f4528ada`, added with **the exact
+one-liner the app shows**: `skywire cli config update hv --add-pks <phone-pk>`.
+
+- **Fleet off = no ingest.** Config carries `"dmsg_ingest": false`; the process
+  log has `Hypervisor enabled` and `Hypervisor HTTP serving on 127.0.0.1:8000`
+  but **zero** `Serving hypervisor RPC over DMSG`. The desktop visor dialed the
+  phone **21 times** and failed every one (`dmsg error 202 - cannot connect to
+  delegated server`, `i/o deadline reached` on `…:46`).
+- **Toggle on.** Confirm dialog → core restarts → config rewritten to
+  `"dmsg_ingest": true` → `Serving hypervisor RPC over DMSG addr="03202f…:46"`.
+  The desktop visor's `Serving RPC client...` landed **8 s later**, and the row
+  appeared: Connected, `darwin_arm64`, uptime, stcpr/webrtc counts, healthy.
+- **Restart.** `POST …/restart → 202` (20-byte body). The desktop log unwound
+  all 37 modules — `Shutdown complete. Goodbye!` — and re-entered
+  `main module set to hypervisor` 0.05 s later; ~6 s end to end. Uptime in the
+  app went **2h 29m 42s → 2m 31s**. Snackbar: "Restart sent to test."
+- **Offline.** `kill -9` on the desktop visor at 09:07:54; the row read
+  **Offline** (grey dot, health `—`, uptime frozen at its last snapshot,
+  "Last answered 6m 45s ago — everything above is from then", Logs and Restart
+  both disabled) when checked at 09:13:10. The flip is not immediate by
+  design: the server holds an evicted visor as online for its three-minute
+  cache-freshness window first.
+- **The 503 path**, before the poll fix: four attempts logged 3 s apart, and
+  the failure reached the user in the server's own words rather than a code.
+- **Logs.** A remote visor's own lines render (stcpr re-registration, address
+  resolver binding the Mac's IPs, self-probe) under the visor's name.
+- **Rename** persists across an app reinstall (DataStore).
+- **Toggling back off** is symmetric: config returns to `"dmsg_ingest": false`,
+  the core restarts, `Hypervisor HTTP serving` appears and
+  `Serving hypervisor RPC over DMSG` does not. The screen returns to the
+  explainer and the list is dropped.
+
+**Not covered:** a second remote visor (list ordering with more than one row),
+and offline behaviour on a real phone — the emulator's dmsg is slow enough that
+its timings are a worst case, not a typical one.
+
+---
+
 ## 2026-08-06 — SkyChat Settings, and a chat that can move to the phone
 
 The phone app embeds skychat's own page, so this is a change in

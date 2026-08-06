@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -120,9 +119,9 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
      * drop users.db, start again — the bootstrap then re-creates the account
      * with the current password. Tried once per process.
      *
-     * Launched as an independent viewModelScope job: stopping the core makes
-     * the state collector cancel [pollWhileRunning] and everything called
-     * from it, and the recovery must survive that cancellation.
+     * The restart runs on the service's own process-scoped job, so stopping
+     * the core — which cancels [pollWhileRunning] and everything called from
+     * it — cannot strand the phone between the stop and the start.
      */
     private fun launchAuthRecovery(cause: AuthFailedException) {
         if (authResetAttempted) {
@@ -131,21 +130,13 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         }
         authResetAttempted = true
         val app = getApplication<Application>()
-        viewModelScope.launch {
-            SkywireCoreService.stop(app)
-            CoreServiceState.state.first { it is CoreState.Stopped }
+        SkywireCoreService.restart(app) {
             ConfigManager(SkywirePaths(app), SecretStore(app)).deleteUsersDb()
-            // Give the stopping service instance a beat to finish stopSelf so
-            // the fresh start command lands on a clean instance.
-            delay(SERVICE_RESTART_GRACE_MS)
-            runCatching { SkywireCoreService.start(app) }
-                .onFailure { live.value = live.value.copy(error = it.message) }
         }
     }
 
     private companion object {
         const val PING_INTERVAL_MS = 700L
         const val REFRESH_INTERVAL_MS = 4_000L
-        const val SERVICE_RESTART_GRACE_MS = 400L
     }
 }

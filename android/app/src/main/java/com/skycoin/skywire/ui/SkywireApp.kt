@@ -211,7 +211,14 @@ fun SkywireApp() {
                     },
                 )
             }
-            composable(Routes.FLEET) { FleetScreen(onBack = { navController.popBackStack() }) }
+            composable(Routes.FLEET) {
+                FleetScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenLogs = { source ->
+                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
+                    },
+                )
+            }
 
             // One log viewer, reached from Home and (later) every app screen.
             composable(
