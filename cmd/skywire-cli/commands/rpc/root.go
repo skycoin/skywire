@@ -554,7 +554,16 @@ func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
 		// gain anything from CXO over the existing chain since the
 		// payload is small.
 		if v := queryParam(rawURL, "v"); v == "v3" {
-			return "tpd-uptime", "uptimes/days/30", true
+			// Honor an explicit &days=N (the publisher writes {1,7,30});
+			// default to 30 when omitted, for back-compat with the graph
+			// commands. Online-filter callers (pv/sd/proxy) pass days=1 —
+			// they read only .on, so the 30-day daily bitmap per visor is
+			// ~30x the payload they never look at.
+			days := queryParamInt(rawURL, "days", 30)
+			if days != 1 && days != 7 && days != 30 {
+				days = 30
+			}
+			return "tpd-uptime", fmt.Sprintf("uptimes/days/%d", days), true
 		}
 		return "", "", false
 	}
@@ -809,10 +818,21 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 // that only read the online flag or the daily percentages therefore
 // work against the v3 payload unchanged.
 func IntegratedUptimeURL(tpdBase string) string {
+	return IntegratedUptimeURLDays(tpdBase, 30)
+}
+
+// IntegratedUptimeURLDays is IntegratedUptimeURL with an explicit uptime
+// window: days ∈ {1,7,30}, the buckets the TPD publishes (uptimes/days/<n>).
+// Callers that only read the online flag (pv / sd / proxy filtering) pass
+// days=1 — the .on flag is present in every window, so pulling the 30-day
+// daily bitmap for every visor is pure over-fetch. Daily-percentage callers
+// (the `ut` command) pass a wider window. An unknown value falls back to 30
+// in cxoFeedForURL.
+func IntegratedUptimeURLDays(tpdBase string, days int) string {
 	if tpdBase == "" {
 		tpdBase = deployment.Prod.TransportDiscovery
 	}
-	return strings.TrimRight(tpdBase, "/") + "/uptimes?v=v3"
+	return fmt.Sprintf("%s/uptimes?v=v3&days=%d", strings.TrimRight(tpdBase, "/"), days)
 }
 
 // FetchIntegratedUptimes fetches the []VisorSummary v3 payload from the
