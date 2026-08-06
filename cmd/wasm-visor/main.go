@@ -411,11 +411,9 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	wsTable = stcp.NewTable(nil)
 	wtTable = network.NewWTTable(nil)
 	// WebRTC ICE servers: the deployment's own STUN (reused from sudph). The
-	// bare host:port entries need the stun: URL scheme the WebRTC stack expects.
-	var iceURLs []string
-	for _, s := range svc.StunServers {
-		iceURLs = append(iceURLs, "stun:"+s)
-	}
+	// shared helper adds the stun: URL scheme the WebRTC stack expects — the
+	// same one the native visor feeds its StunServers through.
+	iceURLs := visorcore.ICEURLs(svc.StunServers)
 	// Learn this tab's public IP via STUN (browser WebRTC). The dmsg LookupIP path
 	// (refreshSelfPublicIP) returns the wss reverse-proxy's address on an HTTPS
 	// page, not the browser's — STUN is the one route that works there. Reuses the
@@ -430,34 +428,37 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 		SecKey:          sk,
 		DiscoveryClient: tpd,
 		LogStore:        transport.InMemoryTransportLogStore(),
+		Version:         buildinfo.Version(),
 	}
-	tm, err := transport.NewManager(mLog.PackageLogger("tp_manager"), nil, eb, tmConf, factory)
+	// Shared construction (pkg/visor/visorcore) — the same seam the native visor
+	// uses: NewManager → InitDmsgClient → Serve → register the browser-dialable
+	// dial-only clients (WS/WT/WEBRTC). Their Start() fails closed under TinyGo
+	// (a tab can't run a WS/WT listener) — logged, non-fatal — but Dial works,
+	// so SaveTransport(WS|WT|WEBRTC) can create an outbound transport to a peer
+	// that runs the listener; WEBRTC also starts the dmsg signaling listener
+	// (port 47) so the tab can ACCEPT DataChannels, not just dial them.
+	vlog("tp_manager: building (shared visorcore.BuildTransportManager)…")
+	tm, err := visorcore.BuildTransportManager(ctx, visorcore.TransportManagerDeps{
+		Log:             mLog.PackageLogger("tp_manager"),
+		ARClient:        nil,
+		EB:              eb,
+		Config:          tmConf,
+		Factory:         factory,
+		DmsgC:           dmsgC,
+		Serve:           true,
+		DialOnlyClients: []types.Type{types.WS, types.WT, types.WEBRTC},
+	})
 	if err != nil {
 		return pk, fmt.Errorf("transport manager: %w", err)
 	}
 	tpM = tm
-	vlog("tp_manager: ok; init dmsg client…")
-	tm.InitDmsgClient(ctx, dmsgC)
-	vlog("tp_manager: dmsg client inited; serving…")
-	go tm.Serve(ctx)
+	vlog("tp_manager: serving; WS/WT/WebRTC dial clients registered")
 
 	// In-memory CXO telemetry: report this tab's transport bandwidth + latency to
 	// TPD (via its cxo-aggregator), so the browser visor's transports show up in
 	// TPD /metrics like a native visor's — see telemetry_js.go.
 	go startTelemetry(sk, tpdPK, mLog.PackageLogger("wasm-telemetry"))
 	go startGroupChat(sk, mLog.PackageLogger("wasm-group"))
-	vlog("tp_manager: serving")
-	// Register the browser-dialable direct transport clients. Their Start() fails
-	// closed under TinyGo (a tab can't run a WS/WT listener) — logged, non-fatal —
-	// but Dial works, so SaveTransport(WS|WT) can create an outbound transport to a
-	// peer that runs the listener. This makes WS/WT "known" networks for the
-	// dialTransport hook.
-	tm.InitClient(ctx, types.WS, 0)
-	tm.InitClient(ctx, types.WT, 0)
-	// WebRTC is symmetric: InitClient also starts the dmsg signaling listener
-	// (port 47), so the tab can ACCEPT WebRTC DataChannels, not just dial them.
-	tm.InitClient(ctx, types.WEBRTC, 0)
-	vlog("tp_manager: WS/WT/WebRTC dial clients registered")
 
 	// 3. edge router (receives route rules + forwards/consumes packets). nil
 	// RouteFinder/RouteGroupDialer → the route-SOURCE path is the build-tagged
