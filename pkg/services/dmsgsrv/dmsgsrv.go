@@ -86,6 +86,17 @@ type Config struct {
 	MetricsAddr string `json:"metrics_addr,omitempty"`
 }
 
+// dmsgEntryVersion returns the build version to advertise in the dmsg server's
+// discovery entry, or "" when the binary carries no meaningful version (dev
+// builds) so the entity keeps the "0.0.1" default. Uses runtime/debug build
+// info via buildinfo — the same source the /health endpoint reports.
+func dmsgEntryVersion() string {
+	if v := buildinfo.Version(); v != "" && v != "unknown" {
+		return v
+	}
+	return ""
+}
+
 // LoadFile reads a standalone dmsg-server JSON config file (the
 // existing `skywire dmsg server start /path/to/file.json` shape).
 // Returned for callers (the multi-service factory) that want to
@@ -193,8 +204,13 @@ func (s *service) Run(ctx context.Context) error {
 	}
 
 	srvConf := dmsg.ServerConfig{
-		MaxSessions:             cfg.MaxSessions,
-		UpdateInterval:          cfg.UpdateInterval,
+		MaxSessions:    cfg.MaxSessions,
+		UpdateInterval: cfg.UpdateInterval,
+		// Advertise the real build version in the server's discovery entry
+		// (disc.Entry.Version) instead of the vestigial "0.0.1" protocol
+		// constant, so `mdisc servers` / discovery consumers see it. Empty
+		// (unknown build) preserves "0.0.1".
+		Version:                 dmsgEntryVersion(),
 		AuthPassphrase:          s.cfg.AuthPassphrase,
 		Peers:                   peers,
 		AnnounceAsPeer:          cfg.AnnounceAsPeer,

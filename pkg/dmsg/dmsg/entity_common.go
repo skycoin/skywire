@@ -58,6 +58,12 @@ type EntityCommon struct {
 
 	updateInterval time.Duration // Minimum duration between discovery entry updates.
 
+	// serverVersion, when non-empty, overrides the disc.Entry.Version a dmsg
+	// SERVER advertises (default "0.0.1") with its real build version. Set once
+	// from ServerConfig.Version in NewServer; read-only afterward. Empty for
+	// clients and for servers that don't set it (keeps "0.0.1").
+	serverVersion string
+
 	// advertisedMx guards the advertised{UDP,WS,WT}Addr / advertisedWTCertHash
 	// fields below. They are written by the Serve{QUIC,WS,WebTransport}
 	// goroutines, which start after Serve's entry-update loop is already reading
@@ -522,6 +528,9 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		entry = disc.NewServerEntry(c.pk, 0, addr, availableSessions)
 		entry.Server.AddressV6 = addrV6
 		entry.Server.DHTBootstrap = c.dhtBootstrap
+		if c.serverVersion != "" {
+			entry.Version = c.serverVersion
+		}
 		if err := entry.Sign(c.sk); err != nil {
 			return err
 		}
@@ -548,9 +557,10 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		wtCertHashHex = hex.EncodeToString(advWTCertHash[:])
 	}
 	wtDelta := entry.Server.AddressWT != advWTAddr || entry.Server.CertHashWT != wtCertHashHex
+	versionDelta := c.serverVersion != "" && entry.Version != c.serverVersion
 
 	// No update needed if entry has no delta AND update is not due.
-	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !wtDelta && !due {
+	if _, due := c.updateIsDue(); !sessionsDelta && !addrDelta && !addrV6Delta && !udpDelta && !wsDelta && !wtDelta && !versionDelta && !due {
 		return nil
 	}
 
@@ -592,6 +602,10 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 		entry.Server.AddressWT = advWTAddr
 		entry.Server.CertHashWT = wtCertHashHex
 		log = log.WithField("addr_wt", entry.Server.AddressWT)
+	}
+	if versionDelta {
+		entry.Version = c.serverVersion
+		log = log.WithField("entry_version", entry.Version)
 	}
 	// Propagate DHT bootstrap status to discovery entry.
 	entry.Server.DHTBootstrap = c.dhtBootstrap
