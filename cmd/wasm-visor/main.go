@@ -451,6 +451,12 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	// TPD /metrics like a native visor's — see telemetry_js.go.
 	go startTelemetry(sk, tpdPK, mLog.PackageLogger("wasm-telemetry"))
 	go startGroupChat(sk, mLog.PackageLogger("wasm-group"))
+	// Uptime heartbeat parity with the native visor: report presence to the
+	// TPD-integrated uptime tracker (net/http-free GET /v4/update over the same
+	// authenticated tpdclient), so a long-lived tab isn't seen as offline.
+	if u, ok := tpd.(tpdclient.UptimeUpdater); ok {
+		go startUptimeHeartbeat(ctx, u, mLog.PackageLogger("wasm-uptime"))
+	}
 
 	// 3. edge router (receives route rules + forwards/consumes packets). nil
 	// RouteFinder/RouteGroupDialer → the route-SOURCE path is the build-tagged
