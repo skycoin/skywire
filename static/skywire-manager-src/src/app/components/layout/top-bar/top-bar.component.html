@@ -70,6 +70,7 @@
   @if (homeTabsData && homeTabsData.length) {
     <div class="secondary-nav-row home-nav-row d-none d-lg-flex">
       @for (t of homeTabsData; track t) {
+        @if (!t.hidden) {
         @if (t.externalUrl) {
           <a mat-button class="tab-button white-theme grey-button-background" [href]="t.externalUrl" target="_blank" rel="noreferrer nofollow noopener">
             <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
@@ -78,6 +79,7 @@
           <a mat-button class="tab-button white-theme" [routerLink]="t.linkParts" routerLinkActive="active-home-tab" [routerLinkActiveOptions]="{exact: true}" [ngClass]="{'grey-button-background': true}">
             <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
           </a>
+        }
         }
       }
     </div>
@@ -126,6 +128,7 @@
     <div class="lower-container">
       <!-- Tabs list. Only shown on large screens or if there is only one tab. -->
       @for (tabData of tabsData; track tabData; let i = $index) {
+        @if (!tabData.hidden) {
         @if (i > 0 && tabsData[i - 1].group !== tabData.group) {
           <span class="tab-group-separator d-none d-md-inline-block" aria-hidden="true"></span>
         }
@@ -158,6 +161,7 @@
             </a>
           }
         </div>
+        }
       }
       <!-- Select tab button. Only shown on small screens when there is only one tab. -->
       @if (tabsData && tabsData[selectedTabIndex]) {

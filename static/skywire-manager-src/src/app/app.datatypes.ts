@@ -69,11 +69,12 @@ export class Node {
   hostname?: string;
 
   // Pre-computed sort helpers populated by node-list's
-  // annotateForSort() so column-sort by transports/services count
-  // resolves through the standard SortingColumn property-path
+  // annotateForSort() so column-sort by transports/services/dmsg
+  // count resolves through the standard SortingColumn property-path
   // lookup. Not from the server.
   transportsCount?: number;
   servicesCount?: number;
+  dmsgServerCount?: number;
 }
 
 export interface Application {
