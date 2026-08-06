@@ -7,7 +7,161 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
-## 2026-08-06 — Settings: the identity, the file that carries it, and the lock
+## 2026-08-07 — Wallet: SKY, fiber coins and BTC, keys never leaving the phone
+
+The Wallet tab is no longer a placeholder. It is a native Compose wallet for
+three kinds of chain behind one interface: Skycoin, any fiber coin the user
+adds (same daemon, their node URL), and Bitcoin mainnet. Seed generation,
+address derivation, transaction construction and signing all happen on the
+phone; the network is asked only for balances, history and broadcast.
+
+### 1. `:wallet-core` — the crypto is a port, not a binding
+
+The decision the wallet hinged on: how to run Skycoin's crypto on Android.
+gomobile would have meant a second Go artifact next to the visor payload and a
+JNI boundary for key material. Instead the needed slice of the reference
+implementation is ported to pure Kotlin in a new `:wallet-core` JVM module —
+no Android types, so every byte of money-handling code runs under host-side
+unit tests. BouncyCastle's lightweight API supplies the secp256k1 curve math,
+RFC 6979 nonces and RIPEMD-160; the JCA "BC" provider is never registered
+(Android ships its own crippled copy under that name).
+
+Ported faithfully from the reference repo: the deterministic keypair iterator
+(`secp256k1Hash`, the sha256-until-valid step, the chained wallet seed), the
+address codec (`ripemd160(sha256(sha256(pub)))`, version byte, 4-byte
+checksum), the skyencoder transaction wire format (little-endian, u32-prefixed
+slices), inner-hash/sign-hash construction, and the whole of
+`transaction.Create`: MinimizeUxOuts spend selection with its three-phase
+ordering, `ceil(hours/burnFactor)` fee, proportional hour distribution with
+the remainder rules, the force-an-extra-input change-hours recovery, and the
+retry at full share when change hours would otherwise burn. Burn factor, max
+decimals and the size cap are read from the node's `/api/v1/health` at plan
+time, so a fiber chain with different rules is honored automatically.
+
+Signatures are the one deliberate deviation: the reference signer draws a
+random nonce; ours is RFC 6979 deterministic, then low-S normalized with the
+recovery id flipped to match — the chain verifies recovery and malleability,
+not nonce provenance, and a phone's RNG is the one component with a track
+record of losing coins.
+
+Bitcoin is the same shape: BIP 39 → BIP 32 → BIP 84 (`m/84'/0'/0'`), P2WPKH
+receive and change chains, destinations in every standard form (base58check
+P2PKH/P2SH, bech32 v0, bech32m v1+), BIP 143 sighash, DER low-S, RBF
+signaled, dust folded into the fee, and an esplora client (mempool.space by
+default) for the chain view and sat/vB presets.
+
+### 2. Tests are against the reference implementation, not against ourselves
+
+`wallet-core` carries 18 host-side tests, and the load-bearing ones compare
+against outputs of the Go implementation rather than hand-computed values:
+
+- The cipher testsuite's golden files: seed → secret/public/address chains
+  must match, and every stored signature must recover to its stored pubkey
+  through our port.
+- A Go fixture generator (run against the local reference repo) emits five
+  `transaction.Create` cases — change, multi-input, send-all, exact-amount
+  with the extra-input recovery, zero-hour mix — and the Kotlin port must
+  reproduce the chosen inputs in order, every output's coins and hours, the
+  inner hash and the **byte-for-byte serialization**.
+- The BIP 84 chain from the canonical test mnemonic, generated with the Go
+  repo's own bip32+segwit code, must match — and does, including the BIP's
+  published first address.
+- The BIP 143 native-P2WPKH example: our sighash equals the vector, and
+  because the BIP's example signature is itself RFC 6979, our DER signature
+  matches it byte for byte.
+- `LiveNodeTest` (opt-in, `SKYWIRE_NET_TESTS=1`) parses production
+  node.skycoin.com balance and 150-transaction history through the real
+  client.
+
+### 3. App side: sealed seeds, cached truth, one ViewModel
+
+Seeds are sealed with a new AndroidKeyStore AES-256-GCM key
+(`skywire_wallet_seed` — deliberately not the service-password key; coins and
+passwords must not share a blast radius). The key is not auth-bound: address
+derivation legitimately runs without a prompt, and a keystore-enforced prompt
+would silently brick the seed the day the user removes their screen lock.
+Every send and every reveal instead goes through the shared `Biometrics`
+confirm — the phone's own credential — before the seed is touched, and the
+prompt states the consequence *before* authentication, never after.
+
+Wallet metadata (addresses are public) lives in the `wallet` DataStore, so
+opening the app never decrypts anything. Each wallet's last good chain view is
+cached to disk; when the node stops answering, the screen keeps the cached
+numbers under an amber banner naming the time it was last true, and Send is
+disabled — a wallet that cannot reach a node can still be read, but not
+spent from.
+
+The whole flow shares one Activity-scoped ViewModel: the freshly generated
+phrase and the send draft live in memory only and never ride in navigation
+arguments. `FLAG_SECURE` is set per-screen (backup, restore, reveal) through a
+helper that on dispose respects the app-lock preference already holding the
+flag session-wide.
+
+Screens follow the wallet design set: coin chip → balance → per-chain
+sub-line (Coin Hours for the Skycoin family, confirmed outputs for BTC),
+Receive with QR and the same-seed address sheet, Send whose fee card is the
+only thing that changes between chains (hours burned/after vs sat/vB presets
+and slider), review sheet with exact figures, result screen with the txid,
+history with filters and day groups, transaction detail with explorer
+link-out, and the wallets manager (rename / reveal / remove, plus create and
+restore for more wallets per coin). QR scanning is zxing's embedded capture —
+the one camera dependency — and paste/scan both strip `skycoin:`/`bitcoin:`
+URI prefixes.
+
+Terminology fixed after review: Skycoin is the original chain, fiber coins
+are separate chains built from its codebase. The review sheet names the
+coin's own network ("on the Skycoin network", "on the <coin> network"), and
+only actual fiber coins carry the fiber label in the coin sheet.
+
+Cleartext policy changed from a loopback whitelist to base-allow: the shipped
+Skycoin node is plain HTTP, and user-entered fiber nodes are free-form (an
+operator's bare IP, usually without TLS) so they cannot be whitelisted by
+domain. Nothing secret rides those connections — signing is local and chain
+data is public.
+
+### 4. Verified — with real coins on the production network
+
+Unit: 18/18 `:wallet-core` tests green (`./gradlew :wallet-core:test`).
+
+Emulator (API 36 arm64, PIN set), against production infrastructure:
+
+- Create: intro → twelve-word grid (screencap returns black — `FLAG_SECURE`
+  held; content verified through the accessibility tree) → quiz rejected a
+  planted wrong word naming its position ("That is not word 6.") → activated.
+- The derived address was accepted by node.skycoin.com, and the first refresh
+  wrote the cache snapshot.
+- **2.000 SKY was received from a real wallet** (txid `86f1aa99…9f5cc5`):
+  balance 2.000 SKY / 27,243 Coin Hours, green `Received +2.000` row,
+  detail screen with Confirmed pill, the sender's fee of 6,054 hours and
+  confirmations counting.
+- **Sent the 2.000 SKY back through the app** (Max): the fee card projected a
+  2,725-hour burn — exactly `ceil(27,243/10)` — the review sheet promised
+  amount 2.000 / burn 2,725 / balance after 0.000 / hours after 0, the PIN
+  prompt gated signing, and the node accepted the broadcast:
+  txid `bc65baea…b98aedeb`, confirmed on chain with precisely the promised
+  2,725-hour fee and 24,518 hours delivered. The counterparty confirmed
+  receipt. Balance and history rows updated to the empty, two-transaction
+  state.
+- Bitcoin: created a second wallet; mempool.space answered (0.00000000 BTC,
+  "0 confirmed outputs" sub-line, Send enabled); the fee card showed live
+  Economy/Normal/Priority presets and the sat/vB slider; the fresh bc1q
+  address was accepted by mempool.space's address endpoint.
+- Fiber: added a coin through the form (name/ticker/node URL); it appears in
+  the coin sheet as "Fiber coin" and opens its own setup.
+- Addresses: generated a second receive address from the sheet; the node
+  accepted a balance query spanning both.
+- Reveal: PIN prompt with the named-wallet warning first, all twelve original
+  words back from the Keystore, 2:00 countdown, black screencap.
+- Offline: with wifi+data off, the next refresh tick raised the amber
+  "last updated at 05:29, 1 minute ago" banner, disabled Send with its
+  caption, and kept the cached history; re-enabling recovered silently.
+- Insufficient balance, wrong quiz word, damaged addresses and a wrong-chain
+  address all surface their specific errors inline.
+
+Not covered: a fiber chain with non-default verification parameters (none is
+publicly reachable to test against), a real BTC spend (needs real BTC; the
+signing path is vector-proven), and restore-scan against a wallet with deep
+address usage.
 
 The Settings tab was the last placeholder. It holds the four things that are
 about the phone rather than about an app — who this visor is, how to get its

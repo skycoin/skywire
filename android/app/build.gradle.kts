@@ -73,5 +73,12 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     // The core service runs its own supervisor scope outside any lifecycle.
     implementation(libs.kotlinx.coroutines.android)
+    // Wallet crypto + node clients. Pure JVM — the seed never crosses a JNI
+    // boundary and the same bytes run under unit tests on the host.
+    implementation(project(":wallet-core"))
+    // QR: journeyapps hosts the scan activity, zxing core renders the
+    // receive-address code into a Bitmap.
+    implementation(libs.zxing.embedded)
+    implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
 }

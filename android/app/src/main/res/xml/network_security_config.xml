@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- targetSdk ≥ 28 blocks cleartext HTTP everywhere, including loopback.
-     The visor's local API is plain HTTP on 127.0.0.1 — allow exactly that,
-     nothing else. -->
+<!-- targetSdk ≥ 28 blocks cleartext HTTP by default. The visor's local API is
+     plain HTTP on 127.0.0.1, the Skycoin node the wallet ships against is plain
+     HTTP (node.skycoin.com), and user-added fiber-coin nodes are commonly plain
+     HTTP on a bare IP — their operators rarely front them with TLS. Since fiber
+     node addresses are free-form user input, they cannot be whitelisted by
+     domain, so cleartext is permitted at the base. Nothing secret rides on
+     those connections: keys never leave the device and signing is local; an
+     eavesdropper sees balances and broadcast transactions, which are public
+     chain data anyway. -->
 <network-security-config>
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="false">127.0.0.1</domain>
-        <domain includeSubdomains="false">localhost</domain>
-    </domain-config>
+    <base-config cleartextTrafficPermitted="true" />
 </network-security-config>

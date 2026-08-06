@@ -53,9 +53,22 @@ import com.skycoin.skywire.ui.logs.LogViewerScreen
 import com.skycoin.skywire.ui.navigation.Routes
 import com.skycoin.skywire.ui.settings.DiagnosticsScreen
 import com.skycoin.skywire.ui.settings.SettingsScreen
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.ui.socks.SocksScreen
 import com.skycoin.skywire.ui.vpn.VpnScreen
+import com.skycoin.skywire.ui.wallet.WalletAddCoinScreen
+import com.skycoin.skywire.ui.wallet.WalletHistoryScreen
+import com.skycoin.skywire.ui.wallet.WalletManageScreen
+import com.skycoin.skywire.ui.wallet.WalletReceiveScreen
+import com.skycoin.skywire.ui.wallet.WalletRestoreScreen
+import com.skycoin.skywire.ui.wallet.WalletResultScreen
+import com.skycoin.skywire.ui.wallet.WalletRevealScreen
 import com.skycoin.skywire.ui.wallet.WalletScreen
+import com.skycoin.skywire.ui.wallet.WalletSeedScreen
+import com.skycoin.skywire.ui.wallet.WalletSendScreen
+import com.skycoin.skywire.ui.wallet.WalletTxScreen
+import com.skycoin.skywire.ui.wallet.WalletVerifyScreen
+import com.skycoin.skywire.ui.wallet.WalletViewModel
 
 /**
  * Main scaffold: bottom NavigationBar with 5 slots (left→right):
@@ -102,6 +115,10 @@ fun SkywireApp() {
     // call runs receive-only rather than failing, and the capture loop picks
     // the grant up whenever it lands.
     val context = LocalContext.current
+    // One ViewModel for the whole wallet flow, scoped to the Activity — the
+    // freshly generated seed and the send draft must survive route changes
+    // inside the flow without ever riding in navigation arguments.
+    val walletViewModel: WalletViewModel = viewModel()
     val inCall by VoiceCalls.state.collectAsState()
     val micPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -130,7 +147,8 @@ fun SkywireApp() {
                     NavigationBarItem(
                         selected = currentRoute == slot.route ||
                             (slot.route == Routes.HUB && currentRoute in Routes.hubPushed) ||
-                            (slot.route == Routes.SETTINGS && currentRoute in Routes.settingsPushed),
+                            (slot.route == Routes.SETTINGS && currentRoute in Routes.settingsPushed) ||
+                            (slot.route == Routes.WALLET && currentRoute in Routes.walletPushed),
                         onClick = { navController.navigateToTab(slot.route) },
                         icon = {
                             Icon(
@@ -185,7 +203,118 @@ fun SkywireApp() {
                     onOpenTab = { navController.navigateToTab(it) },
                 )
             }
-            composable(Routes.WALLET) { WalletScreen() }
+            // The wallet flow shares one ViewModel across its routes — the
+            // freshly generated seed and the send draft live in it, never in
+            // navigation arguments.
+            composable(Routes.WALLET) {
+                WalletScreen(
+                    viewModel = walletViewModel,
+                    onCreate = { navController.navigate(Routes.WALLET_CREATE) { launchSingleTop = true } },
+                    onRestore = { navController.navigate(Routes.WALLET_RESTORE) { launchSingleTop = true } },
+                    onReceive = { navController.navigate(Routes.WALLET_RECEIVE) { launchSingleTop = true } },
+                    onSend = { navController.navigate(Routes.WALLET_SEND) { launchSingleTop = true } },
+                    onHistory = { navController.navigate(Routes.WALLET_HISTORY) { launchSingleTop = true } },
+                    onTx = { txid -> navController.navigate(Routes.walletTx(txid)) { launchSingleTop = true } },
+                    onWallets = { navController.navigate(Routes.WALLET_WALLETS) { launchSingleTop = true } },
+                    onAddCoin = { navController.navigate(Routes.WALLET_ADD_COIN) { launchSingleTop = true } },
+                )
+            }
+            composable(Routes.WALLET_CREATE) {
+                WalletSeedScreen(
+                    viewModel = walletViewModel,
+                    onContinue = { navController.navigate(Routes.WALLET_VERIFY) { launchSingleTop = true } },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_VERIFY) {
+                WalletVerifyScreen(
+                    viewModel = walletViewModel,
+                    onActivated = { navController.popBackStack(Routes.WALLET, inclusive = false) },
+                    onShowSeed = { navController.popBackStack() },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_RESTORE) {
+                WalletRestoreScreen(
+                    viewModel = walletViewModel,
+                    onRestored = { navController.popBackStack(Routes.WALLET, inclusive = false) },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_RECEIVE) {
+                WalletReceiveScreen(
+                    viewModel = walletViewModel,
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_SEND) {
+                WalletSendScreen(
+                    viewModel = walletViewModel,
+                    onSent = {
+                        navController.navigate(Routes.WALLET_RESULT) {
+                            launchSingleTop = true
+                            popUpTo(Routes.WALLET) { inclusive = false }
+                        }
+                    },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_RESULT) {
+                WalletResultScreen(
+                    viewModel = walletViewModel,
+                    onDone = { navController.popBackStack(Routes.WALLET, inclusive = false) },
+                    onHistory = {
+                        navController.navigate(Routes.WALLET_HISTORY) {
+                            launchSingleTop = true
+                            popUpTo(Routes.WALLET) { inclusive = false }
+                        }
+                    },
+                )
+            }
+            composable(Routes.WALLET_HISTORY) {
+                WalletHistoryScreen(
+                    viewModel = walletViewModel,
+                    onTx = { txid -> navController.navigate(Routes.walletTx(txid)) { launchSingleTop = true } },
+                    onReceive = { navController.navigate(Routes.WALLET_RECEIVE) { launchSingleTop = true } },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(
+                Routes.WALLET_TX,
+                arguments = listOf(navArgument("txid") { type = NavType.StringType }),
+            ) { entry ->
+                WalletTxScreen(
+                    viewModel = walletViewModel,
+                    txid = entry.arguments?.getString("txid") ?: "",
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_WALLETS) {
+                WalletManageScreen(
+                    viewModel = walletViewModel,
+                    onAddWallet = { navController.navigate(Routes.WALLET_CREATE) { launchSingleTop = true } },
+                    onRestoreWallet = { navController.navigate(Routes.WALLET_RESTORE) { launchSingleTop = true } },
+                    onReveal = { id -> navController.navigate(Routes.walletReveal(id)) { launchSingleTop = true } },
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(
+                Routes.WALLET_REVEAL,
+                arguments = listOf(navArgument("walletId") { type = NavType.StringType }),
+            ) { entry ->
+                WalletRevealScreen(
+                    viewModel = walletViewModel,
+                    walletId = entry.arguments?.getString("walletId") ?: "",
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.WALLET_ADD_COIN) {
+                WalletAddCoinScreen(
+                    viewModel = walletViewModel,
+                    onAdded = { navController.popBackStack(Routes.WALLET, inclusive = false) },
+                    onBack = { navController.popBackStack() },
+                )
+            }
             composable(Routes.SETTINGS) {
                 SettingsScreen(
                     onOpenDiagnostics = {
