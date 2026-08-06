@@ -372,20 +372,12 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	// visors diverge: omitting sd/ar/ut here left the wasm-visor's network-view /
 	// services-health / uptime aggregation empty (DialStream to the SD 404'd) while
 	// the native visor worked. dmsgURLPK errors are non-fatal (a null PK is skipped).
-	var servicePKs []cipher.PubKey
-	for _, u := range []string{
-		svc.DmsgDiscoveryDmsg,
-		svc.TransportDiscoveryDmsg,
-		svc.AddressResolverDmsg,
-		svc.RouteFinderDmsg,
-		svc.ServiceDiscoveryDmsg,
-		svc.ConfDmsg,
-		svc.UptimeTrackerDmsg,
-	} {
-		if spk, e := dmsgURLPK(u); e == nil {
-			servicePKs = append(servicePKs, spk)
-		}
-	}
+	// Direct-client dmsg service PKs (dmsgd/tpd/ar/rf/sd/conf/ut) via the SHARED
+	// derivation the native visor also uses (visorcore.DmsgServicePKs) — so the
+	// two can't drift on the set, the omission that once left the wasm edge's
+	// network-view / services-health / uptime aggregation empty — plus the
+	// route-setup nodes (which the native visor seeds separately).
+	servicePKs := visorcore.DmsgServicePKs(svc)
 	servicePKs = append(servicePKs, svc.RouteSetupNodes...)
 	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, seeds, discDmsgAddr, true, servicePKs...)
 	if err != nil {
