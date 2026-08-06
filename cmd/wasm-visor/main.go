@@ -492,14 +492,28 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	// a 0-intermediate-hop path).
 	vlog("router: New + serve…")
 	r, err := visorcore.BuildRouter(ctx, visorcore.RouterDeps{
-		DmsgC:              dmsgC,
-		PubKey:             pk,
-		SecKey:             sk,
-		TransportManager:   tm,
-		RouteFinder:        rfClient,
-		RouteGroupDialer:   rgDialer,
-		SetupNodes:         svc.RouteSetupNodes,
-		MinHops:            svc.MinHops,
+		DmsgC:            dmsgC,
+		PubKey:           pk,
+		SecKey:           sk,
+		TransportManager: tm,
+		RouteFinder:      rfClient,
+		RouteGroupDialer: rgDialer,
+		SetupNodes:       svc.RouteSetupNodes,
+		MinHops:          svc.MinHops,
+		// Route-setup hook: on an app dial (min_hops=1, no --existing-tp) the
+		// router races this against the route-finder to create a DIRECT transport
+		// to the peer — the browser edge's missing half (a native visor registers
+		// the equivalent in pkg/visor/init_router.go). EnsureBestTransport tries
+		// the host's creatable direct types in preference order (WEBRTC > WS > WT
+		// for a browser) and only falls back to the DMSG relay if none work — so
+		// the data plane stays peer-to-peer and dmsg is genuinely last resort.
+		// Without this the wasm visor could only route over EXISTING transports,
+		// which is why a fresh dial to an arbitrary exit stormed the route-finder.
+		SetupHooks: []router.RouteSetupHook{
+			func(rPK cipher.PubKey, tpm *transport.Manager) error {
+				return tpm.EnsureBestTransport(ctx, rPK)
+			},
+		},
 		AwaitSetupListener: setupLis,
 		Logger:             mLog.PackageLogger("router"),
 		MasterLogger:       mLog,

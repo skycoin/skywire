@@ -846,6 +846,84 @@ func (tm *Manager) Networks() []types.Type {
 	return nets
 }
 
+// PreferredDirectCreateOrder returns this visor's DIRECT (non-relay) transport
+// types in global preference order (tptypes.PreferenceOrder — STCPR > QUIC >
+// SUDPH > STCP > WEBRTC > WS > WT), filtered to the network clients this manager
+// actually has initialised. It is the host-aware "auto" transport-creation order:
+// a native visor yields e.g. [stcpr, quic, sudph, stcp, webrtc, ws, wt]; a
+// browser visor (no raw TCP/UDP) yields [webrtc, ws, wt]. DMSG is excluded — it
+// is the relay, tried only as a last resort by EnsureBestTransport.
+func (tm *Manager) PreferredDirectCreateOrder() []types.Type {
+	tm.mx.RLock()
+	have := make(map[types.Type]bool, len(tm.netClients))
+	for t, c := range tm.netClients {
+		if c != nil {
+			have[t] = true
+		}
+	}
+	tm.mx.RUnlock()
+	return preferredDirectOrder(have)
+}
+
+// preferredDirectOrder is the pure filter behind PreferredDirectCreateOrder:
+// the global preference order kept to DIRECT types present in `have`, DMSG
+// excluded. Split out so it can be unit-tested without a live client set.
+func preferredDirectOrder(have map[types.Type]bool) []types.Type {
+	var out []types.Type
+	for _, t := range types.PreferenceOrder() {
+		if t != types.DMSG && types.IsDirect(t) && have[t] {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// EnsureBestTransport makes a DIRECT transport to remote if none exists, trying
+// this visor's creatable direct types in preference order (PreferredDirectCreateOrder)
+// and falling back to the DMSG relay ONLY if every direct type fails. Idempotent:
+// returns nil immediately when a direct transport to remote already exists.
+//
+// This is the shared "no transport type specified" creation policy — the order
+// `tp add`, the route-setup hooks, and the proxy clients should all use — so the
+// data plane prefers a peer-to-peer transport (the best one each host can make)
+// and only uses the relayed dmsg transport when nothing direct is possible.
+//
+// Reaching the DMSG fallback is a RED FLAG, not a normal state: a dmsg data-plane
+// transport means every direct type failed for a peer that (usually) should have
+// been reachable p2p — a symptom worth investigating (webrtc/STUN misconfig, the
+// peer not accepting the type it advertises, AR/discovery staleness). Hence it
+// logs at WARN, and callers that must never relay app traffic (e.g. proxy exit
+// SELECTION, which can just pick a different, p2p-reachable exit) should prefer
+// skipping the peer over accepting a dmsg fallback.
+func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey) error {
+	order := tm.PreferredDirectCreateOrder()
+	// Already have a direct transport? A 1-hop route can use it — nothing to do.
+	for _, nt := range order {
+		if mt, _ := tm.GetTransport(remote, nt); mt != nil {
+			return nil
+		}
+	}
+	var lastErr error
+	for _, nt := range order {
+		if _, err := tm.SaveTransport(ctx, remote, nt, LabelAutomatic); err == nil {
+			tm.Logger.Debugf("auto-transport: created %s direct transport to %s", nt, remote)
+			return nil
+		} else if ctx.Err() != nil {
+			return ctx.Err()
+		} else {
+			lastErr = err
+		}
+	}
+	// Last resort: the DMSG relay — loud, because it means no direct type worked.
+	if _, err := tm.SaveTransport(ctx, remote, types.DMSG, LabelAutomatic); err == nil {
+		tm.Logger.Warnf("auto-transport: all direct types %v failed for %s — created a DMSG RELAY transport (relayed data plane; usually signals a p2p reachability problem)", order, remote)
+		return nil
+	} else if lastErr == nil {
+		lastErr = err
+	}
+	return lastErr
+}
+
 // Stcpr returns stcpr client
 func (tm *Manager) Stcpr() (network.Client, bool) {
 	tm.mx.Lock()
