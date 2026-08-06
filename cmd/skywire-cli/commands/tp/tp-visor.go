@@ -116,7 +116,10 @@ Set cache file location to "" to avoid using cache files`,
 		}
 
 		// --- Filtering by online status via jq join ---
-		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), vCacheFileUT, vUTURL+"/uptimes?v=v2", vCacheFilesAge)
+		uts := clirpc.FetchIntegratedUptimes(cmd.Flags(), vUTURL, vCacheFileUT, vCacheFilesAge)
+		if uts == "" {
+			uts = "[]"
+		}
 		joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
 
 		// Build jq filter with optional country and version conditions
