@@ -1299,15 +1299,16 @@
         more: { summary: "Why a key instead of a name or IP",
           panel: "On the clearnet you're found by IP and trusted through a certificate authority vouching for a name. On Skywire the <b>public key</b> is both at once: it's the address other visors route to, and the thing they encrypt to — so there's nothing to spoof and no authority to trust. Whoever holds the matching secret key <i>is</i> this visor; back it up (the tour shows where) and you can move your identity to another device." } },
 
-      // How it's connected — the dmsg-server count column, broken down by carrier.
-      // Anchored to the column HEADER (always present) rather than the count cell:
-      // a browser visor's dmsg sessions can briefly flap to zero, at which point the
-      // cell renders "-" (no .dmsg-counts) and a cell-anchored step would skip.
-      { route: visorList, sel: "th.dmsg-column",
+      // How it's connected — the dmsg-server count itself, broken down by carrier.
+      // Anchored to the live count cell (.dmsg-counts) FIRST, falling back to the
+      // always-present column header only if a browser visor's sessions momentarily
+      // flap to zero (the cell then renders "-" with no .dmsg-counts). pickTarget
+      // tries the comma list in priority order.
+      { route: visorList, sel: ".dmsg-counts, th.dmsg-column",
         title: "How you're connected: dmsg",
         body: {
-          wasm: "This column counts the <b>dmsg servers</b> your visor is connected to right now, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A browser can't open raw TCP, so it joins over <b>WSS</b> (WebSocket-over-TLS) and <b>WT</b> (WebTransport) — the carriers you'll see counted here.",
-          native: "This column counts the <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A native visor joins over <b>TCP</b> (and QUIC where a server offers it)." },
+          wasm: "Right here is your <b>live count</b> of <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A browser can't open raw TCP, so it joins over <b>WSS</b> (WebSocket-over-TLS) and <b>WT</b> (WebTransport) — the carriers counted here.",
+          native: "Right here is your <b>live count</b> of <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A native visor joins over <b>TCP</b> (and QUIC where a server offers it)." },
         more: { summary: "The four carriers",
           panel: "dmsg carries the control plane and a fallback data path. The <b>carrier</b> — how a visor reaches a dmsg server — depends on the host:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
@@ -1318,12 +1319,12 @@
             '</ul>' +
             "A wasm visor in a tab has no raw sockets, so it leans on <b>wss + WebTransport</b>; a native visor can also make direct TCP/UDP transports. These four carriers are the <i>same four protocols</i> Skywire uses for direct transports (next column) — dmsg is simply the <b>relayed</b> version: same wire, reached through a server instead of directly." } },
 
-      // Direct links — the transports count column, right beside dmsg. Header-
-      // anchored for the same reason as the dmsg column (a fresh visor with no
-      // transports yet renders "-", not .tp-counts).
-      { route: visorList, sel: "th.transports-column",
+      // Direct links — the transports count itself, right beside dmsg. Anchored to
+      // the live .tp-counts cell first, header fallback (a fresh visor with no
+      // transports yet renders "-", not .tp-counts) — same priority trick as dmsg.
+      { route: visorList, sel: ".tp-counts, th.transports-column",
         title: "Direct links: transports",
-        body: "Right beside it, this column is your visor's live <b>transports</b> — direct links to peers, counted by type (STCPR, SUDPH, SWTR, WEBRTC…). Where dmsg <i>relays</i> through a server, a transport is point-to-point. It's already dialing peers around the world; the total climbs as it settles in.",
+        body: "Right beside it, this is your visor's live <b>transports</b> count — direct links to peers, by type (STCPR, SUDPH, SWTR, WEBRTC…). Where dmsg <i>relays</i> through a server, a transport is point-to-point. It's already dialing peers around the world; the total climbs as it settles in.",
         more: { summary: "Transport types, and how they mirror dmsg",
           panel: "A transport is a direct link between two visors. <b>Four mirror the dmsg carriers exactly</b> — same wire, dialed peer-to-peer instead of to a server:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
@@ -1634,14 +1635,23 @@
         if (e) { var er = e.getBoundingClientRect(); if (er.width >= 24 && er.height >= 10) { return e; } }
         return null;
       }
-      var cand = doc.querySelectorAll(sel);
-      for (var j = 0; j < cand.length; j++) {
-        var el = cand[j], cr = el.getBoundingClientRect();
-        if (cr.width >= 24 && cr.height >= 10 && getComputedStyle(el).visibility !== "hidden") {
-          // `has` disambiguates when a selector matches several elements (e.g. the
-          // DMSG line among many .info-line rows, or the skysocks app row).
-          if (has && (el.innerText || "").indexOf(has) < 0) { continue; }
-          return el;
+      // sel may be a COMMA-separated PRIORITY list, tried in order (not document
+      // order) — so a step can prefer the live value cell (e.g. .dmsg-counts) and
+      // fall back to the always-present column header only when that cell renders
+      // "-" (no counts div) during a transient flap to zero sessions.
+      var groups = sel.split(",");
+      for (var g = 0; g < groups.length; g++) {
+        var one = groups[g].trim();
+        if (!one) { continue; }
+        var cand = doc.querySelectorAll(one);
+        for (var j = 0; j < cand.length; j++) {
+          var el = cand[j], cr = el.getBoundingClientRect();
+          if (cr.width >= 24 && cr.height >= 10 && getComputedStyle(el).visibility !== "hidden") {
+            // `has` disambiguates when a selector matches several elements (e.g. the
+            // DMSG line among many .info-line rows, or the skysocks app row).
+            if (has && (el.innerText || "").indexOf(has) < 0) { continue; }
+            return el;
+          }
         }
       }
       return null;
