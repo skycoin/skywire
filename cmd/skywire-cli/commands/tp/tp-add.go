@@ -330,14 +330,15 @@ var addTpCmd = &cobra.Command{
 					continue
 				}
 			} else {
-				// No transport type specified - try stcpr, sudph, dmsg in order.
-				// The visor will return "entry not found in discovery" for dmsg
-				// if the PK is not registered — no need to pre-check.
-				transportTypes := []types.Type{
-					types.STCPR,
-					types.SUDPH,
-					types.DMSG,
-				}
+				// No transport type specified — try every type in the visor's
+				// preference order (STCPR > QUIC > SUDPH > STCP > WEBRTC > WS > WT >
+				// DMSG), so the DMSG relay is genuinely last-resort instead of the
+				// third thing tried. AddTransport fails fast for a type the visor
+				// can't create or the peer won't accept, so unreachable types just
+				// fall through to the next. Mirrors the router's EnsureBestTransport
+				// auto-creation policy. (Previously this only tried stcpr/sudph/dmsg,
+				// over-using dmsg on NAT'd visors and skipping webrtc/ws/wt/quic/stcp.)
+				transportTypes := types.PreferenceOrder()
 
 			typeLoop:
 				for _, tpType := range transportTypes {
