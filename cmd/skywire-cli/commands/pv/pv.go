@@ -24,10 +24,8 @@ import (
 var (
 	serviceType    = servicedisc.ServiceTypeVisor
 	sdURL          string
-	utURL          string
 	tpdURL         string
 	cacheDirSD     string
-	cacheDirUT     string
 	cacheDirTPD    string
 	cacheFilesAge  int
 	rawData        bool
@@ -110,14 +108,12 @@ func init() {
 
 	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
-	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
-	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "d", dep.TransportDiscovery, "transport discovery url")
+	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "d", dep.TransportDiscovery, "transport discovery url (also serves the integrated uptime tracker)")
 	RootCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
-	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
+	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status")
 	RootCmd.Flags().StringVar(&cacheDirSD, "cds", cacheDirPath(dep.ServiceDiscovery), "SD cache dir (\"\" to disable)")
-	RootCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.TransportDiscovery), "UT cache dir (\"\" to disable)")
-	RootCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)")
-	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
+	RootCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir, shared by transports + uptime (\"\" to disable)")
+	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "refetch cached data older than n minutes (0 = always fetch fresh, e.g. for `watch`)")
 	RootCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	RootCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
@@ -149,28 +145,23 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			if !cmd.Flags().Changed("sdurl") {
 				sdURL = deployment.Test.ServiceDiscovery
 			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.TransportDiscovery
-			}
 			if !cmd.Flags().Changed("tpdurl") {
 				tpdURL = deployment.Test.TransportDiscovery
 			}
 			if !cmd.Flags().Changed("cds") {
 				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
 			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
-			}
 			if !cmd.Flags().Changed("cdt") {
 				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
 			}
 		}
 
-		// Build full URLs with endpoints. Uptime comes from the
-		// TPD-integrated tracker (CXO-backed v3), never the deprecated
-		// standalone uptime tracker.
+		// Build full URLs with endpoints. Uptime and transports both come
+		// from the transport-discovery base: the uptime tracker is
+		// TPD-integrated (CXO-backed v3), so there is no separate uptime
+		// endpoint or cache — never the deprecated standalone tracker.
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
-		utFullURL := clirpc.IntegratedUptimeURL(utURL)
+		utFullURL := clirpc.IntegratedUptimeURL(tpdURL)
 		tpdFullURL := tpdURL + "/all-transports"
 
 		// Fetch SD
@@ -213,7 +204,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			pks, _ = script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Slice() //nolint:errcheck
 		} else {
 			// Filter by online status via jq join
-			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirTPD, utFullURL), utFullURL, cacheFilesAge)
 			if uts == "" {
 				uts = "[]"
 			}
