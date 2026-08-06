@@ -7,6 +7,155 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-06 — Settings: the identity, the file that carries it, and the lock
+
+The Settings tab was the last placeholder. It holds the four things that are
+about the phone rather than about an app — who this visor is, how to get its
+config off the device, what guards the app, and where the logs are collected —
+plus the theme override and the version card.
+
+### 1. Identity, and the flag that does not exist
+
+`config gen` has no `--sk`. `-r/--regen` takes the secret key from the config
+it is about to overwrite (`gen.go:933-947`), so installing a key means writing
+it into that file first and letting the regenerate read it back. Everything
+else is the first-run pipeline unchanged — same argv, and the phone profile is
+re-applied at the next start — with one thing the generator does for free:
+`mergeExistingApps` keeps per-app argv instead of rebuilding it.
+
+**The key is validated before anything is touched, and that is not politeness.**
+Handed an SK whose public half will not derive, `config gen` does not fail: it
+silently generates a fresh random keypair (`gen.go:674-677`). A mistyped paste
+would land the user on a brand-new identity with no error anywhere. So the
+pasted key goes through `config pk` first, which both validates it and derives
+the public key — which is then what the confirmation dialog quotes, so the user
+approves the actual outcome rather than a promise.
+
+**New identity deletes the config instead of regenerating one**, so the next
+start runs the untouched first-run path. One pipeline for a new identity, not
+two.
+
+Both operations clear `local_path` — chat history, app work dirs, transport
+logs. A visor's key *is* its identity, and carrying a previous identity's
+messages under a new one puts a conversation on screen that nobody can
+continue. It also makes the warning true: both flows are confirmed twice, and
+the first dialog says exactly what is lost rather than saying "destructive".
+`users.db` deliberately stays — the local API account is the app's own device
+credential, not part of the visor's identity.
+
+One bug this would have had: `VisorApi` caches this visor's public key for the
+life of the process, and every `/api/visors/{pk}/…` route is built from it. After
+an identity change the cache addresses a visor that no longer exists and every
+call 404s until the app is killed. `forgetIdentity()` is called the moment the
+identity changes.
+
+### 2. The one Go change: the CLI printed to stdout on every Android run
+
+`getInterfaceNames()` (`gen.go:2261`) called the standard library's
+`net.Interfaces()`, which Android 11+ denies unprivileged processes. It runs at
+flag-registration time — i.e. on **every** invocation of the binary — so on
+Android it put `Error: route ip+net: netlinkrib: permission denied` on stdout
+ahead of the output of whatever command was actually asked for. Harmless until
+something parses that output, which `config pk` now does. It now uses
+`anet.Interfaces()`, which is what the rest of the repo already uses for exactly
+this reason (`pkg/netutil/net_native.go` carries the comment). Off Android anet
+is a straight pass-through.
+
+### 3. App lock
+
+`BIOMETRIC_STRONG | DEVICE_CREDENTIAL` on API 30+, `BIOMETRIC_WEAK |
+DEVICE_CREDENTIAL` below it — not a preference: the strong pairing is rejected
+outright on API 28-29 (`PromptInfo.Builder` throws "Authenticator combination is
+unsupported on API n"), and the weak one is what androidx's own deprecated
+`setDeviceCredentialAllowed` resolves to there. Fingerprint or face when one is
+enrolled, the device PIN/pattern/password otherwise — the phone's own bar, which
+is the bar this asks for. `MainActivity` is now a `FragmentActivity` because
+`BiometricPrompt` hosts itself in a fragment; nothing else changed, since
+FragmentActivity *is* a ComponentActivity and only AppCompatActivity would have
+demanded an AppCompat theme.
+
+**The lock is drawn over the app, not in place of it.** Composing the navigation
+tree only while unlocked would tear down the back stack and the embedded chat
+WebView on every glance at a notification. What keeps content from leaking
+anyway is `FLAG_SECURE`, set for the whole session while the lock is on: the
+recents snapshot is taken as the app *leaves*, before it is locked and with the
+last screen still on it, so blocking it has to be a flag that was already set.
+Screenshots go with it, which is the same promise stated the other way round —
+and the setting says so.
+
+Two decisions the obvious implementation gets wrong. The lock state starts
+*locked*, because a fresh process is exactly the case that must ask, and the
+gate ignores it entirely while the preference is off. And a ringing or connected
+call is shown *through* the lock: a call screen holds no secrets, and every
+dialer on Android surfaces one above the lock screen for the obvious reason.
+
+### 4. Logs & diagnostics
+
+The aggregate home of the shared viewer: every source listed in one place
+(core runtime, the captured process output, each app), Export all, and the log
+level. Sources are named **product first, process second** — "SkyVPN
+(vpn-client)" — because the list is otherwise four process names and the
+process name is the part you actually need there: it is what the config calls
+it, what the API route is keyed on, and what a log line says. The viewer's own
+app bar shows the product name alone; "SkySOCKS (skysocks-client)" does not fit
+a centered title, and the row that opened it already showed both.
+
+**Export all writes the config redacted.** A diagnostics bundle is a thing
+people attach to an issue and the config carries the secret key, so `sk` is
+stripped; the full file has its own deliberate export behind a biometric check
+and a warning that names what is in it. Nothing fails the export either — a
+source that cannot be collected becomes a line in `collection-notes.txt`, since
+the bundle is most wanted exactly when things are broken.
+
+The log level is `log_level` in the config, written from the phone's preference
+on every launch like the transport order and the Fleet opt-in, and read once
+while the visor builds its module graph — so changing it restarts the core, with
+the same confirmation Fleet's toggle uses.
+
+### 5. Smaller
+
+Core version comes from the running visor's summary, not from
+`libskywire-mobile.so --version`. The binary would answer with the core down
+too, which is tempting, but §2 is why: the CLI writes to stdout before any
+command runs, and scraping it means parsing whatever else happened to be
+printed that launch. Theme override (system/light/dark) is a Compose-level
+choice — the palette stays brand-locked, this only picks which half is drawn.
+
+**Verified on the emulator (Pixel arm64, Android 17 / API 37):**
+
+- Log level: DEBUG chosen with the core down saved silently and appeared as
+  `"log_level": "debug"` at the next start; chosen with the core up it asked
+  first, restarted, and came back `"info"`. The five chips wrap to two rows —
+  the first cut put them in a `Row` and TRACE rendered one letter per line.
+- Export all: 10 files, 180 KB. `sk` absent from the redacted config, `pk`
+  present, no collection notes. Stopped apps' feeds are empty files, not
+  errors (the server's 500 "no new available logs" contract).
+- Replace SK: an all-zero key was refused in the core's own words ("invalid
+  secret key") with nothing touched; `…0001` derived
+  `0279be667e…16f81798` in the confirmation, and after the two dialogs the
+  config carried that keypair, `local/` was recreated empty (a fresh 32 KB
+  `skychat-history.db`), and Home reported Connected under the new key —
+  which is also the proof that the API client dropped its cached identity.
+- New identity: fresh random keypair, and every phone-profile pin survived the
+  regenerate (`cli_addr: ""`, absolute `local_path`, `bin_path`,
+  `dmsg_ingest: false`, `log_level`).
+- Export config: the picked document is byte-identical to the on-device config,
+  secret key included.
+- App lock, with a device PIN set: enabling asked first ("Turn on the app lock"
+  / "Confirm it is you"), and from then on `screencap` returns black — FLAG_SECURE
+  working. Cold start raises the prompt automatically; away 5 s returns straight
+  into the app, away 40 s asks again. Disabling asks too. The emulator has no
+  enrolled biometric, so every prompt fell through to the PIN keypad — the
+  fingerprint sheet is untested and wants a real device.
+- Dark/light both rendered; `config pk` output confirmed clean of the netlink
+  line after the Go fix; `go test ./cmd/skywire-cli/commands/config/...` passes.
+
+**Not covered:** the fingerprint/face path (no enrolled biometric on the
+emulator), hardware-backed Keystore behaviour, and FLAG_SECURE in the real
+recents list — all of it wants a real device.
+
+---
+
 ## 2026-08-06 — Fleet: the visors you run elsewhere, seen from the phone
 
 Off by default, and that is the feature. The phone's core ships API-only — the

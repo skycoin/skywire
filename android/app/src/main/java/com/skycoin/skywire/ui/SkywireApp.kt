@@ -51,6 +51,7 @@ import com.skycoin.skywire.ui.hub.HubScreen
 import com.skycoin.skywire.ui.logs.LogSources
 import com.skycoin.skywire.ui.logs.LogViewerScreen
 import com.skycoin.skywire.ui.navigation.Routes
+import com.skycoin.skywire.ui.settings.DiagnosticsScreen
 import com.skycoin.skywire.ui.settings.SettingsScreen
 import com.skycoin.skywire.ui.socks.SocksScreen
 import com.skycoin.skywire.ui.vpn.VpnScreen
@@ -128,7 +129,8 @@ fun SkywireApp() {
                 slots.forEach { slot ->
                     NavigationBarItem(
                         selected = currentRoute == slot.route ||
-                            (slot.route == Routes.HUB && currentRoute in Routes.hubPushed),
+                            (slot.route == Routes.HUB && currentRoute in Routes.hubPushed) ||
+                            (slot.route == Routes.SETTINGS && currentRoute in Routes.settingsPushed),
                         onClick = { navController.navigateToTab(slot.route) },
                         icon = {
                             Icon(
@@ -184,7 +186,21 @@ fun SkywireApp() {
                 )
             }
             composable(Routes.WALLET) { WalletScreen() }
-            composable(Routes.SETTINGS) { SettingsScreen() }
+            composable(Routes.SETTINGS) {
+                SettingsScreen(
+                    onOpenDiagnostics = {
+                        navController.navigate(Routes.DIAGNOSTICS) { launchSingleTop = true }
+                    },
+                )
+            }
+            composable(Routes.DIAGNOSTICS) {
+                DiagnosticsScreen(
+                    onBack = { navController.popBackStack() },
+                    onOpenLogs = { source ->
+                        navController.navigate(Routes.logs(source)) { launchSingleTop = true }
+                    },
+                )
+            }
 
             // Full-screen routes pushed from the hub — back returns to the hub.
             composable(Routes.SOCKS) {
