@@ -23,13 +23,14 @@ func TestPreferredDirectOrder(t *testing.T) {
 		{
 			name: "browser edge (webrtc/ws/wt + dmsg) → p2p types only, preference order",
 			have: []types.Type{types.WT, types.DMSG, types.WEBRTC, types.WS},
-			// global preference: … WEBRTC > WS > WT … so ordered thus, dmsg dropped.
-			want: []types.Type{types.WEBRTC, types.WS, types.WT},
+			// global preference: … WT > WS > WEBRTC … (direct carriers before the
+			// NAT-traversing one) so ordered thus, dmsg dropped.
+			want: []types.Type{types.WT, types.WS, types.WEBRTC},
 		},
 		{
 			name: "native visor (all types) → full preference order, dmsg dropped",
 			have: []types.Type{types.DMSG, types.WT, types.SUDPH, types.STCPR, types.WEBRTC, types.QUIC, types.STCP, types.WS},
-			want: []types.Type{types.STCPR, types.QUIC, types.SUDPH, types.STCP, types.WEBRTC, types.WS, types.WT},
+			want: []types.Type{types.STCPR, types.QUIC, types.SUDPH, types.STCP, types.WT, types.WS, types.WEBRTC},
 		},
 		{
 			name: "only dmsg → empty (nothing direct to create)",
