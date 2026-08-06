@@ -1371,14 +1371,29 @@
         more: { summary: "skysocks-client vs. skysocks-client-lite",
           panel: "<b>skysocks-client</b> (native) runs as an app process and serves a local <b>SOCKS5 port</b> other programs point at. <b>skysocks-client-lite</b> (browser) has no process and no port — it lives in this tab and proxies only this visor's own browse windows and wallet. Both dial an <b>exit</b> visor that does the clearnet egress, so a site sees the exit's IP, not yours. (Naming: the browser one is the <i>lite</i> client — same idea, no listener.)" } },
 
-      // --- back to the top level: your cluster, then the whole mesh ---
-      { route: visorList, sel: "app-node-list",
-        title: "Your cluster, live",
+      // --- back to the top level: this hypervisor's cluster ---
+      // A short PROGRESSIVE demo of hypervisor capability: the real list as-is,
+      // then a visor connects, then it turns out to be a hypervisor, then it has
+      // its own connected visor — then the simulated rows are dropped (the next
+      // step has no `cluster`, so go() resets the level to 0). cluster steps 1-3
+      // are wasm-only (the mock rides the wasm data bridge); a native HV shows its
+      // real cluster, so it only gets the "as-is" explainer.
+      { route: visorList, sel: "app-node-list", cluster: 0,
+        title: "Your cluster: the hypervisor UI",
         body: {
-          wasm: "Back at the top level — and for this tour the list is populated with a <b>demo cluster</b> (the extra rows vanish when the tour closes). A hypervisor manages a whole cluster: <b>demo-frankfurt-hv</b> is a remote visor this hypervisor manages — and it's <i>itself</i> a hypervisor, shown in its own section below with its own connected visor, <b>demo-paris-visor</b>. That's the real shape: attach a remote visor by its public key and it appears here fully controllable from this browser tab, or point another hypervisor at this visor and <i>it</i> shows up over there. Every row is a peer addressed by public key, its transports and routes inspectable from here.",
-          native: "This list is your <b>cluster</b> — every visor this hypervisor manages, grouped by the hypervisor that manages it (a connected visor that is itself a hypervisor gets its own section, with its connected visors under it). Attach more by adding a remote visor's public key, or let another hypervisor manage this one. Each row is a peer addressed by its key, its transports, routes and apps controllable from right here." },
+          wasm: "Back at the top level. This visor list <b>is the hypervisor UI</b> — every visor connected to <i>this</i> hypervisor is shown here. Right now that's just this one visor, in this browser tab. To <b>manage a remote visor</b> from here, add its public key (the ⋯ menu → add visor); to have this visor <b>managed by a remote hypervisor</b> instead, set that hypervisor's public key in this visor's config. Let's simulate what attaching a visor looks like…",
+          native: "This visor list <b>is the hypervisor UI</b> — every visor connected to this hypervisor is shown here. To <b>manage a remote visor</b>, add its public key (⋯ → add visor); to have this visor <b>managed by a remote hypervisor</b>, set that hypervisor's public key in this visor's config. Connected visors appear here, each fully controllable over the mesh." },
         more: { summary: "Hypervisor ⇄ visor: who manages whom",
           panel: "A <b>hypervisor</b> is just a visor that also serves this management UI and holds the keys of the visors it manages. The relationship is set in config (or at runtime): give this hypervisor a remote visor's PK and address to <i>manage</i> it, or set a remote hypervisor's PK on this visor to be <i>managed</i> by it. Management runs over the same encrypted mesh — a hypervisor in a browser tab can drive a native visor on the other side of the world, and vice-versa." } },
+      { wasmOnly: true, route: visorList, sel: "app-node-list", cluster: 1,
+        title: "A visor connects",
+        body: "<b>Watch the list</b> — a remote visor is connecting to your hypervisor (a tour simulation). In a moment <b>demo-frankfurt-hv</b> appears as a second row. It's a full peer you could then inspect and control from this browser tab — its transports, routes and apps — all over the mesh, without it ever exposing an address to the outside world." },
+      { wasmOnly: true, route: visorList, sel: "app-node-list", cluster: 2,
+        title: "…and it's a hypervisor too",
+        body: "That connected visor turns out to be <b>itself a hypervisor</b> — a ★ appears beside it shortly. A hypervisor is only a visor that <i>also</i> manages others, so nothing stops a visor you manage from managing visors of its own. Your hypervisor is now managing another hypervisor, entirely over the mesh." },
+      { wasmOnly: true, route: visorList, sel: "app-node-list", cluster: 3,
+        title: "…with its own connected visor",
+        body: "And that connected hypervisor has <b>its own connected visor</b> — <b>demo-paris-visor</b> — which appears in its own section below it. Hypervisors nest: from this one tab you can see and manage a whole tree of visors. (These simulated rows disappear as we move on.)" },
 
       // Whole-mesh overview tabs — VISIT each (not just point at it) so the tour
       // doubles as a functional check. Rewards is native-only (hidden on wasm).
@@ -1402,6 +1417,18 @@
         more: { summary: "How mesh sites stay safe",
           panel: "Fetched pages run sandboxed and isolated from your keys — a site can't read your identity or reach the clearnet on its own. There's no DNS and no certificate authority; the public key <i>is</i> the address and the authentication. The ⓘ button on a browse window explains the isolation model." } },
 
+      // App demos (wasm desktop only — a native visor surfaces these as its own
+      // Angular tabs). Each step OPENS the app window and spotlights it; go()
+      // closes it again when the tour moves to a non-app step.
+      { wasmOnly: true, action: "browse", sel: "@appwin", title: "App: the mesh browser",
+        body: "The tour just opened the <b>skynet browser</b> — a window that fetches sites <b>over dmsg</b>, addressed by public key (<code>&lt;pk&gt;.dmsg</code>), with no DNS and no certificate authority. It's landed on this visor's own page, served from the tab over the mesh. Type a <code>&lt;pk&gt;.dmsg</code> address to visit any mesh site." },
+      { wasmOnly: true, action: "chat", sel: "@appwin", title: "App: encrypted chat",
+        body: "<b>Skychat</b> — end-to-end encrypted messaging straight between visors over dmsg, with no server storing your messages. Address a peer by public key and type; delivery rides the same mesh your visor is already on." },
+      { wasmOnly: true, action: "wallet", sel: "@appwin", title: "App: Skycoin wallet",
+        body: "The <b>Skycoin wallet</b> — a client-side wallet served from this tab. Your keys never leave the browser; only node and BTC queries cross the mesh. This is where the reward system pays visors that stay online." },
+      { wasmOnly: true, action: "log", sel: "@appwin", title: "App: live visor logs",
+        body: "The <b>visor log</b> — a live tail of this visor's own runtime (dmsg, transports, routing, apps), straight from the wasm core in this tab. Watch the mesh work in real time; the ☰ console runs CLI commands against the same visor." },
+
       { sel: "#tb-menu", title: "Your keys, your visor",
         body: {
           wasm: "Your visor is the keypair we started with, held in <b>this browser</b> (Apps → identity). <b>Export it</b> to back up or move your visor to another device — that key <i>is</i> your identity on the mesh, and this tab holds the only copy.",
@@ -1417,7 +1444,7 @@
     // Drop native-only steps (e.g. the fleet Rewards overview) on a wasm visor,
     // where those tabs are hidden — see home-tabs.ts isWasmHvCore(). Filtering
     // here (rather than skipping at render time) keeps the "N / total" count right.
-    steps = steps.filter(function (s) { return !(s.nativeOnly && mode !== "native"); });
+    steps = steps.filter(function (s) { return !(s.nativeOnly && mode !== "native") && !(s.wasmOnly && mode !== "wasm"); });
 
     // --- tour-only simulated cluster (wasm visor demo) ---
     // A fresh browser visor manages no one, so "Your cluster, live" would show a
@@ -1453,34 +1480,64 @@
         public_autoconnect: true, is_public: !!o.isPublic, is_hypervisor: !!o.isHv
       };
     }
-    function buildMockCluster() {
+    // The cluster demo is PROGRESSIVE, driven by clusterLevel (set per-step via
+    // s.cluster in go()), so the tour can show a hypervisor's capability build up:
+    //   0 — no mock (the real list as-is)
+    //   1 — a regular visor connects (demo-frankfurt-hv, NOT a hypervisor)
+    //   2 — that visor is ALSO a hypervisor (★ appears; is_hypervisor=true)
+    //   3 — that hypervisor has its OWN connected visor (demo-paris-visor, shown
+    //       in its own nested section)
+    // Level resets to 0 when the tour leaves the cluster section, dropping the rows.
+    var clusterLevel = 0;
+    function buildMockCluster(level) {
       var remote = mockEntry({
         pk: MOCK_REMOTE_PK, host: "demo-frankfurt-hv", version: "v1.3.91", os: "linux", arch: "arm64",
-        ip: "185.130.44.12", cc: "DE", region: "Hesse", city: "Frankfurt", isHv: true, uptime: 1209600,
+        ip: "185.130.44.12", cc: "DE", region: "Hesse", city: "Frankfurt", isHv: level >= 2, uptime: 1209600,
         reward: "2RkZ7wFm3nDqA8sT1yV6bXcJ9pLhGw4uEo",
         transports: [mockTp(MOCK_REMOTE_PK, SELFPK || "", "stcpr"), mockTp(MOCK_REMOTE_PK, MOCK_SUB_PK, "dmsg"), mockTp(MOCK_REMOTE_PK, MOCK_SUB_PK, "sudph")],
         dmsg: [mockDs(MOCK_D1, "tcp", "tcp"), mockDs(MOCK_D2, "tcp", "tcp")]
       });
-      var sub = mockEntry({
+      var sub = (level >= 3) ? mockEntry({
         pk: MOCK_SUB_PK, host: "demo-paris-visor", version: "v1.3.91", os: "linux", arch: "amd64",
         ip: "51.75.20.7", cc: "FR", region: "Île-de-France", city: "Paris", uptime: 432000,
         reward: "2Hn9dQ4vC7bR2xW8yK1mF6tL3sA5gZ9jUe",
         transports: [mockTp(MOCK_SUB_PK, MOCK_REMOTE_PK, "stcpr")],
         dmsg: [mockDs(MOCK_D1, "tcp", "tcp")]
-      });
+      }) : null;
       return { remote: remote, sub: sub };
     }
     function spliceMock(path, data) {
-      var m = buildMockCluster();
+      if (clusterLevel <= 0) { return data; }
+      var m = buildMockCluster(clusterLevel);
       if (/visors-tree-summary/.test(path)) {
         if (data && data.sections && data.sections[0] && Array.isArray(data.sections[0].visors)) {
           data.sections[0].visors = data.sections[0].visors.concat([m.remote]);
-          data.sections.push({ hypervisor_pk: MOCK_REMOTE_PK, via_chain: [MOCK_REMOTE_PK], visors: [m.remote, m.sub] });
+          // A hypervisor only gets its own section once it actually manages a
+          // visor (level 3) — level 2 just flips the ★ on the row above.
+          if (clusterLevel >= 3 && m.sub) {
+            data.sections.push({ hypervisor_pk: MOCK_REMOTE_PK, via_chain: [MOCK_REMOTE_PK], visors: [m.remote, m.sub] });
+          }
         }
       } else if (Array.isArray(data)) { // visors-summary (flat)
-        data = data.concat([m.remote, m.sub]);
+        data = data.concat(m.sub ? [m.remote, m.sub] : [m.remote]);
       }
       return data;
+    }
+    // setClusterLevel changes what the mock injects and nudges the node list to
+    // refetch so the change shows within ~1-2s (the raw 5s poll + the wasm core's
+    // slow fetch otherwise lags a change to the NEXT step). The refetch is a single
+    // DEBOUNCED click of the top-bar refresh button: firing it rapidly across
+    // consecutive steps (a fast click-through) backed up the wasm core's request
+    // queue and wedged it, so we coalesce to one refresh ~450ms after the last
+    // level change. Spaced-out steps (real reading pace) each still refresh once.
+    var _clRefreshT = null;
+    function setClusterLevel(n) {
+      clusterLevel = n;
+      if (_clRefreshT) { clearTimeout(_clRefreshT); }
+      _clRefreshT = setTimeout(function () {
+        _clRefreshT = null;
+        try { var rb = doc.querySelector("app-refresh-button"); if (rb) { rb.click(); } } catch (e) {}
+      }, 450);
     }
     function installClusterMock() {
       if (mode !== "wasm") { return; }
@@ -1545,6 +1602,7 @@
       if (closed) { return; }
       closed = true;
       removeClusterMock(); // drop the tour-only synthetic cluster rows (next poll refetches real data)
+      try { if (globalThis.__skywireDemoApps) { globalThis.__skywireDemoApps.closeAll(); } } catch (e) {} // close any app-demo windows the tour opened
       try { localStorage.setItem(TOUR_SEEN_KEY, "1"); } catch (e) {}
       try { win.removeEventListener("scroll", reposition, true); win.removeEventListener("resize", reposition); } catch (e) {}
       if (spot.parentNode) { spot.parentNode.removeChild(spot); }
@@ -1564,8 +1622,16 @@
     // pickTarget returns the first VISIBLE, non-tiny element matching sel (there
     // can be hidden/collapsed duplicates — e.g. a loading vs loaded top-bar — and
     // spotlighting a 1px ghost looks broken).
+    // lastAppEl holds the window a step's `action` just opened (an app demo), so
+    // the special selector "@appwin" spotlights it. Reset per step in go().
+    var lastAppEl = null;
     function pickTarget(sel, has) {
       if (!sel) { return null; }
+      if (sel === "@appwin") {
+        var e = lastAppEl;
+        if (e) { var er = e.getBoundingClientRect(); if (er.width >= 24 && er.height >= 10) { return e; } }
+        return null;
+      }
       var cand = doc.querySelectorAll(sel);
       for (var j = 0; j < cand.length; j++) {
         var el = cand[j], cr = el.getBoundingClientRect();
@@ -1585,6 +1651,18 @@
     function go() {
       var s = steps[i];
       var navigated = false;
+      // App-demo steps: open (or switch to) the app window this step demonstrates,
+      // and remember it so "@appwin" spotlights it. Steps WITHOUT an action close
+      // any lingering demo window, so a following step (e.g. the ☰-menu step) isn't
+      // covered by a left-over app window.
+      if (globalThis.__skywireDemoApps) {
+        if (s.action) { try { lastAppEl = globalThis.__skywireDemoApps.open(s.action); } catch (e) { lastAppEl = null; } }
+        else { lastAppEl = null; try { globalThis.__skywireDemoApps.closeAll(); } catch (e) {} }
+      }
+      // Progressive cluster demo: apply the mock level this step wants; any step
+      // outside the cluster section drops the simulated rows (level 0).
+      if (s.cluster != null) { setClusterLevel(s.cluster); }
+      else if (clusterLevel !== 0) { setClusterLevel(0); }
       if (s.route) {
         var target = (typeof s.route === "function") ? s.route(SELFPK) : s.route;
         if (target && win.location.hash !== target) { try { win.location.hash = target; navigated = true; } catch (e) {} }
@@ -2444,6 +2522,49 @@
         tryOpen();
       }
     } catch (e) {}
+
+    // Tour hook: the onboarding tour (startTour) lives in a sibling scope and
+    // can't reach these open* closures. Expose a small facade so tour steps can
+    // OPEN an app window (browser / chat / wallet / logs) to demonstrate it, get
+    // its DOM element back to spotlight, and have them all torn down when the
+    // tour closes. "One demo window at a time": each open() first closes the
+    // previous tour-opened window, so a demo walk stays uncluttered.
+    var _demoWins = [];
+    function _topDemoWin() {
+      // The just-opened window is focused → highest z among .winbox. Exclude the
+      // tour's own callout window so we spotlight the app, not the tour. (This
+      // bundled WinBox exposes its root element as `.window` / `.g`, not `.dom`.)
+      var twb = globalThis.__tourWB;
+      var tourDom = twb ? (twb.window || twb.g || twb.dom) : null;
+      var best = null, bz = -1, ws = doc.querySelectorAll(".winbox");
+      for (var i = 0; i < ws.length; i++) {
+        if (ws[i] === tourDom) { continue; }
+        var z = parseInt(getComputedStyle(ws[i]).zIndex, 10) || 0;
+        if (z >= bz) { bz = z; best = ws[i]; }
+      }
+      return best;
+    }
+    function _closeDemoWins() {
+      _demoWins.forEach(function (el) { try { var c = el && el.querySelector(".wb-close"); if (c) { c.click(); } } catch (e) {} });
+      _demoWins = [];
+    }
+    globalThis.__skywireDemoApps = {
+      open: function (kind) {
+        _closeDemoWins();
+        try {
+          if (kind === "browse") { openBrowse(); }
+          else if (kind === "chat") { if (globalThis.skywireVisor && globalThis.skywireVisor.skychatSend) { openChat(); } else { return null; } }
+          else if (kind === "wallet") { openWallet(); }
+          else if (kind === "log") { openLog(); }
+          else if (kind === "cli") { openCli(); }
+          else { return null; }
+        } catch (e) { return null; }
+        var el = _topDemoWin();
+        if (el && _demoWins.indexOf(el) < 0) { _demoWins.push(el); }
+        return el;
+      },
+      closeAll: function () { _closeDemoWins(); }
+    };
 
     return {
       panel: bar,
