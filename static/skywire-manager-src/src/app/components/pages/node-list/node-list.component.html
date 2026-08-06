@@ -280,6 +280,12 @@
                     <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
                   }
                 </th>
+                <th class="sortable-column dmsg-column" (click)="changeSort(dmsgServerCountSortData)">
+                  {{ 'nodes.dmsg-servers' | translate }}
+                  @if (dataSorter.currentSortingColumn === dmsgServerCountSortData) {
+                    <mat-icon [inline]="true">{{ dataSorter.sortingArrow }}</mat-icon>
+                  }
+                </th>
                 <th class="sortable-column key-column" (click)="changeSort(keySortData)">
                   {{ 'nodes.key' | translate }}
                   @if (dataSorter.currentSortingColumn === keySortData) {
@@ -382,6 +388,20 @@
                     }
                   </td>
                   <td>
+                    @if (getDmsgServerCount(node) > 0) {
+                      <div class="dmsg-counts">
+                        @for (entry of getDmsgCounts(node); track entry.type) {
+                          <span class="dmsg-type">{{ entry.type }}</span>
+                          <span class="dmsg-count">{{ entry.count }}</span>
+                        }
+                        <span class="dmsg-type dmsg-total">Total</span>
+                        <span class="dmsg-count dmsg-total">{{ getDmsgServerCount(node) }}</span>
+                      </div>
+                    } @else {
+                      <span>-</span>
+                    }
+                  </td>
+                  <td class="key-cell">
                     {{ node.localPk }}
                   </td>
                   <td>
@@ -642,6 +662,7 @@
                       <th class="labels">{{ 'nodes.label' | translate }}</th>
                       <th class="ip-location-column">{{ 'nodes.ip-location' | translate }}</th>
                       <th class="transports-column">{{ 'nodes.transports' | translate }}</th>
+                      <th class="dmsg-column">{{ 'nodes.dmsg-servers' | translate }}</th>
                       <th class="key-column">{{ 'nodes.key' | translate }}</th>
                       <th class="version-column">{{ 'nodes.version' | translate }}</th>
                       <th class="services-column">{{ 'nodes.services' | translate }}</th>
@@ -718,6 +739,20 @@
                           }
                         </td>
                         <td>
+                          @if (getDmsgServerCount(node) > 0) {
+                            <div class="dmsg-counts">
+                              @for (entry of getDmsgCounts(node); track entry.type) {
+                                <span class="dmsg-type">{{ entry.type }}</span>
+                                <span class="dmsg-count">{{ entry.count }}</span>
+                              }
+                              <span class="dmsg-type dmsg-total">Total</span>
+                              <span class="dmsg-count dmsg-total">{{ getDmsgServerCount(node) }}</span>
+                            </div>
+                          } @else {
+                            <span>-</span>
+                          }
+                        </td>
+                        <td class="key-cell">
                           {{ node.localPk }}
                         </td>
                         <td>

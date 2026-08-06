@@ -43,6 +43,14 @@ export interface TabButtonData {
    * change in group inserts a visual separator in the tab strip.
    */
   group?: string;
+  /**
+   * When true, the tab is omitted from the rendered strip (both the home-nav
+   * row and the page-tabs row). Used to hide tabs that have no backing in the
+   * current mode — e.g. Rewards / Resources on a browser wasm hypervisor —
+   * without removing the entry, so the array indices (and each page's fixed
+   * selectedTabIndex) stay stable.
+   */
+  hidden?: boolean;
 }
 
 /**

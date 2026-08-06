@@ -6,7 +6,7 @@ import { ServiceHealthEntry, ServiceHealthService } from 'src/app/services/servi
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
-import { homeTabsData } from 'src/app/utils/home-tabs';
+import { homeTabsData, isWasmHvCore } from 'src/app/utils/home-tabs';
 
 /** One RSN's remote /stats fetch result, mirrors pkg/visor.RSNRemoteStat. */
 interface RSNRemoteStat {
@@ -39,6 +39,26 @@ interface RSNSnapshot {
  * of every deployment service the local visor is configured to use:
  * Transport Discovery, DMSG Discovery, Address Resolver, Route Finder,
  * Uptime Tracker, Service Discovery. Polled every 15s.
+ *
+ * Browser wasm hypervisor cores (an in-tab serverless visor or a standalone
+ * wasm hypervisor) don't serve /api/service-health — the wasm core (pkg/wasmhv)
+ * has no route for it, so the fetch 404s and the view used to show a red
+ * "Failed to fetch services health". On those cores the view now degrades to a
+ * neutral "not available on a browser visor" notice (see `notAvailable`).
+ *
+ * DEFERRED real fix (would let a browser wasm visor populate this table):
+ *   1. Extend pkg/wasmhv SelfProvider with e.g. `SelfServiceHealth() []byte`,
+ *      returning the native /api/service-health shape ([]ServiceHealthEntry)
+ *      pre-marshaled — same pattern as SelfNetworkView / SelfNetworkTransports.
+ *   2. Route it in pkg/wasmhv/router.go ServeHTTP (`case p == "/service-health"`),
+ *      falling back to `[]` when the tab can't reach the deployment services.
+ *   3. Implement the provider on the wasm visor: reuse the visor's existing
+ *      per-service /health probe (the native visor already does this for the
+ *      native endpoint) over the tab's dmsg client, with a short cache since
+ *      each probe is a dmsg round-trip. The RSN stats (route-setup-nodes/stats)
+ *      would need the analogous wasm-core route + self probe.
+ * That is real backend work (a dmsg round-trip per service, on a cadence);
+ * graceful degradation is shipped here instead.
  */
 @Component({
   selector: 'app-services-health',
@@ -52,6 +72,13 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   loading = true;
   error: string | null = null;
   lastUpdated: Date | null = null;
+
+  // True when served by a browser wasm hypervisor core, which does not probe
+  // the deployment services' /health endpoints — so instead of firing a fetch
+  // that 404s (and rendering a red "Failed to fetch services health" error) the
+  // view shows a clear "not available on a browser visor" notice. See the
+  // design note in the component doc for the real (deferred) fix.
+  notAvailable = isWasmHvCore();
 
   // Route setup node remote stats.
   rsnStats: RSNRemoteStat[] = [];
@@ -74,6 +101,17 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   }
 
   ngOnInit() {
+    // A browser wasm hypervisor core doesn't serve /api/service-health (nor the
+    // route-setup-node stats) — it would 404. Skip the polls entirely and let
+    // the template render the graceful "not available on a browser visor"
+    // notice instead of a hard error.
+    if (this.notAvailable) {
+      this.loading = false;
+      this.rsnLoading = false;
+
+      return super.ngOnInit();
+    }
+
     // Poll every 15s, starting immediately.
     this.sub = interval(15000)
       .pipe(
