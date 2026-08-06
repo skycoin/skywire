@@ -1146,6 +1146,18 @@
       text-decoration: underline;
     }
 
+    /* Same reason as .media-dl above: on sent-blue, the accent blue reads as
+       a smudge. The filled state has to give up its blue too — it would be
+       invisible against the bubble. */
+    .message-row.sent .mc-speed { color: #fff; }
+    .message-row.sent .mc-speed:hover { background: rgba(255, 255, 255, 0.16); }
+
+    .message-row.sent .mc-speed.on {
+      background: rgba(255, 255, 255, 0.28);
+      border-color: transparent;
+      color: #fff;
+    }
+
     .file-card {
       display: flex;
       align-items: center;
@@ -1249,6 +1261,32 @@
 
     .media-dl:hover {
       text-decoration: underline;
+    }
+
+    /* Playback speed, on the actions row of every player — recorded clips and
+       attached audio/video alike. A button rather than a link because it
+       changes state instead of going somewhere, and it reads the rate it is
+       currently at rather than the one it would move to. Filled off 1x, so a
+       clip playing at a speed you set three messages ago says so. */
+    .mc-speed {
+      flex-shrink: 0;
+      padding: 1px 8px;
+      background: none;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      color: var(--accent-blue);
+      font: inherit;
+      font-variant-numeric: tabular-nums;
+      line-height: 1.5;
+      cursor: pointer;
+    }
+
+    .mc-speed:hover { background: rgba(0, 122, 255, 0.12); }
+
+    .mc-speed.on {
+      background: var(--accent-blue);
+      border-color: transparent;
+      color: #fff;
     }
 
     /* ---- Recorded voice & video messages ---------------------------------
@@ -3683,6 +3721,11 @@
         // arrow; with the field empty it is the recording affordance, either
         // 'mic' (voice message) or 'video' — a user choice kept across reloads.
         this.mediaMode = localStorage.getItem('skychat_media_mode') === 'video' ? 'video' : 'mic';
+        // Playback rate for every player on the page (see the playback-speed
+        // section). One value, not one per clip, and kept across reloads.
+        this.speed = this._loadSpeed();
+        // The media element currently holding the OS media session, if any.
+        this._msMedia = null;
         // Voice/video-message recorder state (see the recording section below).
         // One recording at a time; every field is reset by _recReset().
         this.rec = {
@@ -4622,14 +4665,20 @@
           // A clip recorded in the composer is a message, not an attachment:
           // it gets its own player, and its filename (a bare timestamp) is not
           // worth showing.
-          const acts = this._mediaActs([dl, reqLink]);
+          // The speed pill leads the actions row on every player: it is the
+          // one action you take while the clip is running, where download and
+          // request are things you do to a file.
+          const acts = this._mediaActs([this._speedPill(), dl, reqLink]);
           if (this.isVoiceMessage(file)) return this._renderVoicePlayer(urlAttr, sizeStr, acts);
           if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, acts);
           const isVideo = this.isVideoFile(file);
           const tag = isVideo ? 'video' : 'audio';
           const cls = isVideo ? 'media-video' : 'media-audio';
-          return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"></${tag}>
-            ${this._mediaCaption(name, nameAttr, sizeStr, [dl, reqLink])}`;
+          // data-ms-title is what the OS media controls put on the lock screen
+          // for this clip; an attached file is known by its name.
+          return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"
+              data-ms-title="${nameAttr}"></${tag}>
+            ${this._mediaCaption(name, nameAttr, sizeStr, [this._speedPill(), dl, reqLink])}`;
         }
         // No bytes to play (never received / pruned): fall through to the file
         // card, but still name a recorded clip for what it is.
@@ -4680,6 +4729,308 @@
       }
 
       // ---------------------------------------------------------------------
+      // Playback speed
+      //
+      // One rate for every player, kept across reloads. Not per clip: someone
+      // who listens to voice messages at 1.5x wants the next one at 1.5x too,
+      // and a speed that resets every message is one you set once and then
+      // stop using. The pill cycles rather than opening a menu — one tap for
+      // the common move, it wraps round to get back, and the label always says
+      // where you are rather than where you would go.
+      //
+      // The stops run below 1x as well as above it: slowing down is what you
+      // want for a clip you are transcribing or a video you are trying to see
+      // a detail in, and it costs nothing to have both directions on the way
+      // round.
+      // ---------------------------------------------------------------------
+
+      _speedRates() { return [0.75, 1, 1.25, 1.5, 2]; }
+
+      _loadSpeed() {
+        const stored = Number(localStorage.getItem('skychat_speed'));
+        return this._speedRates().includes(stored) ? stored : 1;
+      }
+
+      // "1x", "1.5x" — never "1.50x", and the multiplication sign rather than
+      // the letter x.
+      _speedLabel(rate) { return `${rate}×`; }
+
+      _speedPill() {
+        const label = this._speedLabel(this.speed);
+        return `<button type="button" class="mc-speed${this.speed === 1 ? '' : ' on'}"
+                title="Playback speed" aria-label="Playback speed ${label}"
+                onclick="app.cycleSpeed(event)">${label}</button>`;
+      }
+
+      // cycleSpeed advances to the next rate and applies it to everything at
+      // once — including the clip that is playing right now, which is the
+      // point: you speed one up while listening to it.
+      cycleSpeed(ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        const rates = this._speedRates();
+        const at = rates.indexOf(this.speed);
+        this.speed = rates[(at + 1) % rates.length];
+        localStorage.setItem('skychat_speed', String(this.speed));
+        this._applySpeed();
+      }
+
+      // _applySpeed pushes the current rate onto every player on the page and
+      // relabels every pill. Page-wide on purpose: the rate is one setting, so
+      // a pill that disagreed with the one two messages up would be lying
+      // about what the next clip will do.
+      _applySpeed() {
+        document.querySelectorAll('.vm-media, .media-audio, .media-video')
+          .forEach(media => this._setRate(media));
+        const label = this._speedLabel(this.speed);
+        document.querySelectorAll('.mc-speed').forEach(pill => {
+          pill.textContent = label;
+          pill.setAttribute('aria-label', `Playback speed ${label}`);
+          pill.classList.toggle('on', this.speed !== 1);
+        });
+        // The OS scrubber advances at the playback rate, so it has to be told.
+        if (this._msMedia) this._msPosition(this._msMedia);
+      }
+
+      // _bindMedia is what every player gets, recorded or attached: the
+      // current rate, and a seat in the OS media session.
+      _bindMedia(media) {
+        if (!media) return;
+        this._msBind(media);
+        this._setRate(media);
+        if (media.dataset.rateBound) return;
+        media.dataset.rateBound = '1';
+        // Re-applied at load and at play, not just once here. The media load
+        // algorithm resets playbackRate to defaultPlaybackRate, so a rate set
+        // on an element that has not fetched its metadata yet is quietly lost
+        // — which is every player on the page, since they all preload only
+        // metadata and most never get further until they are tapped.
+        ['loadedmetadata', 'play'].forEach(ev =>
+          media.addEventListener(ev, () => this._setRate(media)));
+      }
+
+      _setRate(media) {
+        try {
+          media.defaultPlaybackRate = this.speed;
+          media.playbackRate = this.speed;
+        } catch (e) { /* not settable on this element yet */ }
+      }
+
+      // ---------------------------------------------------------------------
+      // OS media controls
+      //
+      // navigator.mediaSession is what puts a playing clip where the rest of
+      // the system keeps media: the lock screen and the notification shade on
+      // a phone, the media keys and Now Playing on a desktop. Nothing else in
+      // this UI can reach those places — a page cannot draw a notification —
+      // and it is the difference between a voice message you have to come back
+      // to the tab to pause and one you pause from anywhere.
+      //
+      // Only ONE clip plays at a time here (vmToggle enforces it), so there is
+      // one session, handed to whichever media element started last. It is
+      // released on ended rather than on pause, because a paused clip is still
+      // the thing you would resume.
+      // ---------------------------------------------------------------------
+
+      _msSupported() {
+        return typeof navigator !== 'undefined' && 'mediaSession' in navigator &&
+          typeof window.MediaMetadata === 'function';
+      }
+
+      // Wire one media element into the session. Idempotent — a re-render
+      // re-runs _initPlayers over nodes that may already be bound.
+      _msBind(media) {
+        if (!media || media.dataset.msBound) return;
+        media.dataset.msBound = '1';
+        media.addEventListener('play', () => this._msTake(media));
+        media.addEventListener('pause', () => {
+          if (this._msMedia !== media) return;
+          if (this._msSupported()) navigator.mediaSession.playbackState = 'paused';
+          this._hostPush(media, false);
+        });
+        media.addEventListener('ended', () => {
+          if (this._msMedia === media) this._msRelease();
+        });
+        // timeupdate feeds the in-page session only. The host bridge is told
+        // on the events that CHANGE something instead — it reports a position
+        // and a rate, and the shade extrapolates the scrubber from those, so
+        // pushing four times a second would be four notification rebuilds a
+        // second for a bar that was already moving.
+        media.addEventListener('timeupdate', () => {
+          if (this._msMedia === media) this._msPosition(media);
+        });
+        ['durationchange', 'ratechange', 'seeked'].forEach(ev =>
+          media.addEventListener(ev, () => {
+            if (this._msMedia !== media) return;
+            this._msPosition(media);
+            this._hostPush(media, !media.paused && !media.ended);
+          }));
+      }
+
+      // _msTake gives the session to [media] and describes what is playing.
+      // The description is taken from the chat header rather than reconstructed
+      // — it is the same "who this is" the user is already looking at, and it
+      // reads correctly for a DM, a group and the notes thread without this
+      // code knowing which of the three it is.
+      _msTake(media) {
+        this._msMedia = media;
+        this._hostPush(media, true);
+        if (!this._msSupported()) return;
+        const ms = navigator.mediaSession;
+        const header = document.getElementById('headerPk');
+        const avatar = document.getElementById('headerAvatar');
+        const artwork = (avatar && avatar.src) ? [{ src: avatar.src, sizes: '128x128' }] : [];
+        try {
+          ms.metadata = new MediaMetadata({
+            title: media.dataset.msTitle || 'Audio',
+            artist: (header && header.textContent && header.textContent !== '-')
+              ? header.textContent : 'SkyChat',
+            album: 'SkyChat',
+            artwork,
+          });
+        } catch (e) { /* metadata is a nicety; the controls matter more */ }
+        ms.playbackState = 'playing';
+        this._msHandlers(media);
+        this._msPosition(media);
+      }
+
+      // The buttons the OS offers. Every one is set inside its own try: an
+      // engine that does not know an action throws on setActionHandler rather
+      // than ignoring it, and losing "seek forward" must not cost us "pause".
+      _msHandlers(media) {
+        const ms = navigator.mediaSession;
+        const set = (action, fn) => {
+          try { ms.setActionHandler(action, fn); } catch (e) { /* unsupported */ }
+        };
+        const seekBy = offset => {
+          const total = isFinite(media.duration) ? media.duration : 0;
+          const to = (media.currentTime || 0) + offset;
+          try {
+            media.currentTime = Math.max(0, total ? Math.min(total, to) : to);
+          } catch (e) { /* not seekable yet */ }
+        };
+        set('play', () => media.play());
+        set('pause', () => media.pause());
+        set('stop', () => {
+          media.pause();
+          try { media.currentTime = 0; } catch (e) { /* not seekable */ }
+          this._msRelease();
+        });
+        set('seekbackward', details => seekBy(-(details && details.seekOffset ? details.seekOffset : 10)));
+        set('seekforward', details => seekBy(details && details.seekOffset ? details.seekOffset : 10));
+        set('seekto', details => {
+          if (!details || typeof details.seekTime !== 'number') return;
+          if (details.fastSeek && media.fastSeek) { media.fastSeek(details.seekTime); return; }
+          try { media.currentTime = details.seekTime; } catch (e) { /* not seekable */ }
+        });
+      }
+
+      // The scrubber's three numbers. Skipped entirely while the duration is
+      // unknown — a recorded WebM reports Infinity until it has been scanned
+      // (see _vmFixDuration), and setPositionState throws on that rather than
+      // ignoring it.
+      _msPosition(media) {
+        if (!this._msSupported() || !navigator.mediaSession.setPositionState) return;
+        const duration = media.duration;
+        if (!isFinite(duration) || duration <= 0) return;
+        try {
+          navigator.mediaSession.setPositionState({
+            duration,
+            playbackRate: media.playbackRate || 1,
+            position: Math.min(Math.max(media.currentTime || 0, 0), duration),
+          });
+        } catch (e) { /* position is a nicety; the controls matter more */ }
+      }
+
+      _msRelease() {
+        this._msMedia = null;
+        this._hostClear();
+        if (!this._msSupported()) return;
+        navigator.mediaSession.playbackState = 'none';
+        try { navigator.mediaSession.setPositionState(); } catch (e) { /* unsupported */ }
+      }
+
+      // ---------------------------------------------------------------------
+      // The host app's media controls
+      //
+      // Android WebView implements navigator.mediaSession and then connects it
+      // to nothing: the calls above all succeed inside the Skywire app and no
+      // session ever reaches the platform, so nothing appears in the
+      // notification shade. (Measured on-device while a voice message was
+      // playing from this page: dumpsys media_session reported "Sessions Stack
+      // - have 0 sessions" while dumpsys named this package as the one making
+      // sound.) The bridging code lives in Chrome-the-browser, not in WebView.
+      //
+      // So when the host app is there it injects window.SkywireMedia, this
+      // reports through it, and the app posts the session and the notification
+      // itself. Everything above stays exactly as it is — it is what works in
+      // a real browser, and it costs nothing here.
+      // ---------------------------------------------------------------------
+
+      _hostMedia() {
+        const host = (typeof window !== 'undefined') ? window.SkywireMedia : null;
+        return (host && typeof host.update === 'function') ? host : null;
+      }
+
+      _hostPush(media, playing) {
+        const host = this._hostMedia();
+        if (!host || !media) return;
+        // Described from the chat header, for the same reason _msTake is: it
+        // is the "who this is" already on screen, and it reads correctly for a
+        // DM, a group and the notes thread alike.
+        const header = document.getElementById('headerPk');
+        const avatar = document.getElementById('headerAvatar');
+        try {
+          host.update(JSON.stringify({
+            title: media.dataset.msTitle || 'Audio',
+            artist: (header && header.textContent && header.textContent !== '-')
+              ? header.textContent : 'SkyChat',
+            artwork: (avatar && avatar.src) || '',
+            duration: isFinite(media.duration) ? media.duration : 0,
+            position: media.currentTime || 0,
+            rate: media.playbackRate || 1,
+            playing: !!playing,
+          }));
+        } catch (e) { /* the host is gone; the page plays on regardless */ }
+      }
+
+      _hostClear() {
+        const host = this._hostMedia();
+        if (!host || typeof host.clear !== 'function') return;
+        try { host.clear(); } catch (e) { /* already gone */ }
+      }
+
+      // mediaAction is what the host app calls back into when one of its
+      // notification buttons is pressed. It drives the same element the page's
+      // own controls do, so the waveform and the shade never disagree.
+      mediaAction(name, value) {
+        const media = this._msMedia;
+        if (!media) return;
+        const seek = to => {
+          const total = isFinite(media.duration) ? media.duration : 0;
+          try {
+            media.currentTime = Math.max(0, total ? Math.min(total, to) : to);
+          } catch (e) { /* not seekable yet */ }
+        };
+        switch (name) {
+          case 'play': {
+            const played = media.play();
+            if (played && played.catch) played.catch(() => { /* the shade asked; nothing to toast */ });
+            break;
+          }
+          case 'pause': media.pause(); break;
+          case 'stop':
+            media.pause();
+            seek(0);
+            this._msRelease();
+            break;
+          case 'seekby': seek((media.currentTime || 0) + Number(value || 0)); break;
+          case 'seekto': seek(Number(value || 0)); break;
+        }
+        // The player under the message repaints from the media's own events,
+        // so there is nothing to update here beyond what those already do.
+      }
+
+      // ---------------------------------------------------------------------
       // Recorded-message players
       //
       // Voice: a play button, the clip's real waveform, and its duration —
@@ -4707,7 +5058,8 @@
                 ${acts}
               </div>
             </div>
-            <audio class="vm-media" src="${urlAttr}" preload="metadata"></audio>
+            <audio class="vm-media" src="${urlAttr}" preload="metadata"
+                   data-ms-title="Voice message"></audio>
           </div>`;
       }
 
@@ -4717,7 +5069,8 @@
         return `<div class="vm-round">
             <div class="vm-round-frame" role="button" tabindex="0" title="Play video message"
                  aria-label="Play video message" onclick="app.vmToggle(this)">
-              <video class="vm-media" src="${urlAttr}" preload="metadata" playsinline></video>
+              <video class="vm-media" src="${urlAttr}" preload="metadata" playsinline
+                     data-ms-title="Video message"></video>
               <svg class="vm-ring" viewBox="0 0 100 100" aria-hidden="true">
                 <circle class="vm-ring-track" cx="50" cy="50" r="47"></circle>
                 <circle class="vm-ring-fill" cx="50" cy="50" r="47"></circle>
@@ -4738,11 +5091,18 @@
       // same handlers — only the parts they own differ).
       _vmBox(el) { return (el && el.closest) ? el.closest('.vm-player, .vm-round') : null; }
 
-      // _initPlayers wires every recorded-message player inside a freshly
-      // rendered row: media events repaint it, and a voice player kicks off the
-      // waveform decode. Idempotent, so a re-render can't double-bind.
+      // _initPlayers wires every player inside a freshly rendered row.
+      //
+      // A recorded-message player gets its media events (they repaint it) and,
+      // for a voice clip, the waveform decode. An attached .mp3/.mp4 keeps the
+      // browser's own controls and needs none of that — but it does need the
+      // two things every player here shares: the current playback rate, and a
+      // seat in the OS media session. Idempotent, so a re-render can't
+      // double-bind.
       _initPlayers(root) {
         if (!root || !root.querySelectorAll) return;
+        root.querySelectorAll('.vm-media, .media-audio, .media-video').forEach(media =>
+          this._bindMedia(media));
         root.querySelectorAll('.vm-player, .vm-round').forEach(box => {
           const media = box.querySelector('.vm-media');
           if (!media || box.dataset.vmInit) return;

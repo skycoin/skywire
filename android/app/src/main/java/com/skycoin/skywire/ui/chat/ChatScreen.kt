@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.ChatMedia
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.core.SkychatProfile
@@ -213,6 +214,10 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
                             view.setDownloadListener { link, _, disposition, mime, _ ->
                                 ChatWebView.download(ctx, link, disposition, mime, password.value)
                             }
+                            // Lets the page put whatever it is playing in the
+                            // notification shade — which WebView will not do
+                            // for it, see ChatMedia.
+                            ChatMedia.attach(view)
                             webView = view
                         }
                     },
@@ -226,6 +231,10 @@ fun ChatScreen(onOpenLogs: (String) -> Unit, viewModel: ChatViewModel = viewMode
                     },
                     onRelease = { view ->
                         // A live SSE stream survives the composable otherwise.
+                        // The media notification must not: the page IS the
+                        // player, so controls for a destroyed one are buttons
+                        // that do nothing.
+                        ChatMedia.detach(view)
                         ChatWebView.release(view)
                         webView = null
                         loadedUrl = null

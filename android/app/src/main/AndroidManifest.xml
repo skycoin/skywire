@@ -105,6 +105,13 @@
             android:exported="false"
             android:foregroundServiceType="microphone|mediaPlayback" />
 
+        <!-- The transport buttons on the SkyChat media notification. Not
+             exported: the only thing that ever fires these is the notification
+             this app posted, and its PendingIntents carry our own component. -->
+        <receiver
+            android:name=".core.ChatMediaReceiver"
+            android:exported="false" />
+
         <!-- Owns the phone's VPN interface and hands its descriptor to the
              visor.
 
