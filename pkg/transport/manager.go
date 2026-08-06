@@ -23,6 +23,10 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
+// autoTransportPerTypeTimeout bounds each per-type SaveTransport attempt in
+// EnsureBestTransport, so one slow/hanging type can't starve the rest.
+const autoTransportPerTypeTimeout = 15 * time.Second
+
 const reconnectPhaseDelay = 10 * time.Second
 const reconnectRemoteTimeout = 3 * time.Second
 const transportReRegisterInterval = 90 * time.Second
@@ -895,7 +899,15 @@ func preferredDirectOrder(have map[types.Type]bool) []types.Type {
 // logs at WARN, and callers that must never relay app traffic (e.g. proxy exit
 // SELECTION, which can just pick a different, p2p-reachable exit) should prefer
 // skipping the peer over accepting a dmsg fallback.
-func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey) error {
+//
+// skip lists types the caller has already attempted (or wants excluded) — the
+// native route-setup hook passes STCPR/SUDPH, which it tries itself with AR- and
+// STUN-aware gating, so EnsureBestTransport only adds the remaining direct types.
+func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey, skip ...types.Type) error {
+	skipSet := make(map[types.Type]bool, len(skip))
+	for _, t := range skip {
+		skipSet[t] = true
+	}
 	order := tm.PreferredDirectCreateOrder()
 	// Already have a direct transport? A 1-hop route can use it — nothing to do.
 	for _, nt := range order {
@@ -905,14 +917,23 @@ func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey
 	}
 	var lastErr error
 	for _, nt := range order {
-		if _, err := tm.SaveTransport(ctx, remote, nt, LabelAutomatic); err == nil {
+		if skipSet[nt] {
+			continue
+		}
+		// Bound EACH attempt so a slow/hanging type (e.g. SUDPH hole-punch under a
+		// symmetric NAT) can't consume the whole budget and starve later, cheaper
+		// types (webrtc/ws/wt) in the preference order.
+		tctx, cancel := context.WithTimeout(ctx, autoTransportPerTypeTimeout)
+		_, err := tm.SaveTransport(tctx, remote, nt, LabelAutomatic)
+		cancel()
+		if err == nil {
 			tm.Logger.Debugf("auto-transport: created %s direct transport to %s", nt, remote)
 			return nil
-		} else if ctx.Err() != nil {
-			return ctx.Err()
-		} else {
-			lastErr = err
 		}
+		if ctx.Err() != nil { // parent cancelled (not just this type's per-type cap) → abort
+			return ctx.Err()
+		}
+		lastErr = err
 	}
 	// Last resort: the DMSG relay — loud, because it means no direct type worked.
 	if _, err := tm.SaveTransport(ctx, remote, types.DMSG, LabelAutomatic); err == nil {
