@@ -15,6 +15,14 @@ class SkywirePaths(context: Context) {
 
     val configFile: File = File(dataDir, "skywire-config.json")
 
+    /**
+     * The config, encrypted, while the core is stopped and the user has asked
+     * for it. Never present at the same time as a meaningful [configFile] —
+     * see [ConfigVault]. Sits beside it rather than elsewhere so a config
+     * backup or a manual copy of the data dir carries whichever form exists.
+     */
+    val sealedConfigFile: File = File(dataDir, "skywire-config.json.enc")
+
     /** Config `local_path` — app workdirs, log DBs, uptime.db land here. */
     val localDir: File = File(dataDir, "local")
 

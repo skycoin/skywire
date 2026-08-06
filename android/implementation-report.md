@@ -7,6 +7,118 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — Hardening: what leaves the phone, what is readable on it
+
+Four things that had been carried as open questions since the size work
+settled, plus one audit finding.
+
+**Nothing this app stores leaves the device by itself.** `allowBackup="false"`
+was already set and already refused Google Drive. It does not refuse the other
+exit: the device-to-device transfer that runs when a new phone is set up from
+an old one, which would have carried the visor's secret key and the wallet's
+recovery phrases onto a second handset. `res/xml/data_extraction_rules.xml`
+now declines both `<cloud-backup>` and `<device-transfer>`, and
+`res/xml/backup_rules.xml` says the same thing for Android 11 and earlier,
+which ignores the newer file — minSdk is 26, so that is real devices rather
+than a formality.
+
+Both are `exclude domain="root" path="."` — everything, nothing carved back
+in. Naming the two sensitive files would have been narrower and would have
+rotted the first time someone added a third store. There is nothing a user
+loses: the identity is meant to move deliberately through Export config, and
+the wallet is meant to be restored from its twelve words. The seeds and
+passwords are sealed under non-exportable AndroidKeyStore keys anyway, so a
+transferred copy would have been undecryptable ciphertext; this stops the
+ciphertext travelling either.
+
+**The config can be encrypted at rest, and that is the largest piece.**
+`skywire-config.json` holds `sk` — the whole of this phone's identity. It is
+app-private, so the threat is not another app; it is the device being examined.
+New `ConfigVault` seals it as AES-256-GCM under its own keystore alias
+whenever the core is not running, and unseals it at start. Two files, never
+both meaningful: plaintext while the visor runs (it opens the path it is given
+and rewrites it), ciphertext while it is stopped.
+
+Sealing happens after the visor exits, not at generation — that is what lets
+the visor's own runtime rewrites survive, since whatever it left behind is what
+gets encrypted. It runs in the service's `finally` under `NonCancellable`, so a
+crashed core still seals and a cancelled scope cannot skip it and leave the key
+in the clear. `seal` writes the ciphertext, reads it back, and only then
+deletes the plaintext; a power cut mid-way leaves both, and `unseal` resolves
+that in favour of the plaintext. The outcome is never a config that is gone.
+
+The dangerous failure this had to not have: `ensureConfig` treats a missing
+config as first-run and generates a **new identity**. A sealed config plus a
+caller that forgot to unseal would look exactly like a new phone and would
+replace the user's key without a word. So the unseal lives inside
+`ConfigManager` itself — `ensureConfig`, `replaceSecretKey` and the readers all
+go through it — rather than in the service that happens to call it. The two
+synchronous readers (the public key on the identity screen, the redacted copy
+in a diagnostics bundle) read through the vault too, so both still work with
+the config sealed and the core down, which is exactly when the identity screen
+is being looked at.
+
+Off by default and it stays optional. It buys nothing against a running
+unlocked phone, and it cannot be recovered if the keystore is wiped — a factory
+reset, or on some OEMs removing the screen lock. The Settings copy says so.
+Turning it off is confirmed biometrically, because that is a security decision
+being reversed; turning it on is not.
+
+**Battery.** The foreground service was already the baseline and was never the
+issue: Doze is a separate mechanism that suspends the *network* of non-exempt
+apps once the screen has been off a while, and a foreground service does not
+opt out of it. Short naps cost nothing — dmsg sessions are TCP with their own
+keepalives and resume when the window opens — but over a long idle they drop,
+the visor reconnects, and what the user sees is messages arriving when the
+phone next wakes rather than when they were sent.
+
+`BatteryOptimization` reports the state and opens the system dialog, falling
+back to the full list on OEM builds where the direct intent does not resolve.
+It is offered twice: a permanent card in Settings, and a one-time prompt on
+Home that appears only *after* the core is running — before that the question
+is about a problem the user has not got yet. "Not now" is remembered for good
+and silences both. `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` is declared; Play
+restricts it to apps whose core function needs it, and an always-on P2P node
+that is also a VPN service is on that list.
+
+**The audit found one gap.** FLAG_SECURE covered the four wallet screens that
+can show or take a recovery phrase — seed backup, verify, restore, reveal — and
+the app lock holds it session-wide when enabled. It did not cover Settings ▸
+Replace secret key, which is a field you paste a visor secret key into in the
+clear. That is the same class of secret as the twelve words: it *is* the
+identity, it cannot be reissued, and anyone who reads it owns the visor. It has
+the flag now. `SecureWindow` moved from `ui/wallet/WalletUi.kt` to
+`ui/components/`, since it stopped being a wallet concern.
+
+**Size, re-measured rather than assumed:** `libskywire-mobile.so` is
+63,963,432 bytes against the 83,886,080-byte budget `make android-mobile-check`
+enforces — 76% of it. Debug APK 74 MB.
+
+**Verified on the emulator.** Config encryption end to end, which is the one
+that mattered: toggled on with the core down and 9,513 bytes of plaintext
+became 9,541 bytes of `skywire-config.json.enc` with no plaintext beside it —
+exactly plaintext + 12-byte IV + 16-byte GCM tag — and `strings` on it returns
+nothing. Connecting restored the plaintext at 9,513 bytes and the public key
+was **unchanged** (`02498cde10…deadef20` before and after), which is the
+no-new-identity property. Disconnecting re-sealed it. Settings still showed the
+key while sealed. The Home battery prompt appeared once Connected, with Allow /
+Not now, on an emulator confirmed absent from `dumpsys deviceidle whitelist`.
+The secret-key dialog screenshots as a pure-black 21 KB PNG where a normal
+screen is 140 KB — FLAG_SECURE holding.
+
+**Also:** the bottom bar's Skycoin cloud went 44dp → 56dp. It carries no label,
+so it has the label row to grow into, and it is the one slot aimed for by shape
+rather than read — at 44 it was a slightly large icon among four icons instead
+of the centre of the bar. Checked for clipping at the new size; there is none.
+
+**Not covered:** device-to-device transfer cannot be exercised on an emulator,
+so the D2D exclusion is verified by declaration and not by observation; Doze
+behaviour was reasoned from the platform contract rather than measured over a
+long idle; and the keystore-wiped path (factory reset with a sealed config)
+is handled with a stated error but has not been provoked.
+
+---
+
 ## 2026-08-07 — SkyChat wears the Wallet's design; one header for every tab
 
 Three things, all cosmetic in the sense that no protocol changed, and none of

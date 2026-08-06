@@ -520,4 +520,21 @@
     <string name="help_dex_body">Trading against a market maker reached over Skywire rather than over the open internet. The screen is the exchange\u2019s own, running against the market you are connected to.\n\nOrders and balances belong to that market, not to the wallet on the Wallet tab — the two are separate.\n\nLogs for SkyDEX live in Settings \u25b8 Diagnostics.</string>
     <string name="help_fleet_title">About Fleet</string>
     <string name="help_fleet_body">The visors you run on other machines — a desktop, a server, a Skyminer — seen from this phone. It is a window onto them, not a remote control: what arrives is status, and the one action is a restart.\n\nOff by default. Turning it on restarts this phone\u2019s core, because the setting is read once while the visor builds itself.\n\nA visor\u2019s own log is on its card here, since that feed travels from the remote machine; this app\u2019s logs are in Settings \u25b8 Diagnostics. Names you give a visor are kept on this phone and do not travel with it.</string>
+\n    <!-- Battery / Doze. -->
+    <string name="settings_battery">Battery</string>
+    <string name="settings_battery_hint">Skywire keeps running in the background, but Android may still pause its network once the screen has been off for a while — messages and calls then arrive when the phone next wakes rather than when they were sent. Allowing Skywire to ignore battery optimisation closes that gap. It costs battery, and the app works either way.</string>
+    <string name="settings_battery_exempt_hint">Skywire is allowed to ignore battery optimisation, so its connections stay up while the screen is off. Android\u2019s battery settings can take this back at any time.</string>
+    <string name="settings_battery_allow">Allow</string>
+    <string name="settings_battery_not_now">Not now</string>
+    <string name="settings_battery_no_screen">This phone has no battery-optimisation screen to open.</string>
+    <string name="home_battery_title">Keep Skywire connected in the background?</string>
+    <string name="home_battery_body">Android can pause this app\u2019s network once the screen has been off for a while. Allow it to ignore battery optimisation and messages arrive as they are sent.</string>
+    <!-- Config encryption at rest. -->
+    <string name="settings_encrypt">Encrypt the config at rest</string>
+    <string name="settings_encrypt_hint">Seals the config file whenever Skywire is disconnected, under a key this phone will not hand out. Protects the secret key if the device is examined; it makes no difference while you are connected.</string>
+    <string name="settings_encrypt_warning">If this phone is reset — or its screen lock is removed and set again — the sealing key is destroyed and the identity in the config cannot be recovered. Export the config first if it matters.</string>
+    <string name="settings_encrypt_disable_prompt">Confirm to store the config unencrypted</string>
+    <string name="settings_encrypt_on_done">Config encrypted.</string>
+    <string name="settings_encrypt_on_pending">The config will be encrypted when you disconnect.</string>
+    <string name="settings_encrypt_off_done">Config is no longer encrypted.</string>
 </resources>

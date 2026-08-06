@@ -32,6 +32,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +59,7 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.api.VisorSummary
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.ui.components.InfoRow
+import com.skycoin.skywire.ui.components.SectionCard
 import com.skycoin.skywire.ui.components.formatUptime
 import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.ui.logs.LogSources
@@ -104,11 +106,50 @@ fun HomeScreen(
         ConnectButton(state, onConnect = connect, onDisconnect = viewModel::disconnect)
         Spacer(Modifier.height(16.dp))
         StatusCaption(state, onOpenLogs)
+        if (state.offerBatteryExemption) {
+            Spacer(Modifier.height(20.dp))
+            BatteryPrompt(
+                onAllow = viewModel::requestBatteryExemption,
+                onDismiss = viewModel::dismissBatteryPrompt,
+            )
+        }
         state.summary?.let { summary ->
             Spacer(Modifier.height(24.dp))
             VisorInfoCard(state, summary, onOpenLogs)
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+/**
+ * The one place the exemption is put in front of someone who never opens
+ * Settings. It appears under the Connect button *after* the core is running,
+ * because that is the first moment the problem it describes is real, and it
+ * appears once — "Not now" is remembered for good. The same card lives in
+ * Settings permanently for anyone who changes their mind.
+ */
+@Composable
+private fun BatteryPrompt(onAllow: () -> Unit, onDismiss: () -> Unit) {
+    SectionCard {
+        Text(
+            stringResource(R.string.home_battery_title),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(R.string.home_battery_body),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onAllow) {
+                Text(stringResource(R.string.settings_battery_allow))
+            }
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_battery_not_now))
+            }
+        }
     }
 }
 

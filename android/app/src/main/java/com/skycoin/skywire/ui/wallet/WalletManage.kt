@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
+import com.skycoin.skywire.ui.components.SecureWindow
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.wallet.WalletMeta
 import java.time.Instant

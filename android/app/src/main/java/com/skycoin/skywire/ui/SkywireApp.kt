@@ -155,11 +155,20 @@ fun SkywireApp() {
                                 painter = slot.icon(),
                                 contentDescription = slot.label
                                     ?: stringResource(R.string.tab_hub_description),
-                                // Logo slot: slightly enlarged and UNtinted — the
-                                // brand cloud keeps its color; the selection pill
-                                // alone signals the active state. Other slots get
-                                // the bar's default selected/unselected tint.
-                                modifier = Modifier.size(if (slot.isLogo) 44.dp else 24.dp),
+                                // Logo slot: enlarged and UNtinted — the brand
+                                // cloud keeps its color; the selection pill
+                                // alone signals the active state. Other slots
+                                // get the bar's default selected/unselected
+                                // tint.
+                                //
+                                // 56dp against the others' 24dp. It carries no
+                                // label, so it has the label row's height to
+                                // grow into, and it is the one slot people aim
+                                // for by shape rather than by reading — the
+                                // cloud IS the button. At 44 it read as a
+                                // slightly large icon among four icons instead
+                                // of as the centre of the bar.
+                                modifier = Modifier.size(if (slot.isLogo) 56.dp else 24.dp),
                                 tint = if (slot.isLogo) Color.Unspecified
                                 else LocalContentColor.current,
                             )
