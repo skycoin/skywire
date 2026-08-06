@@ -86,23 +86,6 @@ func emitProxyLog(winID, msg string) {
 	}
 }
 
-// directExitDialOptions dials an exit the way native `skysocks-client --direct`
-// does (rpc_ingress_gateway.go's Direct mapping): create a direct transport to
-// the exit on demand, dial 1-hop over it, and bypass the route-finder + setup
-// node. On a browser edge the only creatable transport is DMSG (STCPR/SUDPH have
-// no factory), so EnsureDirectTransport lands a 1-hop dmsg transport to any
-// online exit — instead of a route-finder multi-hop search that can't reach an
-// arbitrary exit and floods "transport not found". Self-heals when the transport
-// drops (the next dial recreates it).
-func directExitDialOptions() *router.DialOptions {
-	o := router.DefaultDialOptions()
-	o.EnsureDirectTransport = true
-	o.UseExistingTpOnly = true
-	o.MinHops = 1
-	o.MuxRoutes = 0
-	return o
-}
-
 // skysocksSession returns a yamux session to the skysocks-server at serverPK,
 // lazily establishing it over a fresh route group (rtr.DialRoutes — the routing
 // layer). Cached per exit; a closed session is re-dialed.
@@ -128,34 +111,26 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	// exits (and different windows) establish in parallel.
 	t0 := time.Now()
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] connecting to exit %s — setting up route…", winID, serverPK.Hex()[:8]))
-	// A reachable exit's direct dmsg transport + session sets up in a few seconds
-	// (~3s observed); a dead/offline one should FAIL FAST so the pool tries another.
-	// SELECTION probes get a tighter cap (creating a dmsg transport to a dead exit
-	// otherwise blocks the full ~20s transport-dial timeout, delaying proxy-ready
-	// when a race round draws several dead exits); the active/standby dials keep the
-	// longer cap. Runs off skysocksMu so exits establish in parallel.
-	dialCap := 18 * time.Second
-	if isProbeProxyWindow(winID) {
-		dialCap = 9 * time.Second
-	}
-	dctx, cancel := context.WithTimeout(ctx, dialCap)
+	// 18s cap: a reachable exit's route (p2p multihop or a freshly-created direct
+	// transport) sets up in a few seconds; a dead/unroutable one should FAIL so the
+	// caller can try another, not hang. Runs off skysocksMu so exits establish in
+	// parallel.
+	dctx, cancel := context.WithTimeout(ctx, 18*time.Second)
 	defer cancel()
-	// Dial the exit like native `skysocks-client --direct`: create a direct DMSG
-	// transport to it on demand, take a 1-hop route over that transport, and
-	// bypass the route-finder (EnsureDirectTransport + UseExistingTpOnly + MinHops
-	// 1). A browser edge has no multi-hop path to an ARBITRARY exit through its
-	// handful of autoconnect (ws/wt/webrtc) transports, so querying the
-	// route-finder there only yields a "transport not found" storm (6× retries per
-	// dead exit, racing several random exits at boot). A 1-hop direct dmsg
-	// transport reaches ANY online exit — the honest, quiet path. STCPR/SUDPH have
-	// no browser factory so EnsureDirectTransport falls through to DMSG.
+	// Default dial: the router races the route-finder (a multihop route over
+	// EXISTING peer-to-peer transports) against the visor's route-setup hook, which
+	// creates the best DIRECT transport to the exit — for a browser edge that's
+	// WEBRTC (p2p), falling back to the dmsg relay only if nothing direct works
+	// (see EnsureBestTransport, wired as the wasm SetupHook in main.go). Whichever
+	// lands first wins; both keep the data plane peer-to-peer. This is exactly what
+	// native `skysocks-client` does by default — no --direct, no forced dmsg.
 	//
-	// Single route (MuxRoutes 0): matching the native visor's working
-	// BrowseClearnet path. A 2-route mux reports "2/2 established" yet the yamux
-	// session over it immediately reads EOF ("session shutdown") — the mux data
-	// plane never carries the skysocks bytes. mux-auto GROW can still adapt an
+	// Single route (MuxRoutes 0, DefaultDialOptions): matching the native visor's
+	// working BrowseClearnet path. A 2-route mux reports "2/2 established" yet the
+	// yamux session over it immediately reads EOF ("session shutdown") — the mux
+	// data plane never carries the skysocks bytes. mux-auto GROW can still adapt an
 	// established single route later.
-	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, directExitDialOptions())
+	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
 	if err != nil {
 		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
 		// If this was the default instance's auto-selected active exit, hand it to
