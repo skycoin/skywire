@@ -31,6 +31,7 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/tpdclient"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
+	"github.com/skycoin/skywire/pkg/visor/visorcore"
 )
 
 func initAddressResolver(ctx context.Context, v *Visor, log *logging.Logger) error {
@@ -552,10 +553,7 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 	// rides the dmsg client. WebRTC is on by default, like stcpr/sudph — a visor
 	// accepts every transport type it can, so browser visors (which can't do
 	// stcpr/sudph/quic) can always reach it.
-	var iceURLs []string
-	for _, s := range v.conf.StunServers {
-		iceURLs = append(iceURLs, "stun:"+s)
-	}
+	iceURLs := visorcore.ICEURLs(v.conf.StunServers)
 	factory := network.ClientFactory{
 		PK:         v.conf.PK,
 		SK:         v.conf.SK,
@@ -611,7 +609,19 @@ func initTransport(ctx context.Context, v *Visor, log *logging.Logger) error {
 		log.Info("stcpr + WS share the stcpr TCP port (cmux) — this visor is reachable over WebSocket")
 		v.pushCloseStack("transport.tcp_cmux", factory.CloseUnifiedTCP)
 	}
-	tpM, err := transport.NewManager(managerLogger, v.arClient, v.ebc, &tpMConf, factory)
+	// Shared construction (pkg/visor/visorcore) — the same seam the wasm edge
+	// uses. Serve stays in this visor's own WaitGroup-wrapped goroutine below
+	// (the close-stack needs the wg handle for graceful shutdown); dmsg-client
+	// init is deferred to the init_dmsg stage; and the gated stcp*/sudph/ws/wt/
+	// quic clients register from their own init modules — so no DmsgC, Serve, or
+	// DialOnlyClients are passed here.
+	tpM, err := visorcore.BuildTransportManager(context.Background(), visorcore.TransportManagerDeps{
+		Log:      managerLogger,
+		ARClient: v.arClient,
+		EB:       v.ebc,
+		Config:   &tpMConf,
+		Factory:  factory,
+	})
 	if err != nil {
 		err := fmt.Errorf("failed to start transport manager: %w", err)
 		return err
