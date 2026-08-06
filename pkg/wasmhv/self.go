@@ -41,6 +41,13 @@ type SelfProvider interface {
 	// visualizer renders nodes with no links ("N visors · 0 transports"). nil
 	// when the tab can't reach the TPD.
 	SelfNetworkTransports(days int) []byte
+
+	// SelfServiceHealth returns the deployment-service health table as the native
+	// /api/service-health shape ([]ServiceHealthEntry) pre-marshaled — probed
+	// over the tab's dmsg client — so the HV-UI Services-Health tab populates on a
+	// browser edge instead of degrading to "not available". nil → the route
+	// falls back to [].
+	SelfServiceHealth() []byte
 	// SelfDmsgSessions returns this tab's dmsg client sessions as pre-marshaled
 	// JSON in the native /visors/{pk}/dmsg/sessions shape
 	// ({main?,route_setup?,transport_setup?} of {pk,role,count,servers}). A browser

@@ -107,6 +107,18 @@ func (c *Core) ServeHTTP(method, path string, body []byte) (int, []byte) {
 		}
 		return 200, []byte(`[]`)
 
+	// Deployment-service health table (the Services-Health tab). The native HV
+	// serves /api/service-health; without it here the browser edge 404s and the
+	// tab shows "not available". The tab probes each service's /health over its
+	// own dmsg client (reachable since the service-PK seed fix).
+	case p == "/service-health":
+		if self := c.selfProvider(); self != nil {
+			if b := self.SelfServiceHealth(); len(b) > 0 {
+				return 200, b
+			}
+		}
+		return 200, []byte(`[]`)
+
 	// The hvui client-error-reporter POSTs console errors here to ship them to
 	// the visor log. In the browser the console already IS the log, so accept +
 	// discard rather than 404 every reported error (which itself spams console).
