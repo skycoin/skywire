@@ -17,6 +17,14 @@ biometric = "1.4.0-alpha07"
 okhttp = "5.4.0"
 kotlinxSerialization = "1.11.0"
 coroutines = "1.10.2"
+# Wallet: BouncyCastle lightweight API only (no JCA provider registration) —
+# secp256k1 curve math, RFC 6979 nonces and RIPEMD-160 for address hashing.
+bouncycastle = "1.80"
+# QR scan (journeyapps wraps zxing with a capture activity; core also renders
+# the receive-address QR). The one camera dependency the wallet adds.
+zxingEmbedded = "4.3.0"
+zxingCore = "3.5.3"
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -35,9 +43,17 @@ compose-material-icons-extended = { group = "androidx.compose.material", name = 
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
+kotlinx-coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-core", version.ref = "coroutines" }
+bouncycastle = { group = "org.bouncycastle", name = "bcprov-jdk18on", version.ref = "bouncycastle" }
+zxing-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", version.ref = "zxingEmbedded" }
+zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 # Kotlin support is built into AGP ≥9 — only the compiler plugins are applied.
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+# :wallet-core applies org.jetbrains.kotlin.jvm versionless — the plugin is
+# already on the classpath via AGP's built-in Kotlin support.

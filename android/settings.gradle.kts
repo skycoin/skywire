@@ -19,4 +19,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "skywire-android"
 include(":app")
-// The wallet work adds :wallet-core (private git submodule at android/wallet-core/).
+// Wallet crypto and node clients live in :wallet-core, a plain Kotlin/JVM module —
+// no Android types, so its transaction and key code runs under JVM unit tests.
+include(":wallet-core")
