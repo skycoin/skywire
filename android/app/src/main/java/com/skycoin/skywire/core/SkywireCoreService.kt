@@ -99,7 +99,8 @@ class SkywireCoreService : Service() {
                     prefs.string(TransportPreference.PREF_KEY).first(),
                 )
                 val fleet = prefs.boolean(Fleet.PREF_KEY, Fleet.DEFAULT).first()
-                val config = configManager.ensureConfig(primary, fleet).getOrElse { err ->
+                val logLevel = CoreLogLevel.sanitize(prefs.string(CoreLogLevel.PREF_KEY).first())
+                val config = configManager.ensureConfig(primary, fleet, logLevel).getOrElse { err ->
                     log.line("=== config generation failed ===")
                     log.line(err.message ?: "unknown error")
                     CoreServiceState.mutableState.value =

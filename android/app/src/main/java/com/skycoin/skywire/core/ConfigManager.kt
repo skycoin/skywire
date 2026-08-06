@@ -37,6 +37,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
     suspend fun ensureConfig(
         transportPrimary: String,
         fleetEnabled: Boolean,
+        logLevel: String,
     ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
         if (!paths.visorBinary.canExecute()) {
@@ -59,6 +60,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
             applyPhoneProfile(
                 transportPrimary,
                 fleetEnabled,
+                logLevel,
                 skychatPasswordFile = ensureGatePassword(
                     SkychatProfile.passwordFile(paths),
                     secrets.skychatPassword(),
@@ -130,10 +132,13 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      *    the app, not the config file, is the source of truth: the visor
      *    persists its own copy when the setting is changed live, and this
      *    keeps the two from drifting apart.
+     *  - `log_level` — the same arrangement, for the same reason (see
+     *    [CoreLogLevel]).
      */
     private fun applyPhoneProfile(
         transportPrimary: String,
         fleetEnabled: Boolean,
+        logLevel: String,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
     ) {
@@ -143,6 +148,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                 when (key) {
                     "pty", "skywire-tcp" -> Unit // dropped
                     "cli_addr" -> put(key, JsonPrimitive(""))
+                    "log_level" -> put(key, JsonPrimitive(CoreLogLevel.sanitize(logLevel)))
                     "local_path" -> put(key, JsonPrimitive(paths.localDir.absolutePath))
                     "transport" -> put(
                         key,
@@ -286,6 +292,154 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         File(paths.dataDir, "users.db").delete()
     }
 
+    // --- identity ---
+
+    /**
+     * This visor's public key, read from the config on disk.
+     *
+     * The API answers the same question, but only while the core runs — and
+     * the identity screen has to be able to show you who you are before you
+     * connect, and right after an operation that took the core down.
+     */
+    fun publicKey(): String? = runCatching {
+        (readConfig()["pk"] as? JsonPrimitive)?.content?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
+
+    /**
+     * Derive the public key of [secretKey] — and, in doing so, validate it.
+     *
+     * Runs the CLI's own `config pk`, which is the point: key handling stays
+     * where the key code is. It also has to happen *before* anything is
+     * touched, because `config gen` will not report a bad key — handed an SK
+     * whose public half will not derive, it silently generates a fresh random
+     * keypair (gen.go:674-677), so a mistyped paste would land the user on a
+     * brand-new identity instead of an error message.
+     *
+     * The key travels as an argv element, visible in this child's `/proc`
+     * entry for the length of the call. That is our own uid on a modern
+     * Android, where no other app may read it, and the alternative — parsing
+     * hex and doing secp256k1 in Kotlin — is exactly the hand-rolled key
+     * handling this design refuses.
+     */
+    suspend fun derivePublicKey(secretKey: String): Result<String> {
+        val sk = secretKey.trim()
+        // A shape check first, so an obvious paste error costs no process.
+        if (sk.length != SK_HEX_LENGTH || !sk.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
+            return Result.failure(IllegalArgumentException("not a $SK_HEX_LENGTH-character hex secret key"))
+        }
+        val result = runCommand(
+            listOf(paths.visorBinary.absolutePath, "config", "pk", sk),
+            timeoutSeconds = 30,
+        )
+        // stdout and stderr are merged, and cobra may add its own lines, so
+        // take the one line that looks like an answer rather than the last.
+        val pk = result.output.lineSequence()
+            .map { it.trim() }
+            .lastOrNull { it.length == PK_HEX_LENGTH && it.all { c -> c.isDigit() || c.lowercaseChar() in 'a'..'f' } }
+        return when {
+            result.ok && pk != null -> Result.success(pk)
+            else -> Result.failure(
+                IllegalArgumentException(
+                    result.output.lineSequence()
+                        .map { it.trim() }
+                        .lastOrNull { it.isNotEmpty() }
+                        ?: "the core could not read that secret key",
+                ),
+            )
+        }
+    }
+
+    /**
+     * Rebuild the config around [secretKey], returning the new public key.
+     * **Call with the core stopped.**
+     *
+     * There is no `--sk` flag: `config gen -r` takes the secret key from the
+     * config it is about to overwrite (gen.go:933-947), so installing a key
+     * means writing it into that file first and letting the regenerate read it
+     * back. Everything else about the regenerate is the first-run pipeline —
+     * same argv, and [applyPhoneProfile] re-applies the phone's pins at the
+     * next start — with one addition the generator makes for free: the launcher
+     * apps are merged rather than rebuilt, so per-app argv survives.
+     */
+    suspend fun replaceSecretKey(secretKey: String): Result<String> {
+        val pk = derivePublicKey(secretKey).getOrElse { return Result.failure(it) }
+        return withContext(Dispatchers.IO) {
+            runCatching {
+                paths.ensureDirs()
+                val existing = runCatching { readConfig() }.getOrDefault(JsonObject(emptyMap()))
+                val seeded = JsonObject(
+                    existing.toMutableMap().apply {
+                        this["sk"] = JsonPrimitive(secretKey.trim())
+                        // Dropped rather than corrected: the generator derives
+                        // it, and a stale pk sitting next to a new sk for the
+                        // length of one command is a lie waiting to be read.
+                        remove("pk")
+                    },
+                )
+                paths.configFile.writeText(json.encodeToString(JsonObject.serializer(), seeded))
+                val gen = runGen()
+                if (!gen.ok) {
+                    error("config regeneration failed (exit ${gen.exitCode}):\n${gen.output.takeLast(2000)}")
+                }
+                clearIdentityData()
+                pk
+            }
+        }
+    }
+
+    /**
+     * Throw the identity away. **Call with the core stopped.**
+     *
+     * Deletes the config instead of regenerating one, so the next start runs
+     * the untouched first-run path — one pipeline for a new identity, not two.
+     */
+    fun resetIdentity() {
+        paths.configFile.delete()
+        clearIdentityData()
+    }
+
+    /**
+     * Everything on this phone that belonged to the identity being replaced.
+     *
+     * A visor's key *is* its identity: chat history is a conversation with
+     * peers who addressed a key that is about to stop existing, and the app
+     * work dirs and transport logs under `local_path` are the same story. They
+     * are cleared rather than carried over, so that what the confirmation
+     * dialog promises is what happens — a phone that keeps a previous
+     * identity's messages under a new one is showing a conversation nobody can
+     * continue.
+     *
+     * `users.db` deliberately stays: the local API account is this app's own
+     * device credential ([SecretStore]), not part of the visor's identity.
+     */
+    private fun clearIdentityData() {
+        paths.localDir.deleteRecursively()
+        paths.processLogFile.delete()
+        File(paths.processLogFile.parentFile, paths.processLogFile.name + ".1").delete()
+        paths.ensureDirs()
+    }
+
+    // --- export ---
+
+    /** The config exactly as the visor reads it — secret key included. */
+    fun configJson(): String = paths.configFile.readText()
+
+    /**
+     * The config with the secret key removed, for the diagnostics bundle.
+     *
+     * Everything else in the file is either public (the visor's own key, the
+     * service endpoints) or a path, and the app passwords live in files under
+     * `local_path` that the argv only points at. The one secret in the
+     * document is `sk`, and a log bundle is a thing people attach to issues.
+     */
+    fun redactedConfigJson(): String {
+        val redacted = JsonObject(readConfig().toMutableMap().apply { remove("sk") })
+        return json.encodeToString(JsonObject.serializer(), redacted)
+    }
+
+    private fun readConfig(): JsonObject =
+        json.parseToJsonElement(paths.configFile.readText()).jsonObject
+
     private suspend fun runCommand(argv: List<String>, timeoutSeconds: Long): CommandResult =
         withContext(Dispatchers.IO) {
             val process = ProcessBuilder(argv)
@@ -323,6 +477,10 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         const val SOCKS_APP = "skysocks-client"
         const val DEFAULT_SOCKS_PORT = 1080
         val ADDR = listOf("--addr", "-addr")
+
+        /** 32 bytes of secp256k1 secret, 33 of compressed public — as hex. */
+        const val SK_HEX_LENGTH = 64
+        const val PK_HEX_LENGTH = 66
     }
 }
 

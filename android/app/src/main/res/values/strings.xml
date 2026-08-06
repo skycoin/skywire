@@ -213,7 +213,92 @@
 
     <string name="core_restart_failed">The core could not be started again: %1$s</string>
 
+    <!-- App lock -->
+    <string name="lock_title">Skywire is locked</string>
+    <string name="lock_unlock">Unlock</string>
+    <string name="lock_prompt_title">Unlock Skywire</string>
+    <string name="lock_prompt_subtitle">Use your fingerprint, face or screen lock.</string>
+
+    <!-- Settings — identity -->
+    <string name="settings_identity">Identity</string>
+    <string name="settings_identity_hint">This phone is a Skywire visor, and its key is what everything else addresses. Both actions below end that identity.</string>
+    <string name="settings_identity_none">No identity yet. Connect once from the Home tab and one is generated.</string>
+    <string name="settings_identity_working">Restarting the Skywire core with the new identity…</string>
+    <string name="settings_replace_sk">Replace secret key</string>
+    <string name="settings_new_config">New identity</string>
+    <string name="settings_sk_hint">Paste the 64-character secret key you want this phone to run as. It is checked by the Skywire core before anything changes.</string>
+    <string name="settings_sk_label">Secret key</string>
+    <string name="settings_sk_unchanged">That is already this visor’s key — nothing to change.</string>
+    <string name="settings_sk_replaced">Identity replaced. The core is starting with the new key.</string>
+    <string name="settings_identity_reset">New identity generated. The core is starting with it.</string>
+
+    <string name="settings_replace_title">Replace this visor’s identity?</string>
+    <string name="settings_replace_new_pk">The new public key will be %1$s.</string>
+    <string name="settings_replace_final_title">This cannot be undone</string>
+    <string name="settings_replace_final_body">Everything above is erased and this phone becomes the visor %1$s. Make sure you still hold the current secret key somewhere if you ever want it back — export the config first if you do not.</string>
+    <string name="settings_replace_action">Replace identity</string>
+
+    <string name="settings_new_title">Generate a new identity?</string>
+    <string name="settings_new_extra">The new key is generated on this phone. Nobody has it yet, so nobody can reach you at it until you share it again.</string>
+    <string name="settings_new_final_title">This cannot be undone</string>
+    <string name="settings_new_final_body">The current key is destroyed, not archived. If you have not exported the config, this identity is gone for good — along with everything addressed to it.</string>
+    <string name="settings_new_action">Generate new identity</string>
+
+    <!-- Shared by both destructive identity flows: what is actually lost. -->
+    <string name="settings_identity_loss">You will lose everything this phone holds as %1$s: its chat history and contacts, its groups, and the address other visors know it by. Nothing here is recoverable afterwards, and nothing moves to the new key.</string>
+
+    <string name="settings_continue">Continue</string>
+
+    <!-- Settings — config export -->
+    <string name="settings_config">Config</string>
+    <string name="settings_config_hint">The complete visor configuration, as a file you keep. It is the only way to move this identity to another device or bring it back.</string>
+    <string name="settings_export">Export config</string>
+    <string name="settings_export_title">Export the config?</string>
+    <string name="settings_export_warning">The file contains this visor’s secret key in plain text. Anyone who reads it can run as this visor. Save it somewhere only you can reach — not a shared drive, not a chat.</string>
+    <string name="settings_export_prompt">Export the Skywire config</string>
+    <string name="settings_export_done">Config exported.</string>
+
+    <!-- Settings — app lock -->
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_hint">Asks for your fingerprint, face or screen lock when Skywire opens and when you come back to it after about half a minute away. Also hides the app in the recent-apps list and blocks screenshots.</string>
+    <string name="settings_app_lock_unavailable">This phone has no screen lock or enrolled biometric, so there is nothing to check against.</string>
+    <string name="settings_open_security">Open security settings</string>
+    <string name="settings_no_security_screen">This phone has no security settings screen to open.</string>
+    <string name="settings_lock_enable_prompt">Turn on the app lock</string>
+    <string name="settings_lock_disable_prompt">Turn off the app lock</string>
+    <string name="settings_biometric_subtitle">Confirm it is you.</string>
+
+    <!-- Settings — appearance and about -->
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_about">About</string>
+    <string name="settings_app_version">App version</string>
+    <string name="settings_core_version">Core version</string>
+
+    <!-- Settings — logs and diagnostics -->
+    <string name="settings_diagnostics">Logs &amp; diagnostics</string>
+    <string name="settings_diagnostics_hint">Every log source, an export of all of them, and how much the core writes.</string>
+
+    <string name="diag_title">Logs &amp; diagnostics</string>
+    <string name="diag_sources">Sources</string>
+    <string name="diag_sources_hint">The same viewer each screen’s Logs button opens, with every feed listed in one place.</string>
+    <string name="diag_source_core_hint">The visor’s own runtime log.</string>
+    <string name="diag_source_process_hint">What the core process printed — the only feed that survives a visor that will not start.</string>
+    <string name="diag_source_app_hint">This app’s log, as the visor keeps it.</string>
+
+    <string name="diag_export">Export all</string>
+    <string name="diag_export_hint">Every source above in one zip, with the device details and the config — without its secret key.</string>
+    <string name="diag_export_action">Export all logs</string>
+    <string name="diag_exporting">Collecting logs…</string>
+    <string name="diag_export_done">Diagnostics exported.</string>
+
+    <string name="diag_level">Core log level</string>
+    <string name="diag_level_hint">How much the visor writes. Debug and trace are for reproducing a problem — on a phone they are a lot of writing for a log nobody is reading.</string>
+    <string name="diag_level_confirm_title">Set the log level to %1$s?</string>
+    <string name="diag_level_confirm_body">The Skywire core reads this only when it starts, so it has to be restarted. Any SkySOCKS or SkyVPN connection drops and has to be reconnected.</string>
+
     <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
     <string name="wallet_placeholder">The native Skycoin wallet is coming soon.</string>
-    <string name="settings_placeholder">Identity, config export, app lock and logs are coming soon.</string>
 </resources>

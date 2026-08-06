@@ -152,6 +152,17 @@ class VisorApi(context: Context) {
     suspend fun localPk(): String =
         cachedPk ?: about().publicKey.also { cachedPk = it }
 
+    /**
+     * Forget the cached key. This client is a process-lifetime singleton and
+     * every `/api/visors/{pk}/…` route is built from [localPk], so after an
+     * identity change the cache would address the visor by a key it no longer
+     * has — every call 404s until the app is killed. Settings calls this the
+     * moment it replaces the identity.
+     */
+    fun forgetIdentity() {
+        cachedPk = null
+    }
+
     suspend fun summary(): VisorSummary = authedGet("/api/visors/${localPk()}/summary")
 
     suspend fun serviceHealth(): List<ServiceHealthEntry> = authedGet("/api/service-health")
