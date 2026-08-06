@@ -1281,19 +1281,34 @@
     // PK can't be resolved, so a step navigates somewhere valid rather than skipping).
     function nodePath(tab) { var pk = resolveSelfPK(); return pk ? "#/nodes/" + pk + "/" + tab : visorList; }
     var steps = [
-      { title: "This is not a normal web page",
+      // --- start on the front page: the visor list, exactly as it loads ---
+      { route: visorList,
+        title: "This is not a normal web page",
         body: {
-          wasm: "You're running a full <b>Skywire visor</b> — a live routing peer on an encrypted, peer-to-peer mesh — <b>inside this browser tab</b>. No install, no account, no server, no one in the middle. It lives only here: close the tab and it's gone (unless you export your key). Here's a short tour.",
-          native: "You're running a full <b>Skywire visor</b> on this machine — a persistent routing peer on an encrypted, peer-to-peer mesh. No account, no central server, no one in the middle. Here's a short tour of what that means." },
+          wasm: "You're running a full <b>Skywire visor</b> — a live routing peer on an encrypted, peer-to-peer mesh — <b>inside this browser tab</b>. No install, no account, no server, no one in the middle. It lives only here: close the tab and it's gone (unless you export your key). We'll start right here, on the <b>visor list</b> in front of you, and read it left to right.",
+          native: "You're running a full <b>Skywire visor</b> on this machine — a persistent routing peer on an encrypted, peer-to-peer mesh. No account, no central server, no one in the middle. We'll start right here, on your hypervisor's <b>visor list</b>, and read it left to right." },
         disc: { summary: "Open-source, no warranty — your keys are yours",
           details: "Skywire and the Skycoin wallet are experimental, open-source software, provided as-is and without warranty. You run this visor yourself and hold your own keys and coins; no one else can access or recover them. Understand the risks before relying on it or storing value." } },
 
-      { route: function () { return nodePath("info"); }, sel: "app-node-info-content .info-line", has: "DMSG servers",
+      // Identity first — the public key IS the visor, right there in the list.
+      { route: visorList, sel: "td.key-cell",
+        title: "You are your public key",
+        body: {
+          wasm: "Every visor is named by a <b>public key</b> — this 66-character hex string, here in the list. There are no usernames and no accounts on the mesh: the key <i>is</i> the identity and the address. It's one half of a cryptographic keypair held in <b>this browser</b>; the secret half never leaves it, and every link your visor makes is encrypted end-to-end with it.",
+          native: "Every visor is named by a <b>public key</b> — this 66-character hex string, here in the list. No usernames, no accounts: the key <i>is</i> the identity and the address. It's one half of a keypair on <b>this machine</b>; the secret half never leaves it, and every link is encrypted end-to-end with it." },
+        more: { summary: "Why a key instead of a name or IP",
+          panel: "On the clearnet you're found by IP and trusted through a certificate authority vouching for a name. On Skywire the <b>public key</b> is both at once: it's the address other visors route to, and the thing they encrypt to — so there's nothing to spoof and no authority to trust. Whoever holds the matching secret key <i>is</i> this visor; back it up (the tour shows where) and you can move your identity to another device." } },
+
+      // How it's connected — the dmsg-server count column, broken down by carrier.
+      // Anchored to the column HEADER (always present) rather than the count cell:
+      // a browser visor's dmsg sessions can briefly flap to zero, at which point the
+      // cell renders "-" (no .dmsg-counts) and a cell-anchored step would skip.
+      { route: visorList, sel: "th.dmsg-column",
         title: "How you're connected: dmsg",
         body: {
-          wasm: "This is your visor's <b>Info</b> tab — <b>DMSG servers</b> shows how many you're connected to right now. dmsg is an encrypted relay network: any two visors reach each other through these servers without knowing each other's location. Your browser can't open raw TCP, so it joins over <b>WebSocket</b> (<code>wss://</code>) plus <b>WebTransport</b> where a server offers it.",
-          native: "This is your visor's <b>Info</b> tab — <b>DMSG servers</b> shows how many you're connected to. dmsg is an encrypted relay network: any two visors reach each other through these servers without knowing each other's location. A native visor joins over plain <b>TCP</b> (plus direct stcpr/sudph links)." },
-        more: { summary: "Protocols, and why the browser is different",
+          wasm: "This column counts the <b>dmsg servers</b> your visor is connected to right now, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A browser can't open raw TCP, so it joins over <b>WSS</b> (WebSocket-over-TLS) and <b>WT</b> (WebTransport) — the carriers you'll see counted here.",
+          native: "This column counts the <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A native visor joins over <b>TCP</b> (and QUIC where a server offers it)." },
+        more: { summary: "The four carriers",
           panel: "dmsg carries the control plane and a fallback data path. The <b>carrier</b> — how a visor reaches a dmsg server — depends on the host:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
             '<li style="margin:.3em 0"><b>tcp</b> — native visors; a raw TCP socket.</li>' +
@@ -1301,17 +1316,14 @@
             '<li style="margin:.3em 0"><b>webtransport</b> — HTTP/3 datagrams; browser-dialable.</li>' +
             '<li style="margin:.3em 0"><b>quic</b> — QUIC over UDP; native. The one carrier that also passes unreliable <b>datagrams</b> (UDP-over-dmsg), not just reliable streams.</li>' +
             '</ul>' +
-            "A wasm visor in a tab has no raw sockets, so it leans on <b>wss + WebTransport</b>; a native visor can also make direct TCP/UDP transports. These four carriers are the <i>same four protocols</i> Skywire uses for direct transports (next step) — dmsg is simply the <b>relayed</b> version: same wire, reached through a server instead of directly." } },
+            "A wasm visor in a tab has no raw sockets, so it leans on <b>wss + WebTransport</b>; a native visor can also make direct TCP/UDP transports. These four carriers are the <i>same four protocols</i> Skywire uses for direct transports (next column) — dmsg is simply the <b>relayed</b> version: same wire, reached through a server instead of directly." } },
 
-      { route: visorList, sel: "app-node-list td", has: "Total",
+      // Direct links — the transports count column, right beside dmsg. Header-
+      // anchored for the same reason as the dmsg column (a fresh visor with no
+      // transports yet renders "-", not .tp-counts).
+      { route: visorList, sel: "th.transports-column",
         title: "Direct links: transports",
-        body: "Back on the visor list, this column is your visor's <b>live transports</b> — direct links to peers, counted by type (STCPR, SUDPH, SWTR, WEBRTC…). It's already dialing peers around the world; the total climbs as it settles in." },
-
-      { route: function () { return nodePath("transports"); }, sel: "app-transport-list",
-        title: "Direct links: transports",
-        body: {
-          wasm: "Your visor's <b>Transports</b> tab: each row is a direct link to a peer. In a browser that's mostly <b>WebTransport</b> and dmsg; a native visor also builds stcpr/sudph/quic. More direct transports = less relaying = lower latency.",
-          native: "Your visor's <b>Transports</b> tab: each row is a direct link to a peer — stcpr, sudph, dmsg, quic — punching through NATs where needed, so traffic takes the shortest path instead of always relaying." },
+        body: "Right beside it, this column is your visor's live <b>transports</b> — direct links to peers, counted by type (STCPR, SUDPH, SWTR, WEBRTC…). Where dmsg <i>relays</i> through a server, a transport is point-to-point. It's already dialing peers around the world; the total climbs as it settles in.",
         more: { summary: "Transport types, and how they mirror dmsg",
           panel: "A transport is a direct link between two visors. <b>Four mirror the dmsg carriers exactly</b> — same wire, dialed peer-to-peer instead of to a server:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
@@ -1327,50 +1339,73 @@
             '</ul>' +
             "And <b>dmsg</b> itself is a transport — the <i>relayed</i> one. Most transports hand up a reliable stream; QUIC (direct or over dmsg) can also carry true unreliable UDP end-to-end. More direct transports = less relaying = lower latency." } },
 
+      // Label + location — the friendly name and where it's connecting from.
+      { route: visorList, sel: "td.label-cell",
+        title: "Label & location",
+        body: "Finally on this row: a human <b>label</b> you can set to recognise a visor at a glance, and — in the next column — its detected <b>IP address and location</b>. The label is just local, cosmetic naming; the identity that actually matters is the public key. That's the whole front page — <i>who</i> the visor is, <i>how</i> it's connected, and <i>where</i>. Now let's open the visor itself." },
+
+      // --- into the local visor's own tabs: the same concepts, up close ---
+      { route: function () { return nodePath("info"); }, sel: "app-node-info-content .info-line", has: "DMSG servers",
+        title: "Inside your visor: Info",
+        body: {
+          wasm: "Opening your visor lands on its <b>Info</b> tab. The <b>DMSG servers</b> line spells out the same connection the list summarised, next to version, uptime and identity. This is the relay layer up close — your control plane and a fallback data path, all end-to-end encrypted, reached over wss / WebTransport from the browser.",
+          native: "Opening your visor lands on its <b>Info</b> tab — <b>DMSG servers</b>, version, uptime and identity in one place. This is the relay layer up close: the control plane and a fallback data path, reached over TCP." } },
+
+      { route: function () { return nodePath("transports"); }, sel: "app-transport-list",
+        title: "Inside your visor: Transports",
+        body: {
+          wasm: "The visor's <b>Transports</b> tab: each row is one direct link to a peer. In a browser that's mostly <b>WebTransport</b> and dmsg; a native visor also builds stcpr/sudph/quic. More direct transports = less relaying = lower latency.",
+          native: "The visor's <b>Transports</b> tab: each row is a direct link — stcpr, sudph, dmsg, quic — punching through NATs where needed, so traffic takes the shortest path instead of always relaying." } },
+
       { route: function () { return nodePath("routing"); }, sel: "app-route-list",
-        title: "Going further: routing",
-        body: "Your visor's <b>Routing</b> tab shows the paths traffic takes across those transports. A route can be <b>DIRECT</b> (a single hop straight to the peer), <b>MULTIHOP</b> (through several visors, so no single hop sees both ends), or <b>MULTIPLEXED</b> (spread across parallel paths for resilience and throughput). The route-finder builds them on demand.",
+        title: "Inside your visor: Routing",
+        body: "The <b>Routing</b> tab shows the paths traffic takes across those transports. A route can be <b>DIRECT</b> (a single hop straight to the peer), <b>MULTIHOP</b> (through several visors, so no single hop sees both ends), or <b>MULTIPLEXED</b> (spread across parallel paths for resilience and throughput). The route-finder builds them on demand.",
         more: { summary: "Hops &amp; the privacy trade-off",
           panel: "A route is an ordered path of transports. One hop is fastest; more hops mean no single intermediary knows both source and destination, at the cost of latency. Skywire's route-finder builds these paths on demand, and apps like the skynet browser ride them." } },
 
       { route: function () { return nodePath("apps"); }, sel: "app-node-app-list tr", has: "skysocks",
-        title: "Your apps: skysocks-client-lite",
+        title: "Inside your visor: Apps",
         body: {
-          wasm: "Your visor's <b>Apps</b>. The default is <b>skysocks-client-lite</b> — an in-browser proxy client that routes a browse window's clearnet fetches out through an <b>exit</b> visor, IP-anonymously. Unlike the native <b>skysocks-client</b>, it serves <i>no local port</i> — it works only inside this tab. The rest of the tour's demos are optional to try: a mesh <b>browser</b>, encrypted <b>skychat</b>, and the <b>Skycoin wallet</b> — each opened from the ☰ menu, each running over the mesh.",
-          native: "Your visor's <b>Apps</b> — start, stop and configure them here: the <b>skysocks</b> proxy client + server, <b>VPN</b> client + server, and <b>skychat</b>. On a native visor these bind real local ports and can serve other machines on your network." },
+          wasm: "The visor's <b>Apps</b>. The default is <b>skysocks-client-lite</b> — an in-browser proxy client that routes a browse window's clearnet fetches out through an <b>exit</b> visor, IP-anonymously. Unlike the native <b>skysocks-client</b>, it serves <i>no local port</i> — it works only inside this tab. The rest of the tour's demos are optional to try: a mesh <b>browser</b>, encrypted <b>skychat</b>, and the <b>Skycoin wallet</b> — each opened from the ☰ menu, each running over the mesh.",
+          native: "The visor's <b>Apps</b> — start, stop and configure them here: the <b>skysocks</b> proxy client + server, <b>VPN</b> client + server, and <b>skychat</b>. On a native visor these bind real local ports and can serve other machines on your network." },
         more: { summary: "skysocks-client vs. skysocks-client-lite",
           panel: "<b>skysocks-client</b> (native) runs as an app process and serves a local <b>SOCKS5 port</b> other programs point at. <b>skysocks-client-lite</b> (browser) has no process and no port — it lives in this tab and proxies only this visor's own browse windows and wallet. Both dial an <b>exit</b> visor that does the clearnet egress, so a site sees the exit's IP, not yours. (Naming: the browser one is the <i>lite</i> client — same idea, no listener.)" } },
 
-      // The network, live — VISIT each overview tab (not just point at it), so the
-      // tour actually demonstrates the UI and doubles as a functional check.
+      // --- back to the top level: your cluster, then the whole mesh ---
       { route: visorList, sel: "app-node-list",
-        title: "The network, live: visors",
-        body: "This top row is the whole-mesh overview, every view fetched <b>peer-to-peer over dmsg</b>, never from a web server. The <b>Visor list</b>: every visor visible on the network right now, each addressable by its public key." },
-      { route: "#/nodes/rewards", sel: "app-node-list", title: "The network, live: rewards",
-        body: "<b>Rewards</b> — the Skycoin paid out to visors that stay online and reachable. This is where your visor appears once it qualifies." },
-      { route: "#/nodes/transports", title: "The network, live: transports",
-        body: "<b>Transports</b> — every direct link across the <i>whole</i> mesh (thousands of them), with per-type bandwidth: the live edge list the route-finder draws on. Toggle Compact / Tree to explore it." },
-      { route: "#/nodes/network", sel: "app-network-view", title: "The network, live: the map",
-        body: "<b>Network</b> — the mesh drawn as a graph: visors, and the transports between them." },
-      { route: "#/nodes/visualizer", sel: "app-network-visualizer", title: "The network, live: visualizer",
-        body: "<b>Network Visualizer</b> — an interactive, geographic render of the same graph (Flat, Globe and WebGL views)." },
-      { route: "#/nodes/uptime", sel: "app-multi-visor-uptime", title: "The network, live: uptime",
-        body: "<b>Uptime</b> — how consistently each visor has stayed online over 1d / 7d / 30d, the basis for rewards." },
-      { route: "#/nodes/services-health", sel: "app-services-health", title: "The network, live: services",
-        body: "<b>Deployment</b> — the health of the shared services (discovery, route-finder, address resolver, dmsg servers) that keep the mesh working. All of it fetched over dmsg — a browser tab talking directly to visors around the world." },
+        title: "Your cluster, live",
+        body: {
+          wasm: "Back at the top level. Right now this list is just <b>your</b> visor — but a hypervisor manages a whole <b>cluster</b>. Attach a remote visor (by its public key) and it appears here, fully controllable from this browser tab; or point another hypervisor at this visor and <i>it</i> shows up over there. Every row is a peer addressed by public key, its transports and routes inspectable from here.",
+          native: "This list is your <b>cluster</b> — every visor this hypervisor manages. Attach more by adding a remote visor's public key, or let another hypervisor manage this one. Each row is a peer addressed by its key, its transports, routes and apps controllable from right here." },
+        more: { summary: "Hypervisor ⇄ visor: who manages whom",
+          panel: "A <b>hypervisor</b> is just a visor that also serves this management UI and holds the keys of the visors it manages. The relationship is set in config (or at runtime): give this hypervisor a remote visor's PK and address to <i>manage</i> it, or set a remote hypervisor's PK on this visor to be <i>managed</i> by it. Management runs over the same encrypted mesh — a hypervisor in a browser tab can drive a native visor on the other side of the world, and vice-versa." } },
 
-      { sel: ".visor-switcher-row", title: "Every peer is addressable",
-        body: "Each chip is a visor on the network, shown by label and public key. Click one to inspect its transports, routes, and apps. There are no usernames here — only keys." },
+      // Whole-mesh overview tabs — VISIT each (not just point at it) so the tour
+      // doubles as a functional check. Rewards is native-only (hidden on wasm).
+      { nativeOnly: true, route: "#/nodes/rewards", sel: "app-node-list", title: "The mesh: rewards",
+        body: "<b>Rewards</b> — the Skycoin paid out to visors that stay online and reachable. This is where a visor appears once it qualifies." },
+      { route: "#/nodes/transports", title: "The mesh: all transports",
+        body: "<b>Transports</b> — every direct link across the <i>whole</i> mesh (thousands of them), with per-type bandwidth: the live edge list the route-finder draws on. Toggle Compact / Tree to explore it. Fetched <b>peer-to-peer over dmsg</b>, never from a web server." },
+      { route: "#/nodes/network", sel: "app-network-view", title: "The mesh: the map",
+        body: "<b>Network</b> — the mesh drawn as a graph: visors, and the transports between them." },
+      { route: "#/nodes/visualizer", sel: "app-network-visualizer", title: "The mesh: visualizer",
+        body: "<b>Network Visualizer</b> — an interactive, geographic render of the same graph (Flat, Globe and WebGL views)." },
+      { route: "#/nodes/uptime", sel: "app-multi-visor-uptime", title: "The mesh: uptime",
+        body: "<b>Uptime</b> — how consistently each visor has stayed online over 1d / 7d / 30d, the basis for rewards." },
+      { route: "#/nodes/services-health", sel: "app-services-health", title: "The mesh: services",
+        body: {
+          wasm: "<b>Deployment</b> — the health of the shared services (discovery, route-finder, address resolver, dmsg servers) that keep the mesh working. This probe isn't run in a browser tab, so the panel notes it's unavailable here; a native visor fills it in live over dmsg.",
+          native: "<b>Deployment</b> — the health of the shared services (discovery, route-finder, address resolver, dmsg servers) that keep the mesh working. All of it fetched over dmsg — a visor talking directly to visors around the world." } },
 
       { sel: "#skywire-skynet-taskbar", title: "The mesh desktop",
         body: "Tool windows float above the UI. The <b>skynet browser</b> fetches sites over dmsg — anonymous, no DNS, no certificate authorities; sites are addressed by public key (e.g. <code>&lt;pk&gt;.dmsg</code>).",
         more: { summary: "How mesh sites stay safe",
           panel: "Fetched pages run sandboxed and isolated from your keys — a site can't read your identity or reach the clearnet on its own. There's no DNS and no certificate authority; the public key <i>is</i> the address and the authentication. The ⓘ button on a browse window explains the isolation model." } },
 
-      { sel: "#tb-menu", title: "You are your keys",
+      { sel: "#tb-menu", title: "Your keys, your visor",
         body: {
-          wasm: "Your visor is a keypair held in <b>this browser</b> (Apps → identity). Export it to back up or move your visor to another device — that key <i>is</i> your identity on the mesh.",
-          native: "Your visor is a keypair on <b>this machine</b> (Apps → identity). Back it up — that key <i>is</i> your identity on the mesh. Whoever holds it is this visor." },
+          wasm: "Your visor is the keypair we started with, held in <b>this browser</b> (Apps → identity). <b>Export it</b> to back up or move your visor to another device — that key <i>is</i> your identity on the mesh, and this tab holds the only copy.",
+          native: "Your visor is the keypair we started with, on <b>this machine</b> (Apps → identity). Back it up — that key <i>is</i> your identity on the mesh. Whoever holds it is this visor." },
         more: { summary: "Wasm visor vs. a native visor",
           panel: "Same protocol, different host. A <b>wasm visor</b> lives in a browser tab: ephemeral by default (export your key to persist it), dials over WebSocket/WebTransport, and hosts a lighter app set. A <b>native visor</b> runs as a system service: persistent on disk, can make direct TCP/UDP transports and bind low ports, and can host the full app set (VPN, skysocks server, and more). Both are first-class peers on the same mesh." } },
 
@@ -1379,6 +1414,10 @@
           wasm: "No server. No account. No IP address handed out. Just your browser, cryptographic keys, and a global peer-to-peer mesh — reachable from anywhere, run by nobody, and gone when you close the tab unless you export your key. Reopen this tour any time from the Apps (☰) menu → tour. Welcome to Skywire.",
           native: "No server. No account. Just cryptographic keys and a global peer-to-peer mesh — reachable from anywhere, run by nobody. Reopen this tour any time from the Apps (☰) menu → tour. Welcome to Skywire." } }
     ];
+    // Drop native-only steps (e.g. the fleet Rewards overview) on a wasm visor,
+    // where those tabs are hidden — see home-tabs.ts isWasmHvCore(). Filtering
+    // here (rather than skipping at render time) keeps the "N / total" count right.
+    steps = steps.filter(function (s) { return !(s.nativeOnly && mode !== "native"); });
     var host = doc.body || doc.documentElement;
     // Ensure the WinBox dark chrome exists even if the skynet desktop (which
     // normally injects it) hasn't mounted yet. Distinct id from mountPanel's

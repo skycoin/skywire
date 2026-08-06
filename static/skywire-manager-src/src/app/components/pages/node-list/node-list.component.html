@@ -336,13 +336,13 @@
                   <td>
                     <span [class]="nodeStatusClass(node, true)" [matTooltip]="nodeStatusText(node, true) | translate"></span>
                   </td>
-                  <td>
+                  <td class="label-cell">
                     {{ node.label }}
                     @if (node.isStale) {
                       <div class="stale-caption">{{ lastSeenText(node) }}</div>
                     }
                   </td>
-                  <td>
+                  <td class="ip-cell">
                     @if (node.ip || node.publicIp || node.countryCode) {
                       @if (node.ip && node.publicIp && node.ip !== node.publicIp) {
                         <div style="font-size: 0.85em;">{{ node.ip }}</div>
