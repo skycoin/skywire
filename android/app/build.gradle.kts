@@ -5,6 +5,19 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// Version comes from the release tag when there is one, and from the
+// fallbacks below otherwise, so a local `./gradlew assembleDebug` needs no
+// arguments. The release workflow derives both from `mobile-vX.Y.Z` — see
+// .github/workflows/android-release.yml.
+val appVersionName = (project.findProperty("skywireVersionName") as String?) ?: "0.1.0"
+val appVersionCode = (project.findProperty("skywireVersionCode") as String?)?.toInt() ?: 1
+
+// Release signing is supplied by the environment, never committed. Absent
+// (every local build), `release` stays unsigned exactly as before; the
+// release workflow refuses to publish in that state rather than shipping an
+// APK nobody can install.
+val keystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
+
 android {
     namespace = "com.skycoin.skywire"
     compileSdk = 37
@@ -14,11 +27,22 @@ android {
         // minSdk 26 / target latest, arm64-only first release.
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
         ndk {
             // The Go payload (libskywire-mobile.so) is arm64-only.
             abiFilters += "arm64-v8a"
+        }
+    }
+
+    signingConfigs {
+        if (keystoreFile != null) {
+            create("release") {
+                storeFile = file(keystoreFile)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
         }
     }
 
@@ -27,6 +51,8 @@ android {
             // Minification/shrinking is deferred to release hardening.
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // findByName, not getByName: null is the valid "unsigned" state.
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
