@@ -294,20 +294,43 @@
        node-identity (back + PK) row — and below the home tabs on the node list. -->
   <ng-template #visorSwitcherRow>
     @if (switcherTabsData && switcherTabsData.length) {
-      <div class="secondary-nav-row visor-switcher-row d-none d-lg-flex">
-        @for (t of switcherTabsData; track t) {
-          <a mat-button class="tab-button white-theme switcher-chip"
-            [routerLink]="t.linkParts"
-            [matTooltip]="t.sublabel"
-            [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier"
-            [ngClass]="{'grey-button-background': !(t.linkParts && t.linkParts[1] === pageHeaderIdentifier)}">
-            <mat-icon [inline]="true">{{ t.icon }}</mat-icon>
-            <span class="switcher-chip-text">
-              <span class="switcher-chip-name">{{ t.label }}</span>
-            </span>
-          </a>
-        }
-      </div>
+      @if (showVisorSwitcherRow) {
+        <div class="secondary-nav-row visor-switcher-row d-none d-lg-flex">
+          @for (t of switcherTabsData; track t) {
+            <a mat-button class="tab-button white-theme switcher-chip"
+              [routerLink]="t.linkParts"
+              [matTooltip]="t.sublabel"
+              [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier"
+              [ngClass]="{'grey-button-background': !(t.linkParts && t.linkParts[1] === pageHeaderIdentifier)}">
+              <mat-icon [inline]="true">{{ t.icon }}</mat-icon>
+              <span class="switcher-chip-text">
+                <span class="switcher-chip-name">{{ t.label }}</span>
+              </span>
+            </a>
+          }
+        </div>
+      } @else {
+        <!-- Compact default: the visor switcher folds into a dropdown so it doesn't
+             take a whole second row. Settings can restore the full row. -->
+        <div class="secondary-nav-row visor-switcher-dropdown d-none d-lg-flex">
+          <button mat-button class="tab-button white-theme grey-button-background" [matMenuTriggerFor]="visorSwitcherMenu">
+            <mat-icon [inline]="true">dns</mat-icon>
+            <span>{{ 'nodes.title' | translate }}</span>
+            <mat-icon [inline]="true">arrow_drop_down</mat-icon>
+          </button>
+          <mat-menu #visorSwitcherMenu="matMenu">
+            @for (t of switcherTabsData; track t) {
+              <a mat-menu-item
+                [routerLink]="t.linkParts"
+                [matTooltip]="t.sublabel"
+                [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier">
+                <mat-icon>{{ t.icon }}</mat-icon>
+                <span>{{ t.label }}</span>
+              </a>
+            }
+          </mat-menu>
+        </div>
+      }
     }
   </ng-template>
 

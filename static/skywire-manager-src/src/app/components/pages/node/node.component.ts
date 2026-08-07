@@ -169,7 +169,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     private injector: Injector,
     private cdr: ChangeDetectorRef,
     private sanitizer: DomSanitizer,
-    router: Router,
+    private router: Router,
   ) {
     super();
 
@@ -531,10 +531,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   openVpnFullWindow() {
-    if (!this.vpnFullWindowUrl) {
-      return;
+    // Navigate IN-SPA to the unified full-page app host (not a new window).
+    if (this.node && this.node.localPk) {
+      this.router.navigate(['/app', 'vpn', this.node.localPk]);
     }
-    window.open(this.vpnFullWindowUrl, '_blank', 'noopener noreferrer');
   }
 
   /**

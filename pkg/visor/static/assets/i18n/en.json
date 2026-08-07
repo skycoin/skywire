@@ -813,6 +813,10 @@
   "settings": {
     "title": "Settings",
     "checking-auth": "Checking authentication settings.",
+    "visor-switcher-row": {
+      "label": "Show the visor switcher as a full row of tabs",
+      "info": "Off (default): the per-visor switcher is a compact dropdown, keeping the navigation clean. On: it's shown as a full second row of tabs for switching between individual visor pages."
+    },
     "auto-update": {
       "label": "Auto-update this in-browser visor",
       "info": "When the server publishes a newer wasm-visor build, reload to it automatically (with a short countdown you can cancel). Turn off to stay on the current build until you reload manually."
