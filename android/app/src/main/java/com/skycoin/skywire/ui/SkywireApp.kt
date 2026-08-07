@@ -158,6 +158,7 @@ fun SkywireApp() {
             SkyNavBar(
                 currentRoute = currentRoute,
                 onSelect = { navController.navigateToTab(it) },
+                onOpenHub = { navController.navigateToHub() },
             )
         },
     ) { innerPadding ->
@@ -374,6 +375,19 @@ private fun NavHostController.navigateToTab(route: String) {
 }
 
 /**
+ * The cloud is a jump to the services list, not a tab. With restoreState it
+ * would bring back whatever the hub had pushed — tap the cloud from inside
+ * SkyVPN and the restored stack put SkyVPN right back on top, so the button
+ * appeared to do nothing. No restore: the hub itself, every time.
+ */
+private fun NavHostController.navigateToHub() {
+    navigate(Routes.HUB) {
+        popUpTo(graph.findStartDestination().id) { saveState = true }
+        launchSingleTop = true
+    }
+}
+
+/**
  * The ← at the top of a tab: back to wherever the tab was opened from, and to
  * Home only when there is genuinely nothing behind it. A tab reached from the
  * bar has Home behind it and lands there either way; one reached from the hub
@@ -395,7 +409,11 @@ private fun NavHostController.leaveTab() {
  * it wins the overlap.
  */
 @Composable
-private fun SkyNavBar(currentRoute: String?, onSelect: (String) -> Unit) {
+private fun SkyNavBar(
+    currentRoute: String?,
+    onSelect: (String) -> Unit,
+    onOpenHub: () -> Unit,
+) {
     val slots = listOf(
         BarSlot(Routes.HOME, stringResource(R.string.tab_home), Icons.Outlined.Home, Icons.Rounded.Home),
         BarSlot(Routes.CHAT, stringResource(R.string.tab_chat), Icons.AutoMirrored.Outlined.Chat, Icons.AutoMirrored.Rounded.Chat),
@@ -439,7 +457,7 @@ private fun SkyNavBar(currentRoute: String?, onSelect: (String) -> Unit) {
         }
         CloudButton(
             ringColor = shellColor,
-            onClick = { onSelect(Routes.HUB) },
+            onClick = onOpenHub,
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .offset(y = -LIFT),

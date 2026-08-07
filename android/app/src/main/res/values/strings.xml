@@ -43,6 +43,11 @@
     <string name="hub_hops_unknown">Hops —</string>
     <string name="hub_killswitch_on">Killswitch on</string>
     <string name="hub_killswitch_off">Killswitch off</string>
+    <string name="hub_wallet_balance">%1$s SKY</string>
+    <plurals name="hub_fleet_connected">
+        <item quantity="one">%d visor connected</item>
+        <item quantity="other">%d visors connected</item>
+    </plurals>
 
     <!-- Route length (router min_hops) -->
     <string name="hops_title">Route length</string>
