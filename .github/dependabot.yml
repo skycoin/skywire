@@ -1,0 +1,13 @@
+# Dependabot keeps GitHub Actions versions current (and, over time, pinned).
+# Go module updates are handled deliberately via `make update-deps` + `go mod
+# vendor`, so the gomod ecosystem is intentionally left out here to avoid
+# conflicting with that vendored workflow.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(ci)"

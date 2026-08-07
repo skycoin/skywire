@@ -1252,19 +1252,64 @@
       if (v && typeof v === "object" && !v.nodeType) { return v[mode] != null ? v[mode] : (v.both != null ? v.both : ""); }
       return v == null ? "" : v;
     }
+    // Resolve THIS visor's PK so navigating steps can open the local visor's own
+    // tabs (#/nodes/<pk>/info|transports|routing|apps). The top-bar always carries
+    // the local visor's chip whose href holds the 66-hex PK; fall back to the URL.
+    // resolveSelfPK finds THIS visor's PK from any /nodes/<pk>/ link in the DOM (the
+    // visor-list rows, the top-bar chip, or the URL) — robust to whatever page the
+    // tour is opened from (the chip is absent on the list page). Re-tried lazily so
+    // a step still resolves it even if the DOM wasn't ready at tour start. The
+    // single-visor wasm PWA has exactly one such PK; the native hypervisor uses the
+    // first listed visor.
+    var SELFPK = "";
+    var visorList = "#/nodes/list/1";
+    function resolveSelfPK() {
+      if (SELFPK) { return SELFPK; }
+      try {
+        var m = (win.location.hash || "").match(/nodes\/([0-9a-fA-F]{66})/);
+        if (m) { SELFPK = m[1]; return SELFPK; }
+        var links = doc.querySelectorAll('a[href*="/nodes/"]');
+        for (var k = 0; k < links.length; k++) {
+          var mm = (links[k].getAttribute("href") || "").match(/nodes\/([0-9a-fA-F]{66})/);
+          if (mm) { SELFPK = mm[1]; return SELFPK; }
+        }
+      } catch (e) {}
+      return SELFPK;
+    }
+    resolveSelfPK();
+    // nodePath(tab) → the local visor's tab hash (falls back to the overview if the
+    // PK can't be resolved, so a step navigates somewhere valid rather than skipping).
+    function nodePath(tab) { var pk = resolveSelfPK(); return pk ? "#/nodes/" + pk + "/" + tab : visorList; }
     var steps = [
-      { title: "This is not a normal web page",
+      // --- start on the front page: the visor list, exactly as it loads ---
+      { route: visorList,
+        title: "This is not a normal web page",
         body: {
-          wasm: "You're running a full <b>Skywire visor</b> — a live routing peer on an encrypted, peer-to-peer mesh — <b>inside this browser tab</b>. No install, no account, no server, no one in the middle. It lives only here: close the tab and it's gone (unless you export your key). Here's a short tour.",
-          native: "You're running a full <b>Skywire visor</b> on this machine — a persistent routing peer on an encrypted, peer-to-peer mesh. No account, no central server, no one in the middle. Here's a short tour of what that means." },
+          wasm: "You're running a full <b>Skywire visor</b> — a live routing peer on an encrypted, peer-to-peer mesh — <b>inside this browser tab</b>. No install, no account, no server, no one in the middle. It lives only here: close the tab and it's gone (unless you export your key). We'll start right here, on the <b>visor list</b> in front of you, and read it left to right.",
+          native: "You're running a full <b>Skywire visor</b> on this machine — a persistent routing peer on an encrypted, peer-to-peer mesh. No account, no central server, no one in the middle. We'll start right here, on your hypervisor's <b>visor list</b>, and read it left to right." },
         disc: { summary: "Open-source, no warranty — your keys are yours",
           details: "Skywire and the Skycoin wallet are experimental, open-source software, provided as-is and without warranty. You run this visor yourself and hold your own keys and coins; no one else can access or recover them. Understand the risks before relying on it or storing value." } },
 
-      { title: "How you're connected: dmsg",
+      // Identity first — the public key IS the visor, right there in the list.
+      { route: visorList, sel: "td.key-cell",
+        title: "You are your public key",
         body: {
-          wasm: "Before anything else, your visor joins <b>dmsg</b> — an encrypted relay network. Any two visors reach each other through dmsg servers without knowing each other's location. Your browser can't open raw TCP, so it connects over <b>WebSocket</b> (<code>wss://</code> on an https page, <code>ws://</code> otherwise), plus WebTransport where available.",
-          native: "Before anything else, your visor joins <b>dmsg</b> — an encrypted relay network. Any two visors reach each other through dmsg servers without knowing each other's location. On a native visor these are plain <b>TCP</b> connections (plus direct stcpr/sudph links)." },
-        more: { summary: "Protocols, and why the browser is different",
+          wasm: "Every visor is named by a <b>public key</b> — this 66-character hex string, here in the list. There are no usernames and no accounts on the mesh: the key <i>is</i> the identity and the address. It's one half of a cryptographic keypair held in <b>this browser</b>; the secret half never leaves it, and every link your visor makes is encrypted end-to-end with it.",
+          native: "Every visor is named by a <b>public key</b> — this 66-character hex string, here in the list. No usernames, no accounts: the key <i>is</i> the identity and the address. It's one half of a keypair on <b>this machine</b>; the secret half never leaves it, and every link is encrypted end-to-end with it." },
+        more: { summary: "Why a key instead of a name or IP",
+          panel: "On the clearnet you're found by IP and trusted through a certificate authority vouching for a name. On Skywire the <b>public key</b> is both at once: it's the address other visors route to, and the thing they encrypt to — so there's nothing to spoof and no authority to trust. Whoever holds the matching secret key <i>is</i> this visor; back it up (the tour shows where) and you can move your identity to another device." } },
+
+      // How it's connected — the dmsg-server count itself, broken down by carrier.
+      // Anchored to the live count cell (.dmsg-counts) FIRST, falling back to the
+      // always-present column header only if a browser visor's sessions momentarily
+      // flap to zero (the cell then renders "-" with no .dmsg-counts). pickTarget
+      // tries the comma list in priority order.
+      { route: visorList, sel: ".dmsg-counts, th.dmsg-column",
+        title: "How you're connected: dmsg",
+        body: {
+          wasm: "Right here is your <b>live count</b> of <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A browser can't open raw TCP, so it joins over <b>WSS</b> (WebSocket-over-TLS) and <b>WT</b> (WebTransport) — the carriers counted here.",
+          native: "Right here is your <b>live count</b> of <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A native visor joins over <b>TCP</b> (and QUIC where a server offers it)." },
+        more: { summary: "The four carriers",
           panel: "dmsg carries the control plane and a fallback data path. The <b>carrier</b> — how a visor reaches a dmsg server — depends on the host:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
             '<li style="margin:.3em 0"><b>tcp</b> — native visors; a raw TCP socket.</li>' +
@@ -1272,12 +1317,14 @@
             '<li style="margin:.3em 0"><b>webtransport</b> — HTTP/3 datagrams; browser-dialable.</li>' +
             '<li style="margin:.3em 0"><b>quic</b> — QUIC over UDP; native. The one carrier that also passes unreliable <b>datagrams</b> (UDP-over-dmsg), not just reliable streams.</li>' +
             '</ul>' +
-            "A wasm visor in a tab has no raw sockets, so it leans on <b>wss + WebTransport</b>; a native visor can also make direct TCP/UDP transports. These four carriers are the <i>same four protocols</i> Skywire uses for direct transports (next step) — dmsg is simply the <b>relayed</b> version: same wire, reached through a server instead of directly." } },
+            "A wasm visor in a tab has no raw sockets, so it leans on <b>wss + WebTransport</b>; a native visor can also make direct TCP/UDP transports. These four carriers are the <i>same four protocols</i> Skywire uses for direct transports (next column) — dmsg is simply the <b>relayed</b> version: same wire, reached through a server instead of directly." } },
 
-      { title: "Direct links: transports",
-        body: {
-          wasm: "Once it's on dmsg, your visor builds <b>direct transports</b> to peers where the browser allows — mostly <b>WebTransport</b> and dmsg itself. This tab is already dialing peers around the world.",
-          native: "Once it's on dmsg, your visor builds <b>direct transports</b> to peers — stcpr, sudph, dmsg, quic — punching through NATs where needed, so traffic can take the shortest path instead of always relaying." },
+      // Direct links — the transports count itself, right beside dmsg. Anchored to
+      // the live .tp-counts cell first, header fallback (a fresh visor with no
+      // transports yet renders "-", not .tp-counts) — same priority trick as dmsg.
+      { route: visorList, sel: ".tp-counts, th.transports-column",
+        title: "Direct links: transports",
+        body: "Right beside it, this is your visor's live <b>transports</b> count — direct links to peers, by type (STCPR, SUDPH, SWTR, WEBRTC…). Where dmsg <i>relays</i> through a server, a transport is point-to-point. It's already dialing peers around the world; the total climbs as it settles in.",
         more: { summary: "Transport types, and how they mirror dmsg",
           panel: "A transport is a direct link between two visors. <b>Four mirror the dmsg carriers exactly</b> — same wire, dialed peer-to-peer instead of to a server:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
@@ -1293,31 +1340,102 @@
             '</ul>' +
             "And <b>dmsg</b> itself is a transport — the <i>relayed</i> one. Most transports hand up a reliable stream; QUIC (direct or over dmsg) can also carry true unreliable UDP end-to-end. More direct transports = less relaying = lower latency." } },
 
-      { title: "Going further: routing",
-        body: "Traffic doesn't have to go straight to a peer — it can take a <b>multi-hop route</b> through several visors, so no single hop sees both ends. The route-finder picks paths across the transports above.",
+      // Label + location — the friendly name and where it's connecting from.
+      { route: visorList, sel: "td.label-cell",
+        title: "Label & location",
+        body: "Finally on this row: a human <b>label</b> you can set to recognise a visor at a glance, and — in the next column — its detected <b>IP address and location</b>. The label is just local, cosmetic naming; the identity that actually matters is the public key. That's the whole front page — <i>who</i> the visor is, <i>how</i> it's connected, and <i>where</i>. Now let's open the visor itself." },
+
+      // --- into the local visor's own tabs: the same concepts, up close ---
+      { route: function () { return nodePath("info"); }, sel: "app-node-info-content .info-line", has: "DMSG servers",
+        title: "Inside your visor: Info",
+        body: {
+          wasm: "Opening your visor lands on its <b>Info</b> tab. The <b>DMSG servers</b> line spells out the same connection the list summarised, next to version, uptime and identity. This is the relay layer up close — your control plane and a fallback data path, all end-to-end encrypted, reached over wss / WebTransport from the browser.",
+          native: "Opening your visor lands on its <b>Info</b> tab — <b>DMSG servers</b>, version, uptime and identity in one place. This is the relay layer up close: the control plane and a fallback data path, reached over TCP." } },
+
+      { route: function () { return nodePath("transports"); }, sel: "app-transport-list",
+        title: "Inside your visor: Transports",
+        body: {
+          wasm: "The visor's <b>Transports</b> tab: each row is one direct link to a peer. In a browser that's mostly <b>WebTransport</b> and dmsg; a native visor also builds stcpr/sudph/quic. More direct transports = less relaying = lower latency.",
+          native: "The visor's <b>Transports</b> tab: each row is a direct link — stcpr, sudph, dmsg, quic — punching through NATs where needed, so traffic takes the shortest path instead of always relaying." } },
+
+      { route: function () { return nodePath("routing"); }, sel: "app-route-list",
+        title: "Inside your visor: Routing",
+        body: "The <b>Routing</b> tab shows the paths traffic takes across those transports. A route can be <b>DIRECT</b> (a single hop straight to the peer), <b>MULTIHOP</b> (through several visors, so no single hop sees both ends), or <b>MULTIPLEXED</b> (spread across parallel paths for resilience and throughput). The route-finder builds them on demand.",
         more: { summary: "Hops &amp; the privacy trade-off",
           panel: "A route is an ordered path of transports. One hop is fastest; more hops mean no single intermediary knows both source and destination, at the cost of latency. Skywire's route-finder builds these paths on demand, and apps like the skynet browser ride them." } },
 
-      { sel: "#tb-menu", title: "Your apps",
-        body: "Everything opens from here: a browser for the mesh, encrypted 1:1 chat, a live log, a command console, your <b>Skycoin wallet</b>, and your visor's cryptographic identity." },
-
-      { sel: "app-top-bar", title: "The network, live",
+      { route: function () { return nodePath("apps"); }, sel: "app-node-app-list tr", has: "skysocks",
+        title: "Inside your visor: Apps",
         body: {
-          wasm: "Visor list, rewards, transports, and a live map of the mesh — all fetched <b>peer-to-peer over dmsg</b>, never from a web server. A browser tab, talking directly to other visors around the world.",
-          native: "Visor list, rewards, transports, and a live map of the mesh — all fetched <b>peer-to-peer over dmsg</b>, never from a web server. This visor is talking directly to peers around the world." } },
+          wasm: "The visor's <b>Apps</b>. The default is <b>skysocks-client-lite</b> — an in-browser proxy client that routes a browse window's clearnet fetches out through an <b>exit</b> visor, IP-anonymously. Unlike the native <b>skysocks-client</b>, it serves <i>no local port</i> — it works only inside this tab. The rest of the tour's demos are optional to try: a mesh <b>browser</b>, encrypted <b>skychat</b>, and the <b>Skycoin wallet</b> — each opened from the ☰ menu, each running over the mesh.",
+          native: "The visor's <b>Apps</b> — start, stop and configure them here: the <b>skysocks</b> proxy client + server, <b>VPN</b> client + server, and <b>skychat</b>. On a native visor these bind real local ports and can serve other machines on your network." },
+        more: { summary: "skysocks-client vs. skysocks-client-lite",
+          panel: "<b>skysocks-client</b> (native) runs as an app process and serves a local <b>SOCKS5 port</b> other programs point at. <b>skysocks-client-lite</b> (browser) has no process and no port — it lives in this tab and proxies only this visor's own browse windows and wallet. Both dial an <b>exit</b> visor that does the clearnet egress, so a site sees the exit's IP, not yours. (Naming: the browser one is the <i>lite</i> client — same idea, no listener.)" } },
 
-      { sel: ".visor-switcher-row", title: "Every peer is addressable",
-        body: "Each chip is a visor on the network, shown by label and public key. Click one to inspect its transports, routes, and apps. There are no usernames here — only keys." },
+      // --- back to the top level: this hypervisor's cluster ---
+      // A short PROGRESSIVE demo of hypervisor capability: the real list as-is,
+      // then a visor connects, then it turns out to be a hypervisor, then it has
+      // its own connected visor — then the simulated rows are dropped (the next
+      // step has no `cluster`, so go() resets the level to 0). cluster steps 1-3
+      // are wasm-only (the mock rides the wasm data bridge); a native HV shows its
+      // real cluster, so it only gets the "as-is" explainer.
+      { route: visorList, sel: "app-node-list", cluster: 0,
+        title: "Your cluster: the hypervisor UI",
+        body: {
+          wasm: "Back at the top level. This visor list <b>is the hypervisor UI</b> — every visor connected to <i>this</i> hypervisor is shown here. Right now that's just this one visor, in this browser tab. To <b>manage a remote visor</b> from here, add its public key (the ⋯ menu → add visor); to have this visor <b>managed by a remote hypervisor</b> instead, set that hypervisor's public key in this visor's config. Let's simulate what attaching a visor looks like…",
+          native: "This visor list <b>is the hypervisor UI</b> — every visor connected to this hypervisor is shown here. To <b>manage a remote visor</b>, add its public key (⋯ → add visor); to have this visor <b>managed by a remote hypervisor</b>, set that hypervisor's public key in this visor's config. Connected visors appear here, each fully controllable over the mesh." },
+        more: { summary: "Hypervisor ⇄ visor: who manages whom",
+          panel: "A <b>hypervisor</b> is just a visor that also serves this management UI and holds the keys of the visors it manages. The relationship is set in config (or at runtime): give this hypervisor a remote visor's PK and address to <i>manage</i> it, or set a remote hypervisor's PK on this visor to be <i>managed</i> by it. Management runs over the same encrypted mesh — a hypervisor in a browser tab can drive a native visor on the other side of the world, and vice-versa." } },
+      { wasmOnly: true, route: visorList, sel: "app-node-list", cluster: 1,
+        title: "A visor connects",
+        body: "<b>Watch the list</b> — a remote visor is connecting to your hypervisor (a tour simulation). In a moment <b>demo-frankfurt-hv</b> appears as a second row. It's a full peer you could then inspect and control from this browser tab — its transports, routes and apps — all over the mesh, without it ever exposing an address to the outside world." },
+      { wasmOnly: true, route: visorList, sel: "app-node-list", cluster: 2,
+        title: "…and it's a hypervisor too",
+        body: "That connected visor turns out to be <b>itself a hypervisor</b> — a ★ appears beside it shortly. A hypervisor is only a visor that <i>also</i> manages others, so nothing stops a visor you manage from managing visors of its own. Your hypervisor is now managing another hypervisor, entirely over the mesh." },
+      { wasmOnly: true, route: visorList, sel: "app-node-list", cluster: 3,
+        title: "…with its own connected visor",
+        body: "And that connected hypervisor has <b>its own connected visor</b> — <b>demo-paris-visor</b> — which appears in its own section below it. Hypervisors nest: from this one tab you can see and manage a whole tree of visors. (These simulated rows disappear as we move on.)" },
+
+      // Whole-mesh overview tabs — VISIT each (not just point at it) so the tour
+      // doubles as a functional check. Rewards is native-only (hidden on wasm).
+      { nativeOnly: true, route: "#/nodes/rewards", sel: "app-node-list", title: "The mesh: rewards",
+        body: "<b>Rewards</b> — the Skycoin paid out to visors that stay online and reachable. This is where a visor appears once it qualifies." },
+      { route: "#/nodes/transports", title: "The mesh: all transports",
+        body: "<b>Transports</b> — every direct link across the <i>whole</i> mesh (thousands of them), with per-type bandwidth: the live edge list the route-finder draws on. Toggle Compact / Tree to explore it. Fetched <b>peer-to-peer over dmsg</b>, never from a web server." },
+      { route: "#/nodes/network", sel: "app-network-view", title: "The mesh: the map",
+        body: "<b>Network</b> — the mesh drawn as a graph: visors, and the transports between them." },
+      { route: "#/nodes/visualizer", sel: "app-network-visualizer", title: "The mesh: visualizer",
+        body: "<b>Network Visualizer</b> — an interactive, geographic render of the same graph (Flat, Globe and WebGL views)." },
+      { route: "#/nodes/uptime", sel: "app-multi-visor-uptime", title: "The mesh: uptime",
+        body: "<b>Uptime</b> — how consistently each visor has stayed online over 1d / 7d / 30d, the basis for rewards." },
+      { route: "#/nodes/services-health", sel: "app-services-health", title: "The mesh: services",
+        body: {
+          wasm: "<b>Deployment</b> — the health of the shared services (config, discovery, route-finder, address resolver, uptime tracker) that keep the mesh working. <b>This browser tab probes each one live over dmsg</b> — status, version and latency — right here, the same reach a native visor has. Green is up; a red row is a service that didn't answer.",
+          native: "<b>Deployment</b> — the health of the shared services (config, discovery, route-finder, address resolver, uptime tracker) that keep the mesh working. All of it fetched over dmsg — a visor talking directly to visors around the world." } },
 
       { sel: "#skywire-skynet-taskbar", title: "The mesh desktop",
         body: "Tool windows float above the UI. The <b>skynet browser</b> fetches sites over dmsg — anonymous, no DNS, no certificate authorities; sites are addressed by public key (e.g. <code>&lt;pk&gt;.dmsg</code>).",
         more: { summary: "How mesh sites stay safe",
           panel: "Fetched pages run sandboxed and isolated from your keys — a site can't read your identity or reach the clearnet on its own. There's no DNS and no certificate authority; the public key <i>is</i> the address and the authentication. The ⓘ button on a browse window explains the isolation model." } },
 
-      { sel: "#tb-menu", title: "You are your keys",
+      // App demos (wasm desktop only — a native visor surfaces these as its own
+      // Angular tabs). Each step OPENS the app window and spotlights it; go()
+      // closes it again when the tour moves to a non-app step.
+      { wasmOnly: true, action: "browse", sel: "@appwin", title: "App: the mesh browser",
+        body: "The tour just opened the <b>skynet browser</b> — a window that fetches sites <b>over dmsg</b>, addressed by public key (<code>&lt;pk&gt;.dmsg</code>), with no DNS and no certificate authority. It's landed on <b>home.dmsg</b>, a start page this visor serves from the tab — and it lists <b>named</b> mesh sites you can click: <code>skywire.dmsg</code>, <code>tpd.dmsg</code>, and more. A name like <code>skywire.dmsg</code> is just a friendly alias the resolver maps to a public key; type any <code>&lt;pk&gt;.dmsg</code> or <code>&lt;name&gt;.dmsg</code> in the bar to visit a mesh site.",
+        more: { summary: "Named .dmsg sites, no DNS",
+          panel: "There's no DNS on the mesh — a public key is the real address. But typing 66 hex characters is unfriendly, so the resolving proxy keeps a small <b>alias</b> table (<code>skywire.dmsg</code>, <code>tpd.dmsg</code>, <code>home.dmsg</code>, …) that maps a readable name to a PK, exactly like the native socks5 resolving proxy. Resolution is local to your visor's alias set, not a global namespace anyone can squat — and in this tab <code>skywire.dmsg</code> resolves to <i>this</i> visor, so the page you're seeing is served from the browser you're reading this in." } },
+      { wasmOnly: true, action: "chat", sel: "@appwin", title: "App: encrypted chat",
+        body: "<b>Skychat</b> — end-to-end encrypted messaging straight between visors over dmsg, with no server storing your messages. Address a peer by public key and type; delivery rides the same mesh your visor is already on." },
+      { wasmOnly: true, action: "wallet", sel: "@appwin", title: "App: Skycoin wallet",
+        body: "The <b>Skycoin wallet</b> — a client-side wallet served from this tab. Your keys never leave the browser; only node and BTC queries cross the mesh. This is where the reward system pays visors that stay online." },
+      { wasmOnly: true, action: "log", sel: "@appwin", title: "App: live visor logs",
+        body: "The <b>visor log</b> — a live tail of this visor's own runtime (dmsg, transports, routing, apps), straight from the wasm core in this tab. Watch the mesh work in real time; the ☰ console runs CLI commands against the same visor." },
+
+      { sel: "#tb-menu", title: "Your keys, your visor",
         body: {
-          wasm: "Your visor is a keypair held in <b>this browser</b> (Apps → identity). Export it to back up or move your visor to another device — that key <i>is</i> your identity on the mesh.",
-          native: "Your visor is a keypair on <b>this machine</b> (Apps → identity). Back it up — that key <i>is</i> your identity on the mesh. Whoever holds it is this visor." },
+          wasm: "Your visor is the keypair we started with, held in <b>this browser</b> (Apps → identity). <b>Export it</b> to back up or move your visor to another device — that key <i>is</i> your identity on the mesh, and this tab holds the only copy.",
+          native: "Your visor is the keypair we started with, on <b>this machine</b> (Apps → identity). Back it up — that key <i>is</i> your identity on the mesh. Whoever holds it is this visor." },
         more: { summary: "Wasm visor vs. a native visor",
           panel: "Same protocol, different host. A <b>wasm visor</b> lives in a browser tab: ephemeral by default (export your key to persist it), dials over WebSocket/WebTransport, and hosts a lighter app set. A <b>native visor</b> runs as a system service: persistent on disk, can make direct TCP/UDP transports and bind low ports, and can host the full app set (VPN, skysocks server, and more). Both are first-class peers on the same mesh." } },
 
@@ -1326,6 +1444,129 @@
           wasm: "No server. No account. No IP address handed out. Just your browser, cryptographic keys, and a global peer-to-peer mesh — reachable from anywhere, run by nobody, and gone when you close the tab unless you export your key. Reopen this tour any time from the Apps (☰) menu → tour. Welcome to Skywire.",
           native: "No server. No account. Just cryptographic keys and a global peer-to-peer mesh — reachable from anywhere, run by nobody. Reopen this tour any time from the Apps (☰) menu → tour. Welcome to Skywire." } }
     ];
+    // Drop native-only steps (e.g. the fleet Rewards overview) on a wasm visor,
+    // where those tabs are hidden — see home-tabs.ts isWasmHvCore(). Filtering
+    // here (rather than skipping at render time) keeps the "N / total" count right.
+    steps = steps.filter(function (s) { return !(s.nativeOnly && mode !== "native") && !(s.wasmOnly && mode !== "wasm"); });
+
+    // --- tour-only simulated cluster (wasm visor demo) ---
+    // A fresh browser visor manages no one, so "Your cluster, live" would show a
+    // one-row list. For the tour we splice in synthetic visors so it SHOWS what a
+    // managed cluster looks like: a remote visor this hypervisor manages, which is
+    // itself a hypervisor with its own connected visor (mirrors how the native HV
+    // renders attached visors + nested hypervisors). Done by wrapping the wasm
+    // core's JS data bridge (skywireVisor.hvApi) — the same path Angular's
+    // SkywireHttpBackend fetches through — so the rows flow through the real render
+    // pipeline (list + tree) and survive Angular's refresh poll. Torn down (hvApi
+    // restored) in cleanup(), so the next poll drops the rows. Wasm-only: a native
+    // HV serves its data over real HTTP, not hvApi, and has real peers to show.
+    var MOCK_REMOTE_PK = "03" + "a7f3c9d1e2b4f608".repeat(4).slice(0, 64);
+    var MOCK_SUB_PK = "02" + "5b8e1d4a7c0f36e9".repeat(4).slice(0, 64);
+    var MOCK_D1 = "02" + "0281a102c82820e8".repeat(4).slice(0, 64);
+    var MOCK_D2 = "03" + "0326978fa1b2c3d4".repeat(4).slice(0, 64);
+    function mockTp(local, remote, type) { return { id: "", local_pk: local, remote_pk: remote, type: type, is_setup: false, label: "automatic", initiator: true }; }
+    function mockDs(pk, carrier, proto) { return { pk: pk, latency: 0, carrier: carrier, protocol: proto }; }
+    function mockEntry(o) {
+      return {
+        overview: {
+          local_pk: o.pk, hostname: o.host || "",
+          build_info: { version: o.version || "v1.3.91", os: o.os || "linux", arch: o.arch || "amd64", commit: "", date: "" },
+          app_protocol_version: "", routes_count: o.routes || 2,
+          local_ip: "", public_ip: o.ip || "", is_symmetic_nat: false,
+          country_code: o.cc || "", region_name: o.region || "", city_name: o.city || "",
+          hypervisors: null, connected_hypervisor: null, apps: o.apps || [], transports: o.transports || []
+        },
+        health: { services_health: "healthy" },
+        dmsg_stats: { public_key: o.pk, server_public_key: (o.dmsg && o.dmsg[0] ? o.dmsg[0].pk : ""), round_trip: 0 },
+        dmsg_servers: o.dmsg || [], uptime: o.uptime || 86400, online: true, min_hops: o.minHops || 1,
+        reward_address: o.reward || "", build_tag: o.buildTag || "", config_version: o.version || "v1.3.91",
+        public_autoconnect: true, is_public: !!o.isPublic, is_hypervisor: !!o.isHv
+      };
+    }
+    // The cluster demo is PROGRESSIVE, driven by clusterLevel (set per-step via
+    // s.cluster in go()), so the tour can show a hypervisor's capability build up:
+    //   0 — no mock (the real list as-is)
+    //   1 — a regular visor connects (demo-frankfurt-hv, NOT a hypervisor)
+    //   2 — that visor is ALSO a hypervisor (★ appears; is_hypervisor=true)
+    //   3 — that hypervisor has its OWN connected visor (demo-paris-visor, shown
+    //       in its own nested section)
+    // Level resets to 0 when the tour leaves the cluster section, dropping the rows.
+    var clusterLevel = 0;
+    function buildMockCluster(level) {
+      var remote = mockEntry({
+        pk: MOCK_REMOTE_PK, host: "demo-frankfurt-hv", version: "v1.3.91", os: "linux", arch: "arm64",
+        ip: "185.130.44.12", cc: "DE", region: "Hesse", city: "Frankfurt", isHv: level >= 2, uptime: 1209600,
+        reward: "2RkZ7wFm3nDqA8sT1yV6bXcJ9pLhGw4uEo",
+        transports: [mockTp(MOCK_REMOTE_PK, SELFPK || "", "stcpr"), mockTp(MOCK_REMOTE_PK, MOCK_SUB_PK, "dmsg"), mockTp(MOCK_REMOTE_PK, MOCK_SUB_PK, "sudph")],
+        dmsg: [mockDs(MOCK_D1, "tcp", "tcp"), mockDs(MOCK_D2, "tcp", "tcp")]
+      });
+      var sub = (level >= 3) ? mockEntry({
+        pk: MOCK_SUB_PK, host: "demo-paris-visor", version: "v1.3.91", os: "linux", arch: "amd64",
+        ip: "51.75.20.7", cc: "FR", region: "Île-de-France", city: "Paris", uptime: 432000,
+        reward: "2Hn9dQ4vC7bR2xW8yK1mF6tL3sA5gZ9jUe",
+        transports: [mockTp(MOCK_SUB_PK, MOCK_REMOTE_PK, "stcpr")],
+        dmsg: [mockDs(MOCK_D1, "tcp", "tcp")]
+      }) : null;
+      return { remote: remote, sub: sub };
+    }
+    function spliceMock(path, data) {
+      if (clusterLevel <= 0) { return data; }
+      var m = buildMockCluster(clusterLevel);
+      if (/visors-tree-summary/.test(path)) {
+        if (data && data.sections && data.sections[0] && Array.isArray(data.sections[0].visors)) {
+          data.sections[0].visors = data.sections[0].visors.concat([m.remote]);
+          // A hypervisor only gets its own section once it actually manages a
+          // visor (level 3) — level 2 just flips the ★ on the row above.
+          if (clusterLevel >= 3 && m.sub) {
+            data.sections.push({ hypervisor_pk: MOCK_REMOTE_PK, via_chain: [MOCK_REMOTE_PK], visors: [m.remote, m.sub] });
+          }
+        }
+      } else if (Array.isArray(data)) { // visors-summary (flat)
+        data = data.concat(m.sub ? [m.remote, m.sub] : [m.remote]);
+      }
+      return data;
+    }
+    // setClusterLevel changes what the mock injects and nudges the node list to
+    // refetch so the change shows within ~1-2s (the raw 5s poll + the wasm core's
+    // slow fetch otherwise lags a change to the NEXT step). The refetch is a single
+    // DEBOUNCED click of the top-bar refresh button: firing it rapidly across
+    // consecutive steps (a fast click-through) backed up the wasm core's request
+    // queue and wedged it, so we coalesce to one refresh ~450ms after the last
+    // level change. Spaced-out steps (real reading pace) each still refresh once.
+    var _clRefreshT = null;
+    function setClusterLevel(n) {
+      clusterLevel = n;
+      if (_clRefreshT) { clearTimeout(_clRefreshT); }
+      _clRefreshT = setTimeout(function () {
+        _clRefreshT = null;
+        try { var rb = doc.querySelector("app-refresh-button"); if (rb) { rb.click(); } } catch (e) {}
+      }, 450);
+    }
+    function installClusterMock() {
+      if (mode !== "wasm") { return; }
+      var v = win.skywireVisor;
+      if (!v || typeof v.hvApi !== "function" || v.__tourMockOn) { return; }
+      var orig = v.hvApi.bind(v);
+      v.__tourOrigHvApi = orig; v.__tourMockOn = true;
+      v.hvApi = function (method, path, body) {
+        var pr = orig(method, path, body);
+        if ((method || "GET").toUpperCase() !== "GET" || !/\/(visors-tree-summary|visors-summary)(\?|$)/.test(path || "")) { return pr; }
+        return pr.then(function (r) {
+          try {
+            var data = JSON.parse(new TextDecoder().decode((r && r.body) || new Uint8Array()));
+            return { status: r.status, body: new TextEncoder().encode(JSON.stringify(spliceMock(path, data))) };
+          } catch (e) { return r; }
+        });
+      };
+    }
+    function removeClusterMock() {
+      var v = win.skywireVisor;
+      if (!v || !v.__tourMockOn) { return; }
+      try { v.hvApi = v.__tourOrigHvApi; } catch (e) {}
+      v.__tourMockOn = false; v.__tourOrigHvApi = null;
+    }
+    installClusterMock();
+
     var host = doc.body || doc.documentElement;
     // Ensure the WinBox dark chrome exists even if the skynet desktop (which
     // normally injects it) hasn't mounted yet. Distinct id from mountPanel's
@@ -1353,7 +1594,7 @@
     // reposition keeps the ring glued to its target when the page scrolls/resizes
     // behind the (now non-modal) window; per-step positioning happens in render().
     function reposition() {
-      var s = steps[i], el = s && pickTarget(s.sel);
+      var s = steps[i], el = s && pickTarget(s.sel, s.has);
       if (el && spot.style.display === "block") {
         var r = el.getBoundingClientRect(), pad = 6;
         spot.style.left = (r.left - pad) + "px"; spot.style.top = (r.top - pad) + "px";
@@ -1363,6 +1604,8 @@
     function cleanup() {
       if (closed) { return; }
       closed = true;
+      removeClusterMock(); // drop the tour-only synthetic cluster rows (next poll refetches real data)
+      try { if (globalThis.__skywireDemoApps) { globalThis.__skywireDemoApps.closeAll(); } } catch (e) {} // close any app-demo windows the tour opened
       try { localStorage.setItem(TOUR_SEEN_KEY, "1"); } catch (e) {}
       try { win.removeEventListener("scroll", reposition, true); win.removeEventListener("resize", reposition); } catch (e) {}
       if (spot.parentNode) { spot.parentNode.removeChild(spot); }
@@ -1382,19 +1625,79 @@
     // pickTarget returns the first VISIBLE, non-tiny element matching sel (there
     // can be hidden/collapsed duplicates — e.g. a loading vs loaded top-bar — and
     // spotlighting a 1px ghost looks broken).
-    function pickTarget(sel) {
+    // lastAppEl holds the window a step's `action` just opened (an app demo), so
+    // the special selector "@appwin" spotlights it. Reset per step in go().
+    var lastAppEl = null;
+    function pickTarget(sel, has) {
       if (!sel) { return null; }
-      var cand = doc.querySelectorAll(sel);
-      for (var j = 0; j < cand.length; j++) {
-        var cr = cand[j].getBoundingClientRect();
-        if (cr.width >= 24 && cr.height >= 10 && getComputedStyle(cand[j]).visibility !== "hidden") { return cand[j]; }
+      if (sel === "@appwin") {
+        var e = lastAppEl;
+        if (e) { var er = e.getBoundingClientRect(); if (er.width >= 24 && er.height >= 10) { return e; } }
+        return null;
+      }
+      // sel may be a COMMA-separated PRIORITY list, tried in order (not document
+      // order) — so a step can prefer the live value cell (e.g. .dmsg-counts) and
+      // fall back to the always-present column header only when that cell renders
+      // "-" (no counts div) during a transient flap to zero sessions.
+      var groups = sel.split(",");
+      for (var g = 0; g < groups.length; g++) {
+        var one = groups[g].trim();
+        if (!one) { continue; }
+        var cand = doc.querySelectorAll(one);
+        for (var j = 0; j < cand.length; j++) {
+          var el = cand[j], cr = el.getBoundingClientRect();
+          if (cr.width >= 24 && cr.height >= 10 && getComputedStyle(el).visibility !== "hidden") {
+            // `has` disambiguates when a selector matches several elements (e.g. the
+            // DMSG line among many .info-line rows, or the skysocks app row).
+            if (has && (el.innerText || "").indexOf(has) < 0) { continue; }
+            return el;
+          }
+        }
       }
       return null;
     }
+    // go() runs a step: navigate to its HV route (s.route, a hash — the local
+    // visor's info/transports/routing/apps tabs live at #/nodes/<pk>/<tab>), then
+    // wait for its target to appear (Angular renders the view async) before
+    // drawing the callout + spotlight. Steps with no route/target render at once.
+    function go() {
+      var s = steps[i];
+      var navigated = false;
+      // App-demo steps: open (or switch to) the app window this step demonstrates,
+      // and remember it so "@appwin" spotlights it. Steps WITHOUT an action close
+      // any lingering demo window, so a following step (e.g. the ☰-menu step) isn't
+      // covered by a left-over app window.
+      if (globalThis.__skywireDemoApps) {
+        if (s.action) { try { lastAppEl = globalThis.__skywireDemoApps.open(s.action); } catch (e) { lastAppEl = null; } }
+        else { lastAppEl = null; try { globalThis.__skywireDemoApps.closeAll(); } catch (e) {} }
+      }
+      // Progressive cluster demo: apply the mock level this step wants; any step
+      // outside the cluster section drops the simulated rows (level 0).
+      if (s.cluster != null) { setClusterLevel(s.cluster); }
+      else if (clusterLevel !== 0) { setClusterLevel(0); }
+      if (s.route) {
+        var target = (typeof s.route === "function") ? s.route(SELFPK) : s.route;
+        if (target && win.location.hash !== target) { try { win.location.hash = target; navigated = true; } catch (e) {} }
+      }
+      if (s.sel) {
+        var t0 = Date.now();
+        (function poll() {
+          if (closed) { return; }
+          if (pickTarget(s.sel, s.has) || Date.now() - t0 > 3000) { render(); return; }
+          setTimeout(poll, 150);
+        })();
+      } else if (navigated) {
+        // A "visit" step (route, no specific target): give the routed view a beat
+        // to render behind the callout before we describe it.
+        setTimeout(function () { if (!closed) { render(); } }, 550);
+      } else {
+        render();
+      }
+    }
     function render() {
       var s = steps[i];
-      var el = pickTarget(s.sel);
-      if (s.sel && !el && i < steps.length - 1) { i++; showMore = false; return render(); } // absent/hidden target → skip
+      var el = pickTarget(s.sel, s.has);
+      if (s.sel && !el && i < steps.length - 1) { i++; showMore = false; return go(); } // absent/hidden target → skip (navigate for the next step)
       var last = (i === steps.length - 1);
       var btn = 'cursor:pointer;border-radius:6px;padding:.4em .85em';
       if (showMore && s.more) {
@@ -1441,8 +1744,8 @@
       if ((b = call.querySelector("#tour-skip"))) b.onclick = done;
       if ((b = call.querySelector("#tour-more"))) b.onclick = function () { showMore = true; render(); };
       if ((b = call.querySelector("#tour-moreback"))) b.onclick = function () { showMore = false; render(); };
-      if ((b = call.querySelector("#tour-back"))) b.onclick = function () { showMore = false; if (i > 0) i--; render(); };
-      if ((b = call.querySelector("#tour-next"))) b.onclick = function () { showMore = false; if (last) { done(); } else { i++; render(); } };
+      if ((b = call.querySelector("#tour-back"))) b.onclick = function () { showMore = false; if (i > 0) i--; go(); };
+      if ((b = call.querySelector("#tour-next"))) b.onclick = function () { showMore = false; if (last) { done(); } else { i++; go(); } };
       // Fit the window to the step's content: no dead space on short steps, no
       // nested scroll on long "more" panels. Cap to 82vh (the body scrolls, and
       // the button row is sticky, so controls stay reachable past the cap).
@@ -1451,7 +1754,7 @@
         wb.resize(380, Math.max(170, Math.min(call.scrollHeight + 38, Math.round(vpH * 0.82))));
       } catch (e) {}
     }
-    render();
+    go();
   }
   globalThis.skywireStartTour = function () { startTour(document); };
 
@@ -2231,6 +2534,49 @@
         tryOpen();
       }
     } catch (e) {}
+
+    // Tour hook: the onboarding tour (startTour) lives in a sibling scope and
+    // can't reach these open* closures. Expose a small facade so tour steps can
+    // OPEN an app window (browser / chat / wallet / logs) to demonstrate it, get
+    // its DOM element back to spotlight, and have them all torn down when the
+    // tour closes. "One demo window at a time": each open() first closes the
+    // previous tour-opened window, so a demo walk stays uncluttered.
+    var _demoWins = [];
+    function _topDemoWin() {
+      // The just-opened window is focused → highest z among .winbox. Exclude the
+      // tour's own callout window so we spotlight the app, not the tour. (This
+      // bundled WinBox exposes its root element as `.window` / `.g`, not `.dom`.)
+      var twb = globalThis.__tourWB;
+      var tourDom = twb ? (twb.window || twb.g || twb.dom) : null;
+      var best = null, bz = -1, ws = doc.querySelectorAll(".winbox");
+      for (var i = 0; i < ws.length; i++) {
+        if (ws[i] === tourDom) { continue; }
+        var z = parseInt(getComputedStyle(ws[i]).zIndex, 10) || 0;
+        if (z >= bz) { bz = z; best = ws[i]; }
+      }
+      return best;
+    }
+    function _closeDemoWins() {
+      _demoWins.forEach(function (el) { try { var c = el && el.querySelector(".wb-close"); if (c) { c.click(); } } catch (e) {} });
+      _demoWins = [];
+    }
+    globalThis.__skywireDemoApps = {
+      open: function (kind) {
+        _closeDemoWins();
+        try {
+          if (kind === "browse") { openBrowse(); }
+          else if (kind === "chat") { if (globalThis.skywireVisor && globalThis.skywireVisor.skychatSend) { openChat(); } else { return null; } }
+          else if (kind === "wallet") { openWallet(); }
+          else if (kind === "log") { openLog(); }
+          else if (kind === "cli") { openCli(); }
+          else { return null; }
+        } catch (e) { return null; }
+        var el = _topDemoWin();
+        if (el && _demoWins.indexOf(el) < 0) { _demoWins.push(el); }
+        return el;
+      },
+      closeAll: function () { _closeDemoWins(); }
+    };
 
     return {
       panel: bar,

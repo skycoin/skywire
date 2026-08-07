@@ -3,7 +3,7 @@
 // The peer link — "is there a way to this person right now, and if not, make
 // one" — as an endpoint of its own.
 //
-// A DM send has always dialled on demand: the first message to a peer carries
+// A DM send has always dialed on demand: the first message to a peer carries
 // the handshake inside its own request. That is fine for a CLI, where a
 // command that takes half a minute is a command that takes half a minute. It
 // is not fine for a person holding a phone. Setting up a skynet route means
@@ -149,7 +149,7 @@ func chatCtrlHasNetwork(net appnet.Type) bool {
 
 // linkHandler serves the peer link.
 //
-//	GET  /link?pk=<hex>                         -> current state, no dialling
+//	GET  /link?pk=<hex>                         -> current state, no dialing
 //	POST /link {"pk":"<hex>","network":"auto"}  -> start one if needed, same shape
 //
 // POST is deliberately not "connect and tell me when you are done": a route

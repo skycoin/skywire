@@ -162,6 +162,28 @@ func statusErr(status int, body []byte) error {
 	return fmt.Errorf("tpd_dmsg: status %d: %s", status, string(body))
 }
 
+// UptimeUpdater sends a visor uptime heartbeat to the TPD-integrated uptime
+// tracker. The dmsg TPD client implements it net/http-free, so the browser
+// wasm-visor can report presence exactly like a native visor by asserting its
+// transport.DiscoveryClient to this interface.
+type UptimeUpdater interface {
+	UpdateUptime(ctx context.Context, version string) error
+}
+
+// UpdateUptime sends the visor's uptime heartbeat — a signed
+// GET /v4/update?version=<version>, the same request utclient.UpdateVisorUptime
+// makes over HTTP, but net/http-free over dmsg and reusing THIS client's shared
+// nonce (so it can't race a second auth stream against the same TPD PK). The
+// TPD-integrated tracker serves the heartbeat on the same base the wasm edge
+// already registers transports against.
+func (c *dmsgClient) UpdateUptime(ctx context.Context, version string) error {
+	status, body, err := c.fetch(ctx, "GET", "/v4/update?version="+version, nil, nil)
+	if err != nil {
+		return err
+	}
+	return statusErr(status, body)
+}
+
 // --- transport.DiscoveryClient ---
 
 func (c *dmsgClient) RegisterTransports(ctx context.Context, entries ...*transport.SignedEntry) error {

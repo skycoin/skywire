@@ -523,7 +523,12 @@ func (a *API) resolve(w http.ResponseWriter, r *http.Request) {
 	}
 
 	receiverVisorData, err := a.store.Resolve(ctx, types.Type(tpType), receiverPK)
-	if errors.Is(err, store.ErrNoEntry) {
+	// ErrNoEntry: no record for this PK. ErrUnknownTransportType: a type the AR
+	// doesn't resolve at all (e.g. webrtc, which dials by PK over dmsg signaling
+	// and has no AR record) — the redis store reports this where the mem store
+	// reports ErrNoEntry. Both mean "nothing to resolve here" and must be 404,
+	// not a 500 server-fault (the AR-500 regression this endpoint has hit before).
+	if errors.Is(err, store.ErrNoEntry) || errors.Is(err, store.ErrUnknownTransportType) {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}

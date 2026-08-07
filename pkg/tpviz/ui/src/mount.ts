@@ -10,6 +10,7 @@
 import indexHtml from '../index.html';
 import { wireEventListeners } from './events';
 import { setHostOpts } from './persist';
+import { teardown, installVisibilityGate } from './lifecycle';
 
 // scopeSelector rewrites one selector so it only matches inside `scope`. Global
 // selectors (body/html/:root/*) become the scope root itself so the tpviz reset
@@ -97,8 +98,18 @@ export function mount(root: HTMLElement, opts?: { view?: string; onViewChange?: 
   root.innerHTML = doc.body.innerHTML;
 
   wireEventListeners();
+
+  // Suspend data sync + rendering whenever the mounted view isn't visible
+  // (backgrounded tab, or this element off-screen/hidden), resume when it is.
+  const removeVisibilityGate = installVisibilityGate(root);
+
   return {
     unmount() {
+      // Stop the visibility wiring, then stop every timer / rAF loop / WebSocket
+      // the app started BEFORE ripping out the DOM — otherwise they keep firing
+      // against a detached document.
+      removeVisibilityGate();
+      teardown();
       root.innerHTML = '';
       root.classList.remove(SCOPE_CLASS);
       if (mountedStyle) { mountedStyle.remove(); mountedStyle = null; }

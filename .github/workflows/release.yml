@@ -1,4 +1,8 @@
 name: Release
+
+permissions:
+  contents: write
+
 on:
   push:
     tags:
@@ -55,7 +59,7 @@ jobs:
             toolchain: riscv64-linux-musl
             toolchain_file: riscv64-linux-musl-cross.tgz
     steps:
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -75,7 +79,7 @@ jobs:
 
       - name: Cache musl toolchain
         id: cache-toolchain
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: musl-data
           key: musl-${{ env.MUSL_RELEASE }}-${{ matrix.toolchain }}
@@ -147,7 +151,7 @@ jobs:
     needs: create-release
     runs-on: macos-15-intel
     steps:
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -210,7 +214,7 @@ jobs:
     needs: create-release
     runs-on: macos-latest
     steps:
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -288,7 +292,7 @@ jobs:
             wix_arch: x64
             wintun_arch: arm64
     steps:
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false
@@ -472,7 +476,7 @@ jobs:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
 
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: false

@@ -28,9 +28,24 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
+
+// topLevelSKRe matches the entire top-level "sk" line in a 2-space-indented
+// MarshalIndent(v.conf) rendering (top-level fields sit at exactly two spaces;
+// any nested "sk" is deeper-indented and left alone). Used to drop the secret
+// key from the runtime-config view — removing the line (rather than blanking to
+// "") keeps the JSON decodable, since an empty string is not a valid SecKey and
+// an absent one is simply Null.
+var topLevelSKRe = regexp.MustCompile(`(?m)^  "sk": "[0-9a-fA-F]*",?\n`)
+
+// redactTopLevelSK removes the visor's secret key from a marshaled config so it
+// never leaves the process via the runtime-config view. The PK is kept.
+func redactTopLevelSK(b []byte) []byte {
+	return topLevelSKRe.ReplaceAll(b, nil)
+}
 
 // SetRuntimeConfig validates and writes the visor's on-disk config.
 // The visor is NOT hot-reloaded; the operator must restart the
@@ -53,14 +68,37 @@ func (v *Visor) SetRuntimeConfig(rawJSON []byte) error {
 		return fmt.Errorf("invalid runtime config json: %w", err)
 	}
 
-	// SK/PK consistency. ensureKeys is unexported on visorconfig
-	// so we replicate the check here. Either field may be empty
-	// (the visor will regenerate on startup), but if both are
-	// present the PK must match what SK derives.
+	// Identity is NOT editable through the runtime-config view. The PK is derived
+	// from the SK, and the SK is redacted out of GetRuntimeConfig, so an honest
+	// edit round-trips with the same PK and a blank SK. Reject anything that would
+	// change the identity: an edited PK, or a freshly-typed SK deriving a different
+	// PK. This prevents a typo (or the redaction) from silently swapping identity.
+	if !newConf.PK.Null() && !v.conf.PK.Null() && newConf.PK != v.conf.PK {
+		return errors.New("public key is not editable via runtime config")
+	}
+
+	// Preserve the running SK when the editor submitted a blank one (the common
+	// case, since the SK is redacted). Re-marshal below so the real key — not the
+	// redacted blank — lands on disk. A deliberately-typed SK is honored but must
+	// still derive the current PK (checked next).
+	preservedSK := false
+	if newConf.SK.Null() && !v.conf.SK.Null() {
+		newConf.SK = v.conf.SK
+		if newConf.PK.Null() {
+			newConf.PK = v.conf.PK
+		}
+		preservedSK = true
+	}
+
+	// SK/PK consistency: whatever SK ends up configured must derive the current
+	// public key (identity is immutable) and match the PK field when both present.
 	if !newConf.SK.Null() {
 		derivedPK, err := newConf.SK.PubKey()
 		if err != nil {
 			return fmt.Errorf("invalid sk: %w", err)
+		}
+		if !v.conf.PK.Null() && derivedPK != v.conf.PK {
+			return errors.New("public key is not editable via runtime config")
 		}
 		if !newConf.PK.Null() && derivedPK != newConf.PK {
 			return errors.New("pk does not match sk")
@@ -69,11 +107,18 @@ func (v *Visor) SetRuntimeConfig(rawJSON []byte) error {
 		return errors.New("pk is set but sk is empty; one without the other will fail at startup")
 	}
 
-	// Write the user's bytes verbatim — preserves the formatting
-	// they typed in the editor. The standard Flush() codepath
-	// re-marshals from the in-memory struct which would clobber
-	// any whitespace / comment-style additions the operator made.
-	if err := os.WriteFile(path, rawJSON, 0o644); err != nil { //nolint:gosec
+	// Write the operator's bytes verbatim to preserve their formatting — EXCEPT
+	// when we re-injected the preserved SK, where we re-marshal so the real key
+	// (not the redacted blank the editor round-tripped) is what persists.
+	toWrite := rawJSON
+	if preservedSK {
+		b, mErr := json.MarshalIndent(&newConf, "", "  ")
+		if mErr != nil {
+			return fmt.Errorf("re-marshal config: %w", mErr)
+		}
+		toWrite = b
+	}
+	if err := os.WriteFile(path, toWrite, 0o644); err != nil { //nolint:gosec
 		return fmt.Errorf("write config to %s: %w", path, err)
 	}
 

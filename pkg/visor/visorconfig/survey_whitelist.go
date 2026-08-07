@@ -7,7 +7,7 @@ package visorconfig
 // whitelist — the key set the conf service hands out — should be written into
 // this visor's config and refreshed into it thereafter.
 //
-// Those keys authorise their holders to read this visor's log server, its
+// Those keys authorize their holders to read this visor's log server, its
 // system survey and its pprof endpoints over dmsg (see initDmsgHTTPLogServer).
 // On a fleet node that is the point: it is how an operator inspects machines
 // they run. The mobile pair says no — see the comment there.

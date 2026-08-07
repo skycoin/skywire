@@ -15,6 +15,7 @@ cobra subcommand tree.
 - [permissions.md](permissions.md) — VPN client CAP_NET_ADMIN, VPN server iptables/sysctl, file system + survey
 - [configuration.md](configuration.md) — `config gen` flags, hypervisor web UI, hypervisor TUI, remote hypervisors, network visualization UI
 - [visor.md](visor.md) — running `skywire visor`, process control / while-loop pattern, transport setup, runtime files
+- [public-visor.md](public-visor.md) — make a visor reachable from the internet: `is_public`, a stable `transport_port`, router port-forwarding and host firewall (TCP **and** UDP), transport-type → protocol map, and reachability troubleshooting
 
 ## Application usage
 

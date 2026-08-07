@@ -19,15 +19,14 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
+	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
 	serviceType    = servicedisc.ServiceTypeVisor
 	sdURL          string
-	utURL          string
 	tpdURL         string
 	cacheDirSD     string
-	cacheDirUT     string
 	cacheDirTPD    string
 	cacheFilesAge  int
 	rawData        bool
@@ -36,6 +35,7 @@ var (
 	version        string
 	isStats        bool
 	showTransports bool
+	showByType     bool
 	minTransports  int
 	testEnv        bool
 )
@@ -110,18 +110,17 @@ func init() {
 
 	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
-	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.UptimeTracker, "uptime tracker url")
-	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "d", dep.TransportDiscovery, "transport discovery url")
+	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "d", dep.TransportDiscovery, "transport discovery url (also serves the integrated uptime tracker)")
 	RootCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "print raw json data")
-	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
+	RootCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status")
 	RootCmd.Flags().StringVar(&cacheDirSD, "cds", cacheDirPath(dep.ServiceDiscovery), "SD cache dir (\"\" to disable)")
-	RootCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.UptimeTracker), "UT cache dir (\"\" to disable)")
-	RootCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)")
-	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
+	RootCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir, shared by transports + uptime (\"\" to disable)")
+	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "refetch cached data older than n minutes (0 = always fetch fresh, e.g. for `watch`)")
 	RootCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	RootCmd.Flags().StringVarP(&version, "version", "v", "", "filter by version")
 	RootCmd.Flags().BoolVarP(&isStats, "stats", "s", false, "return only a count of the results")
 	RootCmd.Flags().BoolVarP(&showTransports, "transports", "t", false, "show transport count per visor")
+	RootCmd.Flags().BoolVarP(&showByType, "bytype", "y", false, "break the transport count down by type (implies -t): total + per-type columns")
 	RootCmd.Flags().IntVarP(&minTransports, "min", "n", 0, "minimum transport count (requires -t)")
 	RootCmd.Flags().StringVar(&clirpc.Addr, "rpc", clirpc.DefaultRPCAddr, "RPC server address (env: SKYWIRE_RPC)")
 	clirpc.RegisterFetchFlags(RootCmd)
@@ -142,6 +141,10 @@ Set cache dir to "" to disable caching for that service.
 
 Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment().ServiceDiscovery, serviceType),
 	Run: func(cmd *cobra.Command, _ []string) {
+		// --bytype is a richer form of --transports; it needs the same TPD fetch.
+		if showByType {
+			showTransports = true
+		}
 		// Handle --testenv flag: override URLs and cache dirs that weren't explicitly set
 		if testEnv && !isTestEnv() {
 			// --testenv was specified at runtime (not via SKYWIRETEST env)
@@ -149,26 +152,25 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			if !cmd.Flags().Changed("sdurl") {
 				sdURL = deployment.Test.ServiceDiscovery
 			}
-			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.UptimeTracker
-			}
 			if !cmd.Flags().Changed("tpdurl") {
 				tpdURL = deployment.Test.TransportDiscovery
 			}
 			if !cmd.Flags().Changed("cds") {
 				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
 			}
-			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.UptimeTracker)
-			}
 			if !cmd.Flags().Changed("cdt") {
 				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
 			}
 		}
 
-		// Build full URLs with endpoints
+		// Build full URLs with endpoints. Uptime and transports both come
+		// from the transport-discovery base: the uptime tracker is
+		// TPD-integrated (CXO-backed v3), so there is no separate uptime
+		// endpoint or cache — never the deprecated standalone tracker.
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
-		utFullURL := utURL + "/uptimes?v=v2"
+		// pv only filters by the online flag, so request the 1-day uptime
+		// window (still carries .on) instead of the 30-day daily bitmap.
+		utFullURL := clirpc.IntegratedUptimeURLDays(tpdURL, 1)
 		tpdFullURL := tpdURL + "/all-transports"
 
 		// Fetch SD
@@ -211,7 +213,10 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			pks, _ = script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Slice() //nolint:errcheck
 		} else {
 			// Filter by online status via jq join
-			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirTPD, utFullURL), utFullURL, cacheFilesAge)
+			if uts == "" {
+				uts = "[]"
+			}
 			joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
 
 			// Build jq filter with optional country and version conditions
@@ -258,15 +263,24 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to parse transport discovery data: %w", err))
 		}
 
-		// Count transports per PK
+		// Count transports per PK (and per type when --bytype is set).
 		tpCount := make(map[string]int)
+		tpByType := make(map[string]map[types.Type]int)
 		for _, entry := range entries {
 			// Skip self-transports
 			if entry.Edges[0] == entry.Edges[1] {
 				continue
 			}
-			tpCount[entry.Edges[0].String()]++
-			tpCount[entry.Edges[1].String()]++
+			for _, edge := range entry.Edges {
+				pk := edge.String()
+				tpCount[pk]++
+				if showByType {
+					if tpByType[pk] == nil {
+						tpByType[pk] = make(map[types.Type]int)
+					}
+					tpByType[pk][entry.Type]++
+				}
+			}
 		}
 
 		// Build result with transport counts
@@ -291,6 +305,21 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`, getDeployment(
 			internal.PrintOutput(cmd.Flags(), struct {
 				Count int `json:"count"`
 			}{Count: len(results)}, fmt.Sprintf("%d\n", len(results)))
+			return
+		}
+
+		if showByType {
+			// Stable columns in preference order (stcpr squicr sudph stcp
+			// webrtc swsr swtr dmsg), each printed even when zero, so the
+			// output is a fixed-width table friendly to awk/graphing.
+			order := types.PreferenceOrder()
+			for _, r := range results {
+				line := fmt.Sprintf("%s total=%d", r.pk, r.count)
+				for _, t := range order {
+					line += fmt.Sprintf(" %s=%d", t, tpByType[r.pk][t])
+				}
+				fmt.Println(line)
+			}
 			return
 		}
 

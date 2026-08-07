@@ -273,11 +273,11 @@ func init() {
 
 	listCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	listCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
-	listCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.UptimeTracker, "uptime tracker url")
+	listCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
 	listCmd.Flags().BoolVarP(&rawData, "raw", "r", false, "pretty print json data")
 	listCmd.Flags().BoolVarP(&noFilterOnline, "noton", "o", false, "do not filter by online status in UT")
 	listCmd.Flags().StringVar(&cacheDirSD, "cds", cacheDirPath(dep.ServiceDiscovery), "SD cache dir (\"\" to disable)")
-	listCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.UptimeTracker), "UT cache dir (\"\" to disable)")
+	listCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.TransportDiscovery), "UT cache dir (\"\" to disable)")
 	listCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	listCmd.Flags().StringVarP(&pk, "pk", "k", "", "check "+serviceType+" service discovery for public key")
 	listCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
@@ -301,19 +301,19 @@ var listCmd = &cobra.Command{
 				sdURL = deployment.Test.ServiceDiscovery
 			}
 			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.UptimeTracker
+				utURL = deployment.Test.TransportDiscovery
 			}
 			if !cmd.Flags().Changed("cds") {
 				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
 			}
 			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.UptimeTracker)
+				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
 			}
 		}
 
 		// Build full URLs
 		sdFullURL := sdURL + "/api/services?type=" + serviceType
-		utFullURL := utURL + "/uptimes?v=v2"
+		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, 1)
 
 		// --- Fetch SD ---
 		sds := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdFullURL), sdFullURL, cacheFilesAge)
@@ -389,6 +389,9 @@ var listCmd = &cobra.Command{
 		// --- Show only offline servers ---
 		if showOffline {
 			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+			if uts == "" {
+				uts = "[]"
+			}
 
 			// Parse SD and UT data
 			var sdEntries []services.Service
@@ -533,6 +536,9 @@ var listCmd = &cobra.Command{
 
 		// --- Filtering by online status ---
 		uts := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirUT, utFullURL), utFullURL, cacheFilesAge)
+		if uts == "" {
+			uts = "[]"
+		}
 
 		// Use Go-based filtering when minVersion or maxVersion is specified (jq can't do semver comparison)
 		if minVersion != "" || maxVersion != "" {

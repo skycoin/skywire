@@ -48,7 +48,7 @@ func TestLinkHandler_GetReportsNoLink(t *testing.T) {
 		t.Fatalf("body is not a link state: %v\nbody=%q", err, rr.Body.String())
 	}
 	if st.Ready {
-		t.Error("ready = true for a peer that was never dialled")
+		t.Error("ready = true for a peer that was never dialed")
 	}
 	// The whole point of the GET: it reads, it does not dial. A poll that
 	// started a dial would stack one every 1.5 seconds.

@@ -53,12 +53,23 @@ const (
 	// participation — so it can carry/relay routes like a first-class node, not
 	// just hold a handful of links.
 	autoconnectMaxDirect = 32
-	// autoconnectDialConcurrency bounds how many direct dials run at once. Each
-	// dialDirect blocks up to ~25s per carrier (AR resolve + WT/WS handshake), so
-	// dialing SEQUENTIALLY made the first transport take ~26s when an early target
-	// was slow/dead. Dialing concurrently makes it ~the fastest single dial. Bounded
-	// so a browser tab doesn't open dozens of QUIC handshakes at once.
+	// autoconnectDialConcurrency bounds how many direct dials run at once, so a
+	// browser tab doesn't open dozens of QUIC handshakes at once. Because each dial
+	// holds a slot for its whole duration, the per-step timeouts below are kept
+	// tight so a hung endpoint frees its slot quickly instead of clogging the pool.
 	autoconnectDialConcurrency = 8
+	// autoconnectResolveTimeout bounds the AR lookup (resolveStcpr/resolveWT) — a
+	// signed HTTP-over-dmsg round-trip. Given its OWN budget so a hung resolver
+	// can't hold a dial slot indefinitely (the raw autoconnect ctx has no deadline).
+	autoconnectResolveTimeout = 10 * time.Second
+	// autoconnectDialTimeout bounds the actual WT/WS handshake (SaveTransport). A
+	// reachable WebTransport/WebSocket handshake completes in well under 2s, so a
+	// dial still pending at this point is almost always an advertised-but-
+	// unreachable endpoint (it hangs until we close it — surfacing as WT's
+	// "close() is called while connecting"). Was 25s, which let every dead endpoint
+	// squat a concurrency slot for 25s and starve the reachable peers; 8s frees the
+	// slot ~3x faster while leaving ample headroom over a real handshake.
+	autoconnectDialTimeout = 8 * time.Second
 	// WebRTC (NAT-traversing DataChannel over dmsg) is reserved on a SEPARATE,
 	// smaller budget for peers no direct carrier can reach (NAT'd / WT-less
 	// visors). Kept apart so WebRTC — heavier, and something ANY visor can accept
@@ -295,14 +306,17 @@ func dialDirect(ctx context.Context, ar *arDmsg, pk cipher.PubKey, port uint16, 
 	// WS: rides the stcpr cmux port. Resolve the peer's stcpr IP, dial
 	// ws://ip:<SD-advertised-port>/. Skipped on HTTPS (mixed content).
 	if !https {
-		if addr, err := ar.resolveStcpr(ctx, pk); err == nil && addr != "" {
+		rctx, rcancel := context.WithTimeout(ctx, autoconnectResolveTimeout)
+		addr, err := ar.resolveStcpr(rctx, pk)
+		rcancel()
+		if err == nil && addr != "" {
 			host := addr
 			if h, _, e := net.SplitHostPort(addr); e == nil {
 				host = h
 			}
 			url := fmt.Sprintf("ws://%s:%d/", host, port)
 			wsTable.SetAddr(pk, url)
-			dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
+			dctx, dcancel := context.WithTimeout(ctx, autoconnectDialTimeout)
 			_, derr := tpM.SaveTransport(dctx, pk, types.WS, transport.LabelAutomatic)
 			dcancel()
 			if derr != nil {
@@ -318,7 +332,9 @@ func dialDirect(ctx context.Context, ar *arDmsg, pk cipher.PubKey, port uint16, 
 
 	// WT: a QUIC endpoint + pinned self-signed cert, learned from the AR's WT
 	// record (https://host:port/skywire).
-	url, certHash, werr := ar.resolveWT(ctx, pk)
+	rctx, rcancel := context.WithTimeout(ctx, autoconnectResolveTimeout)
+	url, certHash, werr := ar.resolveWT(rctx, pk)
+	rcancel()
 	switch {
 	case werr != nil:
 		vlog(fmt.Sprintf("ws-autoconnect: AR wt resolve %s: %v", pk.Hex()[:8], werr))
@@ -326,7 +342,7 @@ func dialDirect(ctx context.Context, ar *arDmsg, pk cipher.PubKey, port uint16, 
 		// no WT entry in AR (404) — a WT-less public visor; WebRTC pass may reach it.
 	default:
 		wtTable.SetEntry(pk, network.WTEntry{URL: url, CertHash: certHash})
-		dctx, dcancel := context.WithTimeout(ctx, 25*time.Second)
+		dctx, dcancel := context.WithTimeout(ctx, autoconnectDialTimeout)
 		_, derr := tpM.SaveTransport(dctx, pk, types.WT, transport.LabelAutomatic)
 		dcancel()
 		if derr != nil {

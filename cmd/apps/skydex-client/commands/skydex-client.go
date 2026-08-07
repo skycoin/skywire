@@ -64,7 +64,7 @@ var (
 	marketPort uint16
 	// passwordFile holds the credential guarding the trading UI, in skychat's
 	// "<hex-salt>:<hex-hash>" format. Empty (the default) serves it ungated,
-	// which is the desktop behaviour; see auth.go for who needs the gate.
+	// which is the desktop behavior; see auth.go for who needs the gate.
 	passwordFile string
 )
 

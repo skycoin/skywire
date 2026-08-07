@@ -53,6 +53,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall/js"
 	"time"
@@ -210,8 +211,14 @@ func jsBoot(_ js.Value, args []js.Value) interface{} {
 	seedPKHex := args[1].String()
 	seedWSURL := args[2].String()
 	discDmsgAddr := args[3].String()
+	// arg 5 (optional): a JSON service-config override the page persisted in
+	// localStorage — how the browser edge is made runtime-reconfigurable.
+	cfgOverrideJSON := ""
+	if len(args) > 4 && args[4].Type() == js.TypeString {
+		cfgOverrideJSON = args[4].String()
+	}
 	return promise(func() (interface{}, error) {
-		pk, err := bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr)
+		pk, err := bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON)
 		if err != nil {
 			return nil, err
 		}
@@ -263,7 +270,7 @@ func jsStatus(js.Value, []js.Value) interface{} {
 
 // bootEdge wires the edge: dmsg client → transport.Manager → edge router →
 // in-process app ProcManager.
-func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, error) {
+func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string) (cipher.PubKey, error) {
 	pk, sk, err := keysFromHex(skHex)
 	if err != nil {
 		return pk, err
@@ -276,6 +283,11 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// visors can't drift on config sourcing. nil V1 → pure deployment defaults
 	// (a browser edge has no operator config file).
 	svc := visorcore.ResolveServices(nil)
+	// Merge any page-supplied override (localStorage → boot arg 5) onto the
+	// deployment defaults, then publish the result as the effective config so
+	// SelfRuntimeConfig renders exactly what dmsg / router / autoconnect use.
+	applyCfgOverride(&svc, cfgOverrideJSON)
+	effectiveSvc = svc
 
 	// Default the discovery to the deployment's dmsg-discovery when the caller
 	// didn't pass one. Without a discDmsgAddr, StartDmsgSeeded skips the discovery
@@ -361,20 +373,12 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// visors diverge: omitting sd/ar/ut here left the wasm-visor's network-view /
 	// services-health / uptime aggregation empty (DialStream to the SD 404'd) while
 	// the native visor worked. dmsgURLPK errors are non-fatal (a null PK is skipped).
-	var servicePKs []cipher.PubKey
-	for _, u := range []string{
-		svc.DmsgDiscoveryDmsg,
-		svc.TransportDiscoveryDmsg,
-		svc.AddressResolverDmsg,
-		svc.RouteFinderDmsg,
-		svc.ServiceDiscoveryDmsg,
-		svc.ConfDmsg,
-		svc.UptimeTrackerDmsg,
-	} {
-		if spk, e := dmsgURLPK(u); e == nil {
-			servicePKs = append(servicePKs, spk)
-		}
-	}
+	// Direct-client dmsg service PKs (dmsgd/tpd/ar/rf/sd/conf/ut) via the SHARED
+	// derivation the native visor also uses (visorcore.DmsgServicePKs) — so the
+	// two can't drift on the set, the omission that once left the wasm edge's
+	// network-view / services-health / uptime aggregation empty — plus the
+	// route-setup nodes (which the native visor seeds separately).
+	servicePKs := visorcore.DmsgServicePKs(svc)
 	servicePKs = append(servicePKs, svc.RouteSetupNodes...)
 	c, _, err := dmsgclient.StartDmsgSeeded(ctx, mLog.PackageLogger("dmsg"), pk, sk, seeds, discDmsgAddr, true, servicePKs...)
 	if err != nil {
@@ -400,11 +404,9 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	wsTable = stcp.NewTable(nil)
 	wtTable = network.NewWTTable(nil)
 	// WebRTC ICE servers: the deployment's own STUN (reused from sudph). The
-	// bare host:port entries need the stun: URL scheme the WebRTC stack expects.
-	var iceURLs []string
-	for _, s := range svc.StunServers {
-		iceURLs = append(iceURLs, "stun:"+s)
-	}
+	// shared helper adds the stun: URL scheme the WebRTC stack expects — the
+	// same one the native visor feeds its StunServers through.
+	iceURLs := visorcore.ICEURLs(svc.StunServers)
 	// Learn this tab's public IP via STUN (browser WebRTC). The dmsg LookupIP path
 	// (refreshSelfPublicIP) returns the wss reverse-proxy's address on an HTTPS
 	// page, not the browser's — STUN is the one route that works there. Reuses the
@@ -419,34 +421,43 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 		SecKey:          sk,
 		DiscoveryClient: tpd,
 		LogStore:        transport.InMemoryTransportLogStore(),
+		Version:         buildinfo.Version(),
 	}
-	tm, err := transport.NewManager(mLog.PackageLogger("tp_manager"), nil, eb, tmConf, factory)
+	// Shared construction (pkg/visor/visorcore) — the same seam the native visor
+	// uses: NewManager → InitDmsgClient → Serve → register the browser-dialable
+	// dial-only clients (WS/WT/WEBRTC). Their Start() fails closed under TinyGo
+	// (a tab can't run a WS/WT listener) — logged, non-fatal — but Dial works,
+	// so SaveTransport(WS|WT|WEBRTC) can create an outbound transport to a peer
+	// that runs the listener; WEBRTC also starts the dmsg signaling listener
+	// (port 47) so the tab can ACCEPT DataChannels, not just dial them.
+	vlog("tp_manager: building (shared visorcore.BuildTransportManager)…")
+	tm, err := visorcore.BuildTransportManager(ctx, visorcore.TransportManagerDeps{
+		Log:             mLog.PackageLogger("tp_manager"),
+		ARClient:        nil,
+		EB:              eb,
+		Config:          tmConf,
+		Factory:         factory,
+		DmsgC:           dmsgC,
+		Serve:           true,
+		DialOnlyClients: []types.Type{types.WS, types.WT, types.WEBRTC},
+	})
 	if err != nil {
 		return pk, fmt.Errorf("transport manager: %w", err)
 	}
 	tpM = tm
-	vlog("tp_manager: ok; init dmsg client…")
-	tm.InitDmsgClient(ctx, dmsgC)
-	vlog("tp_manager: dmsg client inited; serving…")
-	go tm.Serve(ctx)
+	vlog("tp_manager: serving; WS/WT/WebRTC dial clients registered")
 
 	// In-memory CXO telemetry: report this tab's transport bandwidth + latency to
 	// TPD (via its cxo-aggregator), so the browser visor's transports show up in
 	// TPD /metrics like a native visor's — see telemetry_js.go.
 	go startTelemetry(sk, tpdPK, mLog.PackageLogger("wasm-telemetry"))
 	go startGroupChat(sk, mLog.PackageLogger("wasm-group"))
-	vlog("tp_manager: serving")
-	// Register the browser-dialable direct transport clients. Their Start() fails
-	// closed under TinyGo (a tab can't run a WS/WT listener) — logged, non-fatal —
-	// but Dial works, so SaveTransport(WS|WT) can create an outbound transport to a
-	// peer that runs the listener. This makes WS/WT "known" networks for the
-	// dialTransport hook.
-	tm.InitClient(ctx, types.WS, 0)
-	tm.InitClient(ctx, types.WT, 0)
-	// WebRTC is symmetric: InitClient also starts the dmsg signaling listener
-	// (port 47), so the tab can ACCEPT WebRTC DataChannels, not just dial them.
-	tm.InitClient(ctx, types.WEBRTC, 0)
-	vlog("tp_manager: WS/WT/WebRTC dial clients registered")
+	// Uptime heartbeat parity with the native visor: report presence to the
+	// TPD-integrated uptime tracker (net/http-free GET /v4/update over the same
+	// authenticated tpdclient), so a long-lived tab isn't seen as offline.
+	if u, ok := tpd.(tpdclient.UptimeUpdater); ok {
+		go startUptimeHeartbeat(ctx, u, mLog.PackageLogger("wasm-uptime"))
+	}
 
 	// 3. edge router (receives route rules + forwards/consumes packets). nil
 	// RouteFinder/RouteGroupDialer → the route-SOURCE path is the build-tagged
@@ -481,14 +492,28 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// a 0-intermediate-hop path).
 	vlog("router: New + serve…")
 	r, err := visorcore.BuildRouter(ctx, visorcore.RouterDeps{
-		DmsgC:              dmsgC,
-		PubKey:             pk,
-		SecKey:             sk,
-		TransportManager:   tm,
-		RouteFinder:        rfClient,
-		RouteGroupDialer:   rgDialer,
-		SetupNodes:         svc.RouteSetupNodes,
-		MinHops:            svc.MinHops,
+		DmsgC:            dmsgC,
+		PubKey:           pk,
+		SecKey:           sk,
+		TransportManager: tm,
+		RouteFinder:      rfClient,
+		RouteGroupDialer: rgDialer,
+		SetupNodes:       svc.RouteSetupNodes,
+		MinHops:          svc.MinHops,
+		// Route-setup hook: on an app dial (min_hops=1, no --existing-tp) the
+		// router races this against the route-finder to create a DIRECT transport
+		// to the peer — the browser edge's missing half (a native visor registers
+		// the equivalent in pkg/visor/init_router.go). EnsureBestTransport tries
+		// the host's creatable direct types in preference order (WEBRTC > WS > WT
+		// for a browser) and only falls back to the DMSG relay if none work — so
+		// the data plane stays peer-to-peer and dmsg is genuinely last resort.
+		// Without this the wasm visor could only route over EXISTING transports,
+		// which is why a fresh dial to an arbitrary exit stormed the route-finder.
+		SetupHooks: []router.RouteSetupHook{
+			func(rPK cipher.PubKey, tpm *transport.Manager) error {
+				return tpm.EnsureBestTransport(ctx, rPK)
+			},
+		},
 		AwaitSetupListener: setupLis,
 		Logger:             mLog.PackageLogger("router"),
 		MasterLogger:       mLog,
@@ -514,6 +539,9 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr string) (cipher.PubKey, 
 	// without the operator hand-entering an exit (skysocks-lite-as-app P1).
 	if sdPK, err := dmsgURLPK(svc.ServiceDiscoveryDmsg); err == nil {
 		go startDefaultProxyAuto(ctx, sdPK)
+		// Proactively ping the active exit (and keep standbys warm) so a dead route
+		// triggers the retry policy instead of only being noticed on the next fetch.
+		go proxyKeepaliveLoop(ctx)
 	}
 
 	// wss → WebTransport convergence: the browser bootstraps its dmsg session over
@@ -1065,6 +1093,7 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 		//   - RewardAddress: genuinely none (no on-disk config; earns no rewards),
 		//     left empty rather than faked.
 		Uptime:            uptimeSeconds(),
+		MinHops:           effectiveSvc.MinHops,
 		PublicAutoconnect: true,
 		IsPublic:          false,
 	}
@@ -1209,6 +1238,126 @@ func (visorSelf) SelfNetworkView() []byte {
 		return body, nil
 	}
 	b, err := json.Marshal(netview.Compute(fetch))
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+// serviceHealthEntry mirrors pkg/visor.ServiceHealthEntry's JSON shape (the
+// /api/service-health element) so the HV-UI Services-Health tab parses a browser
+// edge's probe results exactly like a native visor's.
+type serviceHealthEntry struct {
+	Name      string `json:"name"`
+	URL       string `json:"url"`
+	Status    string `json:"status"`
+	Version   string `json:"version,omitempty"`
+	Error     string `json:"error,omitempty"`
+	LatencyMs int64  `json:"latency_ms"`
+	Transport string `json:"transport,omitempty"`
+	IP        string `json:"ip,omitempty"`
+}
+
+// probeServiceHealth GETs <service>/health over dmsg (net/http-free) and fills a
+// serviceHealthEntry, mirroring the native visor's doHealthProbe: measure
+// latency, read build_info.version (or top-level version). Unconfigured → N/A.
+func probeServiceHealth(name, dmsgURL string) serviceHealthEntry {
+	e := serviceHealthEntry{Name: name, URL: dmsgURL, Transport: "dmsg"}
+	pk, err := dmsgURLPK(dmsgURL)
+	if dmsgURL == "" || err != nil {
+		e.Status = "N/A"
+		return e
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	start := time.Now()
+	status, _, body, ferr := dmsgclient.FetchOverDmsg(ctx, dmsgC, "GET", pk.Hex(), "/health", nil, nil)
+	e.LatencyMs = time.Since(start).Milliseconds()
+	if ferr != nil {
+		e.Status = "DOWN"
+		e.Error = ferr.Error()
+		return e
+	}
+	if status != 200 {
+		e.Status = fmt.Sprintf("ERROR(%d)", status)
+		return e
+	}
+	var health map[string]interface{}
+	if json.Unmarshal(body, &health) == nil {
+		if bi, ok := health["build_info"].(map[string]interface{}); ok {
+			if ver, ok := bi["version"].(string); ok {
+				e.Version = ver
+			}
+		}
+		if e.Version == "" {
+			if ver, ok := health["version"].(string); ok {
+				e.Version = ver
+			}
+		}
+	}
+	e.Status = "OK"
+	return e
+}
+
+// SelfServiceHealth probes each deployment service's /health over the tab's dmsg
+// client and returns the native /api/service-health shape ([]ServiceHealthEntry)
+// pre-marshaled — so the HV-UI Services-Health tab populates on a browser edge
+// instead of degrading to "not available on a browser visor". Same service set
+// the native visor's ServiceHealth reports (Config, Transport Discovery, DMSG
+// Discovery, Address Resolver, Route Finder, Service Discovery, Uptime Tracker),
+// probed concurrently; each is a dmsg round-trip. (The dmsg-SERVER rows the
+// native visor also reports are a follow-up — they need the transit-client
+// loopback fix deployed across the fleet to be reachable.)
+func (visorSelf) SelfServiceHealth() []byte {
+	if dmsgC == nil {
+		return nil
+	}
+	svc := visorcore.ResolveServices(nil)
+	probes := []struct{ name, dmsgURL string }{
+		{"Config Service", svc.ConfDmsg},
+		{"Transport Discovery", svc.TransportDiscoveryDmsg},
+		{"DMSG Discovery", svc.DmsgDiscoveryDmsg},
+		{"Address Resolver", svc.AddressResolverDmsg},
+		{"Route Finder", svc.RouteFinderDmsg},
+		{"Service Discovery", svc.ServiceDiscoveryDmsg},
+		{"Uptime Tracker", svc.UptimeTrackerDmsg},
+	}
+	entries := make([]serviceHealthEntry, len(probes))
+	// Pre-seed each row so a probe that hasn't returned by the overall deadline
+	// still yields a sensible entry: a configured service shows TIMEOUT, an
+	// unconfigured one N/A. This is what keeps the table from hanging on a single
+	// slow/dead service (e.g. the decommissioned standalone uptime tracker).
+	for i, p := range probes {
+		st := "N/A"
+		if p.dmsgURL != "" {
+			st = "TIMEOUT"
+		}
+		entries[i] = serviceHealthEntry{Name: p.name, URL: p.dmsgURL, Transport: "dmsg", Status: st}
+	}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for i, p := range probes {
+		wg.Add(1)
+		go func(i int, name, url string) {
+			defer wg.Done()
+			e := probeServiceHealth(name, url)
+			mu.Lock()
+			entries[i] = e
+			mu.Unlock()
+		}(i, p.name, p.dmsgURL)
+	}
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	// Overall deadline. Every reachable deployment service answers /health in well
+	// under a second over dmsg, so 9s never truncates a healthy one; it only caps
+	// how long an unreachable service can hold up the whole table.
+	select {
+	case <-done:
+	case <-time.After(9 * time.Second):
+	}
+	mu.Lock()
+	b, err := json.Marshal(entries)
+	mu.Unlock()
 	if err != nil {
 		return nil
 	}

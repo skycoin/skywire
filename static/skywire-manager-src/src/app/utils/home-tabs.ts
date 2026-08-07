@@ -35,7 +35,31 @@ export const HOME_TAB_INDEX = {
   settings: 9,
 };
 
+/**
+ * True when the UI is served BY a browser wasm hypervisor core (an in-tab
+ * serverless visor or a standalone wasm hypervisor), rather than a native
+ * visor-served build or a remote-viewer of a native hypervisor. hv-boot.js
+ * sets window.__SKYWIRE_HV__ before Angular boots; .visor / .standalone are the
+ * two modes whose /api requests are answered by the in-wasm core (see
+ * SkywireHttpBackend). A native build leaves __SKYWIRE_HV__ unset, so this is
+ * false there and the native hypervisor is unaffected. A remote viewer (.pk)
+ * proxies to a real native hypervisor, so it is NOT treated as a wasm core.
+ */
+export function isWasmHvCore(): boolean {
+  const cfg: any = (typeof window !== 'undefined' && (window as any).__SKYWIRE_HV__) || {};
+
+  return !!(cfg.visor || cfg.standalone);
+}
+
 export function homeTabsData(): TabButtonData[] {
+  // On a browser wasm hypervisor the Rewards (fleet reward system) and
+  // Resources (host CPU/RAM/disk of the serving machine) tabs have no
+  // meaningful backing — a browser tab has no host to measure and can't reach
+  // the reward system — so they are hidden there. They stay visible on the
+  // native hypervisor. `hidden` (not removal) keeps the tab array indices
+  // stable so each page's fixed selectedTabIndex still lines up.
+  const wasm = isWasmHvCore();
+
   return [
     // --- local: this hypervisor ---
     { icon: 'view_headline', label: 'nodes.title', linkParts: ['/nodes'], group: 'local' },
@@ -44,8 +68,8 @@ export function homeTabsData(): TabButtonData[] {
     // serving visor's controls without hunting for it in the list; for a
     // serverless wasm tab this is the in-browser visor itself.
     { icon: 'router', label: 'nodes.local-visor-title', linkParts: ['/nodes', 'local'], group: 'local' },
-    { icon: 'monetization_on', label: 'nodes.rewards-title', linkParts: ['/nodes', 'rewards'], group: 'local' },
-    { icon: 'memory', label: 'nodes.resources-title', linkParts: ['/nodes', 'resources'], group: 'local' },
+    { icon: 'monetization_on', label: 'nodes.rewards-title', linkParts: ['/nodes', 'rewards'], group: 'local', hidden: wasm },
+    { icon: 'memory', label: 'nodes.resources-title', linkParts: ['/nodes', 'resources'], group: 'local', hidden: wasm },
     // --- network-wide ---
     { icon: 'swap_horiz', label: 'nodes.transports-title', linkParts: ['/nodes', 'transports'], group: 'network' },
     { icon: 'public', label: 'nodes.network-title', linkParts: ['/nodes', 'network'], group: 'network' },

@@ -6,7 +6,7 @@ import { ServiceHealthEntry, ServiceHealthService } from 'src/app/services/servi
 import { TabButtonData } from '../../layout/top-bar/top-bar.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
-import { homeTabsData } from 'src/app/utils/home-tabs';
+import { homeTabsData, isWasmHvCore } from 'src/app/utils/home-tabs';
 
 /** One RSN's remote /stats fetch result, mirrors pkg/visor.RSNRemoteStat. */
 interface RSNRemoteStat {
@@ -39,6 +39,14 @@ interface RSNSnapshot {
  * of every deployment service the local visor is configured to use:
  * Transport Discovery, DMSG Discovery, Address Resolver, Route Finder,
  * Uptime Tracker, Service Discovery. Polled every 15s.
+ *
+ * Browser wasm hypervisor cores (an in-tab serverless visor or a standalone
+ * wasm hypervisor) populate this table too: the wasm core (pkg/wasmhv) serves
+ * /api/service-health via SelfProvider.SelfServiceHealth(), which probes each
+ * deployment service's /health over the tab's own dmsg client and returns the
+ * native shape ([]ServiceHealthEntry). Only the route-setup-node stats section
+ * is native-hypervisor-only (a browser edge fronts no route-setup nodes) and is
+ * gated off on wasm — see `rsnAvailable`.
  */
 @Component({
   selector: 'app-services-health',
@@ -52,6 +60,13 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   loading = true;
   error: string | null = null;
   lastUpdated: Date | null = null;
+
+  // A browser wasm hypervisor core now probes each deployment service's /health
+  // over its own dmsg client (SelfServiceHealth) and serves /api/service-health
+  // in the native shape, so the health table works on every core. The
+  // route-setup-node stats below are a native-hypervisor role a browser edge
+  // has none of, so that section alone is gated off on wasm.
+  rsnAvailable = !isWasmHvCore();
 
   // Route setup node remote stats.
   rsnStats: RSNRemoteStat[] = [];
@@ -74,7 +89,9 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   }
 
   ngOnInit() {
-    // Poll every 15s, starting immediately.
+    // The deployment-service health table works on every core (a browser wasm
+    // core probes each service's /health over dmsg — SelfServiceHealth). Poll
+    // every 15s, starting immediately.
     this.sub = interval(15000)
       .pipe(
         startWith(0),
@@ -93,23 +110,27 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
         },
       });
 
-    // RSN stats poll on a slower cadence — each entry is a DMSG
-    // round-trip that the visor caches briefly anyway, and 30s is
-    // plenty for an at-a-glance view.
-    this.rsnSub = interval(30000)
-      .pipe(
-        startWith(0),
-        switchMap(() => this.api.get('route-setup-nodes/stats')),
-      )
-      .subscribe({
-        next: (rows: RSNRemoteStat[]) => {
-          this.rsnStats = Array.isArray(rows) ? rows : [];
-          this.rsnLoading = false;
-        },
-        error: () => {
- this.rsnLoading = false; 
-},
-      });
+    // RSN stats are a native-hypervisor concept (the route-setup nodes it
+    // fronts) — a browser edge has no such role, so skip the poll there. Slower
+    // cadence otherwise; each entry is a DMSG round-trip the visor caches.
+    if (this.rsnAvailable) {
+      this.rsnSub = interval(30000)
+        .pipe(
+          startWith(0),
+          switchMap(() => this.api.get('route-setup-nodes/stats')),
+        )
+        .subscribe({
+          next: (rows: RSNRemoteStat[]) => {
+            this.rsnStats = Array.isArray(rows) ? rows : [];
+            this.rsnLoading = false;
+          },
+          error: () => {
+            this.rsnLoading = false;
+          },
+        });
+    } else {
+      this.rsnLoading = false;
+    }
 
     return super.ngOnInit();
   }

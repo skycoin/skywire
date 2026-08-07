@@ -41,6 +41,13 @@ type SelfProvider interface {
 	// visualizer renders nodes with no links ("N visors · 0 transports"). nil
 	// when the tab can't reach the TPD.
 	SelfNetworkTransports(days int) []byte
+
+	// SelfServiceHealth returns the deployment-service health table as the native
+	// /api/service-health shape ([]ServiceHealthEntry) pre-marshaled — probed
+	// over the tab's dmsg client — so the HV-UI Services-Health tab populates on a
+	// browser edge instead of degrading to "not available". nil → the route
+	// falls back to [].
+	SelfServiceHealth() []byte
 	// SelfDmsgSessions returns this tab's dmsg client sessions as pre-marshaled
 	// JSON in the native /visors/{pk}/dmsg/sessions shape
 	// ({main?,route_setup?,transport_setup?} of {pk,role,count,servers}). A browser
@@ -63,6 +70,12 @@ type SelfProvider interface {
 	// JSON (a browser edge has no on-disk config file). Without it the Runtime
 	// Configuration expander errors.
 	SelfRuntimeConfig() []byte
+	// SelfSetRuntimeConfig applies an edit from the UI's runtime-config editor
+	// (the native PUT /visors/{pk}/runtime-config). A browser edge has no on-disk
+	// file, so it extracts the reconfigurable service fields, persists them as the
+	// page-side override, and triggers a reload — making the SAME editor work on
+	// both surfaces. Identity (sk/pk) is not editable. Returns (status, jsonBody).
+	SelfSetRuntimeConfig(body []byte) (int, []byte)
 	// SelfRuntimeLogs returns the tab's captured log lines newer than `since` as
 	// pre-marshaled JSON in the native runtime-logs delta shape
 	// ({entries:[]string of JSON log objects, latest, dropped}). Without it the
@@ -171,10 +184,15 @@ func (c *Core) selfRoute(self SelfProvider, method, sub string, body []byte, que
 		}
 		return jsonResp(map[string]interface{}{})
 	case "runtime-config":
-		// The Runtime Configuration expander. A browser edge has no on-disk config;
-		// serve a representative one so the expander renders instead of erroring.
-		if body := self.SelfRuntimeConfig(); body != nil {
-			return 200, body
+		// The Runtime Configuration expander. GET serves a representative config
+		// (a browser edge has no on-disk file). PUT is the UI editor's Save: apply
+		// the edit as the page-side override + reload (SelfSetRuntimeConfig), so the
+		// same editor drives both the native and browser visor.
+		if method == "PUT" {
+			return self.SelfSetRuntimeConfig(body)
+		}
+		if cfg := self.SelfRuntimeConfig(); cfg != nil {
+			return 200, cfg
 		}
 		return jsonResp(map[string]interface{}{})
 	case "runtime-logs":

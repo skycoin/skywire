@@ -11,9 +11,10 @@ import (
 
 // fakeSelf is a SelfProvider stub for a known local visor.
 type fakeSelf struct {
-	pk        cipher.PubKey
-	tps       []*TransportSummary
-	sinceSink *int64 // records the last SelfRuntimeLogs(since) arg, when non-nil
+	pk         cipher.PubKey
+	tps        []*TransportSummary
+	sinceSink  *int64  // records the last SelfRuntimeLogs(since) arg, when non-nil
+	setCfgSink *[]byte // records the last SelfSetRuntimeConfig(body) arg, when non-nil
 }
 
 func (f fakeSelf) SelfPK() cipher.PubKey { return f.pk }
@@ -28,6 +29,7 @@ func (f fakeSelf) SelfTransports() []*TransportSummary { return f.tps }
 func (f fakeSelf) SelfRoutes() []byte                  { return []byte("[]") }
 func (f fakeSelf) SelfNetworkView() []byte             { return nil }
 func (f fakeSelf) SelfNetworkTransports(int) []byte    { return nil }
+func (f fakeSelf) SelfServiceHealth() []byte           { return nil }
 func (f fakeSelf) SelfDmsgSessions() []byte {
 	return []byte(`{"main":{"pk":"","role":"main","count":1,"servers":[]}}`)
 }
@@ -38,6 +40,12 @@ func (f fakeSelf) SelfRouterSettings() []byte {
 	return []byte(`{"force_local_routes":false,"existing_tp_only":false,"mux_routes":0,"min_hops":0}`)
 }
 func (f fakeSelf) SelfRuntimeConfig() []byte { return []byte(`{"version":"test"}`) }
+func (f fakeSelf) SelfSetRuntimeConfig(body []byte) (int, []byte) {
+	if f.setCfgSink != nil {
+		*f.setCfgSink = body
+	}
+	return 200, []byte(`{"ok":true}`)
+}
 func (f fakeSelf) SelfRuntimeLogs(since int64) []byte {
 	if f.sinceSink != nil {
 		*f.sinceSink = since
@@ -184,6 +192,29 @@ func TestSelf_DmsgConnectAllRoute(t *testing.T) {
 
 	if status, _ := core.ServeHTTP("GET", base+"/dmsg/connect-all", nil); status != 405 {
 		t.Fatalf("GET dmsg/connect-all status = %d, want 405", status)
+	}
+}
+
+// TestSelf_RuntimeConfigPUT locks the config-editor parity: PUT /runtime-config
+// dispatches to SelfSetRuntimeConfig (the browser edge's override+reload path),
+// while GET still serves the config view.
+func TestSelf_RuntimeConfigPUT(t *testing.T) {
+	pk := newSelfPK(t)
+	core := NewCore(pk, nil)
+	var captured []byte
+	core.SetSelf(fakeSelf{pk: pk, setCfgSink: &captured})
+
+	base := "/api/visors/" + pk.Hex()
+	edit := []byte(`{"routing":{"min_hops":2}}`)
+	status, body := core.ServeHTTP("PUT", base+"/runtime-config", edit)
+	if status != 200 {
+		t.Fatalf("PUT runtime-config status = %d (body %s)", status, body)
+	}
+	if string(captured) != string(edit) {
+		t.Fatalf("SelfSetRuntimeConfig got %q, want %q", captured, edit)
+	}
+	if st, _ := core.ServeHTTP("GET", base+"/runtime-config", nil); st != 200 {
+		t.Fatalf("GET runtime-config status = %d, want 200", st)
 	}
 }
 

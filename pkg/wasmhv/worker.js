@@ -127,7 +127,7 @@
   function tryBoot() {
     if (!api || !bootParams || bootPromise) { return; }
     bootPromise = Promise.resolve(
-      api.boot(bootParams.sk, bootParams.seedpk || '', bootParams.seedws || '', bootParams.disc || '')
+      api.boot(bootParams.sk, bootParams.seedpk || '', bootParams.seedws || '', bootParams.disc || '', bootParams.cfg || '')
     );
     bootPromise.then(function (pk) {
       bootedPK = (pk === undefined || pk === null) ? '' : pk;
@@ -149,6 +149,14 @@
       stunPending[id] = resolve;
       if (!agentPost({ t: 'stun-ip', id: id, ice: iceServers })) { delete stunPending[id]; resolve(''); }
     });
+  };
+
+  // The Go runtime calls self.__skywireSaveConfig(overrideJSON) when the UI's
+  // runtime-config editor Saves. localStorage + reload are the page's job (a
+  // worker can't touch either), so broadcast the override to every connected
+  // tab; hv-boot.js persists it and reloads the visor with it applied.
+  self.__skywireSaveConfig = function (cfgJSON) {
+    broadcast({ t: 'cfg-save', cfg: cfgJSON });
   };
 
   // ----- Voice audio bridge (delegated to the agent tab) -----
@@ -283,7 +291,7 @@
     if (!m) { return; }
     switch (m.t) {
       case 'init':
-        if (!bootParams) { bootParams = { sk: m.sk, seedpk: m.seedpk, seedws: m.seedws, disc: m.disc }; tryBoot(); }
+        if (!bootParams) { bootParams = { sk: m.sk, seedpk: m.seedpk, seedws: m.seedws, disc: m.disc, cfg: m.cfg }; tryBoot(); }
         // If already booted, this tab was told 'up' on connect; nothing more to do.
         return;
       case 'shutdown':

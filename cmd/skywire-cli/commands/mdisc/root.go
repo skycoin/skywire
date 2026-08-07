@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
+	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -175,48 +177,71 @@ var entryCmd = &cobra.Command{
 
 var availableServersCmd = &cobra.Command{
 	Use:   "servers",
-	Short: "Fetch available servers",
+	Short: "List dmsg servers with connected-client + available-session counts",
+	Long: `List every dmsg server registered in discovery, sorted by load.
+
+Reads the discovery's /all_servers endpoint (so saturated servers appear too,
+not just those still advertising spare capacity) and, for each, shows the
+connected-client count INFERRED from available sessions:
+
+    connected ~= DefaultMaxSessions (2048) - available_sessions
+
+The discovery entry only carries available sessions, so "connected~" assumes
+every server runs the default 2048 max; a server with a custom max_sessions
+would be off by the difference. A pv-t-style readout: most-loaded first.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		masterLogger.SetLevel(logrus.InfoLevel)
-
-		// Same scheme-aware fetch as entryCmd.
-		url := mdURL + "/dmsg-discovery/available_servers"
-		body, err := clirpc.FetchServiceURL(cmd.Flags(), url)
+		// all_servers (not available_servers): a fully-loaded server drops out
+		// of available_servers, but it's exactly the one worth seeing in a load
+		// view. fetchAllServersAny is the same dmsg://-or-https scheme-aware
+		// cached fetch `mdisc check` uses.
+		entries, err := fetchAllServersAny(cmd, mdURL)
 		internal.Catch(cmd.Flags(), err)
-
-		var entries []*disc.Entry
-		internal.Catch(cmd.Flags(), json.Unmarshal(body, &entries))
 		printAvailableServers(cmd.Flags(), entries)
 	},
 }
 
 func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
-	var b bytes.Buffer
-	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
-	_, err := fmt.Fprintln(w, "version\tregistered\tpublic-key\taddress\tavail-sess")
-	internal.Catch(cmdFlags, err)
-
 	type serverEntry struct {
+		PublicKey         cipher.PubKey `json:"public_key"`
+		Connected         int           `json:"connected"` // inferred: DefaultMaxSessions - avail_sess
+		AvailableSessions int           `json:"avail_sess"`
+		Address           string        `json:"address"`
 		Version           string        `json:"version"`
 		Registered        int64         `json:"registered"`
-		PublicKey         cipher.PubKey `json:"public_key"`
-		Address           string        `json:"address"`
-		AvailableSessions int           `json:"avail_sess"`
 	}
 
 	var serverEntries []serverEntry
-
 	for _, entry := range entries {
-		_, err := fmt.Fprintf(w, "%s\t%d\t%s\t%s\t%d\n",
-			entry.Version, entry.Timestamp, entry.Static, entry.Server.Address, entry.Server.AvailableSessions)
-		sEntry := serverEntry{
+		if entry.Server == nil {
+			continue
+		}
+		avail := entry.Server.AvailableSessions
+		connected := dmsg.DefaultMaxSessions - avail
+		if connected < 0 {
+			connected = 0
+		}
+		serverEntries = append(serverEntries, serverEntry{
+			PublicKey:         entry.Static,
+			Connected:         connected,
+			AvailableSessions: avail,
+			Address:           entry.Server.Address,
 			Version:           entry.Version,
 			Registered:        entry.Timestamp,
-			PublicKey:         entry.Static,
-			Address:           entry.Server.Address,
-			AvailableSessions: entry.Server.AvailableSessions,
-		}
-		serverEntries = append(serverEntries, sEntry)
+		})
+	}
+	// Most-loaded first, like `pv -t` sorts by transport count.
+	sort.Slice(serverEntries, func(i, j int) bool {
+		return serverEntries[i].Connected > serverEntries[j].Connected
+	})
+
+	var b bytes.Buffer
+	w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
+	_, err := fmt.Fprintln(w, "public-key\tconnected~\tavail-sess\taddress\tversion\tregistered")
+	internal.Catch(cmdFlags, err)
+	for _, s := range serverEntries {
+		_, err := fmt.Fprintf(w, "%s\t%d\t%d\t%s\t%s\t%d\n",
+			s.PublicKey, s.Connected, s.AvailableSessions, s.Address, s.Version, s.Registered)
 		internal.Catch(cmdFlags, err)
 	}
 	internal.Catch(cmdFlags, w.Flush())
