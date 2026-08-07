@@ -164,6 +164,13 @@ const routes: Routes = [
             component: TerminalComponent
           },
           {
+            // In-place VPN tab: the full VPN UI is iframed into NodeComponent
+            // (like the terminal tab), so the route target only needs to render
+            // nothing — reuse TerminalComponent's empty placeholder.
+            path: 'vpn',
+            component: TerminalComponent
+          },
+          {
             path: 'wallet',
             component: WalletComponent
           },

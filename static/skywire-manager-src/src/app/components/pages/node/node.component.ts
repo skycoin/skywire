@@ -119,6 +119,12 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // active — preserves the running session.
   terminalIframeUrl: SafeResourceUrl | null = null;
   terminalFullWindowUrl = '';
+  // Matched route segment of the active tab (set in the tab-select logic) — used
+  // to detect iframe-hosted tabs (terminal, vpn) without a fragile fixed index.
+  selectedSeg = '';
+  vpnIframeUrl: SafeResourceUrl | null = null;
+  vpnFullWindowUrl = '';
+  private boundVpnPk = '';
   private boundTerminalPk = '';
   // Throttle timestamp for the visor-switcher summaries call (see refreshNavRows).
   private navSwitcherLoadedAt = 0;
@@ -267,6 +273,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
       this.lastUrl.includes('/web-proxy') ||
+      this.lastUrl.includes('/vpn') ||
       this.lastUrl.includes('/resources') ||
       this.lastUrl.includes('/terminal') ||
       this.lastUrl.includes('/wallet') ||
@@ -346,6 +353,13 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'web-proxy'] : null,
         },
         {
+          // VPN tab: the full VPN UI, iframed in-place here (like the terminal
+          // tab) instead of only launchable in a separate window.
+          icon: 'vpn_lock',
+          label: 'node.tabs.vpn',
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'vpn'] : null,
+        },
+        {
           icon: 'memory',
           label: 'node.tabs.resources',
           linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
@@ -384,7 +398,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // computed by route below, so a shorter array stays correct.
       if (this.node && (this.node as any).arch === 'wasm') {
         const wasmHiddenTabs = new Set(['bandwidth', 'uptime', 'rewards', 'web-proxy',
-          'resources', 'terminal']);
+          'vpn', 'resources', 'terminal']);
         this.tabsData = this.tabsData.filter(t => {
           const seg = t.linkParts ? t.linkParts[t.linkParts.length - 1] : '';
 
@@ -399,7 +413,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // /reachability redirect to /info so they fall through to the default.
       let matchedSeg = 'info';
       const routeOrder = ['routing', 'transports', 'bandwidth', 'uptime', 'apps',
-        'chat', 'rewards', 'skynet', 'web-proxy', 'resources', 'terminal', 'wallet', 'logs'];
+        'chat', 'rewards', 'skynet', 'web-proxy', 'vpn', 'resources', 'terminal', 'wallet', 'logs'];
       for (const seg of routeOrder) {
         if (seg === 'apps') {
           if (this.lastUrl.includes('/apps') && !this.lastUrl.includes('/apps-list')) {
@@ -412,6 +426,13 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       const selIdx = this.tabsData.findIndex(
         t => t.linkParts && t.linkParts[t.linkParts.length - 1] === matchedSeg);
       this.selectedTabIndex = selIdx >= 0 ? selIdx : 0;
+      // Remember the matched route segment so iframe-hosted tabs (terminal, vpn)
+      // can be detected by segment rather than a fragile fixed tab index.
+      this.selectedSeg = matchedSeg;
+      // Build the iframe URLs now that the active segment is known (both are
+      // idempotent — guarded by their bound-PK — so re-calling is harmless).
+      this.maybeBuildTerminalUrl();
+      this.maybeBuildVpnUrl();
 
       // Inform that the current subpage is not for showing a full list.
       this.showingFullList = false;
@@ -480,7 +501,39 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   get isTerminalTab(): boolean {
-    return this.selectedTabIndex === 10;
+    return this.selectedSeg === 'terminal';
+  }
+
+  get isVpnTab(): boolean {
+    return this.selectedSeg === 'vpn';
+  }
+
+  /**
+   * Build the VPN iframe URL the first time the user lands on the VPN tab for
+   * this visor. Kept mounted (hidden off-tab) like the terminal iframe so the
+   * VPN UI's session survives tab switches. Points at the full VPN UI route.
+   */
+  private maybeBuildVpnUrl() {
+    if (!this.isVpnTab) {
+      return;
+    }
+    if (!this.node || !this.node.localPk) {
+      return;
+    }
+    if (this.boundVpnPk === this.node.localPk) {
+      return;
+    }
+    const url = '/#/vpn/' + this.node.localPk + '/status';
+    this.vpnIframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(url);
+    this.vpnFullWindowUrl = window.location.origin + url;
+    this.boundVpnPk = this.node.localPk;
+  }
+
+  openVpnFullWindow() {
+    if (!this.vpnFullWindowUrl) {
+      return;
+    }
+    window.open(this.vpnFullWindowUrl, '_blank', 'noopener noreferrer');
   }
 
   /**
