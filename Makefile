@@ -247,8 +247,30 @@ android-mobile-ndk: ## Release lane: NDK/cgo android build (DNS via bionic getad
 # Android Studio's bundled JDK (gradle needs JDK 17+); override if yours differs.
 ANDROID_JAVA_HOME ?= /Applications/Android Studio.app/Contents/jbr/Contents/Home
 
-android-apk: ## Build the Android APK (release; signed when ANDROID_KEYSTORE_FILE/_PASSWORD + ANDROID_KEY_ALIAS/_PASSWORD are set, else unsigned) — run android-mobile-ndk first for a fresh Go payload
-	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleRelease
+# APK_VERSION=X.Y.Z stamps the build; without it the committed gradle
+# fallbacks apply. The versionCode formula lives HERE and nowhere else — the
+# release workflow calls this target rather than computing its own — so a tag
+# build and a local build can never disagree about the number. Minor and patch
+# are capped at 99, past which the scheme stops being monotonic.
+ifdef APK_VERSION
+APK_VERSION_CODE := $(shell printf '%s' '$(APK_VERSION)' | awk -F. \
+	'{ if (NF==3 && $$1$$2$$3 ~ /^[0-9]+$$/ && $$2<=99 && $$3<=99) print $$1*10000+$$2*100+$$3 }')
+APK_GRADLE_ARGS := -PskywireVersionName=$(APK_VERSION) -PskywireVersionCode=$(APK_VERSION_CODE)
+endif
+
+android-apk: ## Build the Android APK (release; APK_VERSION=X.Y.Z to stamp it; signed when ANDROID_KEYSTORE_FILE/_PASSWORD + ANDROID_KEY_ALIAS/_PASSWORD are set, else unsigned) — run android-mobile-ndk first for a fresh Go payload
+	@if [ -n "$(APK_VERSION)" ] && [ -z "$(APK_VERSION_CODE)" ]; then \
+		echo "APK_VERSION='$(APK_VERSION)' is not X.Y.Z with minor/patch <= 99"; exit 1; fi
+	@if [ "$(APK_VERSION_CODE)" = "0" ]; then \
+		echo "APK_VERSION=0.0.0 derives versionCode 0, and Android requires a"; \
+		echo "positive integer — the lowest usable version is 0.0.1."; exit 1; fi
+	@if [ -n "$(APK_VERSION)" ]; then \
+		echo "version: $(APK_VERSION) (versionCode $(APK_VERSION_CODE))"; fi
+	@if [ -n "$$ANDROID_KEYSTORE_FILE" ]; then \
+		echo "signing with $$ANDROID_KEYSTORE_FILE"; \
+	else \
+		echo "ANDROID_KEYSTORE_FILE unset — building UNSIGNED (app-release-unsigned.apk)"; fi
+	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleRelease $(APK_GRADLE_ARGS)
 
 android-apk-debug: ## Build + the debug-signed APK (installable via adb) — the dev loop's CLI twin of Android Studio Run
 	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleDebug

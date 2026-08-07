@@ -59,8 +59,10 @@ jobs:
             exit 1
           fi
 
-      # mobile-v1.2.3 -> name 1.2.3, code 10203. Monotonic for any sane
-      # X.Y.Z, and Play/F-Droid both need the code to only ever increase.
+      # mobile-v1.2.3 -> 1.2.3. The versionCode is NOT computed here: `make
+      # android-apk` derives it, so the tag and a local build cannot disagree.
+      # The same shape is validated up front anyway, so a malformed tag fails
+      # in seconds instead of after the payload build.
       - name: Derive version from tag
         id: version
         run: |
@@ -69,13 +71,16 @@ jobs:
             echo "::error::Tag '${GITHUB_REF_NAME}' is not mobile-vX.Y.Z"
             exit 1
           fi
-          major=${raw%%.*}; rest=${raw#*.}; minor=${rest%%.*}; patch=${rest#*.}
+          rest=${raw#*.}; minor=${rest%%.*}; patch=${rest#*.}
           if [ "$minor" -gt 99 ] || [ "$patch" -gt 99 ]; then
             echo "::error::minor/patch must be <= 99 to keep versionCode monotonic"
             exit 1
           fi
+          if [ "$raw" = "0.0.0" ]; then
+            echo "::error::0.0.0 derives versionCode 0; Android requires a positive integer (lowest is 0.0.1)"
+            exit 1
+          fi
           echo "name=$raw" >> "$GITHUB_OUTPUT"
-          echo "code=$(( major * 10000 + minor * 100 + patch ))" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v6
         with:
@@ -108,6 +113,9 @@ jobs:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
 
+      # Through make, so this is the same command a maintainer runs locally.
+      # ANDROID_JAVA_HOME points at the runner's JDK instead of the Makefile's
+      # macOS default.
       - name: Assemble signed release APK
         env:
           ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
@@ -115,9 +123,9 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          cd android && ./gradlew --no-daemon :app:assembleRelease \
-            -PskywireVersionName="${{ steps.version.outputs.name }}" \
-            -PskywireVersionCode="${{ steps.version.outputs.code }}"
+          make android-apk \
+            APK_VERSION="${{ steps.version.outputs.name }}" \
+            ANDROID_JAVA_HOME="$JAVA_HOME"
 
       # An unsigned APK reaching this point would mean the signingConfig
       # silently did not apply — catch it here rather than after someone
