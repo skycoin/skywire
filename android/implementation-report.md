@@ -7,6 +7,54 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — The phone stops shipping the deployment's survey whitelist
+
+`survey_whitelist` is not a battery field, but it turned up while reading the
+survey machinery and it is the same question the hardening pass asked: what on
+this device is readable, and by whom. Its keys authorise their holders to fetch
+this visor's **log server, system survey and pprof over dmsg** —
+`initDmsgHTTPLogServer` builds one allow-list out of them, and
+`forward_proxy` uses the same set. On a fleet node that is the point: it is how
+an operator inspects machines they run. A handset is not one of those machines.
+Nobody deploys a phone, the survey exists for reward eligibility, and this build
+sets no reward address — so the keys buy the owner nothing, and each is a party
+that can read the device.
+
+Generation was writing seven of them. That is not the conf-service fetch, which
+the phone already skips with `--nofetch`: they are embedded deployment defaults,
+so `--nofetch` never suppressed them.
+
+Two sites had to change together, and the second is the one that makes it work.
+`config gen` writes the field, and `startConfigRefresh` re-reads the key sets
+from the conf service every hour and **overwrites** `survey_whitelist` with
+whatever it returns — so emptying it at generation alone would have been undone
+within the hour, silently. Both now consult one predicate,
+`visorconfig.UseDeploymentSurveyWhitelist`, a build-tag pair in the shape the
+tpviz and dmsg-ingest gates already use.
+
+Empty by *default*, not always: three ways in survive, deliberately.
+`--surveywhitelist` at generation still applies (the flag's keys are kept and
+only the deployment's are dropped), `user_survey_whitelist` is a separate field
+that `EffectiveSurveyWhitelist` merges and config refresh preserves, and the
+hypervisor keys Fleet adds are appended separately by `initDmsgHTTPLogServer`
+and are untouched — enabling Fleet still authorises the phone's own hypervisor.
+The visor's own PK is always whitelisted, so nothing local loses access.
+
+**Verified** with a control rather than an assertion: the same argv the app
+passes, run through both builds. Desktop writes 7 keys; mobile writes none.
+Build-tagged tests pin the predicate on each side, since a silent flip would
+restore the keys in two places at once. Both tags build; `android-mobile-check`
+passes at 63,963,432 bytes.
+
+The refresh half is verified by inspection, not end to end. With the interval
+temporarily shortened the loop demonstrably runs and reaches this code path,
+but the conf service returned a payload whose `prod` block would not parse
+("unexpected end of JSON input"), so neither build could repopulate and the
+comparison proved nothing. The temporary timing change was reverted. What
+remains unproven is only that a `false &&` short-circuits.
+
+---
+
 ## 2026-08-07 — Battery: two periodic jobs the phone was paying for
 
 A survey of everything that ticks inside the visor as the phone configures it
