@@ -129,7 +129,7 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
             mutable.update {
                 it.copy(
                     lastServer = readLastServer(),
-                    killswitch = prefs.boolean(KEY_KILLSWITCH).first(),
+                    killswitch = prefs.boolean(VpnArgs.PREF_KILLSWITCH).first(),
                     lifetimeBytes = prefs.long(KEY_LIFETIME_BYTES).first(),
                     transportPrimary = TransportPreference.sanitize(
                         prefs.string(TransportPreference.PREF_KEY).first(),
@@ -207,7 +207,7 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
      * the old proc exactly as it does on SkySOCKS' port change.
      */
     fun setKillswitch(on: Boolean) = action {
-        prefs.putBoolean(KEY_KILLSWITCH, on)
+        prefs.putBoolean(VpnArgs.PREF_KILLSWITCH, on)
         mutable.update { it.copy(killswitch = on) }
         if (mutable.value.tunnel.serviceUp) {
             SkyVpnService.setKillswitch(getApplication(), on)
@@ -401,19 +401,20 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private suspend fun readLastServer(): SavedServer? =
-        prefs.string(KEY_LAST_SERVER).first()?.let { stored ->
+        prefs.string(VpnArgs.PREF_LAST_SERVER).first()?.let { stored ->
             runCatching { json.decodeFromString(SavedServer.serializer(), stored) }.getOrNull()
         }
 
     private suspend fun saveLastServer(server: SavedServer) {
-        prefs.putString(KEY_LAST_SERVER, json.encodeToString(SavedServer.serializer(), server))
+        prefs.putString(
+            VpnArgs.PREF_LAST_SERVER,
+            json.encodeToString(SavedServer.serializer(), server),
+        )
     }
 
     private companion object {
         /** SD's own filter value for the SkyVPN server family. */
         const val VPN_TYPE = "vpn"
-        const val KEY_LAST_SERVER = "vpn_last_server"
-        const val KEY_KILLSWITCH = "vpn_killswitch"
         const val KEY_LIFETIME_BYTES = "vpn_lifetime_bytes"
         const val PING_INTERVAL_MS = 700L
         const val POLL_INTERVAL_MS = 2_000L

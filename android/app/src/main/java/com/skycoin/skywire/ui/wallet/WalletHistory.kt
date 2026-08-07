@@ -148,7 +148,12 @@ fun WalletHistoryScreen(
                             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 22.dp, bottom = 10.dp),
                         )
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                            colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            // Cards hold real prose: content must default to ink, not the
+            // muted onSurfaceVariant this container would otherwise imply.
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
                             shape = RoundedCornerShape(16.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -262,7 +267,12 @@ fun WalletTxScreen(
             }
 
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            // Cards hold real prose: content must default to ink, not the
+            // muted onSurfaceVariant this container would otherwise imply.
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {

@@ -53,6 +53,8 @@ import com.skycoin.skywire.core.VisorNames
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.appProductName
 import com.skycoin.skywire.ui.components.shortPk
+import com.skycoin.skywire.ui.theme.SkyAccents
+import com.skycoin.skywire.ui.theme.SkywireBlue
 
 /**
  * The one log viewer, used by every screen that has a log feed: the core
@@ -293,8 +295,8 @@ private fun titleFor(source: String): String = when {
 
 private fun levelColor(level: LogLevel): Color = when (level) {
     LogLevel.ERROR, LogLevel.FATAL -> Color(0xFFDC2626)
-    LogLevel.WARN -> Color(0xFFF59E0B)
-    LogLevel.INFO -> Color(0xFF0072FF)
+    LogLevel.WARN -> SkyAccents.warning
+    LogLevel.INFO -> SkywireBlue
     else -> Color(0xFF9CA3AF)
 }
 

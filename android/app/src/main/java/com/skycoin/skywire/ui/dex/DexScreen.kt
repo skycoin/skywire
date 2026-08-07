@@ -28,6 +28,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -58,6 +59,7 @@ import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.SkydexProfile
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.theme.SkyAccents
 
 /**
  * SkyDEX: pick a market, dial it over Skywire, trade in the page the desktop
@@ -158,7 +160,12 @@ private fun ConnectPanel(state: DexUiState, viewModel: DexViewModel) {
     val malformed = entry.isNotEmpty() && !state.entryValid
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            // Cards hold real prose: content must default to ink, not the
+            // muted onSurfaceVariant this container would otherwise imply.
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 16.dp),
@@ -326,7 +333,7 @@ private fun ConnectedHeader(state: DexUiState, onDisconnect: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        TextButton(onClick = onDisconnect, enabled = !state.busy) {
+        FilledTonalButton(onClick = onDisconnect, enabled = !state.busy) {
             Text(stringResource(R.string.disconnect))
         }
     }
@@ -348,8 +355,8 @@ private fun PageError(message: String?, onRetry: () -> Unit) {
             textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(8.dp))
-        TextButton(onClick = onRetry) { Text(stringResource(R.string.socks_retry)) }
+        FilledTonalButton(onClick = onRetry) { Text(stringResource(R.string.socks_retry)) }
     }
 }
 
-private val CONNECTED_GREEN = Color(0xFF16A34A)
+private val CONNECTED_GREEN = SkyAccents.success

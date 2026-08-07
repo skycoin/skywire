@@ -24,7 +24,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -224,7 +224,7 @@ private fun ExportCard(exporting: Boolean, onExport: () -> Unit) {
                 )
             }
         } else {
-            OutlinedButton(onClick = onExport) {
+            FilledTonalButton(onClick = onExport) {
                 Text(stringResource(R.string.diag_export_action))
             }
         }

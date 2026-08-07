@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -295,7 +296,7 @@ private fun ChatStatus(
         )
         if (error != null && state.coreReady) {
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onRetry) { Text(stringResource(R.string.socks_retry)) }
+            FilledTonalButton(onClick = onRetry) { Text(stringResource(R.string.socks_retry)) }
         }
     }
 }
