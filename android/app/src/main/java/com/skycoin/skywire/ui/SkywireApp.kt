@@ -182,13 +182,19 @@ fun SkywireApp() {
                 )
             }
             composable(Routes.CHAT) {
-                ChatScreen(onBack = { navController.navigateToTab(Routes.HOME) })
+                ChatScreen(onBack = { navController.leaveTab() })
             }
             composable(Routes.HUB) {
                 HubScreen(
-                    onBack = { navController.navigateToTab(Routes.HOME) },
+                    onBack = { navController.leaveTab() },
                     onOpenRoute = { navController.navigate(it) },
-                    onOpenTab = { navController.navigateToTab(it) },
+                    // Pushed, not switched-to: SkyChat and the Wallet are the
+                    // two hub tiles that are also bottom-bar tabs, and going
+                    // to them the tab way rewinds the stack to Home — so back
+                    // out of either landed on Home rather than on the hub the
+                    // user opened it from. Pushing keeps the hub behind them,
+                    // which is what back means here.
+                    onOpenTab = { navController.navigate(it) { launchSingleTop = true } },
                 )
             }
             // The wallet flow shares one ViewModel across its routes — the
@@ -197,7 +203,7 @@ fun SkywireApp() {
             composable(Routes.WALLET) {
                 WalletScreen(
                     viewModel = walletViewModel,
-                    onBack = { navController.navigateToTab(Routes.HOME) },
+                    onBack = { navController.leaveTab() },
                     onCreate = { navController.navigate(Routes.WALLET_CREATE) { launchSingleTop = true } },
                     onRestore = { navController.navigate(Routes.WALLET_RESTORE) { launchSingleTop = true } },
                     onReceive = { navController.navigate(Routes.WALLET_RECEIVE) { launchSingleTop = true } },
@@ -306,7 +312,7 @@ fun SkywireApp() {
             }
             composable(Routes.SETTINGS) {
                 SettingsScreen(
-                    onBack = { navController.navigateToTab(Routes.HOME) },
+                    onBack = { navController.leaveTab() },
                     onOpenDiagnostics = {
                         navController.navigate(Routes.DIAGNOSTICS) { launchSingleTop = true }
                     },
@@ -368,6 +374,16 @@ private fun NavHostController.navigateToTab(route: String) {
 }
 
 /**
+ * The ← at the top of a tab: back to wherever the tab was opened from, and to
+ * Home only when there is genuinely nothing behind it. A tab reached from the
+ * bar has Home behind it and lands there either way; one reached from the hub
+ * now returns to the hub instead of skipping past it.
+ */
+private fun NavHostController.leaveTab() {
+    if (!popBackStack()) navigateToTab(Routes.HOME)
+}
+
+/**
  * The floating bottom bar: a rounded shell with two labelled slots on each
  * side, and the Skycoin cloud on a raised circular button in the middle —
  * the one slot people aim for by shape rather than by reading, so it gets a
@@ -397,7 +413,14 @@ private fun SkyNavBar(currentRoute: String?, onSelect: (String) -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+            // top = LIFT reserves the jut. The cloud is drawn with an offset,
+            // which moves painting but not measurement, so without this the
+            // bar measures as the shell alone and Scaffold hands the screen
+            // content the strip the cloud is standing in — which is how the
+            // logo ended up sitting inside the chat composer. Paying for the
+            // lift here costs every screen 21dp it was never really allowed
+            // to use, and no screen has to know the cloud exists.
+            .padding(top = LIFT, start = 12.dp, end = 12.dp, bottom = 8.dp),
     ) {
         Surface(
             shape = MaterialTheme.shapes.extraLarge,

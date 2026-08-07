@@ -882,6 +882,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	logOSNotifyStartup()
 	mux.Handle("/", requireAuth(http.FileServer(getFileSystem())))
 	mux.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
+	mux.HandleFunc("/link", requireAuthFunc(linkHandler()))
 	mux.HandleFunc("/sse", requireAuthFunc(sseHandler))
 	mux.HandleFunc("/events", requireAuthFunc(eventsHandler))
 	mux.HandleFunc("/history", requireAuthFunc(historyHandler))

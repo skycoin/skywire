@@ -7,6 +7,110 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — Six from a test pass: contrast, the nav cloud, back, battery, hang-up, and the first message
+
+Six problems reported after using the app on a phone. Five were small and
+local; the sixth was a design gap that a peer-to-peer chat has and a
+server-backed one does not.
+
+**Light theme: the invisible controls.** The report named the voice-message
+play button and the call screen's mic/speaker. Both were the same bug, not a
+palette that was slightly too pale: *white ink on a light surface*. The call
+screen's `CallButton` tinted every glyph `Color.White`, which is right for the
+two filled buttons (Answer green, Hang up red) and wrong for mic and speaker,
+which sit on `surfaceVariant` — a near-white card tint on the light theme.
+Those two now take the theme's own ink and only switch to `onPrimary` once the
+blue fill is under them; Speaker also takes a different glyph off than on, so
+its state is legible without reading colour. In the chat page the voice player
+was `color: #fff` on `rgba(255,255,255,.16)`, correct on a sent (blue) bubble
+and invisible on a received one. Ink and disc are now variables (`--vm-ink`,
+`--vm-face`) set per bubble side, and the waveform canvas — which was a
+hardcoded `#f1f5f9` — reads its colour from its own computed `color` and dims
+the unplayed half with `globalAlpha`, so one value covers both halves without
+mixing an rgba string for an unknown ink. A `MutationObserver` on
+`data-theme` repaints the players when the app's theme flips under them:
+painted pixels do not re-colour themselves. The in-page call panel's filled
+states (`.cp-ctl.hangup`, `.cp-ctl.muted`) now name the ink for the colour
+under them. Separately the light scheme's `outline` went from `#7C8AA0` to
+`#56657C` (~4.9:1 on white): it is not only hairlines, it tints the bottom
+bar's resting icons, and at the mock's value those read as switched off.
+
+**The nav cloud sat inside the chat composer.** The raised Skycoin button is
+drawn with `offset`, which moves painting but not measurement, so the bar
+measured as the shell alone and Scaffold handed screen content the strip the
+cloud was standing in. The bar now reserves the lift with `padding(top =
+LIFT)`. Every screen loses 21dp it was never really allowed to use, and no
+screen has to know the cloud exists.
+
+**Back left the app instead of stepping back inside it.** SkyChat's header ←
+called the tab's own back, so it threw the reader out of SkyChat from an open
+conversation; the phone's back gesture already walked the page's history. Both
+now run one rule — page step first, leave only when there is none. SkyDEX got
+the same plus a middle step: the trading page's own screens (it is React and
+routes with pushState), then the market picker, then the hub. And the two hub
+tiles that are also bottom-bar tabs — SkyChat and Wallet — are now *pushed*
+rather than switched to: going the tab way rewinds the stack to Home, so
+backing out of either landed on Home rather than on the hub they were opened
+from. Tab roots use `leaveTab()`: pop if there is anything behind, Home only
+when there is not.
+
+**Battery optimisation did nothing.** `openRequest` was handed the
+Application by both callers, and `startActivity` from a non-Activity context
+throws without `FLAG_ACTIVITY_NEW_TASK` — caught by the `runCatching`, so
+Home's Allow silently did nothing and Settings reported "this phone has no
+battery-optimisation screen". One flag. Verified on the emulator: logcat
+shows `START … REQUEST_IGNORE_BATTERY_OPTIMIZATIONS … flg=0x10000000 …
+result code=0`, and `dumpsys deviceidle whitelist` afterwards lists
+`user,com.skycoin.skywire`.
+
+**Hang up took up to five seconds.** The call screen is drawn off
+`VoiceCalls`, which a watcher fills from a 2s poll — so the red button did
+nothing visible until the next tick. Hang up and Decline now remove the call
+from the shared state *before* the request goes out and suppress it until the
+visor agrees it is gone; a request that fails un-suppresses it and the poll
+puts the screen back. The watcher's delay is also nudgeable, so the confirming
+poll happens at once rather than up to a tick later.
+
+**The first message to a cold peer.** The real one. A DM send has always
+dialled on demand, inside the first message's own request: for skynet that
+means planning and building a route, which can take the better part of a
+minute, and while it ran the sender saw a message sitting there with nothing
+to say for itself — so they sent another, and another, each starting a dial of
+its own, and concluded the app was broken.
+
+The handshake is now something the UI can ask for and talk about.
+`dm.Controller.Connect` is `Send`'s dial without the send; `/link` in skychat
+wraps it — `GET` reports (never dials, so polling is free), `POST` starts one
+if needed and answers immediately, because a route must not hold a browser
+request open. The page asks when a conversation opens, shows a bar above the
+composer while it runs, and *holds* what is typed in the meantime: the bubble
+opens as a new `queued` status (an amber clock, before `pending` in the
+monotonic ladder) and goes out — in order, one at a time — the moment the link
+is up. A failed link says why and offers Retry and Send anyway, so a held
+message is never a trapped one; the same is true if the app has no `/link` at
+all, which stands the whole mechanism down for the session rather than holding
+messages for a handshake nobody is performing. A `queued` bubble that outlives
+its page becomes `failed` on reload, which is the state that has a Resend
+button.
+
+**Verified on the emulator (light theme, Pixel-class 1080×2400, debug APK with
+a fresh `make android-mobile` payload):** the composer sits clear of the cloud;
+SkyChat's ← returns to the conversation list from an open chat; the battery
+grant round-trips (above); a received voice bubble's play button and waveform
+resolve to `#000` on `#E4E7EC` in light and `#fff` in dark (measured through
+the WebView's DevTools, `getComputedStyle`), with the sent bubble unchanged at
+white-on-blue; and a DM to an unreachable peer showed "Connecting to
+024ec474…58c7 over Skywire… · 1 message waiting" with the bubble on the clock,
+then "No route to 024ec474…58c7 yet — they may be offline." with Retry and
+Send anyway. Feeding the page a ready link drained the queue (held 1 → 0) and
+advanced the bubble `queued` → `pending`. `go test ./cmd/apps/skychat/...
+./pkg/skychat/dm/` green, including new coverage for `/link` (GET does not
+dial; malformed, empty and null keys and unknown networks are refused; auto
+prefers dmsg). `pkg/skychat/group` times out at 600s — confirmed pre-existing
+by running it on a stashed tree.
+
+---
+
 ## 2026-08-07 — SkyVPN: real rates, route length, killswitch, and an honest address
 
 Four things asked of the SkyVPN card and screen. Three were straightforward;
