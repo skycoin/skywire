@@ -848,6 +848,9 @@
       font-family: inherit;
     }
     .msg-status.pending { opacity: 0.6; }
+    /* Held for the link: dimmer than pending and in the waiting colour, so a
+       thread of them reads as a queue rather than as five failed sends. */
+    .msg-status.queued { color: var(--warn); opacity: 0.85; }
     .msg-status.read { color: var(--priTx); }
     .msg-status.failed { color: var(--bad); font-weight: 700; }
     /* The failed tick is a click-to-resend button. */
@@ -896,6 +899,88 @@
     }
     .message-row.sent .reply-quote-who,
     .message-row.sent .reply-quote-text { color: rgba(255, 255, 255, 0.9); }
+
+    /* ---- Peer link bar --------------------------------------------------
+       Sits between the thread and the composer and reports the one thing a
+       chat over a peer-to-peer network has to report and a chat over a
+       server never does: that there is not a path to this person yet, and
+       that one is being built. Building it can take the better part of a
+       minute, and the state it replaces was an empty screen — which reads as
+       a broken app, so people typed the same message five times.
+
+       Three faces: working (a spinner and what is being waited for), failed
+       (the reason, Retry, and Send anyway, so nothing is ever trapped), and
+       gone — the link is up and there is nothing to say. */
+    .link-bar {
+      display: flex;
+      align-items: center;
+      /* Wraps because the failed face carries a sentence AND two buttons, and
+         a phone held in portrait has room for one or the other. When it does
+         not fit, the buttons take a row of their own rather than squeezing
+         the reason into a column three words wide. */
+      flex-wrap: wrap;
+      gap: 8px 10px;
+      padding: 9px 12px;
+      margin: 0 12px 8px;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    /* The buttons move as a pair, and stay at the right edge on either row. */
+    .link-acts {
+      display: flex;
+      gap: 8px;
+      margin-left: auto;
+      flex: 0 0 auto;
+    }
+
+    .link-bar.bad {
+      background: var(--badtint);
+      border-color: var(--accent-red);
+      color: var(--accent-red);
+    }
+
+    .link-bar-text { flex: 1 1 20ch; min-width: 0; }
+
+    /* The failed face carries a whole sentence, and squeezing it into the
+       column left over beside two buttons wraps it to three ragged lines. It
+       takes the full width and the buttons drop to a row of their own. */
+    .link-bar.bad .link-bar-text { flex: 1 1 100%; }
+    .link-bar-text b { color: var(--text-primary); font-weight: 700; }
+    .link-bar.bad .link-bar-text b { color: var(--accent-red); }
+
+    /* Held-message count, so a queue is a number rather than a feeling. */
+    .link-bar-held { color: var(--text-muted); }
+
+    .link-spin {
+      flex: 0 0 auto;
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--border-color);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: linkSpin 0.8s linear infinite;
+    }
+
+    @keyframes linkSpin { to { transform: rotate(360deg); } }
+
+    .link-act {
+      flex: 0 0 auto;
+      padding: 3px 10px;
+      background: none;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      color: inherit;
+      font: inherit;
+      font-size: 11px;
+      cursor: pointer;
+    }
+
+    .link-act:hover { background: var(--bg-hover); }
+    .link-bar.bad .link-act:hover { background: var(--badtint); }
 
     .reply-chip {
       display: flex;
@@ -1625,6 +1710,28 @@
       padding: 2px 2px 0;
     }
 
+    /* The player's ink and the disc under it, named as variables because the
+       waveform is a canvas and has to read the same value from script (see
+       _vmDrawWave). A SENT bubble is the brand blue on both themes, so white
+       is right there and always was. A RECEIVED one is a surface — and on the
+       light theme that surface is near-white, which is where a white play
+       button and a white waveform stopped being visible at all. Received
+       clips take the theme's own ink on the theme's own raised tone. */
+    .vm-player {
+      --vm-ink: #fff;
+      --vm-face: rgba(255, 255, 255, 0.16);
+      --vm-face-hover: rgba(255, 255, 255, 0.3);
+    }
+
+    .message-row.received .vm-player {
+      --vm-ink: var(--text-primary);
+      --vm-face: var(--bg-hover);
+      /* The blue wash, not the next surface up: on the light theme the
+         surface ladder runs *lighter* as it rises, so a hover built from it
+         would fade instead of respond. */
+      --vm-face-hover: var(--pritint);
+    }
+
     .vm-play {
       flex-shrink: 0;
       display: flex;
@@ -1633,17 +1740,17 @@
       width: 34px;
       height: 34px;
       padding: 0;
-      background: rgba(255, 255, 255, 0.16);
+      background: var(--vm-face);
       border: none;
       border-radius: 50%;
-      color: #fff;
+      color: var(--vm-ink);
       font-size: 13px;
       line-height: 1;
       cursor: pointer;
       transition: background 0.15s, transform 0.1s;
     }
 
-    .vm-play:hover { background: rgba(255, 255, 255, 0.3); }
+    .vm-play:hover { background: var(--vm-face-hover); }
     .vm-play:active { transform: scale(0.94); }
 
     .vm-body {
@@ -1651,11 +1758,13 @@
       min-width: 0;
     }
 
-    /* Bars are drawn in JS (see _vmDrawWave); the click seeks. */
+    /* Bars are drawn in JS (see _vmDrawWave); the click seeks. `color` is not
+       decorative here — it is how the canvas learns which theme it is in. */
     .vm-wave {
       display: block;
       width: 100%;
       height: 26px;
+      color: var(--vm-ink);
       cursor: pointer;
     }
 
@@ -2794,9 +2903,13 @@
     .cp-actions { display: flex; justify-content: center; gap: 12px; }
     .cp-ctl { width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--border-color); background: var(--bg-tertiary); color: var(--text-primary); font-size: 18px; cursor: pointer; transition: all .15s; }
     .cp-ctl:hover { background: var(--bg-hover); }
-    .cp-ctl.muted { background: var(--accent-orange); border-color: var(--accent-orange); }
+    /* Each filled state names the ink for the colour under it. Leaving these
+       at the button's resting --text-primary put black glyphs on the light
+       theme's dark red and dark orange, which is the muddiest pair on the
+       screen and sits on the two controls a call is steered with. */
+    .cp-ctl.muted { background: var(--accent-orange); border-color: var(--accent-orange); color: var(--onwarn); }
     .cp-ctl.active { background: var(--accent-blue); border-color: var(--accent-blue); color: var(--onpri); }
-    .cp-ctl.hangup { background: var(--accent-red); border-color: var(--accent-red); }
+    .cp-ctl.hangup { background: var(--accent-red); border-color: var(--accent-red); color: var(--onbad); }
     .cp-ctl.hangup:hover { filter: brightness(1.1); }
     /* In-call spectrogram */
     .cp-spec { margin-bottom: 12px; }
@@ -3412,10 +3525,17 @@
 
     <ul id="messages" class="messages-container hidden" onscroll="app._onMessagesScroll()"></ul>
 
+    <!-- What the app is doing about reaching this peer, when that is not
+         instant. Sits directly above the composer because it is about what
+         happens to what you type into it. Empty and hidden once the link is
+         up, which is most of the time. -->
+    <div id="linkBar" class="link-bar hidden"></div>
+
     <div id="replyChip" class="reply-chip hidden"></div>
 
     <form id="msgForm" class="message-form hidden" autocomplete="off" onsubmit="app.sendMessage(this); return false;">
-      <select id="networkSelect" class="network-select" title="Network type">
+      <select id="networkSelect" class="network-select" title="Network type"
+              onchange="app.onNetworkChange()">
         <option value="skynet">Skynet</option>
         <option value="dmsg">DMSG</option>
         <option value="cxo" id="cxoNetworkOption" class="hidden">CXO (paired)</option>
@@ -4150,6 +4270,7 @@
       close: '<path d="M6 6l12 12M18 6 6 18"/>',
       alert: '<path d="M12 3.6 21.2 19.6H2.8z"/><path d="M12 9.8v4.3M12 17.2v.1"/>',
       circle: '<circle cx="12" cy="12" r="6.8"/>',
+      clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
       leave: '<path d="M14.5 20.5H6a2 2 0 0 1-2-2v-13a2 2 0 0 1 2-2h8.5"/><path d="m15 8 4 4-4 4M19 12H9.5"/>',
       dots: '<circle cx="12" cy="5" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="12" cy="19" r="1.7"/>',
       dotsH: '<circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/>',
@@ -4200,6 +4321,18 @@
         // Delivery receipts that arrived before their bubble knew its id
         // (id -> status). See handleDmStatus / _claimOrphanStatus.
         this._orphanStatus = new Map();
+        // Peer link: what is known about reaching each peer (pk -> the app's
+        // /link state) and what is waiting on it (pk -> composed bubbles, in
+        // the order they were typed). _linkPk is the conversation the watcher
+        // is currently attached to. See the peer-link section below.
+        this._link = {};
+        this._outbox = {};
+        this._linkPk = null;
+        this._linkTimer = null;
+        // Set when the app has no /link surface to talk to. Holding messages
+        // for a handshake nobody is performing would be the worse bug of the
+        // two, so that case gives up and sends the old way.
+        this._linkOff = false;
         // Composer button mode. With text in the field the button is a send
         // arrow; with the field empty it is the recording affordance, either
         // 'mic' (voice message) or 'video' — a user choice kept across reloads.
@@ -4526,6 +4659,10 @@
           return `<span class="msg-status failed" title="Transfer failed">${icon('alert', 12)}</span>`;
         }
         const map = {
+          // queued is the state before pending: written, shown, and
+          // deliberately NOT handed to the network yet because there is no
+          // path to the peer to hand it to. See the peer-link section.
+          queued:   { cls: 'queued',   txt: icon('clock', 12),       title: 'Waiting for the link to this peer' },
           pending:  { cls: 'pending',  txt: icon('circle', 11),      title: 'Sending…' },
           sent:     { cls: 'sent',     txt: icon('check', 12),       title: 'Sent' },
           received: { cls: 'received', txt: icon('checkDouble', 14), title: 'Received' },
@@ -4568,7 +4705,9 @@
       // in place. 'failed' only replaces a bubble still pending.
       _setMsgStatus(key, message, status) {
         if (!message) return;
-        const order = ['pending', 'sent', 'received', 'read'];
+        // queued sits before pending: a held message has not been handed to
+        // the network yet, and releasing it is a step forward like any other.
+        const order = ['queued', 'pending', 'sent', 'received', 'read'];
         if (status === 'failed') {
           if (message.status && message.status !== 'pending') return;
           message.status = 'failed';
@@ -4665,11 +4804,226 @@
         }).catch(() => {});
       }
 
+      // ---- The peer link ------------------------------------------------
+      //
+      // Every other chat app in the world has a server in the middle, so
+      // "send" means "hand it to the server", which is up or it isn't and
+      // either way you know inside a second. Here the message goes to the
+      // person, and before it can there has to be a path to them — a dmsg
+      // session or, for skynet, a route planned and built hop by hop. That
+      // can take the better part of a minute for a peer this visor has never
+      // reached.
+      //
+      // It used to happen inside the first send's own request, invisibly.
+      // What that looked like from the outside was a message sitting there
+      // doing nothing, so the sender typed it again, and again — each one
+      // starting a dial of its own — and then decided the app was broken.
+      //
+      // So the link is asked for when the conversation opens, said out loud
+      // while it is being built (see the link bar), and messages typed in the
+      // meantime are HELD here rather than fired into a dial. When the link
+      // comes up they go out in the order they were typed. A link that fails
+      // says why, and offers both Retry and Send anyway — a held message must
+      // never be a trapped one.
+      //
+      // CXO threads are exempt: publishing to a feed has no peer to dial.
+
+      _linkOf(pk) { return (pk && this._link[pk]) || null; }
+
+      _linkReady(pk) {
+        const st = this._linkOf(pk);
+        return !!(st && st.ready);
+      }
+
+      _held(pk) { return (pk && this._outbox[pk]) || []; }
+
+      // _linkWatch attaches the watcher to the conversation now on screen and
+      // detaches it from the last one. Called on every chat switch, including
+      // to a group or to the notes thread, where it simply stops.
+      _linkWatch(pk) {
+        if (this._linkTimer) { clearTimeout(this._linkTimer); this._linkTimer = null; }
+        this._linkPk = null;
+        this._renderLinkBar();
+        if (!pk || this._linkOff || this.group || this.isSaved()) return;
+        if (this._network() === 'cxo') return;
+        this._linkPk = pk;
+        this._linkStart(pk);
+        this._linkPoll(pk);
+      }
+
+      // _linkDisable stands down for the rest of the session: the app answered
+      // something other than a link state, so there is nothing here to wait
+      // on. Anything already held is released immediately and goes out the way
+      // it did before any of this existed — each request dialling for itself.
+      // A held message must never become a lost one, least of all because the
+      // thing that was supposed to look after it isn't there.
+      _linkDisable() {
+        if (this._linkOff) return;
+        this._linkOff = true;
+        if (this._linkTimer) { clearTimeout(this._linkTimer); this._linkTimer = null; }
+        const pk = this._linkPk;
+        this._linkPk = null;
+        this._renderLinkBar();
+        if (pk) this._linkFlush(pk);
+      }
+
+      // _linkStart asks the app to build a link if there isn't one. Idempotent
+      // on the app's side — a second call while a dial is in flight is a
+      // no-op, which is what lets both the chat switch and every held message
+      // call it without counting.
+      _linkStart(pk) {
+        if (!pk || this._linkOff) return;
+        fetch('/link', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk, network: this._network() }),
+        })
+          .then(r => {
+            if (!r.ok) { this._linkDisable(); return null; }
+            return r.json();
+          })
+          .then(st => this._linkSet(pk, st))
+          .catch(() => {});
+      }
+
+      // _linkPoll re-reads the state on a timer for as long as this
+      // conversation is the open one. Fast while the link is being built —
+      // that is when someone is watching the bar — and lazy once it is up,
+      // where the only job left is noticing that it dropped.
+      _linkPoll(pk) {
+        if (this._linkPk !== pk) return;
+        fetch(`/link?pk=${encodeURIComponent(pk)}`)
+          .then(r => {
+            if (!r.ok) { this._linkDisable(); return null; }
+            return r.json();
+          })
+          .then(st => {
+            if (this._linkPk !== pk) return;
+            this._linkSet(pk, st);
+            // Nothing cached, nothing in flight and nothing to explain: the
+            // link was never asked for, or it has since dropped. Ask again —
+            // a failure is NOT this case, and is left alone for Retry.
+            if (st && !st.ready && !st.connecting && !st.error) this._linkStart(pk);
+            this._linkTimer = setTimeout(() => this._linkPoll(pk), st && st.ready ? 8000 : 1500);
+          })
+          .catch(() => {
+            if (this._linkPk !== pk) return;
+            this._linkTimer = setTimeout(() => this._linkPoll(pk), 4000);
+          });
+      }
+
+      // _linkSet records a state and reacts to it: a link that has just come
+      // up releases everything held for that peer.
+      _linkSet(pk, st) {
+        if (!pk || !st) return;
+        const was = this._linkReady(pk);
+        this._link[pk] = st;
+        if (st.ready && !was) this._linkFlush(pk);
+        if (this._linkPk === pk) this._renderLinkBar();
+      }
+
+      // _linkHold parks a composed bubble until the link is up.
+      _linkHold(pk, message, wireText, network) {
+        (this._outbox[pk] = this._outbox[pk] || []).push({ message, wireText, network });
+        // Attach the watcher if it is not already on this peer. It normally
+        // is — the conversation attached it when it opened — but the network
+        // picker can be moved off CXO mid-thread, and a queue nothing is
+        // polling for is a queue that never drains.
+        if (this._linkPk !== pk) {
+          this._linkWatch(pk);
+          return;
+        }
+        this._linkStart(pk);
+        this._renderLinkBar();
+      }
+
+      // onNetworkChange re-points the watcher when the composer's network
+      // moves: CXO publishes to a feed and has no peer to dial, the other two
+      // reach the person directly and do.
+      onNetworkChange() { this._linkWatch(this.recipient); }
+
+      // _linkFlush delivers everything held for pk, in the order it was
+      // typed. Sequential rather than all at once: these are the opening
+      // lines of a conversation, and a handful of parallel writes onto a
+      // conn that has only just come up can arrive in any order at all.
+      _linkFlush(pk) {
+        const queue = this._outbox[pk];
+        if (!queue || !queue.length) return;
+        this._outbox[pk] = [];
+        queue.reduce((chain, item) => chain.then(() => {
+          this._setMsgStatus(pk, item.message, 'pending');
+          return this._deliverDM(pk, item.message, item.wireText, item.network);
+        }), Promise.resolve());
+        if (this._linkPk === pk) this._renderLinkBar();
+      }
+
+      // linkRetry — the failed bar's first button. Clears the recorded failure
+      // by starting a fresh attempt; the poll picks the new state up.
+      linkRetry() {
+        const pk = this._linkPk;
+        if (!pk) return;
+        this._link[pk] = { connecting: true };
+        this._renderLinkBar();
+        this._linkStart(pk);
+      }
+
+      // linkSendAnyway — the failed bar's second button, and the reason a held
+      // message is never a lost one. Sends the queue the old way: each request
+      // dials for itself and reports its own failure on its own bubble.
+      linkSendAnyway() {
+        const pk = this._linkPk;
+        if (pk) this._linkFlush(pk);
+      }
+
+      // _renderLinkBar paints the bar for the open conversation, or hides it.
+      _renderLinkBar() {
+        const bar = document.getElementById('linkBar');
+        if (!bar) return;
+        const pk = this._linkPk;
+        const held = this._held(pk).length;
+        // A message can be held before the first answer about the link comes
+        // back — the composer is faster than a round trip. Held with nothing
+        // known yet IS "connecting"; anything else with nothing known is a
+        // conversation nobody has typed in, and needs no bar at all.
+        const st = this._linkOf(pk) || (held ? { connecting: true } : null);
+        if (!pk || !st || st.ready) {
+          bar.className = 'link-bar hidden';
+          bar.innerHTML = '';
+          return;
+        }
+        const who = this.escapeHtml(this.peerName(pk) || this.shortPk(pk));
+        const heldNote = held
+          ? ` <span class="link-bar-held">· ${held} message${held === 1 ? '' : 's'} waiting</span>`
+          : '';
+        if (st.error) {
+          bar.className = 'link-bar bad';
+          bar.innerHTML =
+            `<span class="link-bar-text">No route to <b>${who}</b> yet — they may be offline.${heldNote}</span>` +
+            `<span class="link-acts">` +
+            `<button type="button" class="link-act" onclick="app.linkRetry()">Retry</button>` +
+            (held ? `<button type="button" class="link-act" onclick="app.linkSendAnyway()">Send anyway</button>` : '') +
+            `</span>`;
+          return;
+        }
+        bar.className = 'link-bar';
+        bar.innerHTML =
+          `<span class="link-spin"></span>` +
+          `<span class="link-bar-text">Connecting to <b>${who}</b> over Skywire…${heldNote}</span>`;
+      }
+
+      // _network is the composer's network choice, defaulting to skynet when
+      // the select isn't on screen (a group, the notes thread).
+      _network() {
+        const el = document.getElementById('networkSelect');
+        return (el && el.value) || 'skynet';
+      }
+
       // _deliverDM sends an already-composed DM bubble over the wire and advances
       // its status: sent (frame left this machine) or failed. Either path hands
       // back the message's id, which it keeps so later received/read receipts
       // can match and so the bubble can be retracted. Shared by the first send
-      // and resend.
+      // and resend. Returns the request's promise so a queued flush can send
+      // one message at a time.
       _deliverDM(destination, message, wireText, network) {
         let url, body;
         if (network === 'cxo') {
@@ -4679,7 +5033,7 @@
           url = '/message';
           body = JSON.stringify({ recipient: destination, message: wireText, network: network, receipts: true });
         }
-        fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+        return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
           .then(res => {
             if (!res.ok) {
               return res.text().then(text => {
@@ -5745,16 +6099,23 @@
         const step = w / peaks.length;
         const barW = Math.max(1, Math.min(3 * dpr, step * 0.6));
         const minH = 2 * dpr, mid = h / 2, played = ratio * w;
+        // The bars used to be a hardcoded near-white, which is invisible on a
+        // received bubble in the light theme. The canvas takes its colour from
+        // its own computed `color` (--vm-ink, set per bubble side in the CSS);
+        // globalAlpha dims the unplayed half, so one colour covers both states
+        // without having to mix an rgba string for an unknown ink.
+        ctx.fillStyle = getComputedStyle(canvas).color || '#f1f5f9';
         for (let i = 0; i < peaks.length; i++) {
           const x = i * step + (step - barW) / 2;
           const bh = Math.max(minH, peaks[i] * (h - minH));
           // Bars behind the playhead are lit; the rest stay dim.
-          ctx.fillStyle = (x + barW / 2) <= played ? '#f1f5f9' : 'rgba(241, 245, 249, 0.35)';
+          ctx.globalAlpha = (x + barW / 2) <= played ? 1 : 0.35;
           ctx.beginPath();
           if (ctx.roundRect) ctx.roundRect(x, mid - bh / 2, barW, bh, barW / 2);
           else ctx.rect(x, mid - bh / 2, barW, bh);
           ctx.fill();
         }
+        ctx.globalAlpha = 1;
       }
 
       _vmLoadPeaks(box, url) {
@@ -6223,6 +6584,9 @@
         this.renderPinned();
         this._updatePinButtons();
         this._updateMuteButtons();
+        // After refreshPairControls, which decides whether CXO is the network
+        // for this thread — and a CXO thread has no peer to dial.
+        this._linkWatch(pk);
       }
 
       // refreshPairControls toggles the CXO option in the network select
@@ -6584,13 +6948,22 @@
         const wireText = replyMeta ? this._encodeReply(msg) : msg;
         this.cancelReply();
 
-        // Render the bubble immediately as pending, then advance it on the
-        // response (sent/failed) and — for receipts sends — later on dm-status
-        // events (received/read). CXO routes through /pair/<pk>/message and is
+        // Render the bubble immediately, then advance it on the response
+        // (sent/failed) and — for receipts sends — later on dm-status events
+        // (received/read). CXO routes through /pair/<pk>/message and is
         // eventual (no per-message receipt, so its bubble stops at "sent");
         // skynet/dmsg use receipts:true for the full lifecycle. _deliverDM owns
         // the wire call (shared with resend).
-        const message = { ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo', reply: replyMeta, status: 'pending' };
+        //
+        // Unless there is no path to the peer yet: then the bubble opens as
+        // `queued` and is held rather than sent, because a send into an
+        // unbuilt route is a request that sits there for most of a minute and
+        // tells the sender nothing. See the peer-link section.
+        const hold = network !== 'cxo' && !this._linkOff && !this._linkReady(destination);
+        const message = {
+          ts: new Date(), from: 'me', text: msg, viaPair: network === 'cxo',
+          reply: replyMeta, status: hold ? 'queued' : 'pending',
+        };
         this.addMsgToList(destination, message);
         msgField.value = '';
         this.syncComposerBtn();
@@ -6600,7 +6973,11 @@
         this.saveSeenList();
         this.updateUnreadBadges();
 
-        this._deliverDM(destination, message, wireText, network);
+        if (hold) {
+          this._linkHold(destination, message, wireText, network);
+        } else {
+          this._deliverDM(destination, message, wireText, network);
+        }
       }
 
       // ---------------------------------------------------------------------
@@ -8683,6 +9060,10 @@
         document.getElementById('headerPresence').classList.add('hidden');
         document.getElementById('headerEpoch').classList.add('hidden');
 
+        // Nothing here goes anywhere, so there is no link to watch — this
+        // detaches the watcher from whatever conversation had it.
+        this._linkWatch(null);
+
         const msgEl = document.getElementById('messages');
         msgEl.innerHTML = '';
         this.messages[key].forEach(m => this._showMessage(m));
@@ -9395,6 +9776,8 @@
         this.cancelReply(); // a reply armed in another thread must not follow
         this.group = id;
         this.recipient = null;
+        // A group publishes to a feed; there is no single peer to reach.
+        this._linkWatch(null);
         if (!this.messages[id]) this.messages[id] = [];
 
         document.querySelectorAll('.group-item').forEach(el => el.classList.toggle('active', el.dataset.gid === id));
@@ -12098,6 +12481,11 @@
                 } else {
                   this.messagesQuantity[pk]++;
                   m.ts = new Date(m.ts);
+                  // A message held for a link it never got: the queue that
+                  // was going to deliver it died with the page, so it is a
+                  // failure now — and a failure has a Resend button, which is
+                  // the only honest thing to offer for it.
+                  if (m.status === 'queued') m.status = 'failed';
                 }
               });
               this.saveChat(pk); // persist the de-duped list
@@ -12596,6 +12984,18 @@
     window.addEventListener('resize', function() {
       app.dismissMenus();
     });
+
+    // A waveform is a canvas: CSS re-colours everything else on the page the
+    // instant the app flips theme under it (ChatWebView.applyTheme sets
+    // data-theme on <html>), but painted pixels stay whatever they were. So
+    // the players are repainted when the attribute moves.
+    if (window.MutationObserver) {
+      new MutationObserver(function() {
+        document.querySelectorAll('.vm-player').forEach(function(box) {
+          app._vmPaint(box);
+        });
+      }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    }
 
     // Device / browser back on a phone returns to the conversation list
     // rather than leaving the app. Only meaningful in the one-pane layout,

@@ -102,9 +102,9 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
 
     fun answer() = act { id -> api.voiceAnswer(id) }
 
-    fun decline() = act { id -> api.voiceDecline(id) }
+    fun decline() = end { id -> api.voiceDecline(id) }
 
-    fun hangUp() = act { id -> api.voiceHangup(id) }
+    fun hangUp() = end { id -> api.voiceHangup(id) }
 
     fun toggleMic() {
         val muted = !mutable.value.micMuted
@@ -130,6 +130,26 @@ class CallViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             runCatching { block(id) }
                 .onFailure { Log.w(TAG, "call action failed", it) }
+        }
+    }
+
+    /**
+     * Hang up / decline: the two actions whose whole point is that the call
+     * stops *now*. The call leaves the shared state before the request goes
+     * out, so the screen closes on the tap rather than on the watcher's next
+     * poll — which is a tick away and read as a phone ignoring the button.
+     * A request that fails hands the call back, and the poll behind it puts
+     * the screen up again.
+     */
+    private fun end(block: suspend (String) -> Unit) {
+        val id = mutable.value.callId ?: return
+        stopRinging()
+        VoiceCalls.endLocally(id)
+        viewModelScope.launch {
+            runCatching { block(id) }.onFailure {
+                Log.w(TAG, "call action failed", it)
+                VoiceCalls.endFailed(id)
+            }
         }
     }
 

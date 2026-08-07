@@ -1,6 +1,7 @@
 package com.skycoin.skywire.core
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -77,9 +78,17 @@ object BatteryOptimization {
      * Start whichever of the two the device actually has. Returns false when
      * neither resolves, so the caller can say so rather than appearing to do
      * nothing.
+     *
+     * FLAG_ACTIVITY_NEW_TASK is not optional here. Both callers are view
+     * models and hold the Application, and `startActivity` from a non-Activity
+     * context throws without it — which is exactly what made every tap on
+     * Allow do nothing on Home and report "this phone has no battery screen"
+     * in Settings. The flag is skipped for a real Activity so the system
+     * dialog still opens over the app rather than as a task of its own.
      */
     fun openRequest(context: Context): Boolean {
         for (intent in listOf(requestIntent(context), settingsIntent())) {
+            if (context !is Activity) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (runCatching { context.startActivity(intent) }.isSuccess) return true
         }
         return false

@@ -75,9 +75,17 @@ internal object DexWebView {
         baseUrl: () -> String?,
         password: () -> String?,
         onError: (String) -> Unit,
+        onHistoryChanged: (Boolean) -> Unit = {},
     ): WebViewClient = object : WebViewClient() {
 
         private var authAttempts = 0
+
+        // The trading UI is a React app that routes with pushState, so its
+        // own screens are history entries — which is what lets back walk them
+        // before it gives up and leaves SkyDEX.
+        override fun doUpdateVisitedHistory(view: WebView, url: String, isReload: Boolean) {
+            onHistoryChanged(view.canGoBack())
+        }
 
         override fun onReceivedHttpAuthRequest(
             view: WebView,
@@ -109,6 +117,7 @@ internal object DexWebView {
 
         override fun onPageFinished(view: WebView, url: String) {
             authAttempts = 0
+            onHistoryChanged(view.canGoBack())
             if (url != "about:blank") applyPhoneStyles(view)
         }
 

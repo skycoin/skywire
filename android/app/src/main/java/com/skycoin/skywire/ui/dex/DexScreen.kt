@@ -2,6 +2,7 @@ package com.skycoin.skywire.ui.dex
 
 import android.webkit.WebView
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,16 +84,32 @@ fun DexScreen(
     // market never answered", the other "it did and then the page broke".
     var pageError by remember { mutableStateOf<String?>(null) }
     var loadedUrl by remember { mutableStateOf<String?>(null) }
+    var webView by remember { mutableStateOf<WebView?>(null) }
+    var canGoBack by remember { mutableStateOf(false) }
     // Read by the WebView client, which is built once — these keep it looking
     // at the current values instead of the ones at creation time.
     val url = rememberUpdatedState(state.uiUrl)
     val password = rememberUpdatedState(state.password)
 
+    // Back walks SkyDEX backwards rather than leaving it: a screen inside the
+    // trading page first, then the market picker, and only from the picker —
+    // where there is genuinely nothing behind — the hub. Leaving the market
+    // IS the disconnect; the page and the app it talks to are one step.
+    val goBack: () -> Unit = {
+        val view = webView
+        when {
+            canGoBack && view != null -> view.goBack()
+            state.connected -> viewModel.disconnect()
+            else -> onBack()
+        }
+    }
+    BackHandler(enabled = canGoBack || state.connected) { goBack() }
+
     Scaffold(
         topBar = {
             SkyTopBar(
                 title = stringResource(R.string.app_skydex),
-                onBack = onBack,
+                onBack = goBack,
                 help = HelpTopic(R.string.help_dex_title, R.string.help_dex_body),
             )
         },
@@ -123,8 +140,10 @@ fun DexScreen(
                                 baseUrl = { url.value },
                                 password = { password.value },
                                 onError = { pageError = it },
+                                onHistoryChanged = { canGoBack = it },
                             )
                             view.webChromeClient = DexWebView.chromeClient()
+                            webView = view
                         }
                     },
                     update = { view ->
@@ -139,6 +158,8 @@ fun DexScreen(
                         // going after the composable is gone.
                         DexWebView.release(view)
                         loadedUrl = null
+                        webView = null
+                        canGoBack = false
                     },
                 )
             } else if (pageError != null) {
