@@ -7,6 +7,90 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-08 — SkyDEX follows the app's theme, and three things about its chrome
+
+**Why:** the trading UI is a vendored single-page app with exactly one theme —
+dark navy, declared as six custom properties on `:root` — so on a phone set to
+Light it was the one dark screen in the app. It is a built bundle from another
+repo, so the only lever this side has is a stylesheet layered on top; the same
+lever the embedded chat already uses.
+
+**Built (`ui/dex/DexWebView.kt`, `ui/dex/DexScreen.kt`):**
+
+- **Theme.** `applyTheme` toggles `html.sky-light` / `html.sky-dark` and injects
+  a stylesheet written against the page's *own* tokens. Dark keeps the page's
+  design and moves one token (`--sky-navy` → `#0A101C`) so the document behind
+  the native header row is the app's ground; light re-points the set to the
+  palette in `ui/theme/Theme.kt` (`#FFFFFF` / `#0B1526` / `#0F7BF4` / `#FAFCFF`
+  / `#44536B`). Committed from `onPageCommitVisible` — the earliest point a
+  script provably runs in the *new* document — so a light load never paints
+  navy first, re-applied at `onPageFinished`, and driven live from a
+  `LaunchedEffect(darkTheme)` when the theme changes with the page open.
+  `LocalDarkTheme` is the source, i.e. the answer *after* the user's Light/Dark
+  override; `DexScreen` now has a second such consumer alongside chat.
+- **The hard-coded darks.** Every translucent fill in the page's CSS is
+  white-on-navy arithmetic that turns to mud on white, so each is re-based:
+  form controls, the trade legs, `.addr-box`, `.recent-connect`, the progress
+  track, the product-card hover, and the two shadows tuned for a dark ground.
+  `color-scheme` flips with the theme so the engine draws scrollbars and select
+  popups to match. **Two exceptions are load-bearing and commented where they
+  are made:** `--sky-white` is the *ink* token and `.btn-primary`/`.btn-connect`
+  fill with brand blue, so those keep white text under light (re-pointing alone
+  would have put near-black on `#0F7BF4`); and `.trade-leg .leg-amount` is
+  re-declared transparent, because the light `.form-control` rule outranks the
+  page's own and would otherwise print a white box inside a tinted panel.
+- **JS dialogs follow too.** `chromeClient` takes `isDark` and names
+  `Theme_DeviceDefault_Light_Dialog_Alert` / `…_Dialog_Alert` explicitly. These
+  are drawn by the platform, so an Activity theme cannot see a choice that lives
+  in a composition local — without this a `window.confirm` (which is what guards
+  cancelling a listing) arrived as a dark slab over a light page.
+- **Cards/List, only where it means something.** The switch used to be a bar of
+  its own at the top of every tab, Settings included — a control above a form
+  with nothing to act on. `ensureViewbar` now takes a predicate computed from
+  the DOM (`table.table thead th` or `.card.product-card`), not a list of tab
+  names, so it follows the rows wherever the page puts them next.
+- **…and it rides in the heading that owns those rows.** The market names its
+  grid (`.section-title`, "Available products") and its `.page-head` already
+  carries New Sell Order; every other tab's rows *are* the tab, so the page
+  title is the heading. Title left, switch right, one line. On `.page-head` it
+  is inserted straight after the `h2` rather than appended, so when three items
+  do not fit it is the page's own button that wraps and never the switch.
+- **Clear history moves to Settings.** Beside the list it wipes it was one
+  mis-tap from the tab just opened; it belongs with the other set-once things.
+  The page's own button is hidden in CSS rather than script — script would let
+  it flash in on each of the page's 8-second re-renders. It is **re-implemented,
+  not moved**: History and Settings are separate React screens, so the button
+  does not exist in the DOM while Settings is on. What it does is entirely
+  local (`localStorage.removeItem('exchange:history')`), so the same key behind
+  the same confirm is the same action — including the part where a later poll
+  can re-save trades the market still reports as finished, which is the page's
+  behaviour and not a difference. Rendered as a `panel`/`panel-title` with a
+  `btn btn-connect`, matching Save addresses directly above it, and shown only
+  when there is something to clear — the condition History itself used.
+
+Both phone-only behaviours sit inside the existing `max-width: 600px` block and
+are hidden by a base rule outside it, so a tablet keeps the layout the page
+intends: its own heading-row button, no injected Settings panel.
+
+**Verified on the Android Studio emulator (arm64, 1080×2400, light theme),
+connected over Skywire to a live market
+(`024a37ba…43bdb9`, "Unofficial Skycoin Market"):** the trading page renders
+light end-to-end — Market (banner, product card, blue buttons with white
+labels), Settings (white fields, readable placeholders, the required-field
+asterisk in a red that works on white), History; dark still renders as shipped
+on the same build. Settings shows no Cards/List switch; History shows "History"
+left and the switch right on one line with no Clear history beside it; the
+Trade history panel appears in Settings, its confirm dialog opens, and OK
+clears the saved history. `:app:assembleDebug` BUILD SUCCESSFUL, installed via
+`adb install -r`.
+
+**Not verified on screen:** the trade builder (`+ New Sell Order`) is gated
+behind saved wallet addresses and redirects to Settings, so the `.leg-amount`
+rule above was confirmed by specificity against the page's bundled CSS rather
+than by eye.
+
+---
+
 ## 2026-08-08 — A polish pass from device use: icon, light theme, battery, coin logos
 
 **Built:**

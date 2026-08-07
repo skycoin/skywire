@@ -74,6 +74,7 @@ internal object DexWebView {
     fun client(
         baseUrl: () -> String?,
         password: () -> String?,
+        isDark: () -> Boolean,
         onError: (String) -> Unit,
         onHistoryChanged: (Boolean) -> Unit = {},
     ): WebViewClient = object : WebViewClient() {
@@ -115,10 +116,21 @@ internal object DexWebView {
             return openExternally(view.context, target)
         }
 
+        // The earliest moment a script provably runs in the NEW document —
+        // onPageStarted can still evaluate against the old one. Committing
+        // the theme here keeps a light-mode load from flashing the page's
+        // built-in navy while its stylesheet arrives.
+        override fun onPageCommitVisible(view: WebView, url: String) {
+            if (url != "about:blank") applyTheme(view, isDark())
+        }
+
         override fun onPageFinished(view: WebView, url: String) {
             authAttempts = 0
             onHistoryChanged(view.canGoBack())
-            if (url != "about:blank") applyPhoneStyles(view)
+            if (url != "about:blank") {
+                applyTheme(view, isDark())
+                applyPhoneStyles(view)
+            }
         }
 
         override fun onReceivedError(
@@ -132,6 +144,110 @@ internal object DexWebView {
             if (request.isForMainFrame) onError(error.description.toString())
         }
     }
+
+    /**
+     * Put the page in the app's theme. The trading UI ships one theme — dark
+     * navy, declared as six custom properties on `:root` — so following the
+     * app is a matter of re-pointing those tokens under a class this side
+     * controls. Called from [WebViewClient.onPageCommitVisible] so a light
+     * load never paints navy first, again at finish (belt and braces on a
+     * page we do not own), and live from the screen when the app's theme
+     * changes with the page open — same mechanism as the chat's.
+     *
+     * Idempotent like the other injections: the stylesheet lands once per
+     * document, only the class toggles.
+     */
+    fun applyTheme(view: WebView, dark: Boolean) {
+        view.evaluateJavascript(
+            """
+            (function () {
+              var root = document.documentElement;
+              root.classList.toggle('sky-light', ${!dark});
+              root.classList.toggle('sky-dark', $dark);
+              var id = 'skywire-theme-styles';
+              if (document.getElementById(id)) return;
+              var style = document.createElement('style');
+              style.id = id;
+              style.textContent = ${JSONObject.quote(THEME_CSS)};
+              (document.head || root).appendChild(style);
+            })();
+            """.trimIndent(),
+            null,
+        )
+    }
+
+    /**
+     * The two themes, written against the page's own tokens.
+     *
+     * Dark is the page's design on the app's ground: one token moves so the
+     * document behind the native header row is the same navy as the rest of
+     * the app, and every border, panel and accent stays as shipped. Light is
+     * the app's light palette from `ui/theme/Theme.kt` — white ground,
+     * near-black ink, the brand blue — plus overrides for each hard-coded
+     * translucent dark in the page's CSS, which are all white-on-navy
+     * arithmetic that turns to mud on white. `color-scheme` flips with it so
+     * the engine draws scrollbars and select popups to match.
+     */
+    private val THEME_CSS = """
+        html.sky-dark {
+          --sky-navy: #0A101C;
+        }
+
+        html.sky-light {
+          color-scheme: light;
+          --sky-navy: #FFFFFF;
+          --sky-white: #0B1526;
+          --sky-blue: #0F7BF4;
+          --panel: #FAFCFF;
+          --border: rgba(15, 123, 244, .28);
+          --muted: #44536B;
+          --bs-emphasis-color: #0B1526;
+          --bs-emphasis-color-rgb: 11, 21, 38;
+        }
+
+        /* Inputs: the page fills them with translucent black over navy. */
+        html.sky-light .form-control,
+        html.sky-light .form-select { background-color: #FFFFFF; }
+        html.sky-light .form-control:focus,
+        html.sky-light .form-select:focus { background-color: #FFFFFF; }
+        html.sky-light .form-control::placeholder { color: rgba(11, 21, 38, .4); }
+        /* — except the trade builder's amount, which the page deliberately
+           leaves transparent so it reads as a figure sitting on the leg panel
+           rather than a field. Re-stating it keeps the rule above from
+           printing a white box inside a tinted one. */
+        html.sky-light .trade-leg .leg-amount,
+        html.sky-light .trade-leg .leg-amount:focus { background-color: transparent; }
+
+        /* The one place re-pointing --sky-white is wrong: it is the *ink* token,
+           and the primary button uses it on a fill of brand blue. Ink on blue
+           is what the dark page means by it; on light it has to stay white. */
+        html.sky-light .btn-primary,
+        html.sky-light .btn-connect,
+        html.sky-light .btn-primary:hover,
+        html.sky-light .btn-connect:hover:not(:disabled) { color: #FFFFFF; }
+
+        /* The other translucent darks, each re-based on ink or the brand. */
+        html.sky-light .trade-builder .trade-leg { background: #F6F9FD; }
+        html.sky-light .addr-box { background: #F0F5FC; }
+        html.sky-light .recent-connect { background: #F6F9FD; }
+        html.sky-light .card.product-card:hover { background-color: rgba(15, 123, 244, .06); }
+        html.sky-light .progress { background-color: rgba(11, 21, 38, .1); }
+        html.sky-light .deposit-close:hover { background: rgba(11, 21, 38, .08); }
+
+        /* A red readable on white, not the page's salmon-on-navy. */
+        html.sky-light .req,
+        html.sky-light .recent-del:hover:not(:disabled) { color: #C62828; }
+
+        /* Shadows tuned for a dark ground read as smears on a light one. */
+        html.sky-light .qr-modal { box-shadow: 0 12px 40px rgba(11, 21, 38, .2); }
+        html.sky-light .connect-card { box-shadow: 0 8px 30px rgba(15, 123, 244, .12); }
+
+        /* The card each table row becomes on a phone is this side's own
+           translucent black (PHONE_CSS) — same scope, light fill. */
+        @media (max-width: 600px) {
+          html.sky-light .table tbody tr.sky-card { background: #FAFCFF; }
+        }
+    """.trimIndent()
 
     /**
      * Give the page the phone layout it does not ship with.
@@ -213,12 +329,33 @@ internal object DexWebView {
             }
           }
 
-          /* The switch rides at the top of .content, which React rebuilds on
-             every tab change — so it is (re)inserted from enhance(), the same
-             way the data-labels are re-applied. */
-          function ensureViewbar() {
+          /* The switch rides in the heading of whatever it switches, which
+             React rebuilds on every tab change — so it is (re)inserted from
+             enhance(), the same way the data-labels are re-applied.
+             It only appears where it does something: Settings is a form, and a
+             Cards/List choice above a form is a control with nothing to act on.
+             The test is the DOM's, not a list of tab names — whatever the page
+             adds later, the switch follows the rows.
+
+             Which heading: the market names its grid ("Available products",
+             an .section-title) and its .page-head already carries New Sell
+             Order; every other tab's rows ARE the tab, so the page title is
+             the heading. Both are one line with the switch on the right —
+             a bar of its own above the rows is a row of chrome that says
+             nothing. */
+          function ensureViewbar(applies) {
             var content = document.querySelector('.content');
-            if (!content || content.querySelector('.sky-viewbar')) return;
+            if (!content) return;
+            var existing = content.querySelector('.sky-viewbar');
+            if (!applies) {
+              if (existing) existing.remove();
+              return;
+            }
+            var host = content.querySelector('.section-title') ||
+              content.querySelector('.page-head');
+            if (!host) return;
+            if (existing && existing.parentNode === host) { syncViewbar(); return; }
+            if (existing) existing.remove();
             var bar = document.createElement('div');
             bar.className = 'sky-viewbar';
             bar.innerHTML =
@@ -228,8 +365,72 @@ internal object DexWebView {
               var b = e.target.closest('button[data-view]');
               if (b) setMode(b.dataset.view);
             });
-            content.insertBefore(bar, content.firstChild);
+            if (host.classList.contains('page-head')) {
+              // Straight after the title rather than at the end, so when the
+              // row is too narrow for three items it is the page's own button
+              // (Clear history) that wraps and never the switch.
+              var title = host.querySelector('h2');
+              host.insertBefore(bar, title ? title.nextSibling : host.firstChild);
+            } else {
+              host.classList.add('sky-titlerow');
+              host.appendChild(bar);
+            }
             syncViewbar();
+          }
+
+          /* "Clear history" belongs with the other things you set once, not
+             beside the list it wipes — a destructive control in a heading row
+             is one mis-tap from the tab you just opened. The page's own button
+             is hidden in CSS (no flash) and re-offered here.
+
+             It is re-implemented rather than moved because the two tabs are
+             separate React screens: History's button does not exist in the DOM
+             while Settings is on screen. What it does is entirely local —
+             `localStorage.removeItem('exchange:history')` — so the same key,
+             behind the same confirm, is the same action. Like the page's own,
+             a later poll can re-save trades the market still reports as
+             finished; that is the page's behaviour, not a difference. */
+          var HISTORY_KEY = 'exchange:history';
+
+          function historyCount() {
+            try {
+              var raw = JSON.parse(localStorage.getItem(HISTORY_KEY));
+              return Array.isArray(raw) ? raw.length : 0;
+            } catch (e) { return 0; }
+          }
+
+          function ensureHistoryClear() {
+            var content = document.querySelector('.content');
+            if (!content) return;
+            var head = content.querySelector('.page-head h2');
+            var onSettings = !!head && head.textContent.trim() === 'Settings';
+            var panel = content.querySelector('.sky-history-panel');
+            // Nothing saved is nothing to clear — the same condition the
+            // History tab put on the button.
+            if (!onSettings || historyCount() === 0) {
+              if (panel) panel.remove();
+              return;
+            }
+            if (panel) return;
+            panel = document.createElement('div');
+            panel.className = 'panel sky-history-panel';
+            panel.innerHTML =
+              '<h4 class="panel-title">Trade history</h4>' +
+              '<p class="text-muted">Completed, cancelled and expired trades are ' +
+              'kept on this device so History can show them after the market ' +
+              'forgets. Clearing removes that local copy.</p>' +
+              '<button type="button" class="btn btn-connect mt-3 sky-clear-history">' +
+              'Clear history</button>';
+            panel.querySelector('.sky-clear-history').addEventListener('click', function (e) {
+              var btn = e.currentTarget;
+              if (!window.confirm(
+                'Clear all locally saved trade history on this device?'
+              )) return;
+              try { localStorage.removeItem(HISTORY_KEY); } catch (err) {}
+              btn.textContent = 'History cleared';
+              btn.disabled = true;
+            });
+            content.appendChild(panel);
           }
 
           function keyOf(tr) {
@@ -286,7 +487,13 @@ internal object DexWebView {
           }
 
           function enhance() {
-            ensureViewbar();
+            // Rows to read either way — a table with a header, or the market's
+            // product grid. Neither means this section is a form.
+            ensureViewbar(!!(
+              document.querySelector('table.table thead th') ||
+              document.querySelector('.card.product-card')
+            ));
+            ensureHistoryClear();
             var tables = document.querySelectorAll('table.table');
             for (var t = 0; t < tables.length; t++) {
               var table = tables[t];
@@ -391,12 +598,33 @@ internal object DexWebView {
         .app-container > header.header { display: none !important; }
 
         /* The Cards/List switch only means something where the phone layout
-           below applies; on wider screens it stays out of the way. */
+           below applies; on wider screens it stays out of the way — and so
+           does the Settings panel that takes over Clear history, which is the
+           same trade: on a desktop the page's own heading row has the room. */
         .sky-viewbar { display: none; }
+        .sky-history-panel { display: none; }
 
         @media (max-width: 600px) {
-          /* Cards or a compact list — the reader's choice, page-wide. */
-          .sky-viewbar { display: flex; justify-content: flex-end; margin: 0 0 0.7rem; }
+          /* Cards or a compact list — the reader's choice, page-wide. It sits
+             in the heading row it belongs to, pushed to the right of the
+             title; .page-head is already such a row, .section-title is made
+             into one. */
+          .sky-viewbar { display: flex; margin-left: auto; }
+          .section-title.sky-titlerow {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+          }
+
+          /* Clear history moves out of History's heading row and into
+             Settings, where the rest of the once-and-done lives. Hiding the
+             original in CSS rather than script keeps it from flashing in on
+             every one of the page's 8-second re-renders. Only History puts a
+             link-button in its page-head. */
+          .page-head .link-btn { display: none; }
+          .sky-history-panel { display: block; }
+          .sky-history-panel .text-muted { font-size: 0.85rem; }
           .sky-viewbar button {
             border: 1px solid var(--border);
             background: transparent;
@@ -614,7 +842,18 @@ internal object DexWebView {
      * this, **Cancel silently does nothing**, which on a screen holding
      * escrowed coins is the worst possible way to fail.
      */
-    fun chromeClient(): WebChromeClient = object : WebChromeClient() {
+    fun chromeClient(isDark: () -> Boolean = { true }): WebChromeClient = object : WebChromeClient() {
+
+        // These dialogs are drawn by the platform, not by Compose, so they do
+        // not inherit the app's light/dark the way every other surface does —
+        // an Activity theme cannot see a choice that lives in a composition
+        // local. Naming the half explicitly is what keeps a confirm from
+        // arriving as a dark slab over the light trading page.
+        private fun builder(context: Context) = AlertDialog.Builder(
+            context,
+            if (isDark()) android.R.style.Theme_DeviceDefault_Dialog_Alert
+            else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert,
+        )
 
         override fun onJsConfirm(
             view: WebView,
@@ -622,7 +861,7 @@ internal object DexWebView {
             message: String,
             result: JsResult,
         ): Boolean {
-            AlertDialog.Builder(view.context)
+            builder(view.context)
                 .setMessage(message)
                 .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
                 .setNegativeButton(android.R.string.cancel) { _, _ -> result.cancel() }
@@ -637,7 +876,7 @@ internal object DexWebView {
             message: String,
             result: JsResult,
         ): Boolean {
-            AlertDialog.Builder(view.context)
+            builder(view.context)
                 .setMessage(message)
                 .setPositiveButton(android.R.string.ok) { _, _ -> result.confirm() }
                 .setOnCancelListener { result.confirm() }
