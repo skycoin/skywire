@@ -47,8 +47,37 @@ data class Overview(
     @SerialName("apps") val apps: List<AppState> = emptyList(),
     @SerialName("transports") val transports: List<TransportSummary> = emptyList(),
     @SerialName("local_ip") val localIp: String = "",
+    /**
+     * The address the visor's STUN probe saw at startup — the phone's
+     * UNDERLAY address, and not a field to present as "your IP" without
+     * saying so: the app excludes its own UID from the SkyVPN tunnel (it
+     * carries that tunnel), so this reads the same whether or not SkyVPN is
+     * connected. It also carries two non-IP shapes — empty behind symmetric
+     * NAT, and the NAT-type word itself when the probe failed — which is why
+     * [publicIpOrNull] exists rather than reading this directly.
+     */
     @SerialName("public_ip") val publicIp: String = "",
-)
+    /** Typo is the wire format's, not ours (`is_symmetic_nat` in api.go). */
+    @SerialName("is_symmetic_nat") val isSymmetricNat: Boolean = false,
+    @SerialName("nat_type") val natType: String = "",
+    /** Where the visor appears to be, resolved by a dmsg server at startup. */
+    @SerialName("country_code") val countryCode: String = "",
+) {
+    /**
+     * [publicIp] when it is actually an address, else null.
+     *
+     * The visor writes the NAT type into this field when STUN fails
+     * (`api_visor.go`: NATError/NATUnknown/NATBlocked all store
+     * `NATType.String()`), and leaves it empty behind symmetric NAT. Both
+     * would otherwise be rendered to the user as though they were addresses.
+     */
+    val publicIpOrNull: String?
+        get() = publicIp.takeIf { candidate ->
+            candidate.isNotEmpty() &&
+                candidate.any { it == '.' || it == ':' } &&
+                candidate.all { it.isDigit() || it == '.' || it == ':' || it in 'a'..'f' || it in 'A'..'F' }
+        }
+}
 
 /**
  * One live transport. A phone's are almost always dmsg, but which carrier

@@ -6,11 +6,13 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.api.AppConnection
 import com.skycoin.skywire.api.AppState
+import com.skycoin.skywire.api.Overview
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.SkyVpnService
+import com.skycoin.skywire.ui.components.RateSampler
 import com.skycoin.skywire.ui.components.SavedServer
 import com.skycoin.skywire.ui.vpn.VpnArgs
 import kotlinx.coroutines.delay
@@ -30,12 +32,24 @@ data class HubUiState(
     val apiUp: Boolean = false,
     /** The visor's client apps by process name, from the local summary. */
     val apps: Map<String, AppState> = emptyMap(),
-    /** SkyVPN's live connection while it runs — rates ride on it. */
+    /** SkyVPN's live connection while it runs — the byte totals ride on it. */
     val vpnConnection: AppConnection? = null,
+    /**
+     * Measured here from the connection's byte counters rather than read off
+     * the visor's own speed fields, which never leave zero — see [RateSampler].
+     * Null until two samples exist.
+     */
+    val vpnRates: RateSampler.Rates? = null,
     /** The exit SkyVPN points at (or last pointed at), if any. */
     val vpnExitPk: String? = null,
     /** [vpnExitPk]'s country code, when the phone knows it. */
     val vpnCountry: String? = null,
+    /** Last summary overview — the device's own address comes off this. */
+    val overview: Overview? = null,
+    /** The phone's killswitch preference — armed or not. */
+    val killswitch: Boolean = false,
+    /** Minimum route hops the visor is dialling with; 1 allows direct. */
+    val minHops: Int = 0,
     /** The hero card's toggle is mid-flight. */
     val vpnBusy: Boolean = false,
 ) {
@@ -68,13 +82,24 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     /** Last exit the SkyVPN screen saved — country label and re-dial ride on it. */
     private var lastServer: SavedServer? = null
 
+    private val rates = RateSampler()
+
     init {
+        // The killswitch is the phone's preference, so it reads the same with
+        // the core down — which is exactly when someone checks whether they
+        // are still protected.
+        viewModelScope.launch {
+            prefs.boolean(VpnArgs.PREF_KILLSWITCH).collect { on ->
+                mutable.update { it.copy(killswitch = on) }
+            }
+        }
         viewModelScope.launch {
             lastServer = prefs.string(VpnArgs.PREF_LAST_SERVER).first()?.let { stored ->
                 runCatching { json.decodeFromString(SavedServer.serializer(), stored) }.getOrNull()
             }
             mutable.update { withExit(it) }
             CoreServiceState.state.collectLatest { core ->
+                rates.reset()
                 mutable.update {
                     withExit(
                         it.copy(
@@ -82,12 +107,18 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                             apiUp = false,
                             apps = emptyMap(),
                             vpnConnection = null,
+                            vpnRates = null,
                         ),
                     )
                 }
                 if (core is CoreState.Running) {
                     while (!api.ping()) delay(PING_INTERVAL_MS)
                     mutable.update { it.copy(apiUp = true) }
+                    // Visor-wide and rarely changed, so it is read once per
+                    // core lifetime rather than on every poll.
+                    runCatching { api.routerSettings().minHops }.getOrNull()?.let { hops ->
+                        mutable.update { it.copy(minHops = hops) }
+                    }
                     poll()
                 }
             }
@@ -166,8 +197,25 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     null
                 }
+                // A gone connection ends the series: the next one starts its
+                // counters from zero and a delta across that is nonsense.
+                val sampled = if (connection == null) {
+                    rates.reset()
+                    null
+                } else {
+                    rates.sample(connection.bandwidthSent, connection.bandwidthReceived)
+                }
                 mutable.update {
-                    withExit(it.copy(apps = apps, vpnConnection = connection))
+                    withExit(
+                        it.copy(
+                            overview = overview,
+                            apps = apps,
+                            vpnConnection = connection,
+                            // Keep the last good reading between samples
+                            // rather than blinking back to "—".
+                            vpnRates = sampled ?: it.vpnRates.takeIf { connection != null },
+                        ),
+                    )
                 }
             }
             delay(POLL_INTERVAL_MS)

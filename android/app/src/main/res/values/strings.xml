@@ -36,6 +36,34 @@
     <string name="hub_stat_up">Up</string>
     <string name="hub_stat_data">Data</string>
     <string name="hub_vpn_toggle">SkyVPN on/off</string>
+    <plurals name="hub_hops">
+        <item quantity="one">%1$d hop</item>
+        <item quantity="other">%1$d hops</item>
+    </plurals>
+    <string name="hub_hops_unknown">Hops —</string>
+    <string name="hub_killswitch_on">Killswitch on</string>
+    <string name="hub_killswitch_off">Killswitch off</string>
+
+    <!-- Route length (router min_hops) -->
+    <string name="hops_title">Route length</string>
+    <string name="hops_label_fastest">Fastest</string>
+    <string name="hops_label_balanced">Balanced</string>
+    <string name="hops_label_private">Most private</string>
+    <string name="hops_hint_direct">A direct route to the exit — the quickest the network can be. The exit still cannot read your traffic, but it does see that this device is the one asking.</string>
+    <string name="hops_hint_multi">Traffic is relayed through intermediaries, so no single node sees both who is asking and what is being asked. Slower, and every hop is another machine that has to stay up.</string>
+    <string name="hops_hint_unknown">Waiting for the visor to report its routing settings.</string>
+
+    <!-- Network address (what SkyVPN does and does not change) -->
+    <string name="net_addr_title">Network address</string>
+    <string name="net_addr_device">This device</string>
+    <string name="net_addr_exit">Traffic exits</string>
+    <string name="net_addr_exit_none">Not through SkyVPN</string>
+    <string name="net_addr_exit_unknown">Exit location unknown</string>
+    <string name="net_addr_waiting">Waiting for the visor…</string>
+    <string name="net_addr_carrier_nat">Shared carrier address</string>
+    <string name="net_addr_unknown">Not discoverable</string>
+    <string name="net_addr_hint">This device’s own address does not change when SkyVPN connects: the app carries the tunnel, so its own traffic has to stay outside it. What changes is where your other apps’ traffic leaves the network — the exit above.</string>
+    <string name="hub_exit_prefix">Exits %1$s</string>
 
     <string name="coming_soon">Coming soon</string>
     <string name="connect">Connect</string>

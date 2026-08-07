@@ -27,7 +27,11 @@ import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.CandlestickChart
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.GppMaybe
 import androidx.compose.material.icons.rounded.Hub
+import androidx.compose.material.icons.rounded.Language
+import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material3.Icon
@@ -53,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -66,7 +71,8 @@ import com.skycoin.skywire.core.SkychatProfile
 import com.skycoin.skywire.core.SkydexProfile
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
-import com.skycoin.skywire.ui.components.flagEmoji
+import com.skycoin.skywire.ui.components.countryText
+import com.skycoin.skywire.ui.components.deviceAddressText
 import com.skycoin.skywire.ui.components.formatBytes
 import com.skycoin.skywire.ui.components.formatDuration
 import com.skycoin.skywire.ui.components.shortPk
@@ -75,7 +81,6 @@ import com.skycoin.skywire.ui.socks.SocksArgs
 import com.skycoin.skywire.ui.theme.SkyAccents
 import com.skycoin.skywire.ui.theme.SkyHeroGradient
 import com.skycoin.skywire.ui.vpn.VpnStatus
-import java.util.Locale
 
 /**
  * The apps hub behind the raised cloud: category chips, a live SkyVPN hero
@@ -326,10 +331,9 @@ private fun VpnHeroCard(
     // The exit, as a person would say it: flag and country name, the short
     // key when the country is unknown, and an honest "none yet" before the
     // first connection.
-    val exit = state.vpnCountry?.let { code ->
-        val name = Locale("", code).displayCountry.takeIf { it.isNotBlank() } ?: code
-        listOfNotNull(flagEmoji(code), name).joinToString(" ")
-    } ?: state.vpnExitPk?.let(::shortPk) ?: stringResource(R.string.hub_hero_no_exit)
+    val exit = state.vpnCountry?.let(::countryText)
+        ?: state.vpnExitPk?.let(::shortPk)
+        ?: stringResource(R.string.hub_hero_no_exit)
 
     Surface(
         onClick = onOpen,
@@ -419,17 +423,23 @@ private fun VpnHeroCard(
             // The stats row is part of the card's shape, not of its state:
             // the card never changes size, the numbers become — when there
             // is nothing to count.
+            //
+            // Down/Up come from HubViewModel's own sampling of the byte
+            // counters, not from the connection's speed fields, which the
+            // visor only fills from a route-group ping exchange and which
+            // stay at zero on a phone.
             val conn = state.vpnConnection
+            val rates = state.vpnRates
             Spacer(Modifier.height(15.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 HeroStat(
                     label = stringResource(R.string.hub_stat_down),
-                    value = conn?.let { formatBytes(it.downloadSpeed) + "/s" } ?: "—",
+                    value = rates?.let { formatBytes(it.downBytesPerSec) + "/s" } ?: "—",
                     modifier = Modifier.weight(1f),
                 )
                 HeroStat(
                     label = stringResource(R.string.hub_stat_up),
-                    value = conn?.let { formatBytes(it.uploadSpeed) + "/s" } ?: "—",
+                    value = rates?.let { formatBytes(it.upBytesPerSec) + "/s" } ?: "—",
                     modifier = Modifier.weight(1f),
                 )
                 HeroStat(
@@ -439,7 +449,61 @@ private fun VpnHeroCard(
                     modifier = Modifier.weight(1f),
                 )
             }
+
+            // Two facts that hold whether or not the tunnel is up, so they
+            // sit outside the stats row: how many hops the visor dials
+            // through, and whether the killswitch would catch a drop.
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // This device's own address, which SkyVPN does not change —
+                // the app carries the tunnel and stays outside it. The line
+                // above is the half that does change. NetworkAddressCard on
+                // the SkyVPN screen explains the distinction; here there is
+                // only room to show both and let them differ.
+                HeroChip(
+                    icon = Icons.Rounded.Language,
+                    text = deviceAddressText(state.overview),
+                )
+                HeroChip(
+                    icon = Icons.Rounded.Route,
+                    text = if (state.minHops > 0) {
+                        pluralStringResource(R.plurals.hub_hops, state.minHops, state.minHops)
+                    } else {
+                        stringResource(R.string.hub_hops_unknown)
+                    },
+                )
+                HeroChip(
+                    icon = if (state.killswitch) Icons.Rounded.Shield else Icons.Rounded.GppMaybe,
+                    text = stringResource(
+                        if (state.killswitch) R.string.hub_killswitch_on
+                        else R.string.hub_killswitch_off,
+                    ),
+                    dim = !state.killswitch,
+                )
+            }
         }
+    }
+}
+
+/** A small fact on the hero's gradient: an icon and a word. */
+@Composable
+private fun HeroChip(icon: ImageVector, text: String, dim: Boolean = false) {
+    val tint = Color.White.copy(alpha = if (dim) 0.62f else 0.95f)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .background(Color.White.copy(alpha = 0.13f))
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelMedium,
+            color = tint,
+            maxLines = 1,
+        )
     }
 }
 
