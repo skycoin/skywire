@@ -225,6 +225,29 @@ func skysocksHTTPClient(sess *yamux.Session) (*http.Client, error) {
 	}, nil
 }
 
+// cachedUA memoizes the browser User-Agent (it never changes within a tab).
+var cachedUA string
+
+// browserUserAgent returns a User-Agent to present to clearnet origins. The wasm
+// visor runs INSIDE a real browser, so we present that browser's own navigator
+// .userAgent — making a proxied fetch indistinguishable from a normal tab, so
+// origins that gate on (or reject a missing / bot-looking) User-Agent serve the
+// real page instead of a 403/robot wall. Falls back to a current desktop UA if
+// navigator is unavailable (e.g. a headless WASI host).
+func browserUserAgent() string {
+	if cachedUA != "" {
+		return cachedUA
+	}
+	if nav := js.Global().Get("navigator"); nav.Truthy() {
+		if ua := nav.Get("userAgent"); ua.Type() == js.TypeString && ua.String() != "" {
+			cachedUA = ua.String()
+			return cachedUA
+		}
+	}
+	cachedUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+	return cachedUA
+}
+
 // jsFetchClearnet(serverPKHex, method, url, bodyOrNull) → Promise<{status, body,
 // headers}>. Fetches a CLEARNET url through the skysocks-server serverPKHex over a
 // skywire route: DialRoutes → yamux → SOCKS5 CONNECT → (https) TLS-in-tab → HTTP.
@@ -325,6 +348,14 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 			if err != nil {
 				return nil, err
 			}
+			// Present as a normal browser so origins that gate on (or reject a missing
+			// / bot-looking) User-Agent serve the real page instead of a 403/robot
+			// wall. Set BEFORE extraHeaders so a caller can still override. Accept-
+			// Encoding is intentionally left unset — the http.Transport adds gzip and
+			// transparently decompresses only when it owns that header.
+			req.Header.Set("User-Agent", browserUserAgent())
+			req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+			req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 			for k, v := range extraHeaders {
 				req.Header.Set(k, v)
 			}
