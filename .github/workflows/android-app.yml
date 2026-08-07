@@ -1,0 +1,71 @@
+# Android APP lane: Kotlin unit tests + an APK that actually assembles.
+#
+# Gated on `android/**` so a pull request that does not touch the app costs
+# nothing here. The Go side is NOT gated the same way and is not duplicated:
+# the `android` job in test.yml builds the arm64 payload and enforces its size
+# budget on every PR, which is what catches a Go change breaking the mobile
+# variant. This lane is the other half — the app that wraps it.
+name: Android app
+
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-app.yml'
+
+# A new push to the same PR makes the previous run irrelevant.
+concurrency:
+  group: android-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          cache: true
+          cache-dependency-path: go.sum
+
+      # AGP 9 / Gradle 9.6 want a modern JDK; 21 is the LTS both are happy on.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The pure-Go payload rather than the NDK one: this lane is a build
+      # check, and the cgo/bionic-DNS difference does not change whether the
+      # Kotlin compiles or the APK packages. Releases use the NDK lane.
+      # Built here even though test.yml also builds it, because an APK
+      # assembled without the .so is not the artifact we ship — packaging is
+      # part of what this job is checking.
+      - name: Build Go payload (pure-Go lane)
+        run: make android-mobile
+
+      # LiveNodeTest is skipped unless SKYWIRE_NET_TESTS=1, so this stays
+      # offline. :app has no unit tests yet; :wallet-core holds the crypto
+      # vectors and golden fixtures, which are the ones worth gating on.
+      - name: Unit tests
+        run: cd android && ./gradlew --no-daemon :wallet-core:test
+
+      - name: Assemble debug APK
+        run: cd android && ./gradlew --no-daemon :app:assembleDebug
+
+      # Kept for triage: when a run fails on a device-only problem, having the
+      # exact APK the job built beats rebuilding it locally and guessing.
+      - name: Upload debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skywire-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+          if-no-files-found: error
