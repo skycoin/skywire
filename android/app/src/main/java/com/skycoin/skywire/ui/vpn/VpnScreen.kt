@@ -64,6 +64,8 @@ import com.skycoin.skywire.ui.components.SectionCard
 import com.skycoin.skywire.ui.components.ServerRow
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.components.MinHopsCard
+import com.skycoin.skywire.ui.components.NetworkAddressCard
 import com.skycoin.skywire.ui.components.TransportPreferenceCard
 import com.skycoin.skywire.ui.components.TransportPreferenceSheet
 import com.skycoin.skywire.ui.components.flagEmoji
@@ -134,6 +136,13 @@ fun VpnScreen(
                 item { StatsCard(state) }
             }
             item {
+                NetworkAddressCard(
+                    overview = state.overview,
+                    exitCountry = state.selectedCountry,
+                    connected = state.carrying,
+                )
+            }
+            item {
                 KillswitchCard(
                     on = state.killswitch,
                     // Changeable with the core down too — it is stored on the
@@ -147,6 +156,16 @@ fun VpnScreen(
                     primary = state.transportPrimary,
                     enabled = !state.busy,
                     onClick = { transportSheetOpen = true },
+                )
+            }
+            item {
+                MinHopsCard(
+                    hops = state.minHops,
+                    // Needs the core: unlike the killswitch and the transport
+                    // order, this is not a phone preference applied later —
+                    // it is a live PUT to the visor's router settings.
+                    enabled = state.coreReady && !state.busy,
+                    onSelect = viewModel::setMinHops,
                 )
             }
 
