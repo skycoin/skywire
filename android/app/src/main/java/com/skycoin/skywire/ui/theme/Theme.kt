@@ -73,7 +73,12 @@ private val LightColors = lightColorScheme(
     // they read faint on white. The mock keeps its washier greys for
     // decoration (outline below), not for prose.
     onSurfaceVariant = Color(0xFF44536B),
-    outline = Color(0xFF7C8AA0),
+    // Darker than a decorative grey, for the same reason as the role above:
+    // this one is not only hairlines. It tints the bottom bar's resting
+    // icons and every "off" glyph in the hub, and at the mock's value those
+    // read as switched-off rather than as not-currently-selected. ~4.9:1 on
+    // white, which is the floor for something you are meant to aim at.
+    outline = Color(0xFF56657C),
     outlineVariant = Color(0xFFE7EEF9),
     primaryContainer = Color(0xFFE4EEFD),
     onPrimaryContainer = SkywireBlueDeep,

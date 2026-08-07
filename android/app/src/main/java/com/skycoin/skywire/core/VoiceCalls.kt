@@ -16,13 +16,17 @@ import com.skycoin.skywire.api.VoiceInvite
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.coroutineContext
 
 /** What the phone knows about calls right now. */
@@ -56,6 +60,39 @@ object VoiceCalls {
     val state: StateFlow<VoiceCallState> = mutable.asStateFlow()
 
     /**
+     * Calls this phone has hung up or declined but the visor still reports.
+     *
+     * The watcher polls, so without this the call screen stayed up for the
+     * rest of the tick after the red button — several seconds of a phone that
+     * looks like it did not hear you. Hanging up removes the call here at
+     * once and suppresses it until the visor agrees it is gone, which is the
+     * order every phone does this in. Nothing is lost if the visor disagrees:
+     * a hang-up that fails un-suppresses the id (see [endFailed]) and the
+     * next poll puts the call back.
+     */
+    private val ended = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * Wakes the watcher out of its poll delay. Conflated and non-blocking:
+     * one nudge before the next tick is all it can usefully carry.
+     */
+    private val nudges = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    internal val nudge: SharedFlow<Unit> = nudges.asSharedFlow()
+
+    /** The user ended [callId] — drop it now, confirm with the visor after. */
+    fun endLocally(callId: String) {
+        ended.update { it + callId }
+        mutable.update { it.without(callId) }
+        nudges.tryEmit(Unit)
+    }
+
+    /** The end never reached the visor: let the call come back on the next poll. */
+    fun endFailed(callId: String) {
+        ended.update { it - callId }
+        nudges.tryEmit(Unit)
+    }
+
+    /**
      * The operator's names for public keys, from skychat's address book.
      *
      * Held here rather than fetched per screen because a call screen has to
@@ -82,11 +119,33 @@ object VoiceCalls {
         dialing: List<VoiceInvite>,
         activeIds: List<String>,
     ) {
-        mutable.update { it.copy(ringing = ringing, dialing = dialing, activeIds = activeIds) }
+        // Ids the visor has stopped reporting have served their purpose and
+        // leave the suppression set with it — kept any longer this would grow
+        // for the life of the process.
+        val reported = ringing.map { it.callId } + dialing.map { it.callId } + activeIds
+        ended.update { it intersect reported.toSet() }
+        val hidden = ended.value
+        mutable.update {
+            it.copy(
+                ringing = ringing.filterNot { call -> call.callId in hidden },
+                dialing = dialing.filterNot { call -> call.callId in hidden },
+                activeIds = activeIds.filterNot { id -> id in hidden },
+            )
+        }
     }
 
-    internal fun clear() = mutable.update { VoiceCallState() }
+    internal fun clear() {
+        ended.value = emptySet()
+        mutable.update { VoiceCallState() }
+    }
 }
+
+/** This state minus one call, whichever of the three lists it is in. */
+private fun VoiceCallState.without(callId: String) = copy(
+    ringing = ringing.filterNot { it.callId == callId },
+    dialing = dialing.filterNot { it.callId == callId },
+    activeIds = activeIds.filterNot { it == callId },
+)
 
 /**
  * Polls the visor for ringing and connected calls, and turns the answer into
@@ -129,7 +188,12 @@ internal class VoiceCallWatcher(context: Context) {
                         wasInCall = inCall
                     }
                 }
-                delay(POLL_MS)
+                // The tick, unless something happened that the next answer
+                // will be about. Hanging up nudges this so the visor is asked
+                // straight away rather than up to a tick later — the screen
+                // has already closed, and this is what makes the state behind
+                // it catch up while the user is still looking at the phone.
+                withTimeoutOrNull(POLL_MS) { VoiceCalls.nudge.first() }
             }
         } finally {
             // The core is going away, so the calls are too — leave nothing

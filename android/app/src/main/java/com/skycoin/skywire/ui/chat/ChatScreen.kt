@@ -104,6 +104,16 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
         }
     }
 
+    // One rule for both ways back, so the ← in the header and the phone's own
+    // gesture cannot disagree: inside the page (a conversation open over the
+    // list) back is the page's step, and only a page with nowhere left to go
+    // leaves the tab. The header button used to skip straight to the second
+    // half, which made ← from an open chat throw the reader out of SkyChat
+    // entirely.
+    val goBack: () -> Unit = {
+        val view = webView
+        if (canGoBack && view != null) view.goBack() else onBack()
+    }
     BackHandler(enabled = canGoBack) { webView?.goBack() }
 
     // A skychat:// link another app opened us for. It waits here rather than
@@ -139,7 +149,7 @@ fun ChatScreen(onBack: () -> Unit, viewModel: ChatViewModel = viewModel()) {
             // is reloaded from the Retry the error state already offers.
             SkyTopBar(
                 title = stringResource(R.string.app_skychat),
-                onBack = onBack,
+                onBack = goBack,
                 help = HelpTopic(R.string.help_chat_title, R.string.help_chat_body),
             )
         },

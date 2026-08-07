@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.CallEnd
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.VolumeDown
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -178,6 +179,8 @@ private fun ConnectedControls(
             ),
             background = if (micMuted) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.surfaceVariant,
+            content = if (micMuted) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurface,
             onClick = onToggleMic,
         )
         CallButton(
@@ -187,21 +190,32 @@ private fun ConnectedControls(
             onClick = onHangUp,
         )
         CallButton(
-            icon = Icons.Default.VolumeUp,
+            icon = if (speakerphone) Icons.Default.VolumeUp else Icons.Default.VolumeDown,
             label = stringResource(R.string.call_speaker),
             background = if (speakerphone) MaterialTheme.colorScheme.primary
             else MaterialTheme.colorScheme.surfaceVariant,
+            content = if (speakerphone) MaterialTheme.colorScheme.onPrimary
+            else MaterialTheme.colorScheme.onSurface,
             onClick = onToggleSpeaker,
         )
     }
 }
 
+/**
+ * One round control. [content] is the ink on it, and it is a parameter rather
+ * than a constant because only the two filled buttons — Answer green, Hang up
+ * red — are guaranteed dark enough for white. Mic and Speaker sit on
+ * `surfaceVariant`, which on the light theme is a near-white card tint: a
+ * white glyph on it is the invisible button, so those pass the theme's own
+ * ink and only switch to `onPrimary` once the blue fill is under them.
+ */
 @Composable
 private fun CallButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     background: Color,
     onClick: () -> Unit,
+    content: Color = Color.White,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
@@ -215,7 +229,7 @@ private fun CallButton(
                     icon,
                     contentDescription = label,
                     modifier = Modifier.size(32.dp),
-                    tint = Color.White,
+                    tint = content,
                 )
             }
         }
