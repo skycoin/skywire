@@ -87,12 +87,15 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
     init {
         // The exemption is granted in a system screen and the prompt can be
         // silenced from Settings, so neither answer is ours to cache. Both are
-        // re-read whenever the app comes back to the front.
+        // re-read on every resume — the system's grant dialog covers the
+        // Activity without stopping it, so the foreground flag alone would
+        // miss the moment the answer changed.
         viewModelScope.launch {
             combine(
                 AppVisibility.isForeground,
+                AppVisibility.resumes,
                 prefs.boolean(BatteryOptimization.PREF_DISMISSED, false),
-            ) { foreground, dismissed -> foreground && !dismissed }
+            ) { foreground, _, dismissed -> foreground && !dismissed }
                 .collectLatest { askable ->
                     batteryOffer.value =
                         askable && !BatteryOptimization.isExempt(getApplication())

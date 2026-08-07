@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Adaptive-icon foreground: the Skycoin cloud tinted white over the
-     brand-blue background layer. 56x42dp centers the logo's 4:3 box in the
-     safe zone; the box corners that graze the 66dp circle are transparent
-     cloud edges, so nothing visible clips. -->
+     brand-blue background layer. 44x33dp keeps the logo's 4:3 box fully
+     inside the 66dp safe circle (half-diagonal 27.5dp), so no launcher
+     mask or parallax scale ever crowds the cloud against the edge. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
     <item
-        android:width="56dp"
-        android:height="42dp"
+        android:width="44dp"
+        android:height="33dp"
         android:gravity="center">
         <bitmap
             android:src="@drawable/skywire_logo"
