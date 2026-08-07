@@ -126,7 +126,21 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 	// older configs. The TPViz config block still tunes SurveyDir and
 	// CacheMaxAge. It is STARTED (and stopped) with the web UI in startUI/
 	// stopUI, since it only backs UI routes.
-	if visor != nil {
+	//
+	// The mobile build is the one exception, and it is a build tag rather
+	// than the config's TPViz.Enable because that field cannot express the
+	// difference: FillDefaults only sets it inside the `DmsgDiscovery == ""`
+	// branch, so a config that already names a discovery leaves it false and
+	// an absent block is indistinguishable from an explicit false — reading
+	// it is what produced those 404s. The phone ships no hvui at all (the
+	// embedded assets are empty on this build), so nothing can ever call
+	// /tp-viz/, while Start() costs a startup geoip+cache fetch, a ~4m30s
+	// SD/DMSG cache refresh over dmsg-HTTP and a 2s websocket broadcast
+	// ticker. Every use of hv.tpvizServer is already nil-guarded, including
+	// the root /api/* routes it would otherwise mount — none of which the
+	// phone app calls (its service-discovery lookups go through
+	// /api/svc-fetch, not tpviz's root-mounted /api/services).
+	if visor != nil && tpvizEnabled() {
 		tpvizCfg := tpviz.DefaultConfig()
 		if config.TPViz.SurveyDir != "" {
 			tpvizCfg.SurveyDir = config.TPViz.SurveyDir

@@ -7,6 +7,83 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — Battery: two periodic jobs the phone was paying for
+
+A survey of everything that ticks inside the visor as the phone configures it
+— roughly sixty recurring jobs once the conditional ones are resolved against
+the phone profile — looking for work with no corresponding benefit on a
+handset. The 5-minute uptime/TPD heartbeat, the one we had flagged, turned out
+not to be worth touching: it is twelve remote wakes an hour against the dmsg
+keepalive's hundred and twenty, it cannot be disabled by config anyway
+(`resolveUptimeTargets` derives the TPD URL from `transport.discovery`,
+deliberately independent of `uptime_tracker`), and with no wakelock anywhere in
+the app it does not fire during deep sleep at all. Two other things did.
+
+**The dmsg client republished its discovery entry five times too often, on
+every visor in the fleet.** `dmsgc.New` builds a `dmsg.Config` literal with
+`MinSessions`, callbacks and protocol, and never sets `UpdateInterval`.
+`EntityCommon.init` then falls back to `DefaultUpdateInterval` — one minute,
+which is the *server's* cadence, because a dmsg server's `AvailableSessions`
+changes on every client connect. A client's entry only carries its delegated
+servers, which on a settled client never change, and `DefaultConfig` sets
+`DefaultUpdateInterval * 5` accordingly. That constructor is simply never
+consulted: eleven of the fifteen client call sites in the tree build the
+literal. The periodic tick is never short-circuited either — the `SamePubKeys`
+guard in `updateClientEntry` only suppresses nudge-driven updates, and the due
+timer always makes `due` true — so each one was a signed GET+PUT to
+dmsg-discovery over a fresh dmsg stream.
+
+The default moved into `Config.Ensure`, which `NewClient` already calls before
+`EntityCommon.init` reads the value, rather than into the one caller. Fixing
+`dmsgc` alone would have left the other ten literals wrong and the next one
+would have reintroduced it; `Ensure` is documented as the place that ensures
+config values are set. The dmsg *server* has its own `ServerConfig` and keeps
+its one-minute cadence untouched. Three unit tests pin the invariant, since
+what let this survive was that nothing asserted the interval.
+
+**tpviz runs on the phone, and nothing on the phone can reach it.** The
+network-visualizer backend is constructed whenever a hypervisor has a local
+visor and started by `startUI` — which the phone must call, because that is the
+localhost API the app talks to. `Start()` costs a geoip and cache fetch at
+boot, a ~4m30s SD/DMSG cache refresh over dmsg-HTTP, and a 2-second websocket
+broadcast ticker, all backing routes that this build cannot serve: the mobile
+variant embeds no hvui at all.
+
+`tp_viz.enable` looked like the lever and is not one. It is written by the
+generator but read nowhere, and it cannot be made to work: `FillDefaults` only
+sets it inside its `DmsgDiscovery == ""` branch, so a config that already names
+a discovery leaves it false, and an absent block is indistinguishable from an
+explicit false — reading it is exactly what produced the `/tp-viz/` 404s the
+comment there warns about. So the gate is a build tag, matching the
+`hypervisor_dmsg_ingest` pair already doing this for the Fleet ingest client.
+Every use of `hv.tpvizServer` was already nil-guarded, including the `/api/*`
+routes it mounts at root — and none of those are routes the app calls, since
+its service-discovery lookups go through `/api/svc-fetch` rather than tpviz's
+root-mounted `/api/services`.
+
+**Verified** on a host build of the mobile variant (`make build-mobile`),
+against a config carrying `tp_viz: {"enable": true}` so the tag is doing the
+work: `/tp-viz/`, `/api/transports`, `/api/uptimes`, `/api/local-visor`,
+`/api/ip-groups` and `/api/health` all 404, while `/api/about`,
+`/api/service-health` and `/api/visors-summary` serve 200, and no tpviz line
+appears in the log. For the cadence, with the phone profile applied (the
+`-i`-forced `lan_dmsg_server`, a genuine 1-minute *server* entity, removed as
+the app removes it): four `[dmsgC]` entry updates in the first 37 seconds —
+registration plus session nudges — then nothing until a single tick at 5m01s.
+The old build would have republished five times in that window. Both tag
+variants build, `android-mobile-check` passes at 63,963,432 bytes against the
+80 MB budget, and the dmsg suite is green.
+
+**Not done, and next.** The three `while (true)` poll loops in Android
+ViewModels that survive backgrounding — Wallet's 30s is the expensive one
+because it hits a remote Skycoin node rather than loopback, and its ViewModel
+is constructed eagerly at app launch. `AppVisibility.isForeground` already
+exists for exactly this. Below that: stcpr/quic/webtransport re-register to the
+address resolver every 90s each plus two `Resolve` calls a minute, for
+transport types that never establish behind carrier NAT.
+
+---
+
 ## 2026-08-07 — Redesign: one visual language for the whole app
 
 The app-wide redesign from the design mock: a new palette, two new

@@ -101,6 +101,26 @@ func (c *Config) Ensure() {
 		c.Callbacks = new(ClientCallbacks)
 	}
 	c.Callbacks.ensure()
+	// A client that leaves UpdateInterval unset gets the CLIENT default, not
+	// EntityCommon.init's zero-value fallback. That fallback is
+	// DefaultUpdateInterval (1 min), which is the SERVER's cadence — a server
+	// republishes often because its AvailableSessions changes with every
+	// client connect/disconnect. A client's entry only carries its delegated
+	// servers, which on a settled client never change, so it is meant to
+	// refresh five times more slowly (DefaultConfig, below).
+	//
+	// Almost nobody constructs a client through DefaultConfig: eleven of the
+	// fifteen call sites in this repo build a Config literal with just
+	// MinSessions and were therefore republishing every 60s instead of every
+	// 5m. That is a signed GET+PUT to dmsg-discovery over a fresh dmsg stream
+	// per tick — the periodic update is never short-circuited, since the
+	// SamePubKeys guard in updateClientEntry only suppresses nudge-driven
+	// updates and the due timer always makes `due` true. Defaulting here
+	// rather than in each caller is what keeps the next literal from
+	// reintroducing it.
+	if c.UpdateInterval == 0 {
+		c.UpdateInterval = DefaultUpdateInterval * 5
+	}
 }
 
 // DefaultConfig returns the default configuration for a dmsg client entity.
