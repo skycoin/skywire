@@ -7,6 +7,108 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — Redesign: one visual language for the whole app
+
+The app-wide redesign from the design mock: a new palette, two new
+typefaces, a floating bottom bar with the Skycoin cloud on a raised
+circular button, and the apps hub rebuilt as a living dashboard. All
+Compose; no Go changes.
+
+**The design system (`ui/theme/`).** Primary moves from `#0072FF` to
+`#0F7BF4`, with a deep-blue gradient pair (`SkyHeroGradient` for hero
+surfaces, `SkyButtonGradient` for the round primary actions) defined once in
+the theme. Light is the design's native theme: white background, cards in
+blue-tinted near-white `#F7FAFF` behind a `#E7EEF9` hairline (`outlineVariant`
+— the border is what makes a card a card at that fill). Dark derives the same
+hues on deep navy (`#0A101C` background) rather than grey or black, with a
+brighter `#4AA3FF` primary carrying dark ink instead of white. Status colors
+consolidate into `SkyAccents` (success `#22C275`, its bright form `#5CF2A8`
+for dots on blue, warning `#F59E0B`); the shared `CONNECTED_GREEN` /
+`PENDING_AMBER` names survive but now point at the theme, and the four
+scattered duplicate hexes (Home ×3, DexScreen's private shadow copy, the log
+viewer's hardcoded `#0072FF` INFO blue) point at the same place. A `Shapes`
+scale lands at 8/12/16/22/28 — chips at small, buttons and icon plates at
+medium, cards at large, sheets and the nav shell at extraLarge.
+
+**Type: Quicksand + Nunito** (both OFL, bundled as single variable-weight
+files — minSdk 26, so the wght axis is real). Quicksand Bold carries every
+display/headline/title role; Nunito carries body (SemiBold) and label (Bold).
+The Skycoin .otf family is gone with its callers. Two findings shaped the
+weights: the old family shipped no 500 cut, which is why ~60 screens had
+hand-bolted `FontWeight.Bold` onto body roles (all now harmless), and the
+first cut at Medium body read *faint* on the tinted cards — user-confirmed,
+light mode only. Related fix in the same pass: every `surfaceVariant` card
+now sets `contentColor = onSurface` explicitly, because `contentColorFor`
+resolves that container to `onSurfaceVariant` and quietly muted every card
+title in the app; and light `onSurfaceVariant` sits at `#44536B`, darker than
+the mock's caption grey, because that role carries real prose here.
+
+**The bar (`SkywireApp`).** The Material `NavigationBar` is replaced by the
+mock's floating shell: a rounded-28 surface with a hairline border and soft
+shadow, icons only (per feedback — labels removed, the icon's Rounded form
+plus primary tint marks the active tab, Outlined+`outline` grey the rest),
+and the Skycoin cloud on a 66 dp gradient disc riding 21 dp above the shell,
+ringed in the shell's own color so it reads as punched through, with a slow
+`PulseRing` behind it (shared composable; Home's Connect reuses it while
+connected). The lift is `offset`, which moves drawing and hit-testing but
+not measurement, and Scaffold places the bottom bar last, so the jut wins
+the overlap without reserving dead space above the shell.
+
+**The hub is the mock's Apps screen, with live data.** New `HubViewModel`
+polls the local summary every 5 s (local HTTP only — nothing crosses dmsg,
+unlike the Fleet lesson) for every app's status: the header's "6 installed ·
+N running", per-card status dots (green running / amber starting / red
+errored / border-grey stopped-or-unknown). Category chips (All / Network /
+Finance / Social) filter the grid. SkyVPN is not a tile: it is the hero card,
+full-size on or off (feedback), on the deep gradient with the two soft
+corner discs, showing status + session length, the exit as a person would
+say it — flag emoji plus `Locale` display name ("🇨🇦 Canada"), short key when
+the country is unknown, "No exit chosen yet" before the first connect — and
+live Down/Up rates plus session data from `appConnections` while it carries.
+Its switch turns the tunnel off directly (stop app, then release the
+interface — the SkyVPN screen's own order), and turns it *on* from the hub
+only when nothing needs a screen: consent already granted
+(`VpnService.prepare` returns null) and an exit already saved; otherwise it
+opens the SkyVPN screen. The `vpn_last_server` / `vpn_killswitch` preference
+keys moved to `VpnArgs` so both owners read the same names. SkyMeet stays
+the one dashed coming-soon card.
+
+**Buttons became visible** (feedback: "so transparent, cannot see it").
+This M3 revision draws `OutlinedButton` borders with `outlineVariant` — a
+hairline here — and standalone `TextButton` actions vanish entirely when
+disabled. Every standalone action (Change port, Refresh, Retry, View logs,
+Fleet's Logs/Restart, DEX disconnect, VPN system-settings, Settings'
+identity/config actions, transport Change) is now `FilledTonalButton` on
+`secondaryContainer`; dialog confirm/cancel pairs and inline links (See all,
+Show more, Paste, Max) stay text, as convention wants.
+
+**The header (`SkyTopBar`)** is the mock's: left-aligned Quicksand title
+with an optional live subtitle line under it, 42 dp rounded-square tonal
+back and ? buttons. Same API plus `subtitle`; every screen inherits.
+
+Also: launcher/splash colors follow the palette (`ic_launcher_background`
+`#0F7BF4`, dark window/splash `#0A101C` via `@color` instead of framework
+black), and Home's Connect is the gradient disc with white Quicksand.
+
+**Verified** on emulator-5554 (1080×2400, API 34): light and dark
+screenshots of Home, hub, Wallet, Settings; tab selection and hub
+navigation; hero card off-state with 🇨🇦 Canada exit line; the cloud button
+opens the hub with the pulse ring visible; core started on-device
+(libskywire-mobile child alive in logcat) with the familiar cosmetic netlink
+denials. Feedback applied live across three rounds (hero always big, flag +
+country name, faint-text fix, icons-only bar, tonal buttons).
+
+**Known gaps, deliberate.** The embedded SkyChat page still wears its own
+palette keyed to the old blue — it lives inside the Go `.so` and syncs only
+a light/dark boolean, so it needs its own pass (and `make android-mobile`)
+to match; visually close, not identical. SkyDEX's injected phone CSS keeps
+its dark-only assumption and one `#00000038` card fill. The raster
+`skywire_logo.png` stays `#0072FF`-blue where it appears untinted (lock
+overlay); on the launcher and the nav cloud it is tinted white over the new
+blue, so nothing clashes.
+
+---
+
 ## 2026-08-07 — Hardening: what leaves the phone, what is readable on it
 
 Four things that had been carried as open questions since the size work

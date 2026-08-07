@@ -194,7 +194,12 @@ fun WalletScreen(
                 item {
                     val recent = state.snapshot?.txs?.take(3) ?: emptyList()
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            // Cards hold real prose: content must default to ink, not the
+            // muted onSurfaceVariant this container would otherwise imply.
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
                         shape = RoundedCornerShape(16.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {

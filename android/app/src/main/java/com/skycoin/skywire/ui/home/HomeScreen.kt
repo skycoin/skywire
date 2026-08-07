@@ -25,15 +25,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -59,10 +58,13 @@ import com.skycoin.skywire.R
 import com.skycoin.skywire.api.VisorSummary
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.ui.components.InfoRow
+import com.skycoin.skywire.ui.components.PulseRing
 import com.skycoin.skywire.ui.components.SectionCard
 import com.skycoin.skywire.ui.components.formatUptime
 import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.ui.logs.LogSources
+import com.skycoin.skywire.ui.theme.SkyAccents
+import com.skycoin.skywire.ui.theme.SkyButtonGradient
 
 /**
  * Home tab: the big Connect control plus the live visor-info card. Connect
@@ -143,7 +145,7 @@ private fun BatteryPrompt(onAllow: () -> Unit, onDismiss: () -> Unit) {
         )
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onAllow) {
+            FilledTonalButton(onClick = onAllow) {
                 Text(stringResource(R.string.settings_battery_allow))
             }
             TextButton(onClick = onDismiss) {
@@ -157,11 +159,11 @@ private fun BatteryPrompt(onAllow: () -> Unit, onDismiss: () -> Unit) {
 private fun StatusLine(state: HomeUiState) {
     val core = state.coreState
     val (label, color) = when {
-        state.connected -> stringResource(R.string.state_connected) to Color(0xFF16A34A)
+        state.connected -> stringResource(R.string.state_connected) to SkyAccents.success
         core is CoreState.Starting || core is CoreState.Running ->
-            stringResource(R.string.state_starting) to Color(0xFFF59E0B)
+            stringResource(R.string.state_starting) to SkyAccents.warning
         core is CoreState.Restarting ->
-            stringResource(R.string.state_restarting, core.nextAttempt) to Color(0xFFF59E0B)
+            stringResource(R.string.state_restarting, core.nextAttempt) to SkyAccents.warning
         core is CoreState.Stopping ->
             stringResource(R.string.state_stopping) to MaterialTheme.colorScheme.onSurfaceVariant
         core is CoreState.Failed ->
@@ -194,46 +196,70 @@ private fun ConnectButton(
     val busy = core is CoreState.Starting || core is CoreState.Stopping
     val showDisconnect = core is CoreState.Running || core is CoreState.Restarting
 
-    Button(
-        onClick = { if (showDisconnect) onDisconnect() else onConnect() },
-        enabled = !busy,
-        shape = CircleShape,
-        colors = if (showDisconnect) {
-            ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-        } else {
-            ButtonDefaults.buttonColors()
-        },
-        modifier = Modifier.size(180.dp),
-    ) {
-        when {
-            busy -> CircularProgressIndicator(
-                modifier = Modifier.size(44.dp),
-                color = MaterialTheme.colorScheme.primary,
-                strokeWidth = 4.dp,
-            )
-            showDisconnect && !state.connected -> Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+    // Idle: the brand gradient asking to be pressed. Running: a quiet tonal
+    // disc — stopping should never look like the loud action — with the
+    // pulse breathing behind it once the network is really there.
+    Box(contentAlignment = Alignment.Center) {
+        if (state.connected) {
+            PulseRing(size = 180.dp, color = MaterialTheme.colorScheme.primary)
+        }
+        Surface(
+            onClick = { if (showDisconnect) onDisconnect() else onConnect() },
+            enabled = !busy,
+            shape = CircleShape,
+            color = if (showDisconnect) {
+                MaterialTheme.colorScheme.secondaryContainer
+            } else {
+                Color.Transparent
+            },
+            shadowElevation = if (showDisconnect) 0.dp else 10.dp,
+            modifier = Modifier.size(180.dp),
+        ) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = if (showDisconnect) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .fillMaxSize()
+                        .background(SkyButtonGradient)
+                },
             ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(28.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp,
-                )
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    stringResource(R.string.disconnect),
-                    style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Center,
-                )
+                val content = if (showDisconnect) {
+                    MaterialTheme.colorScheme.onSecondaryContainer
+                } else {
+                    Color.White
+                }
+                when {
+                    busy -> CircularProgressIndicator(
+                        modifier = Modifier.size(44.dp),
+                        color = content,
+                        strokeWidth = 4.dp,
+                    )
+                    showDisconnect && !state.connected -> Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp,
+                        )
+                        Spacer(Modifier.height(10.dp))
+                        Text(
+                            stringResource(R.string.disconnect),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = content,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    else -> Text(
+                        stringResource(if (showDisconnect) R.string.disconnect else R.string.connect),
+                        style = MaterialTheme.typography.titleLarge,
+                        color = content,
+                        textAlign = TextAlign.Center,
+                    )
+                }
             }
-            else -> Text(
-                stringResource(if (showDisconnect) R.string.disconnect else R.string.connect),
-                style = MaterialTheme.typography.titleLarge,
-                textAlign = TextAlign.Center,
-            )
         }
     }
 }
@@ -250,7 +276,7 @@ private fun StatusCaption(state: HomeUiState, onOpenLogs: (String) -> Unit) {
                 color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center,
             )
-            TextButton(onClick = { onOpenLogs(LogSources.PROCESS) }) {
+            FilledTonalButton(onClick = { onOpenLogs(LogSources.PROCESS) }) {
                 Text(stringResource(R.string.view_logs))
             }
         }
@@ -271,7 +297,7 @@ private fun StatusCaption(state: HomeUiState, onOpenLogs: (String) -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
-            TextButton(onClick = { onOpenLogs(LogSources.PROCESS) }) {
+            FilledTonalButton(onClick = { onOpenLogs(LogSources.PROCESS) }) {
                 Text(stringResource(R.string.view_logs))
             }
         }
@@ -300,6 +326,7 @@ private fun VisorInfoCard(
     Card(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -313,7 +340,7 @@ private fun VisorInfoCard(
                     stringResource(R.string.visor_info_title),
                     style = MaterialTheme.typography.titleMedium,
                 )
-                TextButton(onClick = { onOpenLogs(LogSources.CORE) }) {
+                FilledTonalButton(onClick = { onOpenLogs(LogSources.CORE) }) {
                     Text(stringResource(R.string.view_logs))
                 }
             }
@@ -420,7 +447,7 @@ private fun VisorInfoCard(
                             label = entry.name,
                             value = entry.status.ifEmpty { entry.error.ifEmpty { "?" } },
                             valueColor = if (entry.status.equals("healthy", ignoreCase = true)) {
-                                Color(0xFF16A34A)
+                                SkyAccents.success
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },

@@ -28,6 +28,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -572,10 +573,10 @@ private fun VisorCard(
             horizontalArrangement = Arrangement.End,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            TextButton(onClick = onOpenLogs, enabled = visor.online) {
+            FilledTonalButton(onClick = onOpenLogs, enabled = visor.online) {
                 Text(stringResource(R.string.logs_title))
             }
-            TextButton(onClick = onRestart, enabled = visor.online && !restarting) {
+            FilledTonalButton(onClick = onRestart, enabled = visor.online && !restarting) {
                 Text(stringResource(R.string.fleet_restart))
             }
         }

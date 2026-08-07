@@ -26,7 +26,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -340,10 +340,10 @@ private fun IdentityCard(
             }
         } else {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onReplace) {
+                FilledTonalButton(onClick = onReplace) {
                     Text(stringResource(R.string.settings_replace_sk))
                 }
-                OutlinedButton(onClick = onReset, enabled = state.hasIdentity) {
+                FilledTonalButton(onClick = onReset, enabled = state.hasIdentity) {
                     Text(stringResource(R.string.settings_new_config))
                 }
             }
@@ -366,7 +366,7 @@ private fun ConfigCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(12.dp))
-        OutlinedButton(onClick = onExport, enabled = state.hasIdentity && !state.busy) {
+        FilledTonalButton(onClick = onExport, enabled = state.hasIdentity && !state.busy) {
             Text(stringResource(R.string.settings_export))
         }
 
@@ -549,7 +549,7 @@ private fun BatteryCard(
         if (!state.batteryExempt) {
             Spacer(Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onGrant) {
+                FilledTonalButton(onClick = onGrant) {
                     Text(stringResource(R.string.settings_battery_allow))
                 }
                 if (!state.batteryPromptDismissed) {

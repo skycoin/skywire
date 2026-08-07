@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">#0072FF</color>
+    <color name="ic_launcher_background">#0F7BF4</color>
+    <!-- Window/splash backgrounds; kept in step with the Compose palette in
+         ui/theme/Theme.kt so the first frame lands on the color the window
+         already shows. Dark is the redesign's navy, not black. -->
+    <color name="window_background_light">#FFFFFF</color>
+    <color name="window_background_dark">#0A101C</color>
 </resources>

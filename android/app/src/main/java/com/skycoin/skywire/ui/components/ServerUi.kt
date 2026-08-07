@@ -1,5 +1,6 @@
 package com.skycoin.skywire.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.skycoin.skywire.R
 import com.skycoin.skywire.api.ServiceEntry
+import com.skycoin.skywire.ui.theme.SkyAccents
 import kotlinx.serialization.Serializable
 import java.util.Locale
 
@@ -102,14 +104,27 @@ fun formatDuration(seconds: Long): String {
     }
 }
 
-/** Status dot colors shared by the app screens. */
-val CONNECTED_GREEN = Color(0xFF16A34A)
-val PENDING_AMBER = Color(0xFFF59E0B)
+/** Status dot colors shared by the app screens — the theme's accents. */
+val CONNECTED_GREEN = SkyAccents.success
+val PENDING_AMBER = SkyAccents.warning
 
+/**
+ * The app's standard card: the palette's blue-tinted near-white on a
+ * hairline border, generous radius, 20dp inside. On the plain background
+ * the border is what makes it a card — the fill alone is too close to
+ * white to hold an edge.
+ */
 @Composable
 fun SectionCard(content: @Composable ColumnScope.() -> Unit) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            // Cards hold real prose: content must default to ink, not the
+            // muted onSurfaceVariant this container would otherwise imply.
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
+        shape = MaterialTheme.shapes.large,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(20.dp), content = content)
@@ -169,6 +184,7 @@ fun ServerRow(
             } else {
                 MaterialTheme.colorScheme.surfaceVariant
             },
+            contentColor = MaterialTheme.colorScheme.onSurface,
         ),
         modifier = Modifier
             .fillMaxWidth()

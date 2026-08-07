@@ -36,6 +36,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
+import com.skycoin.skywire.ui.theme.SkyAccents
 
 /**
  * The call, full screen — in either direction, on every tab.
@@ -225,5 +226,7 @@ private fun CallButton(
 
 // Answer/decline keep their conventional colours in both themes: on a call
 // screen these two buttons are read by colour before they are read at all.
-private val AnswerGreen = Color(0xFF2E9E4F)
+// The green is the palette's success accent; the red stays its own — the
+// theme's error role shifts between themes and these two must not.
+private val AnswerGreen = SkyAccents.success
 private val DeclineRed = Color(0xFFD93B34)
