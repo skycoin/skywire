@@ -498,3 +498,11 @@ $top-bar-height: 56px;
     }
   }
 }
+
+// Skywire mark used as the ☰ menu button icon.
+.menu-skywire-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  object-fit: contain;
+}

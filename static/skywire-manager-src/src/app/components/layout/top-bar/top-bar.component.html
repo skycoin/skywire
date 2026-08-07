@@ -29,7 +29,9 @@
       [matMenuTriggerFor]="menu"
       class="transparent-button"
       >
-      <mat-icon>menu</mat-icon>
+      <!-- Skywire mark (the HV favicon) as the menu button, replacing the generic
+           hamburger glyph. -->
+      <img src="assets/img/skywire-icon.png" class="menu-skywire-icon" alt="menu">
     </button>
   </div>
 </div>
@@ -238,7 +240,8 @@
             [matMenuTriggerFor]="menu"
             >
             <div class="icon-container">
-              <mat-icon [inline]="true">menu</mat-icon>
+              <!-- Skywire mark (the HV favicon) as the menu button. -->
+              <img src="assets/img/skywire-icon.png" class="menu-skywire-icon" alt="menu">
             </div>
           </button>
         </div>
