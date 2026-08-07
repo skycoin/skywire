@@ -389,6 +389,13 @@ func (h *sseHub) recordEvent(ev chatEvent) {
 		ev.Channel = channelDM
 	}
 
+	// Every chat surface funnels through here — DM, group, pair, files —
+	// so this is the one place an inbound message can be counted toward
+	// the unread estimate no matter which transport carried it.
+	if ev.Dir == "in" {
+		noteInboundForUnread()
+	}
+
 	h.mu.Lock()
 	h.seq++
 	ev.Seq = h.seq
@@ -888,6 +895,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/history", requireAuthFunc(historyHandler))
 	mux.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
+	mux.HandleFunc("/unread", requireAuthFunc(unreadHandler))
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
 	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
@@ -1357,6 +1365,52 @@ func eventsHandler(w http.ResponseWriter, req *http.Request) {
 			chatLog.Debug("events connection was closed.")
 			return
 		}
+	}
+}
+
+// The unread estimate behind the host app's hub badge. The browser UI owns
+// the real per-conversation numbers — its seen counters live in the page's
+// localStorage, which no server can read — so the arrangement is: the UI
+// POSTs its total whenever it changes, and between reports (including the
+// whole time no UI is attached) every inbound chat message counted by
+// recordEvent bumps the estimate on top of the last report.
+var (
+	unreadMu    sync.Mutex
+	unreadBase  int64 // what the UI last said it was showing
+	unreadSince int64 // inbound messages since that report
+)
+
+func noteInboundForUnread() {
+	unreadMu.Lock()
+	unreadSince++
+	unreadMu.Unlock()
+}
+
+// unreadHandler serves the estimate (GET → {"unread":N}) and takes the UI's
+// authoritative total (POST {"unread":N}), which resets the since-counter.
+func unreadHandler(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodGet:
+		unreadMu.Lock()
+		n := unreadBase + unreadSince
+		unreadMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]int64{"unread": n}) //nolint:errcheck,gosec
+	case http.MethodPost:
+		var body struct {
+			Unread int64 `json:"unread"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.Unread < 0 {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		unreadMu.Lock()
+		unreadBase = body.Unread
+		unreadSince = 0
+		unreadMu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 

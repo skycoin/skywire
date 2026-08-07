@@ -1045,6 +1045,17 @@
     .msg-menu button.danger { color: var(--accent-red); }
     .msg-menu button.danger:hover { background: var(--badtint); }
 
+    /* The live byte counter under a sending file bubble. `done` is the
+       sent state: the full reading holds for a beat (see uploadFadeMs),
+       fades, and the element is removed. */
+    .upload-progress {
+      font-size: 12px;
+      color: var(--fg2);
+      margin-top: 3px;
+      transition: opacity .8s ease;
+    }
+    .upload-progress.done { opacity: 0; }
+
     .date-divider {
       display: flex;
       align-items: center;
@@ -5006,9 +5017,12 @@
           return;
         }
         bar.className = 'link-bar';
+        // "with", not "to": the route comes up between the two visors, and
+        // wording it as a one-way dial made the other side sound like a
+        // server being reached rather than a peer meeting us halfway.
         bar.innerHTML =
           `<span class="link-spin"></span>` +
-          `<span class="link-bar-text">Connecting to <b>${who}</b> over Skywire…${heldNote}</span>`;
+          `<span class="link-bar-text">Establishing connection with <b>${who}</b> over Skywire…${heldNote}</span>`;
       }
 
       // _network is the composer's network choice, defaulting to skynet when
@@ -5125,35 +5139,44 @@
         this._fileDest(form, key, isGroup);
         form.append('file', message._file);
 
-        fetch('/send-file', { method: 'POST', body: form })
-          .then(res => {
-            if (!res.ok) {
-              message.file.status = 'failed';
-              this._patchStatusTick(message);
-              const what = note ? 'Could not save that file' : 'File send failed';
-              res.text().then(t => this.showToast(`${what}: ${t}`, 'error'));
-              return;
-            }
-            message.file.status = note ? 'stored' : 'sent';
-            this._patchStatusTick(message);
-            this.showToast(note ? 'Saved.' : 'File sent.');
-            res.json().then(j => {
-              if (j && j.id) message.file.id = j.id;
-              // Same re-point as the first attempt: the bubble is showing an
-              // object URL, which dies with the page, and the kept copy is
-              // what makes it come back.
-              if (j && j.file_url && !this.isImageFile(message.file)) {
-                message.file.url = j.file_url;
-                message.file.local = false;
-              }
-              if (!isGroup) this.saveChat(key);
-            }).catch(() => { if (!isGroup) this.saveChat(key); });
-          })
-          .catch(e => {
+        // Same XHR upload as the first attempt, for the same live counter.
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/send-file');
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) this._uploadProgress(message, e.loaded, e.total);
+        };
+        xhr.onload = () => {
+          if (xhr.status < 200 || xhr.status >= 300) {
+            this._uploadProgress(message, null);
             message.file.status = 'failed';
             this._patchStatusTick(message);
-            this.showToast(e.message, 'error');
-          });
+            const what = note ? 'Could not save that file' : 'File send failed';
+            this.showToast(`${what}: ${xhr.responseText}`, 'error');
+            return;
+          }
+          this._uploadProgress(message, message._file.size, message._file.size, { fade: true });
+          message.file.status = note ? 'stored' : 'sent';
+          this._patchStatusTick(message);
+          this.showToast(note ? 'Saved.' : 'File sent.');
+          let j = null;
+          try { j = JSON.parse(xhr.responseText); } catch (e) { /* non-JSON reply */ }
+          if (j && j.id) message.file.id = j.id;
+          // Same re-point as the first attempt: the bubble is showing an
+          // object URL, which dies with the page, and the kept copy is
+          // what makes it come back.
+          if (j && j.file_url && !this.isImageFile(message.file)) {
+            message.file.url = j.file_url;
+            message.file.local = false;
+          }
+          if (!isGroup) this.saveChat(key);
+        };
+        xhr.onerror = () => {
+          this._uploadProgress(message, null);
+          message.file.status = 'failed';
+          this._patchStatusTick(message);
+          this.showToast('File send failed: network error', 'error');
+        };
+        xhr.send(form);
       }
 
       // ---- Replies ---------------------------------------------------
@@ -5277,6 +5300,8 @@
         const row = btn.closest('.message-row');
         if (!row) return;
         const isOwn = row.dataset.sender === 'me' || (this.myPK && row.dataset.sender === this.myPK);
+        const msg = (this.messages[this.activeKey()] || [])
+          .find(m => String(m.mid) === String(row.dataset.mid));
         // "Delete for everyone" is offered for our own messages: group messages
         // that carry a ts_nano (the group tombstone key), and DM messages that
         // carry a wire id (the chat-delete target). A plain DM with no wire id
@@ -5286,8 +5311,7 @@
           if (this.group) {
             canDeleteAll = !!row.dataset.tsnano;
           } else {
-            const om = (this.messages[this.activeKey()] || []).find(m => String(m.mid) === String(row.dataset.mid));
-            canDeleteAll = !!(om && om.wireId);
+            canDeleteAll = !!(msg && msg.wireId);
           }
         }
         const menu = document.createElement('div');
@@ -5295,7 +5319,26 @@
         menu.id = 'msgMenu';
         menu.dataset.mid = row.dataset.mid || '';
         menu.dataset.tsnano = row.dataset.tsnano || '';
-        let html = `<button onclick="app.forwardMessage()">Forward</button>`;
+        let html = '';
+        // A file message's verbs lead the menu — the bubble itself no longer
+        // carries them. Download is offered for the served copy (same rule
+        // the old under-bubble link used); re-request asks the sender to
+        // re-send bytes this device does not hold.
+        const file = msg && msg.file;
+        if (file) {
+          menu.dataset.fileName = file.name || 'file';
+          const served = file.url && !file.local && String(file.url).indexOf('/files/') === 0;
+          if (served) {
+            menu.dataset.fileUrl = file.url;
+            html += `<button onclick="app.downloadFromMenu()">Download</button>`;
+          }
+          if (file.from && !file.local && file.id) {
+            menu.dataset.fileFrom = file.from;
+            menu.dataset.fileId = file.id;
+            html += `<button onclick="app.requestFileFromMenu()">Re-request file</button>`;
+          }
+        }
+        html += `<button onclick="app.forwardMessage()">Forward</button>`;
         // Not offered inside the notes thread itself, where it would copy a
         // note onto the end of the list it is already in.
         if (!this.isSaved()) {
@@ -5316,6 +5359,34 @@
         const m = document.getElementById('msgMenu');
         if (m) m.remove();
         this._syncMenuScrim();
+      }
+
+      // downloadFromMenu saves the file behind the menu's message: a real
+      // anchor click, so the same navigation path the old under-bubble link
+      // took (which is what the Android host converts into a download).
+      downloadFromMenu() {
+        const menu = document.getElementById('msgMenu');
+        if (!menu) return;
+        const url = menu.dataset.fileUrl;
+        const name = menu.dataset.fileName || 'file';
+        this.closeMsgMenu();
+        if (!url) return;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+
+      requestFileFromMenu() {
+        const menu = document.getElementById('msgMenu');
+        if (!menu) return;
+        const from = menu.dataset.fileFrom;
+        const fid = menu.dataset.fileId;
+        const fname = menu.dataset.fileName || '';
+        this.closeMsgMenu();
+        this._requestFile(from, fid, fname);
       }
 
       // deleteForMe removes the message from this device only. DM threads are
@@ -5474,19 +5545,17 @@
 
       // renderFile builds the inner HTML of a media/file bubble: an inline
       // image when the file is an image with a source URL, otherwise a
-      // compact file card with a download link (received files) to
-      // /files/<name>. Every peer-supplied value is escaped.
+      // compact file card. Every peer-supplied value is escaped.
+      //
+      // Download and re-request are NOT rendered here: they moved into the
+      // per-message menu (openMsgMenu), where every other verb already
+      // lives. The caption keeps what the file IS — name and size — and the
+      // menu keeps what can be DONE with it.
       renderFile(file) {
         const name = this.escapeHtml(file.name || 'file');
         const nameAttr = this.escapeAttr(file.name || 'file');
         const urlAttr = file.url ? this.escapeAttr(file.url) : '';
         const sizeStr = this.humanSize(file.size || 0);
-        // Re-request link on received files (backfill): ask the sender to
-        // re-send if the local copy is gone (fresh device / pruned). data-* are
-        // DOM-read by requestFile, so no interpolation/injection.
-        const reqLink = (file.from && !file.local && file.id)
-          ? `<a class="media-dl file-req" data-from="${this.escapeAttr(file.from)}" data-fid="${this.escapeAttr(file.id)}" data-fname="${nameAttr}" onclick="app.requestFile(this)">re-request</a>`
-          : '';
         if (this.isImageFile(file) && urlAttr) {
           // src is a lightweight server-side thumbnail (received files);
           // data-full is the full-resolution image the lightbox opens. If the
@@ -5501,22 +5570,18 @@
           return `<img class="media-image" src="${thumb}" data-full="${full}" alt="${nameAttr}"
               loading="lazy" onclick="app.openLightbox(this.dataset.full)"
               onerror="this.onerror=null;this.src=this.dataset.full" />
-            ${this._mediaCaption(name, nameAttr, sizeStr, [reqLink])}`;
+            ${this._mediaCaption(name, nameAttr, sizeStr, [])}`;
         }
         if ((this.isVideoFile(file) || this.isAudioFile(file)) && urlAttr) {
           // Native inline player (browser handles its own preview/controls;
           // /files/ supports Range so seeking works). No poster for video —
-          // that would need server-side frame extraction (ffmpeg). A download
-          // link is offered on received media so it can always be saved.
-          const dl = (!file.local && file.url && file.url.indexOf('/files/') === 0)
-            ? `<a class="media-dl" href="${urlAttr}" download="${nameAttr}">download</a>` : '';
+          // that would need server-side frame extraction (ffmpeg).
           // A clip recorded in the composer is a message, not an attachment:
           // it gets its own player, and its filename (a bare timestamp) is not
           // worth showing.
-          // The speed pill leads the actions row on every player: it is the
-          // one action you take while the clip is running, where download and
-          // request are things you do to a file.
-          const acts = this._mediaActs([this._speedPill(), dl, reqLink]);
+          // The speed pill is the one action that belongs beside a player —
+          // you use it while the clip is running.
+          const acts = this._mediaActs([this._speedPill()]);
           if (this.isVoiceMessage(file)) return this._renderVoicePlayer(urlAttr, sizeStr, acts);
           if (this.isVideoMessage(file)) return this._renderRoundPlayer(urlAttr, sizeStr, acts);
           const isVideo = this.isVideoFile(file);
@@ -5526,10 +5591,12 @@
           // for this clip; an attached file is known by its name.
           return `<${tag} class="${cls}" src="${urlAttr}" controls preload="metadata"
               data-ms-title="${nameAttr}"></${tag}>
-            ${this._mediaCaption(name, nameAttr, sizeStr, [this._speedPill(), dl, reqLink])}`;
+            ${this._mediaCaption(name, nameAttr, sizeStr, [this._speedPill()])}`;
         }
         // No bytes to play (never received / pruned): fall through to the file
-        // card, but still name a recorded clip for what it is.
+        // card, but still name a recorded clip for what it is. The card keeps
+        // its one-tap download icon — a bare card with every action behind
+        // the menu would have no affordance at all.
         const cardName = this.isVoiceMessage(file) ? 'Voice message'
           : this.isVideoMessage(file) ? 'Video message' : name;
         const sub = file.status === 'failed' ? 'transfer failed' : sizeStr;
@@ -5541,7 +5608,6 @@
             <div class="file-meta">
               <div class="file-name" title="${nameAttr}">${cardName}</div>
               <div class="file-sub">${this.escapeHtml(sub)}</div>
-              ${this._mediaActs([reqLink])}
             </div>
             ${dl}
           </div>`;
@@ -6913,6 +6979,18 @@
         });
 
         document.title = totalUnread > 0 ? `(${totalUnread}) Skychat` : 'Skychat';
+
+        // The host app's hub card needs this number when no page is open to
+        // compute it, so every change is reported and the server carries it
+        // forward from there — see /unread on the Go side.
+        if (this._postedUnread !== totalUnread) {
+          this._postedUnread = totalUnread;
+          fetch('/unread', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ unread: totalUnread })
+          }).catch(() => {});
+        }
       }
 
       sendMessage(el) {
@@ -7921,57 +7999,102 @@
           });
         }
 
-        fetch('/send-file', { method: 'POST', body: form })
-          .then(res => {
-            if (!res.ok) {
-              message.file.status = 'failed';
-              this._patchStatusTick(message);
-              const what = note ? 'Could not save that file' : 'File send failed';
-              res.text().then(t => this.showToast(`${what}: ${t}`, 'error'));
-              if (!isGroup) this.saveChat(destination);
-              return;
-            }
-            // 'stored' is a note's whole lifecycle: kept here, offered to
-            // nobody, so there is no delivery to confirm afterwards.
-            message.file.status = note ? 'stored' : 'sent';
-            this._patchStatusTick(message);
-            this.showToast(note
-              ? (opts.savedToast || 'Saved.')
-              : (opts.sentToast || 'File sent.'));
-            // The response carries the server-assigned file id so a re-request
-            // can locate the bytes and the id matches the feed reference other
-            // members see. It also carries file_url — the copy the visor kept
-            // of what we just sent.
-            res.json().then(j => {
-              if (j && j.id) message.file.id = j.id;
-              // Re-point the bubble at that served copy: what it is showing now
-              // is an object URL, which dies with the page, so without this a
-              // clip we recorded comes back as a bare file card after a reload.
-              // Images are left alone — they persist as their own thumbnail
-              // data URL (above), which survives even if the copy is pruned.
-              if (j && j.file_url && !this.isImageFile(message.file)) {
-                message.file.url = j.file_url;
-                message.file.local = false; // a served URL persists — don't strip on save
-              }
-              // Same race as a text bubble: the peer's read receipt for this
-              // transfer can land before we learn its id.
-              this._claimOrphanStatus(destination, message, message.file.id);
-              if (!isGroup) this.saveChat(destination);
-            }).catch(() => { if (!isGroup) this.saveChat(destination); });
-          })
-          .catch(e => {
+        // XHR rather than fetch for the one thing fetch cannot do: upload
+        // progress events. The bubble reads "2.1 MB / 10 MB" and fills as
+        // the frames actually leave, which for a big clip on a slow uplink
+        // is the difference between "sending" and "stuck".
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/send-file');
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) this._uploadProgress(message, e.loaded, e.total);
+        };
+        xhr.onload = () => {
+          if (xhr.status < 200 || xhr.status >= 300) {
+            this._uploadProgress(message, null);
             message.file.status = 'failed';
             this._patchStatusTick(message);
-            this.showToast(e.message, 'error');
-          });
+            const what = note ? 'Could not save that file' : 'File send failed';
+            this.showToast(`${what}: ${xhr.responseText}`, 'error');
+            if (!isGroup) this.saveChat(destination);
+            return;
+          }
+          // The full total, then the fade — "sent" deserves one whole frame.
+          this._uploadProgress(message, file.size, file.size, { fade: true });
+          // 'stored' is a note's whole lifecycle: kept here, offered to
+          // nobody, so there is no delivery to confirm afterwards.
+          message.file.status = note ? 'stored' : 'sent';
+          this._patchStatusTick(message);
+          this.showToast(note
+            ? (opts.savedToast || 'Saved.')
+            : (opts.sentToast || 'File sent.'));
+          // The response carries the server-assigned file id so a re-request
+          // can locate the bytes and the id matches the feed reference other
+          // members see. It also carries file_url — the copy the visor kept
+          // of what we just sent.
+          let j = null;
+          try { j = JSON.parse(xhr.responseText); } catch (e) { /* non-JSON reply */ }
+          if (j && j.id) message.file.id = j.id;
+          // Re-point the bubble at that served copy: what it is showing now
+          // is an object URL, which dies with the page, so without this a
+          // clip we recorded comes back as a bare file card after a reload.
+          // Images are left alone — they persist as their own thumbnail
+          // data URL (above), which survives even if the copy is pruned.
+          if (j && j.file_url && !this.isImageFile(message.file)) {
+            message.file.url = j.file_url;
+            message.file.local = false; // a served URL persists — don't strip on save
+          }
+          // Same race as a text bubble: the peer's read receipt for this
+          // transfer can land before we learn its id.
+          this._claimOrphanStatus(destination, message, message.file.id);
+          if (!isGroup) this.saveChat(destination);
+        };
+        xhr.onerror = () => {
+          this._uploadProgress(message, null);
+          message.file.status = 'failed';
+          this._patchStatusTick(message);
+          this.showToast('File send failed: network error', 'error');
+        };
+        xhr.send(form);
       }
 
+      // _uploadProgress paints "2.1 MB / 10 MB" under a sending bubble,
+      // creating the element on the first event (and re-creating it if a
+      // re-render swept it away). loaded == null removes it — a failed send
+      // shows its failure through the status tick, not a stale counter.
+      // {fade: true} lets the final full reading linger, then dissolve.
+      _uploadProgress(message, loaded, total, fx = {}) {
+        if (message.mid == null) return;
+        const row = document.querySelector(`.message-row[data-mid="${message.mid}"]`);
+        if (!row) return;
+        let el = row.querySelector('.upload-progress');
+        if (loaded == null) {
+          if (el) el.remove();
+          return;
+        }
+        if (!el) {
+          el = document.createElement('div');
+          el.className = 'upload-progress';
+          (row.querySelector('.message-bubble') || row).appendChild(el);
+        }
+        el.textContent = `${this.humanSize(loaded)} / ${this.humanSize(total)}`;
+        if (fx.fade) {
+          el.classList.add('done');
+          setTimeout(() => el.remove(), Chat.uploadFadeMs);
+        }
+      }
+
+      /** How long the final "10 MB / 10 MB" lingers before dissolving. */
+      static get uploadFadeMs() { return 1400; }
+
       // requestFile asks a file's original sender to re-send it (backfill) —
-      // e.g. after the local copy was pruned or on a fresh device. Params come
-      // from the message's file descriptor via data-* attributes (DOM-read, so
-      // no interpolation/injection).
+      // e.g. after the local copy was pruned or on a fresh device. The
+      // element form survives for any markup still carrying data-*; the menu
+      // path calls _requestFile directly.
       requestFile(el) {
-        const from = el.dataset.from, fid = el.dataset.fid, fname = el.dataset.fname || '';
+        this._requestFile(el.dataset.from, el.dataset.fid, el.dataset.fname || '');
+      }
+
+      _requestFile(from, fid, fname) {
         if (!from || !fid) return;
         fetch('/request-file', {
           method: 'POST',
@@ -9824,6 +9947,11 @@
       // the next page arrives before the reader gets to the top of this one.
       static get groupHistoryChunk() { return 50; }
 
+      // The owner's wire-level liveness probe. The server side filters these
+      // everywhere it can, but a store or ring written by an older build can
+      // still serve them — and a probe rendered as a message reads as spam.
+      static get heartbeatMarker() { return '__skychat_group_heartbeat__'; }
+
       // _histState returns the paging state for a group, creating it on first
       // use. cursor is the ts_nano of the OLDEST row we hold — the exclusive
       // bound for the next page. done means the server has told us there is
@@ -9860,6 +9988,7 @@
           // Skip messages this device deleted-for-me (groups reload from
           // history, so the local hide lives in hiddenGroup, not the cache).
           if (this._isGroupHidden(id, tsNano != null ? String(tsNano) : '')) return;
+          if (m.text === Chat.heartbeatMarker) return; // persisted by an older build
           const sender = String(m.sender_pk || '').toLowerCase();
           const senderIsMe = sender === this.myPK;
           // A file-reference row (file_id set) becomes a media bubble.
@@ -10026,6 +10155,7 @@
       handleGroupSSE(data) {
         const gid = data.group_id;
         if (!gid) return;
+        if (data.message === Chat.heartbeatMarker) return; // liveness probe, not chat
         const sender = String(data.sender || '').toLowerCase();
         const tsNano = data.ts_nano != null ? data.ts_nano : null;
         if (this.myPK && sender === this.myPK) {

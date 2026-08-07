@@ -192,9 +192,55 @@ internal object DexWebView {
           var MAX_VISIBLE = 4;
           var open = {};
 
+          /* Two ways to read every section: the labelled cards, or a compact
+             list whose rows hold only the primary pair until tapped open.
+             One choice for the whole page, kept across visits — a reader who
+             prefers the list prefers it on every tab. */
+          var mode = 'card';
+          try { mode = localStorage.getItem('skywire-dex-view') || 'card'; } catch (e) {}
+
+          function setMode(m) {
+            mode = m === 'list' ? 'list' : 'card';
+            try { localStorage.setItem('skywire-dex-view', mode); } catch (e) {}
+            document.documentElement.classList.toggle('sky-list', mode === 'list');
+            syncViewbar();
+          }
+
+          function syncViewbar() {
+            var btns = document.querySelectorAll('.sky-viewbar button');
+            for (var i = 0; i < btns.length; i++) {
+              btns[i].classList.toggle('on', btns[i].dataset.view === mode);
+            }
+          }
+
+          /* The switch rides at the top of .content, which React rebuilds on
+             every tab change — so it is (re)inserted from enhance(), the same
+             way the data-labels are re-applied. */
+          function ensureViewbar() {
+            var content = document.querySelector('.content');
+            if (!content || content.querySelector('.sky-viewbar')) return;
+            var bar = document.createElement('div');
+            bar.className = 'sky-viewbar';
+            bar.innerHTML =
+              '<button type="button" data-view="card">Cards</button>' +
+              '<button type="button" data-view="list">List</button>';
+            bar.addEventListener('click', function (e) {
+              var b = e.target.closest('button[data-view]');
+              if (b) setMode(b.dataset.view);
+            });
+            content.insertBefore(bar, content.firstChild);
+            syncViewbar();
+          }
+
           function keyOf(tr) {
             var first = tr.cells[0];
             return (first ? first.textContent.trim() : '') + '#' + tr.rowIndex;
+          }
+
+          /* A product card has no row index; its own text identifies it well
+             enough to keep it open across the page's 8-second re-renders. */
+          function productKey(card) {
+            return 'p#' + card.textContent.trim().slice(0, 80);
           }
 
           function visibleColumns(heads) {
@@ -240,6 +286,7 @@ internal object DexWebView {
           }
 
           function enhance() {
+            ensureViewbar();
             var tables = document.querySelectorAll('table.table');
             for (var t = 0; t < tables.length; t++) {
               var table = tables[t];
@@ -248,6 +295,10 @@ internal object DexWebView {
               var heads = [];
               for (var h = 0; h < ths.length; h++) heads.push(ths[h].textContent.trim());
               var keep = visibleColumns(heads);
+              // The list's closed row shows only the first two kept columns —
+              // the pair that identifies the row (Amount and Price wherever
+              // the table has them).
+              var primary = keep.slice(0, 2);
 
               var rows = table.querySelectorAll('tbody tr');
               for (var r = 0; r < rows.length; r++) {
@@ -274,6 +325,7 @@ internal object DexWebView {
                   td.setAttribute('data-label', chain ? 'Status' : head);
                   td.classList.toggle('sky-actions', action && !!control);
                   td.classList.toggle('sky-detail', !action && keep.indexOf(c) < 0);
+                  td.classList.toggle('sky-primary', primary.indexOf(c) >= 0);
                   // A hash or an address needs the full width; a number, a
                   // single badge and a button do not.
                   td.classList.toggle(
@@ -284,6 +336,13 @@ internal object DexWebView {
                 }
               }
             }
+            // The market's product grid gets the same two readings: its cards
+            // are already cards, and the list rows open on tap for the seller
+            // and the Buy button.
+            var cards = document.querySelectorAll('.card.product-card');
+            for (var p = 0; p < cards.length; p++) {
+              cards[p].classList.toggle('sky-open', open[productKey(cards[p])] === true);
+            }
           }
 
           document.addEventListener('click', function (e) {
@@ -291,10 +350,20 @@ internal object DexWebView {
             // A control inside the card is the control, not the card.
             if (e.target.closest('button, a, input, select, label')) return;
             var tr = e.target.closest('tr.sky-card');
-            if (!tr) return;
-            var key = keyOf(tr);
-            open[key] = !open[key];
-            tr.classList.toggle('sky-open', open[key]);
+            if (tr) {
+              var key = keyOf(tr);
+              open[key] = !open[key];
+              tr.classList.toggle('sky-open', open[key]);
+              return;
+            }
+            // Product rows expand only in list mode — the card shows
+            // everything already.
+            var pc = e.target.closest('.card.product-card');
+            if (pc && document.documentElement.classList.contains('sky-list')) {
+              var pk = productKey(pc);
+              open[pk] = !open[pk];
+              pc.classList.toggle('sky-open', open[pk]);
+            }
           });
 
           var queued = false;
@@ -304,6 +373,7 @@ internal object DexWebView {
             requestAnimationFrame(function () { queued = false; enhance(); });
           }).observe(document.body, { childList: true, subtree: true });
 
+          document.documentElement.classList.toggle('sky-list', mode === 'list');
           enhance();
         })();
     """.trimIndent()
@@ -320,7 +390,28 @@ internal object DexWebView {
         /* The native row above this page already says all of this. */
         .app-container > header.header { display: none !important; }
 
+        /* The Cards/List switch only means something where the phone layout
+           below applies; on wider screens it stays out of the way. */
+        .sky-viewbar { display: none; }
+
         @media (max-width: 600px) {
+          /* Cards or a compact list — the reader's choice, page-wide. */
+          .sky-viewbar { display: flex; justify-content: flex-end; margin: 0 0 0.7rem; }
+          .sky-viewbar button {
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--muted);
+            font-size: 0.78rem;
+            padding: 0.3rem 0.85rem;
+            min-height: 34px;
+          }
+          .sky-viewbar button:first-child { border-radius: 8px 0 0 8px; }
+          .sky-viewbar button:last-child { border-radius: 0 8px 8px 0; margin-left: -1px; }
+          .sky-viewbar button.on {
+            background: var(--sky-blue);
+            border-color: var(--sky-blue);
+            color: #fff;
+          }
           .content { padding: 0.9rem 0.85rem 1.5rem; }
           .panel, .card { padding: 0.9rem; margin-bottom: 0.9rem; }
           .content h2 { font-size: 1.2rem; }
@@ -447,6 +538,69 @@ internal object DexWebView {
           /* Long hex breaks rather than pushing the page sideways. */
           .addr-box.addr-sm { max-width: 100%; }
           .qr-modal { max-height: 85vh; }
+
+          /* ---- List mode. Same DOM the card rules build on, read tighter:
+             a row is its primary pair on one line, everything else arrives
+             when the row is opened. */
+          html.sky-list .table tbody tr.sky-card {
+            border: 0;
+            border-bottom: 1px solid var(--border);
+            border-radius: 0;
+            background: transparent;
+            padding: 0.55rem 1.4rem 0.5rem 0.1rem;
+            margin-bottom: 0;
+            position: relative;
+          }
+          html.sky-list .table tbody tr.sky-card:not(.sky-open) > td:not(.sky-primary) {
+            display: none;
+          }
+          html.sky-list .table tbody tr.sky-card:not(.sky-open) > td.sky-primary {
+            display: inline-flex;
+            width: auto;
+            font-size: 1rem;
+            gap: 0.4rem;
+            margin-right: 1.1rem;
+          }
+          /* The chevron replaces the Details footer: the row itself is the
+             tap target either way, and a footer per row defeats a list. */
+          html.sky-list .table tbody tr.sky-card::after {
+            content: '\25BE';
+            position: absolute;
+            right: 0.35rem;
+            top: 0.55rem;
+            border: 0;
+            margin: 0;
+            padding: 0;
+            color: var(--muted);
+          }
+          html.sky-list .table tbody tr.sky-card.sky-open::after { content: '\25B4'; }
+
+          /* The market grid, as the same list: amount and price on the line,
+             seller and Buy behind the tap. */
+          html.sky-list .card-grid { display: block; }
+          html.sky-list .card.product-card {
+            flex-direction: row;
+            flex-wrap: wrap;
+            align-items: baseline;
+            gap: 0.6rem;
+            border: 0;
+            border-bottom: 1px solid var(--border);
+            border-radius: 0;
+            background: transparent;
+            padding: 0.55rem 0.1rem 0.5rem;
+            margin-bottom: 0;
+          }
+          html.sky-list .card.product-card .product-price { color: var(--sky-blue); font-weight: 700; }
+          html.sky-list .card.product-card:not(.sky-open) .product-seller { display: none; }
+          html.sky-list .card.product-card:not(.sky-open) .btn { display: none; }
+          html.sky-list .card.product-card:not(.sky-open)::after {
+            content: '\25BE';
+            margin-left: auto;
+            color: var(--muted);
+          }
+          html.sky-list .card.product-card.sky-open { padding-bottom: 0.75rem; }
+          html.sky-list .card.product-card.sky-open .product-seller { flex-basis: 100%; }
+          html.sky-list .card.product-card.sky-open .btn { flex-basis: 100%; margin-top: 0.2rem; }
         }
     """.trimIndent()
 
