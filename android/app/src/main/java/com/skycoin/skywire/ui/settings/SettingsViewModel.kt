@@ -115,11 +115,12 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
         // The exemption is granted in a system screen, not in this app, so the
         // only reliable moment to re-read it is when the user comes back from
-        // there. Every return to the foreground counts as that moment.
+        // there. That has to be every resume, not every return to the
+        // foreground: the system's own dialog covers the Activity without
+        // stopping it, so a grant made there never changes the foreground
+        // flag and the card would keep offering until the app restarts.
         viewModelScope.launch {
-            AppVisibility.isForeground.collectLatest { visible ->
-                if (visible) refreshBatteryExemption()
-            }
+            AppVisibility.resumes.collectLatest { refreshBatteryExemption() }
         }
         refreshBatteryExemption()
         viewModelScope.launch { loadVersions() }

@@ -49,7 +49,7 @@ class WalletRepository private constructor(private val context: Context) {
         val user = prefs[KEY_FIBER_COINS]?.let {
             runCatching { json.decodeFromString(ListSerializer(CoinSpec.serializer()), it) }.getOrNull()
         } ?: emptyList()
-        // SKY first, user fiber coins in the order added, then the other
+        // SKY first, user Fibercoins in the order added, then the other
         // built-ins, then user tokens in the order added.
         listOf(CoinSpec.SKY) +
             user.filter { it.kind == CoinKind.SKY_FIBER } +
@@ -59,7 +59,7 @@ class WalletRepository private constructor(private val context: Context) {
 
     suspend fun coin(coinId: String): CoinSpec? = coins().first().firstOrNull { it.id == coinId }
 
-    suspend fun addFiberCoin(name: String, ticker: String, nodeUrl: String): CoinSpec {
+    suspend fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String? = null): CoinSpec {
         val url = nodeUrl.trim().removeSuffix("/")
         require(url.toHttpUrlOrNull() != null) {
             "the node address must be a full URL, like http://node.example.com:6420"
@@ -70,6 +70,7 @@ class WalletRepository private constructor(private val context: Context) {
             ticker = ticker.trim().uppercase(),
             kind = CoinKind.SKY_FIBER,
             nodeUrl = url,
+            icon = icon,
         )
         storeUserCoin(spec)
         return spec
@@ -81,7 +82,7 @@ class WalletRepository private constructor(private val context: Context) {
      * decimals must match the contract's own or amounts will be off by
      * powers of ten.
      */
-    suspend fun addErc20Token(name: String, ticker: String, contract: String, decimals: Int): CoinSpec {
+    suspend fun addErc20Token(name: String, ticker: String, contract: String, decimals: Int, icon: String? = null): CoinSpec {
         require(EthCrypto.isValidAddress(contract.trim())) {
             "the contract must be a 0x… address (checksummed or all-lowercase)"
         }
@@ -96,6 +97,7 @@ class WalletRepository private constructor(private val context: Context) {
             contract = contract.trim(),
             tokenDecimals = decimals,
             indexerUrl = CoinSpec.ETH_INDEXER,
+            icon = icon,
         )
         storeUserCoin(spec)
         return spec

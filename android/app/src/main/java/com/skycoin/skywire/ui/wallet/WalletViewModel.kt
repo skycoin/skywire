@@ -1,6 +1,7 @@
 package com.skycoin.skywire.ui.wallet
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.wallet.CoinKind
@@ -14,6 +15,7 @@ import com.skycoin.wallet.FeePresets
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.WalletException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,6 +26,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.IOException
 import java.security.SecureRandom
 
@@ -164,17 +167,29 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // --- coin switching / fiber coins ---
+    // --- coin switching / Fibercoins ---
 
     fun selectCoin(coinId: String) = action {
         repo.setSelectedCoin(coinId)
         mutable.update { it.copy(send = SendState(), receiveIndex = 0) }
     }
 
-    fun addFiberCoin(name: String, ticker: String, nodeUrl: String, onDone: () -> Unit) = action {
+    /**
+     * Copy a picked image into app storage for use as a coin badge and hand
+     * back the stored name. Off the main thread — the source can be a large
+     * photo that needs decoding and cropping.
+     */
+    fun importCoinIcon(uri: Uri, onSaved: (String) -> Unit) = action {
+        val name = withContext(Dispatchers.IO) {
+            importCoinIconFrom(getApplication(), uri)
+        }
+        onSaved(name)
+    }
+
+    fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?, onDone: () -> Unit) = action {
         require(name.isNotBlank()) { "give the coin a name" }
         require(ticker.isNotBlank()) { "give the coin a ticker" }
-        val spec = repo.addFiberCoin(name, ticker, nodeUrl)
+        val spec = repo.addFiberCoin(name, ticker, nodeUrl, icon)
         repo.setSelectedCoin(spec.id)
         onDone()
     }
@@ -184,13 +199,14 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         ticker: String,
         contract: String,
         decimals: String,
+        icon: String?,
         onDone: () -> Unit,
     ) = action {
         require(name.isNotBlank()) { "give the token a name" }
         require(ticker.isNotBlank()) { "give the token a ticker" }
         val parsed = decimals.trim().toIntOrNull()
         requireNotNull(parsed) { "decimals must be a number — 6 for USDT-like tokens, 18 for most" }
-        val spec = repo.addErc20Token(name, ticker, contract, parsed)
+        val spec = repo.addErc20Token(name, ticker, contract, parsed, icon)
         repo.setSelectedCoin(spec.id)
         onDone()
     }

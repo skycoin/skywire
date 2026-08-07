@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
@@ -44,42 +42,32 @@ fun TransportPreferenceCard(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            // Cards hold real prose: content must default to ink, not the
-            // muted onSurfaceVariant this container would otherwise imply.
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(20.dp)) {
+    SectionCard {
+        Text(
+            stringResource(R.string.transport_title),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(6.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Text(
-                stringResource(R.string.transport_title),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                transportName(primary),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
             )
-            Spacer(Modifier.height(6.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    transportName(primary),
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.weight(1f),
-                )
-                FilledTonalButton(onClick = onClick, enabled = enabled) {
-                    Text(stringResource(R.string.transport_change))
-                }
+            FilledTonalButton(onClick = onClick, enabled = enabled) {
+                Text(stringResource(R.string.transport_change))
             }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                stringResource(R.string.transport_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.transport_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

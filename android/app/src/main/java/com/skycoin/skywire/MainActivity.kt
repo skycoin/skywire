@@ -85,6 +85,11 @@ class MainActivity : FragmentActivity() {
         AppLock.onForeground()
     }
 
+    override fun onResume() {
+        super.onResume()
+        AppVisibility.onResumed()
+    }
+
     override fun onStop() {
         AppVisibility.set(false)
         AppLock.onBackground()

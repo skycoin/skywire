@@ -542,7 +542,7 @@ private fun ReviewSheet(
             )
             Text(
                 // The network is the coin's own chain — Skycoin, this fiber
-                // coin's, or Bitcoin. Skycoin is not a fiber coin.
+                // coin's, or Bitcoin. Skycoin is not a Fibercoin.
                 stringResource(
                     R.string.wallet_review_dest,
                     shortAddress(plan.toAddress),

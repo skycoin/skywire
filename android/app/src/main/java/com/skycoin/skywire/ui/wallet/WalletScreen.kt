@@ -1,5 +1,7 @@
 package com.skycoin.skywire.ui.wallet
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -51,6 +53,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -305,7 +311,7 @@ private fun CoinChip(coin: CoinSpec, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        CoinBadge(coin.ticker, 30)
+        CoinBadge(coin, 30)
         Text(coin.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
         Icon(
             Icons.Outlined.KeyboardArrowDown,
@@ -316,9 +322,42 @@ private fun CoinChip(coin: CoinSpec, onClick: () -> Unit) {
     }
 }
 
-/** Small circular ticker badge — the coin's "logo" everywhere in the tab. */
+/**
+ * Small circular badge — the coin's logo everywhere in the tab: bundled
+ * artwork for the built-ins, the owner's picked symbol for user-added
+ * coins, ticker letters when there is neither.
+ */
 @Composable
-fun CoinBadge(ticker: String, sizeDp: Int) {
+fun CoinBadge(coin: CoinSpec, sizeDp: Int) {
+    val logo = builtInCoinLogo(coin.id)
+    if (logo != null) {
+        Image(
+            painter = painterResource(logo),
+            contentDescription = null,
+            modifier = Modifier
+                .size(sizeDp.dp)
+                .clip(CircleShape),
+        )
+        return
+    }
+    val context = LocalContext.current
+    val custom = remember(coin.icon) {
+        coin.icon?.let { name ->
+            val file = coinIconFile(context, name)
+            if (file.exists()) BitmapFactory.decodeFile(file.path)?.asImageBitmap() else null
+        }
+    }
+    if (custom != null) {
+        Image(
+            bitmap = custom,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(sizeDp.dp)
+                .clip(CircleShape),
+        )
+        return
+    }
     Box(
         modifier = Modifier
             .size(sizeDp.dp)
@@ -327,7 +366,7 @@ fun CoinBadge(ticker: String, sizeDp: Int) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            ticker.take(4),
+            coin.ticker.take(4),
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary,
@@ -521,7 +560,7 @@ private fun CoinSheet(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(13.dp),
                 ) {
-                    CoinBadge(coin.ticker, 36)
+                    CoinBadge(coin, 36)
                     Column(Modifier.weight(1f)) {
                         Text(coin.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Bold)
                         Text(

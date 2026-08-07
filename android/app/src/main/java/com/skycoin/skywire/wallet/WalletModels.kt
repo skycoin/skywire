@@ -27,6 +27,10 @@ data class CoinSpec(
     val tokenDecimals: Int? = null,
     /** ETH family: etherscan-style history API base (Blockscout, keyless). */
     val indexerUrl: String? = null,
+    /** User-added coins: the badge symbol picked at creation — a key into
+     *  the wallet UI's symbol set. Built-ins carry bundled logos instead;
+     *  null falls back to ticker letters. */
+    val icon: String? = null,
 ) {
     /**
      * Base-unit exponent: droplets 10⁻⁶, satoshis 10⁻⁸ — and for the ETH

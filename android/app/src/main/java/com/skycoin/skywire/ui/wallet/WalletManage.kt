@@ -1,6 +1,13 @@
 package com.skycoin.skywire.ui.wallet
 
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -47,6 +54,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -472,7 +481,7 @@ fun WalletRevealScreen(
 /** What the add screen can add: a fiber chain, or an ERC-20 on Ethereum. */
 private enum class AddCoinKind { FIBER, ERC20 }
 
-/** Add a fiber coin (name + ticker + node URL) or an ERC-20 token
+/** Add a Fibercoin (name + ticker + node URL) or an ERC-20 token
  *  (name + ticker + contract + decimals). */
 @Composable
 fun WalletAddCoinScreen(
@@ -484,6 +493,7 @@ fun WalletAddCoinScreen(
     var kind by remember { mutableStateOf(AddCoinKind.FIBER) }
     var name by remember { mutableStateOf("") }
     var ticker by remember { mutableStateOf("") }
+    var icon by remember { mutableStateOf<String?>(null) }
     var node by remember { mutableStateOf("") }
     var contract by remember { mutableStateOf("") }
     var decimals by remember { mutableStateOf("18") }
@@ -525,6 +535,12 @@ fun WalletAddCoinScreen(
             Spacer(Modifier.height(24.dp))
             LabeledField(stringResource(R.string.wallet_add_coin_name), name, stringResource(R.string.wallet_add_coin_name_hint)) { name = it }
             LabeledField(stringResource(R.string.wallet_add_coin_ticker), ticker, stringResource(R.string.wallet_add_coin_ticker_hint)) { ticker = it }
+            IconPickerRow(
+                ticker = ticker,
+                iconName = icon,
+                onPick = { uri -> viewModel.importCoinIcon(uri) { icon = it } },
+                onClear = { icon = null },
+            )
             if (kind == AddCoinKind.FIBER) {
                 LabeledField(stringResource(R.string.wallet_add_coin_node), node, stringResource(R.string.wallet_add_coin_node_hint)) { node = it }
             } else {
@@ -534,9 +550,9 @@ fun WalletAddCoinScreen(
             Button(
                 onClick = {
                     if (kind == AddCoinKind.FIBER) {
-                        viewModel.addFiberCoin(name, ticker, node, onDone = onAdded)
+                        viewModel.addFiberCoin(name, ticker, node, icon, onDone = onAdded)
                     } else {
-                        viewModel.addErc20Token(name, ticker, contract, decimals, onDone = onAdded)
+                        viewModel.addErc20Token(name, ticker, contract, decimals, icon, onDone = onAdded)
                     }
                 },
                 enabled = name.isNotBlank() && ticker.isNotBlank() &&
@@ -548,6 +564,85 @@ fun WalletAddCoinScreen(
                     .height(52.dp),
             ) {
                 Text(stringResource(R.string.wallet_add_coin_save), fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+}
+
+/**
+ * The badge the new coin will wear: an image picked from the phone, or the
+ * ticker letters when none is chosen. The circle previews whichever will
+ * apply — live off the ticker field while it is still letters. The picked
+ * file is copied into app storage at import, so the badge never depends on
+ * the gallery grant again.
+ */
+@Composable
+private fun IconPickerRow(
+    ticker: String,
+    iconName: String?,
+    onPick: (Uri) -> Unit,
+    onClear: () -> Unit,
+) {
+    val context = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> uri?.let(onPick) }
+    val pick: () -> Unit = {
+        launcher.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+        )
+    }
+    Column(Modifier.padding(bottom = 16.dp)) {
+        Text(
+            stringResource(R.string.wallet_add_coin_icon),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 7.dp),
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            val preview = remember(iconName) {
+                iconName?.let { name ->
+                    val file = coinIconFile(context, name)
+                    if (file.exists()) BitmapFactory.decodeFile(file.path)?.asImageBitmap() else null
+                }
+            }
+            Box(
+                modifier = Modifier
+                    .size(46.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+                    .clickable(onClick = pick),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (preview != null) {
+                    Image(
+                        bitmap = preview,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape),
+                    )
+                } else {
+                    Text(
+                        ticker.trim().uppercase().take(3).ifEmpty { "ABC" },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            FilledTonalButton(onClick = pick) {
+                Text(stringResource(R.string.wallet_add_coin_icon_pick))
+            }
+            if (iconName != null) {
+                TextButton(onClick = onClear) {
+                    Text(stringResource(R.string.wallet_add_coin_icon_clear))
+                }
             }
         }
     }

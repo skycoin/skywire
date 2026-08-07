@@ -6,11 +6,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,47 +41,39 @@ fun MinHopsCard(
     enabled: Boolean,
     onSelect: (Int) -> Unit,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-        ),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(20.dp)) {
-            Text(
-                stringResource(R.string.hops_title),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                HOP_CHOICES.forEach { choice ->
-                    HopChoice(
-                        hops = choice,
-                        // Anything the visor reports outside the offered set
-                        // (an operator edited the config by hand) leaves all
-                        // three unselected rather than silently rounding.
-                        selected = hops == choice,
-                        enabled = enabled,
-                        onClick = { onSelect(choice) },
-                        modifier = Modifier.weight(1f),
-                    )
-                }
+    SectionCard {
+        Text(
+            stringResource(R.string.hops_title),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HOP_CHOICES.forEach { choice ->
+                HopChoice(
+                    hops = choice,
+                    // Anything the visor reports outside the offered set
+                    // (an operator edited the config by hand) leaves all
+                    // three unselected rather than silently rounding.
+                    selected = hops == choice,
+                    enabled = enabled,
+                    onClick = { onSelect(choice) },
+                    modifier = Modifier.weight(1f),
+                )
             }
-            Spacer(Modifier.height(10.dp))
-            Text(
-                stringResource(
-                    when (hops) {
-                        1 -> R.string.hops_hint_direct
-                        in 2..Int.MAX_VALUE -> R.string.hops_hint_multi
-                        else -> R.string.hops_hint_unknown
-                    },
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            stringResource(
+                when (hops) {
+                    1 -> R.string.hops_hint_direct
+                    in 2..Int.MAX_VALUE -> R.string.hops_hint_multi
+                    else -> R.string.hops_hint_unknown
+                },
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
