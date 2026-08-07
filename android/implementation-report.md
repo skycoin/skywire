@@ -7,6 +7,61 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-08 — A polish pass from device use: icon, light theme, battery, coin logos
+
+**Built:**
+
+- **Launcher icon** breathes again: the adaptive-icon foreground drops from
+  56×42dp to 44×33dp, so the cloud's box half-diagonal (27.5dp) now sits
+  fully inside the 33dp safe-zone radius — no more crowding under OEM masks
+  or the launcher's parallax scale.
+- **Hub:** the wallet tile's subtitle is now "SKY · Fibercoin · BTC · ETH";
+  the hero's killswitch chip is words again — "Killswitch on/off" colored
+  green/red replaces the icon-only shield (`KillswitchChip` renders `Text`,
+  the shield glyphs and `HeroChip`'s dead `dim` parameter are gone).
+- **Light theme:** `TransportPreferenceCard` and `MinHopsCard` now wrap
+  `SectionCard`, so every card on SkyVPN carries the outlineVariant hairline
+  and the 22dp radius instead of two of them floating borderless; the light
+  palette's card fill lifts to `#FAFCFF` and the surfaceContainer ramp
+  brightens a step, with the border rather than the fill drawing the edge.
+- **Battery card no longer lies:** `AppVisibility` grew a `resumes` counter
+  bumped from `MainActivity.onResume()`. The system's exemption dialog only
+  pauses the Activity — start/stop never fires, so the old
+  `isForeground`-driven refresh missed the grant until an app restart.
+  Settings re-reads the exemption on every resume; Home's prompt joins the
+  same signal through its `combine`.
+- **Coin badges are real logos:** SKY/BTC/ETH/USDT ship as bundled 128px
+  PNGs (CC0 `cryptocurrency-icons` set, no network fetch at render) mapped
+  in the new `ui/wallet/CoinIcons.kt`; `CoinBadge` takes the `CoinSpec` and
+  draws artwork → user image → ticker letters, in that order.
+- **User-added coins pick an image, not a symbol:** the add-coin screen's
+  Icon row opens the system photo picker (`PickVisualMedia`); the picked
+  image is center-cropped square, scaled to 192px, and copied into
+  `filesDir/coin_icons/` (the picker's grant dies with the process — the
+  badge has to be our own file), with the stored name in the new nullable
+  `CoinSpec.icon` (backward-compatible, `ignoreUnknownKeys`).
+- **"Fibercoin" everywhere:** every user-visible "fiber coin(s)" in strings
+  and the wallet copy now reads Fibercoin — one brand word, matching the
+  chain family's actual name.
+- **Killswitch card button:** the "Always-on VPN settings" tonal button lost
+  its `contentPadding = 0.dp` override, which had the label riding the
+  pill's rounded edges (and spilling out at larger font scales).
+
+**Verified on AVD `skywire` (light theme, PIN 1234):** launcher drawer shows
+the smaller cloud sitting with the same margins as its neighbors; hub hero
+reads "Killswitch off" in red text and the wallet tile lists all four coins;
+SkyVPN's Killswitch/Transport/Route-length cards render as one bordered
+family and the Always-on button holds its label with real insets; the
+battery flow was walked end-to-end — whitelist removed via
+`cmd deviceidle whitelist -`, Settings offered Allow, the system dialog's
+Allow flipped the card to its granted text immediately on return, no app
+restart; the coin sheet shows the four real logos; a Testcoin was added with
+a pushed test image through the photo picker — preview in the Icon row, then
+the badge on the coin chip and sheet, surviving from app-private storage.
+Debug APK built and installed via Android Studio JBR.
+
+---
+
 ## 2026-08-07 — The wallet learns Ethereum: ETH and USDT (and any ERC-20)
 
 **Built (wallet-core, new `eth` package — plain JVM, host-tested like the

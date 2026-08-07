@@ -68,9 +68,10 @@ private val LightColors = lightColorScheme(
     onBackground = Color(0xFF0B1526),
     surface = Color.White,
     onSurface = Color(0xFF0B1526),
-    // Cards: a blue-tinted near-white; the hairline border comes from
-    // outlineVariant wherever a card sits on the plain white background.
-    surfaceVariant = Color(0xFFF7FAFF),
+    // Cards: a blue-tinted near-white, kept just off pure white — the
+    // hairline border from outlineVariant is what draws the card's edge,
+    // so the fill can stay bright and let the ink carry the contrast.
+    surfaceVariant = Color(0xFFFAFCFF),
     // Darker than the mock's caption grey on purpose: this role carries
     // real sentences (Settings bodies, subtitles), and at the mock's value
     // they read faint on white. The mock keeps its washier greys for
@@ -91,9 +92,9 @@ private val LightColors = lightColorScheme(
     onSecondaryContainer = Color(0xFF101A2B),
     surfaceContainerLowest = Color.White,
     surfaceContainerLow = Color(0xFFFBFCFE),
-    surfaceContainer = Color(0xFFF5F8FD),
-    surfaceContainerHigh = Color(0xFFEEF3FB),
-    surfaceContainerHighest = Color(0xFFE4EBF6),
+    surfaceContainer = Color(0xFFF6F9FD),
+    surfaceContainerHigh = Color(0xFFF0F5FC),
+    surfaceContainerHighest = Color(0xFFE9EFF8),
 )
 
 private val DarkColors = darkColorScheme(

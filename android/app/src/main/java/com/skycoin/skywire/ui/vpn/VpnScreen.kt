@@ -446,7 +446,6 @@ private fun KillswitchCard(on: Boolean, enabled: Boolean, onChange: (Boolean) ->
                 }.isSuccess
                 if (!opened) Toast.makeText(context, noSettings, Toast.LENGTH_SHORT).show()
             },
-            contentPadding = PaddingValues(0.dp),
         ) {
             Text(stringResource(R.string.vpn_killswitch_always_on))
         }

@@ -27,10 +27,8 @@ import androidx.compose.material.icons.rounded.AltRoute
 import androidx.compose.material.icons.rounded.CandlestickChart
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Forum
-import androidx.compose.material.icons.rounded.GppMaybe
 import androidx.compose.material.icons.rounded.Hub
 import androidx.compose.material.icons.rounded.Route
-import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material3.Icon
@@ -485,37 +483,34 @@ private fun VpnHeroCard(
 }
 
 /**
- * The killswitch as a state light rather than a caption: the whole shield
- * green when a dropped tunnel would be caught, red when it would not. At
- * chip size the old label was unreadable; the words live in the content
- * description now, and the color is the message.
+ * The killswitch spelled out, color-coded: green words when a dropped
+ * tunnel would be caught, red when it would not. A glyph alone read as
+ * decoration here — the state is worth a sentence fragment.
  */
 @Composable
 private fun KillswitchChip(on: Boolean) {
-    val label = stringResource(
-        if (on) R.string.hub_killswitch_on else R.string.hub_killswitch_off,
-    )
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .clip(MaterialTheme.shapes.small)
             .background(Color.White.copy(alpha = 0.13f))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
-            .semantics { contentDescription = label },
+            .padding(horizontal = 10.dp, vertical = 6.dp),
     ) {
-        Icon(
-            imageVector = if (on) Icons.Rounded.Shield else Icons.Rounded.GppMaybe,
-            contentDescription = null,
-            tint = if (on) SkyAccents.successBright else SkyAccents.dangerBright,
-            modifier = Modifier.size(20.dp),
+        Text(
+            text = stringResource(
+                if (on) R.string.hub_killswitch_on else R.string.hub_killswitch_off,
+            ),
+            style = MaterialTheme.typography.labelMedium,
+            color = if (on) SkyAccents.successBright else SkyAccents.dangerBright,
+            maxLines = 1,
         )
     }
 }
 
 /** A small fact on the hero's gradient: an icon and a word. */
 @Composable
-private fun HeroChip(icon: ImageVector, text: String, dim: Boolean = false) {
-    val tint = Color.White.copy(alpha = if (dim) 0.62f else 0.95f)
+private fun HeroChip(icon: ImageVector, text: String) {
+    val tint = Color.White.copy(alpha = 0.95f)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier

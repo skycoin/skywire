@@ -26,7 +26,7 @@
     <string name="hub_socks_sub">SOCKS5 proxy</string>
     <string name="hub_dex_sub">Swap · SKY / BTC</string>
     <string name="hub_chat_sub">Rooms and messages</string>
-    <string name="hub_wallet_sub">SKY · fiber coins · BTC</string>
+    <string name="hub_wallet_sub">SKY · Fibercoin · BTC · ETH</string>
     <string name="hub_fleet_sub">Visors you run elsewhere</string>
     <string name="hub_meet_sub">Encrypted calls</string>
     <string name="hub_hero_reconnecting">Reconnecting</string>
@@ -397,10 +397,10 @@
     <string name="wallet_coin_chip_description">Choose a coin</string>
     <string name="wallet_coins_title">Choose a coin</string>
     <string name="wallet_coins_search">Search %1$d coins</string>
-    <!-- Skycoin is the original chain — fiber coins are separate chains
+    <!-- Skycoin is the original chain — Fibercoins are separate chains
          built from its codebase, so only they carry the fiber label. -->
     <string name="wallet_coin_native">Skycoin mainnet · native</string>
-    <string name="wallet_coin_fiber">Fiber coin</string>
+    <string name="wallet_coin_fiber">Fibercoin</string>
     <string name="wallet_coin_btc">Bitcoin mainnet</string>
     <string name="wallet_coin_eth">Ethereum mainnet</string>
     <string name="wallet_coin_erc20">ERC-20 token on Ethereum</string>
@@ -475,7 +475,7 @@
     <string name="wallet_review">Review</string>
     <string name="wallet_review_title">You are about to send</string>
     <!-- %2$s is the coin's own name: Skycoin is the original chain, each
-         fiber coin is its own network — never conflate them. -->
+         Fibercoin is its own network — never conflate them. -->
     <string name="wallet_review_dest">to %1$s on the %2$s network. Nothing is signed until you confirm.</string>
     <string name="wallet_review_amount">Amount</string>
     <string name="wallet_review_miner_fee">Miner fee at %1$d sat/vB</string>
@@ -547,14 +547,17 @@
     <string name="wallet_reveal_hide">Hide the phrase</string>
 
     <string name="wallet_add_coin_title">Add a coin or token</string>
-    <string name="wallet_add_kind_fiber">Fiber coin</string>
+    <string name="wallet_add_kind_fiber">Fibercoin</string>
     <string name="wallet_add_kind_erc20">ERC-20 token</string>
-    <string name="wallet_add_coin_body">Every fiber coin runs the same node software as Skycoin. Name the coin and point the wallet at a node you trust — balances, fees and precision come from that node.</string>
+    <string name="wallet_add_coin_body">Every Fibercoin runs the same node software as Skycoin. Name the coin and point the wallet at a node you trust — balances, fees and precision come from that node.</string>
     <string name="wallet_add_token_body">Every ERC-20 token lives on Ethereum and differs only in its contract. The decimals must match the contract’s own — 6 for USDT-like tokens, 18 for most — or amounts will read wrong.</string>
     <string name="wallet_add_coin_name">Coin name</string>
     <string name="wallet_add_coin_name_hint">e.g. MDL Talent Hub</string>
     <string name="wallet_add_coin_ticker">Ticker</string>
     <string name="wallet_add_coin_ticker_hint">e.g. MDL</string>
+    <string name="wallet_add_coin_icon">Icon</string>
+    <string name="wallet_add_coin_icon_pick">Choose image</string>
+    <string name="wallet_add_coin_icon_clear">Remove</string>
     <string name="wallet_add_coin_node">Node address</string>
     <string name="wallet_add_coin_node_hint">http://node.example.com:6420</string>
     <string name="wallet_add_token_contract">Contract address</string>
@@ -579,7 +582,7 @@
     <string name="help_hub_body">Everything your visor can run, in one place. A tile opens the app\u2019s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages and Fleet watches the visors you run elsewhere. A greyed tile is not built yet.</string>
 
     <string name="help_wallet_title">About Wallet</string>
-    <string name="help_wallet_body">Skycoin, the fiber coins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send.</string>
+    <string name="help_wallet_body">Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send.</string>
 
     <string name="help_settings_title">About Settings</string>
     <string name="help_settings_body">Who this phone is on the network, and how the app behaves. The identity is a keypair in a file — back it up before you need it, because losing it loses your address, your chat history\u2019s other half and any rewards tied to the key.\n\nDiagnostics is where every log lives: the visor core, the app process, and each app that runs under it. That is the place to look when something will not connect.</string>
