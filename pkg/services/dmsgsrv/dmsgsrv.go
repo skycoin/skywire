@@ -86,6 +86,17 @@ type Config struct {
 	MetricsAddr string `json:"metrics_addr,omitempty"`
 }
 
+// dmsgEntryVersion returns the build version to advertise in the dmsg server's
+// discovery entry, or "" when the binary carries no meaningful version (dev
+// builds) so the entity keeps the "0.0.1" default. Uses runtime/debug build
+// info via buildinfo — the same source the /health endpoint reports.
+func dmsgEntryVersion() string {
+	if v := buildinfo.Version(); v != "" && v != "unknown" {
+		return v
+	}
+	return ""
+}
+
 // LoadFile reads a standalone dmsg-server JSON config file (the
 // existing `skywire dmsg server start /path/to/file.json` shape).
 // Returned for callers (the multi-service factory) that want to
@@ -193,8 +204,13 @@ func (s *service) Run(ctx context.Context) error {
 	}
 
 	srvConf := dmsg.ServerConfig{
-		MaxSessions:             cfg.MaxSessions,
-		UpdateInterval:          cfg.UpdateInterval,
+		MaxSessions:    cfg.MaxSessions,
+		UpdateInterval: cfg.UpdateInterval,
+		// Advertise the real build version in the server's discovery entry
+		// (disc.Entry.Version) instead of the vestigial "0.0.1" protocol
+		// constant, so `mdisc servers` / discovery consumers see it. Empty
+		// (unknown build) preserves "0.0.1".
+		Version:                 dmsgEntryVersion(),
 		AuthPassphrase:          s.cfg.AuthPassphrase,
 		Peers:                   peers,
 		AnnounceAsPeer:          cfg.AnnounceAsPeer,
@@ -319,10 +335,29 @@ func (s *service) Run(ctx context.Context) error {
 		}
 	}
 
+	// dmsg-over-WebTransport advert (DEFAULT-ON). WT is HTTP/3-over-QUIC, so it
+	// rides the SAME UDP socket as dmsg-over-QUIC (ALPN-demuxed in
+	// ServeUnifiedQUIC) — like WS on the main TCP port, it needs no extra port and
+	// no discovery topology change. Advertise https://<public host:port>/dmsg (the
+	// same host:port as the QUIC/TCP endpoint). An explicit public_address_wt
+	// overrides; disable_wt opts out; a bare ":port"/empty advertised address
+	// (unknown public endpoint) skips it. A browser prefers this over wss and drops
+	// the redundant TLS-over-Noise once the WT session is up.
+	// Only default-on the SHARED-socket WT when no explicit WTAddress is set — a
+	// server configured with its own separate WT UDP socket keeps that path below.
+	mainWTURL := ""
+	if !cfg.DisableWT && cfg.WTAddress == "" && primaryAdvertised != "" && !strings.HasPrefix(primaryAdvertised, ":") {
+		mainWTURL = "https://" + primaryAdvertised + "/dmsg"
+		if cfg.PublicAddressWT != "" {
+			mainWTURL = cfg.PublicAddressWT
+		}
+		log.WithField("wt_url", mainWTURL).Info("dmsg-wt: advertising WebTransport on the main UDP port (shared with QUIC).")
+	}
+
 	go srvAPI.RunBackgroundTasks(runCtx)
 	log.WithField("addr", cfg.HTTPAddress).Info("Serving server API...")
 	go func() {
-		if err := srvAPI.ListenAndServe(cfg.LocalAddress, primaryAdvertised, cfg.HTTPAddress, mainWSURL); err != nil {
+		if err := srvAPI.ListenAndServe(cfg.LocalAddress, primaryAdvertised, cfg.HTTPAddress, mainWSURL, mainWTURL); err != nil {
 			log.Errorf("Serve: %v", err)
 			cancel()
 		}
@@ -570,11 +605,28 @@ func (s *service) buildTransitDmsg(ctx context.Context, deployments []dmsgserver
 	cfg := &s.cfg.Config
 	log := s.log
 
+	// The transit client (MinSessions:0) connects to ALL servers in this list,
+	// INCLUDING itself. Point its OWN entry at the LOOPBACK listener, not the
+	// public address: dialing the public address is a NAT hairpin (a container
+	// dialing its own external IP:port back into itself), which fails on typical
+	// Docker/NAT hosts — so the server held no session for its own co-located
+	// transit client, and a remote dial to <serverPK>:80 relayed through THIS
+	// server (the discovery-resolved path svc-health uses) found no local client
+	// session and timed out (blank version column). Loopback is in-kernel — no
+	// NAT, no external port, no hairpin — so the self-session forms and the
+	// server can relay its own dmsg-side surfaces (/health, pprof, route-setup)
+	// to the co-located transit client. Reachability via the 8 peer servers is
+	// unchanged; this only ADDS the local path. Falls back to the public address
+	// if LocalAddress has no parseable port.
+	selfAddr := cfg.PublicAddress
+	if _, port, perr := net.SplitHostPort(cfg.LocalAddress); perr == nil && port != "" {
+		selfAddr = net.JoinHostPort("127.0.0.1", port)
+	}
 	serverEntry := &disc.Entry{
 		Version: "0.0.1",
 		Static:  cfg.PubKey,
 		Server: &disc.Server{
-			Address:           cfg.PublicAddress,
+			Address:           selfAddr,
 			AvailableSessions: cfg.MaxSessions,
 		},
 	}

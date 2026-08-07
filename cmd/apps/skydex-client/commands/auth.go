@@ -11,7 +11,7 @@
 //
 // The trading UI has no authentication of its own, and everything behind it is
 // live: the connected market session, the registered wallet addresses, placing
-// and cancelling orders. On a desktop, a loopback listener is reachable only by
+// and canceling orders. On a desktop, a loopback listener is reachable only by
 // the user's own login session and that is usually the end of it. On Android it
 // is not: there is no per-app network namespace, so a listener on 127.0.0.1 is
 // reachable by EVERY installed app holding INTERNET, with no prompt. Without a

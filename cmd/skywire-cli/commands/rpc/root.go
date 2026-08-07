@@ -554,7 +554,16 @@ func cxoFeedForURL(rawURL string) (feed, path string, ok bool) {
 		// gain anything from CXO over the existing chain since the
 		// payload is small.
 		if v := queryParam(rawURL, "v"); v == "v3" {
-			return "tpd-uptime", "uptimes/days/30", true
+			// Honor an explicit &days=N (the publisher writes {1,7,30});
+			// default to 30 when omitted, for back-compat with the graph
+			// commands. Online-filter callers (pv/sd/proxy) pass days=1 —
+			// they read only .on, so the 30-day daily bitmap per visor is
+			// ~30x the payload they never look at.
+			days := queryParamInt(rawURL, "days", 30)
+			if days != 1 && days != 7 && days != 30 {
+				days = 30
+			}
+			return "tpd-uptime", fmt.Sprintf("uptimes/days/%d", days), true
 		}
 		return "", "", false
 	}
@@ -793,6 +802,49 @@ func FetchCachedServiceURL(cmdFlags *pflag.FlagSet, cachefile, thisurl string, c
 		}
 	}
 	return string(body)
+}
+
+// IntegratedUptimeURL builds the URL for the TPD-integrated uptime
+// tracker's visor-uptime endpoint: the transport-discovery base with
+// ?v=v3. v3 is the version cxoFeedForURL mirrors over CXO (feed
+// "tpd-uptime", path uptimes/days/30), so a fetch through
+// FetchCachedServiceURL / FetchIntegratedUptimes flows over the
+// CXO→DMSG→HTTP chain and NEVER dials the deprecated standalone uptime
+// tracker. An empty tpdBase falls back to
+// deployment.Prod.TransportDiscovery.
+//
+// v3 is a strict superset of v2: every entry still carries {pk, on,
+// version, daily}, with the per-day timeline bitmap added. Consumers
+// that only read the online flag or the daily percentages therefore
+// work against the v3 payload unchanged.
+func IntegratedUptimeURL(tpdBase string) string {
+	return IntegratedUptimeURLDays(tpdBase, 30)
+}
+
+// IntegratedUptimeURLDays is IntegratedUptimeURL with an explicit uptime
+// window: days ∈ {1,7,30}, the buckets the TPD publishes (uptimes/days/<n>).
+// Callers that only read the online flag (pv / sd / proxy filtering) pass
+// days=1 — the .on flag is present in every window, so pulling the 30-day
+// daily bitmap for every visor is pure over-fetch. Daily-percentage callers
+// (the `ut` command) pass a wider window. An unknown value falls back to 30
+// in cxoFeedForURL.
+func IntegratedUptimeURLDays(tpdBase string, days int) string {
+	if tpdBase == "" {
+		tpdBase = deployment.Prod.TransportDiscovery
+	}
+	return fmt.Sprintf("%s/uptimes?v=v3&days=%d", strings.TrimRight(tpdBase, "/"), days)
+}
+
+// FetchIntegratedUptimes fetches the []VisorSummary v3 payload from the
+// TPD-integrated uptime tracker via the shared cached fetch chain
+// (CXO→DMSG→HTTP + disk cache). tpdBase is the transport-discovery base
+// URL (empty = prod). The returned JSON has the same {pk, on, ...}
+// shape v2 had, so existing jq filters keep working. Returns "" only
+// when every fetch path failed AND there was no cache to fall back on;
+// callers must treat "" as "no online data" and must not build JSON
+// from it (an empty string is not valid JSON).
+func FetchIntegratedUptimes(cmdFlags *pflag.FlagSet, tpdBase, cachefile string, cacheFilesAge int) string {
+	return FetchCachedServiceURL(cmdFlags, cachefile, IntegratedUptimeURL(tpdBase), cacheFilesAge)
 }
 
 var (

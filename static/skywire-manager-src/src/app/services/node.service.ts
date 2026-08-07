@@ -419,6 +419,25 @@ return {
         });
       }
 
+      // DMSG servers. Mirrors getNodes() — the node-list DMSG Servers column
+      // reads node.dmsgServers (pk + per-server carrier/protocol) to render the
+      // per-carrier count. This tree-based path (getNodesTree, which the node
+      // list actually uses) previously mapped no dmsg-server field, so the
+      // column rendered "-" for every row even when the summary carried
+      // dmsg_servers; assigning it here fixes that.
+      node.dmsgServerPk = response.dmsg_stats ? response.dmsg_stats.server_public_key : '';
+      node.connectedDmsgServers = response.connected_dmsg_servers || [];
+      node.roundTripPing = response.dmsg_stats ? this.nsToMs(response.dmsg_stats.round_trip) : '';
+      if (response.dmsg_servers && Array.isArray(response.dmsg_servers)) {
+        node.dmsgServers = response.dmsg_servers.map((s: any) => {
+          return {
+            pk: s.pk,
+            latency: s.latency || 0,
+            protocol: s.protocol || ''
+          };
+        });
+      }
+
       out.push(node);
     });
 

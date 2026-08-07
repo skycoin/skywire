@@ -88,7 +88,7 @@ func (a *ServerAPI) SetDmsgServer(srv *dmsg.Server) {
 // first bytes — raw Noise vs HTTP/1 upgrade), so one advertised ip:port carries
 // both protocols (see dmsg.Server.ServeWithWS and
 // docs/design/dmsg-server-protocol-unification.md). Empty wsURL = raw-dmsg only.
-func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr, wsURL string) error {
+func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr, wsURL, wtURL string) error {
 	errCh := make(chan error, 3)
 
 	dmsgLn, err := net.Listen("tcp", lAddr)
@@ -121,11 +121,15 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr, wsURL string) error {
 		logging.MustGetLogger("dmsg_server").WithError(uerr).
 			Warn("dmsg-over-QUIC: failed to bind UDP listener; serving TCP only")
 	} else {
-		go func(udp net.PacketConn, advertised string) {
-			serr := a.dmsgServer.ServeQUIC(udp, advertised)
+		go func(udp net.PacketConn, advertised, wt string) {
+			// ServeUnifiedQUIC serves dmsg-over-QUIC AND (when wt != "")
+			// dmsg-over-WebTransport on this SAME UDP socket, ALPN-demuxed — so WT
+			// is default-on at zero extra port cost, reachable wherever dmsg-QUIC
+			// already is. wt == "" makes it QUIC-only (the prior behavior).
+			serr := a.dmsgServer.ServeUnifiedQUIC(udp, advertised, wt)
 			udp.Close() //nolint:errcheck,gosec
 			errCh <- fmt.Errorf("dmsg QUIC server stopped: %v", serr)
-		}(udpConn, pAddr)
+		}(udpConn, pAddr, wtURL)
 	}
 
 	ln, err := net.Listen("tcp", httpAddr)

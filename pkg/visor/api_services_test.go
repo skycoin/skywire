@@ -1,6 +1,8 @@
 package visor
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,4 +54,37 @@ func TestServiceFetchOrder(t *testing.T) {
 			require.Equal(t, tt.want, serviceFetchOrder(tt.httpURL, tt.dmsgURL))
 		})
 	}
+}
+
+// TestDoHealthProbe_BuildInfoVersion asserts the shared health probe extracts
+// the service version from build_info.version — the field path the DMSG Server
+// rows now rely on. They route their version fetch through doHealthProbe (the
+// same discovery-routed extraction as the deployment-service rows) instead of
+// the old session-pinned dmsg stream, which never reached the server's
+// transit-client /health and left the VERSION column empty.
+func TestDoHealthProbe_BuildInfoVersion(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "/health", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"build_info":{"version":"v1.3.92-0-7925d659e2ec"}}`)) //nolint
+	}))
+	defer srv.Close()
+
+	entry := doHealthProbe(srv.Client(), "DMSG Server", srv.URL, "dmsg")
+	require.Equal(t, "OK", entry.Status)
+	require.Equal(t, "v1.3.92-0-7925d659e2ec", entry.Version)
+}
+
+// TestDoHealthProbe_TopLevelVersionFallback asserts the fallback to a top-level
+// "version" field when build_info is absent.
+func TestDoHealthProbe_TopLevelVersionFallback(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"version":"v1.3.88-0-54e4b7f90c01"}`)) //nolint
+	}))
+	defer srv.Close()
+
+	entry := doHealthProbe(srv.Client(), "DMSG Server", srv.URL, "dmsg")
+	require.Equal(t, "OK", entry.Status)
+	require.Equal(t, "v1.3.88-0-54e4b7f90c01", entry.Version)
 }

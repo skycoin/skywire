@@ -223,6 +223,20 @@ func (r *router) DialRoutes(
 	if forceLocal {
 		maxFetchAttempts = 1
 	}
+
+	// Fast-fail when this visor holds ZERO transports and no background
+	// transport-creation is pending (hookDone == nil). The route-finder
+	// needs a local first-hop transport to return any route, so querying it
+	// 6× here is pure waste + log spam ("Route finder failed ... transport
+	// not found"). A browser/wasm visor with no transports yet hits this via
+	// app route setup. We must NOT short-circuit when hookDone != nil: that's
+	// the cold-start race where a background hook is creating the FIRST
+	// transport for a cold peer, and the loop below waits on it once.
+	if hookDone == nil && r.tm != nil && r.tm.TransportCount() == 0 {
+		log.Debug("No local transports and no pending transport creation; skipping route finder")
+		return nil, fmt.Errorf("no transports available; route setup skipped")
+	}
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		var forwardPath, reversePath []routing.Hop
 		var err error

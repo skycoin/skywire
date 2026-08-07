@@ -46,27 +46,30 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				log.WithError(err).Warn("failed to fetch AR transport")
 			}
 
-			dmsgFallback := func() error {
-				return retrier.Do(ctx, func() error {
-					_, err := tm.SaveTransport(ctx, rPK, types.DMSG, transport.LabelAutomatic)
-					if err != nil {
-						log.Debugf("Establishing automatic DMSG transport failed.")
-					}
-					return err
-				})
+			// After (or instead of) the AR/STUN-gated STCPR/SUDPH attempts below,
+			// try the REMAINING creatable direct types (QUIC, STCP, WEBRTC, WS, WT)
+			// in preference order before falling back to the DMSG relay —
+			// EnsureBestTransport(skip STCPR,SUDPH), so we don't re-attempt the two
+			// this hook already handles with AR/NAT gating. This keeps the data plane
+			// peer-to-peer: a dmsg transport is created only if EVERY direct type
+			// fails (EnsureBestTransport logs that at WARN as a red flag). Previously
+			// this fell straight to DMSG, skipping webrtc/ws/wt/quic/stcp entirely and
+			// over-using the relay on NAT'd visors.
+			directFallback := func() error {
+				return tm.EnsureBestTransport(ctx, rPK, types.STCPR, types.SUDPH)
 			}
 			// check visor's AR transport
 			if allTransports == nil && !v.conf.Transport.PublicAutoconnect {
 				// skips if there's no AR transports
 				log.Warn("empty AR transports")
-				return dmsgFallback()
+				return directFallback()
 			}
 			transports, ok := allTransports[rPK]
 			if !ok {
 				log.WithField("pk", rPK.String()).Warn("pk not found in the transports")
 				// check if automatic transport is available, if it does,
 				// continue with route creation
-				return dmsgFallback()
+				return directFallback()
 			}
 			// What the peer advertises to the address resolver. dmsg needs no
 			// advertisement — every visor is reachable over it.

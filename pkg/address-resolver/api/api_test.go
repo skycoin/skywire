@@ -152,6 +152,32 @@ func TestTransports(t *testing.T) {
 	require.Contains(t, data.Stcpr, pk.Hex())
 }
 
+// ---- resolve ---------------------------------------------------------------
+
+func TestResolve_StatusMapping(t *testing.T) {
+	sender, _ := cipher.GenerateKeyPair()
+	receiver, _ := cipher.GenerateKeyPair()
+
+	t.Run("unresolvable transport type -> 404 (not 500)", func(t *testing.T) {
+		// webrtc dials by PK over dmsg signaling and has no AR record. The redis
+		// store reports ErrUnknownTransportType (was a 500); the mem store reports
+		// ErrNoEntry. The handler maps both to 404 so neither trips the AR-500 path.
+		a := newTestAPI(t)
+		rec := httptest.NewRecorder()
+		a.resolve(rec, authReq(t, http.MethodGet, "/resolve/webrtc/"+receiver.Hex(), nil,
+			&sender, map[string]string{"type": "webrtc", "pk": receiver.Hex()}))
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("no entry -> 404", func(t *testing.T) {
+		a := newTestAPI(t)
+		rec := httptest.NewRecorder()
+		a.resolve(rec, authReq(t, http.MethodGet, "/resolve/stcpr/"+receiver.Hex(), nil,
+			&sender, map[string]string{"type": "stcpr", "pk": receiver.Hex()}))
+		require.Equal(t, http.StatusNotFound, rec.Code)
+	})
+}
+
 // ---- bind ------------------------------------------------------------------
 
 func TestBind(t *testing.T) {

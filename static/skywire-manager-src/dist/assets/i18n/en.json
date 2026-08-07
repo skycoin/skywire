@@ -355,6 +355,7 @@
     "no-visors-to-update": "There are no visors to update.",
     "no-visors-to-modify": "There are no visors to modify.",
     "transports": "Transports",
+    "dmsg-servers": "DMSG Servers",
     "services": "Services",
     "reward": "Reward",
     "reward-set": "Reward address set",
@@ -418,6 +419,7 @@
 
   "services-health": {
     "loading": "Checking deployment services…",
+    "not-available-wasm": "Deployment service health is not available on a browser visor. A wasm visor running in the browser does not probe the deployment services' health endpoints.",
     "all-ok": "All deployment services operational",
     "degraded": "One or more deployment services are degraded",
     "last-updated": "last checked",
@@ -813,6 +815,11 @@
     "auto-update": {
       "label": "Auto-update this in-browser visor",
       "info": "When the server publishes a newer wasm-visor build, reload to it automatically (with a short countdown you can cancel). Turn off to stay on the current build until you reload manually."
+    },
+    "reload-worker": {
+      "label": "Reload visor (fresh worker)",
+      "info": "Terminate the in-browser visor's shared worker and reload the page with a fresh build. Use this if the visor becomes unresponsive.",
+      "confirmation": "This will terminate the in-browser visor and reload the page with a fresh worker. Continue?"
     },
     "password" : {
       "initial-config-help": "Use this option for setting the initial password. After a password has been set, it is not possible to use this option to modify it.",

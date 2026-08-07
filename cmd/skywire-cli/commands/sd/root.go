@@ -108,10 +108,10 @@ func init() {
 	RootCmd.Flags().BoolVar(&testEnv, "testenv", defaultTestEnv, "use test deployment")
 	RootCmd.Flags().StringVarP(&sdURL, "sdurl", "a", dep.ServiceDiscovery, "service discovery url")
 	RootCmd.Flags().StringVarP(&tpdURL, "tpdurl", "b", dep.TransportDiscovery, "transport discovery url")
-	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.UptimeTracker, "uptime tracker url")
+	RootCmd.Flags().StringVarP(&utURL, "uturl", "w", dep.TransportDiscovery, "TPD-integrated uptime tracker url")
 	RootCmd.Flags().StringVar(&cacheDirSD, "cds", cacheDirPath(dep.ServiceDiscovery), "SD cache dir (\"\" to disable)")
 	RootCmd.Flags().StringVar(&cacheDirTPD, "cdt", cacheDirPath(dep.TransportDiscovery), "TPD cache dir (\"\" to disable)")
-	RootCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.UptimeTracker), "UT cache dir (\"\" to disable)")
+	RootCmd.Flags().StringVar(&cacheDirUT, "cdu", cacheDirPath(dep.TransportDiscovery), "UT cache dir (\"\" to disable)")
 	RootCmd.Flags().IntVarP(&cacheFilesAge, "cfa", "m", 5, "update cache files if older than n minutes")
 	RootCmd.Flags().StringVarP(&country, "country", "c", "", "filter by country code")
 	RootCmd.Flags().StringVarP(&version, "version", "e", "", "filter by version")
@@ -155,7 +155,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				tpdURL = deployment.Test.TransportDiscovery
 			}
 			if !cmd.Flags().Changed("uturl") {
-				utURL = deployment.Test.UptimeTracker
+				utURL = deployment.Test.TransportDiscovery
 			}
 			if !cmd.Flags().Changed("cds") {
 				cacheDirSD = cacheDirPath(deployment.Test.ServiceDiscovery)
@@ -164,7 +164,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 				cacheDirTPD = cacheDirPath(deployment.Test.TransportDiscovery)
 			}
 			if !cmd.Flags().Changed("cdu") {
-				cacheDirUT = cacheDirPath(deployment.Test.UptimeTracker)
+				cacheDirUT = cacheDirPath(deployment.Test.TransportDiscovery)
 			}
 		}
 
@@ -173,7 +173,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		sdVpnURL := sdURL + "/api/services?type=" + servicedisc.ServiceTypeVPN
 		sdVisorURL := sdURL + "/api/services?type=" + servicedisc.ServiceTypeVisor
 		tpdFullURL := tpdURL + "/all-transports"
-		utFullURL := utURL + "/uptimes?v=v2"
+		utFullURL := clirpc.IntegratedUptimeURLDays(utURL, 1)
 
 		// Fetch service discovery data for all service types
 		proxyData := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFile(cacheDirSD, sdProxyURL), sdProxyURL, cacheFilesAge)

@@ -82,7 +82,7 @@ func WithAuth(store NonceStore, original http.Handler, shouldVerifyAuth bool) ht
 		// that PK. Take it from RemoteAddr and skip both.
 		//
 		// This is also the SECURE choice, not just an optimization: the previous
-		// behaviour skipped only the signature over dmsg yet still acted on the
+		// behavior skipped only the signature over dmsg yet still acted on the
 		// UNVERIFIED SW-Public header, which let any dmsg peer impersonate any PK
 		// by forging SW-Public (e.g. bind another visor's AR record). Binding the
 		// identity to the noise-authenticated RemoteAddr closes that. Plain-HTTP
