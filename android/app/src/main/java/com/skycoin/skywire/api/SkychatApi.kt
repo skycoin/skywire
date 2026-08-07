@@ -83,6 +83,27 @@ class SkychatApi private constructor(context: Context) {
         }.getOrDefault(emptyMap())
     }
 
+    /**
+     * The unread estimate skychat keeps for surfaces that are not the page —
+     * the hub card's badge. Null on any failure: no badge beats a wrong one.
+     */
+    suspend fun unread(baseUrl: String): Int? = withContext(Dispatchers.IO) {
+        runCatching {
+            client.newCall(
+                Request.Builder()
+                    .url(baseUrl.trimEnd('/') + "/unread")
+                    .header("Authorization", authorization())
+                    .build(),
+            ).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                json.decodeFromString(UnreadCount.serializer(), resp.body.string()).unread
+            }
+        }.getOrNull()
+    }
+
+    @kotlinx.serialization.Serializable
+    private data class UnreadCount(val unread: Int = 0)
+
     companion object {
         private val json = Json { ignoreUnknownKeys = true; isLenient = true }
 

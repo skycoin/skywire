@@ -7,6 +7,95 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — Eight more from use: the cloud jump, the hero's exit line, live tile numbers, chat file verbs, upload progress, a DEX list view, and heartbeats out of the room
+
+**The cloud that did nothing.** Tapping the raised Skycoin button from inside a
+screen the hub had pushed (SkyVPN, Chat opened from a tile) appeared to be a
+no-op. It was `navigateToTab`'s `restoreState`: popping to Home saved the
+`[hub, pushed screen]` stack, and navigating to the hub restored it — pushed
+screen back on top, "nothing happened". The cloud now has its own
+`navigateToHub()`: same pop-and-save, no restore, so it always lands on the
+services list itself. Tabs keep their save/restore behaviour untouched.
+
+**SkyVPN hero: the exit line and the killswitch light.** The exit line is now
+flag + country name + the first 6 characters of the exit key (`🇩🇪 Germany ·
+02ab4f`). The exit's own IP was asked for and is genuinely not knowable from
+this phone: service discovery's geo carries lat/lon/country/region only
+(`pkg/geo.LocationData`), and the VPN handshake carries a public key, a TUN IP
+and a gateway — no public address in either direction (the constraint
+NetworkAddressCard already documents). The "Shared carrier address" chip —
+the *device's* address, which SkyVPN never changes — is gone from the card;
+the bottom row is hops plus a killswitch that is now a state light: one
+shield icon, green (`successBright`) armed, red (new `SkyAccents.dangerBright`)
+not, words in the content description where the unreadable caption used to be.
+
+**Live numbers on the hub tiles.** Three tiles now carry their one number:
+
+- *SkyChat: unread count.* The page's seen-counters live in its localStorage,
+  and the WebView is torn down when the tab closes — so the count is now a
+  server arrangement. skychat gained `/unread`: the browser UI POSTs its
+  total whenever `updateUnreadBadges` changes it, and between reports every
+  inbound message bumps the estimate — counted in `recordEvent`, the one
+  choke point every surface (DM, group, pair, files) already funnels
+  through. The hub polls it via `SkychatApi.unread()` while the app runs and
+  draws a filled pill beside the status dot (`99+` cap).
+- *Wallet: the active SKY wallet's balance* (`12.5 SKY`) as the subtitle,
+  read from the wallet cache only — the wallet tab owns talking to the node,
+  and the hub must render with the node unreachable.
+- *Fleet: visors connected*, when the ingest is on. Counted from
+  `visors-summary` folded into the hub poll as every third pass (15 s) —
+  the Summary-RPC-per-remote fan-out documented in FleetViewModel tolerates
+  nothing faster.
+
+**`__skychat_group_heartbeat__` rendered as a sent message.** The live
+subscriber path always filtered heartbeats (session.go `onUpdate`), but
+*replay* did not: `replayHistory` handed every decoded leaf to the handler,
+so each reconnect/join resurrected the owner's liveness probes as chat, in
+groups and channels both. Filtered in three layers now: the replay decode
+loop (before the cap window, so probes cannot displace real history), a
+guard at `groupInbox.deliver` (the filter `IsHeartbeat`'s own doc promised
+pkg/visor would apply, and never did — also keeps `last_message_at` honest),
+and a read-side filter in `GroupHistoryPage` for stores already written by
+older builds. The page filters defensively too (SSE + history rows), for
+rings and caches predating all of this.
+
+**Chat file verbs into the message menu.** The `download` / `re-request`
+links under file bubbles moved into the per-message menu (⋯), leading it:
+Download for the served copy (same `/files/` rule the old link used, via a
+real anchor click so the Android host still turns it into a DownloadManager
+download), Re-request when this device lacks the bytes. The caption keeps
+name and size; the bare file card keeps its one-tap download icon — a card
+with every action behind a menu would have no affordance at all. And sending
+a file now shows a live counter: `/send-file` goes over XHR (the one thing
+fetch cannot do is upload progress), a `2.1 MB / 10 MB` line under the bubble
+fills continuously, holds the full reading for a beat at completion, fades,
+and is removed. `resendFile` got the identical treatment.
+
+**SkyDEX: cards or a list, every section.** The trading page is a vendored
+built bundle, so this rides the same injection lane as the phone stylesheet:
+a Cards/List switch at the top of `.content` (re-inserted by the same
+MutationObserver pass that re-applies the data-labels; choice persisted in
+the page's localStorage). List mode flattens the labelled cards into hairline
+rows showing only the primary pair — the first two kept columns, Amount and
+Price wherever the table has them — with everything else, actions included,
+arriving when the row is tapped open (chevron, not a per-row footer). The
+market grid gets the same reading: amount and price on the line, seller and
+Buy behind the tap. Card mode is exactly what shipped before.
+
+**Wording.** The chat link bar's "Connecting to X over Skywire…" became
+"Establishing connection with X over Skywire…" — the route comes up between
+two visors, and the old phrasing made the peer sound like a server.
+
+**Verified:** `go build` over the three touched package trees;
+`pkg/skychat/group` Replay/Heartbeat/History and `pkg/visor` Group* inbox
+tests pass; both of the chat page's script blocks pass `node --check`;
+`make android-mobile` rebuilt the payload (64,028,968 B) and
+`make android-apk-debug` came out BUILD SUCCESSFUL (74 MB debug APK). Not
+yet exercised on a device — the badge poll, the upload counter and the DEX
+list toggle in particular want an on-phone pass.
+
+---
+
 ## 2026-08-07 — Six from a test pass: contrast, the nav cloud, back, battery, hang-up, and the first message
 
 Six problems reported after using the app on a phone. Five were small and

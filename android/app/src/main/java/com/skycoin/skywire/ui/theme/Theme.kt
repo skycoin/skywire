@@ -40,6 +40,9 @@ object SkyAccents {
 
     /** Starting / restarting / degraded. */
     val warning = Color(0xFFF59E0B)
+
+    /** Off / unprotected, where Material's error is too dark for blue. */
+    val dangerBright = Color(0xFFFF7B6E)
 }
 
 /** Hero surface fill: the deep three-stop diagonal from the design. */

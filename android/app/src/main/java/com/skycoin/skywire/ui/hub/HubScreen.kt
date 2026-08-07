@@ -29,7 +29,6 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.GppMaybe
 import androidx.compose.material.icons.rounded.Hub
-import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Videocam
@@ -72,10 +71,8 @@ import com.skycoin.skywire.core.SkydexProfile
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.countryText
-import com.skycoin.skywire.ui.components.deviceAddressText
 import com.skycoin.skywire.ui.components.formatBytes
 import com.skycoin.skywire.ui.components.formatDuration
-import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.ui.navigation.Routes
 import com.skycoin.skywire.ui.socks.SocksArgs
 import com.skycoin.skywire.ui.theme.SkyAccents
@@ -100,6 +97,8 @@ private data class HubTile(
     val category: HubCategory,
     /** Visor process whose status drives the card's dot; null = no dot. */
     val statusApp: String? = null,
+    /** A count worth interrupting for — SkyChat's unread messages. */
+    val badgeCount: Int? = null,
     val wide: Boolean = false,
     val comingSoon: Boolean = false,
     val onClick: (() -> Unit)? = null,
@@ -144,6 +143,7 @@ fun HubScreen(
                 icon = Icons.Rounded.Forum,
                 category = HubCategory.SOCIAL,
                 statusApp = SkychatProfile.APP,
+                badgeCount = state.unreadMessages.takeIf { it > 0 },
                 // Same destination as the Chat tab (one screen, two entries).
                 onClick = { onOpenTab(Routes.CHAT) },
             ),
@@ -151,7 +151,10 @@ fun HubScreen(
         add(
             HubTile(
                 name = stringResource(R.string.app_wallet),
-                subtitle = stringResource(R.string.hub_wallet_sub),
+                // The one number a wallet is for, when there is one to show.
+                subtitle = state.skyBalance
+                    ?.let { stringResource(R.string.hub_wallet_balance, it) }
+                    ?: stringResource(R.string.hub_wallet_sub),
                 icon = Icons.Rounded.AccountBalanceWallet,
                 category = HubCategory.FINANCE,
                 onClick = { onOpenTab(Routes.WALLET) },
@@ -160,7 +163,11 @@ fun HubScreen(
         add(
             HubTile(
                 name = stringResource(R.string.app_fleet),
-                subtitle = stringResource(R.string.hub_fleet_sub),
+                // With the ingest on, the subtitle is the fleet's headcount.
+                subtitle = state.fleetOnline
+                    ?.takeIf { state.fleetEnabled }
+                    ?.let { pluralStringResource(R.plurals.hub_fleet_connected, it, it) }
+                    ?: stringResource(R.string.hub_fleet_sub),
                 icon = Icons.Rounded.Hub,
                 category = HubCategory.NETWORK,
                 wide = true,
@@ -328,12 +335,17 @@ private fun VpnHeroCard(
         else -> SkyAccents.successBright
     }
 
-    // The exit, as a person would say it: flag and country name, the short
-    // key when the country is unknown, and an honest "none yet" before the
-    // first connection.
-    val exit = state.vpnCountry?.let(::countryText)
-        ?: state.vpnExitPk?.let(::shortPk)
-        ?: stringResource(R.string.hub_hero_no_exit)
+    // The exit as flag, country name and enough of the key to tell two
+    // exits in one country apart. The exit's own IP is not knowable from
+    // this phone — the handshake carries a public key, a TUN IP and a
+    // gateway, no public address in either direction (NetworkAddressCard
+    // explains) — so the country is the "where" and the prefix the "which".
+    val exit = state.vpnExitPk?.let { pk ->
+        listOfNotNull(
+            state.vpnCountry?.let(::countryText),
+            pk.take(EXIT_PK_PREFIX),
+        ).joinToString(" · ")
+    } ?: stringResource(R.string.hub_hero_no_exit)
 
     Surface(
         onClick = onOpen,
@@ -454,16 +466,10 @@ private fun VpnHeroCard(
             // sit outside the stats row: how many hops the visor dials
             // through, and whether the killswitch would catch a drop.
             Spacer(Modifier.height(10.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // This device's own address, which SkyVPN does not change —
-                // the app carries the tunnel and stays outside it. The line
-                // above is the half that does change. NetworkAddressCard on
-                // the SkyVPN screen explains the distinction; here there is
-                // only room to show both and let them differ.
-                HeroChip(
-                    icon = Icons.Rounded.Language,
-                    text = deviceAddressText(state.overview),
-                )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 HeroChip(
                     icon = Icons.Rounded.Route,
                     text = if (state.minHops > 0) {
@@ -472,16 +478,37 @@ private fun VpnHeroCard(
                         stringResource(R.string.hub_hops_unknown)
                     },
                 )
-                HeroChip(
-                    icon = if (state.killswitch) Icons.Rounded.Shield else Icons.Rounded.GppMaybe,
-                    text = stringResource(
-                        if (state.killswitch) R.string.hub_killswitch_on
-                        else R.string.hub_killswitch_off,
-                    ),
-                    dim = !state.killswitch,
-                )
+                KillswitchChip(on = state.killswitch)
             }
         }
+    }
+}
+
+/**
+ * The killswitch as a state light rather than a caption: the whole shield
+ * green when a dropped tunnel would be caught, red when it would not. At
+ * chip size the old label was unreadable; the words live in the content
+ * description now, and the color is the message.
+ */
+@Composable
+private fun KillswitchChip(on: Boolean) {
+    val label = stringResource(
+        if (on) R.string.hub_killswitch_on else R.string.hub_killswitch_off,
+    )
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .background(Color.White.copy(alpha = 0.13f))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .semantics { contentDescription = label },
+    ) {
+        Icon(
+            imageVector = if (on) Icons.Rounded.Shield else Icons.Rounded.GppMaybe,
+            contentDescription = null,
+            tint = if (on) SkyAccents.successBright else SkyAccents.dangerBright,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -565,7 +592,13 @@ private fun AppCard(tile: HubTile, status: AppState?) {
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     IconTile(tile.icon)
-                    if (tile.statusApp != null) StatusDot(status)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        tile.badgeCount?.let {
+                            CountBadge(it)
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        if (tile.statusApp != null) StatusDot(status)
+                    }
                 }
                 Spacer(Modifier.height(9.dp))
                 Text(
@@ -660,6 +693,24 @@ private fun IconTile(icon: ImageVector) {
     }
 }
 
+/** Unread messages on the SkyChat tile: a filled pill beside the dot. */
+@Composable
+private fun CountBadge(count: Int) {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .padding(horizontal = 7.dp, vertical = 2.dp),
+    ) {
+        Text(
+            text = if (count > MAX_BADGE_COUNT) "$MAX_BADGE_COUNT+" else count.toString(),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onPrimary,
+        )
+    }
+}
+
 /**
  * The card's status dot with a soft halo: green running, amber starting,
  * error red errored, and the border grey of "not running" otherwise —
@@ -699,3 +750,9 @@ private fun CardSubtitle(text: String) {
         modifier = Modifier.padding(top = 2.dp),
     )
 }
+
+/** Enough of an exit key to tell two exits in one country apart. */
+private const val EXIT_PK_PREFIX = 6
+
+/** Past this the badge reads "99+" — the message is "a lot", not a number. */
+private const val MAX_BADGE_COUNT = 99

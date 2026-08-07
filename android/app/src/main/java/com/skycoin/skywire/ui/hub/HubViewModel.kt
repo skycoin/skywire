@@ -7,15 +7,23 @@ import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.api.AppConnection
 import com.skycoin.skywire.api.AppState
 import com.skycoin.skywire.api.Overview
+import com.skycoin.skywire.api.SkychatApi
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.Fleet
 import com.skycoin.skywire.core.SkyVpnService
+import com.skycoin.skywire.core.SkychatProfile
 import com.skycoin.skywire.ui.components.RateSampler
 import com.skycoin.skywire.ui.components.SavedServer
 import com.skycoin.skywire.ui.vpn.VpnArgs
+import com.skycoin.skywire.wallet.CoinSpec
+import com.skycoin.skywire.wallet.WalletRepository
+import com.skycoin.wallet.Amounts
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -52,6 +60,14 @@ data class HubUiState(
     val minHops: Int = 0,
     /** The hero card's toggle is mid-flight. */
     val vpnBusy: Boolean = false,
+    /** Messages waiting in SkyChat, as skychat itself counts them. */
+    val unreadMessages: Int = 0,
+    /** The active SKY wallet's cached balance, formatted; null = no wallet. */
+    val skyBalance: String? = null,
+    /** The Fleet opt-in, so the tile says nothing extra while it is off. */
+    val fleetEnabled: Boolean = false,
+    /** Remote visors currently connected in; null until the first count. */
+    val fleetOnline: Int? = null,
 ) {
     val coreReady: Boolean get() = coreState is CoreState.Running && apiUp
 
@@ -74,6 +90,8 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
 
     private val api = VisorApi.get(app)
     private val prefs = AppPreferences(app)
+    private val skychat = SkychatApi.get(app)
+    private val wallet = WalletRepository.get(app)
     private val json = Json { ignoreUnknownKeys = true }
 
     private val mutable = MutableStateFlow(HubUiState())
@@ -91,6 +109,13 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             prefs.boolean(VpnArgs.PREF_KILLSWITCH).collect { on ->
                 mutable.update { it.copy(killswitch = on) }
+            }
+        }
+        viewModelScope.launch {
+            prefs.boolean(Fleet.PREF_KEY, Fleet.DEFAULT).collect { on ->
+                mutable.update {
+                    it.copy(fleetEnabled = on, fleetOnline = if (on) it.fleetOnline else null)
+                }
             }
         }
         viewModelScope.launch {
@@ -185,6 +210,10 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Runs until the core-state collector cancels it. */
     private suspend fun poll() {
+        // Counting the fleet fires a Summary RPC to every remote over dmsg,
+        // which routinely outlasts this loop's own cadence — so it runs on
+        // FleetViewModel's slower one, folded in as every Nth pass.
+        var fleetCountdown = 0
         while (true) {
             runCatching {
                 val overview = api.summary().overview
@@ -218,8 +247,46 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             }
+            // The tiles' own numbers, each behind its own failure boundary —
+            // a chat probe failing must not cost the hero card its rates.
+            runCatching { pollBadges() }
+            if (mutable.value.fleetEnabled && fleetCountdown-- <= 0) {
+                fleetCountdown = FLEET_EVERY_N_POLLS - 1
+                runCatching { pollFleetCount() }
+            }
             delay(POLL_INTERVAL_MS)
         }
+    }
+
+    /**
+     * The SkyChat badge and the Wallet tile's balance. The unread number is
+     * skychat's own — the page reports what it shows, the server carries it
+     * while no page is open — and the balance is the wallet cache's, because
+     * the wallet tab owns talking to the node.
+     */
+    private suspend fun pollBadges() {
+        val chat = mutable.value.apps[SkychatProfile.APP]
+        val unread = if (chat?.running == true) {
+            skychat.unread(SkychatProfile.baseUrl(SkychatProfile.listenPort(chat.args)))
+                ?: mutable.value.unreadMessages
+        } else {
+            0
+        }
+        val balance = withContext(Dispatchers.IO) {
+            wallet.activeWalletId(CoinSpec.SKY.id).first()
+                ?.let { wallet.cachedSnapshot(it) }
+                ?.let { Amounts.format(it.confirmed, CoinSpec.SKY.exponent, 0) }
+        }
+        mutable.update { it.copy(unreadMessages = unread, skyBalance = balance) }
+    }
+
+    /** Remote visors currently connected in, the Fleet screen's own way. */
+    private suspend fun pollFleetCount() {
+        val local = api.localPk()
+        val online = api.visorsSummary()
+            .filterNot { it.isHypervisor || it.overview.localPk == local }
+            .count { it.online }
+        mutable.update { it.copy(fleetOnline = online) }
     }
 
     /**
@@ -237,5 +304,11 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val PING_INTERVAL_MS = 700L
         const val POLL_INTERVAL_MS = 5_000L
+
+        /**
+         * Fleet count cadence, in polls: 3 × 5 s matches FleetViewModel's
+         * 15 s, which is what the Summary-RPC-per-remote fan-out tolerates.
+         */
+        const val FLEET_EVERY_N_POLLS = 3
     }
 }
