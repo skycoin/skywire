@@ -165,6 +165,32 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
     }
   }
 
+  // --- wasm-visor fresh-worker reload (hv-boot.js window.skywireConfig) -------
+
+  /**
+   * True only when served as an in-browser wasm-visor, where hv-boot.js exposes
+   * window.skywireConfig.reset() (terminate the SharedWorker + reload a fresh
+   * blob). Absent for a native-hosted UI, so the action stays hidden there.
+   */
+  get reloadWorkerAvailable(): boolean {
+    return typeof window !== 'undefined' && !!window.skywireConfig && typeof window.skywireConfig.reset === 'function';
+  }
+
+  reloadWorker() {
+    if (!this.reloadWorkerAvailable) {
+      return;
+    }
+
+    const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'settings.reload-worker.confirmation');
+
+    confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
+      confirmationDialog.componentInstance.closeModal();
+      try {
+        window.skywireConfig.reset();
+      } catch (e) {}
+    });
+  }
+
   logout() {
     const confirmationDialog = GeneralUtils.createConfirmationDialog(this.dialog, 'common.logout-confirmation');
 

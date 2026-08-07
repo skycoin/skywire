@@ -120,7 +120,10 @@ var addPvCmd = &cobra.Command{
 			pks, _ = script.Echo(sds).JQ(sdJQ).Replace(`"`, "").Slice() //nolint:errcheck
 		} else {
 			// Filter by online status
-			uts := clirpc.FetchCachedServiceURL(cmd.Flags(), pvCacheFileUT, pvUTURL+"/uptimes?v=v2", pvCacheFilesAge)
+			uts := clirpc.FetchIntegratedUptimes(cmd.Flags(), pvUTURL, pvCacheFileUT, pvCacheFilesAge)
+			if uts == "" {
+				uts = "[]"
+			}
 			joinedJSON := fmt.Sprintf(`{"sd": %s, "ut": %s}`, sds, uts)
 			jqFilter := `
 			[ .ut[] | select(.on) | .pk ] as $online

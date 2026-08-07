@@ -167,7 +167,6 @@ func queryServicesDirect(cmdFlags *pflag.FlagSet) []skyvisor.ServiceHealthEntry 
 		"DMSG Discovery":      deployment.Prod.DmsgDiscovery,
 		"Address Resolver":    deployment.Prod.AddressResolver,
 		"Route Finder":        deployment.Prod.RouteFinder,
-		"Uptime Tracker":      deployment.Prod.UptimeTracker,
 		"Service Discovery":   deployment.Prod.ServiceDiscovery,
 	}
 

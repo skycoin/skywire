@@ -3,7 +3,6 @@
 package visor
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
-	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/pty"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -116,16 +114,18 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 		}
 	}
 
-	// ---------- DMSG servers (from session data, no HTTP probe) ----------
+	// ---------- DMSG servers ----------
+	// Pass the (possibly nil) dmsg-HTTP client so each server's version is
+	// fetched over the same discovery-routed path as the services above.
 	if v.dmsgC != nil {
-		results = append(results, v.dmsgServerHealth(nil)...)
+		results = append(results, v.dmsgServerHealth(dmsgClient)...)
 	}
 
 	return results, nil
 }
 
 // doHealthProbe performs a single GET {baseURL}/health and populates a ServiceHealthEntry.
-func doHealthProbe(client *http.Client, name, baseURL, transport string) ServiceHealthEntry {
+func doHealthProbe(client *http.Client, name, baseURL, transport string) ServiceHealthEntry { //nolint
 	entry := ServiceHealthEntry{Name: name, URL: baseURL, Transport: transport}
 
 	reqURL := strings.TrimSuffix(baseURL, "/") + "/health"
@@ -181,7 +181,7 @@ func (v *Visor) confServiceDmsg() string {
 // measured ping RTT (0 if unmeasured). Entries are sorted by PK so the
 // UI order remains stable across polls (DMSGServers() sorts by latency
 // which flips between samples and causes visible reordering).
-func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
+func (v *Visor) dmsgServerHealth(httpClient *http.Client) []ServiceHealthEntry {
 	servers, err := v.DMSGServers()
 	if err != nil || len(servers) == 0 {
 		return nil
@@ -214,40 +214,22 @@ func (v *Visor) dmsgServerHealth(_ *http.Client) []ServiceHealthEntry {
 			LatencyMs: latStr,
 			IP:        addrByPK[s.PK],
 		}
-		// Probe /health via the existing session to get the version.
-		if v.dmsgC != nil {
+		// Fetch the version from the server's /health endpoint over dmsg via
+		// the SAME discovery-routed dmsg-HTTP client the other services use —
+		// NOT a stream pinned to this server's own session. A dmsg server
+		// serves /health on its transit dmsg client (dmsg port 80, a normal
+		// client entry in discovery); dialing the relay server's own PK
+		// through the session with THAT server finds no local client session
+		// for the PK and fails, which is why the VERSION column was empty.
+		// doHealthProbe applies the same build_info.version extraction as the
+		// deployment-service rows.
+		if httpClient != nil {
 			wg.Add(1)
 			go func(idx int, serverPK cipher.PubKey) {
 				defer wg.Done()
-				ses, ok := v.dmsgC.Session(serverPK)
-				if !ok {
-					return
-				}
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				stream, err := ses.DialStream(ctx, dmsg.Addr{PK: serverPK, Port: 80})
-				if err != nil {
-					return
-				}
-				defer stream.Close() //nolint:errcheck
-				// Send HTTP request on the stream.
-				req, _ := http.NewRequestWithContext(ctx, "GET", "http://"+serverPK.String()+":80/health", nil) //nolint:errcheck
-				if err := req.Write(stream); err != nil {
-					return
-				}
-				resp, err := http.ReadResponse(bufio.NewReader(stream), req)
-				if err != nil {
-					return
-				}
-				body, _ := io.ReadAll(resp.Body) //nolint:errcheck
-				resp.Body.Close()                //nolint:errcheck,gosec
-				var health map[string]interface{}
-				if json.Unmarshal(body, &health) == nil {
-					if bi, ok := health["build_info"].(map[string]interface{}); ok {
-						if ver, ok := bi["version"].(string); ok {
-							out[idx].Version = ver
-						}
-					}
+				probe := doHealthProbe(httpClient, "DMSG Server", "dmsg://"+serverPK.String()+":80", "dmsg")
+				if probe.Version != "" {
+					out[idx].Version = probe.Version
 				}
 			}(i, s.PK)
 		}
@@ -703,10 +685,16 @@ func (v *Visor) GetIsPublic() bool {
 	return v.conf.IsPublic
 }
 
-// GetRuntimeConfig returns the visor's running config as JSON bytes.
-// The SK is included — callers should consider access control.
+// GetRuntimeConfig returns the visor's running config as JSON bytes with the
+// secret key redacted — it never leaves the process via this view (matching the
+// browser wasm-visor). The PK is kept but is not editable on save; see
+// SetRuntimeConfig, which preserves and re-injects the real SK.
 func (v *Visor) GetRuntimeConfig() ([]byte, error) {
-	return json.MarshalIndent(v.conf, "", "  ")
+	b, err := json.MarshalIndent(v.conf, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return redactTopLevelSK(b), nil
 }
 
 // GetConfigPath returns the filesystem path the visor loaded its config

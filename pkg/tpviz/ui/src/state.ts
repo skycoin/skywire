@@ -168,3 +168,19 @@ export const ipGroupColors: Record<number, string> = {};
 // Globe view state
 export let globeViewActive = false;
 export function setGlobeViewActive(active: boolean) { globeViewActive = active; }
+
+// Visibility gate — true while the visualizer isn't visible (backgrounded browser
+// tab, or the mount element off-screen/hidden). The self-rescheduling rAF render
+// loops check this and skip their draw (keeping the loop alive so they auto-resume
+// when it clears); the data-sync loops are cleared/re-armed around it. See
+// lifecycle.pauseWhileHidden/resumeWhenVisible + mount.ts.
+export let renderPaused = false;
+export function setRenderPaused(p: boolean) { renderPaused = p; }
+
+// Global (window/document) event listeners the app registers live OUTSIDE the
+// mounted DOM, so root.innerHTML='' on unmount does not remove them and they
+// accumulate across mount cycles. Register every such listener with this
+// controller's signal; teardown() aborts it (removing them all at once) and
+// resets a fresh controller for the next mount.
+export let globalListeners = new AbortController();
+export function resetGlobalListeners() { globalListeners = new AbortController(); }

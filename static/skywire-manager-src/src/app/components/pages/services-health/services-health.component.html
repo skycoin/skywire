@@ -148,6 +148,7 @@
       </div>
     }
 
+    @if (rsnAvailable) {
     <!-- Route Setup Node remote stats (fetched over DMSG). -->
     <div class="rsn-section mt-4">
       <h3 class="rsn-title">{{ 'services-health.rsn-section' | translate }}</h3>
@@ -225,5 +226,6 @@
         </div>
       }
     </div>
+    }
   </div>
 </div>

@@ -141,6 +141,8 @@ function clearBoundaryCanvas(): void {
 function drawBoundaries(): void {
   boundaryRAF = null;
   if (!active || !graph || boundaryCircles.length === 0) { clearBoundaryCanvas(); return; }
+  // Suspended (visualizer not visible): keep the loop alive but skip the redraw.
+  if (S.renderPaused) { boundaryRAF = requestAnimationFrame(drawBoundaries); return; }
   // Idle-skip: if the view transform is unchanged since the last drawn frame,
   // reschedule without touching the canvas. Keeps the overlay glued to the graph
   // during pan/zoom while cutting idle CPU (the grouped layout is static).
@@ -193,6 +195,33 @@ function stopBoundaries(): void {
   if (boundaryRAF != null) { cancelAnimationFrame(boundaryRAF); boundaryRAF = null; }
   lastBoundaryKey = '';
   clearBoundaryCanvas();
+}
+
+// cosmosPause / cosmosResume suspend + restore the WebGL render loop when the
+// visualizer isn't visible. Unlike the settle-pause (which frees the GPU once the
+// layout is framed), this is a reversible visibility gate: pause halts rendering
+// while hidden, resume restarts the sim so it keeps running while visible. No-op
+// unless the cosmos view is active + built.
+export function cosmosPause(): void {
+  if (graph && active) { try { graph.pause(); } catch { /* noop */ } }
+}
+export function cosmosResume(): void {
+  if (graph && active) { try { graph.start(); } catch { /* noop */ } }
+}
+
+// cosmosTeardown stops the WebGL renderer + the boundary-overlay rAF and releases
+// the GPU graph, so unmounting the tab doesn't leave the cosmos render loop /
+// force simulation running against a detached canvas. Idempotent + null-safe.
+export function cosmosTeardown(): void {
+  stopBoundaries();
+  if (graph) {
+    // Prefer a full destroy() if the cosmos build exposes one; otherwise pause()
+    // (which stops scheduling frames) is enough to halt the render loop.
+    try { (graph as unknown as { destroy?: () => void }).destroy?.(); } catch { /* noop */ }
+    try { graph.pause(); } catch { /* noop */ }
+    graph = null;
+  }
+  active = false;
 }
 
 export function isCosmosActive(): boolean {

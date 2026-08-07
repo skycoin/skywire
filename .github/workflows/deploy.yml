@@ -1,4 +1,8 @@
 name: Deploy
+
+permissions:
+  contents: read
+
 # only trigger on pull request closed events
 on:
   push:

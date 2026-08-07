@@ -26,6 +26,9 @@ on:
 
 name: Nix
 
+permissions:
+  contents: read
+
 jobs:
   build-source:
     name: Build skywire (static musl)

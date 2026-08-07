@@ -36,6 +36,9 @@ on:
 
 name: Test IPv6 dual-stack
 
+permissions:
+  contents: read
+
 jobs:
   ipv6-e2e:
     runs-on: ubuntu-latest

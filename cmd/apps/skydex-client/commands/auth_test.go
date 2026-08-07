@@ -128,7 +128,7 @@ func TestGatedServerMovesTheEngine(t *testing.T) {
 	// Stand in for the engine on the address the gate expects it.
 	engine := &http.Server{ //nolint:gosec
 		Addr:              engineAddr,
-		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, r.URL.Path) }),
+		Handler:           http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, r.URL.Path) }), //nolint
 		ReadHeaderTimeout: time.Second,
 	}
 	go func() { _ = engine.ListenAndServe() }() //nolint:errcheck
@@ -196,8 +196,8 @@ func get(t *testing.T, url, password string) (int, string) {
 			time.Sleep(25 * time.Millisecond)
 			continue
 		}
-		defer resp.Body.Close() //nolint:errcheck
-		body, _ := io.ReadAll(resp.Body)
+		defer resp.Body.Close()          //nolint:errcheck
+		body, _ := io.ReadAll(resp.Body) //nolint
 		return resp.StatusCode, string(body)
 	}
 	t.Fatalf("GET %s never answered: %v", url, last)

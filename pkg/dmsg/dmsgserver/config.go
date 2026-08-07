@@ -169,7 +169,12 @@ type Config struct {
 	// (Server.AddressWT), e.g. "https://1.2.3.4:8443/dmsg". Required when
 	// WTAddress is set, otherwise clients learn no URL to dial. It should use a
 	// bare IP (the browser pins the cert hash, not a hostname).
-	PublicAddressWT  string        `json:"public_address_wt,omitempty"`
+	PublicAddressWT string `json:"public_address_wt,omitempty"`
+	// DisableWT opts OUT of the default-on dmsg-over-WebTransport that otherwise
+	// rides the main UDP socket (shared with dmsg-over-QUIC, ALPN-demuxed) and is
+	// advertised automatically from the public address. Set it on a server whose
+	// UDP endpoint genuinely can't serve WT (e.g. a proxy that can't pass HTTP/3).
+	DisableWT        bool          `json:"disable_wt,omitempty"`
 	LocalAddress     string        `json:"local_address"`
 	HTTPAddress      string        `json:"health_endpoint_address"`
 	LogLevel         string        `json:"log_level"`

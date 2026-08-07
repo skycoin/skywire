@@ -8,17 +8,22 @@ import (
 
 // defaultPreference is the built-in priority order:
 //
-//	STCPR > QUIC > SUDPH > STCP > WEBRTC > WS > WT > DMSG
+//	STCPR > QUIC > SUDPH > STCP > WT > WS > WEBRTC > DMSG
 //
 // STCPR (plain TCP via the address resolver) connects through the widest set of
 // networks, so it stays the reliable baseline. QUIC slots above SUDPH: both are
 // UDP, but QUIC is encrypted with modern congestion control and gives datagrams,
-// whereas SUDPH is raw KCP over hole-punching. The browser-oriented direct types
-// (WEBRTC/WS/WT) sit just above DMSG — they ARE direct (the "direct over DMSG"
-// rule), but are newer and chiefly serve browser/NAT-constrained peers. DMSG is
-// last: a dmsg server is an opaque intermediary not visible to path planning.
+// whereas SUDPH is raw KCP over hole-punching. The browser-oriented carriers sit
+// just above DMSG, and within that group the DIRECT ones outrank the relayed one:
+// WT (WebTransport/QUIC, browser-dialable to a reachable endpoint) then WS
+// (WebSocket, insecure-page-only) are true point-to-point links, so they must be
+// preferred over WEBRTC — which reaches ANY visor but only via NAT-traversal
+// (ICE) with dmsg-carried signaling, i.e. heavier and last-direct-resort. A
+// browser edge should therefore make WEBRTC only to peers no direct carrier can
+// reach, matching the public-autoconnect's WT-first/WebRTC-fallback design. DMSG
+// is last: a dmsg server is an opaque intermediary not visible to path planning.
 // Unknown types sort after everything listed.
-var defaultPreference = []Type{STCPR, QUIC, SUDPH, STCP, WEBRTC, WS, WT, DMSG}
+var defaultPreference = []Type{STCPR, QUIC, SUDPH, STCP, WT, WS, WEBRTC, DMSG}
 
 // preferenceOrder is the active order, settable via SetPreferenceOrder.
 // Stored atomically so reads are lock-free in hot path code.
@@ -47,11 +52,9 @@ func TypePreference(t Type) int {
 func PreferenceOrder() []Type {
 	order := preferenceOrder.Load()
 	if order == nil {
-		order = &defaultPreference
+		return append([]Type(nil), defaultPreference...)
 	}
-	out := make([]Type, len(*order))
-	copy(out, *order)
-	return out
+	return append([]Type(nil), (*order)...)
 }
 
 // PreferredOrder returns candidates sorted by TypePreference, most-preferred

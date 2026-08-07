@@ -658,7 +658,7 @@ export function initGlobe(): void {
     container.addEventListener('mouseup', onMouseUp);
     container.addEventListener('wheel', onWheel);
     container.addEventListener('click', onGlobeClick);
-    window.addEventListener('resize', onWindowResize);
+    window.addEventListener('resize', onWindowResize, { signal: S.globalListeners.signal });
 
     // Start animation
     animate();
@@ -669,6 +669,9 @@ function animate(): void {
     if (!isGlobeActive) return;
 
     animationId = requestAnimationFrame(animate);
+
+    // Suspended (visualizer not visible): keep the loop alive but skip rendering.
+    if (S.renderPaused) return;
 
     // Auto-rotate using quaternion
     if (globe && autoRotate && !isDragging) {

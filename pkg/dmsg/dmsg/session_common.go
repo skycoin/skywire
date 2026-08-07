@@ -41,6 +41,12 @@ type SessionCommon struct {
 	// (and, for ws, whether it was plain ws:// or secured wss://).
 	carrierAddr string
 
+	// wtCapable records whether this session's server advertises a WebTransport
+	// endpoint (AddressWT) in discovery. Only WT-capable servers should have their
+	// bootstrap wss session dropped by UpgradeBrowserSessions — dropping a wss to a
+	// server that can't do WT just re-dials wss on the next tick (churn).
+	wtCapable bool
+
 	netConn net.Conn // underlying net.Conn (TCP connection to the dmsg server)
 	// ys      *yamux.Session
 	// ss      *smux.Session

@@ -111,27 +111,33 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	// exits (and different windows) establish in parallel.
 	t0 := time.Now()
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] connecting to exit %s — setting up route…", winID, serverPK.Hex()[:8]))
-	// 18s cap: a reachable exit's route sets up in a few seconds; a dead/unroutable
-	// one (common when picking a random SD exit) should FAIL FAST so the caller can
-	// try another, not hang ~45s. Runs off skysocksMu so exits establish in parallel.
+	// 18s cap: a reachable exit's route (p2p multihop or a freshly-created direct
+	// transport) sets up in a few seconds; a dead/unroutable one should FAIL so the
+	// caller can try another, not hang. Runs off skysocksMu so exits establish in
+	// parallel.
 	dctx, cancel := context.WithTimeout(ctx, 18*time.Second)
 	defer cancel()
-	// Single route to the skysocks server — matching the native visor's working
-	// BrowseClearnet path (which dials with nil opts). Requesting a 2-route mux
-	// here looked cheap but broke browsing: the mux route group reports "2/2
-	// established", yet the yamux session over it immediately reads EOF ("socks
-	// connect tcp: session shutdown") — the mux data plane never carries the
-	// skysocks bytes to the exit, so every fetch failed. The native's single
-	// route to the SAME exit returns 200, so we mirror it. mux-auto GROW can
-	// still adapt an established single route later; it just isn't requested up
-	// front where it was silently killing the session.
+	// Default dial: the router races the route-finder (a multihop route over
+	// EXISTING peer-to-peer transports) against the visor's route-setup hook, which
+	// creates the best DIRECT transport to the exit — for a browser edge that's
+	// WEBRTC (p2p), falling back to the dmsg relay only if nothing direct works
+	// (see EnsureBestTransport, wired as the wasm SetupHook in main.go). Whichever
+	// lands first wins; both keep the data plane peer-to-peer. This is exactly what
+	// native `skysocks-client` does by default — no --direct, no forced dmsg.
+	//
+	// Single route (MuxRoutes 0, DefaultDialOptions): matching the native visor's
+	// working BrowseClearnet path. A 2-route mux reports "2/2 established" yet the
+	// yamux session over it immediately reads EOF ("session shutdown") — the mux
+	// data plane never carries the skysocks bytes. mux-auto GROW can still adapt an
+	// established single route later.
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
 	if err != nil {
 		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
-		// If this was the default instance's auto-selected active exit, hand it
-		// to the pool so a vetted standby is promoted (skip probe windows — a
-		// probe failure is the expected negative result, not a live-exit death).
-		if !strings.HasPrefix(winID, "pool-probe-") {
+		// If this was the default instance's auto-selected active exit, hand it to
+		// the retry policy (sticky-same-key when it had connected, else rotate).
+		// Skip the visor's OWN internal windows (probe / sticky / keepalive / warm)
+		// — each manages its own failure so they don't re-enter the policy.
+		if !isInternalProxyWindow(winID) {
 			reportProxyExitDead(serverPK)
 		}
 		return nil, fmt.Errorf("dial skysocks route: %w", err)
@@ -151,6 +157,11 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	}
 	skysocksSessions[key] = sess
 	skysocksMu.Unlock()
+	// Record that a REAL route to this exit came up (probe windows excluded), so a
+	// later drop is retried with the same key rather than rotated to a new random.
+	if !isProbeProxyWindow(winID) {
+		markProxyExitConnected(serverPK)
+	}
 	emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route+session to exit %s established (%dms)", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds()))
 	return sess, nil
 }

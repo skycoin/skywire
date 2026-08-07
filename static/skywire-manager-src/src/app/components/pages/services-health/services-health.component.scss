@@ -14,6 +14,15 @@
   padding: 24px 0;
 }
 
+// Neutral (not red) notice shown when the view degrades gracefully — e.g. a
+// browser wasm visor that can't probe the deployment services.
+.info-row {
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 24px 0;
+}
+
 .summary-line {
   display: flex;
   align-items: center;

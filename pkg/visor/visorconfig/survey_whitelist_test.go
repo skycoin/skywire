@@ -9,7 +9,7 @@ import (
 )
 
 // The deployment survey whitelist is a policy switch with real consequences —
-// its keys authorise their holders to read a visor's logs, system survey and
+// its keys authorize their holders to read a visor's logs, system survey and
 // pprof over dmsg — and it is read from two places that must agree: the
 // generator, which writes the field, and the hourly config refresh, which
 // would otherwise put back whatever generation left empty. Pinning the value

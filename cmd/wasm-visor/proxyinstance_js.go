@@ -332,23 +332,38 @@ func probeExit(pk cipher.PubKey) bool {
 	return true
 }
 
-// reportProxyExitDead is called when a route/dial to an exit fails. If it is the
-// default instance's current AUTO-selected active exit, that exit is evicted, its
-// live sessions are severed, and the next vetted standby is promoted instantly;
-// if the pool empties, a fresh selection round is kicked off in the background.
-// No-op for operator-pinned exits or any non-active exit (so probe failures and
-// unrelated windows don't disturb the pool).
+// reportProxyExitDead is called when the active auto exit's route dies. If that
+// exit had ever established a real connection, it is retried with the SAME key
+// (stickyReconnect — exponential backoff) before giving up; if it never connected
+// (the very first dial failed), it is rotated out immediately for a new random
+// exit. No-op for operator-pinned or non-active exits, or while a sticky retry is
+// already in flight (so probe / keepalive / unrelated windows don't disturb it).
 func reportProxyExitDead(pk cipher.PubKey) {
-	if pk.Null() {
+	if pk.Null() || !isActiveAutoExit(pk) {
 		return
 	}
-	proxyRegMu.Lock()
-	inst := proxyReg[defaultProxyID]
-	isActiveAuto := inst != nil && inst.Auto && inst.ExitPK == pk
-	proxyRegMu.Unlock()
-	if !isActiveAuto {
+	proxyConnMu.Lock()
+	retrying := proxyStickyActive[pk]
+	everConnected := proxyEverConnected[pk]
+	proxyConnMu.Unlock()
+	if retrying {
+		return // a sticky-reconnect loop already owns this exit
+	}
+	if everConnected {
+		vlog(fmt.Sprintf("[skysocks-lite] active exit %s dropped — retrying same key", exitShort(pk)))
+		go stickyReconnect(pk)
 		return
 	}
+	vlog(fmt.Sprintf("[skysocks-lite] active exit %s never connected — rotating to a new exit", exitShort(pk)))
+	rotateAwayFromExit(pk)
+}
+
+// rotateAwayFromExit evicts pk from the pool, severs its sessions, and promotes the
+// next vetted standby instantly (topping the pool back up in the background); if the
+// pool is empty it clears the exit and kicks off a fresh selection round. This is
+// the "give up on this exit" path — the immediate action when an exit never
+// connected, and the fallback after stickyReconnect exhausts its retries.
+func rotateAwayFromExit(pk cipher.PubKey) {
 	proxyPoolMu.Lock()
 	kept := proxyPool[:0]
 	for _, e := range proxyPool {

@@ -181,7 +181,7 @@ export async function fetchAllData(): Promise<boolean> {
     }
 }
 
-function updateCountdown(): void {
+export function updateCountdown(): void {
     if (!S.nextRefreshTime) return;
     const remaining = Math.max(0, Math.ceil((S.nextRefreshTime - Date.now()) / 1000));
 
