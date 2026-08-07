@@ -7,6 +7,89 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — SkyVPN: real rates, route length, killswitch, and an honest address
+
+Four things asked of the SkyVPN card and screen. Three were straightforward;
+the fourth turned out to be impossible as literally requested, and the
+interesting part is why.
+
+**Down and Up were always zero, and the fields were never going to work.**
+`AppConnection.upload_speed` / `download_speed` are not derived from the byte
+counters. The route group exchanges them inside its ping/pong keepalive —
+`handlePingPacket` stores whatever throughput the far side announced, and the
+download figure is the remote throughput echoed back — so they need an active
+route group, a cooperating exit and a completed ping round. On a phone they sit
+at zero and never move. The SkyVPN screen had quietly known this for a while:
+its rate row was already behind a `> 0` guard, so it simply never appeared.
+
+`bandwidth_sent` / `bandwidth_received` do move, so the new `RateSampler`
+measures the rate here instead — bytes gained since the previous sample over
+the time between them, on `elapsedRealtime` so a clock correction cannot
+produce a rate in gigabytes. A counter that goes backwards means the app
+re-dialled and ends the series rather than reporting the difference. Nothing
+new is asked of the visor; the numbers come from a poll already being made.
+
+**Route length is now a control.** `min_hops` is a router knob — 1 allows a
+direct route, 2 or more forces intermediaries so no single node sees both who
+is asking and what is being asked. The card offers 1/2/3 with those words
+rather than a bare number, since "min_hops" decides nothing for anyone. The
+existing `setTransportPreference` already documented why the PUT must be
+read-modify-write (it applies every field, so sending one alone would send
+`min_hops: 0`, which the router reads as routing disabled); both setters now go
+through one private `updateRouterSettings` so no future one rediscovers that.
+Changing it re-dials a running tunnel — the setting only takes effect when a
+route is built, so an established tunnel would otherwise keep the hop count it
+was dialled with while the screen claimed otherwise. Unlike the transport
+order, which the phone owns and re-pins every launch, this one is the visor's:
+it persists it, and the phone profile's routing edit starts from the existing
+object, so it survives.
+
+**Killswitch state is on the card**, read from the phone's own preference so it
+is right with the core down — which is when someone checks whether they are
+still covered.
+
+**The before/after IP cannot be done the way it is normally done, and showing
+it anyway would have been a lie.** `SkyVpnService` excludes this app's UID from
+the tunnel, and it has to: the visor is a child of the same UID and its dmsg
+traffic is what *carries* the tunnel. So any address probe the phone makes —
+whether from Kotlin or from the visor — leaves through the underlay whether or
+not SkyVPN is up. It would print the same address twice and read as broken.
+That is also why the desktop CLI's "Your current IP" does not port: that
+process is inside the tunnel; this app is not.
+
+Nor can the exit's address be asked for. The VPN handshake is
+`ClientHello{UnavailablePrivateIPs}` and `ServerHello{Status, TUNIP,
+TUNGateway}` — private `192.168.255.x` addresses and a public key. Neither side
+carries a public address, so there is no field to read.
+
+So the card shows the two things that are true: the address this device reaches
+the network from, which SkyVPN does not change, and the country the traffic
+leaves from, which is the thing that does. The device address comes from
+`Overview.public_ip`, already on the wire in a poll being made anyway — but it
+is not safe to print raw. The visor writes the *NAT type* into that field when
+STUN fails and leaves it empty behind symmetric NAT, so `publicIpOrNull` gates
+it and the UI says "Shared carrier address" or "Not discoverable" rather than
+rendering the word "Blocked" as though it were an address. A note under the
+rows explains why the device's own address does not move.
+
+A real exit IP needs a public-address field added to `ServerHello`, on both
+ends, with version-skew handling — deliberately not done here.
+
+**Verified** on emulator-5554 against a live core. The hero card renders the
+device address, hops and killswitch chips alongside the stats row; the SkyVPN
+screen renders the Network address card with its explanation and the Route
+length control. Tapping "2 hops" flipped the hint to the multihop wording and
+`routing.min_hops` in the visor's own config became `2`; tapping back restored
+`1`. The emulator sits behind NAT, so the device address correctly reads
+"Shared carrier address" — the symmetric-NAT guard doing its job on the first
+device it met.
+
+Not verified: Down/Up showing non-zero. That needs a tunnel actually carrying
+traffic to a reachable exit, which the emulator has not established; the cells
+render "—" from the null path, which is the same code path with no samples yet.
+
+---
+
 ## 2026-08-07 — CI for the app, and a release lane behind a `mobile-v*` tag
 
 Two workflows. Neither touches the desktop lanes.

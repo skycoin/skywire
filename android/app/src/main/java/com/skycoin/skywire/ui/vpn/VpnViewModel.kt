@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.api.AppConnection
 import com.skycoin.skywire.api.AppState
+import com.skycoin.skywire.api.Overview
 import com.skycoin.skywire.api.ServiceEntry
 import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppPreferences
@@ -41,7 +42,17 @@ data class VpnUiState(
     val query: String = "",
     /** Transport type the visor tries first — see [TransportPreference]. */
     val transportPrimary: String = TransportPreference.DEFAULT,
+    /**
+     * Minimum route hops. Unlike [transportPrimary], which the phone owns and
+     * re-pins into the config on every launch, this one is the visor's: it is
+     * read from and written to the router settings, the visor persists it, and
+     * the phone profile's routing edit preserves whatever it finds. 0 means
+     * "not read yet" — the visor's own floor is 1.
+     */
+    val minHops: Int = 0,
     val killswitch: Boolean = false,
+    /** Last summary overview — the device's own address comes off this. */
+    val overview: Overview? = null,
     val lastServer: SavedServer? = null,
     /** Bytes this phone has moved through SkyVPN, across all sessions. */
     val lifetimeBytes: Long = 0,
@@ -149,6 +160,16 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
                     while (!api.ping()) delay(PING_INTERVAL_MS)
                     mutable.update { it.copy(apiUp = true) }
                     applyStoredKillswitch()
+                    runCatching { api.routerSettings().minHops }.getOrNull()?.let { hops ->
+                        mutable.update { it.copy(minHops = hops) }
+                    }
+                    // Once, not per poll: public_ip is the visor's startup
+                    // STUN result and STUN is not re-run in steady state, so
+                    // re-reading it every two seconds would cost a summary
+                    // call to watch a value that cannot change.
+                    runCatching { api.summary().overview }.getOrNull()?.let { ov ->
+                        mutable.update { it.copy(overview = ov) }
+                    }
                     // The API answers well before dmsg has a session, and the
                     // exit list rides dmsg — so the opening fetch gets a few
                     // attempts before it becomes the user's problem.
@@ -221,6 +242,23 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
         }
         val pk = state.selectedPk ?: return@action
         startWith(state.lastServer?.takeIf { it.pk == pk } ?: SavedServer(pk))
+    }
+
+    /**
+     * Change the minimum number of route hops. Visor-wide, like the transport
+     * preference, and applied to the running tunnel by re-dialling it: the
+     * setting only takes effect when a route is built, so an established
+     * tunnel would otherwise keep the hop count it was dialled with and the
+     * screen would claim a privacy property the traffic does not have.
+     */
+    fun setMinHops(hops: Int) = action {
+        val settings = api.setMinHops(hops)
+        mutable.update { it.copy(minHops = settings.minHops) }
+        val state = mutable.value
+        if (state.running || state.starting) {
+            val pk = state.selectedPk ?: return@action
+            startWith(state.lastServer?.takeIf { it.pk == pk } ?: SavedServer(pk))
+        }
     }
 
     /**

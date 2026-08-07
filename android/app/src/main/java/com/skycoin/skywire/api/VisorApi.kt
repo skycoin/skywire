@@ -345,27 +345,38 @@ class VisorApi(context: Context) {
     /**
      * Install [order] as the transport-type priority order, live — the
      * visor applies it without a restart and persists it to its config.
-     *
-     * Read-modify-write, and it has to be: the PUT applies every field of
-     * the settings struct, so sending the preference alone would also send
-     * `min_hops: 0` — which the router reads as *routing disabled* — along
-     * with a zeroed mux_routes.
      */
     suspend fun setTransportPreference(order: List<String>): RouterSettings =
-        withContext(Dispatchers.IO) {
-            val body = json.encodeToString(
-                RouterSettings.serializer(),
-                routerSettings().copy(transportPreference = order),
-            )
-            putWithRelogin("/api/visors/${localPk()}/router-settings", body).use { resp ->
-                if (!resp.isSuccessful) {
-                    throw IOException(
-                        "router settings update failed (${resp.code}): ${errorBody(resp)}",
-                    )
-                }
-                decode<RouterSettings>(resp)
+        updateRouterSettings { it.copy(transportPreference = order) }
+
+    /**
+     * Set the minimum number of route hops the visor dials through. 1 allows
+     * a direct route; 2 or more forces the traffic through intermediaries,
+     * which is what buys sender privacy at the cost of latency.
+     */
+    suspend fun setMinHops(hops: Int): RouterSettings =
+        updateRouterSettings { it.copy(minHops = hops) }
+
+    /**
+     * Read-modify-write of the router knobs, and it has to be: the PUT
+     * applies every field of the settings struct, so sending one field alone
+     * would also send `min_hops: 0` — which the router reads as *routing
+     * disabled* — along with a zeroed mux_routes. Every caller goes through
+     * here so no future setter can rediscover that the hard way.
+     */
+    private suspend fun updateRouterSettings(
+        edit: (RouterSettings) -> RouterSettings,
+    ): RouterSettings = withContext(Dispatchers.IO) {
+        val body = json.encodeToString(RouterSettings.serializer(), edit(routerSettings()))
+        putWithRelogin("/api/visors/${localPk()}/router-settings", body).use { resp ->
+            if (!resp.isSuccessful) {
+                throw IOException(
+                    "router settings update failed (${resp.code}): ${errorBody(resp)}",
+                )
             }
+            decode<RouterSettings>(resp)
         }
+    }
 
     // --- voice calls ---
 
