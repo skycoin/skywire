@@ -402,9 +402,13 @@
     <string name="wallet_coin_native">Skycoin mainnet · native</string>
     <string name="wallet_coin_fiber">Fiber coin</string>
     <string name="wallet_coin_btc">Bitcoin mainnet</string>
-    <string name="wallet_coins_add">Add a fiber coin</string>
+    <string name="wallet_coin_eth">Ethereum mainnet</string>
+    <string name="wallet_coin_erc20">ERC-20 token on Ethereum</string>
+    <string name="wallet_coins_add">Add a coin or token</string>
     <string name="wallet_hours_sub">%1$s Coin Hours</string>
     <string name="wallet_btc_sub">%1$d confirmed outputs · no Coin Hours on this chain</string>
+    <string name="wallet_eth_sub">Ethereum mainnet · fees paid in ETH</string>
+    <string name="wallet_erc20_sub">%1$s on Ethereum · fees paid in ETH</string>
     <string name="wallet_stale_banner">Node unreachable. Balance and history last updated at %1$s, %2$s ago. Sending is off until the node answers.</string>
     <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
     <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>
@@ -440,6 +444,7 @@
     <string name="wallet_send_to">To</string>
     <string name="wallet_send_to_hint_fiber">%1$s address</string>
     <string name="wallet_send_to_hint_btc">bc1… or 1… address</string>
+    <string name="wallet_send_to_hint_eth">0x… address</string>
     <string name="wallet_paste">Paste</string>
     <string name="wallet_scan_description">Scan a QR code</string>
     <string name="wallet_send_amount">Amount</string>
@@ -447,6 +452,8 @@
     <string name="wallet_max">Max</string>
     <string name="wallet_max_note_fiber">Max sends every %1$s. Coin Hours are not sent — a share of them is burned as the fee.</string>
     <string name="wallet_max_note_btc">Max spends every confirmed output and subtracts the miner fee, so the amount moves with the rate.</string>
+    <string name="wallet_max_note_eth">Max holds back a little ETH for gas; the exact remainder is computed when you review.</string>
+    <string name="wallet_max_note_erc20">Max sends the whole token balance. Gas is paid in ETH from the same address.</string>
     <string name="wallet_fee">Fee</string>
     <string name="wallet_hours_burned">Coin Hours burned</string>
     <string name="wallet_hours_after">Coin Hours after</string>
@@ -460,6 +467,11 @@
     <string name="wallet_fee_eta_economy">~2 h</string>
     <string name="wallet_fee_eta_normal">~30 min</string>
     <string name="wallet_fee_eta_priority">~10 min</string>
+    <string name="wallet_fee_network">Network fee</string>
+    <string name="wallet_fee_at_review">calculated at review</string>
+    <string name="wallet_fee_gas">Gas limit %1$d · up to %2$d gwei per gas</string>
+    <string name="wallet_fee_note_eth">The fee shown is the worst case at today’s prices — unspent gas is never charged.</string>
+    <string name="wallet_fee_note_erc20">Token transfers burn gas, and gas is paid in ETH from the sending address — keep a little ETH next to the tokens.</string>
     <string name="wallet_review">Review</string>
     <string name="wallet_review_title">You are about to send</string>
     <!-- %2$s is the coin's own name: Skycoin is the original chain, each
@@ -467,6 +479,7 @@
     <string name="wallet_review_dest">to %1$s on the %2$s network. Nothing is signed until you confirm.</string>
     <string name="wallet_review_amount">Amount</string>
     <string name="wallet_review_miner_fee">Miner fee at %1$d sat/vB</string>
+    <string name="wallet_review_network_fee">Network fee, at most</string>
     <string name="wallet_review_total">Total leaving the wallet</string>
     <string name="wallet_review_balance_after">%1$s balance after</string>
     <string name="wallet_review_hours_after">Coin Hours after</string>
@@ -533,14 +546,21 @@
     <string name="wallet_reveal_autohide">Screenshots are disabled. This screen closes on its own in %1$s.</string>
     <string name="wallet_reveal_hide">Hide the phrase</string>
 
-    <string name="wallet_add_coin_title">Add a fiber coin</string>
+    <string name="wallet_add_coin_title">Add a coin or token</string>
+    <string name="wallet_add_kind_fiber">Fiber coin</string>
+    <string name="wallet_add_kind_erc20">ERC-20 token</string>
     <string name="wallet_add_coin_body">Every fiber coin runs the same node software as Skycoin. Name the coin and point the wallet at a node you trust — balances, fees and precision come from that node.</string>
+    <string name="wallet_add_token_body">Every ERC-20 token lives on Ethereum and differs only in its contract. The decimals must match the contract’s own — 6 for USDT-like tokens, 18 for most — or amounts will read wrong.</string>
     <string name="wallet_add_coin_name">Coin name</string>
     <string name="wallet_add_coin_name_hint">e.g. MDL Talent Hub</string>
     <string name="wallet_add_coin_ticker">Ticker</string>
     <string name="wallet_add_coin_ticker_hint">e.g. MDL</string>
     <string name="wallet_add_coin_node">Node address</string>
     <string name="wallet_add_coin_node_hint">http://node.example.com:6420</string>
+    <string name="wallet_add_token_contract">Contract address</string>
+    <string name="wallet_add_token_contract_hint">0x…</string>
+    <string name="wallet_add_token_decimals">Decimals</string>
+    <string name="wallet_add_token_decimals_hint">18</string>
     <string name="wallet_add_coin_save">Add coin</string>
     <string name="wallet_seed_unavailable">The phrase cannot be read — the phone’s keystore has changed since this wallet was created.</string>
 

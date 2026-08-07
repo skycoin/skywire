@@ -121,4 +121,7 @@ sealed class WalletException(message: String) : Exception(message) {
     class NoHoursToBurn : WalletException("outputs hold no coin hours yet — hours accrue over time")
     class DustChange : WalletException("amount leaves change too small to spend")
     class NodeRejected(message: String) : WalletException(message)
+
+    /** Token sends: the token balance is there, the gas money is not. */
+    class InsufficientGas(message: String) : WalletException(message)
 }

@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -468,7 +469,11 @@ fun WalletRevealScreen(
     }
 }
 
-/** Add a fiber coin: name + ticker + node URL. */
+/** What the add screen can add: a fiber chain, or an ERC-20 on Ethereum. */
+private enum class AddCoinKind { FIBER, ERC20 }
+
+/** Add a fiber coin (name + ticker + node URL) or an ERC-20 token
+ *  (name + ticker + contract + decimals). */
 @Composable
 fun WalletAddCoinScreen(
     viewModel: WalletViewModel,
@@ -476,9 +481,12 @@ fun WalletAddCoinScreen(
     onBack: () -> Unit,
 ) {
     val state by viewModel.uiState.collectAsState()
+    var kind by remember { mutableStateOf(AddCoinKind.FIBER) }
     var name by remember { mutableStateOf("") }
     var ticker by remember { mutableStateOf("") }
     var node by remember { mutableStateOf("") }
+    var contract by remember { mutableStateOf("") }
+    var decimals by remember { mutableStateOf("18") }
     val snackbar = remember { SnackbarHostState() }
 
     LaunchedEffect(state.message) {
@@ -495,18 +503,45 @@ fun WalletAddCoinScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp),
         ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AddKindChip(
+                    stringResource(R.string.wallet_add_kind_fiber),
+                    selected = kind == AddCoinKind.FIBER,
+                ) { kind = AddCoinKind.FIBER }
+                AddKindChip(
+                    stringResource(R.string.wallet_add_kind_erc20),
+                    selected = kind == AddCoinKind.ERC20,
+                ) { kind = AddCoinKind.ERC20 }
+            }
+            Spacer(Modifier.height(18.dp))
             Text(
-                stringResource(R.string.wallet_add_coin_body),
+                stringResource(
+                    if (kind == AddCoinKind.FIBER) R.string.wallet_add_coin_body
+                    else R.string.wallet_add_token_body,
+                ),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(24.dp))
             LabeledField(stringResource(R.string.wallet_add_coin_name), name, stringResource(R.string.wallet_add_coin_name_hint)) { name = it }
             LabeledField(stringResource(R.string.wallet_add_coin_ticker), ticker, stringResource(R.string.wallet_add_coin_ticker_hint)) { ticker = it }
-            LabeledField(stringResource(R.string.wallet_add_coin_node), node, stringResource(R.string.wallet_add_coin_node_hint)) { node = it }
+            if (kind == AddCoinKind.FIBER) {
+                LabeledField(stringResource(R.string.wallet_add_coin_node), node, stringResource(R.string.wallet_add_coin_node_hint)) { node = it }
+            } else {
+                LabeledField(stringResource(R.string.wallet_add_token_contract), contract, stringResource(R.string.wallet_add_token_contract_hint)) { contract = it }
+                LabeledField(stringResource(R.string.wallet_add_token_decimals), decimals, stringResource(R.string.wallet_add_token_decimals_hint)) { decimals = it }
+            }
             Button(
-                onClick = { viewModel.addFiberCoin(name, ticker, node, onDone = onAdded) },
-                enabled = name.isNotBlank() && ticker.isNotBlank() && node.isNotBlank(),
+                onClick = {
+                    if (kind == AddCoinKind.FIBER) {
+                        viewModel.addFiberCoin(name, ticker, node, onDone = onAdded)
+                    } else {
+                        viewModel.addErc20Token(name, ticker, contract, decimals, onDone = onAdded)
+                    }
+                },
+                enabled = name.isNotBlank() && ticker.isNotBlank() &&
+                    if (kind == AddCoinKind.FIBER) node.isNotBlank()
+                    else contract.isNotBlank() && decimals.isNotBlank(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp, bottom = 24.dp)
@@ -515,6 +550,24 @@ fun WalletAddCoinScreen(
                 Text(stringResource(R.string.wallet_add_coin_save), fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+@Composable
+private fun AddKindChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+        else MaterialTheme.colorScheme.surfaceContainerHighest,
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 15.dp, vertical = 9.dp),
+        )
     }
 }
 
