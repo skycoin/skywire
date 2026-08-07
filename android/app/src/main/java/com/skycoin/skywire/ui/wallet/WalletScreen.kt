@@ -360,10 +360,11 @@ private fun BalanceHeader(state: WalletUiState) {
             }
         }
         Text(
-            text = if (coin.kind == CoinKind.BTC) {
-                stringResource(R.string.wallet_btc_sub, snapshot?.spendableOutputs ?: 0)
-            } else {
-                stringResource(R.string.wallet_hours_sub, hoursText(snapshot?.hours ?: 0uL))
+            text = when (coin.kind) {
+                CoinKind.BTC -> stringResource(R.string.wallet_btc_sub, snapshot?.spendableOutputs ?: 0)
+                CoinKind.ETH -> stringResource(R.string.wallet_eth_sub)
+                CoinKind.ERC20 -> stringResource(R.string.wallet_erc20_sub, coin.ticker)
+                else -> stringResource(R.string.wallet_hours_sub, hoursText(snapshot?.hours ?: 0uL))
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -527,6 +528,8 @@ private fun CoinSheet(
                             when {
                                 coin.id == CoinSpec.SKY.id -> stringResource(R.string.wallet_coin_native)
                                 coin.kind == CoinKind.BTC -> stringResource(R.string.wallet_coin_btc)
+                                coin.kind == CoinKind.ETH -> stringResource(R.string.wallet_coin_eth)
+                                coin.kind == CoinKind.ERC20 -> stringResource(R.string.wallet_coin_erc20)
                                 else -> stringResource(R.string.wallet_coin_fiber)
                             },
                             style = MaterialTheme.typography.bodySmall,

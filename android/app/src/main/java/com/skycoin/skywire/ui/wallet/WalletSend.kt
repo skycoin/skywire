@@ -123,8 +123,12 @@ fun WalletSendScreen(
                     onValueChange = { new -> viewModel.updateSend { it.copy(to = new, planError = null) } },
                     placeholder = {
                         Text(
-                            if (coin.kind == CoinKind.BTC) stringResource(R.string.wallet_send_to_hint_btc)
-                            else stringResource(R.string.wallet_send_to_hint_fiber, coin.name),
+                            when (coin.kind) {
+                                CoinKind.BTC -> stringResource(R.string.wallet_send_to_hint_btc)
+                                CoinKind.ETH, CoinKind.ERC20 ->
+                                    stringResource(R.string.wallet_send_to_hint_eth)
+                                else -> stringResource(R.string.wallet_send_to_hint_fiber, coin.name)
+                            },
                         )
                     },
                     singleLine = true,
@@ -211,8 +215,12 @@ fun WalletSendScreen(
                 }
             }
             Text(
-                text = if (coin.kind == CoinKind.BTC) stringResource(R.string.wallet_max_note_btc)
-                else stringResource(R.string.wallet_max_note_fiber, coin.ticker),
+                text = when (coin.kind) {
+                    CoinKind.BTC -> stringResource(R.string.wallet_max_note_btc)
+                    CoinKind.ETH -> stringResource(R.string.wallet_max_note_eth)
+                    CoinKind.ERC20 -> stringResource(R.string.wallet_max_note_erc20)
+                    else -> stringResource(R.string.wallet_max_note_fiber, coin.ticker)
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 8.dp),
@@ -222,10 +230,10 @@ fun WalletSendScreen(
                 stringResource(R.string.wallet_fee),
                 modifier = Modifier.padding(top = 26.dp),
             )
-            if (coin.kind == CoinKind.BTC) {
-                BtcFeeCard(viewModel)
-            } else {
-                FiberFeeCard(viewModel)
+            when (coin.kind) {
+                CoinKind.BTC -> BtcFeeCard(viewModel)
+                CoinKind.ETH, CoinKind.ERC20 -> EthFeeCard(viewModel)
+                else -> FiberFeeCard(viewModel)
             }
 
             send.planError?.let { err ->
@@ -338,6 +346,60 @@ private fun FiberFeeCard(viewModel: WalletViewModel) {
         }
         Text(
             stringResource(R.string.wallet_fee_note_fiber, state.coin.ticker),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 12.dp),
+        )
+    }
+}
+
+/**
+ * The gas card: EIP-1559 prices itself, so this shows rather than asks —
+ * the worst-case fee once a plan exists, and where that money comes from
+ * on a token send. No slider: the one honest knob (priority tip) moves a
+ * mainnet fee by fractions of a cent.
+ */
+@Composable
+private fun EthFeeCard(viewModel: WalletViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    val coin = state.coin
+    val plan = state.send.plan
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 9.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(16.dp),
+    ) {
+        Row {
+            Text(stringResource(R.string.wallet_fee_network), style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.weight(1f))
+            Text(
+                plan?.let { "${Amounts.format(it.fee, 9, 6)} ETH" }
+                    ?: stringResource(R.string.wallet_fee_at_review),
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        if (plan?.vsize != null) {
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 13.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            )
+            Row {
+                Text(
+                    stringResource(R.string.wallet_fee_gas, plan.vsize ?: 0, plan.feeRate ?: 0),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Text(
+            stringResource(
+                if (coin.kind == CoinKind.ERC20) R.string.wallet_fee_note_erc20
+                else R.string.wallet_fee_note_eth,
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 12.dp),
@@ -508,6 +570,34 @@ private fun ReviewSheet(
                     )
                     ReviewRow(stringResource(R.string.wallet_review_total), "${Amounts.format(total, 8, 8)} BTC")
                     ReviewRow(stringResource(R.string.wallet_review_balance_after, "BTC"), Amounts.format(after, 8, 8))
+                } else if (coin.kind == CoinKind.ETH) {
+                    val total = plan.amount + plan.fee
+                    val after = (snapshot?.confirmed ?: 0uL).let { if (it >= total) it - total else 0uL }
+                    ReviewRow(stringResource(R.string.wallet_review_amount), "${coin.amountText(plan.amount)} ETH", first = true)
+                    // The worst case, not a quote: unspent gas is never charged.
+                    ReviewRow(
+                        stringResource(R.string.wallet_review_network_fee),
+                        "≤ ${Amounts.format(plan.fee, 9, 6)} ETH",
+                    )
+                    ReviewRow(stringResource(R.string.wallet_review_total), "≤ ${Amounts.format(total, 9, 6)} ETH")
+                    ReviewRow(stringResource(R.string.wallet_review_balance_after, "ETH"), coin.amountText(after))
+                } else if (coin.kind == CoinKind.ERC20) {
+                    // The amount and the fee live in different currencies, so
+                    // there is no total row to add them into.
+                    val after = (snapshot?.confirmed ?: 0uL).let { if (it >= plan.amount) it - plan.amount else 0uL }
+                    ReviewRow(
+                        stringResource(R.string.wallet_review_amount),
+                        "${coin.amountText(plan.amount)} ${coin.ticker}",
+                        first = true,
+                    )
+                    ReviewRow(
+                        stringResource(R.string.wallet_review_network_fee),
+                        "≤ ${Amounts.format(plan.fee, 9, 6)} ETH",
+                    )
+                    ReviewRow(
+                        stringResource(R.string.wallet_review_balance_after, coin.ticker),
+                        coin.amountText(after),
+                    )
                 } else {
                     val afterCoins = (snapshot?.confirmed ?: 0uL).let { if (it >= plan.amount) it - plan.amount else 0uL }
                     val hoursNow = snapshot?.hours ?: 0uL

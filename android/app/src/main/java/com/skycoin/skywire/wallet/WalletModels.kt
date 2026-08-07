@@ -2,13 +2,14 @@ package com.skycoin.skywire.wallet
 
 import kotlinx.serialization.Serializable
 
-/** Which family a coin belongs to — the two protocols this wallet speaks. */
-enum class CoinKind { SKY_FIBER, BTC }
+/** Which family a coin belongs to — the protocols this wallet speaks. */
+enum class CoinKind { SKY_FIBER, BTC, ETH, ERC20 }
 
 /**
- * A coin the wallet can hold. SKY and BTC ship built in; fiber coins are
- * added by the user with a name, a ticker and their node's address — every
- * fiber chain runs the same daemon and differs only in where it lives.
+ * A coin the wallet can hold. SKY, BTC, ETH and USDT ship built in; fiber
+ * coins and ERC-20 tokens are added by the user — every fiber chain runs the
+ * same daemon and differs only in where it lives, and every ERC-20 speaks
+ * the same contract surface and differs only in address and decimals.
  */
 @Serializable
 data class CoinSpec(
@@ -20,12 +21,33 @@ data class CoinSpec(
     /** %s is the txid; null hides the explorer button. */
     val explorerTxUrl: String? = null,
     val builtIn: Boolean = false,
+    /** ERC-20 only: the token's contract address. */
+    val contract: String? = null,
+    /** ERC-20 only: the token's on-chain decimals. */
+    val tokenDecimals: Int? = null,
+    /** ETH family: etherscan-style history API base (Blockscout, keyless). */
+    val indexerUrl: String? = null,
 ) {
-    /** Base-unit exponent: droplets are 10⁻⁶, satoshis 10⁻⁸. */
-    val exponent: Int get() = if (kind == CoinKind.BTC) 8 else 6
+    /**
+     * Base-unit exponent: droplets 10⁻⁶, satoshis 10⁻⁸ — and for the ETH
+     * family, whatever fits the app's 64-bit amounts: gwei (10⁻⁹) for the
+     * native coin because wei overflows 64 bits at ~18 ETH, and a token's
+     * own decimals capped at nine for the same reason.
+     */
+    val exponent: Int get() = when (kind) {
+        CoinKind.BTC -> 8
+        CoinKind.ETH -> 9
+        CoinKind.ERC20 -> minOf(tokenDecimals ?: DEFAULT_TOKEN_DECIMALS, 9)
+        CoinKind.SKY_FIBER -> 6
+    }
 
     /** Decimals shown in balances and amount fields. */
-    val displayDecimals: Int get() = if (kind == CoinKind.BTC) 8 else 3
+    val displayDecimals: Int get() = when (kind) {
+        CoinKind.BTC -> 8
+        CoinKind.ETH -> 6
+        CoinKind.ERC20 -> minOf(exponent, 6)
+        CoinKind.SKY_FIBER -> 3
+    }
 
     companion object {
         val SKY = CoinSpec(
@@ -46,6 +68,34 @@ data class CoinSpec(
             explorerTxUrl = "https://mempool.space/tx/%s",
             builtIn = true,
         )
+        val ETH = CoinSpec(
+            id = "ETH",
+            name = "Ethereum",
+            ticker = "ETH",
+            kind = CoinKind.ETH,
+            nodeUrl = ETH_NODE,
+            explorerTxUrl = "$ETH_INDEXER/tx/%s",
+            builtIn = true,
+            indexerUrl = ETH_INDEXER,
+        )
+        val USDT = CoinSpec(
+            id = "USDT",
+            name = "Tether USD",
+            ticker = "USDT",
+            kind = CoinKind.ERC20,
+            nodeUrl = ETH_NODE,
+            explorerTxUrl = "$ETH_INDEXER/tx/%s",
+            builtIn = true,
+            contract = "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+            tokenDecimals = 6,
+            indexerUrl = ETH_INDEXER,
+        )
+
+        /** Keyless public endpoints; both are user-replaceable per token. */
+        const val ETH_NODE = "https://ethereum-rpc.publicnode.com"
+        const val ETH_INDEXER = "https://eth.blockscout.com"
+
+        const val DEFAULT_TOKEN_DECIMALS = 18
     }
 }
 
