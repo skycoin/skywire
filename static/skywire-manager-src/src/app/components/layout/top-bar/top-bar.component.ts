@@ -265,6 +265,11 @@ export class TopBarComponent implements OnInit, OnDestroy {
     return this.storageService.getShowVisorSwitcherRow();
   }
 
+  /** Navigate to the visor list / front page (from the ☰ menu). */
+  goHome(): void {
+    this.router.navigate(['/nodes', 'list', '1']);
+  }
+
   ngOnInit() {
     this.langSubscriptionsGroup.push(this.languageService.currentLanguage.subscribe(lang => {
       this.language = lang;
