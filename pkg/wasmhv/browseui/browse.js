@@ -103,8 +103,35 @@
   // the page's own requests to the parent — same-site over dmsg, cross-origin
   // (clearnet) through the skysocks-lite upstream proxy (gated by cnMode). cnMode
   // is the clearnet policy at render time ("block"|"direct"|"proxy").
+  // storageShimSrc: the browsed iframe is sandboxed WITHOUT allow-same-origin, so
+  // it runs in an OPAQUE origin — where accessing localStorage/sessionStorage
+  // THROWS SecurityError. Sites (and wasm apps) that touch storage at startup then
+  // crash — e.g. a Go/wasm app panics (exit 2) and its render loop dies, so the
+  // page loads but never animates. Install an in-memory, per-page polyfill so such
+  // sites run; nothing persists, which is the correct privacy posture for proxied
+  // content anyway. Prepended to the injected shim so it runs before the page's
+  // own scripts. (Granting allow-same-origin instead would let untrusted content
+  // reach the visor's real origin + identity key — not an option.)
+  function storageShimSrc() {
+    return "(function(){function bad(g){try{var s=g();return !(s&&typeof s.getItem==='function');}catch(e){return true;}}" +
+      "function mk(){var m=Object.create(null);return {getItem:function(k){k=String(k);return (k in m)?m[k]:null;}," +
+      "setItem:function(k,v){m[String(k)]=String(v);},removeItem:function(k){delete m[String(k)];}," +
+      "clear:function(){m=Object.create(null);},key:function(i){var ks=Object.keys(m);return (i>=0&&i<ks.length)?ks[i]:null;}," +
+      "get length(){return Object.keys(m).length;}};}" +
+      "if(bad(function(){return window.localStorage;})){try{Object.defineProperty(window,'localStorage',{value:mk(),configurable:true});}catch(e){}}" +
+      "if(bad(function(){return window.sessionStorage;})){try{Object.defineProperty(window,'sessionStorage',{value:mk(),configurable:true});}catch(e){}}" +
+      // history.replaceState/pushState THROW in an opaque (sandboxed srcdoc)
+      // document when handed a cross-origin URL — apps that keep a permalink in
+      // sync (e.g. on every param change) then panic mid-run. There's no real
+      // address bar in the iframe, so wrap both to swallow that error and keep
+      // running. (The proxy browser's own address bar reflects the page.)
+      "try{var h=window.history;['replaceState','pushState'].forEach(function(m){var o=h&&h[m];if(typeof o==='function'){h[m]=function(){try{return o.apply(h,arguments);}catch(e){return undefined;}};}});}catch(e){}" +
+      "})();";
+  }
+
   function navShimSrc(path, cnMode) {
     return (
+      storageShimSrc() +
       'var cur=' + JSON.stringify(path) + ';' +
       'function pathOf(h){try{var u=new URL(h,"http://dmsg"+cur);return u.pathname+u.search;}catch(e){return h;}}' +
       'function same(u){return !!u&&u.charAt(0)!=="#"&&!/^https?:\\/\\//i.test(u)&&!/^\\/\\//.test(u)&&!/^[a-z][a-z0-9+.-]*:/i.test(u);}' +
@@ -162,6 +189,7 @@
   // URLs resolve against the page's real URL (BASE).
   function clearnetShimSrc(baseUrl) {
     return (
+      storageShimSrc() +
       'var BASE=' + JSON.stringify(baseUrl) + ';' +
       'function abs(h){try{return new URL(h,BASE).href;}catch(e){return "";}}' +
       'document.addEventListener("click",function(e){' +
@@ -543,11 +571,14 @@
     // clearnetPolicy: {mode:'block'} | {mode:'direct'} | {mode:'proxy', exit}.
     function clearnetPolicy() {
       var up = upstream();
-      if (!up) return { mode: "block" };
-      // "auto" → proxy through the DEFAULT skysocks-client-lite instance. Passing
+      if (up === "block") return { mode: "block" }; // explicit opt-out
+      // Default (unset) and "auto" both proxy through the DEFAULT
+      // skysocks-client-lite instance so regular clearnet sites JUST WORK. Passing
       // exit "" makes the wasm side resolve the current auto-selected (and
-      // failover-managed) pool exit per fetch, so browsing survives a dead exit.
-      if (up === "auto") return { mode: "proxy", exit: "" };
+      // failover-managed) pool exit per fetch, so browsing survives a dead exit —
+      // a fetch retries across exits and waits for the pool to re-select. A user
+      // can still pin a specific exit, or "block", via the ⚙ menu.
+      if (!up || up === "auto") return { mode: "proxy", exit: "" };
       if (up === localPK()) {
         // Local-visor upstream. With a backend that can egress clearnet (the native
         // HV UI, where the visor http.Gets directly), route through it as a
@@ -1307,8 +1338,8 @@
       { route: visorList, sel: ".dmsg-counts, th.dmsg-column",
         title: "How you're connected: dmsg",
         body: {
-          wasm: "Right here is your <b>live count</b> of <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A browser can't open raw TCP, so it joins over <b>WSS</b> (WebSocket-over-TLS) and <b>WT</b> (WebTransport) — the carriers counted here.",
-          native: "Right here is your <b>live count</b> of <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers without either knowing the other's location. A native visor joins over <b>TCP</b> (and QUIC where a server offers it)." },
+          wasm: "Right here is your <b>live count</b> of <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers, without connecting directly. A browser can't open raw TCP, so it joins over <b>WSS</b> (WebSocket-over-TLS) and <b>WT</b> (WebTransport) — the carriers counted here.",
+          native: "Right here is your <b>live count</b> of <b>dmsg servers</b> your visor is connected to, broken down by <b>carrier</b>. dmsg is an encrypted relay network: any two visors reach each other through these servers, without connecting directly. A native visor joins over <b>TCP</b> (and QUIC where a server offers it)." },
         more: { summary: "The four carriers",
           panel: "dmsg carries the control plane and a fallback data path. The <b>carrier</b> — how a visor reaches a dmsg server — depends on the host:" +
             '<ul style="margin:.55em 0;padding-left:1.15em;list-style:disc">' +
@@ -1372,6 +1403,23 @@
         more: { summary: "skysocks-client vs. skysocks-client-lite",
           panel: "<b>skysocks-client</b> (native) runs as an app process and serves a local <b>SOCKS5 port</b> other programs point at. <b>skysocks-client-lite</b> (browser) has no process and no port — it lives in this tab and proxies only this visor's own browse windows and wallet. Both dial an <b>exit</b> visor that does the clearnet egress, so a site sees the exit's IP, not yours. (Naming: the browser one is the <i>lite</i> client — same idea, no listener.)" } },
 
+      // The visor's remaining app tabs — so the inside-visor walk covers ALL of
+      // them (Info/Transports/Routing/Apps above, then these four). Each is also
+      // openable as a floating desktop window, demoed near the end of the tour;
+      // here we just visit the tab so nothing is skipped.
+      { route: function () { return nodePath("chat"); }, sel: "app-skychat",
+        title: "Inside your visor: Chat",
+        body: "The <b>Chat</b> tab is <b>Skychat</b> — end-to-end encrypted messaging to any visor by <b>public key</b>, right here. No server stores your messages; delivery rides dmsg. You can also pop it out as a floating desktop window (shown later)." },
+      { route: function () { return nodePath("skynet"); }, sel: "app-skynet",
+        title: "Inside your visor: Skynet",
+        body: "The <b>Skynet</b> tab is a <b>mesh browser</b> in a tab — fetch <code>&lt;pk&gt;.dmsg</code> sites over dmsg, with no DNS and no certificate authority. The public key is the address <i>and</i> the authentication." },
+      { route: function () { return nodePath("wallet"); }, sel: "app-wallet",
+        title: "Inside your visor: Wallet",
+        body: "The <b>Wallet</b> tab is the <b>Skycoin wallet</b>, served from this tab — your keys never leave the browser, and only node / BTC queries cross the mesh. This is where the reward system pays visors that stay online." },
+      { route: function () { return nodePath("logs"); }, sel: "app-logs",
+        title: "Inside your visor: Logs",
+        body: "The <b>Logs</b> tab is a live tail of this visor's own runtime — dmsg, transports, routing and apps — straight from the wasm core in this tab. That's every tab this visor exposes; now let's step back out to the whole network." },
+
       // --- back to the top level: this hypervisor's cluster ---
       // A short PROGRESSIVE demo of hypervisor capability: the real list as-is,
       // then a visor connects, then it turns out to be a hypervisor, then it has
@@ -1402,8 +1450,8 @@
         body: "<b>Rewards</b> — the Skycoin paid out to visors that stay online and reachable. This is where a visor appears once it qualifies." },
       { route: "#/nodes/transports", title: "The mesh: all transports",
         body: "<b>Transports</b> — every direct link across the <i>whole</i> mesh (thousands of them), with per-type bandwidth: the live edge list the route-finder draws on. Toggle Compact / Tree to explore it. Fetched <b>peer-to-peer over dmsg</b>, never from a web server." },
-      { route: "#/nodes/network", sel: "app-network-view", title: "The mesh: the map",
-        body: "<b>Network</b> — the mesh drawn as a graph: visors, and the transports between them." },
+      { route: "#/nodes/network", sel: "app-network-view", title: "The mesh: every visor",
+        body: "<b>Network</b> — a searchable directory of <b>every visor on the mesh</b> (the running count is top-left). Filter by country, version or transport type, and read each visor's transport mix and uptime status at a glance. The next tab draws this same set as a live <b>graph</b>." },
       { route: "#/nodes/visualizer", sel: "app-network-visualizer", title: "The mesh: visualizer",
         body: "<b>Network Visualizer</b> — an interactive, geographic render of the same graph (Flat, Globe and WebGL views)." },
       { route: "#/nodes/uptime", sel: "app-multi-visor-uptime", title: "The mesh: uptime",
@@ -1750,8 +1798,36 @@
       // nested scroll on long "more" panels. Cap to 82vh (the body scrolls, and
       // the button row is sticky, so controls stay reachable past the cap).
       try {
-        var vpH = (doc.defaultView || window).innerHeight || 700;
-        wb.resize(380, Math.max(170, Math.min(call.scrollHeight + 38, Math.round(vpH * 0.82))));
+        var winv = doc.defaultView || window;
+        var vpW = winv.innerWidth || 1000, vpH = winv.innerHeight || 700;
+        // Measure the callout's TRUE content height. `call` is height:100% +
+        // overflow:auto, so scrollHeight otherwise reports the (possibly stale,
+        // taller) WINDOW height — which left the window oversized after a "more"
+        // panel collapsed back to a short step. Read it at height:auto, restore.
+        var prevH = call.style.height;
+        call.style.height = "auto";
+        var contentH = call.scrollHeight;
+        call.style.height = prevH || "100%";
+        var ch = Math.max(170, Math.min(contentH + 38, Math.round(vpH * 0.82)));
+        wb.resize(380, ch);
+        // Keep the callout from covering the very content it describes. A full-tab
+        // target (the mesh map / visualizer / all-transports) makes the spotlight
+        // ring "everything" — noise — so hide it; and for full-tab, targetless, or
+        // app-demo steps, dock the callout to the bottom-left corner. Small,
+        // specific targets (a row/cell/line) re-center it (clear of a single row).
+        var el2 = pickTarget(s.sel, s.has);
+        var huge = false;
+        if (el2 && s.sel !== "@appwin") {
+          var hr = el2.getBoundingClientRect();
+          huge = hr.width > vpW * 0.8 && hr.height > vpH * 0.6;
+        }
+        if (huge) { spot.style.display = "none"; }
+        if (huge || !el2 || s.sel === "@appwin") {
+          wb.move(16, Math.max(16, Math.round(vpH - ch - 16)));
+        } else {
+          // restore centered placement (a prior full-tab step may have docked it)
+          try { wb.move("center", "center"); } catch (e2) { wb.move(Math.round((vpW - 380) / 2), Math.round((vpH - ch) / 2)); }
+        }
       } catch (e) {}
     }
     go();
