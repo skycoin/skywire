@@ -237,6 +237,45 @@
     // 1x1 transparent GIF — placeholder src for a deferred (lazy) image so it
     // occupies layout without a broken-image flash until the real bytes arrive.
     var BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    // A neutral default title-bar icon (a violet globe) shown while a site's own
+    // favicon is fetched — or when it has none. Inline SVG data URI (no fetch).
+    var DEFAULT_ICON = "data:image/svg+xml;base64," + btoa(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none" stroke="#9d7cff" stroke-width="1.3">' +
+      '<circle cx="8" cy="8" r="6.3"/><path d="M1.7 8h12.6M8 1.7c2 2.4 2 10.2 0 12.6M8 1.7c-2 2.4-2 10.2 0 12.6"/></svg>');
+    // faviconHref picks the best <link rel=icon> from a parsed doc (falling back to
+    // /favicon.ico), resolved to an absolute URL against baseURL.
+    function faviconHref(doc, baseURL) {
+      var sels = ["link[rel~='icon' i]", "link[rel='shortcut icon' i]", "link[rel='apple-touch-icon' i]"];
+      for (var i = 0; i < sels.length; i++) {
+        var el = doc.querySelector(sels[i]);
+        var href = el && el.getAttribute("href");
+        if (href) { try { return new URL(href, baseURL).href; } catch (e) {} }
+      }
+      try { return new URL("/favicon.ico", baseURL).href; } catch (e) { return null; }
+    }
+    // faviconGen guards against a stale favicon fetch clobbering a newer navigation.
+    // resetFavicon (on every nav) shows the default and invalidates in-flight fetches.
+    var faviconGen = 0;
+    function resetFavicon() { faviconGen++; if (opts.setIcon) { try { opts.setIcon(DEFAULT_ICON); } catch (e) {} } }
+    // setFaviconVia fetches the page's favicon over the SAME channel the page came
+    // in on (clearnet exit / dmsg) and shows it in the WinBox title bar. Best-effort
+    // and non-blocking: a missing/slow/oversized/non-image favicon never affects the
+    // render — it just leaves the default icon in place. fetchIcon(absURL) returns
+    // the same {status, body, headers} shape as fetchDmsg/fetchClearnet.
+    function setFaviconVia(fetchIcon, doc, baseURL) {
+      if (!opts.setIcon) return;
+      var u = faviconHref(doc, baseURL);
+      if (!u) return;
+      var myGen = ++faviconGen;
+      Promise.resolve().then(function () { return fetchIcon(u); }).then(function (r) {
+        if (myGen !== faviconGen) return;                  // superseded by a newer nav
+        if (!r || (r.status || 200) >= 400 || !r.body || !r.body.length) return;
+        if (r.body.length > 262144) return;                // sanity cap (256KB)
+        var ct = ctOf(r.headers, u);
+        if (!/^image\//i.test(ct)) return;                 // not an image → ignore
+        try { opts.setIcon("data:" + ct + ";base64," + bytesToB64(r.body)); } catch (e) {}
+      }).catch(function () {});
+    }
     var CSS_URL = /url\(\s*(['"]?)([^'")]+)\1\s*\)/gi;
     function inlineCss(pk, base, css) {
       var uniq = [...new Set([...css.matchAll(CSS_URL)].map(function (m) { return m[2]; }).filter(sameSite))];
@@ -281,6 +320,11 @@
       var docHtml;
       try {
         var doc = new DOMParser().parseFromString(html, "text/html");
+        // Show the site's favicon in the title bar (fetched over dmsg, same site).
+        setFaviconVia(function (u) {
+          var p; try { var x = new URL(u); p = x.pathname + (x.search || ""); } catch (e) { p = "/favicon.ico"; }
+          return fetchDmsg(pk, "GET", p, null);
+        }, doc, "http://dmsg" + path);
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("target", "_self");
         var sc = doc.createElement("script"); sc.textContent = navShimSrc(path, clearnetPolicy().mode);
@@ -454,6 +498,7 @@
 
     async function render(entry) {
       var gen = ++loadGen;
+      resetFavicon(); // default icon now; the site's own favicon replaces it once fetched
       setLoading(true);
       try {
         if (entry.kind === "clearnet") {
@@ -655,6 +700,8 @@
       var docHtml;
       try {
         var doc = new DOMParser().parseFromString(html, "text/html");
+        // Show the site's favicon in the title bar (fetched through the SAME exit).
+        setFaviconVia(function (u) { return fetchClearnet(exit, "GET", u, null); }, doc, url);
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("href", url); base.setAttribute("target", "_self");
         // Nav/form shim: clearnet scripts are stripped, so this restores link
@@ -986,6 +1033,8 @@
       log: function (m) { try { console.log("[skynet] " + m); } catch (e) {} plog(m); },
       // Reflect the current site into the WinBox title bar.
       setAddr: function (u) { $("sb-addr").value = u; var t = u.replace(/^https?:\/\//, "").slice(0, 18); try { wb.setTitle(t || "skynet"); } catch (e) {} },
+      // Reflect the site's favicon (fetched over the proxy/dmsg) into the title bar.
+      setIcon: function (u) { try { wb.setIcon(u); } catch (e) {} },
       // reflect load state into the reload/cancel button (⟳ idle, ✕ while loading)
       onLoading: function (on) { loading = on; var b = $("sb-reload"); b.textContent = on ? "✕" : "⟳"; b.title = on ? "cancel load" : "reload"; },
       // enable/disable back/forward to match history position
