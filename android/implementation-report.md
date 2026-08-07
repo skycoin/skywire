@@ -7,6 +7,62 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — The wallet learns Ethereum: ETH and USDT (and any ERC-20)
+
+**Built (wallet-core, new `eth` package — plain JVM, host-tested like the
+rest of the money code):**
+
+- `EthCrypto`: Keccak-256 (BouncyCastle's `KeccakDigest` — the original
+  Keccak, not FIPS SHA3), BIP 44 `m/44'/60'/0'/0/i` off the existing Bip32,
+  EIP-55 checksummed addresses, and strict parsing (mixed case must be the
+  exact checksum; `0x` required).
+- `Rlp`: encoder only — this wallet authors RLP, never parses it.
+- `EthTxn`: EIP-1559 type-2 build/sign. The signature is the existing
+  `Secp256k1.signCompact` — Ethereum's recoverable form is Skycoin's wire
+  format over a different hash, and low-S means the recovery id IS yParity.
+  Plus the two ABI call datas the wallet needs: `transfer(address,uint256)`
+  and `balanceOf(address)`.
+- `EthRpcClient`: JSON-RPC (balance, pending nonce, chainId, EIP-1559 fee
+  data, estimateGas, eth_call, sendRawTransaction) plus history via the
+  etherscan-style `?module=account` API, which Blockscout serves keyless —
+  plain RPC cannot list an address's past transactions, the same reason BTC
+  uses an esplora server.
+- `EthWalletCore`: one WalletCore for the native coin and any ERC-20 token —
+  a token send is the same transaction with the value moved into `transfer`
+  call data and gas still paid in ETH. **Unit choice:** the seam's amounts
+  are 64-bit, and wei overflows them at ~18.4 ETH — so the native coin is
+  carried in gwei (exponent 9) and a token in its own decimals capped at 9,
+  with wei arithmetic in BigInteger strictly inside the core. Sends pick the
+  funded address (account chains have no change side), pad the node's gas
+  estimate by a fifth, price at 2×baseFee+priority, and refuse a token send
+  whose address lacks gas ETH with a new `WalletException.InsufficientGas`
+  that says exactly that.
+
+**Built (app):** `CoinKind.ETH`/`ERC20`; ETH and USDT
+(`0xdAC17F…1ec7`, 6 decimals) ship built in; the add-coin screen grew a
+Fiber-coin / ERC-20 toggle so any token is user-addable (contract +
+decimals, checksum-validated). Fee UI: a gas card that shows rather than
+asks (EIP-1559 prices itself; "calculated at review", then the worst-case
+fee, gas limit and gwei ceiling), review-sheet branches for ETH (amount +
+fee ≤ totals) and tokens (no total row — amount and fee are different
+currencies), history fee lines always in ETH, `0x…` hints, and honest Max
+notes (native holds back gas headroom, tokens send everything).
+
+**Verified:** vector tests in `EthVectorsTest` — Keccak reference outputs,
+the four EIP-55 examples plus corrupted-case rejections, the standard test
+mnemonic's first two addresses (`0x9858EfFD…`, `0x6Fac4D18…`), the RLP
+examples from the design docs, and the **EIP-155 worked example reproduced
+byte-for-byte** (our RFC 6979 nonce yields the document's exact signature —
+RLP, Keccak, low-S and recovery id pinned in one assert), plus a type-2
+sign→recover round trip. `EthLiveTest` (opt-in, `SKYWIRE_NET_TESTS=1`) ran
+against production: publicnode RPC balance, Blockscout txlist history, USDT
+`balanceOf` and tokentx transfers all parse (2 tests, 0 skipped, 12.5 s).
+Full wallet-core suite green; `:app:assembleDebug` BUILD SUCCESSFUL. Not
+yet sent-and-received on-device with real funds — the SKY wallet's 2-coin
+round-trip equivalent still wants doing for ETH/USDT.
+
+---
+
 ## 2026-08-07 — Eight more from use: the cloud jump, the hero's exit line, live tile numbers, chat file verbs, upload progress, a DEX list view, and heartbeats out of the room
 
 **The cloud that did nothing.** Tapping the raised Skycoin button from inside a

@@ -179,6 +179,22 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         onDone()
     }
 
+    fun addErc20Token(
+        name: String,
+        ticker: String,
+        contract: String,
+        decimals: String,
+        onDone: () -> Unit,
+    ) = action {
+        require(name.isNotBlank()) { "give the token a name" }
+        require(ticker.isNotBlank()) { "give the token a ticker" }
+        val parsed = decimals.trim().toIntOrNull()
+        requireNotNull(parsed) { "decimals must be a number — 6 for USDT-like tokens, 18 for most" }
+        val spec = repo.addErc20Token(name, ticker, contract, parsed)
+        repo.setSelectedCoin(spec.id)
+        onDone()
+    }
+
     // --- create / restore ---
 
     /** Begin the create flow for the selected coin: fresh phrase + quiz picks. */

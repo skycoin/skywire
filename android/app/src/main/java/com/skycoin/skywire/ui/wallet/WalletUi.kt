@@ -59,12 +59,16 @@ fun CoinSpec.amountText(units: ULong): String =
 
 fun hoursText(hours: ULong): String = Amounts.groupThousands(hours.toString())
 
-/** Fee line for a history row / detail: burned hours or BTC. */
+/** Fee line for a history row / detail: burned hours, BTC, or ETH gas. */
 @Composable
 fun feeText(coin: CoinSpec, fee: ULong?): String = when {
     fee == null -> "—"
     coin.kind == com.skycoin.skywire.wallet.CoinKind.BTC ->
         "${Amounts.format(fee, 8, 8)} BTC"
+    // Always the gas, always in ETH — a token has no fee of its own.
+    coin.kind == com.skycoin.skywire.wallet.CoinKind.ETH ||
+        coin.kind == com.skycoin.skywire.wallet.CoinKind.ERC20 ->
+        "${Amounts.format(fee, 9, 6)} ETH"
     else -> stringResource(R.string.wallet_fee_hours_value, hoursText(fee))
 }
 

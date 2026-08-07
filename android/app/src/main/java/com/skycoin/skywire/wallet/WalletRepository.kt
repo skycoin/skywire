@@ -8,6 +8,8 @@ import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
 import com.skycoin.wallet.WalletCore
 import com.skycoin.wallet.btc.BtcWalletCore
+import com.skycoin.wallet.eth.EthCrypto
+import com.skycoin.wallet.eth.EthWalletCore
 import com.skycoin.wallet.skycoin.SkyFiberWalletCore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -42,11 +44,17 @@ class WalletRepository private constructor(private val context: Context) {
     // --- coins ---
 
     fun coins(): Flow<List<CoinSpec>> = seeds.store.data.map { prefs ->
-        val fiber = prefs[KEY_FIBER_COINS]?.let {
+        // One stored list for everything user-added; the key predates
+        // tokens and is not worth a migration to rename.
+        val user = prefs[KEY_FIBER_COINS]?.let {
             runCatching { json.decodeFromString(ListSerializer(CoinSpec.serializer()), it) }.getOrNull()
         } ?: emptyList()
-        // SKY first, user fiber coins in the order added, BTC last.
-        listOf(CoinSpec.SKY) + fiber + listOf(CoinSpec.BTC)
+        // SKY first, user fiber coins in the order added, then the other
+        // built-ins, then user tokens in the order added.
+        listOf(CoinSpec.SKY) +
+            user.filter { it.kind == CoinKind.SKY_FIBER } +
+            listOf(CoinSpec.BTC, CoinSpec.ETH, CoinSpec.USDT) +
+            user.filter { it.kind == CoinKind.ERC20 }
     }
 
     suspend fun coin(coinId: String): CoinSpec? = coins().first().firstOrNull { it.id == coinId }
@@ -63,6 +71,37 @@ class WalletRepository private constructor(private val context: Context) {
             kind = CoinKind.SKY_FIBER,
             nodeUrl = url,
         )
+        storeUserCoin(spec)
+        return spec
+    }
+
+    /**
+     * Add an ERC-20 token on Ethereum mainnet: same chain plumbing as USDT,
+     * different contract and decimals. The contract must be checksum-valid;
+     * decimals must match the contract's own or amounts will be off by
+     * powers of ten.
+     */
+    suspend fun addErc20Token(name: String, ticker: String, contract: String, decimals: Int): CoinSpec {
+        require(EthCrypto.isValidAddress(contract.trim())) {
+            "the contract must be a 0x… address (checksummed or all-lowercase)"
+        }
+        require(decimals in 0..36) { "decimals must be between 0 and 36" }
+        val spec = CoinSpec(
+            id = "erc20-${UUID.randomUUID().toString().take(8)}",
+            name = name.trim(),
+            ticker = ticker.trim().uppercase(),
+            kind = CoinKind.ERC20,
+            nodeUrl = CoinSpec.ETH_NODE,
+            explorerTxUrl = "${CoinSpec.ETH_INDEXER}/tx/%s",
+            contract = contract.trim(),
+            tokenDecimals = decimals,
+            indexerUrl = CoinSpec.ETH_INDEXER,
+        )
+        storeUserCoin(spec)
+        return spec
+    }
+
+    private suspend fun storeUserCoin(spec: CoinSpec) {
         seeds.store.edit { prefs ->
             val current = prefs[KEY_FIBER_COINS]?.let {
                 runCatching { json.decodeFromString(ListSerializer(CoinSpec.serializer()), it) }.getOrNull()
@@ -71,12 +110,21 @@ class WalletRepository private constructor(private val context: Context) {
                 ListSerializer(CoinSpec.serializer()), current + spec,
             )
         }
-        return spec
     }
 
     fun coreFor(spec: CoinSpec): WalletCore = when (spec.kind) {
         CoinKind.SKY_FIBER -> SkyFiberWalletCore(spec.nodeUrl, client)
         CoinKind.BTC -> BtcWalletCore(spec.nodeUrl, client)
+        CoinKind.ETH -> EthWalletCore(spec.nodeUrl, spec.indexerUrl, client)
+        CoinKind.ERC20 -> EthWalletCore(
+            spec.nodeUrl,
+            spec.indexerUrl,
+            client,
+            EthWalletCore.Erc20Token(
+                contract = spec.contract ?: error("token ${spec.id} has no contract address"),
+                decimals = spec.tokenDecimals ?: CoinSpec.DEFAULT_TOKEN_DECIMALS,
+            ),
+        )
     }
 
     // --- selection ---
