@@ -272,6 +272,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUrl.includes('/uptime') ||
       this.lastUrl.includes('/rewards') ||
       this.lastUrl.includes('/skynet') ||
+      this.lastUrl.includes('/chat') ||
       this.lastUrl.includes('/web-proxy') ||
       this.lastUrl.includes('/vpn') ||
       this.lastUrl.includes('/resources') ||
