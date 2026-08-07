@@ -141,9 +141,9 @@ private val SkywireShapes = Shapes(
  * Whether the app resolved to its dark half. `isSystemInDarkTheme()` is not
  * the same question — the user's own Light/Dark override sits on top of it —
  * and screens that hand a colour scheme to something outside Compose need the
- * answer after that override, not before. The embedded SkyChat page is the
- * one caller today: it has a matching pair of themes and no way to know which
- * one the app is in.
+ * answer after that override, not before. The embedded pages are the callers:
+ * SkyChat picks between its own theme pair with it, and SkyDEX's injected
+ * stylesheet re-tokens the trading UI by it.
  */
 val LocalDarkTheme = staticCompositionLocalOf { true }
 

@@ -36,6 +36,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -60,6 +61,7 @@ import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.SkydexProfile
 import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.theme.LocalDarkTheme
 import com.skycoin.skywire.ui.theme.SkyAccents
 
 /**
@@ -90,6 +92,16 @@ fun DexScreen(
     // at the current values instead of the ones at creation time.
     val url = rememberUpdatedState(state.uiUrl)
     val password = rememberUpdatedState(state.password)
+    // The page follows the app's theme, after the user's own Light/Dark
+    // override — the same resolved answer every native screen renders with.
+    val darkTheme = LocalDarkTheme.current
+    val dark = rememberUpdatedState(darkTheme)
+
+    // A theme change while the trading page is open re-themes it in place
+    // instead of leaving it in the other theme until its next load.
+    LaunchedEffect(darkTheme) {
+        webView?.let { DexWebView.applyTheme(it, darkTheme) }
+    }
 
     // Back walks SkyDEX backwards rather than leaving it: a screen inside the
     // trading page first, then the market picker, and only from the picker —
@@ -139,10 +151,11 @@ fun DexScreen(
                             view.webViewClient = DexWebView.client(
                                 baseUrl = { url.value },
                                 password = { password.value },
+                                isDark = { dark.value },
                                 onError = { pageError = it },
                                 onHistoryChanged = { canGoBack = it },
                             )
-                            view.webChromeClient = DexWebView.chromeClient()
+                            view.webChromeClient = DexWebView.chromeClient(isDark = { dark.value })
                             webView = view
                         }
                     },
