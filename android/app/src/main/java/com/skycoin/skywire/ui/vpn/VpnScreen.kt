@@ -30,6 +30,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -414,7 +415,7 @@ private fun KillswitchCard(on: Boolean, enabled: Boolean, onChange: (Boolean) ->
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        TextButton(
+        FilledTonalButton(
             onClick = {
                 // Not every build ships the VPN settings screen; a phone
                 // without it says so instead of crashing.
@@ -478,7 +479,7 @@ private fun ServersFooter(state: VpnUiState, viewModel: VpnViewModel) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
-            TextButton(onClick = viewModel::refreshServers) {
+            FilledTonalButton(onClick = viewModel::refreshServers) {
                 Text(stringResource(R.string.socks_retry))
             }
         }

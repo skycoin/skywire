@@ -26,6 +26,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -324,7 +325,7 @@ private fun ProxyAddressCard(state: SocksUiState, onChangePort: () -> Unit) {
                         Toast.makeText(context, copied, Toast.LENGTH_SHORT).show()
                     },
             )
-            TextButton(onClick = onChangePort, enabled = state.coreReady && !state.busy) {
+            FilledTonalButton(onClick = onChangePort, enabled = state.coreReady && !state.busy) {
                 Text(stringResource(R.string.socks_change_port))
             }
         }
@@ -432,7 +433,7 @@ private fun ServersFooter(state: SocksUiState, viewModel: SocksViewModel) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error,
             )
-            TextButton(onClick = viewModel::refreshServers) {
+            FilledTonalButton(onClick = viewModel::refreshServers) {
                 Text(stringResource(R.string.socks_retry))
             }
         }

@@ -16,6 +16,27 @@
     <string name="app_fleet">Fleet</string>
     <string name="app_skymeet">SkyMeet</string>
 
+    <!-- Apps hub -->
+    <string name="hub_subtitle">%1$d installed · %2$d running</string>
+    <string name="hub_filter_all">All</string>
+    <string name="hub_filter_network">Network</string>
+    <string name="hub_filter_finance">Finance</string>
+    <string name="hub_filter_social">Social</string>
+    <string name="hub_section_apps">Your apps</string>
+    <string name="hub_socks_sub">SOCKS5 proxy</string>
+    <string name="hub_dex_sub">Swap · SKY / BTC</string>
+    <string name="hub_chat_sub">Rooms and messages</string>
+    <string name="hub_wallet_sub">SKY · fiber coins · BTC</string>
+    <string name="hub_fleet_sub">Visors you run elsewhere</string>
+    <string name="hub_meet_sub">Encrypted calls</string>
+    <string name="hub_hero_reconnecting">Reconnecting</string>
+    <string name="hub_hero_starting">Starting</string>
+    <string name="hub_hero_no_exit">No exit chosen yet</string>
+    <string name="hub_stat_down">Down</string>
+    <string name="hub_stat_up">Up</string>
+    <string name="hub_stat_data">Data</string>
+    <string name="hub_vpn_toggle">SkyVPN on/off</string>
+
     <string name="coming_soon">Coming soon</string>
     <string name="connect">Connect</string>
     <string name="disconnect">Disconnect</string>

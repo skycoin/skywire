@@ -4,28 +4,47 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Chat
+import androidx.compose.material.icons.automirrored.rounded.Chat
 import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.rounded.AccountBalanceWallet
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LocalContentColor
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -51,8 +70,10 @@ import com.skycoin.skywire.ui.hub.HubScreen
 import com.skycoin.skywire.ui.logs.LogSources
 import com.skycoin.skywire.ui.logs.LogViewerScreen
 import com.skycoin.skywire.ui.navigation.Routes
+import com.skycoin.skywire.ui.components.PulseRing
 import com.skycoin.skywire.ui.settings.DiagnosticsScreen
 import com.skycoin.skywire.ui.settings.SettingsScreen
+import com.skycoin.skywire.ui.theme.SkyButtonGradient
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.ui.socks.SocksScreen
 import com.skycoin.skywire.ui.vpn.VpnScreen
@@ -71,29 +92,21 @@ import com.skycoin.skywire.ui.wallet.WalletVerifyScreen
 import com.skycoin.skywire.ui.wallet.WalletViewModel
 
 /**
- * Main scaffold: bottom NavigationBar with 5 slots (left→right):
- * Home · Chat · Skycoin logo (apps hub, icon-only) · Wallet · Settings.
- * Bar items and hub tiles take a [Painter] so the designed logos drop in
- * later with zero layout change.
+ * One of the four labelled bottom-bar slots. The fifth — the raised Skycoin
+ * cloud in the middle, which opens the apps hub — is not a slot: it is its
+ * own shape, drawn over the bar in [SkyNavBar].
  */
 private data class BarSlot(
     val route: String,
-    val label: String?, // null = icon-only (the center logo slot)
-    val icon: @Composable () -> Painter,
-    val isLogo: Boolean = false,
+    val label: String,
+    /** Outlined at rest, its Rounded (filled) form when the tab is current. */
+    val idleIcon: ImageVector,
+    val activeIcon: ImageVector,
 )
 
 @Composable
 fun SkywireApp() {
     val navController = rememberNavController()
-    val slots = listOf(
-        BarSlot(Routes.HOME, stringResource(R.string.tab_home), { rememberVectorPainter(Icons.Outlined.Home) }),
-        BarSlot(Routes.CHAT, stringResource(R.string.tab_chat), { rememberVectorPainter(Icons.AutoMirrored.Outlined.Chat) }),
-        // Center slot: the Skycoin cloud only — no label — opens the apps hub.
-        BarSlot(Routes.HUB, null, { painterResource(R.drawable.skywire_logo) }, isLogo = true),
-        BarSlot(Routes.WALLET, stringResource(R.string.tab_wallet), { rememberVectorPainter(Icons.Outlined.AccountBalanceWallet) }),
-        BarSlot(Routes.SETTINGS, stringResource(R.string.tab_settings), { rememberVectorPainter(Icons.Outlined.Settings) }),
-    )
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
@@ -142,41 +155,10 @@ fun SkywireApp() {
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                slots.forEach { slot ->
-                    NavigationBarItem(
-                        selected = currentRoute == slot.route ||
-                            (slot.route == Routes.HUB && currentRoute in Routes.hubPushed) ||
-                            (slot.route == Routes.SETTINGS && currentRoute in Routes.settingsPushed) ||
-                            (slot.route == Routes.WALLET && currentRoute in Routes.walletPushed),
-                        onClick = { navController.navigateToTab(slot.route) },
-                        icon = {
-                            Icon(
-                                painter = slot.icon(),
-                                contentDescription = slot.label
-                                    ?: stringResource(R.string.tab_hub_description),
-                                // Logo slot: enlarged and UNtinted — the brand
-                                // cloud keeps its color; the selection pill
-                                // alone signals the active state. Other slots
-                                // get the bar's default selected/unselected
-                                // tint.
-                                //
-                                // 56dp against the others' 24dp. It carries no
-                                // label, so it has the label row's height to
-                                // grow into, and it is the one slot people aim
-                                // for by shape rather than by reading — the
-                                // cloud IS the button. At 44 it read as a
-                                // slightly large icon among four icons instead
-                                // of as the centre of the bar.
-                                modifier = Modifier.size(if (slot.isLogo) 56.dp else 24.dp),
-                                tint = if (slot.isLogo) Color.Unspecified
-                                else LocalContentColor.current,
-                            )
-                        },
-                        label = slot.label?.let { { Text(it) } },
-                    )
-                }
-            }
+            SkyNavBar(
+                currentRoute = currentRoute,
+                onSelect = { navController.navigateToTab(it) },
+            )
         },
     ) { innerPadding ->
         NavHost(
@@ -384,3 +366,141 @@ private fun NavHostController.navigateToTab(route: String) {
         restoreState = true
     }
 }
+
+/**
+ * The floating bottom bar: a rounded shell with two labelled slots on each
+ * side, and the Skycoin cloud on a raised circular button in the middle —
+ * the one slot people aim for by shape rather than by reading, so it gets a
+ * shape instead of a label. It opens the apps hub.
+ *
+ * The cloud button rides [LIFT] above the shell via [offset], which moves
+ * drawing but not measurement — the jut lands on top of the screen's content,
+ * which is what a raised button is. Scaffold places the bottom bar last, so
+ * it wins the overlap.
+ */
+@Composable
+private fun SkyNavBar(currentRoute: String?, onSelect: (String) -> Unit) {
+    val slots = listOf(
+        BarSlot(Routes.HOME, stringResource(R.string.tab_home), Icons.Outlined.Home, Icons.Rounded.Home),
+        BarSlot(Routes.CHAT, stringResource(R.string.tab_chat), Icons.AutoMirrored.Outlined.Chat, Icons.AutoMirrored.Rounded.Chat),
+        BarSlot(Routes.WALLET, stringResource(R.string.tab_wallet), Icons.Outlined.AccountBalanceWallet, Icons.Rounded.AccountBalanceWallet),
+        BarSlot(Routes.SETTINGS, stringResource(R.string.tab_settings), Icons.Outlined.Settings, Icons.Rounded.Settings),
+    )
+    val selected = { slot: BarSlot ->
+        currentRoute == slot.route ||
+            (slot.route == Routes.SETTINGS && currentRoute in Routes.settingsPushed) ||
+            (slot.route == Routes.WALLET && currentRoute in Routes.walletPushed)
+    }
+    val shellColor = MaterialTheme.colorScheme.surfaceContainerLowest
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(start = 12.dp, end = 12.dp, bottom = 8.dp),
+    ) {
+        Surface(
+            shape = MaterialTheme.shapes.extraLarge,
+            color = shellColor,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            shadowElevation = 8.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(Modifier.height(BAR_HEIGHT)) {
+                NavSlot(slots[0], selected(slots[0]), onSelect, Modifier.weight(1f))
+                NavSlot(slots[1], selected(slots[1]), onSelect, Modifier.weight(1f))
+                Spacer(Modifier.weight(1f)) // the cloud's column
+                NavSlot(slots[2], selected(slots[2]), onSelect, Modifier.weight(1f))
+                NavSlot(slots[3], selected(slots[3]), onSelect, Modifier.weight(1f))
+            }
+        }
+        CloudButton(
+            ringColor = shellColor,
+            onClick = { onSelect(Routes.HUB) },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = -LIFT),
+        )
+    }
+}
+
+@Composable
+private fun NavSlot(
+    slot: BarSlot,
+    selected: Boolean,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val tint = if (selected) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.outline
+    }
+    // Icon only — the label lives in the content description. Four glyphs
+    // and the cloud read cleaner than four glyphs with four captions.
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .fillMaxHeight()
+            // No bounded ripple: the shell is one rounded surface and four
+            // rectangular flashes inside it read as seams.
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = { onSelect(slot.route) },
+            ),
+    ) {
+        Icon(
+            imageVector = if (selected) slot.activeIcon else slot.idleIcon,
+            contentDescription = slot.label,
+            tint = tint,
+            modifier = Modifier.size(26.dp),
+        )
+    }
+}
+
+/**
+ * The raised cloud: brand gradient under the Skycoin mark, a ring of the
+ * shell's own color so it reads as punched *through* the bar, and a slow
+ * pulse behind it — the bar's one piece of motion, on the one control that
+ * is always worth a look.
+ */
+@Composable
+private fun CloudButton(
+    ringColor: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val hubLabel = stringResource(R.string.tab_hub_description)
+
+    Box(contentAlignment = Alignment.Center, modifier = modifier) {
+        PulseRing(size = CLOUD_SIZE, color = MaterialTheme.colorScheme.primary)
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(CLOUD_SIZE)
+                .clip(CircleShape)
+                .background(ringColor)
+                .clickable(onClick = onClick)
+                .padding(4.dp)
+                .clip(CircleShape)
+                .background(SkyButtonGradient),
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.skywire_logo),
+                contentDescription = hubLabel,
+                tint = Color.White,
+                // The mark is a 4:3 cloud; 34×26 keeps it inside the 58dp
+                // gradient disc with the ring's weight around it.
+                modifier = Modifier.size(34.dp),
+            )
+        }
+    }
+}
+
+private val BAR_HEIGHT = 64.dp
+private val CLOUD_SIZE = 66.dp
+
+/** How far the cloud rides above the shell — mock's 0.32 × its size. */
+private val LIFT = 21.dp

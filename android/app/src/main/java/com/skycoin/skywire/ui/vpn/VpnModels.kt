@@ -15,6 +15,17 @@ object VpnArgs {
 
     const val APP = "vpn-client"
 
+    /**
+     * Where the last-used exit lives in [com.skycoin.skywire.core.AppPreferences]
+     * (a [com.skycoin.skywire.ui.components.SavedServer] as JSON). Owned by the
+     * SkyVPN screen; the apps hub reads it for the exit's country and to turn
+     * the tunnel back on from the hero card.
+     */
+    const val PREF_LAST_SERVER = "vpn_last_server"
+
+    /** The phone's killswitch preference — same arrangement, same owners. */
+    const val PREF_KILLSWITCH = "vpn_killswitch"
+
     private val SRV = listOf("--srv", "-srv")
 
     fun serverPk(args: List<String>): String? =
