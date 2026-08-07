@@ -82,8 +82,18 @@ fun deviceAddressText(overview: Overview?): String {
     }
 }
 
-/** `🇨🇦 Canada` — flag plus the name in the reader's own language. */
+/**
+ * `🇨🇦 Canada` — flag plus the name in the reader's own language.
+ *
+ * runCatching because the code is not ours: service discovery hands back `??`
+ * when the visor's geo lookup could not place a node, and `setRegion` rejects
+ * anything that is not a well-formed region with an exception. The bare code
+ * is the honest fallback — better a literal `??` than a crash on a card.
+ */
 fun countryText(code: String): String {
-    val name = Locale("", code).displayCountry.takeIf { it.isNotBlank() } ?: code
+    val name = runCatching { Locale.Builder().setRegion(code).build().displayCountry }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+        ?: code
     return listOfNotNull(flagEmoji(code), name).joinToString(" ")
 }
