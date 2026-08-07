@@ -59,8 +59,8 @@
                 <div class="term-controls">
                   <span class="dim small">{{ 'node.tabs.vpn' | translate }}</span>
                   <button mat-stroked-button class="term-fullscreen" (click)="openVpnFullWindow()">
-                    <mat-icon [inline]="true">open_in_new</mat-icon>
-                    {{ 'terminal.open-fullscreen' | translate }}
+                    <mat-icon [inline]="true">open_in_full</mat-icon>
+                    {{ 'common.open-full-page' | translate }}
                   </button>
                 </div>
                 <iframe class="term-frame" [src]="vpnIframeUrl" allowfullscreen></iframe>
