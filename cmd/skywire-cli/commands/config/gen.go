@@ -1078,7 +1078,15 @@ func configureServices(log *logging.Logger) {
 			log.Fatalf("bad key set for survey whitelist flag: %v", err)
 		}
 	}
-	services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
+	// The deployment's keys are dropped on builds that do not want them (the
+	// phone — see visorconfig.UseDeploymentSurveyWhitelist). Keys named
+	// explicitly with --surveywhitelist are always kept: the policy is a
+	// default, not a prohibition.
+	if visorconfig.UseDeploymentSurveyWhitelist() {
+		services.SurveyWhitelist = append(services.SurveyWhitelist, surveyWlPKs...)
+	} else {
+		services.SurveyWhitelist = surveyWlPKs
+	}
 
 	if services.DmsgDiscovery == "" && services.DmsgDiscoveryDmsg == "" {
 		log.Fatalf("Dmsg Discovery not set (neither HTTP nor DMSG)")
