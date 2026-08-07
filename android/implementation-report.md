@@ -7,6 +7,78 @@ was actually performed (commands, devices, measured numbers — not intentions).
 
 ---
 
+## 2026-08-07 — CI for the app, and a release lane behind a `mobile-v*` tag
+
+Two workflows. Neither touches the desktop lanes.
+
+**`android-app.yml` — pull requests that change `android/**`.** Builds the
+pure-Go payload, runs `:wallet-core:test`, assembles the debug APK and keeps it
+as an artifact for triage. A PR that does not touch the app runs none of it.
+The Go half is deliberately *not* under the same path filter and is not
+duplicated here: `test.yml`'s existing `android` job builds the arm64 payload
+and enforces its size budget on every PR, which is what catches a Go change
+breaking the mobile variant. The payload is still built in this lane, though —
+an APK assembled without the `.so` is not the artifact we ship, and packaging
+is part of what is being checked. `LiveNodeTest` is already gated behind
+`SKYWIRE_NET_TESTS=1`, so the suite stays offline.
+
+**`android-release.yml` — push `mobile-vX.Y.Z`.** The prefix is what keeps the
+lanes apart: `release.yml` fires on `v*`, and `mobile-v1.0.0` does not match
+it, so tagging the phone never starts a Skywire release.
+
+The tag is the version. `mobile-v1.2.3` becomes versionName `1.2.3` and
+versionCode `10203` (`major*10000 + minor*100 + patch`), passed as Gradle
+properties; `build.gradle.kts` falls back to the committed values so a local
+build still needs no arguments. Minor and patch are rejected above 99, since
+the scheme stops being monotonic there and Play and F-Droid both require the
+code to only ever increase.
+
+The payload is the **NDK/cgo** lane, not the pure-Go one used for CI and the
+emulator: cgo resolves DNS through bionic's `getaddrinfo`, which is the only
+path that honours the phone's real resolver configuration.
+
+**On signing, the workflow refuses rather than improvises.** `assembleRelease`
+has always produced an unsigned APK, and unsigned means uninstallable; the
+debug APK is installable but is `debuggable`, which is not a thing to hand to
+users of an app holding wallet seeds. So neither is a fallback. The build takes
+its keystore from the environment — absent, `release` stays unsigned exactly as
+before, so `make android-apk` is unchanged — and the workflow fails at a
+preflight step, before the ten minutes of build, printing the `keytool` and
+`gh secret set` lines needed. A later step re-verifies with `apksigner` and
+fails if the APK came out unsigned anyway, which is also what catches the
+unsigned build (its filename is `app-release-unsigned.apk`, so the expected
+path is simply missing).
+
+Four secrets are required and are not yet set: `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. The
+key must be generated once and kept forever — Android will not upgrade an app
+signed with a different key, so this key is what lets every future release
+reach whoever installs the first one.
+
+Release notes range over the previous `mobile-v*` tag; left alone
+`--generate-notes` walks back to whatever tag came last, usually a desktop
+release, and the changelog would be every Skywire commit since. The APK ships
+as `skywire-X.Y.Z-arm64-v8a.apk` with a `.sha256` beside it, attached to a
+**pre-release**. F-Droid and Play come later.
+
+**Verified** by rehearsing the release path locally rather than by reading it:
+a throwaway keystore, `assembleRelease` with the properties the workflow
+passes, then the workflow's own verification steps. `apksigner` reports Signer
+#1; `aapt2 dump badging` reports `versionCode='10203' versionName='1.2.3'`;
+the APK is not debuggable. With the keystore variables unset the same command
+still produces `app-release-unsigned.apk`, so the local path documented in the
+Makefile is unchanged (its help text now names the signing variables). Both
+workflows parse. The throwaway keystore and both rehearsal APKs were deleted;
+no keystore exists anywhere in the tree.
+
+Not covered: the workflows have not run on GitHub — the first `mobile-v*` push
+will fail at the preflight until the four secrets exist, which is the intended
+behaviour but has not been observed. Runner-provided values (`ANDROID_HOME`,
+`ANDROID_NDK_LATEST_HOME`) are asserted with explicit guards rather than
+assumed, since neither can be checked from here.
+
+---
+
 ## 2026-08-07 — The phone stops shipping the deployment's survey whitelist
 
 `survey_whitelist` is not a battery field, but it turned up while reading the

@@ -247,7 +247,7 @@ android-mobile-ndk: ## Release lane: NDK/cgo android build (DNS via bionic getad
 # Android Studio's bundled JDK (gradle needs JDK 17+); override if yours differs.
 ANDROID_JAVA_HOME ?= /Applications/Android Studio.app/Contents/jbr/Contents/Home
 
-android-apk: ## Build the Android APK (release; unsigned until release signing lands) — run android-mobile-ndk first for a fresh Go payload
+android-apk: ## Build the Android APK (release; signed when ANDROID_KEYSTORE_FILE/_PASSWORD + ANDROID_KEY_ALIAS/_PASSWORD are set, else unsigned) — run android-mobile-ndk first for a fresh Go payload
 	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleRelease
 
 android-apk-debug: ## Build + the debug-signed APK (installable via adb) — the dev loop's CLI twin of Android Studio Run
