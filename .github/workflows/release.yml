@@ -471,7 +471,7 @@ jobs:
       TINYGO_BRANCH: develop
     steps:
       - name: Checkout skywire
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
@@ -532,7 +532,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
