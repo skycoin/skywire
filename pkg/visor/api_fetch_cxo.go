@@ -78,6 +78,17 @@ func (v *Visor) FetchCXO(args FetchCXOArgs) (*FetchCXOResult, error) {
 		if mgr := v.CXOSubMgr(); mgr != nil {
 			mgr.AcquireFor(TabCLIServices)
 			defer mgr.ReleaseFor(TabCLIServices)
+			// CXO is itself an over-dmsg subscription, so it should be the source of
+			// truth — not just a fast path that silently defers to the dmsg-http
+			// fallback whenever the snapshot is still cold. AcquireFor only STARTS
+			// the cycle; a short-lived caller (the CLI) would otherwise always miss
+			// on the first call and fall back. So on a cold snapshot, block briefly
+			// for the subscription's first sync (over dmsg) before reporting a miss.
+			if _, ok := v.servicesFromCXO(serviceType, "", ""); !ok {
+				ctx, cancel := context.WithTimeout(context.Background(), feedFirstSyncTimeout(FeedSDServices))
+				_, _ = mgr.RefreshNow(ctx, FeedSDServices) //nolint:errcheck
+				cancel()
+			}
 		}
 		services, ok := v.servicesFromCXO(serviceType, "", "")
 		if !ok {
