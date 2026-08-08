@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	skycipher "github.com/skycoin/skycoin/src/cipher"
@@ -98,7 +99,27 @@ type memNode struct {
 	// cached on every node along the path from the root.
 	pubHash skycipher.SHA256
 	cached  bool
+
+	// mutSeq is a monotonic stamp bumped on every invalidation of this
+	// node (see invalidatePath). It lets publishIfDirty promote the
+	// encode-cache per-subtree instead of all-or-nothing: the snapshot
+	// clone copies mutSeq, encodeNode records it on each freshSub, and
+	// promotion only re-caches a subtree whose live mutSeq still matches
+	// the snapshot's — i.e. that specific subtree wasn't re-mutated
+	// during the publish. Without this, any single concurrent Put during
+	// the (multi-second) encode discarded the WHOLE freshSubs promotion,
+	// so under sustained churn (dmsg-discovery's ~160 reg/s) the cache
+	// never persisted and every publish re-serialized nearly the whole
+	// tree — the GC-bound CPU seen in production.
+	mutSeq uint64
 }
+
+// treeMutSeq is the process-wide monotonic source for memNode.mutSeq.
+// A single shared counter is fine: mutSeq values are only ever compared
+// to the same node's own earlier value, and any re-invalidation yields a
+// strictly larger stamp, so "changed since snapshot" is detected
+// regardless of which publisher produced the intervening bump.
+var treeMutSeq atomic.Uint64
 
 func newMemNode() *memNode {
 	return &memNode{
@@ -905,29 +926,40 @@ func (p *Publisher) publishIfDirty() error {
 	}
 
 	p.mu.Lock()
-	if p.dirtyGen == gen {
-		// No mutation landed during the publish. Promote freshSubs
-		// into the LIVE tree by path so the next publish can skip
-		// the encode walk for unchanged subtrees, then clear dirty.
-		for _, fs := range freshSubs {
-			n := walkLivePath(p.root, fs.path)
-			if n == nil {
-				// Path was concurrently removed despite dirtyGen
-				// matching — only possible if mutation went
-				// through a code path that forgot to call
-				// markDirty. Defensive: skip.
-				continue
-			}
-			n.cached = true
-			n.pubHash = fs.hash
+	// Promote freshSubs into the LIVE tree by path so the next publish
+	// can skip the encode walk for unchanged subtrees. This is done
+	// PER-SUBTREE: a freshSub is promoted only if the live node's mutSeq
+	// still equals the snapshot's, i.e. that specific subtree wasn't
+	// re-mutated during the publish. The previous all-or-nothing gate
+	// (promote everything iff p.dirtyGen == gen) discarded the entire
+	// promotion whenever a single Put landed anywhere during the
+	// multi-second encode — so under sustained churn the cache never
+	// persisted and every publish re-serialized nearly the whole tree.
+	// A subtree that WAS re-mutated has a bumped mutSeq (and cleared
+	// cached via invalidatePath), so skipping its promotion is correct:
+	// the next publish re-encodes it against the new state.
+	for _, fs := range freshSubs {
+		n := walkLivePath(p.root, fs.path)
+		if n == nil {
+			// Path was concurrently removed — the subtree is gone,
+			// nothing to cache.
+			continue
 		}
+		if n.mutSeq != fs.mutSeq {
+			// Re-mutated during the publish: the encoded hash reflects
+			// stale content. Leave cached=false so it re-encodes next tick.
+			continue
+		}
+		n.cached = true
+		n.pubHash = fs.hash
+	}
+	if p.dirtyGen == gen {
+		// No mutation landed during the publish — the live tree now
+		// matches what we just published, so it's clean.
 		p.dirty = false
 	}
-	// If dirtyGen != gen: a Put / Delete landed during publish.
-	// freshSubs encodes the SNAPSHOT's view of those subtrees,
-	// which no longer matches the live tree. Discard the
-	// promotion entirely — the next tick will re-encode against
-	// the new live state.
+	// If dirtyGen != gen a Put / Delete landed during publish; leave
+	// dirty set so runLoop republishes the new state on the next tick.
 	p.mu.Unlock()
 	return nil
 }
@@ -973,6 +1005,7 @@ func cloneMemNode(n *memNode) *memNode {
 		subs:    make(map[string]*memNode, len(n.subs)),
 		pubHash: n.pubHash,
 		cached:  n.cached,
+		mutSeq:  n.mutSeq,
 	}
 	for k, v := range n.leaves {
 		out.leaves[k] = v // share immutable leaf byte slice
@@ -1099,6 +1132,11 @@ func (p *Publisher) publishRoot(root *memNode) ([]freshSub, error) {
 type freshSub struct {
 	path []string
 	hash skycipher.SHA256
+	// mutSeq is the snapshot subtree's mutSeq at encode time. Promotion
+	// re-caches this subtree in the live tree only if the live node's
+	// mutSeq still equals this — i.e. it wasn't re-mutated during the
+	// publish. See memNode.mutSeq.
+	mutSeq uint64
 }
 
 // encodeNode walks a memNode and produces a TreeNode whose Children
@@ -1150,7 +1188,7 @@ func encodeNode(up registry.Pack, n *memNode, path []string, freshSubs *[]freshS
 				if err := entry.Sub.SetValue(up, &subNode); err != nil {
 					return TreeNode{}, err
 				}
-				*freshSubs = append(*freshSubs, freshSub{path: childPath, hash: entry.Sub.Hash})
+				*freshSubs = append(*freshSubs, freshSub{path: childPath, hash: entry.Sub.Hash, mutSeq: sub.mutSeq})
 			}
 		} else {
 			// Should not happen — memNode invariants keep names in
@@ -1298,13 +1336,18 @@ func pruneAt(root *memNode, segs []string) bool {
 	return true
 }
 
-// invalidatePath clears the encode-cache flag on every node in chain.
-// Called by the mutators after any successful structural change so the
-// next publish re-encodes the affected nodes (and re-uses cached
-// hashes on every untouched sibling subtree).
+// invalidatePath clears the encode-cache flag on every node in chain
+// and stamps each with a fresh mutSeq. Called by the mutators after any
+// successful structural change so the next publish re-encodes the
+// affected nodes (and re-uses cached hashes on every untouched sibling
+// subtree). The single shared mutSeq bump per invalidation lets
+// publishIfDirty tell, per subtree, whether it was touched during a
+// publish (see memNode.mutSeq).
 func invalidatePath(chain []*memNode) {
+	gen := treeMutSeq.Add(1)
 	for _, n := range chain {
 		n.cached = false
+		n.mutSeq = gen
 	}
 }
 
