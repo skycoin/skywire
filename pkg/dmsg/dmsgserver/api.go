@@ -125,7 +125,7 @@ func (a *ServerAPI) ListenAndServe(lAddr, pAddr, httpAddr, wsURL, wtURL string) 
 			// ServeUnifiedQUIC serves dmsg-over-QUIC AND (when wt != "")
 			// dmsg-over-WebTransport on this SAME UDP socket, ALPN-demuxed — so WT
 			// is default-on at zero extra port cost, reachable wherever dmsg-QUIC
-			// already is. wt == "" makes it QUIC-only (the prior behaviour).
+			// already is. wt == "" makes it QUIC-only (the prior behavior).
 			serr := a.dmsgServer.ServeUnifiedQUIC(udp, advertised, wt)
 			udp.Close() //nolint:errcheck,gosec
 			errCh <- fmt.Errorf("dmsg QUIC server stopped: %v", serr)
