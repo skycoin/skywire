@@ -14,6 +14,7 @@
 package visor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -45,7 +46,16 @@ func (v *Visor) FetchVisorUptimeCXO(days int) ([]byte, time.Time, error) {
 	path := fmt.Sprintf("uptimes/days/%d", days)
 	body, ts, ok := mgr.Get(FeedTPDUptime, path)
 	if !ok || len(body) == 0 {
-		return nil, time.Time{}, ErrTPDUptimeNotReady
+		// Cold snapshot: AcquireFor only started the cycle. Block briefly for the
+		// first sync (over dmsg) so CXO serves this call instead of the caller
+		// falling back to dmsg-http — see the sd-services case in FetchCXO.
+		ctx, cancel := context.WithTimeout(context.Background(), feedFirstSyncTimeout(FeedTPDUptime))
+		_, _ = mgr.RefreshNow(ctx, FeedTPDUptime) //nolint:errcheck
+		cancel()
+		body, ts, ok = mgr.Get(FeedTPDUptime, path)
+		if !ok || len(body) == 0 {
+			return nil, time.Time{}, ErrTPDUptimeNotReady
+		}
 	}
 	return body, ts, nil
 }
