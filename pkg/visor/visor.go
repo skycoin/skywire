@@ -535,6 +535,27 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 		conf.Hypervisor.UIAssets = *uiAssets
 	}
 
+	// hypervisor.wasm_serve: serve the standalone wasm-visor PWA / testing
+	// harness from this same visor process, so the operator's rebuild-restart
+	// loop re-embeds + re-serves the latest wasm on every restart (no separate
+	// `hv serve` process). Off unless configured. Best-effort — a serve error
+	// is logged, not fatal.
+	if conf.Hypervisor != nil && conf.Hypervisor.WasmServe != nil && conf.Hypervisor.WasmServe.Addr != "" {
+		ws := conf.Hypervisor.WasmServe
+		go func() {
+			if err := ServeWasm(parentCtx, WasmServeConfig{
+				Addr:     ws.Addr,
+				TLS:      ws.TLS,
+				Harness:  ws.Harness,
+				Wallet:   !ws.NoWallet,
+				Variant:  ws.Variant,
+				Password: ws.Password,
+			}); err != nil {
+				mLog.WithError(err).Error("wasm-serve failed")
+			}
+		}()
+	}
+
 	// Open the service-self uptime recorder before NewVisor so a panic
 	// during subsystem init still leaves a session row with the
 	// running binary's version. Failure to open is non-fatal — the
