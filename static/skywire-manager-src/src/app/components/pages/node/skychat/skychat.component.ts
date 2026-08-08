@@ -2,6 +2,8 @@ import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked, 
 import { firstValueFrom } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
+import { Router } from '@angular/router';
+
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { ApiService } from 'src/app/services/api.service';
@@ -221,8 +223,17 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     private api: ApiService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
+    private router: Router,
   ) {
     super();
+  }
+
+  /** Open this visor's chat as a full-page view (unified in-SPA app host). Only
+   *  offered from the routed node tab (not when already embedded in the host). */
+  openFull(): void {
+    if (this.node && this.node.localPk) {
+      this.router.navigate(['/app', 'skychat', this.node.localPk]);
+    }
   }
 
   ngOnInit() {

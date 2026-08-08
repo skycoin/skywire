@@ -90,7 +90,11 @@ func emitProxyLog(winID, msg string) {
 // lazily establishing it over a fresh route group (rtr.DialRoutes — the routing
 // layer). Cached per exit; a closed session is re-dialed.
 func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, error) {
-	key := skysocksKey(winID, serverPK)
+	// Key by the SESSION OWNER, not the raw window: all user windows on the same
+	// instance share one route to a given exit (a 2nd browser window reuses the
+	// 1st's established session instead of cold-dialing its own). Internal pool
+	// windows keep their own owner (see sessionOwner).
+	key := skysocksKey(sessionOwner(winID), serverPK)
 	// Fast path under the lock: an established, still-open session is reused.
 	skysocksMu.Lock()
 	if s, ok := skysocksSessions[key]; ok && !s.IsClosed() {

@@ -137,3 +137,4 @@ skysocks-client
 
 !cmd/wasm-visor/cacert.pem
 /skywire-cli
+/wasm-visor

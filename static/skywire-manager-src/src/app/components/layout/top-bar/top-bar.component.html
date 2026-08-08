@@ -29,7 +29,9 @@
       [matMenuTriggerFor]="menu"
       class="transparent-button"
       >
-      <mat-icon>menu</mat-icon>
+      <!-- Skywire mark (the HV favicon) as the menu button, replacing the generic
+           hamburger glyph. -->
+      <img src="assets/img/skywire-icon.png" class="menu-skywire-icon" alt="menu">
     </button>
   </div>
 </div>
@@ -39,6 +41,12 @@
 
 <!-- Options menu. -->
 <mat-menu #menu="matMenu" [overlapTrigger]="false">
+  <!-- Home: always return to the visor list / front page (esp. on full-page app
+       views like VPN where the per-page nav isn't otherwise shown). -->
+  <div mat-menu-item (click)="goHome()">
+    <mat-icon>home</mat-icon> {{ 'nodes.title' | translate }}
+  </div>
+  <div class="menu-separator"></div>
   <!-- Options. -->
   @if (optionsData && optionsData.length >= 1) {
     @for (option of optionsData; track option) {
@@ -63,6 +71,21 @@
     }
   </mat-menu>
 
+  <!-- Visor switcher menu: shared by the caret on the "Visor list" home tab (and,
+       when opted out of the full row, the only switcher UI). One item per visor
+       connected to this hypervisor; the current visor is disabled. -->
+  <mat-menu #visorSwitcherMenu="matMenu">
+    @for (t of switcherTabsData; track t) {
+      <a mat-menu-item
+        [routerLink]="t.linkParts"
+        [matTooltip]="t.sublabel"
+        [disabled]="t.linkParts && t.linkParts[1] === pageHeaderIdentifier">
+        <mat-icon>{{ t.icon }}</mat-icon>
+        <span>{{ t.label }}</span>
+      </a>
+    }
+  </mat-menu>
+
   <!-- Persistent hypervisor navigation on node pages: the top-level home tabs
        (visor list / rewards / resources / …) stay visible instead of being
        replaced by the per-node tabs, so navigation isn't lost when viewing a
@@ -75,6 +98,19 @@
           <a mat-button class="tab-button white-theme grey-button-background" [href]="t.externalUrl" target="_blank" rel="noreferrer nofollow noopener">
             <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
           </a>
+        } @else if (t.label === 'nodes.title' && switcherTabsData && switcherTabsData.length && !showVisorSwitcherRow) {
+          <!-- Split "Visor list" control: the text navigates to the visor list
+               (front page); the caret opens the visor switcher menu so a specific
+               connected visor can be picked directly. Replaces the redundant
+               separate switcher dropdown. -->
+          <span class="visor-list-split">
+            <a mat-button class="tab-button white-theme visor-list-main" [routerLink]="t.linkParts" routerLinkActive="active-home-tab" [routerLinkActiveOptions]="{exact: true}" [ngClass]="{'grey-button-background': true}">
+              <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
+            </a>
+            <button mat-button class="tab-button white-theme grey-button-background visor-list-caret" [matMenuTriggerFor]="visorSwitcherMenu" [matTooltip]="'nodes.title' | translate">
+              <mat-icon [inline]="true">arrow_drop_down</mat-icon>
+            </button>
+          </span>
         } @else {
           <a mat-button class="tab-button white-theme" [routerLink]="t.linkParts" routerLinkActive="active-home-tab" [routerLinkActiveOptions]="{exact: true}" [ngClass]="{'grey-button-background': true}">
             <mat-icon [inline]="true">{{ t.icon }}</mat-icon><span>{{ t.label | translate }}</span>
@@ -204,7 +240,8 @@
             [matMenuTriggerFor]="menu"
             >
             <div class="icon-container">
-              <mat-icon [inline]="true">menu</mat-icon>
+              <!-- Skywire mark (the HV favicon) as the menu button. -->
+              <img src="assets/img/skywire-icon.png" class="menu-skywire-icon" alt="menu">
             </div>
           </button>
         </div>
@@ -292,8 +329,10 @@
        highlighted (not greyed). Defined once and rendered in two places (see the
        outlets): directly under the home nav on node pages — where it REPLACES the
        node-identity (back + PK) row — and below the home tabs on the node list. -->
+  <!-- Opt-in only: the FULL row of per-visor chips. By default the switcher is the
+       caret on the "Visor list" home tab (above); Settings can restore this row. -->
   <ng-template #visorSwitcherRow>
-    @if (switcherTabsData && switcherTabsData.length) {
+    @if (switcherTabsData && switcherTabsData.length && showVisorSwitcherRow) {
       <div class="secondary-nav-row visor-switcher-row d-none d-lg-flex">
         @for (t of switcherTabsData; track t) {
           <a mat-button class="tab-button white-theme switcher-chip"
