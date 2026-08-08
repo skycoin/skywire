@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
@@ -47,7 +46,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/flags"
-	"github.com/skycoin/skywire/pkg/logging"
 )
 
 // Command groups for the root help output. Each GroupID must match
@@ -175,15 +173,6 @@ func init() {
 	// when --via isn't set.
 	RootCmd.PersistentFlags().StringVar(&clirpc.Via, "via", "", "remote visor target — `dmsg://<pk>` or `skynet://<pk>`")
 
-	// The CLI shares the logging library's master logger, which defaults to Debug
-	// — far too noisy for a user CLI (e.g. CXO-miss/fallback traces show up on a
-	// plain `proxy list`). Default to Info and expose --loglevel for opting back
-	// into detail. Set the default here so it applies even for subcommands that
-	// override PersistentPreRun.
-	logging.SetLevel(logrus.InfoLevel)
-	RootCmd.PersistentFlags().StringVar(&cliLogLevel, "loglevel", "info", "log level: error, warn, info, debug")
-	RootCmd.PersistentFlags().MarkHidden("loglevel") //nolint:errcheck,gosec
-
 	// --all reveals hidden flags and subcommands
 	RootCmd.Flags().BoolVar(&cliShowAll, "all", false, "show all flags and subcommands (including hidden)")
 	RootCmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
@@ -191,12 +180,8 @@ func init() {
 
 var cliShowAll bool
 
-// cliLogLevel controls the CLI's log verbosity (default "info"); --loglevel debug
-// restores the detailed CXO/RPC/dmsg fallback traces.
-var cliLogLevel string
-
 // cliHiddenFlags are persistent flags hidden by default, revealed by --all.
-var cliHiddenFlags = []string{"timeout", "loglevel"}
+var cliHiddenFlags = []string{"timeout"}
 
 // RootCmd is the root command for skywire-cli
 var RootCmd = &cobra.Command{
@@ -210,13 +195,6 @@ var RootCmd = &cobra.Command{
 	DisableSuggestions:    true,
 	DisableFlagsInUseLine: true,
 	Version:               buildinfo.Version(),
-	PersistentPreRun: func(_ *cobra.Command, _ []string) {
-		// Apply --loglevel (default "info"). Runs for the root and any subcommand
-		// that doesn't override PersistentPreRun; the init() default covers the rest.
-		if lvl, err := logging.LevelFromString(cliLogLevel); err == nil {
-			logging.SetLevel(lvl)
-		}
-	},
 	PreRun: func(cmd *cobra.Command, _ []string) {
 		if cliShowAll {
 			for _, name := range cliHiddenFlags {
