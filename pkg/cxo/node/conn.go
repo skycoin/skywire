@@ -119,20 +119,11 @@ func (c *Conn) run() {
 		}
 	}()
 
-	// Idle watchdog — closes the Conn when receiveMsg hasn't seen
-	// inbound traffic for idleWatchdogThreshold. Targets the
-	// half-dead-underlying-transport case where the dmsg session is
-	// gone but io.ReadFull never returns an error (no FIN/RST
-	// propagation). Without this, reconnect attempts keep hitting
-	// PR #2643's connIsAlive check returning true (closeq still open,
-	// transport.IsClosed false) and getting back the same zombie Conn.
-	// Pairs with #2643: that PR evicts on next ConnectPK; this one
-	// makes sure the Conn actually goes dead so the eviction fires.
-	c.await.Add(1)
-	go func() {
-		defer c.await.Done()
-		c.idleWatchdog()
-	}()
+	// The idle watchdog that closes a Conn after idleWatchdogThreshold
+	// of silence (half-dead-transport case: dmsg session gone but
+	// io.ReadFull never errors) is no longer per-conn. One shared
+	// Node.connReaper walks all active conns on the same interval —
+	// same detection guarantee, minus a goroutine+ticker per conn.
 
 	// If OnConnect returns error, connection will be closed.
 	var occErr error
@@ -199,43 +190,11 @@ const (
 	idleWatchdogInterval  = 30 * time.Second
 )
 
-// idleWatchdog periodically checks whether receiveMsg has observed
-// any inbound traffic recently. Closes the Conn when activity has
-// been silent past idleWatchdogThreshold, on the assumption that a
-// healthy CXO peer with an active subscription would emit at least
-// heartbeats. Closing the Conn surfaces to PR #2643's connIsAlive
-// gate on the next ConnectPK call, which evicts the cached entry
-// and re-dials fresh.
-//
-// Exits cleanly on closeq close (either Close() called externally
-// or receiveMsg observed its own error). No-op call to Close on
-// closeq-already-signaled paths; idempotent.
-func (c *Conn) idleWatchdog() {
-	t := time.NewTicker(idleWatchdogInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-c.closeq:
-			return
-		case <-t.C:
-			last := c.lastActivityNs.Load()
-			if last == 0 {
-				// Watchdog ticked before receiveMsg seeded lastActivityNs.
-				// Skip this tick — receiveMsg seeds the timestamp on
-				// entry, so by the next tick we'll have a real value
-				// (or the Conn will have closed if receive errored).
-				continue
-			}
-			idle := time.Since(time.Unix(0, last))
-			if idle < idleWatchdogThreshold {
-				continue
-			}
-			c.n.Debugf(ConnPin, "[%s] idle watchdog: %s since last inbound, closing", c.String(), idle)
-			c.Close() //nolint:errcheck,gosec
-			return
-		}
-	}
-}
+// The idle-connection watchdog now lives at the Node level as the
+// single shared Node.connReaper goroutine (node.go); the per-Conn
+// idleWatchdog method it replaced cost one goroutine + one time.Ticker
+// per connection. lastActivityNs (seeded/bumped by receiveMsg) and the
+// idleWatchdog* constants remain here as the reaper's inputs.
 
 func (c *Conn) decodeRaw(raw []byte) (seq, rseq uint32, m msg.Msg, err error) {
 
