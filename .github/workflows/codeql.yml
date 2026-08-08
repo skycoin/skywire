@@ -23,7 +23,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v7
         with:
@@ -32,7 +32,7 @@ jobs:
           cache-dependency-path: go.sum
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: go
           # The default autobuild can choke on the multi-binary layout; build
@@ -43,6 +43,6 @@ jobs:
         run: go build -mod=vendor ./cmd/...
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4
         with:
           category: "/language:go"
