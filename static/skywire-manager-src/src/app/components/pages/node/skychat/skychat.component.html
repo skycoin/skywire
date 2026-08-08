@@ -24,6 +24,12 @@
           </button>
         </div>
         <span class="sc-status-spacer"></span>
+        @if (!embeddedNodeKey) {
+          <button mat-button type="button" class="sc-open-full" (click)="openFull()">
+            <mat-icon [inline]="true">open_in_full</mat-icon>
+            {{ 'common.open-full-page' | translate }}
+          </button>
+        }
         <button mat-button type="button" class="sc-password-toggle" (click)="togglePassword()">
           <mat-icon class="lock-icon" [inline]="true">{{ pwIsSet ? 'lock' : 'lock_open' }}</mat-icon>
           {{ (pwOpen ? 'skychat.password.hide' : (pwIsSet ? 'skychat.password.change' : 'skychat.password.set')) | translate }}
