@@ -210,9 +210,42 @@ func skysocksHTTPClient(sess *yamux.Session) (*http.Client, error) {
 			TLSClientConfig:     &tls.Config{RootCAs: caPool, MinVersion: tls.VersionTLS12},
 			TLSHandshakeTimeout: 20 * time.Second,
 			MaxIdleConns:        8,
+			// A route/session can establish to an exit whose clearnet EGRESS is
+			// dead — the SOCKS5 CONNECT succeeds but no HTTP response ever comes.
+			// Cap the wait for response headers so that case fails fast and the
+			// caller (jsFetchClearnet) can fail over to another exit, instead of
+			// hanging on the full Timeout. Body transfer still gets the 45s below.
+			ResponseHeaderTimeout: 12 * time.Second,
 		},
-		Timeout: 45 * time.Second,
+		// Total request budget. ResponseHeaderTimeout (above) already fails a
+		// dead-egress exit fast, so this only bounds BODY transfer — kept generous
+		// so large pages (a multi-MB wasm app can be ~10MB) finish over a mesh
+		// route at modest throughput rather than being cut off mid-download.
+		Timeout: 120 * time.Second,
 	}, nil
+}
+
+// cachedUA memoizes the browser User-Agent (it never changes within a tab).
+var cachedUA string
+
+// browserUserAgent returns a User-Agent to present to clearnet origins. The wasm
+// visor runs INSIDE a real browser, so we present that browser's own navigator
+// .userAgent — making a proxied fetch indistinguishable from a normal tab, so
+// origins that gate on (or reject a missing / bot-looking) User-Agent serve the
+// real page instead of a 403/robot wall. Falls back to a current desktop UA if
+// navigator is unavailable (e.g. a headless WASI host).
+func browserUserAgent() string {
+	if cachedUA != "" {
+		return cachedUA
+	}
+	if nav := js.Global().Get("navigator"); nav.Truthy() {
+		if ua := nav.Get("userAgent"); ua.Type() == js.TypeString && ua.String() != "" {
+			cachedUA = ua.String()
+			return cachedUA
+		}
+	}
+	cachedUA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+	return cachedUA
 }
 
 // jsFetchClearnet(serverPKHex, method, url, bodyOrNull) → Promise<{status, body,
@@ -254,63 +287,114 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		}
 	}
 	return promise(func() (interface{}, error) {
-		var spk cipher.PubKey
-		if serverPKHex == "" {
-			// No exit pinned by the caller — use the default proxy instance's
-			// (auto-selected) exit. Lets the iframe browser / wallet "just
-			// work" once the default instance has picked a random exit.
-			pk, ok := proxyDefaultExit()
-			if !ok {
-				return nil, errors.New("no proxy exit configured (default instance has not selected one yet)")
-			}
-			spk = pk
-		} else if err := spk.UnmarshalText([]byte(serverPKHex)); err != nil {
-			return nil, fmt.Errorf("bad skysocks server pk: %w", err)
-		}
 		if _, err := url.ParseRequestURI(rawURL); err != nil {
 			return nil, fmt.Errorf("bad url: %w", err)
 		}
-		sess, err := skysocksSession(winID, spk)
-		if err != nil {
-			return nil, err
+		// A caller-pinned exit (non-empty serverPKHex) is respected as-is — one
+		// attempt, no failover. The iframe browser / wallet leave it empty to use
+		// the default AUTO instance, which we fail over across exits: if a fetch
+		// fails (dead egress, dropped route, …) we mark that exit dead, promote a
+		// standby (rotateAwayFromExit), and retry — so a stuck exit self-heals
+		// instead of leaving the page hung. Bounded so a run of bad exits ends.
+		pinned := serverPKHex != ""
+		var pinnedPK cipher.PubKey
+		if pinned {
+			if err := pinnedPK.UnmarshalText([]byte(serverPKHex)); err != nil {
+				return nil, fmt.Errorf("bad skysocks server pk: %w", err)
+			}
 		}
-		client, err := skysocksHTTPClient(sess)
-		if err != nil {
-			return nil, err
+		maxTries := 1
+		if !pinned {
+			maxTries = 4
 		}
-		var rdr io.Reader
-		if body != nil {
-			rdr = bytes.NewReader(body)
+		tried := map[cipher.PubKey]bool{}
+		var lastErr error
+		for attempt := 0; attempt < maxTries; attempt++ {
+			var spk cipher.PubKey
+			if pinned {
+				spk = pinnedPK
+			} else {
+				// Wait for a fresh (not-yet-tried) auto exit. After a rotate the pool
+				// can be momentarily empty while it re-selects a replacement (~10s),
+				// so POLL rather than give up — that wait is what lets a fetch survive
+				// the active exit dying with no warm standby ready.
+				pk := waitFreshProxyExit(tried, 16*time.Second)
+				if pk.Null() {
+					lastErr = errors.New("no working proxy exit available")
+					break
+				}
+				spk = pk
+			}
+			tried[spk] = true
+			sess, err := skysocksSession(winID, spk)
+			if err != nil {
+				// skysocksSession already reported the exit dead on a dial failure;
+				// promote a standby so the next attempt uses a different exit.
+				lastErr = err
+				if !pinned {
+					rotateAwayFromExit(spk)
+				}
+				continue
+			}
+			client, err := skysocksHTTPClient(sess)
+			if err != nil {
+				return nil, err
+			}
+			var rdr io.Reader
+			if body != nil {
+				rdr = bytes.NewReader(body)
+			}
+			req, err := http.NewRequestWithContext(ctx, method, rawURL, rdr)
+			if err != nil {
+				return nil, err
+			}
+			// Present as a normal browser so origins that gate on (or reject a missing
+			// / bot-looking) User-Agent serve the real page instead of a 403/robot
+			// wall. Set BEFORE extraHeaders so a caller can still override. Accept-
+			// Encoding is intentionally left unset — the http.Transport adds gzip and
+			// transparently decompresses only when it owns that header.
+			req.Header.Set("User-Agent", browserUserAgent())
+			req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8")
+			req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+			for k, v := range extraHeaders {
+				req.Header.Set(k, v)
+			}
+			t0 := time.Now()
+			resp, err := client.Do(req)
+			if err != nil {
+				lastErr = err
+				vlog(fmt.Sprintf("[skysocks-lite %s] %s %s via %s FAILED (%dms): %v", winID, method, rawURL, spk.Hex()[:8], time.Since(t0).Milliseconds(), err))
+				// The route was fine but the fetch failed (dead egress / timeout).
+				// Rotate straight to a standby (rotateAwayFromExit removes this exit,
+				// promotes the standby, and refills the pool excluding it) — NOT
+				// reportProxyExitDead, which would sticky-reconnect the same
+				// egress-dead exit we're trying to get away from.
+				if !pinned {
+					rotateAwayFromExit(spk)
+				}
+				continue
+			}
+			defer resp.Body.Close()                               //nolint:errcheck
+			b, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20)) // 16MB cap
+			if proxyVerbose {
+				vlog(fmt.Sprintf("[skysocks-lite %s] %s %s via %s → %d (%dB, %dms)", winID, method, rawURL, spk.Hex()[:8], resp.StatusCode, len(b), time.Since(t0).Milliseconds()))
+			}
+			res := js.Global().Get("Object").New()
+			res.Set("status", resp.StatusCode)
+			buf := js.Global().Get("Uint8Array").New(len(b))
+			js.CopyBytesToJS(buf, b)
+			res.Set("body", buf)
+			hdrs := js.Global().Get("Object").New()
+			for k := range resp.Header {
+				hdrs.Set(k, resp.Header.Get(k))
+			}
+			res.Set("headers", hdrs)
+			return res, nil
 		}
-		req, err := http.NewRequestWithContext(ctx, method, rawURL, rdr)
-		if err != nil {
-			return nil, err
+		if lastErr == nil {
+			lastErr = errors.New("no exit")
 		}
-		for k, v := range extraHeaders {
-			req.Header.Set(k, v)
-		}
-		t0 := time.Now()
-		resp, err := client.Do(req)
-		if err != nil {
-			vlog(fmt.Sprintf("[skysocks-lite %s] %s %s via %s FAILED (%dms): %v", winID, method, rawURL, spk.Hex()[:8], time.Since(t0).Milliseconds(), err))
-			return nil, fmt.Errorf("fetch via skysocks: %w", err)
-		}
-		defer resp.Body.Close()                               //nolint:errcheck
-		b, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<20)) // 16MB cap
-		if proxyVerbose {
-			vlog(fmt.Sprintf("[skysocks-lite %s] %s %s via %s → %d (%dB, %dms)", winID, method, rawURL, spk.Hex()[:8], resp.StatusCode, len(b), time.Since(t0).Milliseconds()))
-		}
-		res := js.Global().Get("Object").New()
-		res.Set("status", resp.StatusCode)
-		buf := js.Global().Get("Uint8Array").New(len(b))
-		js.CopyBytesToJS(buf, b)
-		res.Set("body", buf)
-		hdrs := js.Global().Get("Object").New()
-		for k := range resp.Header {
-			hdrs.Set(k, resp.Header.Get(k))
-		}
-		res.Set("headers", hdrs)
-		return res, nil
+		return nil, fmt.Errorf("fetch via skysocks (all exits failed): %w", lastErr)
 	})
 }
 

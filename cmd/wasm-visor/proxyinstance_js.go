@@ -84,6 +84,25 @@ func proxyInstanceExit(id string) (cipher.PubKey, bool) {
 // don't pin their own exit, so the auto-selected random proxy is the fallback).
 func proxyDefaultExit() (cipher.PubKey, bool) { return proxyInstanceExit(defaultProxyID) }
 
+// waitFreshProxyExit returns the current default auto exit if it isn't already in
+// `tried`, polling for up to `timeout`. rotateAwayFromExit refills the pool
+// asynchronously (a re-select takes ~10s when no warm standby exists), so right
+// after a rotate the pool can be briefly empty; polling here is what lets a
+// clearnet fetch wait for a healthy replacement and self-heal instead of failing
+// the moment the active exit dies. Returns null if no untried exit appears in time.
+func waitFreshProxyExit(tried map[cipher.PubKey]bool, timeout time.Duration) cipher.PubKey {
+	deadline := time.Now().Add(timeout)
+	for {
+		if pk, ok := proxyDefaultExit(); ok && !pk.Null() && !tried[pk] {
+			return pk
+		}
+		if !time.Now().Before(deadline) {
+			return cipher.PubKey{}
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
+}
+
 // setProxyExit sets an instance's exit PK (the wasm analog of the native
 // SetAppPK). Clearing (null pk) is allowed. Turns off Auto once the operator
 // pins an exit explicitly.
