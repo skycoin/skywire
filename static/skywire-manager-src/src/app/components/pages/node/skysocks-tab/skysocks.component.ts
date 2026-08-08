@@ -67,7 +67,7 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
         return;
       }
       this.busy.add(client.name);
-      this.appsService.changeAppSettings(this.node.localPk, client.name, { pk }).subscribe({
+      this.appsService.changeAppSettings(this.node.localPk, client.name, { pk: pk }).subscribe({
         next: () => {
           this.busy.delete(client.name);
           this.snackbar.showDone('skysocks-tab.select-server.done');
