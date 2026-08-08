@@ -109,6 +109,12 @@ type Node struct {
 
 	await  sync.WaitGroup // wait for goroutines
 	closeo sync.Once      // close once
+
+	// reaperStop signals the shared idle-conn reaper to exit. Closed
+	// once, in Close(). One reaper goroutine per Node replaces the
+	// former per-Conn idle watchdog (which cost one goroutine + one
+	// time.Ticker per connection — hundreds each on the TPD aggregator).
+	reaperStop chan struct{}
 }
 
 // NewNode creates new Node instance using provided
@@ -177,6 +183,7 @@ func NewNodeContainer(
 
 	n.conns = newAddrConnMap()
 	n.pkConns = newPkConnMap()
+	n.reaperStop = make(chan struct{})
 
 	n.ss = make(map[cipher.PubKey]*Swarm)
 
@@ -226,6 +233,12 @@ func NewNodeContainer(
 	}
 
 	// Pings are handled at node level; per-connection pings would improve health granularity.
+
+	// One shared idle-conn reaper for the whole Node, replacing the
+	// former per-Conn watchdog goroutine+ticker. Registered on n.await
+	// so Close() (which closes reaperStop, then Waits) reaps it.
+	n.await.Add(1)
+	go n.connReaper()
 
 	return n, err
 }
@@ -852,11 +865,57 @@ func (n *Node) Close() (err error) {
 		// Close database.
 		err = n.c.Close() //nolint:errcheck,gosec
 
+		// Stop the shared idle-conn reaper and wait for it (plus any
+		// other n.await goroutines) to exit.
+		close(n.reaperStop)
 		n.await.Wait()
 
 	})
 
 	return err
+}
+
+// connReaper is the shared idle-connection watchdog for the whole
+// Node. It replaces the former per-Conn idleWatchdog goroutine+ticker:
+// a single ticker walks every active Conn and closes any whose last
+// inbound activity is older than idleWatchdogThreshold. Closing a Conn
+// surfaces to PR #2643's connIsAlive gate on the next ConnectPK, which
+// evicts the zombie and re-dials fresh — the half-dead-transport case
+// the per-conn watchdog was built for (see the idleWatchdog* consts).
+//
+// Worst-case detection latency is unchanged (threshold + interval =
+// 120s) since the shared ticker uses the same interval. Runs until
+// reaperStop is closed (Node.Close). c.Close() is idempotent and
+// lastActivityNs is atomic, so acting on a conn that is concurrently
+// shutting down is a harmless no-op, and a conn removed from the active
+// map between snapshot and callback simply isn't visited.
+func (n *Node) connReaper() {
+	defer n.await.Done()
+	t := time.NewTicker(idleWatchdogInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-n.reaperStop:
+			return
+		case <-t.C:
+			now := time.Now()
+			n.conns.rangeActive(func(c *Conn) {
+				last := c.lastActivityNs.Load()
+				if last == 0 {
+					// receiveMsg hasn't seeded lastActivityNs yet — skip
+					// this tick; a real value lands before the next one
+					// (or the conn closes if receive errored).
+					return
+				}
+				idle := now.Sub(time.Unix(0, last))
+				if idle < idleWatchdogThreshold {
+					return
+				}
+				n.Debugf(ConnPin, "[%s] idle watchdog: %s since last inbound, closing", c.String(), idle)
+				c.Close() //nolint:errcheck,gosec
+			})
+		}
+	}
 }
 
 func (n *Node) JoinSwarm(

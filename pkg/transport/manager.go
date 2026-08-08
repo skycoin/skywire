@@ -853,7 +853,7 @@ func (tm *Manager) Networks() []types.Type {
 // PreferredDirectCreateOrder returns this visor's DIRECT (non-relay) transport
 // types in global preference order (tptypes.PreferenceOrder — STCPR > QUIC >
 // SUDPH > STCP > WEBRTC > WS > WT), filtered to the network clients this manager
-// actually has initialised. It is the host-aware "auto" transport-creation order:
+// actually has initialized. It is the host-aware "auto" transport-creation order:
 // a native visor yields e.g. [stcpr, quic, sudph, stcp, webrtc, ws, wt]; a
 // browser visor (no raw TCP/UDP) yields [webrtc, ws, wt]. DMSG is excluded — it
 // is the relay, tried only as a last resort by EnsureBestTransport.
@@ -911,7 +911,7 @@ func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey
 	order := tm.PreferredDirectCreateOrder()
 	// Already have a direct transport? A 1-hop route can use it — nothing to do.
 	for _, nt := range order {
-		if mt, _ := tm.GetTransport(remote, nt); mt != nil {
+		if mt, err := tm.GetTransport(remote, nt); err == nil && mt != nil {
 			return nil
 		}
 	}
@@ -930,7 +930,7 @@ func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey
 			tm.Logger.Debugf("auto-transport: created %s direct transport to %s", nt, remote)
 			return nil
 		}
-		if ctx.Err() != nil { // parent cancelled (not just this type's per-type cap) → abort
+		if ctx.Err() != nil { // parent canceled (not just this type's per-type cap) → abort
 			return ctx.Err()
 		}
 		lastErr = err
