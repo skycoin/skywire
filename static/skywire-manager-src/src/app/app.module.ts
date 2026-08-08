@@ -56,6 +56,7 @@ import { AppSettingsComponent } from './components/pages/node/apps/app-settings/
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { VpnComponent } from './components/pages/node/vpn/vpn.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
+import { SelectProxyServerComponent } from './components/pages/node/skysocks-tab/select-proxy-server/select-proxy-server.component';
 import { LogsComponent } from './components/pages/node/logs/logs.component';
 import { NetworkViewComponent } from './components/pages/network-view/network-view.component';
 import { NetworkVisualizerComponent } from './components/pages/network-visualizer/network-visualizer.component';
@@ -117,6 +118,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         WebProxyComponent,
         VpnComponent,
         SkysocksTabComponent,
+        SelectProxyServerComponent,
         LogsComponent,
         NetworkViewComponent,
         NetworkVisualizerComponent,

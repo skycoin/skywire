@@ -1,4 +1,5 @@
 import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 
 import { Node, Application } from '../../../../app.datatypes';
@@ -6,6 +7,7 @@ import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppsService } from 'src/app/services/apps.service';
 import { SnackbarService } from 'src/app/services/snackbar.service';
+import { SelectProxyServerComponent } from './select-proxy-server/select-proxy-server.component';
 
 const SKYSOCKS_SERVER = 'skysocks';
 const SKYSOCKS_CLIENT_PREFIX = 'skysocks-client';
@@ -41,9 +43,42 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
     private appsService: AppsService,
     private snackbar: SnackbarService,
     private cdr: ChangeDetectorRef,
+    private dialog: MatDialog,
   ) {
- super(); 
+ super();
 }
+
+  /**
+   * Open the public-server picker for a skysocks-client instance and, on
+   * selection, set that client's exit PK (the HV-UI equivalent of picking a
+   * `skywire cli proxy` server). Uses the shared changeAppSettings path — the
+   * same one the VPN client uses to set its server.
+   */
+  chooseServer(client: Application) {
+    if (!this.node || !client) {
+      return;
+    }
+    const ref = this.dialog.open(SelectProxyServerComponent, {
+      width: '600px',
+      data: { clientName: client.name },
+    });
+    ref.afterClosed().subscribe((pk: string) => {
+      if (!pk) {
+        return;
+      }
+      this.busy.add(client.name);
+      this.appsService.changeAppSettings(this.node.localPk, client.name, { pk }).subscribe({
+        next: () => {
+          this.busy.delete(client.name);
+          this.snackbar.showDone('skysocks-tab.select-server.done');
+        },
+        error: () => {
+          this.busy.delete(client.name);
+          this.snackbar.showError('skysocks-tab.select-server.error');
+        },
+      });
+    });
+  }
 
   toggleSettings(name: string) {
     if (this.expandedSettings.has(name)) {
