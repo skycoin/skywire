@@ -66,7 +66,7 @@ func TestDoHealthProbe_BuildInfoVersion(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/health", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"build_info":{"version":"v1.3.92-0-7925d659e2ec"}}`))
+		_, _ = w.Write([]byte(`{"build_info":{"version":"v1.3.92-0-7925d659e2ec"}}`)) //nolint:errcheck
 	}))
 	defer srv.Close()
 
@@ -80,7 +80,7 @@ func TestDoHealthProbe_BuildInfoVersion(t *testing.T) {
 func TestDoHealthProbe_TopLevelVersionFallback(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"version":"v1.3.88-0-54e4b7f90c01"}`))
+		_, _ = w.Write([]byte(`{"version":"v1.3.88-0-54e4b7f90c01"}`)) //nolint:errcheck
 	}))
 	defer srv.Close()
 
