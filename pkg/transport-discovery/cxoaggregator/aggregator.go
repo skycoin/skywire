@@ -40,6 +40,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sirupsen/logrus"
+
 	skycipher "github.com/skycoin/skycoin/src/cipher"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -204,7 +205,20 @@ type Aggregator struct {
 	// coalesce into a single pending reconcile (which is idempotent
 	// and walks the full conn set anyway).
 	nudge chan struct{}
+
+	// orphanStrikes counts consecutive cleanup ticks a shared feed has
+	// had no connected conn. A feed is reclaimed (un-shared + all its
+	// Roots deleted) once it reaches orphanGraceTicks, so a visor that
+	// briefly drops and redials within the grace window keeps its feed.
+	// Only touched from cleanup() (single goroutine), so no lock.
+	orphanStrikes map[skycipher.PubKey]int
 }
+
+// orphanGraceTicks is how many consecutive cleanup ticks a feed must
+// have zero connected conns before it's reclaimed. At the 2-minute
+// default CleanupInterval this is a ~4-minute grace, long enough to
+// ride out a visor's dmsg reconnect without churning a stable feed.
+const orphanGraceTicks = 2
 
 // New constructs an Aggregator. Sets up a CXO Node, enables DMSG so
 // remote visors can dial in, and wires OnRootFilled to walk
@@ -264,12 +278,13 @@ func New(dmsgC *dmsg.Client, sink Sink, conf Config) (*Aggregator, error) {
 	}
 
 	a := &Aggregator{
-		cxoNode: cxoNode,
-		sink:    sink,
-		conf:    conf,
-		log:     conf.Logger,
-		done:    make(chan struct{}),
-		nudge:   make(chan struct{}, 1),
+		cxoNode:       cxoNode,
+		sink:          sink,
+		conf:          conf,
+		log:           conf.Logger,
+		done:          make(chan struct{}),
+		nudge:         make(chan struct{}, 1),
+		orphanStrikes: make(map[skycipher.PubKey]int),
 	}
 	// Subscribe to a visor's feed the moment it dials in, rather than
 	// waiting up to ReconcileInterval (30s) for the next poll. A fresh
@@ -395,8 +410,64 @@ func (a *Aggregator) cleanup() {
 		a.log.WithError(err).Debug("CXO aggregator: RemoveRootObjects failed; will retry next tick")
 		return
 	}
+	a.reclaimOrphanFeeds(c)
 	if err := cxoutils.RemoveObjects(c); err != nil {
 		a.log.WithError(err).Debug("CXO aggregator: RemoveObjects failed; will retry next tick")
+	}
+}
+
+// reclaimOrphanFeeds un-shares and hard-deletes feeds that no longer
+// have a connected conn. RemoveRootObjects(c, 1) keeps the LAST Root of
+// every feed forever, so without this a feed whose visor has gone away
+// (notably an ephemeral wasm/browser visor with a one-shot PK) pins its
+// final Root tree — and every object it references at rc>0 — in the
+// in-memory CXDS permanently. Over time the store grows without bound as
+// visor PKs churn (the +105 MB/12min inuse + 1576-goroutine growth seen
+// in production heap deltas). DontShare unsubscribes the conns and
+// removes the feed from the node's share set; DelFeed deletes all its
+// Roots and decrements the referenced objects to rc==0 so the following
+// RemoveObjects sweep can finally reclaim them.
+//
+// Reclamation is grace-gated (orphanGraceTicks) so a visor that drops
+// and redials within a few cleanup ticks keeps its feed rather than
+// paying a full re-replication.
+func (a *Aggregator) reclaimOrphanFeeds(c *skyobject.Container) {
+	connected := make(map[skycipher.PubKey]struct{})
+	for _, conn := range a.cxoNode.Connections() {
+		if pk := conn.PeerID(); pk != (skycipher.PubKey{}) {
+			connected[pk] = struct{}{}
+		}
+	}
+
+	self := a.cxoNode.ID()
+	for _, feed := range c.Feeds() {
+		if feed == self {
+			// The node's own identity feed — never reclaim it.
+			delete(a.orphanStrikes, feed)
+			continue
+		}
+		if _, ok := connected[feed]; ok {
+			// Live feed — clear any accumulated strikes.
+			delete(a.orphanStrikes, feed)
+			continue
+		}
+		a.orphanStrikes[feed]++
+		if a.orphanStrikes[feed] < orphanGraceTicks {
+			continue
+		}
+		delete(a.orphanStrikes, feed)
+		if err := a.cxoNode.DontShare(feed); err != nil {
+			a.log.WithError(err).WithField("visor", cipher.PubKey(feed)).
+				Debug("CXO aggregator: DontShare orphan feed failed; will retry next tick")
+			continue
+		}
+		if err := c.DelFeed(feed); err != nil {
+			a.log.WithError(err).WithField("visor", cipher.PubKey(feed)).
+				Debug("CXO aggregator: DelFeed orphan feed failed; will retry next tick")
+			continue
+		}
+		a.log.WithField("visor", cipher.PubKey(feed)).
+			Debug("CXO aggregator: reclaimed orphan feed (no connected conn)")
 	}
 }
 
