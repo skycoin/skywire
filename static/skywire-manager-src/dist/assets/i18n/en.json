@@ -473,6 +473,20 @@
   },
 
   "skysocks-tab": {
+    "select-server": {
+      "button": "Choose server",
+      "title": "Choose a proxy server",
+      "help": "Pick a public skysocks server as the exit for {{ client }}, or enter a server public key manually.",
+      "manual-pk": "Server public key",
+      "use": "Use",
+      "filter": "Filter by location or key",
+      "unknown-location": "Unknown location",
+      "empty": "No public proxy servers found in the discovery service.",
+      "load-error": "Couldn't reach the discovery service.",
+      "invalid-pk": "That doesn't look like a valid public key (66 hex characters).",
+      "done": "Proxy server updated.",
+      "error": "Couldn't set the proxy server."
+    },
     "server": {
       "title": "Skysocks Server",
       "help": "Run this visor as a SOCKS5 exit node. Other visors can route through skysocks-client.",
