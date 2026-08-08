@@ -265,6 +265,18 @@ export class StorageService {
   }
 
   /**
+   * Whether to show the per-visor switcher as a full second row of tabs (true) or
+   * fold it into a dropdown to keep the nav compact (false, the default).
+   */
+  getShowVisorSwitcherRow(): boolean {
+    return this.storage.getItem('showVisorSwitcherRow') === 'true';
+  }
+
+  setShowVisorSwitcherRow(show: boolean): void {
+    this.storage.setItem('showVisorSwitcherRow', show ? 'true' : 'false');
+  }
+
+  /**
    * Saves a list of online nodes in the list of local nodes this app has already seen. If a
    * node was already saved in the list and set as hidden, its hidden status will be removed.
    * @param nodesPublicKeys Public keys of the nodes to save.

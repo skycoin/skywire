@@ -53,6 +53,20 @@
               </div>
             </div>
           }
+          @if (vpnIframeUrl) {
+            <div [hidden]="!isVpnTab" class="rounded-elevated-box mt-3 term-box">
+              <div class="box-internal-container term-shell">
+                <div class="term-controls">
+                  <span class="dim small">{{ 'node.tabs.vpn' | translate }}</span>
+                  <button mat-stroked-button class="term-fullscreen" (click)="openVpnFullWindow()">
+                    <mat-icon [inline]="true">open_in_full</mat-icon>
+                    {{ 'common.open-full-page' | translate }}
+                  </button>
+                </div>
+                <iframe class="term-frame" [src]="vpnIframeUrl" allowfullscreen></iframe>
+              </div>
+            </div>
+          }
         </div>
       </div>
     </div>

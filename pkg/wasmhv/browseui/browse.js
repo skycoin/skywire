@@ -126,6 +126,12 @@
       // address bar in the iframe, so wrap both to swallow that error and keep
       // running. (The proxy browser's own address bar reflects the page.)
       "try{var h=window.history;['replaceState','pushState'].forEach(function(m){var o=h&&h[m];if(typeof o==='function'){h[m]=function(){try{return o.apply(h,arguments);}catch(e){return undefined;}};}});}catch(e){}" +
+      // navigator.serviceWorker THROWS a SecurityError when merely READ in an opaque
+      // (sandboxed, no allow-same-origin) srcdoc — 'serviceWorker' in navigator is
+      // true, but touching it throws. Apps that register a service worker at startup
+      // (e.g. Create-React-App) then die before mounting. Replace it with a no-op
+      // stub so feature-detection + register() resolve harmlessly and the app runs.
+      "try{var swThrows=false;try{void navigator.serviceWorker;}catch(e){swThrows=true;}if(swThrows){var _sw={register:function(){return Promise.reject(new Error('service worker disabled (sandboxed)'));},getRegistration:function(){return Promise.resolve(undefined);},getRegistrations:function(){return Promise.resolve([]);},ready:new Promise(function(){}),addEventListener:function(){},removeEventListener:function(){},controller:null};Object.defineProperty(Navigator.prototype,'serviceWorker',{configurable:true,get:function(){return _sw;}});}}catch(e){}" +
       "})();";
   }
 
@@ -214,6 +220,66 @@
     );
   }
 
+  // clearnetDynamicShimSrc is injected at the top of a DYNAMIC-mode clearnet page,
+  // BEFORE the page's own (inlined) scripts run. It makes the page's runtime network
+  // work through the exit without ever touching clearnet directly: window.fetch and
+  // XMLHttpRequest are patched to relay http(s) requests to the parent (dmsgreq,
+  // clearnet:true → fetchClearnet → exit) and reconstruct the response in-tab; a
+  // MutationObserver rewrites any http(s) <img> the page adds to a data: URI fetched
+  // the same way. Link clicks / form submits are relayed like the static shim. The
+  // dynamic CSP keeps connect-src off http, so anything NOT patched here simply
+  // fails closed (no IP leak) rather than reaching clearnet directly.
+  function clearnetDynamicShimSrc(baseUrl) {
+    return (
+      storageShimSrc() +
+      'var BASE=' + JSON.stringify(baseUrl) + ';' +
+      'function abs(h){try{return new URL(h,BASE).href;}catch(e){return h;}}' +
+      'function isCn(u){return /^https?:\\/\\//i.test(u||"");}' +
+      'var _rq=0,_pend={};' +
+      'window.addEventListener("message",function(e){var d=e.data||{};if(d.type!=="dmsgreply")return;var p=_pend[d.id];if(!p)return;delete _pend[d.id];p(d);});' +
+      'function relay(u,m,b,h){return new Promise(function(res){var id=++_rq;_pend[id]=res;parent.postMessage({type:"dmsgreq",id:id,path:u,method:m||"GET",body:(typeof b==="string"?b:null),headers:h||null,clearnet:true},"*");});}' +
+      'function _bytes(r){return r.body?Uint8Array.from(atob(r.body),function(c){return c.charCodeAt(0);}):new Uint8Array();}' +
+      // fetch(): resolve relative → absolute, relay http(s), pass through data:/blob:
+      'var _f=window.fetch;window.fetch=function(input,init){var u=typeof input==="string"?input:(input&&input.url);u=abs(u);var m=(init&&init.method)||"GET",b=(init&&init.body)||null;' +
+      'if(!isCn(u))return _f.apply(this,arguments);' +
+      'var hh=null;try{if(init&&init.headers){hh={};if(init.headers.forEach)init.headers.forEach(function(v,k){hh[k]=v;});else Object.keys(init.headers).forEach(function(k){hh[k]=init.headers[k];});}}catch(_){}' +
+      'return relay(u,m,b,hh).then(function(r){return new Response(_bytes(r),{status:r.status||200,headers:{"Content-Type":r.ct||"application/octet-stream"}});});};' +
+      // XMLHttpRequest (Angular's HttpClient default): patch open/send to relay
+      '(function(){var _o=XMLHttpRequest.prototype.open,_s=XMLHttpRequest.prototype.send,_h=XMLHttpRequest.prototype.setRequestHeader;' +
+      'XMLHttpRequest.prototype.open=function(m,u){this.__m=m;this.__u=abs(u);this.__h={};this.__cn=isCn(this.__u);return _o.apply(this,[m,this.__cn?this.__u:u].concat([].slice.call(arguments,2)));};' +
+      'XMLHttpRequest.prototype.setRequestHeader=function(k,v){if(this.__cn){this.__h[k]=v;return;}return _h.apply(this,arguments);};' +
+      'XMLHttpRequest.prototype.send=function(b){var x=this;if(!x.__cn)return _s.apply(x,arguments);' +
+      'function def(k,val){try{Object.defineProperty(x,k,{configurable:true,get:function(){return val;}});}catch(e){}}' +
+      'relay(x.__u,x.__m,b,x.__h).then(function(r){var by=_bytes(r);var tx="";try{tx=new TextDecoder().decode(by);}catch(e){}' +
+      'def("readyState",4);def("status",r.status||200);def("statusText","");def("responseURL",x.__u);def("responseText",tx);' +
+      'def("response",(x.responseType==="arraybuffer")?by.buffer:(x.responseType==="blob"?new Blob([by]):(x.responseType==="json"?(function(){try{return JSON.parse(tx);}catch(e){return null;}})():tx)));' +
+      'x.getAllResponseHeaders=function(){return "content-type: "+(r.ct||"application/octet-stream")+"\\r\\n";};' +
+      'x.getResponseHeader=function(k){return /content-type/i.test(k)?(r.ct||"application/octet-stream"):null;};' +
+      'try{if(typeof x.onreadystatechange==="function")x.onreadystatechange();}catch(e){}x.dispatchEvent(new Event("readystatechange"));' +
+      'try{if(typeof x.onload==="function")x.onload();}catch(e){}x.dispatchEvent(new Event("load"));x.dispatchEvent(new Event("loadend"));' +
+      '}).catch(function(){def("readyState",4);def("status",0);x.dispatchEvent(new Event("readystatechange"));try{if(typeof x.onerror==="function")x.onerror();}catch(e){}x.dispatchEvent(new Event("error"));x.dispatchEvent(new Event("loadend"));});};})();' +
+      // dynamically-injected external scripts (code-split chunks): intercept the .src
+      // setter so a webpack/Gatsby-style loader''s http(s) chunk is fetched via the
+      // exit and applied as a data: URI (raw http script-src is CSP-blocked). onload/
+      // onerror still fire off the data: script, so the loader''s chunk-ready wiring
+      // works. ES-module import() fetches are NOT interceptable this way (browser-
+      // internal) — those sites still degrade.
+      '(function(){var d=Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype,"src");if(!d||!d.set)return;' +
+      'Object.defineProperty(HTMLScriptElement.prototype,"src",{configurable:true,enumerable:true,get:function(){return this.__s||(d.get?d.get.call(this):"");},' +
+      'set:function(v){var u=abs(v);if(!isCn(u))return d.set.call(this,v);var self=this;self.__s=u;' +
+      'relay(u,"GET",null).then(function(r){if(r&&r.body&&(r.status||200)<400)d.set.call(self,"data:text/javascript;base64,"+r.body);else self.dispatchEvent(new Event("error"));}).catch(function(){self.dispatchEvent(new Event("error"));});}});})();' +
+      // dynamic images: rewrite any http(s) <img> src to a data: URI fetched via exit
+      'function _img(el){var s=el.getAttribute&&el.getAttribute("src");if(!s)return;var u=abs(s);if(!isCn(u))return;if(el.__d===u)return;el.__d=u;' +
+      'relay(u,"GET",null).then(function(r){if(r&&r.body&&(r.status||200)<400)el.src="data:"+(r.ct||"application/octet-stream")+";base64,"+r.body;}).catch(function(){});}' +
+      'function _scan(root){var ns=(root&&root.querySelectorAll)?root.querySelectorAll("img[src]"):[];for(var i=0;i<ns.length;i++)_img(ns[i]);}' +
+      'document.addEventListener("DOMContentLoaded",function(){_scan(document);});' +
+      'new MutationObserver(function(ms){ms.forEach(function(m){if(m.type==="attributes"){if(m.target&&m.target.tagName==="IMG")_img(m.target);return;}if(!m.addedNodes)return;for(var i=0;i<m.addedNodes.length;i++){var n=m.addedNodes[i];if(n.nodeType!==1)continue;if(n.tagName==="IMG")_img(n);_scan(n);}});}).observe(document.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:["src"]});' +
+      // link clicks + form submits → relay to the parent (history-tracked navigation)
+      'document.addEventListener("click",function(e){var a=e.target.closest?e.target.closest("a[href]"):null;if(!a)return;var h=a.getAttribute("href")||"";if(!h||h.charAt(0)==="#")return;var u=abs(h);if(isCn(u)){e.preventDefault();parent.postMessage({type:"cnnav",url:u},"*");}},true);' +
+      'document.addEventListener("submit",function(e){var f=e.target;if(!f||f.tagName!=="FORM")return;e.preventDefault();var method=((f.getAttribute("method")||"GET")).toUpperCase();var action=abs(f.getAttribute("action")||BASE)||BASE;var fd=new URLSearchParams();var sub=e.submitter;if(sub&&sub.name)fd.append(sub.name,sub.value||"");for(var i=0;i<f.elements.length;i++){var el=f.elements[i];if(!el.name||el.disabled)continue;if((el.type==="checkbox"||el.type==="radio")&&!el.checked)continue;if(el.type==="submit"||el.type==="button"||el.type==="file"||el.type==="image")continue;fd.append(el.name,el.value);}if(method==="POST"){parent.postMessage({type:"cnnav",url:action,method:"POST",body:fd.toString()},"*");}else{try{var uo=new URL(action);uo.search=fd.toString();parent.postMessage({type:"cnnav",url:uo.href},"*");}catch(_){}}},true);'
+    );
+  }
+
   // createBrowser drives one iframe against one "current site". opts:
   //   frame      — the <iframe> element to render into (sandbox allow-scripts).
   //   fetchDmsg  — (pkHost, method, path, body) => Promise<{status,body,headers}>.
@@ -230,7 +296,9 @@
     // fetch tunneled through a skysocks exit over a skywire route (IP-anonymous).
     // We wrap it to append winId as the 5th arg for every call site.
     var rawFetchClearnet = opts.fetchClearnet || function () { return globalThis.skywireVisor.fetchClearnet.apply(null, arguments); };
-    var fetchClearnet = function (exit, m, u, b) { return rawFetchClearnet(exit, m, u, b, winId); };
+    // h (optional) is a request-headers object forwarded to the exit (6th arg) —
+    // used by dynamic mode so a page's XHR/fetch keeps its Content-Type etc.
+    var fetchClearnet = function (exit, m, u, b, h) { return rawFetchClearnet(exit, m, u, b, winId, h || null); };
     var log = opts.log || function () {};
     var currentSitePK = "";
 
@@ -613,6 +681,16 @@
     function upstream() { return (winUpstream !== null ? winUpstream : globalUpstream()).trim(); }
     function setUpstream(pk) { winUpstream = (pk || "").trim(); try { localStorage.setItem("skywire-upstream-proxy", winUpstream); } catch (_) {} }
     function localPK() { try { return ((opts.selfPK && opts.selfPK()) || "").trim(); } catch (_) { return ""; } }
+    // Dynamic mode: run a clearnet page's OWN scripts and proxy its runtime network
+    // (fetch / XHR / images) through the exit, so JS-rendered sites (SPAs) work like
+    // in a normal browser. Off by default — static render is lighter and doesn't
+    // execute untrusted site JS. Per-window with a persisted global default. Egress
+    // still goes only through the postMessage bridge → exit (the dynamic CSP keeps
+    // connect-src off http), so it stays IP-anonymous.
+    var winDynamic = null; // per-window override; null → global default
+    function globalDynamic() { try { return localStorage.getItem("skywire-clearnet-dynamic") === "1"; } catch (_) { return false; } }
+    function clearnetDynamic() { return winDynamic !== null ? winDynamic : globalDynamic(); }
+    function setClearnetDynamic(on) { winDynamic = !!on; try { localStorage.setItem("skywire-clearnet-dynamic", on ? "1" : "0"); } catch (_) {} }
     // clearnetPolicy: {mode:'block'} | {mode:'direct'} | {mode:'proxy', exit}.
     function clearnetPolicy() {
       var up = upstream();
@@ -646,8 +724,15 @@
         if (el.tagName === "SCRIPT" || el.tagName === "LINK") el.remove(); else el.removeAttribute(attr);
         return null;
       }
-      // proxy: clearnet scripts are dropped (static render); css/img/media inlined.
-      if (el.tagName === "SCRIPT") { el.remove(); return null; }
+      // proxy: static render drops clearnet scripts; dynamic mode inlines them (as a
+      // text/javascript data: URI, so they execute in order) so the page's JS runs.
+      if (el.tagName === "SCRIPT") {
+        if (!policy.dynamic) { el.remove(); return null; }
+        return fetchClearnet(policy.exit, "GET", absURL, null).then(function (r) {
+          if (r && r.body && (r.status || 200) < 400) el.setAttribute("src", "data:text/javascript;base64," + bytesToB64(r.body));
+          else el.remove();
+        }).catch(function () { el.remove(); });
+      }
       return fetchClearnet(policy.exit, "GET", absURL, null).then(function (r) {
         if (el.tagName === "LINK") {
           // Rewrite url() refs inside the fetched stylesheet (background-images,
@@ -704,9 +789,11 @@
         setFaviconVia(function (u) { return fetchClearnet(exit, "GET", u, null); }, doc, url);
         var head = doc.head || doc.documentElement;
         var base = doc.createElement("base"); base.setAttribute("href", url); base.setAttribute("target", "_self");
-        // Nav/form shim: clearnet scripts are stripped, so this restores link
-        // navigation and (search) form submission through the proxy.
-        var sc = doc.createElement("script"); sc.textContent = clearnetShimSrc(url);
+        // Dynamic mode runs the page's OWN scripts (inlined below) and bridges its
+        // runtime fetch/XHR/images through the exit; static mode strips scripts and
+        // only restores link navigation + form submission through the proxy.
+        var dyn = clearnetDynamic();
+        var sc = doc.createElement("script"); sc.textContent = dyn ? clearnetDynamicShimSrc(url) : clearnetShimSrc(url);
         // Light canvas default so an unstyled/partly-styled page stays legible —
         // the sandboxed iframe otherwise inherits the HV UI's dark color-scheme.
         // Inserted FIRST so the page's own (inlined) CSS overrides it.
@@ -715,8 +802,8 @@
         head.insertBefore(sc, head.firstChild);
         head.insertBefore(base, head.firstChild);
         head.insertBefore(baseStyle, head.firstChild);
-        applyCSP(doc); // proxy mode: everything is inlined; block any direct egress
-        var cnJobs = gateAllClearnet(doc, url, { mode: "proxy", exit: exit }, true);
+        applyCSP(doc, dyn); // proxy mode: everything is inlined/bridged; block direct egress
+        var cnJobs = gateAllClearnet(doc, url, { mode: "proxy", exit: exit, dynamic: dyn }, true);
         // Inline <style> url() refs (background-images/fonts) through the exit too,
         // so CSS-referenced assets (e.g. a logo drawn via background-image) load.
         doc.querySelectorAll("style").forEach(function (el) {
@@ -738,10 +825,24 @@
     // background-image, <link rel=preload>, beacons, etc. that the element walk
     // doesn't rewrite simply cannot reach clearnet. NOT applied in DIRECT mode
     // (where loading clearnet directly is the explicit intent).
-    function applyCSP(doc) {
+    function applyCSP(doc, dynamic) {
       var head = doc.head || doc.documentElement;
       var m = doc.createElement("meta");
       m.setAttribute("http-equiv", "Content-Security-Policy");
+      if (dynamic) {
+        // Dynamic mode: the page's own scripts run and its runtime fetch/XHR/images
+        // are relayed through the exit by the injected shim (via postMessage, which
+        // CSP does not gate). We additionally allow 'unsafe-eval' + blob: so app
+        // frameworks and blob workers work. connect-src is kept OFF http(s) (blob:
+        // only) so anything the shim doesn't patch fails closed — no direct clearnet
+        // egress, so the render stays IP-anonymous.
+        m.setAttribute("content",
+          "default-src 'none'; img-src data: blob:; media-src data: blob:; font-src data:; " +
+          "style-src data: 'unsafe-inline'; script-src data: blob: 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'; " +
+          "connect-src blob:; worker-src blob:; child-src blob:; frame-src 'none'; form-action 'none'");
+        head.insertBefore(m, head.firstChild);
+        return;
+      }
       m.setAttribute("content",
         "default-src 'none'; img-src data:; media-src data:; font-src data:; " +
         // 'wasm-unsafe-eval' lets a fetched site compile/instantiate its own
@@ -840,7 +941,7 @@
               return;
             }
             var ct0 = Date.now();
-            r = await fetchClearnet(pol.exit, d.method || "GET", d.path, d.body || null);
+            r = await fetchClearnet(pol.exit, d.method || "GET", d.path, d.body || null, d.headers || null);
             log("clearnet " + (d.method || "GET") + " " + d.path + " via " + pol.exit.slice(0, 8) + "… → " + r.status + " (" + (r.body ? r.body.length : 0) + "B, " + (Date.now() - ct0) + "ms)");
           } else {
             if (!currentSitePK) return;
@@ -860,6 +961,7 @@
       renderSite: renderSite, browseTo: browseTo, browseToClearnet: browseToClearnet,
       back: back, forward: forward, reload: reload, cancel: cancel,
       upstream: upstream, setUpstream: setUpstream, winId: winId,
+      clearnetDynamic: clearnetDynamic, setClearnetDynamic: setClearnetDynamic,
       currentPK: function () { return currentSitePK; }
     };
   }
@@ -960,6 +1062,7 @@
       '<button id="sb-proxy-save" style="cursor:pointer">set</button>' +
       '<button id="sb-proxy-stop" title="stop this window\'s skysocks-lite: release its route + session (re-establishes on the next clearnet request)" style="cursor:pointer">■ stop</button>' +
       '<button id="sb-proxy-dbg" title="stream the wasm visor\'s own detailed [skysocks-lite]/[resolve-proxy] lines to the visor-log window too" style="cursor:pointer">🐞 verbose: off</button>' +
+      '<button id="sb-proxy-dyn" title="dynamic rendering: run the site\'s own scripts and route its fetch/XHR/images through the exit — needed for JS-heavy sites (SPAs). Off = static, lighter render that does not execute the page\'s JS." style="cursor:pointer">⚡ dynamic: off</button>' +
       '<button id="sb-proxy-clear" title="clear this window\'s request log" style="cursor:pointer">clear</button>' +
       '</div>' +
       '<select id="sb-proxy-list" style="display:none;background:#0e0c14;color:#cdd2da;border:1px solid #2a2342;padding:.3em;font:11px monospace"></select>' +
@@ -1173,6 +1276,12 @@
       this.textContent = "🐞 verbose: " + (dbgOn ? "on" : "off");
       this.style.color = dbgOn ? "#9ece6a" : "";
     };
+    // Dynamic-rendering toggle (per-window): run the clearnet page's own scripts and
+    // bridge its runtime fetch/XHR/images through the exit. Reload so it takes effect.
+    var dynBtn = $("sb-proxy-dyn");
+    function renderDynBtn() { var on = browser.clearnetDynamic(); dynBtn.textContent = "⚡ dynamic: " + (on ? "on" : "off"); dynBtn.style.color = on ? "#9ece6a" : ""; }
+    renderDynBtn();
+    dynBtn.onclick = function () { browser.setClearnetDynamic(!browser.clearnetDynamic()); renderDynBtn(); try { browser.reload(); } catch (e) {} };
 
     // home.dmsg (resolver alias for the deployment landing page), matching the
     // socks5 resolving proxy's default — landed once per window.

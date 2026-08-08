@@ -475,3 +475,34 @@ $top-bar-height: 56px;
     }
   }
 }
+
+// Split "Visor list" control: the main link and the switcher caret rendered as
+// one visual unit — the text navigates to the visor list, the caret opens the
+// visor switcher menu.
+.visor-list-split {
+  display: inline-flex;
+  align-items: center;
+
+  .visor-list-main {
+    margin-right: 0;
+  }
+
+  .visor-list-caret {
+    min-width: 0;
+    padding-left: 4px;
+    padding-right: 4px;
+    margin-left: -4px;
+
+    mat-icon {
+      margin: 0;
+    }
+  }
+}
+
+// Skywire mark used as the ☰ menu button icon.
+.menu-skywire-icon {
+  width: 24px;
+  height: 24px;
+  display: block;
+  object-fit: contain;
+}

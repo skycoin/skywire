@@ -6,6 +6,7 @@ import { Observable, Subscription, delay, mergeMap, of } from 'rxjs';
 import { TabButtonData, MenuOptionData } from '../../layout/top-bar/top-bar.component';
 import { homeTabsData } from 'src/app/utils/home-tabs';
 import { AuthService, AuthStates } from '../../../services/auth.service';
+import { StorageService } from '../../../services/storage.service';
 import { SnackbarService } from '../../../services/snackbar.service';
 import GeneralUtils from 'src/app/utils/generalUtils';
 import { PageBaseComponent } from 'src/app/utils/page-base';
@@ -46,6 +47,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
     private router: Router,
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
+    private storageService: StorageService,
   ) {
     super();
 
@@ -136,6 +138,16 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
   }
 
   // --- wasm-visor auto-update (autoupdate.js / `cli hv serve`) ---------------
+
+  /** Show the per-visor switcher as a full second row of tabs (opt-in) vs the
+   *  compact dropdown default. */
+  get showVisorSwitcherRow(): boolean {
+    return this.storageService.getShowVisorSwitcherRow();
+  }
+
+  setShowVisorSwitcherRow(show: boolean): void {
+    this.storageService.setShowVisorSwitcherRow(show);
+  }
 
   /** True only when served as an in-browser wasm-visor with auto-update wired. */
   get autoUpdateAvailable(): boolean {
