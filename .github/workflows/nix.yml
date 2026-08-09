@@ -34,9 +34,9 @@ jobs:
     name: Build skywire (static musl)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: cachix/install-nix-action@v27
+      - uses: cachix/install-nix-action@v31
         with:
           # Authenticate Nix's github: flake fetches. Without a token,
           # resolving the unpinned `nixos-unstable` branch to a commit

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/go-redis/redis/v8"
 
@@ -196,6 +197,14 @@ func (s *service) Run(ctx context.Context) error {
 	}
 }
 
+// servicesCXORepublishInterval is how often the SD services CXO feed
+// is fully republished from the store so a fresh, fillable head Root is
+// always available to newly-connecting subscribers. Matches the TPD
+// uptime publisher cadence (60s); SD's redis state refreshes on the
+// visor heartbeat cycle so faster ticks would just republish identical
+// Roots.
+const servicesCXORepublishInterval = 60 * time.Second
+
 func (s *service) startServicesCXO(
 	ctx context.Context,
 	dmsgC *dmsg.Client,
@@ -213,10 +222,29 @@ func (s *service) startServicesCXO(
 	// the publisher's first Root carries the active service list
 	// instead of being empty until the next register/heartbeat event
 	// — without this a subscriber that connects in the post-restart
-	// gap times out at firstSyncTimeout (10s).
+	// gap times out at firstSyncTimeout.
 	sdAPI.WarmCXOFromStore(ctx)
+	// Then republish the full service list on a ticker. Reactive
+	// register/deregister events alone leave the feed with no fresh
+	// Root during content-idle windows, and a cold-redis startup can
+	// leave the initial warm empty — in both cases a fresh subscriber
+	// finds no servable head Root (LastRoot returns nothing, or a Root
+	// whose objects the cleanup sweep has since reclaimed) and times
+	// out, falling back to dmsg-http. A periodic full republish keeps a
+	// fresh, fully object-backed (fillable) head Root available at all
+	// times and self-heals a cold-start miss — the same pattern the TPD
+	// uptime / metrics / all-transports publishers use.
 	go func() {
-		<-ctx.Done()
-		pub.Close() //nolint:errcheck,gosec
+		t := time.NewTicker(servicesCXORepublishInterval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				pub.Close() //nolint:errcheck,gosec
+				return
+			case <-t.C:
+				sdAPI.WarmCXOFromStore(ctx)
+			}
+		}
 	}()
 }

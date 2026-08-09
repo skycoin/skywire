@@ -1,0 +1,51 @@
+<h1 mat-dialog-title>{{ 'skysocks-tab.select-server.title' | translate }}</h1>
+
+<div mat-dialog-content class="sps-content">
+  <p class="sps-sub">{{ 'skysocks-tab.select-server.help' | translate:{ client: data.clientName } }}</p>
+
+  <!-- Manual PK entry -->
+  <div class="sps-manual">
+    <mat-form-field class="sps-manual-field">
+      <mat-label>{{ 'skysocks-tab.select-server.manual-pk' | translate }}</mat-label>
+      <input matInput [(ngModel)]="manualPk" spellcheck="false" autocomplete="off" placeholder="0000...">
+    </mat-form-field>
+    <button mat-raised-button color="primary" (click)="useManual()">
+      {{ 'skysocks-tab.select-server.use' | translate }}
+    </button>
+  </div>
+
+  <!-- Discovery list -->
+  <mat-form-field class="sps-filter">
+    <mat-label>{{ 'skysocks-tab.select-server.filter' | translate }}</mat-label>
+    <input matInput [(ngModel)]="filterText" (ngModelChange)="applyFilter()" spellcheck="false" autocomplete="off">
+  </mat-form-field>
+
+  @if (loading) {
+    <div class="sps-msg">{{ 'common.loading' | translate }}</div>
+  } @else if (loadError) {
+    <div class="sps-msg sps-error">{{ 'skysocks-tab.select-server.load-error' | translate }}</div>
+  } @else if (!filtered.length) {
+    <div class="sps-msg">{{ 'skysocks-tab.select-server.empty' | translate }}</div>
+  } @else {
+    <div class="sps-list">
+      @for (s of filtered; track s.pk) {
+        <button class="sps-row" (click)="select(s)">
+          @if (s.country) {
+            <span class="sps-flag" [style.background-image]="'url(' + countryFlag(s.country) + ')'"></span>
+          } @else {
+            <mat-icon class="sps-flag-icon">public</mat-icon>
+          }
+          <span class="sps-row-text">
+            <span class="sps-loc">{{ s.location || ('skysocks-tab.select-server.unknown-location' | translate) }}</span>
+            <span class="sps-pk mono">{{ s.pk }}</span>
+          </span>
+          <mat-icon class="sps-go">chevron_right</mat-icon>
+        </button>
+      }
+    </div>
+  }
+</div>
+
+<div mat-dialog-actions align="end">
+  <button mat-button (click)="close()">{{ 'common.cancel' | translate }}</button>
+</div>

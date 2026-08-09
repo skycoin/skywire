@@ -1,0 +1,28 @@
+<div class="full-app-shell">
+  <div class="full-app-bar">
+    <button mat-icon-button [matMenuTriggerFor]="menu" aria-label="menu">
+      <mat-icon>menu</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <button mat-menu-item (click)="goHome()">
+        <mat-icon>home</mat-icon>
+        <span>{{ 'nodes.title' | translate }}</span>
+      </button>
+      <button mat-menu-item (click)="goNode()" [disabled]="!key">
+        <mat-icon>dns</mat-icon>
+        <span>{{ 'node.title' | translate }}</span>
+      </button>
+    </mat-menu>
+    <span class="full-app-title">{{ title }}</span>
+  </div>
+
+  <div class="full-app-body">
+    @if (unknownApp) {
+      <div class="full-app-empty">{{ name }} ?</div>
+    } @else if (comp) {
+      <ng-container *ngComponentOutlet="comp; inputs: compInputs"></ng-container>
+    } @else if (iframeUrl) {
+      <iframe class="full-app-frame" [src]="iframeUrl" allowfullscreen></iframe>
+    }
+  </div>
+</div>

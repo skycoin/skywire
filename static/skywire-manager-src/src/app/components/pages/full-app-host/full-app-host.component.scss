@@ -1,0 +1,39 @@
+.full-app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+}
+
+.full-app-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  flex: 0 0 auto;
+}
+
+.full-app-title {
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.full-app-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.full-app-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  flex: 1 1 auto;
+}
+
+.full-app-empty {
+  padding: 2rem;
+  opacity: 0.6;
+}

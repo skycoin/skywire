@@ -1,5 +1,6 @@
 {
   "common": {
+    "open-full-page": "Open full page",
     "save": "Save",
     "cancel": "Cancel",
     "loading": "Loading…",
@@ -274,6 +275,7 @@
       "rewards": "Rewards",
       "skynet": "Skynet",
       "web-proxy": "Web Proxy",
+      "vpn": "VPN",
       "resources": "Resources",
       "terminal": "Terminal",
       "wallet": "Wallet",
@@ -471,6 +473,20 @@
   },
 
   "skysocks-tab": {
+    "select-server": {
+      "button": "Choose server",
+      "title": "Choose a proxy server",
+      "help": "Pick a public skysocks server as the exit for {{ client }}, or enter a server public key manually.",
+      "manual-pk": "Server public key",
+      "use": "Use",
+      "filter": "Filter by location or key",
+      "unknown-location": "Unknown location",
+      "empty": "No public proxy servers found in the discovery service.",
+      "load-error": "Couldn't reach the discovery service.",
+      "invalid-pk": "That doesn't look like a valid public key (66 hex characters).",
+      "done": "Proxy server updated.",
+      "error": "Couldn't set the proxy server."
+    },
     "server": {
       "title": "Skysocks Server",
       "help": "Run this visor as a SOCKS5 exit node. Other visors can route through skysocks-client.",
@@ -812,6 +828,10 @@
   "settings": {
     "title": "Settings",
     "checking-auth": "Checking authentication settings.",
+    "visor-switcher-row": {
+      "label": "Show the visor switcher as a full row of tabs",
+      "info": "Off (default): the per-visor switcher is a compact dropdown, keeping the navigation clean. On: it's shown as a full second row of tabs for switching between individual visor pages."
+    },
     "auto-update": {
       "label": "Auto-update this in-browser visor",
       "info": "When the server publishes a newer wasm-visor build, reload to it automatically (with a short countdown you can cancel). Turn off to stay on the current build until you reload manually."

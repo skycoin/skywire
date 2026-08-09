@@ -171,6 +171,16 @@ type Manager struct {
 
 // managedFeed holds a single feed's runtime state.
 type managedFeed struct {
+	// syncMu serializes syncOnce for this feed. syncOnce binds a fixed
+	// per-feed dmsg port (feedSpec's port) for the lifetime of one
+	// subscribe→snapshot→close cycle; two concurrent syncOnce calls
+	// would collide with "dmsg listen on port N: port already occupied"
+	// and both fail. The cycleLoop goroutine and an explicit RefreshNow
+	// are independent callers, so without this lock a RefreshNow issued
+	// while the cycle's syncOnce is mid-flight breaks the feed. Held for
+	// the whole cycle so the port is free before the next caller binds it.
+	syncMu sync.Mutex
+
 	// Snapshot data — populated by syncOnce, read by Get / Walk.
 	snapMu     sync.RWMutex
 	snapshot   map[string][]byte
@@ -208,20 +218,23 @@ const TabCloseGrace = 10 * time.Second
 // publisher returns its cache-miss within ~10s.
 const FirstSyncTimeout = 10 * time.Second
 
-// allTransportsFirstSyncTimeout is the first-Root wait for the TPD
-// all-transports feed. It's the largest, deepest tree (~8MB network-wide
-// snapshot) and routinely needs well over FirstSyncTimeout to deliver its
-// first Root over dmsg — a 10s bound left it never syncing over CXO. The
-// all-transports topology is the most important feed for the transport
-// graph, so it gets the room it needs; other feeds keep the tighter default.
-const allTransportsFirstSyncTimeout = 45 * time.Second
+// largeFeedFirstSyncTimeout is the first-Root wait for the big feeds.
+// all-transports (~8MB network-wide snapshot) and sd-services (the full
+// service-discovery listing, ~1000 servers) are large, deep trees that
+// routinely need well over FirstSyncTimeout to deliver their first Root
+// over dmsg — a 10s bound left them never syncing over CXO (sd-services
+// timed out at 10s → empty proxy/vpn pickers). These feeds get the room
+// they need; the small, fast feeds keep the tighter default so a UI
+// Acquire on a dead publisher still returns its cache-miss within ~10s.
+const largeFeedFirstSyncTimeout = 45 * time.Second
 
 // FeedFirstSyncTimeout returns the first-Root wait for a feed. Per-feed so the
-// large all-transports snapshot syncs reliably without slowing a UI Acquire on
-// the small, fast feeds.
+// large snapshots sync reliably without slowing a UI Acquire on the small,
+// fast feeds.
 func FeedFirstSyncTimeout(f Feed) time.Duration {
-	if f == FeedTPDAllTransports {
-		return allTransportsFirstSyncTimeout
+	switch f {
+	case FeedTPDAllTransports, FeedSDServices:
+		return largeFeedFirstSyncTimeout
 	}
 	return FirstSyncTimeout
 }
@@ -684,6 +697,13 @@ func (m *Manager) cycleLoop(ctx context.Context, fk Feed, f *managedFeed) {
 // is left in place; callers continue serving stale data until the
 // next cycle succeeds.
 func (m *Manager) syncOnce(ctx context.Context, fk Feed, f *managedFeed) {
+	// Serialize per feed: syncOnce binds a fixed dmsg port for the
+	// duration of the subscribe→snapshot→close cycle. The cycleLoop and
+	// RefreshNow are independent callers; overlapping them collides on
+	// the port. See managedFeed.syncMu.
+	f.syncMu.Lock()
+	defer f.syncMu.Unlock()
+
 	dmsgC := m.dmsgClient()
 	if dmsgC == nil {
 		f.recordErr(errors.New("dmsg client not ready"))
