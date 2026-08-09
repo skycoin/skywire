@@ -228,6 +228,28 @@ jobs:
       - name: Compile-check js/wasm binaries
         run: make build-wasm
 
+  # Build lane for the android payload: cmd/skywire-mobile with tags
+  # mobile,withoutsystray (GOOS=android GOARCH=arm64, pure-Go), then the size
+  # budget — so the lite variant can't silently rot or regain stripped assets.
+  # fetch-depth/tags mirror the linux job: `git describe` needs them so the
+  # stamped $(BUILDINFO) version isn't a bare short SHA.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.5'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build android payload + enforce size budget
+        run: make android-mobile-check
+
   # Headless RUNTIME smoke of the real wasm-visor blob (Tier B of the
   # wasm-visor test plan): Node ≥22 executes the compiled js/wasm binary via
   # Go's wasm_exec.js — no browser — boots the visor against a loopback dmsg

@@ -2,6 +2,7 @@
 package tptypes
 
 import (
+	"sort"
 	"sync/atomic"
 )
 
@@ -43,17 +44,32 @@ func TypePreference(t Type) int {
 	return len(*order)
 }
 
-// PreferenceOrder returns the active transport-type preference order (the
-// built-in default unless overridden via SetPreferenceOrder), most-preferred
-// first, DMSG last. Callers that create transports "automatically" (no explicit
-// type) iterate this to try the best direct type first and fall back to the DMSG
-// relay only as a last resort. Returns a copy — safe to mutate/filter.
+// PreferenceOrder returns the active order — the one SetPreferenceOrder
+// installed, or the built-in default when none was. The result is a copy;
+// mutating it does not affect the active order. Callers surfacing the
+// setting (the router-settings API, a UI) use this rather than assuming
+// the default.
 func PreferenceOrder() []Type {
 	order := preferenceOrder.Load()
 	if order == nil {
 		return append([]Type(nil), defaultPreference...)
 	}
 	return append([]Type(nil), (*order)...)
+}
+
+// PreferredOrder returns candidates sorted by TypePreference, most-preferred
+// first, without modifying the input. It is the single way to answer "which
+// of these types do we try first" — whether picking between transports that
+// already exist or deciding which one to create — so one configured order
+// governs every such decision. Types absent from the active order keep their
+// relative position at the end (the sort is stable).
+func PreferredOrder(candidates ...Type) []Type {
+	out := make([]Type, len(candidates))
+	copy(out, candidates)
+	sort.SliceStable(out, func(i, j int) bool {
+		return TypePreference(out[i]) < TypePreference(out[j])
+	})
+	return out
 }
 
 // SetPreferenceOrder overrides the active transport-type preference order.

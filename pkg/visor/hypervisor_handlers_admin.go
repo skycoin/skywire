@@ -29,6 +29,42 @@ func (hv *Hypervisor) shutdown() http.HandlerFunc {
 	})
 }
 
+// restart restarts a whole visor through its existing Reload RPC: close the
+// module stack, re-read the config from disk, run it again — the process
+// stays, everything inside it is rebuilt.
+//
+// Fired and not waited on, because Reload cannot answer: it tears down the
+// very RPC transport the call is riding, so the caller's outcome is an EOF
+// whether the restart succeeded or the visor died. `cli visor reload` has
+// always worked this way (goroutine + a fixed pause, then "Visor reloaded").
+// So this route reports 202 — dispatched, not completed — and the caller
+// learns the real outcome the honest way: the visor drops out of
+// /api/visors-summary and comes back.
+//
+// The visor being connected at all is already established before we get
+// here: visorCtx answers 404/503 for a PK this hypervisor cannot reach.
+func (hv *Hypervisor) restart() http.HandlerFunc {
+	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
+		api := ctx.API
+		addr := ctx.Addr.PK
+		go func() {
+			// Expected on success (connection closed under the call) —
+			// logged for the case where it is something else entirely.
+			if err := api.Reload(); err != nil {
+				hv.logger.WithError(err).WithField("visor_pk", addr).
+					Debug("Reload RPC returned (an error is expected: the visor closes the connection).")
+			}
+		}()
+		httputil.WriteJSON(w, r, http.StatusAccepted, restartResp{Restarting: true})
+	})
+}
+
+// restartResp is the 202 body of the restart route: the request was
+// dispatched, the visor's state is what the next summary poll says.
+type restartResp struct {
+	Restarting bool `json:"restarting"`
+}
+
 func (hv *Hypervisor) getRuntimeLogs() http.HandlerFunc {
 	return hv.withCtx(hv.visorCtx, func(w http.ResponseWriter, r *http.Request, ctx *httpCtx) {
 		// Diff-streaming mode: caller passes ?since=N to receive

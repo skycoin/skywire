@@ -158,7 +158,7 @@ func (s *BoltStore) Append(msg Message) error {
 
 		// Enforce per-peer cap via FIFO eviction of oldest.
 		if s.limits.PerPeerCap > 0 {
-			if err := evictOldest(peerBkt, s.limits.PerPeerCap); err != nil {
+			if _, err := evictOldest(peerBkt, s.limits.PerPeerCap); err != nil {
 				return err
 			}
 		}
@@ -359,7 +359,7 @@ func (s *BoltStore) AppendGroup(msg GroupMessage) error {
 		}
 
 		if s.limits.PerPeerCap > 0 {
-			if err := evictOldest(gBkt, s.limits.PerPeerCap); err != nil {
+			if _, err := evictOldest(gBkt, s.limits.PerPeerCap); err != nil {
 				return err
 			}
 		}
@@ -551,6 +551,192 @@ func iterateGroupForward(bkt *bolt.Bucket, limit int, fn func(GroupMessage) erro
 	})
 }
 
+// Import implements Store. One transaction for the whole archive: a
+// half-applied migration is worse than a failed one, and the caller can
+// simply try the same file again.
+func (s *BoltStore) Import(msgs []Message, groups []GroupMessage) (ImportResult, error) {
+	var res ImportResult
+	if len(msgs) == 0 && len(groups) == 0 {
+		return res, nil
+	}
+
+	now := time.Now().UTC()
+	cutoff, expires := s.limits.expiryCutoff(now)
+
+	// The cap is read once rather than per record: this transaction only
+	// grows the file, and re-stat'ing it for every row would be a syscall
+	// each to learn the same thing. A store already at the cap takes
+	// nothing at all, which is the honest answer to "import my history".
+	if s.limits.TotalCapBytes > 0 {
+		if fi, err := os.Stat(s.db.Path()); err == nil && fi.Size() >= s.limits.TotalCapBytes {
+			res.Rejected = len(msgs) + len(groups)
+			return res, ErrStorageFull
+		}
+	}
+
+	byPeer := make(map[string][]Message)
+	for _, m := range msgs {
+		if !s.acceptImport(m.Peer, m.Text) {
+			res.Rejected++
+			continue
+		}
+		if m.Timestamp.IsZero() {
+			m.Timestamp = now
+		}
+		byPeer[m.Peer] = append(byPeer[m.Peer], m)
+	}
+
+	byGroup := make(map[string][]GroupMessage)
+	for _, m := range groups {
+		if !s.acceptImport(m.GroupID, m.Text) {
+			res.Rejected++
+			continue
+		}
+		if m.Timestamp.IsZero() {
+			m.Timestamp = now
+		}
+		byGroup[m.GroupID] = append(byGroup[m.GroupID], m)
+	}
+
+	// Counted inside the transaction but kept out of res until it commits:
+	// a rolled-back import must not report rows it did not store.
+	var applied ImportResult
+	err := s.db.Update(func(tx *bolt.Tx) error {
+		applied = ImportResult{}
+
+		root := tx.Bucket([]byte(messagesBucket))
+		for peer, batch := range byPeer {
+			bkt, err := root.CreateBucketIfNotExists([]byte(peer))
+			if err != nil {
+				return err
+			}
+			seen := make(map[string]bool)
+			if err := bkt.ForEach(func(_, raw []byte) error {
+				var existing Message
+				if json.Unmarshal(raw, &existing) == nil {
+					seen[messageKey(existing)] = true
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			for _, m := range batch {
+				key := messageKey(m)
+				if seen[key] {
+					applied.Duplicates++
+					continue
+				}
+				raw, err := json.Marshal(m)
+				if err != nil {
+					applied.Rejected++
+					continue
+				}
+				if err := putAtTimestamp(bkt, m.Timestamp, raw); err != nil {
+					return err
+				}
+				seen[key] = true
+				applied.Messages++
+				if expires && m.Timestamp.Before(cutoff) {
+					applied.Expiring++
+				}
+			}
+			if s.limits.PerPeerCap > 0 {
+				dropped, err := evictOldest(bkt, s.limits.PerPeerCap)
+				if err != nil {
+					return err
+				}
+				applied.Evicted += dropped
+			}
+		}
+
+		groupRoot := tx.Bucket([]byte(groupsBucket))
+		for id, batch := range byGroup {
+			bkt, err := groupRoot.CreateBucketIfNotExists([]byte(id))
+			if err != nil {
+				return err
+			}
+			seen := make(map[string]bool)
+			if err := bkt.ForEach(func(_, raw []byte) error {
+				var existing GroupMessage
+				if json.Unmarshal(raw, &existing) == nil {
+					seen[groupMessageKey(existing)] = true
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+			for _, m := range batch {
+				key := groupMessageKey(m)
+				if seen[key] {
+					applied.Duplicates++
+					continue
+				}
+				raw, err := json.Marshal(m)
+				if err != nil {
+					applied.Rejected++
+					continue
+				}
+				if err := putAtTimestamp(bkt, m.Timestamp, raw); err != nil {
+					return err
+				}
+				seen[key] = true
+				applied.GroupMessages++
+				if expires && m.Timestamp.Before(cutoff) {
+					applied.Expiring++
+				}
+			}
+			if s.limits.PerPeerCap > 0 {
+				dropped, err := evictOldest(bkt, s.limits.PerPeerCap)
+				if err != nil {
+					return err
+				}
+				applied.Evicted += dropped
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return ImportResult{}, err
+	}
+
+	res.Messages = applied.Messages
+	res.GroupMessages = applied.GroupMessages
+	res.Duplicates = applied.Duplicates
+	res.Expiring = applied.Expiring
+	res.Evicted = applied.Evicted
+	res.Rejected += applied.Rejected
+
+	return res, nil
+}
+
+// acceptImport applies the limits that still hold for an operator restoring
+// their own archive: a record needs a conversation, has to fit the size cap,
+// and has to pass the whitelist. The per-peer RATE limit is deliberately not
+// among them — see Store.Import.
+func (s *BoltStore) acceptImport(key, text string) bool {
+	switch {
+	case key == "":
+		return false
+	case s.limits.MaxMessageSize > 0 && len(text) > s.limits.MaxMessageSize:
+		return false
+	case s.limits.WhitelistOnly && !s.limits.Whitelist[key]:
+		return false
+	default:
+		return true
+	}
+}
+
+// putAtTimestamp writes raw under ts, walking forward past any key already
+// taken — the same collision rule Append uses, since two messages can share
+// a nanosecond and the timestamp IS the key.
+func putAtTimestamp(bkt *bolt.Bucket, ts time.Time, raw []byte) error {
+	key := tsKey(ts)
+	for bkt.Get(key) != nil {
+		key = nextKey(key)
+	}
+	return bkt.Put(key, raw)
+}
+
 // Close implements Store. Idempotent: a second call is a no-op returning the
 // first call's error. Shutdown paths legitimately close more than once (a
 // defer plus an explicit close, or two owners of the same store), and closing
@@ -694,7 +880,9 @@ func iterateForward(bkt *bolt.Bucket, limit int, out *[]Message) error {
 // is at most cap. Counts keys via cursor walk because Bucket.Stats() is
 // per-transaction-cached and not reliable for just-inserted keys within
 // the same transaction.
-func evictOldest(bkt *bolt.Bucket, cap int) error {
+// evictOldest trims bkt to cap by deleting oldest-first, reporting how many
+// records it removed (Import shows that number; Append has no use for it).
+func evictOldest(bkt *bolt.Bucket, cap int) (int, error) {
 	// Count current keys.
 	total := 0
 	_ = bkt.ForEach(func(_, _ []byte) error { //nolint:errcheck
@@ -702,7 +890,7 @@ func evictOldest(bkt *bolt.Bucket, cap int) error {
 		return nil
 	})
 	if total <= cap {
-		return nil
+		return 0, nil
 	}
 	toRemove := total - cap
 	cur := bkt.Cursor()
@@ -714,10 +902,10 @@ func evictOldest(bkt *bolt.Bucket, cap int) error {
 	}
 	for _, k := range keys {
 		if err := bkt.Delete(k); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	return nil
+	return len(keys), nil
 }
 
 func sortByTimestamp(msgs []Message) {

@@ -76,6 +76,26 @@ type Manager struct {
 	calls   map[string]*Session
 	ringing map[string]*ringingCall
 	taps    map[string]*callTap
+	// dialing holds calls THIS visor is placing, from the moment an id
+	// exists until the peer answers or the invite fails. Without it a call
+	// being dialed is invisible: it is in neither Incoming (that is the
+	// callee's list) nor Active (that starts at "answered"), so a UI had
+	// nothing to show for the ten seconds a caller most wants feedback.
+	dialing map[string]*dialingCall
+}
+
+// dialingCall is an outbound invite in flight.
+type dialingCall struct {
+	peer cipher.PubKey
+	// cancel aborts the invite. It is what makes hanging up DURING the ring
+	// possible — there is no session to close yet.
+	cancel context.CancelFunc
+}
+
+// Dial is one call this visor is placing, for a UI to show as "calling…".
+type Dial struct {
+	CallID string
+	Peer   cipher.PubKey
 }
 
 // NewManager constructs a Manager. Call Serve to start accepting.
@@ -98,7 +118,7 @@ func NewManager(cfg Config) *Manager {
 	if cfg.NewSink == nil {
 		cfg.NewSink = func() Sink { return NullSink{} }
 	}
-	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap)}
+	m := &Manager{cfg: cfg, log: cfg.Logger, calls: make(map[string]*Session), ringing: make(map[string]*ringingCall), taps: make(map[string]*callTap), dialing: make(map[string]*dialingCall)}
 	m.sig = NewSignaler(cfg.LocalPK, cfg.SignalPort, cfg.Dial, cfg.Logger)
 	m.sig.SetInviteHandler(m.handleInvite)
 	return m
@@ -122,7 +142,20 @@ func (m *Manager) AddListener(ctx context.Context, lis net.Listener) {
 // Session, or the peer's decline/busy reason.
 func (m *Manager) Call(ctx context.Context, peer cipher.PubKey) (*Session, error) {
 	callID := newCallID()
-	conn, reply, err := m.sig.Invite(ctx, peer, callID, m.cfg.Codec.Name(), m.cfg.SignalPort)
+	// Cancellable so Hangup can abort the ring; registered before the invite
+	// goes out so the very first poll of a UI already sees the call.
+	dctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	m.mu.Lock()
+	m.dialing[callID] = &dialingCall{peer: peer, cancel: cancel}
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.dialing, callID)
+		m.mu.Unlock()
+	}()
+
+	conn, reply, err := m.sig.Invite(dctx, peer, callID, m.cfg.Codec.Name(), m.cfg.SignalPort)
 	if err != nil {
 		return nil, err
 	}
@@ -218,6 +251,18 @@ func (m *Manager) decide(callID string, ok bool) error {
 	return nil
 }
 
+// Dialing returns the calls this visor is placing and that have not been
+// answered yet.
+func (m *Manager) Dialing() []Dial {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Dial, 0, len(m.dialing))
+	for id, d := range m.dialing {
+		out = append(out, Dial{CallID: id, Peer: d.peer})
+	}
+	return out
+}
+
 // Incoming returns the invites of calls currently ringing (awaiting answer).
 func (m *Manager) Incoming() []Sig {
 	m.mu.Lock()
@@ -276,12 +321,20 @@ func (m *Manager) dropCall(callID string) {
 func (m *Manager) Hangup(callID string) error {
 	m.mu.Lock()
 	sess := m.calls[callID]
+	dial := m.dialing[callID]
 	m.mu.Unlock()
-	if sess == nil {
-		return errors.New("voice: no such call")
+	if sess != nil {
+		sess.Close()
+		return nil
 	}
-	sess.Close()
-	return nil
+	// Still ringing at the other end: there is no session to close, so
+	// canceling the invite IS the hang-up. Without this the caller could
+	// only wait out the dial timeout.
+	if dial != nil {
+		dial.cancel()
+		return nil
+	}
+	return errors.New("voice: no such call")
 }
 
 // SetMute toggles the mic (send) and speaker (playback) mute state of an active
