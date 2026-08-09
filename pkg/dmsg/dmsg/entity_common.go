@@ -781,6 +781,13 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		return nil
 	}
 
+	// This client has never published a delegated-server set of its own, and it
+	// now has one to publish: force the write through even if the read-modify-
+	// write below finds a matching set already on record. See the mustPublish
+	// argument of updateClientEntryOnEndpoint for why "already matching" is not
+	// the same as "already published".
+	mustPublish := lastPushed == nil && len(srvPKs) > 0
+
 	var firstErr error
 	anyOK := false
 	// Re-check shutdown immediately before the publish IO. The work above
@@ -796,7 +803,7 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 		return nil
 	}
 	for _, ep := range endpoints {
-		if updateErr := c.updateClientEntryOnEndpoint(ctx, ep, clientType, srvPKs); updateErr != nil {
+		if updateErr := c.updateClientEntryOnEndpoint(ctx, ep, clientType, srvPKs, mustPublish); updateErr != nil {
 			if firstErr == nil {
 				firstErr = updateErr
 			}
@@ -820,7 +827,22 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 
 // updateClientEntryOnEndpoint runs the read-modify-write registration
 // cycle against a single discovery endpoint.
-func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, clientType string, srvPKs []cipher.PubKey) error {
+//
+// mustPublish forces the PUT even when the entry read back already carries the
+// delegated servers we would write. The read is not proof of publication: a
+// visor's disc client is a registering fallback whose READS resolve
+// direct-first (pkg/dmsg/dmsgclient/fallback_disc.go), and the visor seeds its
+// OWN pk into that direct client (pkg/visor/init_dmsg.go), where
+// direct.GetAllEntries synthesizes a self-entry listing every CONFIGURED server
+// as delegated. So the entry compared against here can be a local fiction that
+// the real dmsg-discovery has never seen. When the configured server set
+// happens to equal the live session set — a single-server deployment, i.e.
+// every e2e run — sameSrvPKs was true on the very first publish and the client
+// silently skipped it, staying absent from discovery until the periodic tick
+// (UpdateInterval, 5 min for clients) came round. Callers pass mustPublish for
+// the first publish only, so the steady-state suppression that keeps reconnect
+// storms off the discovery is unaffected.
+func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, clientType string, srvPKs []cipher.PubKey, mustPublish bool) error {
 	entry, err := ep.Client.Entry(ctx, c.pk)
 	if err != nil {
 		// Only register a fresh sequence-0 entry when the entry is
@@ -853,8 +875,9 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 	// Whether the client's CURRENT delegated servers is the same as what would be advertised.
 	sameSrvPKs := cipher.SamePubKeys(srvPKs, entry.Client.DelegatedServers)
 
-	// No update is needed if delegated servers has no delta, and an entry update is not due.
-	if _, due := c.updateIsDue(); sameSrvPKs && !due {
+	// No update is needed if delegated servers has no delta, an entry update is
+	// not due, and this is not the client's first publish.
+	if _, due := c.updateIsDue(); sameSrvPKs && !due && !mustPublish {
 		return nil
 	}
 
