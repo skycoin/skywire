@@ -142,12 +142,15 @@ func TestRestart(t *testing.T) {
 			}
 
 			// Restart visor containers (ContainerRestart polls until containers are running)
+			restartedAt := time.Now()
 			require.NoError(t, env.ContainerRestart(tc.restartList...))
 
-			// Wait for DMSG to be ready on all restarted visors
+			// Wait for DMSG to be ready on all restarted visors. The cutoff is the
+			// restart itself: anything published before that belongs to the process
+			// we just killed, however recent it looks.
 			for _, visor := range tc.restartList {
 				t.Logf("Waiting for DMSG to be ready on %s", visor)
-				if err := env.WaitForDmsgDiscoveryEntry(visor, 30*time.Second); err != nil {
+				if err := env.WaitForFreshDmsgDiscoveryEntry(visor, 30*time.Second, restartedAt); err != nil {
 					t.Logf("Warning: DMSG not ready on %s: %v", visor, err)
 				}
 				t.Logf("DMSG ready on %s", visor)
