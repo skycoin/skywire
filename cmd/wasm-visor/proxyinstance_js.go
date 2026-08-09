@@ -49,6 +49,52 @@ var (
 	}
 )
 
+// consumerBind maps a clearnet CONSUMER (a browser window id like "w1", or a
+// well-known consumer like "wallet") to the skysocks-client-lite INSTANCE it uses.
+// An unbound consumer falls back to the default instance. This is what lets every
+// app share ONE auto-established default proxy connection (fast + robust) while
+// still allowing a consumer to be pinned to a specific/second instance.
+var (
+	consumerBindMu sync.Mutex
+	consumerBind   = map[string]string{}
+)
+
+// consumerInstance returns the instance id a consumer is bound to (default when
+// unbound or bound to a since-removed instance).
+func consumerInstance(consumer string) string {
+	consumerBindMu.Lock()
+	id, ok := consumerBind[consumer]
+	consumerBindMu.Unlock()
+	if ok && id != "" && isProxyInstance(id) {
+		return id
+	}
+	return defaultProxyID
+}
+
+// bindConsumer binds a consumer to an instance (empty id unbinds → default).
+func bindConsumer(consumer, instanceID string) {
+	consumerBindMu.Lock()
+	if instanceID == "" || instanceID == defaultProxyID {
+		delete(consumerBind, consumer)
+	} else {
+		consumerBind[consumer] = instanceID
+	}
+	consumerBindMu.Unlock()
+}
+
+// sessionOwner maps a fetch's window id to the skysocks SESSION key owner. All
+// user browser/wallet windows bound to the same instance SHARE one session per
+// exit (yamux multiplexes their streams), so a 2nd window reuses the 1st's route
+// instead of cold-dialing its own (the per-window-session slowness). Internal pool
+// windows (probe/keepalive/sticky/warm) keep their OWN owner so their throwaway
+// probes never collide with — or get reused as — the shared user session.
+func sessionOwner(winID string) string {
+	if isInternalProxyWindow(winID) {
+		return winID
+	}
+	return consumerInstance(winID)
+}
+
 // Warm-pool tuning. Rather than pick ONE random exit and hope it routes, the
 // default instance races several candidates from service discovery, keeps the
 // ones that actually establish a route ("vetted"), makes the first the active
@@ -83,6 +129,25 @@ func proxyInstanceExit(id string) (cipher.PubKey, bool) {
 // proxyDefaultExit returns the default instance's exit (used by consumers that
 // don't pin their own exit, so the auto-selected random proxy is the fallback).
 func proxyDefaultExit() (cipher.PubKey, bool) { return proxyInstanceExit(defaultProxyID) }
+
+// waitFreshProxyExit returns the current default auto exit if it isn't already in
+// `tried`, polling for up to `timeout`. rotateAwayFromExit refills the pool
+// asynchronously (a re-select takes ~10s when no warm standby exists), so right
+// after a rotate the pool can be briefly empty; polling here is what lets a
+// clearnet fetch wait for a healthy replacement and self-heal instead of failing
+// the moment the active exit dies. Returns null if no untried exit appears in time.
+func waitFreshProxyExit(tried map[cipher.PubKey]bool, timeout time.Duration) cipher.PubKey {
+	deadline := time.Now().Add(timeout)
+	for {
+		if pk, ok := proxyDefaultExit(); ok && !pk.Null() && !tried[pk] {
+			return pk
+		}
+		if !time.Now().Before(deadline) {
+			return cipher.PubKey{}
+		}
+		time.Sleep(400 * time.Millisecond)
+	}
+}
 
 // setProxyExit sets an instance's exit PK (the wasm analog of the native
 // SetAppPK). Clearing (null pk) is allowed. Turns off Auto once the operator
@@ -305,6 +370,7 @@ func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKe
 			_ = setProxyExit(defaultProxyID, r.pk) //nolint:errcheck
 			reArmDefaultAuto()
 			vlog(fmt.Sprintf("[skysocks-lite] active proxy exit: %s", exitShort(r.pk)))
+				prewarmDefaultSession(r.pk) // establish the SHARED user session now → first fetch is instant
 			continue
 		}
 		proxyPoolMu.Lock()
@@ -315,6 +381,23 @@ func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKe
 		proxyPoolMu.Unlock()
 	}
 	return installed
+}
+
+// prewarmDefaultSession establishes the SHARED default-instance session to pk in
+// the background, so the first user clearnet fetch reuses an already-open route
+// instead of paying route setup itself. Best-effort — a failure just leaves the
+// first fetch to establish (and fail over) as it did before.
+func prewarmDefaultSession(pk cipher.PubKey) {
+	if pk.Null() {
+		return
+	}
+	go func() {
+		if _, err := skysocksSession(defaultProxyID, pk); err != nil {
+			vlog(fmt.Sprintf("[skysocks-lite] pre-warm default session to %s failed: %v", exitShort(pk), err))
+			return
+		}
+		vlog(fmt.Sprintf("[skysocks-lite] default proxy session pre-warmed → %s", exitShort(pk)))
+	}()
 }
 
 // probeExit confirms an exit is actually routable by establishing a skysocks
@@ -468,4 +551,39 @@ func jsSetProxyExit(_ js.Value, args []js.Value) interface{} {
 		return err.Error()
 	}
 	return nil
+}
+
+// jsProxyBind(consumer, instanceID) wires a clearnet CONSUMER (a browser window
+// id, or a well-known consumer like "wallet") to a skysocks-lite provider INSTANCE
+// — the switcher app's core operation. An empty/"skysocks-client" instanceID
+// unbinds → the default instance. The consumer's NEXT fetch uses the new
+// instance's session (a live switch; the old shared session stays for others).
+// Returns null (bindings are always accepted; an unknown instance falls back to
+// default at resolve time).
+func jsProxyBind(_ js.Value, args []js.Value) interface{} {
+	if len(args) < 1 || args[0].String() == "" {
+		return "proxyBind(consumer, instanceID)"
+	}
+	instanceID := ""
+	if len(args) > 1 && !args[1].IsNull() && !args[1].IsUndefined() {
+		instanceID = args[1].String()
+	}
+	bindConsumer(args[0].String(), instanceID)
+	return nil
+}
+
+// jsProxyConsumers() → JSON object {consumer: instanceID} of the current wiring,
+// so the switcher app can render which consumer is bound to which provider.
+func jsProxyConsumers(_ js.Value, _ []js.Value) interface{} {
+	consumerBindMu.Lock()
+	cp := make(map[string]string, len(consumerBind))
+	for k, v := range consumerBind {
+		cp[k] = v
+	}
+	consumerBindMu.Unlock()
+	b, err := json.Marshal(cp)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }

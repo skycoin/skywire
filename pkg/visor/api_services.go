@@ -125,7 +125,7 @@ func (v *Visor) ServiceHealth() ([]ServiceHealthEntry, error) {
 }
 
 // doHealthProbe performs a single GET {baseURL}/health and populates a ServiceHealthEntry.
-func doHealthProbe(client *http.Client, name, baseURL, transport string) ServiceHealthEntry { //nolint
+func doHealthProbe(client *http.Client, name, baseURL, transport string) ServiceHealthEntry { //nolint:unparam
 	entry := ServiceHealthEntry{Name: name, URL: baseURL, Transport: transport}
 
 	reqURL := strings.TrimSuffix(baseURL, "/") + "/health"

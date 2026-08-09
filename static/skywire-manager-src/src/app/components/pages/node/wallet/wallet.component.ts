@@ -3,6 +3,8 @@ import { Subscription } from 'rxjs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
 import { Node, Application } from '../../../../app.datatypes';
+import { Router } from '@angular/router';
+
 import { NodeComponent } from '../node.component';
 import { PageBaseComponent } from 'src/app/utils/page-base';
 import { AppsService } from 'src/app/services/apps.service';
@@ -83,6 +85,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     private sanitizer: DomSanitizer,
     private appsService: AppsService,
     private snackbar: SnackbarService,
+    private router: Router,
   ) {
  super();
 }
@@ -166,10 +169,11 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   openFullWindow() {
-    if (!this.fullWindowUrl) {
-      return;
+    // Navigate IN-SPA to the unified full-page app host (not the separately-served
+    // /wallet/ URL, and not a new window).
+    if (this.node && this.node.localPk) {
+      this.router.navigate(['/app', 'wallet', this.node.localPk]);
     }
-    window.open(this.fullWindowUrl, '_blank', 'noopener noreferrer');
   }
 
   // ---- skycoin-web app controls (start/stop + settings) ----

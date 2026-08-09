@@ -152,7 +152,11 @@ func (a *API) WarmCXOFromStore(ctx context.Context) int {
 		}
 	}
 	if n > 0 {
-		a.log.WithField("entries", n).Info("CXO warm: pre-populated publisher tree from store")
+		// Debug, not Info: this now runs on a periodic republish ticker
+		// (see startServicesCXO), so an Info line per cycle would spam
+		// the log. Startup health is signaled by the one-shot
+		// "CXO services publisher running" Info line.
+		a.log.WithField("entries", n).Debug("CXO warm: (re)populated publisher tree from store")
 	}
 	return n
 }

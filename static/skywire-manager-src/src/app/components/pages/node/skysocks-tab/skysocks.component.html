@@ -75,6 +75,10 @@
                 <mat-icon [inline]="true">{{ isRunning(c) ? 'stop' : 'play_arrow' }}</mat-icon>
                 {{ (isRunning(c) ? 'skysocks-tab.stop' : 'skysocks-tab.start') | translate }}
               </button>
+              <button mat-stroked-button (click)="chooseServer(c)" [disabled]="busy.has(c.name)">
+                <mat-icon [inline]="true">travel_explore</mat-icon>
+                {{ 'skysocks-tab.select-server.button' | translate }}
+              </button>
               <button mat-stroked-button (click)="toggleSettings(c.name)"
                       [class.settings-toggle-open]="isSettingsOpen(c.name)">
                 <mat-icon [inline]="true">{{ isSettingsOpen(c.name) ? 'expand_less' : 'settings' }}</mat-icon>

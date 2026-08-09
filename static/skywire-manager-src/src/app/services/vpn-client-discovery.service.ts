@@ -79,9 +79,13 @@ export class VpnServer {
 })
 export class VpnClientDiscoveryService {
   /**
-   * URL of the discovery service.
+   * Hypervisor route that serves the service discovery from the local CXO
+   * subscriber tree (falling back to dmsg-http) — the deployment is dmsg-only, so
+   * the legacy clearnet `sd.skycoin.com` frontend is gone. Relative so it targets
+   * whichever hypervisor served the UI, and it reuses the same CXO-backed feed the
+   * network view uses instead of a public HTTP SD.
    */
-  private readonly discoveryServiceUrl = 'https://sd.skycoin.com/api/services?type=vpn';
+  private readonly discoveryServiceUrl = 'api/services?type=vpn';
 
   /**
    * Servers obtained from the discovery service.
@@ -106,46 +110,52 @@ export class VpnClientDiscoveryService {
     return this.http.get(this.discoveryServiceUrl).pipe(
       // In case of error, retry.
       retryWhen(errors => errors.pipe(delay(4000))),
-      map((result: any[]) => {
+      map((result: any) => {
         const response: VpnServer[] = [];
 
         if (result) {
-          // Process the data.
-          result.forEach(entry => {
+          // The hypervisor's /api/services returns a MAP keyed by PK
+          // ({ "<pk>": { pk, services:[...], country } }); the legacy/canonical SD
+          // returns an ARRAY ([{ address, geo:{country,region} }]). Support both.
+          const entries: any[] = Array.isArray(result) ? result : Object.keys(result).map(k => result[k]);
+
+          entries.forEach(entry => {
             const currentEntry = new VpnServer();
 
-            // The address must have 2 parts: the pk and the port.
-            const addressParts = (entry.address as string).split(':');
-            if (addressParts.length === 2) {
-              currentEntry.pk = addressParts[0];
-
-              // Process the location.
-              currentEntry.location = '';
-              if (entry.geo) {
-                if (entry.geo.country) {
-                  currentEntry.countryCode = entry.geo.country;
-                }
-                if (entry.geo.region) {
-                  currentEntry.location = entry.geo.region;
-                }
-              }
-
-              currentEntry.name = addressParts[0];
-              /*
-              // TODO: used only for columns that are currently deactivated in the server list. Must
-              // be deleted or reactivated depending on what happens to the columns.
-              currentEntry.congestion = 20;
-              currentEntry.congestionRating = Ratings.Gold;
-              currentEntry.latency = 123;
-              currentEntry.latencyRating = Ratings.Gold;
-              currentEntry.hops = 3;
-              */
-
-              // TODO: still not added to the discovery service.
-              currentEntry.note = '';
-
-              response.push(currentEntry);
+            // Resolve the PK from either shape.
+            let pk = '';
+            if (entry.address) {
+              pk = (entry.address as string).split(':')[0];
+            } else if (entry.pk) {
+              pk = entry.pk;
             }
+            if (!/^[0-9a-fA-F]{66}$/.test(pk)) {
+              return;
+            }
+
+            // If the entry declares its service types, keep only vpn ones.
+            if (Array.isArray(entry.services) && entry.services.length && !entry.services.includes('vpn')) {
+              return;
+            }
+
+            currentEntry.pk = pk;
+            currentEntry.name = pk;
+
+            // Location: map shape has a 2-letter `country`; array shape has `geo`.
+            currentEntry.location = '';
+            const country = entry.country || (entry.geo && entry.geo.country);
+            const region = entry.geo && entry.geo.region;
+            if (country) {
+              currentEntry.countryCode = country;
+            }
+            if (region) {
+              currentEntry.location = region;
+            }
+
+            // TODO: still not added to the discovery service.
+            currentEntry.note = '';
+
+            response.push(currentEntry);
           });
         }
 

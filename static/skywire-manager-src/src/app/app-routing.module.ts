@@ -15,6 +15,7 @@ import { SkychatComponent } from './components/pages/node/skychat/skychat.compon
 import { BandwidthComponent } from './components/pages/node/bandwidth/bandwidth.component';
 import { UptimeComponent } from './components/pages/node/uptime/uptime.component';
 import { TerminalComponent } from './components/pages/node/terminal/terminal.component';
+import { FullAppHostComponent } from './components/pages/full-app-host/full-app-host.component';
 import { WalletComponent } from './components/pages/node/wallet/wallet.component';
 import { WebProxyComponent } from './components/pages/node/web-proxy/web-proxy.component';
 import { SkysocksTabComponent } from './components/pages/node/skysocks-tab/skysocks.component';
@@ -164,6 +165,13 @@ const routes: Routes = [
             component: TerminalComponent
           },
           {
+            // In-place VPN tab: the full VPN UI is iframed into NodeComponent
+            // (like the terminal tab), so the route target only needs to render
+            // nothing — reuse TerminalComponent's empty placeholder.
+            path: 'vpn',
+            component: TerminalComponent
+          },
+          {
             path: 'wallet',
             component: WalletComponent
           },
@@ -268,6 +276,12 @@ const routes: Routes = [
     path: 'vpn',
     canActivate: [VpnAuthGuardService],
     loadChildren: () => import('./components/vpn/vpn.module').then(m => m.VpnModule),
+  },
+  {
+    // Unified full-page app host: every app's "open full UI" navigates here
+    // (in-SPA) — #/app/<name>/<pk> mounts the app in a shared shell.
+    path: 'app/:name/:key',
+    component: FullAppHostComponent,
   },
   {
     path: '**',

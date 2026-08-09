@@ -911,7 +911,7 @@ func (tm *Manager) EnsureBestTransport(ctx context.Context, remote cipher.PubKey
 	order := tm.PreferredDirectCreateOrder()
 	// Already have a direct transport? A 1-hop route can use it — nothing to do.
 	for _, nt := range order {
-		if mt, _ := tm.GetTransport(remote, nt); mt != nil { //nolint
+		if mt, err := tm.GetTransport(remote, nt); err == nil && mt != nil {
 			return nil
 		}
 	}
