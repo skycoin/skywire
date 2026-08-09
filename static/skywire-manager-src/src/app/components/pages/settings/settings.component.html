@@ -12,6 +12,15 @@
   <div class="content col-12 mt-4.5">
     <app-refresh-rate class="d-block mb-4"></app-refresh-rate>
 
+    <div class="d-flex align-items-center mb-4">
+      <mat-slide-toggle
+        color="primary"
+        [checked]="showVisorSwitcherRow"
+        (change)="setShowVisorSwitcherRow($event.checked)"
+      >{{ 'settings.visor-switcher-row.label' | translate }}</mat-slide-toggle>
+      <mat-icon [inline]="true" class="info-tip ml-2" [matTooltip]="'settings.visor-switcher-row.info' | translate">info</mat-icon>
+    </div>
+
     @if (autoUpdateAvailable) {
       <div class="d-flex align-items-center mb-4">
         <mat-slide-toggle

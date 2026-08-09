@@ -168,6 +168,8 @@ func main() {
 		"closeWindow":        js.FuncOf(jsCloseWindow),
 		"proxyInstances":     js.FuncOf(jsProxyInstances),
 		"setProxyExit":       js.FuncOf(jsSetProxyExit),
+		"proxyBind":          js.FuncOf(jsProxyBind),
+		"proxyConsumers":     js.FuncOf(jsProxyConsumers),
 		"visorStats":         js.FuncOf(jsVisorStats),
 		"skychatSend":        js.FuncOf(jsSkychatSend),
 		"skychatMessages":    js.FuncOf(jsSkychatMessages),

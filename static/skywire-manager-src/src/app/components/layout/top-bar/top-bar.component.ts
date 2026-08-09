@@ -10,6 +10,7 @@ import { AppState, VpnClientService } from 'src/app/services/vpn-client.service'
 import { VpnHelpers } from '../../vpn/vpn-helpers';
 import { DataUnits, VpnSavedDataService } from 'src/app/services/vpn-saved-data.service';
 import { AppModeService } from 'src/app/services/app-mode.service';
+import { StorageService } from 'src/app/services/storage.service';
 
 /**
  * Properties of a tab shown in TopBarComponent.
@@ -255,7 +256,19 @@ export class TopBarComponent implements OnInit, OnDestroy {
     private vpnClientService: VpnClientService,
     private vpnSavedDataService: VpnSavedDataService,
     public appMode: AppModeService,
+    private storageService: StorageService,
   ) { }
+
+  /** Show the per-visor switcher as a full row of tabs (Settings opt-in) vs the
+   *  compact dropdown (default). */
+  get showVisorSwitcherRow(): boolean {
+    return this.storageService.getShowVisorSwitcherRow();
+  }
+
+  /** Navigate to the visor list / front page (from the ☰ menu). */
+  goHome(): void {
+    this.router.navigate(['/nodes', 'list', '1']);
+  }
 
   ngOnInit() {
     this.langSubscriptionsGroup.push(this.languageService.currentLanguage.subscribe(lang => {
