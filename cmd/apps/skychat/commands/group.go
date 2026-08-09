@@ -251,7 +251,7 @@ func startGroupPoller(parent context.Context) {
 				// Body = "<sender>: <text>" using the display text (file/reply
 				// overrides applied above).
 				msgText, _ := envelope["message"].(string)
-				notifyOSInbound("Group message", shortHexPK(m.SenderPK.Hex())+": "+notifPreview(msgText))
+				notifyOSInbound("Group message", displayName(m.SenderPK.Hex())+": "+notifPreview(msgText))
 			}
 		}
 	}()

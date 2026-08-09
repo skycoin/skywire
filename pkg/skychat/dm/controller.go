@@ -722,6 +722,32 @@ func (c *Controller) HasConn(pk cipher.PubKey) bool {
 	return ok
 }
 
+// Connect makes sure there is a conn to pk, dialing and caching one over
+// netType when there is not. A cached conn on ANY network satisfies it — the
+// question this answers is "can a message leave for this peer right now", and
+// the send path reuses whatever is cached regardless of which network carried
+// it.
+//
+// Send does this implicitly, inside the request that carries the first
+// message. That is the right default for a CLI and the wrong one for a person:
+// setting up a route can take the better part of a minute, and until it
+// resolves the sender has no way to tell a slow handshake from an app that
+// swallowed what they typed. Exported so the UI can ask for the handshake on
+// its own, up front, and say so while it runs.
+func (c *Controller) Connect(ctx context.Context, pk cipher.PubKey, netType appnet.Type) error {
+	c.mu.Lock()
+	conn := c.conns[pk]
+	c.mu.Unlock()
+	if conn != nil {
+		return nil
+	}
+	_, err := c.dialAndCache(ctx, pk, appnet.Addr{Net: netType, PubKey: pk, Port: c.port})
+	if err != nil {
+		return fmt.Errorf("dial %s over %s: %w", short(pk.Hex()), netType, err)
+	}
+	return nil
+}
+
 // NoteInbound records an inbound message that arrived outside the framed-conn
 // read loop (e.g. the native app's CXO feed path) so the /status counters stay
 // accurate for those transports too.

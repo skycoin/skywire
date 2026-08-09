@@ -71,8 +71,12 @@ func (v *Visor) refreshKeySets(ctx context.Context, log *logging.Logger) {
 		updated = true
 	}
 
-	// Update survey whitelist
-	if len(services.SurveyWhitelist) > 0 && !pubKeysEqual(v.conf.SurveyWhitelist, services.SurveyWhitelist) {
+	// Update survey whitelist. Skipped entirely on builds that do not take the
+	// deployment's keys (the phone) — otherwise this hourly refresh would put
+	// back what generation deliberately left empty. user_survey_whitelist is a
+	// separate field and is preserved either way.
+	if visorconfig.UseDeploymentSurveyWhitelist() &&
+		len(services.SurveyWhitelist) > 0 && !pubKeysEqual(v.conf.SurveyWhitelist, services.SurveyWhitelist) {
 		log.Infof("Updating survey_whitelist: %d keys", len(services.SurveyWhitelist))
 		v.conf.SurveyWhitelist = services.SurveyWhitelist
 		updated = true

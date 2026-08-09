@@ -137,4 +137,17 @@ skysocks-client
 
 !cmd/wasm-visor/cacert.pem
 /skywire-cli
+
+
+# Android app (android/ Gradle project lands in Step 1; the Go payload
+# libskywire-mobile.so is already covered by the bare *.so above).
+# Build outputs + machine-local config + signing keys — keys NEVER enter git.
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/app/src/main/jniLibs/
+*.keystore
+*.jks
 /wasm-visor
+

@@ -11,6 +11,7 @@ import (
 	"context"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -23,6 +24,52 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
+// voiceAudioBridge is the SKYWIRE_VOICE_AUDIO value that hands capture and
+// playback to the process that started the visor (see pkg/skychat/call.Bridge).
+const voiceAudioBridge = "bridge"
+
+// voiceAudioMode resolves the audio backend to use.
+//
+// Android defaults to the bridge because nothing else there can work: GOOS=
+// android satisfies the `linux` build tag, so the default path opens the
+// PulseAudio backend, finds no server, and silently degrades to a mute call.
+// The host app owns the only real device on the platform. An explicit
+// SKYWIRE_VOICE_AUDIO still wins — including on Android, where "off" is a
+// legitimate way to run a visor that never touches the microphone.
+func voiceAudioMode() string {
+	mode := strings.ToLower(strings.TrimSpace(os.Getenv("SKYWIRE_VOICE_AUDIO")))
+	if mode == "" && runtime.GOOS == "android" {
+		return voiceAudioBridge
+	}
+	return mode
+}
+
+// VoiceAudioBridge returns the host-app audio device this visor is using, or
+// nil when it opens a device of its own (or has none). The local API's voice
+// audio routes are served only when this is non-nil.
+func (v *Visor) VoiceAudioBridge() *skycall.Bridge { return v.voiceAudio }
+
+// voiceSkynetDialBudget caps one skynet signaling attempt. Long enough for
+// route setup on a mesh that has a path, short enough that the dmsg fallback
+// still has most of the caller's 30 s to place the call.
+const voiceSkynetDialBudget = 10 * time.Second
+
+// dialSkynetBounded makes one skynet dial under its own deadline and reports
+// nil rather than an error: the caller has a fallback and nothing to decide
+// from the reason it failed. Never outlives ctx — a shorter caller deadline
+// still wins.
+func dialSkynetBounded(ctx context.Context, addr appnet.Addr) net.Conn {
+	dctx, cancel := context.WithTimeout(ctx, voiceSkynetDialBudget)
+	// Safe on the success path too: the context governs route setup, not the
+	// conn it produced, which is exactly how net.Dialer.DialContext behaves.
+	defer cancel()
+	c, err := appnet.DialContext(dctx, addr)
+	if err != nil {
+		return nil
+	}
+	return c
+}
+
 // initVoice wires the voice manager. Best-effort: with no dmsg client it's a
 // no-op (voice disabled), like grouping/pairing.
 func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
@@ -34,10 +81,19 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 
 	// Dial prefers skynet (on-mesh, IP-anonymous, multi-hop) when its networker
 	// is up, and falls back to a direct dmsg stream. Both target the SAME port.
+	//
+	// The skynet attempt is given its OWN slice of the caller's budget rather
+	// than the whole of it. Preferring skynet only makes sense if failing at it
+	// still leaves time to try dmsg, and route setup to an unreachable peer
+	// does not fail fast: it asks the setup nodes, falls back to a local BFS,
+	// then tries to build a direct transport, and burns the entire deadline
+	// getting there. That is the ordinary state of a phone — no inbound
+	// reachability, so no direct transport and no route — and it meant a call
+	// to one timed out having never tried the carrier that does work.
 	dial := func(dctx context.Context, peer cipher.PubKey, p uint16) (net.Conn, error) {
 		if _, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
 			addr := appnet.Addr{Net: appnet.TypeSkynet, PubKey: peer, Port: routing.Port(p)}
-			if c, derr := appnet.DialContext(dctx, addr); derr == nil {
+			if c := dialSkynetBounded(dctx, addr); c != nil {
 				return c, nil
 			}
 		}
@@ -74,13 +130,14 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 	//   (unset)/mic       → the system default input device (a mic, or on a
 	//                        desktop with no mic the monitor, per the OS default)
 	//   monitor           → force the default sink's monitor (system audio)
+	//   bridge            → the HOST APP's device, over the local API (below)
 	//   off/none/silent/0 → no local capture (receive-only), still explicit-answer
 	//   auto/auto-answer  → auto-accept inbound calls, silent (headless/testing)
 	ring := func(inv skycall.Sig) {
 		log.WithField("from", inv.FromPK.Hex()).WithField("call", inv.CallID).
 			Warn("voice: INCOMING CALL — answer in the hvui or `skywire cli skychat voice answer <id>`")
 	}
-	switch mode := strings.ToLower(strings.TrimSpace(os.Getenv("SKYWIRE_VOICE_AUDIO"))); mode {
+	switch mode := voiceAudioMode(); mode {
 	case "auto", "auto-answer", "autoanswer":
 		// Headless/testing: accept every inbound call silently.
 		cfg.OnIncoming = func(inv skycall.Sig) bool {
@@ -91,6 +148,20 @@ func initVoice(_ context.Context, v *Visor, log *logging.Logger) error {
 		cfg.ManualAnswer = true
 		cfg.Ring = ring
 		log.Info("voice: real audio OFF (SKYWIRE_VOICE_AUDIO) — calls ring; answer to connect (silent)")
+	case voiceAudioBridge:
+		// The device belongs to the process that started us; we only present
+		// it to the call manager. Nothing is held open until a call exists,
+		// and a call still connects (mute) if the app never attaches — which
+		// is the same degradation as a host with no sound card.
+		bridge := skycall.NewBridge()
+		v.voiceAudio = bridge
+		cfg.ManualAnswer = true
+		cfg.Visualize = true
+		cfg.NewSource = func() skycall.Source { return bridge.Source() }
+		cfg.NewSink = func() skycall.Sink { return bridge.Sink() }
+		cfg.Ring = ring
+		log.Infof("voice: audio bridged to the host app (%d Hz mono) — calls ring; answer to connect",
+			skycall.SampleRate)
 	default:
 		monitor := mode == "monitor"
 		cfg.ManualAnswer = true

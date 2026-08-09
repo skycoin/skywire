@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  What may leave this device, on Android 12 and later.
+
+  `allowBackup="false"` in the manifest already refuses Google Drive. It does
+  NOT refuse the other way data leaves a phone: the device-to-device transfer
+  that runs when someone sets up a new handset from the old one. That path has
+  its own section here, and this file exists mainly for it.
+
+  Both sections are `<exclude domain="root" path="." />` — everything, with
+  nothing carved back in. Stating it that way rather than naming the two
+  sensitive files is deliberate. The visor's secret key (files/skywire/
+  skywire-config.json) and the wallet's recovery phrases (files/datastore/
+  wallet.preferences_pb) are the ones that must never move, but an app whose
+  data is *entirely* device-local is a rule that stays correct when someone
+  adds a third store later and forgets this file exists. There is nothing here
+  a user would miss: the identity is meant to be moved deliberately, by
+  exporting the config from Settings, and the wallet is meant to be restored
+  from its twelve words.
+
+  The seeds and passwords are sealed under AndroidKeyStore keys anyway, and
+  those keys are non-exportable and never leave the device — so a transferred
+  copy would be undecryptable ciphertext. This makes that belt-and-braces:
+  the ciphertext does not travel either.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" path="." />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" path="." />
+    </device-transfer>
+</data-extraction-rules>

@@ -14,9 +14,11 @@ package commands
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -176,6 +178,78 @@ func TestSendFileHandler_Branches(t *testing.T) {
 	h(rr, req)
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Errorf("group send with no active group: code=%d, want 503 (body=%q)", rr.Code, rr.Body.String())
+	}
+
+	// Neither pk, nor group, nor local → 400.
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/send-file", strings.NewReader("path=/tmp/x.png"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("no destination: code=%d, want 400 (body=%q)", rr.Code, rr.Body.String())
+	}
+}
+
+// The notes thread ("Saved Messages") has no peer, so its attachments are kept
+// and never offered. Before this branch existed the UI had nowhere to put a
+// destination and sent the thread's own name as the pk, which could only ever
+// answer "bad pk: Invalid public key".
+func TestSendFileHandler_LocalKeepsWithoutSending(t *testing.T) {
+	if appLog == nil {
+		appLog = func(string, ...any) {}
+	}
+	h := sendFileHandler(context.Background())
+
+	src := filepath.Join(t.TempDir(), "voice-20260806.weba")
+	if err := os.WriteFile(src, []byte("OPUS-BYTES"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/send-file",
+		strings.NewReader("path="+url.QueryEscape(src)+"&local=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("local keep: code=%d, want 200 (body=%q)", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		ID      string `json:"id"`
+		Local   bool   `json:"local"`
+		FileURL string `json:"file_url"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode %q: %v", rr.Body.String(), err)
+	}
+	if resp.ID == "" || !resp.Local {
+		t.Errorf("resp = %+v, want an id and local=true", resp)
+	}
+	// The URL is the same shape a DM's kept copy gets, so the player, the
+	// waveform decode and /thumb all treat a note's file as any other.
+	if want := "/files/" + resp.ID + ".weba"; resp.FileURL != want {
+		t.Errorf("file_url = %q, want %q", resp.FileURL, want)
+	}
+
+	dir, err := downloadsDir()
+	if err != nil {
+		t.Fatalf("downloadsDir: %v", err)
+	}
+	kept := filepath.Join(dir, resp.ID+".weba")
+	t.Cleanup(func() { _ = os.Remove(kept) })                                   //nolint
+	if b, rerr := os.ReadFile(kept); rerr != nil || string(b) != "OPUS-BYTES" { //nolint
+		t.Fatalf("kept copy = %q err=%v, want the source bytes", b, rerr)
+	}
+
+	// A source that isn't there cannot be kept, and says so rather than
+	// reporting a note that does not exist.
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/send-file",
+		strings.NewReader("path="+url.QueryEscape(filepath.Join(t.TempDir(), "gone.weba"))+"&local=1"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("missing source: code=%d, want 500 (body=%q)", rr.Code, rr.Body.String())
 	}
 }
 

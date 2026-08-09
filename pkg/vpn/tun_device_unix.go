@@ -1,5 +1,5 @@
-//go:build !windows
-// +build !windows
+//go:build !windows && !android
+// +build !windows,!android
 
 // Package vpn pkg/vpn/tun_device_unix.go c4-app-vpn
 package vpn

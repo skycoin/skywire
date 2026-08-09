@@ -1,12 +1,14 @@
-//go:build linux || (voiceaudio && (windows || darwin)) || (js && wasm)
-
 // Package call pkg/skychat/call/audio_ring.go c4-app-chat
 //
 // sampleRing is the bounded int16 FIFO shared by all audio backends: the pure-Go
-// PulseAudio backend on Linux, the cgo malgo backend on Windows/macOS, and the
-// browser WebAudio backend on js/wasm. It bridges a push-model capture callback
-// and a pull-model playback callback to the voice package's pull-model Source /
-// push-model Sink.
+// PulseAudio backend on Linux, the cgo malgo backend on Windows/macOS, the
+// browser WebAudio backend on js/wasm, and the host-app Bridge (bridge.go). It
+// bridges a push-model capture callback and a pull-model playback callback to
+// the voice package's pull-model Source / push-model Sink.
+//
+// Built on every platform. It carries no build constraint of its own because
+// the Bridge has none either — "the audio device belongs to another process" is
+// not a property of the OS this compiles for.
 package call
 
 import "sync"

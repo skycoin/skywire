@@ -126,7 +126,21 @@ func NewHypervisor(config visorconfig.HypervisorConfig, visor *Visor, dmsgC *dms
 	// older configs. The TPViz config block still tunes SurveyDir and
 	// CacheMaxAge. It is STARTED (and stopped) with the web UI in startUI/
 	// stopUI, since it only backs UI routes.
-	if visor != nil {
+	//
+	// The mobile build is the one exception, and it is a build tag rather
+	// than the config's TPViz.Enable because that field cannot express the
+	// difference: FillDefaults only sets it inside the `DmsgDiscovery == ""`
+	// branch, so a config that already names a discovery leaves it false and
+	// an absent block is indistinguishable from an explicit false — reading
+	// it is what produced those 404s. The phone ships no hvui at all (the
+	// embedded assets are empty on this build), so nothing can ever call
+	// /tp-viz/, while Start() costs a startup geoip+cache fetch, a ~4m30s
+	// SD/DMSG cache refresh over dmsg-HTTP and a 2s websocket broadcast
+	// ticker. Every use of hv.tpvizServer is already nil-guarded, including
+	// the root /api/* routes it would otherwise mount — none of which the
+	// phone app calls (its service-discovery lookups go through
+	// /api/svc-fetch, not tpviz's root-mounted /api/services).
+	if visor != nil && tpvizEnabled() {
 		tpvizCfg := tpviz.DefaultConfig()
 		if config.TPViz.SurveyDir != "" {
 			tpvizCfg.SurveyDir = config.TPViz.SurveyDir
@@ -842,6 +856,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Get("/visors/{pk}/routegroups", hv.getRouteGroups())
 				r.Get("/visors/{pk}/routing-policies", hv.getRoutingPolicies())
 				r.Post("/visors/{pk}/shutdown", hv.shutdown())
+				r.Post("/visors/{pk}/restart", hv.restart())
 				r.Get("/visors/{pk}/runtime-logs", hv.getRuntimeLogs())
 				r.Get("/visors/{pk}/runtime-stats", hv.getRuntimeStats())
 				r.Get("/visors/{pk}/host-stats", hv.getHostStats())
@@ -949,6 +964,7 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				// wasm visor's skychatVoice* JS hooks).
 				r.Get("/visors/{pk}/skychat/voice/active", hv.getVoiceActive())
 				r.Get("/visors/{pk}/skychat/voice/incoming", hv.getVoiceIncoming())
+				r.Get("/visors/{pk}/skychat/voice/dialing", hv.getVoiceDialing())
 				r.Post("/visors/{pk}/skychat/voice/call", hv.postVoiceCall())
 				r.Post("/visors/{pk}/skychat/voice/answer", hv.postVoiceAnswer())
 				r.Post("/visors/{pk}/skychat/voice/decline", hv.postVoiceDecline())
@@ -1005,6 +1021,28 @@ func (hv *Hypervisor) makeMux() chi.Router {
 			}
 
 			r.Get("/stream", hv.getNotifyStream())
+		})
+
+		// A call's audio, for a visor whose device belongs to the app that
+		// started it (Android) — see hypervisor_handlers_voice_audio.go.
+		//
+		// Out here for the same reason the notification stream is, and it cost
+		// a debugging session to find out: inside /api these carry
+		// middleware.Timeout(httpTimeout), which cancels the request context
+		// 30 s in. The symptom is not an error anywhere — the microphone
+		// stream simply broke and silently reopened every 30 seconds, for the
+		// whole call.
+		//
+		// The path shape differs from the sibling /api/visors/{pk}/skychat/
+		// voice/* routes because it has to; {pk} is kept so the same
+		// withCtx(visorCtx) auth + CSRF + local-visor checks apply.
+		r.Route("/api/voice-audio", func(r chi.Router) {
+			if hv.c.EnableAuth {
+				r.Use(hv.users.Authorize)
+			}
+
+			r.Post("/{pk}/mic", hv.postVoiceMic())
+			r.Get("/{pk}/speaker", hv.getVoiceSpeaker())
 		})
 
 		// we don't enable `dmsgpty` endpoints for Windows

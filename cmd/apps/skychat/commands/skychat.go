@@ -389,6 +389,13 @@ func (h *sseHub) recordEvent(ev chatEvent) {
 		ev.Channel = channelDM
 	}
 
+	// Every chat surface funnels through here — DM, group, pair, files —
+	// so this is the one place an inbound message can be counted toward
+	// the unread estimate no matter which transport carried it.
+	if ev.Dir == "in" {
+		noteInboundForUnread()
+	}
+
 	h.mu.Lock()
 	h.seq++
 	ev.Seq = h.seq
@@ -725,6 +732,11 @@ func RunSkychat(ctx context.Context, args []string) error {
 		appLog("Successfully started skychat.")
 	}
 
+	// The address book is opened whether or not history persistence is on: a
+	// nickname is not a message, and a user who has turned history off still
+	// expects to see names rather than keys.
+	openContactStore(contactStorePath())
+
 	if persistEnabled {
 		if err := openHistoryStore(); err != nil {
 			appLog("Failed to open history store: %v — continuing in ephemeral mode", err)
@@ -851,6 +863,8 @@ func RunSkychat(ctx context.Context, args []string) error {
 
 	connectPairRPC()
 	startPairRPCWatchdog(ctx)
+	startVoiceMissedWatcher(ctx)
+	defer stopVoiceMissedWatcher()
 	defer stopPairRPCWatchdog()
 	startPairPoller(ctx)
 	defer stopPairPoller()
@@ -875,11 +889,13 @@ func RunSkychat(ctx context.Context, args []string) error {
 	logOSNotifyStartup()
 	mux.Handle("/", requireAuth(http.FileServer(getFileSystem())))
 	mux.HandleFunc("/message", requireAuthFunc(messageHandler(ctx)))
+	mux.HandleFunc("/link", requireAuthFunc(linkHandler()))
 	mux.HandleFunc("/sse", requireAuthFunc(sseHandler))
 	mux.HandleFunc("/events", requireAuthFunc(eventsHandler))
 	mux.HandleFunc("/history", requireAuthFunc(historyHandler))
 	mux.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
+	mux.HandleFunc("/unread", requireAuthFunc(unreadHandler))
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
 	mux.HandleFunc("/files/", requireAuthFunc(downloadFileHandler))
 	mux.HandleFunc("/thumb/", requireAuthFunc(thumbnailHandler))
@@ -891,6 +907,9 @@ func RunSkychat(ctx context.Context, args []string) error {
 	registerGroupHTTPHandlers(mux)
 	registerProfileHTTPHandlers(mux)
 	registerVoiceHTTPHandlers(mux)
+	registerCallLogHandler(mux)
+	registerContactHandlers(mux)
+	registerTransferHandlers(mux)
 	registerPresenceHTTPHandlers(mux)
 	startPresenceLoop(ctx)
 
@@ -1349,6 +1368,52 @@ func eventsHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
+// The unread estimate behind the host app's hub badge. The browser UI owns
+// the real per-conversation numbers — its seen counters live in the page's
+// localStorage, which no server can read — so the arrangement is: the UI
+// POSTs its total whenever it changes, and between reports (including the
+// whole time no UI is attached) every inbound chat message counted by
+// recordEvent bumps the estimate on top of the last report.
+var (
+	unreadMu    sync.Mutex
+	unreadBase  int64 // what the UI last said it was showing
+	unreadSince int64 // inbound messages since that report
+)
+
+func noteInboundForUnread() {
+	unreadMu.Lock()
+	unreadSince++
+	unreadMu.Unlock()
+}
+
+// unreadHandler serves the estimate (GET → {"unread":N}) and takes the UI's
+// authoritative total (POST {"unread":N}), which resets the since-counter.
+func unreadHandler(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodGet:
+		unreadMu.Lock()
+		n := unreadBase + unreadSince
+		unreadMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]int64{"unread": n}) //nolint:errcheck,gosec
+	case http.MethodPost:
+		var body struct {
+			Unread int64 `json:"unread"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.Unread < 0 {
+			http.Error(w, "invalid body", http.StatusBadRequest)
+			return
+		}
+		unreadMu.Lock()
+		unreadBase = body.Unread
+		unreadSince = 0
+		unreadMu.Unlock()
+		w.WriteHeader(http.StatusNoContent)
+	default:
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
 // historyHandler returns JSON history. Query params:
 //
 //	peer=<pk>    — filter to a specific peer
@@ -1676,7 +1741,7 @@ func onChatEvent(ev dm.Event) {
 	// Host-OS notification when no capable browser UI is showing it. Inbound
 	// only — our own outbound mirror is not news to this host.
 	if ev.Dir == "in" {
-		notifyOSInbound(shortHexPK(ev.Peer), notifPreview(ev.Text))
+		notifyOSInbound(displayName(ev.Peer), notifPreview(ev.Text))
 	}
 }
 

@@ -129,8 +129,13 @@ func (r *router) DialRoutes(
 	// direct transport is already known to TPD). After this, isTpdExist(rPK) is
 	// true → baseMinHops downgrades to 1, and UseExistingTpOnly (set alongside
 	// EnsureDirectTransport) bypasses the route-finder → a 1-hop direct dial.
+	// Creation order follows the configured transport preference
+	// (routing.transport_preference), same as the order the route/transport
+	// SELECTION paths use — one knob decides "which type first" everywhere.
+	// Unset preference = the built-in default = stcpr, sudph, dmsg, exactly
+	// as this list was hardcoded.
 	if opts != nil && opts.EnsureDirectTransport && !r.isTpdExist(rPK) {
-		for _, nt := range []tptypes.Type{tptypes.STCPR, tptypes.SUDPH, tptypes.DMSG} {
+		for _, nt := range tptypes.PreferredOrder(tptypes.STCPR, tptypes.SUDPH, tptypes.DMSG) {
 			if _, sErr := r.tm.SaveTransport(ctx, rPK, nt, transport.LabelAutomatic); sErr == nil {
 				log.WithField("tp_type", nt).WithField("remote", rPK).
 					Debug("--direct: created direct transport on demand")
