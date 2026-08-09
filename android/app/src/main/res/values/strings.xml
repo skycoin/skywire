@@ -1,0 +1,617 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Skywire</string>
+
+    <string name="tab_home">Home</string>
+    <string name="tab_chat">Chat</string>
+    <string name="tab_wallet">Wallet</string>
+    <string name="tab_settings">Settings</string>
+    <string name="tab_hub_description">Apps</string>
+
+    <string name="app_skysocks">SkySOCKS</string>
+    <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydex">SkyDEX</string>
+    <string name="app_skychat">SkyChat</string>
+    <string name="app_wallet">Wallet</string>
+    <string name="app_fleet">Fleet</string>
+    <string name="app_skymeet">SkyMeet</string>
+
+    <!-- Apps hub -->
+    <string name="hub_subtitle">%1$d installed · %2$d running</string>
+    <string name="hub_filter_all">All</string>
+    <string name="hub_filter_network">Network</string>
+    <string name="hub_filter_finance">Finance</string>
+    <string name="hub_filter_social">Social</string>
+    <string name="hub_section_apps">Your apps</string>
+    <string name="hub_socks_sub">SOCKS5 proxy</string>
+    <string name="hub_dex_sub">Swap · SKY / BTC</string>
+    <string name="hub_chat_sub">Rooms and messages</string>
+    <string name="hub_wallet_sub">SKY · Fibercoin · BTC · ETH</string>
+    <string name="hub_fleet_sub">Visors you run elsewhere</string>
+    <string name="hub_meet_sub">Encrypted calls</string>
+    <string name="hub_hero_reconnecting">Reconnecting</string>
+    <string name="hub_hero_starting">Starting</string>
+    <string name="hub_hero_no_exit">No exit chosen yet</string>
+    <string name="hub_stat_down">Down</string>
+    <string name="hub_stat_up">Up</string>
+    <string name="hub_stat_data">Data</string>
+    <string name="hub_vpn_toggle">SkyVPN on/off</string>
+    <plurals name="hub_hops">
+        <item quantity="one">%1$d hop</item>
+        <item quantity="other">%1$d hops</item>
+    </plurals>
+    <string name="hub_hops_unknown">Hops —</string>
+    <string name="hub_killswitch_on">Killswitch on</string>
+    <string name="hub_killswitch_off">Killswitch off</string>
+    <string name="hub_wallet_balance">%1$s SKY</string>
+    <plurals name="hub_fleet_connected">
+        <item quantity="one">%d visor connected</item>
+        <item quantity="other">%d visors connected</item>
+    </plurals>
+
+    <!-- Route length (router min_hops) -->
+    <string name="hops_title">Route length</string>
+    <string name="hops_label_fastest">Fastest</string>
+    <string name="hops_label_balanced">Balanced</string>
+    <string name="hops_label_private">Most private</string>
+    <string name="hops_hint_direct">A direct route to the exit — the quickest the network can be. The exit still cannot read your traffic, but it does see that this device is the one asking.</string>
+    <string name="hops_hint_multi">Traffic is relayed through intermediaries, so no single node sees both who is asking and what is being asked. Slower, and every hop is another machine that has to stay up.</string>
+    <string name="hops_hint_unknown">Waiting for the visor to report its routing settings.</string>
+
+    <!-- Network address (what SkyVPN does and does not change) -->
+    <string name="net_addr_title">Network address</string>
+    <string name="net_addr_device">This device</string>
+    <string name="net_addr_exit">Traffic exits</string>
+    <string name="net_addr_exit_none">Not through SkyVPN</string>
+    <string name="net_addr_exit_unknown">Exit location unknown</string>
+    <string name="net_addr_waiting">Waiting for the visor…</string>
+    <string name="net_addr_carrier_nat">Shared carrier address</string>
+    <string name="net_addr_unknown">Not discoverable</string>
+    <string name="net_addr_hint">This device’s own address does not change when SkyVPN connects: the app carries the tunnel, so its own traffic has to stay outside it. What changes is where your other apps’ traffic leaves the network — the exit above.</string>
+    <string name="hub_exit_prefix">Exits %1$s</string>
+
+    <string name="coming_soon">Coming soon</string>
+    <string name="connect">Connect</string>
+    <string name="disconnect">Disconnect</string>
+    <string name="back">Back</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Core service / notification -->
+    <string name="core_channel_name">Skywire core</string>
+    <string name="core_channel_description">Shown while the Skywire visor is running.</string>
+    <string name="core_notification_title">Skywire running</string>
+    <string name="core_notification_starting">Starting the visor…</string>
+    <string name="core_notification_running">Connected to the Skywire network.</string>
+    <string name="core_notification_restarting">Visor crashed — restarting (attempt %1$d).</string>
+
+    <!-- Voice calls -->
+    <string name="call_channel_incoming">Incoming calls</string>
+    <string name="call_channel_ongoing">Call in progress</string>
+    <string name="call_incoming_title">Incoming call</string>
+    <string name="call_dialing">Calling…</string>
+    <string name="call_answer">Answer</string>
+    <string name="call_decline">Decline</string>
+    <string name="call_ongoing_title">Call in progress</string>
+    <string name="call_ongoing_text">SkyChat is using the microphone.</string>
+    <string name="call_mic_rationale">Allow the microphone so the other side can hear you.</string>
+    <string name="call_hang_up">Hang up</string>
+    <string name="call_mute">Mute</string>
+    <string name="call_unmute">Unmute</string>
+    <string name="call_speaker">Speaker</string>
+    <string name="call_missed_title">Missed call</string>
+
+    <!-- Home / Connect -->
+    <string name="state_disconnected">Disconnected</string>
+    <string name="state_starting">Starting…</string>
+    <string name="state_connected">Connected</string>
+    <string name="state_stopping">Stopping…</string>
+    <string name="state_restarting">Restarting (attempt %1$d)…</string>
+    <string name="home_hint_disconnected">Connect starts the Skywire core on this phone.</string>
+    <string name="home_hint_starting">Joining the Skywire network. The first connection can take a few minutes.</string>
+    <string name="home_error_start">The core did not come up. Check the process log.</string>
+    <string name="visor_info_title">Visor</string>
+    <string name="visor_public_key">Public key</string>
+    <string name="visor_version">Version</string>
+    <string name="visor_uptime">Uptime</string>
+    <string name="visor_show_more">More info</string>
+    <string name="visor_show_less">Less info</string>
+    <string name="visor_transports">Transports</string>
+    <string name="visor_transports_total">Total</string>
+    <string name="visor_dmsg_servers">DMSG servers</string>
+    <string name="visor_service_health">Service health</string>
+    <string name="copied_to_clipboard">Copied</string>
+    <string name="view_logs">View logs</string>
+
+    <!-- Log viewer -->
+    <string name="logs_title">Logs</string>
+    <string name="logs_source_core">Core</string>
+    <string name="logs_source_process">Process</string>
+    <string name="logs_follow">Follow</string>
+    <string name="logs_pause">Pause</string>
+    <string name="logs_share">Share</string>
+    <string name="logs_search_hint">Filter…</string>
+    <string name="logs_empty">No log entries yet.</string>
+    <string name="logs_loading">Fetching the log…</string>
+    <string name="logs_dropped">%1$d lines missed (buffer wrapped)</string>
+    <string name="logs_api_down">Core API unreachable — showing nothing new. The Process source works even when the visor won’t start.</string>
+
+    <!-- SkySOCKS -->
+    <string name="socks_state_connecting">Connecting…</string>
+    <string name="socks_state_error">Connection failed</string>
+    <string name="socks_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="socks_core_starting">Waiting for the Skywire core to come up…</string>
+    <string name="socks_server">Server</string>
+    <string name="socks_latency">Latency</string>
+    <string name="socks_transferred">Transferred</string>
+    <string name="socks_reconnect">Reconnect</string>
+    <string name="socks_pick_server">Pick a server below to connect.</string>
+    <string name="socks_proxy_title">SOCKS5 for other apps</string>
+    <string name="socks_proxy_hint">Point a proxy-aware app or browser at this address while SkySOCKS is connected. Whole-phone routing arrives with SkyVPN.</string>
+    <string name="socks_change_port">Change port</string>
+    <string name="socks_port_title">Listen port</string>
+    <string name="socks_port_hint">The SOCKS5 listener stays on 127.0.0.1 — only apps on this phone can reach it.</string>
+    <string name="socks_port_label">Port</string>
+    <string name="socks_port_invalid">Enter a port between 1024 and 65535.</string>
+    <string name="socks_servers">Servers (%1$d)</string>
+    <string name="socks_search_hint">Search by key, country or version</string>
+    <string name="socks_servers_empty">No server matched your search.</string>
+    <string name="socks_servers_none">Service discovery returned no proxy servers.</string>
+    <string name="socks_retry">Retry</string>
+    <string name="socks_refresh">Refresh</string>
+
+    <!-- Shared server-list pieces (SkySOCKS, SkyVPN) -->
+    <string name="server_location_unknown">Unknown location</string>
+
+    <!-- SkyVPN -->
+    <string name="vpn_state_connecting">Connecting…</string>
+    <string name="vpn_state_error">Connection failed</string>
+    <string name="vpn_state_blocked">Blocked by killswitch</string>
+    <string name="vpn_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="vpn_core_starting">Waiting for the Skywire core to come up…</string>
+    <string name="vpn_server">Exit</string>
+    <string name="vpn_reconnect">Reconnect</string>
+    <string name="vpn_pick_server">Pick an exit below to route this phone through it.</string>
+    <string name="vpn_hint_blocked">The tunnel is down and the killswitch is holding every other app offline. Disconnect to restore normal networking.</string>
+    <string name="vpn_hint_excluded">Skywire’s own traffic stays outside the tunnel — that is what carries it.</string>
+    <string name="vpn_servers">Exits (%1$d)</string>
+    <string name="vpn_servers_empty">No exit matched your search.</string>
+    <string name="vpn_servers_none">Service discovery returned no VPN servers.</string>
+    <string name="vpn_search_hint">Search by key, country or version</string>
+
+    <string name="vpn_stats_title">This session</string>
+    <string name="vpn_stats_ping">Ping</string>
+    <string name="vpn_stats_transferred">Transferred</string>
+    <string name="vpn_stats_speed">Speed</string>
+    <string name="vpn_stats_session">Session</string>
+    <string name="vpn_stats_total">Total on this phone</string>
+    <string name="vpn_stats_interface">Interface</string>
+
+    <string name="vpn_killswitch_title">Killswitch</string>
+    <string name="vpn_killswitch_hint">Keeps the network interface in place while the tunnel is down, so nothing leaks out around it. Other apps have no connection until it comes back.</string>
+    <string name="vpn_killswitch_always_on">Always-on VPN settings</string>
+    <string name="vpn_killswitch_always_on_hint">For the strongest guarantee — blocking even before the app starts — turn on “Always-on VPN” and “Block connections without VPN” for Skywire in Android’s settings.</string>
+
+    <string name="vpn_error_no_consent">Android has not granted the VPN permission.</string>
+    <string name="vpn_error_socket">The VPN service could not open its handoff socket: %1$s</string>
+    <string name="vpn_error_consent_denied">The VPN permission is required to route this phone through Skywire.</string>
+    <string name="vpn_error_settings">Android has no VPN settings screen to open.</string>
+
+    <!-- Primary transport (visor-wide; shown on SkySOCKS, later SkyVPN) -->
+    <string name="transport_title">Transport</string>
+    <string name="transport_change">Change</string>
+    <string name="transport_hint">Tried first when building the route to a server. The others stay as fallbacks.</string>
+    <string name="transport_sheet_title">Primary transport</string>
+    <string name="transport_sheet_hint">Skywire tries this type first when it connects, and falls back to the others when it can’t. Takes effect on the next connection.</string>
+    <string name="transport_recommended">Recommended on mobile</string>
+    <string name="transport_dmsg">DMSG</string>
+    <string name="transport_dmsg_hint">Relayed through a DMSG server. Works behind any carrier NAT — the connection a phone can always make.</string>
+    <string name="transport_stcpr">STCPR</string>
+    <string name="transport_stcpr_hint">Direct TCP to the server. Fastest when it works, but needs reachability a mobile network rarely gives.</string>
+    <string name="transport_sudph">SUDPH</string>
+    <string name="transport_sudph_hint">Direct UDP with hole punching. Needs a NAT that allows it — many carriers do not.</string>
+
+    <!-- SkyChat (embedded web UI) -->
+    <string name="chat_menu">Chat actions</string>
+    <string name="chat_reload">Reload</string>
+    <string name="chat_starting">Starting SkyChat…</string>
+    <string name="chat_core_starting">Waiting for the Skywire core to come up…</string>
+    <string name="chat_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="chat_media_channel_name">SkyChat playback</string>
+    <string name="chat_media_channel_description">Play, pause and skip a voice message or clip while it is playing.</string>
+
+    <!-- SkyDEX (native market entry + embedded trading UI) -->
+    <string name="dex_market_title">Market</string>
+    <string name="dex_market_label">Market public key</string>
+    <string name="dex_market_hint">The market to trade on. Connecting dials it over Skywire and opens its trading screen below.</string>
+    <string name="dex_market_invalid">A market public key is 66 hex characters starting with 02 or 03.</string>
+    <string name="dex_recents">Recent markets</string>
+    <string name="dex_connecting">Reaching the market over Skywire…</string>
+    <string name="dex_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="dex_core_starting">Waiting for the Skywire core to come up…</string>
+
+    <!-- Fleet (opt-in, status-only view of the user's other visors) -->
+    <string name="fleet_enable">Enable Fleet</string>
+    <string name="fleet_enable_hint">Lets your own visors reach this phone over DMSG and report their status here. Off by default.</string>
+    <string name="fleet_core_restarting">Restarting the Skywire core so the change takes effect…</string>
+    <string name="fleet_confirm_on_title">Turn Fleet on?</string>
+    <string name="fleet_confirm_off_title">Turn Fleet off?</string>
+    <string name="fleet_confirm_restart_body">The Skywire core reads this setting only when it starts, so it has to be restarted. Any SkySOCKS or SkyVPN connection drops and has to be reconnected.</string>
+    <string name="fleet_confirm_restart_action">Restart core</string>
+
+    <string name="fleet_off_title">Your other visors, from here</string>
+    <string name="fleet_off_body">Fleet lists the visors you run elsewhere — whether each one is up, what it is running, and for how long. You can restart one. Nothing else: no transports, no apps, no settings.</string>
+    <string name="fleet_off_reachable">Turning it on makes this phone reachable over DMSG as a status endpoint, so those visors can connect in. Only visors that already carry this phone’s key connect — and they still cannot control anything here.</string>
+
+    <string name="fleet_add_title">Add a visor</string>
+    <string name="fleet_add_body">On the other machine, add this phone’s key to that visor’s config:</string>
+    <string name="fleet_this_phone">This phone</string>
+    <string name="fleet_add_pk_pending">Waiting for the core to report this phone’s key…</string>
+    <string name="fleet_add_command">skywire cli config update hv --add-pks %1$s</string>
+    <string name="fleet_add_tap_to_copy">Tap to copy.</string>
+    <string name="fleet_add_then_restart">Run it where that visor’s skywire-config.json lives, then restart that visor. It appears in the list once it connects.</string>
+
+    <string name="fleet_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="fleet_core_starting">Waiting for the Skywire core to come up…</string>
+    <string name="fleet_visors">Visors (%1$d)</string>
+    <string name="fleet_visors_none">No visor has connected yet. Tap ? above to see how to add one.</string>
+    <string name="fleet_refresh">Refresh</string>
+    <string name="fleet_state_offline">Offline</string>
+    <string name="fleet_health">Health</string>
+    <string name="fleet_health_unknown">Unknown</string>
+    <string name="fleet_last_seen">Last answered %1$s ago — everything above is from then</string>
+    <string name="fleet_restart">Restart</string>
+    <string name="fleet_rename">Name this visor</string>
+    <string name="fleet_rename_label">Name</string>
+    <string name="fleet_rename_hint">A name for %1$s, so you know which machine it is. Kept on this phone only — the visor is never written to. Clear the field to remove it.</string>
+    <string name="fleet_restart_confirm">Restart %1$s? It closes everything it is running, re-reads its config and starts again — offline for a few seconds, and anything routed through it drops.</string>
+    <string name="fleet_restart_sent">Restart sent to %1$s. It goes offline and comes back on its own.</string>
+
+    <string name="core_restart_failed">The core could not be started again: %1$s</string>
+
+    <!-- App lock -->
+    <string name="lock_title">Skywire is locked</string>
+    <string name="lock_unlock">Unlock</string>
+    <string name="lock_prompt_title">Unlock Skywire</string>
+    <string name="lock_prompt_subtitle">Use your fingerprint, face or screen lock.</string>
+
+    <!-- Settings — identity -->
+    <string name="settings_identity">Identity</string>
+    <string name="settings_identity_hint">This phone is a Skywire visor, and its key is what everything else addresses. Both actions below end that identity.</string>
+    <string name="settings_identity_none">No identity yet. Connect once from the Home tab and one is generated.</string>
+    <string name="settings_identity_working">Restarting the Skywire core with the new identity…</string>
+    <string name="settings_replace_sk">Replace secret key</string>
+    <string name="settings_new_config">New identity</string>
+    <string name="settings_sk_hint">Paste the 64-character secret key you want this phone to run as. It is checked by the Skywire core before anything changes.</string>
+    <string name="settings_sk_label">Secret key</string>
+    <string name="settings_sk_unchanged">That is already this visor’s key — nothing to change.</string>
+    <string name="settings_sk_replaced">Identity replaced. The core is starting with the new key.</string>
+    <string name="settings_identity_reset">New identity generated. The core is starting with it.</string>
+
+    <string name="settings_replace_title">Replace this visor’s identity?</string>
+    <string name="settings_replace_new_pk">The new public key will be %1$s.</string>
+    <string name="settings_replace_final_title">This cannot be undone</string>
+    <string name="settings_replace_final_body">Everything above is erased and this phone becomes the visor %1$s. Make sure you still hold the current secret key somewhere if you ever want it back — export the config first if you do not.</string>
+    <string name="settings_replace_action">Replace identity</string>
+
+    <string name="settings_new_title">Generate a new identity?</string>
+    <string name="settings_new_extra">The new key is generated on this phone. Nobody has it yet, so nobody can reach you at it until you share it again.</string>
+    <string name="settings_new_final_title">This cannot be undone</string>
+    <string name="settings_new_final_body">The current key is destroyed, not archived. If you have not exported the config, this identity is gone for good — along with everything addressed to it.</string>
+    <string name="settings_new_action">Generate new identity</string>
+
+    <!-- Shared by both destructive identity flows: what is actually lost. -->
+    <string name="settings_identity_loss">You will lose everything this phone holds as %1$s: its chat history and contacts, its groups, and the address other visors know it by. Nothing here is recoverable afterwards, and nothing moves to the new key.</string>
+
+    <string name="settings_continue">Continue</string>
+
+    <!-- Settings — config export -->
+    <string name="settings_config">Config</string>
+    <string name="settings_config_hint">The complete visor configuration, as a file you keep. It is the only way to move this identity to another device or bring it back.</string>
+    <string name="settings_export">Export config</string>
+    <string name="settings_export_title">Export the config?</string>
+    <string name="settings_export_warning">The file contains this visor’s secret key in plain text. Anyone who reads it can run as this visor. Save it somewhere only you can reach — not a shared drive, not a chat.</string>
+    <string name="settings_export_prompt">Export the Skywire config</string>
+    <string name="settings_export_done">Config exported.</string>
+
+    <!-- Settings — app lock -->
+    <string name="settings_app_lock">App lock</string>
+    <string name="settings_app_lock_hint">Asks for your fingerprint, face or screen lock when Skywire opens and when you come back to it after about half a minute away. Also hides the app in the recent-apps list and blocks screenshots.</string>
+    <string name="settings_app_lock_unavailable">This phone has no screen lock or enrolled biometric, so there is nothing to check against.</string>
+    <string name="settings_open_security">Open security settings</string>
+    <string name="settings_no_security_screen">This phone has no security settings screen to open.</string>
+    <string name="settings_lock_enable_prompt">Turn on the app lock</string>
+    <string name="settings_lock_disable_prompt">Turn off the app lock</string>
+    <string name="settings_biometric_subtitle">Confirm it is you.</string>
+
+    <!-- Settings — appearance and about -->
+    <string name="settings_theme">Theme</string>
+    <string name="settings_theme_system">System</string>
+    <string name="settings_theme_light">Light</string>
+    <string name="settings_theme_dark">Dark</string>
+    <string name="settings_about">About</string>
+    <string name="settings_app_version">App version</string>
+    <string name="settings_core_version">Core version</string>
+
+    <!-- Settings — logs and diagnostics -->
+    <string name="settings_diagnostics">Logs &amp; diagnostics</string>
+    <string name="settings_diagnostics_hint">Every log source, an export of all of them, and how much the core writes.</string>
+
+    <string name="diag_title">Logs &amp; diagnostics</string>
+    <string name="diag_sources">Sources</string>
+    <string name="diag_sources_hint">The same viewer each screen’s Logs button opens, with every feed listed in one place.</string>
+    <string name="diag_source_core_hint">The visor’s own runtime log.</string>
+    <string name="diag_source_process_hint">What the core process printed — the only feed that survives a visor that will not start.</string>
+    <string name="diag_source_app_hint">This app’s log, as the visor keeps it.</string>
+
+    <string name="diag_export">Export all</string>
+    <string name="diag_export_hint">Every source above in one zip, with the device details and the config — without its secret key.</string>
+    <string name="diag_export_action">Export all logs</string>
+    <string name="diag_exporting">Collecting logs…</string>
+    <string name="diag_export_done">Diagnostics exported.</string>
+
+    <string name="diag_level">Core log level</string>
+    <string name="diag_level_hint">How much the visor writes. Debug and trace are for reproducing a problem — on a phone they are a lot of writing for a log nobody is reading.</string>
+    <string name="diag_level_confirm_title">Set the log level to %1$s?</string>
+    <string name="diag_level_confirm_body">The Skywire core reads this only when it starts, so it has to be restarted. Any SkySOCKS or SkyVPN connection drops and has to be reconnected.</string>
+
+    <string name="home_placeholder">Connect will start the Skywire core — coming soon.</string>
+
+    <!-- Wallet — native SKY / fiber / BTC wallet. Keys are created and kept on
+         this device; the network is only asked for balances, history and
+         broadcast. -->
+    <string name="wallet_intro_title">Set up your %1$s wallet</string>
+    <string name="wallet_intro_body">Your keys are created on this device and stay on this device. Skywire never sees them, and they are never sent to the network.</string>
+    <string name="wallet_intro_create">Create a new wallet</string>
+    <string name="wallet_intro_create_sub">Generate a new recovery phrase</string>
+    <string name="wallet_intro_restore">Restore from seed</string>
+    <string name="wallet_intro_restore_sub">Enter an existing 12 word phrase</string>
+
+    <string name="wallet_seed_title">Recovery phrase</string>
+    <string name="wallet_seed_body">Write these twelve words down in order and keep them offline. Anyone who has them can spend your coins.</string>
+    <string name="wallet_seed_secure">Screenshots are disabled on this screen. There is no copy button.</string>
+    <string name="wallet_seed_continue">Continue</string>
+
+    <string name="wallet_verify_title">Confirm phrase</string>
+    <string name="wallet_verify_body">Enter three words from the phrase you just wrote down. The wallet activates once they match.</string>
+    <string name="wallet_verify_word">Word %1$d</string>
+    <string name="wallet_verify_hint">type the word</string>
+    <string name="wallet_verify_wrong">That is not word %1$d. Check your written copy.</string>
+    <string name="wallet_verify_missing">Enter word %1$d.</string>
+    <string name="wallet_verify_activate">Activate wallet</string>
+    <string name="wallet_verify_again">Show the phrase again</string>
+    <string name="wallet_verify_done">Wallet activated</string>
+
+    <string name="wallet_restore_title">Restore wallet</string>
+    <string name="wallet_restore_progress">Word %1$d of %2$d</string>
+    <string name="wallet_restore_paste">Paste whole seed</string>
+    <string name="wallet_restore_pasted">Twelve words read from the clipboard</string>
+    <string name="wallet_restore_hint">Next word</string>
+    <string name="wallet_restore_wordlist_note">Suggestions come from the BIP39 wordlist held on the device. Nothing you type is sent anywhere.</string>
+    <string name="wallet_restore_action">Restore wallet</string>
+    <string name="wallet_restore_checksum">This phrase fails its checksum. One of the twelve words is wrong or out of order.</string>
+    <string name="wallet_restore_short">Only %1$d of 12 words entered. A seed is restored in full or not at all.</string>
+    <string name="wallet_restore_done">Wallet restored. Scanning for balances.</string>
+    <string name="wallet_restore_scanning">Restoring and scanning for balances…</string>
+
+    <string name="wallet_coin_chip_description">Choose a coin</string>
+    <string name="wallet_coins_title">Choose a coin</string>
+    <string name="wallet_coins_search">Search %1$d coins</string>
+    <!-- Skycoin is the original chain — Fibercoins are separate chains
+         built from its codebase, so only they carry the fiber label. -->
+    <string name="wallet_coin_native">Skycoin mainnet · native</string>
+    <string name="wallet_coin_fiber">Fibercoin</string>
+    <string name="wallet_coin_btc">Bitcoin mainnet</string>
+    <string name="wallet_coin_eth">Ethereum mainnet</string>
+    <string name="wallet_coin_erc20">ERC-20 token on Ethereum</string>
+    <string name="wallet_coins_add">Add a coin or token</string>
+    <string name="wallet_hours_sub">%1$s Coin Hours</string>
+    <string name="wallet_btc_sub">%1$d confirmed outputs · no Coin Hours on this chain</string>
+    <string name="wallet_eth_sub">Ethereum mainnet · fees paid in ETH</string>
+    <string name="wallet_erc20_sub">%1$s on Ethereum · fees paid in ETH</string>
+    <string name="wallet_stale_banner">Node unreachable. Balance and history last updated at %1$s, %2$s ago. Sending is off until the node answers.</string>
+    <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
+    <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>
+    <string name="wallet_receive">Receive</string>
+    <string name="wallet_send">Send</string>
+    <string name="wallet_recent">Recent activity</string>
+    <string name="wallet_see_all">See all</string>
+    <string name="wallet_no_activity_title">No activity yet</string>
+    <string name="wallet_no_activity_body">Coins you receive on this wallet will appear here.</string>
+    <string name="wallet_wallets_row">Wallets</string>
+    <string name="wallet_received_verb">Received</string>
+    <string name="wallet_sent_verb">Sent</string>
+    <string name="wallet_from_line">from %1$s · %2$s</string>
+    <string name="wallet_to_line">to %1$s · %2$s</string>
+    <string name="wallet_self_line">within this wallet · %1$s</string>
+
+    <string name="wallet_receive_title">Receive</string>
+    <string name="wallet_receive_only">Send only %1$s to this address.</string>
+    <string name="wallet_receive_tap_copy">Tap to copy the full address</string>
+    <string name="wallet_copy">Copy</string>
+    <string name="wallet_share">Share</string>
+    <string name="wallet_address_copied">Address copied to the clipboard</string>
+    <string name="wallet_other_addresses">Other addresses in this wallet</string>
+    <string name="wallet_addresses_in">Addresses in %1$s</string>
+    <string name="wallet_addresses_note">All of them belong to the same seed. Using a fresh one makes your balance harder to follow.</string>
+    <string name="wallet_address_default">Default · in use</string>
+    <string name="wallet_address_unused">Never used</string>
+    <string name="wallet_address_new">Generate a new address</string>
+    <string name="wallet_address_generated">New address generated in %1$s</string>
+    <string name="wallet_address_picked">Receiving on the selected address</string>
+
+    <string name="wallet_send_title">Send</string>
+    <string name="wallet_send_to">To</string>
+    <string name="wallet_send_to_hint_fiber">%1$s address</string>
+    <string name="wallet_send_to_hint_btc">bc1… or 1… address</string>
+    <string name="wallet_send_to_hint_eth">0x… address</string>
+    <string name="wallet_paste">Paste</string>
+    <string name="wallet_scan_description">Scan a QR code</string>
+    <string name="wallet_send_amount">Amount</string>
+    <string name="wallet_send_available">Available %1$s %2$s</string>
+    <string name="wallet_max">Max</string>
+    <string name="wallet_max_note_fiber">Max sends every %1$s. Coin Hours are not sent — a share of them is burned as the fee.</string>
+    <string name="wallet_max_note_btc">Max spends every confirmed output and subtracts the miner fee, so the amount moves with the rate.</string>
+    <string name="wallet_max_note_eth">Max holds back a little ETH for gas; the exact remainder is computed when you review.</string>
+    <string name="wallet_max_note_erc20">Max sends the whole token balance. Gas is paid in ETH from the same address.</string>
+    <string name="wallet_fee">Fee</string>
+    <string name="wallet_hours_burned">Coin Hours burned</string>
+    <string name="wallet_hours_after">Coin Hours after</string>
+    <string name="wallet_fee_note_fiber">%1$s transactions cost no %1$s. One tenth of the Coin Hours entering the transaction is burned as the fee, and half of what remains moves on with the coins.</string>
+    <string name="wallet_fee_rate">Fee rate</string>
+    <string name="wallet_fee_rate_value">%1$d sat/vB</string>
+    <string name="wallet_fee_estimate">Estimated fee, %1$d vB</string>
+    <string name="wallet_fee_economy">Economy</string>
+    <string name="wallet_fee_normal">Normal</string>
+    <string name="wallet_fee_priority">Priority</string>
+    <string name="wallet_fee_eta_economy">~2 h</string>
+    <string name="wallet_fee_eta_normal">~30 min</string>
+    <string name="wallet_fee_eta_priority">~10 min</string>
+    <string name="wallet_fee_network">Network fee</string>
+    <string name="wallet_fee_at_review">calculated at review</string>
+    <string name="wallet_fee_gas">Gas limit %1$d · up to %2$d gwei per gas</string>
+    <string name="wallet_fee_note_eth">The fee shown is the worst case at today’s prices — unspent gas is never charged.</string>
+    <string name="wallet_fee_note_erc20">Token transfers burn gas, and gas is paid in ETH from the sending address — keep a little ETH next to the tokens.</string>
+    <string name="wallet_review">Review</string>
+    <string name="wallet_review_title">You are about to send</string>
+    <!-- %2$s is the coin's own name: Skycoin is the original chain, each
+         Fibercoin is its own network — never conflate them. -->
+    <string name="wallet_review_dest">to %1$s on the %2$s network. Nothing is signed until you confirm.</string>
+    <string name="wallet_review_amount">Amount</string>
+    <string name="wallet_review_miner_fee">Miner fee at %1$d sat/vB</string>
+    <string name="wallet_review_network_fee">Network fee, at most</string>
+    <string name="wallet_review_total">Total leaving the wallet</string>
+    <string name="wallet_review_balance_after">%1$s balance after</string>
+    <string name="wallet_review_hours_after">Coin Hours after</string>
+    <string name="wallet_review_back">Back</string>
+    <string name="wallet_review_sign">Sign and send</string>
+    <string name="wallet_bio_send_title">Sign this transaction</string>
+    <string name="wallet_bio_send_subtitle">Signing happens on this device. Your key is never sent anywhere.</string>
+    <string name="wallet_result_title">Broadcast to the network</string>
+    <string name="wallet_result_body">%1$s %2$s is on its way to %3$s. It stays pending until the network confirms it.</string>
+    <string name="wallet_result_done">Done</string>
+    <string name="wallet_result_history">View in history</string>
+    <string name="wallet_txid_copied">Transaction id copied</string>
+
+    <string name="wallet_history_title">History</string>
+    <string name="wallet_filter_all">All</string>
+    <string name="wallet_filter_sent">Sent</string>
+    <string name="wallet_filter_received">Received</string>
+    <string name="wallet_filter_pending">Pending</string>
+    <string name="wallet_history_empty_title">Nothing here yet</string>
+    <string name="wallet_history_empty_all">No %1$s has moved in or out of this wallet.</string>
+    <string name="wallet_history_empty_filter">No %1$s transactions match this filter.</string>
+    <string name="wallet_history_show_address">Show my address</string>
+    <string name="wallet_day_today">Today</string>
+    <string name="wallet_day_yesterday">Yesterday</string>
+
+    <string name="wallet_tx_title">Transaction</string>
+    <string name="wallet_tx_confirmed">Confirmed</string>
+    <string name="wallet_tx_pending_long">Pending · waiting for the first confirmation</string>
+    <string name="wallet_tx_from">From</string>
+    <string name="wallet_tx_to">To</string>
+    <string name="wallet_tx_wallet">Wallet</string>
+    <string name="wallet_tx_date">Date</string>
+    <string name="wallet_tx_fee">Fee</string>
+    <string name="wallet_tx_confirmations">Confirmations</string>
+    <string name="wallet_tx_id">Transaction id</string>
+    <string name="wallet_tx_explorer">Open in explorer</string>
+    <string name="wallet_tx_explorer_note">Opens %1$s in your browser. The explorer will see this transaction id.</string>
+    <string name="wallet_fee_hours_value">%1$s Coin Hours</string>
+
+    <string name="wallet_wallets_title">Wallets</string>
+    <string name="wallet_active_badge">ACTIVE</string>
+    <string name="wallet_address_count_one">1 address</string>
+    <string name="wallet_address_count_many">%1$d addresses</string>
+    <string name="wallet_add_wallet">Add a wallet</string>
+    <string name="wallet_count_one">1 wallet</string>
+    <string name="wallet_count_many">%1$d wallets</string>
+    <string name="wallet_manage_create">Create new</string>
+    <string name="wallet_created_on">%1$s · created %2$s</string>
+    <string name="wallet_use">Use this wallet</string>
+    <string name="wallet_rename">Rename</string>
+    <string name="wallet_rename_title">Rename wallet</string>
+    <string name="wallet_reveal_action">Reveal recovery phrase</string>
+    <string name="wallet_reveal_action_sub">Shows all twelve words in the clear. Asks for your fingerprint first.</string>
+    <string name="wallet_remove_action">Remove from this device</string>
+    <string name="wallet_remove_action_sub">Deletes the keys here. Without the phrase the coins are gone for good.</string>
+    <string name="wallet_remove_title">Remove %1$s from this device?</string>
+    <string name="wallet_remove_body">The keys stored here are deleted. If you do not have the twelve recovery words written down, the coins in this wallet cannot be reached again by anyone, including you.</string>
+    <string name="wallet_remove_confirm">Remove</string>
+    <string name="wallet_remove_keep">Keep it</string>
+    <string name="wallet_removed">%1$s removed from this device</string>
+    <string name="wallet_bio_reveal_title">Confirm it is you</string>
+    <string name="wallet_bio_reveal_subtitle">The words of %1$s will be shown in the clear on the next screen.</string>
+    <string name="wallet_reveal_warning">Anyone who reads these twelve words can move every coin in %1$s, from any device, without your phone. Only reveal them somewhere no one can see your screen.</string>
+    <string name="wallet_reveal_autohide">Screenshots are disabled. This screen closes on its own in %1$s.</string>
+    <string name="wallet_reveal_hide">Hide the phrase</string>
+
+    <string name="wallet_add_coin_title">Add a coin or token</string>
+    <string name="wallet_add_kind_fiber">Fibercoin</string>
+    <string name="wallet_add_kind_erc20">ERC-20 token</string>
+    <string name="wallet_add_coin_body">Every Fibercoin runs the same node software as Skycoin. Name the coin and point the wallet at a node you trust — balances, fees and precision come from that node.</string>
+    <string name="wallet_add_token_body">Every ERC-20 token lives on Ethereum and differs only in its contract. The decimals must match the contract’s own — 6 for USDT-like tokens, 18 for most — or amounts will read wrong.</string>
+    <string name="wallet_add_coin_name">Coin name</string>
+    <string name="wallet_add_coin_name_hint">e.g. MDL Talent Hub</string>
+    <string name="wallet_add_coin_ticker">Ticker</string>
+    <string name="wallet_add_coin_ticker_hint">e.g. MDL</string>
+    <string name="wallet_add_coin_icon">Icon</string>
+    <string name="wallet_add_coin_icon_pick">Choose image</string>
+    <string name="wallet_add_coin_icon_clear">Remove</string>
+    <string name="wallet_add_coin_node">Node address</string>
+    <string name="wallet_add_coin_node_hint">http://node.example.com:6420</string>
+    <string name="wallet_add_token_contract">Contract address</string>
+    <string name="wallet_add_token_contract_hint">0x…</string>
+    <string name="wallet_add_token_decimals">Decimals</string>
+    <string name="wallet_add_token_decimals_hint">18</string>
+    <string name="wallet_add_coin_save">Add coin</string>
+    <string name="wallet_seed_unavailable">The phrase cannot be read — the phone’s keystore has changed since this wallet was created.</string>
+
+    <!-- Screen help. One ? per tab, in the header, opening a few sentences
+         about what the screen is for. The apps that used to carry their own
+         Logs action point at Settings instead. Typographic apostrophes
+         throughout: the Skycoin face has broken sidebearings on the straight
+         one and renders "phone's" as three tokens. -->
+    <string name="help_open">About this screen</string>
+    <string name="help_close">Got it</string>
+
+    <string name="help_chat_title">About SkyChat</string>
+    <string name="help_chat_body">Messages, calls, groups and channels that travel over Skywire rather than a company\u2019s servers. Your identity here is this visor\u2019s public key — hand it out with the QR button and anyone holding it can reach you.\n\nThis is the same chat the desktop runs, laid out for a phone. It keeps its own history on this device; there is no account and nothing syncs on its own, so moving to another phone means exporting from Settings inside the chat and importing there.\n\nLogs for SkyChat live in Settings \u25b8 Diagnostics, together with every other log this app keeps.</string>
+
+    <string name="help_hub_title">About Apps</string>
+    <string name="help_hub_body">Everything your visor can run, in one place. A tile opens the app\u2019s own screen; the visor itself keeps running underneath whichever one you are looking at.\n\nSkySOCKS and SkyVPN send other traffic through the network, SkyDEX trades, SkyChat messages and Fleet watches the visors you run elsewhere. A greyed tile is not built yet.</string>
+
+    <string name="help_wallet_title">About Wallet</string>
+    <string name="help_wallet_body">Skycoin, the Fibercoins that share its node software, and Bitcoin — all held by keys that are generated on this phone and never leave it. Skywire never sees them and they are never sent to the network.\n\nThe twelve recovery words are the wallet. Anyone who reads them can spend the coins from any device without your phone, and if you lose them nobody can recover the wallet for you — not us, not anyone.\n\nBalances and history come from the node each coin is pointed at, so a coin whose node is unreachable shows its last known balance and will not send.</string>
+
+    <string name="help_settings_title">About Settings</string>
+    <string name="help_settings_body">Who this phone is on the network, and how the app behaves. The identity is a keypair in a file — back it up before you need it, because losing it loses your address, your chat history\u2019s other half and any rewards tied to the key.\n\nDiagnostics is where every log lives: the visor core, the app process, and each app that runs under it. That is the place to look when something will not connect.</string>
+
+    <string name="help_socks_title">About SkySOCKS</string>
+    <string name="help_socks_body">A SOCKS5 proxy that comes out somewhere else. Pick a server and this phone offers a local proxy port; anything you point at that port leaves the network from the server you chose rather than from here.\n\nIt proxies only what you configure to use it — it does not capture the whole phone. SkyVPN is the one that does that.\n\nLogs for SkySOCKS live in Settings \u25b8 Diagnostics.</string>
+
+    <string name="help_vpn_title">About SkyVPN</string>
+    <string name="help_vpn_body">The whole phone\u2019s traffic, through a server you choose. Android will ask to add a VPN configuration the first time; while it is on, every app\u2019s traffic leaves from the exit server instead of from here.\n\nThe key stays on this device and the exit server sees the traffic it forwards, exactly as any VPN exit does. Turning it off restores normal routing immediately.\n\nLogs for SkyVPN live in Settings \u25b8 Diagnostics.</string>
+
+    <string name="help_dex_title">About SkyDEX</string>
+    <string name="help_dex_body">Trading against a market maker reached over Skywire rather than over the open internet. The screen is the exchange\u2019s own, running against the market you are connected to.\n\nOrders and balances belong to that market, not to the wallet on the Wallet tab — the two are separate.\n\nLogs for SkyDEX live in Settings \u25b8 Diagnostics.</string>
+    <string name="help_fleet_title">About Fleet</string>
+    <string name="help_fleet_body">The visors you run on other machines — a desktop, a server, a Skyminer — seen from this phone. It is a window onto them, not a remote control: what arrives is status, and the one action is a restart.\n\nOff by default. Turning it on restarts this phone\u2019s core, because the setting is read once while the visor builds itself.\n\nA visor\u2019s own log is on its card here, since that feed travels from the remote machine; this app\u2019s logs are in Settings \u25b8 Diagnostics. Names you give a visor are kept on this phone and do not travel with it.</string>
+\n    <!-- Battery / Doze. -->
+    <string name="settings_battery">Battery</string>
+    <string name="settings_battery_hint">Skywire keeps running in the background, but Android may still pause its network once the screen has been off for a while — messages and calls then arrive when the phone next wakes rather than when they were sent. Allowing Skywire to ignore battery optimisation closes that gap. It costs battery, and the app works either way.</string>
+    <string name="settings_battery_exempt_hint">Skywire is allowed to ignore battery optimisation, so its connections stay up while the screen is off. Android\u2019s battery settings can take this back at any time.</string>
+    <string name="settings_battery_allow">Allow</string>
+    <string name="settings_battery_not_now">Not now</string>
+    <string name="settings_battery_no_screen">This phone has no battery-optimisation screen to open.</string>
+    <string name="home_battery_title">Keep Skywire connected in the background?</string>
+    <string name="home_battery_body">Android can pause this app\u2019s network once the screen has been off for a while. Allow it to ignore battery optimisation and messages arrive as they are sent.</string>
+    <!-- Config encryption at rest. -->
+    <string name="settings_encrypt">Encrypt the config at rest</string>
+    <string name="settings_encrypt_hint">Seals the config file whenever Skywire is disconnected, under a key this phone will not hand out. Protects the secret key if the device is examined; it makes no difference while you are connected.</string>
+    <string name="settings_encrypt_warning">If this phone is reset — or its screen lock is removed and set again — the sealing key is destroyed and the identity in the config cannot be recovered. Export the config first if it matters.</string>
+    <string name="settings_encrypt_disable_prompt">Confirm to store the config unencrypted</string>
+    <string name="settings_encrypt_on_done">Config encrypted.</string>
+    <string name="settings_encrypt_on_pending">The config will be encrypted when you disconnect.</string>
+    <string name="settings_encrypt_off_done">Config is no longer encrypted.</string>
+</resources>

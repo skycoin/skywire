@@ -1,0 +1,162 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The visor talks to dmsg/transports; the app talks to its local API. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- SkywireCoreService runs the visor as a foreground service. specialUse
+         (not dataSync) because Android 15 caps dataSync services at ~6 h and
+         the visor is an always-on network node while connected. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <!-- A connected call records while the app is in the background, which
+         only a foreground service typed `microphone` may do. Kept OFF the
+         always-on core service: that one runs for hours and would hold the
+         claim (and the status-bar indicator) the whole time.
+
+         mediaPlayback is the SAME service before the microphone is granted:
+         the platform rejects a `microphone` service outright while RECORD_AUDIO
+         is missing, so a call that arrives before the user was ever asked has
+         to start as what it honestly is — audio coming out and none going in —
+         and promote itself once the grant lands. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Runtime-granted on API 33+; the FGS notification is invisible without it. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets Settings offer the one-tap "don't optimise this app" dialog. The
+         foreground service keeps the visor alive; this is about Doze, which
+         suspends the *network* of non-exempt apps once the screen has been off
+         a while — so without it a phone left alone stops receiving until it
+         next wakes. Offered behind an explanation, never asked for on launch,
+         and the app is fully functional if it is refused. See
+         [com.skycoin.skywire.core.BatteryOptimization]. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- An incoming call is shown as the call SCREEN, not as something to read
+         in the shade. An app may not start an Activity from the background, so
+         the full-screen intent is how the system is asked to raise one on our
+         behalf — the same mechanism every dialer uses. -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
+    <!-- Voice messages (and the video messages the chat UI already renders a
+         player for) go through getUserMedia inside the embedded SkyChat page;
+         the WebChromeClient maps its request onto these. Both are optional
+         features so a device without a camera still installs. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Not optional and not obvious: WebView's audio manager refuses to open
+         a capture device without it, even with RECORD_AUDIO granted, and
+         getUserMedia fails with a bare "NotReadableError: Could not start
+         audio source" while logcat says "Requires MODIFY_AUDIO_SETTINGS and
+         RECORD_AUDIO". Install-time permission — no runtime prompt. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-feature android:name="android.hardware.microphone" android:required="false" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- Nothing this app stores may leave the device by itself.
+
+         Three declarations rather than one, because they cover three
+         different exits. allowBackup=false refuses Google Drive.
+         dataExtractionRules refuses it again on Android 12+ AND refuses the
+         device-to-device transfer that runs when a new phone is set up from
+         an old one — which allowBackup does not cover, and which is the path
+         that would otherwise carry the visor's secret key and the wallet's
+         recovery phrases onto a second handset. fullBackupContent is the same
+         refusal for Android 11 and earlier, which ignores the newer file.
+
+         The identity is meant to move deliberately, through Export config;
+         the wallet is meant to be restored from its twelve words. -->
+    <application
+        android:name=".SkywireApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:theme="@style/Theme.Skywire.Splash">
+
+        <!-- showWhenLocked/turnScreenOn: a call raised by its full-screen
+             intent has to be answerable without unlocking first, which is what
+             makes it a call screen rather than a reminder to go and look. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:theme="@style/Theme.Skywire.Splash">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- skychat:// addresses and skychat:invite: links — a scanned QR,
+                 a link in another chat, a contact card. The app opens the Chat
+                 tab's Add-by-address dialog on it and resolves it; acting on
+                 the result stays a tap. BROWSABLE is what makes a link in a
+                 browser or another app reach us at all.
+
+                 Only this scheme is claimed. skycoin:// belongs to the Skycoin
+                 wallet app, which is already installed on the same phones. -->
+            <intent-filter android:label="@string/app_skychat">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="skychat" />
+            </intent-filter>
+        </activity>
+
+        <!-- The visor core: execs libskywire-mobile.so as a child process and
+             keeps it alive while the user is connected. -->
+        <service
+            android:name=".core.SkywireCoreService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Runs the Skywire visor — the peer-to-peer networking core the user explicitly connects to and disconnects from; it must stay up while apps use the mesh." />
+        </service>
+
+        <!-- Lends the visor this phone's microphone and speaker for the
+             duration of a connected call. Starts when a call connects and
+             stops when it ends — see VoiceCallService. -->
+        <service
+            android:name=".core.VoiceCallService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|mediaPlayback" />
+
+        <!-- The transport buttons on the SkyChat media notification. Not
+             exported: the only thing that ever fires these is the notification
+             this app posted, and its PendingIntents carry our own component. -->
+        <receiver
+            android:name=".core.ChatMediaReceiver"
+            android:exported="false" />
+
+        <!-- Owns the phone's VPN interface and hands its descriptor to the
+             visor.
+
+             exported + BIND_VPN_SERVICE is the sanctioned pair, not a
+             contradiction: the intent filter is what puts Skywire in
+             Android's "Always-on VPN" list (the strongest form of the
+             killswitch, and where the SkyVPN screen sends you), and the
+             system can only reach it if the component is exported. The
+             permission is the gate — it is signature-level and held by the
+             system alone, so nothing else can bind or start this. Our own
+             startService is unaffected: same-UID callers skip the check.
+
+             No foregroundServiceType: this is a plain service sharing a
+             process with the always-on core service — the VPN cannot outlive
+             the visor that carries it — and the platform draws its own VPN
+             indicator while an interface is up. -->
+        <service
+            android:name=".core.SkyVpnService"
+            android:exported="true"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+    </application>
+
+</manifest>

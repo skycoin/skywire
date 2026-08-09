@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The same refusal for Android 11 and earlier, which ignores
+  data_extraction_rules.xml entirely and reads this instead. minSdk is 26, so
+  this file covers real devices rather than being a formality.
+
+  There is no device-transfer concept on these releases — the only way data
+  leaves is Auto Backup, which `allowBackup="false"` already declines. This is
+  the second lock on that same door, and it is here so that flipping
+  allowBackup on some day (to back up a preference, say) cannot silently start
+  uploading the secret key with it.
+-->
+<full-backup-content>
+    <exclude domain="file" path="." />
+    <exclude domain="database" path="." />
+    <exclude domain="sharedpref" path="." />
+    <exclude domain="external" path="." />
+</full-backup-content>

@@ -2708,6 +2708,12 @@ func (s *Session) ReplayHistoryThrough(handler MessageHandler, cap int) {
 			msg.Ciphertext = nil
 			msg.Nonce = nil
 		}
+		// The live path drops heartbeats in onUpdate; replay must not
+		// resurrect them as chat. Skipped before the cap window so a
+		// heartbeat-heavy feed cannot displace real history within it.
+		if IsHeartbeat(msg) {
+			continue
+		}
 		out = append(out, decoded{path: l.path, msg: msg})
 	}
 	if len(out) == 0 {

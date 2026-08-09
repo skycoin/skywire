@@ -82,6 +82,19 @@ func connectPairRPCLocked(reason string) visor.API {
 		pairRPC = nil
 	}
 
+	// Running inside the visor (the launcher's internal mode, which is the
+	// default) means the API is right here — take it rather than gob-encoding
+	// every call through a socket back into our own process. This is also the
+	// ONLY path on a deployment that runs no RPC listener: a phone leaves
+	// cli_addr empty, because on Android any installed app can reach another
+	// app's loopback port and the visor RPC has no authentication of its own.
+	// Without this, pairing, group chat and voice are dead there.
+	if api := visor.LocalAPI(); api != nil {
+		pairRPC = api
+		appLog("Pairing: using the in-process visor API (%s)", reason)
+		return pairRPC
+	}
+
 	const dialTimeout = 5 * time.Second
 	conn, err := net.DialTimeout("tcp", pairRPCAddr, dialTimeout)
 	if err != nil {

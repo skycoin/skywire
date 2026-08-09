@@ -3,7 +3,6 @@ package visor
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -274,6 +273,12 @@ type Visor struct {
 	// skynet on skyenv.SkychatVoiceSignalPort, RTP media over a skywire
 	// conn). Brought up by init_voice.go; nil when dmsg is unavailable.
 	voice *skycall.Manager
+
+	// voiceAudio is the host app's microphone and speaker, borrowed over the
+	// local API, when this visor has no audio device of its own to open — the
+	// default on Android. nil when the visor uses a real local device (or
+	// none at all); see init_voice.go.
+	voiceAudio *skycall.Bridge
 
 	// groupStreamSendCounter ticks once per successful stream.Send on
 	// any rpcgrpc.StreamGroupMessages stream. Bumped from the gRPC
@@ -713,6 +718,14 @@ func NewVisor(ctx context.Context, conf *visorconfig.V1, logBcast *logging.Broad
 	// without touching the process-level signal ctx. Resume rebuilds it.
 	v.networkCtx, v.networkCancel = context.WithCancel(ctx)
 	ctx = v.networkCtx
+	// Publish this visor to the apps that will run inside its process, BEFORE
+	// module init starts them: the launcher autostarts internal apps during
+	// init, and one that looked for the in-process API a moment too early
+	// would fall back to dialing cli_addr for the rest of its life. Individual
+	// API methods nil-guard the subsystems they read, so being reachable
+	// before those exist answers "not ready" rather than crashing.
+	RegisterLocalAPI(v)
+	v.pushCloseStack("visor.local_api", func() error { UnregisterLocalAPI(v); return nil })
 	registerModules(v.MasterLogger())
 	var mainModule visorinit.Module
 	if v.conf.Hypervisor == nil {
@@ -1082,8 +1095,9 @@ func (v *Visor) FetchAllTransportEntries(ctx context.Context) ([]*transport.Entr
 	return entries, nil
 }
 
-//go:embed static
-var ui embed.FS
+// The embedded manager UI (`//go:embed static` → var ui) lives in
+// static_embed.go; the `mobile` build variant replaces it with an empty FS
+// (static_mobile.go) so the ~6.8 MB bundle never ships to the phone.
 
 // HypervisorUIFS returns the embedded Angular hypervisor UI filesystem (the
 // built static/ assets). Exposed for consumers like the standalone-html

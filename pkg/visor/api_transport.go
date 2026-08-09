@@ -26,6 +26,16 @@ type RouterSettings struct {
 	ExistingTPOnly   bool   `json:"existing_tp_only"`
 	MuxRoutes        int    `json:"mux_routes"`
 	MinHops          uint16 `json:"min_hops"`
+	// TransportPreference is the transport-type priority order: which type
+	// is tried first when a transport has to be created, and which existing
+	// one a route rides when several reach the same peer. GET always answers
+	// the full order in effect. On PUT:
+	//   omitted / null — leave the order unchanged;
+	//   []             — revert to the built-in default;
+	//   non-empty      — that order, most-preferred first (unlisted types
+	//                    sort after it).
+	// Persisted to routing.transport_preference, so it survives a restart.
+	TransportPreference []string `json:"transport_preference,omitempty"`
 }
 
 // GetRouterSettings returns the current runtime values of the four
@@ -41,11 +51,17 @@ func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 	if err != nil {
 		return RouterSettings{}, err
 	}
+	order := types.PreferenceOrder()
+	preference := make([]string, 0, len(order))
+	for _, t := range order {
+		preference = append(preference, string(t))
+	}
 	return RouterSettings{
-		ForceLocalRoutes: v.router.GetForceLocalRoutes(),
-		ExistingTPOnly:   v.router.GetExistingTPOnly(),
-		MuxRoutes:        v.router.GetMuxRoutes(),
-		MinHops:          hops,
+		ForceLocalRoutes:    v.router.GetForceLocalRoutes(),
+		ExistingTPOnly:      v.router.GetExistingTPOnly(),
+		MuxRoutes:           v.router.GetMuxRoutes(),
+		MinHops:             hops,
+		TransportPreference: preference,
 	}, nil
 }
 
@@ -70,6 +86,31 @@ func (v *Visor) SetRouterSettings(s RouterSettings) error {
 	if err := v.SetMinHops(s.MinHops); err != nil {
 		return err
 	}
+	if s.TransportPreference != nil {
+		if err := v.SetTransportPreference(s.TransportPreference); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// SetTransportPreference installs the transport-type priority order and
+// persists it to routing.transport_preference. An empty slice reverts to
+// the built-in default. Every name must be a known transport type — a
+// silently-dropped typo would leave the caller believing a preference is
+// in force that isn't.
+func (v *Visor) SetTransportPreference(order []string) error {
+	parsed := types.ParsePreferenceOrder(order)
+	if len(parsed) != len(order) {
+		return fmt.Errorf("unknown transport type in preference order %v (known: %v)",
+			order, types.Known())
+	}
+	types.SetPreferenceOrder(parsed)
+	v.conf.Routing.TransportPreference = order
+	if err := v.conf.Flush(); err != nil {
+		v.log.WithError(err).Warn("Failed to persist transport_preference to config")
+	}
+	v.log.Infof("SetTransportPreference: %v", order)
 	return nil
 }
 

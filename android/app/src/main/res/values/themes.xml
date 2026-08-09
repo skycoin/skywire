@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Post-splash base theme; all real theming is Compose (ui/theme/Theme.kt).
+         windowBackground avoids a flash before the first frame. -->
+    <style name="Theme.Skywire" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <!-- Splash (androidx core-splashscreen): Skycoin mark on white; the night
+         variant switches to black (spec: logo on white (light) / black (dark)). -->
+    <style name="Theme.Skywire.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@android:color/white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_mark</item>
+        <item name="postSplashScreenTheme">@style/Theme.Skywire</item>
+    </style>
+</resources>

@@ -4,7 +4,6 @@ package tpviz
 import (
 	"bytes"
 	"context"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,8 +31,9 @@ import (
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
 
-//go:embed legacy/*
-var legacyFS embed.FS
+// legacyFS (the embedded legacy JavaScript UI, `//go:embed legacy/*`) lives in
+// tpviz_legacy_on.go; the `mobile` build variant leaves it empty
+// (tpviz_legacy_off.go) so the ~2.8 MB bundle stays out of the phone binary.
 
 // wasmDistFS holds the experimental WebGL/WASM tpviz view (dist/*). It is only
 // populated in a build with `-tags tpvizwasm` (see tpviz_wasm_on.go); the

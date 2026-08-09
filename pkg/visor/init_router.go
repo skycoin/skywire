@@ -71,22 +71,21 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				// continue with route creation
 				return directFallback()
 			}
-			// try to establish direct connection to rPK (single hop) using SUDPH or STCPR
-			trySTCPR := false
-			trySUDPH := false
-
+			// What the peer advertises to the address resolver. dmsg needs no
+			// advertisement — every visor is reachable over it.
+			advertised := make(map[types.Type]bool, len(transports))
 			for _, trans := range transports {
-				nType := types.Type(trans)
-				if nType == types.STCPR {
-					trySTCPR = true
-					continue
-				}
+				advertised[types.Type(trans)] = true
+			}
 
-				// Wait until the stun client is ready — but bounded. An
-				// unbounded <-v.stun.ready blocks direct-transport setup for this
-				// peer forever when STUN never becomes ready (no reachable STUN
-				// server), wedging automatic transport establishment. Same wedge
-				// class as the AR/service-discovery paths.
+			// SUDPH additionally needs a ready STUN client and a NAT type that
+			// can hole-punch. Evaluated LAZILY: the wait below costs up to 20 s,
+			// and a preference order that reaches dmsg or stcpr first must not
+			// pay it. (Bounded — an unbounded <-v.stun.ready blocks direct-
+			// transport setup for this peer forever when STUN never becomes
+			// ready, wedging automatic transport establishment. Same wedge class
+			// as the AR/service-discovery paths.)
+			sudphUsable := func() (bool, error) {
 				stunReady := false
 				select {
 				case <-v.stun.ready:
@@ -94,49 +93,59 @@ func getRouteSetupHooks(ctx context.Context, v *Visor, log *logging.Logger) []ro
 				case <-time.After(20 * time.Second):
 					log.Warn("STUN not ready within 20s; skipping SUDPH for this peer")
 				case <-ctx.Done():
-					return ctx.Err()
+					return false, ctx.Err()
 				}
-
-				// skip SUDPH if NAT type prevents it (symmetric NAT, firewall, or STUN failure)
-				if nType == types.SUDPH {
-					// Without a ready STUN client we can't determine NAT type;
-					// skip SUDPH rather than nil-deref v.stun.client.
-					if !stunReady || v.stun.client == nil {
-						continue
-					}
-					switch v.stun.client.NATType {
-					case stun.NATSymmetric, stun.NATSymmetricUDPFirewall,
-						stun.NATError, stun.NATUnknown, stun.NATBlocked:
-						continue
-					}
+				// Without a ready STUN client we can't determine NAT type;
+				// skip SUDPH rather than nil-deref v.stun.client.
+				if !stunReady || v.stun.client == nil {
+					return false, nil
 				}
-				trySUDPH = true
+				switch v.stun.client.NATType {
+				case stun.NATSymmetric, stun.NATSymmetricUDPFirewall,
+					stun.NATError, stun.NATUnknown, stun.NATBlocked:
+					return false, nil
+				}
+				return true, nil
 			}
 
-			// trying to establish direct connection to rPK using STCPR
-			if trySTCPR {
+			// Try each type in the configured preference order
+			// (routing.transport_preference), stopping at the first one that
+			// establishes: the operator's primary transport, then the others.
+			// Unset preference = the built-in default = stcpr, then sudph, then
+			// dmsg — the order this was hardcoded to. A phone that pins dmsg
+			// first skips the STCPR/SUDPH dialing a NATed mobile link rarely
+			// wins, and the ~20 s STUN wait with it.
+			var lastErr error
+			for _, nType := range types.PreferredOrder(types.STCPR, types.SUDPH, types.DMSG) {
+				switch nType {
+				case types.STCPR:
+					if !advertised[types.STCPR] {
+						continue
+					}
+				case types.SUDPH:
+					if !advertised[types.SUDPH] {
+						continue
+					}
+					usable, err := sudphUsable()
+					if err != nil {
+						return err
+					}
+					if !usable {
+						continue
+					}
+				}
 				err := retrier.Do(ctx, func() error {
-					_, err := tm.SaveTransport(ctx, rPK, types.STCPR, transport.LabelAutomatic)
+					_, err := tm.SaveTransport(ctx, rPK, nType, transport.LabelAutomatic)
 					return err
 				})
 				if err == nil {
 					return nil
 				}
-				log.Debugf("Establishing automatic STCPR transport failed.")
-			}
-			// trying to establish direct connection to rPK using SUDPH
-			if trySUDPH {
-				err := retrier.Do(ctx, func() error {
-					_, err := tm.SaveTransport(ctx, rPK, types.SUDPH, transport.LabelAutomatic)
-					return err
-				})
-				if err == nil {
-					return nil
-				}
-				log.Debugf("Establishing automatic SUDPH transport failed.")
+				log.Debugf("Establishing automatic %s transport failed.", nType)
+				lastErr = err
 			}
 
-			return directFallback()
+			return lastErr
 		},
 	}
 }

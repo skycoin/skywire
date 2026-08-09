@@ -2,6 +2,12 @@
 //
 // Coverage for the CXO-subscriber integration, geoip/IP-group caches,
 // the embedded-visor refresh path, and the server lifecycle helpers.
+//
+// !mobile: shares helpers with tpviz_test.go, which is excluded from the
+// `mobile` build variant (its tests read the stripped legacyFS embed).
+
+//go:build !mobile
+
 package tpviz
 
 import (

@@ -326,6 +326,139 @@ func (s *MemStore) Groups() ([]string, error) {
 	return groups, nil
 }
 
+// Import implements Store, with the same rules as BoltStore.Import: no rate
+// limit, duplicates skipped, every other guardrail intact.
+func (s *MemStore) Import(msgs []Message, groups []GroupMessage) (ImportResult, error) {
+	var res ImportResult
+	if len(msgs) == 0 && len(groups) == 0 {
+		return res, nil
+	}
+
+	now := time.Now().UTC()
+	cutoff, expires := s.limits.expiryCutoff(now)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.limits.TotalCapBytes > 0 && s.totalBytes >= s.limits.TotalCapBytes {
+		res.Rejected = len(msgs) + len(groups)
+		return res, ErrStorageFull
+	}
+
+	// Fingerprints of what is already held, built once per conversation
+	// touched rather than per record.
+	seenPeer := make(map[string]map[string]bool)
+	for _, m := range msgs {
+		if !s.acceptImportLocked(m.Peer, m.Text) {
+			res.Rejected++
+			continue
+		}
+		if m.Timestamp.IsZero() {
+			m.Timestamp = now
+		}
+		seen, ok := seenPeer[m.Peer]
+		if !ok {
+			seen = make(map[string]bool, len(s.byPeer[m.Peer]))
+			for _, existing := range s.byPeer[m.Peer] {
+				seen[messageKey(existing)] = true
+			}
+			seenPeer[m.Peer] = seen
+		}
+		key := messageKey(m)
+		if seen[key] {
+			res.Duplicates++
+			continue
+		}
+		seen[key] = true
+		s.byPeer[m.Peer] = append(s.byPeer[m.Peer], m)
+		s.totalBytes += msgSize(m)
+		res.Messages++
+		if expires && m.Timestamp.Before(cutoff) {
+			res.Expiring++
+		}
+	}
+
+	seenGroup := make(map[string]map[string]bool)
+	for _, m := range groups {
+		if !s.acceptImportLocked(m.GroupID, m.Text) {
+			res.Rejected++
+			continue
+		}
+		if m.Timestamp.IsZero() {
+			m.Timestamp = now
+		}
+		seen, ok := seenGroup[m.GroupID]
+		if !ok {
+			seen = make(map[string]bool, len(s.byGroup[m.GroupID]))
+			for _, existing := range s.byGroup[m.GroupID] {
+				seen[groupMessageKey(existing)] = true
+			}
+			seenGroup[m.GroupID] = seen
+		}
+		key := groupMessageKey(m)
+		if seen[key] {
+			res.Duplicates++
+			continue
+		}
+		seen[key] = true
+		s.byGroup[m.GroupID] = append(s.byGroup[m.GroupID], m)
+		s.totalBytes += msgSize(m)
+		res.GroupMessages++
+		if expires && m.Timestamp.Before(cutoff) {
+			res.Expiring++
+		}
+	}
+
+	// Sorting and capping once per conversation, after the batch — doing
+	// either per record would re-sort a whole archive on every row.
+	for peer := range seenPeer {
+		kept := s.byPeer[peer]
+		sort.SliceStable(kept, func(i, j int) bool {
+			return kept[i].Timestamp.Before(kept[j].Timestamp)
+		})
+		if s.limits.PerPeerCap > 0 && len(kept) > s.limits.PerPeerCap {
+			drop := len(kept) - s.limits.PerPeerCap
+			for _, ev := range kept[:drop] {
+				s.totalBytes -= msgSize(ev)
+			}
+			kept = append([]Message(nil), kept[drop:]...)
+			res.Evicted += drop
+		}
+		s.byPeer[peer] = kept
+	}
+	for id := range seenGroup {
+		kept := s.byGroup[id]
+		sort.SliceStable(kept, func(i, j int) bool {
+			return kept[i].Timestamp.Before(kept[j].Timestamp)
+		})
+		if s.limits.PerPeerCap > 0 && len(kept) > s.limits.PerPeerCap {
+			drop := len(kept) - s.limits.PerPeerCap
+			for _, ev := range kept[:drop] {
+				s.totalBytes -= msgSize(ev)
+			}
+			kept = append([]GroupMessage(nil), kept[drop:]...)
+			res.Evicted += drop
+		}
+		s.byGroup[id] = kept
+	}
+
+	return res, nil
+}
+
+// acceptImportLocked mirrors BoltStore.acceptImport; caller holds s.mu.
+func (s *MemStore) acceptImportLocked(key, text string) bool {
+	switch {
+	case key == "":
+		return false
+	case s.limits.MaxMessageSize > 0 && len(text) > s.limits.MaxMessageSize:
+		return false
+	case s.limits.WhitelistOnly && !s.limits.Whitelist[key]:
+		return false
+	default:
+		return true
+	}
+}
+
 // Close implements Store. Idempotent.
 func (s *MemStore) Close() error {
 	s.mu.Lock()

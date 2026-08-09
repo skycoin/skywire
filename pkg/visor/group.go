@@ -1171,7 +1171,20 @@ func (v *Visor) GroupHistoryPage(args GroupHistoryPageArgs) ([]GroupMessage, err
 	if hist == nil {
 		return nil, ErrGroupHistoryDisabled
 	}
-	return hist.ListGroupBefore(args.GroupID, args.Before, args.Limit)
+	msgs, err := hist.ListGroupBefore(args.GroupID, args.Before, args.Limit)
+	if err != nil {
+		return nil, err
+	}
+	// Stores written by builds that predate the inbox's heartbeat filter
+	// carry the owner's liveness probes as ordinary rows; a page may come
+	// back short of Limit, which readers already tolerate.
+	kept := msgs[:0]
+	for _, m := range msgs {
+		if m.Text != skychatgroup.HeartbeatMarker {
+			kept = append(kept, m)
+		}
+	}
+	return kept, nil
 }
 
 // GroupHistoryPageArgs is the RPC input for GroupHistoryPage.
@@ -1365,6 +1378,12 @@ func (g *groupInbox) setManager(mgr *skychatgroup.Manager) {
 }
 
 func (g *groupInbox) deliver(groupID string, senderPK cipher.PubKey, msg skychatgroup.Message) {
+	// The filter IsHeartbeat was exposed for: the inbox is the user-facing
+	// surface, and a heartbeat that slips past the session layer must not
+	// reach subscribers, the ring, history, or last_message_at.
+	if skychatgroup.IsHeartbeat(msg) {
+		return
+	}
 	gm := GroupMessage{
 		GroupID:  groupID,
 		SenderPK: senderPK,
