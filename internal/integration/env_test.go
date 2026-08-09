@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/proxy"
 
+	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/servicedisc"
@@ -1376,14 +1377,42 @@ func (env *TestEnv) CheckServicesDmsgReachable(timeout time.Duration) error {
 	return nil
 }
 
+const (
+	// dmsgClientPublishInterval mirrors the client cadence set in dmsg.Config.Ensure.
+	dmsgClientPublishInterval = dmsg.DefaultUpdateInterval * 5
+
+	// dmsgEntryMaxAge bounds how old a client's discovery entry may be and
+	// still count as "this visor is registered". A dmsg client publishes as
+	// soon as its first session is up and then only refreshes on the cadence
+	// above, so a healthy, settled visor's entry is routinely minutes old — its
+	// age says nothing about whether the visor is reachable. The bound exists
+	// solely to reject an entry left behind by a visor that is no longer
+	// running, so it tracks the publish cadence with one interval of slack for
+	// a missed tick.
+	//
+	// It was previously a flat 60s, which matched the cadence back when clients
+	// inherited the SERVER's DefaultUpdateInterval. Once clients moved to their
+	// own 5-minute cadence, that bound rejected a perfectly good entry for four
+	// minutes out of every five and every test gated on this helper timed out
+	// against a deployment that was working.
+	dmsgEntryMaxAge = 2 * dmsgClientPublishInterval
+)
+
 // WaitForDmsgDiscoveryEntry waits for a visor's entry to appear in DMSG discovery
-// with delegated servers and a recent timestamp. After a graceful visor halt, the old
-// entry is deregistered, so this waits for a fresh registration from the restarted visor.
+// with delegated servers, published recently enough to belong to the running
+// visor rather than to a dead predecessor.
+//
+// Callers that have just restarted a visor and need proof of a re-registration
+// want WaitForFreshDmsgDiscoveryEntry, which pins the cutoff to the restart.
 func (env *TestEnv) WaitForDmsgDiscoveryEntry(visor string, timeout time.Duration) error {
-	// Reject entries older than 60s to avoid matching stale entries that
-	// weren't cleaned up (e.g. if graceful halt failed)
-	notBefore := time.Now().Add(-60 * time.Second)
-	return env.waitForDmsgDiscoveryEntryAfter(visor, timeout, notBefore)
+	return env.waitForDmsgDiscoveryEntryAfter(visor, timeout, time.Now().Add(-dmsgEntryMaxAge))
+}
+
+// WaitForFreshDmsgDiscoveryEntry waits for a registration published after
+// `since` — the moment the visor was restarted — so a stale entry carried over
+// from the previous process can never satisfy the wait.
+func (env *TestEnv) WaitForFreshDmsgDiscoveryEntry(visor string, timeout time.Duration, since time.Time) error {
+	return env.waitForDmsgDiscoveryEntryAfter(visor, timeout, since)
 }
 
 func (env *TestEnv) waitForDmsgDiscoveryEntryAfter(visor string, timeout time.Duration, notBefore time.Time) error {
