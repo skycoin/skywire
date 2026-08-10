@@ -210,12 +210,12 @@ func (s *service) Run(ctx context.Context) error {
 		// (disc.Entry.Version) instead of the vestigial "0.0.1" protocol
 		// constant, so `mdisc servers` / discovery consumers see it. Empty
 		// (unknown build) preserves "0.0.1".
-		Version:                 dmsgEntryVersion(),
-		AuthPassphrase:          s.cfg.AuthPassphrase,
-		Peers:                   peers,
-		AnnounceAsPeer:          cfg.AnnounceAsPeer,
-		AcceptPeerAnnouncements: cfg.AcceptPeerAnnouncements,
-		AcceptedPeerPKs:         cfg.AcceptedPeerPKs,
+		Version:           dmsgEntryVersion(),
+		AuthPassphrase:    s.cfg.AuthPassphrase,
+		Peers:             peers,
+		AcceptedPeerPKs:   cfg.AcceptedPeerPKs,
+		MaxPeerLinks:      cfg.MaxPeerLinks,
+		MaxRelayedStreams: cfg.MaxRelayedStreams,
 	}
 
 	deployments := cfg.NormalizedDeployments()

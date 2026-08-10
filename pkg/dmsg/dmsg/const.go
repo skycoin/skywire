@@ -22,6 +22,14 @@ const (
 
 	DefaultMaxSessions = 2048
 
+	// DefaultMaxPeerLinks bounds concurrent peer sessions (inbound
+	// announced + configured outbound) on an always-on relay server.
+	DefaultMaxPeerLinks = 512
+
+	// DefaultMaxRelayedStreams bounds concurrent streams a server relays
+	// on behalf of a peer, so an always-open relay can't be amplified.
+	DefaultMaxRelayedStreams = 4096
+
 	DefaultDmsgHTTPPort = uint16(80)
 
 	DefaultOfficialDmsgServerType = "official"
