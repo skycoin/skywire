@@ -348,6 +348,7 @@ func (ce *Client) Serve(ctx context.Context) {
 	pingLoopOnce := new(sync.Once)
 	reconnectLoopOnce := new(sync.Once)
 	porterReapLoopOnce := new(sync.Once)
+	reapLoopOnce := new(sync.Once)
 
 	needInitialPost := true
 
@@ -601,6 +602,7 @@ func (ce *Client) Serve(ctx context.Context) {
 				updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
 				pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
 				porterReapLoopOnce.Do(func() { go ce.porterReapLoop(cancellabelCtx) })
+				reapLoopOnce.Do(func() { go ce.reapIdleSessionsLoop(cancellabelCtx) })
 				if ce.conf.MinSessions == 0 {
 					reconnectLoopOnce.Do(func() { go ce.reconnectLoop(cancellabelCtx) })
 				}
@@ -614,6 +616,7 @@ func (ce *Client) Serve(ctx context.Context) {
 		updateEntryLoopOnce.Do(func() { go ce.updateClientEntryLoop(cancellabelCtx, ce.done, ce.conf.ClientType) })
 		pingLoopOnce.Do(func() { go ce.pingSessionsLoop(cancellabelCtx) })
 		porterReapLoopOnce.Do(func() { go ce.porterReapLoop(cancellabelCtx) })
+		reapLoopOnce.Do(func() { go ce.reapIdleSessionsLoop(cancellabelCtx) })
 		// When MinSessions is 0 (connect to all), start a reconnect loop that
 		// aggressively retries connecting to servers we failed to reach on the first pass.
 		if ce.conf.MinSessions == 0 {
@@ -1209,6 +1212,99 @@ func (ce *Client) porterReapLoop(ctx context.Context) {
 			ce.reapOrphanPorts()
 		}
 	}
+}
+
+// reapIdleSessionsLoop periodically closes sessions that are streamless and
+// beyond MinSessions, so on-demand rendezvous sessions (opened by the dial path
+// to reach a peer delegated to a server this client wasn't connected to, then
+// kept alive forever by pingSessionsLoop) don't accumulate — the session count
+// settles toward the configured minimum instead of drifting toward "all servers".
+// Disabled when MinSessions == 0 (connect-to-all), where every session is
+// intentional and reconnectLoop actively re-dials.
+func (ce *Client) reapIdleSessionsLoop(ctx context.Context) {
+	if ce.MinSessions() <= 0 {
+		return
+	}
+	const interval = 60 * time.Second
+	// A session must read as streamless for this many consecutive checks before
+	// it's reaped, so a brief gap between requests (or a transient ping stream)
+	// doesn't cull an in-use session.
+	const idleChecksToReap = 2
+	idleStreak := make(map[cipher.PubKey]int)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ce.done:
+			return
+		case <-ticker.C:
+			ce.reapExcessIdleSessions(idleStreak, idleChecksToReap)
+		}
+	}
+}
+
+// reapExcessIdleSessions snapshots the live sessions and their stream counts,
+// asks pickIdleSessionsToReap which to close, and closes them. Closing a session
+// unwinds its serve goroutine, which calls delSession to drop it from the map.
+func (ce *Client) reapExcessIdleSessions(idleStreak map[cipher.PubKey]int, idleChecksToReap int) {
+	min := ce.MinSessions()
+	if min <= 0 {
+		return
+	}
+	ce.sessionsMx.Lock()
+	sessions := make(map[cipher.PubKey]*SessionCommon, len(ce.sessions))
+	streams := make(map[cipher.PubKey]int, len(ce.sessions))
+	for pk, ses := range ce.sessions {
+		sessions[pk] = ses
+		streams[pk] = ses.NumStreams()
+	}
+	ce.sessionsMx.Unlock()
+
+	for _, pk := range pickIdleSessionsToReap(streams, idleStreak, min, idleChecksToReap) {
+		if ses := sessions[pk]; ses != nil {
+			ce.log.WithField("remote_pk", pk.String()).
+				Debug("reaping idle dmsg session (streamless, over min_sessions)")
+			_ = ses.Close() //nolint:errcheck
+		}
+	}
+}
+
+// pickIdleSessionsToReap decides which sessions to close given each session's
+// open-stream count (0 = idle; a negative "unknown" count — e.g. quic — is
+// treated as busy). It advances the per-session idle streak, prunes streaks for
+// sessions that have vanished, and returns up to (total - min) sessions that have
+// read as streamless for at least idleChecksToReap consecutive calls — so it
+// never takes the count below the MinSessions floor and never reaps an in-use
+// session. Pure over its inputs (it mutates idleStreak) so the policy is unit
+// testable without real sessions.
+func pickIdleSessionsToReap(streams, idleStreak map[cipher.PubKey]int, min, idleChecksToReap int) []cipher.PubKey {
+	total := len(streams)
+	var reap []cipher.PubKey
+	for pk, n := range streams {
+		if n == 0 {
+			idleStreak[pk]++
+			if idleStreak[pk] >= idleChecksToReap {
+				reap = append(reap, pk)
+			}
+		} else {
+			idleStreak[pk] = 0
+		}
+	}
+	for pk := range idleStreak {
+		if _, ok := streams[pk]; !ok {
+			delete(idleStreak, pk)
+		}
+	}
+	surplus := total - min
+	if surplus <= 0 {
+		return nil
+	}
+	if len(reap) > surplus {
+		reap = reap[:surplus]
+	}
+	return reap
 }
 
 // reapOrphanPorts walks the porter and calls the close function for any
