@@ -1,7 +1,7 @@
 //go:build !js
 
-// Package wasmhv gob_mirror_test.go: validates that the wasm-core MIRROR types
-// (which deliberately do not import pkg/visor, so they compile to js/wasm)
+// Package wasmhv_test (gob_mirror_test.go): validates that the wasm-core MIRROR
+// types (which deliberately do not import pkg/visor, so they compile to js/wasm)
 // gob-decode faithfully from the REAL visor RPC types — and that the mirror
 // argument types gob-encode into the real RPC argument types. This is the
 // safety net for the "gob matches by field name" assumption the wasm
@@ -9,8 +9,12 @@
 // instead of silently returning zero values to the browser UI.
 //
 // Host-only (`!js`): it imports pkg/visor / appserver, which don't build for
-// wasm — exactly why the mirror types exist.
-package wasmhv
+// wasm — exactly why the mirror types exist. It is an EXTERNAL test package
+// (wasmhv_test) so importing pkg/visor is not a cycle: pkg/visor imports
+// pkg/wasmhv (ServeWasm), so an internal test importing pkg/visor would be
+// "wasmhv[test] → visor → wasmhv". The unexported argument mirrors are reached
+// through the test-only aliases in export_test.go.
+package wasmhv_test
 
 import (
 	"bytes"
@@ -25,6 +29,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor"
+	"github.com/skycoin/skywire/pkg/wasmhv"
 )
 
 func gobRoundTrip(t *testing.T, src, dst interface{}) {
@@ -47,7 +52,7 @@ func TestMirrorAppStateDecodes(t *testing.T) {
 	real.Port = 3
 	real.LauncherMode = "external"
 
-	var got AppState
+	var got wasmhv.AppState
 	gobRoundTrip(t, real, &got)
 
 	require.Equal(t, "skysocks-client", got.Name)
@@ -77,7 +82,7 @@ func TestMirrorTransportSummaryDecodes(t *testing.T) {
 		LatencyMS: 42.5,
 	}
 
-	var got TransportSummary
+	var got wasmhv.TransportSummary
 	gobRoundTrip(t, real, &got)
 
 	require.Equal(t, real.ID, got.ID)
@@ -99,12 +104,12 @@ func TestMirrorTransportSummaryDecodes(t *testing.T) {
 func TestMirrorTransportSummaryEncodes(t *testing.T) {
 	pkL, _ := cipher.GenerateKeyPair()
 	pkR, _ := cipher.GenerateKeyPair()
-	mirror := &TransportSummary{
+	mirror := &wasmhv.TransportSummary{
 		ID:        uuid.New(),
 		Local:     pkL,
 		Remote:    pkR,
 		Type:      "dmsg",
-		Log:       &TransportLogEntry{RecvBytes: 7, SentBytes: 9},
+		Log:       &wasmhv.TransportLogEntry{RecvBytes: 7, SentBytes: 9},
 		Label:     "user",
 		LatencyMS: 12.5,
 	}
@@ -125,7 +130,7 @@ func TestMirrorTransportSummaryEncodes(t *testing.T) {
 // must match) — it panicked before TransportLogEntry.GobEncode existed.
 func TestMirrorTransportListEmptyEncodes(t *testing.T) {
 	var got []*visor.TransportSummary
-	gobRoundTrip(t, []*TransportSummary{}, &got)
+	gobRoundTrip(t, []*wasmhv.TransportSummary{}, &got)
 	require.Empty(t, got)
 }
 
@@ -134,20 +139,20 @@ func TestMirrorTransportListEmptyEncodes(t *testing.T) {
 func TestMirrorArgsEncode(t *testing.T) {
 	t.Run("StartAppIn", func(t *testing.T) {
 		var got visor.StartAppIn
-		gobRoundTrip(t, &startAppIn{AppName: "vpn-client", LauncherMode: "internal"}, &got)
+		gobRoundTrip(t, &wasmhv.MirrorStartAppIn{AppName: "vpn-client", LauncherMode: "internal"}, &got)
 		require.Equal(t, "vpn-client", got.AppName)
 		require.Equal(t, "internal", got.LauncherMode)
 	})
 	t.Run("SetAutoStartIn", func(t *testing.T) {
 		var got visor.SetAutoStartIn
-		gobRoundTrip(t, &setAutoStartIn{AppName: "vpn-client", AutoStart: true}, &got)
+		gobRoundTrip(t, &wasmhv.MirrorSetAutoStartIn{AppName: "vpn-client", AutoStart: true}, &got)
 		require.Equal(t, "vpn-client", got.AppName)
 		require.True(t, got.AutoStart)
 	})
 	t.Run("TransportsIn", func(t *testing.T) {
 		pk, _ := cipher.GenerateKeyPair()
 		var got visor.TransportsIn
-		gobRoundTrip(t, &transportsIn{FilterTypes: []string{"dmsg"}, FilterPubKeys: []cipher.PubKey{pk}, ShowLogs: true}, &got)
+		gobRoundTrip(t, &wasmhv.MirrorTransportsIn{FilterTypes: []string{"dmsg"}, FilterPubKeys: []cipher.PubKey{pk}, ShowLogs: true}, &got)
 		require.Equal(t, []string{"dmsg"}, got.FilterTypes)
 		require.Equal(t, []cipher.PubKey{pk}, got.FilterPubKeys)
 		require.True(t, got.ShowLogs)
@@ -155,7 +160,7 @@ func TestMirrorArgsEncode(t *testing.T) {
 	t.Run("AddTransportIn", func(t *testing.T) {
 		pk, _ := cipher.GenerateKeyPair()
 		var got visor.AddTransportIn
-		gobRoundTrip(t, &addTransportIn{
+		gobRoundTrip(t, &wasmhv.MirrorAddTransportIn{
 			RemotePK: pk, TpType: "stcpr", Timeout: 30 * time.Second, Label: "user", NoRegister: true,
 		}, &got)
 		require.Equal(t, pk, got.RemotePK)
