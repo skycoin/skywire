@@ -65,6 +65,7 @@ func init() {
 		visorListCmd,
 		vizCmd,
 		autoCmd,
+		publicCmd,
 		metricsCmd,
 	)
 	tpCmd.Flags().StringSliceVarP(&filterTypes, "types", "t", filterTypes, "show transport(s) type(s) comma-separated")
