@@ -127,6 +127,76 @@ the bootstrap paradox**: nothing about the deployment host becomes circular,
 because the forwarding visor still bootstraps over the dmsg-server floor. dmsg
 stays the bootstrap/fallback layer; steady-state traffic moves onto skynet.
 
+### How CXO actually propagates — fan-in vs fan-out
+
+CXO **does** relay hop-by-hop, but as an explicit **subscription tree**, not
+epidemic gossip. A node forwards a feed only if it *itself* subscribed to that
+feed, holds it, and serves it: `broadcastRoot` (pkg/cxo/node/feed.go) re-sends a
+Root received on one connection to every *other* connection subscribed to that
+same feed, and downstream nodes fill the objects from whoever advertised the
+Root. Propagation follows the **subscription graph**, never the transport graph;
+nothing discovers who wants a feed.
+
+Because **each visor is its own publisher (feed PK = visor PK)**, the two
+directions are not symmetric:
+
+- **Upstream (visor → deployment): N distinct feeds — irreducible fan-in.** The
+  TPD CXO aggregator subscribes once per visor feed (`conn.Subscribe(peerPK)`). A
+  relay carrying upstream feeds must subscribe to *all* of them, so CXO relaying
+  does **not** shrink the number of feeds — only the number of *connections*
+  (many subscriptions multiplex over one conn to a high-degree public visor, the
+  same way a dmsg server fans many clients into one session). The information
+  still converges somewhere; the relays reduce connections and noise handshakes,
+  not feed count.
+- **Downstream (deployment → fleet): one aggregated feed — cheap fan-out.** The
+  aggregator collapses N→1 and republishes a single feed; that rides a
+  subscription tree of relay visors via `broadcastRoot` as-is. This is the only
+  place the propagation win is free, and it is where a relay-visor tier genuinely
+  replaces the dmsg-server star.
+
+### Uptime through the relay tree: presence is not transitive
+
+CXO's statefulness suggests uptime for free: connection lifetime = uptime, no
+heartbeat. **That holds only on a direct visor↔collector edge.** CXO relaying is
+store-and-forward — each hop terminates the upstream connection and re-originates
+downstream — so a relay's knowledge that an origin went offline does **not**
+propagate to nodes behind it.
+
+This is measured, not assumed, by `TestRelayPresenceNotTransitive`
+(pkg/cxo/treestore): with `V → R → A` (and a direct control `V → A2`), killing V
+fires an `OnDisconnect` on both A2 (direct) and R (the relay's own edge)
+immediately, but the leaf **A behind the relay receives nothing** — no
+disconnect, no unsubscribe — for the full observation window. R keeps the feed
+live (A is still subscribed, the last Root is cached), so it has no reason to
+tear anything down. A can only infer V's absence from *silence* (no fresh
+Roots), which is indistinguishable from "alive but idle."
+
+**Consequence for the reward feed.** The moment the public-relay fan-in tier is
+interposed — which is the whole point, to avoid N direct connections — passive
+connection-lifetime uptime evaporates. The fix is to invert the problem from
+*detecting absence* (which does not propagate) to *confirming presence* (which
+does, as signed data):
+
+- A visor **republishes its head Root periodically** even when nothing changed —
+  a signed, timestamped liveness beat. A CXO `Root` carries `Seq`, `Time`
+  (unix-nano) and `Sig` (pkg/cxo/skyobject/registry/root.go), so a republish is a
+  fresh, distinct, **visor-signed** Root; unchanged child objects are
+  content-addressed and dedup in the store (cxds `Set` bumps a refcount when the
+  key already exists), so the beat costs ~one small Root on the wire, not a data
+  resend.
+- The collector reads the Root's timestamp + signature: relays **cannot forge or
+  inflate** it (signed by the visor), and a visor that vanishes simply stops
+  producing Roots and **times out** after K missed intervals. The republish
+  interval is the uptime resolution knob. The project already republishes
+  reactive feeds on an idle ticker for the "servable head Root" reason (SD's
+  `servicesCXORepublishInterval`, the uptime publisher's per-window republish);
+  this reuses that machinery as the liveness signal.
+
+So the earlier apparent fork — direct-gateway vs. heartbeat — collapses: for a
+**decentralized relay fan-in, uptime is signed periodic Roots**. Pure passive
+connection-lifetime uptime survives only if the visor↔collector edge for the
+uptime feed is kept **direct** (no relay), accepting fan-in at that one gateway.
+
 ### Rejected alternative: deployment-services-as-visors
 
 Making the deployment services *be* visors (or having a visor run them) is more
