@@ -20,8 +20,8 @@
   // isMeshBrowseHost / the configured browse suffix).
   function isBrowseOrigin(origin) {
     try {
-      var h = new URL(origin).hostname;
-      return /\.mesh\.localhost$/.test(h);
+      var suffix = (globalThis.__SKYWIRE_BROWSE_ORIGIN__ && globalThis.__SKYWIRE_BROWSE_ORIGIN__.suffix) || '.mesh.localhost';
+      return new URL(origin).hostname.endsWith(suffix);
     } catch (e) { return false; }
   }
 
