@@ -16,6 +16,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -444,10 +445,20 @@ func wasmLocalhostTLSCert() (tls.Certificate, error) {
 	return tls.X509KeyPair(certPEM, keyPEM)
 }
 
-// wasmPasswordGate wraps h behind a cookie-based access-password gate.
+// wasmPasswordGate wraps h behind a cookie-based access-password gate. The cookie
+// carries a random per-process session token — NOT a hash of the password — so a
+// leaked cookie can't be reversed to the password and there is no fast-hash of a
+// secret for an offline attacker to grind. Both the password check and the cookie
+// check run in constant time. The token is regenerated on each restart, so an open
+// session re-authenticates after the visor restarts.
 func wasmPasswordGate(h http.Handler, password string, secure bool) http.Handler {
-	tok := func(p string) string { s := sha256.Sum256([]byte("skywire-hv:" + p)); return hex.EncodeToString(s[:]) }
-	token := tok(password)
+	sessionToken, err := randomHex(32)
+	if err != nil {
+		// crypto/rand unavailable — fail closed rather than serve unguarded.
+		return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "access gate unavailable", http.StatusServiceUnavailable)
+		})
+	}
 	const cookieName = "skywire-hv-auth"
 	loginPage := func(w http.ResponseWriter, msg string) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -458,18 +469,27 @@ func wasmPasswordGate(h http.Handler, password string, secure bool) http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/__login" && r.Method == http.MethodPost {
 			r.Body = http.MaxBytesReader(w, r.Body, 4096)
-			if r.ParseForm() == nil && tok(r.FormValue("p")) == token {
-				http.SetCookie(w, &http.Cookie{Name: cookieName, Value: token, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: secure, MaxAge: 7 * 24 * 3600}) //nolint:gosec
+			if r.ParseForm() == nil && subtle.ConstantTimeCompare([]byte(r.FormValue("p")), []byte(password)) == 1 {
+				http.SetCookie(w, &http.Cookie{Name: cookieName, Value: sessionToken, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, Secure: secure, MaxAge: 7 * 24 * 3600}) //nolint:gosec
 				http.Redirect(w, r, "/", http.StatusSeeOther)
 				return
 			}
 			loginPage(w, "wrong password")
 			return
 		}
-		if c, err := r.Cookie(cookieName); err == nil && c.Value == token {
+		if c, err := r.Cookie(cookieName); err == nil && subtle.ConstantTimeCompare([]byte(c.Value), []byte(sessionToken)) == 1 {
 			h.ServeHTTP(w, r)
 			return
 		}
 		loginPage(w, "access password required")
 	})
+}
+
+// randomHex returns n cryptographically-random bytes as a lowercase hex string.
+func randomHex(n int) (string, error) {
+	b := make([]byte, n)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
