@@ -325,11 +325,23 @@
     // labelFor: a 66-hex PK → 53-char base32 DNS label (hex is too long for a DNS
     // label); an alias / already-base32 label passes through unchanged.
     function labelFor(pk) { return /^[0-9a-fA-F]{66}$/.test(pk) ? pkDNSLabel(pk) : pk; }
-    function buildRealOrigin(pk, path, scheme) {
+    // buildRealOrigin takes the FULL resolver host go() produced (e.g. "<hex>.dmsg",
+    // "<vhost>.<hex>.dmsg", "home.dmsg", "<base32>.dmsg") and turns it into a valid
+    // browse origin: it peels a trailing ".dmsg"/".skynet" into net (else uses a
+    // dmsg/skynet scheme), then base32-encodes ANY 66-hex label (a bare hex PK is
+    // too long for a DNS label) while leaving aliases / 53-char base32 / vhost
+    // labels alone. Reassembles "<labels>[.<net>]<suffix>[:<port>]<path>".
+    function buildRealOrigin(host, path, scheme) {
       var c = realOriginCfg;
-      var net = (scheme === "skynet") ? "skynet" : (scheme === "dmsg") ? "dmsg" : ""; // "" = auto
-      var host = labelFor(pk) + (net ? ("." + net) : "") + (c.suffix || ".mesh.localhost");
-      return (c.scheme || "https") + "://" + host + (c.port ? (":" + c.port) : "") + (path || "/");
+      var net = "";
+      if (/\.dmsg$/i.test(host)) { net = "dmsg"; host = host.slice(0, -5); }
+      else if (/\.skynet$/i.test(host)) { net = "skynet"; host = host.slice(0, -7); }
+      else if (scheme === "dmsg" || scheme === "skynet") { net = scheme; }
+      var labels = host.split(".").map(function (l) {
+        return /^[0-9a-fA-F]{66}$/.test(l) ? pkDNSLabel(l) : l;
+      }).join(".");
+      var origin = labels + (net ? ("." + net) : "") + (c.suffix || ".mesh.localhost");
+      return (c.scheme || "https") + "://" + origin + (c.port ? (":" + c.port) : "") + (path || "/");
     }
 
     // 1x1 transparent GIF — placeholder src for a deferred (lazy) image so it
@@ -687,6 +699,25 @@
         frame.src = url; // browser/visor loads it directly (non-anonymous, no skysocks hop)
         log("clearnet DIRECT (upstream = local visor): " + url);
         return { status: 0, direct: true };
+      }
+      // Real-origin clearnet: load the site at its own isolated origin
+      // <host>.skysocks.<suffix>; the origin's SW relays every fetch through
+      // this visor's skysocks-lite. (Transcoder below stays as the fallback.)
+      if (realOriginCfg) {
+        var cu; try { cu = new URL(url); } catch (e) { cu = null; }
+        if (cu && (cu.protocol === "http:" || cu.protocol === "https:")) {
+          var corigin = cu.hostname + ".skysocks" + (realOriginCfg.suffix || ".mesh.localhost");
+          var crurl = (realOriginCfg.scheme || "https") + "://" + corigin +
+            (realOriginCfg.port ? (":" + realOriginCfg.port) : "") + (cu.pathname + cu.search);
+          if (gen !== loadGen) return { status: 0, cancelled: true };
+          currentSitePK = "";
+          frame.removeAttribute("srcdoc");
+          frame.src = crurl;
+          if (opts.setAddr) opts.setAddr(url); // show the REAL clearnet URL, not the B origin
+          log("real-origin clearnet " + crurl);
+          setLoading(false);
+          return { status: 0, realOrigin: true };
+        }
       }
       var r = await fetchClearnet(pol.exit, "GET", url, null);
       if (gen !== loadGen) return { status: 0, cancelled: true };

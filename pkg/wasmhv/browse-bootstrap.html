@@ -45,7 +45,25 @@
     var net = 'dmsg';
     if (/\.skynet$/.test(host)) { net = 'skynet'; host = host.replace(/\.skynet$/, ''); }
     else if (/\.dmsg$/.test(host)) { net = 'dmsg'; host = host.replace(/\.dmsg$/, ''); }
+    else if (/\.skysocks$/.test(host)) { net = 'skysocks'; host = host.replace(/\.skysocks$/, ''); }
+    // For skysocks the host IS the clearnet hostname (no ".<net>" mesh suffix).
+    if (net === 'skysocks') return { host: host, net: net };
     return { host: host + '.' + net, net: net };
+  }
+
+  // For skysocks, a request to origin B (<clearnethost>.skysocks<SUFFIX>) maps to
+  // the real clearnet URL https://<clearnethost><path>; an absolute cross-origin
+  // request is already a real clearnet URL and passes through unchanged.
+  function realFetchUrl(net, reqUrl) {
+    if (net !== 'skysocks') return reqUrl;
+    try {
+      var u = new URL(reqUrl, location.href);
+      var suf = '.skysocks' + SUFFIX;
+      if (u.hostname.slice(-suf.length) === suf) {
+        return 'https://' + u.hostname.slice(0, -suf.length) + u.pathname + u.search;
+      }
+      return u.href;
+    } catch (e) { return reqUrl; }
   }
 
   var tgt = meshTarget();
@@ -119,7 +137,7 @@
       var replyPort = e.ports[0];
       var r = d.req || {};
       var transfer = r.body ? [r.body] : [];
-      helperFetch({ host: tgt.host, net: tgt.net, url: r.url, method: r.method, headers: r.headers, body: r.body }, transfer)
+      helperFetch({ host: tgt.host, net: tgt.net, url: realFetchUrl(tgt.net, r.url), method: r.method, headers: r.headers, body: r.body }, transfer)
         .then(function (res) {
           var t = res.body ? [res.body] : [];
           replyPort.postMessage(res, t);
@@ -145,7 +163,7 @@
   ]).then(function () {
     window.__mb.step = 'fetching-top';
     var path = location.pathname + location.search;
-    return helperFetch({ host: tgt.host, net: tgt.net, url: location.href, method: 'GET', headers: {}, body: null, path: path });
+    return helperFetch({ host: tgt.host, net: tgt.net, url: realFetchUrl(tgt.net, location.href), method: 'GET', headers: {}, body: null, path: path });
   }).then(function (res) {
     window.__mb.step = 'top-returned';
     window.__mb.topStatus = res && res.status;
