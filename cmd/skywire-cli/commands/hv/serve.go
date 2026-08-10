@@ -10,14 +10,17 @@ import (
 )
 
 var (
-	serveAddr     string
-	serveHarness  bool
-	serveTLS      bool
-	serveTLSCert  string
-	serveTLSKey   string
-	servePassword string
-	serveVariant  string
-	serveWallet   bool
+	serveAddr         string
+	serveHarness      bool
+	serveTLS          bool
+	serveTLSCert      string
+	serveTLSKey       string
+	servePassword     string
+	serveVariant      string
+	serveWallet       bool
+	serveBrowseSuffix string
+	serveBrowseOrigin string
+	serveVOrigin      string
 )
 
 func init() {
@@ -29,6 +32,9 @@ func init() {
 	serveCmd.Flags().StringVar(&servePassword, "password", "", "gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear")
 	serveCmd.Flags().StringVarP(&serveVariant, "variant", "W", "", "which embedded wasm-visor to serve: 'go' (larger, full crypto/tls+net/http) or 'tinygo' (~4x smaller — better for the PWA, with the documented TinyGo feature gaps). Empty = the build default. A standard-Go build embeds both; a TinyGo build has only 'tinygo'")
 	serveCmd.Flags().BoolVar(&serveWallet, "wallet", true, "serve the bundled skycoin-web wallet at /wallet/ (custody stays browser-side — the host never sees keys). --wallet=false serves a wallet-less PWA")
+	serveCmd.Flags().StringVar(&serveBrowseSuffix, "browse-suffix", "", "browse-origin domain suffix for the real-origin browser (leading dot). Empty = .mesh.localhost (local). Set e.g. .haltingstate.net for a hosted deploy")
+	serveCmd.Flags().StringVar(&serveBrowseOrigin, "browse-origin", "", "ALSO serve the browse-origin SW bootstrap on this second addr (e.g. 127.0.0.1:7998), for the hosted real-origin browser's B origins. Caddy routes *.<browse-suffix> here; this same process serves V on --addr and B here. Empty = off (V host-routes B on --addr, local mode)")
+	serveCmd.Flags().StringVar(&serveVOrigin, "v-origin", "", "the PUBLIC origin of the visor app V that B's bootstrap postMessages to, e.g. https://theskywirenetwork.net. Only needed with --browse-origin behind a proxy; empty = derive from --addr (local)")
 	RootCmd.AddCommand(serveCmd)
 }
 
@@ -54,14 +60,17 @@ ephemeral key (localStorage). That is what makes serving from a domain safe — 
 page never asks anyone to type a secret key.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		if err := visor.ServeWasm(cmd.Context(), visor.WasmServeConfig{
-			Addr:     serveAddr,
-			TLS:      serveTLS,
-			TLSCert:  serveTLSCert,
-			TLSKey:   serveTLSKey,
-			Harness:  serveHarness,
-			Wallet:   serveWallet,
-			Variant:  serveVariant,
-			Password: servePassword,
+			Addr:             serveAddr,
+			TLS:              serveTLS,
+			TLSCert:          serveTLSCert,
+			TLSKey:           serveTLSKey,
+			Harness:          serveHarness,
+			Wallet:           serveWallet,
+			Variant:          serveVariant,
+			Password:         servePassword,
+			BrowseSuffix:     serveBrowseSuffix,
+			BrowseOriginAddr: serveBrowseOrigin,
+			VOrigin:          serveVOrigin,
 		}); err != nil {
 			cmd.PrintErrln("serve:", err)
 			os.Exit(1)
