@@ -79,7 +79,7 @@ func newInstrumentedNode(t *testing.T, dmsgC *dmsg.Client, sk cipher.SecKey, pro
 	n, err := node.NewNode(cfg)
 	require.NoError(t, err)
 	require.NoError(t, n.EnableDMSG(cxotransport.NewDMSGFactory(dmsgC, cxotransport.DefaultCXOPort)))
-	t.Cleanup(func() { _ = n.Close() })
+	t.Cleanup(func() { _ = n.Close() }) //nolint:errcheck
 	return n
 }
 
@@ -114,21 +114,21 @@ func TestRelayPresenceNotTransitive(t *testing.T) {
 	require.NoError(t, rNode.Share(skycipher.PubKey(feedV)))
 	rSub, err := NewSubscriberOnNode(rNode, feedV, SubConfig{})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = rSub.Close() })
+	t.Cleanup(func() { _ = rSub.Close() }) //nolint:errcheck
 
 	// A: leaf, subscribes feedV but dials ONLY R.
 	aProbe := &presenceProbe{name: "A"}
 	aNode := newInstrumentedNode(t, aClient, ask, aProbe)
 	aSub, err := NewSubscriberOnNode(aNode, feedV, SubConfig{})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = aSub.Close() })
+	t.Cleanup(func() { _ = aSub.Close() }) //nolint:errcheck
 
 	// A2: direct control, subscribes feedV and dials V.
 	a2Probe := &presenceProbe{name: "A2"}
 	a2Node := newInstrumentedNode(t, a2Client, a2sk, a2Probe)
 	a2Sub, err := NewSubscriberOnNode(a2Node, feedV, SubConfig{})
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = a2Sub.Close() })
+	t.Cleanup(func() { _ = a2Sub.Close() }) //nolint:errcheck
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
