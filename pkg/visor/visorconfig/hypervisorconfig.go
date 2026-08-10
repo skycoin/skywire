@@ -126,6 +126,16 @@ type WasmServeConf struct {
 	NoWallet bool   `json:"no_wallet,omitempty"` // default serves the bundled skycoin-web wallet; set true to omit it
 	Variant  string `json:"variant,omitempty"`   // "" = build default; "go" | "tinygo"
 	Password string `json:"password,omitempty"`  // optional access-password gate (use with TLS)
+	// BrowseSuffix is the real-origin browser's browse-origin domain suffix
+	// (leading dot); empty = ".mesh.localhost".
+	BrowseSuffix string `json:"browse_suffix,omitempty"`
+	// BrowseOriginAddr, when set, ALSO serves the browse-origin SW bootstrap on
+	// this second address (Caddy fronts it on *.<browse_suffix>). Empty = off.
+	BrowseOriginAddr string `json:"browse_origin_addr,omitempty"`
+	// VOrigin is the public origin of the visor app V (e.g.
+	// "https://theskywirenetwork.net") that B's bootstrap postMessages to — used
+	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr.
+	VOrigin string `json:"browse_v_origin,omitempty"`
 }
 
 // DefaultHypervisorConfig returns a HypervisorConfig with sensible defaults.
