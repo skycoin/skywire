@@ -153,7 +153,7 @@ func (v *Visor) skynetHTTPTransport() http.RoundTripper {
 				return nil, fmt.Errorf("skynet dial: %w", err)
 			}
 			if err := skynetweb.PerformHandshake(conn, uint16(port)); err != nil {
-				_ = conn.Close()
+				_ = conn.Close() //nolint:errcheck
 				return nil, fmt.Errorf("skynet handshake: %w", err)
 			}
 			return conn, nil
@@ -306,7 +306,7 @@ func serveMeshHTTP(ctx context.Context, addr string, h http.Handler, certFile, k
 	srv := &http.Server{Handler: h} //nolint:gosec // local loopback reverse proxy
 	go func() {
 		<-ctx.Done()
-		_ = srv.Close()
+		_ = srv.Close() //nolint:errcheck
 	}()
 	if certFile != "" && keyFile != "" {
 		err = srv.ServeTLS(lis, certFile, keyFile)
@@ -355,7 +355,7 @@ func (v *Visor) ServeMeshProxy(ctx context.Context, cfg *visorconfig.BrowseOrigi
 	}
 	switch strings.ToLower(cfg.Mode) {
 	case "port":
-		return v.serveMeshPortMode(ctx, addr, cfg, aliases)
+		return v.serveMeshPortMode(ctx, addr, cfg)
 	default: // "subdomain" or ""
 		return v.serveMeshSubdomain(ctx, addr, cfg, aliases)
 	}
@@ -434,7 +434,7 @@ func (m *meshPortManager) originFor(host string) (string, error) {
 	dest := pk
 	rp, rerr := m.v.newMeshReverseProxy(func(string) (cipher.PubKey, string, string, error) { return dest, vhost, network, nil })
 	if rerr != nil {
-		_ = lis.Close()
+		_ = lis.Close() //nolint:errcheck
 		return "", rerr
 	}
 	srv := &http.Server{Handler: rp} //nolint:gosec // local loopback reverse proxy
@@ -453,7 +453,7 @@ func (m *meshPortManager) originFor(host string) (string, error) {
 	}()
 	go func() {
 		<-m.parentCtx.Done()
-		_ = srv.Close()
+		_ = srv.Close() //nolint:errcheck
 	}()
 	return e.url, nil
 }
@@ -479,7 +479,7 @@ func (m *meshPortManager) evictLocked(key string) {
 	if !ok {
 		return
 	}
-	_ = e.srv.Close()
+	_ = e.srv.Close() //nolint:errcheck
 	delete(m.byKey, key)
 	delete(m.byPort, e.port)
 	for i, k := range m.order {
@@ -503,7 +503,7 @@ func (m *meshPortManager) touchLocked(key string) {
 // serveMeshPortMode runs the port-mode "portal" on addr: GET /open?host=<host>
 // resolves the mesh host to a dedicated 127.0.0.1:<port> origin and 302-redirects
 // there (so an iframe pointed at .../open?host=… lands on the isolated origin).
-func (v *Visor) serveMeshPortMode(ctx context.Context, addr string, cfg *visorconfig.BrowseOriginConfig, aliases map[string]cipher.PubKey) error {
+func (v *Visor) serveMeshPortMode(ctx context.Context, addr string, cfg *visorconfig.BrowseOriginConfig) error {
 	if v.dmsgHTTP == nil || v.dmsgHTTP.Transport == nil {
 		return fmt.Errorf("dmsg HTTP client not ready")
 	}
@@ -536,7 +536,9 @@ func (v *Visor) serveMeshPortMode(ctx context.Context, addr string, cfg *visorco
 			http.Error(w, "mesh proxy: "+err.Error(), http.StatusBadGateway)
 			return
 		}
-		http.Redirect(w, r, u, http.StatusFound)
+		// u is not user-controlled: originFor resolves h to a PK and returns this
+		// manager's own scheme://127.0.0.1:<port> origin from the local pool.
+		http.Redirect(w, r, u, http.StatusFound) //nolint:gosec // G710: redirect target is a local loopback origin we minted, not tainted input
 	})
 	return serveMeshHTTP(ctx, addr, mux, cfg.TLSCert, cfg.TLSKey)
 }
