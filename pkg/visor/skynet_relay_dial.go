@@ -33,9 +33,6 @@ const (
 	// stream: if the relay can't reach the destination (stale transport
 	// graph), no ready byte ever arrives, so we must not block forever.
 	relayHandshakeTimeout = 8 * time.Second
-	// maxRelayCandidates caps how many shared relays we try before falling
-	// through to a multihop route.
-	maxRelayCandidates = 3
 	// maxRelayFanout bounds the blind-try fallback: when the transport graph
 	// can't confirm which of our peers reaches the destination, we try this
 	// many of our own direct peers as relays in parallel. Each relay drops the
@@ -74,11 +71,15 @@ func (d *routerSkynetDialer) dialViaRelay(ctx context.Context, remote cipher.Pub
 			defer wg.Done()
 			stream, err := mux.DialThroughRelay(relay, remote, "")
 			if err != nil {
+				d.log.WithField("relay", relay.String()).WithField("remote", remote.String()).
+					WithError(err).Debug("Skynet relay: DialThroughRelay failed")
 				return
 			}
 			conn := &vstreamConn{VStream: stream}
 			if herr := performHandshakeWithTimeout(conn, port, relayHandshakeTimeout); herr != nil {
 				conn.Close() //nolint:errcheck,gosec
+				d.log.WithField("relay", relay.String()).WithField("remote", remote.String()).
+					WithError(herr).Debug("Skynet relay: handshake over relayed stream failed")
 				return
 			}
 			if claimed.CompareAndSwap(false, true) {
@@ -99,10 +100,10 @@ func (d *routerSkynetDialer) dialViaRelay(ctx context.Context, remote cipher.Pub
 	return nil, errNoRelay
 }
 
-// discoverRelayCandidates returns up to maxRelayCandidates peers that (a) we
-// have a direct non-dmsg transport to and (b) the destination also has one to,
-// per the transport graph — i.e. peers that can relay a stream to remote in a
-// single hop.
+// discoverRelayCandidates returns up to maxRelayFanout peers to try as 1-hop
+// relays: peers we have a direct non-dmsg transport to. Transport-graph-
+// CONFIRMED relays (peers the destination also has a transport to) are ordered
+// first, then our other direct peers are appended as blind fallbacks.
 func (d *routerSkynetDialer) discoverRelayCandidates(ctx context.Context, remote cipher.PubKey) []cipher.PubKey {
 	// Our own directly-connected non-dmsg peers — the only possible 1-hop
 	// relays. Computed first so we can both intersect with the transport graph
@@ -129,17 +130,40 @@ func (d *routerSkynetDialer) discoverRelayCandidates(ctx context.Context, remote
 					remotePeers[peer] = struct{}{}
 				}
 			}
-			var confirmed []cipher.PubKey
+			// Order candidates: transport-graph-CONFIRMED relays first, then our
+			// other direct peers as blind fallbacks. dialViaRelay dials the whole
+			// set in parallel (first success wins), so if the confirmed relays
+			// can't actually bridge — an older peer without relay-forwarding
+			// support, or a stale transport-graph edge — a working peer in the
+			// same batch still completes the dial. Bounded by maxRelayFanout.
+			ordered := make([]cipher.PubKey, 0, len(myPeers))
+			seen := make(map[cipher.PubKey]struct{}, len(myPeers))
+			var nConfirmed int
 			for _, p := range myPeers {
 				if _, ok := remotePeers[p]; ok {
-					confirmed = append(confirmed, p)
-					if len(confirmed) >= maxRelayCandidates {
-						break
-					}
+					ordered = append(ordered, p)
+					seen[p] = struct{}{}
+					nConfirmed++
 				}
 			}
-			if len(confirmed) > 0 {
-				return confirmed
+			for _, p := range myPeers {
+				if len(ordered) >= maxRelayFanout {
+					break
+				}
+				if _, dup := seen[p]; !dup {
+					ordered = append(ordered, p)
+					seen[p] = struct{}{}
+				}
+			}
+			if len(ordered) > maxRelayFanout {
+				ordered = ordered[:maxRelayFanout]
+			}
+			if len(ordered) > 0 {
+				d.log.WithField("remote", remote.String()).
+					WithField("confirmed", nConfirmed).
+					WithField("candidates", len(ordered)).
+					Debug("Skynet relay: candidate set (confirmed relays first, blind fallbacks appended)")
+				return ordered
 			}
 		}
 	}
