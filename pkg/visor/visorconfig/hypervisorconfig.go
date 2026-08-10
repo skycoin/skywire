@@ -106,6 +106,24 @@ type HypervisorConfig struct {
 	// package default (5m). Common knob to tune the bandwidth /
 	// freshness tradeoff for hvui tabs that source CXO data.
 	CXOSubscribeInterval Duration `json:"cxo_subscribe_interval,omitempty"`
+	// WasmServe, when non-nil with a non-empty Addr, also serves the
+	// standalone wasm-visor PWA / testing harness from this same visor
+	// process on that address — built from the binary's embedded wasm, so
+	// a rebuild-restart serves the latest (no separate `hv serve`). Off
+	// by default. See pkg/visor.ServeWasm.
+	WasmServe *WasmServeConf `json:"wasm_serve,omitempty"`
+}
+
+// WasmServeConf configures the in-process standalone wasm-visor server —
+// the same surface as `skywire cli hv serve`, hosted by the visor daemon.
+// See pkg/visor.ServeWasm.
+type WasmServeConf struct {
+	Addr     string `json:"addr"`                // e.g. ":8443"; empty = disabled
+	TLS      bool   `json:"tls,omitempty"`       // HTTPS with a self-signed localhost cert
+	Harness  bool   `json:"harness,omitempty"`   // mount the /ctl/* operator control bridge (DEV ONLY — never expose publicly)
+	NoWallet bool   `json:"no_wallet,omitempty"` // default serves the bundled skycoin-web wallet; set true to omit it
+	Variant  string `json:"variant,omitempty"`   // "" = build default; "go" | "tinygo"
+	Password string `json:"password,omitempty"`  // optional access-password gate (use with TLS)
 }
 
 // DefaultHypervisorConfig returns a HypervisorConfig with sensible defaults.
