@@ -6,6 +6,23 @@
 //
 // Wire format per packet: [streamID:8][senderPK:33][flags:1][data...]
 // Flags: 0x00=data, 0x01=SYN (new stream), 0x02=FIN (close)
+//
+// A visor also acts as a dmsg-server-style RELAY over its skynet transports:
+// a SYN carrying the Relay flag names a third-party destination PK and is
+// signed by the originator. If the destination is not this visor and a direct
+// transport to it exists, the SYN is forwarded (byte-spliced) to that peer —
+// PK-addressed forwarding with no route, mirroring the dmsg server's
+// forwardViaPeer/bridgeStream. Relaying is always on and bounded (1-hop guard
+// via the Relayed flag + a concurrent-relay cap); it is not configurable off.
+// See pkg/transport/vstream_relay.go and docs/design/dmsg-bootstrap-floor.md.
+//
+// Relay SYN wire format:
+//
+//	[streamID:8][senderPK:33][flags:1][dstPK:33][originID:8][sig:65]
+//
+// where sig = sign_senderSK(originID || senderPK || dstPK). originID is the
+// originator's own stream id, preserved end-to-end (the relay remaps streamID
+// but not originID) so the signature verifies at the destination.
 package transport
 
 import (
@@ -26,9 +43,23 @@ import (
 // VStream header constants.
 const (
 	VStreamHeaderSize = 8 + 33 + 1 // streamID + senderPK + flags
-	VStreamFlagData   = 0x00
-	VStreamFlagSyn    = 0x01
-	VStreamFlagFin    = 0x02
+	// vstreamRelaySynHeaderSize is the header of a relay SYN, which appends
+	// [dstPK:33][originID:8][sig:65] after the base header.
+	vstreamRelaySynHeaderSize = VStreamHeaderSize + 33 + 8 + 65
+
+	VStreamFlagData = 0x00
+	VStreamFlagSyn  = 0x01
+	VStreamFlagFin  = 0x02
+	// VStreamFlagRelay marks a SYN destined for a third-party PK carried in
+	// the extended relay header; the relay forwards it PK-addressed.
+	VStreamFlagRelay = 0x04
+	// VStreamFlagRelayed is set by a relay on the leg it emits, so the next
+	// hop refuses to forward again (1-hop guard, mirrors dmsg's ss.isPeer).
+	VStreamFlagRelayed = 0x08
+
+	// DefaultMaxRelayedVStreams bounds concurrent relayed streams a visor
+	// carries on behalf of others, so an always-on relay can't be amplified.
+	DefaultMaxRelayedVStreams = 4096
 )
 
 // VStreamMux multiplexes virtual streams over route ID 0 packets.
@@ -42,6 +73,16 @@ type VStreamMux struct {
 	streams   map[uint64]*VStream
 	streamsMu sync.Mutex
 	streamID  uint64
+
+	// relays holds active relay legs keyed by (inbound transport, wire
+	// streamID). Each direction of a bridged stream is registered pointing
+	// at its peer leg, so a DATA/FIN frame arriving on either transport is
+	// spliced to the other. relayCount is the live count (atomic), bounded
+	// by maxRelays.
+	relays     map[relayKey]relayKey
+	relaysMu   sync.Mutex
+	relayCount int64
+	maxRelays  int
 
 	incoming chan *VStream
 	done     chan struct{}
@@ -62,6 +103,8 @@ func NewVStreamMux(tm *Manager, packetType routing.PacketType, log *logging.Logg
 		tm:         tm,
 		packetType: packetType,
 		streams:    make(map[uint64]*VStream),
+		relays:     make(map[relayKey]relayKey),
+		maxRelays:  DefaultMaxRelayedVStreams,
 		incoming:   make(chan *VStream, 32),
 		done:       make(chan struct{}),
 	}
@@ -217,8 +260,29 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 	flags := payload[41]
 	data := payload[VStreamHeaderSize:]
 
-	switch flags {
-	case VStreamFlagSyn:
+	// Established relay leg? Splice DATA/FIN straight through to the paired
+	// leg on the other transport. Checked before local handling; a relayed
+	// stream is never a local endpoint on this node.
+	inKey := relayKey{tp: mt.Entry.ID, streamID: streamID}
+	if peer, ok := m.lookupRelayLeg(inKey); ok {
+		if flags&VStreamFlagFin != 0 {
+			m.forwardRelayFrame(peer, VStreamFlagFin, nil)
+			m.teardownRelayLeg(inKey, peer)
+			return
+		}
+		m.forwardRelayFrame(peer, VStreamFlagData, data)
+		return
+	}
+
+	// Relay SYN: a new stream addressed to a third-party PK. Verify, then
+	// either terminate locally (we are the destination) or forward.
+	if flags&VStreamFlagSyn != 0 && flags&VStreamFlagRelay != 0 {
+		m.handleRelaySyn(mt, streamID, remotePK, flags, payload)
+		return
+	}
+
+	switch {
+	case flags&VStreamFlagSyn != 0:
 		stream := &VStream{
 			id:       streamID,
 			remotePK: remotePK,
@@ -238,7 +302,18 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 			stream.Close() //nolint:errcheck,gosec
 		}
 
-	case VStreamFlagData:
+	case flags&VStreamFlagFin != 0:
+		m.streamsMu.Lock()
+		stream, ok := m.streams[streamID]
+		if ok {
+			delete(m.streams, streamID)
+		}
+		m.streamsMu.Unlock()
+		if ok {
+			stream.Close() //nolint:errcheck,gosec
+		}
+
+	default: // DATA
 		m.streamsMu.Lock()
 		stream, ok := m.streams[streamID]
 		m.streamsMu.Unlock()
@@ -252,17 +327,6 @@ func (m *VStreamMux) HandlePacket(p routing.Packet, mt *ManagedTransport) {
 		case <-stream.closed:
 		default:
 			m.log.Warn("vstream: read buffer full, dropping data")
-		}
-
-	case VStreamFlagFin:
-		m.streamsMu.Lock()
-		stream, ok := m.streams[streamID]
-		if ok {
-			delete(m.streams, streamID)
-		}
-		m.streamsMu.Unlock()
-		if ok {
-			stream.Close() //nolint:errcheck,gosec
 		}
 	}
 }
