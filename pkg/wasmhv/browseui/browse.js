@@ -325,23 +325,40 @@
     // labelFor: a 66-hex PK → 53-char base32 DNS label (hex is too long for a DNS
     // label); an alias / already-base32 label passes through unchanged.
     function labelFor(pk) { return /^[0-9a-fA-F]{66}$/.test(pk) ? pkDNSLabel(pk) : pk; }
-    // buildRealOrigin takes the FULL resolver host go() produced (e.g. "<hex>.dmsg",
-    // "<vhost>.<hex>.dmsg", "home.dmsg", "<base32>.dmsg") and turns it into a valid
-    // browse origin: it peels a trailing ".dmsg"/".skynet" into net (else uses a
-    // dmsg/skynet scheme), then base32-encodes ANY 66-hex label (a bare hex PK is
-    // too long for a DNS label) while leaving aliases / 53-char base32 / vhost
-    // labels alone. Reassembles "<labels>[.<net>]<suffix>[:<port>]<path>".
-    function buildRealOrigin(host, path, scheme) {
+    // Content-addressed browse origins: origin B is a short, STABLE hash of the
+    // target — not the target itself — so ONE wildcard cert covers every site
+    // regardless of PK length, clearnet subdomain depth, or dmsg name-vhosts. The
+    // visor keeps shortid -> descriptor; the B bootstrap asks V for its descriptor
+    // by id at handshake (see browse-responder.js / browse-bootstrap.html).
+    var meshOrigins = (globalThis.__meshOrigins = globalThis.__meshOrigins || {});
+    function originIdFor(canon) {
+      return crypto.subtle.digest("SHA-256", new TextEncoder().encode(canon)).then(function (buf) {
+        var b = new Uint8Array(buf), out = "", bits = 0, val = 0;
+        for (var i = 0; i < b.length && out.length < 20; i++) {
+          val = (val << 8) | b[i]; bits += 8;
+          while (bits >= 5 && out.length < 20) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; }
+        }
+        return out;
+      });
+    }
+    // normResolverHost canonicalizes a dmsg/skynet resolver host: strips a trailing
+    // .dmsg/.skynet, base32-encodes any 66-hex PK label, re-appends ".<net>". Keeps
+    // aliases / base32 / name-vhost labels intact. So "<hex>.dmsg", "<base32>.dmsg",
+    // "magnetosphere.net.<hex>.dmsg" all normalize to a stable "<...>.<net>".
+    function normResolverHost(pk, net) {
+      var h = String(pk || "").replace(/\.(dmsg|skynet)$/i, "");
+      h = h.split(".").map(function (l) { return /^[0-9a-fA-F]{66}$/.test(l) ? pkDNSLabel(l) : l; }).join(".");
+      return h + "." + net;
+    }
+    // buildRealOrigin(descriptor, path) -> Promise<url>. descriptor is
+    //   {net:'dmsg'|'skynet', host:'<resolverHost>'} or {net:'skysocks', base:'https://<host>'}.
+    function buildRealOrigin(descriptor, path) {
       var c = realOriginCfg;
-      var net = "";
-      if (/\.dmsg$/i.test(host)) { net = "dmsg"; host = host.slice(0, -5); }
-      else if (/\.skynet$/i.test(host)) { net = "skynet"; host = host.slice(0, -7); }
-      else if (scheme === "dmsg" || scheme === "skynet") { net = scheme; }
-      var labels = host.split(".").map(function (l) {
-        return /^[0-9a-fA-F]{66}$/.test(l) ? pkDNSLabel(l) : l;
-      }).join(".");
-      var origin = labels + (net ? ("." + net) : "") + (c.suffix || ".mesh.localhost");
-      return (c.scheme || "https") + "://" + origin + (c.port ? (":" + c.port) : "") + (path || "/");
+      var canon = descriptor.net === "skysocks" ? ("skysocks|" + descriptor.base) : (descriptor.net + "|" + descriptor.host);
+      return originIdFor(canon).then(function (id) {
+        meshOrigins[id] = descriptor;
+        return (c.scheme || "https") + "://" + id + (c.suffix || ".mesh.localhost") + (c.port ? (":" + c.port) : "") + (path || "/");
+      });
     }
 
     // 1x1 transparent GIF — placeholder src for a deferred (lazy) image so it
@@ -624,7 +641,8 @@
       try {
         // Real-origin: hand the whole load to the browser via an isolated origin.
         if (realOriginCfg && entry.kind === "dmsg") {
-          var rurl = buildRealOrigin(entry.pk, entry.path, entry.scheme);
+          var dnet = (entry.scheme === "skynet") ? "skynet" : "dmsg";
+          var rurl = await buildRealOrigin({ net: dnet, host: normResolverHost(entry.pk, dnet) }, entry.path);
           frame.removeAttribute("srcdoc");
           frame.src = rurl;
           currentSitePK = entry.pk;
@@ -706,15 +724,13 @@
       if (realOriginCfg) {
         var cu; try { cu = new URL(url); } catch (e) { cu = null; }
         if (cu && (cu.protocol === "http:" || cu.protocol === "https:")) {
-          var corigin = cu.hostname + ".skysocks" + (realOriginCfg.suffix || ".mesh.localhost");
-          var crurl = (realOriginCfg.scheme || "https") + "://" + corigin +
-            (realOriginCfg.port ? (":" + realOriginCfg.port) : "") + (cu.pathname + cu.search);
           if (gen !== loadGen) return { status: 0, cancelled: true };
+          var crurl = await buildRealOrigin({ net: "skysocks", base: cu.origin }, cu.pathname + cu.search);
           currentSitePK = "";
           frame.removeAttribute("srcdoc");
           frame.src = crurl;
           if (opts.setAddr) opts.setAddr(url); // show the REAL clearnet URL, not the B origin
-          log("real-origin clearnet " + crurl);
+          log("real-origin clearnet " + url);
           setLoading(false);
           return { status: 0, realOrigin: true };
         }

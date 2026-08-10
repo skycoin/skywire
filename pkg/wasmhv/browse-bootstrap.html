@@ -29,45 +29,17 @@
   'use strict';
   var V_ORIGIN = "__V_ORIGIN__";      // visor origin (holds the SharedWorker visor + key)
   var SUFFIX   = "__SUFFIX__" || ".mesh.localhost";
+  // Content-addressed browse origin: the hostname is a short stable hash of the
+  // target (the shortid). V holds shortid -> descriptor and resolves the target;
+  // we just tell V which shortid we are, then send RAW request URLs (V maps them).
+  var SHORTID = location.hostname.slice(0, Math.max(0, location.hostname.length - SUFFIX.length));
 
   function fail(msg) {
     var m = document.getElementById('mesh-msg'); if (m) { m.textContent = msg; }
     var b = document.getElementById('mesh-boot'); if (b) { b.querySelector('.sp').style.display = 'none'; }
   }
 
-  // meshTarget derives the resolving-proxy host (for skywireVisor.fetchDmsg) from
-  // this origin's hostname: "<vhost>.<base32pk>[.<net>].mesh.localhost" →
-  // "<vhost>.<base32pk>.dmsg" (or ".skynet"). fetchDmsg resolves base32/hex PKs,
-  // aliases and name-vhost forms Go-side.
-  function meshTarget() {
-    var host = location.hostname;
-    if (host.slice(-SUFFIX.length) === SUFFIX) host = host.slice(0, -SUFFIX.length);
-    var net = 'dmsg';
-    if (/\.skynet$/.test(host)) { net = 'skynet'; host = host.replace(/\.skynet$/, ''); }
-    else if (/\.dmsg$/.test(host)) { net = 'dmsg'; host = host.replace(/\.dmsg$/, ''); }
-    else if (/\.skysocks$/.test(host)) { net = 'skysocks'; host = host.replace(/\.skysocks$/, ''); }
-    // For skysocks the host IS the clearnet hostname (no ".<net>" mesh suffix).
-    if (net === 'skysocks') return { host: host, net: net };
-    return { host: host + '.' + net, net: net };
-  }
-
-  // For skysocks, a request to origin B (<clearnethost>.skysocks<SUFFIX>) maps to
-  // the real clearnet URL https://<clearnethost><path>; an absolute cross-origin
-  // request is already a real clearnet URL and passes through unchanged.
-  function realFetchUrl(net, reqUrl) {
-    if (net !== 'skysocks') return reqUrl;
-    try {
-      var u = new URL(reqUrl, location.href);
-      var suf = '.skysocks' + SUFFIX;
-      if (u.hostname.slice(-suf.length) === suf) {
-        return 'https://' + u.hostname.slice(0, -suf.length) + u.pathname + u.search;
-      }
-      return u.href;
-    } catch (e) { return reqUrl; }
-  }
-
-  var tgt = meshTarget();
-  var hostEl = document.getElementById('mesh-host'); if (hostEl) hostEl.textContent = tgt.host;
+  var hostEl = document.getElementById('mesh-host'); if (hostEl) hostEl.textContent = SHORTID;
 
   // --- bridge to the PARENT visor app (V) ----------------------------------
   // This browse origin B is embedded as an iframe INSIDE the visor app V (the
@@ -90,6 +62,13 @@
       window.addEventListener('message', function onmsg(e) {
         if (e.origin !== V_ORIGIN) return;               // only trust V
         if (!e.data || e.data.type !== 'mesh-helper-ready') return;
+        if (e.data.error) {                              // V rejected our shortid
+          clearTimeout(to);
+          window.removeEventListener('message', onmsg);
+          fail('mesh: ' + e.data.error);
+          reject(new Error(e.data.error));
+          return;
+        }
         if (!e.ports || !e.ports[0]) return;
         clearTimeout(to);
         helperPort = e.ports[0];
@@ -101,7 +80,7 @@
       (function hello() {
         if (helperPort || tries > 30) return;
         tries++;
-        try { window.parent.postMessage({ type: 'mesh-hello' }, V_ORIGIN); } catch (e) {}
+        try { window.parent.postMessage({ type: 'mesh-hello', shortid: SHORTID }, V_ORIGIN); } catch (e) {}
         setTimeout(hello, 300);
       })();
     });
@@ -137,7 +116,7 @@
       var replyPort = e.ports[0];
       var r = d.req || {};
       var transfer = r.body ? [r.body] : [];
-      helperFetch({ host: tgt.host, net: tgt.net, url: realFetchUrl(tgt.net, r.url), method: r.method, headers: r.headers, body: r.body }, transfer)
+      helperFetch({ url: r.url, method: r.method, headers: r.headers, body: r.body }, transfer)
         .then(function (res) {
           var t = res.body ? [res.body] : [];
           replyPort.postMessage(res, t);
@@ -163,7 +142,7 @@
   ]).then(function () {
     window.__mb.step = 'fetching-top';
     var path = location.pathname + location.search;
-    return helperFetch({ host: tgt.host, net: tgt.net, url: realFetchUrl(tgt.net, location.href), method: 'GET', headers: {}, body: null, path: path });
+    return helperFetch({ url: location.href, method: 'GET', headers: {}, body: null, path: path });
   }).then(function (res) {
     window.__mb.step = 'top-returned';
     window.__mb.topStatus = res && res.status;
