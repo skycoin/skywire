@@ -41,13 +41,23 @@ Two premises make this a *bounded* change rather than a rewrite:
 
 ### 1. Server↔server relay, always on
 
-`forwardViaPeer` / `PeerAnnounce` exist but ship opt-in
+`forwardViaPeer` / `PeerAnnounce` shipped opt-in
 (`AnnounceAsPeer` / `AcceptPeerAnnouncements` default off). A relay capability
 that fragments the network into "relays" and "non-relays" for no reason should
 just be how a dmsg server behaves — so the on/off toggles are **removed** (not
 merely defaulted on), with internal caps (max accepted peer links, max relayed
 streams, the existing loop/hop guard) so an always-open relay can't become an
 amplifier. "Implicitly enabled, bounded — not configurable off."
+
+*(Shipped.)* Every server now announces itself as a forwardable peer over
+its outbound links and honors inbound announcements unconditionally. The
+`AnnounceAsPeer` / `AcceptPeerAnnouncements` config fields are gone; the
+optional `accepted_peer_pks` allowlist remains (empty = accept any), joined by
+`max_peer_links` (`DefaultMaxPeerLinks`) and `max_relayed_streams`
+(`DefaultMaxRelayedStreams`) as the bounds. A bridge is counted against the
+relay-stream cap only when one side is a peer session — plain local
+client↔client bridging is never gated. Peer-originated frames are still refused
+re-forwarding (`ss.isPeer` 1-hop guard).
 
 ### 2. Visor as a dmsg relay (the `VStreamMux` bridge)
 
