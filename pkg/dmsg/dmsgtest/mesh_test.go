@@ -199,14 +199,17 @@ func TestServerMesh_CrossServerDial(t *testing.T) {
 	srvWg.Wait()
 }
 
-// nonPublicReverseSetup stands up a public server S_pub (AcceptPeerAnnouncements
-// = accept) and a non-public server S_priv that dials S_pub and announces
-// itself as a forwardable peer; S_priv is NOT registered in the public
-// discovery. It then connects client A (reachable only via S_priv) and client B
-// (on S_pub), and attempts B's dial of A. The dial can only succeed via the
-// announced reverse-forward path. Returns B's dial result so callers can assert
-// both the gate-on (success) and gate-off (failure) behavior.
-func nonPublicReverseSetup(t *testing.T, ctx context.Context, accept bool) (streamB *dmsg.Stream, accA func() (*dmsg.Stream, error), cleanup func(), dialErr error) {
+// nonPublicReverseSetup stands up a public server S_pub and a non-public
+// server S_priv that dials S_pub and announces itself as a forwardable peer;
+// S_priv is NOT registered in the public discovery. Peer relaying is always
+// on, so reachability is instead governed by S_pub's AcceptedPeerPKs
+// allowlist: when allow is true the allowlist admits S_priv; when false it
+// lists a foreign PK, so S_priv's announcement is rejected. It then connects
+// client A (reachable only via S_priv) and client B (on S_pub) and attempts
+// B's dial of A — which can only succeed via the announced reverse-forward
+// path. Returns B's dial result so callers can assert both the allow (success)
+// and reject (failure) behavior.
+func nonPublicReverseSetup(t *testing.T, ctx context.Context, allow bool) (streamB *dmsg.Stream, accA func() (*dmsg.Stream, error), cleanup func(), dialErr error) {
 	t.Helper()
 
 	// Public discovery — only S_pub registers here.
@@ -217,11 +220,17 @@ func nonPublicReverseSetup(t *testing.T, ctx context.Context, accept bool) (stre
 	require.NoError(t, err)
 	pkPriv, skPriv := cipher.GenerateKeyPair()
 
+	// Peer relaying is always on; the allowlist is what gates S_priv. Admit
+	// pkPriv to allow the reverse path, or list a foreign PK to reject it.
+	allowlist := []cipher.PubKey{pkPriv}
+	if !allow {
+		foreign, _ := cipher.GenerateKeyPair()
+		allowlist = []cipher.PubKey{foreign}
+	}
 	confPub := &dmsg.ServerConfig{
-		MaxSessions:             10,
-		UpdateInterval:          dmsg.DefaultUpdateInterval,
-		AcceptPeerAnnouncements: accept,
-		AcceptedPeerPKs:         []cipher.PubKey{pkPriv},
+		MaxSessions:     10,
+		UpdateInterval:  dmsg.DefaultUpdateInterval,
+		AcceptedPeerPKs: allowlist,
 	}
 
 	lisPriv, err := nettest.NewLocalListener("tcp")
@@ -230,7 +239,6 @@ func nonPublicReverseSetup(t *testing.T, ctx context.Context, accept bool) (stre
 	confPriv := &dmsg.ServerConfig{
 		MaxSessions:    10,
 		UpdateInterval: dmsg.DefaultUpdateInterval,
-		AnnounceAsPeer: true,
 		Peers:          []dmsg.PeerEntry{{PK: pkPub, Addr: lisPub.Addr().String()}},
 	}
 
@@ -390,10 +398,10 @@ func TestNonPublicServer_ReverseDial(t *testing.T) {
 	t.Log("Non-public-server reverse-dial test passed.")
 }
 
-// TestNonPublicServer_ReverseDial_GateOff is the negative control: with
-// AcceptPeerAnnouncements disabled on the public server, the same reverse dial
-// must FAIL — proving it is the announcement gate (not the static-peer path)
-// that makes the non-public server's clients reachable inbound.
+// TestNonPublicServer_ReverseDial_GateOff is the negative control: with an
+// AcceptedPeerPKs allowlist that does NOT include S_priv, the same reverse
+// dial must FAIL — proving it is the (always-on) announcement path, gated by
+// the allowlist, that makes the non-public server's clients reachable inbound.
 func TestNonPublicServer_ReverseDial_GateOff(t *testing.T) {
 	const timeout = 40 * time.Second
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
