@@ -50,15 +50,28 @@ import (
 
 // WasmServeConfig configures ServeWasm. Mirrors the `hv serve` flags.
 type WasmServeConfig struct {
-	Addr     string          // HTTP listen address (e.g. ":8443")
-	TLS      bool            // serve HTTPS (self-signed localhost cert, or TLSCert/TLSKey if set)
-	TLSCert  string          // optional cert file (PEM) — a locally-trusted *.mesh.localhost cert (mkcert) so B-origin iframes load without a per-host accept; empty = built-in self-signed
-	TLSKey   string          // optional key file (PEM), paired with TLSCert
-	Harness  bool            // mount the /ctl/* operator control bridge (DEV ONLY)
-	Wallet   bool            // serve the bundled skycoin-web wallet at /wallet/
-	Variant  string          // "" = build default; "go" | "tinygo"
-	Password string          // optional access-password gate
-	Log      *logging.Logger // nil → package default
+	Addr     string // HTTP listen address (e.g. ":8443")
+	TLS      bool   // serve HTTPS (self-signed localhost cert, or TLSCert/TLSKey if set)
+	TLSCert  string // optional cert file (PEM) — a locally-trusted *.mesh.localhost cert (mkcert) so B-origin iframes load without a per-host accept; empty = built-in self-signed
+	TLSKey   string // optional key file (PEM), paired with TLSCert
+	Harness  bool   // mount the /ctl/* operator control bridge (DEV ONLY)
+	Wallet   bool   // serve the bundled skycoin-web wallet at /wallet/
+	Variant  string // "" = build default; "go" | "tinygo"
+	Password string // optional access-password gate
+	// BrowseSuffix is the browse-origin domain suffix (leading dot), e.g.
+	// ".mesh.localhost" (local) or ".haltingstate.net" (hosted). Empty →
+	// ".mesh.localhost".
+	BrowseSuffix string
+	// BrowseOriginAddr, when set, ALSO serves the browse-origin SW bootstrap on a
+	// SECOND listener at this address (the same process serves V on Addr and the
+	// isolated browse origins B here). A hosted deploy fronts this with Caddy on
+	// *.<BrowseSuffix>. Empty = off (local mode host-routes B on the V listener).
+	BrowseOriginAddr string
+	// VOrigin is the PUBLIC origin of the visor app V (e.g.
+	// "https://theskywirenetwork.net") that B's bootstrap postMessages to — used
+	// only with BrowseOriginAddr behind a proxy. Empty = derive from Addr (local).
+	VOrigin string
+	Log     *logging.Logger // nil → package default
 }
 
 // ServeWasm builds the standalone wasm-visor handler and serves it on
@@ -134,13 +147,51 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	if bport != "" {
 		vHostPort = "localhost:" + bport
 	}
-	// Injected so browse.js enters real-origin mode and builds <pk>.mesh.localhost
-	// :<port> origins for the WinBox browser iframe.
-	browseOriginJS := "window.__SKYWIRE_BROWSE_ORIGIN__={suffix:\".mesh.localhost\",scheme:" + strconv.Quote(browseScheme) + ",port:" + strconv.Quote(bport) + "};"
+	// Browse-origin domain suffix. Empty = local single-listener default.
+	suffix := cfg.BrowseSuffix
+	if suffix == "" {
+		suffix = ".mesh.localhost"
+	}
+	// B-origin scheme+port. B may live elsewhere than V: for the *.localhost local
+	// model B and V share THIS listener + cert, so B inherits browseScheme/bport;
+	// for a hosted suffix B is fronted by Caddy TLS on 443 (a separate process /
+	// host — see ServeBrowseOrigin), so it's plain https with no explicit port.
+	bScheme, bPort := browseScheme, bport
+	if !strings.HasSuffix(suffix, ".localhost") {
+		bScheme, bPort = "https", ""
+	}
+	// Injected so browse.js enters real-origin mode and builds <pk><suffix>[:<port>]
+	// origins for the WinBox browser iframe.
+	browseOriginJS := "window.__SKYWIRE_BROWSE_ORIGIN__={suffix:" + strconv.Quote(suffix) + ",scheme:" + strconv.Quote(bScheme) + ",port:" + strconv.Quote(bPort) + "};"
 	index := injectWasmBoot(indexB, wasmVer, cfg.Harness, browseOriginJS)
 
 	browseBootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__V_ORIGIN__"), []byte(browseScheme+"://"+vHostPort))
-	browseBootstrap = bytes.ReplaceAll(browseBootstrap, []byte("__SUFFIX__"), []byte(".mesh.localhost"))
+	browseBootstrap = bytes.ReplaceAll(browseBootstrap, []byte("__SUFFIX__"), []byte(suffix))
+
+	// Hosted two-port mode: when BrowseOriginAddr is set, this SAME process ALSO
+	// runs the browse-origin bootstrap server on that second listener (Caddy fronts
+	// it on *.<suffix>). V (this listener) and B (that one) are separate origins;
+	// co-locating them in one process keeps the deploy to a single unit. Best-effort
+	// — a bind failure is logged, not fatal to serving V.
+	if cfg.BrowseOriginAddr != "" {
+		vOrigin := cfg.VOrigin
+		if vOrigin == "" {
+			vOrigin = browseScheme + "://" + vHostPort
+		}
+		go func() {
+			if err := ServeBrowseOrigin(ctx, BrowseOriginConfig{
+				Addr:    cfg.BrowseOriginAddr,
+				VOrigin: vOrigin,
+				Suffix:  suffix,
+				TLS:     cfg.TLS,
+				TLSCert: cfg.TLSCert,
+				TLSKey:  cfg.TLSKey,
+				Log:     log,
+			}); err != nil {
+				log.WithError(err).Error("browse-origin bootstrap server failed")
+			}
+		}()
+	}
 
 	mux := http.NewServeMux()
 	serveBytes := func(path, ct string, body []byte) {
@@ -318,7 +369,7 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// subresources. Non-B hosts (the visor origin V = localhost) are untouched.
 	base := handler
 	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isMeshBrowseHost(r.Host) && r.URL.Path != "/browse-sw.js" {
+		if isMeshBrowseHost(r.Host, suffix) && r.URL.Path != "/browse-sw.js" {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			w.Header().Set("Cache-Control", "no-store")
 			_, _ = w.Write(browseBootstrap) //nolint:errcheck
@@ -359,6 +410,95 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		return nil
 	}
 	log.Infof("serving standalone wasm-visor (ui + %d-byte wasm + hv-boot) on %s", len(wasm), cfg.Addr)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("serve: %w", err)
+	}
+	return nil
+}
+
+// BrowseOriginConfig configures ServeBrowseOrigin — the browse-origin bootstrap
+// server for the hosted two-server model. It serves ONLY the embedded SW bootstrap
+// (and browse-sw.js) for the isolated browse origins B (<pk><Suffix>); it is NEVER
+// in the content path (the registered SW relays every fetch to the visitor's in-tab
+// visor at VOrigin). Front it with Caddy on *.<Suffix>.
+type BrowseOriginConfig struct {
+	Addr    string          // HTTP listen address (loopback; Caddy fronts it)
+	VOrigin string          // the visor app origin V, e.g. "https://theskywirenetwork.net"
+	Suffix  string          // browse-origin domain suffix (leading dot), e.g. ".haltingstate.net"
+	TLS     bool            // usually false — Caddy terminates TLS
+	TLSCert string          // optional PEM cert (paired with TLSKey)
+	TLSKey  string          // optional PEM key
+	Log     *logging.Logger // nil → package default
+}
+
+// ServeBrowseOrigin runs the browse-origin bootstrap server (RFC §4b, hosted mode):
+// for any Host under Suffix it returns the SW bootstrap shell with __V_ORIGIN__ and
+// __SUFFIX__ substituted; /browse-sw.js returns the transport SW. Blocking until ctx
+// is canceled.
+func ServeBrowseOrigin(ctx context.Context, cfg BrowseOriginConfig) error {
+	log := cfg.Log
+	if log == nil {
+		log = logging.MustGetLogger("browse-origin")
+	}
+	if strings.TrimSpace(cfg.VOrigin) == "" {
+		return fmt.Errorf("browse-origin: VOrigin is required")
+	}
+	suffix := strings.TrimSpace(cfg.Suffix)
+	if suffix == "" {
+		return fmt.Errorf("browse-origin: Suffix is required")
+	}
+	if !strings.HasPrefix(suffix, ".") {
+		suffix = "." + suffix
+	}
+
+	// Precompute the bootstrap shell: the SW bootstrap that every browse origin B
+	// serves. It registers browse-sw.js and points the SW at the visitor's in-tab
+	// visor at VOrigin; the transcode substitutions match ServeWasm.
+	bootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__V_ORIGIN__"), []byte(cfg.VOrigin))
+	bootstrap = bytes.ReplaceAll(bootstrap, []byte("__SUFFIX__"), []byte(suffix))
+
+	// Caddy only routes *.Suffix here, so no host check is needed: /browse-sw.js is
+	// the transport SW, every other path is the bootstrap shell.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/browse-sw.js" {
+			w.Header().Set("Content-Type", "text/javascript")
+			w.Header().Set("Cache-Control", "no-cache")
+			_, _ = w.Write(wasmhv.BrowseSWJS) //nolint:errcheck
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
+		_, _ = w.Write(bootstrap) //nolint:errcheck
+	})
+
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() {
+		<-ctx.Done()
+		_ = srv.Close() //nolint:errcheck
+	}()
+
+	log.Infof("serving browse-origin bootstrap on %s (V-origin %s, suffix %s)", cfg.Addr, cfg.VOrigin, suffix)
+	if cfg.TLS {
+		var cert tls.Certificate
+		var err error
+		if cfg.TLSCert != "" && cfg.TLSKey != "" {
+			cert, err = tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
+		} else {
+			cert, err = wasmLocalhostTLSCert()
+		}
+		if err != nil {
+			return fmt.Errorf("tls cert: %w", err)
+		}
+		srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		if err := srv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+			return fmt.Errorf("serve: %w", err)
+		}
+		return nil
+	}
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return fmt.Errorf("serve: %w", err)
 	}
@@ -462,15 +602,16 @@ func injectWasmBoot(index []byte, wasmVer string, harness bool, browseOriginJS s
 }
 
 // isMeshBrowseHost reports whether an HTTP Host header targets an isolated
-// real-origin browse origin B (<...>.mesh.localhost[:port]) rather than the visor
-// origin V (localhost). Browsers resolve *.localhost to loopback, so these hit
-// the same wasm-serve listener and are distinguished only by Host.
-func isMeshBrowseHost(h string) bool {
+// real-origin browse origin B (<...><suffix>[:port]) rather than the visor
+// origin V. For the *.mesh.localhost local model browsers resolve *.localhost to
+// loopback, so these hit the same wasm-serve listener and are distinguished only
+// by Host.
+func isMeshBrowseHost(h, suffix string) bool {
 	host := h
 	if i := strings.IndexByte(host, ':'); i >= 0 {
 		host = host[:i]
 	}
-	return strings.HasSuffix(host, ".mesh.localhost")
+	return strings.HasSuffix(host, suffix)
 }
 
 // wasmLocalhostTLSCert returns a self-signed localhost cert for
