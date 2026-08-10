@@ -108,15 +108,22 @@ type EntityCommon struct {
 	peerSessionsFunc func() []*SessionCommon
 
 	// acceptPeerAnnouncements, peerAnnounceAllowedFunc and
-	// promoteToPeerFunc support inbound peer announcements: a non-public
-	// server (not in discovery, never dialed by anyone) announcing itself
-	// as a forwardable peer over the link it dials out. Only set on
-	// Server entities that opt in. promoteToPeerFunc files the announced
-	// inbound session in the server's peer set so the reverse path can
-	// forward client streams to it.
+	// promoteToPeerFunc support inbound peer announcements: a server
+	// announcing itself as a forwardable peer over the link it dials out.
+	// Set to true on all Server entities (peer relaying is always on).
+	// peerAnnounceAllowedFunc bounds/allowlists who may be filed;
+	// promoteToPeerFunc files the announced inbound session in the
+	// server's peer set so the reverse path can forward client streams.
 	acceptPeerAnnouncements bool
 	peerAnnounceAllowedFunc func(remotePK cipher.PubKey) bool
 	promoteToPeerFunc       func(remotePK cipher.PubKey, ses *SessionCommon)
+
+	// maxRelayedStreams bounds concurrent streams this server relays on
+	// behalf of a peer (a peer bridge, either direction); relayedStreams
+	// is the live count (accessed atomically). Local client↔client
+	// bridging on the same server is not counted. Set on Server entities.
+	maxRelayedStreams int
+	relayedStreams    int64
 
 	// lastPushedSrvPKs is the set of delegated server PKs most recently
 	// pushed to the dmsg discovery. It is used by updateClientEntry to
@@ -305,6 +312,27 @@ func (c *EntityCommon) peerAnnounceAllowed(remotePK cipher.PubKey) bool {
 		return false
 	}
 	return c.peerAnnounceAllowedFunc(remotePK)
+}
+
+// tryAcquireRelaySlot reserves capacity for one peer-relayed stream,
+// reporting false when the server is already at maxRelayedStreams. A
+// zero/unset cap means relaying is not configured (client entities) —
+// reject rather than relay unbounded. Pair every true return with a
+// releaseRelaySlot.
+func (c *EntityCommon) tryAcquireRelaySlot() bool {
+	if c.maxRelayedStreams <= 0 {
+		return false
+	}
+	if atomic.AddInt64(&c.relayedStreams, 1) > int64(c.maxRelayedStreams) {
+		atomic.AddInt64(&c.relayedStreams, -1)
+		return false
+	}
+	return true
+}
+
+// releaseRelaySlot returns a slot reserved by tryAcquireRelaySlot.
+func (c *EntityCommon) releaseRelaySlot() {
+	atomic.AddInt64(&c.relayedStreams, -1)
 }
 
 // promoteToPeer files an announced inbound session in the server's peer

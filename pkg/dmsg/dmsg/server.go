@@ -44,26 +44,32 @@ type ServerConfig struct {
 	// pkg/dmsg decoupled from skywire's buildinfo. Empty preserves "0.0.1".
 	Version string
 
-	// AnnounceAsPeer makes this server send a signed PeerAnnounce on
-	// every outbound peer link it dials, asking the remote to treat
-	// this server as a forwardable peer. Used by a non-public server
-	// (not registered in discovery) so its clients become reachable
-	// inbound via the link it dialed out.
-	AnnounceAsPeer bool
-	// AcceptPeerAnnouncements lets this server honor inbound PeerAnnounce
-	// frames, filing the announcing session in its peer set so it
-	// forwards client streams back down that link. When AcceptedPeerPKs
-	// is non-empty it acts as an allowlist; empty means accept any
-	// announcer (an open relay surface — set deliberately).
-	AcceptPeerAnnouncements bool
-	AcceptedPeerPKs         []cipher.PubKey
+	// AcceptedPeerPKs optionally restricts which servers may announce
+	// themselves as forwardable peers over an inbound link. Empty (the
+	// default) accepts any announcer — every dmsg server is a relay
+	// surface. Peer relaying is always on and cannot be disabled; this
+	// allowlist only narrows *who* may be filed as a peer.
+	AcceptedPeerPKs []cipher.PubKey
+
+	// MaxPeerLinks bounds the number of concurrent peer sessions (inbound
+	// announced + configured outbound) so an always-open relay surface
+	// can't accumulate unbounded peer links. Zero uses DefaultMaxPeerLinks.
+	MaxPeerLinks int
+	// MaxRelayedStreams bounds the number of concurrent streams this
+	// server relays on behalf of a peer (either direction of a peer
+	// bridge), so relaying for others can't be turned into an amplifier.
+	// Zero uses DefaultMaxRelayedStreams. Local client↔client bridging on
+	// this same server is unaffected — only peer-relayed streams count.
+	MaxRelayedStreams int
 }
 
 // DefaultServerConfig returns the default server config.
 func DefaultServerConfig() *ServerConfig {
 	return &ServerConfig{
-		MaxSessions:    DefaultMaxSessions,
-		UpdateInterval: DefaultUpdateInterval,
+		MaxSessions:       DefaultMaxSessions,
+		UpdateInterval:    DefaultUpdateInterval,
+		MaxPeerLinks:      DefaultMaxPeerLinks,
+		MaxRelayedStreams: DefaultMaxRelayedStreams,
 	}
 }
 
@@ -103,10 +109,12 @@ type Server struct {
 	peerSessions   map[cipher.PubKey]*SessionCommon
 	peerSessionsMx sync.Mutex
 
-	// Inbound peer-announcement support (non-public servers).
-	announceAsPeer          bool
-	acceptPeerAnnouncements bool
-	acceptedPeerPKs         map[cipher.PubKey]struct{} // allowlist; empty = accept any
+	// Inbound peer-announcement support. Peer relaying is always on; a
+	// server always announces on its outbound peer links and always
+	// honors inbound announcements, bounded by maxPeerLinks and the
+	// optional acceptedPeerPKs allowlist.
+	acceptedPeerPKs map[cipher.PubKey]struct{} // allowlist; empty = accept any
+	maxPeerLinks    int
 }
 
 // GeoLookupFunc returns geolocation data for the given IP. Returns
@@ -171,22 +179,32 @@ func NewServer(pk cipher.PubKey, sk cipher.SecKey, dc disc.APIClient, conf *Serv
 		return sessions
 	}
 
-	// Inbound peer-announcement support: a non-public server announces
-	// itself as a forwardable peer over its outbound links; an accepting
-	// server promotes the announced inbound session into peerSessions.
-	s.announceAsPeer = conf.AnnounceAsPeer
-	s.acceptPeerAnnouncements = conf.AcceptPeerAnnouncements
+	// Peer relaying is always on: a server always announces itself as a
+	// forwardable peer over its outbound links, and always promotes an
+	// accepted inbound announcement into peerSessions. Bounded by
+	// maxPeerLinks (link count) and the optional acceptedPeerPKs
+	// allowlist; there is no on/off toggle.
+	s.maxPeerLinks = conf.MaxPeerLinks
+	if s.maxPeerLinks <= 0 {
+		s.maxPeerLinks = DefaultMaxPeerLinks
+	}
 	s.acceptedPeerPKs = make(map[cipher.PubKey]struct{}, len(conf.AcceptedPeerPKs))
 	for _, pk := range conf.AcceptedPeerPKs {
 		s.acceptedPeerPKs[pk] = struct{}{}
 	}
-	s.EntityCommon.acceptPeerAnnouncements = conf.AcceptPeerAnnouncements
+	s.EntityCommon.acceptPeerAnnouncements = true
+	s.EntityCommon.maxRelayedStreams = conf.MaxRelayedStreams
+	if s.EntityCommon.maxRelayedStreams <= 0 {
+		s.EntityCommon.maxRelayedStreams = DefaultMaxRelayedStreams
+	}
 	s.EntityCommon.peerAnnounceAllowedFunc = func(remotePK cipher.PubKey) bool {
-		if !s.acceptPeerAnnouncements {
-			return false
-		}
 		s.peerSessionsMx.Lock()
 		defer s.peerSessionsMx.Unlock()
+		// Bound the number of peer links so an always-open relay surface
+		// can't accumulate unbounded inbound peers.
+		if len(s.peerSessions) >= s.maxPeerLinks {
+			return false
+		}
 		if len(s.acceptedPeerPKs) == 0 {
 			return true // empty allowlist = accept any announcer
 		}
@@ -581,15 +599,13 @@ func (s *Server) maintainPeerConnection(ctx context.Context, peer PeerEntry) {
 		bo = 5 * time.Second // reset backoff on success
 
 		// Announce ourselves as a forwardable peer over this outbound
-		// link so a non-public server (not in discovery) becomes
+		// link so we (and, for a non-public server, our clients) become
 		// reachable inbound: the remote files this session in its peer
-		// set and forwards client streams back down it.
-		if s.announceAsPeer {
-			if aErr := s.sendPeerAnnounce(ses); aErr != nil {
-				log.WithError(aErr).Warn("Failed to announce as peer.")
-			} else {
-				log.Info("Announced as forwardable peer.")
-			}
+		// set and forwards client streams back down it. Always on.
+		if aErr := s.sendPeerAnnounce(ses); aErr != nil {
+			log.WithError(aErr).Warn("Failed to announce as peer.")
+		} else {
+			log.Info("Announced as forwardable peer.")
 		}
 
 		// Serve the outbound peer session so forwarded streams arriving
@@ -637,9 +653,9 @@ func (s *Server) isPeerPK(pk cipher.PubKey) bool {
 }
 
 // sendPeerAnnounce opens a stream on the given (outbound) peer session,
-// sends a signed PeerAnnounce, and waits for the remote's ack. Used on
-// outbound peer links when AnnounceAsPeer is set, so a non-public server
-// becomes reachable inbound.
+// sends a signed PeerAnnounce, and waits for the remote's ack. Sent on
+// every outbound peer link (peer relaying is always on), so the server —
+// and a non-public server's clients — become reachable inbound.
 func (s *Server) sendPeerAnnounce(ses *SessionCommon) error {
 	ann := &PeerAnnounce{Timestamp: time.Now().UnixNano(), SrcPK: s.pk}
 	obj, err := MakeSignedPeerAnnounce(ann, s.sk)
