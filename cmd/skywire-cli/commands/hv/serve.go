@@ -13,6 +13,8 @@ var (
 	serveAddr     string
 	serveHarness  bool
 	serveTLS      bool
+	serveTLSCert  string
+	serveTLSKey   string
 	servePassword string
 	serveVariant  string
 	serveWallet   bool
@@ -22,6 +24,8 @@ func init() {
 	serveCmd.Flags().StringVarP(&serveAddr, "addr", "a", ":7999", "HTTP listen address")
 	serveCmd.Flags().BoolVar(&serveHarness, "harness", false, "mount the /ctl/* operator control bridge (drive the in-tab visor from a shell); DEV ONLY — never expose publicly")
 	serveCmd.Flags().BoolVar(&serveTLS, "tls", false, "serve over HTTPS with a self-signed localhost cert (a real https origin for local testing — wss works, ws:// is mixed-content-blocked exactly as in prod). Accept the browser cert warning once; the cert is persisted across restarts")
+	serveCmd.Flags().StringVar(&serveTLSCert, "tls-cert", "", "PEM cert to serve TLS with instead of the self-signed localhost cert — e.g. a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept. Requires --tls-key")
+	serveCmd.Flags().StringVar(&serveTLSKey, "tls-key", "", "PEM key paired with --tls-cert")
 	serveCmd.Flags().StringVar(&servePassword, "password", "", "gate the served PWA behind an access password (cookie login). Empty = open. Use over --tls / behind TLS so the password isn't sent in clear")
 	serveCmd.Flags().StringVarP(&serveVariant, "variant", "W", "", "which embedded wasm-visor to serve: 'go' (larger, full crypto/tls+net/http) or 'tinygo' (~4x smaller — better for the PWA, with the documented TinyGo feature gaps). Empty = the build default. A standard-Go build embeds both; a TinyGo build has only 'tinygo'")
 	serveCmd.Flags().BoolVar(&serveWallet, "wallet", true, "serve the bundled skycoin-web wallet at /wallet/ (custody stays browser-side — the host never sees keys). --wallet=false serves a wallet-less PWA")
@@ -52,6 +56,8 @@ page never asks anyone to type a secret key.`,
 		if err := visor.ServeWasm(cmd.Context(), visor.WasmServeConfig{
 			Addr:     serveAddr,
 			TLS:      serveTLS,
+			TLSCert:  serveTLSCert,
+			TLSKey:   serveTLSKey,
 			Harness:  serveHarness,
 			Wallet:   serveWallet,
 			Variant:  serveVariant,

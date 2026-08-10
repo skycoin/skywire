@@ -551,6 +551,8 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 			if err := ServeWasm(parentCtx, WasmServeConfig{
 				Addr:     ws.Addr,
 				TLS:      ws.TLS,
+				TLSCert:  ws.TLSCert,
+				TLSKey:   ws.TLSKey,
 				Harness:  ws.Harness,
 				Wallet:   !ws.NoWallet,
 				Variant:  ws.Variant,
