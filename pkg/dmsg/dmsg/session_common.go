@@ -77,6 +77,27 @@ type SessionManager struct {
 	addr  net.Addr
 }
 
+// NumStreams reports the number of open mux streams on this session. Returns -1
+// when the count is unavailable — a quic session's native streams aren't cheaply
+// countable, and a not-yet-established manager has no mux — which the idle-session
+// reaper treats as "busy" so it never reaps a session it can't measure.
+func (sm *SessionManager) NumStreams() int {
+	sm.mutx.RLock()
+	defer sm.mutx.RUnlock()
+	switch {
+	case sm.yamux != nil:
+		return sm.yamux.NumStreams()
+	case sm.smux != nil:
+		return sm.smux.NumStreams()
+	default:
+		return -1
+	}
+}
+
+// NumStreams reports the number of open mux streams on this session (0 = idle;
+// -1 = unmeasurable, treated as busy). Used by the idle-session reaper.
+func (sc *SessionCommon) NumStreams() int { return sc.sm.NumStreams() }
+
 // GetConn returns underlying TCP `net.Conn`.
 func (sc *SessionCommon) GetConn() net.Conn {
 	return sc.netConn
