@@ -140,3 +140,27 @@ func performHandshakeWithTimeout(conn net.Conn, port uint16, timeout time.Durati
 		return errors.New("skynet relay: handshake timed out")
 	}
 }
+
+// dialDirectOrRelay reaches remote:port over skynet WITHOUT a route: a direct
+// VStream when a non-dmsg transport exists, else a 1-hop relay (route-0,
+// PK-addressed forwarding). Returns a handshaken conn, or an error if neither
+// works. This is the "dmsg over skynet transports" primitive — used by the
+// .dmsg reach path to serve a peer's :80 over the visor-relay, with
+// dmsg-servers as the only fallback (never a route-finder route).
+func (d *routerSkynetDialer) dialDirectOrRelay(ctx context.Context, remote cipher.PubKey, port uint16) (net.Conn, error) {
+	var mux *transport.VStreamMux
+	if d.skynetMuxPtr != nil {
+		mux = *d.skynetMuxPtr
+	}
+	if mux != nil {
+		if stream, err := mux.Dial(remote, ""); err == nil {
+			conn := &vstreamConn{VStream: stream}
+			if herr := performHandshakeWithTimeout(conn, port, relayHandshakeTimeout); herr == nil {
+				d.log.WithField("remote", remote.String()).Debug("dmsg-over-skynet: direct transport")
+				return conn, nil
+			}
+			conn.Close() //nolint:errcheck,gosec
+		}
+	}
+	return d.dialViaRelay(ctx, remote, port)
+}
