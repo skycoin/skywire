@@ -308,7 +308,14 @@ func (d *routerSkynetDialer) DialSkynet(ctx context.Context, remote cipher.PubKe
 			}
 			return conn, nil
 		}
-		// No direct transport (dial failed) — fall through to route-based dial.
+		// No direct transport (dial failed) — try a 1-hop relay (a peer we
+		// share a direct transport with that also reaches the destination)
+		// before falling back to a multihop route. PK-addressed forwarding,
+		// no route setup.
+		if conn, rErr := d.dialViaRelay(ctx, remote, port); rErr == nil {
+			return conn, nil
+		}
+		// No usable relay — fall through to route-based dial.
 	}
 
 	// Reuse a HELD, yamux-muxed multihop route via the pool: dial the mux forwarding
