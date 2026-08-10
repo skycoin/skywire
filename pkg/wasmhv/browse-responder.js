@@ -36,29 +36,35 @@
     return null;
   }
 
-  function serve(req) {
+  function serve(desc, req) {
     var v = globalThis.skywireVisor;
     if (!v || !v.fetchDmsg) { return Promise.reject(new Error('visor not ready')); }
     var method = req.method || 'GET';
     var headers = req.headers || {};
     var bodyU8 = req.body ? new Uint8Array(req.body) : null;
-    if (req.net === 'skysocks') {
-      // clearnet egress via skysocks-lite (empty exit = auto pool w/ failover)
-      return v.fetchClearnet('', method, req.url, bodyU8, '', headers);
+    if (desc.net === 'skysocks') {
+      // Map a request to origin B back to its real clearnet URL; an absolute
+      // cross-origin request is already a real clearnet URL and passes through.
+      var realUrl = req.url;
+      try {
+        var u = new URL(req.url);
+        if (isBrowseOrigin(u.origin)) { realUrl = desc.base + u.pathname + u.search; }
+      } catch (e) {}
+      return v.fetchClearnet('', method, realUrl, bodyU8, '', headers);
     }
-    // mesh over dmsg (wasm has no separate skynet round-tripper today → dmsg
-    // serves dmsg + auto).
-    return v.fetchDmsg(req.host, method, pathOf(req.url, req.path), bodyU8, headers);
+    return v.fetchDmsg(desc.host, method, pathOf(req.url, req.path), bodyU8, headers);
   }
 
   window.addEventListener('message', function (e) {
     var d = e.data || {};
     if (d.type !== 'mesh-hello') { return; }
     if (!isBrowseOrigin(e.origin) || !e.source) { return; }
+    var desc = (globalThis.__meshOrigins || {})[String(d.shortid || '')];
+    if (!desc) { try { e.source.postMessage({ type: 'mesh-helper-ready', error: 'unknown browse origin' }, e.origin); } catch (x) {} return; }
     var mc = new MessageChannel();
     mc.port1.onmessage = function (ev) {
       var q = ev.data || {};
-      serve(q.req || {}).then(function (r) {
+      serve(desc, q.req || {}).then(function (r) {
         r = r || {};
         var ab = toArrayBuffer(r.body);
         mc.port1.postMessage({ id: q.id, status: r.status || 200, headers: r.headers || {}, body: ab }, ab ? [ab] : []);
