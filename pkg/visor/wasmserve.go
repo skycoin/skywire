@@ -51,7 +51,9 @@ import (
 // WasmServeConfig configures ServeWasm. Mirrors the `hv serve` flags.
 type WasmServeConfig struct {
 	Addr     string          // HTTP listen address (e.g. ":8443")
-	TLS      bool            // serve HTTPS with a self-signed localhost cert
+	TLS      bool            // serve HTTPS (self-signed localhost cert, or TLSCert/TLSKey if set)
+	TLSCert  string          // optional cert file (PEM) — a locally-trusted *.mesh.localhost cert (mkcert) so B-origin iframes load without a per-host accept; empty = built-in self-signed
+	TLSKey   string          // optional key file (PEM), paired with TLSCert
 	Harness  bool            // mount the /ctl/* operator control bridge (DEV ONLY)
 	Wallet   bool            // serve the bundled skycoin-web wallet at /wallet/
 	Variant  string          // "" = build default; "go" | "tinygo"
@@ -104,6 +106,9 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	vh.Write(wasmhv.WorkerJS)
 	vh.Write(wasmhv.BrowseJS)
 	vh.Write(wasmhv.AutoUpdateJS)
+	vh.Write(wasmhv.BrowseSWJS)
+	vh.Write(wasmhv.BrowseBootstrapHTML)
+	vh.Write(wasmhv.BrowseResponderJS)
 	wasmVer := hex.EncodeToString(vh.Sum(nil))[:16]
 	// etag is the fingerprint as an HTTP entity tag. The version-bound assets
 	// below are served no-cache + ETag so every load REVALIDATES: unchanged →
@@ -112,7 +117,30 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	// serving the previous 9.5MB blob from its HTTP cache while /wasm-version
 	// already reports the new hash.)
 	etag := `"` + wasmVer + `"`
-	index := injectWasmBoot(indexB, wasmVer, cfg.Harness)
+
+	// Real-origin browse origin (RFC §4a/§4b): the browse iframe loads a mesh site
+	// from an isolated origin B (<pkslug>.mesh.localhost) on THIS listener (host-
+	// routed below). Compute scheme+port once so the injected client config and the
+	// bootstrap substitutions agree; B and V share this listener + TLS cert.
+	browseScheme := "http"
+	if cfg.TLS {
+		browseScheme = "https"
+	}
+	bport := ""
+	if _, p, e := net.SplitHostPort(cfg.Addr); e == nil {
+		bport = p
+	}
+	vHostPort := "localhost"
+	if bport != "" {
+		vHostPort = "localhost:" + bport
+	}
+	// Injected so browse.js enters real-origin mode and builds <pk>.mesh.localhost
+	// :<port> origins for the WinBox browser iframe.
+	browseOriginJS := "window.__SKYWIRE_BROWSE_ORIGIN__={suffix:\".mesh.localhost\",scheme:" + strconv.Quote(browseScheme) + ",port:" + strconv.Quote(bport) + "};"
+	index := injectWasmBoot(indexB, wasmVer, cfg.Harness, browseOriginJS)
+
+	browseBootstrap := bytes.ReplaceAll(wasmhv.BrowseBootstrapHTML, []byte("__V_ORIGIN__"), []byte(browseScheme+"://"+vHostPort))
+	browseBootstrap = bytes.ReplaceAll(browseBootstrap, []byte("__SUFFIX__"), []byte(".mesh.localhost"))
 
 	mux := http.NewServeMux()
 	serveBytes := func(path, ct string, body []byte) {
@@ -185,6 +213,12 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	serveBytes("/manifest.webmanifest", "application/manifest+json", wasmhv.PWAManifest)
 	serveBytes("/icon-192.png", "image/png", wasmhv.PWAIcon192)
 	serveBytes("/icon-512.png", "image/png", wasmhv.PWAIcon512)
+	// Real-origin mesh browser (RFC §4b): the transport SW (served on the B origin,
+	// scope "/") and the V-origin mesh-fetch responder. The B navigation shell is
+	// host-routed below (it needs per-request substitution). browse-sw.js and
+	// browse-responder.js are static — the same bytes work on every origin.
+	serveBytes("/browse-sw.js", "text/javascript", wasmhv.BrowseSWJS)
+	serveBytes("/browse-responder.js", "text/javascript", wasmhv.BrowseResponderJS)
 	swJS := bytes.ReplaceAll(wasmhv.ServiceWorkerJS, []byte("__BUILD__"), []byte(wasmVer))
 	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/javascript")
@@ -277,6 +311,21 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		handler = wasmPasswordGate(mux, cfg.Password, cfg.TLS)
 		log.Info("wasm-serve access-password gate enabled")
 	}
+	// Host-route isolated browse origins B (<pkslug>.mesh.localhost): a request to
+	// B for the transport SW falls through to the mux (same bytes, any host); every
+	// other B request is served the real-origin bootstrap shell, which registers
+	// the SW, injects the mesh page into B, and thereafter the SW intercepts
+	// subresources. Non-B hosts (the visor origin V = localhost) are untouched.
+	base := handler
+	handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isMeshBrowseHost(r.Host) && r.URL.Path != "/browse-sw.js" {
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			w.Header().Set("Cache-Control", "no-store")
+			_, _ = w.Write(browseBootstrap) //nolint:errcheck
+			return
+		}
+		base.ServeHTTP(w, r)
+	})
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           handler,
@@ -289,7 +338,16 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 	}()
 
 	if cfg.TLS {
-		cert, err := wasmLocalhostTLSCert()
+		var cert tls.Certificate
+		var err error
+		if cfg.TLSCert != "" && cfg.TLSKey != "" {
+			// Operator-supplied cert (e.g. a locally-trusted *.mesh.localhost cert
+			// from mkcert, or a real wildcard cert) — B-origin iframes load with no
+			// per-host accept.
+			cert, err = tls.LoadX509KeyPair(cfg.TLSCert, cfg.TLSKey)
+		} else {
+			cert, err = wasmLocalhostTLSCert()
+		}
 		if err != nil {
 			return fmt.Errorf("tls cert: %w", err)
 		}
@@ -370,10 +428,18 @@ func walletDmsgFetchShim() string {
 // injectWasmBoot inserts the hv-boot.js bootstrap (+ browse/autoupdate,
 // and either the harness ctl-bridge or the PWA manifest/SW) right after
 // <head> so it runs before Angular's deferred module scripts.
-func injectWasmBoot(index []byte, wasmVer string, harness bool) []byte {
+func injectWasmBoot(index []byte, wasmVer string, harness bool, browseOriginJS string) []byte {
 	s := string(index)
-	tag := "\n<script src=\"hv-boot.js\"></script>\n" +
+	tag := "\n"
+	if browseOriginJS != "" {
+		// Set BEFORE browse.js loads so the WinBox browser picks real-origin mode.
+		tag += "<script>" + browseOriginJS + "</script>\n"
+	}
+	tag += "<script src=\"hv-boot.js\"></script>\n" +
 		"<script src=\"browse.js\"></script>\n" +
+		// Mesh-fetch responder: lets embedded <pk>.mesh.localhost browse iframes
+		// reach THIS app's first-party skywireVisor (RFC §4b real-origin browser).
+		"<script src=\"browse-responder.js\"></script>\n" +
 		"<script>" + wasmhv.BrowseLauncherJS + "</script>\n" +
 		"<script>window.__SKYWIRE_WASM_VERSION__=" + strconv.Quote(wasmVer) + ";</script>\n" +
 		"<script src=\"autoupdate.js\"></script>\n"
@@ -395,6 +461,18 @@ func injectWasmBoot(index []byte, wasmVer string, harness bool) []byte {
 	return []byte(tag + s)
 }
 
+// isMeshBrowseHost reports whether an HTTP Host header targets an isolated
+// real-origin browse origin B (<...>.mesh.localhost[:port]) rather than the visor
+// origin V (localhost). Browsers resolve *.localhost to loopback, so these hit
+// the same wasm-serve listener and are distinguished only by Host.
+func isMeshBrowseHost(h string) bool {
+	host := h
+	if i := strings.IndexByte(host, ':'); i >= 0 {
+		host = host[:i]
+	}
+	return strings.HasSuffix(host, ".mesh.localhost")
+}
+
 // wasmLocalhostTLSCert returns a self-signed localhost cert for
 // --wasm-serve-tls, persisted under the temp dir and reused across
 // restarts. NOT for production.
@@ -403,8 +481,15 @@ func wasmLocalhostTLSCert() (tls.Certificate, error) {
 	certPath, keyPath := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
 
 	if c, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
+		// Reuse the cached cert only if it's unexpired AND already carries the
+		// *.mesh.localhost SAN (real-origin browse origins B share this one cert
+		// with the visor origin V); otherwise fall through and regenerate.
 		if leaf, e := x509.ParseCertificate(c.Certificate[0]); e == nil && time.Now().Before(leaf.NotAfter) {
-			return c, nil
+			for _, n := range leaf.DNSNames {
+				if n == "*.mesh.localhost" {
+					return c, nil
+				}
+			}
 		}
 	}
 
@@ -424,8 +509,11 @@ func wasmLocalhostTLSCert() (tls.Certificate, error) {
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		BasicConstraintsValid: true,
-		DNSNames:              []string{"localhost"},
-		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		// localhost = the visor origin V; *.mesh.localhost + mesh.localhost = the
+		// isolated real-origin browse origins B (<pkslug>.mesh.localhost), so one
+		// cert covers V and every B under the same wasm-serve listener.
+		DNSNames:    []string{"localhost", "mesh.localhost", "*.mesh.localhost"},
+		IPAddresses: []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
 	}
 	der, err := x509.CreateCertificate(rand.Reader, &tmpl, &tmpl, &key.PublicKey, key)
 	if err != nil {

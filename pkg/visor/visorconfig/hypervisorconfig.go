@@ -119,7 +119,9 @@ type HypervisorConfig struct {
 // See pkg/visor.ServeWasm.
 type WasmServeConf struct {
 	Addr     string `json:"addr"`                // e.g. ":8443"; empty = disabled
-	TLS      bool   `json:"tls,omitempty"`       // HTTPS with a self-signed localhost cert
+	TLS      bool   `json:"tls,omitempty"`       // HTTPS with a self-signed localhost cert (or TLSCert/TLSKey if set)
+	TLSCert  string `json:"tls_cert,omitempty"`  // optional PEM cert — a locally-trusted *.mesh.localhost cert (mkcert) so real-origin browse iframes load without a per-host accept
+	TLSKey   string `json:"tls_key,omitempty"`   // optional PEM key, paired with TLSCert
 	Harness  bool   `json:"harness,omitempty"`   // mount the /ctl/* operator control bridge (DEV ONLY — never expose publicly)
 	NoWallet bool   `json:"no_wallet,omitempty"` // default serves the bundled skycoin-web wallet; set true to omit it
 	Variant  string `json:"variant,omitempty"`   // "" = build default; "go" | "tinygo"
