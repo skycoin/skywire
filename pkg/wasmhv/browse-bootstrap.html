@@ -1,0 +1,164 @@
+<!doctype html>
+<!-- pkg/wasmhv/browse-bootstrap.html c4-app-skynet
+     Bootstrap shell for the real-origin mesh browser (RFC §4b). Served by
+     wasm-serve for NAVIGATIONS to an isolated browse origin B
+     ("<vhost>.<base32pk>[.<net>].mesh.localhost" or a hosted <pk>.<domain>). It:
+       1. registers browse-sw.js (the transport SW for B),
+       2. embeds a hidden helper iframe on the VISOR origin V (which reaches the
+          in-tab SharedWorker wasm visor and mediates fetches — the trust
+          boundary; B can only ask it to "fetch a mesh URL", never touch the key),
+       3. relays SW mesh-fetch messages ↔ the helper (same-origin SW <-> the shell
+          page <-> cross-origin V helper via postMessage with targetOrigin checks),
+       4. fetches the real mesh page over the visor's transports and writes it into
+          THIS real origin (document.write — a genuine origin, unlike the old
+          sandboxed srcdoc), after which all subresources flow through the SW.
+     __V_ORIGIN__ and __SUFFIX__ are substituted by wasm-serve at request time. -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mesh://loading…</title>
+<style>
+  html,body{margin:0;height:100%;background:#0b0d17;color:#c7cbe6;font:14px/1.5 system-ui,sans-serif}
+  #mesh-boot{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px}
+  #mesh-boot .sp{width:26px;height:26px;border:3px solid #2b3163;border-top-color:#7c83ff;border-radius:50%;animation:spin 1s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  #mesh-boot small{opacity:.6}
+</style>
+<div id="mesh-boot"><div class="sp"></div><div id="mesh-msg">Connecting to the mesh…</div><small id="mesh-host"></small></div>
+<script>
+(function () {
+  'use strict';
+  var V_ORIGIN = "__V_ORIGIN__";      // visor origin (holds the SharedWorker visor + key)
+  var SUFFIX   = "__SUFFIX__" || ".mesh.localhost";
+
+  function fail(msg) {
+    var m = document.getElementById('mesh-msg'); if (m) { m.textContent = msg; }
+    var b = document.getElementById('mesh-boot'); if (b) { b.querySelector('.sp').style.display = 'none'; }
+  }
+
+  // meshTarget derives the resolving-proxy host (for skywireVisor.fetchDmsg) from
+  // this origin's hostname: "<vhost>.<base32pk>[.<net>].mesh.localhost" →
+  // "<vhost>.<base32pk>.dmsg" (or ".skynet"). fetchDmsg resolves base32/hex PKs,
+  // aliases and name-vhost forms Go-side.
+  function meshTarget() {
+    var host = location.hostname;
+    if (host.slice(-SUFFIX.length) === SUFFIX) host = host.slice(0, -SUFFIX.length);
+    var net = 'dmsg';
+    if (/\.skynet$/.test(host)) { net = 'skynet'; host = host.replace(/\.skynet$/, ''); }
+    else if (/\.dmsg$/.test(host)) { net = 'dmsg'; host = host.replace(/\.dmsg$/, ''); }
+    return { host: host + '.' + net, net: net };
+  }
+
+  var tgt = meshTarget();
+  var hostEl = document.getElementById('mesh-host'); if (hostEl) hostEl.textContent = tgt.host;
+
+  // --- bridge to the PARENT visor app (V) ----------------------------------
+  // This browse origin B is embedded as an iframe INSIDE the visor app V (the
+  // WinBox browser). We post 'mesh-hello' to window.parent (V); V's injected
+  // browse-responder replies with a MessagePort we post {fetch} to. V validates
+  // and calls its OWN first-party skywireVisor.* — we never get the key. (We do
+  // NOT create a helper iframe on V: under Storage Partitioning a cross-origin
+  // helper iframe lands in a different partition and can't reach V's booted
+  // SharedWorker visor. The first-party parent can.)
+  var helperReady = null;
+  var helperPort = null;
+  function ensureHelper() {
+    if (helperReady) return helperReady;
+    helperReady = new Promise(function (resolve, reject) {
+      if (!(window.parent && window.parent !== window)) {
+        reject(new Error('mesh browser must be embedded in the visor app'));
+        return;
+      }
+      var to = setTimeout(function () { reject(new Error('visor parent timeout')); }, 30000);
+      window.addEventListener('message', function onmsg(e) {
+        if (e.origin !== V_ORIGIN) return;               // only trust V
+        if (!e.data || e.data.type !== 'mesh-helper-ready') return;
+        if (!e.ports || !e.ports[0]) return;
+        clearTimeout(to);
+        helperPort = e.ports[0];
+        window.removeEventListener('message', onmsg);
+        resolve(helperPort);
+      });
+      // retry the hello a few times in case the parent's responder isn't wired yet
+      var tries = 0;
+      (function hello() {
+        if (helperPort || tries > 30) return;
+        tries++;
+        try { window.parent.postMessage({ type: 'mesh-hello' }, V_ORIGIN); } catch (e) {}
+        setTimeout(hello, 300);
+      })();
+    });
+    return helperReady;
+  }
+
+  // helperFetch sends one request to the V helper and resolves {status,headers,body}.
+  var nextId = 1, pending = {};
+  function helperFetch(reqObj, transfer) {
+    return ensureHelper().then(function (port) {
+      if (!port.__wired) {
+        port.__wired = true;
+        port.onmessage = function (ev) {
+          var d = ev.data || {}; var cb = pending[d.id];
+          if (cb) { delete pending[d.id]; cb(d); }
+        };
+      }
+      return new Promise(function (resolve) {
+        var id = nextId++; pending[id] = resolve;
+        port.postMessage({ id: id, req: reqObj }, transfer || []);
+      });
+    });
+  }
+
+  // --- SW registration + relay ---------------------------------------------
+  // The SW (browse-sw.js) posts {type:'mesh-fetch'} with a MessageChannel port
+  // for each subresource; we relay to the helper and reply on that port.
+  navigator.serviceWorker && window.addEventListener('message', function () {}); // noop guard
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      var d = e.data || {};
+      if (d.type !== 'mesh-fetch' || !e.ports || !e.ports[0]) return;
+      var replyPort = e.ports[0];
+      var r = d.req || {};
+      var transfer = r.body ? [r.body] : [];
+      helperFetch({ host: tgt.host, net: tgt.net, url: r.url, method: r.method, headers: r.headers, body: r.body }, transfer)
+        .then(function (res) {
+          var t = res.body ? [res.body] : [];
+          replyPort.postMessage(res, t);
+        })
+        .catch(function (err) { replyPort.postMessage({ error: String(err) }); });
+    });
+  }
+
+  function registerSW() {
+    if (!('serviceWorker' in navigator)) return Promise.resolve(null);
+    return navigator.serviceWorker.register('/browse-sw.js', { scope: '/' })
+      .then(function () { return navigator.serviceWorker.ready; })
+      .catch(function () { return null; }); // fall through; top page still injects
+  }
+
+  // --- boot ----------------------------------------------------------------
+  // Register the SW + prime the helper, then fetch THIS path's mesh HTML through
+  // the visor and write it into the real origin.
+  window.__mb = { step: 'start', helperReady: false, topStatus: null, topLen: 0, err: null };
+  Promise.all([
+    registerSW().then(function () { window.__mb.step = 'sw-registered'; }),
+    ensureHelper().then(function () { window.__mb.helperReady = true; window.__mb.step = 'helper-ready'; })
+  ]).then(function () {
+    window.__mb.step = 'fetching-top';
+    var path = location.pathname + location.search;
+    return helperFetch({ host: tgt.host, net: tgt.net, url: location.href, method: 'GET', headers: {}, body: null, path: path });
+  }).then(function (res) {
+    window.__mb.step = 'top-returned';
+    window.__mb.topStatus = res && res.status;
+    window.__mb.topLen = (res && res.body) ? res.body.byteLength : 0;
+    if (!res || res.error) { window.__mb.err = (res && res.error) || 'no response'; fail('mesh: ' + ((res && res.error) || 'no response')); return; }
+    if ((res.status | 0) >= 400) { fail('mesh: HTTP ' + res.status); return; }
+    var html = '';
+    if (res.body) { try { html = new TextDecoder('utf-8').decode(new Uint8Array(res.body)); } catch (e) { html = ''; } }
+    // Replace the shell with the real page ON THIS ORIGIN. Subresources it
+    // requests are relative/absolute to B and get intercepted by the SW.
+    document.open();
+    document.write(html);
+    document.close();
+  }).catch(function (err) { try { window.__mb.err = String(err); window.__mb.step = 'catch'; } catch (e) {} fail('mesh: ' + String(err)); });
+})();
+</script>

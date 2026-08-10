@@ -302,6 +302,36 @@
     var log = opts.log || function () {};
     var currentSitePK = "";
 
+    // --- real-origin mode (RFC §4a/§4b) -------------------------------------
+    // When the host injected __SKYWIRE_BROWSE_ORIGIN__, a dmsg/skynet site loads
+    // from a REAL, isolated origin "<label>[.<net>]<suffix>:<port>" instead of the
+    // sandboxed-srcdoc transcoder — so the BROWSER does native subresource
+    // loading, cookies, redirects, WASM and streaming, and the visor only proxies
+    // the transport (native = local reverse-proxy origin on that port; wasm = the
+    // origin's Service Worker → this tab's visor). Transcoder stays as fallback.
+    var realOriginCfg = (typeof globalThis !== "undefined" && globalThis.__SKYWIRE_BROWSE_ORIGIN__) || null;
+    var B32 = "abcdefghijklmnopqrstuvwxyz234567"; // RFC4648 base32 lowercase (= cipher.DNSLabel)
+    function pkDNSLabel(hexPK) {
+      var bytes = [];
+      for (var i = 0; i + 1 < hexPK.length; i += 2) { bytes.push(parseInt(hexPK.substr(i, 2), 16)); }
+      var out = "", bits = 0, val = 0;
+      for (var j = 0; j < bytes.length; j++) {
+        val = (val << 8) | bytes[j]; bits += 8;
+        while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; }
+      }
+      if (bits > 0) { out += B32[(val << (5 - bits)) & 31]; }
+      return out;
+    }
+    // labelFor: a 66-hex PK → 53-char base32 DNS label (hex is too long for a DNS
+    // label); an alias / already-base32 label passes through unchanged.
+    function labelFor(pk) { return /^[0-9a-fA-F]{66}$/.test(pk) ? pkDNSLabel(pk) : pk; }
+    function buildRealOrigin(pk, path, scheme) {
+      var c = realOriginCfg;
+      var net = (scheme === "skynet") ? "skynet" : (scheme === "dmsg") ? "dmsg" : ""; // "" = auto
+      var host = labelFor(pk) + (net ? ("." + net) : "") + (c.suffix || ".mesh.localhost");
+      return (c.scheme || "https") + "://" + host + (c.port ? (":" + c.port) : "") + (path || "/");
+    }
+
     // 1x1 transparent GIF — placeholder src for a deferred (lazy) image so it
     // occupies layout without a broken-image flash until the real bytes arrive.
     var BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -465,7 +495,18 @@
     // dmsg_sessions}). Returns {} if the core isn't booted yet (status() throws).
     function dmsgStatus() {
       return Promise.resolve().then(function () {
-        return (globalThis.skywireVisor && globalThis.skywireVisor.status && globalThis.skywireVisor.status()) || {};
+        var v = globalThis.skywireVisor;
+        if (v && v.status) { return v.status() || {}; }
+        // Native / hosted HV UI (directViaBackend, no in-tab wasm core to
+        // introspect): the BACKEND visor owns the dmsg connection and fetchDmsg
+        // is proxied to it over /api/browse/*, so the page can't read a session
+        // count. Report "connected" — otherwise waitForDmsg spins the full
+        // connect-overlay timeout on EVERY dmsg navigation even though the visor
+        // is connected (the bug that made every .dmsg site show "Connecting to
+        // the mesh…"). A genuinely-disconnected visor still surfaces as a real
+        // fetchDmsg error, not an endless spinner.
+        if (opts.directViaBackend) { return { dmsg_connected: true }; }
+        return {};
       }).catch(function () { return {}; });
     }
     // dmsg is "up" when there's a live session. Prefer the explicit fields
@@ -569,6 +610,27 @@
       resetFavicon(); // default icon now; the site's own favicon replaces it once fetched
       setLoading(true);
       try {
+        // Real-origin: hand the whole load to the browser via an isolated origin.
+        if (realOriginCfg && entry.kind === "dmsg") {
+          var rurl = buildRealOrigin(entry.pk, entry.path, entry.scheme);
+          frame.removeAttribute("srcdoc");
+          frame.src = rurl;
+          currentSitePK = entry.pk;
+          try { if (typeof hideConnecting === "function") { hideConnecting(); } } catch (e) {}
+          if (opts.setAddr) {
+            // Show a readable, re-typable address WITH a protocol, e.g.
+            // "http://<pk>.dmsg/path" (or https://, or .skynet). A host already
+            // carrying a dot (name-vhost / alias.dmsg) keeps it. The scheme is the
+            // HTTP scheme carried over the mesh transport (http unless TLS/https).
+            var disp = entry.pk;
+            if (disp.indexOf(".") < 0) { disp += (entry.scheme === "skynet" ? ".skynet" : ".dmsg"); }
+            if (entry.path && entry.path !== "/") { disp += entry.path; }
+            opts.setAddr((entry.scheme === "https" ? "https" : "http") + "://" + disp);
+          }
+          log("real-origin " + rurl);
+          setLoading(false);
+          return { status: 0, realOrigin: true };
+        }
         if (entry.kind === "clearnet") {
           var rc = await fetchClearnetEntry(entry.url, gen);
           return rc;
@@ -1076,14 +1138,27 @@
       // per-site-origin design that would lift the storage limit.
       '<div id="sb-info-panel" style="display:none;flex-direction:column;gap:.5em;padding:.7em .8em;background:#1a1726;border-bottom:1px solid #2a2342;font:12px/1.5 monospace;color:#cdd2da;max-height:40%;overflow:auto">' +
       '<div style="display:flex;align-items:center;gap:.5em"><b style="color:#9d7cff;font-size:13px">about the skynet browser</b><span style="flex:1"></span><button id="sb-info-x" style="cursor:pointer">×</button></div>' +
-      '<div>Fetches sites over <b>dmsg</b> (skynet) — no DNS, no certificate authorities, IP-anonymous. Address bar accepts a visor <b>PK</b>, <b>pk.dmsg</b>, an <b>alias.dmsg</b> (e.g. <b>home.dmsg</b>), or an <b>https://</b> clearnet site (routed through a skysocks exit — set in ⚙).</div>' +
-      '<div style="border-top:1px solid #2a2342;padding-top:.5em"><b style="color:#e0af68">Limitations (by design):</b></div>' +
-      '<ul style="margin:.1em 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:.25em">' +
-      '<li><b>No persistent storage.</b> Every page runs in a sandboxed frame with an opaque origin — <b>cookies, localStorage and logins do not persist</b>, even across a reload. Each visit is effectively fresh/incognito.</li>' +
-      '<li><b>Isolated.</b> Sites cannot read each other\'s data, and cannot read this visor\'s keys/storage.</li>' +
-      '<li><b>Scripts limited</b> (sandbox: allow-scripts allow-forms); no plugins, popups, or top-level navigation. Some clearnet sites that require cookies/service-workers may misbehave.</li>' +
-      '<li>Per-site persistent storage like a normal browser would need the <b>native desktop</b> app (each site on its own local origin) — not possible in a keyless browser tab.</li>' +
-      '</ul>' +
+      (globalThis.__SKYWIRE_BROWSE_ORIGIN__ ?
+        // Real-origin mode (RFC §4a/§4b): each site is its own genuine origin.
+        '<div>Each mesh site loads from its <b>own real, isolated origin</b> (<code>&lt;pk&gt;.mesh.localhost</code>), fetched over <b>this visor\'s own dmsg / skynet transports</b> — no DNS, no certificate authorities, IP-anonymous. Clearnet sites route through a skysocks exit (set in ⚙).</div>' +
+        '<div style="border-top:1px solid #2a2342;padding-top:.5em"><b style="color:#9ece6a">Works like a normal browser:</b></div>' +
+        '<ul style="margin:.1em 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:.25em">' +
+        '<li><b>Persistent storage.</b> Cookies, localStorage, logins and service workers <b>persist</b> across reloads — each site in its own real origin.</li>' +
+        '<li><b>Isolated per-site.</b> A real cross-origin boundary keeps sites from reading each other\'s data, and none can reach this visor\'s keys.</li>' +
+        '<li><b>Full scripts</b>, subresources, redirects, WASM and streaming — the browser renders the page natively; the visor only proxies the transport.</li>' +
+        '<li>Address bar: a visor <b>PK</b>, <b>pk.dmsg</b>, <b>alias.dmsg</b>, <b>dmsg://</b>/<b>skynet://</b>, or an <b>https://</b> clearnet site.</li>' +
+        '</ul>'
+      :
+        // Transcoder fallback: sandboxed opaque-origin srcdoc (the old limits).
+        '<div>Fetches sites over <b>dmsg</b> (skynet) — no DNS, no certificate authorities, IP-anonymous. Address bar accepts a visor <b>PK</b>, <b>pk.dmsg</b>, an <b>alias.dmsg</b> (e.g. <b>home.dmsg</b>), or an <b>https://</b> clearnet site (routed through a skysocks exit — set in ⚙).</div>' +
+        '<div style="border-top:1px solid #2a2342;padding-top:.5em"><b style="color:#e0af68">Limitations (by design):</b></div>' +
+        '<ul style="margin:.1em 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:.25em">' +
+        '<li><b>No persistent storage.</b> Every page runs in a sandboxed frame with an opaque origin — <b>cookies, localStorage and logins do not persist</b>, even across a reload. Each visit is effectively fresh/incognito.</li>' +
+        '<li><b>Isolated.</b> Sites cannot read each other\'s data, and cannot read this visor\'s keys/storage.</li>' +
+        '<li><b>Scripts limited</b> (sandbox: allow-scripts allow-forms); no plugins, popups, or top-level navigation. Some clearnet sites that require cookies/service-workers may misbehave.</li>' +
+        '<li>Per-site persistent storage like a normal browser would need the <b>native desktop</b> app (each site on its own local origin) — not possible in a keyless browser tab.</li>' +
+        '</ul>'
+      ) +
       '</div>' +
       // The page iframe + a DOM overlay (sb-connect) for the connecting/journey
       // state. The overlay is rendered/updated in the PARENT dom — NOT via the
@@ -1091,7 +1166,11 @@
       // (re-setting srcdoc every tick flashed the iframe's background = strobe).
       // iframe background is dark (not #fff) so any transition is not a white flash.
       '<div id="sb-frame-wrap" style="position:relative;flex:1;display:flex;min-height:0">' +
-      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#0e0c14"></iframe>' +
+      // Real-origin mode (RFC): NO sandbox — B is a genuine isolated origin that
+      // must have its own storage/cookies/service-worker/secure-context. The old
+      // transcoder keeps the opaque-origin sandbox. Cross-origin isolation between
+      // sites is by ORIGIN (<pk>.mesh.localhost), not the sandbox attribute.
+      '<iframe id="sb-frame" ' + (globalThis.__SKYWIRE_BROWSE_ORIGIN__ ? '' : 'sandbox="allow-scripts allow-forms" ') + 'style="flex:1;width:100%;border:0;background:#0e0c14"></iframe>' +
       '<div id="sb-connect" style="position:absolute;inset:0;display:none;background:#0e0c14;color:#cdd2da;font:14px/1.6 system-ui,-apple-system,sans-serif;overflow:auto"></div>' +
       '</div>';
 

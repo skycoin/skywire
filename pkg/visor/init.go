@@ -123,6 +123,8 @@ var (
 	embFwdProxy vinit.Module
 	// Embedded skynetweb resolver (localhost SOCKS5 for .skynet browsing)
 	embSkynetWeb vinit.Module
+	// Native real-origin browse proxy (loopback reverse-proxy origin over dmsg)
+	meshProxy vinit.Module
 	// Embedded SMTP→skywire bridge (localhost SMTP listener for *.skynet recipients)
 	embSkymailBridge vinit.Module
 	// UI server module (serves tp-viz)
@@ -197,6 +199,12 @@ func registerModules(logger *logging.MasterLogger) {
 	rt = maker("router", initRouter, &tr, &dmsgC, &dmsgHTTP, &embRouteSetup, &routerListener)
 	// skynetweb depends on the router being up, unlike dmsgweb.
 	embSkynetWeb = maker("embedded_skynetweb", initEmbeddedSkynetWeb, &rt)
+	// Native real-origin browse proxy: reverse-proxies mesh sites over dmsg AND
+	// skynet from an isolated loopback origin. Depends on the router module (rt) —
+	// which transitively brings up dmsgC (assigns v.dmsgHTTP) AND sets v.router
+	// (needed for the skynet transport). Without the rt dep the skynet round-
+	// tripper would be built before v.router exists.
+	meshProxy = maker("mesh_proxy", initMeshProxy, &rt)
 	launch = maker("launcher", initLauncher, &ebc, &disc, &dmsgC, &tr, &rt)
 	// cli depends on tr so v.tpM is set when initCLI wires up the
 	// shared VStreamMux for transport-RPC (registered as the manager's
@@ -251,7 +259,7 @@ func registerModules(logger *logging.MasterLogger) {
 	// + SD dmsg client) and skyFwd (dmsg forwarder). See init_coinnode.go.
 	coinNodesMod = maker("coin_nodes", initCoinNodes, &dmsgC, &skyFwd)
 	vis = vinit.MakeModule("visor", vinit.DoNothing, logger, &ebc, &ar, &disc, &ptyModule,
-		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod)
+		&tr, &rt, &launch, &cli, &hvs, &ut, &pv, &pvs, &trs, &stcpC, &stcprC, &quicC, &wsC, &wtC, &skyFwd, &pi, &dmsgPi, &dmsgServerLatency, &systemSurvey, &tc, &tpdco, &embTPS, &embRouteSetup, &embDmsgWeb, &embFwdProxy, &embSkynetWeb, &meshProxy, &embSkymailBridge, &uiServer, &nodeHealth, &selfProbe, &skynetPorts, &statsMod, &cxoUserFeedsMod, &pairingMod, &groupingMod, &voiceMod, &coinNodesMod)
 
 	// Hypervisor includes the full visor module tree so all services
 	// (CLI, transports, pings, public visor, etc.) run in hypervisor mode.
