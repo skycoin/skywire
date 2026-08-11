@@ -17,7 +17,7 @@ Two independent mechanisms exist, and they differ in direction:
 
 | | Direction | What you get | Target needs |
 |---|---|---|---|
-| **`--via` CLI bridge** | controller dials target | the full `skywire cli` surface against the target | controller's PK in the target's trust list, `cli_addr` set, restart |
+| **`--via` CLI bridge** | controller dials target | the full `skywire cli` surface against the target | controller's PK in the target's trust list, restart |
 | **Hypervisor attach** | target dials controller | web UI, `hv ls`, `hv tui` (apps, routing knobs, transports, logs) | controller's PK in the target's `hypervisors`, restart |
 
 Listing a controller PK in `hypervisors` enables **both** — it puts
@@ -76,9 +76,11 @@ skywire cli config update hv --add-pks <controller-pk>
 skywire cli visor hv add <controller-pk>
 ```
 
-The target also needs `cli_addr` set (the default config has it;
-API-only builds that blank it skip every RPC surface — see the mobile
-section).
+`cli_addr` is not involved: it gates only the *local* TCP RPC
+listener, and the dmsg/transport surfaces start independently of it.
+(Builds older than the decoupling in `initCLI` did skip every RPC
+surface when `cli_addr` was blank — if a trusted, restarted target
+still refuses dials, check its binary age first.)
 
 ## Driving the target
 
@@ -143,47 +145,35 @@ surfaces are off.
 
 ## Testing the mobile app's visor from a desktop
 
-The Android app generates and owns its visor's config
-(`android/…/core/ConfigManager.kt`), with two pins that matter here:
-`hypervisors` is empty and `cli_addr` is `""` — so out of the box the
-phone neither trusts anyone nor runs any RPC surface. Deliberate:
-nothing on the phone listens unless its owner asked.
+The Android app generates and owns its visor's config, and out of the
+box the phone trusts nobody and runs no RPC surface — nothing on the
+phone listens unless its owner asked. The ask is **Settings → Remote
+management → Grant access…**: paste the controlling visor's PK
+(`skywire cli visor pk` on that machine), then disconnect/reconnect
+the core. The grant is one key, shown on the card, revocable in one
+tap; granting and revoking both apply on the next core start.
 
-**What works today (debug builds):** hand the phone's config a
-`hypervisors` entry and restart the app. The phone dials the desktop
-hypervisor over dmsg and serves its full RPC over that outbound
-connection — it appears in `hv ls`, and `hv tui` / the web UI can
-start/stop its apps, set min-hops and mux, and read its runtime logs.
+That single grant is both directions at once. The phone dials the
+desktop hypervisor — it appears in `hv ls` / `hv tui` / the web UI —
+and admits the desktop on its dmsg RPC surfaces, so the full CLI
+works too:
 
 ```
-# desktop: hypervisor running; note its PK
-skywire cli visor pk
-
-# phone (debug build): add the PK to the visor config
-adb shell run-as com.skycoin.skywire sh -c \
-  'cat files/skywire/skywire-config.json' > phone-config.json
-# edit: "hypervisors": ["<desktop-pk>"]
-adb push phone-config.json /data/local/tmp/
-adb shell run-as com.skycoin.skywire sh -c \
-  'cp /data/local/tmp/phone-config.json files/skywire/skywire-config.json'
-# then fully stop and relaunch the app (the visor reads the list at boot)
+skywire cli --via dmsg://<phone-pk> visor info
+skywire cli --via dmsg://<phone-pk> visor log --follow --min-level debug
+skywire cli --via dmsg://<phone-pk> proxy start <server-pk> --min-hops 3
 ```
 
-The edit survives normal launches — the app's per-launch profile pass
-preserves keys it does not own — but is dropped by an identity reset
-or key replacement, and is impossible while config sealing is enabled
-(the file on disk is then `skywire-config.json.enc`; disable sealing
-in the app first). The phone's PK is on the app's identity screen and
-in the diagnostics export.
+— the two-terminal diagnosis session above, against the phone in your
+pocket. The phone's PK is on the app's identity screen and in the
+diagnostics export.
 
-**What does not work yet:** the full `--via` bridge against the
-phone. That needs the two profile pins to open up — `cli_addr` set
-(loopback listener plus the dmsg RPC surfaces it gates) and a
-user-facing way to grant a remote-management PK instead of an adb
-edit. Both are app changes, tracked as follow-up work to the mobile
-logging/diagnosis items; until then the hypervisor views above are
-the remote-control surface for phones, and their app/routing/log
-coverage is enough for the VPN-and-proxy diagnosis workflow.
+Narrower than a desktop grant by construction: the phone runs no
+dmsgpty and pins dmsgscp off, so the granted key gets the typed API
+only — no remote shell, no file access. The app also re-pins
+`hypervisors` to exactly the granted key on every launch, so a key
+that arrived any other way (a hand-edited config, a persisted runtime
+`hv add`) does not outlive the setting.
 
 Expect a phone visor to be reachable only while the app's core is
 running (foreground service); Android may still throttle the radio in
@@ -192,10 +182,10 @@ deep Doze, which shows up as dmsg session drops, not as auth errors.
 ## Troubleshooting
 
 - **Dial fails / times out on `--via dmsg://<pk>`** — the target's
-  listener is off (no trusted PKs at its last boot, or `cli_addr`
-  blank), the target restarted since you were added but *you* typo'd
-  the PK, or the target is offline in dmsg. Check the target's boot
-  log for `Dmsg visor-RPC server listening`.
+  listener is off (no trusted PKs at its last boot, or a binary old
+  enough that blank `cli_addr` disabled the dmsg surfaces too), you
+  typo'd the PK, or the target is offline in dmsg. Check the target's
+  boot log for `Dmsg visor-RPC server listening`.
 - **Connection accepted, then dropped immediately** — the connecting
   visor's PK is not on the target's live whitelist (added at runtime
   without a restart, or you are dialing from a different visor than

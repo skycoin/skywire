@@ -428,6 +428,19 @@
     <string name="settings_autoconnect_hint">Keeps open transports to public visors so the network can route through this phone, and so this phone can route through them. Costs battery and mobile data, which is why it is off. Route lengths above one hop need it.</string>
     <string name="settings_autoconnect_restart">Applies when the core next starts.</string>
 
+    <string name="settings_remote">Remote management</string>
+    <string name="settings_remote_hint">Lets one other visor — yours, on a desk — drive this one over the network: start and stop apps, change routing, read the logs. Nothing is reachable until a key is granted, and the granted key has full control, so it should be a machine you own. No shell or file access either way.</string>
+    <string name="settings_remote_restart">Granting or revoking applies when the core next starts.</string>
+    <string name="settings_remote_grant">Grant access…</string>
+    <string name="settings_remote_grant_confirm">Grant</string>
+    <string name="settings_remote_revoke">Revoke</string>
+    <string name="settings_remote_dialog_title">Grant remote management</string>
+    <string name="settings_remote_dialog_hint">Paste the public key of the controlling visor — “skywire cli visor pk” on that machine prints it. That machine gains full control of this visor the next time the core starts, and appears in its hypervisor list as this phone.</string>
+    <string name="settings_remote_label">Public key</string>
+    <string name="settings_remote_invalid">Not a visor public key — expected 66 hex characters.</string>
+    <string name="settings_remote_granted">Access granted. Applies when the core next starts.</string>
+    <string name="settings_remote_revoked">Access revoked. Applies when the core next starts.</string>
+
     <string name="wallet_coins_add">Add a coin or token</string>
     <!-- Removing a coin the user added. Only the list entry goes: no key is
          touched, which is the whole difference from removing a wallet, and
