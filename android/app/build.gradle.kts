@@ -29,6 +29,7 @@ android {
         targetSdk = 36
         versionCode = appVersionCode
         versionName = appVersionName
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             // The Go payload (libskywire-mobile.so) is arm64-only.
             abiFilters += "arm64-v8a"
@@ -107,4 +108,11 @@ dependencies {
     implementation(libs.zxing.embedded)
     implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
+    // Instrumented only. The audio engine's contract — that stopping a call
+    // hands the microphone back — is a statement about AudioRecord and a real
+    // socket, and neither has a meaningful stand-in on the JVM.
+    androidTestImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.rules)
+    androidTestImplementation(libs.androidx.test.ext.junit)
 }
