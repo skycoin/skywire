@@ -116,6 +116,18 @@ type EntityCommon struct {
 	// once per successful update, for the primary discovery only.
 	entryPublishHook atomic.Pointer[EntryPublishFunc]
 
+	// cxoKeepaliveHealthyFn, when set and returning true, means this CLIENT's
+	// discovery entry is being kept alive over a healthy registration-over-CXO
+	// feed (installed by the visor; see pkg/visor/init_registration_cxo.go).
+	// While true, the periodic NO-CHANGE HTTP keepalive re-registration is
+	// stretched to cxoHealthyUpdateInterval, so the expensive Noise+PQ
+	// handshake fires far less often; that stretched interval stays well under
+	// the dmsg-discovery client-entry TTL, so the HTTP path alone keeps the
+	// entry alive even if CXO ingest silently stalls (fallback), and
+	// delegated-server CHANGES still publish immediately via the nudge path.
+	// Nil on servers and on clients not publishing over CXO.
+	cxoKeepaliveHealthyFn atomic.Pointer[func() bool]
+
 	// peerSessionsFunc returns peer server sessions for mesh forwarding.
 	// Only set on Server entities; nil for clients.
 	peerSessionsFunc func() []*SessionCommon
@@ -1090,8 +1102,15 @@ func (c *EntityCommon) updateClientEntryLoop(ctx context.Context, done chan stru
 			return
 
 		case <-t.C:
-			if lastUpdate, due := c.updateIsDue(); !due {
-				t.Reset(c.updateInterval - time.Since(lastUpdate))
+			if _, due := c.updateIsDue(); !due {
+				// Re-evaluate every base updateInterval rather than sleeping
+				// the full (possibly CXO-stretched) remaining time: this
+				// bounds how long a keepalive stays stretched after the CXO
+				// feed drops (effectiveUpdateInterval falls back to the base
+				// interval the moment cxoKeepaliveHealthyFn goes false), and
+				// avoids a negative Reset when the effective interval exceeds
+				// the base one.
+				t.Reset(c.updateInterval)
 				continue
 			}
 
@@ -1195,8 +1214,39 @@ func getClientEntry(ctx context.Context, dc disc.APIClient, clientPK cipher.PubK
 
 func (c *EntityCommon) updateIsDue() (lastUpdate time.Time, isDue bool) {
 	lastUpdate = time.Unix(0, atomic.LoadInt64(&c.lastUpdate))
-	isDue = time.Since(lastUpdate) >= c.updateInterval
+	isDue = time.Since(lastUpdate) >= c.effectiveUpdateInterval()
 	return lastUpdate, isDue
+}
+
+// cxoHealthyUpdateInterval is the stretched spacing between no-change client
+// discovery re-registrations while a registration-over-CXO keepalive is
+// healthy. Chosen well under the dmsg-discovery client-entry TTL (60m) so the
+// HTTP re-PUT alone keeps the entry alive even if CXO ingest silently stalls,
+// while cutting the periodic Noise+PQ handshake rate by an order of magnitude.
+const cxoHealthyUpdateInterval = 30 * time.Minute
+
+// effectiveUpdateInterval is c.updateInterval, stretched to
+// cxoHealthyUpdateInterval when a registration-over-CXO keepalive reports
+// healthy. Servers and non-CXO clients (nil fn) always get c.updateInterval.
+func (c *EntityCommon) effectiveUpdateInterval() time.Duration {
+	if fn := c.cxoKeepaliveHealthyFn.Load(); fn != nil && (*fn)() {
+		if cxoHealthyUpdateInterval > c.updateInterval {
+			return cxoHealthyUpdateInterval
+		}
+	}
+	return c.updateInterval
+}
+
+// SetCXOKeepaliveHealthyFunc installs (or, with nil, clears) the predicate
+// that reports whether this client's registration-over-CXO keepalive is
+// healthy. See cxoKeepaliveHealthyFn. Safe to call concurrently with the
+// entry-update loop.
+func (c *EntityCommon) SetCXOKeepaliveHealthyFunc(fn func() bool) {
+	if fn == nil {
+		c.cxoKeepaliveHealthyFn.Store(nil)
+		return
+	}
+	c.cxoKeepaliveHealthyFn.Store(&fn)
 }
 
 // updatedWithin reports whether the last discovery-entry update happened within

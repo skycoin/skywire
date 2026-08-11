@@ -52,12 +52,6 @@ type Deployment struct {
 	// hypervisors with their embedded dmsg server enabled — see
 	// LANDmsgServerInfo.DiscoveryURL.
 	HypervisorDiscovery string `json:"hypervisor_discovery,omitempty"`
-
-	// RegistrationCXO opts this visor into publishing its own signed
-	// discovery entry as a CXO feed to this deployment's dmsg-discovery
-	// (registration-over-CXO), in addition to the HTTP PUT. See the
-	// DmsgConfig.RegistrationCXO mirror field. Experimental; default false.
-	RegistrationCXO bool `json:"registration_cxo,omitempty"`
 }
 
 // DmsgConfig is the visor-side dmsg subsystem configuration.
@@ -100,15 +94,6 @@ type DmsgConfig struct {
 	// rewards-eligible), a stealthy leaf reaching only statically-known
 	// services/servers. Experimental; default stays discovery.
 	DirectOnly bool `json:"direct_only,omitempty"`
-
-	// RegistrationCXO opts this visor into publishing its own signed
-	// discovery entry as a CXO feed (registration-over-CXO) IN ADDITION to
-	// the HTTP PUT, letting dmsg-discovery ingest registrations off a
-	// persistent connection instead of a timer-driven re-PUT (each a fresh
-	// Noise+PQ handshake). Experimental; default false. Inert unless the
-	// target dmsg-discovery also runs the registration aggregator, so it is
-	// safe to enable ahead of the server rollout.
-	RegistrationCXO bool `json:"registration_cxo,omitempty"`
 }
 
 // MarshalJSON and UnmarshalJSON live in spec_native.go under
@@ -135,7 +120,6 @@ func (c *DmsgConfig) mirrorPrimary() {
 	c.Protocol = d.Protocol
 	c.LANServers = d.LANServers
 	c.HypervisorDiscovery = d.HypervisorDiscovery
-	c.RegistrationCXO = d.RegistrationCXO
 }
 
 // toDeployment snapshots the legacy top-level fields into a Deployment.
@@ -149,7 +133,6 @@ func (c *DmsgConfig) toDeployment() Deployment {
 		Protocol:             c.Protocol,
 		LANServers:           c.LANServers,
 		HypervisorDiscovery:  c.HypervisorDiscovery,
-		RegistrationCXO:      c.RegistrationCXO,
 	}
 }
 
