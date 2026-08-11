@@ -167,3 +167,47 @@ func TestHandlePairControlFrame_Types(t *testing.T) {
 		t.Errorf("pair-decline should PairRemove(peer), got %v", fake.removed)
 	}
 }
+
+// An invite is announced once, however many times it arrives and however
+// often the page reconnects. Reported as "every time I open this
+// interface, it pops up so many Peer invites from PK…", with a second
+// phone showing one — the count tracked invite events still in the SSE
+// replay ring, not invites outstanding.
+func TestHandlePairControlFrame_InviteAnnouncedOnce(t *testing.T) {
+	fake := &pairControlAPI{}
+	withPairControlEnv(t, fake)
+	clearPending()
+	peer, _ := cipher.GenerateKeyPair()
+	invite, _ := json.Marshal(pairMsg{Type: pairTypeInvite}) //nolint:errcheck
+
+	open, unsub := hub.subscribe()
+	defer unsub()
+
+	if !handlePairControlFrame(context.Background(), peer, invite) {
+		t.Fatal("pair-invite should be consumed")
+	}
+	if got := drainStrings(open); len(got) != 1 {
+		t.Fatalf("first invite announced %d times, want exactly 1: %v", len(got), got)
+	}
+
+	// The peer retries — a reconnect, a resend. The invite is already in
+	// the sidebar, so there is nothing new to say about it.
+	if !handlePairControlFrame(context.Background(), peer, invite) {
+		t.Fatal("a repeat pair-invite should still be consumed")
+	}
+	if got := drainStrings(open); len(got) != 0 {
+		t.Errorf("repeat invite announced again: %v", got)
+	}
+	if !pendingHas(peer) {
+		t.Error("a repeat invite must still keep the invite pending — the resend " +
+			"is what carries it across a dropped connection")
+	}
+
+	// The page is reopened. This is the reported bug: it used to be handed
+	// every past invite envelope out of the replay ring and toast for each.
+	reopened, reopenedUnsub := hub.subscribe()
+	defer reopenedUnsub()
+	if got := drainStrings(reopened); len(got) != 0 {
+		t.Errorf("opening the page replayed %d invite envelope(s): %v", len(got), got)
+	}
+}

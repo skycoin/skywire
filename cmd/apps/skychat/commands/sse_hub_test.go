@@ -81,6 +81,32 @@ func TestSSEHub_NoSubscribersCountsDrop(t *testing.T) {
 	}
 }
 
+// A control alert reaches the page that is open and is not kept for the
+// page that opens next; a chat message is kept. Both halves matter: drop
+// the ring for messages and a reconnecting listener silently loses them,
+// keep it for alerts and every reconnect re-announces the whole ring.
+func TestSSEHub_BroadcastLiveIsNotReplayed(t *testing.T) {
+	h := newSSEHub()
+
+	live, unsub := h.subscribe()
+	h.broadcast("a message")
+	h.broadcastLive("an alert")
+	if got := drainStrings(live); len(got) != 2 || got[0] != "a message" || got[1] != "an alert" {
+		t.Fatalf("connected subscriber got %v, want both [a message an alert]", got)
+	}
+	unsub()
+
+	// The page reopens. It must be told what it missed, and nothing else.
+	late, lateUnsub := h.subscribe()
+	defer lateUnsub()
+	got := drainStrings(late)
+	if len(got) != 1 || got[0] != "a message" {
+		t.Errorf("reconnecting subscriber got %v, want only [a message] — "+
+			"an alert replayed on connect is a second notification for something "+
+			"the user was already shown", got)
+	}
+}
+
 func TestSSEHub_ClientCount(t *testing.T) {
 	h := newSSEHub()
 	if h.clientCount() != 0 {
