@@ -405,6 +405,18 @@
     <string name="wallet_coin_eth">Ethereum mainnet</string>
     <string name="wallet_coin_erc20">ERC-20 token on Ethereum</string>
     <string name="wallet_coins_add">Add a coin or token</string>
+    <!-- Removing a coin the user added. Only the list entry goes: no key is
+         touched, which is the whole difference from removing a wallet, and
+         is why this one is safe to say plainly. A coin still holding wallets
+         is refused rather than cascading — see WalletRepository.removeUserCoin. -->
+    <string name="wallet_coin_remove">Remove this coin</string>
+    <string name="wallet_coin_remove_title">Remove %1$s?</string>
+    <string name="wallet_coin_remove_body">It goes from your coin list. Nothing on the chain changes and no keys are touched — you can add it again with the same details.</string>
+    <string name="wallet_coin_remove_blocked_title">%1$s still has wallets</string>
+    <string name="wallet_coin_remove_blocked">Remove its wallets first. Deleting a wallet erases its recovery phrase from this phone, so it is a separate decision from tidying this list.</string>
+    <string name="wallet_coin_remove_confirm">Remove</string>
+    <string name="wallet_coin_remove_ack">Got it</string>
+    <string name="wallet_coin_removed">%1$s removed</string>
     <string name="wallet_hours_sub">%1$s Coin Hours</string>
     <string name="wallet_btc_sub">%1$d confirmed outputs · no Coin Hours on this chain</string>
     <string name="wallet_eth_sub">Ethereum mainnet · fees paid in ETH</string>

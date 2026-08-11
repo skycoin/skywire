@@ -24,9 +24,11 @@ import androidx.compose.material.icons.outlined.AccountBalanceWallet
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,6 +36,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -41,6 +44,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -295,6 +299,11 @@ fun WalletScreen(
                 coinSheet = false
                 onAddCoin()
             },
+            // The sheet stays open: removing one of several is a tidying pass,
+            // and closing it after each would make the next one another trip.
+            // Both the confirmation and any refusal arrive as state.message,
+            // which the LaunchedEffect above already puts in the snackbar.
+            onRemove = { viewModel.removeCoin(it) },
             onDismiss = { coinSheet = false },
         )
     }
@@ -521,9 +530,12 @@ private fun CoinSheet(
     state: WalletUiState,
     onPick: (String) -> Unit,
     onAddCoin: () -> Unit,
+    onRemove: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
+    // The coin the user is being asked about. Null = no dialog up.
+    var removing by remember { mutableStateOf<CoinSpec?>(null) }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState()) {
         Column(Modifier.padding(bottom = 28.dp)) {
             Text(
@@ -585,6 +597,20 @@ private fun CoinSheet(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    // Only what the user added can go, and the control is
+                    // visible rather than a long-press: the report that
+                    // prompted this was someone asking how it was done, so a
+                    // gesture they would have to already know is no answer.
+                    if (!coin.builtIn) {
+                        IconButton(onClick = { removing = coin }, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = stringResource(R.string.wallet_coin_remove),
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
             Row(
@@ -612,5 +638,48 @@ private fun CoinSheet(
                 )
             }
         }
+    }
+
+    // Two different conversations, and it matters which one the user gets.
+    // With wallets on the coin this is not a confirmation at all — there is
+    // nothing to confirm, only a reason and what to do about it. The
+    // repository refuses either way; this just says so before the tap rather
+    // than after it.
+    removing?.let { coin ->
+        val blocked = state.allWallets.any { it.coinId == coin.id }
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            title = {
+                Text(
+                    if (blocked) stringResource(R.string.wallet_coin_remove_blocked_title, coin.name)
+                    else stringResource(R.string.wallet_coin_remove_title, coin.name),
+                )
+            },
+            text = {
+                Text(
+                    if (blocked) stringResource(R.string.wallet_coin_remove_blocked)
+                    else stringResource(R.string.wallet_coin_remove_body),
+                )
+            },
+            confirmButton = {
+                if (blocked) {
+                    TextButton(onClick = { removing = null }) {
+                        Text(stringResource(R.string.wallet_coin_remove_ack))
+                    }
+                } else {
+                    TextButton(onClick = {
+                        removing = null
+                        onRemove(coin.id)
+                    }) {
+                        Text(stringResource(R.string.wallet_coin_remove_confirm))
+                    }
+                }
+            },
+            dismissButton = if (blocked) {
+                null
+            } else {
+                { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel)) } }
+            },
+        )
     }
 }

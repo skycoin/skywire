@@ -103,6 +103,48 @@ class WalletRepository private constructor(private val context: Context) {
         return spec
     }
 
+    /**
+     * Drop a user-added coin from the list, returning the spec that went so a
+     * caller can name it and clear up its icon file — icon storage belongs to
+     * the UI layer that put the file there.
+     *
+     * Refuses while any wallet still holds the coin, rather than cascading
+     * into [removeWallet]. That is not caution for its own sake: removeWallet
+     * erases a sealed seed that exists nowhere else, and a phrase written down
+     * nowhere else is gone with it. Tidying a list is not a moment where a
+     * user is braced for that, so the two stay separate acts — delete the
+     * wallets, having read what deleting a wallet means, and then the coin.
+     *
+     * Built-ins are not removable. They are the wallet's floor: SKY is what
+     * the selection falls back TO, and the other three have no add path to
+     * restore them from.
+     */
+    suspend fun removeUserCoin(coinId: String): CoinSpec? {
+        val spec = coin(coinId) ?: return null
+        require(!spec.builtIn) { "${spec.name} is built in and cannot be removed" }
+        val held = wallets().first().count { it.coinId == coinId }
+        require(held == 0) {
+            val what = if (held == 1) "its wallet" else "its $held wallets"
+            "Remove $what first — deleting a wallet erases its recovery phrase from this phone."
+        }
+        seeds.store.edit { prefs ->
+            val current = prefs[KEY_FIBER_COINS]?.let {
+                runCatching { json.decodeFromString(ListSerializer(CoinSpec.serializer()), it) }.getOrNull()
+            } ?: emptyList()
+            prefs[KEY_FIBER_COINS] = json.encodeToString(
+                ListSerializer(CoinSpec.serializer()), current.filter { it.id != coinId },
+            )
+            // The active-wallet pointer for a coin with no wallets is already
+            // meaningless, but leaving it would resurrect a stale id if a coin
+            // with the same generated id ever came back.
+            prefs.remove(stringPreferencesKey("active_$coinId"))
+            // Selection has to move or the wallet tab opens on a coin that is
+            // no longer in its own list.
+            if (prefs[KEY_SELECTED_COIN] == coinId) prefs[KEY_SELECTED_COIN] = CoinSpec.SKY.id
+        }
+        return spec
+    }
+
     private suspend fun storeUserCoin(spec: CoinSpec) {
         seeds.store.edit { prefs ->
             val current = prefs[KEY_FIBER_COINS]?.let {
