@@ -22,8 +22,10 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
+	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/cxo/treestore"
 	dmsgdisc "github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -43,10 +45,6 @@ const registrationEntryPath = "entry"
 const registrationBatchWindow = 5 * time.Second
 
 func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error {
-	if v.conf.Dmsg == nil || !v.conf.Dmsg.RegistrationCXO {
-		log.Debug("Registration-CXO: not opted in (dmsg.registration_cxo=false); skipping")
-		return nil
-	}
 	if v.dmsgC == nil {
 		log.Warn("Registration-CXO: dmsg client absent; publisher not started")
 		return nil
@@ -93,11 +91,25 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 
 	// Dial dmsg-discovery so its aggregator sees the inbound conn and
 	// subscribes to our feed (PK = our PK). ConnectPK is idempotent, so the
-	// same loop handles initial announce + reconnect. Reuses the telemetry
-	// announce loop (identical shape).
-	go runAnnounceLoop(v.ctx, pub, dmsgdPK, log)
+	// same loop handles initial announce + reconnect. Each success stamps
+	// lastAnnounceOK, which drives the keepalive-health predicate below.
+	lastAnnounceOK := new(atomic.Int64)
+	go runRegistrationAnnounceLoop(v.ctx, pub, dmsgdPK, lastAnnounceOK, log)
+
+	// Tell the dmsg client the CXO registration keepalive is healthy while we
+	// have recently reached dmsg-discovery over the feed conn. While healthy,
+	// the client stretches its periodic HTTP keepalive re-PUT (see
+	// EntityCommon.cxoKeepaliveHealthyFn); if the feed conn drops, announces
+	// stop succeeding and this falls back to false within the window, so the
+	// frequent HTTP keepalive resumes. Delegated-server CHANGES are unaffected
+	// (they publish immediately over both HTTP and CXO).
+	v.dmsgC.SetCXOKeepaliveHealthyFunc(func() bool {
+		last := lastAnnounceOK.Load()
+		return last != 0 && time.Since(time.Unix(0, last)) < cxoKeepaliveHealthyWindow
+	})
 
 	v.pushCloseStack("registration_cxo", func() error {
+		v.dmsgC.SetCXOKeepaliveHealthyFunc(nil)
 		v.dmsgC.SetEntryPublishHook(nil)
 		return pub.Close()
 	})
@@ -106,4 +118,43 @@ func initRegistrationCXO(_ context.Context, v *Visor, log *logging.Logger) error
 		WithField("port", skyenv.DmsgDMSGDRegistrationCXOPort).
 		Info("Registration-CXO: publisher running (entry mirrored to dmsg-discovery)")
 	return nil
+}
+
+// registrationAnnounceInterval is how often the visor pokes its CXO feed conn
+// to dmsg-discovery. Short enough that a recovered visor/dmsg-disc re-links
+// within the health window.
+const registrationAnnounceInterval = 30 * time.Second
+
+// cxoKeepaliveHealthyWindow is how long after the last successful announce the
+// registration-over-CXO keepalive is still considered healthy. ~3 announce
+// intervals of slack, so one missed announce doesn't flap the HTTP-keepalive
+// fallback, while a genuinely dropped feed conn falls back within a minute or
+// two.
+const cxoKeepaliveHealthyWindow = 95 * time.Second
+
+// runRegistrationAnnounceLoop dials dmsg-discovery on a ticker (ConnectPK is
+// idempotent — a live conn is a no-op, a dropped one redials) and stamps
+// lastOK with the wall-clock time of each success. lastOK drives the client's
+// keepalive-health predicate.
+func runRegistrationAnnounceLoop(ctx context.Context, pub *treestore.Publisher, dmsgdPK cipher.PubKey, lastOK *atomic.Int64, log *logging.Logger) {
+	t := time.NewTicker(registrationAnnounceInterval)
+	defer t.Stop()
+	announce := func() {
+		dctx, cancel := context.WithTimeout(ctx, registrationAnnounceInterval/2)
+		defer cancel()
+		if err := pub.AnnounceTo(dctx, dmsgdPK); err != nil {
+			log.WithError(err).WithField("dmsgd_pk", dmsgdPK).Trace("Registration-CXO: announce to dmsg-discovery failed")
+			return
+		}
+		lastOK.Store(time.Now().UnixNano())
+	}
+	announce()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			announce()
+		}
+	}
 }
