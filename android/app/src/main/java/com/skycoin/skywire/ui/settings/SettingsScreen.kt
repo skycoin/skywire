@@ -8,11 +8,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -52,7 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
@@ -364,36 +362,43 @@ private fun IdentityCard(
                 )
             }
         } else {
-            // Equal halves with a real gutter. Sized to their labels these two
-            // all but fill the row, so the 8dp between them read as no gap at
-            // all — two destructive actions with nothing separating them, which
-            // is the last place a mis-tap should be easy.
+            val replaceLabel = stringResource(R.string.settings_replace_sk)
+            val resetLabel = stringResource(R.string.settings_new_config)
+            // Equal halves gave the longer label half a row to sit in, which is
+            // less than it needs — it wrapped to two lines and left its
+            // neighbour a short button beside a tall one. Weighting by the
+            // measured label widths instead gives each one the share of the row
+            // its text actually asks for: both stay on one line, and the two
+            // together still fill the width with only the gutter between them.
+            val measurer = rememberTextMeasurer()
+            val labelStyle = MaterialTheme.typography.labelLarge
+            val replaceWidth = remember(replaceLabel, labelStyle) {
+                measurer.measure(replaceLabel, labelStyle).size.width.toFloat()
+            }
+            val resetWidth = remember(resetLabel, labelStyle) {
+                measurer.measure(resetLabel, labelStyle).size.width.toFloat()
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                // IntrinsicSize.Min + fillMaxHeight: the longer label wraps to
-                // two lines and would otherwise leave one button visibly taller
-                // than its neighbour. This sizes the row to the tallest of them
-                // and lets both fill it.
-                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+                modifier = Modifier.fillMaxWidth(),
             ) {
+                // Trimmed from the 24dp default: the padding is what decides
+                // whether a proportional share is wide enough for its label.
+                val padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
                 FilledTonalButton(
                     onClick = onReplace,
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentPadding = padding,
+                    modifier = Modifier.weight(replaceWidth),
                 ) {
-                    Text(
-                        stringResource(R.string.settings_replace_sk),
-                        textAlign = TextAlign.Center,
-                    )
+                    Text(replaceLabel, maxLines = 1)
                 }
                 FilledTonalButton(
                     onClick = onReset,
                     enabled = state.hasIdentity,
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                    contentPadding = padding,
+                    modifier = Modifier.weight(resetWidth),
                 ) {
-                    Text(
-                        stringResource(R.string.settings_new_config),
-                        textAlign = TextAlign.Center,
-                    )
+                    Text(resetLabel, maxLines = 1)
                 }
             }
         }
@@ -520,9 +525,13 @@ private fun RemoteManagementCard(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
+        // Both of these are buttons, not text links. Handing another machine
+        // control of this one — and taking it back — is the same weight of
+        // action as exporting the config or allowing background work, and it
+        // is styled like them rather than like a hyperlink in a paragraph.
         if (state.remoteManagementPk.isEmpty()) {
-            TextButton(onClick = onGrant) {
+            FilledTonalButton(onClick = onGrant) {
                 Text(stringResource(R.string.settings_remote_grant))
             }
         } else {
@@ -537,7 +546,8 @@ private fun RemoteManagementCard(
                     ),
                     modifier = Modifier.weight(1f),
                 )
-                TextButton(onClick = onRevoke) {
+                Spacer(Modifier.width(12.dp))
+                FilledTonalButton(onClick = onRevoke) {
                     Text(stringResource(R.string.settings_remote_revoke))
                 }
             }
