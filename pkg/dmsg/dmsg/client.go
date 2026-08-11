@@ -156,13 +156,24 @@ type Client struct {
 	entryCache   map[cipher.PubKey]entryCacheEntry
 	entryCacheMx sync.RWMutex
 
-	// wtUpgradeFailAt records, per dmsg-server PK, the time of the last failed
-	// wss→WebTransport upgrade attempt (see UpgradeBrowserSessions). A server
-	// whose WT endpoint is unreachable (a UDP-blocked H3 listener) would
-	// otherwise be re-dialed every upgrade tick; backing off keeps a browser on
-	// its working wss instead of thrashing. Lazily initialized.
-	wtUpgradeFailAt map[cipher.PubKey]time.Time
-	wtUpgradeFailMx sync.Mutex
+	// carrierFailAt records, per dmsg-server PK, the time of the last carrier
+	// convergence re-dial that landed on a less-preferred carrier or failed
+	// (see ConvergeCarriers). A server whose preferred endpoint is unreachable
+	// (e.g. a UDP-blocked WT/QUIC H3 listener) would otherwise be re-dialed
+	// every converge tick; backing off keeps the session on its working carrier
+	// instead of thrashing. Lazily initialized.
+	carrierFailAt map[cipher.PubKey]time.Time
+	carrierFailMx sync.Mutex
+
+	// carrier convergence controls: convMx guards a runtime override of the
+	// ordered carrier preference (nil = Config.Carriers) and a live-only
+	// discovery client used to read a server's CURRENT WT/QUIC endpoints
+	// (AddressWT/CertHashWT/AddressUDP). The default disc client (ce.dc) is a
+	// static-seed-first fallback that shadows those rotating fields, so
+	// convergence must resolve through a live lookup — set via SetLiveDiscovery.
+	convMx           sync.RWMutex
+	carriersOverride []string
+	liveDisc         disc.APIClient
 
 	// DHTLookup, when set, is called by DialStream before the HTTP
 	// discovery lookup. If it returns a valid entry, the HTTP discovery

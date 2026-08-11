@@ -139,98 +139,207 @@ func prefersWTOverWS(carriers []string) bool {
 	return wt >= 0 && ws >= 0 && wt < ws
 }
 
-// Timeouts and backoff for the wss→WebTransport upgrade path.
+// Timeouts and backoff for carrier convergence.
 const (
-	wtUpgradeResolveTimeout = 10 * time.Second
-	wtUpgradeDialTimeout    = 8 * time.Second
-	// wtUpgradeBackoff is how long to leave a server on wss after a failed WT
-	// upgrade before retrying — long enough that an unreachable WT endpoint
-	// doesn't churn, short enough that a transiently-down one recovers.
-	wtUpgradeBackoff = 5 * time.Minute
+	carrierConvergeResolveTimeout = 10 * time.Second
+	carrierConvergeDialTimeout    = 8 * time.Second
+	// carrierConvergeBackoff is how long to leave a session on its current
+	// carrier after a converge re-dial landed on a less-preferred one (or
+	// failed) — long enough that an unreachable preferred endpoint doesn't
+	// churn, short enough that a transiently-down one recovers.
+	carrierConvergeBackoff = 5 * time.Minute
 )
 
-// UpgradeBrowserSessions converges a browser's bootstrap wss sessions to
-// WebTransport. A browser MUST bootstrap over wss: the seed entries carry only
-// AddressWS (a stable domain wss URL), because a server's WT cert is
-// self-signed with a ~2-week life and its SHA-256 (CertHashWT) rotates, so it
-// can't be baked into the seed — the browser pins the CURRENT hash via
-// serverCertificateHashes, which is only knowable from live discovery.
+// SessionCarrier summarizes one live dmsg-server session's carrier, for the
+// convergence CLI/RPC. Preferred is the most-preferred carrier the server
+// currently advertises per the client's ordered Carriers preference (empty if
+// no preference is set or none is advertised).
+type SessionCarrier struct {
+	ServerPK  cipher.PubKey `json:"server_pk"`
+	Carrier   string        `json:"carrier"`
+	Addr      string        `json:"addr"`
+	Preferred string        `json:"preferred,omitempty"`
+}
+
+// SetCarriers overrides the client's ordered carrier preference at runtime
+// (nil restores Config.Carriers). See ConvergeCarriers.
+func (ce *Client) SetCarriers(carriers []string) {
+	ce.convMx.Lock()
+	if carriers == nil {
+		ce.carriersOverride = nil
+	} else {
+		ce.carriersOverride = append([]string(nil), carriers...)
+	}
+	ce.convMx.Unlock()
+}
+
+// Carriers returns the client's effective ordered carrier preference (the
+// runtime override if set, else Config.Carriers).
+func (ce *Client) Carriers() []string {
+	return append([]string(nil), ce.effectiveCarriers()...)
+}
+
+// effectiveCarriers is the runtime override if set, else Config.Carriers.
+func (ce *Client) effectiveCarriers() []string {
+	ce.convMx.RLock()
+	defer ce.convMx.RUnlock()
+	if ce.carriersOverride != nil {
+		return ce.carriersOverride
+	}
+	return ce.conf.Carriers
+}
+
+// SetLiveDiscovery installs a live-only discovery client used by carrier
+// convergence to read a server's CURRENT WT/QUIC endpoints. The client's
+// default disc (ce.dc) is a static-seed-first fallback that shadows those
+// rotating fields, so convergence would otherwise never see them.
+func (ce *Client) SetLiveDiscovery(dc disc.APIClient) {
+	ce.convMx.Lock()
+	ce.liveDisc = dc
+	ce.convMx.Unlock()
+}
+
+// liveServerEntry resolves a server's CURRENT entry, preferring the live-only
+// discovery client (SetLiveDiscovery) over the default static-seed-first dc.
+func (ce *Client) liveServerEntry(ctx context.Context, pk cipher.PubKey) (*disc.Entry, error) {
+	ce.convMx.RLock()
+	live := ce.liveDisc
+	ce.convMx.RUnlock()
+	if live != nil {
+		return getServerEntry(ctx, live, pk)
+	}
+	return getServerEntry(ctx, ce.dc, pk)
+}
+
+// SessionCarriers returns the carrier each live server session is using, plus
+// the most-preferred carrier that server currently advertises. Read-only.
+func (ce *Client) SessionCarriers() []SessionCarrier {
+	carriers := ce.effectiveCarriers()
+	ce.sessionsMx.Lock()
+	out := make([]SessionCarrier, 0, len(ce.sessions))
+	for pk, s := range ce.sessions {
+		out = append(out, SessionCarrier{ServerPK: pk, Carrier: s.carrier, Addr: s.carrierAddr})
+	}
+	ce.sessionsMx.Unlock()
+	if len(carriers) == 0 {
+		return out
+	}
+	for i := range out {
+		ctx, cancel := context.WithTimeout(context.Background(), carrierConvergeResolveTimeout)
+		entry, err := ce.liveServerEntry(ctx, out[i].ServerPK)
+		cancel()
+		if err == nil && entry != nil && entry.Server != nil {
+			if want, _ := pickCarrier(carriers, entry); want != "" {
+				out[i].Preferred = want
+			}
+		}
+	}
+	return out
+}
+
+// ConvergeCarriers re-dials each live server session that isn't already on the
+// most-preferred carrier that server advertises (per the client's ordered
+// Carriers preference), converging it. dialSession is newest-session-wins, so a
+// successful re-dial atomically REPLACES the session (the session count never
+// grows). A re-dial that lands on a LESS-preferred carrier (e.g. an unreachable
+// WT/QUIC endpoint that falls back to ws/tcp) backs the server off so it doesn't
+// thrash on a timer.
 //
-// So for each wss session this RE-RESOLVES the server's current discovery entry
-// (now reachable over the bootstrap wss) and, if it advertises WT, dials a WT
-// session from that fresh entry. dialSession is newest-session-wins, so a
-// successful WT session atomically replaces the wss; a WT failure falls back to
-// wss (dialSession's own WT→WS fallback) and the server is backed off so an
-// unreachable WT listener doesn't thrash. This is the active converge the old
-// "close the wss and hope Serve re-dials WT" approach could never bootstrap —
-// Serve re-dials from the ws-only seed list, so pickCarrier never saw AddressWT.
+// It resolves each server through the live-only discovery client (see
+// SetLiveDiscovery) so it sees the server's current AddressWT/CertHashWT/
+// AddressUDP, which the default static-seed-first disc client shadows.
 //
-// No-op unless the client prefers WT over WS (native clients skip it). Never
-// drops the session count (replace-in-place, not close-then-redial). Safe to
-// call on a timer. Returns the number of sessions upgraded to WT this call.
-func (ce *Client) UpgradeBrowserSessions() int {
-	if !prefersWTOverWS(ce.conf.Carriers) {
+// No-op when no carrier preference is set (empty Carriers = native default,
+// already optimal). Safe to call on a timer or on demand. Returns the number of
+// sessions re-dialed onto a MORE-preferred carrier this call.
+func (ce *Client) ConvergeCarriers() int {
+	carriers := ce.effectiveCarriers()
+	if len(carriers) == 0 {
 		return 0
 	}
+	type snap struct {
+		pk      cipher.PubKey
+		carrier string
+	}
 	ce.sessionsMx.Lock()
-	wsPKs := make([]cipher.PubKey, 0, len(ce.sessions))
+	sessions := make([]snap, 0, len(ce.sessions))
 	for pk, s := range ce.sessions {
-		if s.carrier == CarrierWS {
-			wsPKs = append(wsPKs, pk)
-		}
+		sessions = append(sessions, snap{pk, s.carrier})
 	}
 	ce.sessionsMx.Unlock()
 
-	upgraded := 0
-	for _, pk := range wsPKs {
-		if ce.wtUpgradeBackedOff(pk) {
+	converged := 0
+	for _, s := range sessions {
+		if ce.carrierBackedOff(s.pk) {
 			continue
 		}
-		// Re-resolve the LIVE entry so we get today's AddressWT + CertHashWT.
-		rctx, rcancel := context.WithTimeout(context.Background(), wtUpgradeResolveTimeout)
-		entry, err := ce.resolveServerEntry(rctx, pk)
+		rctx, rcancel := context.WithTimeout(context.Background(), carrierConvergeResolveTimeout)
+		entry, err := ce.liveServerEntry(rctx, s.pk)
 		rcancel()
-		if err != nil || entry == nil || entry.Server == nil || entry.Server.AddressWT == "" {
-			continue // lookup failed, or this server doesn't advertise WT — stay wss
+		if err != nil || entry == nil || entry.Server == nil {
+			ce.log.WithError(err).WithField("remote_pk", s.pk).Debug("carrier converge: live discovery lookup failed")
+			continue
 		}
-		// Dial WT from the fresh entry. Newest-session-wins replaces the wss on
-		// success; on WT failure dialSession falls back to wss and we back off.
-		dctx, dcancel := context.WithTimeout(context.Background(), wtUpgradeDialTimeout)
+		want, _ := pickCarrier(carriers, entry)
+		if want == "" || want == s.carrier {
+			continue // no advertised preferred carrier, or already on it
+		}
+		dctx, dcancel := context.WithTimeout(context.Background(), carrierConvergeDialTimeout)
 		ns, derr := ce.dialSession(dctx, entry)
 		dcancel()
-		if derr != nil || ns.carrier != CarrierWT {
-			ce.noteWTUpgradeFailure(pk)
+		if derr != nil {
+			ce.log.WithError(derr).WithField("remote_pk", s.pk).Debug("carrier converge: re-dial failed; backing off")
+			ce.noteCarrierFailure(s.pk)
 			continue
 		}
-		ce.log.WithField("remote_pk", pk).Debug("Upgraded wss session to WebTransport.")
-		ce.clearWTUpgradeFailure(pk)
-		upgraded++
+		if ns.carrier != want {
+			// Landed on a less-preferred carrier (preferred endpoint unreachable
+			// → dialSession fell back). Keep the working session, back off.
+			ce.log.WithField("remote_pk", s.pk).WithField("want", want).WithField("got", ns.carrier).
+				Debug("carrier converge: dial landed on a less-preferred carrier; backing off")
+			ce.noteCarrierFailure(s.pk)
+			continue
+		}
+		ce.log.WithField("remote_pk", s.pk).WithField("from", s.carrier).WithField("to", want).
+			Info("carrier converge: session converged to preferred carrier")
+		ce.clearCarrierFailure(s.pk)
+		converged++
 	}
-	return upgraded
+	return converged
 }
 
-// wtUpgradeBackedOff reports whether a WT upgrade for this server was tried and
-// failed within wtUpgradeBackoff.
-func (ce *Client) wtUpgradeBackedOff(pk cipher.PubKey) bool {
-	ce.wtUpgradeFailMx.Lock()
-	defer ce.wtUpgradeFailMx.Unlock()
-	t, ok := ce.wtUpgradeFailAt[pk]
-	return ok && time.Since(t) < wtUpgradeBackoff
-}
-
-func (ce *Client) noteWTUpgradeFailure(pk cipher.PubKey) {
-	ce.wtUpgradeFailMx.Lock()
-	if ce.wtUpgradeFailAt == nil {
-		ce.wtUpgradeFailAt = make(map[cipher.PubKey]time.Time)
+// UpgradeBrowserSessions is the browser's wss→WebTransport convergence, kept
+// under its original name for the wasm converge ticker. It is now a thin
+// wrapper over ConvergeCarriers, gated on the browser's WT-over-WS preference.
+func (ce *Client) UpgradeBrowserSessions() int {
+	if !prefersWTOverWS(ce.effectiveCarriers()) {
+		return 0
 	}
-	ce.wtUpgradeFailAt[pk] = time.Now()
-	ce.wtUpgradeFailMx.Unlock()
+	return ce.ConvergeCarriers()
 }
 
-func (ce *Client) clearWTUpgradeFailure(pk cipher.PubKey) {
-	ce.wtUpgradeFailMx.Lock()
-	delete(ce.wtUpgradeFailAt, pk)
-	ce.wtUpgradeFailMx.Unlock()
+// carrierBackedOff reports whether a converge re-dial for this server landed on
+// a less-preferred carrier (or failed) within carrierConvergeBackoff.
+func (ce *Client) carrierBackedOff(pk cipher.PubKey) bool {
+	ce.carrierFailMx.Lock()
+	defer ce.carrierFailMx.Unlock()
+	t, ok := ce.carrierFailAt[pk]
+	return ok && time.Since(t) < carrierConvergeBackoff
+}
+
+func (ce *Client) noteCarrierFailure(pk cipher.PubKey) {
+	ce.carrierFailMx.Lock()
+	if ce.carrierFailAt == nil {
+		ce.carrierFailAt = make(map[cipher.PubKey]time.Time)
+	}
+	ce.carrierFailAt[pk] = time.Now()
+	ce.carrierFailMx.Unlock()
+}
+
+func (ce *Client) clearCarrierFailure(pk cipher.PubKey) {
+	ce.carrierFailMx.Lock()
+	delete(ce.carrierFailAt, pk)
+	ce.carrierFailMx.Unlock()
 }
 
 func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
