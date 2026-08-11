@@ -215,6 +215,55 @@ simpler.
    `sessions_count`; once it has transports and relays, it need not hold more.
 4. dmsg servers remain only as the bootstrap/fallback floor.
 
+## Registration over CXO (the fan-in direction)
+
+The load investigation (dmsg-discovery pinned at ~90% CPU, GC-bound on
+noise + ML-KEM-768 handshake allocations) traced most of dmsg-disc's inbound
+work to **periodic client-entry registration over HTTP-over-dmsg**: every visor
+re-`PUT`s its entry on a timer, and each `PUT` is a fresh dmsg stream — a full
+noise + PQ handshake. This is the same connect→handshake→close churn the
+quiet-feed heartbeat (the CXO idle-watchdog fix) removed for *persistent* CXO
+connections — but registration never used a persistent connection.
+
+Move registration onto CXO, mirroring the telemetry→TPD pattern:
+
+1. **A visor publishes its own signed `disc.Entry` as a CXO feed** (feed PK = the
+   visor's PK, a dedicated dmsg port). This reuses the exact `treestore.Publisher`
+   the visor already runs for telemetry (`pkg/visor/init_stats.go`), and the
+   quiet-feed heartbeat keeps the connection alive — so registration becomes **one
+   persistent push per visor, re-published only on actual change** (the delegated-
+   server set changes), instead of a periodic re-`PUT`. The signature model maps
+   1:1: a CXO feed is signed by its publisher, and the entry is already
+   self-signed by the same visor.
+
+2. **dmsg-disc runs a CXO aggregator** that subscribes to visor entry feeds
+   (fan-in, like TPD's `cxoaggregator`), verifies the entry signature + monotonic
+   sequence, and ingests into its store (`SetEntry`) — so lookups and the HTTP API
+   keep working unchanged. dmsg-disc already publishes the inverse
+   `ClientsByServerCXOPublisher` feed (fan-out), so the CXO plumbing on the
+   dmsg-disc side is established; this adds the subscribe side.
+
+3. **Backward-compatible & additive.** The HTTP `PUT /dmsg-discovery/entry` path
+   stays for un-migrated clients; a visor that can't reach dmsg-disc over CXO
+   falls back to HTTP.
+
+**Layering.** The entry publisher lives at the **visor** level (`pkg/visor`), not
+in `pkg/dmsg` — CXO imports dmsg, so having dmsg publish its own entry over CXO
+would be an import cycle. The visor reads the dmsg client's current entry and
+publishes it; it already orchestrates both dmsg and CXO. Bootstrap is unaffected:
+a visor dials dmsg servers directly (no entry needed), then publishes *which*
+servers it's on — after a dmsg session already exists.
+
+**Lookup stays measure-first / configurable.** The fan-out
+`ClientsByServerCXOPublisher` already lets a visor mirror the entry set from
+dmsg-disc over CXO. Whether a visor subscribes to it (a full local mirror) vs.
+does on-demand HTTP lookups should be **configurable** — leaf / resource-
+constrained boards on-demand, hub visors (public visors, hypervisors, the
+resolving proxies) full-sync — because most visors only ever resolve their
+handful of transport peers, and a full mirror over-provisions constrained boards
+(the eMMC/microSD case). Measure the actual per-visor lookup rate before
+defaulting anything to full-sync; the dominant churn was registration, not lookup.
+
 ## Open questions
 
 - **Relay discovery / rendezvous.** With visors as relays, how does a visor pick
