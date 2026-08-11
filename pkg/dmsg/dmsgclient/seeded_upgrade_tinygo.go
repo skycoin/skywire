@@ -42,5 +42,8 @@ func upgradeDiscovery(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Clie
 	}
 
 	dmsgC.SetDiscoveryClients([]disc.APIClient{NewSeededDiscClient(real, shortcut, seedServers, log)})
+	// Carrier convergence needs a LIVE lookup (fresh AddressWT/CertHashWT) that
+	// bypasses the seeded-shortcut disc, which shadows those rotating fields.
+	dmsgC.SetLiveDiscovery(real)
 	return nil
 }
