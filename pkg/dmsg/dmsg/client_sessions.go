@@ -110,6 +110,17 @@ func (ce *Client) EnsureSession(ctx context.Context, entry *disc.Entry) error {
 // the server advertises a QUIC endpoint (Protocol "quic" + AddressUDP), else the
 // legacy TCP path. Unknown carrier names are skipped. Pure — unit-tested.
 // hasCarrier reports whether c is in the client's ordered carrier preference.
+// rankOfCarrier returns the index of c in the ordered preference (lower =
+// more preferred), or -1 if c is not listed.
+func rankOfCarrier(carriers []string, c string) int {
+	for i, x := range carriers {
+		if x == c {
+			return i
+		}
+	}
+	return -1
+}
+
 func hasCarrier(carriers []string, c string) bool {
 	for _, x := range carriers {
 		if x == c {
@@ -283,6 +294,17 @@ func (ce *Client) ConvergeCarriers() int {
 		want, _ := pickCarrier(carriers, entry)
 		if want == "" || want == s.carrier {
 			continue // no advertised preferred carrier, or already on it
+		}
+		// Converge UP the preference only. Both the target and the current
+		// carrier must be listed, and the target must rank strictly higher
+		// (lower index). If the current carrier isn't in the preference at all,
+		// leave it — the operator's preference doesn't cover it, so we must
+		// never downgrade (e.g. carriers=[wt,ws] must not move a quic session
+		// to ws).
+		wantRank := rankOfCarrier(carriers, want)
+		curRank := rankOfCarrier(carriers, s.carrier)
+		if wantRank < 0 || curRank < 0 || wantRank >= curRank {
+			continue
 		}
 		dctx, dcancel := context.WithTimeout(context.Background(), carrierConvergeDialTimeout)
 		ns, derr := ce.dialSession(dctx, entry)
