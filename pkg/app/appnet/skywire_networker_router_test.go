@@ -30,6 +30,15 @@ func (s stubRouter) DialRoutes(context.Context, cipher.PubKey, routing.Port, rou
 	return nil, s.err
 }
 
+// The dial path asks this before deciding whether a direct 0-hop conn is
+// acceptable. 1 = "one hop is fine", which is what these tests assume: they
+// exercise the fallback to DialRoutes when no direct transport exists, not
+// the min-hops constraint. Embedding router.Router alone would leave it nil
+// and panic here rather than fail a comparison.
+func (s stubRouter) EffectiveMinHops(*router.DialOptions) uint16 {
+	return 1
+}
+
 func (s stubRouter) PingRoute(context.Context, cipher.PubKey, routing.Port, routing.Port, *router.DialOptions) (net.Conn, error) {
 	return nil, s.err
 }
