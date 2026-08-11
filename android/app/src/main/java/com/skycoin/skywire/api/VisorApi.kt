@@ -83,8 +83,12 @@ class VisorApi(context: Context) {
      * For the two voice-audio streams, which last as long as the call does.
      * Every timeout is off: a call is minutes, and a quiet moment is not a
      * dead connection. Liveness is the server's business — each stream
-     * re-arms its own deadline per frame — and on this side the loops stop
-     * when the call does.
+     * re-arms its own deadline per frame.
+     *
+     * Which makes ending a stream entirely this side's job, and the only
+     * thing that ends one is cancelling its [okhttp3.Call] — see the `onCall`
+     * hook on the two stream openers below. With no timeout to fall back on,
+     * a stream nobody cancels runs until the process dies.
      */
     private val streamClient = client.newBuilder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -436,23 +440,38 @@ class VisorApi(context: Context) {
      * [body] is a factory, not a body: a request body can only be written
      * once, so the re-login retry needs a fresh one. The caller owns closing
      * the returned response.
+     *
+     * [onCall] receives each attempt's call — including the retry's, so the
+     * caller always holds the current one. It is the only way to end this
+     * stream: the upload is written from inside `execute()`, so this function
+     * does not return until the body stops producing, and cancelling the
+     * coroutine cannot reach a thread parked in there. The caller must keep
+     * the call and cancel it to stop early.
      */
-    suspend fun voiceMicStream(body: () -> RequestBody): okhttp3.Response =
+    suspend fun voiceMicStream(
+        body: () -> RequestBody,
+        onCall: (okhttp3.Call) -> Unit = {},
+    ): okhttp3.Response =
         withContext(Dispatchers.IO) {
             val path = "/api/voice-audio/${localPk()}/mic"
-            val first = post(path, body(), csrfToken(), streamClient)
+            val first = post(path, body(), csrfToken(), streamClient, onCall)
             if (first.code != 401) return@withContext first
             first.close()
             ensureSession()
-            post(path, body(), csrfToken(), streamClient)
+            post(path, body(), csrfToken(), streamClient, onCall)
         }
 
     /**
      * Opens the playback stream: the response body is PCM to play, for as long
      * as it is read. The caller owns closing the returned response.
+     *
+     * [onCall] as above — cancelling the call is what unblocks a reader parked
+     * on the body.
      */
-    suspend fun voiceSpeakerStream(): okhttp3.Response = withContext(Dispatchers.IO) {
-        getWithRelogin("/api/voice-audio/${localPk()}/speaker", streamClient)
+    suspend fun voiceSpeakerStream(
+        onCall: (okhttp3.Call) -> Unit = {},
+    ): okhttp3.Response = withContext(Dispatchers.IO) {
+        getWithRelogin("/api/voice-audio/${localPk()}/speaker", streamClient, onCall)
     }
 
     /**
@@ -512,12 +531,13 @@ class VisorApi(context: Context) {
     private suspend fun getWithRelogin(
         path: String,
         client: OkHttpClient = this.client,
+        onCall: (okhttp3.Call) -> Unit = {},
     ): okhttp3.Response {
-        val first = get(path, client)
+        val first = get(path, client, onCall)
         if (first.code != 401) return first
         first.close()
         ensureSession()
-        return get(path, client)
+        return get(path, client, onCall)
     }
 
     /**
@@ -541,14 +561,26 @@ class VisorApi(context: Context) {
         return post(path, payload(), csrfToken())
     }
 
-    private fun get(path: String, client: OkHttpClient = this.client): okhttp3.Response =
-        client.newCall(Request.Builder().url("$BASE$path").build()).execute()
+    // onCall hands the call out BEFORE it is executed, which is the only
+    // moment that works for a long-lived stream: execute() blocks until the
+    // exchange is over, so a caller that waited for the return value would be
+    // holding a call it no longer needs to cancel. Default no-op — every
+    // request that completes on its own ignores it.
+    private fun get(
+        path: String,
+        client: OkHttpClient = this.client,
+        onCall: (okhttp3.Call) -> Unit = {},
+    ): okhttp3.Response =
+        client.newCall(Request.Builder().url("$BASE$path").build())
+            .also(onCall)
+            .execute()
 
     private fun post(
         path: String,
         body: RequestBody,
         csrf: String,
         client: OkHttpClient = this.client,
+        onCall: (okhttp3.Call) -> Unit = {},
     ): okhttp3.Response =
         client.newCall(
             Request.Builder()
@@ -556,7 +588,7 @@ class VisorApi(context: Context) {
                 .header(CSRF_HEADER, csrf)
                 .post(body)
                 .build(),
-        ).execute()
+        ).also(onCall).execute()
 
     private fun put(path: String, body: String, csrf: String): okhttp3.Response =
         client.newCall(
