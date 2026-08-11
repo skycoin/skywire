@@ -311,7 +311,7 @@ clean: ## Clean project: remove created binaries and apps
 
 build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
 	@echo "compile-checking js/wasm binaries..."
-	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/skywire/commands/web/wasm; do \
+	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/websh-probe ./cmd/skywire/commands/web/wasm; do \
 		echo "  GOOS=js GOARCH=wasm go build $$p"; \
 		GOOS=js GOARCH=wasm go build -mod=vendor -o /dev/null "$$p" || exit 1; \
 	done
@@ -327,7 +327,7 @@ build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no r
 	@# full js/wasm binaries ./cmd/dmsg-wasm and ./cmd/wasm-visor deliberately use
 	@# net/http (HTTP-over-dmsg; dmsg-wasm also needs logrus+gob reflection) and are
 	@# standard-Go-only — they are compile-checked by the `build-wasm` lane instead.
-	@for p in ./pkg/tpviz/wasm; do \
+	@for p in ./pkg/tpviz/wasm ./cmd/websh-probe; do \
 		echo "  tinygo build -target wasm $$p"; \
 		tinygo build -target wasm -no-debug -o /dev/null "$$p" || exit 1; \
 	done
