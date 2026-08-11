@@ -78,6 +78,17 @@ android {
     }
 }
 
+// ManifestKeyguardTest asserts against the manifest SOURCE, which Gradle has
+// no reason to consider an input to a unit test — so without this the guard
+// stays UP-TO-DATE through the exact edit it exists to catch, and reports
+// success for a test it never ran. Verified by re-adding the attribute and
+// watching the task run and fail.
+tasks.withType<Test>().configureEach {
+    inputs.file("src/main/AndroidManifest.xml")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("appManifest")
+}
+
 dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
@@ -108,7 +119,11 @@ dependencies {
     implementation(libs.zxing.embedded)
     implementation(libs.zxing.core)
     debugImplementation(libs.compose.ui.tooling)
-    // Instrumented only. The audio engine's contract — that stopping a call
+    // Host-side. For the few facts that are about the module's own sources
+    // rather than about a running app — the manifest not handing the lock
+    // screen to every screen, for one.
+    testImplementation(libs.junit)
+    // Instrumented. The audio engine's contract — that stopping a call
     // hands the microphone back — is a statement about AudioRecord and a real
     // socket, and neither has a meaningful stand-in on the JVM.
     androidTestImplementation(libs.junit)

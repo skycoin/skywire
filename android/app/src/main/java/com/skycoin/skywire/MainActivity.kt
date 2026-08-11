@@ -1,6 +1,7 @@
 package com.skycoin.skywire
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.compose.setContent
@@ -17,6 +18,7 @@ import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppVisibility
 import com.skycoin.skywire.core.DeepLinks
 import com.skycoin.skywire.core.ThemeMode
+import com.skycoin.skywire.core.VoiceCalls
 import com.skycoin.skywire.ui.SkywireApp
 import com.skycoin.skywire.ui.components.BiometricGate
 import com.skycoin.skywire.ui.theme.SkywireTheme
@@ -69,11 +71,54 @@ class MainActivity : FragmentActivity() {
                 }
             }
 
+            // Permission to cross the lock screen lasts exactly as long as the
+            // call that needs it. See the manifest for what declaring it there
+            // instead did: one Activity means one grant for the entire app, so
+            // a locked phone kept showing whatever screen was open, still
+            // working under the user's finger.
+            val calls by VoiceCalls.state.collectAsState()
+            LaunchedEffect(calls.busy) { showOverKeyguard(calls.busy) }
+
             SkywireTheme(darkTheme = ThemeMode.of(theme).isDark(isSystemInDarkTheme())) {
                 BiometricGate {
                     SkywireApp()
                 }
             }
+        }
+    }
+
+    /**
+     * Show this Activity over the lock screen, wake the screen for it, and
+     * hold the display on — the three things a ringing or connected call
+     * needs, granted together and dropped together.
+     *
+     * Dropped together matters as much as granted: the moment the call ends,
+     * the keyguard has to take the screen back. Driven by the call state
+     * rather than by a screen being open, so no navigation, crash or missed
+     * teardown can leave the app parked in front of a locked phone.
+     *
+     * FLAG_KEEP_SCREEN_ON rides along because a call is the one time the user
+     * is plainly using the phone without touching it — the timeout otherwise
+     * blanks the screen mid-conversation. It is scoped to the call for the
+     * same reason as the rest: holding the display on for the whole app would
+     * be someone else's battery.
+     *
+     * setShowWhenLocked/setTurnScreenOn are API 27; on 26 the same behaviour
+     * is the deprecated window flags, which is why both paths are here.
+     */
+    private fun showOverKeyguard(busy: Boolean) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(busy)
+            setTurnScreenOn(busy)
+        } else {
+            val keyguard = WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+            if (busy) window.addFlags(keyguard) else window.clearFlags(keyguard)
+        }
+        if (busy) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
