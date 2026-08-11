@@ -148,6 +148,14 @@ func pageHTTPS() bool {
 
 func main() {
 	ctx = context.Background()
+	// One binary, two roles (see shell_js.go): the tab loads this same wasm a
+	// second time as "shell" when the visor itself lives in a worker, which
+	// has no DOM to draw a terminal into.
+	if wasmRole() == "shell" {
+		installShell()
+		fmt.Println("wasm-visor: shell role — call skywireShell.open(el)")
+		select {}
+	}
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
 		"boot":               js.FuncOf(jsBoot),
 		"status":             js.FuncOf(jsStatus),
@@ -203,6 +211,11 @@ func main() {
 		"skychatGroupMessages":  js.FuncOf(jsGroupMessages),
 		"skychatGroupReplay":    js.FuncOf(jsGroupReplay),
 	}))
+	// The in-page host fallback has a DOM, so this instance can serve the
+	// terminal too and the tab needs no second instance.
+	if hasDOM() {
+		installShell()
+	}
 	fmt.Println("wasm-visor: ready — call skywireVisor.boot(sk, seedPk, seedWs, discDmsgAddr)")
 	select {} // block forever
 }

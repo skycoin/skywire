@@ -2201,6 +2201,90 @@
     return { wb: wb, close: function () { wb.close(); } };
   }
 
+  // ensureShell resolves globalThis.skywireShell — websh, the Bash/POSIX shell
+  // + terminal compiled into the wasm visor (cmd/wasm-visor/shell_js.go).
+  //
+  // When the visor runs IN THIS PAGE it already installed skywireShell and this
+  // resolves immediately. Normally it runs in a (Shared)Worker, which has no
+  // DOM, so the tab instantiates the SAME wasm binary a second time with
+  // __SKYWIRE_WASM_ROLE__='shell': that instance skips the visor entirely and
+  // only draws terminals, calling back into the worker over the existing
+  // skywireVisor proxy. One binary, two roles — no second blob to build, ship
+  // or cache. Rejects where there is no visor at all (the native HV UI).
+  var shellReady = null;
+  function ensureShell() {
+    if (globalThis.skywireShell) { return Promise.resolve(globalThis.skywireShell); }
+    if (shellReady) { return shellReady; }
+    if (!globalThis.skywireVisor) { return Promise.reject(new Error("no visor in this tab")); }
+    shellReady = (function () {
+      var vqs = "";
+      try { var v = localStorage.getItem("skywire-visor-variant"); if (v) { vqs = "?variant=" + encodeURIComponent(v); } } catch (e) {}
+      var loadExec = (typeof globalThis.Go === "function") ? Promise.resolve() : new Promise(function (res, rej) {
+        var s = document.createElement("script");
+        s.src = "wasm_exec.js" + vqs;
+        s.onload = function () { res(); };
+        s.onerror = function () { rej(new Error("failed to load wasm_exec.js")); };
+        document.head.appendChild(s);
+      });
+      return loadExec.then(function () {
+        var go = new globalThis.Go();
+        // TinyGo's wasm_exec.js omits the gojs getRandomData import the
+        // crypto-using runtime needs (mirrors hv-boot.js / worker.js).
+        if (go.importObject.gojs && !go.importObject.gojs["runtime.getRandomData"]) {
+          go.importObject.gojs["runtime.getRandomData"] = function (ptr, len) {
+            crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
+          };
+        }
+        globalThis.__SKYWIRE_WASM_ROLE__ = "shell";
+        return WebAssembly.instantiateStreaming(fetch("wasm-visor.wasm" + vqs), go.importObject)
+          .then(function (r) {
+            go.run(r.instance); // installs globalThis.skywireShell, then blocks
+            return new Promise(function (res, rej) {
+              var tries = 0;
+              (function wait() {
+                if (globalThis.skywireShell) { res(globalThis.skywireShell); return; }
+                if (++tries > 600) { rej(new Error("shell wasm did not come up")); return; }
+                setTimeout(wait, 50);
+              })();
+            });
+          });
+      });
+    })();
+    return shellReady;
+  }
+
+  // createShellWindow opens websh as a WinBox window: a real shell (pipes,
+  // globbing, control flow, an editor, jq/awk) whose visor commands — pk about
+  // visors net health apps tps routes hvapi — emit JSON straight into it. Go
+  // owns everything inside the mount element; this side supplies the frame and
+  // closes the session.
+  function createShellWindow(doc, opts) {
+    var mount = doc.createElement("div");
+    mount.style.cssText = "position:absolute;inset:0;background:#000;overflow:hidden";
+    var note = doc.createElement("div");
+    note.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa0a6;font:12px monospace";
+    note.textContent = "starting the shell…";
+    mount.appendChild(note);
+    var handle = null;
+    var wb = makeWin(doc, {
+      title: opts.title || "shell", root: opts.root, top: opts.top, bottom: opts.bottom,
+      width: "56%", height: "62%", mount: mount,
+      onclose: function () {
+        try { if (handle && handle.close) { handle.close(); } } catch (e) {}
+        if (opts.onClose) { opts.onClose(); }
+      }
+    });
+    ensureShell().then(function (sh) {
+      note.remove();
+      handle = sh.open(mount);
+      if (handle && handle.error) { mount.textContent = "shell: " + handle.error; return; }
+      if (handle && handle.focus) { handle.focus(); }
+    }).catch(function (e) {
+      note.textContent = "shell failed to start: " + (e.message || e);
+    });
+    return { wb: wb, close: function () { wb.close(); } };
+  }
+
   // createCliWindow opens a REPL that dispatches a curated command set to the
   // visor's RPC via opts.api(method, path, body) — the wasm core's hvApi() in the
   // wasm visor (function call, no shell needed — works in standalone PWA mode),
@@ -2686,7 +2770,12 @@
     var cliWin = null;
     function openCli() {
       if (focusExisting(cliWin)) { return; }
-      cliWin = createCliWindow(doc, withRoot({ onClose: function () { untrack(cliWin); cliWin = null; } }));
+      var close = function () { untrack(cliWin); cliWin = null; };
+      // A tab with a visor in it runs the real shell; the native HV UI overlay
+      // (no in-tab visor) keeps the REPL.
+      cliWin = globalThis.skywireVisor
+        ? createShellWindow(doc, withRoot({ title: "visor shell", onClose: close }))
+        : createCliWindow(doc, withRoot({ onClose: close }));
       track(cliWin, "console");
     }
     var termWin = null;
