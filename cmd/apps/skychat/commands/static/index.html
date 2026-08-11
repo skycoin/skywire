@@ -4235,6 +4235,18 @@
     // tap waits out before it counts as one (see _lbUp).
     const DOUBLE_TAP_MS = 300;
 
+    // Longest edge of an image handed to the host's QR decoder. Only the
+    // fallback path uses these — the browser's own BarcodeDetector reads the
+    // source directly. See _qrDetector.
+    //
+    // Two values because the two callers are not alike. The camera decodes
+    // several times a second over a synchronous bridge, so its frames are cut
+    // small enough not to stutter the page. A picked file is decoded once and
+    // may be a photograph in which the code is a small part of the frame, so
+    // it keeps far more detail — there is no loop to slow down.
+    const QR_SCAN_MAX_EDGE = 640;
+    const QR_FILE_MAX_EDGE = 1600;
+
     /* ---- Icons ---------------------------------------------------------
        Every icon in this app is drawn here. It used to be emoji — a
        paperclip, a megaphone, a bell — pasted straight into the markup as
@@ -11118,6 +11130,15 @@
             isAdmin: false,
           };
         }
+        // Everywhere else: the browser's own, where it is both present and
+        // backed by something that works (Chrome, Edge on desktop).
+        if (typeof window.BarcodeDetector === 'function') {
+          try {
+            return new window.BarcodeDetector({ formats: ['qr_code'] });
+          } catch (e) {
+            console.debug('skychat: BarcodeDetector unavailable:', e && e.message);
+          }
+        }
         return null;
       }
 
@@ -11180,23 +11201,67 @@
 
       // ---- QR scanning -----------------------------------------------
 
-      // _qrDetector returns a BarcodeDetector for QR codes, or null where
-      // the browser has no such API.
+      // _qrDetector returns something that decodes QR codes, or null where
+      // nothing here can.
       //
-      // Native only, no bundled decoder: this covers Chrome, Edge and the
-      // Android WebView the mobile app runs in, and adds nothing to a page
-      // that is already embedded in the binary. Where it is missing
-      // (Safari, Firefox) scanning is declined in plain words and the
-      // paste field — which is the whole dialog's primary input anyway —
-      // still works.
+      // Two implementations behind one shape. BarcodeDetector is the
+      // browser's own and is used wherever it exists (Chrome, Edge). The
+      // Android WebView does NOT have it — it is a Chrome-on-Android API
+      // that WebView never wired up — which is why scanning failed in the
+      // mobile app while the phone's camera app read the same code fine:
+      // that decodes it elsewhere and hands us a skychat:// link. There the
+      // host lends us zxing over SkywireQr, and the page keeps the camera,
+      // the picker and this dialog.
+      //
+      // Where neither exists (Safari, Firefox) scanning is declined in
+      // plain words and the paste field — the dialog's primary input
+      // anyway — still works.
       _qrDetector() {
-        if (typeof window.BarcodeDetector !== 'function') return null;
-        try {
-          return new window.BarcodeDetector({ formats: ['qr_code'] });
-        } catch (e) {
-          console.debug('skychat: BarcodeDetector unavailable:', e && e.message);
-          return null;
+        // The host's decoder is tried FIRST where it exists, which means the
+        // Android app. BarcodeDetector is present in that WebView but does
+        // not work: it is backed by a Play Services barcode module that is
+        // not always installed, and when it is missing detect() does not
+        // fail — it quietly returns no results, so every scan reported "no
+        // QR code found" while the phone's own camera app read the same code
+        // fine. A decoder that ships inside the APK has nothing to be
+        // missing.
+        if (window.SkywireQr && typeof window.SkywireQr.decode === 'function') {
+          // Same detect(source) → [{rawValue}] contract, so both call sites
+          // stay one code path. The host takes an image, so whatever is
+          // handed in is painted onto a canvas first.
+          return {
+            detect: async (source, maxEdge) => {
+              const cap = maxEdge || QR_SCAN_MAX_EDGE;
+              const srcW = source.videoWidth || source.width || 0;
+              const srcH = source.videoHeight || source.height || 0;
+              if (!srcW || !srcH) return [];
+              // Downscaled first. The bridge call is synchronous — it blocks
+              // this thread until zxing answers — and it runs several times a
+              // second while the camera is open, so a full 1080p frame would
+              // be felt as stutter in the page behind the viewfinder. A code
+              // large enough for a camera to see is still legible at 640.
+              const scale = Math.min(1, cap / Math.max(srcW, srcH));
+              const width = Math.max(1, Math.round(srcW * scale));
+              const height = Math.max(1, Math.round(srcH * scale));
+              const canvas = this._qrCanvas || (this._qrCanvas = document.createElement('canvas'));
+              canvas.width = width;
+              canvas.height = height;
+              canvas.getContext('2d').drawImage(source, 0, 0, width, height);
+              // JPEG, not PNG: a 1080p frame every fifth of a second is the
+              // difference between a few KB across the bridge and a few
+              // hundred, and a photograph compresses cleanly enough for a
+              // decoder that is already tolerating camera shake.
+              const url = canvas.toDataURL('image/jpeg', 0.8);
+              // Kept for the file path's message: "found nothing" is worth
+              // distinguishing from "never looked", and the size it examined
+              // is the difference between a bad photo and a bad decode.
+              this._qrLastFrame = width + '×' + height + ', ' + Math.round(url.length / 1024) + 'KB';
+              const text = window.SkywireQr.decode(url);
+              return text ? [{ rawValue: text }] : [];
+            },
+          };
         }
+        return null;
       }
 
       _qrUnsupportedToast() {
@@ -11274,10 +11339,13 @@
         if (!detector) { this._qrUnsupportedToast(); return; }
         try {
           const bitmap = await createImageBitmap(file);
-          const found = await detector.detect(bitmap);
+          // The larger cap: one image, one decode, and the code may be a
+          // small part of a photograph.
+          const found = await detector.detect(bitmap, QR_FILE_MAX_EDGE);
           bitmap.close();
           if (!found || !found.length || !found[0].rawValue) {
-            this.showToast('No QR code found in that image.', 'error');
+            const looked = this._qrLastFrame ? ` (checked ${this._qrLastFrame})` : '';
+            this.showToast(`No QR code found in that image${looked}.`, 'error');
             return;
           }
           this._onQrDecoded(found[0].rawValue);
