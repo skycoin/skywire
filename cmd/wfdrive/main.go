@@ -25,10 +25,11 @@
 //	curl  http://127.0.0.1:9224/health            # session + tab usable?
 //	curl  http://127.0.0.1:9224/quit              # session.end + exit
 //
-// Captures land in the temp directory. "out" names the file there — it is a
-// name, not a path, and must be [A-Za-z0-9._-], so nothing a request can say
-// writes outside that directory. The control port is loopback-only, but the
-// name still arrives in a request.
+// Captures land in the temp directory under names wfdrive picks itself
+// (wfdrive-<n>.png / .console.txt); the response says where each one went. The
+// "out" parameter is accepted and ignored — letting a request name a file it
+// writes is a path-injection question nobody needs to have, on a tool whose
+// callers only ever needed to know where the file is.
 //
 // /nav, /shoot and /eval write <out>.png + <out>.console.txt and return JSON.
 // Splitting navigation, evaluation and capture apart matters for anything that
@@ -54,10 +55,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -290,32 +291,36 @@ func (d *driver) evalStr(bctx, expr string) string {
 	return strings.Trim(out, `"`)
 }
 
-// safeName is the character set a capture name may use. Validating against an
-// allowlist — rather than trying to spot the bad shapes — is what makes it
-// impossible for a request to address anything but a file in the output
-// directory.
-var safeName = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
+// captureSeq numbers capture files. wfdrive names them itself rather than
+// letting a request name them: two static analysers both, correctly, refused
+// to believe any amount of validation on a request-supplied name made the
+// resulting path safe, and they are easier to agree with than to argue with.
+// The caller learns where its capture landed from the JSON response, which is
+// all it needed the name for.
+var captureSeq atomic.Uint64
 
-// safeOut turns a requested capture name into a path in the output directory.
-// "out" is a NAME, not a path: it must match safeName, so it cannot contain a
-// separator or traverse anywhere. The control port is loopback-only, but the
-// name still arrives in a request.
-func safeOut(out string) string {
-	name := "wfdrive"
-	if out != "" && out != "." && out != ".." && safeName.MatchString(out) {
-		name = out
-	}
-	return filepath.Join(os.TempDir(), name)
+// captureBase is the prefix for this run's captures.
+const captureBase = "wfdrive"
+
+// writeCapture writes one capture into the temp directory under a name of our
+// own making, and returns the path.
+func writeCapture(seq uint64, ext string, b []byte) string {
+	// Every component here is ours: the temp dir, a constant prefix, a counter
+	// and a literal extension. The taint analysers reach os.TempDir (it reads
+	// TMPDIR) rather than anything a request said.
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d%s", captureBase, seq, ext))
+	_ = os.WriteFile(path, b, 0o600) //nolint:errcheck,gosec // path is built from constants and a counter
+	return path
 }
 
-func (d *driver) shoot(bctx, outPrefix string) {
+func (d *driver) shoot(bctx string, seq uint64) {
 	if shot, e := d.cmd("browsingContext.captureScreenshot", map[string]interface{}{"context": bctx}); e == nil {
 		var s struct {
 			Data string `json:"data"`
 		}
 		_ = json.Unmarshal(shot, &s) //nolint:errcheck
 		if b, de := base64.StdEncoding.DecodeString(s.Data); de == nil {
-			_ = os.WriteFile(outPrefix+".png", b, 0o644) //nolint:errcheck,gosec
+			writeCapture(seq, ".png", b)
 		}
 	}
 }
@@ -349,12 +354,16 @@ func serveMode() error {
 	mux := http.NewServeMux()
 
 	// report writes the screenshot + console for a step and answers as JSON.
-	report := func(w http.ResponseWriter, out, evalOut string, warn error) {
-		out = safeOut(out)
-		_ = d.withTab(func(bctx string) error { d.shoot(bctx, out); return nil }) //nolint:errcheck
+	report := func(w http.ResponseWriter, _, evalOut string, warn error) {
+		seq := captureSeq.Add(1)
+		_ = d.withTab(func(bctx string) error { d.shoot(bctx, seq); return nil }) //nolint:errcheck
 		con := d.dumpConsole()
-		_ = os.WriteFile(out+".console.txt", []byte(con+"\n"), 0o644) //nolint:errcheck,gosec
-		body := map[string]interface{}{"png": out + ".png", "eval": evalOut, "console": con}
+		conPath := writeCapture(seq, ".console.txt", []byte(con+"\n"))
+		body := map[string]interface{}{
+			"png":     strings.TrimSuffix(conPath, ".console.txt") + ".png",
+			"console": con,
+			"eval":    evalOut,
+		}
 		if warn != nil {
 			body["warning"] = warn.Error()
 		}
