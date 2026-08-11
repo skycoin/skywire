@@ -251,7 +251,7 @@ func (r *router) DialRoutes(
 			// Naming public autoconnect because it is the lever, not a
 			// detail: it is what fills the transport table with public
 			// visors, and those are the intermediates a multi-hop route is
-			// made of. Dialling once at one hop only builds a transport to
+			// made of. Dialing once at one hop only builds a transport to
 			// the exit — enough to get past this check, not enough to route
 			// THROUGH anything, so the finder would then return nothing.
 			return nil, fmt.Errorf("no transports available and none created for a multi-hop dial "+
@@ -1655,7 +1655,7 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// bfsMinHops (computed above) already resolves the per-dial overrides
 	// against the visor-global setting, so it is the constraint. Local-BFS
 	// mirrors forward→reverse so both directions share one path; satisfying
-	// the higher constraint ensures the stricter direction is honoured. The
+	// the higher constraint ensures the stricter direction is honored. The
 	// 2 is only for a router with routing effectively unconfigured — this
 	// branch is multi-hop search, so one hop is not an answer it can give.
 	minHops := 2
