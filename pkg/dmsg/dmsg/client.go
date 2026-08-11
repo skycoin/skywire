@@ -163,7 +163,11 @@ type Client struct {
 	// every converge tick; backing off keeps the session on its working carrier
 	// instead of thrashing. Lazily initialized.
 	carrierFailAt map[cipher.PubKey]time.Time
-	carrierFailMx sync.Mutex
+	// carrierLastErr records, per server PK, the reason the last convergence
+	// attempt didn't reach the preferred carrier (surfaced by SessionCarriers /
+	// the `dmsg converge` CLI for diagnostics). Guarded by carrierFailMx.
+	carrierLastErr map[cipher.PubKey]string
+	carrierFailMx  sync.Mutex
 
 	// carrier convergence controls: convMx guards a runtime override of the
 	// ordered carrier preference (nil = Config.Carriers) and a live-only

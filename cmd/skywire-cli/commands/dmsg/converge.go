@@ -81,5 +81,8 @@ func printConverge(r *visor.DmsgConvergeResult) {
 			mark = fmt.Sprintf("  (prefers %s)", s.Preferred)
 		}
 		fmt.Printf("  %s  %-4s  %s%s\n", s.ServerPK.Hex()[:8], s.Carrier, s.Addr, mark)
+		if s.Note != "" {
+			fmt.Printf("        ↳ %s\n", s.Note)
+		}
 	}
 }

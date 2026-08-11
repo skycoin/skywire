@@ -170,6 +170,7 @@ type SessionCarrier struct {
 	Carrier   string        `json:"carrier"`
 	Addr      string        `json:"addr"`
 	Preferred string        `json:"preferred,omitempty"`
+	Note      string        `json:"note,omitempty"` // why the last converge attempt didn't reach Preferred
 }
 
 // SetCarriers overrides the client's ordered carrier preference at runtime
@@ -244,6 +245,9 @@ func (ce *Client) SessionCarriers() []SessionCarrier {
 				out[i].Preferred = want
 			}
 		}
+		if out[i].Preferred != "" && out[i].Preferred != out[i].Carrier {
+			out[i].Note = ce.carrierNote(out[i].ServerPK)
+		}
 	}
 	return out
 }
@@ -311,7 +315,7 @@ func (ce *Client) ConvergeCarriers() int {
 		dcancel()
 		if derr != nil {
 			ce.log.WithError(derr).WithField("remote_pk", s.pk).Debug("carrier converge: re-dial failed; backing off")
-			ce.noteCarrierFailure(s.pk)
+			ce.noteCarrierFailure(s.pk, fmt.Sprintf("re-dial to %s failed: %v", want, derr))
 			continue
 		}
 		if ns.carrier != want {
@@ -319,7 +323,7 @@ func (ce *Client) ConvergeCarriers() int {
 			// → dialSession fell back). Keep the working session, back off.
 			ce.log.WithField("remote_pk", s.pk).WithField("want", want).WithField("got", ns.carrier).
 				Debug("carrier converge: dial landed on a less-preferred carrier; backing off")
-			ce.noteCarrierFailure(s.pk)
+			ce.noteCarrierFailure(s.pk, fmt.Sprintf("wanted %s but dial landed on %s", want, ns.carrier))
 			continue
 		}
 		ce.log.WithField("remote_pk", s.pk).WithField("from", s.carrier).WithField("to", want).
@@ -349,19 +353,32 @@ func (ce *Client) carrierBackedOff(pk cipher.PubKey) bool {
 	return ok && time.Since(t) < carrierConvergeBackoff
 }
 
-func (ce *Client) noteCarrierFailure(pk cipher.PubKey) {
+func (ce *Client) noteCarrierFailure(pk cipher.PubKey, reason string) {
 	ce.carrierFailMx.Lock()
 	if ce.carrierFailAt == nil {
 		ce.carrierFailAt = make(map[cipher.PubKey]time.Time)
 	}
+	if ce.carrierLastErr == nil {
+		ce.carrierLastErr = make(map[cipher.PubKey]string)
+	}
 	ce.carrierFailAt[pk] = time.Now()
+	ce.carrierLastErr[pk] = reason
 	ce.carrierFailMx.Unlock()
 }
 
 func (ce *Client) clearCarrierFailure(pk cipher.PubKey) {
 	ce.carrierFailMx.Lock()
 	delete(ce.carrierFailAt, pk)
+	delete(ce.carrierLastErr, pk)
 	ce.carrierFailMx.Unlock()
+}
+
+// carrierNote returns the recorded reason the last convergence attempt for pk
+// didn't reach its preferred carrier, or "" if none.
+func (ce *Client) carrierNote(pk cipher.PubKey) string {
+	ce.carrierFailMx.Lock()
+	defer ce.carrierFailMx.Unlock()
+	return ce.carrierLastErr[pk]
 }
 
 func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {
