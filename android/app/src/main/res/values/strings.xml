@@ -404,6 +404,15 @@
     <string name="wallet_coin_btc">Bitcoin mainnet</string>
     <string name="wallet_coin_eth">Ethereum mainnet</string>
     <string name="wallet_coin_erc20">ERC-20 token on Ethereum</string>
+    <!-- The visor's own account of the last connection attempt, folded up
+         under the connect control. The failure reason is already on screen in
+         one line; this is the sequence behind it, for pasting to whoever is
+         helping. Same events the CLI prints for a verbose proxy start. -->
+    <string name="vpn_attempt_log">Connection details (%1$d events)</string>
+    <string name="vpn_attempt_log_live">Connection details — collecting…</string>
+    <string name="vpn_attempt_log_empty">The visor logged nothing for this attempt.</string>
+    <string name="vpn_attempt_log_copy">Copy details</string>
+
     <string name="wallet_coins_add">Add a coin or token</string>
     <!-- Removing a coin the user added. Only the list entry goes: no key is
          touched, which is the whole difference from removing a wallet, and
