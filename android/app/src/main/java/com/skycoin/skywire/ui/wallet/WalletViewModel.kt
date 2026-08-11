@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.skycoin.skywire.R
 import com.skycoin.skywire.wallet.CoinKind
 import com.skycoin.skywire.wallet.CoinSpec
 import com.skycoin.skywire.wallet.WalletMeta
@@ -184,6 +185,27 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
             importCoinIconFrom(getApplication(), uri)
         }
         onSaved(name)
+    }
+
+    /**
+     * Remove a user-added coin. Refused for a built-in or while wallets still
+     * hold it — the repository decides, and its message is what the sheet
+     * shows, so the reason is the same wherever this is called from.
+     */
+    fun removeCoin(coinId: String) = action {
+        val gone = repo.removeUserCoin(coinId) ?: return@action
+        // The badge file was written by this layer (importCoinIcon), so it is
+        // this layer that clears it up. Best-effort: a coin already out of the
+        // list must not come back because a file would not delete.
+        gone.icon?.let { name ->
+            withContext(Dispatchers.IO) {
+                runCatching { coinIconFile(getApplication(), name).delete() }
+            }
+        }
+        val app: Application = getApplication()
+        mutable.update {
+            it.copy(message = app.getString(R.string.wallet_coin_removed, gone.name))
+        }
     }
 
     fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?, onDone: () -> Unit) = action {
