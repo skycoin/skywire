@@ -14,10 +14,10 @@
 // shown to match. Until then the two run side by side, selected by the view
 // toggle, so they can be compared on the same data.
 //
-// # Division of labour
+// # Division of labor
 //
 // The TypeScript side keeps the data assembly (buildData: filters, grouping,
-// DMSG gating, service-route colours) and hands the result over as typed
+// DMSG gating, service-route colors) and hands the result over as typed
 // arrays. Both views are therefore fed from the same function, so a difference
 // between them is a difference in the engine and not in the data.
 //
@@ -101,11 +101,15 @@ func floats(v js.Value) []float32 {
 	buf := make([]byte, n*4)
 	bytes := js.Global().Get("Uint8Array").New(v.Get("buffer"), v.Get("byteOffset"), n*4)
 	js.CopyBytesToGo(buf, bytes)
-	return unsafe.Slice((*float32)(unsafe.Pointer(&buf[0])), n)
+	// The bytes are a Float32Array's, and a []byte from make is suitably
+	// aligned, so this reinterprets the copy rather than converting it
+	// element by element — at ~20k links that is the difference between a
+	// data refresh being free and being visible.
+	return unsafe.Slice((*float32)(unsafe.Pointer(&buf[0])), n) //nolint:gosec // reinterpreting our own aligned copy
 }
 
-// colors converts an array of CSS colour strings — what the TypeScript side
-// already produces — into the normalised 0..1 RGBA the GPU wants.
+// colors converts an array of CSS color strings — what the TypeScript side
+// already produces — into the normalized 0..1 RGBA the GPU wants.
 func colors(v js.Value) []float32 {
 	if !v.Truthy() {
 		return nil
@@ -174,7 +178,7 @@ func jsInit(_ js.Value, args []js.Value) interface{} {
 
 	cfg.OnPointClick = func(index int, pos [2]float64, _ js.Value) {
 		// Persistent selection, matching the TypeScript view's
-		// click-to-isolate: the neighbourhood stays highlighted after the
+		// click-to-isolate: the neighborhood stays highlighted after the
 		// pointer leaves, until another point or the background is clicked.
 		v.graph.SelectPointByIndex(index, true)
 		v.emit("click", index, pos[0], pos[1])
@@ -184,7 +188,7 @@ func jsInit(_ js.Value, args []js.Value) interface{} {
 		v.emit("bgclick", -1, 0, 0)
 	}
 	cfg.OnPointMouseOver = func(index int, _ [2]float64, event js.Value) {
-		// Highlight the hovered point's neighbourhood — the WebGL analogue of
+		// Highlight the hovered point's neighborhood — the WebGL analog of
 		// the flat view's show-edges-only-on-hover.
 		v.graph.SelectPointByIndex(index, true)
 		var cx, cy float64
@@ -198,7 +202,7 @@ func jsInit(_ js.Value, args []js.Value) interface{} {
 	}
 	cfg.OnSimulationEnd = func() {
 		// Re-frame once the layout settles; the initial fit is too tight while
-		// every point still sits clustered near the centre.
+		// every point still sits clustered near the center.
 		v.graph.FitView(400, 0.1)
 		v.emit("simend", -1, 0, 0)
 	}
@@ -217,11 +221,11 @@ func jsInit(_ js.Value, args []js.Value) interface{} {
 // jsSetData replaces the graph's contents. The payload is what the TypeScript
 // buildData produced, converted to typed arrays:
 //
-//	positions   Float32Array  x,y per point (empty → seeded near the centre)
-//	pointColors string[]      CSS colour per point
+//	positions   Float32Array  x,y per point (empty → seeded near the center)
+//	pointColors string[]      CSS color per point
 //	pointSizes  Float32Array  pixel radius per point
 //	links       Float32Array  source,target index pairs
-//	linkColors  string[]      CSS colour per link
+//	linkColors  string[]      CSS color per link
 //	linkWidths  Float32Array  width per link
 //	grouped     bool          fixed positions, simulation off
 //	boundaries  object[]      {x, y, r, color, label} group circles
@@ -239,7 +243,7 @@ func jsSetData(_ js.Value, args []js.Value) interface{} {
 	pointSizes := floats(p.Get("pointSizes"))
 	grouped := p.Get("grouped").Truthy()
 
-	// v1 randomised points that arrived without a position; v2 uses what it is
+	// v1 randomized points that arrived without a position; v2 uses what it is
 	// given, so a free layout has to be seeded here or every point starts at
 	// the origin and the simulation has nothing to push apart.
 	if len(positions) == 0 && len(pointSizes) > 0 {
