@@ -267,6 +267,34 @@ func (ce *Client) SessionCarriers() []SessionCarrier {
 // No-op when no carrier preference is set (empty Carriers = native default,
 // already optimal). Safe to call on a timer or on demand. Returns the number of
 // sessions re-dialed onto a MORE-preferred carrier this call.
+// probeCarrierErr does a throwaway direct dial of ONE carrier purely to capture
+// its failure reason (dialSession swallows per-carrier errors when it falls back
+// to a working carrier). The session, if it establishes, is never registered —
+// it is closed immediately. Returns "" for carriers with no native dialer.
+func (ce *Client) probeCarrierErr(entry *disc.Entry, carrier string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), carrierConvergeDialTimeout)
+	defer cancel()
+	var (
+		s   ClientSession
+		err error
+	)
+	switch carrier {
+	case CarrierWT:
+		s, err = ce.dialSessionWT(ctx, entry)
+	case CarrierWS:
+		s, err = ce.dialSessionWS(ctx, entry)
+	case CarrierQUIC:
+		s, err = ce.dialSessionQUIC(ctx, entry)
+	default:
+		return ""
+	}
+	if err != nil {
+		return err.Error()
+	}
+	_ = s.Close() //nolint:errcheck // throwaway probe session, never registered
+	return "dial succeeded on retry (transient failure)"
+}
+
 func (ce *Client) ConvergeCarriers() int {
 	carriers := ce.effectiveCarriers()
 	if len(carriers) == 0 {
@@ -321,9 +349,17 @@ func (ce *Client) ConvergeCarriers() int {
 		if ns.carrier != want {
 			// Landed on a less-preferred carrier (preferred endpoint unreachable
 			// → dialSession fell back). Keep the working session, back off.
+			// dialSession swallows the per-carrier error on fallback, so do one
+			// throwaway direct dial of the wanted carrier to capture WHY it
+			// failed — this is the visor-side reproduction of the reachability
+			// the standalone `svc health --carriers` probe measures.
+			note := fmt.Sprintf("wanted %s but dial landed on %s", want, ns.carrier)
+			if detail := ce.probeCarrierErr(entry, want); detail != "" {
+				note += "; " + want + " err: " + detail
+			}
 			ce.log.WithField("remote_pk", s.pk).WithField("want", want).WithField("got", ns.carrier).
 				Debug("carrier converge: dial landed on a less-preferred carrier; backing off")
-			ce.noteCarrierFailure(s.pk, fmt.Sprintf("wanted %s but dial landed on %s", want, ns.carrier))
+			ce.noteCarrierFailure(s.pk, note)
 			continue
 		}
 		ce.log.WithField("remote_pk", s.pk).WithField("from", s.carrier).WithField("to", want).
