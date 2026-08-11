@@ -13,7 +13,30 @@ import (
 
 // Driver implements database/sql/driver.Driver.
 //
-// Registration functions and methods must be called before the first call to Open.
+// Registration functions and methods must be called before the first call to
+// Open.
+//
+// Most code has no use for this type. sql.Open("sqlite", dsn) and
+// [NewConnector] both go through the driver this package registers as
+// "sqlite", which carries everything registered with [RegisterFunction],
+// [RegisterScalarFunction], [RegisterDeterministicScalarFunction],
+// [RegisterCollationUtf8], [RegisterConnectionHook] and
+// [vtab.RegisterModule].
+//
+// A Driver a caller constructs is not equivalent to that one. Its fields are
+// unexported, so it starts out with no functions, collations or connection
+// hooks, and the only way to give it any is [Driver.RegisterConnectionHook];
+// the package-level registration functions always apply to the registered
+// driver, never to a constructed one. Connections it opens therefore run
+// without the package-level functions and collations -- and where such a
+// registration overrides a SQLite built-in of the same name, they run with
+// SQLite's built-in in force instead. Virtual table modules are the one
+// exception: they are held process-globally and reach every Driver.
+//
+// Constructing one is supported for the private-hook pattern: a driver
+// registered under a name of its own with sql.Register, so that its connection
+// hooks apply to its own connections rather than to every connection in the
+// process. Prefer sql.Open or NewConnector for anything else.
 type Driver struct {
 	// user defined functions that are added to every new connection on Open
 	udfs map[string]*userDefinedFunction
@@ -52,6 +75,38 @@ func newDriver() *Driver { return d }
 // _pragma: Each value will be run as a "PRAGMA ..." statement (with the PRAGMA
 // keyword added for you). May be specified more than once, '&'-separated. For more
 // information on supported PRAGMAs see: https://www.sqlite.org/pragma.html
+//
+// The following shorthand keys set common PRAGMAs for easier DSN compatibility
+// when migrating from github.com/mattn/go-sqlite3. Each value is validated
+// against the same set github.com/mattn/go-sqlite3 accepts (case-insensitive);
+// an unrecognized value fails the connection with an error instead of being
+// silently ignored. The keys are applied in a fixed order, independent of the
+// order they appear in the DSN: _busy_timeout and _auto_vacuum first (auto_vacuum
+// must be set before the database is first written), then the _pragma values,
+// then the remaining keys, and _query_only last. Where a shorthand key and a
+// _pragma set the same PRAGMA, whichever is applied later in that order wins. If
+// a key and its alias are both supplied, the alias (the second name below) wins,
+// matching github.com/mattn/go-sqlite3; supplying the alias with an empty value
+// therefore suppresses the PRAGMA rather than deferring to the primary key.
+// Accepted values:
+//
+//	_busy_timeout, _timeout   -> PRAGMA busy_timeout   (an integer)
+//	_foreign_keys, _fk        -> PRAGMA foreign_keys   (0 1 false true no yes off on)
+//	_journal_mode, _journal   -> PRAGMA journal_mode   (DELETE TRUNCATE PERSIST MEMORY WAL OFF)
+//	_synchronous, _sync       -> PRAGMA synchronous    (0 OFF 1 NORMAL 2 FULL 3 EXTRA)
+//	_auto_vacuum, _vacuum     -> PRAGMA auto_vacuum    (0 NONE 1 FULL 2 INCREMENTAL)
+//	_query_only               -> PRAGMA query_only     (0 1 false true no yes off on)
+//
+// All DSN parameters that can be validated are validated before any of them is
+// applied, so a DSN carrying a typo fails without having executed the PRAGMAs
+// that precede it -- a rejected DSN does not leave the database converted to WAL
+// or with auto_vacuum already set.
+//
+// Unlike these validated shorthand keys, each _pragma value is executed verbatim
+// (with PRAGMA prepended) and is not validated, so a DSN that includes _pragma
+// must come from a trusted source. It is also the one case that can still fail
+// partway: a bad _pragma is only rejected by SQLite as it runs, after any
+// earlier _pragma in the list has taken effect.
 //
 // _time_format: The name of a format to use when writing time values to the database.
 // The currently supported values are (1) "sqlite" for YYYY-MM-DD HH:MM:SS.SSS[+-]HH:MM
@@ -123,6 +178,14 @@ func newDriver() *Driver { return d }
 // driver's *Error is unchanged in either mode. The parameter is parsed
 // before sqlite3_open_v2 so open-time errors are covered. See
 // https://gitlab.com/cznic/sqlite/-/issues/230.
+//
+// vfs: The name of the SQLite VFS to open the database with. Note the absent
+// underscore prefix: this is the same parameter SQLite recognizes in a file:
+// URI, and its value is passed on as the sqlite3_open_v2 zVfs argument. It
+// selects any VFS registered with SQLite, in particular one returned by
+// [modernc.org/sqlite/vfs.New], which exposes a Go fs.FS as a read-only VFS.
+// When absent or empty the default VFS is used. Supplying the parameter more
+// than once with values that differ is an error.
 func (d *Driver) Open(name string) (conn driver.Conn, err error) {
 	if dmesgs {
 		defer func() {
@@ -165,6 +228,11 @@ func (d *Driver) Open(name string) (conn driver.Conn, err error) {
 
 // RegisterConnectionHook registers a function to be called after each connection
 // is opened. This is called after all the connection has been set up.
+//
+// The hook applies only to connections opened by d. To register one on the
+// driver this package registers as "sqlite", and so on the connections
+// sql.Open and [NewConnector] hand out, use the package-level
+// [RegisterConnectionHook].
 func (d *Driver) RegisterConnectionHook(fn ConnectionHookFn) {
 	d.connectionHooks = append(d.connectionHooks, fn)
 }
