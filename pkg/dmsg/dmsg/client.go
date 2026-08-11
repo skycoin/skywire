@@ -156,6 +156,14 @@ type Client struct {
 	entryCache   map[cipher.PubKey]entryCacheEntry
 	entryCacheMx sync.RWMutex
 
+	// wtUpgradeFailAt records, per dmsg-server PK, the time of the last failed
+	// wss→WebTransport upgrade attempt (see UpgradeBrowserSessions). A server
+	// whose WT endpoint is unreachable (a UDP-blocked H3 listener) would
+	// otherwise be re-dialed every upgrade tick; backing off keeps a browser on
+	// its working wss instead of thrashing. Lazily initialized.
+	wtUpgradeFailAt map[cipher.PubKey]time.Time
+	wtUpgradeFailMx sync.Mutex
+
 	// DHTLookup, when set, is called by DialStream before the HTTP
 	// discovery lookup. If it returns a valid entry, the HTTP discovery
 	// is skipped entirely. This lets the visor resolve DMSG client
