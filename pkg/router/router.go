@@ -95,6 +95,15 @@ type Config struct {
 	RulesGCInterval  time.Duration
 	MinHops          uint16
 	MaxHops          uint16
+	// MuxRoutes seeds the router's runtime parallel-mux-routes value from
+	// routing.mux_routes at construction, the way MinHops already is. The
+	// dial-time default is applied by the app networker (which the launcher
+	// seeds from the same config field) — this seed is what makes
+	// GetMuxRoutes/GetRouterSettings report the configured value from boot,
+	// so a read-modify-write of the settings (the mobile app's min_hops
+	// control does one) echoes the real value back instead of a zero that
+	// silently turns the configured default off.
+	MuxRoutes int
 	// DisableRaceRouteSetup turns OFF the app-dial race (default: race ON).
 	// Normally, when a dial would create a direct transport to the peer
 	// (min-hops==1, not existing-tp-only), DialRoutes runs that transport
@@ -534,6 +543,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		conf:            config,
 		logger:          config.Logger,
 		mLogger:         config.MasterLogger,
+		muxRoutes:       config.MuxRoutes,
 		tm:              config.TransportManager,
 		rt:              routing.NewTable(config.Logger),
 		sl:              sl,

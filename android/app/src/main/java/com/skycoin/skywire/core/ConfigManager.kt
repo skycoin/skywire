@@ -146,6 +146,10 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      *    the app, not the config file, is the source of truth: the visor
      *    persists its own copy when the setting is changed live, and this
      *    keeps the two from drifting apart.
+     *  - `routing.mux_routes` — client apps (SkyVPN, SkySOCKS) dial over
+     *    [MUX_ROUTES] parallel routes by default. Same every-launch pin,
+     *    same reason: the phone owns the policy, and the visor rewrites
+     *    the field whenever the router settings are saved live.
      *  - `log_level` — the same arrangement, for the same reason (see
      *    [CoreLogLevel]).
      */
@@ -212,6 +216,16 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                             this["transport_preference"] = JsonArray(
                                 TransportPreference.order(transportPrimary).map(::JsonPrimitive),
                             )
+                            // Client apps dial over multiplexed routes by
+                            // default — the phone's policy, not a setting, so
+                            // there is deliberately no switch for it: min_hops
+                            // stays the one routing control the user sees.
+                            // Every leg beyond the first is best-effort (a
+                            // dial never fails for lack of a second path, and
+                            // extra legs are skipped outright when the route
+                            // rides dmsg — carrier NAT), so on a phone that
+                            // has only the relay this quietly changes nothing.
+                            this["mux_routes"] = JsonPrimitive(MUX_ROUTES)
                         },
                     )
                     else -> put(key, value)
@@ -512,6 +526,16 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"
         const val DEFAULT_SOCKS_PORT = 1080
+
+        /**
+         * How many parallel routes a client app's dial asks for. Two, not
+         * more: the second leg is what buys the bandwidth aggregation (a
+         * disjoint physical path — say sudph next to stcpr), it stays
+         * within the route-finder's stock candidate set, and each further
+         * leg would cost another background setup dial on every connect
+         * for a return a single-radio phone can't use.
+         */
+        const val MUX_ROUTES = 2
         val ADDR = listOf("--addr", "-addr")
 
         /** 32 bytes of secp256k1 secret, 33 of compressed public — as hex. */
