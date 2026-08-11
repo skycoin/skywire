@@ -240,6 +240,18 @@ func (r *router) DialRoutes(
 	// transport for a cold peer, and the loop below waits on it once.
 	if hookDone == nil && r.tm != nil && r.tm.TransportCount() == 0 {
 		log.Debug("No local transports and no pending transport creation; skipping route finder")
+		// Naming min-hops when it is the reason there is no transport to
+		// begin with. The hook that creates one on demand runs only at
+		// baseMinHops == 1 (see above), so a visor holding none — a phone
+		// that has just started, most of all — cannot dial at 2 or more:
+		// route setup is skipped here, before the route finder is ever
+		// asked, and "no transports available" on its own reads as a
+		// network fault rather than a consequence of the chosen setting.
+		if baseMinHops > 1 {
+			return nil, fmt.Errorf("no transports available and none created for a multi-hop dial "+
+				"(min_hops=%d): this visor holds no transport to route through — "+
+				"connect once at min_hops=1 to establish one, or lower the setting", baseMinHops)
+		}
 		return nil, fmt.Errorf("no transports available; route setup skipped")
 	}
 
