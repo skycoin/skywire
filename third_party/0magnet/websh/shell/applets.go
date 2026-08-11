@@ -1,0 +1,704 @@
+package shell
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/expand"
+	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/interp"
+	"github.com/skycoin/skywire/third_party/0magnet/u-root/pkg/ls"
+	"github.com/skycoin/skywire/third_party/0magnet/afero"
+)
+
+// applet is a built-in utility. run returns the exit code.
+type applet struct {
+	help string
+	run  func(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int
+}
+
+var applets map[string]applet
+
+// registered in init to avoid an initialization cycle through help
+func init() {
+	applets = map[string]applet{
+		"ls":       {"list directory contents (-l long, -a all)", runLs},
+		"cat":      {"concatenate files to stdout", runCat},
+		"mkdir":    {"create directories (-p parents)", runMkdir},
+		"rmdir":    {"remove empty directories", runRmdir},
+		"rm":       {"remove files (-r recursive, -f force)", runRm},
+		"cp":       {"copy files (-r recursive)", runCp},
+		"mv":       {"move/rename files", runMv},
+		"touch":    {"create files / update timestamps", runTouch},
+		"head":     {"first lines of files (-n count)", runHead},
+		"tail":     {"last lines of files (-n count)", runTail},
+		"wc":       {"count lines, words, bytes (-l -w -c)", runWc},
+		"grep":     {"search with regexps (-i -v -n -c)", runGrep},
+		"seq":      {"print number sequences", runSeq},
+		"sort":     {"sort lines (-r reverse, -n numeric)", runSort},
+		"uniq":     {"filter repeated lines (-c count)", runUniq},
+		"tree":     {"directory tree", runTree},
+		"basename": {"strip directory from path", runBasename},
+		"dirname":  {"strip filename from path", runDirname},
+		"date":     {"print the current time", runDate},
+		"sleep":    {"delay for N seconds", runSleep},
+		"clear":    {"clear the terminal", runClear},
+		"env":      {"print the environment", runEnv},
+		"which":    {"locate a command", runWhich},
+		"uname":    {"system information", runUname},
+		"hostname": {"print the hostname", runHostname},
+		"help":     {"list available commands", runHelp},
+	}
+}
+
+// AppletNames returns the registered applet names, sorted.
+func AppletNames() []string {
+	names := make([]string, 0, len(applets))
+	for name := range applets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// RegisterApplet adds (or replaces) an applet — used by embedders to
+// expose environment-specific commands.
+func RegisterApplet(name, help string, run func(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int) {
+	applets[name] = applet{help, run}
+}
+
+func fail(hc *interp.HandlerContext, name string, err error) int {
+	fmt.Fprintf(hc.Stderr, "%s: %v\n", name, err)
+	return 1
+}
+
+// parseFlags splits leading -x flags from args (combined -abc allowed).
+func parseFlags(args []string) (flags map[byte]bool, rest []string) {
+	flags = map[byte]bool{}
+	for i, a := range args {
+		if len(a) > 1 && a[0] == '-' && a != "--" {
+			for _, c := range a[1:] {
+				flags[byte(c)] = true
+			}
+			continue
+		}
+		if a == "--" {
+			return flags, args[i+1:]
+		}
+		return flags, args[i:]
+	}
+	return flags, nil
+}
+
+func resolveArg(hc *interp.HandlerContext, path string) string {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
+	return filepath.Join(hc.Dir, path)
+}
+
+func runLs(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	if len(rest) == 0 {
+		rest = []string{"."}
+	}
+	var stringer ls.Stringer = ls.NameStringer{}
+	if flags['l'] {
+		stringer = ls.LongStringer{Human: flags['h'], Name: ls.NameStringer{}}
+	}
+	code := 0
+	for _, arg := range rest {
+		path := resolveArg(hc, arg)
+		info, err := s.FS.Stat(path)
+		if err != nil {
+			code = fail(hc, "ls", err)
+			continue
+		}
+		if !info.IsDir() {
+			fmt.Fprintln(hc.Stdout, stringer.FileString(ls.FromOSFileInfo(path, info)))
+			continue
+		}
+		infos, err := afero.ReadDir(s.FS, path)
+		if err != nil {
+			code = fail(hc, "ls", err)
+			continue
+		}
+		if len(rest) > 1 {
+			fmt.Fprintf(hc.Stdout, "%s:\n", arg)
+		}
+		for _, fi := range infos {
+			if !flags['a'] && strings.HasPrefix(fi.Name(), ".") {
+				continue
+			}
+			name := stringer.FileString(ls.FromOSFileInfo(filepath.Join(path, fi.Name()), fi))
+			if fi.IsDir() && !flags['l'] {
+				name += "/"
+			}
+			fmt.Fprintln(hc.Stdout, name)
+		}
+	}
+	return code
+}
+
+func runCat(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	_, rest := parseFlags(args)
+	if len(rest) == 0 {
+		_, _ = io.Copy(hc.Stdout, hc.Stdin)
+		return 0
+	}
+	for _, arg := range rest {
+		f, err := s.FS.Open(resolveArg(hc, arg))
+		if err != nil {
+			return fail(hc, "cat", err)
+		}
+		_, _ = io.Copy(hc.Stdout, f)
+		f.Close()
+	}
+	return 0
+}
+
+func runMkdir(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	if len(rest) == 0 {
+		fmt.Fprintln(hc.Stderr, "mkdir: missing operand")
+		return 1
+	}
+	for _, arg := range rest {
+		path := resolveArg(hc, arg)
+		var err error
+		if flags['p'] {
+			err = s.FS.MkdirAll(path, 0o755)
+		} else {
+			err = s.FS.Mkdir(path, 0o755)
+		}
+		if err != nil {
+			return fail(hc, "mkdir", err)
+		}
+	}
+	return 0
+}
+
+func runRmdir(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	_, rest := parseFlags(args)
+	for _, arg := range rest {
+		path := resolveArg(hc, arg)
+		infos, err := afero.ReadDir(s.FS, path)
+		if err != nil {
+			return fail(hc, "rmdir", err)
+		}
+		if len(infos) > 0 {
+			fmt.Fprintf(hc.Stderr, "rmdir: %s: directory not empty\n", arg)
+			return 1
+		}
+		if err := s.FS.Remove(path); err != nil {
+			return fail(hc, "rmdir", err)
+		}
+	}
+	return 0
+}
+
+func runRm(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	if len(rest) == 0 {
+		fmt.Fprintln(hc.Stderr, "rm: missing operand")
+		return 1
+	}
+	for _, arg := range rest {
+		path := resolveArg(hc, arg)
+		info, err := s.FS.Stat(path)
+		if err != nil {
+			if flags['f'] {
+				continue
+			}
+			return fail(hc, "rm", err)
+		}
+		if info.IsDir() && !flags['r'] {
+			fmt.Fprintf(hc.Stderr, "rm: %s: is a directory\n", arg)
+			return 1
+		}
+		if err := s.FS.RemoveAll(path); err != nil && !flags['f'] {
+			return fail(hc, "rm", err)
+		}
+	}
+	return 0
+}
+
+func copyFile(s *Shell, src, dst string) error {
+	in, err := s.FS.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	info, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	out, err := s.FS.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, info.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	_, err = io.Copy(out, in)
+	return err
+}
+
+func copyAny(s *Shell, src, dst string, recursive bool) error {
+	info, err := s.FS.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		// copying into a directory keeps the base name
+		if di, err := s.FS.Stat(dst); err == nil && di.IsDir() {
+			dst = filepath.Join(dst, filepath.Base(src))
+		}
+		return copyFile(s, src, dst)
+	}
+	if !recursive {
+		return fmt.Errorf("%s is a directory (use -r)", src)
+	}
+	if err := s.FS.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	infos, err := afero.ReadDir(s.FS, src)
+	if err != nil {
+		return err
+	}
+	for _, fi := range infos {
+		if err := copyAny(s, filepath.Join(src, fi.Name()), filepath.Join(dst, fi.Name()), true); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func runCp(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	if len(rest) < 2 {
+		fmt.Fprintln(hc.Stderr, "cp: missing operand")
+		return 1
+	}
+	dst := resolveArg(hc, rest[len(rest)-1])
+	for _, arg := range rest[:len(rest)-1] {
+		if err := copyAny(s, resolveArg(hc, arg), dst, flags['r']); err != nil {
+			return fail(hc, "cp", err)
+		}
+	}
+	return 0
+}
+
+func runMv(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	_, rest := parseFlags(args)
+	if len(rest) < 2 {
+		fmt.Fprintln(hc.Stderr, "mv: missing operand")
+		return 1
+	}
+	dst := resolveArg(hc, rest[len(rest)-1])
+	for _, arg := range rest[:len(rest)-1] {
+		src := resolveArg(hc, arg)
+		target := dst
+		if di, err := s.FS.Stat(dst); err == nil && di.IsDir() {
+			target = filepath.Join(dst, filepath.Base(src))
+		}
+		if err := s.FS.Rename(src, target); err != nil {
+			return fail(hc, "mv", err)
+		}
+	}
+	return 0
+}
+
+func runTouch(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	_, rest := parseFlags(args)
+	now := time.Now()
+	for _, arg := range rest {
+		path := resolveArg(hc, arg)
+		if _, err := s.FS.Stat(path); err != nil {
+			f, err := s.FS.Create(path)
+			if err != nil {
+				return fail(hc, "touch", err)
+			}
+			f.Close()
+			continue
+		}
+		_ = s.FS.Chtimes(path, now, now)
+	}
+	return 0
+}
+
+func readLines(s *Shell, hc *interp.HandlerContext, args []string) ([]string, error) {
+	var data []byte
+	if len(args) == 0 {
+		var err error
+		data, err = io.ReadAll(hc.Stdin)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		for _, arg := range args {
+			b, err := afero.ReadFile(s.FS, resolveArg(hc, arg))
+			if err != nil {
+				return nil, err
+			}
+			data = append(data, b...)
+		}
+	}
+	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		return nil, nil
+	}
+	return lines, nil
+}
+
+func headTailCount(flags map[byte]bool, rest []string) (int, []string) {
+	n := 10
+	// support "-n 5" (parseFlags treats -n as flag; the count is the
+	// first rest arg if numeric)
+	if flags['n'] && len(rest) > 0 {
+		if v, err := strconv.Atoi(rest[0]); err == nil {
+			n = v
+			rest = rest[1:]
+		}
+	}
+	return n, rest
+}
+
+func runHead(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	n, rest := headTailCount(flags, rest)
+	lines, err := readLines(s, hc, rest)
+	if err != nil {
+		return fail(hc, "head", err)
+	}
+	if n < len(lines) {
+		lines = lines[:n]
+	}
+	for _, l := range lines {
+		fmt.Fprintln(hc.Stdout, l)
+	}
+	return 0
+}
+
+func runTail(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	n, rest := headTailCount(flags, rest)
+	lines, err := readLines(s, hc, rest)
+	if err != nil {
+		return fail(hc, "tail", err)
+	}
+	if n < len(lines) {
+		lines = lines[len(lines)-n:]
+	}
+	for _, l := range lines {
+		fmt.Fprintln(hc.Stdout, l)
+	}
+	return 0
+}
+
+func runWc(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	var data []byte
+	var err error
+	if len(rest) == 0 {
+		data, err = io.ReadAll(hc.Stdin)
+	} else {
+		for _, arg := range rest {
+			var b []byte
+			b, err = afero.ReadFile(s.FS, resolveArg(hc, arg))
+			if err != nil {
+				break
+			}
+			data = append(data, b...)
+		}
+	}
+	if err != nil {
+		return fail(hc, "wc", err)
+	}
+	lines := strings.Count(string(data), "\n")
+	words := len(strings.Fields(string(data)))
+	bytes := len(data)
+	if !flags['l'] && !flags['w'] && !flags['c'] {
+		fmt.Fprintf(hc.Stdout, "%7d %7d %7d\n", lines, words, bytes)
+		return 0
+	}
+	var out []string
+	if flags['l'] {
+		out = append(out, strconv.Itoa(lines))
+	}
+	if flags['w'] {
+		out = append(out, strconv.Itoa(words))
+	}
+	if flags['c'] {
+		out = append(out, strconv.Itoa(bytes))
+	}
+	fmt.Fprintln(hc.Stdout, strings.Join(out, " "))
+	return 0
+}
+
+func runGrep(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	if len(rest) == 0 {
+		fmt.Fprintln(hc.Stderr, "grep: missing pattern")
+		return 2
+	}
+	pattern := rest[0]
+	if flags['i'] {
+		pattern = "(?i)" + pattern
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return fail(hc, "grep", err)
+	}
+	lines, err := readLines(s, hc, rest[1:])
+	if err != nil {
+		return fail(hc, "grep", err)
+	}
+	count := 0
+	for i, l := range lines {
+		m := re.MatchString(l)
+		if flags['v'] {
+			m = !m
+		}
+		if m {
+			count++
+			if flags['c'] {
+				continue
+			}
+			if flags['n'] {
+				fmt.Fprintf(hc.Stdout, "%d:%s\n", i+1, l)
+			} else {
+				fmt.Fprintln(hc.Stdout, l)
+			}
+		}
+	}
+	if flags['c'] {
+		fmt.Fprintln(hc.Stdout, count)
+	}
+	if count == 0 {
+		return 1
+	}
+	return 0
+}
+
+func runSeq(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	_, rest := parseFlags(args)
+	first, incr, last := 1, 1, 1
+	var err error
+	switch len(rest) {
+	case 1:
+		last, err = strconv.Atoi(rest[0])
+	case 2:
+		first, err = strconv.Atoi(rest[0])
+		if err == nil {
+			last, err = strconv.Atoi(rest[1])
+		}
+	case 3:
+		first, err = strconv.Atoi(rest[0])
+		if err == nil {
+			incr, err = strconv.Atoi(rest[1])
+		}
+		if err == nil {
+			last, err = strconv.Atoi(rest[2])
+		}
+	default:
+		fmt.Fprintln(hc.Stderr, "usage: seq [first [incr]] last")
+		return 1
+	}
+	if err != nil || incr == 0 {
+		fmt.Fprintln(hc.Stderr, "seq: invalid arguments")
+		return 1
+	}
+	for i := first; (incr > 0 && i <= last) || (incr < 0 && i >= last); i += incr {
+		fmt.Fprintln(hc.Stdout, i)
+	}
+	return 0
+}
+
+func runSort(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	lines, err := readLines(s, hc, rest)
+	if err != nil {
+		return fail(hc, "sort", err)
+	}
+	if flags['n'] {
+		sort.SliceStable(lines, func(i, j int) bool {
+			a, _ := strconv.Atoi(strings.TrimSpace(lines[i]))
+			b, _ := strconv.Atoi(strings.TrimSpace(lines[j]))
+			return a < b
+		})
+	} else {
+		sort.Strings(lines)
+	}
+	if flags['r'] {
+		for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+			lines[i], lines[j] = lines[j], lines[i]
+		}
+	}
+	for _, l := range lines {
+		fmt.Fprintln(hc.Stdout, l)
+	}
+	return 0
+}
+
+func runUniq(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	flags, rest := parseFlags(args)
+	lines, err := readLines(s, hc, rest)
+	if err != nil {
+		return fail(hc, "uniq", err)
+	}
+	var prev string
+	count := 0
+	flush := func() {
+		if count == 0 {
+			return
+		}
+		if flags['c'] {
+			fmt.Fprintf(hc.Stdout, "%7d %s\n", count, prev)
+		} else {
+			fmt.Fprintln(hc.Stdout, prev)
+		}
+	}
+	for _, l := range lines {
+		if count > 0 && l == prev {
+			count++
+			continue
+		}
+		flush()
+		prev = l
+		count = 1
+	}
+	flush()
+	return 0
+}
+
+func runTree(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	_, rest := parseFlags(args)
+	root := "."
+	if len(rest) > 0 {
+		root = rest[0]
+	}
+	path := resolveArg(hc, root)
+	fmt.Fprintln(hc.Stdout, root)
+	var walk func(dir, prefix string) error
+	walk = func(dir, prefix string) error {
+		infos, err := afero.ReadDir(s.FS, dir)
+		if err != nil {
+			return err
+		}
+		for i, fi := range infos {
+			connector, childPrefix := "├── ", "│   "
+			if i == len(infos)-1 {
+				connector, childPrefix = "└── ", "    "
+			}
+			fmt.Fprintln(hc.Stdout, prefix+connector+fi.Name())
+			if fi.IsDir() {
+				if err := walk(filepath.Join(dir, fi.Name()), prefix+childPrefix); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if err := walk(path, ""); err != nil {
+		return fail(hc, "tree", err)
+	}
+	return 0
+}
+
+func runBasename(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(hc.Stderr, "basename: missing operand")
+		return 1
+	}
+	fmt.Fprintln(hc.Stdout, filepath.Base(args[0]))
+	return 0
+}
+
+func runDirname(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(hc.Stderr, "dirname: missing operand")
+		return 1
+	}
+	fmt.Fprintln(hc.Stdout, filepath.Dir(args[0]))
+	return 0
+}
+
+func runDate(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	fmt.Fprintln(hc.Stdout, time.Now().Format("Mon Jan  2 15:04:05 MST 2006"))
+	return 0
+}
+
+func runSleep(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	if len(args) == 0 {
+		fmt.Fprintln(hc.Stderr, "sleep: missing operand")
+		return 1
+	}
+	secs, err := strconv.ParseFloat(args[0], 64)
+	if err != nil {
+		return fail(hc, "sleep", err)
+	}
+	select {
+	case <-time.After(time.Duration(secs * float64(time.Second))):
+		return 0
+	case <-ctx.Done():
+		return 130
+	}
+}
+
+func runClear(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	fmt.Fprint(hc.Stdout, "\x1b[2J\x1b[H")
+	return 0
+}
+
+func runEnv(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	hc.Env.Each(func(name string, vr expand.Variable) bool {
+		if vr.Exported {
+			fmt.Fprintf(hc.Stdout, "%s=%s\n", name, vr.String())
+		}
+		return true
+	})
+	return 0
+}
+
+func runWhich(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	code := 0
+	for _, arg := range args {
+		if _, ok := applets[arg]; ok {
+			fmt.Fprintf(hc.Stdout, "/bin/%s\n", arg)
+		} else {
+			fmt.Fprintf(hc.Stderr, "which: %s not found\n", arg)
+			code = 1
+		}
+	}
+	return code
+}
+
+func runUname(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	fmt.Fprintln(hc.Stdout, "websh wasm")
+	return 0
+}
+
+func runHostname(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	fmt.Fprintln(hc.Stdout, "websh")
+	return 0
+}
+
+func runHelp(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
+	names := make([]string, 0, len(applets))
+	for name := range applets {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	fmt.Fprintln(hc.Stdout, "websh applets:")
+	for _, name := range names {
+		fmt.Fprintf(hc.Stdout, "  %-10s %s\n", name, applets[name].help)
+	}
+	fmt.Fprintln(hc.Stdout, "plus the shell builtins: cd pwd echo printf read exit export unset source test [ ...")
+	return 0
+}
