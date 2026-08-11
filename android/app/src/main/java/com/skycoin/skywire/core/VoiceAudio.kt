@@ -85,7 +85,18 @@ class VoiceAudioEngine(context: Context) {
     @Volatile
     private var live: Boolean = false
 
-    /** True while the mic loop is actually recording — false if the permission is missing. */
+    /**
+     * True while the mic loop is actually recording — false if the permission
+     * is missing.
+     *
+     * Written only where the recorder itself is opened and closed, so it
+     * tracks the device rather than the intent to use it. [stop] deliberately
+     * does not clear it: it used to, and that made the flag claim the
+     * microphone was free the instant a call ended while the recorder was in
+     * fact still open — the exact bug, reported by the one value that should
+     * have revealed it. It now goes false when the recorder is released, a
+     * frame period later.
+     */
     @Volatile
     var capturing: Boolean = false
         private set
@@ -142,7 +153,8 @@ class VoiceAudioEngine(context: Context) {
         playback?.cancel()
         capture = null
         playback = null
-        capturing = false
+        // capturing is NOT cleared here — see its declaration. The recorder's
+        // own teardown owns it, so it reports the device and not the wish.
         priorMode?.let { mode -> runCatching { audioManager.mode = mode } }
         priorMode = null
     }
