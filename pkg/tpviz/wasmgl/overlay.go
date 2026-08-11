@@ -5,7 +5,7 @@
 // groups when grouping is on.
 //
 // This is the one thing in the view that reads graph state on every animation
-// frame — each circle's centre and radius have to be reprojected through the
+// frame — each circle's center and radius have to be reprojected through the
 // current view transform so the rings stay glued to the points during pan and
 // zoom. In the TypeScript view that is a handful of calls into the graph per
 // circle per frame, which is free when the graph is JavaScript and is a wasm
@@ -233,8 +233,8 @@ func formatKey(zoom, x, y float64) string {
 	return f(zoom) + ":" + f(math.Round(x)) + ":" + f(math.Round(y))
 }
 
-// seedPositions places points near the centre of the space. cosmos 2.x uses
-// the positions it is given as-is, where 1.x randomised missing ones; without
+// seedPositions places points near the center of the space. cosmos 2.x uses
+// the positions it is given as-is, where 1.x randomized missing ones; without
 // this a free layout starts every point at the origin with nothing to push
 // apart.
 func seedPositions(n int) []float32 {
