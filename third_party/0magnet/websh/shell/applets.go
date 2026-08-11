@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/skycoin/skywire/third_party/0magnet/afero"
 	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/expand"
 	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/interp"
 	"github.com/skycoin/skywire/third_party/0magnet/u-root/pkg/ls"
-	"github.com/skycoin/skywire/third_party/0magnet/afero"
 )
 
 // applet is a built-in utility. run returns the exit code.
@@ -700,5 +700,6 @@ func runHelp(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		fmt.Fprintf(hc.Stdout, "  %-10s %s\n", name, applets[name].help)
 	}
 	fmt.Fprintln(hc.Stdout, "plus the shell builtins: cd pwd echo printf read exit export unset source test [ ...")
+	fmt.Fprintln(hc.Stdout, "for those, bash-style: \x1b[1mbuiltin help\x1b[0m  (or \x1b[1mbuiltin help cd\x1b[0m for one)")
 	return 0
 }

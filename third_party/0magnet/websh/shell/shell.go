@@ -13,10 +13,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/skycoin/skywire/third_party/0magnet/afero"
 	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/expand"
 	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/interp"
 	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/syntax"
-	"github.com/skycoin/skywire/third_party/0magnet/afero"
 )
 
 // Shell is an interpreter bound to a virtual filesystem.
@@ -74,6 +74,14 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) (*Shell, error
 	s.Runner = runner
 	s.PopulateBin()
 	return s, nil
+}
+
+// UseHistory gives the interpreter's history builtin a history list. The
+// interpreter never reads input lines itself, so only the line editor above it
+// has one; call this with [LineEditor.History] and [LineEditor.ClearHistory]
+// once the editor exists.
+func (s *Shell) UseHistory(list func() []string, clear func()) {
+	_ = interp.History(list, clear)(s.Runner)
 }
 
 // PopulateBin creates a stub file in /bin for every registered applet
