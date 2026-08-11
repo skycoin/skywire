@@ -75,6 +75,12 @@ import kotlinx.coroutines.launch
  * the consequence spelled out rather than implied by the word *destructive*.
  * The key handling itself is never done here: the core binary validates the
  * key and derives its public half, and the confirmation quotes what it said.
+ *
+ * One rule for the buttons, so a card's actions never look like two different
+ * kinds of thing: everything a card offers is a [FilledTonalButton], whatever
+ * its emphasis, and [TextButton] is left to the dialogs, where the platform
+ * expects it. A text button inside a card reads as a hyperlink in a paragraph,
+ * which is not what "Open security settings" or "Not now" are.
  */
 @Composable
 fun SettingsScreen(
@@ -643,8 +649,8 @@ private fun AppLockCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(4.dp))
-            TextButton(onClick = onOpenSecuritySettings, contentPadding = PaddingValues(0.dp)) {
+            Spacer(Modifier.height(12.dp))
+            FilledTonalButton(onClick = onOpenSecuritySettings) {
                 Text(stringResource(R.string.settings_open_security))
             }
         }
@@ -751,12 +757,12 @@ private fun BatteryCard(
         )
         if (!state.batteryExempt) {
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilledTonalButton(onClick = onGrant) {
                     Text(stringResource(R.string.settings_battery_allow))
                 }
                 if (!state.batteryPromptDismissed) {
-                    TextButton(onClick = onDismiss) {
+                    FilledTonalButton(onClick = onDismiss) {
                         Text(stringResource(R.string.settings_battery_not_now))
                     }
                 }
