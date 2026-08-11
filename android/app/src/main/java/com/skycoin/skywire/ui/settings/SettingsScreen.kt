@@ -8,9 +8,11 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -50,6 +52,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
@@ -345,12 +348,36 @@ private fun IdentityCard(
                 )
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onReplace) {
-                    Text(stringResource(R.string.settings_replace_sk))
+            // Equal halves with a real gutter. Sized to their labels these two
+            // all but fill the row, so the 8dp between them read as no gap at
+            // all — two destructive actions with nothing separating them, which
+            // is the last place a mis-tap should be easy.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                // IntrinsicSize.Min + fillMaxHeight: the longer label wraps to
+                // two lines and would otherwise leave one button visibly taller
+                // than its neighbour. This sizes the row to the tallest of them
+                // and lets both fill it.
+                modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            ) {
+                FilledTonalButton(
+                    onClick = onReplace,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                ) {
+                    Text(
+                        stringResource(R.string.settings_replace_sk),
+                        textAlign = TextAlign.Center,
+                    )
                 }
-                FilledTonalButton(onClick = onReset, enabled = state.hasIdentity) {
-                    Text(stringResource(R.string.settings_new_config))
+                FilledTonalButton(
+                    onClick = onReset,
+                    enabled = state.hasIdentity,
+                    modifier = Modifier.weight(1f).fillMaxHeight(),
+                ) {
+                    Text(
+                        stringResource(R.string.settings_new_config),
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
         }
