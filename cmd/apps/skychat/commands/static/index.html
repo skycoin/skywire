@@ -1923,6 +1923,20 @@
     }
 
     /* Modal */
+    /* The overlay is also the scroller. A dialog is laid out at its natural
+       height, and on a phone with the soft keyboard up — which takes about
+       half the viewport — several of them are taller than what is left. The
+       host resizes the WebView for the keyboard (ChatScreen's imePadding),
+       so the overlay correctly shrinks; without a scroll here that only
+       means the dialog overflows it.
+
+       align-items is flex-start, with `margin: auto` on .modal below doing
+       the centring instead. They are not interchangeable: a CENTRED flex
+       item that outgrows its container overflows both edges, and the half
+       above the top edge cannot be scrolled back to — which is exactly the
+       group-name field disappearing above a screenful of help text. Auto
+       margins centre the same way when there is room and collapse to 0
+       when there isn't, so the top of the dialog stays reachable. */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -1931,8 +1945,15 @@
       bottom: 0;
       background: var(--scrim);
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
+      overflow-y: auto;
+      /* The chat behind must not take over the scroll once the dialog
+         reaches its end. */
+      overscroll-behavior: contain;
+      /* Vertical only: .modal is width:90%, so its side gutters already
+         come from its own width and padding here would narrow it. */
+      padding: 16px 0 calc(16px + env(safe-area-inset-bottom, 0px));
       z-index: 100;
       opacity: 0;
       visibility: hidden;
@@ -1956,6 +1977,9 @@
       max-width: 400px;
       width: 90%;
       box-shadow: var(--shadow);
+      /* Centres the dialog in the overlay without clipping it when it is
+         taller than one — see the .modal-overlay comment. */
+      margin: auto;
       transform: scale(0.95);
       transition: transform 0.2s;
     }
@@ -10960,7 +10984,13 @@
           .finally(() => { btn.disabled = false; btn.textContent = restore; });
       }
 
-      closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+      closeModal(id) {
+        const el = document.getElementById(id);
+        el.classList.remove('visible');
+        // The overlay scrolls now, so a dialog left scrolled down would
+        // come back that way the next time it is opened.
+        el.scrollTop = 0;
+      }
 
       createGroup() {
         const name = document.getElementById('cgName').value.trim();
@@ -13114,6 +13144,31 @@
     window.addEventListener('resize', function() {
       app.dismissMenus();
     });
+
+    // Scrolling the dialog is now possible (see .modal-overlay); this is what
+    // saves the user from having to. The field being typed into is often the
+    // one the keyboard just displaced, so it is brought back into view.
+    //
+    // Timing is the whole difficulty: focus fires when the field is tapped,
+    // but the keyboard animates in some 200-300ms later and it is THAT resize
+    // which moves the field. So both ends are covered — focusin schedules a
+    // reveal for the resize about to happen, and visualViewport reveals again
+    // on the resize itself, which also catches rotating the phone mid-edit
+    // and the keyboard being dismissed and re-summoned.
+    function revealFocusedField() {
+      const el = document.activeElement;
+      if (!el || !el.closest || !el.closest('.modal-overlay.visible')) return;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+
+    document.addEventListener('focusin', function(e) {
+      if (!e.target.closest || !e.target.closest('.modal-overlay.visible')) return;
+      setTimeout(revealFocusedField, 300);
+    });
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', revealFocusedField);
+    }
 
     // A waveform is a canvas: CSS re-colours everything else on the page the
     // instant the app flips theme under it (ChatWebView.applyTheme sets
