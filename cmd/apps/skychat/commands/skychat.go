@@ -925,6 +925,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/events", requireAuthFunc(eventsHandler))
 	mux.HandleFunc("/history", requireAuthFunc(historyHandler))
 	mux.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
+	mux.HandleFunc("/history/forget", requireAuthFunc(forgetHandler))
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
 	mux.HandleFunc("/unread", requireAuthFunc(unreadHandler))
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))

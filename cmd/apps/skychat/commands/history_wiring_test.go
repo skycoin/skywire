@@ -17,6 +17,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -234,5 +235,96 @@ func TestHistoryPeersHandler(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("peers = %v, missing %s", peers, pk.Hex())
+	}
+}
+
+// A DM deleted for me must not come back from the store.
+//
+// The browser drops the message from its thread cache, but the cache is not
+// the durable copy: selectRecipient calls loadHistoryFor, which refills an
+// empty thread straight out of this store. Reported as deleted messages
+// reappearing on returning to the conversation from another tab. So the
+// delete has to reach here, and /history must not serve the message again.
+func TestForgetHandler(t *testing.T) {
+	if appLog == nil {
+		appLog = func(string, ...any) {}
+	}
+	withChatLog(t)
+	restoreHistoryStore(t)
+
+	pk, _ := cipher.GenerateKeyPair()
+	post := func(body string) *httptest.ResponseRecorder {
+		rr := httptest.NewRecorder()
+		forgetHandler(rr, httptest.NewRequest(http.MethodPost, "/history/forget", strings.NewReader(body)))
+		return rr
+	}
+
+	// Persistence off: nothing stored, so nothing to forget — and the caller's
+	// own removal already stands. Not an error.
+	historyStore = nil
+	if rr := post(`{"pk":"` + pk.Hex() + `","id":"m1"}`); rr.Code != http.StatusNoContent {
+		t.Fatalf("nil store: code=%d body=%q, want 204", rr.Code, rr.Body.String())
+	}
+
+	st := newTempStore(t, history.Limits{})
+	historyStore = st
+	for _, id := range []string{"m1", "m2"} {
+		if err := st.Append(history.Message{
+			Peer: pk.Hex(), ID: id, Text: "text-" + id, Timestamp: time.Now().UTC(),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if rr := post(`{"pk":"not-a-pk","id":"m1"}`); rr.Code != http.StatusBadRequest {
+		t.Errorf("bad pk: code=%d, want 400", rr.Code)
+	}
+	if rr := post(`{"pk":"` + pk.Hex() + `","id":"  "}`); rr.Code != http.StatusBadRequest {
+		t.Errorf("blank id: code=%d, want 400", rr.Code)
+	}
+	if rr := post(`{"pk":"` + pk.Hex() + `","id":"m1"}`); rr.Code != http.StatusNoContent {
+		t.Fatalf("forget m1: code=%d body=%q, want 204", rr.Code, rr.Body.String())
+	}
+
+	// The named message is gone from the store and the other one is untouched
+	// — this is the assertion the bug fails: m1 used to still be served here,
+	// and loadHistoryFor would put it straight back on screen.
+	left, err := st.ListByPeer(pk.Hex(), 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range left {
+		if m.ID == "m1" {
+			t.Error("m1 survived the forget — the deleted message will be rehydrated")
+		}
+	}
+	if len(left) != 1 || left[0].ID != "m2" {
+		t.Errorf("remaining = %+v, want only m2", left)
+	}
+
+	// And through the endpoint the browser actually rehydrates from, which is
+	// where the resurrection happened.
+	served := httptest.NewRecorder()
+	historyHandler(served, httptest.NewRequest(http.MethodGet, "/history?peer="+pk.Hex()+"&limit=100", nil))
+	if served.Code != http.StatusOK {
+		t.Fatalf("/history after forget: code=%d body=%q", served.Code, served.Body.String())
+	}
+	if body := served.Body.String(); strings.Contains(body, "text-m1") {
+		t.Errorf("/history still serves the forgotten message: %s", body)
+	} else if !strings.Contains(body, "text-m2") {
+		t.Errorf("/history dropped the message that was NOT deleted: %s", body)
+	}
+
+	// Forgetting an id that is not there is a no-op, not a failure: the same
+	// delete may be replayed by a second tab.
+	if rr := post(`{"pk":"` + pk.Hex() + `","id":"m1"}`); rr.Code != http.StatusNoContent {
+		t.Errorf("repeat forget: code=%d, want 204", rr.Code)
+	}
+
+	if rr := httptest.NewRecorder(); true {
+		forgetHandler(rr, httptest.NewRequest(http.MethodGet, "/history/forget", nil))
+		if rr.Code != http.StatusMethodNotAllowed {
+			t.Errorf("GET: code=%d, want 405", rr.Code)
+		}
 	}
 }
