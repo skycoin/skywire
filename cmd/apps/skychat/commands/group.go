@@ -299,7 +299,11 @@ func scanPendingJoins(seen map[string]int) {
 			"group_name":    g.Name,
 			"pending_joins": g.PendingJoins,
 		}); err == nil {
-			hub.broadcast(string(body))
+			// Live-only, for the same reason as a pair invite: the queue
+			// itself comes back from /group on connect, so replaying this
+			// re-toasts a join request the user has already seen once per
+			// reconnect. See sseHub.broadcastLive.
+			hub.broadcastLive(string(body))
 		}
 		if had {
 			notifyOSInbound("Group join request",

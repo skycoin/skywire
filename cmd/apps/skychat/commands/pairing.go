@@ -88,11 +88,16 @@ var (
 )
 
 // pendingPut records a fresh invite. Idempotent — re-invites from the
-// same peer just bump the timestamp.
-func pendingPut(peerPK cipher.PubKey) {
+// same peer just bump the timestamp. Reports whether this was the first
+// invite from that peer, so a caller can tell an announcement from a
+// repeat: a peer that retries its invite (a reconnect, a resend) is not
+// news to a user already looking at it in the sidebar.
+func pendingPut(peerPK cipher.PubKey) bool {
 	pendingInvitesMu.Lock()
 	defer pendingInvitesMu.Unlock()
+	_, existed := pendingInvites[peerPK]
 	pendingInvites[peerPK] = pendingInvite{PeerPK: peerPK, ReceivedAt: time.Now().UTC()}
+	return !existed
 }
 
 // pendingDelete drops a pending invite (called on accept/decline).
@@ -125,6 +130,11 @@ func pendingList() []pendingInvite {
 // SSE client so the browser hears about new invites in real time.
 // The hub drops to per-client buffers internally if any consumer is
 // slow.
+//
+// Live-only: this is an alert about a state change, and the state itself
+// is served by /pair/invites, which the page fetches on every connect. A
+// replayed alert therefore adds nothing but a second toast for an invite
+// the user has already been shown — see sseHub.broadcastLive.
 func notifyInviteSSE(peerPK cipher.PubKey, kind string) {
 	envelope := map[string]string{
 		"channel": "pair-invite",
@@ -136,7 +146,7 @@ func notifyInviteSSE(peerPK cipher.PubKey, kind string) {
 	if err != nil {
 		return
 	}
-	hub.broadcast(string(body))
+	hub.broadcastLive(string(body))
 	// Also surface on the structured /events stream's "pair" channel,
 	// keeping the legacy /sse control-envelope above untouched.
 	hub.recordEvent(chatEvent{
@@ -589,8 +599,13 @@ func handlePairControlFrame(ctx context.Context, peerPK cipher.PubKey, raw []byt
 		// stored as pending and surfaced to the UI, which calls
 		// /pair/invites/<pk>/accept when the user consents.
 		appLog("Pairing: pair-invite from %s (pending user consent)", peerPK.Hex())
-		pendingPut(peerPK)
-		notifyInviteSSE(peerPK, "received")
+		// Announce the first one only. The invite is stored either way —
+		// the retry is what keeps the record alive across a dropped
+		// connection — but a peer that re-sends does not earn a second
+		// toast for an invite already sitting in the user's sidebar.
+		if pendingPut(peerPK) {
+			notifyInviteSSE(peerPK, "received")
+		}
 		return true
 
 	case pairTypeAck:
