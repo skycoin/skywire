@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package stun is a STUN (RFC 3489 and RFC 5389) client implementation in
-// golang.
+// Package stun is a STUN client implementation for basic Binding over UDP or
+// TCP and NAT behavior discovery over UDP.
 //
 // It is extremely easy to use -- just one line of code.
 //
-// 	nat, host, err := stun.NewClient().Discover()
+//	nat, host, err := stun.NewClient().Discover()
 //
 // More details please go to `main.go`.
 package stun

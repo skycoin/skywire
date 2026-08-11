@@ -166,7 +166,7 @@ func (ce *Client) dialSessionWT(ctx context.Context, entry *disc.Entry) (ClientS
 			return nil
 		},
 	}
-	d := &webtransport.Dialer{
+	d := &webtransport.Transport{
 		TLSClientConfig: tlsConf,
 		QUICConfig: &quic.Config{
 			EnableDatagrams:                  true,
