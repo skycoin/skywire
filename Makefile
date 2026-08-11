@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race deploy wasm-visor tpviz-gl embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-apk-debug
 .PHONY : host-apps bin
 .PHONY : docker-image docker-clean docker-network
@@ -379,6 +379,17 @@ tinygo-dmsg-wasm: ## Build the browser WASM dmsg client with TinyGo (~6.5MB vs ~
 # `go build -tags llvm22 -o build/tinygo .` and point TINYGO at it + export
 # TINYGOROOT=<fork checkout>. Stock upstream TinyGo cannot compile this target.
 TINYGO ?= tinygo
+
+# The Go/wasm WebGL tpviz view. Unlike the wasm-visor lane this needs no fork —
+# the engine (third_party/0magnet/cosmos-go) is pure syscall/js, so stock TinyGo
+# 0.41+ builds it. The artifacts live in pkg/tpviz/legacy/ because that whole
+# directory is go:embed'ed and served next to bundle.js, which loads the module
+# lazily when the "WebGL (Go)" view is selected.
+tpviz-gl: ## Build the Go/wasm WebGL tpviz view into pkg/tpviz/legacy/ (TinyGo, ~630 KB). Runs alongside the JS WebGL view for comparison.
+	$(TINYGO) build -target wasm -no-debug -opt=z -o ./pkg/tpviz/legacy/tpviz-gl.wasm ./pkg/tpviz/wasmgl
+	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/legacy/tpviz-gl-exec.js
+	@echo "built pkg/tpviz/legacy/tpviz-gl.wasm — commit it intentionally; select it with the 'WebGL (Go)' toggle or ?view=go"
+
 tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+appserver, net/http+crypto/tls, route origination) into build/wasm-visor — TinyGo FORK (~7MB / ~2.9MB gzip vs 43MB/9.5MB std-Go). Needs the 0magnet/tinygo fork; set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>
 	mkdir -p ./build/wasm-visor
 	$(TINYGO) build -target wasm -no-debug -opt=z -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
