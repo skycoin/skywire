@@ -48,6 +48,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         fleetEnabled: Boolean,
         publicAutoconnect: Boolean,
         logLevel: String,
+        remoteManagementPk: String?,
     ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
         // Before the existence check below, which is what decides whether to
@@ -75,6 +76,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                 fleetEnabled,
                 publicAutoconnect,
                 logLevel,
+                remoteManagementPk,
                 skychatPasswordFile = ensureGatePassword(
                     SkychatProfile.passwordFile(paths),
                     secrets.skychatPassword(),
@@ -152,12 +154,19 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      *    the field whenever the router settings are saved live.
      *  - `log_level` — the same arrangement, for the same reason (see
      *    [CoreLogLevel]).
+     *  - `hypervisors` — the remote-management grant (see
+     *    [RemoteManagement]). Pinned to exactly the granted key, or empty:
+     *    this list is what admits another machine to the visor's RPC
+     *    surfaces, so a key planted by anything other than the setting —
+     *    a hand edit, a runtime `hv add` the visor persisted — must not
+     *    outlive the user's answer.
      */
     private fun applyPhoneProfile(
         transportPrimary: String,
         fleetEnabled: Boolean,
         publicAutoconnect: Boolean,
         logLevel: String,
+        remoteManagementPk: String?,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
     ) {
@@ -167,6 +176,10 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                 when (key) {
                     "pty", "skywire-tcp" -> Unit // dropped
                     "cli_addr" -> put(key, JsonPrimitive(""))
+                    "hypervisors" -> put(
+                        key,
+                        JsonArray(listOfNotNull(remoteManagementPk).map(::JsonPrimitive)),
+                    )
                     "log_level" -> put(key, JsonPrimitive(CoreLogLevel.sanitize(logLevel)))
                     "local_path" -> put(key, JsonPrimitive(paths.localDir.absolutePath))
                     "transport" -> put(
