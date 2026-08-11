@@ -83,6 +83,10 @@ internal object ChatWebView {
         // Inline playback for received voice/video messages — full-screen
         // handoff is the WebChromeClient path we deliberately don't take.
         settings.mediaPlaybackRequiresUserGesture = true
+        // The page's own QR decoding (BarcodeDetector) does not exist in this
+        // WebView, so the host lends it zxing — see QrBridge. Narrow surface:
+        // images in, text out.
+        addJavascriptInterface(QrBridge(), "SkywireQr")
         // chrome://inspect on a debug build; never on a release APK.
         val debuggable =
             (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
