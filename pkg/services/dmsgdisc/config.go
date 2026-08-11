@@ -76,6 +76,15 @@ type Config struct {
 	PProfMode string `json:"pprof_mode,omitempty"`
 	PProfAddr string `json:"pprof_addr,omitempty"`
 
+	// RegistrationCXO enables the registration-over-CXO aggregator: a CXO
+	// node on DmsgDMSGDRegistrationCXOPort that visors (opted in via their
+	// own dmsg.registration_cxo) publish their signed entry to and announce
+	// to, letting the discovery ingest registrations off a persistent
+	// connection instead of the timer-driven HTTP PUT (each a fresh Noise +
+	// PQ handshake). HTTP PUT remains the fallback; ingest is idempotent.
+	// Experimental; default false. Requires a dmsg-capable mode (a SecKey).
+	RegistrationCXO bool `json:"registration_cxo,omitempty"`
+
 	// DmsgServers is the static dmsg-server transit set the
 	// discovery preloads at startup. Replaces the runtime read of
 	// deployment.Prod.DmsgServers — operators ship a config file
