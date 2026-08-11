@@ -398,6 +398,24 @@ func (_m *MockRouter) SetMinHop(_a0 uint16) {
 	_m.Called(_a0)
 }
 
+// EffectiveMinHops provides a mock function with given fields: opts
+func (_m *MockRouter) EffectiveMinHops(opts *DialOptions) uint16 {
+	ret := _m.Called(opts)
+
+	if len(ret) == 0 {
+		panic("no return value specified for EffectiveMinHops")
+	}
+
+	var r0 uint16
+	if rf, ok := ret.Get(0).(func(*DialOptions) uint16); ok {
+		r0 = rf(opts)
+	} else {
+		r0 = ret.Get(0).(uint16)
+	}
+
+	return r0
+}
+
 // SetupIsTrusted provides a mock function with given fields: _a0
 func (_m *MockRouter) SetupIsTrusted(_a0 cipher.PubKey) bool {
 	ret := _m.Called(_a0)

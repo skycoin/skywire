@@ -386,6 +386,13 @@ type Router interface {
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
 	SetMinHop(uint16)
+
+	// EffectiveMinHops resolves a dial's min-hops constraint from the
+	// per-dial options and the visor-global setting together. Exposed
+	// because callers OUTSIDE the router take dial shortcuts that bypass
+	// route setup — appnet's direct dial above all — and cannot honour the
+	// operator's constraint without being able to ask what it is.
+	EffectiveMinHops(opts *DialOptions) uint16
 	SetExistingTPOnly(bool)
 	SetForceLocalRoutes(bool)
 	SetMuxRoutes(int)
@@ -456,16 +463,19 @@ type router struct {
 	done               chan struct{}
 	once               sync.Once
 	routeSetupHookMu   sync.Mutex
-	routeSetupHooks    []RouteSetupHook  // see RouteSetupHook description
-	existingTpOnly     bool              // when true, don't create new transports for routing
-	existingTpOnlyMu   sync.Mutex        // protects existingTpOnly
-	forceLocalRoutes   bool              // when true, skip route finder and use local route calculation
-	forceLocalRoutesMu sync.Mutex        // protects forceLocalRoutes
-	muxRoutes          int               // number of parallel mux routes (0 or 1 = disabled)
-	muxMode            WeightMode        // default weight mode for new mux connections
-	lastRouteCalcTime  time.Duration     // last route calculation time (for local routes)
-	lastRouteCalcMu    sync.Mutex        // protects lastRouteCalcTime
-	tpdCache           *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
+	routeSetupHooks    []RouteSetupHook // see RouteSetupHook description
+	existingTpOnly     bool             // when true, don't create new transports for routing
+	existingTpOnlyMu   sync.Mutex       // protects existingTpOnly
+	forceLocalRoutes   bool             // when true, skip route finder and use local route calculation
+	forceLocalRoutesMu sync.Mutex       // protects forceLocalRoutes
+	// protects conf.MinHops, which SetMinHop changes at runtime while dials
+	// are reading it — see SetMinHop / MinHops.
+	minHopsMu         sync.RWMutex
+	muxRoutes         int               // number of parallel mux routes (0 or 1 = disabled)
+	muxMode           WeightMode        // default weight mode for new mux connections
+	lastRouteCalcTime time.Duration     // last route calculation time (for local routes)
+	lastRouteCalcMu   sync.Mutex        // protects lastRouteCalcTime
+	tpdCache          *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
 }
 
 // scopedLog returns a logger augmented with app_name=<n> when the
