@@ -18,11 +18,9 @@ skywire dmsg web srv
 ```
   -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
   -A, --disc-addr string   DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
-  -U, --disc-url string    DMSG Discovery URL (default "http://dmsgd.skywire.skycoin.com")
   -D, --dmsgconf string    dmsghttp-config path
   -d, --dport uints        DMSG port(s) to serve (default [80])
   -E, --envs               show example .conf file
-  -Z, --http               use regular http to connect to DMSG Discovery
   -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "debug")
   -p, --lport uints        local application interface port(s) (default [8086])
       --pprofaddr string   pprof http port (default "localhost:6060")

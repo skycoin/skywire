@@ -13,11 +13,11 @@ skywire cxo daemon
 ## Flags
 
 ```
-      --data-dir string                 data directory (default "/home/d0mo/.skycoin/cxo")
+      --data-dir string                 data directory (default "/Users/mohammed/.skycoin/cxo")
       --debug                           print debug logs
       --log-prefix string               log prefix (default "[node] ")
       --max-connections int             max connections, incoming and outgoing, tcp and udp (default 1000000)
-      --max-filling-time duration       max time to fill a Root (default 10m0s)
+      --max-filling-time duration       max time to fill a Root (default 2m0s)
       --max-heads int                   max heads of a feed allowed (default 10)
       --mem-db                          use in-memory database
       --public                          public server

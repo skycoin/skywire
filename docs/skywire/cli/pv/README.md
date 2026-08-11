@@ -3,7 +3,7 @@
 [← skywire cli](../README.md)
 
 List public visors from service discovery
-http://sd.skycoin.com/api/services?type=visor
+dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services?type=visor
 
 Returns only public keys, one per line.
 Use -t to show transport counts per visor.
@@ -22,26 +22,26 @@ skywire cli pv
 ## Flags
 
 ```
-      --cds string       SD cache dir ("" to disable) (default "/tmp/sd.skycoin.com")
-      --cdt string       TPD cache dir ("" to disable) (default "/tmp/tpd.skywire.skycoin.com")
-      --cdu string       UT cache dir ("" to disable) (default "/tmp/ut.skywire.skycoin.com")
-  -m, --cfa int          update cache files if older than n minutes (default 5)
-  -c, --country string   filter by country code
-  -n, --min int          minimum transport count (requires -t)
-      --no-cxo           skip CXO subscriber-cache step
-      --no-dmsg          skip direct DMSG HTTP step
-      --no-http          skip direct HTTP fallback step
-      --no-rpc           skip visor RPC (DmsgHTTP) step
-  -o, --noton            do not filter by online status in UT
-  -r, --raw              print raw json data
-      --rpc string       RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-  -a, --sdurl string     service discovery url (default "http://sd.skycoin.com")
-  -s, --stats            return only a count of the results
-      --testenv          use test deployment
-  -d, --tpdurl string    transport discovery url (default "http://tpd.skywire.skycoin.com")
-  -t, --transports       show transport count per visor
-  -w, --uturl string     uptime tracker url (default "http://ut.skywire.skycoin.com")
-  -v, --version string   filter by version
+  -y, --bytype             break the transport count down by type (implies -t): total + per-type columns
+      --cds string         SD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --cdt string         TPD cache dir, shared by transports + uptime ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -m, --cfa watch          refetch cached data older than n minutes (0 = always fetch fresh, e.g. for watch) (default 5)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
+  -c, --country string     filter by country code
+  -n, --min int            minimum transport count (requires -t)
+      --no-cxo             skip CXO subscriber-cache step
+      --no-dmsg            skip direct DMSG HTTP step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+  -o, --noton              do not filter by online status
+  -r, --raw                print raw json data
+      --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -a, --sdurl string       service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+  -s, --stats              return only a count of the results
+      --testenv            use test deployment
+  -d, --tpdurl string      transport discovery url (also serves the integrated uptime tracker) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -t, --transports         show transport count per visor
+  -v, --version string     filter by version
 ```
 
 ## Global Flags

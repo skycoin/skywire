@@ -26,6 +26,7 @@ skywire app skychat
       --cxo-peer strings              subscribe to a peer's CXO feed: tcp://<feedpk>@host:port (repeat for many)
       --dmsg                          listen on dmsg network (default true)
       --internal-token string         shared secret used by the hypervisor's reverse proxy to bypass the password gate; managed automatically by the visor
+      --os-notify                     post host-OS desktop notifications for inbound messages when no browser UI is showing them (no-ops on a headless host) (default true)
       --pair-enable                   enable per-partner CXO pair feeds (HTTP /pair endpoints + handshake)
       --pair-poll-interval duration   how often skychat drains the visor's pair-message inbox onto the SSE stream (default 1s)
       --pair-rpc string               visor RPC address used by the pair manager (default "localhost:3435")

@@ -2,7 +2,17 @@
 
 [← skywire cli mdisc](../README.md)
 
-Fetch available servers
+List every dmsg server registered in discovery, sorted by load.
+
+Reads the discovery's /all_servers endpoint (so saturated servers appear too,
+not just those still advertising spare capacity) and, for each, shows the
+connected-client count INFERRED from available sessions:
+
+    connected ~= DefaultMaxSessions (2048) - available_sessions
+
+The discovery entry only carries available sessions, so "connected~" assumes
+every server runs the default 2048 max; a server with a custom max_sessions
+would be off by the difference. A pv-t-style readout: most-loaded first.
 
 ## Usage
 
@@ -13,7 +23,7 @@ skywire cli mdisc servers
 ## Flags
 
 ```
-      --url string   specify alternative DMSG discovery url (default "http://dmsgd.skywire.skycoin.com")
+      --url string   specify alternative DMSG discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
 ```
 
 ## Global Flags

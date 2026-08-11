@@ -41,7 +41,7 @@ skywire cli rewards loginchain
 ## Flags
 
 ```
-  -W, --wd string   working directory for login chain files (login_genesis.json, login_fiber.toml) (default "/home/d0mo/go/src/github.com/0pcom/skywire")
+  -W, --wd string   working directory for login chain files (login_genesis.json, login_fiber.toml) (default "/Users/mohammed/Projects/Skycoin/mohammed/skywire")
 ```
 
 ## Global Flags

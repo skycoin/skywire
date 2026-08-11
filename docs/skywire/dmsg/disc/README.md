@@ -116,6 +116,7 @@ GET /dmsg-discovery/entries (all client and server entries)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
+          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
         }
       }
@@ -156,6 +157,7 @@ GET /dmsg-discovery/available_servers (servers with available_streams > 0)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
+          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
         }
       }
@@ -180,6 +182,7 @@ GET /dmsg-discovery/all_servers (all server entries)
         "static": "0281a102c82820e811368c8d028cf11b1a985043b726b1bcdb8fce89b27384b2cb",
         "server": {
           "address": "139.162.160.227:30086",
+          "address_ws": "wss://aka2cawifaqoqejwrsgqfdhrdmnjqucdw4tldpg3r7hitmttqszmw.theskywirenetwork.net/dmsg",
           "availableSessions": 0
         }
       }

@@ -15,6 +15,7 @@ skywire cli visor app arg
 - [autostart](autostart/README.md) — Set app autostart
 - [killswitch](killswitch/README.md) — Set app killswitch
 - [netifc](netifc/README.md) — Set app network interface
+- [pk](pk/README.md) — Set an app's remote server/exit public key
 - [secure](secure/README.md) — Set app secure
 - [whitelist](whitelist/README.md) — Set app connection whitelist (skysocks / vpn-server)
 

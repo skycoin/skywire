@@ -34,18 +34,19 @@ skywire cli rewards bw-collect
 ## Flags
 
 ```
-  -s, --loglvl string   [ debug | warn | error | fatal | panic | trace ] (default "info")
-  -n, --no-cache        bypass cache and fetch fresh data
-  -p, --hist string     path to history directory for daily files (default "hist")
-  -b, --min-bw uint     minimum bandwidth in bytes to qualify (default 64)
-  -l, --lpath string    path to hardware surveys (for same-LAN detection) (default "log_collecting")
-      --days int        TPD ?days= window to fetch (max 35); only the entries whose Date matches --date are counted (default 1)
-      --date string     UTC date the output file is named for and the only Daily entry counted (default: today)
-      --rpc string      RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --no-cxo          skip CXO subscriber-cache step
-      --no-rpc          skip visor RPC (DmsgHTTP) step
-      --no-dmsg         skip direct DMSG HTTP step
-      --no-http         skip direct HTTP fallback step
+  -s, --loglvl string      [ debug | warn | error | fatal | panic | trace ] (default "info")
+  -n, --no-cache           bypass cache and fetch fresh data
+  -p, --hist string        path to history directory for daily files (default "hist")
+  -b, --min-bw uint        minimum bandwidth in bytes to qualify (default 64)
+  -l, --lpath string       path to hardware surveys (for same-LAN detection) (default "log_collecting")
+      --days int           TPD ?days= window to fetch (max 35); only the entries whose Date matches --date are counted (default 1)
+      --date string        UTC date the output file is named for and the only Daily entry counted (default: today)
+      --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --no-cxo             skip CXO subscriber-cache step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --no-dmsg            skip direct DMSG HTTP step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 
 ## Global Flags
