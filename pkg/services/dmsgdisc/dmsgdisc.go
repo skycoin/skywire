@@ -288,12 +288,13 @@ func (s *service) runDMSG(
 		}()
 	}
 
-	// Registration-over-CXO aggregator: opt-in fan-in path where visors
-	// publish their signed entry as a CXO feed instead of re-PUTting it
-	// over HTTP on a timer. Needs the dmsg client; the API is the Sink
-	// (IngestEntryFromCXO). Best-effort — HTTP registration is unaffected
-	// if it fails to start.
-	if cfg.RegistrationCXO && dmsgDC != nil {
+	// Registration-over-CXO aggregator: always-on fan-in path where visors
+	// publish their signed entry as a CXO feed instead of re-PUTting it over
+	// HTTP on a timer. Inert until visors subscribe (just a listener), and
+	// the same aggregator pattern runs at fleet scale in TPD, so it needs no
+	// gate. Needs the dmsg client; the API is the Sink (IngestEntryFromCXO).
+	// Best-effort — HTTP registration is unaffected if it fails to start.
+	if dmsgDC != nil {
 		agg, aerr := regcxo.New(dmsgDC, a, regcxo.Config{Logger: log})
 		if aerr != nil {
 			log.WithError(aerr).Error("Failed to start registration-over-CXO aggregator, continuing without it")

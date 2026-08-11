@@ -29,7 +29,7 @@ import (
 // finds the store already at that sequence. Keep this in sync with
 // (*API).setEntry — deliberately duplicated (not refactored out of the
 // hot HTTP path) to keep this additive, opt-in path from touching
-// production registration behaviour.
+// production registration behavior.
 func (a *API) IngestEntryFromCXO(ctx context.Context, entry *disc.Entry, reporter cipher.PubKey) {
 	if entry == nil {
 		return
@@ -73,9 +73,23 @@ func (a *API) IngestEntryFromCXO(ctx context.Context, entry *disc.Entry, reporte
 		log.WithError(err).WithField("reporter", reporter).Debug("registration-cxo: store lookup failed")
 		return
 	}
-	// Idempotent: we already hold this (or a newer) entry — the HTTP path or
-	// an earlier Root already applied it. Not an error.
-	if entry.Sequence <= old.Sequence {
+	// Stale: we already hold a strictly newer entry — never roll back.
+	if entry.Sequence < old.Sequence {
+		return
+	}
+	// Equal sequence = the feed's periodic no-change heartbeat. The content
+	// didn't change, so there's nothing to re-mirror, but this is precisely
+	// the signal that replaces the HTTP keepalive re-PUT: refresh the stored
+	// entry's TTL (and the uptime heartbeat) off the STORED entry so the
+	// visor's registration stays alive without a Noise+PQ handshake. Refresh
+	// off `old`, not the incoming entry, so an equal-sequence body we can't
+	// distinguish from the canonical one can never overwrite it.
+	if entry.Sequence == old.Sequence {
+		if e := a.db.SetEntry(ctx, old, a.clientEntryTTL); e != nil {
+			log.WithError(e).WithField("reporter", reporter).Debug("registration-cxo: TTL refresh failed")
+			return
+		}
+		_ = a.db.RecordHeartbeat(ctx, old.Static, old.ClientType) //nolint:errcheck
 		return
 	}
 	if err := old.ValidateIteration(entry); err != nil {
