@@ -37,12 +37,14 @@ import (
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/disc/metrics"
 	"github.com/skycoin/skywire/pkg/dmsg/discovery/api"
+	"github.com/skycoin/skywire/pkg/dmsg/discovery/regcxo"
 	"github.com/skycoin/skywire/pkg/dmsg/discovery/store"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsghttp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/metricsutil"
 	"github.com/skycoin/skywire/pkg/services"
+	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/svcmode"
 )
 
@@ -284,6 +286,27 @@ func (s *service) runDMSG(
 			<-ctx.Done()
 			pub.Close() //nolint:errcheck,gosec
 		}()
+	}
+
+	// Registration-over-CXO aggregator: opt-in fan-in path where visors
+	// publish their signed entry as a CXO feed instead of re-PUTting it
+	// over HTTP on a timer. Needs the dmsg client; the API is the Sink
+	// (IngestEntryFromCXO). Best-effort — HTTP registration is unaffected
+	// if it fails to start.
+	if cfg.RegistrationCXO && dmsgDC != nil {
+		agg, aerr := regcxo.New(dmsgDC, a, regcxo.Config{Logger: log})
+		if aerr != nil {
+			log.WithError(aerr).Error("Failed to start registration-over-CXO aggregator, continuing without it")
+		} else {
+			agg.Run(ctx)
+			go func() {
+				<-ctx.Done()
+				agg.Close() //nolint:errcheck,gosec
+			}()
+			log.WithField("feed_pk", agg.FeedPK()).
+				WithField("port", skyenv.DmsgDMSGDRegistrationCXOPort).
+				Info("Registration-over-CXO aggregator running")
+		}
 	}
 
 	return nil

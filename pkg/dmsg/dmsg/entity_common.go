@@ -103,6 +103,19 @@ type EntityCommon struct {
 	setSessionCallback func(ctx context.Context) error
 	delSessionCallback func(ctx context.Context) error
 
+	// entryPublishHook, when set, is invoked with the freshly-registered
+	// client entry after each successful discovery registration (the POST or
+	// PUT that dmsg-discovery accepted). The visor uses it to mirror the
+	// canonical entry onto a CXO feed (registration-over-CXO) so quiet
+	// visors need not re-PUT over dmsg on a timer — each such PUT is a fresh
+	// Noise+PQ handshake and those dominate dmsg-discovery CPU. The hook
+	// receives the entry with its authoritative Sequence/Signature (PutEntry
+	// mutates them in place), so a CXO subscriber can ingest it verbatim.
+	// This package cannot import CXO (CXO imports dmsg — cycle), hence the
+	// callback. Nil for servers and clients that do not opt in; fired at most
+	// once per successful update, for the primary discovery only.
+	entryPublishHook atomic.Pointer[EntryPublishFunc]
+
 	// peerSessionsFunc returns peer server sessions for mesh forwarding.
 	// Only set on Server entities; nil for clients.
 	peerSessionsFunc func() []*SessionCommon
@@ -773,6 +786,38 @@ func (c *EntityCommon) initilizeClientEntry(ctx context.Context, clientType stri
 	return firstErr
 }
 
+// EntryPublishFunc receives a copy of the client's discovery entry each time it
+// is successfully (re)registered with the primary discovery. See
+// EntityCommon.SetEntryPublishHook and entryPublishHook.
+type EntryPublishFunc = func(*disc.Entry)
+
+// SetEntryPublishHook installs (or, with nil, clears) a callback invoked with
+// the client's canonical discovery entry after each successful registration
+// with the primary discovery. Used by the visor to mirror the entry onto a CXO
+// feed. Safe to call concurrently with the entry-update loop.
+//
+// The hook runs synchronously on the entry-update goroutine, so it MUST NOT
+// block — a well-behaved installer only hands the entry to a batched/async
+// sink (e.g. treestore.Publisher.Put, which coalesces into the next
+// BatchWindow tick) and returns immediately.
+func (c *EntityCommon) SetEntryPublishHook(fn EntryPublishFunc) {
+	if fn == nil {
+		c.entryPublishHook.Store(nil)
+		return
+	}
+	c.entryPublishHook.Store(&fn)
+}
+
+// fireEntryPublishHook invokes the installed publish hook, if any, with entry.
+func (c *EntityCommon) fireEntryPublishHook(entry *disc.Entry) {
+	if entry == nil {
+		return
+	}
+	if fn := c.entryPublishHook.Load(); fn != nil {
+		(*fn)(entry)
+	}
+}
+
 func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}, clientType string) (err error) {
 	if isClosed(done) {
 		return nil
@@ -830,8 +875,10 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 	if isClosed(done) {
 		return nil
 	}
-	for _, ep := range endpoints {
-		if updateErr := c.updateClientEntryOnEndpoint(ctx, ep, clientType, srvPKs, mustPublish); updateErr != nil {
+	var publishedEntry *disc.Entry
+	for i, ep := range endpoints {
+		entry, updateErr := c.updateClientEntryOnEndpoint(ctx, ep, clientType, srvPKs, mustPublish)
+		if updateErr != nil {
 			if firstErr == nil {
 				firstErr = updateErr
 			}
@@ -839,6 +886,17 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 			continue
 		}
 		anyOK = true
+		// Mirror only the PRIMARY discovery's entry onto the CXO feed:
+		// sequences are per-discovery, and the primary (endpoints[0], ==
+		// c.dc) is the canonical one. entry is nil when nothing was written
+		// (short-circuit), in which case we don't disturb the CXO feed —
+		// the publisher's heartbeat keeps it warm without a re-publish.
+		if i == 0 {
+			publishedEntry = entry
+		}
+	}
+	if publishedEntry != nil {
+		c.fireEntryPublishHook(publishedEntry)
 	}
 	if anyOK {
 		c.recordUpdate()
@@ -870,7 +928,13 @@ func (c *EntityCommon) updateClientEntry(ctx context.Context, done chan struct{}
 // (UpdateInterval, 5 min for clients) came round. Callers pass mustPublish for
 // the first publish only, so the steady-state suppression that keeps reconnect
 // storms off the discovery is unaffected.
-func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, clientType string, srvPKs []cipher.PubKey, mustPublish bool) error {
+// updateClientEntryOnEndpoint (re)registers this client's entry with a single
+// discovery endpoint. On a successful POST/PUT it returns the canonical entry
+// that dmsg-discovery accepted (Sequence/Signature authoritative — PutEntry
+// mutates them in place); it returns (nil, nil) when no update was needed and
+// (nil, err) on failure. The caller uses the returned entry to mirror the
+// registration onto a CXO feed for the primary discovery only.
+func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *discoveryEndpoint, clientType string, srvPKs []cipher.PubKey, mustPublish bool) (*disc.Entry, error) {
 	entry, err := ep.Client.Entry(ctx, c.pk)
 	if err != nil {
 		// Only register a fresh sequence-0 entry when the entry is
@@ -879,14 +943,17 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 		// entry is rejected 422 "not old + 1". Return the error and let the
 		// update loop retry on the next tick.
 		if !isEntryNotFound(err) {
-			return err
+			return nil, err
 		}
 		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
 		entry.ClientType = clientType
 		if err := entry.Sign(c.sk); err != nil {
-			return err
+			return nil, err
 		}
-		return ep.Client.PostEntry(ctx, entry)
+		if err := ep.Client.PostEntry(ctx, entry); err != nil {
+			return nil, err
+		}
+		return entry, nil
 	}
 
 	// The entry might be a server entry (e.g., debug client running on a dmsg server).
@@ -895,9 +962,12 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 		entry = disc.NewClientEntry(c.pk, 0, srvPKs)
 		entry.ClientType = clientType
 		if err := entry.Sign(c.sk); err != nil {
-			return err
+			return nil, err
 		}
-		return ep.Client.PostEntry(ctx, entry)
+		if err := ep.Client.PostEntry(ctx, entry); err != nil {
+			return nil, err
+		}
+		return entry, nil
 	}
 
 	// Whether the client's CURRENT delegated servers is the same as what would be advertised.
@@ -906,13 +976,16 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 	// No update is needed if delegated servers has no delta, an entry update is
 	// not due, and this is not the client's first publish.
 	if _, due := c.updateIsDue(); sameSrvPKs && !due && !mustPublish {
-		return nil
+		return nil, nil
 	}
 
 	entry.ClientType = clientType
 	entry.Client.DelegatedServers = srvPKs
 	c.log.WithField("entry", entry).Debug("Updating entry.\n")
-	return ep.Client.PutEntry(ctx, c.sk, entry)
+	if err := ep.Client.PutEntry(ctx, c.sk, entry); err != nil {
+		return nil, err
+	}
+	return entry, nil
 }
 
 // entryUpdateDebounce is how long to wait after a nudge before updating
