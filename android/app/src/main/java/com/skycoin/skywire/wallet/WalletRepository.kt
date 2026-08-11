@@ -100,6 +100,10 @@ class WalletRepository private constructor(private val context: Context) {
             icon = icon,
         )
         storeUserCoin(spec)
+        // The account this token lives in may already be set up under ETH or
+        // another token; if so it arrives holding it, rather than asking for
+        // a phrase the user has already given.
+        adoptEthFamilyWallets(spec)
         return spec
     }
 
@@ -221,6 +225,29 @@ class WalletRepository private constructor(private val context: Context) {
             }
             val book = core.deriveAddresses(seed, receiveCount, changeCount)
 
+            // This coin may already hold this exact account — most likely
+            // because mirroring put it there, and the user restored the phrase
+            // under the sibling anyway out of habit, which is the very habit
+            // this is meant to retire. Two entries for one address would show
+            // the same balance twice and let the same coins be spent from
+            // either, so the existing one is adopted instead of duplicated.
+            val head = book.receive.firstOrNull()
+            val already = wallets().first().firstOrNull {
+                it.coinId == spec.id && head != null && it.receiveAddresses.firstOrNull() == head
+            }
+            if (already != null) {
+                // A restore that scanned further than the mirror knew about is
+                // the one thing worth carrying over.
+                val grown = if (book.receive.size > already.receiveAddresses.size) {
+                    already.copy(receiveAddresses = book.receive, changeAddresses = book.change)
+                        .also { putWallets(wallets().first().map { w -> if (w.id == it.id) it else w }) }
+                } else {
+                    already
+                }
+                setActiveWallet(spec.id, grown.id)
+                return@withContext grown
+            }
+
             val meta = WalletMeta(
                 id = "w-${UUID.randomUUID().toString().take(12)}",
                 coinId = spec.id,
@@ -232,8 +259,106 @@ class WalletRepository private constructor(private val context: Context) {
             seeds.putSeed(meta.id, seed)
             putWallets(wallets().first() + meta)
             setActiveWallet(spec.id, meta.id)
+            if (spec.isEthFamily) mirrorIntoEthFamily(meta, seed, book, exceptCoin = spec.id)
             meta
         }
+
+    /**
+     * Give every other Ethereum-family coin the same wallet.
+     *
+     * ETH and every ERC-20 are one account on one chain — the same key, the
+     * same address, differing only in which asset you are looking at. The
+     * store keys a wallet by coin, so without this a user who has entered
+     * their phrase for ETH is asked for the very same phrase again to see the
+     * USDT sitting at the address they just added, and again for each token
+     * after that.
+     *
+     * [book] is passed rather than re-derived: EthWalletCore.deriveAddresses
+     * reads only the seed, so this is the same computation, and reusing it
+     * makes "the mirror has identical addresses" true by construction rather
+     * than by agreement between two call sites.
+     */
+    private suspend fun mirrorIntoEthFamily(
+        source: WalletMeta,
+        seed: String,
+        book: AddressBook,
+        exceptCoin: String,
+    ) {
+        coins().first()
+            .filter { it.isEthFamily && it.id != exceptCoin }
+            .forEach { sibling -> mirrorWallet(sibling, source.name, source.createdAtMs, seed, book) }
+    }
+
+    /**
+     * One mirrored wallet, or nothing if [coin] already has this account.
+     *
+     * Matching on the first receive address rather than on a stored link:
+     * an address IS the account here, so this stays right for wallets that
+     * predate mirroring — including the pair someone made by entering the
+     * same phrase twice, which is what this feature exists to stop.
+     */
+    private suspend fun mirrorWallet(
+        coin: CoinSpec,
+        name: String,
+        createdAtMs: Long,
+        seed: String,
+        book: AddressBook,
+    ): WalletMeta? {
+        val head = book.receive.firstOrNull() ?: return null
+        val existing = wallets().first().filter { it.coinId == coin.id }
+        if (existing.any { it.receiveAddresses.firstOrNull() == head }) return null
+
+        val meta = WalletMeta(
+            id = "w-${UUID.randomUUID().toString().take(12)}",
+            coinId = coin.id,
+            name = name,
+            createdAtMs = createdAtMs,
+            receiveAddresses = book.receive,
+            changeAddresses = book.change,
+        )
+        // A second sealed copy of a phrase already on this device, under the
+        // same keystore key — no new exposure, and the alternative (one seed
+        // shared by reference) makes deleting any one wallet able to strand
+        // the others.
+        seeds.putSeed(meta.id, seed)
+        putWallets(wallets().first() + meta)
+        // Only if that coin has nothing selected yet: arriving at a coin the
+        // user was already using must not move them off their own choice.
+        if (activeWalletId(coin.id).first() == null) setActiveWallet(coin.id, meta.id)
+        return meta
+    }
+
+    /**
+     * Give a newly added ERC-20 the Ethereum wallets that already exist, so a
+     * token added today reaches the account the user set up months ago
+     * without them typing the phrase again — the same rule as
+     * [mirrorIntoEthFamily], applied when the coin arrives after the wallet
+     * instead of before it.
+     *
+     * One wallet per distinct account: several ETH-family coins already hold
+     * a copy each, and they must not become several copies here.
+     */
+    private suspend fun adoptEthFamilyWallets(token: CoinSpec) {
+        val ethCoinIds = coins().first().filter { it.isEthFamily && it.id != token.id }.map { it.id }.toSet()
+        val seen = mutableSetOf<String>()
+        wallets().first()
+            .filter { it.coinId in ethCoinIds }
+            .forEach { existing ->
+                val head = existing.receiveAddresses.firstOrNull() ?: return@forEach
+                if (!seen.add(head)) return@forEach
+                // Unreadable seed: keystore rotated under the store, or the
+                // wallet predates sealing. Nothing to copy, and the user can
+                // still restore the token's wallet by hand.
+                val seed = seeds.seed(existing.id) ?: return@forEach
+                mirrorWallet(
+                    token,
+                    existing.name,
+                    existing.createdAtMs,
+                    seed,
+                    AddressBook(existing.receiveAddresses, existing.changeAddresses),
+                )
+            }
+    }
 
     private fun normalizeSeed(mnemonic: String): String =
         mnemonic.trim().lowercase().split(Regex("\\s+")).joinToString(" ")
