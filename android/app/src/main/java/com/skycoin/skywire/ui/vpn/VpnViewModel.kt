@@ -331,6 +331,7 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
         val from = logCursor()
         SkyVpnService.start(getApplication(), killswitch)
         runCatching { api.updateApp(VpnArgs.APP, status = VisorApi.APP_STOP) }
+        awaitStopped()
         val updated = api.updateApp(
             VpnArgs.APP,
             pk = server.pk,
@@ -343,6 +344,30 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
             it.copy(app = updated, lastServer = server, attemptLog = emptyList(), attemptLive = true)
         }
         collectAttemptLog(from)
+    }
+
+    /**
+     * Wait for the app to actually be gone before starting it again.
+     *
+     * Stopping does not wait: the visor pops the process and signals it
+     * (procManager.Stop), so the RPC returns while the old vpn-client is still
+     * winding down and still holding what it holds. Starting into that window
+     * failed with an address already in use, and the user's own fix was to
+     * wait about ten seconds and press it again — which is precisely this,
+     * minus having to know it.
+     *
+     * Bounded and best-effort: after [STOP_WAIT_MS] it starts anyway rather
+     * than refusing to connect, so the worst case is the behaviour we already
+     * had. A failing status read also proceeds — an unreachable visor is not
+     * evidence that the old app is still up.
+     */
+    private suspend fun awaitStopped() {
+        val deadline = System.currentTimeMillis() + STOP_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val state = runCatching { api.app(VpnArgs.APP) }.getOrNull() ?: return
+            if (!state.running && state.status != AppState.STATUS_STARTING) return
+            delay(STOP_POLL_MS)
+        }
     }
 
     /**
@@ -475,8 +500,20 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         app = state,
                         connection = connection,
-                        killswitch = VpnArgs.killswitch(state.args),
-                        error = null,
+                        // The killswitch is deliberately NOT read back from
+                        // the visor's args. The phone owns that preference and
+                        // pushes it down (applyStoredKillswitch); reading it
+                        // back made this poll overwrite the user's choice with
+                        // the visor's not-yet-updated copy, so a freshly
+                        // flipped switch flipped itself back within two
+                        // seconds and then flipped again once the write
+                        // landed. Truth flows one way.
+                        //
+                        // The error is not cleared here either: a failure
+                        // raised by a user's action would be wiped by the very
+                        // next poll, which is a two-second window to read why
+                        // a connection did not happen. action() clears it when
+                        // the next action starts, which is the right moment.
                     )
                 }
                 accrue(connection)
@@ -553,5 +590,14 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
 
         /** Enough for a full setup sequence with retries, bounded for a phone. */
         const val ATTEMPT_LOG_MAX_LINES = 400
+
+        /**
+         * How long to let the previous vpn-client finish stopping. Ten
+         * seconds because that is what the workaround needed; teardown is
+         * normally well under one, and the poll below leaves as soon as the
+         * app reports stopped.
+         */
+        const val STOP_WAIT_MS = 10_000L
+        const val STOP_POLL_MS = 250L
     }
 }
