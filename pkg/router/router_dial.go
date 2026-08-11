@@ -248,9 +248,16 @@ func (r *router) DialRoutes(
 		// asked, and "no transports available" on its own reads as a
 		// network fault rather than a consequence of the chosen setting.
 		if baseMinHops > 1 {
+			// Naming public autoconnect because it is the lever, not a
+			// detail: it is what fills the transport table with public
+			// visors, and those are the intermediates a multi-hop route is
+			// made of. Dialling once at one hop only builds a transport to
+			// the exit — enough to get past this check, not enough to route
+			// THROUGH anything, so the finder would then return nothing.
 			return nil, fmt.Errorf("no transports available and none created for a multi-hop dial "+
 				"(min_hops=%d): this visor holds no transport to route through — "+
-				"connect once at min_hops=1 to establish one, or lower the setting", baseMinHops)
+				"enable autoconnect to public visors so it builds some, or lower the setting",
+				baseMinHops)
 		}
 		return nil, fmt.Errorf("no transports available; route setup skipped")
 	}
