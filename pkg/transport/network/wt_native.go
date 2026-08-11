@@ -155,7 +155,7 @@ func wtDial(ctx context.Context, url, certHashHex string) (net.Conn, error) {
 			return nil
 		},
 	}
-	d := &webtransport.Dialer{
+	d := &webtransport.Transport{
 		TLSClientConfig: tlsConf,
 		QUICConfig: &quic.Config{
 			EnableDatagrams:                  true,
