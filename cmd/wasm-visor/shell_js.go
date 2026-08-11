@@ -51,6 +51,7 @@ import (
 	"github.com/skycoin/skywire/third_party/0magnet/afero"
 	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/interp"
 	"github.com/skycoin/skywire/third_party/0magnet/websh/shell"
+	"github.com/skycoin/skywire/third_party/0magnet/websh/shell/browser"
 	xterm "github.com/skycoin/skywire/third_party/0magnet/xterm-go"
 )
 
@@ -304,6 +305,10 @@ type shellSession struct {
 // openShell builds a terminal + shell inside el and starts the read loop.
 func openShell(el js.Value) *shellSession {
 	registerVisorApplets()
+	// the browser's own console, reachable from the shell: `js <expr>` and
+	// `logs` (which backfills from browse.js's window.skywireLog, so visor
+	// output from before this window opened is there too)
+	browser.Register()
 
 	term := xterm.New(nil)
 	term.Open(el)
@@ -364,6 +369,9 @@ func openShell(el js.Value) *shellSession {
 		}
 	}
 
+	// the history builtin reads the line editor's list
+	sh.UseHistory(s.editor.History, s.editor.ClearHistory)
+
 	// keep the grid in step with the WinBox window as it is resized
 	if ro := js.Global().Get("ResizeObserver"); ro.Truthy() {
 		cb := js.FuncOf(func(js.Value, []js.Value) any {
@@ -378,7 +386,9 @@ func openShell(el js.Value) *shellSession {
 
 	term.WriteString("\x1b[1;36mwebsh\x1b[0m — a shell in the visor tab · type \x1b[1mhelp\x1b[0m\r\n")
 	term.WriteString("visor commands: \x1b[1mpk about visors net health apps tps routes hvapi\x1b[0m " +
-		"(JSON — pipe into \x1b[1mjq\x1b[0m)\r\n\r\n")
+		"(JSON — pipe into \x1b[1mjq\x1b[0m)\r\n")
+	term.WriteString("browser: \x1b[1mlogs\x1b[0m (-f follow, -e errors) · \x1b[1mjs\x1b[0m <expr> · " +
+		"\x1b[1mcurl download upload pbcopy\x1b[0m\r\n\r\n")
 	s.writePrompt()
 	return s
 }
@@ -454,6 +464,8 @@ var shellBuiltins = []string{
 	"source", "test", "true", "false", "set", "shift", "local", "declare",
 	"eval", "alias", "unalias", "type", "return", "break", "continue",
 	"pushd", "popd", "dirs", "let", "getopts", "wait",
+	"jobs", "kill", "disown", "fg", "bg", "enable", "compgen", "history",
+	"builtin", "umask", "times", "trap", "shopt", "mapfile", "readarray",
 }
 
 // run executes submitted lines one at a time, off the JS event loop so the
@@ -463,6 +475,9 @@ func (s *shellSession) run() {
 		if !s.sh.Pending() {
 			s.editor.AddHistory(line)
 		}
+		// Canceling this at the end of the line is safe: the interpreter
+		// detaches background jobs from it, so `sleep 30 &` survives to the
+		// next prompt as it would in bash. close() stops them instead.
 		runCtx, cancel := context.WithCancel(ctx)
 		s.cancelRun = cancel
 		s.running = true
@@ -487,6 +502,11 @@ func (s *shellSession) close() {
 	}
 	if s.cancelRun != nil {
 		s.cancelRun()
+	}
+	if s.sh != nil {
+		// Background jobs outlive the line that started them, so closing the
+		// window is what ends them.
+		s.sh.Runner.StopJobs()
 	}
 	if s.stdinW != nil {
 		_ = s.stdinW.Close() //nolint:errcheck

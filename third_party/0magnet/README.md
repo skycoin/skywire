@@ -8,7 +8,7 @@ repository.
 | directory  | upstream of the copy                  | what it is                                                                   |
 | ---------- | ------------------------------------- | ---------------------------------------------------------------------------- |
 | `xterm-go` | `github.com/0magnet/xterm-go`         | Go/wasm port of xterm.js 6.0.0 — VT parser + buffers (`vt/`, portable), DOM and WebGL renderers, IME, fit/attach |
-| `websh`    | `github.com/0magnet/websh`            | the shell: `sh` interpreter wired to a virtual filesystem, ~45 applets, line editor (`shell/` only; the standalone wasm demo is not copied) |
+| `websh`    | `github.com/0magnet/websh`            | the shell: `sh` interpreter wired to a virtual filesystem, ~45 applets, line editor, and `shell/browser/` — the js/wasm applets (`js logs curl nc download upload pbcopy`) any embedder turns on with `browser.Register()` (`shell/` only; the standalone wasm demo is not copied) |
 | `sh/v3`    | `github.com/0magnet/sh` (fork of `mvdan.cc/sh`) | Bash/POSIX parser and interpreter, with js/wasm support           |
 | `afero`    | `github.com/0magnet/afero` (fork of `spf13/afero`) | filesystem abstraction, with the `net/http` dependency removed  |
 | `u-root`   | `github.com/0magnet/u-root` (fork of `u-root/u-root`) | `pkg/ls` only — long-listing format                          |
@@ -23,6 +23,16 @@ costs:
   stdin is now a small interface with build-tagged backends (`os.Pipe` on real
   OSes — unchanged behaviour, subprocess inheritance and read deadlines intact;
   in-process `io.Pipe` on js). Also an `os.SameFile` shim for TinyGo.
+
+  The fork additionally implements builtins upstream leaves out, so the browser
+  terminal feels like bash: `help` (`interp/help.go`, in bash's two-column
+  format, starring the ones still unimplemented), job control over the
+  interpreter's background shells (`interp/jobs.go` — `jobs kill disown fg bg`,
+  where a job is a goroutine, so `kill` cancels its context and nothing is ever
+  *stopped*), and `enable`, `compgen`, `history`, `umask`, `times` and `logout`
+  (`interp/bashbuiltin.go`). Background jobs are detached from the statement's
+  context so they outlive the command line, which is why a shell embedding this
+  calls `Runner.StopJobs` when it goes away.
 - **`afero`** — `HttpFs` pulls in `net/http`, whose js shim does not compile
   under stock TinyGo (the same `roundtrip_js.go` limitation noted in the
   `build-wasm-tinygo` Makefile lane). It is removed, and the `os` functions

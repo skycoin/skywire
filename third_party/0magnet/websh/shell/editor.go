@@ -32,8 +32,8 @@ type LineEditor struct {
 	histIdx  int    // == len(history) when editing a fresh line
 	histSave string // the fresh line stashed while browsing history
 
-	esc  int // escape state: 0 none, 1 ESC, 2 CSI
-	csi  strings.Builder
+	esc int // escape state: 0 none, 1 ESC, 2 CSI
+	csi strings.Builder
 }
 
 // Line returns the current buffer contents.
@@ -57,6 +57,17 @@ func (e *LineEditor) AddHistory(line string) {
 	}
 	e.history = append(e.history, line)
 	e.histIdx = len(e.history)
+}
+
+// History returns the lines entered so far, oldest first. It backs the
+// interpreter's history builtin, which has no list of its own.
+func (e *LineEditor) History() []string { return e.history }
+
+// ClearHistory discards the history, as `history -c` does.
+func (e *LineEditor) ClearHistory() {
+	e.history = nil
+	e.histIdx = 0
+	e.histSave = ""
 }
 
 func (e *LineEditor) redraw() {

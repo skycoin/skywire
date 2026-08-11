@@ -155,6 +155,61 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 	case ":", "true":
 	case "false":
 		exit.code = 1
+	case "help":
+		return r.runHelp(args)
+	case "jobs":
+		return r.runJobs(args)
+	case "kill":
+		return r.runKill(args)
+	case "disown":
+		return r.runDisown(args)
+	case "fg":
+		return r.runFg(ctx, args)
+	case "bg":
+		return r.runBg(args)
+	case "enable":
+		return r.runEnable(args)
+	case "compgen":
+		return r.runCompgen(ctx, args)
+	case "history":
+		return r.runHistory(args)
+	case "logout":
+		// There is no login shell here, so this is bash's error for one that
+		// is not: the user wants exit.
+		return failf(1, "logout: not login shell: use `exit'\n")
+	case "times":
+		// No per-process CPU accounting on the targets this fork serves
+		// (js/wasm has none at all), so report zeros in bash's format
+		// rather than fail: shell user/sys, then children user/sys.
+		r.out("0m0.000s 0m0.000s\n0m0.000s 0m0.000s\n")
+	case "umask":
+		symbolic := false
+		rest := args
+		for len(rest) > 0 && strings.HasPrefix(rest[0], "-") && rest[0] != "-" {
+			switch rest[0] {
+			case "-S":
+				symbolic = true
+			case "-p":
+				// "print in a form reusable as input" — the mask line below
+				// already is, so -p only differs by the leading word.
+			default:
+				return failf(2, "umask: %s: invalid option\n", rest[0])
+			}
+			rest = rest[1:]
+		}
+		if len(rest) > 0 {
+			mask, err := strconv.ParseUint(rest[0], 8, 32)
+			if err != nil {
+				return failf(2, "umask: %s: octal number expected\n", rest[0])
+			}
+			r.umask = uint32(mask)
+			break
+		}
+		if symbolic {
+			r.out(umaskSymbolic(r.umask) + "\n")
+		} else {
+			r.outf("%04o\n", r.umask)
+		}
 	case "exit":
 		switch len(args) {
 		case 0:
@@ -332,7 +387,12 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 		if len(args) == 0 {
 			// Note that "wait" without arguments always returns exit status zero.
 			for _, bg := range r.bgProcs {
-				<-bg.done
+				if bg.disowned {
+					continue
+				}
+				if !bg.await(ctx) {
+					return exitStatus{code: 130}
+				}
 			}
 			break
 		}
@@ -343,7 +403,9 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args 
 				return failf(1, "wait: pid %s is not a child of this shell\n", arg)
 			}
 			bg := r.bgProcs[pid-1]
-			<-bg.done
+			if !bg.await(ctx) {
+				return exitStatus{code: 130}
+			}
 			exit = *bg.exit
 		}
 	case "builtin":
