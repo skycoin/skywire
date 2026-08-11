@@ -247,7 +247,13 @@ func jsSetData(_ js.Value, args []js.Value) interface{} {
 	}
 
 	v.graph.Config().EnableSimulation = !grouped
-	v.graph.SetPointPositions(positions)
+	// Skip the engine's rescale: both position sources are already in cosmos
+	// space. Grouped mode arrives pre-packed into it by buildData's toSpace,
+	// and the free layout is seeded into it below. Letting the engine rescale
+	// moves the points while the group-boundary circles stay at the
+	// coordinates they were computed for, so the rings end up drawn somewhere
+	// the points no longer are.
+	v.graph.SetPointPositions(positions, true)
 	v.graph.SetPointColors(colors(p.Get("pointColors")))
 	v.graph.SetPointSizes(pointSizes)
 	v.graph.SetLinks(floats(p.Get("links")))
