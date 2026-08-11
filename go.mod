@@ -110,6 +110,8 @@ require (
 	golang.org/x/tools v0.48.0 // indirect
 )
 
+require github.com/benhoyt/goawk v1.31.0 // indirect
+
 require (
 	github.com/0magnet/coloredcobra v1.0.2 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
