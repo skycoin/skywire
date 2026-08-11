@@ -27,7 +27,10 @@ import (
 
 	cdplog "github.com/chromedp/cdproto/log"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/cdproto/runtime"
+	cdpsecurity "github.com/chromedp/cdproto/security"
+	"github.com/chromedp/cdproto/storage"
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 )
@@ -209,6 +212,10 @@ func main() {
 	evalExpr := os.Getenv("HVINSPECT_EVAL") // optional in-page JS probe (await-able)
 	var evalResult string
 	actions := []chromedp.Action{
+		// Bypass cert errors in ATTACH mode too (the launch path has the
+		// --ignore-certificate-errors flag, but an already-running Brave doesn't):
+		// lets us drive self-signed local origins like https://<pk>.mesh.localhost.
+		cdpsecurity.SetIgnoreCertificateErrors(true),
 		network.Enable(),
 		runtime.Enable(),
 		cdplog.Enable(),
@@ -217,11 +224,30 @@ func main() {
 		// Headless, or attach-with-no-matching-tab: load the URL (headless tab, or
 		// the fresh visor tab we opened in the user's browser).
 		actions = append(actions, chromedp.Navigate(url))
-	} else if os.Getenv("HVINSPECT_RELOAD") != "" {
+	} else if rl := os.Getenv("HVINSPECT_RELOAD"); rl != "" {
 		// Reload the ATTACHED tab (by id, so it stays on the same tab across the
 		// reload — unlike re-matching by URL, which drifts while the page is
 		// momentarily about:blank). Used to pick up new browse.js after a rebuild.
-		actions = append(actions, chromedp.Reload())
+		if rl == "hard" {
+			// Empty-cache-and-hard-reload equivalent: drop the HTTP cache and any
+			// service-worker / CacheStorage for the origin, then reload ignoring
+			// cache — so a rebuilt wasm blob is fetched fresh even while its old
+			// max-age entry is still nominally "fresh" in the HTTP cache.
+			origin := url
+			if i := strings.Index(url, "://"); i >= 0 {
+				if j := strings.IndexAny(url[i+3:], "/#?"); j >= 0 {
+					origin = url[:i+3+j]
+				}
+			}
+			actions = append(actions,
+				network.ClearBrowserCache(),
+				network.SetCacheDisabled(true),
+				storage.ClearDataForOrigin(origin, "service_workers,cache_storage"),
+				page.Reload().WithIgnoreCache(true),
+			)
+		} else {
+			actions = append(actions, chromedp.Reload())
+		}
 	}
 	actions = append(actions, chromedp.Sleep(wait))
 	if evalExpr != "" {
