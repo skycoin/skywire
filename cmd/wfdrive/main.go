@@ -25,10 +25,10 @@
 //	curl  http://127.0.0.1:9224/health            # session + tab usable?
 //	curl  http://127.0.0.1:9224/quit              # session.end + exit
 //
-// Captures land in WFDRIVE_OUTDIR (default: the temp dir). "out" names the
-// file within that directory, not a path — any directory part is stripped, so
-// nothing a request can say writes outside it. The control port is
-// loopback-only, but "out" still arrives from a request.
+// Captures land in the temp directory. "out" names the file there — it is a
+// name, not a path, and must be [A-Za-z0-9._-], so nothing a request can say
+// writes outside that directory. The control port is loopback-only, but the
+// name still arrives in a request.
 //
 // /nav, /shoot and /eval write <out>.png + <out>.console.txt and return JSON.
 // Splitting navigation, evaluation and capture apart matters for anything that
@@ -54,6 +54,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -289,28 +290,22 @@ func (d *driver) evalStr(bctx, expr string) string {
 	return strings.Trim(out, `"`)
 }
 
-// outRoot is the directory wfdrive is allowed to write captures into. The
-// control port is loopback-only, but "out" still arrives from a request, and a
-// request that can name any path can overwrite any file this process can. Keep
-// it under one root — the temp dir by default, WFDRIVE_OUTDIR to move it.
-func outRoot() string {
-	if dir := os.Getenv("WFDRIVE_OUTDIR"); dir != "" {
-		return filepath.Clean(dir)
-	}
-	return filepath.Clean(os.TempDir())
-}
+// safeName is the character set a capture name may use. Validating against an
+// allowlist — rather than trying to spot the bad shapes — is what makes it
+// impossible for a request to address anything but a file in the output
+// directory.
+var safeName = regexp.MustCompile(`^[A-Za-z0-9._-]{1,64}$`)
 
-// safeOut turns a requested output prefix into a path under outRoot. "out" is
-// treated as a NAME, not a path: any directory part is stripped, so nothing a
-// request can say escapes the root. Pass WFDRIVE_OUTDIR to choose where
-// captures land; the name only picks the file within it.
+// safeOut turns a requested capture name into a path in the output directory.
+// "out" is a NAME, not a path: it must match safeName, so it cannot contain a
+// separator or traverse anywhere. The control port is loopback-only, but the
+// name still arrives in a request.
 func safeOut(out string) string {
-	name := filepath.Base(filepath.Clean(out))
-	switch name {
-	case "", ".", "..", string(os.PathSeparator):
-		name = "wfdrive"
+	name := "wfdrive"
+	if out != "" && out != "." && out != ".." && safeName.MatchString(out) {
+		name = out
 	}
-	return filepath.Join(outRoot(), name)
+	return filepath.Join(os.TempDir(), name)
 }
 
 func (d *driver) shoot(bctx, outPrefix string) {
