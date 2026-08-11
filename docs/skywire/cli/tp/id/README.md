@@ -8,7 +8,7 @@ discovery query — and mirrors transport.MakeTransportID().
 
 The returned ID is independent of PK order: id(T, A, B) == id(T, B, A).
 
-Valid transport types: dmsg, stcp, stcpr, sudph (default: dmsg)
+Valid transport types: stcpr, squicr, sudph, stcp, webrtc, swsr, swtr, dmsg (default: dmsg)
 
 ## Usage
 

@@ -26,11 +26,13 @@ skywire cli rewards run
 ## Flags
 
 ```
-  -d, --date string    date to calculate (YYYY-MM-DD); default = yesterday UTC
-  -H, --hist string    history output directory (default "hist")
-  -p, --lpath string   path to collected surveys (default "log_backups")
-      --minv string    minimum skywire version to fetch from / keep surveys for
-      --skip-collect   skip survey/tp/bw collection (use existing data on disk)
+  -d, --date string              date to calculate (YYYY-MM-DD); default = yesterday UTC
+  -H, --hist string              history output directory (default "hist")
+  -p, --lpath string             path to collected surveys (default "log_backups")
+      --minv string              minimum skywire version to fetch from / keep surveys for
+      --skip-collect             skip survey/tp/bw collection (use existing data on disk)
+      --proxy skywire dmsg web   collect surveys via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)
+                                 instead of an own dmsg client — reuses a running skywire dmsg web's warm sessions
 ```
 
 ## Global Flags

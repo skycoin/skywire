@@ -10,9 +10,9 @@ Route Finder Server - finds routes between visors using transport data.
 
 Depends: redis (shares Redis with TPD)
 
-Production: http://rf.skywire.skycoin.com
+Production: dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80
             dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80
-Test:       http://rf.skywire.dev
+Test:       dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80
             dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80
 
 HTTP Endpoints:
@@ -77,7 +77,7 @@ skywire svc rf
   -c, --config string             path to JSON config file. Generate with: skywire cli config gen --rf -o /etc/skywire/route-finder.json
                                   
   -D, --dmsg-disc string          url of dmsg discovery
-                                   (default "http://dmsgd.skywire.skycoin.com")
+                                   (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --dmsg-port uint16          dmsg port value
                                    (default 80)
       --dmsg-server-type string   type of dmsg server on dmsghttp handler

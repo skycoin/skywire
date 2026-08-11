@@ -19,6 +19,7 @@ skywire cli visor pair
 ## Subcommands
 
 - [add](add/README.md) — Register a chat pair with peer-pk
+- [delete](delete/README.md) — Retract a message previously sent into the pair feed
 - [ls](ls/README.md) — List chat pairs
 - [poll](poll/README.md) — Drain inbound pair messages
 - [rm](rm/README.md) — Tear down a chat pair

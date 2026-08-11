@@ -116,6 +116,12 @@ Config gen: [`VPNSERVER`](VISOR_CONFIG_GEN.md#apps), [`PROXYSERVER`](VISOR_CONFI
 | `hypervisor.enable` | `skywire cli visor hv enable\|disable` |
 | `hypervisors` (add remote HV) | `skywire cli visor hv add <pk>` |
 
+`hv add` connects out to the hypervisor immediately and persists the
+PK — but the *inbound* access the PK grants (the `skywire cli --via
+dmsg://<pk>` bridge) starts on the next restart, when the dmsg RPC
+listeners and the peer whitelist are rebuilt from config. See
+[docs/guides/remote-visor-cli.md](docs/guides/remote-visor-cli.md).
+
 Config gen: [`ISHYPERVISOR`](VISOR_CONFIG_GEN.md#hypervisor), [`HYPERVISORPKS`](VISOR_CONFIG_GEN.md#remote-access)
 
 ## Log Level (`log_level`)

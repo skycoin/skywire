@@ -22,22 +22,26 @@ skywire cli rewards ui
 ## Flags
 
 ```
-      --canonical string           canonical domain for SEO (e.g. https://theskywirenetwork.net) (default "https://theskywirenetwork.net")
-  -D, --dmsg-disc string           dmsg discovery url (default "http://dmsgd.skywire.skycoin.com")
-  -d, --dport uint16               dmsg port to serve (default 80)
-  -e, --dsess int                  dmsg sessions (default 1)
-      --health-only                serve only /health endpoint for testing
-      --login-chain-flags string   override flags for login chain skycoin daemon subprocess
-                                   (default: --block-publisher --localhost-only --download-peerlist=false
-                                   --disable-default-peers --disable-csrf --host-whitelist=fiber.skywire.dev)
-      --login-node string          login chain node: empty=disabled, 'auto'=auto-setup on localhost:6421,
-                                   or URL of external node (e.g. http://localhost:6421)
-  -p, --port uint                  port to serve (default 80)
-  -s, --sk cipher.SecKey           a random key is generated if unspecified
-                                    (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --skycoin-node string        Skycoin mainnet node URL for reward transaction broadcasts (default "http://127.0.0.1:6420")
-  -W, --wd string                  location of dir containing 'log_collection' & reward 'hist' dirs (default "/home/d0mo/go/src/github.com/0pcom/skywire")
-  -w, --wl string                  add whitelist keys, comma separated to permit POST of reward transaction to be broadcast
+      --canonical string            canonical domain for SEO (e.g. https://theskywirenetwork.net) (default "https://theskywirenetwork.net")
+  -D, --dmsg-disc string            dmsg discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -d, --dport uint16                dmsg port to serve (default 80)
+  -e, --dsess int                   dmsg sessions (default 1)
+      --health-only                 serve only /health endpoint for testing
+      --login-chain-flags string    override flags for login chain skycoin daemon subprocess
+                                    (default: --block-publisher --localhost-only --download-peerlist=false
+                                    --disable-default-peers --disable-csrf --host-whitelist=fiber.skywire.dev)
+      --login-node string           login chain node: empty=disabled, 'auto'=auto-setup on localhost:6421,
+                                    or URL of external node (e.g. http://localhost:6421)
+  -p, --port uint                   port to serve (default 80)
+  -s, --sk cipher.SecKey            a random key is generated if unspecified
+                                     (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --skycoin-node string         Skycoin mainnet node URL for reward transaction broadcasts (default "http://127.0.0.1:6420")
+      --survey-min-version string   min skywire version a PUSHed survey may report to be stored/eligible
+                                    (empty = accept any parseable version; the getlogs.sh prune over log_backups
+                                    remains the authoritative floor). Set to the current reward floor to give
+                                    visors an accurate eligible/ineligible signal for the hypervisor UI.
+  -W, --wd string                   location of dir containing 'log_collection' & reward 'hist' dirs (default "/Users/mohammed/Projects/Skycoin/mohammed/skywire")
+  -w, --wl string                   add whitelist keys, comma separated to permit POST of reward transaction to be broadcast
 ```
 
 ## Global Flags

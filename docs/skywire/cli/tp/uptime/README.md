@@ -25,18 +25,19 @@ skywire cli tp uptime
 
 ```
       --cache-age int      re-fetch if cache is older than N minutes (0 disables) (default 5)
-      --cache-dir string   cache directory ("" disables) (default "/tmp/tpd.skywire.skycoin.com")
+      --cache-dir string   cache directory ("" disables) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
       --ids strings        filter to these transport IDs (comma-separated UUIDs) — uses /metrics/uptime/{ids}
       --json               emit raw JSON
   -m, --metrics            fetch network-wide /metrics/uptime aggregate instead of per-transport rows
       --no-cxo             skip CXO subscriber-cache step
       --no-dmsg            skip direct DMSG HTTP step
-      --no-http            skip direct HTTP fallback step
       --no-rpc             skip visor RPC (DmsgHTTP) step
   -o, --on                 only include currently online transports
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --timeout duration   HTTP timeout (default 30s)
   -t, --type string        filter by transport type (stcpr / sudph / dmsg / stcp)
-      --url string         transport-discovery base URL (default "http://tpd.skywire.skycoin.com")
+      --url string         transport-discovery base URL (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -v, --v string           response version (v1|v2|v3) (default "v2")
       --visors strings     filter to transports touching these visor PKs (comma-separated) — uses /metrics/uptime/visor/{pks}
 ```

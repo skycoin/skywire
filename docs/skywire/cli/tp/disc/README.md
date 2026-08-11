@@ -13,10 +13,15 @@ skywire cli tp disc
 ## Flags
 
 ```
-  -i, --id string       obtain transport of given ID
-  -p, --pk string       obtain transports by public key
-      --tpdurl string   transport discovery url (default "http://tpd.skywire.skycoin.com")
-      --http            query transport discovery via HTTP, bypass RPC
+  -i, --id string          obtain transport of given ID
+  -p, --pk string          obtain transports by public key
+      --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --http               skip the structured visor RPC and query transport discovery via the fetch chain (CXO→DmsgHTTP→DMSG)
+      --no-cxo             skip CXO subscriber-cache step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --no-dmsg            skip direct DMSG HTTP step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 
 ## Global Flags

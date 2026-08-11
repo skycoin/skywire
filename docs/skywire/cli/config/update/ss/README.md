@@ -25,6 +25,7 @@ skywire cli config update ss
       --json              print output as JSON
   -o, --output string     config file to output
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+  -u, --user              update config at: $HOME/skywire-config.json
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

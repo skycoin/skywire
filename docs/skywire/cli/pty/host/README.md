@@ -43,7 +43,7 @@ skywire cli pty host
 
 ```
   -l, --listen string          TCP listen address (e.g. :2022, 0.0.0.0:2022, 127.0.0.1:2022) (default ":2022")
-      --sk-from-visor string   path to a skywire-config.json whose .sk we use as the server identity; empty means try the default /opt/skywire/skywire.json
+      --sk-from-visor string   path to a skywire-config.json whose .sk we use as the server identity; empty means try the default /Library/Application Support/Skywire/skywire-config.json
       --allow strings          comma-separated client PKs that may connect (authorized_keys equivalent); merged with --conf's whitelist if both are set
   -c, --conf string            optional dmsgpty config.json with whitelist + identity; --allow + --sk-from-visor override matching fields
       --log-level string       log level: trace|debug|info|warn|error (default "info")

@@ -15,7 +15,7 @@ skywire cli survey
 ```
   -c, --config string      optional config file to use (i.e.: skywire-config.json)
   -D, --dmsg-disc string   value of dmsg discovery
-  -p, --pkg                use package config /opt/skywire/skywire.json
+  -u, --user               use config at: /Users/mohammed/skywire-config.json
 ```
 
 ## Global Flags
