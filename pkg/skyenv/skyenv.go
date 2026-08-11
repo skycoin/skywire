@@ -108,6 +108,19 @@ const (
 	// subscribe to one TPD feed without dragging in the others.
 	DmsgTPDAllTransportsCXOPort uint16 = 55
 
+	// DmsgDMSGDRegistrationCXOPort is the dmsg port the dmsg-discovery's CXO
+	// client-entry REGISTRATION aggregator binds (and each visor's entry
+	// publisher binds for the reverse subscribe). A visor publishes its own
+	// signed disc.Entry as a CXO feed here and announces to dmsg-disc, which
+	// subscribes back and ingests the entry — moving registration off the
+	// timer-driven HTTP PUT (each a fresh Noise+PQ handshake) that dominates
+	// dmsg-discovery CPU. Distinct from DmsgCXOPort (50, the visor's telemetry
+	// publisher) so the entry feed runs on its own CXO node without colliding
+	// with the stats listener on the same visor. Numbered 67 (not adjacent to
+	// the 50–55 CXO block) because 56 is DmsgWebRTCSignalPort; the value only
+	// needs to be collision-free, which the ports_test guards.
+	DmsgDMSGDRegistrationCXOPort uint16 = 67
+
 	// DmsgWebRTCSignalPort is the dmsg port the WebRTC carrier exchanges its SDP
 	// offer/answer + ICE candidates on (a visor dials a peer here to open a
 	// signaling stream; the answerer listens). It MUST live in this registry: it
