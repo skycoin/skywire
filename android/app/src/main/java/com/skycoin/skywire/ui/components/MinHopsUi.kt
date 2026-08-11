@@ -39,6 +39,18 @@ import com.skycoin.skywire.R
 fun MinHopsCard(
     hops: Int,
     enabled: Boolean,
+    /**
+     * Whether routes through intermediates can be built at all — i.e. whether
+     * this visor holds transports to route THROUGH, which on a phone means
+     * Connect to public visors is on.
+     *
+     * With it off, 2 and 3 are offered but cannot work: the dial fails before
+     * the route finder is even asked, because the visor has no transport and
+     * nothing creates one above one hop (see DialRoutes). Offering a choice
+     * that only ever fails is worse than not offering it, so they are shown
+     * disabled with the reason and where to change it.
+     */
+    multiHopAvailable: Boolean = true,
     onSelect: (Int) -> Unit,
 ) {
     SectionCard {
@@ -56,7 +68,7 @@ fun MinHopsCard(
                     // (an operator edited the config by hand) leaves all
                     // three unselected rather than silently rounding.
                     selected = hops == choice,
-                    enabled = enabled,
+                    enabled = enabled && (choice == 1 || multiHopAvailable),
                     onClick = { onSelect(choice) },
                     modifier = Modifier.weight(1f),
                 )
@@ -65,9 +77,10 @@ fun MinHopsCard(
         Spacer(Modifier.height(10.dp))
         Text(
             stringResource(
-                when (hops) {
-                    1 -> R.string.hops_hint_direct
-                    in 2..Int.MAX_VALUE -> R.string.hops_hint_multi
+                when {
+                    !multiHopAvailable -> R.string.hops_hint_needs_autoconnect
+                    hops == 1 -> R.string.hops_hint_direct
+                    hops >= 2 -> R.string.hops_hint_multi
                     else -> R.string.hops_hint_unknown
                 },
             ),
@@ -99,11 +112,15 @@ private fun HopChoice(
             .clickable(enabled = enabled && !selected, onClick = onClick)
             .padding(vertical = 12.dp, horizontal = 8.dp),
     ) {
-        val content = if (selected) {
-            MaterialTheme.colorScheme.onPrimary
-        } else {
-            MaterialTheme.colorScheme.onSurface
-        }
+        // Dimmed when the choice cannot be taken, so "unavailable" is visible
+        // before the tap rather than only in the hint underneath.
+        val content = (
+            if (selected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            }
+            ).copy(alpha = if (enabled || selected) 1f else 0.4f)
         Text(
             text = pluralStringResource(R.plurals.hub_hops, hops, hops),
             style = MaterialTheme.typography.titleMedium,

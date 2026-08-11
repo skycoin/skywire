@@ -170,6 +170,9 @@ fun VpnScreen(
             item {
                 MinHopsCard(
                     hops = state.minHops,
+                    // 2 and 3 need transports to route through, which on this
+                    // phone come from Connect to public visors.
+                    multiHopAvailable = state.publicAutoconnect,
                     // Needs the core: unlike the killswitch and the transport
                     // order, this is not a phone preference applied later —
                     // it is a live PUT to the visor's router settings.

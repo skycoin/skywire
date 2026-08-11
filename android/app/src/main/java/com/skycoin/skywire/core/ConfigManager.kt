@@ -46,6 +46,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
     suspend fun ensureConfig(
         transportPrimary: String,
         fleetEnabled: Boolean,
+        publicAutoconnect: Boolean,
         logLevel: String,
     ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
@@ -72,6 +73,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
             applyPhoneProfile(
                 transportPrimary,
                 fleetEnabled,
+                publicAutoconnect,
                 logLevel,
                 skychatPasswordFile = ensureGatePassword(
                     SkychatProfile.passwordFile(paths),
@@ -150,6 +152,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
     private fun applyPhoneProfile(
         transportPrimary: String,
         fleetEnabled: Boolean,
+        publicAutoconnect: Boolean,
         logLevel: String,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
@@ -165,6 +168,13 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                     "transport" -> put(
                         key,
                         value.jsonObject.edit {
+                            // Re-pinned every launch like the transport order:
+                            // the phone owns this choice, and `config gen`
+                            // wrote its own answer (--autoconn) at generation.
+                            put(
+                                PublicAutoconnect.CONFIG_KEY,
+                                JsonPrimitive(publicAutoconnect),
+                            )
                             putObject("log_store") {
                                 put(
                                     "location",
