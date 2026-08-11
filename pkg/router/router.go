@@ -399,7 +399,7 @@ type Router interface {
 	// EffectiveMinHops resolves a dial's min-hops constraint from the
 	// per-dial options and the visor-global setting together. Exposed
 	// because callers OUTSIDE the router take dial shortcuts that bypass
-	// route setup — appnet's direct dial above all — and cannot honour the
+	// route setup — appnet's direct dial above all — and cannot honor the
 	// operator's constraint without being able to ask what it is.
 	EffectiveMinHops(opts *DialOptions) uint16
 	SetExistingTPOnly(bool)
