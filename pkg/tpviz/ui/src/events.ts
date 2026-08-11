@@ -16,9 +16,11 @@ import { performPing, updateLocalRouteVisibility } from './ping';
 import { checkServer, fetchAllData } from './api';
 import { startFlowAnimation } from './flow-animation';
 import { showGlobe, hideGlobe, updateGlobeData, isGlobeViewActive, setVoronoiMode, setVoronoiOverlay } from './globe';
-import { showCosmos, hideCosmos, updateCosmosData, isCosmosActive, cosmosFit, cosmosZoomBy, cosmosFocusNode, cosmosSetPhysics } from './cosmos-graph';
 import { showNodeInfo } from './node-info';
 import { restoreFilters, saveFilters, resetControls, getInitialView, saveView, ViewMode } from './persist';
+import { showCosmos, hideCosmos } from './cosmos-graph';
+import { showCosmosGo, hideCosmosGo } from './cosmos-go-graph';
+import { webglActive, webglUpdateData, webglFit, webglZoomBy, webglFocusNode, webglSetPhysics } from './webgl-view';
 
 export function wireEventListeners(): void {
     // Restore persisted filter/control state BEFORE the first render so the
@@ -44,11 +46,11 @@ export function wireEventListeners(): void {
     document.getElementById('show-services')!.addEventListener('change', () => { applyFilters(); updateLegend(); });
     document.getElementById('show-flags')!.addEventListener('change', applyFilters);
     document.getElementById('cluster-country')!.addEventListener('change', () => {
-        if (isCosmosActive()) { updateCosmosData(); } else { applyGrouping(); }
+        if (webglActive()) { webglUpdateData(); } else { applyGrouping(); }
         updateLegend();
     });
     document.getElementById('cluster-ip')!.addEventListener('change', () => {
-        if (isCosmosActive()) { updateCosmosData(); } else { applyGrouping(); }
+        if (webglActive()) { webglUpdateData(); } else { applyGrouping(); }
         updateLegend();
     });
     document.getElementById('version-filter')!.addEventListener('change', applyFilters);
@@ -56,22 +58,22 @@ export function wireEventListeners(): void {
 
     // Zoom/fit listeners — route to the active renderer (cosmos WebGL or vis-network).
     document.getElementById('btn-fit')!.addEventListener('click', () => {
-        if (isCosmosActive()) { cosmosFit(); } else if (S.network) { S.network.fit(); }
+        if (webglActive()) { webglFit(); } else if (S.network) { S.network.fit(); }
     });
     document.getElementById('zoom-in')!.addEventListener('click', () => {
-        if (isCosmosActive()) { cosmosZoomBy(1.3); return; }
+        if (webglActive()) { webglZoomBy(1.3); return; }
         if (!S.network) return;
         const scale = S.network.getScale();
         S.network.moveTo({ scale: scale * 1.3 });
     });
     document.getElementById('zoom-out')!.addEventListener('click', () => {
-        if (isCosmosActive()) { cosmosZoomBy(1 / 1.3); return; }
+        if (webglActive()) { webglZoomBy(1 / 1.3); return; }
         if (!S.network) return;
         const scale = S.network.getScale();
         S.network.moveTo({ scale: scale / 1.3 });
     });
     document.getElementById('zoom-fit')!.addEventListener('click', () => {
-        if (isCosmosActive()) { cosmosFit(); } else if (S.network) { S.network.fit(); }
+        if (webglActive()) { webglFit(); } else if (S.network) { S.network.fit(); }
     });
 
     // Resizable sidebar
@@ -173,7 +175,7 @@ export function wireEventListeners(): void {
 
     // Physics toggle
     document.getElementById('toggle-physics')!.addEventListener('change', function(this: HTMLInputElement) {
-        if (isCosmosActive()) { cosmosSetPhysics(this.checked); return; }
+        if (webglActive()) { webglSetPhysics(this.checked); return; }
         if (!S.network) return;
         if (this.checked) {
             S.setUserPhysicsDisabled(false);
@@ -211,11 +213,13 @@ export function wireEventListeners(): void {
     const viewGlobeBtn = document.getElementById('view-globe');
     const viewFlatBtn = document.getElementById('view-flat');
     const viewCosmosBtn = document.getElementById('view-cosmos');
+    const viewCosmosGoBtn = document.getElementById('view-cosmos-go');
 
     const clearViewButtons = () => {
         viewGlobeBtn?.classList.remove('active');
         viewFlatBtn?.classList.remove('active');
         viewCosmosBtn?.classList.remove('active');
+        viewCosmosGoBtn?.classList.remove('active');
     };
 
     // activateView switches to one view (globe / flat=legacy / cosmos=WebGL) and
@@ -225,13 +229,16 @@ export function wireEventListeners(): void {
         clearViewButtons();
         if (v === 'globe') {
             viewGlobeBtn?.classList.add('active');
-            hideCosmos(); S.setGlobeViewActive(true); setVoronoiMode(false); showGlobe();
+            hideCosmos(); hideCosmosGo(); S.setGlobeViewActive(true); setVoronoiMode(false); showGlobe();
         } else if (v === 'flat') {
             viewFlatBtn?.classList.add('active');
-            hideCosmos(); S.setGlobeViewActive(false); hideGlobe();
+            hideCosmos(); hideCosmosGo(); S.setGlobeViewActive(false); hideGlobe();
+        } else if (v === 'cosmosgo') {
+            viewCosmosGoBtn?.classList.add('active');
+            hideCosmos(); S.setGlobeViewActive(false); hideGlobe(); showCosmosGo();
         } else {
             viewCosmosBtn?.classList.add('active');
-            S.setGlobeViewActive(false); hideGlobe(); showCosmos();
+            hideCosmosGo(); S.setGlobeViewActive(false); hideGlobe(); showCosmos();
         }
         if (persist) { saveView(v); }
     };
@@ -239,6 +246,7 @@ export function wireEventListeners(): void {
     viewGlobeBtn?.addEventListener('click', () => activateView('globe'));
     viewFlatBtn?.addEventListener('click', () => activateView('flat'));
     viewCosmosBtn?.addEventListener('click', () => activateView('cosmos'));
+    viewCosmosGoBtn?.addEventListener('click', () => activateView('cosmosgo'));
     // Expose the switcher so an embedding host (Angular tab reacting to a ?view=
     // change on an already-open page) can drive the view without re-mounting.
     (window as any).__tpvizSetView = (v: ViewMode) => activateView(v);
@@ -272,8 +280,8 @@ export function wireEventListeners(): void {
         if (isGlobeViewActive()) {
             updateGlobeData();
         }
-        if (isCosmosActive()) {
-            updateCosmosData();
+        if (webglActive()) {
+            webglUpdateData();
         }
     };
 
@@ -307,11 +315,11 @@ export function wireEventListeners(): void {
     // Search focuses the matching visor in the active WebGL view (it otherwise
     // only drove the hidden flat graph).
     document.getElementById('search')?.addEventListener('input', () => {
-        if (!isCosmosActive()) { return; }
+        if (!webglActive()) { return; }
         const q = ((document.getElementById('search') as HTMLInputElement)?.value || '').trim().toLowerCase();
         if (q.length < 4) { return; }
         const raw: any[] = S.nodesDataset ? S.nodesDataset.get() : [];
         const hit = raw.find((n: any) => (((n.id as string) || '')).toLowerCase().startsWith(q));
-        if (hit) { cosmosFocusNode(hit.id); showNodeInfo(hit.id); }
+        if (hit) { webglFocusNode(hit.id); showNodeInfo(hit.id); }
     });
 }
