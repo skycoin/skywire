@@ -11,11 +11,11 @@
 //
 //   - .modal-overlay must scroll. Without overflow-y the dialog simply
 //     overflows a container that cannot be moved.
-//   - .modal-overlay must NOT centre with align-items, and .modal must carry
-//     `margin: auto` instead. A centred flex item that outgrows its container
+//   - .modal-overlay must NOT center with align-items, and .modal must carry
+//     `margin: auto` instead. A centered flex item that outgrows its container
 //     overflows both edges and the part above the top edge is unreachable by
 //     scrolling — the reported symptom was the name field being invisible
-//     while typing into it. Auto margins centre identically when there is
+//     while typing into it. Auto margins center identically when there is
 //     room and collapse to 0 when there is not.
 //
 // Asserting on CSS text is blunt, but the alternative is a headless browser
@@ -61,14 +61,14 @@ func TestModalDialogsScrollUnderTheKeyboard(t *testing.T) {
 			"dialog taller than the viewport left by the soft keyboard")
 	}
 	if strings.Contains(overlay, "align-items: center") {
-		t.Error(".modal-overlay must not centre with align-items: a centred flex item " +
+		t.Error(".modal-overlay must not center with align-items: a centered flex item " +
 			"that overflows is clipped at the top with no way to scroll to it; " +
 			"centring belongs to .modal's margin: auto")
 	}
 
 	modal := cssRule(t, css, ".modal")
 	if !strings.Contains(modal, "margin: auto") {
-		t.Error(".modal must set margin: auto — it is what centres the dialog now that " +
+		t.Error(".modal must set margin: auto — it is what centers the dialog now that " +
 			".modal-overlay aligns to flex-start")
 	}
 }
