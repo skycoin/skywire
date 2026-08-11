@@ -23,8 +23,8 @@ skywire cli proxy test
 
 ```
   -b, --batch int        number of proxies to test (1=sequential/stable, >1=parallel/experimental) (default 1)
-      --cds string       SD cache dir ("" to disable) (default "/tmp/sd.skycoin.com")
-      --cdu string       UT cache dir ("" to disable) (default "/tmp/ut.skywire.skycoin.com")
+      --cds string       SD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --cdu string       UT cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -m, --cfa int          update cache files if older than n minutes (default 5)
   -c, --connect          connect only mode: add transports without HTTP testing
   -k, --country string   filter proxies by country code
@@ -32,12 +32,12 @@ skywire cli proxy test
       --existing-tp      only use existing transports, don't create new ones
       --local-route      calculate routes locally instead of using route finder
   -s, --pk string        test a specific proxy server by public key
-  -a, --sdurl string     service discovery url (default "http://sd.skycoin.com")
+  -a, --sdurl string     service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
       --testenv          use test deployment
   -t, --timeout int      timeout in seconds for HTTP request (route setup has separate 30s timeout) (default 10)
   -p, --transport        only test proxies that have an existing transport
   -u, --url string       URL to fetch through proxy for testing (default "http://ip.skycoin.com")
-  -w, --uturl string     uptime tracker url (default "http://ut.skywire.skycoin.com")
+  -w, --uturl string     TPD-integrated uptime tracker url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -v, --verbose          verbose output
   -V, --version string   filter proxies by version (empty to skip)
       --via string       test 2-hop routes via specified visor (queries TPD for its transports)

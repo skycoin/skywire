@@ -18,9 +18,7 @@ skywire dmsg curl
 ## Flags
 
 ```
-  -Z, --http               use regular http to connect to DMSG Discovery
   -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
-  -U, --disc-url string    DMSG Discovery URL (default "http://dmsgd.skywire.skycoin.com")
   -A, --disc-addr string   DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -D, --dmsgconf string    dmsghttp-config path
   -e, --sess int           number of DMSG Servers to connect to (default 2)

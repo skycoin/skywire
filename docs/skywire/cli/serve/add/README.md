@@ -24,6 +24,7 @@ skywire cli serve add <port>
 ```
   -d, --desc string        description shown on the landing page
       --dmsg               expose over DMSG (default true)
+      --inject-pk          HTTP mode: inject the authenticated caller's PK as the X-Skywire-Remote-PK header (any client-supplied copy is stripped) so the backend can do per-PK auth. Bind the backend to loopback only — see docs/guides/skynet-website-auth.md
   -l, --label string       label shown on the visor landing page
       --landing            show on the visor landing page (default true)
       --preserve-host      for port-80 HTTP reverse-proxy: keep the original Host header instead of rewriting to --to target. Use when the backend (Caddy / nginx / traefik) dispatches its virtual hosts by Host (e.g. paired with the resolver's subdomain rewrite)

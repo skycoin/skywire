@@ -10,9 +10,9 @@ Address Resolver Server - resolves visor addresses for STCPR/SUDPH connections.
 
 Depends: redis
 
-Production: http://ar.skywire.skycoin.com
+Production: dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80
             dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80
-Test:       http://ar.skywire.dev
+Test:       dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80
             dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80
 
 HTTP Endpoints:
@@ -102,7 +102,7 @@ skywire svc ar
   -c, --config string               path to JSON config file. Generate with: skywire cli config gen --ar -o /etc/skywire/address-resolver.json
                                     
       --dmsg-disc string            url of dmsg discovery
-                                     (default "http://dmsgd.skywire.skycoin.com")
+                                     (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --dmsg-port uint16            dmsg port value
                                      (default 80)
       --dmsg-server-type string     type of dmsg server on dmsghttp handler

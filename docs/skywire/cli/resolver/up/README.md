@@ -24,6 +24,7 @@ skywire cli resolver up
 ## Flags
 
 ```
+      --bind string       SOCKS5 bind host, persisted (e.g. 0.0.0.0 or a LAN IP to serve the LAN; empty = loopback)
       --dmsg-only         only enable the .dmsg resolver
       --no-chain          skip the dmsgweb→skynetweb auto-chain even when both resolvers are up
       --skynet-only       only enable the .skynet resolver

@@ -14,7 +14,7 @@ skywire cli svc
 
 - [ar](ar/README.md) — Address Resolver endpoints
 - [dmsgd](dmsgd/README.md) — DMSG Discovery endpoints
-- [health](health/README.md) — Check health of all deployment services
+- [health](health/README.md) — Check health of the skywire deployment services
 - [nm](nm/README.md) — Network Monitor status
 - [tpd](tpd/README.md) — Transport Discovery endpoints
 

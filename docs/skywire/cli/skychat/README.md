@@ -20,7 +20,9 @@ skywire cli skychat
 - [listen](listen/README.md) — Listen for incoming messages
 - [pair](pair/README.md) — CXO-backed 1:1 chat (paired contacts)
 - [send](send/README.md) — Send a message
+- [send-file](send-file/README.md) — send a file to a peer (--to) or the active group (--group)
 - [status](status/README.md) — Probe the skychat app's health
+- [voice](voice/README.md) — 1:1 voice calls (dmsg/skynet signaling, RTP media on the mesh)
 
 ## Flags
 

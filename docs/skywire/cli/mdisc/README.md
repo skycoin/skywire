@@ -15,17 +15,18 @@ skywire cli mdisc
 
 ## Subcommands
 
+- [check](check/README.md) — Probe every dmsg server's advertised wss front (DNS, TLS cert, 426)
 - [entry](entry/README.md) — Fetch an entry
-- [servers](servers/README.md) — Fetch available servers
+- [servers](servers/README.md) — List dmsg servers with connected-client + available-session counts
 
 ## Flags
 
 ```
-      --cdd string   DMSG cache dir ("" to disable) (default "/tmp/dmsgd.skywire.skycoin.com")
+      --cdd string   DMSG cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -m, --cfa int      update cache file if older than n minutes (default 5)
   -s, --stats        count the number of results
       --testenv      use test deployment
-      --url string   specify alternative DMSG discovery url (default "http://dmsgd.skywire.skycoin.com")
+      --url string   specify alternative DMSG discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
 ```
 
 ## Global Flags

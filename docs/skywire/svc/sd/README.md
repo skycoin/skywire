@@ -10,9 +10,9 @@ Service Discovery Server - registers and discovers services (VPN, proxy, visor).
 
 Depends: redis
 
-Production: http://sd.skycoin.com
+Production: dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80
             dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80
-Test:       http://sd.skywire.dev
+Test:       dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80
             dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80
 
 HTTP Endpoints:
@@ -108,7 +108,7 @@ skywire svc sd
   -c, --config string             path to JSON config file. Generate with: skywire cli config gen --sd -o /etc/skywire/service-discovery.json
                                   
   -d, --dmsg-disc string          url of dmsg-discovery
-                                   (default "http://dmsgd.skywire.skycoin.com")
+                                   (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --dmsg-port uint16          dmsg port value
                                    (default 80)
       --dmsg-server-type string   type of dmsg server on dmsghttp handler

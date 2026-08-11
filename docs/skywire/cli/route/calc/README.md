@@ -19,6 +19,7 @@ skywire cli route calc [<src-pk>] <dst-pk>
 
 ```
       --by-latency         rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -c, --count int          max routes to return (0 = all matching) (default 1)
       --disable            disable local route calculation in visor
       --enable             enable local route calculation in visor
@@ -26,12 +27,12 @@ skywire cli route calc [<src-pk>] <dst-pk>
   -n, --min uint16         minimum hops (0 = use visor's routing.min_hops, fallback 1)
       --no-cxo             skip CXO subscriber-cache step
       --no-dmsg            skip direct DMSG HTTP step
-      --no-http            skip direct HTTP fallback step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --queue-cap int      BFS queue cap (0 = server/local default ~200K, negative = unbounded)
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --source string      transport graph source: tpd (HTTP), dht (visor's local DHT store), auto (DHT then TPD) (default "tpd")
   -t, --timeout duration   request timeout (default 30s)
-  -a, --tpd string         transport discovery URL (default "http://tpd.skywire.skycoin.com")
+  -a, --tpd string         transport discovery URL (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
 ```
 
 ## Global Flags

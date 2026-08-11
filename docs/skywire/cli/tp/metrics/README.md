@@ -18,18 +18,19 @@ skywire cli tp metrics
 ## Flags
 
 ```
-  -d, --days int        number of days of metrics (0 = all, max 35) (default 1)
-  -p, --pk string       filter by public key
-  -n, --top int         show only top N results by bandwidth (0 = all)
-  -t, --by-transport    show bandwidth per transport ID instead of per visor
-      --tree            tree view: visors with their transports as children
-  -v, --verbose         show full public keys (with --by-transport)
-      --tpdurl string   transport discovery url (default "http://tpd.skywire.skycoin.com")
-      --rpc string      RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --no-cxo          skip CXO subscriber-cache step
-      --no-rpc          skip visor RPC (DmsgHTTP) step
-      --no-dmsg         skip direct DMSG HTTP step
-      --no-http         skip direct HTTP fallback step
+  -d, --days int           number of days of metrics (0 = all, max 35) (default 1)
+  -p, --pk string          filter by public key
+  -n, --top int            show only top N results by bandwidth (0 = all)
+  -t, --by-transport       show bandwidth per transport ID instead of per visor
+      --tree               tree view: visors with their transports as children
+  -v, --verbose            show full public keys (with --by-transport)
+      --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --no-cxo             skip CXO subscriber-cache step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --no-dmsg            skip direct DMSG HTTP step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 
 ## Global Flags

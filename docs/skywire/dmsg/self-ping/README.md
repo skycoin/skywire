@@ -11,7 +11,7 @@ command exits 1.
 
 The --server flag is required and must be in the format pk@ip:port, e.g.:
 
-  skywire dmsg self-ping --server 02a2d4c3...@145.79.124.73:30082
+  skywire dmsg self-ping --server 02a2d4c3...@45.79.124.73:30082
 
 ## Usage
 
