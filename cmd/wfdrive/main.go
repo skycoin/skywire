@@ -25,10 +25,10 @@
 //	curl  http://127.0.0.1:9224/health            # session + tab usable?
 //	curl  http://127.0.0.1:9224/quit              # session.end + exit
 //
-// Captures are written under WFDRIVE_OUTDIR (default: the temp dir); an "out"
-// that escapes that root falls back to the default rather than writing where
-// it was asked to — the control port is loopback-only, but "out" still comes
-// from a request.
+// Captures land in WFDRIVE_OUTDIR (default: the temp dir). "out" names the
+// file within that directory, not a path — any directory part is stripped, so
+// nothing a request can say writes outside it. The control port is
+// loopback-only, but "out" still arrives from a request.
 //
 // /nav, /shoot and /eval write <out>.png + <out>.console.txt and return JSON.
 // Splitting navigation, evaluation and capture apart matters for anything that
@@ -300,24 +300,17 @@ func outRoot() string {
 	return filepath.Clean(os.TempDir())
 }
 
-// safeOut resolves a requested output prefix to a path under outRoot, or
-// returns the default when it escapes. A relative name is taken as relative to
-// the root, so the common "out=run1" just works.
+// safeOut turns a requested output prefix into a path under outRoot. "out" is
+// treated as a NAME, not a path: any directory part is stripped, so nothing a
+// request can say escapes the root. Pass WFDRIVE_OUTDIR to choose where
+// captures land; the name only picks the file within it.
 func safeOut(out string) string {
-	root := outRoot()
-	def := filepath.Join(root, "wfdrive")
-	if out == "" {
-		return def
+	name := filepath.Base(filepath.Clean(out))
+	switch name {
+	case "", ".", "..", string(os.PathSeparator):
+		name = "wfdrive"
 	}
-	p := out
-	if !filepath.IsAbs(p) {
-		p = filepath.Join(root, p)
-	}
-	p = filepath.Clean(p)
-	if p != root && !strings.HasPrefix(p, root+string(os.PathSeparator)) {
-		return def
-	}
-	return p
+	return filepath.Join(outRoot(), name)
 }
 
 func (d *driver) shoot(bctx, outPrefix string) {
