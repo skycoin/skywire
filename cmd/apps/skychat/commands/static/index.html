@@ -5386,14 +5386,21 @@
         }
         menu.innerHTML = html;
         document.body.appendChild(menu);
+        // Kept so the menu can be re-pinned when the viewport changes shape
+        // under it rather than thrown away — see repositionMenus.
+        this._msgMenuBtn = btn;
+        this._placeMsgMenu(menu, btn);
+        this._syncMenuScrim();
+      }
+      _placeMsgMenu(menu, btn) {
         const r = btn.getBoundingClientRect();
         menu.style.top = (r.bottom + 4) + 'px';
         menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, Math.max(8, r.left)) + 'px';
-        this._syncMenuScrim();
       }
       closeMsgMenu() {
         const m = document.getElementById('msgMenu');
         if (m) m.remove();
+        this._msgMenuBtn = null;
         this._syncMenuScrim();
       }
 
@@ -10469,6 +10476,48 @@
         this.closeAllMenus();
       }
 
+      // repositionMenus keeps an open menu pinned to its trigger when the
+      // window changes shape under it. It is what `resize` calls, and it
+      // used to call dismissMenus instead.
+      //
+      // The soft keyboard is a resize. Opening the header ⋮ while the
+      // composer had focus moved focus onto the first menu row, which
+      // retracted the keyboard, which fired `resize` — so the menu the tap
+      // had just opened was dismissed before it could be read, and all the
+      // user saw was the keyboard going away. The same resize tore the
+      // staged #msgMenu out from under an open bottom sheet, leaving its
+      // Forward / Save / Delete rows pointing at a message that was no
+      // longer recorded anywhere.
+      //
+      // The window moving is not the user asking for the menu to close. The
+      // scrim is, and it still is — this only re-measures.
+      repositionMenus() {
+        this._menuPairs().forEach(p => {
+          const menu = document.getElementById(p.menu);
+          if (!menu || !menu.classList.contains('visible')) return;
+          const btnId = p.menu === 'hdrMenu' ? (this._hdrMenuBtn || p.btns[0]) : p.btns[0];
+          // A trigger with no box is one the new layout has taken off the
+          // screen. There is nothing left to pin to, and a menu pinned to a
+          // zero rect lands in the top-left corner, so it closes instead.
+          const btn = document.getElementById(btnId);
+          const r = btn && btn.getBoundingClientRect();
+          if (!r || (!r.width && !r.height)) {
+            if (p.menu === 'hdrMenu') this.closeHeaderMenu(); else this.closeMenu(p.menu, btnId);
+            return;
+          }
+          this._positionMenu(p.menu, btnId);
+        });
+        // display:none is the bottom sheet's hidden data carrier, which has
+        // no place on screen to keep; the sheet is laid out by CSS and rides
+        // the resize on its own.
+        const msg = document.getElementById('msgMenu');
+        if (msg && msg.style.display !== 'none') {
+          const btn = this._msgMenuBtn;
+          if (btn && btn.isConnected) this._placeMsgMenu(msg, btn);
+          else this.closeMsgMenu();
+        }
+      }
+
       toggleStartMenu(ev) {
         if (ev) ev.stopPropagation();
         const menu = document.getElementById('startMenu');
@@ -13294,8 +13343,11 @@
     // Keep the open menu attached to its button when the viewport changes
     // — a resize can move the compose button between the header and the
     // floating position, and an orientation change moves it a long way.
+    // Re-measured, not dismissed: on a phone the commonest resize by far is
+    // the soft keyboard, and closing on it made the header ⋮ unopenable
+    // while composing (see repositionMenus).
     window.addEventListener('resize', function() {
-      app.dismissMenus();
+      app.repositionMenus();
     });
 
     // Scrolling the dialog is now possible (see .modal-overlay); this is what
