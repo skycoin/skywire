@@ -11,6 +11,7 @@ import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.PublicAutoconnect
 import com.skycoin.skywire.core.SkyVpnService
 import com.skycoin.skywire.core.TransportPreference
 import com.skycoin.skywire.core.VpnTunnel
@@ -51,6 +52,12 @@ data class VpnUiState(
      */
     val minHops: Int = 0,
     val killswitch: Boolean = false,
+    /**
+     * Whether this visor builds transports to public visors. Route lengths
+     * above one hop have nothing to route through without it — see
+     * [PublicAutoconnect] and MinHopsCard.
+     */
+    val publicAutoconnect: Boolean = PublicAutoconnect.DEFAULT,
     /** Last summary overview — the device's own address comes off this. */
     val overview: Overview? = null,
     val lastServer: SavedServer? = null,
@@ -160,6 +167,11 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
                         prefs.string(TransportPreference.PREF_KEY).first(),
                     ),
                 )
+            }
+        }
+        viewModelScope.launch {
+            prefs.boolean(PublicAutoconnect.PREF_KEY, PublicAutoconnect.DEFAULT).collect { on ->
+                mutable.update { it.copy(publicAutoconnect = on) }
             }
         }
         viewModelScope.launch {

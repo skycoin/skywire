@@ -413,6 +413,21 @@
     <string name="vpn_attempt_log_empty">The visor logged nothing for this attempt.</string>
     <string name="vpn_attempt_log_copy">Copy details</string>
 
+    <!-- Automatic transports to public visors. Off on this build because a
+         handset pays for them in battery and a radio that never idles, and
+         they mostly serve the network rather than this device. It is also
+         what gives the visor transports to route THROUGH, so a route length
+         above one hop needs it — hence the second line. -->
+    <!-- Route lengths above one hop need transports to route THROUGH, and on
+         this phone those come from Connect to public visors. Without it the
+         dial fails before the route finder is asked, so the choices are shown
+         disabled with the reason rather than offered and always failing. -->
+    <string name="hops_hint_needs_autoconnect">Only one hop is available: routing through intermediaries needs open transports to public visors, which is off. Turn on “Connect to public visors” in Settings to use 2 or 3 hops.</string>
+
+    <string name="settings_autoconnect">Connect to public visors</string>
+    <string name="settings_autoconnect_hint">Keeps open transports to public visors so the network can route through this phone, and so this phone can route through them. Costs battery and mobile data, which is why it is off. Route lengths above one hop need it.</string>
+    <string name="settings_autoconnect_restart">Applies when the core next starts.</string>
+
     <string name="wallet_coins_add">Add a coin or token</string>
     <!-- Removing a coin the user added. Only the list entry goes: no key is
          touched, which is the whole difference from removing a wallet, and

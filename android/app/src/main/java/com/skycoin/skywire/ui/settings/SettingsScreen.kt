@@ -167,6 +167,12 @@ fun SettingsScreen(
                 )
             }
             item {
+                PublicAutoconnectCard(
+                    state = state,
+                    onToggle = viewModel::setPublicAutoconnect,
+                )
+            }
+            item {
                 AppLockCard(
                     state = state,
                     onToggle = { wanted ->
@@ -403,6 +409,46 @@ private fun ConfigCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * Automatic transports to public visors.
+ *
+ * Off on this build — see [com.skycoin.skywire.core.PublicAutoconnect] for
+ * why a phone opts out by default. Worth surfacing rather than leaving buried
+ * in the config: it is the switch that decides whether this visor holds any
+ * transports of its own, and a visor holding none cannot dial a route through
+ * intermediates at all, which is what a route length above one hop asks for.
+ */
+@Composable
+private fun PublicAutoconnectCard(
+    state: SettingsUiState,
+    onToggle: (Boolean) -> Unit,
+) {
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.settings_autoconnect),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.settings_autoconnect_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = state.publicAutoconnect, onCheckedChange = onToggle)
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            stringResource(R.string.settings_autoconnect_restart),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
