@@ -25,6 +25,11 @@
 //	curl  http://127.0.0.1:9224/health            # session + tab usable?
 //	curl  http://127.0.0.1:9224/quit              # session.end + exit
 //
+// Captures are written under WFDRIVE_OUTDIR (default: the temp dir); an "out"
+// that escapes that root falls back to the default rather than writing where
+// it was asked to — the control port is loopback-only, but "out" still comes
+// from a request.
+//
 // /nav, /shoot and /eval write <out>.png + <out>.console.txt and return JSON.
 // Splitting navigation, evaluation and capture apart matters for anything that
 // has to settle between steps: /nav evaluates immediately before it shoots, so
@@ -48,6 +53,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -283,6 +289,37 @@ func (d *driver) evalStr(bctx, expr string) string {
 	return strings.Trim(out, `"`)
 }
 
+// outRoot is the directory wfdrive is allowed to write captures into. The
+// control port is loopback-only, but "out" still arrives from a request, and a
+// request that can name any path can overwrite any file this process can. Keep
+// it under one root — the temp dir by default, WFDRIVE_OUTDIR to move it.
+func outRoot() string {
+	if dir := os.Getenv("WFDRIVE_OUTDIR"); dir != "" {
+		return filepath.Clean(dir)
+	}
+	return filepath.Clean(os.TempDir())
+}
+
+// safeOut resolves a requested output prefix to a path under outRoot, or
+// returns the default when it escapes. A relative name is taken as relative to
+// the root, so the common "out=run1" just works.
+func safeOut(out string) string {
+	root := outRoot()
+	def := filepath.Join(root, "wfdrive")
+	if out == "" {
+		return def
+	}
+	p := out
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(root, p)
+	}
+	p = filepath.Clean(p)
+	if p != root && !strings.HasPrefix(p, root+string(os.PathSeparator)) {
+		return def
+	}
+	return p
+}
+
 func (d *driver) shoot(bctx, outPrefix string) {
 	if shot, e := d.cmd("browsingContext.captureScreenshot", map[string]interface{}{"context": bctx}); e == nil {
 		var s struct {
@@ -325,9 +362,7 @@ func serveMode() error {
 
 	// report writes the screenshot + console for a step and answers as JSON.
 	report := func(w http.ResponseWriter, out, evalOut string, warn error) {
-		if out == "" {
-			out = "/tmp/wfdrive"
-		}
+		out = safeOut(out)
 		_ = d.withTab(func(bctx string) error { d.shoot(bctx, out); return nil }) //nolint:errcheck
 		con := d.dumpConsole()
 		_ = os.WriteFile(out+".console.txt", []byte(con+"\n"), 0o644) //nolint:errcheck,gosec
