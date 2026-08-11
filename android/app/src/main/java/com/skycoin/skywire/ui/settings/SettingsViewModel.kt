@@ -15,6 +15,7 @@ import com.skycoin.skywire.core.ConfigVault
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.core.PublicAutoconnect
+import com.skycoin.skywire.core.RemoteManagement
 import com.skycoin.skywire.core.SecretStore
 import com.skycoin.skywire.core.SkywireCoreService
 import com.skycoin.skywire.core.SkywirePaths
@@ -39,6 +40,8 @@ data class SettingsUiState(
     val appLockEnabled: Boolean = AppLock.DEFAULT,
     /** Automatic transports to public visors — see [PublicAutoconnect]. */
     val publicAutoconnect: Boolean = PublicAutoconnect.DEFAULT,
+    /** The remote-management grant — empty means nothing granted. */
+    val remoteManagementPk: String = "",
     /** False when the phone has no screen lock and no enrolled biometric. */
     val biometricsAvailable: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
@@ -106,6 +109,13 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
                 .collectLatest { enabled ->
                     mutable.update { it.copy(publicAutoconnect = enabled) }
                 }
+        }
+        viewModelScope.launch {
+            prefs.string(RemoteManagement.PREF_KEY).collectLatest { stored ->
+                mutable.update {
+                    it.copy(remoteManagementPk = RemoteManagement.sanitize(stored).orEmpty())
+                }
+            }
         }
         viewModelScope.launch {
             prefs.string(ThemeMode.PREF_KEY).collectLatest { stored ->
@@ -262,6 +272,32 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun setPublicAutoconnect(enabled: Boolean) {
         viewModelScope.launch { prefs.putBoolean(PublicAutoconnect.PREF_KEY, enabled) }
+    }
+
+    /**
+     * Grant remote management to the visor whose public key is [raw], or
+     * refuse it on shape grounds with the reason on the snackbar. Stored
+     * first and applied by the config rewrite on the next core start, like
+     * [setPublicAutoconnect] — the trust list is read when the visor boots.
+     */
+    fun grantRemoteManagement(raw: String) {
+        viewModelScope.launch {
+            val pk = RemoteManagement.sanitize(raw)
+            if (pk == null) {
+                report(getApplication<Application>().getString(R.string.settings_remote_invalid))
+                return@launch
+            }
+            prefs.putString(RemoteManagement.PREF_KEY, pk)
+            report(getApplication<Application>().getString(R.string.settings_remote_granted))
+        }
+    }
+
+    /** Withdraw the grant. Takes effect when the core next starts. */
+    fun revokeRemoteManagement() {
+        viewModelScope.launch {
+            prefs.putString(RemoteManagement.PREF_KEY, null)
+            report(getApplication<Application>().getString(R.string.settings_remote_revoked))
+        }
     }
 
     fun setBiometricsAvailable(available: Boolean) {

@@ -176,6 +176,13 @@ fun SettingsScreen(
                 )
             }
             item {
+                RemoteManagementCard(
+                    state = state,
+                    onGrant = { dialog = SettingsDialog.EnterRemotePk },
+                    onRevoke = viewModel::revokeRemoteManagement,
+                )
+            }
+            item {
                 AppLockCard(
                     state = state,
                     onToggle = { wanted ->
@@ -228,6 +235,14 @@ fun SettingsScreen(
                         else -> dialog = SettingsDialog.ReplaceWarning(entered, pk)
                     }
                 }
+            },
+        )
+
+        SettingsDialog.EnterRemotePk -> RemotePkDialog(
+            onDismiss = { dialog = null },
+            onSubmit = { entered ->
+                viewModel.grantRemoteManagement(entered)
+                dialog = null
             },
         )
 
@@ -289,6 +304,7 @@ fun SettingsScreen(
 /** Which dialog is open, and what it is carrying. */
 private sealed interface SettingsDialog {
     data object EnterSecretKey : SettingsDialog
+    data object EnterRemotePk : SettingsDialog
     data class ReplaceWarning(val secretKey: String, val publicKey: String) : SettingsDialog
     data class ReplaceFinal(val secretKey: String, val publicKey: String) : SettingsDialog
     data object NewIdentityWarning : SettingsDialog
@@ -477,6 +493,110 @@ private fun PublicAutoconnectCard(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
+}
+
+/**
+ * The remote-management grant — see [com.skycoin.skywire.core.RemoteManagement].
+ *
+ * Rendered as a grant rather than a toggle: what is being switched on is not
+ * a feature of this phone but another machine's full control of it, so the
+ * card always shows *which* key holds that control, and revoking it is one
+ * tap with no key to retype.
+ */
+@Composable
+private fun RemoteManagementCard(
+    state: SettingsUiState,
+    onGrant: () -> Unit,
+    onRevoke: () -> Unit,
+) {
+    SectionCard {
+        Text(
+            stringResource(R.string.settings_remote),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.settings_remote_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(10.dp))
+        if (state.remoteManagementPk.isEmpty()) {
+            TextButton(onClick = onGrant) {
+                Text(stringResource(R.string.settings_remote_grant))
+            }
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    shortPk(state.remoteManagementPk),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onRevoke) {
+                    Text(stringResource(R.string.settings_remote_revoke))
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(R.string.settings_remote_restart),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Paste-a-key dialog for [RemoteManagementCard]. A public key, so no [SecureWindow]. */
+@Composable
+private fun RemotePkDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_remote_dialog_title)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.settings_remote_dialog_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.trim() },
+                    singleLine = false,
+                    maxLines = 3,
+                    label = { Text(stringResource(R.string.settings_remote_label)) },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(text) },
+                enabled = text.isNotEmpty(),
+            ) {
+                Text(stringResource(R.string.settings_remote_grant_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
 }
 
 @Composable
