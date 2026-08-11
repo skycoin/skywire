@@ -281,6 +281,13 @@ func ServeWasm(ctx context.Context, cfg WasmServeConfig) error {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(wasmVer)) //nolint:errcheck
 	})
+	// Distinct browser-tab favicon for the wasm-visor surface (violet mesh-cloud),
+	// so it reads apart at a glance from a host-native hypervisor tab.
+	mux.HandleFunc("/favicon.ico", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/x-icon")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = w.Write(wasmhv.FaviconICO) //nolint:errcheck
+	})
 
 	// --harness: the /ctl/* operator control bridge + the ctl-bridge.js the
 	// page loads to connect to it. DEV ONLY — unauthenticated control/eval.
