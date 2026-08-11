@@ -31,6 +31,18 @@ type boundary struct {
 	x, y, r float64
 	color   string
 	label   string
+	// flag is the country emoji the label is prefixed with, when grouping by
+	// country and the group is a known one.
+	flag string
+}
+
+// labelText is the ring's caption: the country flag, when there is one,
+// followed by the group name and its size.
+func (b boundary) labelText() string {
+	if b.flag != "" {
+		return b.flag + " " + b.label
+	}
+	return b.label
 }
 
 // overlay draws the boundaries onto a 2D canvas stacked over the graph.
@@ -91,6 +103,7 @@ func (o *overlay) setBoundaries(v js.Value) {
 				r:     b.Get("r").Float(),
 				color: b.Get("color").String(),
 				label: b.Get("label").String(),
+				flag:  b.Get("flag").String(),
 			})
 		}
 	}
@@ -193,10 +206,10 @@ func (o *overlay) frame() {
 		ctx.Set("lineWidth", 1.2)
 		ctx.Set("strokeStyle", b.color)
 		ctx.Call("stroke")
-		if b.label != "" {
-			ctx.Set("globalAlpha", 0.9)
+		ctx.Set("globalAlpha", 1)
+		if label := b.labelText(); label != "" {
 			ctx.Set("fillStyle", b.color)
-			ctx.Call("fillText", b.label, c[0], c[1]-sr-6)
+			ctx.Call("fillText", label, c[0], c[1]-sr-5)
 		}
 	}
 	ctx.Set("globalAlpha", 1)
