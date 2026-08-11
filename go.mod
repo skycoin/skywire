@@ -104,6 +104,8 @@ require (
 	google.golang.org/protobuf v1.36.12
 )
 
+require github.com/benhoyt/goawk v1.31.0 // indirect
+
 require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	golang.org/x/mod v0.39.0 // indirect
