@@ -5413,10 +5413,16 @@
         this._requestFile(from, fid, fname);
       }
 
-      // deleteForMe removes the message from this device only. DM threads are
-      // localStorage-cached, so dropping it from the cache persists the hide;
-      // groups reload from visor history, so the ts_nano key is remembered in
-      // hiddenGroup and filtered on reload.
+      // deleteForMe removes the message from this device only.
+      //
+      // Both kinds reload from the visor, so neither can be deleted by editing
+      // what the browser is holding. A group remembers a ts_nano tombstone in
+      // hiddenGroup and filters it on reload; a DM asks the visor to forget its
+      // stored copy, because for a DM the visor's history store IS the durable
+      // copy and loadHistoryFor refills an empty thread from it every time the
+      // conversation is opened. Dropping it from the localStorage cache alone
+      // left the message on disk to be handed straight back — deleted, then
+      // back on the next visit.
       deleteForMe() {
         const menu = document.getElementById('msgMenu');
         if (!menu) return;
@@ -5424,13 +5430,32 @@
         const key = this.activeKey();
         this.closeMsgMenu();
         if (!key || !this.messages[key]) return;
+        const dropped = this.messages[key].find(m => m && String(m.mid) === String(mid));
         this.messages[key] = this.messages[key].filter(m => String(m.mid) !== String(mid));
         if (this.group) {
           if (tsNano) { this.hiddenGroup.add(this._groupHideKey(this.group, tsNano)); this._saveHiddenGroup(); }
         } else {
           this.saveChat(key);
+          this._forgetStored(key, dropped);
         }
         this._rerenderActive();
+      }
+
+      // _forgetStored drops the visor's stored copy of one DM. Local only: the
+      // peer is told nothing, since their copy is theirs to keep.
+      //
+      // Skipped for notes (nothing on the wire, nothing stored) and for a
+      // message with no wireId — one sent so recently that the id hasn't come
+      // back yet, which is also the only window in which it isn't findable in
+      // the store. Best-effort: the bubble is already gone from the screen and
+      // the cache, so a failed request must not undo that.
+      _forgetStored(pk, msg) {
+        if (this.isSaved() || !msg || !msg.wireId) return;
+        fetch('/history/forget', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk, id: msg.wireId })
+        }).catch(e => console.debug('skychat: forget stored copy skipped:', e.message));
       }
 
       // deleteForAll removes a GROUP message we authored for everyone: it drops
@@ -8405,6 +8430,9 @@
       }
 
       // savePeerName applies what's in the Contact Settings field.
+      // Saves the name and, with it, any picture the published-profile lookup
+      // put on offer — one button for the one dialog, so accepting what a peer
+      // publishes is a single deliberate act.
       savePeerName() {
         const pk = this.recipient;
         const field = document.getElementById('modalName');
@@ -8412,9 +8440,18 @@
         const had = this.peerName(pk);
         this.setPeerName(pk, field.value);
         const now = this.peerName(pk);
-        this.showToast(now ? `Saved as "${this.escapeHtml(now)}".`
-          : (had ? 'Name cleared.' : 'Enter a name first.'));
-        if (now || had) this.closeSettings();
+        const picture = this._applyOfferedAvatar(pk);
+        if (picture === 'full') {
+          this.showToast('No room left in this browser\'s storage for another picture.', 'error');
+        } else if (now && picture === 'stored') {
+          this.showToast(`Saved as "${this.escapeHtml(now)}", with their picture.`);
+        } else if (picture === 'stored') {
+          this.showToast('Picture saved.');
+        } else {
+          this.showToast(now ? `Saved as "${this.escapeHtml(now)}".`
+            : (had ? 'Name cleared.' : 'Enter a name first.'));
+        }
+        if (now || had || picture === 'stored') this.closeSettings();
       }
 
       // _paintHeaderPeer writes the open DM's name/key into the chat header.
@@ -8792,18 +8829,42 @@
           const field = document.getElementById('modalName');
           if (p.name && field) field.value = p.name;
           if (p.avatar) {
+            // Shown in the dialog and held, not written. The picture used to
+            // be stored the instant this ran, which quietly replaced one the
+            // user had chosen for that person — with no undo, and no way to
+            // tell it had happened beyond the picture being someone else's.
+            // The name two lines up was always offered rather than applied;
+            // this is the same rule, and what the contract above promises.
             document.getElementById('modalAvatar').src = p.avatar;
-            try {
-              localStorage.setItem(`i_${pk}`, p.avatar);
-              this.updateAvatarUI(pk, p.avatar);
-              this.renderContacts();
-            } catch (e) {
-              console.debug('skychat: could not store fetched avatar:', e && e.message);
-            }
+            this._offeredAvatar = { pk, dataUrl: p.avatar };
           }
-          this.showToast(p.name ? `They call themselves "${this.escapeHtml(p.name)}". Press Save Name to keep it.`
-            : 'Picture updated.');
+          const both = p.name && p.avatar;
+          this.showToast(
+            both ? `They call themselves "${this.escapeHtml(p.name)}". Press Save Name to keep the name and picture.`
+              : p.name ? `They call themselves "${this.escapeHtml(p.name)}". Press Save Name to keep it.`
+                : 'They publish a picture. Press Save Name to keep it.');
         });
+      }
+
+      // _applyOfferedAvatar commits the picture fetchPeerProfileInto put on
+      // offer, if one is waiting for this peer. An offer for anyone else is
+      // stale — the dialog moved on — and is dropped rather than applied.
+      //
+      // Returns 'stored', 'none' or 'full' so the caller can say one thing
+      // about the whole save instead of racing its own toast.
+      _applyOfferedAvatar(pk) {
+        const offered = this._offeredAvatar;
+        this._offeredAvatar = null;
+        if (!offered || offered.pk !== pk) return 'none';
+        try {
+          localStorage.setItem(`i_${pk}`, offered.dataUrl);
+        } catch (e) {
+          console.debug('skychat: could not store offered avatar:', e && e.message);
+          return 'full';
+        }
+        this.updateAvatarUI(pk, offered.dataUrl);
+        this.renderContacts();
+        return 'stored';
       }
 
       // fetchPeerProfile asks the visor for a peer's published profile.
@@ -11835,9 +11896,14 @@
         // is "I am done with these messages", not "I no longer know this
         // person". A saved contact keeps its name and picture, and Remove
         // from contacts is the action that discards them.
-        if (!this.isContact(pk)) {
-          localStorage.removeItem(`i_${pk}`);
-        }
+        //
+        // The picture is kept for a non-contact too, which it used to not be.
+        // Nothing here distinguishes a picture the user chose for someone
+        // from one the app pulled off their published profile, so discarding
+        // it took the deliberate one with the disposable one — and the same
+        // sentence above says why that is the wrong reading of this action.
+        // Remove picture is the control that means "lose it"; the cost of
+        // keeping it is one avatar, which _cropToSquare caps at 32 KB.
         this.renderContacts();
 
         this.recipient = null;
@@ -11877,6 +11943,9 @@
       openSettings() {
         // The notes thread has no peer to have settings about.
         if (!this.recipient || this.isSaved()) return;
+        // A picture offered by a previous lookup was never accepted; opening
+        // the dialog again starts from what is actually stored.
+        this._offeredAvatar = null;
         const image = localStorage.getItem(`i_${this.recipient}`) || 'p.png';
         document.getElementById('modalAvatar').src = image;
         document.getElementById('modalPk').textContent = this.recipient;
@@ -11887,6 +11956,8 @@
       }
 
       closeSettings() {
+        // Closing without Save declines whatever the lookup offered.
+        this._offeredAvatar = null;
         document.getElementById('settingsModal').classList.remove('visible');
       }
 
@@ -12596,7 +12667,21 @@
           }
           return m;
         });
-        localStorage.setItem(`c_${pk}`, JSON.stringify(serializable));
+        try {
+          localStorage.setItem(`c_${pk}`, JSON.stringify(serializable));
+        } catch (e) {
+          // Out of quota. Every caller has ALREADY changed this.messages and
+          // is about to re-render from it, so throwing from here abandons the
+          // operation half-done — deleteForMe in particular would leave the
+          // message gone from memory, still in the cache, and the screen never
+          // redrawn. Report once and let the caller finish; the thread simply
+          // stops being cached, which the next reload recovers from history.
+          console.debug('skychat: could not cache thread:', e && e.message);
+          if (!this._quotaWarned) {
+            this._quotaWarned = true;
+            this.showToast('This browser is out of storage — conversations are no longer being cached.', 'error');
+          }
+        }
       }
 
       saveSeenList() {
