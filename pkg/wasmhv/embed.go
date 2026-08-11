@@ -118,6 +118,13 @@ var PWAIcon192 []byte
 //go:embed icon-512.png
 var PWAIcon512 []byte
 
+// FaviconICO is the wasm-visor's browser-tab favicon: the Skywire mesh-cloud
+// mark tinted violet, so a wasm-visor tab is distinct at a glance from a
+// host-native hypervisor tab. Served at /favicon.ico by ServeWasm.
+//
+//go:embed favicon.ico
+var FaviconICO []byte
+
 // WasmExecJS is Go's lib/wasm/wasm_exec.js, vendored here so a generated file is
 // self-contained. It MUST match the Go toolchain that built the embedded/passed
 // dmsg.wasm — refresh it with the wasm build (the Makefile bundle target copies
