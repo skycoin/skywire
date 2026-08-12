@@ -8,6 +8,9 @@ package clivisor
 
 import (
 	"testing"
+	"time"
+
+	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -91,5 +94,44 @@ func TestFormatARAddr(t *testing.T) {
 				t.Errorf("formatARAddr(%+v):\n  got:  %q\n  want: %q", c.in, got, c.want)
 			}
 		})
+	}
+}
+
+func TestAbbrevHash(t *testing.T) {
+	const full = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+	got := abbrevHash(full)
+	if got != "9f86d081…b0f00a08" {
+		t.Fatalf("abbrevHash(%q) = %q", full, got)
+	}
+	// Short enough to show whole: left alone rather than padded or cut.
+	if s := abbrevHash("abc123"); s != "abc123" {
+		t.Fatalf("abbrevHash short = %q, want it unchanged", s)
+	}
+}
+
+func TestPluralVisors(t *testing.T) {
+	for n, want := range map[int]string{0: "0 visors", 1: "1 visor", 7: "7 visors"} {
+		if got := pluralVisors(n); got != want {
+			t.Errorf("pluralVisors(%d) = %q, want %q", n, got, want)
+		}
+	}
+}
+
+// A latency the visor never measured must not be reported as zero. The
+// tracker keys on the visor's own PK and usually holds no entry for it, so the
+// summary carries a zero value that means "unknown", not "instant".
+func TestDmsgLatencyUnmeasured(t *testing.T) {
+	if got := dmsgLatency(&visor.Summary{}); got != "" {
+		t.Errorf("nil DmsgStats: got %q, want empty", got)
+	}
+	zero := &visor.Summary{DmsgStats: &dmsgtracker.DmsgClientSummary{}}
+	if got := dmsgLatency(zero); got != "" {
+		t.Errorf("zero RoundTrip: got %q, want empty", got)
+	}
+	measured := &visor.Summary{DmsgStats: &dmsgtracker.DmsgClientSummary{
+		RoundTrip: 8 * time.Millisecond,
+	}}
+	if got := dmsgLatency(measured); got != "8ms" {
+		t.Errorf("measured: got %q, want 8ms", got)
 	}
 }

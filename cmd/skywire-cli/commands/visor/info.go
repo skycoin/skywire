@@ -199,7 +199,7 @@ var summaryCmd = &cobra.Command{
 			RegionName:           summary.Overview.RegionName,
 			CityName:             summary.Overview.CityName,
 			DMSGServers:          summary.DMSGServers,
-			DmsgLatency:          summary.DmsgStats.RoundTrip.String(),
+			DmsgLatency:          dmsgLatency(summary),
 			VisorVersion:         summary.Overview.BuildInfo.Version,
 			ConfigVersion:        summary.ConfigVersion,
 			UptimeTracker:        summary.Health.ServicesHealth,
@@ -791,26 +791,42 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 	}
 
 	msg += fmt.Sprintf("DMSG Servers (%d connected):\n              %s\n", len(summary.DMSGServers), dmsgServersStr)
-	msg += fmt.Sprintf("DMSG Latency: %s\n", summary.DmsgStats.RoundTrip)
+	// Only when it was actually measured. The tracker keys on the visor's own
+	// PK and usually holds no entry for it, leaving the zero value — which
+	// printed as a confident "DMSG Latency: 0s" directly under a list of
+	// servers whose real round-trips were hundreds of milliseconds. Say
+	// nothing rather than something false; the per-server figures above are
+	// the measured ones.
+	if summary.DmsgStats != nil && summary.DmsgStats.RoundTrip > 0 {
+		msg += fmt.Sprintf("DMSG Latency: %s\n", summary.DmsgStats.RoundTrip)
+	}
 
-	// Transport summary by type
+	// Transport summary by type, and by how many DISTINCT peers those
+	// transports reach. The totals alone cannot tell ten links to ten visors
+	// from ten links to three, which is the question being asked of this line
+	// most of the time.
 	tpCounts := make(map[string]int)
+	peers := make(map[cipher.PubKey]struct{})
 	for _, tp := range summary.Overview.Transports {
 		tpCounts[string(tp.Type)]++
+		peers[tp.Remote] = struct{}{}
 	}
 	tpTotal := len(summary.Overview.Transports)
 	tpStr := fmt.Sprintf("%d", tpTotal)
 	if tpTotal > 0 {
-		tpStr += " ("
-		first := true
-		for tpType, count := range tpCounts {
-			if !first {
-				tpStr += ", "
-			}
-			tpStr += fmt.Sprintf("%s: %d", strings.ToUpper(tpType), count)
-			first = false
+		// Sorted: ranging a map rendered these in a different order run to
+		// run, which makes two otherwise identical summaries look different.
+		types := make([]string, 0, len(tpCounts))
+		for tpType := range tpCounts {
+			types = append(types, tpType)
 		}
-		tpStr += ")"
+		sort.Strings(types)
+		parts := make([]string, 0, len(types))
+		for _, tpType := range types {
+			parts = append(parts, fmt.Sprintf("%s: %d", strings.ToUpper(tpType), tpCounts[tpType]))
+		}
+		tpStr += " (" + strings.Join(parts, ", ") + ")"
+		tpStr += fmt.Sprintf(" to %s", pluralVisors(len(peers)))
 	}
 	msg += fmt.Sprintf("Transports: %s\n", tpStr)
 
@@ -824,6 +840,13 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 			msg += "AR Registration:\n"
 			for _, e := range reg.Entries {
 				addr := formatARAddr(e)
+				// The WT certificate hash is what a browser has to pin to
+				// dial this visor, so it belongs beside the endpoint it
+				// applies to. Abbreviated: it is 64 hex characters, and the
+				// full value is in --json for anyone who needs to paste it.
+				if e.CertHash != "" {
+					addr += fmt.Sprintf(" (cert %s)", abbrevHash(e.CertHash))
+				}
 				msg += fmt.Sprintf("  %-6s %s\n", strings.ToUpper(e.Type), addr)
 			}
 		} else {
@@ -880,6 +903,39 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 	}
 
 	return msg, summary, arSelf, nil
+}
+
+// dmsgLatency renders the visor's dmsg round-trip, or empty when there is no
+// measurement. The tracker keys on the visor's own public key and usually has
+// no entry for it, so the summary carries a zero value that is not a latency of
+// zero — it is the absence of one. Reporting it as "0s" beside per-server
+// round-trips in the hundreds of milliseconds is worse than reporting nothing.
+//
+// Nil-safe because it must be: the hypervisor path deliberately leaves this nil
+// when stats are missing, and this call site used to dereference it blind.
+func dmsgLatency(summary *visor.Summary) string {
+	if summary.DmsgStats == nil || summary.DmsgStats.RoundTrip <= 0 {
+		return ""
+	}
+	return summary.DmsgStats.RoundTrip.String()
+}
+
+// abbrevHash shortens a hex digest for a summary line, keeping enough of both
+// ends to compare against another rendering of the same hash by eye.
+func abbrevHash(h string) string {
+	const keep = 8
+	if len(h) <= 2*keep+1 {
+		return h
+	}
+	return h[:keep] + "…" + h[len(h)-keep:]
+}
+
+// pluralVisors renders a distinct-peer count with its noun agreed.
+func pluralVisors(n int) string {
+	if n == 1 {
+		return "1 visor"
+	}
+	return fmt.Sprintf("%d visors", n)
 }
 
 func formatARAddr(e visor.ARSelfEntry) string {
