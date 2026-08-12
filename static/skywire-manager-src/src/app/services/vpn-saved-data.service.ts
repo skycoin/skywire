@@ -34,9 +34,9 @@ export interface LocalServerData {
    */
   name: string;
   /**
-   * Custom name set by the user.
+   * Custom name set by the user, or null if they have not set one.
    */
-  customName: string;
+  customName: string | null;
   /**
    * Public key.
    */
@@ -62,9 +62,9 @@ export interface LocalServerData {
    */
   note: string;
   /**
-   * Personal note added by the user.
+   * Personal note added by the user, or null if they have not added one.
    */
-  personalNote: string;
+  personalNote: string | null;
   /**
    * If the server was entered manually, at least one time.
    */
@@ -85,9 +85,9 @@ interface SavedServersData {
    */
   serverList: LocalServerData[];
   /**
-   * Public key of the currently selected server.
+   * Public key of the currently selected server, or null if none is selected.
    */
-  selectedServerPk: string;
+  selectedServerPk: string | null;
 }
 
 /**
@@ -128,7 +128,7 @@ export class VpnSavedDataService {
   // the app.
   private savedDataVersion = 0;
 
-  private currentServerSubject = new ReplaySubject<LocalServerData>(1);
+  private currentServerSubject = new ReplaySubject<LocalServerData | undefined>(1);
   private historySubject = new ReplaySubject<LocalServerData[]>(1);
   private favoritesSubject = new ReplaySubject<LocalServerData[]>(1);
   private blockedSubject = new ReplaySubject<LocalServerData[]>(1);
@@ -196,7 +196,7 @@ export class VpnSavedDataService {
   /**
    * Observable which emits the currently selected server after each change.
    */
-  get currentServerObservable(): Observable<LocalServerData> {
+  get currentServerObservable(): Observable<LocalServerData | undefined> {
     return this.currentServerSubject.asObservable();
   }
 
@@ -357,8 +357,8 @@ export class VpnSavedDataService {
 
     const retrievedServer = this.serversMap.get(newServer.pk);
     if (retrievedServer) {
-      retrievedServer.customName = newServer.name;
-      retrievedServer.personalNote = newServer.note;
+      retrievedServer.customName = newServer.name ?? null;
+      retrievedServer.personalNote = newServer.note ?? null;
       retrievedServer.enteredManually = true;
 
       this.saveData();
@@ -369,13 +369,13 @@ export class VpnSavedDataService {
     return {
       countryCode: 'zz',
       name: '',
-      customName: newServer.name,
+      customName: newServer.name ?? null,
       pk: newServer.pk,
       lastUsed: 0,
       inHistory: false,
       flag: ServerFlags.None,
       location: '',
-      personalNote: newServer.note,
+      personalNote: newServer.note ?? null,
       note: '',
       enteredManually: true,
     };
@@ -489,8 +489,13 @@ export class VpnSavedDataService {
     // Update the local data, if needed.
     this.checkIfDataWasChanged();
 
-    this.currentServer.lastUsed = Date.now();
-    this.currentServer.inHistory = true;
+    const current = this.currentServer;
+    if (!current) {
+      return;
+    }
+
+    current.lastUsed = Date.now();
+    current.inHistory = true;
 
     // Make a list with the servers in the history and sort it by usage date.
     let historyList: LocalServerData[] = [];
