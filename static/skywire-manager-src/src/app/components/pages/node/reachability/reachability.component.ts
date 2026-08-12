@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
@@ -50,9 +50,10 @@ interface ResultRow {
   templateUrl: './reachability.component.html',
   styleUrls: ['./reachability.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ReachabilityComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
 
   // Form state
   target = '';
@@ -63,16 +64,17 @@ export class ReachabilityComponent extends PageBaseComponent implements OnInit, 
   // Result log (most recent first).
   results: ResultRow[] = [];
 
-  private nodeSub: Subscription;
-  private actionSub: Subscription;
+  private nodeSub!: Subscription;
+  private actionSub!: Subscription;
 
-  constructor(private api: ApiService) {
+  constructor(private api: ApiService, private changeDetectorRef: ChangeDetectorRef) {
  super(); 
 }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();

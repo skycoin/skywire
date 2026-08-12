@@ -411,6 +411,7 @@ type Router interface {
 	GetMuxRoutes() int
 	GetLastRouteCalcTime() time.Duration
 	ActiveRouteStatuses() []RouteStatus
+	RoutingTableStats() routing.RoutingTableStats
 	AddMuxRouteByHops(desc routing.RouteDescriptor, fwd, rev []routing.Hop) error
 	GrowMuxRoute(desc routing.RouteDescriptor, target, minHops int) (int, error)
 	RemoveMuxRouteByTransport(desc routing.RouteDescriptor, tpID uuid.UUID) error

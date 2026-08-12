@@ -130,6 +130,8 @@ func (cc CloseCode) String() string {
 	switch cc {
 	case CloseRequested:
 		return "Closing requested by visor"
+	case CloseLegRetired:
+		return "Single mux leg retired"
 	default:
 		return fmt.Sprintf("Unknown(%d)", byte(cc))
 	}
@@ -138,6 +140,18 @@ func (cc CloseCode) String() string {
 const (
 	// CloseRequested is used when a closing is requested by visor.
 	CloseRequested CloseCode = iota
+	// CloseLegRetired closes ONE leg of a multiplexed route group without
+	// tearing down the whole group. Intermediary relays handle it exactly like
+	// CloseRequested (delete the leg's intermediary rule, forward onward), so
+	// they reclaim the retired leg's rules immediately instead of waiting out
+	// the ~10-minute idle-rule GC. The DESTINATION endpoint treats it specially:
+	// it prunes only the leg whose consume rule the packet arrived on and keeps
+	// the route group (and its other legs) alive. A visor that predates this
+	// code falls back to the default branch and closes the whole group, so a
+	// source must only emit CloseLegRetired to peers known to support it (gated
+	// separately from this receive-side handling, which is inert until a source
+	// opts in).
+	CloseLegRetired
 )
 
 // RouteID represents ID of a Route in a Packet.

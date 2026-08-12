@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, timer } from 'rxjs';
 
 import { NodeService } from '../../../../services/node.service';
@@ -78,9 +78,10 @@ const WINDOW = 60; // samples kept (≈ 60s at 1s polling)
   templateUrl: './resource-monitor.component.html',
   styleUrls: ['./resource-monitor.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ResourceMonitorComponent implements OnInit, OnDestroy {
-  @Input() nodeKey: string;
+  @Input() nodeKey!: string;
   /** When true, the panel starts expanded + polling on init. Used
    *  by the dedicated Resources tab; right-bar embeds keep the
    *  collapsed-by-default behavior. */
@@ -116,9 +117,9 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
   private firstHostSample = true;
   private firstProcSample = true;
 
-  private hostSub: Subscription;
-  private procSub: Subscription;
-  private pollSub: Subscription;
+  private hostSub!: Subscription | null;
+  private procSub!: Subscription | null;
+  private pollSub!: Subscription | null;
 
   constructor(
     private nodeService: NodeService,
@@ -204,6 +205,7 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
     this.pollSub = timer(0, 1000).subscribe(() => {
       this.pollHost();
       this.pollProc();
+      this.cdr.markForCheck();
     });
   }
 
@@ -227,10 +229,14 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
  this.hostSub.unsubscribe(); 
 }
     this.hostSub = this.nodeService.getHostStats(this.nodeKey).subscribe(
-      (s: HostStats) => this.onHostStats(s),
+      (s: HostStats) => {
+ this.onHostStats(s); this.cdr.markForCheck(); 
+},
       // Silent error — keep polling; the snackbar would scream once
       // per second on a broken visor connection.
-      () => {},
+      () => {
+        this.cdr.markForCheck();
+      },
     );
   }
 
@@ -242,8 +248,12 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
  this.procSub.unsubscribe(); 
 }
     this.procSub = this.nodeService.getRuntimeStats(this.nodeKey).subscribe(
-      (s: RuntimeStats) => this.onRuntimeStats(s),
-      () => {},
+      (s: RuntimeStats) => {
+ this.onRuntimeStats(s); this.cdr.markForCheck(); 
+},
+      () => {
+        this.cdr.markForCheck();
+      },
     );
   }
 

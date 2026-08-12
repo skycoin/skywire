@@ -19,7 +19,7 @@ export class MultipleNodesBackendData {
    * sections by design). Existing components that consume the flat
    * list keep working unchanged.
    */
-  data: Node[];
+  data!: Node[];
   /**
    * Per-hypervisor sections in tree form. First entry is the local
    * hypervisor; subsequent entries are sub-hypervisors. Consumed by
@@ -27,22 +27,22 @@ export class MultipleNodesBackendData {
    * breadcrumb between them. See NodeService.getNodesTree() for the
    * source-of-truth contract.
    */
-  sections: NodeSection[];
+  sections!: NodeSection[];
   /**
    * Error found while trying to get the data. It will only have a value if the last
    * try ended in an error.
    */
-  error: OperationError;
+  error!: OperationError;
   /**
    * Time (Date.now()) in which the data returned in the data property was obtained. If
    * the error proterty has a value, this property will still have a valid value if valid
    * data was previously found.
    */
-  momentOfLastCorrectUpdate: number;
+  momentOfLastCorrectUpdate!: number;
   /**
    * If the service is currently updating the data.
    */
-  updating: boolean;
+  updating!: boolean;
 }
 
 /**
@@ -55,11 +55,11 @@ export class MultipleNodesBackendData {
 })
 export class MultipleNodeDataService {
   // Intervals (in ms) in which the service must refresh the data automatically.
-  private dataRefreshDelay: number;
+  private dataRefreshDelay!: number;
   // Subject for sending the data updates.
   dataSubject = new BehaviorSubject<MultipleNodesBackendData>(null);
   // Subscription for refreshing the data periodically.
-  updateSubscription: Subscription;
+  updateSubscription!: Subscription;
   // Last data sent by dataSubject.
   lastEmitedData = new MultipleNodesBackendData();
   // If the getData function has already been called.

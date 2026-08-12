@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 
@@ -12,21 +12,24 @@ import { SelectLanguageComponent } from '../select-language/select-language.comp
     selector: 'app-lang-button',
     templateUrl: './lang-button.component.html',
     styleUrls: ['./lang-button.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LangButtonComponent implements OnInit, OnDestroy {
-  language: LanguageData;
+  language!: LanguageData;
 
-  private subscription: Subscription;
+  private subscription!: Subscription;
 
   constructor(
     private languageService: LanguageService,
     private dialog: MatDialog,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
     this.subscription = this.languageService.currentLanguage.subscribe(lang => {
       this.language = lang;
+      this.changeDetectorRef.markForCheck();
     });
   }
 

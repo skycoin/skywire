@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 
 /**
  * Link that is shown at the bottom of the tables to let the user see the rest of the
@@ -8,7 +8,8 @@ import { Component, Input } from '@angular/core';
     selector: 'app-view-all-link',
     templateUrl: './view-all-link.component.html',
     styleUrls: ['./view-all-link.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ViewAllLinkComponent {
   /**

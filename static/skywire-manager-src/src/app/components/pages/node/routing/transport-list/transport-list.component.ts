@@ -38,7 +38,7 @@ export class TransportListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
   private readonly listId = 'tr';
 
-  nodePK: string;
+  nodePK!: string;
 
   // Vars with the data of the columns used for sorting the data.
   persistentSortData = new SortingColumn(['isPersistent'], 'transports.persistent', SortingModes.Boolean);
@@ -55,7 +55,7 @@ export class TransportListComponent implements OnDestroy {
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
-  dataSource: Transport[];
+  dataSource!: Transport[];
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -66,17 +66,17 @@ export class TransportListComponent implements OnDestroy {
    * accessing the full list. If false, the full list is shown, with pagination
    * controls, if needed.
    */
-  showShortList_: boolean;
+  showShortList_!: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
     // Sort the data.
     this.dataSorter.setData(this.filteredTransports);
   }
 
-  currentNode: Node;
-  allTransports: Transport[];
-  filteredTransports: Transport[];
-  transportsToShow: Transport[];
+  currentNode!: Node;
+  allTransports!: Transport[];
+  filteredTransports!: Transport[];
+  transportsToShow!: Transport[] | null;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
@@ -136,10 +136,10 @@ export class TransportListComponent implements OnDestroy {
 
     // Add the label data to the array, to be able to use it for filtering and sorting.
     this.allTransports.forEach(transport => {
-      transport['id_label'] =
+      (transport as any)['id_label'] =
         LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.id);
 
-      transport['remote_pk_label'] =
+      (transport as any)['remote_pk_label'] =
         LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, transport.remotePk);
     });
 
@@ -194,10 +194,10 @@ export class TransportListComponent implements OnDestroy {
   addingPersistent = false;
   addAvailableTypes: string[] | null = null;
   addBusy = false;
-  private addOperationSubscription: Subscription;
-  private addTypesSubscription: Subscription;
+  private addOperationSubscription!: Subscription;
+  private addTypesSubscription!: Subscription;
 
-  private persistentTransportSubscription: Subscription;
+  private persistentTransportSubscription!: Subscription;
   private navigationsSubscription: Subscription;
   private operationSubscriptionsGroup: Subscription[] = [];
   private languageSubscription: Subscription;
@@ -240,6 +240,7 @@ export class TransportListComponent implements OnDestroy {
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allTransports has already been sorted.
       this.recalculateElementsToShow();
+      this.cdr.markForCheck();
     });
 
     this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
@@ -247,6 +248,7 @@ export class TransportListComponent implements OnDestroy {
       this.filteredTransports = data;
 
       this.dataSorter.setData(this.filteredTransports);
+      this.cdr.markForCheck();
     });
 
     // Get the page requested in the URL.
@@ -261,12 +263,14 @@ export class TransportListComponent implements OnDestroy {
 
         this.recalculateElementsToShow();
       }
+      this.cdr.markForCheck();
     });
 
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
       this.node = this.currentNode;
+      this.cdr.markForCheck();
     });
   }
 
@@ -403,9 +407,15 @@ export class TransportListComponent implements OnDestroy {
             dataToUse,
           ).subscribe(() => {
             this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, true);
-          }, (err: OperationError) => this.onAddError(err));
+            this.cdr.markForCheck();
+          }, (err: OperationError) => {
+ this.onAddError(err); this.cdr.markForCheck(); 
+});
         }
-      }, (err: OperationError) => this.onAddError(err));
+        this.cdr.markForCheck();
+      }, (err: OperationError) => {
+ this.onAddError(err); this.cdr.markForCheck(); 
+});
     } else {
       this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, false);
     }
@@ -433,6 +443,7 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.snackbarService.showWarning('transports.dialog.success-without-label');
       }
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       if (creatingAfterPersistent) {
         this.addBusy = false;
@@ -442,6 +453,7 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.onAddError(err);
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -527,6 +539,7 @@ export class TransportListComponent implements OnDestroy {
       } else if (selectedOption === 3) {
         this.delete(transport);
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -596,13 +609,17 @@ export class TransportListComponent implements OnDestroy {
       ).subscribe(() => {
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('transports.changes-made');
+        this.cdr.markForCheck();
       }, (err: OperationError) => {
         err = processServiceError(err);
         this.snackbarService.showError(err);
+        this.cdr.markForCheck();
       });
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
       this.snackbarService.showError(err);
+      this.cdr.markForCheck();
     });
   }
 
@@ -624,9 +641,11 @@ export class TransportListComponent implements OnDestroy {
     this.operationSubscriptionsGroup.push(this.startDeleting(transport.id).subscribe(() => {
       NodeComponent.refreshCurrentDisplayedData();
       this.snackbarService.showDone('transports.deleted');
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
       this.snackbarService.showError(err);
+      this.cdr.markForCheck();
     }));
   }
 
@@ -714,6 +733,7 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.deleteRecursively(ids, confirmationDialog);
       }
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
       err = processServiceError(err);
@@ -722,6 +742,7 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.snackbarService.showError(err);
       }
+      this.cdr.markForCheck();
     }));
   }
 }
