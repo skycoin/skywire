@@ -115,6 +115,9 @@ func startWSAutoconnect(ctx context.Context, sdDmsgURL, arDmsgURL string, pk cip
 			case <-time.After(250 * time.Millisecond):
 			}
 		}
+		// unproductive counts consecutive passes that left the edge short of
+		// autoconnectTargetTransports; it drives the backoff below.
+		unproductive := uint(0)
 		for {
 			// Recover per-pass so a transient panic (e.g. a peer's malformed AR
 			// reply) can't take down the whole tab.
@@ -131,9 +134,34 @@ func startWSAutoconnect(ctx context.Context, sdDmsgURL, arDmsgURL string, pk cip
 			// a first pass that lands only one (or zero) transport otherwise sat
 			// idle for 90s before trying again. Once the target is reached, back
 			// off to the steady-state interval.
+			//
+			// But the short interval must not be forever. An edge that can reach
+			// NOBODY — every dial refused or timing out, which is what a
+			// restrictive network looks like from a browser — never reaches the
+			// target, so this retried every 12s indefinitely: a full pass of up
+			// to autoconnectMaxDirect dials, eight at a time, each running its
+			// timeouts out, every twelve seconds, forever. The standard-Go wasm
+			// runtime is single-threaded and hands control back to the browser
+			// only when every goroutine is blocked, so that load kept its host
+			// from ever idling. The result was a SharedWorker (or tab) spinning
+			// in wasm: unable to answer a port, unable to run its own heartbeat,
+			// unable even to close itself. A stack sample of a wedged renderer
+			// showed twelve frames of JIT/wasm code beneath the Chromium frames.
+			//
+			// So back off geometrically while passes stay unproductive, capped
+			// at the steady-state interval. A network that comes back still
+			// recovers — the first pass that lands a transport resets it.
 			wait := autoconnectInterval
 			if tpM != nil && tpM.TransportCount() < autoconnectTargetTransports {
-				wait = autoconnectFastRetry
+				wait = autoconnectFastRetry << unproductive
+				if wait > autoconnectInterval || wait <= 0 {
+					wait = autoconnectInterval
+				}
+				if unproductive < 8 {
+					unproductive++
+				}
+			} else {
+				unproductive = 0
 			}
 			select {
 			case <-ctx.Done():
