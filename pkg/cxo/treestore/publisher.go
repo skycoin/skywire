@@ -61,6 +61,17 @@ type Publisher struct {
 	// matches the encoded content.
 	dirtyGen uint64
 
+	// lastPublishNs is the UnixNano of the last successful publish (real
+	// change OR heartbeat). runLoop's heartbeat re-publishes the current
+	// Root when this is older than heartbeatInterval, so subscribers keep
+	// receiving an inbound Root inside the CXO idle-watchdog window and
+	// don't tear the connection down + re-dial (a full noise+PQ handshake)
+	// on a quiet/static feed. A feed with real changes publishes via the
+	// dirty path and resets this well inside the interval, so busy feeds
+	// never pay the heartbeat, and a quiet feed's republish is a warm
+	// encode-cache walk (no re-serialize).
+	lastPublishNs atomic.Int64
+
 	// allow gates which subscriber PKs may connect. nil-set means the
 	// allowlist is disabled (any subscriber is accepted). NewWithDMSG
 	// wires this state into the CXO node's OnSubscribeRemote hook
@@ -723,6 +734,18 @@ func (p *Publisher) Walk(prefix string, fn func(path string, value []byte) bool)
 // package-wide "test timed out" panic with no failing test named.
 const flushTimeout = 5 * time.Second
 
+// heartbeatInterval is how often runLoop re-publishes the current Root
+// on a QUIET feed (one with no real changes) so subscribers keep
+// receiving an inbound Root and their CXO connection stays alive. It
+// MUST be shorter than BOTH keepalive-relevant thresholds so a healthy-
+// but-quiet conn is never torn down + re-dialed (a full noise+PQ
+// handshake): the CXO node idle watchdog (idleWatchdogThreshold = 90s,
+// pkg/cxo/node) AND the subscriber reconnect-on-quiet watchdog
+// (reconnectQuietThreshold = 60s, pkg/cxo/treestore/subscriber.go). 45s
+// clears both with margin; a genuinely stalled feed still stops emitting
+// heartbeats, so the 60s reconnect safety net recovers it as intended.
+const heartbeatInterval = 45 * time.Second
+
 // Flush blocks until pending changes have been published, or
 // returns nil immediately if there are none. Useful in tests where
 // the caller wants deterministic post-Put state.
@@ -863,6 +886,12 @@ func (p *Publisher) markDirty() {
 // runLoop is the dedicated publish goroutine. It coalesces
 // mutations within batchWindow and writes one Root per batch.
 func (p *Publisher) runLoop() {
+	// Quiet-feed keepalive: check twice per interval so a "no publish for
+	// heartbeatInterval" condition is caught and republished comfortably
+	// inside the CXO idle watchdog (90s). Only feeds that have gone silent
+	// pay it; busy feeds publish via the dirty path and reset the clock.
+	hb := time.NewTicker(heartbeatInterval / 2)
+	defer hb.Stop()
 	for {
 		select {
 		case <-p.done:
@@ -870,6 +899,17 @@ func (p *Publisher) runLoop() {
 			// state (Close already flushed but be defensive).
 			_ = p.publishIfDirty() //nolint:errcheck
 			return
+		case <-hb.C:
+			// Re-publish the current Root if nothing has published for a
+			// full interval, so subscribers keep seeing an inbound Root and
+			// don't re-dial. Skip until the first real publish so we never
+			// emit an empty startup Root.
+			if last := p.lastPublishNs.Load(); last != 0 &&
+				time.Since(time.Unix(0, last)) >= heartbeatInterval {
+				if err := p.publishHeartbeat(); err != nil {
+					p.log.WithError(err).Debug("treestore: heartbeat republish failed")
+				}
+			}
 		case <-p.wakeup:
 			// Coalesce: wait the batch window, then publish.
 			timer := time.NewTimer(p.batchWindow)
@@ -887,7 +927,7 @@ func (p *Publisher) runLoop() {
 	}
 }
 
-func (p *Publisher) publishIfDirty() error {
+func (p *Publisher) doPublish(force bool) error {
 	// Decouple the in-memory snapshot phase from the CXO encode /
 	// bbolt-write phase. Holding p.mu through publishRoot was the
 	// original bug: encodeNode + Cache.WithBatch can take many
@@ -912,7 +952,7 @@ func (p *Publisher) publishIfDirty() error {
 	//     drop freshSubs to avoid pinning the live tree to a hash
 	//     that no longer matches its content.
 	p.mu.Lock()
-	if !p.dirty {
+	if !force && !p.dirty {
 		p.mu.Unlock()
 		return nil
 	}
@@ -961,8 +1001,23 @@ func (p *Publisher) publishIfDirty() error {
 	// If dirtyGen != gen a Put / Delete landed during publish; leave
 	// dirty set so runLoop republishes the new state on the next tick.
 	p.mu.Unlock()
+	p.lastPublishNs.Store(time.Now().UnixNano())
 	return nil
 }
+
+// publishIfDirty publishes the current Root only when there are
+// unpublished changes — the batch-window path driven by markDirty.
+func (p *Publisher) publishIfDirty() error { return p.doPublish(false) }
+
+// publishHeartbeat re-publishes the current Root even when the tree is
+// clean, so subscribers on a quiet/static feed receive an inbound Root
+// within the CXO idle-watchdog window (see heartbeatInterval) and keep
+// their connection instead of tearing it down and re-dialing (a full
+// noise+PQ handshake). Cheap: the encode-cache makes an unchanged tree a
+// warm shallow walk with no re-serialize, and a feed with real changes
+// publishes via publishIfDirty and resets the heartbeat clock, so busy
+// feeds never reach here.
+func (p *Publisher) publishHeartbeat() error { return p.doPublish(true) }
 
 // walkLivePath returns the memNode at the given path in n, or nil if
 // the path no longer exists or hits a leaf instead of a sub-tree at

@@ -183,16 +183,15 @@ type Config struct {
 	Peers            []PeerConfig  `json:"peers,omitempty"`
 	EnableRouteSetup bool          `json:"enable_route_setup,omitempty"`
 
-	// AnnounceAsPeer makes this (typically non-public) server announce
-	// itself as a forwardable peer over every outbound peer link it
-	// dials, so its clients become reachable inbound without it being
-	// registered in the discovery. AcceptPeerAnnouncements lets a
-	// (typically public) server honor such announcements, filing the
-	// announcing session in its peer set; AcceptedPeerPKs, when non-empty,
-	// restricts which announcers are honored (allowlist).
-	AnnounceAsPeer          bool            `json:"announce_as_peer,omitempty"`
-	AcceptPeerAnnouncements bool            `json:"accept_peer_announcements,omitempty"`
-	AcceptedPeerPKs         []cipher.PubKey `json:"accepted_peer_pks,omitempty"`
+	// Peer relaying is always on: every server announces itself as a
+	// forwardable peer over the links it dials and honors inbound
+	// announcements. AcceptedPeerPKs, when non-empty, restricts which
+	// announcers are honored (allowlist); empty accepts any. MaxPeerLinks
+	// and MaxRelayedStreams bound the relay surface (0 = built-in
+	// defaults). There is no toggle to disable relaying.
+	AcceptedPeerPKs   []cipher.PubKey `json:"accepted_peer_pks,omitempty"`
+	MaxPeerLinks      int             `json:"max_peer_links,omitempty"`
+	MaxRelayedStreams int             `json:"max_relayed_streams,omitempty"`
 }
 
 // GenerateDefaultConfig generate default config for dmsg-server

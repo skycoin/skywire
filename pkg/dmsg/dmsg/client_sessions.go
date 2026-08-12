@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/hashicorp/yamux"
 	"github.com/xtaci/smux"
@@ -138,56 +139,98 @@ func prefersWTOverWS(carriers []string) bool {
 	return wt >= 0 && ws >= 0 && wt < ws
 }
 
-// UpgradeBrowserSessions closes WebSocket (wss) sessions once at least one
-// WebTransport session is live, so a browser that BOOTSTRAPPED over wss (the
-// only carrier a browser can use before discovery is reachable) converges to
-// WebTransport — dropping the redundant TLS-over-Noise of wss. It is safe to
-// call repeatedly (e.g. on a timer): when a wss session is closed, the Serve
-// loop re-dials to MinSessions, preferring WT (Carriers=[wt,ws]).
+// Timeouts and backoff for the wss→WebTransport upgrade path.
+const (
+	wtUpgradeResolveTimeout = 10 * time.Second
+	wtUpgradeDialTimeout    = 8 * time.Second
+	// wtUpgradeBackoff is how long to leave a server on wss after a failed WT
+	// upgrade before retrying — long enough that an unreachable WT endpoint
+	// doesn't churn, short enough that a transiently-down one recovers.
+	wtUpgradeBackoff = 5 * time.Minute
+)
+
+// UpgradeBrowserSessions converges a browser's bootstrap wss sessions to
+// WebTransport. A browser MUST bootstrap over wss: the seed entries carry only
+// AddressWS (a stable domain wss URL), because a server's WT cert is
+// self-signed with a ~2-week life and its SHA-256 (CertHashWT) rotates, so it
+// can't be baked into the seed — the browser pins the CURRENT hash via
+// serverCertificateHashes, which is only knowable from live discovery.
 //
-// Conservative by construction so it can never strand the client:
-//   - a no-op unless the client prefers WT over WS (native clients skip it);
-//   - only acts when a WT session already exists;
-//   - never drops the session count below one.
+// So for each wss session this RE-RESOLVES the server's current discovery entry
+// (now reachable over the bootstrap wss) and, if it advertises WT, dials a WT
+// session from that fresh entry. dialSession is newest-session-wins, so a
+// successful WT session atomically replaces the wss; a WT failure falls back to
+// wss (dialSession's own WT→WS fallback) and the server is backed off so an
+// unreachable WT listener doesn't thrash. This is the active converge the old
+// "close the wss and hope Serve re-dials WT" approach could never bootstrap —
+// Serve re-dials from the ws-only seed list, so pickCarrier never saw AddressWT.
 //
-// Returns the number of wss sessions closed.
+// No-op unless the client prefers WT over WS (native clients skip it). Never
+// drops the session count (replace-in-place, not close-then-redial). Safe to
+// call on a timer. Returns the number of sessions upgraded to WT this call.
 func (ce *Client) UpgradeBrowserSessions() int {
 	if !prefersWTOverWS(ce.conf.Carriers) {
 		return 0
 	}
 	ce.sessionsMx.Lock()
-	var hasWT bool
-	var wsSessions []*SessionCommon
-	for _, s := range ce.sessions {
-		switch s.carrier {
-		case CarrierWT:
-			hasWT = true
-		case CarrierWS:
-			// Only converge wss → WT for servers that actually advertise WT. A wss
-			// to a non-WT server has no WT to converge to — dropping it just re-dials
-			// wss next tick (the churn when only a few of N servers advertise WT).
-			if s.wtCapable {
-				wsSessions = append(wsSessions, s)
-			}
+	wsPKs := make([]cipher.PubKey, 0, len(ce.sessions))
+	for pk, s := range ce.sessions {
+		if s.carrier == CarrierWS {
+			wsPKs = append(wsPKs, pk)
 		}
 	}
-	remaining := len(ce.sessions)
 	ce.sessionsMx.Unlock()
 
-	if !hasWT {
-		return 0
-	}
-	closed := 0
-	for _, s := range wsSessions {
-		if remaining <= 1 {
-			break // never strand the client
+	upgraded := 0
+	for _, pk := range wsPKs {
+		if ce.wtUpgradeBackedOff(pk) {
+			continue
 		}
-		ce.log.WithField("remote_pk", s.RemotePK()).Debug("Dropping wss session — WebTransport is up; converging off the redundant TLS layer.")
-		_ = s.Close() //nolint:errcheck // serve loop unwinds → delSession → Serve re-dials WT-preferred
-		remaining--
-		closed++
+		// Re-resolve the LIVE entry so we get today's AddressWT + CertHashWT.
+		rctx, rcancel := context.WithTimeout(context.Background(), wtUpgradeResolveTimeout)
+		entry, err := ce.resolveServerEntry(rctx, pk)
+		rcancel()
+		if err != nil || entry == nil || entry.Server == nil || entry.Server.AddressWT == "" {
+			continue // lookup failed, or this server doesn't advertise WT — stay wss
+		}
+		// Dial WT from the fresh entry. Newest-session-wins replaces the wss on
+		// success; on WT failure dialSession falls back to wss and we back off.
+		dctx, dcancel := context.WithTimeout(context.Background(), wtUpgradeDialTimeout)
+		ns, derr := ce.dialSession(dctx, entry)
+		dcancel()
+		if derr != nil || ns.carrier != CarrierWT {
+			ce.noteWTUpgradeFailure(pk)
+			continue
+		}
+		ce.log.WithField("remote_pk", pk).Debug("Upgraded wss session to WebTransport.")
+		ce.clearWTUpgradeFailure(pk)
+		upgraded++
 	}
-	return closed
+	return upgraded
+}
+
+// wtUpgradeBackedOff reports whether a WT upgrade for this server was tried and
+// failed within wtUpgradeBackoff.
+func (ce *Client) wtUpgradeBackedOff(pk cipher.PubKey) bool {
+	ce.wtUpgradeFailMx.Lock()
+	defer ce.wtUpgradeFailMx.Unlock()
+	t, ok := ce.wtUpgradeFailAt[pk]
+	return ok && time.Since(t) < wtUpgradeBackoff
+}
+
+func (ce *Client) noteWTUpgradeFailure(pk cipher.PubKey) {
+	ce.wtUpgradeFailMx.Lock()
+	if ce.wtUpgradeFailAt == nil {
+		ce.wtUpgradeFailAt = make(map[cipher.PubKey]time.Time)
+	}
+	ce.wtUpgradeFailAt[pk] = time.Now()
+	ce.wtUpgradeFailMx.Unlock()
+}
+
+func (ce *Client) clearWTUpgradeFailure(pk cipher.PubKey) {
+	ce.wtUpgradeFailMx.Lock()
+	delete(ce.wtUpgradeFailAt, pk)
+	ce.wtUpgradeFailMx.Unlock()
 }
 
 func pickCarrier(carriers []string, entry *disc.Entry) (network, addr string) {

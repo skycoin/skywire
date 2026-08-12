@@ -25,16 +25,7 @@ func Render(pk string, links []string) string {
 	}
 	return `<!doctype html><html><head><title>Skywire Visor</title>` +
 		`<style>body{background:#000;color:#fff;font-family:monospace;padding:20px}a{color:#3399FF}a:visited{color:#FF00FF}` +
-		`.pk{color:#5fd75f;word-break:break-all;margin:2px 0}.ipcheck{margin:8px 0}</style>` +
+		`.pk{color:#5fd75f;word-break:break-all;margin:2px 0}</style>` +
 		`</head><body><h2>Skywire Visor</h2>` + idHeader +
-		ipCheckSection +
 		`<pre>` + strings.Join(links, "\n") + `</pre></body></html>`
 }
-
-// ipCheckSection links two clearnet IP-echo services. Opened in the wasm-visor's
-// iframe browser (skysocks-client-lite), the reported IP is the PROXY EXIT's — a
-// one-click way to see which exit the tab is browsing through. On a native visor's
-// dmsg-served page they're just external links.
-const ipCheckSection = `<p class="ipcheck">Check your exit IP: ` +
-	`<a href="http://ip.skycoin.com">ip.skycoin.com</a> &middot; ` +
-	`<a href="https://ip.skywire.dev">ip.skywire.dev</a></p>`
