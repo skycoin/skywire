@@ -2593,9 +2593,13 @@
     }
     .group-header-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
 
-    /* Founder-only display-metadata editor in the members dialog. */
+    /* Founder-only name + picture editor at the top of group settings. The
+       picture sits beside the field it belongs to, so the row reads as one
+       identity rather than two unrelated controls. */
     .ga-meta-line { display: flex; gap: 12px; align-items: flex-start; }
     .ga-meta-fields { flex: 1; min-width: 0; }
+    /* Tighter than the create-group form's 12px: here the buttons under the
+       field belong to it, and the gap has to say so. */
     .ga-meta-fields .cg-input { margin-bottom: 8px; }
     .ga-meta-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -2798,12 +2802,12 @@
     .notif-setting:last-child { border-bottom: none; }
     .notif-setting .notif-label { font-size: 14px; color: var(--text-primary); }
     .notif-setting .notif-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-    /* Settings holds two sections now, so it is the one modal that can
-       outgrow the viewport — the muted list has no fixed length. Cap it
-       against the short side and scroll the body, keeping the title and
-       the Close button in place. */
+    /* The sectioned-dialog shape, shared by app Settings and group/channel
+       settings: both hold a stack of sections plus a list with no fixed
+       length, so both can outgrow the viewport. Cap against the short side
+       and scroll the body, keeping the title and the Close button in place. */
     .settings-modal { display: flex; flex-direction: column; max-height: 86vh; }
-    .settings-body { overflow-y: auto; flex: 1; min-height: 0; }
+    .settings-body { overflow-y: auto; flex: 1; min-height: 0; text-align: left; }
     .settings-section {
       font-size: 12px;
       font-weight: 700;
@@ -2813,8 +2817,13 @@
       margin: 20px 0 8px;
       padding-top: 16px;
       border-top: 1px solid var(--border-color);
+      text-align: left;
     }
-    .settings-body > .settings-section:first-child {
+    .settings-body > .settings-section:first-child,
+    /* Applied when every section above this one is hidden — :first-child
+       counts DOM position, not what is on screen, so a section that has
+       become the first visible one needs telling. */
+    .settings-section.flush {
       margin-top: 0;
       padding-top: 0;
       border-top: none;
@@ -3231,6 +3240,14 @@
        pictures people pick, and a pan/zoom surface would be a large
        amount of machinery for a decision the centre of the frame already
        makes correctly. */
+
+    /* Above every dialog, including #contactsModal's 101: this one is only
+       ever opened FROM another dialog, so it has to outrank whichever one
+       launched it. Not left to DOM order — that silently worked only while
+       every caller happened to sit earlier in the file, and the group
+       settings dialog (which does not) came up behind it. */
+    #avatarModal { z-index: 102; }
+
     .av-preview {
       display: flex;
       align-items: center;
@@ -4110,148 +4127,164 @@
     </div>
   </div>
 
-  <!-- Group Members / Admission Modal -->
+  <!-- Group / channel settings. Two sections, separated the way the app's
+       own Settings dialog separates its own: everything that CONFIGURES the
+       room first, then who is in it. They were one undivided stack before,
+       which is why the dialog read as a member list that happened to have
+       switches on top of it. Scrolls for the same reason Settings does —
+       the member list has no fixed length. -->
   <div id="groupAdminModal" class="modal-overlay">
-    <div class="modal modal-wide">
-      <h3>Group members</h3>
-      <!-- Display metadata. Founder-only, and honestly so: members mirror
-           the founder's record and re-learn name + picture from it when
-           they open the chat, so an edit anywhere else would un-happen. -->
-      <div id="gaMetaRow" class="ga-row hidden">
-        <div class="ga-meta-line">
-          <div class="group-avatar" id="gaMetaAvatar">#</div>
-          <div class="ga-meta-fields">
-            <input id="gaMetaName" class="cg-input" type="text" maxlength="64" autocomplete="off"
-                   placeholder="Group name" />
-            <div class="ga-meta-actions">
-              <button class="btn" onclick="app.saveGroupName()">Rename</button>
-              <button class="btn" onclick="document.getElementById('gaPictureField').click()">Change picture</button>
-              <button class="btn hidden" id="gaClearAvatarBtn" onclick="app.clearGroupAvatar()">Remove picture</button>
+    <div class="modal modal-wide settings-modal">
+      <h3 id="gaTitle">Group settings</h3>
+      <div class="settings-body">
+        <div class="settings-section" id="gaSettingsSection">Settings</div>
+        <!-- Display metadata. Founder-only, and honestly so: members mirror
+             the founder's record and re-learn name + picture from it when
+             they open the chat, so an edit anywhere else would un-happen. -->
+        <div id="gaMetaRow" class="ga-row hidden">
+          <div class="ga-meta-line">
+            <div class="group-avatar" id="gaMetaAvatar">#</div>
+            <div class="ga-meta-fields">
+              <input id="gaMetaName" class="cg-input" type="text" maxlength="64" autocomplete="off"
+                     placeholder="Group name" />
+              <!-- ga-btn, not btn: this dialog's own button idiom is the
+                   small bordered one (see Rotate key). Full primary pills
+                   here read as the dialog's main action, which Close is. -->
+              <div class="ga-meta-actions">
+                <button class="ga-btn" onclick="app.saveGroupName()">Rename</button>
+                <button class="ga-btn" onclick="document.getElementById('gaPictureField').click()">Change picture</button>
+                <button class="ga-btn hidden" id="gaClearAvatarBtn" onclick="app.clearGroupAvatar()">Remove picture</button>
+              </div>
             </div>
           </div>
+          <input type="file" id="gaPictureField" accept="image/*" style="display: none;" onchange="app.pickGroupAvatar()">
+          <p class="ga-key-note">
+            Members and new joiners take the name and picture from this visor
+            the next time they open the chat.
+          </p>
         </div>
-        <input type="file" id="gaPictureField" accept="image/*" style="display: none;" onchange="app.pickGroupAvatar()">
-        <p class="ga-key-note">
-          Members and new joiners take the name and picture from this visor
-          the next time they open the chat.
-        </p>
-      </div>
-      <div id="gaReadOnlyRow" class="ga-row hidden">
-        <label class="ga-toggle">
-          <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
-          <span>Read-only — only admins can send messages</span>
-        </label>
-      </div>
-      <!-- Discovery. Local to this visor rather than a property of the group:
-           it says what WE answer questions about, so another admin's copy is
-           unaffected either way. -->
-      <div id="gaListedRow" class="ga-row hidden">
-        <label class="ga-toggle">
-          <input type="checkbox" id="gaListed" onchange="app.toggleGroupListed()" />
-          <span>List in this visor's public catalog</span>
-        </label>
-        <p class="ga-key-note">
-          On means anyone holding this visor's public key can discover it by
-          asking. Off keeps it reachable only by address or invite link. Other
-          admins publish their own copies independently.
-        </p>
-      </div>
-      <!-- Flood protection. Public keys are free, so this is the only
-           thing that makes an identity cost anything. -->
-      <div id="gaJoinCostRow" class="ga-row hidden">
-        <div class="ga-key-line">
-          <span>Cost to ask to join</span>
-          <select id="gaJoinCost" class="ga-select" onchange="app.setGroupJoinCost()">
-            <option value="0">Free</option>
-            <option value="16">Low</option>
-            <option value="18">Normal</option>
-            <option value="22">High</option>
-            <option value="26">Maximum</option>
-          </select>
+        <div id="gaReadOnlyRow" class="ga-row hidden">
+          <label class="ga-toggle">
+            <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
+            <span>Read-only — only admins can send messages</span>
+          </label>
         </div>
-        <div class="ga-key-note">
-          Anyone can make unlimited public keys, so a flood of join requests
-          costs an attacker nothing and costs you your attention. This makes
-          each request spend CPU first — unnoticeable once, expensive by the
-          thousand. Raise it while you are being flooded. Requests are also
-          rate-limited and the approval queue is capped regardless.
+        <!-- Discovery. Local to this visor rather than a property of the group:
+             it says what WE answer questions about, so another admin's copy is
+             unaffected either way. -->
+        <div id="gaListedRow" class="ga-row hidden">
+          <label class="ga-toggle">
+            <input type="checkbox" id="gaListed" onchange="app.toggleGroupListed()" />
+            <span>List in this visor's public catalog</span>
+          </label>
+          <p class="ga-key-note">
+            On means anyone holding this visor's public key can discover it by
+            asking. Off keeps it reachable only by address or invite link. Other
+            admins publish their own copies independently.
+          </p>
         </div>
-      </div>
-      <!-- Who can catch a new member up, and who can serve the room while
-           the admins are offline. -->
-      <div id="gaBackfillRow" class="ga-row hidden">
-        <label class="ga-toggle">
-          <input type="checkbox" id="gaPeerBackfill" onchange="app.toggleGroupPeerBackfill()" />
-          <span>Any member can share history with new members</span>
-        </label>
-        <div class="ga-key-note">
-          Off means only admins can, so nothing reaches a new member — and
-          no message passes between two non-admins — while every admin is
-          offline. On, each member keeps a copy of the room; only members
-          can read it either way.
+        <!-- Flood protection. Public keys are free, so this is the only
+             thing that makes an identity cost anything. -->
+        <div id="gaJoinCostRow" class="ga-row hidden">
+          <div class="ga-key-line">
+            <span>Cost to ask to join</span>
+            <select id="gaJoinCost" class="ga-select" onchange="app.setGroupJoinCost()">
+              <option value="0">Free</option>
+              <option value="16">Low</option>
+              <option value="18">Normal</option>
+              <option value="22">High</option>
+              <option value="26">Maximum</option>
+            </select>
+          </div>
+          <div class="ga-key-note">
+            Anyone can make unlimited public keys, so a flood of join requests
+            costs an attacker nothing and costs you your attention. This makes
+            each request spend CPU first — unnoticeable once, expensive by the
+            thousand. Raise it while you are being flooded. Requests are also
+            rate-limited and the approval queue is capped regardless.
+          </div>
         </div>
-      </div>
-      <!-- What an encrypted group hides beyond the message bodies. Shown
-           to every member, not only admins: "who was banned stays private"
-           is a promise about the members as much as about the moderators,
-           and the member is the one who cannot check it any other way. -->
-      <div id="gaPrivacyRow" class="ga-row hidden">
-        <div class="ga-key-line">
-          <span>Membership, moderation and files are encrypted</span>
+        <!-- Who can catch a new member up, and who can serve the room while
+             the admins are offline. -->
+        <div id="gaBackfillRow" class="ga-row hidden">
+          <label class="ga-toggle">
+            <input type="checkbox" id="gaPeerBackfill" onchange="app.toggleGroupPeerBackfill()" />
+            <span>Any member can share history with new members</span>
+          </label>
+          <div class="ga-key-note">
+            Off means only admins can, so nothing reaches a new member — and
+            no message passes between two non-admins — while every admin is
+            offline. On, each member keeps a copy of the room; only members
+            can read it either way.
+          </div>
         </div>
-        <div class="ga-key-note">
-          Joins, removals, promotions, bans and mutes travel sealed under
-          the group key, exactly like the messages — so someone who can pull
-          this group's feed without being in it cannot read who was banned,
-          who was muted, or when. Key hand-offs no longer name who they are
-          addressed to either. Shared files are sealed under the same key
-          before they leave this device and stay sealed on every member's
-          disk, so a copy of the downloads folder — or a re-send to someone
-          outside the group — is bytes nobody can open. Such an observer can
-          still tell that an admin acted, roughly when, how many members the
-          group has, and the name and size of a file. Members still running
-          an older build publish these changes in the clear until they
-          update.
+        <!-- What an encrypted group hides beyond the message bodies. Shown
+             to every member, not only admins: "who was banned stays private"
+             is a promise about the members as much as about the moderators,
+             and the member is the one who cannot check it any other way. -->
+        <div id="gaPrivacyRow" class="ga-row hidden">
+          <div class="ga-key-line">
+            <span>Membership, moderation and files are encrypted</span>
+          </div>
+          <div class="ga-key-note">
+            Joins, removals, promotions, bans and mutes travel sealed under
+            the group key, exactly like the messages — so someone who can pull
+            this group's feed without being in it cannot read who was banned,
+            who was muted, or when. Key hand-offs no longer name who they are
+            addressed to either. Shared files are sealed under the same key
+            before they leave this device and stay sealed on every member's
+            disk, so a copy of the downloads folder — or a re-send to someone
+            outside the group — is bytes nobody can open. Such an observer can
+            still tell that an admin acted, roughly when, how many members the
+            group has, and the name and size of a file. Members still running
+            an older build publish these changes in the clear until they
+            update.
+          </div>
         </div>
-      </div>
-      <!-- Encryption row: private groups only. Shows which key generation
-           the group is on (it advances on every eviction) and lets an
-           admin re-key on demand. -->
-      <div id="gaKeyRow" class="ga-row hidden">
-        <div class="ga-key-line">
-          <span id="gaKeyEpoch">Encryption: key #0</span>
-          <button id="gaRotateBtn" class="ga-btn" onclick="app.rotateGroupKey()">Rotate key</button>
+        <!-- Encryption row: private groups only. Shows which key generation
+             the group is on (it advances on every eviction) and lets an
+             admin re-key on demand. -->
+        <div id="gaKeyRow" class="ga-row hidden">
+          <div class="ga-key-line">
+            <span id="gaKeyEpoch">Encryption: key #0</span>
+            <button id="gaRotateBtn" class="ga-btn" onclick="app.rotateGroupKey()">Rotate key</button>
+          </div>
+          <div id="gaKeyAge" class="ga-key-age"></div>
+          <div class="ga-key-note">
+            The key rotates on its own once it has covered a week or a few
+            thousand messages, so no single key covers the whole life of the
+            group. Evicting a member rotates it immediately. Rotate by hand if
+            a member's device or key may have been exposed — the new key is
+            sealed to each remaining member, so anyone outside the group stops
+            being able to read new messages. Older messages stay readable.
+            Each rotation seals with a throwaway key that is discarded on the
+            spot, so leaking an admin's identity key later does not re-open
+            past keys. Keys are stored encrypted on this device, tied to this
+            visor's identity.
+          </div>
         </div>
-        <div id="gaKeyAge" class="ga-key-age"></div>
-        <div class="ga-key-note">
-          The key rotates on its own once it has covered a week or a few
-          thousand messages, so no single key covers the whole life of the
-          group. Evicting a member rotates it immediately. Rotate by hand if
-          a member's device or key may have been exposed — the new key is
-          sealed to each remaining member, so anyone outside the group stops
-          being able to read new messages. Older messages stay readable.
-          Each rotation seals with a throwaway key that is discarded on the
-          spot, so leaking an admin's identity key later does not re-open
-          past keys. Keys are stored encrypted on this device, tied to this
-          visor's identity.
+        <div class="settings-section" id="gaMembersSection">Members</div>
+        <div id="gaRequestsWrap" class="hidden">
+          <h4 class="ga-heading">Join requests <span id="gaRequestsCount" class="ga-badge"></span></h4>
+          <ul id="gaRequests" class="ga-list"></ul>
         </div>
-      </div>
-      <div id="gaRequestsWrap" class="hidden">
-        <h4 class="ga-heading">Join requests <span id="gaRequestsCount" class="ga-badge"></span></h4>
-        <ul id="gaRequests" class="ga-list"></ul>
-      </div>
-      <h4 class="ga-heading">Members</h4>
-      <ul id="gaMembers" class="ga-list"></ul>
-      <!-- Shown to admins of a group that has only one. An invite names
-           the group's admins, so with one admin the group can only be
-           joined while that one visor is online. -->
-      <div id="gaSoloAdminHint" class="ga-hint hidden">
-        You are this group's only admin — nobody can join while you are
-        offline. Make another member an admin so invites have a second door.
-      </div>
-      <div id="gaBannedWrap" class="hidden">
-        <h4 class="ga-heading">Banned</h4>
-        <ul id="gaBanned" class="ga-list"></ul>
+        <!-- Shown only when the join-request list is above it, which is the
+             only time this list needs a label of its own: otherwise the
+             section header already names the one list under it. Worded "in
+             this group" rather than "Members" so it never echoes that header. -->
+        <h4 class="ga-heading hidden" id="gaMembersHeading">In this group</h4>
+        <ul id="gaMembers" class="ga-list"></ul>
+        <!-- Shown to admins of a group that has only one. An invite names
+             the group's admins, so with one admin the group can only be
+             joined while that one visor is online. -->
+        <div id="gaSoloAdminHint" class="ga-hint hidden">
+          You are this group's only admin — nobody can join while you are
+          offline. Make another member an admin so invites have a second door.
+        </div>
+        <div id="gaBannedWrap" class="hidden">
+          <h4 class="ga-heading">Banned</h4>
+          <ul id="gaBanned" class="ga-list"></ul>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="app.closeModal('groupAdminModal')">Close</button>
@@ -9249,8 +9282,9 @@
         }
         if (pending.target === 'group') {
           this._pendingAvatar = null;
+          const noun = this._groupNounCap();
           this._postGroupMeta({ avatar: pending.dataUrl })
-            .then(() => this.showToast('Group picture updated.'))
+            .then(() => this.showToast(`${noun} picture updated.`))
             .catch(e => this.showToast(`Failed: ${e.message || e}`, 'error'));
           return;
         }
@@ -10776,7 +10810,9 @@
             icon: icon(muted ? 'bellOff' : 'bell', 16), label: muted ? 'Unmute' : 'Mute',
             act: 'toggleMute', warn: muted,
           },
-          { icon: icon('users', 16), label: 'Members', act: 'openGroupAdmin', count: pending },
+          // Settings, not Members: the dialog behind it configures the room
+          // and lists its people, and the switches are the larger half.
+          { icon: icon('gear', 16), label: 'Settings', act: 'openGroupAdmin', count: pending },
           { icon: icon('link', 16), label: 'Invite link', act: 'showGroupInvite' },
           { icon: this._qrIcon(), label: 'QR code', act: 'showQr' },
           { sep: true },
@@ -11555,9 +11591,11 @@
 
       // ---- Group admission control -----------------------------------
 
-      // openGroupAdmin shows the members panel: the approval queue (admins
-      // only), the roster with per-member actions, the ban list, and the
-      // read-only toggle.
+      // openGroupAdmin shows the group's (or channel's) settings panel: the
+      // room's own configuration first — name and picture, read-only,
+      // discovery, join cost, backfill, key — then who is in it: the
+      // approval queue (admins only), the roster with per-member actions,
+      // and the ban list.
       openGroupAdmin() {
         if (!this.group) return;
         document.getElementById('groupAdminModal').classList.add('visible');
@@ -11585,6 +11623,13 @@
         // A channel is admins-only permanently, so a reversible "quiet the
         // room" toggle has nothing left to say there.
         const isChannel = !!(info && info.kind === 'channel');
+        // The dialog names what it is editing: a channel is not a group, and
+        // this is the one place both words are load-bearing.
+        const noun = this._groupNounCap();
+        const title = document.getElementById('gaTitle');
+        if (title) title.textContent = `${noun} settings`;
+        const membersHeading = document.getElementById('gaMembersHeading');
+        if (membersHeading) membersHeading.textContent = `In this ${this._groupNoun()}`;
         roRow.classList.toggle('hidden', !isAdmin || isChannel);
         document.getElementById('gaReadOnly').checked = !!(info && info.read_only);
 
@@ -11601,6 +11646,7 @@
           metaRow.classList.toggle('hidden', !isFounder);
           if (isFounder) {
             const nameField = document.getElementById('gaMetaName');
+            if (nameField) nameField.placeholder = `${noun} name`;
             // Refill only when idle — this dialog re-renders on every poll
             // of the request queue, and mid-typing is the wrong moment.
             if (nameField && document.activeElement !== nameField) {
@@ -11666,6 +11712,22 @@
           }
         }
 
+        // An empty section header is a lie. A plain member sees none of the
+        // switches above — and in a public group not even the privacy note —
+        // so the header appears only when something sits under it, and the
+        // Members header takes over the top slot when it does not.
+        const anySetting = [
+          'gaMetaRow', 'gaReadOnlyRow', 'gaListedRow', 'gaJoinCostRow',
+          'gaBackfillRow', 'gaPrivacyRow', 'gaKeyRow',
+        ].some(rowID => {
+          const row = document.getElementById(rowID);
+          return row && !row.classList.contains('hidden');
+        });
+        const settingsSection = document.getElementById('gaSettingsSection');
+        if (settingsSection) settingsSection.classList.toggle('hidden', !anySetting);
+        const membersSection = document.getElementById('gaMembersSection');
+        if (membersSection) membersSection.classList.toggle('flush', !anySetting);
+
         this._renderMemberList(info, isAdmin);
 
         const banWrap = document.getElementById('gaBannedWrap');
@@ -11682,12 +11744,24 @@
         // Requests are admin-only and only meaningful for approval-type
         // groups; an open group admits without ever queuing.
         const reqWrap = document.getElementById('gaRequestsWrap');
-        if (!isAdmin) { reqWrap.classList.add('hidden'); return; }
+        // The roster heading rides along: it exists to separate two adjacent
+        // lists, so it appears exactly when the request list does. Left
+        // alone until the fetch answers, so a poll doesn't flicker it.
+        const showRosterHeading = show => {
+          const h = document.getElementById('gaMembersHeading');
+          if (h) h.classList.toggle('hidden', !show);
+        };
+        if (!isAdmin) {
+          reqWrap.classList.add('hidden');
+          showRosterHeading(false);
+          return;
+        }
         fetch(`/group/${gid}/requests`)
           .then(res => res.ok ? res.json() : [])
           .then(reqs => {
             reqs = reqs || [];
             reqWrap.classList.toggle('hidden', reqs.length === 0);
+            showRosterHeading(reqs.length > 0);
             document.getElementById('gaRequestsCount').textContent = reqs.length || '';
             const list = document.getElementById('gaRequests');
             list.innerHTML = '';
@@ -11699,7 +11773,7 @@
               ]));
             });
           })
-          .catch(() => reqWrap.classList.add('hidden'));
+          .catch(() => { reqWrap.classList.add('hidden'); showRosterHeading(false); });
       }
 
       _renderMemberList(info, isAdmin) {
@@ -12056,6 +12130,12 @@
       _groupNoun() {
         const info = this._groupInfo();
         return (info && info.kind === 'channel') ? 'channel' : 'group';
+      }
+
+      // The same word where a sentence or a title starts with it.
+      _groupNounCap() {
+        const noun = this._groupNoun();
+        return noun.charAt(0).toUpperCase() + noun.slice(1);
       }
 
       leaveGroup() {
