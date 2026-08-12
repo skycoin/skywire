@@ -598,6 +598,8 @@ dep-github-release:
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
 
+.PHONY: check-ui check-onpush
+
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
 	cd $(MANAGER_UI_DIR) && npm ci
@@ -645,6 +647,24 @@ build-ui: install-deps-ui  ## Builds the UI
 	rm -rf ${MANAGER_UI_BUILT_DIR}
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
+
+check-onpush:  ## Fail if an OnPush component has an unmarked asynchronous callback
+	node ci-scripts/check-onpush-marks.js $(MANAGER_UI_DIR)/src
+
+check-ui: build-ui  ## Fail if the committed manager UI bundle is stale vs a fresh build
+	@# pkg/visor/static is a build artifact committed to the repository and
+	@# embedded in the visor, so a stale one ships an old UI from source that
+	@# looks current. CI builds the UI already; this is what makes the build
+	@# prove the committed copy matches.
+	@git diff --quiet -- $(MANAGER_UI_BUILT_DIR) && git diff --quiet --cached -- $(MANAGER_UI_BUILT_DIR) \
+		&& test -z "$$(git ls-files --others --exclude-standard -- $(MANAGER_UI_BUILT_DIR))" || { \
+		echo "ERROR: the committed manager UI bundle is stale."; \
+		echo "Run 'make build-ui' and commit the result."; \
+		git --no-pager diff --stat -- $(MANAGER_UI_BUILT_DIR); \
+		git ls-files --others --exclude-standard -- $(MANAGER_UI_BUILT_DIR); \
+		exit 1; \
+	}
+	@echo "The committed manager UI bundle is up to date."
 
 build-ui-windows: install-deps-ui ## Builds the UI on windows
 	cd $(MANAGER_UI_DIR) && npm run build

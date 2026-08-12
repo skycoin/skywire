@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 import { UntypedFormControl, UntypedFormGroup } from '@angular/forms';
 
@@ -9,7 +9,8 @@ import { SnackbarService } from '../../../../../services/snackbar.service';
   selector: 'app-proxy-settings',
   templateUrl: './proxy-settings.component.html',
   styleUrls: ['./proxy-settings.component.scss'],
-  standalone: false
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ProxySettingsComponent {
   form: UntypedFormGroup;
@@ -23,6 +24,7 @@ export class ProxySettingsComponent {
     @Inject(MAT_DIALOG_DATA) public data: { nodeKey: string },
     private nodeService: NodeService,
     private snackbarService: SnackbarService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.form = new UntypedFormGroup({
       skynetEnabled: new UntypedFormControl(false),
@@ -42,10 +44,12 @@ export class ProxySettingsComponent {
         const upstream = status?.skynet_web?.upstream_socks || '';
         this.form.get('skynetEnabled').setValue(skynetRunning);
         this.form.get('upstream').setValue(upstream);
+        this.changeDetectorRef.markForCheck();
       },
       () => {
  this.loading = false; 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -53,8 +57,11 @@ export class ProxySettingsComponent {
     this.nodeService.getSkynetPorts(this.data.nodeKey).subscribe(
       (ports: number[]) => {
         this.skynetPorts = (ports || []).sort((a, b) => a - b);
+        this.changeDetectorRef.markForCheck();
       },
-      () => {}
+      () => {
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -68,15 +75,19 @@ export class ProxySettingsComponent {
             this.loading = false;
             this.snackbarService.showDone(enable ? 'Resolving proxy enabled' : 'Resolving proxy disabled');
             this.loadStatus();
+            this.changeDetectorRef.markForCheck();
           },
           () => {
  this.loading = false; 
-}
+            this.changeDetectorRef.markForCheck();
+          }
         );
+        this.changeDetectorRef.markForCheck();
       },
       () => {
  this.loading = false; this.snackbarService.showError('Failed to toggle proxy'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -88,10 +99,12 @@ export class ProxySettingsComponent {
         this.loading = false;
         this.snackbarService.showDone(addr ? `Upstream set to ${addr}` : 'Upstream cleared');
         this.loadStatus();
+        this.changeDetectorRef.markForCheck();
       },
       () => {
  this.loading = false; this.snackbarService.showError('Failed to set upstream'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -107,9 +120,11 @@ export class ProxySettingsComponent {
         this.newPort = '';
         this.snackbarService.showDone(`Port ${port} forwarded`);
         this.loadPorts();
+        this.changeDetectorRef.markForCheck();
       },
       (err) => {
         this.snackbarService.showError(err?.error?.error || 'Failed to register port');
+        this.changeDetectorRef.markForCheck();
       }
     );
   }
@@ -119,10 +134,12 @@ export class ProxySettingsComponent {
       () => {
         this.snackbarService.showDone(`Port ${port} removed`);
         this.loadPorts();
+        this.changeDetectorRef.markForCheck();
       },
       () => {
  this.snackbarService.showError('Failed to deregister port'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 

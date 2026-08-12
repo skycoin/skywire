@@ -1,4 +1,4 @@
-import { Component, HostListener, OnInit } from '@angular/core';
+import { Component, HostListener, OnInit, ChangeDetectionStrategy } from '@angular/core';
 
 /**
  * Info about a value saved using the functions from PageBase.
@@ -23,7 +23,8 @@ export class LocalValueData {
     selector: 'app-page-base',
     template: '',
     styles: [],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PageBaseComponent implements OnInit {
   // Property to make mandatory calling super.ngOnInit on child classes.
@@ -38,6 +39,7 @@ export class PageBaseComponent implements OnInit {
     let lastScrollPos = this.getLocalValue(this.persistentScrollPosKey);
     lastScrollPos = lastScrollPos ? lastScrollPos.value : '0';
     window.scrollTo(0, Number(lastScrollPos));
+    // change-detection: no view state — scrolls the window
     setTimeout(() => window.scrollTo(0, Number(lastScrollPos)), 1);
 
     return undefined as typeof PageBaseComponent.mustCallNgOnInitSuper & never;

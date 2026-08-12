@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 
@@ -12,7 +12,8 @@ import { AppConfig } from 'src/app/app.config';
     selector: 'app-select-language',
     templateUrl: './select-language.component.html',
     styleUrls: ['./select-language.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SelectLanguageComponent implements OnInit, OnDestroy {
   languages: LanguageData[] = [];
@@ -33,11 +34,13 @@ export class SelectLanguageComponent implements OnInit, OnDestroy {
   constructor(
     public dialogRef: MatDialogRef<SelectLanguageComponent>,
     private languageService: LanguageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
     this.subscription = this.languageService.languages.subscribe(languages => {
       this.languages = languages;
+      this.changeDetectorRef.markForCheck();
     });
   }
 

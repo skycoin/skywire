@@ -240,6 +240,7 @@ export class TransportListComponent implements OnDestroy {
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allTransports has already been sorted.
       this.recalculateElementsToShow();
+      this.cdr.markForCheck();
     });
 
     this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
@@ -247,6 +248,7 @@ export class TransportListComponent implements OnDestroy {
       this.filteredTransports = data;
 
       this.dataSorter.setData(this.filteredTransports);
+      this.cdr.markForCheck();
     });
 
     // Get the page requested in the URL.
@@ -261,12 +263,14 @@ export class TransportListComponent implements OnDestroy {
 
         this.recalculateElementsToShow();
       }
+      this.cdr.markForCheck();
     });
 
     // Refresh the data after languaje changes, to ensure the labels used for filtering
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
       this.node = this.currentNode;
+      this.cdr.markForCheck();
     });
   }
 
@@ -403,9 +407,15 @@ export class TransportListComponent implements OnDestroy {
             dataToUse,
           ).subscribe(() => {
             this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, true);
-          }, (err: OperationError) => this.onAddError(err));
+            this.cdr.markForCheck();
+          }, (err: OperationError) => {
+ this.onAddError(err); this.cdr.markForCheck(); 
+});
         }
-      }, (err: OperationError) => this.onAddError(err));
+        this.cdr.markForCheck();
+      }, (err: OperationError) => {
+ this.onAddError(err); this.cdr.markForCheck(); 
+});
     } else {
       this.doCreateTransport(newTransportPk, newTransportType, newTransportLabel, false);
     }
@@ -433,6 +443,7 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.snackbarService.showWarning('transports.dialog.success-without-label');
       }
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       if (creatingAfterPersistent) {
         this.addBusy = false;
@@ -442,6 +453,7 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.onAddError(err);
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -527,6 +539,7 @@ export class TransportListComponent implements OnDestroy {
       } else if (selectedOption === 3) {
         this.delete(transport);
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -596,13 +609,17 @@ export class TransportListComponent implements OnDestroy {
       ).subscribe(() => {
         NodeComponent.refreshCurrentDisplayedData();
         this.snackbarService.showDone('transports.changes-made');
+        this.cdr.markForCheck();
       }, (err: OperationError) => {
         err = processServiceError(err);
         this.snackbarService.showError(err);
+        this.cdr.markForCheck();
       });
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
       this.snackbarService.showError(err);
+      this.cdr.markForCheck();
     });
   }
 
@@ -624,9 +641,11 @@ export class TransportListComponent implements OnDestroy {
     this.operationSubscriptionsGroup.push(this.startDeleting(transport.id).subscribe(() => {
       NodeComponent.refreshCurrentDisplayedData();
       this.snackbarService.showDone('transports.deleted');
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
       this.snackbarService.showError(err);
+      this.cdr.markForCheck();
     }));
   }
 
@@ -714,6 +733,7 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.deleteRecursively(ids, confirmationDialog);
       }
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
       err = processServiceError(err);
@@ -722,6 +742,7 @@ export class TransportListComponent implements OnDestroy {
       } else {
         this.snackbarService.showError(err);
       }
+      this.cdr.markForCheck();
     }));
   }
 }

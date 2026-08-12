@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription, map } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -30,7 +30,8 @@ import { DataFilterer } from 'src/app/utils/lists/data-filterer';
     selector: 'app-node-app-list',
     templateUrl: './node-apps-list.component.html',
     styleUrls: ['./node-apps-list.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeAppsListComponent implements OnInit, OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
@@ -193,6 +194,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
     private storageService: StorageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     // Get the page and type requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
@@ -210,6 +212,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
 
         this.recalculateElementsToShow();
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -227,6 +230,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allAppsForType has already been sorted.
       this.recalculateElementsToShow();
+      this.changeDetectorRef.markForCheck();
     });
 
     if (this.dataSorter) {
@@ -237,6 +241,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredApps = data;
       this.dataSorter.setData(this.filteredApps);
+      this.changeDetectorRef.markForCheck();
     });
 
     if (this.allAppsForType) {
@@ -509,6 +514,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       } else if (selectedOption === 4) {
         this.toggleExpanded(app.name);
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -555,8 +561,10 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           this.refreshAgain = true;
           NodeComponent.refreshCurrentDisplayedData();
+          this.changeDetectorRef.markForCheck();
         }, 50);
         this.snackbarService.showDone('apps.operation-completed');
+        this.changeDetectorRef.markForCheck();
       }, (err: OperationError) => {
         err = processServiceError(err);
 
@@ -565,6 +573,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           this.refreshAgain = true;
           NodeComponent.refreshCurrentDisplayedData();
+          this.changeDetectorRef.markForCheck();
         }, 50);
 
         if (confirmationDialog) {
@@ -572,6 +581,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         } else {
           this.snackbarService.showError(err);
         }
+        this.changeDetectorRef.markForCheck();
       }
     ));
   }
@@ -674,7 +684,9 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     if (this.refreshAgain) {
       this.refreshAgain = false;
 
-      setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 2000);
+      setTimeout(() => {
+ NodeComponent.refreshCurrentDisplayedData(); this.changeDetectorRef.markForCheck(); 
+}, 2000);
     }
   }
 
@@ -722,7 +734,9 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
 
     // The list may be empty because apps which already have the settings are ignored.
     if (!names || names.length === 0) {
-      setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
+      setTimeout(() => {
+ NodeComponent.refreshCurrentDisplayedData(); this.changeDetectorRef.markForCheck(); 
+}, 50);
       this.snackbarService.showWarning('apps.operation-unnecessary');
 
       if (confirmationDialog) {
@@ -751,12 +765,14 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           this.refreshAgain = true;
           NodeComponent.refreshCurrentDisplayedData();
+          this.changeDetectorRef.markForCheck();
         }, 50);
 
         this.snackbarService.showDone('apps.operation-completed');
       } else {
         this.changeAppsValRecursively(names, changingAutostart, newVal, confirmationDialog);
       }
+      this.changeDetectorRef.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
 
@@ -765,6 +781,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       setTimeout(() => {
         this.refreshAgain = true;
         NodeComponent.refreshCurrentDisplayedData();
+        this.changeDetectorRef.markForCheck();
       }, 50);
 
       if (confirmationDialog) {
@@ -772,6 +789,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       } else {
         this.snackbarService.showError(err);
       }
+      this.changeDetectorRef.markForCheck();
     }));
   }
 }
