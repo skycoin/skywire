@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router, NavigationEnd } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription, delay, mergeMap, of } from 'rxjs';
@@ -17,7 +17,8 @@ import { processServiceError } from './utils/errors';
     selector: 'app-root',
     templateUrl: './app.component.html',
     styleUrls: ['./app.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AppComponent {
   static currentInstance: AppComponent;
@@ -35,7 +36,7 @@ export class AppComponent {
 
   showingDataProblemMsg = false;
 
-  obtainPkSubscription: Subscription;
+  obtainPkSubscription!: Subscription;
 
   constructor(
     // Imported to call its constructor right after opening the app.
@@ -46,6 +47,7 @@ export class AppComponent {
     private languageService: LanguageService,
     private apiService: ApiService,
     ngBridge: NgBridgeService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     AppComponent.currentInstance = this;
 
@@ -54,7 +56,9 @@ export class AppComponent {
     ngBridge.install();
 
     // Close the snackbar when opening a modal window.
-    dialog.afterOpened.subscribe(() => snackbarService.closeCurrent());
+    dialog.afterOpened.subscribe(() => {
+ snackbarService.closeCurrent(); this.changeDetectorRef.markForCheck(); 
+});
 
     // Prevent automatic scroll retoration during navigation.
     if (history.scrollRestoration) {
@@ -68,11 +72,14 @@ export class AppComponent {
         snackbarService.closeCurrent();
         dialog.closeAll();
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     // After closing the modal windows, close the snackbar, but only if it is showing a temporary error,
     // as modal windows can open the snackbar for showing messages that should stay open.
-    dialog.afterAllClosed.subscribe(() => snackbarService.closeCurrentIfTemporaryError());
+    dialog.afterAllClosed.subscribe(() => {
+ snackbarService.closeCurrentIfTemporaryError(); this.changeDetectorRef.markForCheck(); 
+});
 
     // Check if the app is showing the VPN client.
     router.events.subscribe((e: any) => {
@@ -96,6 +103,7 @@ export class AppComponent {
           document.title = 'Skywire Hypervisor';
         }
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     // Initialize the language configuration.
@@ -148,6 +156,7 @@ export class AppComponent {
         }
         this.checkHypervisorPk(1000);
       }
+      this.changeDetectorRef.markForCheck();
     }, err => {
       this.pkErrorsFound += 1;
 
@@ -161,6 +170,7 @@ export class AppComponent {
       if (!this.inLoginPage && this.pkErrorsFound < 30) {
         this.checkHypervisorPk(Math.min(this.pkErrorsFound * 1000, 10000));
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 

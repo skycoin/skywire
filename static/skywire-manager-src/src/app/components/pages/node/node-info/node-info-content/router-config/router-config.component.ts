@@ -1,4 +1,4 @@
-import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { UntypedFormGroup, UntypedFormBuilder, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -33,15 +33,16 @@ export interface RouterConfigParams {
     selector: 'app-router-config',
     templateUrl: './router-config.component.html',
     styleUrls: ['./router-config.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RouterConfigComponent implements OnInit, OnDestroy {
-  @ViewChild('button') button: ButtonComponent;
-  @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('button') button!: ButtonComponent;
+  @ViewChild('firstInput') firstInput!: ElementRef;
 
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
 
-  private operationSubscription: Subscription;
+  private operationSubscription!: Subscription | null;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -72,6 +73,7 @@ export class RouterConfigComponent implements OnInit, OnDestroy {
       ])],
     });
 
+    // change-detection: no view state — focuses an input
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 

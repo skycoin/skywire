@@ -22,6 +22,16 @@ var (
 	ErrNoAvailableRoutes = errors.New("no available routeIDs")
 )
 
+// RoutingTableStats summarizes a routing table for observability: the live rule
+// count, the monotonic route-ID high-water mark (RouteIDs are never reused, so
+// this only ever grows — tracking it surfaces reservation leaks under churn),
+// and a per-rule-type breakdown.
+type RoutingTableStats struct {
+	Count  int            `json:"count"`
+	NextID RouteID        `json:"next_id"`
+	ByType map[string]int `json:"by_type"`
+}
+
 // Table represents a routing table implementation.
 type Table interface {
 	// ReserveKeys reserves n RouteIDs.
@@ -51,6 +61,10 @@ type Table interface {
 
 	// Count returns the number of RoutingRule entries stored.
 	Count() int
+
+	// Stats returns observability counters: live rule count, the monotonic
+	// route-ID high-water mark (never reused), and a per-type breakdown.
+	Stats() RoutingTableStats
 
 	// CollectGarbage checks all the stored rules, removes and returns ones that timed out.
 	CollectGarbage() []Rule
@@ -228,6 +242,17 @@ func (mt *memTable) Count() int {
 	defer mt.RUnlock()
 
 	return len(mt.rules)
+}
+
+func (mt *memTable) Stats() RoutingTableStats {
+	mt.RLock()
+	defer mt.RUnlock()
+
+	byType := make(map[string]int, 4)
+	for _, r := range mt.rules {
+		byType[r.Type().String()]++
+	}
+	return RoutingTableStats{Count: len(mt.rules), NextID: mt.nextID, ByType: byType}
 }
 
 func (mt *memTable) CollectGarbage() []Rule {

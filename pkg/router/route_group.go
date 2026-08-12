@@ -1459,6 +1459,66 @@ func (rg *RouteGroup) pruneDeadTransports() []int {
 	return droppedIdx
 }
 
+// pruneLegByConsumeRule removes the single mux leg whose consume (reverse) rule
+// matches routeID, WITHOUT closing the route group — the endpoint counterpart to
+// a remote peer retiring one leg (routing.CloseLegRetired). It reclaims that
+// leg's forward+consume rules and drops it from the mux, leaving the group and
+// its other legs live. Returns true if a leg was pruned; false if this is the
+// group's last leg (or the rule wasn't found), in which case the caller falls
+// back to a normal whole-group close. Mirrors pruneDeadTransports' slice/rule
+// bookkeeping; tolerates pruning index 0 exactly as the dead-transport path does
+// (the mux selector is rebuilt and tps[0]-hardcoded probes re-target the new
+// primary leg).
+func (rg *RouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
+	rg.mu.Lock()
+	if len(rg.tps) <= 1 || len(rg.rvs) <= 1 {
+		rg.mu.Unlock()
+		return false // last leg — let the caller do a full close
+	}
+	idx := -1
+	for i, rv := range rg.rvs {
+		if rv != nil && rv.KeyRouteID() == routeID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		rg.mu.Unlock()
+		return false
+	}
+
+	var deadRuleIDs []routing.RouteID
+	if idx < len(rg.fwd) {
+		deadRuleIDs = append(deadRuleIDs, rg.fwd[idx].KeyRouteID())
+	}
+	if idx < len(rg.rvs) {
+		deadRuleIDs = append(deadRuleIDs, rg.rvs[idx].KeyRouteID())
+	}
+
+	if idx < len(rg.tps) {
+		rg.tps = append(rg.tps[:idx], rg.tps[idx+1:]...)
+	}
+	if idx < len(rg.fwd) {
+		rg.fwd = append(rg.fwd[:idx], rg.fwd[idx+1:]...)
+	}
+	if idx < len(rg.rvs) {
+		rg.rvs = append(rg.rvs[:idx], rg.rvs[idx+1:]...)
+	}
+
+	if len(deadRuleIDs) > 0 {
+		rg.rt.DelRules(deadRuleIDs)
+	}
+	if rg.mux != nil {
+		rg.mux.removeLegs(idx)
+		rg.mux.rebuildWeights(rg.tps)
+	}
+	rg.logger.Infof("Retired remote mux leg %d (consume rule %d); %d legs remain", idx, routeID, len(rg.tps))
+	rg.mu.Unlock()
+
+	rg.fireLegChange("retired-remote", idx)
+	return true
+}
+
 func (rg *RouteGroup) sendKeepAlive() error {
 	rg.mu.Lock()
 	defer rg.mu.Unlock()

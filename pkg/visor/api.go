@@ -176,6 +176,7 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	RoutingStats() (routing.RoutingTableStats, error)
 	// RoutingPolicies returns a snapshot of the currently-installed
 	// routing-policy state: the visor-wide default plus any per-app
 	// overrides. Empty struct when no policies are configured.
@@ -256,6 +257,7 @@ type API interface {
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
 	DmsgSessions() (*DmsgClientSessions, error)
+	DmsgConverge(carriers []string) (*DmsgConvergeResult, error)
 
 	// CXO user feeds — visor-published TreeStore feeds beyond the
 	// always-on telemetry one. See pkg/visor/cxo_user_feeds.go.

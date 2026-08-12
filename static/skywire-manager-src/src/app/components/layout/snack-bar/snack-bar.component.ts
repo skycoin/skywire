@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, ChangeDetectionStrategy } from '@angular/core';
 import { MAT_SNACK_BAR_DATA, MatSnackBarRef } from '@angular/material/snack-bar';
 
 /**
@@ -57,7 +57,8 @@ export interface SnackbarConfig {
     selector: 'app-snack-bar',
     templateUrl: './snack-bar.component.html',
     styleUrls: ['./snack-bar.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SnackbarComponent {
   config: SnackbarConfig;

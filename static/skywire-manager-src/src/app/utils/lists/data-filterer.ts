@@ -24,12 +24,12 @@ export class DataFilterer {
     return this.currentFiltersTextsInternal;
   }
   // Current params in the query string added to the url.
-  private currentUrlQueryParamsInternal: object;
+  private currentUrlQueryParamsInternal!: object;
   get currentUrlQueryParams(): object {
     return this.currentUrlQueryParamsInternal;
   }
   // Data to filter.
-  private data: any[];
+  private data!: any[];
 
   private dataUpdatedSubject = new Subject<any[]>();
 
@@ -62,7 +62,7 @@ export class DataFilterer {
     this.currentFilters = {};
     this.filterPropertiesList.forEach(property => {
       property.keyNameInFiltersObject = id + '_' + property.keyNameInElementsArray;
-      this.currentFilters[property.keyNameInFiltersObject] = '';
+      (this.currentFilters as any)[property.keyNameInFiltersObject] = '';
     });
 
     // Get the query string.
@@ -70,14 +70,14 @@ export class DataFilterer {
       // Get the filters from the query string.
       Object.keys(this.currentFilters).forEach(key => {
         if (queryParams.has(key)) {
-          this.currentFilters[key] = queryParams.get(key);
+          (this.currentFilters as any)[key] = queryParams.get(key);
         }
       });
 
       // Save the query string.
       this.currentUrlQueryParamsInternal = {};
       queryParams.keys.forEach(key => {
-        this.currentUrlQueryParamsInternal[key] = queryParams.get(key);
+        (this.currentUrlQueryParamsInternal as any)[key] = queryParams.get(key);
       });
 
       // Update the filtered data.
@@ -145,7 +145,7 @@ export class DataFilterer {
       // Check if at least one filter is valid.
       let filtersSet = false;
       Object.keys(this.currentFilters).forEach(key => {
-        if (this.currentFilters[key]) {
+        if ((this.currentFilters as any)[key]) {
           filtersSet = true;
         }
       });
