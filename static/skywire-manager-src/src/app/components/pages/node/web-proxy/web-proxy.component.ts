@@ -28,12 +28,12 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   form: UntypedFormGroup;
   loading = false;
   proxyStatus: any = null;
 
-  private nodeSub: Subscription;
+  private nodeSub!: Subscription;
 
   constructor(
     private nodeService: NodeService,
@@ -47,7 +47,7 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
     });
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;

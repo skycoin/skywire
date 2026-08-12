@@ -15,8 +15,8 @@ import { SelectableOption, SelectOptionComponent } from '../select-option/select
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PaginatorComponent {
-  @Input() currentPage: number;
-  @Input() numberOfPages: number;
+  @Input() currentPage!: number;
+  @Input() numberOfPages!: number;
 
   /**
    * Array with the parts of the route that must be openned by the buttons of the paginator.

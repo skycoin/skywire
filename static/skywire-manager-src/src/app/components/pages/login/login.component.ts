@@ -25,15 +25,15 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LoginComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
   loading = false;
   isForVpn = false;
   vpnKey = '';
   userExists = true; // hide configure button by default until we check
 
-  private verificationSubscription: Subscription;
-  private loginSubscription: Subscription;
-  private routeSubscription: Subscription;
+  private verificationSubscription!: Subscription;
+  private loginSubscription!: Subscription;
+  private routeSubscription!: Subscription;
 
   constructor(
     private authService: AuthService,
@@ -47,7 +47,7 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Stop multiple requests that will fail for auth.
     this.multipleNodeDataService.stopRequestingData();
 

@@ -18,11 +18,11 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 export class NodeInfoComponent extends PageBaseComponent implements OnInit, OnDestroy {
   private changeDetectorRef = inject(ChangeDetectorRef);
 
-  node: Node;
+  node!: Node;
 
-  private nodeSubscription: Subscription;
+  private nodeSubscription!: Subscription;
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.changeDetectorRef.markForCheck();

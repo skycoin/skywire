@@ -70,7 +70,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
   error: string | null = null;
   lastUpdated: Date | null = null;
 
-  private sub: Subscription;
+  private sub!: Subscription;
 
   constructor(
     private nodeService: NodeService,
@@ -81,7 +81,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.sub = interval(5000).pipe(
       startWith(0),
       switchMap(() => this.nodeService.getNodes()),

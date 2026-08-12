@@ -31,8 +31,8 @@ export interface EditVpnServerParams {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EditVpnServerValueComponent implements OnInit {
-  @ViewChild('firstInput') firstInput: ElementRef;
-  form: UntypedFormGroup;
+  @ViewChild('firstInput') firstInput!: ElementRef;
+  form!: UntypedFormGroup;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".

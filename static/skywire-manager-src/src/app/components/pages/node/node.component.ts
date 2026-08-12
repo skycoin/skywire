@@ -51,13 +51,13 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // Keys for persisting the server data, to be able to restore the state after navigation.
   private readonly persistentDataResponseKey = 'serv-dat-response';
 
-  node: Node;
+  node!: Node;
   nodeLoaded = false;
-  trafficData: TrafficData;
+  trafficData!: TrafficData;
   notFound = false;
 
   // Values for the tab bar.
-  titleParts = [];
+  titleParts: any[] = [];
   tabsData: TabButtonData[] = [];
   // Persistent hypervisor navigation shown on node pages (top-bar rows above the
   // per-node tabs): the home nav (visor list / rewards / resources / …) and the
@@ -65,7 +65,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   // without backing out to the list. Built in refreshNavRows().
   homeNavTabs: TabButtonData[] = [];
   switcherTabs: TabButtonData[] = [];
-  private switcherSubscription: Subscription;
+  private switcherSubscription!: Subscription;
   selectedTabIndex = -1;
   // Persistent visor identity rendered in the top bar — replaces
   // the translated "Visor details" title so the user can always see
@@ -84,16 +84,16 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   /**
    * Keeps track of the browser URL.
    */
-  private lastUrl: string;
+  private lastUrl!: string;
   /**
    * Allows to know if a route event already fired.
    */
    private initialRouteEventFired = false;
 
-  private dataSubscription: Subscription;
-  private updateTimeSubscription: Subscription;
+  private dataSubscription!: Subscription;
+  private updateTimeSubscription!: Subscription;
   private navigationsSubscription: Subscription;
-  private initSubscription: Subscription;
+  private initSubscription!: Subscription;
 
   // Vars for keeping track of the data updating.
   secondsSinceLastUpdate = 0;
@@ -109,7 +109,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   private instanceId = '';
 
   // Manages the options shown in the menu.
-  nodeActionsHelper: NodeActionsHelper;
+  nodeActionsHelper!: NodeActionsHelper;
 
   // Terminal iframe is hosted here (not in TerminalComponent) so the
   // dmsgpty websocket survives tab switches. Browsers reload an
@@ -180,8 +180,8 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     this.instanceId = Math.random().toString(36).substring(7);
 
     this.navigationsSubscription = router.events.subscribe(event => {
-      if (event['urlAfterRedirects']) {
-        this.lastUrl = event['urlAfterRedirects'] as string;
+      if ((event as any)['urlAfterRedirects']) {
+        this.lastUrl = (event as any)['urlAfterRedirects'] as string;
         this.processRouteUpdate();
         this.initialRouteEventFired = true;
       }
@@ -189,7 +189,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     });
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Procedure to keep updated the variable that indicates how long ago the data was updated.
     this.ngZone.runOutsideAngular(() => {
       this.updateTimeSubscription =

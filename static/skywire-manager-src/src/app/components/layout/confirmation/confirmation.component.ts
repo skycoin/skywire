@@ -65,17 +65,17 @@ enum ConfirmationStates {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ConfirmationComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('cancelButton') cancelButton: ButtonComponent;
-  @ViewChild('confirmButton') confirmButton: ButtonComponent;
+  @ViewChild('cancelButton') cancelButton!: ButtonComponent;
+  @ViewChild('confirmButton') confirmButton!: ButtonComponent;
 
   disableDismiss = false;
   state = ConfirmationStates.Asking;
   confirmationStates = ConfirmationStates;
 
   // Texts for the Done state.
-  doneTitle: string;
-  doneText: string;
-  doneList: string[];
+  doneTitle!: string;
+  doneText!: string;
+  doneList!: string[];
 
   // Event for when the user confirms.
   @Output() operationAccepted = new EventEmitter();
@@ -145,7 +145,7 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
    * @param newText New main text for the modal window.
    * @param newList New optional list to show below the main text.
    */
-  showDone(newTitle: string | null, newText: string, newList: string[] = null) {
+  showDone(newTitle: string | null, newText: string, newList: string[] | null = null) {
     if (newTitle) {
       this.doneTitle = newTitle;
     } else {

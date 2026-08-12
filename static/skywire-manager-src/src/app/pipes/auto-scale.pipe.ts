@@ -8,23 +8,23 @@ class AutoScalePipeParams {
   /**
    * If true, the numeric value will be shown.
    */
-  showValue: boolean;
+  showValue?: boolean;
   /**
    * If true, the unit will be shown.
    */
-  showUnit: boolean;
+  showUnit?: boolean;
   /**
    * If true, the unit will be in data per second (like KB/s instead of KB).
    */
-  showPerSecond: boolean;
+  showPerSecond?: boolean;
   /**
    * If true, the numeric value will have at most 1 decimal.
    */
-  limitDecimals: boolean;
+  limitDecimals?: boolean;
   /**
    * If the data must be shown in bits (true) or bytes (false).
    */
-  useBits: boolean;
+  useBits?: boolean;
 }
 
 /**
@@ -40,7 +40,7 @@ export class AutoScalePipe implements PipeTransform {
   private static readonly accumulatedMeasurementsInBits = ['b', 'Kb', 'Mb', 'Gb', 'Tb', 'Pb', 'Eb', 'Zb', 'Yb'];
   private static readonly measurementsPerSecInBits = ['b/s', 'Kb/s', 'Mb/s', 'Gb/s', 'Tb/s', 'Pb/s', 'Eb/s', 'Zb/s', 'Yb/s'];
 
-  transform(value: any, params: AutoScalePipeParams): any {
+  transform(value: any, params?: AutoScalePipeParams): any {
     let useBytes = true;
 
     /**

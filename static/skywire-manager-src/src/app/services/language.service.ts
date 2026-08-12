@@ -6,11 +6,11 @@ import { AppConfig } from '../app.config';
 import { environment } from '../../environments/environment';
 
 export class LanguageData {
-  code: string;
-  name: string;
-  iconName: string;
+  code!: string;
+  name!: string;
+  iconName!: string;
 
-  constructor(langObj) {
+  constructor(langObj: any) {
     Object.assign(this, langObj);
   }
 }

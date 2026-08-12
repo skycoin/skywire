@@ -13,5 +13,5 @@ import { TrafficData } from 'src/app/services/single-node-data.service';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ChartsComponent {
-  @Input() trafficData: TrafficData;
+  @Input() trafficData!: TrafficData;
 }

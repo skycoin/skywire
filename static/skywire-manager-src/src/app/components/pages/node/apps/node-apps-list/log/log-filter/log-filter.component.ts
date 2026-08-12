@@ -32,10 +32,10 @@ export interface LogsFilter {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LogFilterComponent implements OnInit, OnDestroy {
-  filters: LogsFilter[];
-  form: UntypedFormGroup;
+  filters!: LogsFilter[];
+  form!: UntypedFormGroup;
 
-  private formSubscription: Subscription;
+  private formSubscription!: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".

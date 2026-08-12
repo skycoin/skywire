@@ -38,7 +38,7 @@ interface LogMessage {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LogComponent implements OnInit, OnDestroy {
-  @ViewChild('content') content: ElementRef;
+  @ViewChild('content') content!: ElementRef;
 
   // Logs entries shown on the UI.
   logMessages: LogMessage[] = [];
@@ -58,7 +58,7 @@ export class LogComponent implements OnInit, OnDestroy {
    * getting the data, and not all the automatic attemps.
    */
   private shouldShowError = true;
-  private subscription: Subscription;
+  private subscription!: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".

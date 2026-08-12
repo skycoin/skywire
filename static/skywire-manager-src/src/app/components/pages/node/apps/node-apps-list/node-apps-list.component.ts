@@ -49,8 +49,8 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     'skycoin-daemon', 'skycoin-web', 'skydex-market', 'skydex-client',
   ]);
 
-  @Input() nodePK: string;
-  @Input() nodeIp: string;
+  @Input() nodePK!: string;
+  @Input() nodeIp!: string;
   @Input() showOfficialApps = true;
 
   // Vars with the data of the columns used for sorting the data.
@@ -59,13 +59,13 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   portSortData = new SortingColumn(['port'], 'apps.apps-list.port', SortingModes.Number);
   autoStartSortData = new SortingColumn(['autostart'], 'apps.apps-list.auto-start', SortingModes.Boolean);
 
-  private dataSortedSubscription: Subscription;
-  private dataFiltererSubscription: Subscription;
+  private dataSortedSubscription!: Subscription;
+  private dataFiltererSubscription!: Subscription;
   // Objects in charge of sorting and filtering the data.
-  dataSorter: DataSorter;
-  dataFilterer: DataFilterer;
+  dataSorter!: DataSorter;
+  dataFilterer!: DataFilterer;
 
-  dataSource: Application[];
+  dataSource!: Application[];
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -76,7 +76,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    * accessing the full list. If false, the full list is shown, with pagination
    * controls, if needed.
    */
-  showShortList_: boolean;
+  showShortList_!: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
     // Sort the data.
@@ -89,12 +89,12 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   appsWithoutConfig = new Set<string>();
 
   // All apps the ode has.
-  allApps: Application[];
+  allApps!: Application[];
   // All apps the node has for the selected type (official apps or user apps).
-  allAppsForType: Application[];
-  filteredApps: Application[];
-  appsToShow: Application[];
-  appsMap: Map<string, Application>;
+  allAppsForType!: Application[];
+  filteredApps!: Application[];
+  appsToShow!: Application[] | null;
+  appsMap!: Map<string, Application>;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is readed asynchronously.
@@ -547,7 +547,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    */
   private changeSingleAppVal(
     observable: Observable<any>,
-    confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
+    confirmationDialog: MatDialogRef<ConfirmationComponent, any> | null = null) {
 
     // Start the operation and save it for posible cancellation.
     this.operationSubscriptionsGroup.push(observable.subscribe(
@@ -730,7 +730,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     names: string[],
     changingAutostart: boolean,
     newVal: boolean,
-    confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
+    confirmationDialog: MatDialogRef<ConfirmationComponent, any> | null = null) {
 
     // The list may be empty because apps which already have the settings are ignored.
     if (!names || names.length === 0) {

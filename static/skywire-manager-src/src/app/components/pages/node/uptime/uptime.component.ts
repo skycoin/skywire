@@ -78,7 +78,7 @@ type WindowDays = 1 | 7 | 30;
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UptimeComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   days: DayBlock[] = [];
   loading = true;
   error: string | null = null;
@@ -97,14 +97,14 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
   serviceUptime: ServiceUptimeRow[] = [];
   serviceUptimeLoading = false;
 
-  private nodeSub: Subscription;
-  private pollSub: Subscription;
+  private nodeSub!: Subscription;
+  private pollSub!: Subscription;
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
  super(); 
 }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;

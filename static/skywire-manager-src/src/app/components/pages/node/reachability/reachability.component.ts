@@ -53,7 +53,7 @@ interface ResultRow {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ReachabilityComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
 
   // Form state
   target = '';
@@ -64,14 +64,14 @@ export class ReachabilityComponent extends PageBaseComponent implements OnInit, 
   // Result log (most recent first).
   results: ResultRow[] = [];
 
-  private nodeSub: Subscription;
-  private actionSub: Subscription;
+  private nodeSub!: Subscription;
+  private actionSub!: Subscription;
 
   constructor(private api: ApiService, private changeDetectorRef: ChangeDetectorRef) {
  super(); 
 }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.changeDetectorRef.markForCheck();

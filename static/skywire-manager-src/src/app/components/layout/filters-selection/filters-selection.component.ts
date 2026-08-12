@@ -35,7 +35,7 @@ export interface FiltersSelectiondParams {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FiltersSelectionComponent implements OnInit {
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
   filterFieldTypes = FilterFieldTypes;
 
   /**
@@ -61,7 +61,7 @@ export class FiltersSelectionComponent implements OnInit {
     // Create the form.
     const formFields = {};
     this.data.filterPropertiesList.forEach(properties => {
-      formFields[properties.keyNameInFiltersObject] = [this.data.currentFilters[properties.keyNameInFiltersObject]];
+      (formFields as any)[properties.keyNameInFiltersObject] = [this.data.currentFilters[properties.keyNameInFiltersObject]];
     });
 
     this.form = this.formBuilder.group(formFields);
@@ -73,7 +73,7 @@ export class FiltersSelectionComponent implements OnInit {
 
     // Build the response object.
     this.data.filterPropertiesList.forEach(properties => {
-      response[properties.keyNameInFiltersObject] =
+      (response as any)[properties.keyNameInFiltersObject] =
         (this.form.get(properties.keyNameInFiltersObject).value as string).trim();
     });
 
