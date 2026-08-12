@@ -34,7 +34,7 @@ const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WalletComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   // Possible UI states. The template branches on these.
   state: 'unknown' | 'not-configured' | 'not-running' | 'running' = 'unknown';
   // The URL the iframe / "open in new tab" button points at when
@@ -80,7 +80,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // don't fight for focus the way dialogs do.
   expandedDaemons = new Set<string>();
 
-  private nodeSub: Subscription;
+  private nodeSub!: Subscription;
 
   constructor(
     private sanitizer: DomSanitizer,
@@ -100,7 +100,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     }
   };
 
-  ngOnInit() {
+  override ngOnInit() {
     // The config UI lives in the embedded /wallet/config page (same origin, so
     // it reads+writes the same localStorage the /wallet/ shim reads). It's the
     // SAME page the ☰ wallet window uses — one config implementation. Point the

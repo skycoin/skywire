@@ -73,8 +73,8 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   rsnStats: RSNRemoteStat[] = [];
   rsnLoading = true;
 
-  private sub: Subscription;
-  private rsnSub: Subscription;
+  private sub!: Subscription;
+  private rsnSub!: Subscription;
 
   // Drill-down state: per-service-name expanded body + the loaded
   // raw JSON. Keyed by service name so clicking "Drill" twice on
@@ -89,7 +89,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // The deployment-service health table works on every core (a browser wasm
     // core probes each service's /health over dmsg — SelfServiceHealth). Poll
     // every 15s, starting immediately.

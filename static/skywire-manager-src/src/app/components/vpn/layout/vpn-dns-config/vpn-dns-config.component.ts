@@ -38,12 +38,12 @@ export interface VpnDnsConfigParams {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnDnsConfigComponent implements OnInit, OnDestroy {
-  @ViewChild('button') button: ButtonComponent;
-  @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('button') button!: ButtonComponent;
+  @ViewChild('firstInput') firstInput!: ElementRef;
 
-  form: FormGroup;
+  form!: FormGroup;
 
-  private operationSubscription: Subscription;
+  private operationSubscription!: Subscription | null;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".

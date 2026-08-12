@@ -81,7 +81,7 @@ const WINDOW = 60; // samples kept (≈ 60s at 1s polling)
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ResourceMonitorComponent implements OnInit, OnDestroy {
-  @Input() nodeKey: string;
+  @Input() nodeKey!: string;
   /** When true, the panel starts expanded + polling on init. Used
    *  by the dedicated Resources tab; right-bar embeds keep the
    *  collapsed-by-default behavior. */
@@ -117,9 +117,9 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
   private firstHostSample = true;
   private firstProcSample = true;
 
-  private hostSub: Subscription;
-  private procSub: Subscription;
-  private pollSub: Subscription;
+  private hostSub!: Subscription | null;
+  private procSub!: Subscription | null;
+  private pollSub!: Subscription | null;
 
   constructor(
     private nodeService: NodeService,

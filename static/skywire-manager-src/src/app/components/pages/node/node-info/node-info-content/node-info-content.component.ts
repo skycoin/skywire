@@ -37,8 +37,8 @@ export class NodeInfoContentComponent implements OnDestroy {
     this.fetchPorts(val.localPk);
   }
 
-  node: Node;
-  timeOnline: ElapsedTime;
+  node!: Node;
+  timeOnline!: ElapsedTime;
 
   // Live-counter state for "Time online". The backend refreshes the
   // visor's seconds_online roughly every 10s; the local 1Hz tick

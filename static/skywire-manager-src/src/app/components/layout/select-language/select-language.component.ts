@@ -18,7 +18,7 @@ import { AppConfig } from 'src/app/app.config';
 export class SelectLanguageComponent implements OnInit, OnDestroy {
   languages: LanguageData[] = [];
 
-  private subscription: Subscription;
+  private subscription!: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -48,7 +48,7 @@ export class SelectLanguageComponent implements OnInit, OnDestroy {
     this.subscription.unsubscribe();
   }
 
-  closePopup(language: LanguageData = null) {
+  closePopup(language: LanguageData | null = null) {
     if (language) {
       this.languageService.changeLanguage(language.code);
     }

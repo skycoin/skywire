@@ -120,7 +120,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   /**
    * Elements to show in the title. The idea is to show the path of the current page.
    */
-  @Input() titleParts: string[];
+  @Input() titleParts!: string[];
   /**
    * When set, replaces the translated titleParts text with a structured
    * "label + identifier" pair — used by the visor detail page so the
@@ -133,7 +133,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   /**
    * List with the tabs to show.
    */
-  @Input() tabsData: TabButtonData[];
+  @Input() tabsData!: TabButtonData[];
   /**
    * Optional persistent top-level navigation row rendered ABOVE the page tabs
    * (visor list / rewards / resources / …). Shown on node pages so the hypervisor
@@ -165,28 +165,28 @@ export class TopBarComponent implements OnInit, OnDestroy {
   /**
    * List with the options to show.
    */
-  @Input() optionsData: MenuOptionData[];
+  @Input() optionsData!: MenuOptionData[];
   /**
    * Text for the translatable pipe to be shown in the return button. The return button is only
    * shown if this var has a valid value. If the return button is pressed, the optionSelected
    * event is emited with null as value.
    */
-  @Input() returnText: string;
+  @Input() returnText!: string;
 
   /**
    * Seconds since the last time the data was updated.
    */
-  @Input() secondsSinceLastUpdate: number;
+  @Input() secondsSinceLastUpdate!: number;
   /**
    * Makes the refresh button to show a loading animation.
    */
-  @Input() showLoading: boolean;
+  @Input() showLoading!: boolean;
   /**
    * Makes the refresh button to show an alert icon, to inform that there was an error
    * updating the data. It also activates a tooltip in which he user can see how often
    * the system retries to get the data.
    */
-  @Input() showAlert: boolean;
+  @Input() showAlert!: boolean;
   /**
    * How often the system automatically refreshes the data, in seconds.
    */
@@ -220,10 +220,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
 
   hideLanguageButton = true;
   // Currently selecte language.
-  language: LanguageData;
+  language!: LanguageData;
 
   // Data about the current state of the vpn client app.
-  vpnData: VpnData;
+  vpnData!: VpnData;
   // If the vpn data must be shown.
   showVpnInfo = false;
   // If the state of the vpn client app has already been obtained for the first time.
@@ -245,10 +245,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
   errorsConnectingToVpn = false;
 
   private langSubscriptionsGroup: Subscription[] = [];
-  private vpnDataSubscription: Subscription;
-  private showVpnStateChangeAnimationSubscription: Subscription;
-  private showVpnStateAnimatedDotSubscription: Subscription;
-  private errorsConnectingToVpnSubscription: Subscription;
+  private vpnDataSubscription!: Subscription;
+  private showVpnStateChangeAnimationSubscription!: Subscription;
+  private showVpnStateAnimatedDotSubscription!: Subscription;
+  private errorsConnectingToVpnSubscription!: Subscription;
 
   constructor(
     private languageService: LanguageService,

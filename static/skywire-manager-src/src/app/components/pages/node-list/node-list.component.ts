@@ -103,9 +103,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   rewardDataLoaded = false;
 
   // Vars for the pagination functionality.
-  allNodes: Node[];
-  filteredNodes: Node[];
-  nodesToShow: Node[];
+  allNodes!: Node[];
+  filteredNodes!: Node[];
+  nodesToShow!: Node[] | null;
   hasOfflineNodes = false;
   numberOfPages = 1;
   currentPage = 1;
@@ -178,9 +178,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   ];
 
   private authVerificationSubscription: Subscription;
-  private dataSubscription: Subscription;
-  private updateTimeSubscription: Subscription;
-  private updateSubscription: Subscription;
+  private dataSubscription!: Subscription;
+  private updateTimeSubscription!: Subscription;
+  private updateSubscription!: Subscription;
   private navigationsSubscription: Subscription;
   private languageSubscription: Subscription;
 
@@ -349,7 +349,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     }
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Restore the user's drag-drop custom order from localStorage so
     // a reload preserves what they explicitly arranged. Empty / parse
     // failure → keep customNodeOrder as the empty default (pure

@@ -31,13 +31,13 @@ enum Level {
  */
 class LevelDetails {
   // Name to show on the log entries list for the importance level.
-  name: string;
+  name!: string;
   // CSS class for showing the name of the level.
-  colorClass: string;
+  colorClass!: string;
   // Translatable var for showing the name of a filter which shows entries of this level or more.
-  levelFilterName: string;
+  levelFilterName!: string;
   // Numeric importance of the leve.
-  importance: number;
+  importance!: number;
 }
 
 /**
@@ -45,15 +45,15 @@ class LevelDetails {
  */
 class LogEntry {
   // Date and hour.
-  time: string;
+  time!: string;
   // Importance level.
-  level: Level;
+  level!: Level;
   // Log msg.
-  msg: string;
+  msg!: string;
   // Function that originated the msg.
-  func: string;
+  func!: string;
   // Module that originated the msg.
-  _module: string;
+  _module!: string;
   // Collection of extra key value pairs that form part of the log entry.
   extra: LogEntryExtraValue[] = [];
 }
@@ -62,8 +62,8 @@ class LogEntry {
  * Unknown key value pairs that can be part of an log entry.
  */
 class LogEntryExtraValue {
-  name: string;
-  value: string;
+  name!: string;
+  value!: string;
 }
 
 /**
@@ -77,7 +77,7 @@ class LogEntryExtraValue {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeLogsComponent implements OnInit, OnDestroy {
-  @ViewChild('content') content: ElementRef;
+  @ViewChild('content') content!: ElementRef;
 
   // Map with the properties of each possible log entry importance level.
   levelDetails: Map<Level, LevelDetails> = new Map([
@@ -114,7 +114,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
   // Moment in which the data was loaded.
   LoadingMoment = 0;
   // How much time has passed since the data was loaded.
-  elapsedTime: ElapsedTime;
+  elapsedTime!: ElapsedTime;
 
   // Live tail polling. When true, the dialog re-fetches every
   // livePollMs and appends only the entries newer than its cursor.
@@ -152,8 +152,8 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
    */
   private shouldShowError = true;
 
-  private subscription: Subscription;
-  private timeUpdateSubscription: Subscription;
+  private subscription!: Subscription;
+  private timeUpdateSubscription!: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".

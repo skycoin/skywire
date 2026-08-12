@@ -35,13 +35,13 @@ enum WorkingOptions {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy {
-  @ViewChild('topBarLoading') topBarLoading: TopBarComponent;
-  @ViewChild('topBarLoaded') topBarLoaded: TopBarComponent;
+  @ViewChild('topBarLoading') topBarLoading!: TopBarComponent;
+  @ViewChild('topBarLoaded') topBarLoaded!: TopBarComponent;
 
   // If the data is being loaded.
   loading = true;
   // Current state of the VPN client app in the backend.
-  backendData: BackendState;
+  backendData!: BackendState;
   // If the option for getting the browser IP is active.
   getIpOption: boolean;
   // Units that must be used for displaying the data stats.
@@ -50,7 +50,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
   tabsData = VpnHelpers.vpnTabsData;
 
   // Pk of the local visor.
-  currentLocalPk: string;
+  currentLocalPk!: string;
 
   // Current option being changed asynchronously.
   working: WorkingOptions = WorkingOptions.None;
@@ -58,7 +58,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
 
   private navigationsSubscription: Subscription;
   private dataSubscription: Subscription;
-  private operationSubscription: Subscription;
+  private operationSubscription!: Subscription;
 
   constructor(
     private vpnClientService: VpnClientService,
@@ -215,14 +215,14 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
 
     // Get all the available options and mark the currently selected one.
     Object.keys(DataUnits).forEach(key => {
-      const option: SelectableOption = { label: this.getUnitsOptionText(DataUnits[key]) };
+      const option: SelectableOption = { label: this.getUnitsOptionText((DataUnits as any)[key]) };
 
-      if (this.dataUnitsOption === DataUnits[key]) {
+      if (this.dataUnitsOption === (DataUnits as any)[key]) {
         option.icon = 'done';
       }
 
       options.push(option);
-      optionValues.push(DataUnits[key]);
+      optionValues.push((DataUnits as any)[key]);
     });
 
     // Open the option selection modal window.

@@ -38,7 +38,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
   // Removes the password settings if the auth option is not active in the back-end.
   authActive = false;
 
-  private authSubscription: Subscription;
+  private authSubscription!: Subscription;
 
   // TODO: must be removed if the old updater is removed.
   //mustShowUpdaterSettings = !!localStorage.getItem(UpdaterStorageKeys.UseCustomSettings);
@@ -59,7 +59,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
     this.updateOptionsMenu();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     setTimeout(() => {
       this.waitBeforeShowingLoading = false;
       this.changeDetectorRef.markForCheck();

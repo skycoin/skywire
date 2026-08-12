@@ -62,8 +62,8 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
 
   nodeKey = '';
 
-  private portsSub: Subscription;
-  private fwdsSub: Subscription;
+  private portsSub!: Subscription;
+  private fwdsSub!: Subscription;
 
   constructor(
     private nodeService: NodeService,
@@ -73,7 +73,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeKey = NodeComponent.getCurrentNodeKey();
     this.loadPorts();
     this.loadForwards();
@@ -245,7 +245,7 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   clearWhitelist(fp: ForwardedPort) {
-    const updated = { ...fp, whitelist: [] };
+    const updated = { ...fp, whitelist: [] as any[] };
     this.nodeService.updateForwardedPort(this.nodeKey, updated).subscribe(
       () => {
         this.snackbarService.showDone(`Whitelist cleared on port ${fp.port}`);

@@ -80,10 +80,10 @@ interface RoutingPoliciesSummary {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RoutingComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
-  routes: Route[];
-  nodePK: string;
-  trafficData: TrafficData;
+  node!: Node;
+  routes!: Route[];
+  nodePK!: string;
+  trafficData!: TrafficData;
 
   // Inline router-config editor (replaces the dialog flow).
   showRouterForm = false;
@@ -120,11 +120,11 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   routingPoliciesLoading = false;
   routingPoliciesError: string | null = null;
 
-  private dataSubscription: Subscription;
-  private trafficSubscription: Subscription;
-  private saveRouterSubscription: Subscription;
-  private groupsSubscription: Subscription;
-  private policiesSubscription: Subscription;
+  private dataSubscription!: Subscription;
+  private trafficSubscription!: Subscription;
+  private saveRouterSubscription!: Subscription;
+  private groupsSubscription!: Subscription;
+  private policiesSubscription!: Subscription;
 
   constructor(
     private formBuilder: UntypedFormBuilder,
@@ -142,7 +142,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     });
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.localPk;
       this.node = node;

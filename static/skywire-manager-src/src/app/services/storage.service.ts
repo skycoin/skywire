@@ -22,15 +22,15 @@ export class LegacyNodeInfo {
   /**
    * Public key of the node.
    */
-  publicKey: string;
+  publicKey!: string;
   /**
    * Label of the node.
    */
-  label: string;
+  label!: string;
   /**
    * If true, the node should not be shown in the node list.
    */
-  deleted: boolean;
+  deleted!: boolean;
 }
 
 /**
@@ -41,15 +41,15 @@ export class LocalNodeInfo {
   /**
    * Public key of the node.
    */
-  publicKey: string;
+  publicKey!: string;
   /**
    * If true, the node should not be shown in the node list if it is offline.
    */
-  hidden: boolean;
+  hidden!: boolean;
   /**
    * IP the node had the last time it was seen.
    */
-  ip: string;
+  ip!: string;
 }
 
 /**
@@ -59,15 +59,15 @@ export class LabelInfo {
   /**
    * ID of the element.
    */
-  id: string;
+  id!: string;
   /**
    * Label for identifying the element.
    */
-  label: string;
+  label!: string;
   /**
    * Allows to know what the element is (like a node or a dmsg server).
    */
-  identifiedElementType: LabeledElementTypes;
+  identifiedElementType!: LabeledElementTypes;
 }
 
 /**
@@ -87,13 +87,13 @@ export enum LabeledElementTypes {
   providedIn: 'root'
 })
 export class StorageService {
-  private storage: Storage;
-  private hypervisorPk: string;
+  private storage!: Storage;
+  private hypervisorPk!: string;
   /**
    * The currently saved value of the time interval (seconds) in which the UI should automatically
    * referesh the data from the backend.
    */
-  private currentRefreshTime: number;
+  private currentRefreshTime!: number;
   private currentRefreshTimeSubject = new ReplaySubject<number>(1);
 
   /**
@@ -164,7 +164,7 @@ export class StorageService {
    * @param key Key of the data to save.
    * @param value Data to save
    */
-  setDataForHv(key: string, value) {
+  setDataForHv(key: string, value: any) {
     return this.storage.setItem(this.hypervisorPk + key, value);
   }
 

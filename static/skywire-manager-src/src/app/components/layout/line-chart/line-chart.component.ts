@@ -17,8 +17,8 @@ export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
   // Margin at the top of the chart. The max value will be this many pixels from the top.
   public static topInternalMargin = 5;
 
-  @ViewChild('chart') chartElement: ElementRef;
-  @Input() data: number[];
+  @ViewChild('chart') chartElement!: ElementRef;
+  @Input() data!: number[];
   @Input() height = 100;
   @Input() animated = false;
 
