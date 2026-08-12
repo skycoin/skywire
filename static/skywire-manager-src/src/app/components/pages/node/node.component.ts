@@ -581,7 +581,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
    * Called when an option form the top bar is selected.
    * @param actionName Name of the selected option.
    */
-  performAction(actionName: string) {
+  performAction(actionName: string | null) {
     // The helper object manages the event.
     this.nodeActionsHelper.performAction(actionName, NodeComponent.currentNodeKey!);
   }

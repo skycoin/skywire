@@ -30,7 +30,7 @@ enum KnownProblems {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnErrorComponent extends PageBaseComponent {
-  private problem: KnownProblems | string = null;
+  private problem: KnownProblems | string | null = null;
 
   private navigationsSubscription: Subscription;
 

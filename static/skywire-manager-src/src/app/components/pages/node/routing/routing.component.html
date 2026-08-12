@@ -288,13 +288,13 @@
           @for (appName of policyAppNames(); track appName) {
             <tr>
               <td>{{ appName }}</td>
-              <td class="mono small">{{ routingPolicies.per_app[appName].source }}</td>
-              <td>{{ routingPolicies.per_app[appName].backend || '-' }}</td>
+              <td class="mono small">{{ routingPolicies!.per_app[appName].source }}</td>
+              <td>{{ routingPolicies!.per_app[appName].backend || '-' }}</td>
               <td>
                 <span class="policy-badge"
-                      [class.policy-active]="routingPolicies.per_app[appName].active"
-                      [class.policy-inactive]="!routingPolicies.per_app[appName].active">
-                  {{ routingPolicies.per_app[appName].active
+                      [class.policy-active]="routingPolicies!.per_app[appName].active"
+                      [class.policy-inactive]="!routingPolicies!.per_app[appName].active">
+                  {{ routingPolicies!.per_app[appName].active
                       ? ('routing.policies.active' | translate)
                       : ('routing.policies.inactive' | translate) }}
                 </span>

@@ -67,7 +67,7 @@
                       [isBlocked]="currentRemoteServer.flag === serverFlags.Blocked"
                       [name]="currentRemoteServer.name"
                       [pk]="currentRemoteServer.pk"
-                      [customName]="currentRemoteServer.customName"
+                      [customName]="currentRemoteServer!.customName"
                       defaultName="vpn.unnamed">
                     </app-vpn-server-name>
                   </div>
@@ -377,7 +377,7 @@
                     [adjustIconsForBigText]="true"
                     [name]="currentRemoteServer.name"
                     [pk]="currentRemoteServer.pk"
-                    [customName]="currentRemoteServer.customName"
+                    [customName]="currentRemoteServer!.customName"
                     defaultName="vpn.unnamed">
                   </app-vpn-server-name>
                   <mat-icon

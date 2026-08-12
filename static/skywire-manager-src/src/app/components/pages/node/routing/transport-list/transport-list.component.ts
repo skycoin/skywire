@@ -75,7 +75,7 @@ export class TransportListComponent implements OnDestroy {
 
   currentNode!: Node;
   allTransports!: Transport[];
-  filteredTransports!: Transport[];
+  filteredTransports!: Transport[] | null;
   transportsToShow!: Transport[] | null;
   numberOfPages = 1;
   currentPage = 1;

@@ -59,7 +59,7 @@ interface VpnServerForList {
   /**
    * Custom name set by the user.
    */
-  customName: string;
+  customName: string | null;
   /**
    * Location of the server, obtained from the discovery service.
    */
@@ -101,7 +101,7 @@ interface VpnServerForList {
   /**
    * Personal note added by the user.
    */
-  personalNote: string;
+  personalNote: string | null;
   /**
    * Last moment in which the VPN was connected to the server.
    */
@@ -183,13 +183,13 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
   // If the app is still loading the data about the local visor. Must be true for showing the list.
   loadingBackendData = true;
   // Data for populating the list.
-  dataSource!: VpnServerForList[];
+  dataSource!: VpnServerForList[] | null;
   // Data for populating the tabs of the top bar.
   tabsData = VpnHelpers.vpnTabsData;
 
   // Vars for the pagination functionality.
   allServers!: VpnServerForList[];
-  filteredServers!: VpnServerForList[];
+  filteredServers!: VpnServerForList[] | null;
   serversToShow!: VpnServerForList[] | null;
   numberOfPages = 1;
   currentPage = 1;
@@ -201,7 +201,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
   // List currently being shown. It also means which tab is currently selected in the lower tab bar.
   currentList = Lists.Public;
   // Currently selected server.
-  currentServer!: LocalServerData;
+  currentServer!: LocalServerData | undefined;
   // If the VPN is currently running.
   vpnRunning = false;
 
@@ -263,7 +263,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
 
       // Get the PK of the current local visor.
       if (params.has('key')) {
-        this.currentLocalPk = params.get('key');
+        this.currentLocalPk = params.get('key')!;
         VpnHelpers.changeCurrentPk(this.currentLocalPk);
         this.tabsData = VpnHelpers.vpnTabsData;
       }
@@ -372,7 +372,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
     // favorites, blocked) the row already carries a LocalServerData.
     const localServer = server.originalLocalData
       ? server.originalLocalData
-      : this.vpnSavedDataService.processFromDiscovery(server.originalDiscoveryData);
+      : this.vpnSavedDataService.processFromDiscovery(server.originalDiscoveryData!);
 
     // Mark it as the current server (local/UI state only — no connection) and
     // navigate to the status page, where Start performs the actual connection.
@@ -386,7 +386,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
   openOptions(server: VpnServerForList) {
     let savedVersion = this.vpnSavedDataService.getSavedVersion(server.pk, true);
     if (!savedVersion) {
-      savedVersion = this.vpnSavedDataService.processFromDiscovery(server.originalDiscoveryData);
+      savedVersion = this.vpnSavedDataService.processFromDiscovery(server.originalDiscoveryData!);
     }
     if (!savedVersion) {
       // This should not happen.
@@ -441,11 +441,11 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
             countryCode: server.countryCode,
             countryName: this.getCountryName(server.countryCode),
             name: server.name,
-            customName: null as string | null,
+            customName: null,
             location: server.location,
             pk: server.pk,
             note: server.note,
-            personalNote: null as string | null,
+            personalNote: null,
 
             /*
             // TODO: for currently commented columns, must be deleted or reactivated depending on
