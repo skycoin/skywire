@@ -240,9 +240,18 @@ func TestTypeFromTransportID(t *testing.T) {
 	pkA, _ := cipher.GenerateKeyPair()
 	pkB, _ := cipher.GenerateKeyPair()
 
-	for _, ty := range []types.Type{types.STCPR, types.SUDPH, types.STCP, types.DMSG} {
+	// Every canonical known type must round-trip, including the newer
+	// transports (squicr/webrtc/swsr/swtr) that the old hard-coded list missed.
+	for _, ty := range types.Known() {
 		id := MakeTransportID(pkA, pkB, ty)
-		require.Equal(t, ty, TypeFromTransportID(id, pkA, pkB))
+		require.Equal(t, ty, TypeFromTransportID(id, pkA, pkB), "type %q must be recoverable from its TPID", ty)
+	}
+	// A transport registered under a legacy wire name resolves to its canonical
+	// type (its TPID differs from the canonical-named one, so this exercises the
+	// legacy-alias fallback).
+	for _, legacy := range []types.Type{types.QUICLegacy, types.QUICLegacy2, types.WSLegacy, types.WTLegacy} {
+		id := MakeTransportID(pkA, pkB, legacy)
+		require.Equal(t, types.NormalizeType(legacy), TypeFromTransportID(id, pkA, pkB), "legacy %q must normalize", legacy)
 	}
 	// An ID that matches no known type yields "".
 	require.Equal(t, types.Type(""), TypeFromTransportID(MakeTransportID(pkA, pkB, "weird"), pkA, pkB))
