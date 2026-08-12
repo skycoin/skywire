@@ -522,6 +522,10 @@ func (proxyDefaultAPI) RouteGroups() ([]RouteGroupInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) RoutingStats() (routing.RoutingTableStats, error) {
+	return routing.RoutingTableStats{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RoutingPolicies() (*RoutingPoliciesSummary, error) {
 	return nil, ErrProxyNotSupported
 }
