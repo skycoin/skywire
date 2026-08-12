@@ -68,10 +68,10 @@ func visorCall(method string, args ...interface{}) (js.Value, error) {
 	return jsAwait(v.Call(method, args...))
 }
 
-// meshHost splits a dmsg target into the host the resolver understands and the
-// path. The host is passed through untouched — alias resolution, the .dmsg
-// suffix and vhost handling all belong to resolveFetchHost on the visor side,
-// and duplicating them here would be a second thing to keep in step.
+// meshHost splits a dmsg target into the host the visor's resolver understands
+// and the path. Resolution itself stays on the visor side (resolveFetchHost):
+// all this does is give a bare alias the .dmsg suffix that resolver keys on,
+// so "tpd" works as well as "tpd.dmsg" — a public key goes through verbatim.
 func meshHost(raw string) (host, path string) {
 	s := raw
 	for _, scheme := range []string{"dmsg://", "skynet://", "http://"} {
@@ -84,7 +84,33 @@ func meshHost(raw string) (host, path string) {
 	if i := strings.IndexByte(s, '/'); i >= 0 {
 		path, s = s[i:], s[:i]
 	}
-	return s, path
+	// The visor's resolver keys on the .dmsg suffix — "tpd.dmsg" resolves, a
+	// bare "tpd" does not — so add it for anything that is not already a
+	// public key or suffixed. A raw key is 66 hex characters and must go
+	// through untouched.
+	host = s
+	if !strings.Contains(host, ".") && !isPubKey(strings.SplitN(host, ":", 2)[0]) {
+		if i := strings.IndexByte(host, ':'); i >= 0 {
+			host = host[:i] + ".dmsg" + host[i:]
+		} else {
+			host += ".dmsg"
+		}
+	}
+	return host, path
+}
+
+// isPubKey reports whether s looks like a hex-encoded public key, which the
+// resolver takes verbatim.
+func isPubKey(s string) bool {
+	if len(s) != 66 {
+		return false
+	}
+	for _, r := range s {
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 // registerMeshApplets adds the mesh-backed network commands to the shell.
