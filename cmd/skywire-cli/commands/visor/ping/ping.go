@@ -3,9 +3,11 @@ package ping
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/visor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
@@ -26,11 +29,55 @@ var (
 	tpType         string
 	useDmsg        bool
 	showRoute      bool
+	routeSpec      string
 	pingTimeout    time.Duration
 	setupTimeout   time.Duration
 	allDmsgServers bool
 	dmsgServerPK   string
 )
+
+// parseRouteSpec parses an explicit route to pin, accepting the JSON emitted by
+// `skywire cli route find` / `route calc` — {"forward":[...],"reverse":[...]}
+// with routing.Hop entries — either inline or as @<file>. When reverse is empty
+// it is mirrored from forward (reverse order, From/To swapped, same transport
+// ID, since transports are bidirectional). Pinning a fixed route is what makes a
+// cascade-vs-legacy A/B valid: the same intermediates carry both arms.
+func parseRouteSpec(spec string) (fwd, rev []rpcgrpc.RouteHopDetail, err error) {
+	data := []byte(spec)
+	if strings.HasPrefix(spec, "@") {
+		data, err = os.ReadFile(strings.TrimPrefix(spec, "@")) //nolint:gosec
+		if err != nil {
+			return nil, nil, fmt.Errorf("read route file: %w", err)
+		}
+	}
+	var r struct {
+		Forward []routing.Hop `json:"forward"`
+		Reverse []routing.Hop `json:"reverse"`
+	}
+	if err := json.Unmarshal(data, &r); err != nil {
+		return nil, nil, fmt.Errorf("parse --route JSON (expects route find/calc output): %w", err)
+	}
+	if len(r.Forward) == 0 {
+		return nil, nil, fmt.Errorf("--route has no forward hops")
+	}
+	toDetail := func(h routing.Hop) rpcgrpc.RouteHopDetail {
+		return rpcgrpc.RouteHopDetail{TpID: h.TpID.String(), From: h.From.String(), To: h.To.String()}
+	}
+	for _, h := range r.Forward {
+		fwd = append(fwd, toDetail(h))
+	}
+	if len(r.Reverse) > 0 {
+		for _, h := range r.Reverse {
+			rev = append(rev, toDetail(h))
+		}
+	} else {
+		for i := len(r.Forward) - 1; i >= 0; i-- {
+			h := r.Forward[i]
+			rev = append(rev, rpcgrpc.RouteHopDetail{TpID: h.TpID.String(), From: h.To.String(), To: h.From.String()})
+		}
+	}
+	return fwd, rev, nil
+}
 
 func init() {
 	// Register flags on RootCmd so they work with `ping <pk> --flags`
@@ -41,6 +88,7 @@ func init() {
 	RootCmd.Flags().StringVar(&tpType, "tp-type", "stcpr", "Transport type to create when using --create-tp (stcpr or sudph)")
 	RootCmd.Flags().BoolVar(&useDmsg, "dmsg", false, "Ping over dmsg connection instead of skywire route")
 	RootCmd.Flags().BoolVar(&showRoute, "show-route", false, "Show the route hops used for the ping")
+	RootCmd.Flags().StringVar(&routeSpec, "route", "", "Pin an explicit route, skipping route calculation. Accepts `route find`/`route calc` JSON ({\"forward\":[...],\"reverse\":[...]}) inline or as @<file>; reverse is mirrored from forward if omitted. Forces the same intermediates across a cascade-vs-legacy A/B.")
 	RootCmd.Flags().DurationVarP(&pingTimeout, "timeout", "o", 0, "Timeout per ping attempt; fails if exceeded (e.g., 5s, 30s)")
 	RootCmd.Flags().DurationVar(&setupTimeout, "setup-timeout", 30*time.Second, "Timeout for route setup phase")
 	RootCmd.Flags().BoolVar(&allDmsgServers, "all-servers", false, "Ping through all DMSG servers the remote visor is connected to (only with --dmsg)")
@@ -188,6 +236,13 @@ var pingCmd = &cobra.Command{
 			// Normal DMSG ping (optionally via specific server)
 			fmt.Printf("Dialing dmsg ping to %s...\n", pk)
 			err = grpcClient.StreamDmsgPing(ctx, pk.String(), int32(tries), int32(pcktSize), pingTimeout, dmsgServerPK, callback)
+		} else if routeSpec != "" {
+			fwd, rev, perr := parseRouteSpec(routeSpec)
+			if perr != nil {
+				internal.PrintFatalError(cmd.Flags(), perr)
+			}
+			fmt.Printf("Dialing pinned %d-hop route to %s...\n", len(fwd), pk)
+			err = grpcClient.StreamPingWithRoute(ctx, pk.String(), int32(tries), int32(pcktSize), localRoute, pingTimeout, setupTimeout, fwd, rev, callback)
 		} else {
 			fmt.Printf("Dialing ping to %s...\n", pk)
 			err = grpcClient.StreamPing(ctx, pk.String(), int32(tries), int32(pcktSize), localRoute, pingTimeout, setupTimeout, callback)
