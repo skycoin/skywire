@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef } from '@angular/material/dialog';
 
 import { ProxyDiscoveryService } from 'src/app/services/proxy-discovery.service';
@@ -18,6 +18,7 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
   templateUrl: './select-proxy-server.component.html',
   styleUrls: ['./select-proxy-server.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SelectProxyServerComponent implements OnInit {
   servers: ProxyDiscoveryEntry[] = [];

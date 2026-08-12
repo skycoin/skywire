@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { Node, Application } from '../../../../app.datatypes';
@@ -21,6 +21,7 @@ const VPN_SERVER = 'vpn-server';
   templateUrl: './vpn.component.html',
   styleUrls: ['./vpn.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
@@ -58,6 +59,7 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();

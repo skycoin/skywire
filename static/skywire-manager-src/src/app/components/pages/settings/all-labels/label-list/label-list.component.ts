@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy } from '@angular/core';
+import { Component, Input, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -21,7 +21,8 @@ import { DataFilterer } from 'src/app/utils/lists/data-filterer';
     selector: 'app-label-list',
     templateUrl: './label-list.component.html',
     styleUrls: ['./label-list.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LabelListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
@@ -112,6 +113,7 @@ export class LabelListComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
     private storageService: StorageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
@@ -123,12 +125,14 @@ export class LabelListComponent implements OnDestroy {
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allLabels has already been sorted.
       this.recalculateElementsToShow();
+      this.changeDetectorRef.markForCheck();
     });
 
     this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredLabels = data;
       this.dataSorter.setData(this.filteredLabels);
+      this.changeDetectorRef.markForCheck();
     });
 
     this.loadData();
@@ -145,6 +149,7 @@ export class LabelListComponent implements OnDestroy {
 
         this.recalculateElementsToShow();
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -245,6 +250,7 @@ export class LabelListComponent implements OnDestroy {
 
       this.snackbarService.showDone('labels.deleted');
       this.loadData();
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -263,6 +269,7 @@ export class LabelListComponent implements OnDestroy {
       if (selectedOption === 1) {
         this.delete(label.id);
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -278,6 +285,7 @@ export class LabelListComponent implements OnDestroy {
       this.snackbarService.showDone('labels.deleted');
 
       this.loadData();
+      this.changeDetectorRef.markForCheck();
     });
   }
 

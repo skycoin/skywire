@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { Node, Application } from '../../../../../app.datatypes';
@@ -12,9 +12,12 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
     selector: 'app-all-apps',
     templateUrl: './all-apps.component.html',
     styleUrls: ['./all-apps.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AllAppsComponent extends PageBaseComponent implements OnInit, OnDestroy {
+  private changeDetectorRef = inject(ChangeDetectorRef);
+
   apps: Application[];
   nodePK: string;
 
@@ -25,6 +28,7 @@ export class AllAppsComponent extends PageBaseComponent implements OnInit, OnDes
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.localPk;
       this.apps = node.apps;
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();

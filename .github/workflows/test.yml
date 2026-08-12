@@ -340,6 +340,12 @@ jobs:
       - name: Build UI
         run: cd static/skywire-manager-src && npm run build
 
+      # Under OnPush a field assigned from a subscription or a timer repaints
+      # nothing on its own. Forget the mark and there is no error and no
+      # warning, just a view that keeps showing stale data.
+      - name: Check OnPush change detection marks
+        run: make check-onpush
+
       - name: Test UI
         run: make test-ui
         env:

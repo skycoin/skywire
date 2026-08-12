@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { Node } from '../../../../../app.datatypes';
@@ -21,7 +21,8 @@ import { processServiceError } from 'src/app/utils/errors';
     selector: 'app-all-transports',
     templateUrl: './all-transports.component.html',
     styleUrls: ['./all-transports.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AllTransportsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
@@ -36,6 +37,7 @@ export class AllTransportsComponent extends PageBaseComponent implements OnInit,
     private apiService: ApiService,
     private transportService: TransportService,
     private snackbarService: SnackbarService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
   }
@@ -47,6 +49,7 @@ export class AllTransportsComponent extends PageBaseComponent implements OnInit,
       if (node) {
         this.fetchPublicStatus(node.localPk);
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();
@@ -78,9 +81,11 @@ return { type: type, count: count }
   private fetchPublicStatus(pk: string) {
     this.apiService.get(`visors/${pk}/public`).subscribe((result: any) => {
       this.isPublic = !!(result && result.is_public === true);
+      this.changeDetectorRef.markForCheck();
     }, () => {
  this.isPublic = false; 
-});
+      this.changeDetectorRef.markForCheck();
+    });
   }
 
   changeTransportsConfig() {
@@ -95,9 +100,11 @@ return { type: type, count: count }
         next ? 'node.details.transports-info.enable-done' : 'node.details.transports-info.disable-done'
       );
       NodeComponent.refreshCurrentDisplayedData();
+      this.changeDetectorRef.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
       this.snackbarService.showError(err);
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -111,9 +118,11 @@ return { type: type, count: count }
       this.snackbarService.showDone(
         next ? 'node.details.transports-info.public-enable-done' : 'node.details.transports-info.public-disable-done'
       );
+      this.changeDetectorRef.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
       this.snackbarService.showError(err);
+      this.changeDetectorRef.markForCheck();
     });
   }
 }

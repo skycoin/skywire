@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
@@ -14,7 +14,8 @@ import GeneralUtils from 'src/app/utils/generalUtils';
     selector: 'app-updater-config',
     templateUrl: './updater-config.component.html',
     styleUrls: ['./updater-config.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UpdaterConfigComponent implements OnInit, OnDestroy {
   form: UntypedFormGroup;
@@ -33,6 +34,7 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
   constructor(
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
@@ -112,6 +114,7 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
         localStorage.setItem(UpdaterStorageKeys.ChecksumsURL, checksumsURL);
 
         this.snackbarService.showDone('settings.updater-config.saved');
+        this.changeDetectorRef.markForCheck();
       });
     } else {
       // If all fields are empty, erase the custom settings.
@@ -145,6 +148,7 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
       localStorage.removeItem(UpdaterStorageKeys.ChecksumsURL);
 
       this.snackbarService.showDone('settings.updater-config.removed');
+      this.changeDetectorRef.markForCheck();
     });
   }
 }

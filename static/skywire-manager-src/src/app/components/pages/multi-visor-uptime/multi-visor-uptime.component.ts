@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith, of, forkJoin, timer } from 'rxjs';
 import { switchMap, catchError, takeUntil } from 'rxjs/operators';
 
@@ -99,6 +99,7 @@ const FETCH_TIMEOUT_MS = 45000;
   templateUrl: './multi-visor-uptime.component.html',
   styleUrls: ['./multi-visor-uptime.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class MultiVisorUptimeComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];

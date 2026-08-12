@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup } from '@angular/forms';
 import { Subscription } from 'rxjs';
 
@@ -25,6 +25,7 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
   templateUrl: './web-proxy.component.html',
   styleUrls: ['./web-proxy.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
@@ -53,6 +54,7 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
       if (wasUnset && node) {
  this.loadStatus(); 
 }
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();
@@ -96,15 +98,19 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
             this.loading = false;
             this.snackbar.showDone(enable ? 'Resolving proxy enabled' : 'Resolving proxy disabled');
             this.loadStatus();
+            this.cdr.markForCheck();
           },
           () => {
  this.loading = false; 
-},
+            this.cdr.markForCheck();
+          },
         );
+        this.cdr.markForCheck();
       },
       () => {
  this.loading = false; this.snackbar.showError('Failed to toggle proxy'); 
-},
+        this.cdr.markForCheck();
+      },
     );
   }
 
@@ -119,10 +125,12 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
         this.loading = false;
         this.snackbar.showDone(addr ? `Upstream set to ${addr}` : 'Upstream cleared');
         this.loadStatus();
+        this.cdr.markForCheck();
       },
       () => {
  this.loading = false; this.snackbar.showError('Failed to set upstream'); 
-},
+        this.cdr.markForCheck();
+      },
     );
   }
 
