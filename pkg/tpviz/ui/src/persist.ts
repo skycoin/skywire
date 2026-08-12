@@ -5,7 +5,7 @@
 // and a reset clears everything back to defaults (view → WebGL). Works both
 // standalone (/tp-viz/) and embedded (host passes opts through mount()).
 
-export type ViewMode = 'globe' | 'flat' | 'cosmos';
+export type ViewMode = 'globe' | 'flat' | 'cosmos' | 'cosmosgo';
 
 const FILTER_KEY = 'tpviz.filters.v1';
 const VIEW_KEY = 'tpviz.view.v1';
@@ -31,6 +31,9 @@ export function normalizeView(v: string | null | undefined): ViewMode | null {
     case 'globe': return 'globe';
     case 'flat': case 'legacy': return 'flat';
     case 'webgl': case 'cosmos': case 'gl': return 'cosmos';
+    // The Go/wasm WebGL view, which runs alongside the JavaScript one
+    // so the two can be compared.
+    case 'webgl-go': case 'cosmosgo': case 'go': return 'cosmosgo';
     default: return null;
   }
 }
