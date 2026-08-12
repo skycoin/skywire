@@ -18,13 +18,15 @@
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
     "strictNullChecks": false,
-    "baseUrl": "./",
-    "ignoreDeprecations": "6.0",
     "paths": {
       "src/*": [
         "./src/*"
       ]
-    }
+    },
+    "types": [
+      "jasmine",
+      "node"
+    ]
   },
   "angularCompilerOptions": {
     "strictInjectionParameters": true,
