@@ -82,8 +82,12 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
   }
 
   ngOnDestroy() {
-    if (this.portsSub) this.portsSub.unsubscribe();
-    if (this.fwdsSub) this.fwdsSub.unsubscribe();
+    if (this.portsSub) {
+this.portsSub.unsubscribe();
+}
+    if (this.fwdsSub) {
+this.fwdsSub.unsubscribe();
+}
   }
 
   loadPorts() {
