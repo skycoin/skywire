@@ -28,11 +28,24 @@ import (
 )
 
 var (
-	directQuery     bool
-	healthService   string
-	healthViaServer string
-	healthPort      uint16
+	directQuery       bool
+	healthService     string
+	healthViaServer   string
+	healthPort        uint16
+	healthCarriers    string
+	healthHoldCarrier string
 )
+
+// CarrierProbe is the result of a DIRECT per-carrier reachability probe of one
+// dmsg server: a standalone dmsg client forced onto a single carrier, dialing
+// the server directly (not relayed through another server).
+type CarrierProbe struct {
+	Carrier   string `json:"carrier"`
+	Addr      string `json:"addr,omitempty"`
+	Status    string `json:"status"` // OK | FAIL | not-advertised
+	LatencyMs int64  `json:"latency_ms,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
 
 // RootCmd is the svc command
 var RootCmd = &cobra.Command{
@@ -47,6 +60,8 @@ func init() {
 	healthCmd.Flags().StringVar(&healthService, "service", "", "narrow to ONE deployment service by its dmsg PK; only effective with --dmsg-server or --direct (ignored by the default all-services RPC query). For an arbitrary visor use: dmsg curl dmsg://<pk>:80/health")
 	healthCmd.Flags().StringVar(&healthViaServer, "dmsg-server", "", "route the /health check through ONE specific dmsg server (PK or PK@host:port) using a standalone direct dmsg client — tests per-server reachability of --service, even for direct-client services not in discovery")
 	healthCmd.Flags().Uint16Var(&healthPort, "port", 80, "service dmsg port for the /health endpoint (default: 80, the dmsghttp log-server port)")
+	healthCmd.Flags().StringVar(&healthCarriers, "carriers", "", "with --dmsg-server: probe THAT dmsg server DIRECTLY over each of these carriers (comma-sep: wt,ws,quic,tcp), one clean standalone session per carrier — reports which protocols actually reach it")
+	healthCmd.Flags().StringVar(&healthHoldCarrier, "hold-carrier", "", "diagnostic: before probing --carriers, open and HOLD a session on this carrier to the same server IN THIS PROCESS — reproduces in-process carrier interference (e.g. --hold-carrier quic while probing wt)")
 	healthCmd.Flags().Bool(internal.JSONString, false, "print output as JSON")
 	RootCmd.AddCommand(healthCmd)
 }
@@ -69,6 +84,15 @@ var healthCmd = &cobra.Command{
     optionally pinned through ONE dmsg server (per-server reachability).`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		var results []skyvisor.ServiceHealthEntry
+
+		// Per-carrier DIRECT server-reachability mode: probe ONE dmsg server
+		// over each named carrier with a clean standalone client. Answers
+		// "which protocols actually reach server X" — the direct analog of the
+		// carrier convergence the visor does.
+		if healthViaServer != "" && healthCarriers != "" {
+			probeServerCarriers(cmd)
+			return
+		}
 
 		// Per-server mode: pin a standalone direct dmsg client to ONE
 		// server and fetch the target service's /health through it. This
@@ -291,6 +315,218 @@ func queryServiceViaServer(cmd *cobra.Command) skyvisor.ServiceHealthEntry {
 		entry.Status = fmt.Sprintf("HTTP %d", resp.StatusCode)
 	}
 	return entry
+}
+
+func splitCarriers(s string) []string {
+	var out []string
+	for _, c := range strings.Split(s, ",") {
+		if c = strings.TrimSpace(c); c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func carrierAddr(e *disc.Entry, carrier string) string {
+	if e == nil || e.Server == nil {
+		return ""
+	}
+	switch carrier {
+	case "wt":
+		return e.Server.AddressWT
+	case "ws":
+		return e.Server.AddressWS
+	case "quic":
+		return e.Server.AddressUDP
+	case "tcp":
+		return e.Server.Address
+	}
+	return ""
+}
+
+// resolveServerEntryLive returns the target server's CURRENT discovery entry
+// (fresh AddressWT/CertHashWT/AddressUDP/AddressWS). It prefers the running
+// visor — already connected to the dmsg-discovery — and falls back to a
+// standalone bootstrap client when no visor is reachable.
+func resolveServerEntryLive(flags *pflag.FlagSet, srvPK cipher.PubKey, log *logging.Logger) (*disc.Entry, error) {
+	url := strings.TrimSuffix(deployment.Prod.DmsgDiscoveryDmsg, "/") + "/dmsg-discovery/all_servers"
+	if body, err := clirpc.FetchServiceURL(flags, url); err == nil {
+		var servers []*disc.Entry
+		if json.Unmarshal(body, &servers) == nil {
+			for _, s := range servers {
+				if s.Static == srvPK && s.Server != nil {
+					return s, nil
+				}
+			}
+		}
+	}
+	// No visor (or it couldn't reach the disc) — bootstrap standalone.
+	return fetchLiveServerEntry(context.Background(), srvPK, log)
+}
+
+// fetchLiveServerEntry bootstraps a standalone dmsg client through the embedded
+// seed servers and fetches the target server's CURRENT discovery entry (fresh
+// AddressWT/CertHashWT/AddressUDP/AddressWS), which a per-carrier probe needs.
+func fetchLiveServerEntry(ctx context.Context, srvPK cipher.PubKey, log *logging.Logger) (*disc.Entry, error) {
+	seeds := deployment.DmsgServerEntriesToDisc(deployment.Prod.DmsgServers)
+	if len(seeds) == 0 {
+		return nil, fmt.Errorf("no embedded seed dmsg servers to bootstrap through")
+	}
+	discPKHex := dmsg.ExtractPKFromDmsgAddr(deployment.Prod.DmsgDiscoveryDmsg)
+	if discPKHex == "" {
+		return nil, fmt.Errorf("no dmsg-discovery dmsg address in the embedded deployment")
+	}
+	var discPK cipher.PubKey
+	if err := discPK.Set(discPKHex); err != nil {
+		return nil, fmt.Errorf("invalid embedded dmsg-discovery pk %q: %w", discPKHex, err)
+	}
+	myPK, mySK := cipher.GenerateKeyPair()
+	conf := dmsg.DefaultConfig()
+	// Connect to several seeds to raise the odds one co-hosts the disc client.
+	conf.MinSessions = len(seeds)
+	if conf.MinSessions > 5 {
+		conf.MinSessions = 5
+	}
+	// Include discPK so GetAllEntries mints a synthetic entry delegating the
+	// seed servers — otherwise dmsg can't route the all_servers request to it.
+	dClient := direct.NewClient(direct.GetAllEntries(cipher.PubKeys{myPK, discPK}, seeds), log)
+	bctx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	defer cancel()
+	dmsgC, stop, err := direct.StartDmsg(bctx, log, myPK, mySK, dClient, conf)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap dmsg client (to read live discovery): %w", err)
+	}
+	defer stop()
+	// Server entries live in all_servers, NOT the per-PK /entry endpoint.
+	httpC := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC), Timeout: 15 * time.Second}
+	dc := disc.NewHTTP(fmt.Sprintf("http://%s:80", discPKHex), httpC, log)
+	servers, err := dc.AllServers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("fetch all_servers over dmsg: %w", err)
+	}
+	for _, s := range servers {
+		if s.Static == srvPK {
+			if s.Server == nil {
+				return nil, fmt.Errorf("%s has no server section in discovery", srvPK)
+			}
+			return s, nil
+		}
+	}
+	return nil, fmt.Errorf("%s not found in dmsg-discovery all_servers", srvPK)
+}
+
+// probeOneCarrier dials the server over ONE carrier with a clean standalone
+// client (no fallback, so a failure isolates that carrier) and reports whether
+// a direct session established.
+func probeOneCarrier(ctx context.Context, srvPK cipher.PubKey, entry *disc.Entry, carrier string, log *logging.Logger) CarrierProbe {
+	res := CarrierProbe{Carrier: carrier, Addr: carrierAddr(entry, carrier)}
+	if res.Addr == "" {
+		res.Status = "not-advertised"
+		return res
+	}
+	conf := dmsg.DefaultConfig()
+	conf.Carriers = []string{carrier}
+	conf.MinSessions = 1
+	myPK, mySK := cipher.GenerateKeyPair()
+	dClient := direct.NewClient(direct.GetAllEntries(cipher.PubKeys{myPK, srvPK}, []*disc.Entry{entry}), log)
+	cctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+	defer cancel()
+	t0 := time.Now()
+	dmsgC, stop, err := direct.StartDmsg(cctx, log, myPK, mySK, dClient, conf)
+	res.LatencyMs = time.Since(t0).Milliseconds()
+	if err != nil {
+		res.Status = "FAIL"
+		res.Error = err.Error()
+		return res
+	}
+	defer stop()
+	got := ""
+	for _, s := range dmsgC.SessionCarriers() {
+		if s.ServerPK == srvPK {
+			got = s.Carrier
+		}
+	}
+	switch {
+	case got == carrier:
+		res.Status = "OK"
+	case got != "":
+		res.Status = "OK(" + got + ")"
+	default:
+		res.Status = "FAIL"
+		res.Error = "session not established on " + carrier
+	}
+	return res
+}
+
+func probeServerCarriers(cmd *cobra.Command) {
+	logging.SetLevel(logrus.ErrorLevel)
+	log := logging.MustGetLogger("svc-health")
+	pkHex := healthViaServer
+	if at := strings.IndexByte(pkHex, '@'); at > 0 {
+		pkHex = pkHex[:at]
+	}
+	var srvPK cipher.PubKey
+	if err := srvPK.Set(pkHex); err != nil {
+		internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --dmsg-server pk %q: %w", pkHex, err))
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	entry, err := resolveServerEntryLive(cmd.Flags(), srvPK, log)
+	if err != nil {
+		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	// Diagnostic: hold a session on --hold-carrier to the same server in THIS
+	// process for the duration of the probes. If probing wt fails only while a
+	// quic session is held, that isolates in-process (quic-go) interference.
+	if healthHoldCarrier != "" {
+		if addr := carrierAddr(entry, healthHoldCarrier); addr == "" {
+			fmt.Printf("(hold-carrier %s not advertised by %s; skipping hold)\n", healthHoldCarrier, srvPK.Hex()[:8])
+		} else {
+			hConf := dmsg.DefaultConfig()
+			hConf.Carriers = []string{healthHoldCarrier}
+			hConf.MinSessions = 1
+			hPK, hSK := cipher.GenerateKeyPair()
+			hClient := direct.NewClient(direct.GetAllEntries(cipher.PubKeys{hPK, srvPK}, []*disc.Entry{entry}), log)
+			hCtx, hCancel := context.WithTimeout(ctx, 15*time.Second)
+			hC, hStop, herr := direct.StartDmsg(hCtx, log, hPK, hSK, hClient, hConf)
+			hCancel()
+			if herr != nil {
+				fmt.Printf("(could not hold a %s session to %s: %v; probing anyway)\n", healthHoldCarrier, srvPK.Hex()[:8], herr)
+			} else {
+				got := ""
+				for _, s := range hC.SessionCarriers() {
+					if s.ServerPK == srvPK {
+						got = s.Carrier
+					}
+				}
+				fmt.Printf("holding a %s session to %s (landed on %q) during probes\n", healthHoldCarrier, srvPK.Hex()[:8], got)
+				defer hStop()
+			}
+		}
+	}
+	var results []CarrierProbe
+	for _, c := range splitCarriers(healthCarriers) {
+		results = append(results, probeOneCarrier(ctx, srvPK, entry, c, log))
+	}
+	if isJSON, _ := cmd.Flags().GetBool(internal.JSONString); isJSON { //nolint:errcheck
+		internal.PrintOutput(cmd.Flags(), map[string]interface{}{"server": srvPK.Hex(), "carriers": results}, "")
+		return
+	}
+	fmt.Printf("dmsg server %s — direct per-carrier reachability:\n", srvPK.Hex()[:8])
+	tw := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "CARRIER\tSTATUS\tLATENCY\tADDR\tERROR") //nolint:errcheck,gosec
+	for _, r := range results {
+		lat := "-"
+		if strings.HasPrefix(r.Status, "OK") {
+			lat = fmt.Sprintf("%dms", r.LatencyMs)
+		}
+		e := r.Error
+		if len(e) > 64 {
+			e = e[:64]
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", r.Carrier, r.Status, lat, r.Addr, e) //nolint:errcheck,gosec
+	}
+	tw.Flush() //nolint:errcheck,gosec
 }
 
 // resolveServerEntry turns a "--dmsg-server" spec into a dmsg server

@@ -1261,6 +1261,10 @@ func (mc *mockRPCClient) DmsgSessions() (*DmsgClientSessions, error) {
 	return &DmsgClientSessions{}, nil
 }
 
+func (mc *mockRPCClient) DmsgConverge(_ []string) (*DmsgConvergeResult, error) {
+	return &DmsgConvergeResult{}, nil
+}
+
 // RegisterCXOFeed implements API.
 func (mc *mockRPCClient) RegisterCXOFeed(_ string, _ uint16, _ string) error { return nil }
 
