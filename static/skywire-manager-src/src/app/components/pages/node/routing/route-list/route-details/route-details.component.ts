@@ -49,7 +49,7 @@ export class RouteDetailsComponent {
 
   getRuleTypeName(type: number): string {
     if (this.ruleTypes.has(type)) {
-      return this.ruleTypes.get(type);
+      return this.ruleTypes.get(type)!;
     }
 
     return type.toString();

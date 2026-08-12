@@ -78,19 +78,19 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
 
   // Allows to know if the user has modified the data in the form.
   get dataChanged(): boolean {
-    return this.initialChannel !== (this.form.get('channel').value as string).trim() ||
-      this.initialVersion !== (this.form.get('version').value as string).trim() ||
-      this.initialArchiveURL !== (this.form.get('archiveURL').value as string).trim() ||
-      this.initialChecksumsURL !== (this.form.get('checksumsURL').value as string).trim();
+    return this.initialChannel !== (this.form.get('channel')!.value as string).trim() ||
+      this.initialVersion !== (this.form.get('version')!.value as string).trim() ||
+      this.initialArchiveURL !== (this.form.get('archiveURL')!.value as string).trim() ||
+      this.initialChecksumsURL !== (this.form.get('checksumsURL')!.value as string).trim();
   }
 
   // Saves the settings entered in the form.
   saveSettings() {
     // Get the data entered in the form.
-    const channel = (this.form.get('channel').value as string).trim();
-    const version = (this.form.get('version').value as string).trim();
-    const archiveURL = (this.form.get('archiveURL').value as string).trim();
-    const checksumsURL = (this.form.get('checksumsURL').value as string).trim();
+    const channel = (this.form.get('channel')!.value as string).trim();
+    const version = (this.form.get('version')!.value as string).trim();
+    const archiveURL = (this.form.get('archiveURL')!.value as string).trim();
+    const checksumsURL = (this.form.get('checksumsURL')!.value as string).trim();
 
     if (channel || version || archiveURL || checksumsURL) {
       // Ask for confirmation.
@@ -134,10 +134,10 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
       this.initialArchiveURL = '';
       this.initialChecksumsURL = '';
 
-      this.form.get('channel').setValue('');
-      this.form.get('version').setValue('');
-      this.form.get('archiveURL').setValue('');
-      this.form.get('checksumsURL').setValue('');
+      this.form.get('channel')!.setValue('');
+      this.form.get('version')!.setValue('');
+      this.form.get('archiveURL')!.setValue('');
+      this.form.get('checksumsURL')!.setValue('');
 
       this.hasCustomSettings = false;
 

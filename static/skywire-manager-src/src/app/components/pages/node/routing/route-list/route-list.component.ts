@@ -52,7 +52,7 @@ export class RouteListComponent implements OnDestroy {
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
-  dataSource!: Route[];
+  dataSource!: Route[] | null;
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -100,20 +100,20 @@ export class RouteListComponent implements OnDestroy {
     // using the filterer and sorter objects.
     this.allRoutes.forEach(route => {
       // Save the type in the root of the object to be able to use it with the filterer.
-      if (route.ruleSummary.ruleType || route.ruleSummary.ruleType === 0) {
-        (route as any)['type'] = route.ruleSummary.ruleType;
+      if (route.ruleSummary!.ruleType || route.ruleSummary!.ruleType === 0) {
+        (route as any)['type'] = route.ruleSummary!.ruleType;
       } else {
         (route as any)['type'] = '';
       }
 
       if (route.appFields || route.forwardFields) {
-        const routeDescriptor = route.appFields ? route.appFields.routeDescriptor : route.forwardFields.routeDescriptor;
+        const routeDescriptor = route.appFields ? route.appFields.routeDescriptor : route.forwardFields!.routeDescriptor;
 
         // Save the source and destination visor keys and the associated labels.
-        (route as any)['src'] = routeDescriptor.srcPk;
+        (route as any)['src'] = routeDescriptor?.srcPk;
         (route as any)['src_label'] =
           LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, (route as any)['src']);
-        (route as any)['dst'] = routeDescriptor.dstPk;
+        (route as any)['dst'] = routeDescriptor?.dstPk;
         (route as any)['dst_label'] =
           LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, (route as any)['dst']);
       } else if (route.intermediaryForwardFields) {
@@ -208,7 +208,7 @@ export class RouteListComponent implements OnDestroy {
       ],
     };
     this.ruleTypes.forEach((v, k) => {
-      typeFilterConfig.printableLabelsForValues.push({
+      typeFilterConfig.printableLabelsForValues!.push({
         value: k + '',
         label: v,
       });
@@ -226,7 +226,7 @@ export class RouteListComponent implements OnDestroy {
     // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
-        let selectedPage = Number.parseInt(params.get('page'), 10);
+        let selectedPage = Number.parseInt(params.get('page')!, 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
           selectedPage = 1;
         }
@@ -260,7 +260,7 @@ export class RouteListComponent implements OnDestroy {
    */
   getTypeName(type: number): string {
     if (this.ruleTypes.has(type)) {
-      return this.ruleTypes.get(type);
+      return this.ruleTypes.get(type)!;
     }
 
     return 'Unknown';

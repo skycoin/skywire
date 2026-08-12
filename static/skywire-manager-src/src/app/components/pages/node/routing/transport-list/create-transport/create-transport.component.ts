@@ -105,9 +105,9 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
     this.button.showLoading();
 
-    const newTransportPk: string = this.form.get('remoteKey').value;
-    const newTransportType: string = this.form.get('type').value;
-    const newTransportLabel: string = this.form.get('label').value;
+    const newTransportPk: string = this.form.get('remoteKey')!.value;
+    const newTransportType: string = this.form.get('type')!.value;
+    const newTransportLabel: string = this.form.get('label')!.value;
 
     if (this.makePersistent) {
       // Check the current visor config.
@@ -251,7 +251,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
         // Prepare the form.
         this.types = types;
-        this.form.get('type').setValue(types[defaultIndex]);
+        this.form.get('type')!.setValue(types[defaultIndex]);
 
         // Prepare the UI change.
         this.snackbarService.closeCurrentIfTemporaryError();

@@ -145,7 +145,7 @@ export class NodeInfoContentComponent implements OnDestroy {
   }
 
   hasDmsgServer() {
-    if (!this.node || this.node.dmsgServerPk.replace(/0/g, '').length === 0) {
+    if (!this.node || !this.node.dmsgServerPk || this.node.dmsgServerPk.replace(/0/g, '').length === 0) {
       return false;
     }
 
