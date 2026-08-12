@@ -45,7 +45,7 @@ object DiagnosticsExport {
     ): Unit = withContext(Dispatchers.IO) {
         val app = context.applicationContext
         val paths = SkywirePaths(app)
-        val config = ConfigManager(paths, SecretStore(app))
+        val config = ConfigManager(paths, SecretStore(app), app)
         val api = VisorApi.get(app)
         val notes = mutableListOf<String>()
 

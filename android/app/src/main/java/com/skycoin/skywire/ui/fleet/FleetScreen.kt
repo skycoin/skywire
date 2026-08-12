@@ -65,8 +65,10 @@ import com.skycoin.skywire.ui.components.CONNECTED_GREEN
 import com.skycoin.skywire.ui.components.InfoRow
 import com.skycoin.skywire.ui.components.SectionCard
 import com.skycoin.skywire.ui.components.SkyTopBar
+import com.skycoin.skywire.ui.components.HEALTHY
 import com.skycoin.skywire.ui.components.formatDuration
 import com.skycoin.skywire.ui.components.formatUptime
+import com.skycoin.skywire.ui.components.healthText
 import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.ui.logs.LogSources
 import java.time.Instant
@@ -683,7 +685,7 @@ private fun healthLabel(visor: VisorSummary): String {
     return when {
         !visor.online -> "—"
         health.isEmpty() -> stringResource(R.string.fleet_health_unknown)
-        else -> health
+        else -> healthText(health)
     }
 }
 
@@ -704,7 +706,6 @@ private fun secondsSince(rfc3339: String): Long? = runCatching {
     (System.currentTimeMillis() - Instant.parse(rfc3339).toEpochMilli()).coerceAtLeast(0) / 1000
 }.getOrNull()
 
-private const val HEALTHY = "healthy"
 
 /**
  * How old a snapshot has to be before the card says so. Comfortably past one

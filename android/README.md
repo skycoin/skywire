@@ -264,10 +264,43 @@ adb shell
   ./libskywire-mobile.so visor -c ./skywire-config.json
 ```
 
-There are no unit tests in the app module yet; UI/integration tests will be
-added alongside the feature screens. Go-side tests run from the repo root as
+Host-side unit tests are the ones that state facts about the sources rather
+than about a running app — the manifest not handing the lock screen to every
+screen (`ManifestKeyguardTest`), and the string catalogues staying complete and
+formattable (`TranslationCatalogTest`, `AppLanguageTest`). Run them with
+`./gradlew :app:testDebugUnitTest`. Go-side tests run from the repo root as
 usual (`make test`); the `mobile` build variant is compile-checked in CI by
 the `android` job with a size budget.
+
+## Languages
+
+The interface ships in English and Simplified Chinese, chosen in Settings ▸
+Language and remembered per app. On Android 13+ the platform owns that choice
+(it is the same setting as Settings ▸ Apps ▸ Skywire ▸ Language); below 13 it
+lives in the app's own prefs and every Activity and Service picks it up by
+wrapping its base context. Both paths are behind `core/AppLocale.kt`.
+
+Only the app's own interface is translated. Logs, the visor's own output and
+anything quoted from a process or an HTTP response stay in English — they are
+read next to a desktop's and matched against the Go source, and a translated
+log line is one nobody can search for.
+
+Adding a language is three edits and nothing else:
+
+1. `app/src/main/res/values-<tag>/strings.xml` — every translatable string
+   from `values/strings.xml`. Chinese has one plural category (`other`); check
+   what yours has before copying a `<plurals>`.
+2. A constant in `core/AppLanguage.kt` with the language's BCP-47 tag, and its
+   name **in its own script** as a `translatable="false"` string
+   (`settings_language_zh_cn` is the pattern). The picker builds itself from
+   the enum — the Settings screen needs no edit.
+3. The tag in `app/src/main/res/xml/locales_config.xml`, which is what
+   Android 13+ reads to list the app in its own language settings.
+
+`TranslationCatalogTest` then holds all three together: it fails the build if a
+string is missing from a translation, if a translation asks for a format
+argument the call site does not pass, or if the enum, the values folder and
+the locale config disagree about what is shipped.
 
 ## Project layout
 
