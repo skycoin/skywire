@@ -136,7 +136,7 @@ func humanRate(bytesPerSec float64) string {
 	return humanBytes(uint64(bytesPerSec)) + "/s"
 }
 
-// renderMuxInfo prints the visor's mux-info response. We re-marshal/
+// renderMuxInfo prints the visor's mux info response. We re-marshal/
 // unmarshal through the local muxRouteGroupInfo struct so the CLI's
 // render logic doesn't reach into the visor package's internal type
 // — the JSON contract is the stable boundary.
