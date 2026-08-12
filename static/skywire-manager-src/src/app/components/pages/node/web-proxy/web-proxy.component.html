@@ -44,8 +44,8 @@
 
       <div class="wp-controls">
         <mat-checkbox
-          [checked]="form.get('skynetEnabled').value"
-          (change)="form.get('skynetEnabled').setValue($event.checked); toggleProxy()"
+          [checked]="form.get('skynetEnabled')!.value"
+          (change)="form.get('skynetEnabled')!.setValue($event.checked); toggleProxy()"
           [disabled]="loading">
           {{ 'web-proxy.enable' | translate }}
         </mat-checkbox>

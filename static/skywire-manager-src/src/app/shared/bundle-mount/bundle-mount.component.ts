@@ -59,7 +59,7 @@ export class BundleMountComponent implements AfterViewInit, OnDestroy {
   /** Emits once the bundle is mounted, with its global and teardown handle. */
   @Output() ready = new EventEmitter<{ global: MountableBundle; handle: MountHandle }>();
   /** Emits the error message if `mount()` throws. */
-  @Output() failed = new EventEmitter<string>();
+  @Output() failed = new EventEmitter<string | null>();
 
   @ViewChild('mountRoot', { static: false }) rootEl!: ElementRef<HTMLDivElement>;
 

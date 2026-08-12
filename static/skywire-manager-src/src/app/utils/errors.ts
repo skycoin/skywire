@@ -103,7 +103,7 @@ export function processServiceError(error: any): OperationError {
  * @param error Error to process.
  * @returns The error msg, or null, if it was not possible to retrieve the error msg.
  */
-export function getErrorMsg(error: any): string {
+export function getErrorMsg(error: any): string | null {
   if (error) {
     // Check different posibilities, testing a normal error object and different
     // known locations in which the error msg could be.

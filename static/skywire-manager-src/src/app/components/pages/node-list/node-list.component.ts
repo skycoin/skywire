@@ -404,7 +404,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
    * Called when an option form the top bar is selected.
    * @param actionName Name of the selected option, as defined in the this.options array.
    */
-  performAction(actionName: string) {
+  performAction(actionName: string | null) {
     if (actionName === 'logout') {
       this.logout();
     } else if (actionName === 'updateAll') {
@@ -687,7 +687,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
    * shown in the DMSG cell, mirroring how the Transports cell shows a
    * short uppercase type. Unknown/blank protocols fall back to "?".
    */
-  private dmsgCarrierLabel(protocol: string): string {
+  private dmsgCarrierLabel(protocol: string | undefined): string {
     switch ((protocol || '').toLowerCase()) {
       case 'wss': return 'WSS';
       case 'ws': return 'WS';
@@ -1191,7 +1191,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
 
       // Prepare all offline nodes to be removed.
       const nodesToRemove: string[] = [];
-      const ipsToRemove: string[] = [];
+      const ipsToRemove: (string | null)[] = [];
       this.filteredNodes.forEach(node => {
         if (!node.online) {
           nodesToRemove.push(node.localPk);

@@ -74,7 +74,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
     this.navigationsSubscription = route.paramMap.subscribe(params => {
       // Get the PK of the current local visor.
       if (params.has('key')) {
-        this.currentLocalPk = params.get('key');
+        this.currentLocalPk = params.get('key')!;
         VpnHelpers.changeCurrentPk(this.currentLocalPk);
         this.tabsData = VpnHelpers.vpnTabsData;
       }

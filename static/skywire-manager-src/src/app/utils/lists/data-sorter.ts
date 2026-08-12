@@ -29,7 +29,7 @@ export class SortingColumn {
    * shown in the cell, instead of the value itself. If set, the user will be able to select
    * to sort the data using the value or the label shown in the cell.
    */
-  labelProperties: string[];
+  labelProperties: string[] | undefined;
 
   constructor(properties: string[], label: string, sortingMode: SortingModes, labelProperties?: string[]) {
     this.properties = properties;
@@ -86,12 +86,12 @@ export class DataSorter {
   // If the data must be sorted using the label shown in the cell instead of the data itself.
   private sortByLabel = false;
   // Data to sort.
-  private data!: any[];
+  private data!: any[] | null;
   // Index inside sortableColumns of the default column.
   private defaultColumnIndex: number;
   // Index inside sortableColumns of the column used for sorting the data when the currently
   // selected column is is not enough.
-  private tieBreakerColumnIndex: number = null;
+  private tieBreakerColumnIndex: number | null = null;
 
   // Prefixes used, along the ID, for saving the sorting options in localStorage.
   private readonly columnStorageKeyPrefix = 'col_';
@@ -191,7 +191,7 @@ export class DataSorter {
    * the provided array is updated.
    * @param data Data to sort.
    */
-  setData(data: any[]) {
+  setData(data: any[] | null) {
     this.data = data;
     this.sortData();
   }

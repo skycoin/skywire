@@ -74,7 +74,7 @@ export class FiltersSelectionComponent implements OnInit {
     // Build the response object.
     this.data.filterPropertiesList.forEach(properties => {
       (response as any)[properties.keyNameInFiltersObject] =
-        (this.form.get(properties.keyNameInFiltersObject).value as string).trim();
+        (this.form.get(properties.keyNameInFiltersObject)!.value as string).trim();
     });
 
     this.dialogRef.close(response);
