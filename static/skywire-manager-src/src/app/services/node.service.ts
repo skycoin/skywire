@@ -3,7 +3,7 @@ import { Observable, map } from 'rxjs';
 import BigNumber from 'bignumber.js';
 
 import { StorageService } from './storage.service';
-import { Node } from '../app.datatypes';
+import { Node, Route, RouteForwardRuleSumary } from '../app.datatypes';
 import { ApiService, RequestOptions, ResponseTypes } from './api.service';
 
 /**
@@ -223,7 +223,11 @@ return {
         obtainedNodes.set(node.localPk, node);
         if (node.online) {
           nodesToRegisterInLocalStorageAsOnline.push(node.localPk);
-          ipsToRegisterInLocalStorageAsOnline.push(node.ip);
+          // A visor with no address — a browser or wasm one — has nothing to
+          // record here.
+          if (node.ip) {
+            ipsToRegisterInLocalStorageAsOnline.push(node.ip);
+          }
         }
       });
 
@@ -247,7 +251,7 @@ return {
 
         // If the backend returned a node, informed that it is offline and the saved data indicates
         // that the user deleted it from the node list in the past, remove it from the response.
-        if (obtainedNodes.has(node.publicKey) && !obtainedNodes.get(node.publicKey).online && node.hidden) {
+        if (obtainedNodes.has(node.publicKey) && !obtainedNodes.get(node.publicKey)!.online && node.hidden) {
           obtainedNodes.delete(node.publicKey);
         }
       });
@@ -566,18 +570,23 @@ return {
         }
 
         // Routes.
-        node.routes = [];
+        //
+        // Built locally and assigned once: node.routes is optional on the type,
+        // so every one of the pushes and index reads below would otherwise have
+        // to re-establish that the array assigned a line earlier still exists.
+        const routes: Route[] = [];
+        node.routes = routes;
         if (response.routes) {
           (response.routes as any[]).forEach(route => {
             // Basic data.
-            node.routes.push({
+            routes.push({
               key: route.key,
               rule: route.rule,
             });
 
             if (route.rule_summary) {
               // Rule summary.
-              node.routes[node.routes.length - 1].ruleSummary = {
+              routes[routes.length - 1].ruleSummary = {
                 keepAlive: route.rule_summary.keep_alive,
                 ruleType: route.rule_summary.rule_type,
                 keyRouteId: route.rule_summary.key_route_id,
@@ -585,7 +594,7 @@ return {
 
               // App fields, if any.
               if (route.rule_summary.app_fields && route.rule_summary.app_fields.route_descriptor) {
-                node.routes[node.routes.length - 1].appFields = {
+                routes[routes.length - 1].appFields = {
                   routeDescriptor: {
                     dstPk: route.rule_summary.app_fields.route_descriptor.dst_pk,
                     dstPort: route.rule_summary.app_fields.route_descriptor.dst_port,
@@ -597,13 +606,14 @@ return {
 
               // Forward fields, if any.
               if (route.rule_summary.forward_fields) {
-                node.routes[node.routes.length - 1].forwardFields = {
+                const forwardFields = {
                   nextRid: route.rule_summary.forward_fields.next_rid,
                   nextTid: route.rule_summary.forward_fields.next_tid,
-                };
+                } as RouteForwardRuleSumary;
+                routes[routes.length - 1].forwardFields = forwardFields;
 
                 if (route.rule_summary.forward_fields.route_descriptor) {
-                  node.routes[node.routes.length - 1].forwardFields.routeDescriptor = {
+                  forwardFields.routeDescriptor = {
                     dstPk: route.rule_summary.forward_fields.route_descriptor.dst_pk,
                     dstPort: route.rule_summary.forward_fields.route_descriptor.dst_port,
                     srcPk: route.rule_summary.forward_fields.route_descriptor.src_pk,
@@ -614,7 +624,7 @@ return {
 
               // Intermediary forward fields, if any.
               if (route.rule_summary.intermediary_forward_fields) {
-                node.routes[node.routes.length - 1].intermediaryForwardFields = {
+                routes[routes.length - 1].intermediaryForwardFields = {
                   nextRid: route.rule_summary.intermediary_forward_fields.next_rid,
                   nextTid: route.rule_summary.intermediary_forward_fields.next_tid,
                 };

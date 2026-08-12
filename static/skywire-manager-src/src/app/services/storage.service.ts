@@ -49,7 +49,7 @@ export class LocalNodeInfo {
   /**
    * IP the node had the last time it was seen.
    */
-  ip!: string;
+  ip!: string | null;
 }
 
 /**
@@ -126,7 +126,7 @@ export class StorageService {
 
     this.migrateDataToHvStorage();
 
-    this.currentRefreshTime = parseInt(this.getDataForHv(KEY_REFRESH_SECONDS), 10) || 10;
+    this.currentRefreshTime = parseInt(this.getDataForHv(KEY_REFRESH_SECONDS) || '', 10) || 10;
     this.currentRefreshTimeSubject.next(this.currentRefreshTime);
 
     // Load the saved local nodes and labels.
@@ -155,7 +155,7 @@ export class StorageService {
    * Gets data in LocalStorage, associated with the current hypervisor.
    * @param key Key of the data to retrieve.
    */
-  getDataForHv(key: string): string {
+  getDataForHv(key: string): string | null {
     return this.storage.getItem(this.hypervisorPk + key);
   }
 
@@ -203,7 +203,8 @@ export class StorageService {
    * are removed.
    */
   private loadLegacyNodeData() {
-    const oldSavedLocalNodes: LegacyNodeInfo[] = JSON.parse(this.storage.getItem(LEGACY_KEY_NODES)) || [];
+    const legacy = this.storage.getItem(LEGACY_KEY_NODES);
+    const oldSavedLocalNodes: LegacyNodeInfo[] = legacy ? JSON.parse(legacy) : [];
 
     if (oldSavedLocalNodes.length > 0) {
       // Get the data saved in the new storage keys.
@@ -329,7 +330,7 @@ export class StorageService {
 
         // If the ip if different, update it.
         if (localNode.ip !== publicKeysMap.get(localNode.publicKey)) {
-          localNode.ip = publicKeysMap.get(localNode.publicKey);
+          localNode.ip = publicKeysMap.get(localNode.publicKey) ?? null;
           modificationsMade = true;
           this.savedLocalNodes.set(localNode.publicKey, localNode);
         }
@@ -378,7 +379,9 @@ export class StorageService {
    * Gets the saved local nodes array, directly from the persistent storage, not the cached map.
    */
   getSavedLocalNodes(): LocalNodeInfo[] {
-    return JSON.parse(this.getDataForHv(KEY_LOCAL_NODES)) || [];
+    const stored = this.getDataForHv(KEY_LOCAL_NODES);
+
+    return stored ? JSON.parse(stored) : [];
   }
 
   /**
@@ -400,7 +403,9 @@ export class StorageService {
    * Gets the saved labels array, directly from the persistent storage, not the cached map.
    */
   getSavedLabels(): LabelInfo[] {
-    return JSON.parse(this.getDataForHv(KEY_SAVED_LABELS)) || [];
+    const stored = this.getDataForHv(KEY_SAVED_LABELS);
+
+    return stored ? JSON.parse(stored) : [];
   }
 
   /**
@@ -506,9 +511,9 @@ export class StorageService {
    * Gets the label info assigned to an id. If no label has been assigned to the id, null
    * is returned.
    */
-  getLabelInfo(id: string): LabelInfo {
+  getLabelInfo(id: string): LabelInfo | null {
     if (this.savedLabels.has(id)) {
-      return this.savedLabels.get(id);
+      return this.savedLabels.get(id)!;
     }
 
     return null;

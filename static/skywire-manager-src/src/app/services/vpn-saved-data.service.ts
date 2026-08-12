@@ -190,8 +190,8 @@ export class VpnSavedDataService {
   /**
    * Currently selected server.
    */
-  get currentServer(): LocalServerData {
-    return this.serversMap.get(this.currentServerPk);
+  get currentServer(): LocalServerData | undefined {
+    return this.currentServerPk ? this.serversMap.get(this.currentServerPk) : undefined;
   }
   /**
    * Observable which emits the currently selected server after each change.
@@ -291,7 +291,7 @@ export class VpnSavedDataService {
     // servers that have already been saved.
     serverList.forEach(server => {
       if (this.serversMap.has(server.pk)) {
-        const savedServer = this.serversMap.get(server.pk);
+        const savedServer = this.serversMap.get(server.pk)!;
 
         savedServer.countryCode = server.countryCode;
         savedServer.name = server.name;
