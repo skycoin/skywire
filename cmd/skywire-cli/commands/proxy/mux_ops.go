@@ -57,9 +57,9 @@ func init() {
 	muxAddCmd.Flags().StringVar(&muxAddRouteSrc, "route", "-", "route JSON file ('-' = stdin); shape is 'cli route calc --json' output")
 	muxRmCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route group to modify")
 	muxRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
-	RootCmd.AddCommand(muxAddCmd)
-	RootCmd.AddCommand(muxRmCmd)
-	RootCmd.AddCommand(muxModeCmd)
+	addMuxSub(muxAddCmd, "mux-add")
+	addMuxSub(muxRmCmd, "mux-rm")
+	addMuxSub(muxModeCmd, "mux-mode")
 }
 
 // routePair mirrors the shape 'cli route calc --json' emits.
@@ -104,7 +104,7 @@ func readRoutePair(src string) (routePair, error) {
 }
 
 var muxAddCmd = &cobra.Command{
-	Use:   "mux-add",
+	Use:   "add",
 	Short: "Add a leg to an active proxy session's mux'd rg from a piped route",
 	Long: `Add a mux leg over a caller-supplied route. The route is read
 as JSON (default: stdin; --route <file> reads from a file) and uses
@@ -152,7 +152,7 @@ Example:
 }
 
 var muxRmCmd = &cobra.Command{
-	Use:   "mux-rm <tp-id>",
+	Use:   "rm <tp-id>",
 	Short: "Remove a leg from an active proxy session's mux'd route group",
 	Long: `Remove the mux leg routed via the specified transport.
 
@@ -189,7 +189,7 @@ Example:
 }
 
 var muxModeCmd = &cobra.Command{
-	Use:   "mux-mode <auto|equal>",
+	Use:   "mode <auto|equal>",
 	Short: "Change mux scheduler weighting at runtime",
 	Long: `Set the mux transport-selection mode for the visor.
 

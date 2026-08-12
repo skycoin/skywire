@@ -26,11 +26,11 @@ func init() {
 	muxInfoCmd.Flags().StringVarP(&muxInfoApp, "name", "n", "skysocks-client", "app name to query (e.g. skysocks-client, vpn-client)")
 	muxInfoCmd.Flags().DurationVarP(&muxInfoWatch, "watch", "w", 0, "refresh interval; 0 prints once and exits (e.g. 1s, 500ms)")
 	muxInfoCmd.Flags().BoolVarP(&muxInfoVerbose, "verbose", "v", false, "show full PKs / transport IDs (default: short hex prefixes)")
-	RootCmd.AddCommand(muxInfoCmd)
+	addMuxSub(muxInfoCmd, "mux-info")
 }
 
 var muxInfoCmd = &cobra.Command{
-	Use:   "mux-info",
+	Use:   "info",
 	Short: "Show per-mux-leg traffic for an active proxy session",
 	Long: `Show per-mux-leg traffic for active route groups belonging to a named app.
 
@@ -43,10 +43,10 @@ The query is local to this visor; what you see is your visor's view
 of what it sent/received on each leg, not the peer's view.
 
 Examples:
-  skywire cli proxy mux-info                   # one snapshot, default app
-  skywire cli proxy mux-info --watch 1s        # refresh every second
-  skywire cli proxy mux-info -n vpn-client     # query a different app
-  skywire cli proxy mux-info --json            # machine-readable`,
+  skywire cli proxy mux info                    # one snapshot, default app
+  skywire cli proxy mux info --watch 1s         # refresh every second
+  skywire cli proxy mux info -n vpn-client      # query a different app
+  skywire cli proxy mux info --json             # machine-readable`,
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
 		rpcClient, err := clirpc.Client(cmd.Flags())
