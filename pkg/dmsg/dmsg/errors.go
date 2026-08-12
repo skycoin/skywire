@@ -24,14 +24,15 @@ var (
 
 // Errors for dial request/response (3xx).
 var (
-	ErrReqInvalidSig       = registerErr(Error{code: 300, msg: "request has invalid signature"})
-	ErrReqInvalidTimestamp = registerErr(Error{code: 301, msg: "request timestamp should be higher than last"})
-	ErrReqInvalidSrcPK     = registerErr(Error{code: 302, msg: "request has invalid source public key"})
-	ErrReqInvalidDstPK     = registerErr(Error{code: 303, msg: "request has invalid destination public key"})
-	ErrReqInvalidSrcPort   = registerErr(Error{code: 304, msg: "request has invalid source port"})
-	ErrReqInvalidDstPort   = registerErr(Error{code: 305, msg: "request has invalid destination port"})
-	ErrReqNoListener       = registerErr(Error{code: 306, msg: "request has no associated listener", temp: true})
-	ErrReqNoNextSession    = registerErr(Error{code: 307, msg: "request cannot be forwarded because the next session is non-existent"})
+	ErrReqInvalidSig        = registerErr(Error{code: 300, msg: "request has invalid signature"})
+	ErrReqInvalidTimestamp  = registerErr(Error{code: 301, msg: "request timestamp should be higher than last"})
+	ErrReqInvalidSrcPK      = registerErr(Error{code: 302, msg: "request has invalid source public key"})
+	ErrReqInvalidDstPK      = registerErr(Error{code: 303, msg: "request has invalid destination public key"})
+	ErrReqInvalidSrcPort    = registerErr(Error{code: 304, msg: "request has invalid source port"})
+	ErrReqInvalidDstPort    = registerErr(Error{code: 305, msg: "request has invalid destination port"})
+	ErrReqNoListener        = registerErr(Error{code: 306, msg: "request has no associated listener", temp: true})
+	ErrReqNoNextSession     = registerErr(Error{code: 307, msg: "request cannot be forwarded because the next session is non-existent"})
+	ErrRelayCapacityReached = registerErr(Error{code: 308, msg: "server is at its peer-relay stream capacity", temp: true})
 
 	ErrDialRespInvalidSig  = registerErr(Error{code: 350, msg: "response has invalid signature"})
 	ErrDialRespInvalidHash = registerErr(Error{code: 351, msg: "response has invalid hash of associated request"})

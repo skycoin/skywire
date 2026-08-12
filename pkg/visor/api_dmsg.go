@@ -766,6 +766,12 @@ func (v *Visor) DmsgHTTP(req DmsgHTTPRequest) (*DmsgHTTPResponse, error) {
 		return nil, fmt.Errorf("DMSG client not ready: %w", err)
 	}
 
+	// dmsg over skynet transports: reach the peer over the VStreamMux relay
+	// (no route, no dmsg-server) when possible; dmsg-servers are the fallback.
+	if resp, ok := v.dmsgOverSkynet(req); ok {
+		return resp, nil
+	}
+
 	httpClient := &http.Client{
 		Transport: &dmsgHTTPTransport{ctx: context.Background(), dmsgC: v.dmsgC},
 		Timeout:   15 * time.Second,

@@ -100,6 +100,22 @@ linters:
       - linters:
           - staticcheck
         text: "QF1012:" # could use fmt.Fprintf instead of WriteString(fmt.Sprintf) (staticcheck)
+      # The mesh gateway is Linux-only; on darwin/windows the //go:build
+      # !linux stub functions always return an error, so the SHARED caller's
+      # `if err != nil` reads as "always true" (SA4023) on those platforms
+      # only. The cross-platform code is correct — the stub path is meant to
+      # fail — so this is a platform-stub false positive, not a dead branch.
+      - linters:
+          - staticcheck
+        text: "SA4023:"
+        path: "(pkg/vpn/|pkg/vpnrouter/meshgw/|cmd/apps/vpn-router/)"
+      # require.NoError-then-use pattern in these tests: staticcheck can't
+      # prove the pointer is non-nil after the error check (SA5011), but the
+      # test contract (a non-error result yields a valid value) guarantees it.
+      - linters:
+          - staticcheck
+        text: "SA5011:"
+        path: "(pkg/calvin/|pkg/config-bootstrapper/api/|pkg/skywireconfig/autoconfigcmd/).*_test\\.go"
 issues:
   new: false
 formatters:

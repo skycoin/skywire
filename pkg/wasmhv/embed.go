@@ -85,6 +85,30 @@ var PWAManifest []byte
 //go:embed sw.js
 var ServiceWorkerJS []byte
 
+// Real-origin mesh browser (RFC §4b) served on the isolated browse origin B
+// (<pkslug>.mesh.localhost) and the visor origin V:
+//
+//	BrowseSWJS         — transport Service Worker on B: intercepts subresource
+//	                     fetches and relays them through the in-tab visor.
+//	BrowseBootstrapHTML— B navigation shell: registers the SW, stands up the V
+//	                     helper bridge, injects the real mesh HTML into B.
+//
+// (Distinct from ServiceWorkerJS/sw.js, which is the PWA app-shell cache for V.)
+//
+//go:embed browse-sw.js
+var BrowseSWJS []byte
+
+//go:embed browse-bootstrap.html
+var BrowseBootstrapHTML []byte
+
+// BrowseResponderJS is injected into the visor app origin V: it answers
+// {type:'mesh-hello'} from embedded browse-origin (B) iframes with a MessagePort
+// and services their fetches via V's first-party skywireVisor (the trust
+// boundary). Replaces the partitioned cross-origin helper iframe.
+//
+//go:embed browse-responder.js
+var BrowseResponderJS []byte
+
 // PWAIcon192 / PWAIcon512 are the maskable install icons referenced by the
 // manifest, served at /icon-192.png and /icon-512.png.
 //
@@ -93,6 +117,13 @@ var PWAIcon192 []byte
 
 //go:embed icon-512.png
 var PWAIcon512 []byte
+
+// FaviconICO is the wasm-visor's browser-tab favicon: the Skywire mesh-cloud
+// mark tinted violet, so a wasm-visor tab is distinct at a glance from a
+// host-native hypervisor tab. Served at /favicon.ico by ServeWasm.
+//
+//go:embed favicon.ico
+var FaviconICO []byte
 
 // WasmExecJS is Go's lib/wasm/wasm_exec.js, vendored here so a generated file is
 // self-contained. It MUST match the Go toolchain that built the embedded/passed
