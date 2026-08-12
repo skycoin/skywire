@@ -80,7 +80,7 @@ export class ProxyDiscoveryService {
           const region = raw.geo && raw.geo.region;
           if (country) {
             currentEntry.country = country;
-            currentEntry.location += countriesList[String(country).toUpperCase()] || country;
+            currentEntry.location += (countriesList as any)[String(country).toUpperCase()] || country;
           }
           if (region) {
             currentEntry.region = region;

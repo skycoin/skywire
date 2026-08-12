@@ -139,7 +139,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   private readonly versionHistoryMinUptime = 75;
 
   private allRows: VisorRow[] = [];
-  private sub: Subscription;
+  private sub!: Subscription;
 
   constructor(
     private nodeService: NodeService,
@@ -150,7 +150,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // 60s cadence — matches the TPD publisher's recompute tick.
     this.sub = interval(60000).pipe(
       startWith(0),

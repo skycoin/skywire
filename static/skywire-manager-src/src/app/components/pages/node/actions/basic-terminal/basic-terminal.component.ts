@@ -41,10 +41,10 @@ export interface BasicTerminalData {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('terminal') terminalElement: ElementRef<HTMLDivElement>;
-  @ViewChild('dialogContent') dialogContentElement: ElementRef<HTMLDivElement>;
+  @ViewChild('terminal') terminalElement!: ElementRef<HTMLDivElement>;
+  @ViewChild('dialogContent') dialogContentElement!: ElementRef<HTMLDivElement>;
   private terminal: any;
-  private subscription: Subscription;
+  private subscription!: Subscription;
 
   // These variables store the history of the commands sent by the user, to make it possible to
   // Use the keyboard arrows to call old commands again.
@@ -127,7 +127,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
   private waitForInput() {
     // Print the header string and wait for user input.
-    this.terminal.input(this.translate.instant('actions.terminal.input-start', { address: this.data.pk }), (input) => {
+    this.terminal.input(this.translate.instant('actions.terminal.input-start', { address: this.data.pk }), (input: any) => {
       // Save the command in the history and go to the end of the history.
       this.history.push(input);
       this.historyIndex = this.history.length;

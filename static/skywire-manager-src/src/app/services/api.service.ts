@@ -25,8 +25,8 @@ export class RequestOptions {
   responseType = ResponseTypes.Json;
   requestType = RequestTypes.Json;
   ignoreAuth = false;
-  vpnKeyForAuth: string;
-  csrfToken: string;
+  vpnKeyForAuth!: string;
+  csrfToken!: string;
 
   public constructor(init?: Partial<RequestOptions>) {
     Object.assign(this, init);
@@ -65,7 +65,7 @@ export class ApiService {
    * Makes a request to a GET endpoint.
    * @param url Endpoint URL, after the "/api/" part.
    */
-  get(url: string, options: RequestOptions = null): Observable<any> {
+  get(url: string, options: RequestOptions | null = null): Observable<any> {
     return this.request('GET', url, {}, options);
   }
 
@@ -73,7 +73,7 @@ export class ApiService {
    * Makes a request to a POST endpoint.
    * @param url Endpoint URL, after the "/api/" part.
    */
-  post(url: string, body: any = {}, options: RequestOptions = null): Observable<any> {
+  post(url: string, body: any = {}, options: RequestOptions | null = null): Observable<any> {
     return this.getCsrf().pipe(first(), mergeMap(csrf => {
       options = options ? options : new RequestOptions();
       options.csrfToken = csrf;
@@ -86,7 +86,7 @@ export class ApiService {
    * Makes a request to a PUT endpoint.
    * @param url Endpoint URL, after the "/api/" part.
    */
-  put(url: string, body: any = {}, options: RequestOptions = null): Observable<any> {
+  put(url: string, body: any = {}, options: RequestOptions | null = null): Observable<any> {
     return this.getCsrf().pipe(first(), mergeMap(csrf => {
       options = options ? options : new RequestOptions();
       options.csrfToken = csrf;
@@ -99,7 +99,7 @@ export class ApiService {
    * Makes a request to a DELETE endpoint.
    * @param url Endpoint URL, after the "/api/" part.
    */
-  delete(url: string, options: RequestOptions = null): Observable<any> {
+  delete(url: string, options: RequestOptions | null = null): Observable<any> {
     return this.getCsrf().pipe(first(), mergeMap(csrf => {
       options = options ? options : new RequestOptions();
       options.csrfToken = csrf;

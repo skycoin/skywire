@@ -15,7 +15,7 @@ import { SnackbarService } from '../../../services/snackbar.service';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CopyToClipboardTextComponent {
-  @Input() text: string;
+  @Input() text!: string;
   /**
    * Indicates if the text must be truncated to show an specific amount of characters only,
    * if it is too long.

@@ -25,13 +25,13 @@ import { processServiceError } from 'src/app/utils/errors';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AllTransportsComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   transportStats: { total: number, byType: { type: string, count: number }[] } = { total: 0, byType: [] };
   isPublic = false;
 
-  private dataSubscription: Subscription;
-  private autoconnectSubscription: Subscription;
-  private publicToggleSubscription: Subscription;
+  private dataSubscription!: Subscription;
+  private autoconnectSubscription!: Subscription;
+  private publicToggleSubscription!: Subscription;
 
   constructor(
     private apiService: ApiService,
@@ -42,7 +42,7 @@ export class AllTransportsComponent extends PageBaseComponent implements OnInit,
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.transportStats = this.computeTransportStats(node);

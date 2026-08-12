@@ -16,9 +16,9 @@ import { SelectLanguageComponent } from '../select-language/select-language.comp
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LangButtonComponent implements OnInit, OnDestroy {
-  language: LanguageData;
+  language!: LanguageData;
 
-  private subscription: Subscription;
+  private subscription!: Subscription;
 
   constructor(
     private languageService: LanguageService,

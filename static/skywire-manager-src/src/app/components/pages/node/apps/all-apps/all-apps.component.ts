@@ -18,12 +18,12 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 export class AllAppsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   private changeDetectorRef = inject(ChangeDetectorRef);
 
-  apps: Application[];
-  nodePK: string;
+  apps!: Application[];
+  nodePK!: string;
 
-  private dataSubscription: Subscription;
+  private dataSubscription!: Subscription;
 
-  ngOnInit() {
+  override ngOnInit() {
     // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.localPk;

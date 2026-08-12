@@ -1,10 +1,10 @@
 <!-- Header. -->
 <div class="generic-title-container mt-4.5 d-flex" [ngClass]="{'paginator-icons-fixer': !showShortList_ && numberOfPages > 1 && dataSource}">
   <div class="title">
-    @if (showShortList_ && showOfficialApps) {
+    @if (showShortList_ && showOfficialApps.toString()) {
       <span class="uppercase">{{ 'apps.apps-list.title-official' | translate }}</span>
     }
-    @if (showShortList_ && !showOfficialApps) {
+    @if (showShortList_ && !showOfficialApps.toString()) {
       <span class="uppercase">{{ 'apps.apps-list.title-user' | translate }}</span>
     }
     @if (dataFilterer.currentFiltersTexts && dataFilterer.currentFiltersTexts.length > 0) {
@@ -65,7 +65,7 @@
       <app-paginator
         [currentPage]="currentPage"
         [numberOfPages]="numberOfPages"
-        [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps]"
+        [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps.toString()]"
         [queryParams]="dataFilterer.currentUrlQueryParams">
       </app-paginator>
     }
@@ -316,7 +316,7 @@
     @if (showShortList_ && numberOfPages > 1) {
       <app-view-all-link
         [numberOfElements]="filteredApps.length"
-        [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps, '1']"
+        [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps.toString(), '1']"
         [queryParams]="dataFilterer.currentUrlQueryParams"
       ></app-view-all-link>
     }
@@ -328,10 +328,10 @@
   <div class="rounded-elevated-box mt-3">
     <div class="box-internal-container">
       <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>
-      @if (allAppsForType.length === 0 && showOfficialApps) {
+      @if (allAppsForType.length === 0 && showOfficialApps.toString()) {
         <span class="font-sm">{{ 'apps.apps-list.empty-official' | translate }}</span>
       }
-      @if (allAppsForType.length === 0 && !showOfficialApps) {
+      @if (allAppsForType.length === 0 && !showOfficialApps.toString()) {
         <span class="font-sm">{{ 'apps.apps-list.empty-user' | translate }}</span>
       }
       @if (allAppsForType.length !== 0) {
@@ -346,7 +346,7 @@
   <app-paginator
     [currentPage]="currentPage"
     [numberOfPages]="numberOfPages"
-    [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps]"
+    [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps.toString()]"
     [queryParams]="dataFilterer.currentUrlQueryParams">
   </app-paginator>
 }

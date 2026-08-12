@@ -21,8 +21,8 @@ import { processServiceError } from '../../../../utils/errors';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
-  @ViewChild('button') button: ButtonComponent;
-  @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('button') button!: ButtonComponent;
+  @ViewChild('firstInput') firstInput!: ElementRef;
   @Output() workingState = new EventEmitter<boolean>();
 
   /**
@@ -31,10 +31,10 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   @Input() forInitialConfig = false;
 
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
 
-  private subscription: Subscription;
-  private formSubscription: Subscription;
+  private subscription!: Subscription;
+  private formSubscription!: Subscription;
 
   constructor(
     private authService: AuthService,
