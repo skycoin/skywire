@@ -13,7 +13,7 @@ skywire cli mdisc entry <visor-public-key>
 ## Flags
 
 ```
-      --url string   specify alternative DMSG discovery url (default "http://dmsgd.skywire.skycoin.com")
+      --url string   specify alternative DMSG discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
 ```
 
 ## Global Flags

@@ -48,7 +48,7 @@ Example Config:
       "secret_key": "0000000000000000000000000000000000000000000000000000000000000000",
       "port": 8080,
       "dmsg": {
-        "discovery": "http://dmsgd.skywire.skycoin.com",
+        "discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
         "sessions_count": 2
       }
     }

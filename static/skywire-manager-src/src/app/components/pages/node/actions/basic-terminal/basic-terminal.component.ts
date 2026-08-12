@@ -1,4 +1,4 @@
-import { Component, ElementRef, Inject, OnDestroy, ViewChild, Renderer2, HostListener, AfterViewInit } from '@angular/core';
+import { Component, ElementRef, Inject, OnDestroy, ViewChild, Renderer2, HostListener, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
@@ -37,13 +37,14 @@ export interface BasicTerminalData {
     selector: 'app-basic-terminal',
     templateUrl: './basic-terminal.component.html',
     styleUrls: ['./basic-terminal.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('terminal') terminalElement: ElementRef<HTMLDivElement>;
-  @ViewChild('dialogContent') dialogContentElement: ElementRef<HTMLDivElement>;
+  @ViewChild('terminal') terminalElement!: ElementRef<HTMLDivElement>;
+  @ViewChild('dialogContent') dialogContentElement!: ElementRef<HTMLDivElement>;
   private terminal: any;
-  private subscription: Subscription;
+  private subscription!: Subscription;
 
   // These variables store the history of the commands sent by the user, to make it possible to
   // Use the keyboard arrows to call old commands again.
@@ -69,6 +70,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
     private renderer: Renderer2,
     private apiService: ApiService,
     private translate: TranslateService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngAfterViewInit() {
@@ -125,7 +127,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
   private waitForInput() {
     // Print the header string and wait for user input.
-    this.terminal.input(this.translate.instant('actions.terminal.input-start', { address: this.data.pk }), (input) => {
+    this.terminal.input(this.translate.instant('actions.terminal.input-start', { address: this.data.pk }), (input: any) => {
       // Save the command in the history and go to the end of the history.
       this.history.push(input);
       this.historyIndex = this.history.length;
@@ -143,6 +145,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
         this.printLines(' ');
         this.waitForInput();
+        this.changeDetectorRef.markForCheck();
       }, (error: OperationError) => {
         error = processServiceError(error);
 
@@ -158,6 +161,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
         this.printLines(' ');
         this.waitForInput();
+        this.changeDetectorRef.markForCheck();
       });
     });
   }
@@ -175,6 +179,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
     this.terminal.print(processedText);
 
+    // change-detection: no view state — scrolls a container
     setTimeout(() => {
       this.dialogContentElement.nativeElement.scrollTop = this.dialogContentElement.nativeElement.scrollHeight;
     });

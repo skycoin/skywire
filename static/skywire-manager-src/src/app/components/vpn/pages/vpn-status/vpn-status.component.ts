@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { interval, Observable, of, Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -20,7 +20,8 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
     selector: 'app-vpn-status',
     templateUrl: './vpn-status.component.html',
     styleUrls: ['./vpn-status.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.
@@ -49,7 +50,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   // Current connection time.
   connectionTimeString = '00:00:00';
   private calculatedSegs = -1;
-  private timeUpdateSubscription: Subscription;
+  private timeUpdateSubscription!: Subscription | null;
 
   // Current data transmission stats.
   uploadSpeed = 0;
@@ -76,19 +77,19 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   // If the user has not blocked the option for showing the IP info.
   ipInfoAllowed: boolean;
   // Public IP of the machine running the app.
-  currentIp: string;
+  currentIp!: string | null;
   // Country of the public IP of the machine running the app.
-  ipCountry: string;
+  ipCountry!: string | null;
   // If the current IP is being checked.
   loadingCurrentIp = true;
   // If there was a problem the last time the code tried to get the current IP.
   problemGettingIp = false;
   // Pk of the local visor.
-  currentLocalPk: string;
+  currentLocalPk!: string;
   // Currently selected server.
-  currentRemoteServer: LocalServerData;
+  currentRemoteServer!: LocalServerData;
   // Extended data about the current state of the VPN client app.
-  backendState: BackendState;
+  backendState!: BackendState;
   // Route options applied when pressing Start. minHops >= 2 forces the route
   // through that many intermediate visors (multihop); muxRoutes > 1 dials over
   // that many parallel multiplexed routes (experimental). 1 = plain dial.
@@ -99,10 +100,10 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
 
   serverFlags = ServerFlags;
 
-  private dataSubscription: Subscription;
-  private currentRemoteServerSubscription: Subscription;
-  private operationSubscription: Subscription;
-  private navigationsSubscription: Subscription;
+  private dataSubscription!: Subscription;
+  private currentRemoteServerSubscription!: Subscription;
+  private operationSubscription!: Subscription;
+  private navigationsSubscription!: Subscription;
 
   constructor(
     private vpnClientService: VpnClientService,
@@ -111,6 +112,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     private route: ActivatedRoute,
     private dialog: MatDialog,
     private router: Router,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
 
@@ -130,7 +132,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     }
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       // Get the PK of the current local visor.
       if (params.has('key')) {
@@ -139,6 +141,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
         this.tabsData = VpnHelpers.vpnTabsData;
       }
 
+      // change-detection: no view state — unsubscribes
       setTimeout(() => this.navigationsSubscription.unsubscribe());
 
       this.startGettingData(true);
@@ -146,7 +149,9 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
       // Get or update the currently selected server.
       this.currentRemoteServerSubscription = this.vpnSavedDataService.currentServerObservable.subscribe(server => {
         this.currentRemoteServer = server;
+        this.changeDetectorRef.markForCheck();
       });
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();
@@ -252,6 +257,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
             this.timeUpdateSubscription = interval(1000).subscribe(() => {
               this.calculatedSegs += 1;
               this.refreshConnectionTimeString();
+              this.changeDetectorRef.markForCheck();
             });
           }
         } else {
@@ -271,6 +277,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
       if (savedData) {
         this.startGettingData(false);
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -307,7 +314,9 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     // If no server has been selected, open the server list.
     if (!this.currentRemoteServer) {
       this.router.navigate(['vpn', this.currentLocalPk, 'servers']);
-      setTimeout(() => this.snackbarService.showWarning('vpn.status-page.select-server-warning'), 100);
+      setTimeout(() => {
+ this.snackbarService.showWarning('vpn.status-page.select-server-warning'); this.changeDetectorRef.markForCheck(); 
+}, 100);
 
       return;
     }
@@ -368,6 +377,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
       confirmationDialog.componentInstance.closeModal();
       this.finishStoppingVpn();
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -399,7 +409,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
    * @param countryCode 2 letter code of the country.
    */
   getCountryName(countryCode: string): string {
-    return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
+    return (countriesList as any)[countryCode.toUpperCase()] ? (countriesList as any)[countryCode.toUpperCase()] : countryCode;
   }
 
   /**
@@ -448,6 +458,10 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     } else if (this.backendState.vpnClientAppData.appState === AppState.Reconnecting) {
       return 'vpn.connection-info.state-reconnecting';
     }
+
+    // Unreachable for the states above; stated so noImplicitReturns can see it,
+    // and returning what the implicit path already returned.
+    return undefined;
   }
 
   /**

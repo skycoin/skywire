@@ -18,7 +18,7 @@ skywire cli visor pk
 
 ```
   -i, --input string   path of input config file.
-  -p, --pkg            read from {/opt/skywire/bin /opt/skywire/local {/opt/skywire/users.db true}}
+  -p, --pkg            read from {/Applications/Skywire.app/Contents/MacOS /Library/Application Support/Skywire/local {/Library/Application Support/Skywire/users.db true}}
 ```
 
 ## Global Flags

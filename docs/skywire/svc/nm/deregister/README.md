@@ -45,7 +45,7 @@ skywire svc nm deregister
   -r, --rpc string      visor RPC address (used when --sk is not provided)
                          (default "localhost:3435")
       --sd-url string   service discovery URL (only used with --sk)
-                         (default "http://sd.skycoin.com")
+                         (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
       --sk string       secret key for signing (if not provided, uses visor RPC)
   -t, --type string     service type: vpn, visor, skysocks (or proxy)
 ```

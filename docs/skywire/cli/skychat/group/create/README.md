@@ -13,9 +13,12 @@ skywire cli skychat group create
 ## Flags
 
 ```
-      --member strings   initial member PK; repeat for many (the owner is implicit)
-  -m, --mode string      public | private — private encrypts feed messages with an AES key shipped in the invite link (default "public")
-  -n, --name string      human-readable group name (required)
+  -k, --kind string        public | private | channel — private is admin-approved and encrypted; a channel is open to join but only admins may post (default public)
+      --listed             publish in this visor's discovery catalog, so anyone with this visor's key can find it; off by default
+      --member strings     initial member PK; repeat for many (the owner is implicit)
+  -m, --mode string        deprecated alias for --kind, accepts public | private only
+  -n, --name string        human-readable group name (required)
+      --no-peer-backfill   only admins may serve this group's history to a joiner; without this flag any online member can, so the group stays readable while admins are offline
 ```
 
 ## Global Flags

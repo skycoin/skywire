@@ -522,6 +522,10 @@ func (proxyDefaultAPI) RouteGroups() ([]RouteGroupInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) RoutingStats() (routing.RoutingTableStats, error) {
+	return routing.RoutingTableStats{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RoutingPolicies() (*RoutingPoliciesSummary, error) {
 	return nil, ErrProxyNotSupported
 }
@@ -750,6 +754,10 @@ func (proxyDefaultAPI) DmsgSessions() (*DmsgClientSessions, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) DmsgConverge(_ []string) (*DmsgConvergeResult, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RegisterCXOFeed(_ string, _ uint16, _ string) error {
 	return ErrProxyNotSupported
 }
@@ -815,6 +823,14 @@ func (proxyDefaultAPI) ProfileFetch(_ cipher.PubKey) (Profile, error) {
 }
 
 func (proxyDefaultAPI) GroupSetListed(_ string, _ bool) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupSetMeta(_ GroupSetMetaArgs) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupRefreshMeta(_ string) (GroupInfo, error) {
 	return GroupInfo{}, ErrProxyNotSupported
 }
 

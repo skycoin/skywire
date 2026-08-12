@@ -46,7 +46,9 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
     suspend fun ensureConfig(
         transportPrimary: String,
         fleetEnabled: Boolean,
+        publicAutoconnect: Boolean,
         logLevel: String,
+        remoteManagementPk: String?,
     ): Result<File> = withContext(Dispatchers.IO) {
         paths.ensureDirs()
         // Before the existence check below, which is what decides whether to
@@ -72,7 +74,9 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
             applyPhoneProfile(
                 transportPrimary,
                 fleetEnabled,
+                publicAutoconnect,
                 logLevel,
+                remoteManagementPk,
                 skychatPasswordFile = ensureGatePassword(
                     SkychatProfile.passwordFile(paths),
                     secrets.skychatPassword(),
@@ -144,13 +148,25 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      *    the app, not the config file, is the source of truth: the visor
      *    persists its own copy when the setting is changed live, and this
      *    keeps the two from drifting apart.
+     *  - `routing.mux_routes` — client apps (SkyVPN, SkySOCKS) dial over
+     *    [MUX_ROUTES] parallel routes by default. Same every-launch pin,
+     *    same reason: the phone owns the policy, and the visor rewrites
+     *    the field whenever the router settings are saved live.
      *  - `log_level` — the same arrangement, for the same reason (see
      *    [CoreLogLevel]).
+     *  - `hypervisors` — the remote-management grant (see
+     *    [RemoteManagement]). Pinned to exactly the granted key, or empty:
+     *    this list is what admits another machine to the visor's RPC
+     *    surfaces, so a key planted by anything other than the setting —
+     *    a hand edit, a runtime `hv add` the visor persisted — must not
+     *    outlive the user's answer.
      */
     private fun applyPhoneProfile(
         transportPrimary: String,
         fleetEnabled: Boolean,
+        publicAutoconnect: Boolean,
         logLevel: String,
+        remoteManagementPk: String?,
         skychatPasswordFile: File,
         skydexPasswordFile: File,
     ) {
@@ -160,11 +176,22 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                 when (key) {
                     "pty", "skywire-tcp" -> Unit // dropped
                     "cli_addr" -> put(key, JsonPrimitive(""))
+                    "hypervisors" -> put(
+                        key,
+                        JsonArray(listOfNotNull(remoteManagementPk).map(::JsonPrimitive)),
+                    )
                     "log_level" -> put(key, JsonPrimitive(CoreLogLevel.sanitize(logLevel)))
                     "local_path" -> put(key, JsonPrimitive(paths.localDir.absolutePath))
                     "transport" -> put(
                         key,
                         value.jsonObject.edit {
+                            // Re-pinned every launch like the transport order:
+                            // the phone owns this choice, and `config gen`
+                            // wrote its own answer (--autoconn) at generation.
+                            put(
+                                PublicAutoconnect.CONFIG_KEY,
+                                JsonPrimitive(publicAutoconnect),
+                            )
                             putObject("log_store") {
                                 put(
                                     "location",
@@ -202,6 +229,16 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                             this["transport_preference"] = JsonArray(
                                 TransportPreference.order(transportPrimary).map(::JsonPrimitive),
                             )
+                            // Client apps dial over multiplexed routes by
+                            // default — the phone's policy, not a setting, so
+                            // there is deliberately no switch for it: min_hops
+                            // stays the one routing control the user sees.
+                            // Every leg beyond the first is best-effort (a
+                            // dial never fails for lack of a second path, and
+                            // extra legs are skipped outright when the route
+                            // rides dmsg — carrier NAT), so on a phone that
+                            // has only the relay this quietly changes nothing.
+                            this["mux_routes"] = JsonPrimitive(MUX_ROUTES)
                         },
                     )
                     else -> put(key, value)
@@ -502,6 +539,16 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         const val MAX_CAPTURE = 256 * 1024
         const val SOCKS_APP = "skysocks-client"
         const val DEFAULT_SOCKS_PORT = 1080
+
+        /**
+         * How many parallel routes a client app's dial asks for. Two, not
+         * more: the second leg is what buys the bandwidth aggregation (a
+         * disjoint physical path — say sudph next to stcpr), it stays
+         * within the route-finder's stock candidate set, and each further
+         * leg would cost another background setup dial on every connect
+         * for a return a single-radio phone can't use.
+         */
+        const val MUX_ROUTES = 2
         val ADDR = listOf("--addr", "-addr")
 
         /** 32 bytes of secp256k1 secret, 33 of compressed public — as hex. */

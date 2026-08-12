@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Observable, Subscription, map } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -30,7 +30,8 @@ import { DataFilterer } from 'src/app/utils/lists/data-filterer';
     selector: 'app-node-app-list',
     templateUrl: './node-apps-list.component.html',
     styleUrls: ['./node-apps-list.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeAppsListComponent implements OnInit, OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
@@ -48,8 +49,8 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     'skycoin-daemon', 'skycoin-web', 'skydex-market', 'skydex-client',
   ]);
 
-  @Input() nodePK: string;
-  @Input() nodeIp: string;
+  @Input() nodePK!: string;
+  @Input() nodeIp!: string;
   @Input() showOfficialApps = true;
 
   // Vars with the data of the columns used for sorting the data.
@@ -58,13 +59,13 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   portSortData = new SortingColumn(['port'], 'apps.apps-list.port', SortingModes.Number);
   autoStartSortData = new SortingColumn(['autostart'], 'apps.apps-list.auto-start', SortingModes.Boolean);
 
-  private dataSortedSubscription: Subscription;
-  private dataFiltererSubscription: Subscription;
+  private dataSortedSubscription!: Subscription;
+  private dataFiltererSubscription!: Subscription;
   // Objects in charge of sorting and filtering the data.
-  dataSorter: DataSorter;
-  dataFilterer: DataFilterer;
+  dataSorter!: DataSorter;
+  dataFilterer!: DataFilterer;
 
-  dataSource: Application[];
+  dataSource!: Application[];
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -75,7 +76,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    * accessing the full list. If false, the full list is shown, with pagination
    * controls, if needed.
    */
-  showShortList_: boolean;
+  showShortList_!: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
     // Sort the data.
@@ -88,12 +89,12 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   appsWithoutConfig = new Set<string>();
 
   // All apps the ode has.
-  allApps: Application[];
+  allApps!: Application[];
   // All apps the node has for the selected type (official apps or user apps).
-  allAppsForType: Application[];
-  filteredApps: Application[];
-  appsToShow: Application[];
-  appsMap: Map<string, Application>;
+  allAppsForType!: Application[];
+  filteredApps!: Application[];
+  appsToShow!: Application[] | null;
+  appsMap!: Map<string, Application>;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is readed asynchronously.
@@ -193,6 +194,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
     private storageService: StorageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     // Get the page and type requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
@@ -210,6 +212,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
 
         this.recalculateElementsToShow();
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -227,6 +230,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allAppsForType has already been sorted.
       this.recalculateElementsToShow();
+      this.changeDetectorRef.markForCheck();
     });
 
     if (this.dataSorter) {
@@ -237,6 +241,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredApps = data;
       this.dataSorter.setData(this.filteredApps);
+      this.changeDetectorRef.markForCheck();
     });
 
     if (this.allAppsForType) {
@@ -509,6 +514,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       } else if (selectedOption === 4) {
         this.toggleExpanded(app.name);
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -541,7 +547,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
    */
   private changeSingleAppVal(
     observable: Observable<any>,
-    confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
+    confirmationDialog: MatDialogRef<ConfirmationComponent, any> | null = null) {
 
     // Start the operation and save it for posible cancellation.
     this.operationSubscriptionsGroup.push(observable.subscribe(
@@ -555,8 +561,10 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           this.refreshAgain = true;
           NodeComponent.refreshCurrentDisplayedData();
+          this.changeDetectorRef.markForCheck();
         }, 50);
         this.snackbarService.showDone('apps.operation-completed');
+        this.changeDetectorRef.markForCheck();
       }, (err: OperationError) => {
         err = processServiceError(err);
 
@@ -565,6 +573,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           this.refreshAgain = true;
           NodeComponent.refreshCurrentDisplayedData();
+          this.changeDetectorRef.markForCheck();
         }, 50);
 
         if (confirmationDialog) {
@@ -572,6 +581,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         } else {
           this.snackbarService.showError(err);
         }
+        this.changeDetectorRef.markForCheck();
       }
     ));
   }
@@ -674,7 +684,9 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     if (this.refreshAgain) {
       this.refreshAgain = false;
 
-      setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 2000);
+      setTimeout(() => {
+ NodeComponent.refreshCurrentDisplayedData(); this.changeDetectorRef.markForCheck(); 
+}, 2000);
     }
   }
 
@@ -718,11 +730,13 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     names: string[],
     changingAutostart: boolean,
     newVal: boolean,
-    confirmationDialog: MatDialogRef<ConfirmationComponent, any> = null) {
+    confirmationDialog: MatDialogRef<ConfirmationComponent, any> | null = null) {
 
     // The list may be empty because apps which already have the settings are ignored.
     if (!names || names.length === 0) {
-      setTimeout(() => NodeComponent.refreshCurrentDisplayedData(), 50);
+      setTimeout(() => {
+ NodeComponent.refreshCurrentDisplayedData(); this.changeDetectorRef.markForCheck(); 
+}, 50);
       this.snackbarService.showWarning('apps.operation-unnecessary');
 
       if (confirmationDialog) {
@@ -751,12 +765,14 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
         setTimeout(() => {
           this.refreshAgain = true;
           NodeComponent.refreshCurrentDisplayedData();
+          this.changeDetectorRef.markForCheck();
         }, 50);
 
         this.snackbarService.showDone('apps.operation-completed');
       } else {
         this.changeAppsValRecursively(names, changingAutostart, newVal, confirmationDialog);
       }
+      this.changeDetectorRef.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
 
@@ -765,6 +781,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       setTimeout(() => {
         this.refreshAgain = true;
         NodeComponent.refreshCurrentDisplayedData();
+        this.changeDetectorRef.markForCheck();
       }, 50);
 
       if (confirmationDialog) {
@@ -772,6 +789,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       } else {
         this.snackbarService.showError(err);
       }
+      this.changeDetectorRef.markForCheck();
     }));
   }
 }

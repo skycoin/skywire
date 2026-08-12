@@ -353,12 +353,43 @@ func (h *sseHub) broadcast(msg string) {
 		h.replayLen++
 	}
 
+	h.fanout(msg)
+}
+
+// broadcastLive delivers to the subscribers connected right now and does
+// NOT record the message in the replay ring.
+//
+// For control envelopes that announce a state change rather than carry
+// content — an invite is pending, a join request is waiting. Their truth
+// lives behind an endpoint the page refetches every time it connects
+// (/pair/invites, /group), so replaying the announcement restores no
+// state that the refetch would not. What it does restore is the alert:
+// the page treats a replayed envelope as news and raises a toast for it,
+// once per connect, for as long as the envelope stays in a 256-deep
+// ring. That is the reported "so many Pair invite popups every time I
+// open the app", and why a second phone with fewer past invites showed
+// one — the count was never the invites outstanding, it was the invite
+// events still in the ring.
+//
+// Chat messages are exactly the opposite and must keep using broadcast:
+// nothing else will tell a reconnecting listener what it missed, which
+// is what the ring is for.
+func (h *sseHub) broadcastLive(msg string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.fanout(msg)
+}
+
+// fanout delivers msg to every live subscriber and counts what could not
+// be delivered. Caller holds h.mu.
+func (h *sseHub) fanout(msg string) {
 	var drops uint64
 	if len(h.clients) == 0 {
-		// No live readers right now. Replay buffer will catch any
-		// listener that reconnects within the next sseReplayBufSize
-		// messages; surface the "no subscribers" event in /status
-		// so the operator knows live-stream had a gap.
+		// No live readers right now. A broadcast is caught by the replay
+		// buffer if a listener reconnects within the next
+		// sseReplayBufSize messages; a broadcastLive is simply gone.
+		// Either way, surface the "no subscribers" event in /status so
+		// the operator knows live-stream had a gap.
 		drops = 1
 	} else {
 		for ch := range h.clients {
@@ -894,6 +925,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/events", requireAuthFunc(eventsHandler))
 	mux.HandleFunc("/history", requireAuthFunc(historyHandler))
 	mux.HandleFunc("/history/peers", requireAuthFunc(historyPeersHandler))
+	mux.HandleFunc("/history/forget", requireAuthFunc(forgetHandler))
 	mux.HandleFunc("/status", requireAuthFunc(statusHandler))
 	mux.HandleFunc("/unread", requireAuthFunc(unreadHandler))
 	mux.HandleFunc("/send-file", requireAuthFunc(sendFileHandler(ctx)))
@@ -903,6 +935,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/read-receipt", requireAuthFunc(readReceiptHandler(ctx)))
 	mux.HandleFunc("/delete", requireAuthFunc(deleteHandler(ctx)))
 	mux.HandleFunc("/notify-capable", requireAuthFunc(notifyCapableHandler))
+	mux.HandleFunc("/notify-focus", requireAuthFunc(notifyFocusHandler))
 	registerPairHTTPHandlers(ctx, mux)
 	registerGroupHTTPHandlers(mux)
 	registerProfileHTTPHandlers(mux)
@@ -1741,7 +1774,7 @@ func onChatEvent(ev dm.Event) {
 	// Host-OS notification when no capable browser UI is showing it. Inbound
 	// only — our own outbound mirror is not news to this host.
 	if ev.Dir == "in" {
-		notifyOSInbound(displayName(ev.Peer), notifPreview(ev.Text))
+		notifyOSInboundThread(ev.Peer, ev.Peer, displayName(ev.Peer), notifPreview(ev.Text))
 	}
 }
 

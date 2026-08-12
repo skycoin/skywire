@@ -6,11 +6,11 @@ import { AppConfig } from '../app.config';
 import { environment } from '../../environments/environment';
 
 export class LanguageData {
-  code: string;
-  name: string;
-  iconName: string;
+  code!: string;
+  name!: string;
+  iconName!: string;
 
-  constructor(langObj) {
+  constructor(langObj: any) {
     Object.assign(this, langObj);
   }
 }
@@ -55,7 +55,7 @@ export class LanguageService {
 
     // Config Ngx-Translate.
     this.translate.addLangs(langs);
-    this.translate.setDefaultLang(AppConfig.defaultLanguage);
+    this.translate.setFallbackLang(AppConfig.defaultLanguage);
 
     // Detect when the selected language is changed.
     this.translate.onLangChange

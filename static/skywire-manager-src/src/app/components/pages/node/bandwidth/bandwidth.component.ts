@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -65,29 +65,31 @@ type WindowDays = 1 | 7 | 30;
   templateUrl: './bandwidth.component.html',
   styleUrls: ['./bandwidth.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BandwidthComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   rows: Row[] = [];
   loading = true;
   error: string | null = null;
   fetchedAt: Date | null = null;
   windowDays: WindowDays = 7;
 
-  private nodeSub: Subscription;
-  private pollSub: Subscription;
+  private nodeSub!: Subscription;
+  private pollSub!: Subscription;
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;
       if (wasUnset && node) {
  this.startPolling(); 
 }
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();

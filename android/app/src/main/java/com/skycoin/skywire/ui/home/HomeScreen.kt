@@ -144,11 +144,16 @@ private fun BatteryPrompt(onAllow: () -> Unit, onDismiss: () -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Both buttons, matching the same prompt in Settings: a card's actions
+        // are FilledTonalButton whatever their emphasis, and a text button in
+        // among them reads as a hyperlink rather than the other half of a
+        // choice. "Not now" is the half that gets declined — it has to look
+        // like something you can press.
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             FilledTonalButton(onClick = onAllow) {
                 Text(stringResource(R.string.settings_battery_allow))
             }
-            TextButton(onClick = onDismiss) {
+            FilledTonalButton(onClick = onDismiss) {
                 Text(stringResource(R.string.settings_battery_not_now))
             }
         }

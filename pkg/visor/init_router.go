@@ -290,6 +290,7 @@ func initRouter(ctx context.Context, v *Visor, log *logging.Logger) error {
 		RouteGroupDialer:   rgDialer,
 		SetupNodes:         v.conf.EffectiveRouteSetupNodes(),
 		MinHops:            v.conf.Routing.MinHops,
+		MuxRoutes:          v.conf.Routing.MuxRoutes,
 		AwaitSetupListener: v.awaitSetupListener,
 		Logger:             logger,
 		MasterLogger:       v.MasterLogger(),

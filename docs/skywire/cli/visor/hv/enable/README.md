@@ -2,7 +2,7 @@
 
 [← skywire cli visor hv](../README.md)
 
-Enable hypervisor UI at runtime.
+Enable the hypervisor — DMSG-RPC listener, managed-visor tracking, and the web UI (unless ui_disable is set). Use `hv ui enable/disable` to toggle just the web UI.
 Use -w to also persist the change to the config file.
 
 ## Usage

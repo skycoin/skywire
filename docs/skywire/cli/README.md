@@ -21,6 +21,7 @@ skywire cli
 - [got](got/README.md) — HTTP client with concurrent downloads (also speaks skynet:// and dmsg://)
 - [gotop](gotop/README.md) — Terminal based graphical activity monitor
 - [halt](halt/README.md) — Stop a running visor (alias for `cli visor halt`)
+- [hv](hv/README.md) — Hypervisor UI tools
 - [log](log/README.md) — survey & transport log collection
 - [mail](mail/README.md) — Embedded SMTP→skywire bridge (skymail-bridge)
 - [mdisc](mdisc/README.md) — Query DMSG Discovery

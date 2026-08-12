@@ -18,7 +18,7 @@ import { MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { DragDropModule } from '@angular/cdk/drag-drop';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateDirective, TranslatePipe } from '@ngx-translate/core';
 
 import { AutoScalePipe } from '../pipes/auto-scale.pipe';
 import { ClipboardDirective } from '../directives/clipboard.directive';
@@ -71,11 +71,12 @@ const SHARED_ANGULAR_MODULES = [
   // used by shared components like ViewAllLinkComponent. The route table
   // (RouterModule.forRoot) stays in AppModule's AppRoutingModule.
   RouterModule,
-  // Bare TranslateModule (the `translate` pipe/directive) — the root provider
-  // config lives in AppModule's AppTranslationModule (forRoot). Re-exporting
-  // only the bare module keeps future lazy feature modules on the single root
-  // TranslateService instead of spawning duplicate services via forRoot.
-  TranslateModule,
+  // The `translate` pipe and directive. ngx-translate 18 removed
+  // TranslateModule and made both standalone, so they are listed directly; the
+  // service configuration still lives once in AppTranslationModule, which keeps
+  // future lazy feature modules on the single root TranslateService.
+  TranslatePipe,
+  TranslateDirective,
   MatSnackBarModule,
   MatDialogModule,
   MatFormFieldModule,

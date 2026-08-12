@@ -103,6 +103,35 @@ func (r *RPC) GroupSetListed(req *GroupSetListedRequest, out *GroupInfo) (err er
 	return nil
 }
 
+// GroupSetMeta updates a group's display metadata (name and/or picture).
+func (r *RPC) GroupSetMeta(req *GroupSetMetaArgs, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupSetMeta", req)(out, &err)
+	if req == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupSetMeta(*req)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
+// GroupRefreshMeta re-reads a group's display metadata from its founding
+// visor.
+func (r *RPC) GroupRefreshMeta(id *string, out *GroupInfo) (err error) {
+	defer rpcutil.LogCall(r.log, "GroupRefreshMeta", id)(out, &err)
+	if id == nil {
+		return fmt.Errorf("nil request")
+	}
+	info, err := r.visor.GroupRefreshMeta(*id)
+	if err != nil {
+		return err
+	}
+	*out = info
+	return nil
+}
+
 // GroupCatalog asks a visor what groups and channels it publishes. A zero
 // host means this visor.
 func (r *RPC) GroupCatalog(host *cipher.PubKey, out *GroupCatalogResponse) (err error) {

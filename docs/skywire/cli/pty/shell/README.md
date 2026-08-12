@@ -44,7 +44,7 @@ skywire cli pty shell <pk>@<host>[:<port>] [-- <command> [args...]]
 
 ```
   -s, --sk cipher.SecKey   local client SK for the noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
-      --no-visor-key       don't borrow the local visor's SK from /opt/skywire/skywire.json — use --sk or a random one instead
+      --no-visor-key       don't borrow the local visor's SK from /Library/Application Support/Skywire/skywire-config.json — use --sk or a random one instead
   -e, --env stringArray    extra env var KEY=VALUE; repeatable; exec mode only
   -t, --timeout string     max command duration in exec mode (e.g. 30s, 2m); host-side cap is 5m (default "30s")
       --no-pty             force exec mode even when no command is given (rarely useful — defaults to interactive when no command, exec when command is present, matching ssh's behavior)

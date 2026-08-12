@@ -1923,6 +1923,20 @@
     }
 
     /* Modal */
+    /* The overlay is also the scroller. A dialog is laid out at its natural
+       height, and on a phone with the soft keyboard up — which takes about
+       half the viewport — several of them are taller than what is left. The
+       host resizes the WebView for the keyboard (ChatScreen's imePadding),
+       so the overlay correctly shrinks; without a scroll here that only
+       means the dialog overflows it.
+
+       align-items is flex-start, with `margin: auto` on .modal below doing
+       the centring instead. They are not interchangeable: a CENTRED flex
+       item that outgrows its container overflows both edges, and the half
+       above the top edge cannot be scrolled back to — which is exactly the
+       group-name field disappearing above a screenful of help text. Auto
+       margins centre the same way when there is room and collapse to 0
+       when there isn't, so the top of the dialog stays reachable. */
     .modal-overlay {
       position: fixed;
       top: 0;
@@ -1931,8 +1945,15 @@
       bottom: 0;
       background: var(--scrim);
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: center;
+      overflow-y: auto;
+      /* The chat behind must not take over the scroll once the dialog
+         reaches its end. */
+      overscroll-behavior: contain;
+      /* Vertical only: .modal is width:90%, so its side gutters already
+         come from its own width and padding here would narrow it. */
+      padding: 16px 0 calc(16px + env(safe-area-inset-bottom, 0px));
       z-index: 100;
       opacity: 0;
       visibility: hidden;
@@ -1956,6 +1977,9 @@
       max-width: 400px;
       width: 90%;
       box-shadow: var(--shadow);
+      /* Centres the dialog in the overlay without clipping it when it is
+         taller than one — see the .modal-overlay comment. */
+      margin: auto;
       transform: scale(0.95);
       transition: transform 0.2s;
     }
@@ -2558,7 +2582,26 @@
     }
 
     .group-avatar { width: 40px; height: 40px; font-size: 18px; }
+    /* A picture fills the same rounded tile the glyph sat in; overflow is
+       clipped by the parent's radius so both render identically. */
+    .group-avatar-sm, .group-avatar { overflow: hidden; }
+    .group-avatar-sm img, .group-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
     .group-header-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Founder-only name + picture editor at the top of group settings. The
+       picture sits beside the field it belongs to, so the row reads as one
+       identity rather than two unrelated controls. */
+    .ga-meta-line { display: flex; gap: 12px; align-items: flex-start; }
+    .ga-meta-fields { flex: 1; min-width: 0; }
+    /* Tighter than the create-group form's 12px: here the buttons under the
+       field belong to it, and the gap has to say so. */
+    .ga-meta-fields .cg-input { margin-bottom: 8px; }
+    .ga-meta-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
     .msg-sender {
       font-size: 11px;
@@ -2759,12 +2802,12 @@
     .notif-setting:last-child { border-bottom: none; }
     .notif-setting .notif-label { font-size: 14px; color: var(--text-primary); }
     .notif-setting .notif-desc { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
-    /* Settings holds two sections now, so it is the one modal that can
-       outgrow the viewport — the muted list has no fixed length. Cap it
-       against the short side and scroll the body, keeping the title and
-       the Close button in place. */
+    /* The sectioned-dialog shape, shared by app Settings and group/channel
+       settings: both hold a stack of sections plus a list with no fixed
+       length, so both can outgrow the viewport. Cap against the short side
+       and scroll the body, keeping the title and the Close button in place. */
     .settings-modal { display: flex; flex-direction: column; max-height: 86vh; }
-    .settings-body { overflow-y: auto; flex: 1; min-height: 0; }
+    .settings-body { overflow-y: auto; flex: 1; min-height: 0; text-align: left; }
     .settings-section {
       font-size: 12px;
       font-weight: 700;
@@ -2774,8 +2817,13 @@
       margin: 20px 0 8px;
       padding-top: 16px;
       border-top: 1px solid var(--border-color);
+      text-align: left;
     }
-    .settings-body > .settings-section:first-child {
+    .settings-body > .settings-section:first-child,
+    /* Applied when every section above this one is hidden — :first-child
+       counts DOM position, not what is on screen, so a section that has
+       become the first visible one needs telling. */
+    .settings-section.flush {
       margin-top: 0;
       padding-top: 0;
       border-top: none;
@@ -3192,6 +3240,14 @@
        pictures people pick, and a pan/zoom surface would be a large
        amount of machinery for a decision the centre of the frame already
        makes correctly. */
+
+    /* Above every dialog, including #contactsModal's 101: this one is only
+       ever opened FROM another dialog, so it has to outrank whichever one
+       launched it. Not left to DOM order — that silently worked only while
+       every caller happened to sit earlier in the file, and the group
+       settings dialog (which does not) came up behind it. */
+    #avatarModal { z-index: 102; }
+
     .av-preview {
       display: flex;
       align-items: center;
@@ -4071,126 +4127,164 @@
     </div>
   </div>
 
-  <!-- Group Members / Admission Modal -->
+  <!-- Group / channel settings. Two sections, separated the way the app's
+       own Settings dialog separates its own: everything that CONFIGURES the
+       room first, then who is in it. They were one undivided stack before,
+       which is why the dialog read as a member list that happened to have
+       switches on top of it. Scrolls for the same reason Settings does —
+       the member list has no fixed length. -->
   <div id="groupAdminModal" class="modal-overlay">
-    <div class="modal modal-wide">
-      <h3>Group members</h3>
-      <div id="gaReadOnlyRow" class="ga-row hidden">
-        <label class="ga-toggle">
-          <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
-          <span>Read-only — only admins can send messages</span>
-        </label>
-      </div>
-      <!-- Discovery. Local to this visor rather than a property of the group:
-           it says what WE answer questions about, so another admin's copy is
-           unaffected either way. -->
-      <div id="gaListedRow" class="ga-row hidden">
-        <label class="ga-toggle">
-          <input type="checkbox" id="gaListed" onchange="app.toggleGroupListed()" />
-          <span>List in this visor's public catalog</span>
-        </label>
-        <p class="cg-help">
-          On means anyone holding this visor's public key can discover it by
-          asking. Off keeps it reachable only by address or invite link. Other
-          admins publish their own copies independently.
-        </p>
-      </div>
-      <!-- Flood protection. Public keys are free, so this is the only
-           thing that makes an identity cost anything. -->
-      <div id="gaJoinCostRow" class="ga-row hidden">
-        <div class="ga-key-line">
-          <span>Cost to ask to join</span>
-          <select id="gaJoinCost" class="ga-select" onchange="app.setGroupJoinCost()">
-            <option value="0">Free</option>
-            <option value="16">Low</option>
-            <option value="18">Normal</option>
-            <option value="22">High</option>
-            <option value="26">Maximum</option>
-          </select>
+    <div class="modal modal-wide settings-modal">
+      <h3 id="gaTitle">Group settings</h3>
+      <div class="settings-body">
+        <div class="settings-section" id="gaSettingsSection">Settings</div>
+        <!-- Display metadata. Founder-only, and honestly so: members mirror
+             the founder's record and re-learn name + picture from it when
+             they open the chat, so an edit anywhere else would un-happen. -->
+        <div id="gaMetaRow" class="ga-row hidden">
+          <div class="ga-meta-line">
+            <div class="group-avatar" id="gaMetaAvatar">#</div>
+            <div class="ga-meta-fields">
+              <input id="gaMetaName" class="cg-input" type="text" maxlength="64" autocomplete="off"
+                     placeholder="Group name" />
+              <!-- ga-btn, not btn: this dialog's own button idiom is the
+                   small bordered one (see Rotate key). Full primary pills
+                   here read as the dialog's main action, which Close is. -->
+              <div class="ga-meta-actions">
+                <button class="ga-btn" onclick="app.saveGroupName()">Rename</button>
+                <button class="ga-btn" onclick="document.getElementById('gaPictureField').click()">Change picture</button>
+                <button class="ga-btn hidden" id="gaClearAvatarBtn" onclick="app.clearGroupAvatar()">Remove picture</button>
+              </div>
+            </div>
+          </div>
+          <input type="file" id="gaPictureField" accept="image/*" style="display: none;" onchange="app.pickGroupAvatar()">
+          <p class="ga-key-note">
+            Members and new joiners take the name and picture from this visor
+            the next time they open the chat.
+          </p>
         </div>
-        <div class="ga-key-note">
-          Anyone can make unlimited public keys, so a flood of join requests
-          costs an attacker nothing and costs you your attention. This makes
-          each request spend CPU first — unnoticeable once, expensive by the
-          thousand. Raise it while you are being flooded. Requests are also
-          rate-limited and the approval queue is capped regardless.
+        <div id="gaReadOnlyRow" class="ga-row hidden">
+          <label class="ga-toggle">
+            <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
+            <span>Read-only — only admins can send messages</span>
+          </label>
         </div>
-      </div>
-      <!-- Who can catch a new member up, and who can serve the room while
-           the admins are offline. -->
-      <div id="gaBackfillRow" class="ga-row hidden">
-        <label class="ga-toggle">
-          <input type="checkbox" id="gaPeerBackfill" onchange="app.toggleGroupPeerBackfill()" />
-          <span>Any member can share history with new members</span>
-        </label>
-        <div class="ga-key-note">
-          Off means only admins can, so nothing reaches a new member — and
-          no message passes between two non-admins — while every admin is
-          offline. On, each member keeps a copy of the room; only members
-          can read it either way.
+        <!-- Discovery. Local to this visor rather than a property of the group:
+             it says what WE answer questions about, so another admin's copy is
+             unaffected either way. -->
+        <div id="gaListedRow" class="ga-row hidden">
+          <label class="ga-toggle">
+            <input type="checkbox" id="gaListed" onchange="app.toggleGroupListed()" />
+            <span>List in this visor's public catalog</span>
+          </label>
+          <p class="ga-key-note">
+            On means anyone holding this visor's public key can discover it by
+            asking. Off keeps it reachable only by address or invite link. Other
+            admins publish their own copies independently.
+          </p>
         </div>
-      </div>
-      <!-- What an encrypted group hides beyond the message bodies. Shown
-           to every member, not only admins: "who was banned stays private"
-           is a promise about the members as much as about the moderators,
-           and the member is the one who cannot check it any other way. -->
-      <div id="gaPrivacyRow" class="ga-row hidden">
-        <div class="ga-key-line">
-          <span>Membership, moderation and files are encrypted</span>
+        <!-- Flood protection. Public keys are free, so this is the only
+             thing that makes an identity cost anything. -->
+        <div id="gaJoinCostRow" class="ga-row hidden">
+          <div class="ga-key-line">
+            <span>Cost to ask to join</span>
+            <select id="gaJoinCost" class="ga-select" onchange="app.setGroupJoinCost()">
+              <option value="0">Free</option>
+              <option value="16">Low</option>
+              <option value="18">Normal</option>
+              <option value="22">High</option>
+              <option value="26">Maximum</option>
+            </select>
+          </div>
+          <div class="ga-key-note">
+            Anyone can make unlimited public keys, so a flood of join requests
+            costs an attacker nothing and costs you your attention. This makes
+            each request spend CPU first — unnoticeable once, expensive by the
+            thousand. Raise it while you are being flooded. Requests are also
+            rate-limited and the approval queue is capped regardless.
+          </div>
         </div>
-        <div class="ga-key-note">
-          Joins, removals, promotions, bans and mutes travel sealed under
-          the group key, exactly like the messages — so someone who can pull
-          this group's feed without being in it cannot read who was banned,
-          who was muted, or when. Key hand-offs no longer name who they are
-          addressed to either. Shared files are sealed under the same key
-          before they leave this device and stay sealed on every member's
-          disk, so a copy of the downloads folder — or a re-send to someone
-          outside the group — is bytes nobody can open. Such an observer can
-          still tell that an admin acted, roughly when, how many members the
-          group has, and the name and size of a file. Members still running
-          an older build publish these changes in the clear until they
-          update.
+        <!-- Who can catch a new member up, and who can serve the room while
+             the admins are offline. -->
+        <div id="gaBackfillRow" class="ga-row hidden">
+          <label class="ga-toggle">
+            <input type="checkbox" id="gaPeerBackfill" onchange="app.toggleGroupPeerBackfill()" />
+            <span>Any member can share history with new members</span>
+          </label>
+          <div class="ga-key-note">
+            Off means only admins can, so nothing reaches a new member — and
+            no message passes between two non-admins — while every admin is
+            offline. On, each member keeps a copy of the room; only members
+            can read it either way.
+          </div>
         </div>
-      </div>
-      <!-- Encryption row: private groups only. Shows which key generation
-           the group is on (it advances on every eviction) and lets an
-           admin re-key on demand. -->
-      <div id="gaKeyRow" class="ga-row hidden">
-        <div class="ga-key-line">
-          <span id="gaKeyEpoch">Encryption: key #0</span>
-          <button id="gaRotateBtn" class="ga-btn" onclick="app.rotateGroupKey()">Rotate key</button>
+        <!-- What an encrypted group hides beyond the message bodies. Shown
+             to every member, not only admins: "who was banned stays private"
+             is a promise about the members as much as about the moderators,
+             and the member is the one who cannot check it any other way. -->
+        <div id="gaPrivacyRow" class="ga-row hidden">
+          <div class="ga-key-line">
+            <span>Membership, moderation and files are encrypted</span>
+          </div>
+          <div class="ga-key-note">
+            Joins, removals, promotions, bans and mutes travel sealed under
+            the group key, exactly like the messages — so someone who can pull
+            this group's feed without being in it cannot read who was banned,
+            who was muted, or when. Key hand-offs no longer name who they are
+            addressed to either. Shared files are sealed under the same key
+            before they leave this device and stay sealed on every member's
+            disk, so a copy of the downloads folder — or a re-send to someone
+            outside the group — is bytes nobody can open. Such an observer can
+            still tell that an admin acted, roughly when, how many members the
+            group has, and the name and size of a file. Members still running
+            an older build publish these changes in the clear until they
+            update.
+          </div>
         </div>
-        <div id="gaKeyAge" class="ga-key-age"></div>
-        <div class="ga-key-note">
-          The key rotates on its own once it has covered a week or a few
-          thousand messages, so no single key covers the whole life of the
-          group. Evicting a member rotates it immediately. Rotate by hand if
-          a member's device or key may have been exposed — the new key is
-          sealed to each remaining member, so anyone outside the group stops
-          being able to read new messages. Older messages stay readable.
-          Each rotation seals with a throwaway key that is discarded on the
-          spot, so leaking an admin's identity key later does not re-open
-          past keys. Keys are stored encrypted on this device, tied to this
-          visor's identity.
+        <!-- Encryption row: private groups only. Shows which key generation
+             the group is on (it advances on every eviction) and lets an
+             admin re-key on demand. -->
+        <div id="gaKeyRow" class="ga-row hidden">
+          <div class="ga-key-line">
+            <span id="gaKeyEpoch">Encryption: key #0</span>
+            <button id="gaRotateBtn" class="ga-btn" onclick="app.rotateGroupKey()">Rotate key</button>
+          </div>
+          <div id="gaKeyAge" class="ga-key-age"></div>
+          <div class="ga-key-note">
+            The key rotates on its own once it has covered a week or a few
+            thousand messages, so no single key covers the whole life of the
+            group. Evicting a member rotates it immediately. Rotate by hand if
+            a member's device or key may have been exposed — the new key is
+            sealed to each remaining member, so anyone outside the group stops
+            being able to read new messages. Older messages stay readable.
+            Each rotation seals with a throwaway key that is discarded on the
+            spot, so leaking an admin's identity key later does not re-open
+            past keys. Keys are stored encrypted on this device, tied to this
+            visor's identity.
+          </div>
         </div>
-      </div>
-      <div id="gaRequestsWrap" class="hidden">
-        <h4 class="ga-heading">Join requests <span id="gaRequestsCount" class="ga-badge"></span></h4>
-        <ul id="gaRequests" class="ga-list"></ul>
-      </div>
-      <h4 class="ga-heading">Members</h4>
-      <ul id="gaMembers" class="ga-list"></ul>
-      <!-- Shown to admins of a group that has only one. An invite names
-           the group's admins, so with one admin the group can only be
-           joined while that one visor is online. -->
-      <div id="gaSoloAdminHint" class="ga-hint hidden">
-        You are this group's only admin — nobody can join while you are
-        offline. Make another member an admin so invites have a second door.
-      </div>
-      <div id="gaBannedWrap" class="hidden">
-        <h4 class="ga-heading">Banned</h4>
-        <ul id="gaBanned" class="ga-list"></ul>
+        <div class="settings-section" id="gaMembersSection">Members</div>
+        <div id="gaRequestsWrap" class="hidden">
+          <h4 class="ga-heading">Join requests <span id="gaRequestsCount" class="ga-badge"></span></h4>
+          <ul id="gaRequests" class="ga-list"></ul>
+        </div>
+        <!-- Shown only when the join-request list is above it, which is the
+             only time this list needs a label of its own: otherwise the
+             section header already names the one list under it. Worded "in
+             this group" rather than "Members" so it never echoes that header. -->
+        <h4 class="ga-heading hidden" id="gaMembersHeading">In this group</h4>
+        <ul id="gaMembers" class="ga-list"></ul>
+        <!-- Shown to admins of a group that has only one. An invite names
+             the group's admins, so with one admin the group can only be
+             joined while that one visor is online. -->
+        <div id="gaSoloAdminHint" class="ga-hint hidden">
+          You are this group's only admin — nobody can join while you are
+          offline. Make another member an admin so invites have a second door.
+        </div>
+        <div id="gaBannedWrap" class="hidden">
+          <h4 class="ga-heading">Banned</h4>
+          <ul id="gaBanned" class="ga-list"></ul>
+        </div>
       </div>
       <div class="modal-actions">
         <button class="btn btn-secondary" onclick="app.closeModal('groupAdminModal')">Close</button>
@@ -4210,6 +4304,18 @@
     // Window between the two taps of a double-tap, and the delay a single
     // tap waits out before it counts as one (see _lbUp).
     const DOUBLE_TAP_MS = 300;
+
+    // Longest edge of an image handed to the host's QR decoder. Only the
+    // fallback path uses these — the browser's own BarcodeDetector reads the
+    // source directly. See _qrDetector.
+    //
+    // Two values because the two callers are not alike. The camera decodes
+    // several times a second over a synchronous bridge, so its frames are cut
+    // small enough not to stutter the page. A picked file is decoded once and
+    // may be a photograph in which the code is a small part of the frame, so
+    // it keeps far more detail — there is no loop to slow down.
+    const QR_SCAN_MAX_EDGE = 640;
+    const QR_FILE_MAX_EDGE = 1600;
 
     /* ---- Icons ---------------------------------------------------------
        Every icon in this app is drawn here. It used to be emoji — a
@@ -4432,9 +4538,17 @@
         // notification for the thread the user is actively looking at (Telegram
         // behavior) while still notifying for background threads.
         this._winFocused = (typeof document !== 'undefined' && document.hasFocus) ? document.hasFocus() : true;
-        window.addEventListener('focus', () => { this._winFocused = true; });
+        // What /notify-focus was last told, so the report only fires on a real
+        // change (plus a periodic refresh that keeps the server lease alive).
+        this._notifFocusSent = null;
+        this._notifFocusSentAt = 0;
+        window.addEventListener('focus', () => {
+          this._winFocused = true;
+          this._reportNotifFocus();
+        });
         window.addEventListener('blur', () => {
           this._winFocused = false;
+          this._reportNotifFocus();
           // Leaving the window ends a hold we can no longer track: stop and
           // send what was captured rather than holding the mic open. A locked
           // take is hands-free by definition, so it keeps running.
@@ -4448,6 +4562,10 @@
         // requestAnimationFrame is frozen while hidden, so a hands-free take's
         // bars stopped where they were.
         document.addEventListener('visibilitychange', () => {
+          // Hidden must clear the focus lease immediately: in the Android
+          // WebView this handler is often the last JS to run before timers
+          // freeze, and blur may never fire at all.
+          this._reportNotifFocus();
           if (document.hidden) {
             if (this.rec.active && !this.rec.locked) this._stopRecording(false);
           } else if (this.rec.active) {
@@ -4470,6 +4588,15 @@
         // disabled) the lease expires (~45s) and the Go side takes over.
         this._reportNotifCapability();
         setInterval(() => { if (this._notifCapable()) this._reportNotifCapability(); }, 20000);
+        // Tell the server which conversation is on screen, so the background
+        // process holds notifications for the thread the user is already
+        // looking at. Polled rather than hooked into every selection site:
+        // the report itself deduplicates, and a ~2s stale window on a thread
+        // switch is invisible next to message latency. The interval also
+        // serves as the lease heartbeat — when this page freezes (Android
+        // WebView in the background) the server lease simply expires.
+        this._reportNotifFocus();
+        setInterval(() => this._reportNotifFocus(), 2000);
         // Surface the permission banner if this browser was never asked.
         this._refreshNotifNudge();
         // Voice calls: the visor owns the call manager + host audio; this UI is a
@@ -5350,14 +5477,21 @@
         }
         menu.innerHTML = html;
         document.body.appendChild(menu);
+        // Kept so the menu can be re-pinned when the viewport changes shape
+        // under it rather than thrown away — see repositionMenus.
+        this._msgMenuBtn = btn;
+        this._placeMsgMenu(menu, btn);
+        this._syncMenuScrim();
+      }
+      _placeMsgMenu(menu, btn) {
         const r = btn.getBoundingClientRect();
         menu.style.top = (r.bottom + 4) + 'px';
         menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, Math.max(8, r.left)) + 'px';
-        this._syncMenuScrim();
       }
       closeMsgMenu() {
         const m = document.getElementById('msgMenu');
         if (m) m.remove();
+        this._msgMenuBtn = null;
         this._syncMenuScrim();
       }
 
@@ -5389,10 +5523,16 @@
         this._requestFile(from, fid, fname);
       }
 
-      // deleteForMe removes the message from this device only. DM threads are
-      // localStorage-cached, so dropping it from the cache persists the hide;
-      // groups reload from visor history, so the ts_nano key is remembered in
-      // hiddenGroup and filtered on reload.
+      // deleteForMe removes the message from this device only.
+      //
+      // Both kinds reload from the visor, so neither can be deleted by editing
+      // what the browser is holding. A group remembers a ts_nano tombstone in
+      // hiddenGroup and filters it on reload; a DM asks the visor to forget its
+      // stored copy, because for a DM the visor's history store IS the durable
+      // copy and loadHistoryFor refills an empty thread from it every time the
+      // conversation is opened. Dropping it from the localStorage cache alone
+      // left the message on disk to be handed straight back — deleted, then
+      // back on the next visit.
       deleteForMe() {
         const menu = document.getElementById('msgMenu');
         if (!menu) return;
@@ -5400,13 +5540,32 @@
         const key = this.activeKey();
         this.closeMsgMenu();
         if (!key || !this.messages[key]) return;
+        const dropped = this.messages[key].find(m => m && String(m.mid) === String(mid));
         this.messages[key] = this.messages[key].filter(m => String(m.mid) !== String(mid));
         if (this.group) {
           if (tsNano) { this.hiddenGroup.add(this._groupHideKey(this.group, tsNano)); this._saveHiddenGroup(); }
         } else {
           this.saveChat(key);
+          this._forgetStored(key, dropped);
         }
         this._rerenderActive();
+      }
+
+      // _forgetStored drops the visor's stored copy of one DM. Local only: the
+      // peer is told nothing, since their copy is theirs to keep.
+      //
+      // Skipped for notes (nothing on the wire, nothing stored) and for a
+      // message with no wireId — one sent so recently that the id hasn't come
+      // back yet, which is also the only window in which it isn't findable in
+      // the store. Best-effort: the bubble is already gone from the screen and
+      // the cache, so a failed request must not undo that.
+      _forgetStored(pk, msg) {
+        if (this.isSaved() || !msg || !msg.wireId) return;
+        fetch('/history/forget', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pk, id: msg.wireId })
+        }).catch(e => console.debug('skychat: forget stored copy skipped:', e.message));
       }
 
       // deleteForAll removes a GROUP message we authored for everyone: it drops
@@ -8381,6 +8540,9 @@
       }
 
       // savePeerName applies what's in the Contact Settings field.
+      // Saves the name and, with it, any picture the published-profile lookup
+      // put on offer — one button for the one dialog, so accepting what a peer
+      // publishes is a single deliberate act.
       savePeerName() {
         const pk = this.recipient;
         const field = document.getElementById('modalName');
@@ -8388,9 +8550,18 @@
         const had = this.peerName(pk);
         this.setPeerName(pk, field.value);
         const now = this.peerName(pk);
-        this.showToast(now ? `Saved as "${this.escapeHtml(now)}".`
-          : (had ? 'Name cleared.' : 'Enter a name first.'));
-        if (now || had) this.closeSettings();
+        const picture = this._applyOfferedAvatar(pk);
+        if (picture === 'full') {
+          this.showToast('No room left in this browser\'s storage for another picture.', 'error');
+        } else if (now && picture === 'stored') {
+          this.showToast(`Saved as "${this.escapeHtml(now)}", with their picture.`);
+        } else if (picture === 'stored') {
+          this.showToast('Picture saved.');
+        } else {
+          this.showToast(now ? `Saved as "${this.escapeHtml(now)}".`
+            : (had ? 'Name cleared.' : 'Enter a name first.'));
+        }
+        if (now || had || picture === 'stored') this.closeSettings();
       }
 
       // _paintHeaderPeer writes the open DM's name/key into the chat header.
@@ -8768,18 +8939,42 @@
           const field = document.getElementById('modalName');
           if (p.name && field) field.value = p.name;
           if (p.avatar) {
+            // Shown in the dialog and held, not written. The picture used to
+            // be stored the instant this ran, which quietly replaced one the
+            // user had chosen for that person — with no undo, and no way to
+            // tell it had happened beyond the picture being someone else's.
+            // The name two lines up was always offered rather than applied;
+            // this is the same rule, and what the contract above promises.
             document.getElementById('modalAvatar').src = p.avatar;
-            try {
-              localStorage.setItem(`i_${pk}`, p.avatar);
-              this.updateAvatarUI(pk, p.avatar);
-              this.renderContacts();
-            } catch (e) {
-              console.debug('skychat: could not store fetched avatar:', e && e.message);
-            }
+            this._offeredAvatar = { pk, dataUrl: p.avatar };
           }
-          this.showToast(p.name ? `They call themselves "${this.escapeHtml(p.name)}". Press Save Name to keep it.`
-            : 'Picture updated.');
+          const both = p.name && p.avatar;
+          this.showToast(
+            both ? `They call themselves "${this.escapeHtml(p.name)}". Press Save Name to keep the name and picture.`
+              : p.name ? `They call themselves "${this.escapeHtml(p.name)}". Press Save Name to keep it.`
+                : 'They publish a picture. Press Save Name to keep it.');
         });
+      }
+
+      // _applyOfferedAvatar commits the picture fetchPeerProfileInto put on
+      // offer, if one is waiting for this peer. An offer for anyone else is
+      // stale — the dialog moved on — and is dropped rather than applied.
+      //
+      // Returns 'stored', 'none' or 'full' so the caller can say one thing
+      // about the whole save instead of racing its own toast.
+      _applyOfferedAvatar(pk) {
+        const offered = this._offeredAvatar;
+        this._offeredAvatar = null;
+        if (!offered || offered.pk !== pk) return 'none';
+        try {
+          localStorage.setItem(`i_${pk}`, offered.dataUrl);
+        } catch (e) {
+          console.debug('skychat: could not store offered avatar:', e && e.message);
+          return 'full';
+        }
+        this.updateAvatarUI(pk, offered.dataUrl);
+        this.renderContacts();
+        return 'stored';
       }
 
       // fetchPeerProfile asks the visor for a peer's published profile.
@@ -8946,6 +9141,12 @@
             size: dim, budget: 64 * 1024,
             label: `Kept on this device only, at ${dim}×${dim}.`,
           },
+          // The open group's picture. Same wire budget as 'me': it rides
+          // the same probe frames (profile.MaxAvatarBytes).
+          group: {
+            size: dim, budget: 32 * 1024,
+            label: `Shown to every member, at ${dim}×${dim}. Served from this visor.`,
+          },
         };
       }
 
@@ -8953,6 +9154,10 @@
       // end in the same confirmation dialog.
       pickMyAvatar() {
         this._pickAvatar(document.getElementById('myPictureField'), 'me');
+      }
+
+      pickGroupAvatar() {
+        this._pickAvatar(document.getElementById('gaPictureField'), 'group');
       }
 
       _pickAvatar(input, target) {
@@ -9073,6 +9278,14 @@
         if (pending.target === 'me') {
           document.getElementById('myAvatar').src = pending.dataUrl;
           this.showToast('Press Save to publish it.');
+          return;
+        }
+        if (pending.target === 'group') {
+          this._pendingAvatar = null;
+          const noun = this._groupNounCap();
+          this._postGroupMeta({ avatar: pending.dataUrl })
+            .then(() => this.showToast(`${noun} picture updated.`))
+            .catch(e => this.showToast(`Failed: ${e.message || e}`, 'error'));
           return;
         }
         if (pending.target === 'newcontact') {
@@ -9762,7 +9975,7 @@
           const badge = pending > 0 ? `<span class="ga-badge">${pending}</span>` : '';
           li.innerHTML = `
             <div class="group-item ${g.id === this.group ? 'active' : ''}" data-gid="${g.id}" onclick="app.selectGroup('${g.id}')">
-              <div class="group-avatar-sm">${g.kind === 'channel' ? icon('megaphone', 20) : icon('hash', 20)}</div>
+              <div class="group-avatar-sm">${this._groupAvatarHTML(g, 20)}</div>
               <div class="recipient-info">
                 <div class="recipient-pk">${this.escapeHtml(g.name || g.id)} ${badge}</div>
                 <div class="recipient-preview">${this.escapeHtml(this._groupSubtitle(g))}</div>
@@ -9918,11 +10131,10 @@
         if (attachBtn) attachBtn.classList.remove('hidden');
 
         const info = this.groups.find(g => g.id === id);
-        const avatar = document.getElementById('groupHeaderAvatar');
-        if (avatar) avatar.innerHTML = icon((info && info.kind === 'channel') ? 'megaphone' : 'hash', 19);
-        document.getElementById('groupHeaderName').textContent = info ? info.name : id;
-        document.getElementById('groupHeaderSub').textContent = info
-          ? this._groupSubtitle(info) : '';
+        this._paintGroupHeader(info, id);
+        // Ask the founder whether the name or picture changed since we
+        // mirrored them — throttled, and a no-op on groups we founded.
+        this._maybeRefreshGroupMeta(id);
         this._updateComposerLock();
         this._updatePendingBadge();
 
@@ -9937,6 +10149,26 @@
         this.renderPinned();
         this._updatePinButtons();
         this._updateMuteButtons();
+      }
+
+      // _paintGroupHeader draws the open group's identity row: picture (or
+      // the kind glyph when there is none), name, subtitle. Split out of
+      // selectGroup so a metadata refresh can repaint without reselecting.
+      _paintGroupHeader(info, id) {
+        const avatar = document.getElementById('groupHeaderAvatar');
+        if (avatar) avatar.innerHTML = this._groupAvatarHTML(info, 19);
+        document.getElementById('groupHeaderName').textContent = info ? info.name : (id || '');
+        document.getElementById('groupHeaderSub').textContent = info
+          ? this._groupSubtitle(info) : '';
+      }
+
+      // _groupAvatarHTML is the inner markup for any group avatar tile: the
+      // picture when one is set, else the kind glyph. The data URI's MIME
+      // was validated server-side and base64 cannot break out of the
+      // attribute, so it is safe to inline.
+      _groupAvatarHTML(info, glyphSize) {
+        if (info && info.avatar) return `<img src="${info.avatar}" alt="" />`;
+        return icon((info && info.kind === 'channel') ? 'megaphone' : 'hash', glyphSize);
       }
 
       // groupHistoryChunk is how many messages one page of backlog carries.
@@ -10372,6 +10604,48 @@
         this.closeAllMenus();
       }
 
+      // repositionMenus keeps an open menu pinned to its trigger when the
+      // window changes shape under it. It is what `resize` calls, and it
+      // used to call dismissMenus instead.
+      //
+      // The soft keyboard is a resize. Opening the header ⋮ while the
+      // composer had focus moved focus onto the first menu row, which
+      // retracted the keyboard, which fired `resize` — so the menu the tap
+      // had just opened was dismissed before it could be read, and all the
+      // user saw was the keyboard going away. The same resize tore the
+      // staged #msgMenu out from under an open bottom sheet, leaving its
+      // Forward / Save / Delete rows pointing at a message that was no
+      // longer recorded anywhere.
+      //
+      // The window moving is not the user asking for the menu to close. The
+      // scrim is, and it still is — this only re-measures.
+      repositionMenus() {
+        this._menuPairs().forEach(p => {
+          const menu = document.getElementById(p.menu);
+          if (!menu || !menu.classList.contains('visible')) return;
+          const btnId = p.menu === 'hdrMenu' ? (this._hdrMenuBtn || p.btns[0]) : p.btns[0];
+          // A trigger with no box is one the new layout has taken off the
+          // screen. There is nothing left to pin to, and a menu pinned to a
+          // zero rect lands in the top-left corner, so it closes instead.
+          const btn = document.getElementById(btnId);
+          const r = btn && btn.getBoundingClientRect();
+          if (!r || (!r.width && !r.height)) {
+            if (p.menu === 'hdrMenu') this.closeHeaderMenu(); else this.closeMenu(p.menu, btnId);
+            return;
+          }
+          this._positionMenu(p.menu, btnId);
+        });
+        // display:none is the bottom sheet's hidden data carrier, which has
+        // no place on screen to keep; the sheet is laid out by CSS and rides
+        // the resize on its own.
+        const msg = document.getElementById('msgMenu');
+        if (msg && msg.style.display !== 'none') {
+          const btn = this._msgMenuBtn;
+          if (btn && btn.isConnected) this._placeMsgMenu(msg, btn);
+          else this.closeMsgMenu();
+        }
+      }
+
       toggleStartMenu(ev) {
         if (ev) ev.stopPropagation();
         const menu = document.getElementById('startMenu');
@@ -10536,7 +10810,9 @@
             icon: icon(muted ? 'bellOff' : 'bell', 16), label: muted ? 'Unmute' : 'Mute',
             act: 'toggleMute', warn: muted,
           },
-          { icon: icon('users', 16), label: 'Members', act: 'openGroupAdmin', count: pending },
+          // Settings, not Members: the dialog behind it configures the room
+          // and lists its people, and the switches are the larger half.
+          { icon: icon('gear', 16), label: 'Settings', act: 'openGroupAdmin', count: pending },
           { icon: icon('link', 16), label: 'Invite link', act: 'showGroupInvite' },
           { icon: this._qrIcon(), label: 'QR code', act: 'showQr' },
           { sep: true },
@@ -10960,7 +11236,13 @@
           .finally(() => { btn.disabled = false; btn.textContent = restore; });
       }
 
-      closeModal(id) { document.getElementById(id).classList.remove('visible'); }
+      closeModal(id) {
+        const el = document.getElementById(id);
+        el.classList.remove('visible');
+        // The overlay scrolls now, so a dialog left scrolled down would
+        // come back that way the next time it is opened.
+        el.scrollTop = 0;
+      }
 
       createGroup() {
         const name = document.getElementById('cgName').value.trim();
@@ -11027,6 +11309,15 @@
             isAdmin: false,
           };
         }
+        // Everywhere else: the browser's own, where it is both present and
+        // backed by something that works (Chrome, Edge on desktop).
+        if (typeof window.BarcodeDetector === 'function') {
+          try {
+            return new window.BarcodeDetector({ formats: ['qr_code'] });
+          } catch (e) {
+            console.debug('skychat: BarcodeDetector unavailable:', e && e.message);
+          }
+        }
         return null;
       }
 
@@ -11089,23 +11380,67 @@
 
       // ---- QR scanning -----------------------------------------------
 
-      // _qrDetector returns a BarcodeDetector for QR codes, or null where
-      // the browser has no such API.
+      // _qrDetector returns something that decodes QR codes, or null where
+      // nothing here can.
       //
-      // Native only, no bundled decoder: this covers Chrome, Edge and the
-      // Android WebView the mobile app runs in, and adds nothing to a page
-      // that is already embedded in the binary. Where it is missing
-      // (Safari, Firefox) scanning is declined in plain words and the
-      // paste field — which is the whole dialog's primary input anyway —
-      // still works.
+      // Two implementations behind one shape. BarcodeDetector is the
+      // browser's own and is used wherever it exists (Chrome, Edge). The
+      // Android WebView does NOT have it — it is a Chrome-on-Android API
+      // that WebView never wired up — which is why scanning failed in the
+      // mobile app while the phone's camera app read the same code fine:
+      // that decodes it elsewhere and hands us a skychat:// link. There the
+      // host lends us zxing over SkywireQr, and the page keeps the camera,
+      // the picker and this dialog.
+      //
+      // Where neither exists (Safari, Firefox) scanning is declined in
+      // plain words and the paste field — the dialog's primary input
+      // anyway — still works.
       _qrDetector() {
-        if (typeof window.BarcodeDetector !== 'function') return null;
-        try {
-          return new window.BarcodeDetector({ formats: ['qr_code'] });
-        } catch (e) {
-          console.debug('skychat: BarcodeDetector unavailable:', e && e.message);
-          return null;
+        // The host's decoder is tried FIRST where it exists, which means the
+        // Android app. BarcodeDetector is present in that WebView but does
+        // not work: it is backed by a Play Services barcode module that is
+        // not always installed, and when it is missing detect() does not
+        // fail — it quietly returns no results, so every scan reported "no
+        // QR code found" while the phone's own camera app read the same code
+        // fine. A decoder that ships inside the APK has nothing to be
+        // missing.
+        if (window.SkywireQr && typeof window.SkywireQr.decode === 'function') {
+          // Same detect(source) → [{rawValue}] contract, so both call sites
+          // stay one code path. The host takes an image, so whatever is
+          // handed in is painted onto a canvas first.
+          return {
+            detect: async (source, maxEdge) => {
+              const cap = maxEdge || QR_SCAN_MAX_EDGE;
+              const srcW = source.videoWidth || source.width || 0;
+              const srcH = source.videoHeight || source.height || 0;
+              if (!srcW || !srcH) return [];
+              // Downscaled first. The bridge call is synchronous — it blocks
+              // this thread until zxing answers — and it runs several times a
+              // second while the camera is open, so a full 1080p frame would
+              // be felt as stutter in the page behind the viewfinder. A code
+              // large enough for a camera to see is still legible at 640.
+              const scale = Math.min(1, cap / Math.max(srcW, srcH));
+              const width = Math.max(1, Math.round(srcW * scale));
+              const height = Math.max(1, Math.round(srcH * scale));
+              const canvas = this._qrCanvas || (this._qrCanvas = document.createElement('canvas'));
+              canvas.width = width;
+              canvas.height = height;
+              canvas.getContext('2d').drawImage(source, 0, 0, width, height);
+              // JPEG, not PNG: a 1080p frame every fifth of a second is the
+              // difference between a few KB across the bridge and a few
+              // hundred, and a photograph compresses cleanly enough for a
+              // decoder that is already tolerating camera shake.
+              const url = canvas.toDataURL('image/jpeg', 0.8);
+              // Kept for the file path's message: "found nothing" is worth
+              // distinguishing from "never looked", and the size it examined
+              // is the difference between a bad photo and a bad decode.
+              this._qrLastFrame = width + '×' + height + ', ' + Math.round(url.length / 1024) + 'KB';
+              const text = window.SkywireQr.decode(url);
+              return text ? [{ rawValue: text }] : [];
+            },
+          };
         }
+        return null;
       }
 
       _qrUnsupportedToast() {
@@ -11183,10 +11518,13 @@
         if (!detector) { this._qrUnsupportedToast(); return; }
         try {
           const bitmap = await createImageBitmap(file);
-          const found = await detector.detect(bitmap);
+          // The larger cap: one image, one decode, and the code may be a
+          // small part of a photograph.
+          const found = await detector.detect(bitmap, QR_FILE_MAX_EDGE);
           bitmap.close();
           if (!found || !found.length || !found[0].rawValue) {
-            this.showToast('No QR code found in that image.', 'error');
+            const looked = this._qrLastFrame ? ` (checked ${this._qrLastFrame})` : '';
+            this.showToast(`No QR code found in that image${looked}.`, 'error');
             return;
           }
           this._onQrDecoded(found[0].rawValue);
@@ -11253,9 +11591,11 @@
 
       // ---- Group admission control -----------------------------------
 
-      // openGroupAdmin shows the members panel: the approval queue (admins
-      // only), the roster with per-member actions, the ban list, and the
-      // read-only toggle.
+      // openGroupAdmin shows the group's (or channel's) settings panel: the
+      // room's own configuration first — name and picture, read-only,
+      // discovery, join cost, backfill, key — then who is in it: the
+      // approval queue (admins only), the roster with per-member actions,
+      // and the ban list.
       openGroupAdmin() {
         if (!this.group) return;
         document.getElementById('groupAdminModal').classList.add('visible');
@@ -11283,12 +11623,41 @@
         // A channel is admins-only permanently, so a reversible "quiet the
         // room" toggle has nothing left to say there.
         const isChannel = !!(info && info.kind === 'channel');
+        // The dialog names what it is editing: a channel is not a group, and
+        // this is the one place both words are load-bearing.
+        const noun = this._groupNounCap();
+        const title = document.getElementById('gaTitle');
+        if (title) title.textContent = `${noun} settings`;
+        const membersHeading = document.getElementById('gaMembersHeading');
+        if (membersHeading) membersHeading.textContent = `In this ${this._groupNoun()}`;
         roRow.classList.toggle('hidden', !isAdmin || isChannel);
         document.getElementById('gaReadOnly').checked = !!(info && info.read_only);
 
         const listedRow = document.getElementById('gaListedRow');
         listedRow.classList.toggle('hidden', !isAdmin);
         document.getElementById('gaListed').checked = !!(info && info.listed);
+
+        // Name + picture editor. Founder-only, a strictly smaller set than
+        // isAdmin: a non-founder admin's edit would be overwritten by their
+        // own next refresh from the founder, so the dialog doesn't offer it.
+        const metaRow = document.getElementById('gaMetaRow');
+        if (metaRow) {
+          const isFounder = !!(info && String(info.owner_pk || '').toLowerCase() === this.myPK);
+          metaRow.classList.toggle('hidden', !isFounder);
+          if (isFounder) {
+            const nameField = document.getElementById('gaMetaName');
+            if (nameField) nameField.placeholder = `${noun} name`;
+            // Refill only when idle — this dialog re-renders on every poll
+            // of the request queue, and mid-typing is the wrong moment.
+            if (nameField && document.activeElement !== nameField) {
+              nameField.value = info.name || '';
+            }
+            const av = document.getElementById('gaMetaAvatar');
+            if (av) av.innerHTML = this._groupAvatarHTML(info, 19);
+            const clearBtn = document.getElementById('gaClearAvatarBtn');
+            if (clearBtn) clearBtn.classList.toggle('hidden', !info.avatar);
+          }
+        }
 
         // Encryption / key generation. Only private groups have a key, and
         // only admins can rotate it — a public group's bodies are plaintext
@@ -11343,6 +11712,22 @@
           }
         }
 
+        // An empty section header is a lie. A plain member sees none of the
+        // switches above — and in a public group not even the privacy note —
+        // so the header appears only when something sits under it, and the
+        // Members header takes over the top slot when it does not.
+        const anySetting = [
+          'gaMetaRow', 'gaReadOnlyRow', 'gaListedRow', 'gaJoinCostRow',
+          'gaBackfillRow', 'gaPrivacyRow', 'gaKeyRow',
+        ].some(rowID => {
+          const row = document.getElementById(rowID);
+          return row && !row.classList.contains('hidden');
+        });
+        const settingsSection = document.getElementById('gaSettingsSection');
+        if (settingsSection) settingsSection.classList.toggle('hidden', !anySetting);
+        const membersSection = document.getElementById('gaMembersSection');
+        if (membersSection) membersSection.classList.toggle('flush', !anySetting);
+
         this._renderMemberList(info, isAdmin);
 
         const banWrap = document.getElementById('gaBannedWrap');
@@ -11359,12 +11744,24 @@
         // Requests are admin-only and only meaningful for approval-type
         // groups; an open group admits without ever queuing.
         const reqWrap = document.getElementById('gaRequestsWrap');
-        if (!isAdmin) { reqWrap.classList.add('hidden'); return; }
+        // The roster heading rides along: it exists to separate two adjacent
+        // lists, so it appears exactly when the request list does. Left
+        // alone until the fetch answers, so a poll doesn't flicker it.
+        const showRosterHeading = show => {
+          const h = document.getElementById('gaMembersHeading');
+          if (h) h.classList.toggle('hidden', !show);
+        };
+        if (!isAdmin) {
+          reqWrap.classList.add('hidden');
+          showRosterHeading(false);
+          return;
+        }
         fetch(`/group/${gid}/requests`)
           .then(res => res.ok ? res.json() : [])
           .then(reqs => {
             reqs = reqs || [];
             reqWrap.classList.toggle('hidden', reqs.length === 0);
+            showRosterHeading(reqs.length > 0);
             document.getElementById('gaRequestsCount').textContent = reqs.length || '';
             const list = document.getElementById('gaRequests');
             list.innerHTML = '';
@@ -11376,7 +11773,7 @@
               ]));
             });
           })
-          .catch(() => reqWrap.classList.add('hidden'));
+          .catch(() => { reqWrap.classList.add('hidden'); showRosterHeading(false); });
       }
 
       _renderMemberList(info, isAdmin) {
@@ -11559,6 +11956,81 @@
 
       // toggleGroupListed publishes or un-publishes this group in the visor's
       // discovery catalog.
+      // ---- Display metadata (name + picture) -------------------------
+      //
+      // Founder-only writes; the server enforces it and the dialog only
+      // shows the editor to the founder. Members converge through
+      // _maybeRefreshGroupMeta when they open the chat.
+
+      // _postGroupMeta sends a metadata edit for the open group and applies
+      // the returned info. Body: {name} and/or {avatar} — avatar '' clears,
+      // absent leaves alone (the server tells the two apart by presence).
+      _postGroupMeta(body) {
+        const gid = this.group;
+        if (!gid) return Promise.reject(new Error('no group open'));
+        return fetch(`/group/${gid}/meta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(new Error(t.trim() || `HTTP ${res.status}`))))
+          .then(info => { this._applyGroupMeta(info); return info; });
+      }
+
+      // _applyGroupMeta folds fresh display metadata into the cached group
+      // and repaints everywhere the name or picture shows. Merges just the
+      // two display fields rather than replacing the entry: the fresh info
+      // comes from a metadata call, and clobbering live fields like
+      // subscriber_alive with its zero values would flicker the UI.
+      _applyGroupMeta(info) {
+        if (!info || !info.id) return;
+        const g = this.groups.find(x => x.id === info.id);
+        if (g) {
+          g.name = info.name;
+          g.avatar = info.avatar || '';
+        }
+        this.renderGroups();
+        if (this.group === info.id) {
+          this._paintGroupHeader(g || info, info.id);
+          const modal = document.getElementById('groupAdminModal');
+          if (modal && modal.classList.contains('visible')) this.refreshGroupAdmin();
+        }
+      }
+
+      saveGroupName() {
+        const field = document.getElementById('gaMetaName');
+        const name = (field ? field.value : '').trim();
+        if (!name) { this.showToast('A group needs a name.', 'error'); return; }
+        this._postGroupMeta({ name })
+          .then(() => this.showToast('Renamed.'))
+          .catch(e => this.showToast(`Failed: ${e.message || e}`, 'error'));
+      }
+
+      clearGroupAvatar() {
+        this._postGroupMeta({ avatar: '' })
+          .then(() => this.showToast('Picture removed.'))
+          .catch(e => this.showToast(`Failed: ${e.message || e}`, 'error'));
+      }
+
+      // _maybeRefreshGroupMeta pulls the founder's current name + picture
+      // for a group this visor merely mirrors. Fire-and-forget with a
+      // per-group throttle: opening the same chat five times in a minute
+      // must not probe the founder five times. The server side is
+      // best-effort too, so a sleeping founder costs nothing but the call.
+      _maybeRefreshGroupMeta(id) {
+        const g = this.groups.find(x => x.id === id);
+        if (!g) return;
+        if (String(g.owner_pk || '').toLowerCase() === this.myPK) return;
+        const now = Date.now();
+        this._groupMetaAskedAt = this._groupMetaAskedAt || {};
+        if (now - (this._groupMetaAskedAt[id] || 0) < 5 * 60 * 1000) return;
+        this._groupMetaAskedAt[id] = now;
+        fetch(`/group/${id}/refresh-meta`, { method: 'POST' })
+          .then(res => res.ok ? res.json() : null)
+          .then(info => { if (info) this._applyGroupMeta(info); })
+          .catch(() => {});
+      }
+
       toggleGroupListed() {
         const gid = this.group;
         const on = document.getElementById('gaListed').checked;
@@ -11658,6 +12130,12 @@
       _groupNoun() {
         const info = this._groupInfo();
         return (info && info.kind === 'channel') ? 'channel' : 'group';
+      }
+
+      // The same word where a sentence or a title starts with it.
+      _groupNounCap() {
+        const noun = this._groupNoun();
+        return noun.charAt(0).toUpperCase() + noun.slice(1);
       }
 
       leaveGroup() {
@@ -11805,9 +12283,14 @@
         // is "I am done with these messages", not "I no longer know this
         // person". A saved contact keeps its name and picture, and Remove
         // from contacts is the action that discards them.
-        if (!this.isContact(pk)) {
-          localStorage.removeItem(`i_${pk}`);
-        }
+        //
+        // The picture is kept for a non-contact too, which it used to not be.
+        // Nothing here distinguishes a picture the user chose for someone
+        // from one the app pulled off their published profile, so discarding
+        // it took the deliberate one with the disposable one — and the same
+        // sentence above says why that is the wrong reading of this action.
+        // Remove picture is the control that means "lose it"; the cost of
+        // keeping it is one avatar, which _cropToSquare caps at 32 KB.
         this.renderContacts();
 
         this.recipient = null;
@@ -11847,6 +12330,9 @@
       openSettings() {
         // The notes thread has no peer to have settings about.
         if (!this.recipient || this.isSaved()) return;
+        // A picture offered by a previous lookup was never accepted; opening
+        // the dialog again starts from what is actually stored.
+        this._offeredAvatar = null;
         const image = localStorage.getItem(`i_${this.recipient}`) || 'p.png';
         document.getElementById('modalAvatar').src = image;
         document.getElementById('modalPk').textContent = this.recipient;
@@ -11857,6 +12343,8 @@
       }
 
       closeSettings() {
+        // Closing without Save declines whatever the lookup offered.
+        this._offeredAvatar = null;
         document.getElementById('settingsModal').classList.remove('visible');
       }
 
@@ -12109,6 +12597,35 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ capable: this._notifCapable() }),
+        }).catch(() => {});
+      }
+
+      // _reportNotifFocus tells the server which conversation this UI is
+      // actively showing — '' when none, blurred, or hidden — so the
+      // background process can suppress host-OS notifications for the thread
+      // that is literally on screen (commands/osnotify.go, uiShowingThread).
+      // This matters most where _notifCapable() can never be true (the
+      // Android WebView has no Notifications API): there the Go side posts
+      // everything, and this lease is its only knowledge of what the user is
+      // looking at. Lease-shaped: refreshed every few seconds while focused,
+      // cleared on blur/hide, and expiring server-side regardless, because a
+      // backgrounded WebView freezes before it can say goodbye.
+      _reportNotifFocus() {
+        const visible = typeof document === 'undefined' || document.visibilityState !== 'hidden';
+        // Inside the Skywire app's WebView (recognisable by the injected QR
+        // bridge) there is exactly one window, so visible IS focused — and
+        // document.hasFocus() there can stay false until the first tap,
+        // which would report "not looking" about a chat filling the screen.
+        const embedded = typeof window.SkywireQr !== 'undefined';
+        const key = ((this._winFocused || embedded) && visible) ? (this.activeKey() || '') : '';
+        const now = Date.now();
+        if (key === this._notifFocusSent && now - this._notifFocusSentAt < 5000) return;
+        this._notifFocusSent = key;
+        this._notifFocusSentAt = now;
+        fetch('/notify-focus', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, focused: key !== '' }),
         }).catch(() => {});
       }
 
@@ -12566,7 +13083,21 @@
           }
           return m;
         });
-        localStorage.setItem(`c_${pk}`, JSON.stringify(serializable));
+        try {
+          localStorage.setItem(`c_${pk}`, JSON.stringify(serializable));
+        } catch (e) {
+          // Out of quota. Every caller has ALREADY changed this.messages and
+          // is about to re-render from it, so throwing from here abandons the
+          // operation half-done — deleteForMe in particular would leave the
+          // message gone from memory, still in the cache, and the screen never
+          // redrawn. Report once and let the caller finish; the thread simply
+          // stops being cached, which the next reload recovers from history.
+          console.debug('skychat: could not cache thread:', e && e.message);
+          if (!this._quotaWarned) {
+            this._quotaWarned = true;
+            this.showToast('This browser is out of storage — conversations are no longer being cached.', 'error');
+          }
+        }
       }
 
       saveSeenList() {
@@ -13111,9 +13642,37 @@
     // Keep the open menu attached to its button when the viewport changes
     // — a resize can move the compose button between the header and the
     // floating position, and an orientation change moves it a long way.
+    // Re-measured, not dismissed: on a phone the commonest resize by far is
+    // the soft keyboard, and closing on it made the header ⋮ unopenable
+    // while composing (see repositionMenus).
     window.addEventListener('resize', function() {
-      app.dismissMenus();
+      app.repositionMenus();
     });
+
+    // Scrolling the dialog is now possible (see .modal-overlay); this is what
+    // saves the user from having to. The field being typed into is often the
+    // one the keyboard just displaced, so it is brought back into view.
+    //
+    // Timing is the whole difficulty: focus fires when the field is tapped,
+    // but the keyboard animates in some 200-300ms later and it is THAT resize
+    // which moves the field. So both ends are covered — focusin schedules a
+    // reveal for the resize about to happen, and visualViewport reveals again
+    // on the resize itself, which also catches rotating the phone mid-edit
+    // and the keyboard being dismissed and re-summoned.
+    function revealFocusedField() {
+      const el = document.activeElement;
+      if (!el || !el.closest || !el.closest('.modal-overlay.visible')) return;
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+
+    document.addEventListener('focusin', function(e) {
+      if (!e.target.closest || !e.target.closest('.modal-overlay.visible')) return;
+      setTimeout(revealFocusedField, 300);
+    });
+
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', revealFocusedField);
+    }
 
     // A waveform is a canvas: CSS re-colours everything else on the page the
     // instant the app flips theme under it (ChatWebView.applyTheme sets

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -78,6 +78,7 @@ type ViewMode = 'compact' | 'tree';
   templateUrl: './network-transports.component.html',
   styleUrls: ['./network-transports.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NetworkTransportsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
@@ -99,14 +100,14 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   byTransport: ByTransportRow[] = [];
   byVisor: VisorNode[] = [];
 
-  private sub: Subscription;
+  private sub!: Subscription;
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
     super();
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // 5min cadence: TPD metrics roll up daily, no benefit in
     // anything tighter. The Refresh button below the table forces
     // a fresh fetch when the user wants a current sample.
