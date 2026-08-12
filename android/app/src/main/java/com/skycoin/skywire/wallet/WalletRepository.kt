@@ -3,6 +3,7 @@ package com.skycoin.skywire.wallet
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.skycoin.skywire.R
 import com.skycoin.wallet.AddressBook
 import com.skycoin.wallet.SignedTx
 import com.skycoin.wallet.TxPlan
@@ -62,7 +63,7 @@ class WalletRepository private constructor(private val context: Context) {
     suspend fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String? = null): CoinSpec {
         val url = nodeUrl.trim().removeSuffix("/")
         require(url.toHttpUrlOrNull() != null) {
-            "the node address must be a full URL, like http://node.example.com:6420"
+            context.getString(R.string.wallet_add_coin_node_invalid)
         }
         val spec = CoinSpec(
             id = "fiber-${UUID.randomUUID().toString().take(8)}",
@@ -84,9 +85,9 @@ class WalletRepository private constructor(private val context: Context) {
      */
     suspend fun addErc20Token(name: String, ticker: String, contract: String, decimals: Int, icon: String? = null): CoinSpec {
         require(EthCrypto.isValidAddress(contract.trim())) {
-            "the contract must be a 0x… address (checksummed or all-lowercase)"
+            context.getString(R.string.wallet_add_token_contract_invalid)
         }
-        require(decimals in 0..36) { "decimals must be between 0 and 36" }
+        require(decimals in 0..36) { context.getString(R.string.wallet_add_token_decimals_range) }
         val spec = CoinSpec(
             id = "erc20-${UUID.randomUUID().toString().take(8)}",
             name = name.trim(),
@@ -125,11 +126,12 @@ class WalletRepository private constructor(private val context: Context) {
      */
     suspend fun removeUserCoin(coinId: String): CoinSpec? {
         val spec = coin(coinId) ?: return null
-        require(!spec.builtIn) { "${spec.name} is built in and cannot be removed" }
+        require(!spec.builtIn) { context.getString(R.string.wallet_coin_remove_builtin, spec.name) }
         val held = wallets().first().count { it.coinId == coinId }
         require(held == 0) {
-            val what = if (held == 1) "its wallet" else "its $held wallets"
-            "Remove $what first — deleting a wallet erases its recovery phrase from this phone."
+            context.resources.getQuantityString(
+                R.plurals.wallet_coin_remove_blocked_count, held, held,
+            )
         }
         seeds.store.edit { prefs ->
             val current = prefs[KEY_FIBER_COINS]?.let {
@@ -216,7 +218,7 @@ class WalletRepository private constructor(private val context: Context) {
         withContext(Dispatchers.IO) {
             val core = coreFor(spec)
             val seed = normalizeSeed(mnemonic)
-            require(core.validateSeed(seed)) { "invalid recovery phrase" }
+            require(core.validateSeed(seed)) { context.getString(R.string.wallet_seed_invalid) }
 
             val (receiveCount, changeCount) = if (restored) {
                 runCatching { core.scanUsed(seed) }.getOrDefault(1 to 0)
@@ -390,7 +392,7 @@ class WalletRepository private constructor(private val context: Context) {
     suspend fun newReceiveAddress(walletId: String): String {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
-        val seed = seeds.seed(walletId) ?: error("seed unavailable")
+        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
         val book = coreFor(spec).deriveAddresses(
             seed, meta.receiveAddresses.size + 1, meta.changeAddresses.size,
         )
@@ -453,7 +455,7 @@ class WalletRepository private constructor(private val context: Context) {
     ): TxPlan = withContext(Dispatchers.IO) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
-        val seed = seeds.seed(walletId) ?: error("seed unavailable")
+        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
         coreFor(spec).buildTx(
             seed = seed,
             book = AddressBook(meta.receiveAddresses, meta.changeAddresses),
@@ -469,7 +471,7 @@ class WalletRepository private constructor(private val context: Context) {
         val meta = wallet(walletId) ?: error("unknown wallet")
         val spec = coin(meta.coinId) ?: error("unknown coin")
         val core = coreFor(spec)
-        val seed = seeds.seed(walletId) ?: error("seed unavailable")
+        val seed = seeds.seed(walletId) ?: error(context.getString(R.string.wallet_seed_unavailable))
         val signed: SignedTx = core.signTx(seed, plan)
         val txid = core.broadcast(signed)
 

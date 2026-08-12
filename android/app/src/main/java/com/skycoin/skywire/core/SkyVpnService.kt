@@ -59,6 +59,11 @@ import java.util.Collections
  */
 class SkyVpnService : VpnService() {
 
+    /** Its session name and errors are the user's, so they follow the language. */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val json = Json { ignoreUnknownKeys = true }
 

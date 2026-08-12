@@ -3,6 +3,7 @@ package com.skycoin.skywire.ui.dex
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.skycoin.skywire.R
 import com.skycoin.skywire.api.AppState
 import com.skycoin.skywire.api.MarketStatus
 import com.skycoin.skywire.api.SkydexApi
@@ -144,8 +145,11 @@ class DexViewModel(app: Application) : AndroidViewModel(app) {
      * with the new key in place.
      */
     fun connect() = action {
+        val context = getApplication<Application>()
         val pk = mutable.value.entry.trim()
-        if (!isMarketPk(pk)) throw IOException("That is not a market public key.")
+        if (!isMarketPk(pk)) {
+            throw IOException(context.getString(R.string.dex_error_invalid_key))
+        }
 
         val current = visor.app(SkydexProfile.APP)
         runCatching { visor.updateApp(SkydexProfile.APP, status = VisorApi.APP_STOP) }
@@ -157,7 +161,9 @@ class DexViewModel(app: Application) : AndroidViewModel(app) {
         mutable.update { it.copy(app = started) }
 
         val url = SkydexProfile.baseUrl(SkydexProfile.listenPort(started.args))
-        if (!awaitUi(url)) throw IOException("SkyDEX did not answer on $url")
+        if (!awaitUi(url)) {
+            throw IOException(context.getString(R.string.dex_error_no_answer, url))
+        }
 
         val market = skydex.connect(url, pk)
         saveRecent(SavedMarket(pk, market.marketName))

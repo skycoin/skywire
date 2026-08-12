@@ -60,7 +60,9 @@ import com.skycoin.skywire.core.CoreState
 import com.skycoin.skywire.ui.components.InfoRow
 import com.skycoin.skywire.ui.components.PulseRing
 import com.skycoin.skywire.ui.components.SectionCard
+import com.skycoin.skywire.ui.components.HEALTHY
 import com.skycoin.skywire.ui.components.formatUptime
+import com.skycoin.skywire.ui.components.healthText
 import com.skycoin.skywire.ui.components.shortPk
 import com.skycoin.skywire.ui.logs.LogSources
 import com.skycoin.skywire.ui.theme.SkyAccents
@@ -450,8 +452,15 @@ private fun VisorInfoCard(
                     state.serviceHealth.forEach { entry ->
                         InfoRow(
                             label = entry.name,
-                            value = entry.status.ifEmpty { entry.error.ifEmpty { "?" } },
-                            valueColor = if (entry.status.equals("healthy", ignoreCase = true)) {
+                            // The status is the visor's own word for it, so it
+                            // is translated where one is known. The error is
+                            // the service's own text and stays as it arrived.
+                            value = when {
+                                entry.status.isNotEmpty() -> healthText(entry.status)
+                                entry.error.isNotEmpty() -> entry.error
+                                else -> "?"
+                            },
+                            valueColor = if (entry.status.equals(HEALTHY, ignoreCase = true)) {
                                 SkyAccents.success
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
