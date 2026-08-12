@@ -212,6 +212,15 @@
       var port = sw.port;
       var nextId = 1, pending = Object.create(null);
       var upTimer = setTimeout(function () { reject(new Error('shared worker did not report ready in time')); }, 45000);
+      // A live worker greets the port on connect, whether or not the visor has
+      // finished booting. No greeting means the connection was never delivered
+      // — an orphaned worker the browser has marked for termination but cannot
+      // kill (the Go runtime holds its thread). Waiting out the 45s ready
+      // timeout for that is 45s of nothing; give up on it in seconds instead.
+      var helloTimer = setTimeout(function () {
+        clearTimeout(upTimer);
+        reject(new Error('shared worker did not answer connect (orphaned worker)'));
+      }, 5000);
 
       function makeProxy(methods) {
         var proxy = {};
@@ -232,11 +241,22 @@
       port.onmessage = function (ev) {
         var m = ev.data || {};
         switch (m.t) {
+          case 'hello':
+            clearTimeout(helloTimer);
+            break;
+          case 'ping':
+            // Liveness. The worker cannot see a tab go away (a MessagePort
+            // fires nothing when the far side dies), and it must know, because
+            // it has to close ITSELF once the last tab is gone — the browser
+            // cannot terminate it while the Go runtime holds the thread.
+            try { port.postMessage({ t: 'pong' }); } catch (e) {}
+            break;
           case 'log':
             try { (m.level === 'error' ? console.error : m.level === 'warn' ? console.warn : console.log)(m.line); } catch (e) {}
             try { if (typeof self.__skylog === 'function') self.__skylog(m.line); } catch (e) {}
             break;
           case 'up':
+            clearTimeout(helloTimer);
             clearTimeout(upTimer);
             // The worker has already booted the shared visor; install the proxy and
             // resolve with the booted PK (do NOT call boot() again — that's the
@@ -337,6 +357,9 @@
       worker.onmessage = function (ev) {
         var m = ev.data || {};
         switch (m.t) {
+          case 'ping':
+            try { worker.postMessage({ t: 'pong' }); } catch (e) {}
+            break;
           case 'log':
             // Re-emit worker/visor output on the PAGE console so the HV-UI log
             // window (which captures console.*) shows it, and feed __skylog.
