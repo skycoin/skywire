@@ -71,7 +71,7 @@ export class RouteListComponent implements OnDestroy {
   }
 
   allRoutes!: Route[];
-  filteredRoutes!: Route[];
+  filteredRoutes!: Route[] | null;
   routesToShow!: Route[] | null;
   numberOfPages = 1;
   currentPage = 1;
@@ -80,7 +80,7 @@ export class RouteListComponent implements OnDestroy {
   private lastRouteCount = -1;
   private lastRouteKeys = '';
 
-  @Input() set routes(val: Route[]) {
+  @Input() set routes(val: Route[] | undefined) {
     if (!val) {
       return;
     }

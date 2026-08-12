@@ -167,7 +167,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
   nodesForUpdatesFound!: number;
 
   // Custom channel set by the user for downloading the updates.
-  customChannel: string = localStorage.getItem(UpdaterStorageKeys.Channel);
+  customChannel: string | null = localStorage.getItem(UpdaterStorageKeys.Channel);
 
   updatingStates = UpdatingStates;
 

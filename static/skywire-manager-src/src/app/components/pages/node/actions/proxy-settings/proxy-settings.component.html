@@ -52,8 +52,8 @@
         }
         <div class="proxy-form">
           <div class="form-row toggle-row">
-            <mat-checkbox [checked]="form.get('skynetEnabled').value"
-              (change)="form.get('skynetEnabled').setValue($event.checked); toggleProxy()"
+            <mat-checkbox [checked]="form.get('skynetEnabled')!.value"
+              (change)="form.get('skynetEnabled')!.setValue($event.checked); toggleProxy()"
               [disabled]="loading">
               Enable resolving proxy (.skynet + .dmsg)
             </mat-checkbox>

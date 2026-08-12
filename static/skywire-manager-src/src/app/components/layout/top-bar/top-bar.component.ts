@@ -165,7 +165,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   /**
    * List with the options to show.
    */
-  @Input() optionsData!: MenuOptionData[];
+  @Input() optionsData!: MenuOptionData[] | null;
   /**
    * Text for the translatable pipe to be shown in the return button. The return button is only
    * shown if this var has a valid value. If the return button is pressed, the optionSelected
@@ -216,11 +216,11 @@ export class TopBarComponent implements OnInit, OnDestroy {
    * Event for when the user selects an option from the menu. It return the value of the
    * actionName property of the selected option or null, if the back button was pressed.
    */
-  @Output() optionSelected = new EventEmitter<string>();
+  @Output() optionSelected = new EventEmitter<string | null>();
 
   hideLanguageButton = true;
   // Currently selecte language.
-  language!: LanguageData;
+  language!: LanguageData | undefined;
 
   // Data about the current state of the vpn client app.
   vpnData!: VpnData;
@@ -402,7 +402,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   }
 
   // Called when the user selects an option from the menu.
-  requestAction(name: string) {
+  requestAction(name: string | null) {
     this.optionSelected.emit(name);
   }
 
@@ -430,7 +430,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
       if (result) {
         result -= 1;
         if (result !== this.selectedTabIndex) {
-          this.router.navigate(this.tabsData[result].linkParts);
+          const destination = this.tabsData[result].linkParts;
+          if (destination) {
+            this.router.navigate(destination);
+          }
         }
       }
       this.changeDetectorRef.markForCheck();

@@ -69,7 +69,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   // If the VPN is currently running.
   showStarted = false;
   // State of the VPN client app the last time it was checked.
-  lastAppState: AppState = null;
+  lastAppState: AppState | null = null;
   // If the UI must be shown busy.
   showBusy = false;
   // If the user requested the VPN to be stopped and the code is still waiting for it to happen.
@@ -87,7 +87,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   // Pk of the local visor.
   currentLocalPk!: string;
   // Currently selected server.
-  currentRemoteServer!: LocalServerData;
+  currentRemoteServer!: LocalServerData | undefined;
   // Extended data about the current state of the VPN client app.
   backendState!: BackendState;
   // Route options applied when pressing Start. minHops >= 2 forces the route
@@ -136,7 +136,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       // Get the PK of the current local visor.
       if (params.has('key')) {
-        this.currentLocalPk = params.get('key');
+        this.currentLocalPk = params.get('key')!;
         VpnHelpers.changeCurrentPk(this.currentLocalPk);
         this.tabsData = VpnHelpers.vpnTabsData;
       }
@@ -394,6 +394,10 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
    * Opens the options modal window for the currently selected server.
    */
   openServerOptions() {
+    if (!this.currentRemoteServer) {
+      return;
+    }
+
     VpnHelpers.openServerOptions(
       this.currentRemoteServer,
       this.router,
@@ -417,6 +421,10 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
    * selected server. If there is only one note, the note itself is returned.
    */
   getNoteVar() {
+    if (!this.currentRemoteServer) {
+      return '';
+    }
+
     if (this.currentRemoteServer.note && this.currentRemoteServer.personalNote) {
       return 'vpn.server-list.notes-info';
     } else if (!this.currentRemoteServer.note && this.currentRemoteServer.personalNote) {
@@ -446,7 +454,7 @@ export class VpnStatusComponent extends PageBaseComponent implements OnInit, OnD
   /**
    * Translatable var that must be used for showing the current state of the VPN protection.
    */
-  get currentStateText(): string {
+  get currentStateText(): string | undefined {
     if (this.backendState.vpnClientAppData.appState === AppState.Stopped) {
       return 'vpn.connection-info.state-disconnected';
     } else if (this.backendState.vpnClientAppData.appState === AppState.Connecting) {

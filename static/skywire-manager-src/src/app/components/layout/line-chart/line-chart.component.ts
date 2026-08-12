@@ -24,8 +24,8 @@ export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
 
   // Max and min values that the chart sill show. If not set, the chart will calculate the
   // values automatically.
-  @Input() min: number = undefined;
-  @Input() max: number = undefined;
+  @Input() min: number | undefined = undefined;
+  @Input() max: number | undefined = undefined;
 
   chart: any;
 
@@ -35,7 +35,7 @@ export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
     differs: IterableDiffers,
   ) {
     // Create the object used for checking if the "data" var has been updated.
-    this.differ = differs.find([]).create(null);
+    this.differ = differs.find([]).create();
   }
 
   ngAfterViewInit() {

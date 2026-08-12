@@ -12,7 +12,7 @@
           >
       </div>
       <mat-error>
-        @if (!this.form.get('pk').hasError('pattern')) {
+        @if (!this.form.get('pk')!.hasError('pattern')) {
           <span>{{ 'vpn.server-list.add-server-dialog.pk-length-error' | translate }}</span>
         } @else {
           <span>{{ 'vpn.server-list.add-server-dialog.pk-chars-error' | translate }}</span>

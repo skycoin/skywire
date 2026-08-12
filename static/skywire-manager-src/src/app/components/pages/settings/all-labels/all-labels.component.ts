@@ -34,7 +34,7 @@ export class AllLabelsComponent {
    * Called when an option form the top bar is selected.
    * @param actionName Name of the selected option.
    */
-  performAction(actionName: string) {
+  performAction(actionName: string | null) {
     // Null is returned if the back button was pressed.
     if (actionName === null) {
       this.router.navigate(['settings']);
