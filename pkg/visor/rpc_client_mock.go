@@ -806,6 +806,11 @@ func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 	return nil
 }
 
+// RoutingStats implements API.
+func (mc *mockRPCClient) RoutingStats() (routing.RoutingTableStats, error) {
+	return mc.rt.Stats(), nil
+}
+
 // RouteGroups implements API.
 func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	var routeGroups []RouteGroupInfo
