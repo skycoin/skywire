@@ -153,9 +153,16 @@ func renderHomePage(aliases map[string]cipher.PubKey, suffix string, localPK cip
 	b.WriteString(".ep pre{margin:.3rem 0 0;padding:.3rem;background:#f6f6f6;border:1px solid #ddd;border-radius:3px;font-size:11px;white-space:pre-wrap;word-break:break-all;max-height:14rem;overflow:auto}")
 	b.WriteString("@media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#ddd}h2{color:#aaa}h3{color:#bbb}code{color:#777}")
 	b.WriteString(".ep{border-color:#333}.ep input,.ep textarea{background:#222;color:#ddd;border-color:#444}.ep button{background:#2a2a2a;color:#ddd;border-color:#555}.ep pre{background:#222;border-color:#333}}")
+	b.WriteString(".ipcheck{margin:.3rem 0 1rem}")
 	b.WriteString("</style></head><body>")
 	b.WriteString("<h1>skywire resolver</h1>")
 	b.WriteString("<p>Services reachable by name through this resolving proxy. Each link tunnels over the mesh — no clearnet hop.</p>")
+	// Exit-IP echo: in the wasm-visor's iframe browser (skysocks-client-lite)
+	// the reported IP is the PROXY EXIT's — a one-click way to see which exit
+	// this tab browses through. Elsewhere they're plain external links.
+	b.WriteString(`<p class="ipcheck">Check your exit IP: `)
+	b.WriteString(`<a href="http://ip.skycoin.com">ip.skycoin.com</a> &middot; `)
+	b.WriteString(`<a href="https://ip.skywire.dev">ip.skywire.dev</a></p>`)
 	// The visor serves a real landing page at "/"; the deployment services,
 	// setup nodes and dmsg servers don't, but they all answer "/health". A
 	// service that has a manifest section below is omitted from the flat

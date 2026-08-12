@@ -9,10 +9,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/skycoin/skywire/pkg/routing"
-	"github.com/skycoin/skywire/pkg/skyenv"
-	"github.com/skycoin/skywire/pkg/skynetweb"
 )
 
 // SkynetHTTP performs an HTTP request over skynet using the visor's router.
@@ -24,17 +20,24 @@ func (v *Visor) SkynetHTTP(req SkynetHTTPRequest) (*SkynetHTTPResponse, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Dial the remote visor via skynet routing
-	conn, err := v.router.DialRoutes(ctx, req.PK, 0, routing.Port(skyenv.SkyForwardingServerPort), nil)
+	// Dial the remote visor over skynet using the SAME ladder the browse uses:
+	// direct transport → 1-hop relay (route-0, no route-finder) → multihop route.
+	// Previously this went straight to DialRoutes, so general skynet fetches
+	// never used the visor-relay — only the browse UI did. Routing through the
+	// shared dialer makes the relay carry ordinary skynet traffic too.
+	// DialSkynet performs the skynet handshake itself, so we do not repeat it.
+	dialer := &routerSkynetDialer{
+		router:       v.router,
+		localPK:      v.conf.PK,
+		log:          v.log,
+		tpM:          v.tpM,
+		skynetMuxPtr: &v.skynetFwdMux,
+	}
+	conn, err := dialer.DialSkynet(ctx, req.PK, req.Port, nil)
 	if err != nil {
 		return nil, fmt.Errorf("skynet dial failed: %w", err)
 	}
 	defer conn.Close() //nolint:errcheck,gosec
-
-	// Perform skynet handshake
-	if err := skynetweb.PerformHandshake(conn, req.Port); err != nil {
-		return nil, fmt.Errorf("skynet handshake failed: %w", err)
-	}
 
 	// Build HTTP request
 	method := req.Method

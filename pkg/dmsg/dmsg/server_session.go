@@ -317,6 +317,19 @@ func (ss *ServerSession) serveStream(log logrus.FieldLogger, yStr io.ReadWriteCl
 
 // bridgeStream forwards a request to a destination session and bridges the two streams.
 func (ss *ServerSession) bridgeStream(log logrus.FieldLogger, yStr io.ReadWriteCloser, dst ServerSession, req StreamRequest) error {
+	// A bridge where either side is a peer session is a *relayed* stream —
+	// this server carrying traffic on behalf of another server. Bound the
+	// concurrent count so an always-open relay can't be amplified. A plain
+	// local client↔client bridge (neither side a peer) is normal operation
+	// and is never gated.
+	if ss.isPeer || dst.isPeer {
+		if !ss.entity.tryAcquireRelaySlot() {
+			ss.m.RecordStream(metrics.DeltaFailed)
+			return ErrRelayCapacityReached
+		}
+		defer ss.entity.releaseRelaySlot()
+	}
+
 	yStr2, resp, err := dst.forwardRequest(req)
 	if err != nil {
 		ss.m.RecordStream(metrics.DeltaFailed)

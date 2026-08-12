@@ -22,6 +22,7 @@ type V1 struct {
 	LogServer     *LogServer           `json:"log_server,omitempty"`
 	DmsgWeb       *DmsgWebConfig       `json:"dmsg_web,omitempty"`
 	SkynetWeb     *SkynetWebConfig     `json:"skynet_web,omitempty"`
+	BrowseOrigin  *BrowseOriginConfig  `json:"browse_origin,omitempty"`
 	SkymailBridge *SkymailBridgeConfig `json:"skymail_bridge,omitempty"`
 	Rewards       *RewardsConfig       `json:"rewards,omitempty"`
 	STCP          *tnspec.STCPConfig   `json:"skywire-tcp,omitempty"`
@@ -349,6 +350,53 @@ type DmsgWebConfig struct {
 	ForwardProxy bool `json:"forward_proxy,omitempty"`
 	// ForwardPort is the dmsg port the forward-proxy listens on. Default 84.
 	ForwardPort uint16 `json:"forward_port,omitempty"`
+}
+
+// BrowseOriginConfig enables the native "real-origin" browse proxy: a loopback
+// HTTP reverse-proxy origin that serves mesh (dmsg) sites so the BROWSER does
+// native subresource loading, cookies, redirects, WASM and streaming — skywire
+// only proxies the transport over dmsg (see pkg/visor/meshproxy.go and
+// pkg/wasmhv/browseui/RFC-real-origin-browser.md). Content flows through THIS
+// visor's OWN transports; it is a local listener, never a shared/central relay.
+//
+// The browse iframe points at http://<vhost>.<base32pk><suffix>:<port>/, which
+// the browser resolves to loopback (for .mesh.localhost) or to wherever the
+// operator's DNS points (a hosted domain). This is the native counterpart of the
+// wasm surface's Service-Worker browse origin.
+type BrowseOriginConfig struct {
+	// Enable must be true for the reverse-proxy origin to start.
+	Enable bool `json:"enable"`
+	// Mode selects how each mesh site gets its own isolated browser origin:
+	//   "subdomain" (default) — ONE listener on Addr; each site is the origin
+	//     "<vhost>.<base32pk><Suffix>" routed by Host header. Needs *.<Suffix> to
+	//     resolve to loopback (*.mesh.localhost does in every target browser) or,
+	//     for a hosted domain, real wildcard DNS.
+	//   "port" — each site gets its OWN "127.0.0.1:<port>" origin from a small
+	//     pool (PortBase..PortBase+PortSpan). No DNS/wildcard dependency at all;
+	//     works anywhere. Weaker isolation than subdomain (cookies are domain-
+	//     scoped, not port-scoped), so prefer subdomain unless *.localhost can't
+	//     resolve in the target environment.
+	Mode string `json:"mode,omitempty"`
+	// Addr is the listen address for subdomain mode, and the "portal" listener
+	// (GET /open?host=… → 302 to the per-site port) for port mode. Default
+	// "127.0.0.1:8461". Loopback-only unless you front it with real TLS.
+	Addr string `json:"addr,omitempty"`
+	// Suffix is the subdomain-mode origin domain; must start with "." — default
+	// ".mesh.localhost" (loopback, no public cert needed). Set to a wildcard
+	// domain you control (e.g. ".haltingstate.net") or your own domain to serve
+	// a hosted browse origin behind real TLS.
+	Suffix string `json:"suffix,omitempty"`
+	// TLSCert / TLSKey, when BOTH set, serve the browse origin over HTTPS with
+	// this cert/key — a real cert for <Suffix>, or a locally-trusted one (e.g.
+	// from mkcert) for local https parity with the hosted origin (same scheme,
+	// real secure-context, real-domain cookie isolation). Empty = plain HTTP
+	// (fine for *.mesh.localhost, which is a secure context without TLS).
+	TLSCert string `json:"tls_cert,omitempty"`
+	TLSKey  string `json:"tls_key,omitempty"`
+	// PortBase / PortSpan bound the per-site loopback port pool used in "port"
+	// mode (least-recently-used eviction when full). Defaults 8470 / 64.
+	PortBase int `json:"port_base,omitempty"`
+	PortSpan int `json:"port_span,omitempty"`
 }
 
 // SkynetWebConfig enables the embedded `.skynet` resolving proxy — the

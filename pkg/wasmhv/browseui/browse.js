@@ -302,6 +302,65 @@
     var log = opts.log || function () {};
     var currentSitePK = "";
 
+    // --- real-origin mode (RFC §4a/§4b) -------------------------------------
+    // When the host injected __SKYWIRE_BROWSE_ORIGIN__, a dmsg/skynet site loads
+    // from a REAL, isolated origin "<label>[.<net>]<suffix>:<port>" instead of the
+    // sandboxed-srcdoc transcoder — so the BROWSER does native subresource
+    // loading, cookies, redirects, WASM and streaming, and the visor only proxies
+    // the transport (native = local reverse-proxy origin on that port; wasm = the
+    // origin's Service Worker → this tab's visor). Transcoder stays as fallback.
+    var realOriginCfg = (typeof globalThis !== "undefined" && globalThis.__SKYWIRE_BROWSE_ORIGIN__) || null;
+    var B32 = "abcdefghijklmnopqrstuvwxyz234567"; // RFC4648 base32 lowercase (= cipher.DNSLabel)
+    function pkDNSLabel(hexPK) {
+      var bytes = [];
+      for (var i = 0; i + 1 < hexPK.length; i += 2) { bytes.push(parseInt(hexPK.substr(i, 2), 16)); }
+      var out = "", bits = 0, val = 0;
+      for (var j = 0; j < bytes.length; j++) {
+        val = (val << 8) | bytes[j]; bits += 8;
+        while (bits >= 5) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; }
+      }
+      if (bits > 0) { out += B32[(val << (5 - bits)) & 31]; }
+      return out;
+    }
+    // labelFor: a 66-hex PK → 53-char base32 DNS label (hex is too long for a DNS
+    // label); an alias / already-base32 label passes through unchanged.
+    function labelFor(pk) { return /^[0-9a-fA-F]{66}$/.test(pk) ? pkDNSLabel(pk) : pk; }
+    // Content-addressed browse origins: origin B is a short, STABLE hash of the
+    // target — not the target itself — so ONE wildcard cert covers every site
+    // regardless of PK length, clearnet subdomain depth, or dmsg name-vhosts. The
+    // visor keeps shortid -> descriptor; the B bootstrap asks V for its descriptor
+    // by id at handshake (see browse-responder.js / browse-bootstrap.html).
+    var meshOrigins = (globalThis.__meshOrigins = globalThis.__meshOrigins || {});
+    function originIdFor(canon) {
+      return crypto.subtle.digest("SHA-256", new TextEncoder().encode(canon)).then(function (buf) {
+        var b = new Uint8Array(buf), out = "", bits = 0, val = 0;
+        for (var i = 0; i < b.length && out.length < 20; i++) {
+          val = (val << 8) | b[i]; bits += 8;
+          while (bits >= 5 && out.length < 20) { out += B32[(val >>> (bits - 5)) & 31]; bits -= 5; }
+        }
+        return out;
+      });
+    }
+    // normResolverHost canonicalizes a dmsg/skynet resolver host: strips a trailing
+    // .dmsg/.skynet, base32-encodes any 66-hex PK label, re-appends ".<net>". Keeps
+    // aliases / base32 / name-vhost labels intact. So "<hex>.dmsg", "<base32>.dmsg",
+    // "magnetosphere.net.<hex>.dmsg" all normalize to a stable "<...>.<net>".
+    function normResolverHost(pk, net) {
+      var h = String(pk || "").replace(/\.(dmsg|skynet)$/i, "");
+      h = h.split(".").map(function (l) { return /^[0-9a-fA-F]{66}$/.test(l) ? pkDNSLabel(l) : l; }).join(".");
+      return h + "." + net;
+    }
+    // buildRealOrigin(descriptor, path) -> Promise<url>. descriptor is
+    //   {net:'dmsg'|'skynet', host:'<resolverHost>'} or {net:'skysocks', base:'https://<host>'}.
+    function buildRealOrigin(descriptor, path) {
+      var c = realOriginCfg;
+      var canon = descriptor.net === "skysocks" ? ("skysocks|" + descriptor.base) : (descriptor.net + "|" + descriptor.host);
+      return originIdFor(canon).then(function (id) {
+        meshOrigins[id] = descriptor;
+        return (c.scheme || "https") + "://" + id + (c.suffix || ".mesh.localhost") + (c.port ? (":" + c.port) : "") + (path || "/");
+      });
+    }
+
     // 1x1 transparent GIF — placeholder src for a deferred (lazy) image so it
     // occupies layout without a broken-image flash until the real bytes arrive.
     var BLANK_IMG = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
@@ -465,7 +524,18 @@
     // dmsg_sessions}). Returns {} if the core isn't booted yet (status() throws).
     function dmsgStatus() {
       return Promise.resolve().then(function () {
-        return (globalThis.skywireVisor && globalThis.skywireVisor.status && globalThis.skywireVisor.status()) || {};
+        var v = globalThis.skywireVisor;
+        if (v && v.status) { return v.status() || {}; }
+        // Native / hosted HV UI (directViaBackend, no in-tab wasm core to
+        // introspect): the BACKEND visor owns the dmsg connection and fetchDmsg
+        // is proxied to it over /api/browse/*, so the page can't read a session
+        // count. Report "connected" — otherwise waitForDmsg spins the full
+        // connect-overlay timeout on EVERY dmsg navigation even though the visor
+        // is connected (the bug that made every .dmsg site show "Connecting to
+        // the mesh…"). A genuinely-disconnected visor still surfaces as a real
+        // fetchDmsg error, not an endless spinner.
+        if (opts.directViaBackend) { return { dmsg_connected: true }; }
+        return {};
       }).catch(function () { return {}; });
     }
     // dmsg is "up" when there's a live session. Prefer the explicit fields
@@ -569,6 +639,28 @@
       resetFavicon(); // default icon now; the site's own favicon replaces it once fetched
       setLoading(true);
       try {
+        // Real-origin: hand the whole load to the browser via an isolated origin.
+        if (realOriginCfg && entry.kind === "dmsg") {
+          var dnet = (entry.scheme === "skynet") ? "skynet" : "dmsg";
+          var rurl = await buildRealOrigin({ net: dnet, host: normResolverHost(entry.pk, dnet) }, entry.path);
+          frame.removeAttribute("srcdoc");
+          frame.src = rurl;
+          currentSitePK = entry.pk;
+          try { if (typeof hideConnecting === "function") { hideConnecting(); } } catch (e) {}
+          if (opts.setAddr) {
+            // Show a readable, re-typable address WITH a protocol, e.g.
+            // "http://<pk>.dmsg/path" (or https://, or .skynet). A host already
+            // carrying a dot (name-vhost / alias.dmsg) keeps it. The scheme is the
+            // HTTP scheme carried over the mesh transport (http unless TLS/https).
+            var disp = entry.pk;
+            if (disp.indexOf(".") < 0) { disp += (entry.scheme === "skynet" ? ".skynet" : ".dmsg"); }
+            if (entry.path && entry.path !== "/") { disp += entry.path; }
+            opts.setAddr((entry.scheme === "https" ? "https" : "http") + "://" + disp);
+          }
+          log("real-origin " + rurl);
+          setLoading(false);
+          return { status: 0, realOrigin: true };
+        }
         if (entry.kind === "clearnet") {
           var rc = await fetchClearnetEntry(entry.url, gen);
           return rc;
@@ -625,6 +717,23 @@
         frame.src = url; // browser/visor loads it directly (non-anonymous, no skysocks hop)
         log("clearnet DIRECT (upstream = local visor): " + url);
         return { status: 0, direct: true };
+      }
+      // Real-origin clearnet: load the site at its own isolated origin
+      // <host>.skysocks.<suffix>; the origin's SW relays every fetch through
+      // this visor's skysocks-lite. (Transcoder below stays as the fallback.)
+      if (realOriginCfg) {
+        var cu; try { cu = new URL(url); } catch (e) { cu = null; }
+        if (cu && (cu.protocol === "http:" || cu.protocol === "https:")) {
+          if (gen !== loadGen) return { status: 0, cancelled: true };
+          var crurl = await buildRealOrigin({ net: "skysocks", base: cu.origin }, cu.pathname + cu.search);
+          currentSitePK = "";
+          frame.removeAttribute("srcdoc");
+          frame.src = crurl;
+          if (opts.setAddr) opts.setAddr(url); // show the REAL clearnet URL, not the B origin
+          log("real-origin clearnet " + url);
+          setLoading(false);
+          return { status: 0, realOrigin: true };
+        }
       }
       var r = await fetchClearnet(pol.exit, "GET", url, null);
       if (gen !== loadGen) return { status: 0, cancelled: true };
@@ -1076,14 +1185,27 @@
       // per-site-origin design that would lift the storage limit.
       '<div id="sb-info-panel" style="display:none;flex-direction:column;gap:.5em;padding:.7em .8em;background:#1a1726;border-bottom:1px solid #2a2342;font:12px/1.5 monospace;color:#cdd2da;max-height:40%;overflow:auto">' +
       '<div style="display:flex;align-items:center;gap:.5em"><b style="color:#9d7cff;font-size:13px">about the skynet browser</b><span style="flex:1"></span><button id="sb-info-x" style="cursor:pointer">×</button></div>' +
-      '<div>Fetches sites over <b>dmsg</b> (skynet) — no DNS, no certificate authorities, IP-anonymous. Address bar accepts a visor <b>PK</b>, <b>pk.dmsg</b>, an <b>alias.dmsg</b> (e.g. <b>home.dmsg</b>), or an <b>https://</b> clearnet site (routed through a skysocks exit — set in ⚙).</div>' +
-      '<div style="border-top:1px solid #2a2342;padding-top:.5em"><b style="color:#e0af68">Limitations (by design):</b></div>' +
-      '<ul style="margin:.1em 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:.25em">' +
-      '<li><b>No persistent storage.</b> Every page runs in a sandboxed frame with an opaque origin — <b>cookies, localStorage and logins do not persist</b>, even across a reload. Each visit is effectively fresh/incognito.</li>' +
-      '<li><b>Isolated.</b> Sites cannot read each other\'s data, and cannot read this visor\'s keys/storage.</li>' +
-      '<li><b>Scripts limited</b> (sandbox: allow-scripts allow-forms); no plugins, popups, or top-level navigation. Some clearnet sites that require cookies/service-workers may misbehave.</li>' +
-      '<li>Per-site persistent storage like a normal browser would need the <b>native desktop</b> app (each site on its own local origin) — not possible in a keyless browser tab.</li>' +
-      '</ul>' +
+      (globalThis.__SKYWIRE_BROWSE_ORIGIN__ ?
+        // Real-origin mode (RFC §4a/§4b): each site is its own genuine origin.
+        '<div>Each mesh site loads from its <b>own real, isolated origin</b> (<code>&lt;pk&gt;.mesh.localhost</code>), fetched over <b>this visor\'s own dmsg / skynet transports</b> — no DNS, no certificate authorities, IP-anonymous. Clearnet sites route through a skysocks exit (set in ⚙).</div>' +
+        '<div style="border-top:1px solid #2a2342;padding-top:.5em"><b style="color:#9ece6a">Works like a normal browser:</b></div>' +
+        '<ul style="margin:.1em 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:.25em">' +
+        '<li><b>Persistent storage.</b> Cookies, localStorage, logins and service workers <b>persist</b> across reloads — each site in its own real origin.</li>' +
+        '<li><b>Isolated per-site.</b> A real cross-origin boundary keeps sites from reading each other\'s data, and none can reach this visor\'s keys.</li>' +
+        '<li><b>Full scripts</b>, subresources, redirects, WASM and streaming — the browser renders the page natively; the visor only proxies the transport.</li>' +
+        '<li>Address bar: a visor <b>PK</b>, <b>pk.dmsg</b>, <b>alias.dmsg</b>, <b>dmsg://</b>/<b>skynet://</b>, or an <b>https://</b> clearnet site.</li>' +
+        '</ul>'
+      :
+        // Transcoder fallback: sandboxed opaque-origin srcdoc (the old limits).
+        '<div>Fetches sites over <b>dmsg</b> (skynet) — no DNS, no certificate authorities, IP-anonymous. Address bar accepts a visor <b>PK</b>, <b>pk.dmsg</b>, an <b>alias.dmsg</b> (e.g. <b>home.dmsg</b>), or an <b>https://</b> clearnet site (routed through a skysocks exit — set in ⚙).</div>' +
+        '<div style="border-top:1px solid #2a2342;padding-top:.5em"><b style="color:#e0af68">Limitations (by design):</b></div>' +
+        '<ul style="margin:.1em 0 0;padding-left:1.2em;display:flex;flex-direction:column;gap:.25em">' +
+        '<li><b>No persistent storage.</b> Every page runs in a sandboxed frame with an opaque origin — <b>cookies, localStorage and logins do not persist</b>, even across a reload. Each visit is effectively fresh/incognito.</li>' +
+        '<li><b>Isolated.</b> Sites cannot read each other\'s data, and cannot read this visor\'s keys/storage.</li>' +
+        '<li><b>Scripts limited</b> (sandbox: allow-scripts allow-forms); no plugins, popups, or top-level navigation. Some clearnet sites that require cookies/service-workers may misbehave.</li>' +
+        '<li>Per-site persistent storage like a normal browser would need the <b>native desktop</b> app (each site on its own local origin) — not possible in a keyless browser tab.</li>' +
+        '</ul>'
+      ) +
       '</div>' +
       // The page iframe + a DOM overlay (sb-connect) for the connecting/journey
       // state. The overlay is rendered/updated in the PARENT dom — NOT via the
@@ -1091,7 +1213,11 @@
       // (re-setting srcdoc every tick flashed the iframe's background = strobe).
       // iframe background is dark (not #fff) so any transition is not a white flash.
       '<div id="sb-frame-wrap" style="position:relative;flex:1;display:flex;min-height:0">' +
-      '<iframe id="sb-frame" sandbox="allow-scripts allow-forms" style="flex:1;width:100%;border:0;background:#0e0c14"></iframe>' +
+      // Real-origin mode (RFC): NO sandbox — B is a genuine isolated origin that
+      // must have its own storage/cookies/service-worker/secure-context. The old
+      // transcoder keeps the opaque-origin sandbox. Cross-origin isolation between
+      // sites is by ORIGIN (<pk>.mesh.localhost), not the sandbox attribute.
+      '<iframe id="sb-frame" ' + (globalThis.__SKYWIRE_BROWSE_ORIGIN__ ? '' : 'sandbox="allow-scripts allow-forms" ') + 'style="flex:1;width:100%;border:0;background:#0e0c14"></iframe>' +
       '<div id="sb-connect" style="position:absolute;inset:0;display:none;background:#0e0c14;color:#cdd2da;font:14px/1.6 system-ui,-apple-system,sans-serif;overflow:auto"></div>' +
       '</div>';
 
@@ -2075,6 +2201,90 @@
     return { wb: wb, close: function () { wb.close(); } };
   }
 
+  // ensureShell resolves globalThis.skywireShell — websh, the Bash/POSIX shell
+  // + terminal compiled into the wasm visor (cmd/wasm-visor/shell_js.go).
+  //
+  // When the visor runs IN THIS PAGE it already installed skywireShell and this
+  // resolves immediately. Normally it runs in a (Shared)Worker, which has no
+  // DOM, so the tab instantiates the SAME wasm binary a second time with
+  // __SKYWIRE_WASM_ROLE__='shell': that instance skips the visor entirely and
+  // only draws terminals, calling back into the worker over the existing
+  // skywireVisor proxy. One binary, two roles — no second blob to build, ship
+  // or cache. Rejects where there is no visor at all (the native HV UI).
+  var shellReady = null;
+  function ensureShell() {
+    if (globalThis.skywireShell) { return Promise.resolve(globalThis.skywireShell); }
+    if (shellReady) { return shellReady; }
+    if (!globalThis.skywireVisor) { return Promise.reject(new Error("no visor in this tab")); }
+    shellReady = (function () {
+      var vqs = "";
+      try { var v = localStorage.getItem("skywire-visor-variant"); if (v) { vqs = "?variant=" + encodeURIComponent(v); } } catch (e) {}
+      var loadExec = (typeof globalThis.Go === "function") ? Promise.resolve() : new Promise(function (res, rej) {
+        var s = document.createElement("script");
+        s.src = "wasm_exec.js" + vqs;
+        s.onload = function () { res(); };
+        s.onerror = function () { rej(new Error("failed to load wasm_exec.js")); };
+        document.head.appendChild(s);
+      });
+      return loadExec.then(function () {
+        var go = new globalThis.Go();
+        // TinyGo's wasm_exec.js omits the gojs getRandomData import the
+        // crypto-using runtime needs (mirrors hv-boot.js / worker.js).
+        if (go.importObject.gojs && !go.importObject.gojs["runtime.getRandomData"]) {
+          go.importObject.gojs["runtime.getRandomData"] = function (ptr, len) {
+            crypto.getRandomValues(new Uint8Array(go._inst.exports.memory.buffer, ptr >>> 0, len >>> 0));
+          };
+        }
+        globalThis.__SKYWIRE_WASM_ROLE__ = "shell";
+        return WebAssembly.instantiateStreaming(fetch("wasm-visor.wasm" + vqs), go.importObject)
+          .then(function (r) {
+            go.run(r.instance); // installs globalThis.skywireShell, then blocks
+            return new Promise(function (res, rej) {
+              var tries = 0;
+              (function wait() {
+                if (globalThis.skywireShell) { res(globalThis.skywireShell); return; }
+                if (++tries > 600) { rej(new Error("shell wasm did not come up")); return; }
+                setTimeout(wait, 50);
+              })();
+            });
+          });
+      });
+    })();
+    return shellReady;
+  }
+
+  // createShellWindow opens websh as a WinBox window: a real shell (pipes,
+  // globbing, control flow, an editor, jq/awk) whose visor commands — pk about
+  // visors net health apps tps routes hvapi — emit JSON straight into it. Go
+  // owns everything inside the mount element; this side supplies the frame and
+  // closes the session.
+  function createShellWindow(doc, opts) {
+    var mount = doc.createElement("div");
+    mount.style.cssText = "position:absolute;inset:0;background:#000;overflow:hidden";
+    var note = doc.createElement("div");
+    note.style.cssText = "position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa0a6;font:12px monospace";
+    note.textContent = "starting the shell…";
+    mount.appendChild(note);
+    var handle = null;
+    var wb = makeWin(doc, {
+      title: opts.title || "shell", root: opts.root, top: opts.top, bottom: opts.bottom,
+      width: "56%", height: "62%", mount: mount,
+      onclose: function () {
+        try { if (handle && handle.close) { handle.close(); } } catch (e) {}
+        if (opts.onClose) { opts.onClose(); }
+      }
+    });
+    ensureShell().then(function (sh) {
+      note.remove();
+      handle = sh.open(mount);
+      if (handle && handle.error) { mount.textContent = "shell: " + handle.error; return; }
+      if (handle && handle.focus) { handle.focus(); }
+    }).catch(function (e) {
+      note.textContent = "shell failed to start: " + (e.message || e);
+    });
+    return { wb: wb, close: function () { wb.close(); } };
+  }
+
   // createCliWindow opens a REPL that dispatches a curated command set to the
   // visor's RPC via opts.api(method, path, body) — the wasm core's hvApi() in the
   // wasm visor (function call, no shell needed — works in standalone PWA mode),
@@ -2560,7 +2770,12 @@
     var cliWin = null;
     function openCli() {
       if (focusExisting(cliWin)) { return; }
-      cliWin = createCliWindow(doc, withRoot({ onClose: function () { untrack(cliWin); cliWin = null; } }));
+      var close = function () { untrack(cliWin); cliWin = null; };
+      // A tab with a visor in it runs the real shell; the native HV UI overlay
+      // (no in-tab visor) keeps the REPL.
+      cliWin = globalThis.skywireVisor
+        ? createShellWindow(doc, withRoot({ title: "visor shell", onClose: close }))
+        : createCliWindow(doc, withRoot({ onClose: close }));
       track(cliWin, "console");
     }
     var termWin = null;

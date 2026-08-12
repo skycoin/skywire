@@ -10,6 +10,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 
@@ -79,6 +80,35 @@ func serveJS(w http.ResponseWriter, b []byte) {
 	_, _ = w.Write(b) //nolint:errcheck
 }
 
+// browseOriginInjectJS returns a JS snippet that sets window.__SKYWIRE_BROWSE_ORIGIN__
+// so browse.js loads mesh sites from the native real-origin reverse-proxy
+// (meshproxy) instead of the sandboxed-srcdoc transcoder — but ONLY when
+// BrowseOrigin (the mesh_proxy module) is enabled. The origin is
+// <pk>[.<net>]<suffix>:<port> on the meshproxy's loopback listener; the native
+// visor reverse-proxies it over dmsg/skynet server-side (no SW/bridge needed).
+// Empty string when disabled → the transcoder fallback stays in effect.
+func browseOriginInjectJS(v *Visor) string {
+	bo := v.conf.BrowseOrigin
+	if bo == nil || !bo.Enable {
+		return ""
+	}
+	addr := bo.Addr
+	if addr == "" {
+		addr = defaultMeshProxyAddr
+	}
+	port := ""
+	if _, p, err := net.SplitHostPort(addr); err == nil {
+		port = p
+	}
+	scheme := "http"
+	if bo.TLSCert != "" && bo.TLSKey != "" {
+		scheme = "https"
+	}
+	suffix := normalizeMeshSuffix(bo.Suffix) // guaranteed leading dot
+	return `window.__SKYWIRE_BROWSE_ORIGIN__={suffix:` + strconv.Quote(suffix) +
+		`,scheme:` + strconv.Quote(scheme) + `,port:` + strconv.Quote(port) + `};`
+}
+
 // serveInjectedIndex serves index.html with the browse engine + launcher scripts
 // (and window.__SKYWIRE_LOCAL_PK__) injected before </body>. Falls back to the
 // plain file server if index.html can't be read.
@@ -105,7 +135,7 @@ func (hv *Hypervisor) serveInjectedIndex(w http.ResponseWriter, r *http.Request,
 	// references the content-hashed chunk filenames — it changes iff the UI does.
 	ver := uiVersionHash(b)
 	inject := []byte(`<script>window.__SKYWIRE_LOCAL_PK__=` + strconv.Quote(hv.visor.conf.PK.Hex()) +
-		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;</script>` +
+		`;window.__SKYWIRE_UI_VERSION__=` + strconv.Quote(ver) + `;` + browseOriginInjectJS(hv.visor) + `</script>` +
 		`<script src="browse.js"></script><script src="skywire-browse-launcher.js"></script>` +
 		`<script>` + uiAutoReloadJS + `</script>`)
 	out := bytes.Replace(b, []byte("</body>"), append(inject, []byte("</body>")...), 1)

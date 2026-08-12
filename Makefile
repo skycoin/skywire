@@ -311,7 +311,7 @@ clean: ## Clean project: remove created binaries and apps
 
 build-wasm: ## Compile-check every js/wasm binary (GOOS=js GOARCH=wasm), no run — mirrors the CI wasm lane
 	@echo "compile-checking js/wasm binaries..."
-	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/skywire/commands/web/wasm; do \
+	@for p in ./pkg/tpviz/wasm ./cmd/dmsg-wasm ./cmd/wasm-visor ./cmd/wasm-visor-probe ./cmd/websh-probe ./cmd/skywire/commands/web/wasm; do \
 		echo "  GOOS=js GOARCH=wasm go build $$p"; \
 		GOOS=js GOARCH=wasm go build -mod=vendor -o /dev/null "$$p" || exit 1; \
 	done
@@ -327,7 +327,7 @@ build-wasm-tinygo: ## Compile-check every TinyGo wasm binary (-o /dev/null, no r
 	@# full js/wasm binaries ./cmd/dmsg-wasm and ./cmd/wasm-visor deliberately use
 	@# net/http (HTTP-over-dmsg; dmsg-wasm also needs logrus+gob reflection) and are
 	@# standard-Go-only — they are compile-checked by the `build-wasm` lane instead.
-	@for p in ./pkg/tpviz/wasm; do \
+	@for p in ./pkg/tpviz/wasm ./cmd/websh-probe; do \
 		echo "  tinygo build -target wasm $$p"; \
 		tinygo build -target wasm -no-debug -o /dev/null "$$p" || exit 1; \
 	done
@@ -383,12 +383,11 @@ tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+a
 	mkdir -p ./build/wasm-visor
 	$(TINYGO) build -target wasm -no-debug -opt=z -o ./build/wasm-visor/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./build/wasm-visor/wasm_exec.js
-	cp ./cmd/wasm-visor/index.html ./build/wasm-visor/
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor/
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor/
-	@echo "built ./build/wasm-visor (TinyGo fork) — serve it: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor' then open http://localhost:8085/"
+	@echo "built ./build/wasm-visor (TinyGo fork) — embed it with 'make embed-wasm-visor-tinygo', then serve the real UI: './skywire cli hv serve --variant tinygo'"
 
 test-wasm-headless: ## Tier B headless smoke: run the REAL compiled wasm-visor blob under Node (no browser) against a loopback dmsg server — boot → ws dmsg session → /api core. Needs node >= 22.
 	./scripts/wasm-headless/run.sh
@@ -397,7 +396,6 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	mkdir -p ./build/wasm-visor-go
 	GOOS=js GOARCH=wasm go build -buildvcs=false -ldflags="$(WASM_BUILDINFO) -s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
-	cp ./cmd/wasm-visor/index.html ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/hv-boot.js ./build/wasm-visor-go/
