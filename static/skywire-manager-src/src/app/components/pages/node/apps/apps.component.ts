@@ -21,9 +21,9 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 export class AppsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   private changeDetectorRef = inject(ChangeDetectorRef);
 
-  apps: Application[];
-  nodePK: string;
-  nodeIp: string;
+  apps!: Application[];
+  nodePK!: string;
+  nodeIp!: string;
 
   // Active sub-tab. 'list' (default) is the apps table; the other
   // three render the per-app management surfaces inline.
@@ -36,9 +36,9 @@ export class AppsComponent extends PageBaseComponent implements OnInit, OnDestro
   // node's arch, not the UI mode, for exactly that reason.
   wasmNode = false;
 
-  private dataSubscription: Subscription;
+  private dataSubscription!: Subscription;
 
-  ngOnInit() {
+  override ngOnInit() {
     // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.localPk;

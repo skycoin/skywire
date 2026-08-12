@@ -20,7 +20,7 @@ export class TruncatedTextComponent {
    * Allow to deactivate the tooltip.
    */
   @Input() showTooltip = true;
-  @Input() text: string;
+  @Input() text!: string;
   /**
    * Number of characters at the left and right of the text that will be shown if "short" is
    * "true". Example: if the text is "Hello word" and this var is set to 2, the component will

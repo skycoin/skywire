@@ -45,10 +45,10 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   showRewardRules = false;
   rewardRules: string | null = null;
 
-  private nodeSub: Subscription;
-  private dataSub: Subscription;
-  private saveRewardsSubscription: Subscription;
-  private rewardRulesSubscription: Subscription;
+  private nodeSub!: Subscription;
+  private dataSub!: Subscription;
+  private saveRewardsSubscription!: Subscription;
+  private rewardRulesSubscription!: Subscription;
 
   constructor(
     private http: HttpClient,

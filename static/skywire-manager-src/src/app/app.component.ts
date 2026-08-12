@@ -36,7 +36,7 @@ export class AppComponent {
 
   showingDataProblemMsg = false;
 
-  obtainPkSubscription: Subscription;
+  obtainPkSubscription!: Subscription;
 
   constructor(
     // Imported to call its constructor right after opening the app.

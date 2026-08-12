@@ -30,8 +30,8 @@ export interface ManualVpnServerData {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AddVpnServerComponent implements OnInit {
-  @ViewChild('firstInput') firstInput: ElementRef;
-  form: UntypedFormGroup;
+  @ViewChild('firstInput') firstInput!: ElementRef;
+  form!: UntypedFormGroup;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".

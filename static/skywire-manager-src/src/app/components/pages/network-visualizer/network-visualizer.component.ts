@@ -54,7 +54,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
     };
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // React to ?view= changes while the tab stays mounted (Angular reuses the
     // component, so a link to a different view wouldn't otherwise re-apply).
     this.routeSub = this.route.queryParamMap.subscribe((pm) => {

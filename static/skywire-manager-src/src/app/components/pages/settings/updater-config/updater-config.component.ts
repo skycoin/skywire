@@ -18,18 +18,18 @@ import GeneralUtils from 'src/app/utils/generalUtils';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UpdaterConfigComponent implements OnInit, OnDestroy {
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
 
   // If there are custom settings saved in the app.
-  hasCustomSettings: boolean;
+  hasCustomSettings!: boolean;
 
   // Values currently saved in the app.
-  private initialChannel: string;
-  private initialVersion: string;
-  private initialArchiveURL: string;
-  private initialChecksumsURL: string;
+  private initialChannel!: string;
+  private initialVersion!: string;
+  private initialArchiveURL!: string;
+  private initialChecksumsURL!: string;
 
-  private subscription: Subscription;
+  private subscription!: Subscription;
 
   constructor(
     private snackbarService: SnackbarService,

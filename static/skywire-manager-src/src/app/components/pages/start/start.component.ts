@@ -18,7 +18,7 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StartComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  private verificationSubscription: Subscription;
+  private verificationSubscription!: Subscription;
 
   constructor(
     private authService: AuthService,
@@ -28,7 +28,7 @@ export class StartComponent extends PageBaseComponent implements OnInit, OnDestr
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Check if the user is unauthorized.
     this.verificationSubscription = this.authService.checkLogin().subscribe(response => {
       if (response !== AuthStates.NotLogged) {

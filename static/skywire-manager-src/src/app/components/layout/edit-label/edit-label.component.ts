@@ -18,9 +18,9 @@ import { AppConfig } from 'src/app/app.config';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EditLabelComponent implements OnInit, AfterViewInit {
-  @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('firstInput') firstInput!: ElementRef;
 
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
