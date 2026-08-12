@@ -1025,7 +1025,7 @@ github.com/shopspring/decimal
 ## explicit; go 1.17
 github.com/sirupsen/logrus
 github.com/sirupsen/logrus/hooks/syslog
-# github.com/skycoin/skycoin v0.28.6-0.20260811181324-ab113fbd4466
+# github.com/skycoin/skycoin v0.28.6-0.20260812090621-023ee6e8a033
 ## explicit; go 1.26.1
 github.com/skycoin/skycoin/cmd/explorer/commands
 github.com/skycoin/skycoin/cmd/newcoin/commands
@@ -1072,6 +1072,7 @@ github.com/skycoin/skycoin/src/readable
 github.com/skycoin/skycoin/src/skycoin
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-go
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo
+github.com/skycoin/skycoin/src/skycoin-lite/wasmgz
 github.com/skycoin/skycoin/src/skycoin-web/src/gui
 github.com/skycoin/skycoin/src/skydex/chain
 github.com/skycoin/skycoin/src/skydex/db

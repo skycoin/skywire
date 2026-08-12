@@ -38,7 +38,7 @@ require (
 	github.com/pterm/pterm v0.12.83
 	github.com/robert-nix/ansihtml v1.0.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/skycoin/skycoin v0.28.6-0.20260811181324-ab113fbd4466
+	github.com/skycoin/skycoin v0.28.6-0.20260812090621-023ee6e8a033
 	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -104,15 +104,13 @@ require (
 	google.golang.org/protobuf v1.36.12
 )
 
-require github.com/benhoyt/goawk v1.31.0 // indirect
+require github.com/benhoyt/goawk v1.31.0
 
 require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	golang.org/x/mod v0.39.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
 )
-
-require github.com/benhoyt/goawk v1.31.0 // indirect
 
 require (
 	github.com/0magnet/coloredcobra v1.0.2 // indirect
@@ -127,7 +125,7 @@ require (
 	github.com/cloudfoundry/jibber_jabber v0.0.0-20151120183258-bcc4c8345a21 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/dunglas/httpsfv v1.1.0 // indirect
-	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/dustin/go-humanize v1.0.1
 	github.com/erikgeiser/coninput v0.0.0-20211004153227-1c3628e74d0f // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/josharian/native v1.1.0 // indirect
@@ -298,7 +296,7 @@ require (
 	golang.org/x/crypto v0.55.0
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90 // indirect
 	golang.org/x/image v0.45.0 // indirect
-	golang.org/x/text v0.41.0 // indirect
+	golang.org/x/text v0.41.0
 	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260810153831-ec0a7760b754 // indirect
