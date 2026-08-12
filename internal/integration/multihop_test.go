@@ -89,7 +89,7 @@ func testMultiHopRouteViaB(t *testing.T, env *TestEnv) {
 	// c↔a transport while we are walking the list.
 	//
 	// min_hops=2 is supposed to make a direct 1-hop c→a route unbuildable, and
-	// it is still set above as the defence against autoconnect recreating the
+	// it is still set above as the defense against autoconnect recreating the
 	// link mid-test. It is not sufficient on its own: this test has watched
 	// route setup build a 1-hop route over a leftover direct c→a SUDPH
 	// transport — the forward rule's nxtTpID was that transport — and then time
