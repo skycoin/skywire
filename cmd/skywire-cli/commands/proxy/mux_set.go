@@ -1,14 +1,14 @@
 // Package skysocksc cmd/skywire-cli/commands/proxy/mux_set.go c4-vis-cli
 //
-// mux-set reconciles an active proxy session's mux legs to a target
-// leg-set in one shot, instead of hand-driving mux-add / mux-rm. It's
+// mux set reconciles an active proxy session's mux legs to a target
+// leg-set in one shot, instead of hand-driving mux add / mux rm. It's
 // the static-mux primitive — "make the legs be exactly these" — and the
 // actuation primitive the adaptive routing presets will drive (compute a
-// target leg-set from the live mux-info signals, then reconcile to it).
+// target leg-set from the live mux info signals, then reconcile to it).
 //
 // A leg's identity is its FIRST-HOP transport id (Forward[0].TpID, which
-// is what mux-info reports as a leg's transport_id and what mux-rm takes).
-// mux-set diffs the target set against the current legs by that id:
+// is what mux info reports as a leg's transport_id and what mux rm takes).
+// mux set diffs the target set against the current legs by that id:
 //   - target legs not currently present -> AddMuxRoute
 //   - with --prune: current legs not in the target -> RemoveMuxRoute
 //
@@ -20,8 +20,8 @@
 // same shape 'cli route calc --json' emits, concatenated:
 //
 //	skywire cli route calc <peer-pk> --count 3 --json > legs.json
-//	skywire cli proxy mux-set --legs legs.json            # ensure those 3 legs
-//	skywire cli proxy mux-set --legs legs.json --prune    # exactly those 3
+//	skywire cli proxy mux set --legs legs.json            # ensure those 3 legs
+//	skywire cli proxy mux set --legs legs.json --prune    # exactly those 3
 package skysocksc
 
 import (
@@ -46,7 +46,7 @@ var (
 
 func init() {
 	muxSetCmd.Flags().StringVarP(&muxSetApp, "name", "n", "skysocks-client", "app whose route group to reconcile")
-	muxSetCmd.Flags().Uint16Var(&muxSetSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
+	muxSetCmd.Flags().Uint16Var(&muxSetSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
 	muxSetCmd.Flags().StringVar(&muxSetFile, "legs", "-", "leg-set JSON file ('-' = stdin): array of {forward,reverse} pairs ('cli route calc --json' shape)")
 	muxSetCmd.Flags().BoolVar(&muxSetPrune, "prune", false, "also remove current legs not in the target set (exact reconcile). Careful: the primary route is a leg too — include it or it's removed")
 	addMuxSub(muxSetCmd, "mux-set")
@@ -83,7 +83,7 @@ func readRoutePairs(src string) ([]routePair, error) {
 
 // currentLegTpIDs returns the first-hop transport ids of the legs in the
 // target rg. With srcPort 0 it requires exactly one active rg; otherwise
-// it matches the rg by src_port (mux-info prints it).
+// it matches the rg by src_port (mux info prints it).
 func currentLegTpIDs(infos any, srcPort uint16) (map[uuid.UUID]struct{}, error) {
 	raw, _ := json.Marshal(infos) //nolint:errcheck
 	var rgs []muxRouteGroupInfo
@@ -101,11 +101,11 @@ func currentLegTpIDs(infos any, srcPort uint16) (map[uuid.UUID]struct{}, error) 
 			}
 		}
 		if rg == nil {
-			return nil, fmt.Errorf("no active route group with src_port=%d (see 'mux-info')", srcPort)
+			return nil, fmt.Errorf("no active route group with src_port=%d (see 'mux info')", srcPort)
 		}
 	} else {
 		if len(rgs) > 1 {
-			return nil, fmt.Errorf("app=%s has %d active route groups; pass --rg <src_port> (see 'mux-info')", muxSetApp, len(rgs))
+			return nil, fmt.Errorf("app=%s has %d active route groups; pass --rg <src_port> (see 'mux info')", muxSetApp, len(rgs))
 		}
 		rg = &rgs[0]
 	}
@@ -137,9 +137,9 @@ route counts as a leg, so include it in the target or --prune removes it.
 
 Example:
   skywire cli route calc <peer-pk> --count 3 --json > legs.json
-  skywire cli proxy mux-set --legs legs.json            # ensure those legs exist
-  skywire cli proxy mux-set --legs legs.json --prune    # make legs exactly those
-  skywire cli proxy mux-info                            # confirm`,
+  skywire cli proxy mux set --legs legs.json            # ensure those legs exist
+  skywire cli proxy mux set --legs legs.json --prune    # make legs exactly those
+  skywire cli proxy mux info                            # confirm`,
 	Args:                  cobra.NoArgs,
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
@@ -201,7 +201,7 @@ Example:
 			}
 		}
 
-		fmt.Printf("mux-set app=%s: target=%d, +%d added, -%d removed, %d already present%s\n",
+		fmt.Printf("mux set app=%s: target=%d, +%d added, -%d removed, %d already present%s\n",
 			muxSetApp, len(want), added, removed, present, pruneNote(muxSetPrune))
 	},
 }
