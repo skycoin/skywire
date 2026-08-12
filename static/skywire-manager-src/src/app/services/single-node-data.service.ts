@@ -24,7 +24,7 @@ export class SingleNodeBackendData {
    * Error found while trying to get the data. It will only have a value if the last
    * try ended in an error.
    */
-  error!: OperationError;
+  error!: OperationError | null;
   /**
    * Time (Date.now()) in which the data returned in the data property was obtained. If
    * the error proterty has a value, this property will still have a valid value if valid
@@ -87,7 +87,7 @@ export class NodeData {
   /**
    * Subject used for sending events with data about this node.
    */
-  dataSubject = new BehaviorSubject<SingleNodeBackendData>(null);
+  dataSubject = new BehaviorSubject<SingleNodeBackendData | null>(null);
   /**
    * Moment in which the last automatic data refresh was scheduled. It is not the same as the
    * last moment in which the data was obtained, as the data could have not been obtained via
@@ -163,7 +163,7 @@ export class SingleNodeDataService {
    * getting the data.
    * @param publicKey Public key of the specific node to check.
    */
-  startRequestingData(publicKey: string): Observable<SingleNodeBackendData> {
+  startRequestingData(publicKey: string): Observable<SingleNodeBackendData | null> {
     // If the cache has info about the node, use the cached info. If not, create a
     // new entry.
     let nodeData = this.nodesMap.get(publicKey);
@@ -299,8 +299,8 @@ export class SingleNodeDataService {
     currentData.totalSent = 0;
     currentData.totalReceived = 0;
     if (transports && transports.length > 0) {
-      currentData.totalSent = transports.reduce((total, transport) => total + transport.sent, 0);
-      currentData.totalReceived = transports.reduce((total, transport) => total + transport.recv, 0);
+      currentData.totalSent = transports.reduce((total, transport) => total + (transport.sent || 0), 0);
+      currentData.totalReceived = transports.reduce((total, transport) => total + (transport.recv || 0), 0);
     }
 
     // Update the history.
