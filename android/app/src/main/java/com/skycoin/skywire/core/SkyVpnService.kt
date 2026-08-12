@@ -16,6 +16,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -63,9 +65,9 @@ class SkyVpnService : VpnService() {
     /** One interface change at a time, whichever connection asks. */
     private val mutex = Mutex()
 
-    private var server: LocalServerSocket? = null
-    private var acceptor: Job? = null
-    private var coreWatcher: Job? = null
+    @Volatile private var server: LocalServerSocket? = null
+    @Volatile private var acceptor: Job? = null
+    @Volatile private var coreWatcher: Job? = null
 
     /**
      * Live control connections. Tracked only so shutdown can close them: a
@@ -120,27 +122,57 @@ class SkyVpnService : VpnService() {
     private fun listen() {
         if (acceptor?.isActive == true) return
         acceptor = scope.launch {
-            val socket = try {
-                LocalServerSocket(SOCKET_NAME)
-            } catch (e: IOException) {
-                // Almost always a leftover bind from a service instance that
-                // has not finished going down; the screen surfaces it.
-                VpnTunnel.mutableState.value = VpnTunnelState(
-                    error = getString(R.string.vpn_error_socket, e.message.orEmpty()),
-                )
-                return@launch
-            }
-            server = socket
-            VpnTunnel.mutableState.value = VpnTunnelState(serviceUp = true)
+            val socket = bind() ?: return@launch
             try {
-                while (isActive) {
-                    val client = socket.accept()
-                    launch { serve(client) }
+                // A shutdown that raced the bind lands here with the job
+                // already cancelled; fall through to the close below rather
+                // than publish a listener nobody will tear down.
+                if (isActive) {
+                    server = socket
+                    VpnTunnel.mutableState.value = VpnTunnelState(serviceUp = true)
+                    while (isActive) {
+                        val client = socket.accept()
+                        launch { serve(client) }
+                    }
                 }
             } catch (e: IOException) {
                 // accept() throwing is how closing the socket stops this loop.
+            } finally {
+                // The binder owns the close. An abstract name stays bound
+                // until its fd closes or the process dies, and this process
+                // hosts the foreground core service, so it does not die —
+                // any exit that skipped this close used to wedge the VPN
+                // with EADDRINUSE until a force-stop.
+                runCatching { socket.close() }
+                if (boundServer === socket) boundServer = null
+                if (server === socket) server = null
             }
         }
+    }
+
+    /**
+     * Binds the abstract name, first reclaiming any listener a predecessor
+     * service instance left bound: the name is process-wide but the field
+     * holding it used to be per-instance, so an orphan was unreachable and
+     * every rebind failed until the process died. The brief retry covers a
+     * predecessor that is still mid-close.
+     */
+    private suspend fun bind(): LocalServerSocket? {
+        var last: IOException? = null
+        repeat(BIND_ATTEMPTS) { attempt ->
+            runCatching { boundServer?.close() }
+            boundServer = null
+            try {
+                return LocalServerSocket(SOCKET_NAME).also { boundServer = it }
+            } catch (e: IOException) {
+                last = e
+            }
+            if (attempt < BIND_ATTEMPTS - 1) delay(BIND_RETRY_MS)
+        }
+        VpnTunnel.mutableState.value = VpnTunnelState(
+            error = getString(R.string.vpn_error_socket, last?.message.orEmpty()),
+        )
+        return null
     }
 
     /**
@@ -296,7 +328,11 @@ class SkyVpnService : VpnService() {
     private fun watchCore() {
         if (coreWatcher?.isActive == true) return
         coreWatcher = scope.launch {
-            CoreServiceState.state.collect { core ->
+            // Drop the replayed snapshot: this watcher exists to notice the
+            // core GOING away, not to veto a start that raced one. Acting on
+            // the stale initial value used to tear down the listener the
+            // sibling coroutine was busy binding.
+            CoreServiceState.state.drop(1).collect { core ->
                 if (core is CoreState.Stopped || core is CoreState.Failed) {
                     shutdown()
                     stopSelf()
@@ -346,6 +382,17 @@ class SkyVpnService : VpnService() {
          * the Go side learns the name.
          */
         const val SOCKET_NAME = "com.skycoin.skywire.vpn"
+
+        /**
+         * The one bound listener in this process, whichever service instance
+         * bound it. Process-scoped so a fresh instance can close a socket a
+         * dead predecessor orphaned — that is what turns "Address already in
+         * use" from a permanent failure into a self-healing one.
+         */
+        @Volatile private var boundServer: LocalServerSocket? = null
+
+        private const val BIND_ATTEMPTS = 3
+        private const val BIND_RETRY_MS = 250L
 
         private const val ACTION_START = "com.skycoin.skywire.vpn.START"
         private const val ACTION_STOP = "com.skycoin.skywire.vpn.STOP"

@@ -323,9 +323,10 @@ func onXferDone(dir xfer.Direction, peer cipher.PubKey, offer xfer.Offer, err er
 	if dir == xfer.Incoming && err == nil && !wasRequested {
 		desc := notifPreview("📎 " + fileKindLabel(offer.Name, offer.MIME) + ": " + offer.Name)
 		if offer.Group != "" {
-			notifyOSInbound("Group message", displayName(peer.Hex())+": "+desc)
+			notifyOSInboundThread(offer.Group, offer.Group,
+				"Group message", displayName(peer.Hex())+": "+desc)
 		} else {
-			notifyOSInbound(displayName(peer.Hex()), desc)
+			notifyOSInboundThread(peer.Hex(), peer.Hex(), displayName(peer.Hex()), desc)
 		}
 	}
 
