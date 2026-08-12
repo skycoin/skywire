@@ -27,6 +27,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -45,6 +46,7 @@ var (
 	shellSettle    int
 	shellNoConsole bool
 	shellLogAll    bool
+	shellKeepTabs  bool
 )
 
 func init() {
@@ -55,9 +57,33 @@ func init() {
 	shellCmd.Flags().IntVar(&shellBoot, "boot", 20, "seconds to wait for the shell wasm after opening the console")
 	shellCmd.Flags().IntVar(&shellSettle, "settle", 8, "seconds to wait after each command")
 	shellCmd.Flags().BoolVar(&shellNoConsole, "no-console", false, "skip opening the visor console window")
+	shellCmd.Flags().BoolVar(&shellKeepTabs, "keep-tabs", false, "leave other tabs on the same origin open; by default they are closed first, because the visor is one SharedWorker per origin while every tab spawns its own shell instance against it")
 	shellCmd.Flags().BoolVar(&shellLogAll, "log-all", false, "record every console level, not just errors and warnings — a wasm module's fatal error is written at log level")
 	RootCmd.AddCommand(shellCmd)
 }
+
+// waitFor polls expr until it evaluates to "true" or the deadline passes, and
+// reports whether the condition was met. Polling beats sleeping: the things
+// being waited for here take milliseconds when they work, so a fixed sleep is
+// either far too long (every run costs minutes) or too short (a working
+// command is misread as broken) — and both mistakes were made before this
+// existed.
+func (d *cdp) waitFor(expr string, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if d.eval(expr) == "true" {
+			return true
+		}
+		time.Sleep(150 * time.Millisecond)
+	}
+	return false
+}
+
+// doneMarker is appended to each typed command so the tool can tell when the
+// shell has finished it, instead of guessing with a sleep. The shell runs it
+// after the command whatever the command did, so a failing command is still
+// detected as finished.
+const doneMarker = `; js "window.__hvshellDone=(window.__hvshellDone||0)+1" >/dev/null`
 
 var shellCmd = &cobra.Command{
 	Use:   "shell [command]...",
@@ -71,7 +97,7 @@ terminal as a command line, and writes a screenshot plus the page console.
 Needs a browser started with --remote-debugging-port=9222.`,
 	Run: func(_ *cobra.Command, args []string) {
 		if err := driveShell(shellPort, shellURL, shellOut, shellLoad, shellBoot,
-			shellSettle, shellNoConsole, args); err != nil {
+			shellSettle, shellNoConsole, shellKeepTabs, args); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
@@ -287,7 +313,14 @@ func (d *cdp) clickText(text string) string {
     })()`, strconv(text)))
 }
 
-func driveShell(port, pageURL, out string, load, boot, settle int, noConsole bool, cmds []string) error {
+func driveShell(port, pageURL, out string, load, boot, settle int, noConsole, keepTabs bool, cmds []string) error {
+	if !keepTabs {
+		if n, err := closeOrigin(port, pageURL); err != nil {
+			fmt.Fprintln(os.Stderr, "could not close existing tabs:", err)
+		} else if n > 0 {
+			fmt.Printf("closed %d existing tab(s) on this origin\n", n)
+		}
+	}
 	tab, err := newTab(port)
 	if err != nil {
 		return err
@@ -314,7 +347,13 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole boo
 	if _, err := d.send("Page.navigate", map[string]interface{}{"url": pageURL}); err != nil {
 		return err
 	}
-	time.Sleep(time.Duration(load) * time.Second)
+	// Ready when the UI has painted something interactive, not when a timer
+	// says so. -load is now the ceiling, not the cost.
+	if !d.waitFor(`(!!document.querySelector('#view-toggle') ||
+		[...document.querySelectorAll('*')].some(x => (x.textContent||'').trim() === '☰'))`,
+		time.Duration(load)*time.Second) {
+		fmt.Fprintln(os.Stderr, "warning: the page never looked ready; carrying on")
+	}
 
 	if !noConsole {
 		fmt.Println("tour:   ", d.clickText("skip"))
@@ -337,9 +376,22 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole boo
 	time.Sleep(time.Second)
 
 	for _, cmd := range cmds {
-		fmt.Println("typing: ", cmd)
-		d.typeLine(cmd)
-		time.Sleep(time.Duration(settle) * time.Second)
+		before := d.eval("window.__hvshellDone|0")
+		fmt.Print("typing:  ", cmd)
+		start := time.Now()
+		if noConsole {
+			d.typeLine(cmd)
+			time.Sleep(time.Duration(settle) * time.Second)
+			fmt.Println()
+			continue
+		}
+		d.typeLine(cmd + doneMarker)
+		if d.waitFor(fmt.Sprintf("(window.__hvshellDone|0) > %s", before),
+			time.Duration(settle)*time.Second) {
+			fmt.Printf("   [%s]\n", time.Since(start).Round(time.Millisecond))
+		} else {
+			fmt.Printf("   [no completion within %ds — still running or wedged]\n", settle)
+		}
 	}
 
 	// The terminal is a canvas, so the screen is read back as the xterm
@@ -391,6 +443,53 @@ func driveShell(port, pageURL, out string, load, boot, settle int, noConsole boo
 		fmt.Println("  none")
 	}
 	return nil
+}
+
+// closeOrigin closes existing pages on the same origin as pageURL and reports
+// how many. The visor is one SharedWorker per origin, but every tab opens its
+// own shell instance against it — so leftover tabs are extra wasm instances
+// competing for the same visor, which is a good way to mistake test wreckage
+// for a bug in the code under test.
+func closeOrigin(port, pageURL string) (int, error) {
+	u, err := url.Parse(pageURL)
+	if err != nil {
+		return 0, err
+	}
+	origin := u.Host
+	if origin == "" {
+		return 0, fmt.Errorf("no host in %q", pageURL)
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		"http://localhost:"+port+"/json/list", nil)
+	if err != nil {
+		return 0, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	var tabs []struct {
+		ID   string `json:"id"`
+		Type string `json:"type"`
+		URL  string `json:"url"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tabs); err != nil {
+		return 0, err
+	}
+	closed := 0
+	for _, t := range tabs {
+		if t.Type != "page" || !strings.Contains(t.URL, origin) {
+			continue
+		}
+		if err := closeTab(port, t.ID); err == nil {
+			closed++
+		}
+	}
+	if closed > 0 {
+		time.Sleep(2 * time.Second) // let the shared worker settle
+	}
+	return closed, nil
 }
 
 type tabInfo struct {
