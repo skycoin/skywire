@@ -55,7 +55,7 @@ export class TransportListComponent implements OnDestroy {
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
-  dataSource!: Transport[];
+  dataSource!: Transport[] | null;
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -254,7 +254,7 @@ export class TransportListComponent implements OnDestroy {
     // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
-        let selectedPage = Number.parseInt(params.get('page'), 10);
+        let selectedPage = Number.parseInt(params.get('page')!, 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
           selectedPage = 1;
         }
@@ -385,9 +385,9 @@ export class TransportListComponent implements OnDestroy {
     if (!this.addForm.valid || this.addBusy) {
       return;
     }
-    const newTransportPk: string = this.addForm.get('remoteKey').value;
-    const newTransportType: string = this.addForm.get('type').value;
-    const newTransportLabel: string = this.addForm.get('label').value;
+    const newTransportPk: string = this.addForm.get('remoteKey')!.value;
+    const newTransportType: string = this.addForm.get('type')!.value;
+    const newTransportLabel: string = this.addForm.get('label')!.value;
 
     this.addBusy = true;
     if (this.addingPersistent) {
@@ -493,7 +493,7 @@ export class TransportListComponent implements OnDestroy {
       let defaultIndex = types.findIndex(t => t.toLowerCase() === 'dmsg');
       defaultIndex = defaultIndex !== -1 ? defaultIndex : 0;
       this.addAvailableTypes = types;
-      this.addForm.get('type').setValue(types[defaultIndex] || '');
+      this.addForm.get('type')!.setValue(types[defaultIndex] || '');
       this.cdr.markForCheck();
     }, (err: any) => {
       err = processServiceError(err);

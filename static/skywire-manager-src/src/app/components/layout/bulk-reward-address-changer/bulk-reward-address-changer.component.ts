@@ -161,7 +161,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
       return;
     }
 
-    const address = this.form.get('address').value as string;
+    const address = this.form.get('address')!.value as string;
 
     if (address) {
       this.startProcessing();
@@ -195,8 +195,8 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
     });
     this.nodesToEdit = newList;
 
-    const newAddress = this.form.get('address').value;
-    this.form.get('address').disable();
+    const newAddress = this.form.get('address')!.value;
+    this.form.get('address')!.disable();
 
     this.currentlyProcessed = 0;
 

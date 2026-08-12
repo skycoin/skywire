@@ -82,9 +82,9 @@ export class AddVpnServerComponent implements OnInit {
     }
 
     const serverData: ManualVpnServerData = {
-      pk: this.form.get('pk').value,
-      name: this.form.get('name').value,
-      note: this.form.get('note').value,
+      pk: this.form.get('pk')!.value,
+      name: this.form.get('name')!.value,
+      note: this.form.get('note')!.value,
     };
 
     VpnHelpers.processServerChange(

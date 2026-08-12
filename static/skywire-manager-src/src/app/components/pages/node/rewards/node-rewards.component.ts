@@ -143,7 +143,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   toggleRewardForm() {
     this.showRewardForm = !this.showRewardForm;
     if (this.showRewardForm) {
-      this.rewardForm.get('address').setValue(this.rewardsAddress || '');
+      this.rewardForm.get('address')!.setValue(this.rewardsAddress || '');
     }
   }
 
@@ -151,7 +151,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     if (!this.rewardForm.valid) {
  return; 
 }
-    const newAddr = (this.rewardForm.get('address').value || '').trim();
+    const newAddr = (this.rewardForm.get('address')!.value || '').trim();
     const op = newAddr
       ? this.nodeService.setRewardsAddress(this.pk, newAddr)
       : this.nodeService.deleteRewardsAddress(this.pk);

@@ -435,10 +435,10 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
   private filter() {
     this.filteredLogEntries = [];
 
-    const minimumimportance = this.levelDetails.get(this.currentMinimumLevel).importance;
+    const minimumimportance = this.levelDetails.get(this.currentMinimumLevel)!.importance;
 
     this.logEntries.forEach(e => {
-      const importance = this.levelDetails.get(e.level).importance;
+      const importance = this.levelDetails.get(e.level)!.importance;
       if (minimumimportance <= importance) {
         this.filteredLogEntries.push(e);
       }

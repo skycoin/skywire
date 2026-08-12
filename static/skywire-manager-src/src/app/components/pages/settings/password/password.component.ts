@@ -86,7 +86,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
       this.workingState.next(true);
 
       if (!this.forInitialConfig) {
-        this.subscription = this.authService.changePassword(this.form.get('oldPassword').value, this.form.get('newPassword').value)
+        this.subscription = this.authService.changePassword(this.form.get('oldPassword')!.value, this.form.get('newPassword')!.value)
           .subscribe(
             () => {
               this.router.navigate(['nodes']);
@@ -103,7 +103,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
             },
           );
       } else {
-        this.subscription = this.authService.initialConfig(this.form.get('newPassword').value).subscribe(
+        this.subscription = this.authService.initialConfig(this.form.get('newPassword')!.value).subscribe(
           () => {
             this.dialog.closeAll();
             this.snackbarService.showDone('settings.password.initial-config.done');
@@ -126,7 +126,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
 
   private validatePasswords() {
     if (this.form) {
-      return this.form.get('newPassword').value !== this.form.get('newPasswordConfirmation').value
+      return this.form.get('newPassword')!.value !== this.form.get('newPasswordConfirmation')!.value
         ? { invalid: true } : null;
     } else {
       return null;
