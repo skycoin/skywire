@@ -114,22 +114,41 @@ func installConsoleCapture() {
 			}
 		}
 
+		// The installed console.* must not re-enter Go. Go's own stdout goes
+		// out through console.log (wasm_exec.js), so a sink written in Go is
+		// reachable from inside a wasm-initiated call — and anything it logs,
+		// a panic above all, calls it again. That recursion climbs the JS
+		// stack until "Maximum call stack size exceeded", after which the
+		// module is corrupt and everything is an out-of-bounds access.
+		//
+		// The guard therefore lives in JS, outside the module: while the sink
+		// is running, console.* is the original and nothing re-enters.
+		guard := js.Global().Call("eval", `(function (orig, sink) {
+			var inside = false;
+			return function () {
+				if (inside) { return orig.apply(console, arguments); }
+				inside = true;
+				try { sink.apply(null, arguments); } catch (e) { /* never let the sink break logging */ }
+				inside = false;
+				return orig.apply(console, arguments);
+			};
+		})`)
+
 		for _, level := range []string{"log", "info", "warn", "error", "debug"} {
 			lvl := level
 			orig := console.Get(lvl)
-			fn := js.FuncOf(func(_ js.Value, args []js.Value) any {
+			sink := js.FuncOf(func(_ js.Value, args []js.Value) any {
 				appendLog(logEntry{at: time.Now(), level: lvl, text: joinArgs(args)})
-				if orig.Type() == js.TypeFunction {
-					ifaces := make([]any, len(args))
-					for i, a := range args {
-						ifaces[i] = a
-					}
-					orig.Invoke(ifaces...)
-				}
 				return nil
 			})
-			logFuncs = append(logFuncs, fn)
-			console.Set(lvl, fn)
+			logFuncs = append(logFuncs, sink)
+			if guard.Type() == js.TypeFunction && orig.Type() == js.TypeFunction {
+				console.Set(lvl, guard.Invoke(orig, sink))
+				continue
+			}
+			// No eval (a strict CSP, say): capture without chaining rather
+			// than install something that could recurse.
+			console.Set(lvl, sink)
 		}
 
 		win := js.Global().Get("window")
