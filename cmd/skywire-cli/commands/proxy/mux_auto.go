@@ -64,11 +64,11 @@ func init() {
 	muxAutoCmd.Flags().DurationVarP(&muxAutoWatch, "watch", "w", 0, "re-evaluate every interval (e.g. 5s); 0 = decide once and exit")
 	muxAutoCmd.Flags().BoolVar(&muxAutoDry, "dry-run", false, "print the prune/grow decision without acting")
 	muxAutoCmd.Flags().IntVar(&muxAutoMinHops, "min-hops", 2, "hop-count floor for legs added when growing toward the preset (>=2 keeps grown legs multihop)")
-	RootCmd.AddCommand(muxAutoCmd)
+	addMuxSub(muxAutoCmd, "mux-auto")
 }
 
 var muxAutoCmd = &cobra.Command{
-	Use:   "mux-auto <fastest|balanced|resilient>",
+	Use:   "auto <fastest|balanced|resilient>",
 	Short: "Adapt a proxy session's mux legs to a preset off live latency",
 	Long: `Adaptive control loop: read the live per-leg latency (mux-info) and
 prune a running proxy's mux toward the preset's intent. The primary route
