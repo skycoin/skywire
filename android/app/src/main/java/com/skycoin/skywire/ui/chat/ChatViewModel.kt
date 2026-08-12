@@ -3,6 +3,7 @@ package com.skycoin.skywire.ui.chat
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.skycoin.skywire.R
 import com.skycoin.skywire.api.AppState
 import com.skycoin.skywire.api.SkychatApi
 import com.skycoin.skywire.api.VisorApi
@@ -138,7 +139,11 @@ class ChatViewModel(app: Application) : AndroidViewModel(app) {
             delay(READY_INTERVAL_MS)
         }
         mutable.update {
-            it.copy(starting = false, error = startError ?: "SkyChat did not answer on $url")
+            it.copy(
+                starting = false,
+                error = startError
+                    ?: getApplication<Application>().getString(R.string.chat_error_no_answer, url),
+            )
         }
     }
 

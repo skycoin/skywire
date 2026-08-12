@@ -8,6 +8,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -54,6 +56,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
+import com.skycoin.skywire.core.AppLanguage
 import com.skycoin.skywire.core.ThemeMode
 import com.skycoin.skywire.ui.components.Biometrics
 import com.skycoin.skywire.ui.components.InfoRow
@@ -210,6 +213,15 @@ fun SettingsScreen(
                 )
             }
             item { ThemeCard(state, viewModel::setThemeMode) }
+            item {
+                LanguageCard(state) { language ->
+                    // Below API 33 nothing applies the choice on its own — the
+                    // Activity has to be built again on it. See AppLocale.
+                    if (viewModel.setLanguage(language)) {
+                        context.findFragmentActivity()?.recreate()
+                    }
+                }
+            }
             item { DiagnosticsRow(onOpenDiagnostics) }
             item { AboutCard(state) }
         }
@@ -678,6 +690,49 @@ private fun themeLabel(mode: ThemeMode): Int = when (mode) {
     ThemeMode.SYSTEM -> R.string.settings_theme_system
     ThemeMode.LIGHT -> R.string.settings_theme_light
     ThemeMode.DARK -> R.string.settings_theme_dark
+}
+
+/**
+ * The interface language, built from [AppLanguage.entries] so that shipping a
+ * translation is a resource folder and an enum constant — this screen needs no
+ * edit for the second one.
+ *
+ * Each language is labelled in its own script. The user most likely to come
+ * looking is the one who cannot read the language currently on screen.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LanguageCard(state: SettingsUiState, onPick: (AppLanguage) -> Unit) {
+    SectionCard {
+        Text(stringResource(R.string.settings_language), style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.settings_language_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        // Wrapping: language names are as long as their own script makes them,
+        // and the list grows with every translation added.
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AppLanguage.entries.forEach { language ->
+                FilterChip(
+                    selected = state.language == language,
+                    onClick = { onPick(language) },
+                    label = { Text(stringResource(languageLabel(language))) },
+                )
+            }
+        }
+    }
+}
+
+private fun languageLabel(language: AppLanguage): Int = when (language) {
+    AppLanguage.SYSTEM -> R.string.settings_language_system
+    AppLanguage.ENGLISH -> R.string.settings_language_en
+    AppLanguage.CHINESE_SIMPLIFIED -> R.string.settings_language_zh_cn
 }
 
 @Composable

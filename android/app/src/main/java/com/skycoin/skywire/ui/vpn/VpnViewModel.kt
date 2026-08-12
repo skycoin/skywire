@@ -16,6 +16,7 @@ import com.skycoin.skywire.core.SkyVpnService
 import com.skycoin.skywire.core.TransportPreference
 import com.skycoin.skywire.core.VpnTunnel
 import com.skycoin.skywire.core.VpnTunnelState
+import com.skycoin.skywire.ui.components.AppStatus
 import com.skycoin.skywire.ui.components.SavedServer
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -103,7 +104,7 @@ data class VpnUiState(
     /** The tunnel is up and carrying: the visor says so and traffic is in it. */
     val carrying: Boolean
         get() = running && tunnel.established &&
-            app?.detailedStatus != VpnStatus.RECONNECTING
+            app?.detailedStatus != AppStatus.RECONNECTING
 
     /**
      * The interface is in place with nothing carrying traffic through it —

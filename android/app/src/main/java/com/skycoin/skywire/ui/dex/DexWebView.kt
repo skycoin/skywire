@@ -15,6 +15,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.core.net.toUri
+import com.skycoin.skywire.R
 import com.skycoin.skywire.core.SkydexProfile
 import org.json.JSONObject
 
@@ -99,7 +100,7 @@ internal object DexWebView {
             // wrong; proceeding again would spin forever.
             if (secret == null || authAttempts++ > 0) {
                 handler.cancel()
-                onError("SkyDEX rejected the stored password")
+                onError(view.context.getString(R.string.dex_error_password))
                 return
             }
             handler.proceed(SkydexProfile.USER, secret)

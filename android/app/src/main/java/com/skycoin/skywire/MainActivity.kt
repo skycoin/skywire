@@ -1,5 +1,6 @@
 package com.skycoin.skywire
 
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -13,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
+import com.skycoin.skywire.core.AppLocale
 import com.skycoin.skywire.core.AppLock
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppVisibility
@@ -39,6 +41,15 @@ import com.skycoin.skywire.ui.theme.SkywireTheme
  * one. Handling it is [DeepLinks]' job; taking it is this one's.
  */
 class MainActivity : FragmentActivity() {
+
+    /**
+     * The chosen interface language, applied before a single resource is read.
+     * Below API 33 this is the only thing that applies it — see [AppLocale].
+     */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         val splash = installSplashScreen()
         super.onCreate(savedInstanceState)

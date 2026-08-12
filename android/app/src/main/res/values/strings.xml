@@ -169,6 +169,30 @@
     <!-- Shared server-list pieces (SkySOCKS, SkyVPN) -->
     <string name="server_location_unknown">Unknown location</string>
 
+    <!-- Durations, rendered a part at a time so a language that writes its
+         units out can. The separator is a resource for the same reason:
+         "2d 3h 4m" in English, "2天3小时4分" in Chinese, which sets them solid. -->
+    <string name="unit_days">%1$sd</string>
+    <string name="unit_hours">%1$sh</string>
+    <string name="unit_minutes">%1$sm</string>
+    <string name="unit_seconds">%1$ss</string>
+    <string name="unit_separator">" "</string>
+
+    <!-- The visor's own word for what an app is doing (detailed_status) and
+         for how its services are (services_health). The English is what the
+         API sends, character for character — anything these lists do not know
+         is shown exactly as it arrived. See ui/components/VisorWords.kt. -->
+    <string name="app_status_starting">Starting</string>
+    <string name="app_status_running">Running</string>
+    <string name="app_status_connecting">Connecting</string>
+    <string name="app_status_reconnecting">Connection failed, reconnecting</string>
+    <string name="app_status_shutting_down">Shutting down</string>
+    <string name="app_status_stopped">Stopped</string>
+    <string name="health_healthy">healthy</string>
+    <string name="health_unhealthy">unhealthy</string>
+    <string name="health_connecting">connecting</string>
+    <string name="health_error">error</string>
+
     <!-- SkyVPN -->
     <string name="vpn_state_connecting">Connecting…</string>
     <string name="vpn_state_error">Connection failed</string>
@@ -223,8 +247,15 @@
     <string name="chat_starting">Starting SkyChat…</string>
     <string name="chat_core_starting">Waiting for the Skywire core to come up…</string>
     <string name="chat_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
+    <string name="chat_error_password">SkyChat rejected the stored password</string>
+    <string name="chat_error_no_answer">SkyChat did not answer on %1$s</string>
     <string name="chat_media_channel_name">SkyChat playback</string>
     <string name="chat_media_channel_description">Play, pause and skip a voice message or clip while it is playing.</string>
+    <string name="chat_media_default_title">Audio</string>
+    <string name="chat_media_back">Back %1$ds</string>
+    <string name="chat_media_pause">Pause</string>
+    <string name="chat_media_play">Play</string>
+    <string name="chat_media_forward">Forward %1$ds</string>
 
     <!-- SkyDEX (native market entry + embedded trading UI) -->
     <string name="dex_market_title">Market</string>
@@ -235,6 +266,10 @@
     <string name="dex_connecting">Reaching the market over Skywire…</string>
     <string name="dex_core_offline">The Skywire core is not running. Start it from the Home tab.</string>
     <string name="dex_core_starting">Waiting for the Skywire core to come up…</string>
+    <string name="dex_error_connect">market connect failed (%1$d)</string>
+    <string name="dex_error_password">SkyDEX rejected the stored password</string>
+    <string name="dex_error_no_answer">SkyDEX did not answer on %1$s</string>
+    <string name="dex_error_invalid_key">That is not a market public key.</string>
 
     <!-- Fleet (opt-in, status-only view of the user's other visors) -->
     <string name="fleet_enable">Enable Fleet</string>
@@ -274,6 +309,17 @@
     <string name="fleet_restart_sent">Restart sent to %1$s. It goes offline and comes back on its own.</string>
 
     <string name="core_restart_failed">The core could not be started again: %1$s</string>
+    <string name="core_service_error">The core service failed unexpectedly.</string>
+    <string name="core_spawn_failed">The visor could not be started: %1$s</string>
+    <string name="core_seal_readback_failed">The sealed config could not be read back, so the unencrypted one is left in place.</string>
+    <string name="core_sealed_unreadable">The sealed config cannot be opened.</string>
+    <string name="core_sealed_key_gone">The sealed config cannot be opened — this phone’s keystore key is gone (a factory reset, or a screen lock that was removed and re-added). The identity in it is unrecoverable; a new one can be generated.</string>
+    <string name="core_config_failed">The config could not be generated.</string>
+    <string name="core_config_unreadable">The config file cannot be read (%1$s) — clearing this app’s data regenerates it.</string>
+    <string name="core_config_regen_failed">The config could not be regenerated (exit %1$d):\n%2$s</string>
+    <string name="core_config_gen_timed_out">The config could not be generated — it timed out (exit %1$d):\n%2$s</string>
+    <string name="core_config_gen_failed">The config could not be generated (exit %1$d):\n%2$s</string>
+    <string name="core_binary_missing">The Skywire core binary is missing or not executable: %1$s</string>
 
     <!-- App lock -->
     <string name="lock_title">Skywire is locked</string>
@@ -291,6 +337,8 @@
     <string name="settings_sk_hint">Paste the 64-character secret key you want this phone to run as. It is checked by the Skywire core before anything changes.</string>
     <string name="settings_sk_label">Secret key</string>
     <string name="settings_sk_unchanged">That is already this visor’s key — nothing to change.</string>
+    <string name="settings_sk_unreadable">The core could not read that secret key.</string>
+    <string name="settings_sk_invalid">Not a secret key — expected %1$d hex characters.</string>
     <string name="settings_sk_replaced">Identity replaced. The core is starting with the new key.</string>
     <string name="settings_identity_reset">New identity generated. The core is starting with it.</string>
 
@@ -319,6 +367,7 @@
     <string name="settings_export_warning">The file contains this visor’s secret key in plain text. Anyone who reads it can run as this visor. Save it somewhere only you can reach — not a shared drive, not a chat.</string>
     <string name="settings_export_prompt">Export the Skywire config</string>
     <string name="settings_export_done">Config exported.</string>
+    <string name="settings_export_unwritable">The chosen file could not be opened for writing.</string>
 
     <!-- Settings — app lock -->
     <string name="settings_app_lock">App lock</string>
@@ -335,6 +384,14 @@
     <string name="settings_theme_system">System</string>
     <string name="settings_theme_light">Light</string>
     <string name="settings_theme_dark">Dark</string>
+
+    <!-- Interface language. Each language is offered in its own script, so a
+         user who cannot read the current one can still find theirs. -->
+    <string name="settings_language">Language</string>
+    <string name="settings_language_hint">What this app is written in. Logs and whatever the visor itself reports stay in English — they are read next to a desktop’s, and a translated log line is one nobody can search for.</string>
+    <string name="settings_language_system">System</string>
+    <string name="settings_language_en" translatable="false">English</string>
+    <string name="settings_language_zh_cn" translatable="false">简体中文</string>
     <string name="settings_about">About</string>
     <string name="settings_app_version">App version</string>
     <string name="settings_core_version">Core version</string>
@@ -355,6 +412,7 @@
     <string name="diag_export_action">Export all logs</string>
     <string name="diag_exporting">Collecting logs…</string>
     <string name="diag_export_done">Diagnostics exported.</string>
+    <string name="diag_export_unwritable">The chosen file could not be opened for writing.</string>
 
     <string name="diag_level">Core log level</string>
     <string name="diag_level_hint">How much the visor writes. Debug and trace are for reproducing a problem — on a phone they are a lot of writing for a log nobody is reading.</string>
@@ -457,6 +515,11 @@
     <string name="wallet_coin_remove_body">It goes from your coin list. Nothing on the chain changes and no keys are touched — you can add it again with the same details.</string>
     <string name="wallet_coin_remove_blocked_title">%1$s still has wallets</string>
     <string name="wallet_coin_remove_blocked">Remove its wallets first. Deleting a wallet erases its recovery phrase from this phone, so it is a separate decision from tidying this list.</string>
+    <plurals name="wallet_coin_remove_blocked_count">
+        <item quantity="one">Remove its wallet first — deleting a wallet erases its recovery phrase from this phone.</item>
+        <item quantity="other">Remove its %1$d wallets first — deleting a wallet erases its recovery phrase from this phone.</item>
+    </plurals>
+    <string name="wallet_coin_remove_builtin">%1$s is built in and cannot be removed</string>
     <string name="wallet_coin_remove_confirm">Remove</string>
     <string name="wallet_coin_remove_ack">Got it</string>
     <string name="wallet_coin_removed">%1$s removed</string>
@@ -465,8 +528,15 @@
     <string name="wallet_eth_sub">Ethereum mainnet · fees paid in ETH</string>
     <string name="wallet_erc20_sub">%1$s on Ethereum · fees paid in ETH</string>
     <string name="wallet_stale_banner">Node unreachable. Balance and history last updated at %1$s, %2$s ago. Sending is off until the node answers.</string>
+    <plurals name="wallet_stale_age_minutes">
+        <item quantity="one">%1$d minute</item>
+        <item quantity="other">%1$d minutes</item>
+    </plurals>
+    <string name="wallet_stale_age_hours">%1$d h %2$d min</string>
     <string name="wallet_stale_never">Node unreachable. This wallet has not synced yet — balances show once the node answers.</string>
     <string name="wallet_stale_send_note">Send is disabled: no route to the node</string>
+    <string name="wallet_error_no_route">no route to the node</string>
+    <string name="wallet_error_rejected">rejected</string>
     <string name="wallet_receive">Receive</string>
     <string name="wallet_send">Send</string>
     <string name="wallet_recent">Recent activity</string>
@@ -504,6 +574,7 @@
     <string name="wallet_scan_description">Scan a QR code</string>
     <string name="wallet_send_amount">Amount</string>
     <string name="wallet_send_available">Available %1$s %2$s</string>
+    <string name="wallet_send_invalid_amount">enter a valid amount</string>
     <string name="wallet_max">Max</string>
     <string name="wallet_max_note_fiber">Max sends every %1$s. Coin Hours are not sent — a share of them is burned as the fee.</string>
     <string name="wallet_max_note_btc">Max spends every confirmed output and subtracts the miner fee, so the amount moves with the rate.</string>
@@ -569,9 +640,11 @@
     <string name="wallet_tx_date">Date</string>
     <string name="wallet_tx_fee">Fee</string>
     <string name="wallet_tx_confirmations">Confirmations</string>
+    <string name="wallet_tx_confirmations_pending">0 of 1</string>
     <string name="wallet_tx_id">Transaction id</string>
     <string name="wallet_tx_explorer">Open in explorer</string>
     <string name="wallet_tx_explorer_note">Opens %1$s in your browser. The explorer will see this transaction id.</string>
+    <string name="wallet_tx_explorer_fallback">the explorer</string>
     <string name="wallet_fee_hours_value">%1$s Coin Hours</string>
 
     <string name="wallet_wallets_title">Wallets</string>
@@ -608,19 +681,29 @@
     <string name="wallet_add_token_body">Every ERC-20 token lives on Ethereum and differs only in its contract. The decimals must match the contract’s own — 6 for USDT-like tokens, 18 for most — or amounts will read wrong.</string>
     <string name="wallet_add_coin_name">Coin name</string>
     <string name="wallet_add_coin_name_hint">e.g. MDL Talent Hub</string>
+    <string name="wallet_add_coin_name_required">give the coin a name</string>
     <string name="wallet_add_coin_ticker">Ticker</string>
     <string name="wallet_add_coin_ticker_hint">e.g. MDL</string>
+    <string name="wallet_add_coin_ticker_required">give the coin a ticker</string>
     <string name="wallet_add_coin_icon">Icon</string>
     <string name="wallet_add_coin_icon_pick">Choose image</string>
     <string name="wallet_add_coin_icon_clear">Remove</string>
+    <string name="wallet_add_coin_icon_unreadable">that image cannot be read</string>
     <string name="wallet_add_coin_node">Node address</string>
     <string name="wallet_add_coin_node_hint">http://node.example.com:6420</string>
+    <string name="wallet_add_coin_node_invalid">the node address must be a full URL, like http://node.example.com:6420</string>
     <string name="wallet_add_token_contract">Contract address</string>
     <string name="wallet_add_token_contract_hint">0x…</string>
+    <string name="wallet_add_token_contract_invalid">the contract must be a 0x… address (checksummed or all-lowercase)</string>
     <string name="wallet_add_token_decimals">Decimals</string>
     <string name="wallet_add_token_decimals_hint">18</string>
+    <string name="wallet_add_token_decimals_range">decimals must be between 0 and 36</string>
+    <string name="wallet_add_token_decimals_invalid">decimals must be a number — 6 for USDT-like tokens, 18 for most</string>
+    <string name="wallet_add_token_ticker_required">give the token a ticker</string>
+    <string name="wallet_add_token_name_required">give the token a name</string>
     <string name="wallet_add_coin_save">Add coin</string>
     <string name="wallet_seed_unavailable">The phrase cannot be read — the phone’s keystore has changed since this wallet was created.</string>
+    <string name="wallet_seed_invalid">invalid recovery phrase</string>
 
     <!-- Screen help. One ? per tab, in the header, opening a few sentences
          about what the screen is for. The apps that used to carry their own
@@ -652,7 +735,8 @@
     <string name="help_dex_body">Trading against a market maker reached over Skywire rather than over the open internet. The screen is the exchange\u2019s own, running against the market you are connected to.\n\nOrders and balances belong to that market, not to the wallet on the Wallet tab — the two are separate.\n\nLogs for SkyDEX live in Settings \u25b8 Diagnostics.</string>
     <string name="help_fleet_title">About Fleet</string>
     <string name="help_fleet_body">The visors you run on other machines — a desktop, a server, a Skyminer — seen from this phone. It is a window onto them, not a remote control: what arrives is status, and the one action is a restart.\n\nOff by default. Turning it on restarts this phone\u2019s core, because the setting is read once while the visor builds itself.\n\nA visor\u2019s own log is on its card here, since that feed travels from the remote machine; this app\u2019s logs are in Settings \u25b8 Diagnostics. Names you give a visor are kept on this phone and do not travel with it.</string>
-\n    <!-- Battery / Doze. -->
+
+    <!-- Battery / Doze. -->
     <string name="settings_battery">Battery</string>
     <string name="settings_battery_hint">Skywire keeps running in the background, but Android may still pause its network once the screen has been off for a while — messages and calls then arrive when the phone next wakes rather than when they were sent. Allowing Skywire to ignore battery optimisation closes that gap. It costs battery, and the app works either way.</string>
     <string name="settings_battery_exempt_hint">Skywire is allowed to ignore battery optimisation, so its connections stay up while the screen is off. Android\u2019s battery settings can take this back at any time.</string>

@@ -21,6 +21,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import com.skycoin.skywire.R
 import com.skycoin.skywire.core.SkychatProfile
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -126,7 +127,7 @@ internal object ChatWebView {
             // wrong; proceeding again would spin forever.
             if (secret == null || authAttempts++ > 0) {
                 handler.cancel()
-                onError("SkyChat rejected the stored password")
+                onError(view.context.getString(R.string.chat_error_password))
                 return
             }
             handler.proceed(SkychatProfile.USER, secret)
