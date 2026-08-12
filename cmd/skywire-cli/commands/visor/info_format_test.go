@@ -7,6 +7,7 @@
 package clivisor
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -134,4 +135,53 @@ func TestDmsgLatencyUnmeasured(t *testing.T) {
 	if got := dmsgLatency(measured); got != "8ms" {
 		t.Errorf("measured: got %q, want 8ms", got)
 	}
+}
+
+// The point of ARSelfRegistration.Queried: "asked and not registered" and
+// "never asked" must not render the same. Only the first is an answer.
+func TestRenderARSection(t *testing.T) {
+	stcpr := visor.ARSelfEntry{Type: "stcpr", RemoteAddr: "1.2.3.4:7777"}
+	wt := visor.ARSelfEntry{
+		Type:       "wt",
+		RemoteAddr: "1.2.3.4:7773",
+		CertHash:   "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+	}
+
+	t.Run("modern visor, WT checked and unregistered, says so", func(t *testing.T) {
+		got := renderARSection(&visor.ARSelfRegistration{
+			Entries: []visor.ARSelfEntry{stcpr},
+			Queried: []string{"stcpr", "sudph", "wt"},
+		})
+		for _, want := range []string{"SUDPH  (not registered)", "WT     (not registered)"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("missing %q in:\n%s", want, got)
+			}
+		}
+	})
+
+	t.Run("old visor reports no Queried, so WT is not mentioned", func(t *testing.T) {
+		got := renderARSection(&visor.ARSelfRegistration{
+			Entries: []visor.ARSelfEntry{stcpr},
+		})
+		if strings.Contains(got, "WT") || strings.Contains(got, "not registered") {
+			t.Errorf("claimed something about WT from a visor that never mentioned it:\n%s", got)
+		}
+	})
+
+	t.Run("WT registration shows the cert hash abbreviated", func(t *testing.T) {
+		got := renderARSection(&visor.ARSelfRegistration{
+			Entries: []visor.ARSelfEntry{wt},
+			Queried: []string{"wt"},
+		})
+		if !strings.Contains(got, "(cert 9f86d081…b0f00a08)") {
+			t.Errorf("cert hash not rendered:\n%s", got)
+		}
+	})
+
+	t.Run("nothing registered stays a single line", func(t *testing.T) {
+		got := renderARSection(&visor.ARSelfRegistration{Queried: []string{"stcpr", "wt"}})
+		if got != "AR Registration: (none)\n" {
+			t.Errorf("got %q", got)
+		}
+	})
 }

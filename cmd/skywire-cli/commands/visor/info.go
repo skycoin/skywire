@@ -836,22 +836,7 @@ func buildSummaryMessageWithData(rpcClient visor.API) (string, *visor.Summary, *
 	var arSelf *visor.ARSelfRegistration
 	if reg, regErr := rpcClient.ARSelfInfo(); regErr == nil {
 		arSelf = reg
-		if reg != nil && len(reg.Entries) > 0 {
-			msg += "AR Registration:\n"
-			for _, e := range reg.Entries {
-				addr := formatARAddr(e)
-				// The WT certificate hash is what a browser has to pin to
-				// dial this visor, so it belongs beside the endpoint it
-				// applies to. Abbreviated: it is 64 hex characters, and the
-				// full value is in --json for anyone who needs to paste it.
-				if e.CertHash != "" {
-					addr += fmt.Sprintf(" (cert %s)", abbrevHash(e.CertHash))
-				}
-				msg += fmt.Sprintf("  %-6s %s\n", strings.ToUpper(e.Type), addr)
-			}
-		} else {
-			msg += "AR Registration: (none)\n"
-		}
+		msg += renderARSection(reg)
 	}
 
 	// Hypervisor section: (a) whether this visor serves the
@@ -918,6 +903,39 @@ func dmsgLatency(summary *visor.Summary) string {
 		return ""
 	}
 	return summary.DmsgStats.RoundTrip.String()
+}
+
+// renderARSection renders the visor's own AR registration.
+//
+// Split out from the summary so the distinction it exists to draw can be
+// tested: a transport type the visor CHECKED and is not registered for is
+// reported as such, while a type it never mentioned produces no line at all.
+// Only the visor knows which of those it means, and an older one — reached
+// over --via or --rpc, since locally the CLI and the visor are one binary —
+// reports no Queried list, so its silence must stay silent here.
+func renderARSection(reg *visor.ARSelfRegistration) string {
+	if reg == nil || len(reg.Entries) == 0 {
+		return "AR Registration: (none)\n"
+	}
+	msg := "AR Registration:\n"
+	have := make(map[string]bool, len(reg.Entries))
+	for _, e := range reg.Entries {
+		have[e.Type] = true
+		addr := formatARAddr(e)
+		// The WT certificate hash is what a browser has to pin to dial this
+		// visor, so it belongs beside the endpoint it applies to. Abbreviated:
+		// it is 64 hex characters, and --json carries the full value.
+		if e.CertHash != "" {
+			addr += fmt.Sprintf(" (cert %s)", abbrevHash(e.CertHash))
+		}
+		msg += fmt.Sprintf("  %-6s %s\n", strings.ToUpper(e.Type), addr)
+	}
+	for _, tpType := range reg.Queried {
+		if !have[tpType] {
+			msg += fmt.Sprintf("  %-6s (not registered)\n", strings.ToUpper(tpType))
+		}
+	}
+	return msg
 }
 
 // abbrevHash shortens a hex digest for a summary line, keeping enough of both

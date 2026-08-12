@@ -82,6 +82,21 @@ type ARSelfEntry struct {
 // Empty when the visor has not (yet) bound any transport with AR.
 type ARSelfRegistration struct {
 	Entries []ARSelfEntry `json:"entries,omitempty"`
+	// Queried lists the transport types this visor actually checked, whether or
+	// not it is registered for them. It exists so a caller can tell "asked, not
+	// registered" from "never asked".
+	//
+	// Without it the two are the same silence, and the CLI cannot say which it
+	// is looking at: a type missing from Entries might be unregistered, or the
+	// answering visor might predate that type entirely. That is not
+	// hypothetical here — `--via dmsg://<pk>` and `--rpc` point these commands
+	// at other people's visors across the mesh, running whatever version they
+	// are running. Locally it cannot happen, because the CLI and the visor are
+	// the same binary.
+	//
+	// Empty from a visor too old to report it, which is itself the signal:
+	// nothing can be concluded from a type's absence.
+	Queried []string `json:"queried,omitempty"`
 }
 
 // arSelfState caches the visor's own AR-side bind state, populated by a
@@ -140,7 +155,7 @@ func (s *arSelfState) snapshot() map[string]addrresolver.VisorData { //nolint:un
 // ARSelfInfo returns the visor's own cached AR registration. Reads the
 // in-memory cache populated by the refresh loop — no HTTP round-trip.
 func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
-	out := &ARSelfRegistration{}
+	out := &ARSelfRegistration{Queried: append([]string(nil), arSelfTypes...)}
 	for _, tpType := range arSelfTypes {
 		d, ok := v.arSelf.get(tpType)
 		if !ok {
