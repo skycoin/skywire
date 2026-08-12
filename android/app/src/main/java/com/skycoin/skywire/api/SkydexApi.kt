@@ -1,6 +1,7 @@
 package com.skycoin.skywire.api
 
 import android.content.Context
+import com.skycoin.skywire.R
 import com.skycoin.skywire.core.SecretStore
 import com.skycoin.skywire.core.SkydexProfile
 import kotlinx.coroutines.Dispatchers
@@ -45,7 +46,9 @@ data class MarketStatus(
  */
 class SkydexApi private constructor(context: Context) {
 
-    private val secrets = SecretStore(context.applicationContext)
+    private val app = context.applicationContext
+
+    private val secrets = SecretStore(app)
 
     // Loopback, and a server that either answers at once or isn't up yet.
     private val client = OkHttpClient.Builder()
@@ -138,7 +141,7 @@ class SkydexApi private constructor(context: Context) {
         runCatching { json.decodeFromString(ApiError.serializer(), body).error }
             .getOrNull()
             ?.takeIf { it.isNotEmpty() }
-            ?: "market connect failed ($code)"
+            ?: app.getString(R.string.dex_error_connect, code)
 
     @Serializable
     private data class ConnectRequest(@SerialName("market_pk") val marketPk: String)

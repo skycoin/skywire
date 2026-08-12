@@ -70,12 +70,12 @@ import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.countryText
 import com.skycoin.skywire.ui.components.formatBytes
+import com.skycoin.skywire.ui.components.AppStatus
 import com.skycoin.skywire.ui.components.formatDuration
 import com.skycoin.skywire.ui.navigation.Routes
 import com.skycoin.skywire.ui.socks.SocksArgs
 import com.skycoin.skywire.ui.theme.SkyAccents
 import com.skycoin.skywire.ui.theme.SkyHeroGradient
-import com.skycoin.skywire.ui.vpn.VpnStatus
 
 /**
  * The apps hub behind the raised cloud: category chips, a live SkyVPN hero
@@ -313,9 +313,9 @@ private fun VpnHeroCard(
     val on = state.vpnOn
     val starting = on && (
         vpn?.status == AppState.STATUS_STARTING ||
-            vpn?.detailedStatus == VpnStatus.CONNECTING
+            vpn?.detailedStatus == AppStatus.CONNECTING
         )
-    val reconnecting = on && vpn?.detailedStatus == VpnStatus.RECONNECTING
+    val reconnecting = on && vpn?.detailedStatus == AppStatus.RECONNECTING
 
     val statusText = when {
         !on -> stringResource(R.string.state_disconnected)

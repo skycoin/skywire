@@ -99,7 +99,9 @@ class DiagnosticsViewModel(app: Application) : AndroidViewModel(app) {
                 val resolver = getApplication<Application>().contentResolver
                 resolver.openOutputStream(uri, "wt")?.use { out ->
                     DiagnosticsExport.writeTo(getApplication(), out, apps)
-                } ?: error("could not open the chosen file for writing")
+                } ?: error(
+                    getApplication<Application>().getString(R.string.diag_export_unwritable),
+                )
             }
             mutable.update {
                 it.copy(message = getApplication<Application>().getString(R.string.diag_export_done))

@@ -61,6 +61,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -430,10 +431,10 @@ private fun StaleBanner(state: WalletUiState) {
         val at = Instant.ofEpochMilli(snapshot.fetchedAtMs).atZone(ZoneId.systemDefault())
             .format(DateTimeFormatter.ofPattern("HH:mm"))
         val minutes = ((System.currentTimeMillis() - snapshot.fetchedAtMs) / 60000L).coerceAtLeast(1)
-        val age = when {
-            minutes >= 60 -> "${minutes / 60} h ${minutes % 60} min"
-            minutes == 1L -> "1 minute"
-            else -> "$minutes minutes"
+        val age = if (minutes >= 60) {
+            stringResource(R.string.wallet_stale_age_hours, minutes / 60, minutes % 60)
+        } else {
+            pluralStringResource(R.plurals.wallet_stale_age_minutes, minutes.toInt(), minutes.toInt())
         }
         stringResource(R.string.wallet_stale_banner, at, age)
     }

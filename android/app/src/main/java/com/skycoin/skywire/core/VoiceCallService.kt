@@ -35,6 +35,11 @@ import kotlinx.coroutines.cancel
  */
 class VoiceCallService : android.app.Service() {
 
+    /** Its call notification is the user's, so it follows the language. */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var engine: VoiceAudioEngine
 

@@ -41,13 +41,3 @@ object VpnArgs {
     private const val KILLSWITCH = "killswitch"
 }
 
-/**
- * The visor's own wording for what vpn-client is doing, as it reports it in
- * `detailed_status`. Matched as strings because that is what the API sends —
- * the constants live in pkg/app/appserver/app_state.go.
- */
-object VpnStatus {
-    const val RUNNING = "Running"
-    const val CONNECTING = "Connecting"
-    const val RECONNECTING = "Connection failed, reconnecting"
-}

@@ -1,0 +1,735 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Simplified Chinese (zh-rCN). Every translatable string in values/strings.xml
+    has an entry here; the guard is TranslationCatalogTest, which also pins the
+    format placeholders, so a translation that drops a %1$s fails the build
+    rather than the screen that uses it.
+
+    Only the app's own interface is translated. Logs, the visor's own output and
+    the status text the network reports stay in English on purpose — see
+    com.skycoin.skywire.core.AppLanguage.
+-->
+<resources>
+
+    <string name="app_name">Skywire</string>
+
+    <string name="tab_home">首页</string>
+    <string name="tab_chat">聊天</string>
+    <string name="tab_wallet">钱包</string>
+    <string name="tab_settings">设置</string>
+    <string name="tab_hub_description">应用</string>
+
+    <string name="app_skysocks">SkySOCKS</string>
+    <string name="app_skyvpn">SkyVPN</string>
+    <string name="app_skydex">SkyDEX</string>
+    <string name="app_skychat">SkyChat</string>
+    <string name="app_wallet">钱包</string>
+    <string name="app_fleet">集群</string>
+    <string name="app_skymeet">SkyMeet</string>
+
+    <!-- Apps hub -->
+    <string name="hub_subtitle">已安装 %1$d 个 · 运行中 %2$d 个</string>
+    <string name="hub_filter_all">全部</string>
+    <string name="hub_filter_network">网络</string>
+    <string name="hub_filter_finance">金融</string>
+    <string name="hub_filter_social">社交</string>
+    <string name="hub_section_apps">你的应用</string>
+    <string name="hub_socks_sub">SOCKS5 代理</string>
+    <string name="hub_dex_sub">兑换 · SKY / BTC</string>
+    <string name="hub_chat_sub">聊天室与消息</string>
+    <string name="hub_wallet_sub">SKY · Fibercoin · BTC · ETH</string>
+    <string name="hub_fleet_sub">你在别处运行的节点</string>
+    <string name="hub_meet_sub">加密通话</string>
+    <string name="hub_hero_reconnecting">重新连接中</string>
+    <string name="hub_hero_starting">启动中</string>
+    <string name="hub_hero_no_exit">尚未选择出口</string>
+    <string name="hub_stat_down">下行</string>
+    <string name="hub_stat_up">上行</string>
+    <string name="hub_stat_data">流量</string>
+    <string name="hub_vpn_toggle">SkyVPN 开关</string>
+    <plurals name="hub_hops">
+        <item quantity="other">%1$d 跳</item>
+    </plurals>
+    <string name="hub_hops_unknown">跳数 —</string>
+    <string name="hub_killswitch_on">断网保护已开启</string>
+    <string name="hub_killswitch_off">断网保护已关闭</string>
+    <string name="hub_wallet_balance">%1$s SKY</string>
+    <plurals name="hub_fleet_connected">
+        <item quantity="other">已连接 %d 个节点</item>
+    </plurals>
+
+    <!-- Route length (router min_hops) -->
+    <string name="hops_title">路由长度</string>
+    <string name="hops_label_fastest">最快</string>
+    <string name="hops_label_balanced">均衡</string>
+    <string name="hops_label_private">私密</string>
+    <string name="hops_hint_direct">直连出口的路由，也是这个网络能达到的最快方式。出口依然无法读取你的流量，但它会看到发起请求的正是这台设备。</string>
+    <string name="hops_hint_multi">流量经中间节点转发，因此没有任何一个节点能同时看到是谁在请求、请求的又是什么。速度更慢，而且每多一跳，就多一台必须保持在线的机器。</string>
+    <string name="hops_hint_unknown">正在等待节点报告它的路由设置。</string>
+    <string name="hops_label_custom">自定义</string>
+    <string name="hops_custom_more">4+</string>
+    <string name="hops_custom_title">自定义路由长度</string>
+    <string name="hops_custom_hint">节点建立的每条路由，至少都要经过这么多跳。第一跳之后每增加一跳，请求者与请求内容之间的隔离就更强一分，代价是更高的延迟，以及多一台必须保持在线的机器。路由查找最深只搜索 10 跳，因此更大的值永远无法建立路由。</string>
+    <string name="hops_custom_label">最小跳数</string>
+    <string name="hops_custom_invalid">请输入 1 到 10 之间的数字。</string>
+
+    <!-- Network address (what SkyVPN does and does not change) -->
+    <string name="net_addr_title">网络地址</string>
+    <string name="net_addr_device">本设备</string>
+    <string name="net_addr_exit">流量出口</string>
+    <string name="net_addr_exit_none">不经过 SkyVPN</string>
+    <string name="net_addr_exit_unknown">出口位置未知</string>
+    <string name="net_addr_waiting">正在等待节点…</string>
+    <string name="net_addr_carrier_nat">运营商共享地址</string>
+    <string name="net_addr_unknown">无法被发现</string>
+    <string name="net_addr_hint">连接 SkyVPN 后，本机地址不会改变：隧道由本应用承载，它自身的流量必须留在隧道之外。改变的是其他应用的流量从哪里离开网络，也就是上面的出口。</string>
+    <string name="hub_exit_prefix">出口 %1$s</string>
+
+    <string name="coming_soon">敬请期待</string>
+    <string name="connect">连接</string>
+    <string name="disconnect">断开</string>
+    <string name="back">返回</string>
+    <string name="save">保存</string>
+    <string name="cancel">取消</string>
+
+    <!-- Core service / notification -->
+    <string name="core_channel_name">Skywire 核心</string>
+    <string name="core_channel_description">在 Skywire 节点运行期间显示。</string>
+    <string name="core_notification_title">Skywire 正在运行</string>
+    <string name="core_notification_starting">正在启动节点…</string>
+    <string name="core_notification_running">已连接到 Skywire 网络。</string>
+    <string name="core_notification_restarting">节点已崩溃，正在重启（第 %1$d 次尝试）。</string>
+
+    <!-- Voice calls -->
+    <string name="call_channel_incoming">来电</string>
+    <string name="call_channel_ongoing">通话中</string>
+    <string name="call_incoming_title">来电</string>
+    <string name="call_dialing">正在呼叫…</string>
+    <string name="call_answer">接听</string>
+    <string name="call_decline">拒接</string>
+    <string name="call_ongoing_title">通话中</string>
+    <string name="call_ongoing_text">SkyChat 正在使用麦克风。</string>
+    <string name="call_mic_rationale">允许使用麦克风，对方才能听到你的声音。</string>
+    <string name="call_hang_up">挂断</string>
+    <string name="call_mute">静音</string>
+    <string name="call_unmute">取消静音</string>
+    <string name="call_speaker">免提</string>
+    <string name="call_missed_title">未接来电</string>
+
+    <!-- Home / Connect -->
+    <string name="state_disconnected">未连接</string>
+    <string name="state_starting">正在启动…</string>
+    <string name="state_connected">已连接</string>
+    <string name="state_stopping">正在停止…</string>
+    <string name="state_restarting">正在重启（第 %1$d 次尝试）…</string>
+    <string name="home_hint_disconnected">点按“连接”即可在本机启动 Skywire 核心。</string>
+    <string name="home_hint_starting">正在加入 Skywire 网络。首次连接可能需要几分钟。</string>
+    <string name="home_error_start">核心未能启动。请查看进程日志。</string>
+    <string name="visor_info_title">节点</string>
+    <string name="visor_public_key">公钥</string>
+    <string name="visor_version">版本</string>
+    <string name="visor_uptime">运行时长</string>
+    <string name="visor_show_more">更多信息</string>
+    <string name="visor_show_less">收起信息</string>
+    <string name="visor_transports">传输通道</string>
+    <string name="visor_transports_total">总计</string>
+    <string name="visor_dmsg_servers">DMSG 服务器</string>
+    <string name="visor_service_health">服务状态</string>
+    <string name="copied_to_clipboard">已复制</string>
+    <string name="view_logs">查看日志</string>
+
+    <!-- Log viewer -->
+    <string name="logs_title">日志</string>
+    <string name="logs_source_core">核心</string>
+    <string name="logs_source_process">进程</string>
+    <string name="logs_follow">跟随</string>
+    <string name="logs_pause">暂停</string>
+    <string name="logs_share">分享</string>
+    <string name="logs_search_hint">筛选…</string>
+    <string name="logs_empty">暂无日志。</string>
+    <string name="logs_loading">正在获取日志…</string>
+    <string name="logs_dropped">丢失 %1$d 行（缓冲区已覆盖）</string>
+    <string name="logs_api_down">核心 API 无法访问，无法显示新内容。即使节点无法启动，“进程”来源仍然可用。</string>
+
+    <!-- SkySOCKS -->
+    <string name="socks_state_connecting">正在连接…</string>
+    <string name="socks_state_error">连接失败</string>
+    <string name="socks_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
+    <string name="socks_core_starting">正在等待 Skywire 核心启动…</string>
+    <string name="socks_server">服务器</string>
+    <string name="socks_latency">延迟</string>
+    <string name="socks_transferred">传输量</string>
+    <string name="socks_reconnect">重新连接</string>
+    <string name="socks_pick_server">在下方选择一台服务器进行连接。</string>
+    <string name="socks_proxy_title">供其他应用使用的 SOCKS5</string>
+    <string name="socks_proxy_hint">SkySOCKS 连接期间，把支持代理的应用或浏览器指向该地址即可。整机流量路由将随 SkyVPN 提供。</string>
+    <string name="socks_change_port">更改端口</string>
+    <string name="socks_port_title">监听端口</string>
+    <string name="socks_port_hint">SOCKS5 监听始终绑定在 127.0.0.1，只有本机上的应用能访问。</string>
+    <string name="socks_port_label">端口</string>
+    <string name="socks_port_invalid">请输入 1024 到 65535 之间的端口。</string>
+    <string name="socks_servers">服务器（%1$d）</string>
+    <string name="socks_search_hint">按公钥、国家或版本搜索</string>
+    <string name="socks_servers_empty">没有匹配的服务器。</string>
+    <string name="socks_servers_none">服务发现未返回任何代理服务器。</string>
+    <string name="socks_retry">重试</string>
+    <string name="socks_refresh">刷新</string>
+
+    <!-- 服务器列表共用部分（SkySOCKS、SkyVPN） -->
+    <string name="server_location_unknown">位置未知</string>
+
+    <!-- 时长单位。中文不加空格，所以分隔符为空 -->
+    <string name="unit_days">%1$s天</string>
+    <string name="unit_hours">%1$s小时</string>
+    <string name="unit_minutes">%1$s分</string>
+    <string name="unit_seconds">%1$s秒</string>
+    <string name="unit_separator"></string>
+
+    <!-- 节点自身报告的应用状态与服务健康状况 -->
+    <string name="app_status_starting">正在启动</string>
+    <string name="app_status_running">运行中</string>
+    <string name="app_status_connecting">正在连接</string>
+    <string name="app_status_reconnecting">连接失败，正在重连</string>
+    <string name="app_status_shutting_down">正在关闭</string>
+    <string name="app_status_stopped">已停止</string>
+    <string name="health_healthy">正常</string>
+    <string name="health_unhealthy">异常</string>
+    <string name="health_connecting">连接中</string>
+    <string name="health_error">错误</string>
+
+    <!-- SkyVPN -->
+    <string name="vpn_state_connecting">正在连接…</string>
+    <string name="vpn_state_error">连接失败</string>
+    <string name="vpn_state_blocked">已被断网保护阻断</string>
+    <string name="vpn_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
+    <string name="vpn_core_starting">正在等待 Skywire 核心启动…</string>
+    <string name="vpn_server">出口</string>
+    <string name="vpn_reconnect">重新连接</string>
+    <string name="vpn_pick_server">在下方选择一个出口，让本机流量经由它转发。</string>
+    <string name="vpn_hint_blocked">隧道已断开，断网保护正在让其他所有应用保持离线。断开连接即可恢复正常网络。</string>
+    <string name="vpn_hint_excluded">Skywire 自身的流量不走隧道——隧道正是由它承载的。</string>
+    <string name="vpn_servers">出口（%1$d）</string>
+    <string name="vpn_servers_empty">没有匹配的出口。</string>
+    <string name="vpn_servers_none">服务发现未返回任何 VPN 服务器。</string>
+    <string name="vpn_search_hint">按公钥、国家或版本搜索</string>
+
+    <string name="vpn_stats_title">本次会话</string>
+    <string name="vpn_stats_ping">延迟</string>
+    <string name="vpn_stats_transferred">传输量</string>
+    <string name="vpn_stats_speed">速度</string>
+    <string name="vpn_stats_session">会话时长</string>
+    <string name="vpn_stats_total">本机累计</string>
+    <string name="vpn_stats_interface">接口地址</string>
+
+    <string name="vpn_killswitch_title">断网保护</string>
+    <string name="vpn_killswitch_hint">隧道断开时保留网络接口，使流量不会绕过它泄漏出去。在隧道恢复之前，其他应用将无法联网。</string>
+    <string name="vpn_killswitch_always_on">“始终开启的 VPN”设置</string>
+    <string name="vpn_killswitch_always_on_hint">若要获得最强的保障——在应用启动前就开始拦截——请在 Android 设置中为 Skywire 打开“始终开启的 VPN”和“阻止不使用 VPN 的连接”。</string>
+
+    <string name="vpn_error_no_consent">Android 尚未授予 VPN 权限。</string>
+    <string name="vpn_error_socket">VPN 服务无法打开其交接套接字：%1$s</string>
+    <string name="vpn_error_consent_denied">要让这台手机通过 Skywire 路由流量，必须授予 VPN 权限。</string>
+    <string name="vpn_error_settings">Android 没有可打开的 VPN 设置页面。</string>
+
+    <!-- 首选传输通道 -->
+    <string name="transport_title">传输通道</string>
+    <string name="transport_change">更改</string>
+    <string name="transport_hint">建立到服务器的路由时优先尝试这一类型，其余类型仍作为备用。</string>
+    <string name="transport_sheet_title">首选传输通道</string>
+    <string name="transport_sheet_hint">Skywire 连接时会先尝试这一类型，无法建立时再回退到其他类型。下次连接时生效。</string>
+    <string name="transport_recommended">移动端推荐</string>
+    <string name="transport_dmsg">DMSG</string>
+    <string name="transport_dmsg_hint">通过 DMSG 服务器中转。在任何运营商 NAT 后面都能用——手机总能建立的连接。</string>
+    <string name="transport_stcpr">STCPR</string>
+    <string name="transport_stcpr_hint">直连服务器的 TCP。可用时最快，但移动网络很少能提供它所需的可达性。</string>
+    <string name="transport_sudph">SUDPH</string>
+    <string name="transport_sudph_hint">带打洞的 UDP 直连。需要 NAT 允许打洞——很多运营商并不允许。</string>
+
+    <!-- SkyChat -->
+    <string name="chat_menu">聊天操作</string>
+    <string name="chat_reload">重新加载</string>
+    <string name="chat_starting">正在启动 SkyChat…</string>
+    <string name="chat_core_starting">正在等待 Skywire 核心启动…</string>
+    <string name="chat_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
+    <string name="chat_error_password">SkyChat 拒绝了已保存的密码。</string>
+    <string name="chat_error_no_answer">SkyChat 未在 %1$s 上响应。</string>
+    <string name="chat_media_channel_name">SkyChat 播放</string>
+    <string name="chat_media_channel_description">语音消息或片段播放期间，可播放、暂停和跳过。</string>
+    <string name="chat_media_default_title">音频</string>
+    <string name="chat_media_back">后退 %1$d 秒</string>
+    <string name="chat_media_pause">暂停</string>
+    <string name="chat_media_play">播放</string>
+    <string name="chat_media_forward">前进 %1$d 秒</string>
+
+    <!-- SkyDEX -->
+    <string name="dex_market_title">市场</string>
+    <string name="dex_market_label">市场公钥</string>
+    <string name="dex_market_hint">要交易的市场。连接后会通过 Skywire 接入该市场，并在下方打开它的交易界面。</string>
+    <string name="dex_market_invalid">市场公钥是以 02 或 03 开头的 66 位十六进制字符。</string>
+    <string name="dex_recents">最近的市场</string>
+    <string name="dex_connecting">正在通过 Skywire 接入市场…</string>
+    <string name="dex_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
+    <string name="dex_core_starting">正在等待 Skywire 核心启动…</string>
+    <string name="dex_error_connect">连接市场失败（%1$d）</string>
+    <string name="dex_error_password">SkyDEX 拒绝了已保存的密码。</string>
+    <string name="dex_error_no_answer">SkyDEX 未在 %1$s 上响应。</string>
+    <string name="dex_error_invalid_key">这不是市场公钥。</string>
+
+    <!-- 集群 -->
+    <string name="fleet_enable">启用集群</string>
+    <string name="fleet_enable_hint">允许你自己的节点通过 DMSG 连到这台手机，并在这里上报状态。默认关闭。</string>
+    <string name="fleet_core_restarting">正在重启 Skywire 核心以使更改生效…</string>
+    <string name="fleet_confirm_on_title">打开集群？</string>
+    <string name="fleet_confirm_off_title">关闭集群？</string>
+    <string name="fleet_confirm_restart_body">Skywire 核心只在启动时读取该设置，因此必须重启。任何 SkySOCKS 或 SkyVPN 连接都会中断，需要重新连接。</string>
+    <string name="fleet_confirm_restart_action">重启核心</string>
+
+    <string name="fleet_off_title">在这里看你的其他节点</string>
+    <string name="fleet_off_body">集群会列出你在别处运行的节点——每个是否在线、正在运行什么、已运行多久。你可以重启其中一个。除此之外没有别的：不涉及传输通道、应用和设置。</string>
+    <string name="fleet_off_reachable">打开后，这台手机会作为状态端点通过 DMSG 变得可达，那些节点便可连入。只有已经带有这台手机公钥的节点才能连接——而且它们依然无法控制这里的任何东西。</string>
+
+    <string name="fleet_add_title">添加节点</string>
+    <string name="fleet_add_body">在另一台机器上，把这台手机的公钥加入该节点的配置：</string>
+    <string name="fleet_this_phone">这台手机</string>
+    <string name="fleet_add_pk_pending">正在等待核心上报这台手机的公钥…</string>
+    <string name="fleet_add_command">skywire cli config update hv --add-pks %1$s</string>
+    <string name="fleet_add_tap_to_copy">点按即可复制。</string>
+    <string name="fleet_add_then_restart">在该节点的 skywire-config.json 所在位置运行这条命令，然后重启该节点。它连上后就会出现在列表中。</string>
+
+    <string name="fleet_core_offline">Skywire 核心未运行。请从“首页”启动。</string>
+    <string name="fleet_core_starting">正在等待 Skywire 核心启动…</string>
+    <string name="fleet_visors">节点（%1$d）</string>
+    <string name="fleet_visors_none">还没有节点连接。点按上方的 ? 查看如何添加。</string>
+    <string name="fleet_refresh">刷新</string>
+    <string name="fleet_state_offline">离线</string>
+    <string name="fleet_health">健康状况</string>
+    <string name="fleet_health_unknown">未知</string>
+    <string name="fleet_last_seen">上次响应在 %1$s 前，以上都是那时的数据</string>
+    <string name="fleet_restart">重启</string>
+    <string name="fleet_rename">为此节点命名</string>
+    <string name="fleet_rename_label">名称</string>
+    <string name="fleet_rename_hint">给 %1$s 起个名字，方便你分辨是哪台机器。名称只保存在本手机，不会写入该节点。清空输入框即可删除。</string>
+    <string name="fleet_restart_confirm">要重启 %1$s 吗？它会关闭正在运行的一切，重新读取配置后再启动——离线几秒，经由它路由的连接都会断开。</string>
+    <string name="fleet_restart_sent">已向 %1$s 发送重启指令。它会先离线，然后自行恢复。</string>
+
+    <string name="core_restart_failed">核心无法重新启动：%1$s</string>
+    <string name="core_service_error">核心服务意外出错。</string>
+    <string name="core_spawn_failed">节点无法启动：%1$s</string>
+    <string name="core_seal_readback_failed">已加密的配置无法读回，因此保留了未加密的配置。</string>
+    <string name="core_sealed_unreadable">无法打开已加密的配置。</string>
+    <string name="core_sealed_key_gone">无法打开已加密的配置——这部手机的密钥库密钥已经不在了（可能是恢复出厂设置，或者锁屏密码被删除后又重新设置）。其中的身份无法恢复，但可以生成一个新的身份。</string>
+    <string name="core_config_failed">无法生成配置。</string>
+    <string name="core_config_unreadable">无法读取配置文件（%1$s）——清除本应用的数据可重新生成。</string>
+    <string name="core_config_regen_failed">无法重新生成配置（退出码 %1$d）：\n%2$s</string>
+    <string name="core_config_gen_timed_out">无法生成配置——生成超时（退出码 %1$d）：\n%2$s</string>
+    <string name="core_config_gen_failed">无法生成配置（退出码 %1$d）：\n%2$s</string>
+    <string name="core_binary_missing">Skywire 核心程序缺失或不可执行：%1$s</string>
+
+    <!-- 应用锁 -->
+    <string name="lock_title">Skywire 已锁定</string>
+    <string name="lock_unlock">解锁</string>
+    <string name="lock_prompt_title">解锁 Skywire</string>
+    <string name="lock_prompt_subtitle">请使用指纹、面容或锁屏密码。</string>
+
+    <!-- 设置 — 身份 -->
+    <string name="settings_identity">身份</string>
+    <string name="settings_identity_hint">这部手机本身就是一个 Skywire 节点，其他一切都通过它的密钥来寻址。下面两项操作都会终结这个身份。</string>
+    <string name="settings_identity_none">尚无身份。在首页连接一次，就会生成一个。</string>
+    <string name="settings_identity_working">正在以新身份重启 Skywire 核心…</string>
+    <string name="settings_replace_sk">更换私钥</string>
+    <string name="settings_new_config">新建身份</string>
+    <string name="settings_sk_hint">粘贴你想让这部手机使用的 64 字符私钥。Skywire 核心会先校验，之后才会改动任何内容。</string>
+    <string name="settings_sk_label">私钥</string>
+    <string name="settings_sk_unchanged">这已经是本节点的密钥，无需更改。</string>
+    <string name="settings_sk_unreadable">核心无法读取该私钥。</string>
+    <string name="settings_sk_invalid">这不是私钥——应为 %1$d 位十六进制字符。</string>
+    <string name="settings_sk_replaced">身份已更换。核心正在以新密钥启动。</string>
+    <string name="settings_identity_reset">已生成新身份。核心正在以它启动。</string>
+
+    <string name="settings_replace_title">要更换本节点的身份吗？</string>
+    <string name="settings_replace_new_pk">新的公钥将是 %1$s。</string>
+    <string name="settings_replace_final_title">此操作无法撤销</string>
+    <string name="settings_replace_final_body">以上内容会全部抹除，这部手机将变成节点 %1$s。如果日后还想换回来，请确认你在别处保有当前私钥；如果没有，请先导出配置。</string>
+    <string name="settings_replace_action">更换身份</string>
+
+    <string name="settings_new_title">要生成新身份吗？</string>
+    <string name="settings_new_extra">新密钥在这部手机上生成。目前还没有人拥有它，在你再次分享之前，没有人能通过它找到你。</string>
+    <string name="settings_new_final_title">此操作无法撤销</string>
+    <string name="settings_new_final_body">当前密钥会被销毁，而不是存档。如果你没有导出配置，这个身份就永远消失了——发往它的一切也一并消失。</string>
+    <string name="settings_new_action">生成新身份</string>
+
+    <!-- 两个销毁身份的流程共用：实际会失去什么。 -->
+    <string name="settings_identity_loss">这部手机以 %1$s 身份保存的一切都会丢失：聊天记录和联系人、群组，以及其他节点认识它的那个地址。这些事后都无法恢复，也不会转移到新密钥上。</string>
+
+    <string name="settings_continue">继续</string>
+
+    <!-- 设置 — 导出配置 -->
+    <string name="settings_config">配置</string>
+    <string name="settings_config_hint">完整的节点配置，导出为一个由你自己保管的文件。这是把该身份迁移到其他设备或日后找回的唯一途径。</string>
+    <string name="settings_export">导出配置</string>
+    <string name="settings_export_title">要导出配置吗？</string>
+    <string name="settings_export_warning">文件中以明文包含本节点的私钥。任何人读到它，都能以本节点的身份运行。请存放在只有你能访问的地方——不要放共享网盘，也不要发到聊天里。</string>
+    <string name="settings_export_prompt">导出 Skywire 配置</string>
+    <string name="settings_export_done">配置已导出。</string>
+    <string name="settings_export_unwritable">无法打开所选文件进行写入。</string>
+
+    <!-- 设置 — 应用锁 -->
+    <string name="settings_app_lock">应用锁</string>
+    <string name="settings_app_lock_hint">打开 Skywire 时，以及离开约半分钟后再回到应用时，都会要求指纹、面容或锁屏密码。同时会在最近任务列表中隐藏应用内容，并禁止截屏。</string>
+    <string name="settings_app_lock_unavailable">这部手机既没有设置锁屏密码，也没有录入生物识别，因此无从校验。</string>
+    <string name="settings_open_security">打开安全设置</string>
+    <string name="settings_no_security_screen">这部手机没有可打开的安全设置页面。</string>
+    <string name="settings_lock_enable_prompt">开启应用锁</string>
+    <string name="settings_lock_disable_prompt">关闭应用锁</string>
+    <string name="settings_biometric_subtitle">请确认是你本人。</string>
+
+    <!-- 设置 — 外观与关于 -->
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_system">跟随系统</string>
+    <string name="settings_theme_light">浅色</string>
+    <string name="settings_theme_dark">深色</string>
+
+    <!-- 界面语言 -->
+    <string name="settings_language">语言</string>
+    <string name="settings_language_hint">应用界面所用的语言。日志和节点自身报告的内容仍为英文——它们要与桌面端的日志放在一起看，翻译过的日志行没有人能搜到。</string>
+    <string name="settings_language_system">跟随系统</string>
+
+    <string name="settings_about">关于</string>
+    <string name="settings_app_version">应用版本</string>
+    <string name="settings_core_version">核心版本</string>
+
+    <!-- 设置 — 日志与诊断 -->
+    <string name="settings_diagnostics">日志与诊断</string>
+    <string name="settings_diagnostics_hint">查看各个日志来源、一次性导出全部日志，并设置核心的记录量。</string>
+
+    <string name="diag_title">日志与诊断</string>
+    <string name="diag_sources">日志来源</string>
+    <string name="diag_sources_hint">与各页面“日志”按钮打开的是同一个查看器，这里把所有日志集中列出。</string>
+    <string name="diag_source_core_hint">节点自身的运行日志。</string>
+    <string name="diag_source_process_hint">核心进程输出的内容——节点无法启动时，只剩这一份日志可看。</string>
+    <string name="diag_source_app_hint">本应用的日志，由节点保存。</string>
+
+    <string name="diag_export">全部导出</string>
+    <string name="diag_export_hint">把以上所有来源打包成一个 zip，附带设备信息和配置——不含私钥。</string>
+    <string name="diag_export_action">导出全部日志</string>
+    <string name="diag_exporting">正在收集日志…</string>
+    <string name="diag_export_done">诊断信息已导出。</string>
+    <string name="diag_export_unwritable">无法打开所选文件进行写入。</string>
+
+    <string name="diag_level">核心日志级别</string>
+    <string name="diag_level_hint">节点记录多少内容。debug 和 trace 用于复现问题——在手机上会写入大量没人会看的日志。</string>
+    <string name="diag_level_confirm_title">将日志级别设为 %1$s？</string>
+    <string name="diag_level_confirm_body">Skywire 核心只在启动时读取该设置，因此必须重启。所有 SkySOCKS 或 SkyVPN 连接都会中断，需要重新连接。</string>
+
+    <string name="home_placeholder">“连接”将启动 Skywire 核心——即将推出。</string>
+
+    <!-- 钱包 — 原生 SKY / fiber / BTC 钱包。密钥在本设备上创建并保存；
+         只有查询余额、历史记录和广播交易时才会请求网络。 -->
+    <string name="wallet_intro_title">设置你的 %1$s 钱包</string>
+    <string name="wallet_intro_body">密钥在本设备上生成，也只留在本设备上。Skywire 看不到它们，它们也不会被发送到网络。</string>
+    <string name="wallet_intro_create">创建新钱包</string>
+    <string name="wallet_intro_create_sub">生成一组新的助记词</string>
+    <string name="wallet_intro_restore">用助记词恢复</string>
+    <string name="wallet_intro_restore_sub">输入已有的 12 个助记词</string>
+
+    <string name="wallet_seed_title">助记词</string>
+    <string name="wallet_seed_body">按顺序抄下这十二个助记词，并离线保存。拿到它们的人就能花掉你的币。</string>
+    <string name="wallet_seed_secure">本页面已禁止截屏，也没有复制按钮。</string>
+    <string name="wallet_seed_continue">继续</string>
+
+    <string name="wallet_verify_title">确认助记词</string>
+    <string name="wallet_verify_body">从刚抄下的助记词中输入其中三个。全部匹配后钱包即启用。</string>
+    <string name="wallet_verify_word">第 %1$d 个词</string>
+    <string name="wallet_verify_hint">输入该词</string>
+    <string name="wallet_verify_wrong">这不是第 %1$d 个词。请核对你抄下的内容。</string>
+    <string name="wallet_verify_missing">请输入第 %1$d 个词。</string>
+    <string name="wallet_verify_activate">启用钱包</string>
+    <string name="wallet_verify_again">再看一次助记词</string>
+    <string name="wallet_verify_done">钱包已启用</string>
+
+    <string name="wallet_restore_title">恢复钱包</string>
+    <string name="wallet_restore_progress">第 %1$d 个词，共 %2$d 个</string>
+    <string name="wallet_restore_paste">粘贴完整助记词</string>
+    <string name="wallet_restore_pasted">已从剪贴板读取十二个助记词</string>
+    <string name="wallet_restore_hint">下一个词</string>
+    <string name="wallet_restore_wordlist_note">候选词来自设备上的 BIP39 词表。你输入的内容不会发送到任何地方。</string>
+    <string name="wallet_restore_action">恢复钱包</string>
+    <string name="wallet_restore_checksum">这组助记词校验不通过。十二个词中有一个写错了，或者顺序不对。</string>
+    <string name="wallet_restore_short">12 个词只输入了 %1$d 个。助记词必须完整输入，否则无法恢复。</string>
+    <string name="wallet_restore_done">钱包已恢复，正在扫描余额。</string>
+    <string name="wallet_restore_scanning">正在恢复并扫描余额…</string>
+
+    <string name="wallet_coin_chip_description">选择币种</string>
+    <string name="wallet_coins_title">选择币种</string>
+    <string name="wallet_coins_search">在 %1$d 种币种中搜索</string>
+    <!-- 币种类型 -->
+    <string name="wallet_coin_native">Skycoin 主网 · 原生链</string>
+    <string name="wallet_coin_fiber">Fibercoin</string>
+    <string name="wallet_coin_btc">比特币主网</string>
+    <string name="wallet_coin_eth">以太坊主网</string>
+    <string name="wallet_coin_erc20">以太坊上的 ERC-20 代币</string>
+    <!-- VPN 连接尝试日志 -->
+    <string name="vpn_attempt_log">连接详情（%1$d 条事件）</string>
+    <string name="vpn_attempt_log_live">连接详情——收集中…</string>
+    <string name="vpn_attempt_log_empty">节点没有为本次尝试记录任何日志。</string>
+    <string name="vpn_attempt_log_copy">复制详情</string>
+
+    <!-- 自动连接公共节点 -->
+    <string name="hops_hint_needs_autoconnect">当前只能使用 1 跳：经中间节点路由需要与公共节点保持开放的传输通道，而该功能已关闭。在设置中开启“连接公共节点”后即可使用 2 跳或 3 跳。</string>
+
+    <string name="settings_autoconnect">连接公共节点</string>
+    <string name="settings_autoconnect_hint">保持与公共节点之间的传输通道，让网络可以经这部手机路由，也让这部手机可以经它们路由。会消耗电量和移动数据，因此默认关闭。路由长度超过 1 跳时必须开启。</string>
+    <string name="settings_autoconnect_restart">核心下次启动时生效。</string>
+
+    <!-- 远程管理 -->
+    <string name="settings_remote">远程管理</string>
+    <string name="settings_remote_hint">允许另一个节点——你自己桌上的那台——通过网络操作本节点：启动和停止应用、修改路由、读取日志。在授权公钥之前外部无法访问；被授权的公钥拥有完全控制权，因此只应授权你自己的设备。双向都不提供 shell 或文件访问。</string>
+    <string name="settings_remote_restart">授权或撤销在核心下次启动时生效。</string>
+    <string name="settings_remote_grant">授权访问…</string>
+    <string name="settings_remote_grant_confirm">授权</string>
+    <string name="settings_remote_revoke">撤销</string>
+    <string name="settings_remote_dialog_title">授权远程管理</string>
+    <string name="settings_remote_dialog_hint">粘贴控制端节点的公钥——在那台机器上运行“skywire cli visor pk”即可打印出来。核心下次启动后，那台机器将获得本节点的完全控制权，同时这部手机会出现在它的 hypervisor 列表中。</string>
+    <string name="settings_remote_label">公钥</string>
+    <string name="settings_remote_invalid">这不是节点公钥——应为 66 位十六进制字符。</string>
+    <string name="settings_remote_granted">已授权访问。核心下次启动时生效。</string>
+    <string name="settings_remote_revoked">已撤销访问。核心下次启动时生效。</string>
+
+    <string name="wallet_coins_add">添加币种或代币</string>
+    <!-- 移除用户添加的币种：只删列表项，不动任何密钥 -->
+    <string name="wallet_coin_remove">移除该币种</string>
+    <string name="wallet_coin_remove_title">移除 %1$s？</string>
+    <string name="wallet_coin_remove_body">它只会从你的币种列表中消失。链上不会有任何变化，也不会动到任何密钥——你可以用相同的信息重新添加。</string>
+    <string name="wallet_coin_remove_blocked_title">%1$s 下仍有钱包</string>
+    <string name="wallet_coin_remove_blocked">请先移除它的钱包。删除钱包会把助记词从这部手机上抹除，所以那是与整理列表无关的另一个决定。</string>
+    <plurals name="wallet_coin_remove_blocked_count">
+        <item quantity="other">请先移除它的 %1$d 个钱包——删除钱包会把助记词从这部手机上抹除。</item>
+    </plurals>
+    <string name="wallet_coin_remove_builtin">%1$s 是内置币种，无法移除</string>
+    <string name="wallet_coin_remove_confirm">移除</string>
+    <string name="wallet_coin_remove_ack">知道了</string>
+    <string name="wallet_coin_removed">已移除 %1$s</string>
+    <string name="wallet_hours_sub">%1$s 币时</string>
+    <string name="wallet_btc_sub">%1$d 个已确认输出 · 该链没有币时</string>
+    <string name="wallet_eth_sub">以太坊主网 · 手续费以 ETH 支付</string>
+    <string name="wallet_erc20_sub">以太坊上的 %1$s · 手续费以 ETH 支付</string>
+    <string name="wallet_stale_banner">无法连接节点服务器。余额和历史记录最后更新于 %1$s，距今 %2$s。在节点服务器恢复响应前无法发送。</string>
+    <plurals name="wallet_stale_age_minutes">
+        <item quantity="other">%1$d 分钟</item>
+    </plurals>
+    <string name="wallet_stale_age_hours">%1$d 小时 %2$d 分钟</string>
+    <string name="wallet_stale_never">无法连接节点服务器。该钱包尚未同步——节点服务器恢复响应后才会显示余额。</string>
+    <string name="wallet_stale_send_note">发送已停用：没有到节点服务器的路由</string>
+    <string name="wallet_error_no_route">没有到节点服务器的路由</string>
+    <string name="wallet_error_rejected">已被拒绝</string>
+    <string name="wallet_receive">接收</string>
+    <string name="wallet_send">发送</string>
+    <string name="wallet_recent">最近活动</string>
+    <string name="wallet_see_all">查看全部</string>
+    <string name="wallet_no_activity_title">暂无活动</string>
+    <string name="wallet_no_activity_body">该钱包收到的币会显示在这里。</string>
+    <string name="wallet_wallets_row">钱包</string>
+    <string name="wallet_received_verb">已接收</string>
+    <string name="wallet_sent_verb">已发送</string>
+    <string name="wallet_from_line">来自 %1$s · %2$s</string>
+    <string name="wallet_to_line">发往 %1$s · %2$s</string>
+    <string name="wallet_self_line">钱包内部转账 · %1$s</string>
+
+    <string name="wallet_receive_title">接收</string>
+    <string name="wallet_receive_only">只能向该地址转入 %1$s。</string>
+    <string name="wallet_receive_tap_copy">点按复制完整地址</string>
+    <string name="wallet_copy">复制</string>
+    <string name="wallet_share">分享</string>
+    <string name="wallet_address_copied">地址已复制到剪贴板</string>
+    <string name="wallet_other_addresses">此钱包中的其他地址</string>
+    <string name="wallet_addresses_in">%1$s 中的地址</string>
+    <string name="wallet_addresses_note">它们都来自同一组助记词。每次使用新地址，可以让你的余额更难被追踪。</string>
+    <string name="wallet_address_default">默认 · 使用中</string>
+    <string name="wallet_address_unused">从未使用</string>
+    <string name="wallet_address_new">生成新地址</string>
+    <string name="wallet_address_generated">已在 %1$s 中生成新地址</string>
+    <string name="wallet_address_picked">已切换到所选地址收款</string>
+
+    <string name="wallet_send_title">发送</string>
+    <string name="wallet_send_to">收款方</string>
+    <string name="wallet_send_to_hint_fiber">%1$s 地址</string>
+    <string name="wallet_send_to_hint_btc">bc1… 或 1… 开头的地址</string>
+    <string name="wallet_send_to_hint_eth">0x… 开头的地址</string>
+    <string name="wallet_paste">粘贴</string>
+    <string name="wallet_scan_description">扫描二维码</string>
+    <string name="wallet_send_amount">金额</string>
+    <string name="wallet_send_available">可用 %1$s %2$s</string>
+    <string name="wallet_send_invalid_amount">请输入有效金额</string>
+    <string name="wallet_max">全部</string>
+    <string name="wallet_max_note_fiber">“全部”会发送所有 %1$s。币时不会转出——其中一部分会作为手续费被销毁。</string>
+    <string name="wallet_max_note_btc">“全部”会花掉每一笔已确认的输出并扣除矿工费，因此金额会随费率变动。</string>
+    <string name="wallet_max_note_eth">“全部”会预留少量 ETH 用作 Gas，确切金额在预览页计算。</string>
+    <string name="wallet_max_note_erc20">“全部”会发送全部代币余额。Gas 仍从同一地址的 ETH 中扣除。</string>
+    <string name="wallet_fee">手续费</string>
+    <string name="wallet_hours_burned">销毁的币时</string>
+    <string name="wallet_hours_after">交易后币时</string>
+    <string name="wallet_fee_note_fiber">%1$s 交易不消耗 %1$s。进入交易的币时会有十分之一作为手续费被销毁，剩下的一半随币一同转出。</string>
+    <string name="wallet_fee_rate">费率</string>
+    <string name="wallet_fee_rate_value">%1$d sat/vB</string>
+    <string name="wallet_fee_estimate">按 %1$d vB 预估手续费</string>
+    <string name="wallet_fee_economy">经济</string>
+    <string name="wallet_fee_normal">普通</string>
+    <string name="wallet_fee_priority">优先</string>
+    <string name="wallet_fee_eta_economy">~2 h</string>
+    <string name="wallet_fee_eta_normal">~30 min</string>
+    <string name="wallet_fee_eta_priority">~10 min</string>
+    <string name="wallet_fee_network">网络手续费</string>
+    <string name="wallet_fee_at_review">预览时计算</string>
+    <string name="wallet_fee_gas">Gas 上限 %1$d · 每单位 Gas 最高 %2$d gwei</string>
+    <string name="wallet_fee_note_eth">显示的是按当前价格计算的最高手续费——未用完的 Gas 不会收取。</string>
+    <string name="wallet_fee_note_erc20">代币转账会消耗 Gas，而 Gas 由发送地址中的 ETH 支付——请在存放代币的地址里留一点 ETH。</string>
+    <string name="wallet_review">预览</string>
+    <string name="wallet_review_title">你即将发送</string>
+    <!-- %2$s 是币种自身的名称 -->
+    <string name="wallet_review_dest">到 %2$s 网络上的 %1$s。在你确认之前不会签名。</string>
+    <string name="wallet_review_amount">金额</string>
+    <string name="wallet_review_miner_fee">矿工费，按 %1$d sat/vB</string>
+    <string name="wallet_review_network_fee">网络手续费，最高</string>
+    <string name="wallet_review_total">从钱包转出合计</string>
+    <string name="wallet_review_balance_after">交易后 %1$s 余额</string>
+    <string name="wallet_review_hours_after">交易后币时</string>
+    <string name="wallet_review_back">返回</string>
+    <string name="wallet_review_sign">签名并发送</string>
+    <string name="wallet_bio_send_title">签署这笔交易</string>
+    <string name="wallet_bio_send_subtitle">签名在本机完成，你的私钥不会发送到任何地方。</string>
+    <string name="wallet_result_title">已广播到网络</string>
+    <string name="wallet_result_body">%1$s %2$s 正在发往 %3$s。在网络确认之前，交易一直处于待确认状态。</string>
+    <string name="wallet_result_done">完成</string>
+    <string name="wallet_result_history">在记录中查看</string>
+    <string name="wallet_txid_copied">交易 ID 已复制</string>
+
+    <string name="wallet_history_title">交易记录</string>
+    <string name="wallet_filter_all">全部</string>
+    <string name="wallet_filter_sent">转出</string>
+    <string name="wallet_filter_received">转入</string>
+    <string name="wallet_filter_pending">待确认</string>
+    <string name="wallet_history_empty_title">这里还没有内容</string>
+    <string name="wallet_history_empty_all">这个钱包还没有任何 %1$s 的转入或转出。</string>
+    <string name="wallet_history_empty_filter">没有符合此筛选条件的 %1$s 交易。</string>
+    <string name="wallet_history_show_address">显示我的地址</string>
+    <string name="wallet_day_today">今天</string>
+    <string name="wallet_day_yesterday">昨天</string>
+
+    <string name="wallet_tx_title">交易</string>
+    <string name="wallet_tx_confirmed">已确认</string>
+    <string name="wallet_tx_pending_long">待确认 · 等待首次确认</string>
+    <string name="wallet_tx_from">来自</string>
+    <string name="wallet_tx_to">发往</string>
+    <string name="wallet_tx_wallet">钱包</string>
+    <string name="wallet_tx_date">日期</string>
+    <string name="wallet_tx_fee">手续费</string>
+    <string name="wallet_tx_confirmations">确认数</string>
+    <string name="wallet_tx_confirmations_pending">0 / 1</string>
+    <string name="wallet_tx_id">交易 ID</string>
+    <string name="wallet_tx_explorer">在区块浏览器中打开</string>
+    <string name="wallet_tx_explorer_note">将在浏览器中打开 %1$s。该区块浏览器会看到这个交易 ID。</string>
+    <string name="wallet_tx_explorer_fallback">区块浏览器</string>
+    <string name="wallet_fee_hours_value">%1$s 币时</string>
+
+    <string name="wallet_wallets_title">钱包</string>
+    <string name="wallet_active_badge">使用中</string>
+    <string name="wallet_address_count_one">1 个地址</string>
+    <string name="wallet_address_count_many">%1$d 个地址</string>
+    <string name="wallet_add_wallet">添加钱包</string>
+    <string name="wallet_count_one">1 个钱包</string>
+    <string name="wallet_count_many">%1$d 个钱包</string>
+    <string name="wallet_manage_create">新建</string>
+    <string name="wallet_created_on">%1$s · 创建于 %2$s</string>
+    <string name="wallet_use">使用此钱包</string>
+    <string name="wallet_rename">重命名</string>
+    <string name="wallet_rename_title">重命名钱包</string>
+    <string name="wallet_reveal_action">显示助记词</string>
+    <string name="wallet_reveal_action_sub">以明文显示全部十二个助记词。需要先验证指纹。</string>
+    <string name="wallet_remove_action">从本机移除</string>
+    <string name="wallet_remove_action_sub">删除本机保存的密钥。没有助记词，币将永远无法找回。</string>
+    <string name="wallet_remove_title">从本机移除 %1$s？</string>
+    <string name="wallet_remove_body">本机保存的密钥会被删除。如果你没有抄下那十二个助记词，这个钱包里的币将再也无人能够动用，包括你自己。</string>
+    <string name="wallet_remove_confirm">移除</string>
+    <string name="wallet_remove_keep">保留</string>
+    <string name="wallet_removed">%1$s 已从本机移除</string>
+    <string name="wallet_bio_reveal_title">确认是你本人</string>
+    <string name="wallet_bio_reveal_subtitle">%1$s 的助记词将在下一个页面以明文显示。</string>
+    <string name="wallet_reveal_warning">任何人读到这十二个助记词，都能在任意设备上转走 %1$s 中的全部币，不需要你的手机。只在没有人能看到你屏幕的地方查看它们。</string>
+    <string name="wallet_reveal_autohide">已禁用截屏。本页面将在 %1$s 后自动关闭。</string>
+    <string name="wallet_reveal_hide">隐藏助记词</string>
+
+    <string name="wallet_add_coin_title">添加币种或代币</string>
+    <string name="wallet_add_kind_fiber">Fibercoin</string>
+    <string name="wallet_add_kind_erc20">ERC-20 代币</string>
+    <string name="wallet_add_coin_body">每一种 Fibercoin 都运行与 Skycoin 相同的节点软件。填写币种名称，并让钱包指向一个你信任的节点服务器——余额、手续费和精度都来自那台节点服务器。</string>
+    <string name="wallet_add_token_body">ERC-20 代币都运行在以太坊上，彼此之间只有合约不同。小数位必须与合约本身一致：USDT 这类代币为 6 位，多数代币为 18 位，否则金额会显示错误。</string>
+    <string name="wallet_add_coin_name">币种名称</string>
+    <string name="wallet_add_coin_name_hint">例如 MDL Talent Hub</string>
+    <string name="wallet_add_coin_name_required">请填写币种名称</string>
+    <string name="wallet_add_coin_ticker">代号</string>
+    <string name="wallet_add_coin_ticker_hint">例如 MDL</string>
+    <string name="wallet_add_coin_ticker_required">请填写币种代号</string>
+    <string name="wallet_add_coin_icon">图标</string>
+    <string name="wallet_add_coin_icon_pick">选择图片</string>
+    <string name="wallet_add_coin_icon_clear">移除</string>
+    <string name="wallet_add_coin_icon_unreadable">无法读取这张图片</string>
+    <string name="wallet_add_coin_node">节点服务器地址</string>
+    <string name="wallet_add_coin_node_hint">http://node.example.com:6420</string>
+    <string name="wallet_add_coin_node_invalid">节点服务器地址必须是完整的 URL，例如 http://node.example.com:6420</string>
+    <string name="wallet_add_token_contract">合约地址</string>
+    <string name="wallet_add_token_contract_hint">0x…</string>
+    <string name="wallet_add_token_contract_invalid">合约地址必须是 0x… 开头的地址（校验和格式或全小写）</string>
+    <string name="wallet_add_token_decimals">小数位</string>
+    <string name="wallet_add_token_decimals_hint">18</string>
+    <string name="wallet_add_token_decimals_range">小数位必须在 0 到 36 之间</string>
+    <string name="wallet_add_token_decimals_invalid">小数位必须是数字：USDT 这类代币为 6 位，多数代币为 18 位</string>
+    <string name="wallet_add_token_ticker_required">请填写代币代号</string>
+    <string name="wallet_add_token_name_required">请填写代币名称</string>
+    <string name="wallet_add_coin_save">添加币种</string>
+    <string name="wallet_seed_unavailable">无法读取助记词——本钱包创建之后，手机的密钥库已经发生变化。</string>
+    <string name="wallet_seed_invalid">助记词无效</string>
+
+    <!-- Screen help. One ? per tab, in the header. -->
+    <string name="help_open">关于本页面</string>
+    <string name="help_close">知道了</string>
+
+    <string name="help_chat_title">关于 SkyChat</string>
+    <string name="help_chat_body">消息、通话、群组和频道都经由 Skywire 传输，而不是某家公司的服务器。你在这里的身份就是本节点的公钥——用 QR 码按钮把它发出去，拿到它的人就能联系到你。\n\n这与桌面端是同一个聊天，只是为手机重新排版。历史记录只保存在本机；没有账号，也不会自行同步，所以换到另一部手机时，要先在聊天内的设置里导出，再到新手机上导入。\n\nSkyChat 的日志在“设置 \u25b8 诊断”里，与本应用保存的其他日志放在一起。</string>
+
+    <string name="help_hub_title">关于应用</string>
+    <string name="help_hub_body">你的节点能运行的一切都集中在这里。点开一张卡片进入该应用自己的页面；无论你在看哪一个，节点本身都在底下持续运行。\n\nSkySOCKS 和 SkyVPN 把其他流量送进网络，SkyDEX 用于交易，SkyChat 用于聊天，集群用于查看你在别处运行的节点。变灰的卡片表示尚未实现。</string>
+
+    <string name="help_wallet_title">关于钱包</string>
+    <string name="help_wallet_body">Skycoin、与它共用节点软件的各种 Fibercoin，还有比特币——全部由本机生成、从不离开本机的密钥持有。Skywire 看不到这些密钥，它们也绝不会被发送到网络上。\n\n十二个助记词就是钱包本身。任何人只要看到它们，不需要你的手机也能在任意设备上花掉这些币；而你一旦弄丢，没有人能帮你找回钱包——我们不能，任何人都不能。\n\n余额和交易记录来自每个币种所指向的节点服务器，因此当某个币种的节点服务器无法连接时，只会显示最后一次已知的余额，并且无法转账。</string>
+
+    <string name="help_settings_title">关于设置</string>
+    <string name="help_settings_body">这部手机在网络上的身份，以及本应用的行为方式。身份是保存在文件里的一对密钥——请在需要之前就备份好，因为弄丢它就等于弄丢了你的地址、聊天记录的另一半，以及与这把密钥绑定的所有奖励。\n\n所有日志都在“诊断”里：节点核心、应用进程，以及在其之下运行的每个应用。连不上的时候就到那里看。</string>
+
+    <string name="help_socks_title">关于 SkySOCKS</string>
+    <string name="help_socks_body">一个从别处出网的 SOCKS5 代理。选好服务器后，这部手机会开放一个本地代理端口；凡是指向该端口的流量，都会从你选择的服务器离开网络，而不是从这里。\n\n它只代理你配置为走它的流量，不会接管整部手机。接管整部手机的是 SkyVPN。\n\nSkySOCKS 的日志在“设置 \u25b8 诊断”里。</string>
+
+    <string name="help_vpn_title">关于 SkyVPN</string>
+    <string name="help_vpn_body">整部手机的流量，都经过你选择的服务器。首次启用时 Android 会请求添加 VPN 配置；开启期间，每个应用的流量都从出口服务器离开，而不是从这里。\n\n密钥始终留在本机，出口服务器能看到它转发的流量——任何 VPN 出口都是如此。关闭后会立即恢复正常路由。\n\nSkyVPN 的日志在“设置 \u25b8 诊断”里。</string>
+
+    <string name="help_dex_title">关于 SkyDEX</string>
+    <string name="help_dex_body">与做市商交易，连接经由 Skywire，而不是公开互联网。这个页面是交易所自己的界面，运行在你当前连接的市场上。\n\n订单和余额属于那个市场，不属于“钱包”标签页里的钱包——两者互相独立。\n\nSkyDEX 的日志在“设置 \u25b8 诊断”里。</string>
+    <string name="help_fleet_title">关于集群</string>
+    <string name="help_fleet_body">你在其他机器上运行的节点——台式机、服务器、Skyminer——从这部手机看过去的样子。它是一扇窗，不是遥控器：传回来的是状态，唯一能做的操作是重启。\n\n默认关闭。开启会重启这部手机的核心，因为这项设置只在节点自我构建时读取一次。\n\n节点自己的日志在这里的卡片上，因为那条日志来自远程机器；本应用的日志在“设置 \u25b8 诊断”里。你给节点起的名字保存在本机，不会跟着它走。</string>
+    <!-- Battery / Doze. -->
+    <string name="settings_battery">电池</string>
+    <string name="settings_battery_hint">Skywire 会在后台持续运行，但屏幕熄灭一段时间后，Android 仍可能暂停它的网络——消息和通话会等到手机下次唤醒时才到达，而不是在发出时到达。允许 Skywire 忽略电池优化可以消除这段延迟。这会更耗电；不允许也一样能用。</string>
+    <string name="settings_battery_exempt_hint">Skywire 已获准忽略电池优化，因此屏幕熄灭时连接仍会保持。Android 的电池设置随时可能收回这项权限。</string>
+    <string name="settings_battery_allow">允许</string>
+    <string name="settings_battery_not_now">暂不</string>
+    <string name="settings_battery_no_screen">这部手机没有可打开的电池优化设置页面。</string>
+    <string name="home_battery_title">让 Skywire 在后台保持连接？</string>
+    <string name="home_battery_body">屏幕熄灭一段时间后，Android 可能暂停本应用的网络。允许它忽略电池优化，消息就能即发即到。</string>
+    <!-- Config encryption at rest. -->
+    <string name="settings_encrypt">加密存储配置</string>
+    <string name="settings_encrypt_hint">每当 Skywire 断开连接时，用一把本机不会交出的密钥封存配置文件。设备被检查时可以保护私钥；连接期间则没有区别。</string>
+    <string name="settings_encrypt_warning">如果这部手机被重置——或者锁屏密码被移除后重新设置——封存密钥会随之销毁，配置中的身份将无法恢复。如果这对你很重要，请先导出配置。</string>
+    <string name="settings_encrypt_disable_prompt">确认以明文存储配置</string>
+    <string name="settings_encrypt_on_done">配置已加密。</string>
+    <string name="settings_encrypt_on_pending">断开连接后将对配置加密。</string>
+    <string name="settings_encrypt_off_done">配置已不再加密。</string>
+</resources>
