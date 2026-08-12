@@ -1,14 +1,9 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-apk-debug
-.PHONY : host-apps bin
-.PHONY : docker-image docker-clean docker-network
-.PHONY : docker-apps docker-bin docker-volume
-.PHONY : docker-run docker-stop
-.PHONY : integration-build
-.PHONY : integration-run-generic
+.PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
 VERSION := $(shell git describe --always)
@@ -57,10 +52,7 @@ endif
 
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
-GO_BUILDER_VERSION=v1.24
 MANAGER_UI_BUILT_DIR=pkg/visor/static
-DOCKER_OPTS?=GO111MODULE=on GOOS=linux
-DOCKER_NETWORK?=SKYWIRE
 DOCKER_COMPOSE_FILE:=./docker/docker-compose.yml
 DOCKER_REGISTRY:=skycoin
 
@@ -112,7 +104,6 @@ WASM_BUILDINFO := -X $(WASM_BUILDINFO_PATH).version=$(VERSION) -X $(WASM_BUILDIN
 
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
-BUILD_OPTS_RACE?="-race"
 
 export COMPOSE_FILE=${DOCKER_COMPOSE_FILE}
 export REGISTRY=${DOCKER_REGISTRY}
@@ -141,9 +132,6 @@ dmsghttp: ## update dmsghttp-config.json
 dmsg-servers: ## update embedded dmsg_servers in deployment/services-config.json from the discovery, over dmsg
 	go run . dmsg conf pull
 	go generate ./deployment/
-
-count-dmsg-disc-entries:
-	curl -sL $(jq -r '.prod.dmsg_discovery' services-config.json)/dmsg-discovery/entries | jq '. | length'
 
 check: ## Run linters and tests (lint, check-cg, check-help, test). Serialized via flock so two concurrent invocations don't trigger overlapping parallel test runs that pin every core and make the machine unresponsive.
 	@if command -v flock >/dev/null 2>&1; then \
@@ -283,7 +271,7 @@ install-system-linux: build ## Install apps and binaries over those provided by 
 	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
 
 install-generate: ## Installs required execs for go generate.
-	${OPTS} go install github.com/mjibson/esc github.com/vektra/mockery/v2@latest
+	${OPTS} go install github.com/vektra/mockery/v2@latest
 
 	## TO DO: it may be unnecessary to install required execs for go generate into the path. An alternative method may exist which does not require this
 	## https://eli.thegreenplace.net/2021/a-comprehensive-guide-to-go-generate
@@ -492,7 +480,6 @@ test-windows: ## Run tests on windows
 
 install-linters: ## Install linters
 	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	GOPRIVATE=github.com/skycoin/* go get -u
 	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/FiloSottile/vendorcheck@latest
 
 install-linters-windows: ## Install linters
@@ -566,7 +553,7 @@ build-windows: ## Build `skywire-visor`
 
 # Static Bin
 build-static: ## Build `skywire-visor`, `skywire-cli`
-	${STATIC_OPTS} go build 8 -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH) .
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH) .
 
 # Static Bin without Systray
 build-static-wos: ## Build `skywire-visor`, `skywire-cli`
