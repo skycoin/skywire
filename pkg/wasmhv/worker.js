@@ -50,6 +50,56 @@
   // ----- connected tabs -----
   var ports = [];        // MessagePorts of connected tabs
   var agentPort = null;  // the ONE tab elected to run STUN + WebRTC (main-thread APIs)
+  var idleTimer = null;  // pending self-close once the last tab has gone
+
+  // ----- staying terminable -----
+  //
+  // The spec says a SharedWorker dies with its last client and a dedicated one
+  // dies with its page, so this used to just let the browser tear us down. That
+  // is not what happens here: go.run() never returns and the Go scheduler keeps
+  // this thread busy, so Chromium cannot kill it. The worker outlives every tab
+  // — and an ORPHANED SharedWorker is worse than a leaked one, because the
+  // browser marks it for termination and then refuses to deliver `connect` to
+  // it. The next tab's port is never answered; it waits out its ready timeout,
+  // falls back to a per-tab worker, finds the singleton lock still held by the
+  // previous orphan, and tells the user "Skywire is already running in another
+  // tab" when no other tab exists. Reproduced with zero pages open: both
+  // workers still alive after 45s, a fresh port getting no reply at all.
+  //
+  // So we close ourselves instead of waiting to be closed. Two parts, because
+  // neither is sufficient alone: 'bye' on pagehide is prompt but a crashed or
+  // killed tab never sends it, and the heartbeat catches those but only after
+  // it has had time to miss.
+  var idleGraceMS = 10000;   // a reload leaves us portless for a moment
+  var pingEveryMS = 15000;
+  var missesAllowed = 2;
+
+  function clearIdleClose() {
+    if (idleTimer !== null) { clearTimeout(idleTimer); idleTimer = null; }
+  }
+
+  function scheduleIdleClose() {
+    clearIdleClose();
+    if (ports.length > 0) { return; }
+    idleTimer = setTimeout(function () {
+      idleTimer = null;
+      if (ports.length > 0) { return; }   // a tab came back during the grace period
+      try { self.close(); } catch (e) { /* nothing left to do */ }
+    }, idleGraceMS);
+  }
+
+  // Prune ports that have stopped answering. A MessagePort fires no event when
+  // the far side dies, so silence is the only signal available.
+  function sweepPorts() {
+    for (var i = ports.length - 1; i >= 0; i--) {
+      var p = ports[i];
+      if ((p._missed || 0) >= missesAllowed) { removePort(p); continue; }
+      p._missed = (p._missed || 0) + 1;
+      try { p.postMessage({ t: 'ping' }); } catch (e) { removePort(p); }
+    }
+    scheduleIdleClose();
+  }
+  setInterval(sweepPorts, pingEveryMS);
 
   function broadcast(msg) {
     for (var i = 0; i < ports.length; i++) {
@@ -284,12 +334,19 @@
     var i = ports.indexOf(port);
     if (i >= 0) { ports.splice(i, 1); }
     if (port === agentPort) { agentPort = null; electAgent(); }
-    // When the last tab goes, the browser tears the SharedWorker down (visor stops).
+    // The browser will NOT tear this worker down when the last tab goes — see
+    // the note beside idleTimer. Close ourselves instead, after a grace period
+    // so a reload does not kill the visor it is about to reconnect to.
+    scheduleIdleClose();
   }
 
   function handleMessage(port, m) {
     if (!m) { return; }
+    // Any message at all proves the tab is alive.
+    port._missed = 0;
     switch (m.t) {
+      case 'pong':
+        return;
       case 'init':
         if (!bootParams) { bootParams = { sk: m.sk, seedpk: m.seedpk, seedws: m.seedws, disc: m.disc, cfg: m.cfg }; tryBoot(); }
         // If already booted, this tab was told 'up' on connect; nothing more to do.
@@ -338,10 +395,17 @@
 
   function registerPort(port) {
     port._vis = 'visible';
+    port._missed = 0;
     ports.push(port);
+    clearIdleClose();
     if (!agentPort) { agentPort = port; }
     port.onmessage = function (ev) { handleMessage(port, ev.data); };
     if (typeof port.start === 'function') { port.start(); }
+    // Greet the port before anything else, booted or not. This is what lets a
+    // tab tell "still booting, wait for it" from "orphaned worker that will
+    // never answer" — the two are otherwise identical (silence), which is why
+    // a tab used to sit through its whole ready timeout before falling back.
+    try { port.postMessage({ t: 'hello', booted: bootedPK !== null }); } catch (e) {}
     // If the visor is already up, tell this tab immediately so it can install its
     // proxy and resolve without waiting for a broadcast.
     if (api && bootedPK !== null) {
