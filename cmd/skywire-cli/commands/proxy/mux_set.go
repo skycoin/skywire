@@ -49,7 +49,7 @@ func init() {
 	muxSetCmd.Flags().Uint16Var(&muxSetSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
 	muxSetCmd.Flags().StringVar(&muxSetFile, "legs", "-", "leg-set JSON file ('-' = stdin): array of {forward,reverse} pairs ('cli route calc --json' shape)")
 	muxSetCmd.Flags().BoolVar(&muxSetPrune, "prune", false, "also remove current legs not in the target set (exact reconcile). Careful: the primary route is a leg too — include it or it's removed")
-	RootCmd.AddCommand(muxSetCmd)
+	addMuxSub(muxSetCmd, "mux-set")
 }
 
 // readRoutePairs reads an array (or a single object) of {forward,reverse}
@@ -120,7 +120,7 @@ func currentLegTpIDs(infos any, srcPort uint16) (map[uuid.UUID]struct{}, error) 
 }
 
 var muxSetCmd = &cobra.Command{
-	Use:   "mux-set",
+	Use:   "set",
 	Short: "Reconcile an active proxy session's mux legs to a target set",
 	Long: `Reconcile a mux'd proxy session's legs to a caller-supplied target
 set in one shot — the static-mux building block (and the actuation the
