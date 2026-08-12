@@ -37,12 +37,12 @@ export interface RouterConfigParams {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RouterConfigComponent implements OnInit, OnDestroy {
-  @ViewChild('button') button: ButtonComponent;
-  @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('button') button!: ButtonComponent;
+  @ViewChild('firstInput') firstInput!: ElementRef;
 
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
 
-  private operationSubscription: Subscription;
+  private operationSubscription!: Subscription | null;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".

@@ -26,16 +26,16 @@ import { PersistentTransport } from 'src/app/app.datatypes';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CreateTransportComponent implements OnInit, OnDestroy {
-  @ViewChild('button') button: ButtonComponent;
-  @ViewChild('firstInput') firstInput: ElementRef;
-  types: string[];
-  form: UntypedFormGroup;
+  @ViewChild('button') button!: ButtonComponent;
+  @ViewChild('firstInput') firstInput!: ElementRef;
+  types!: string[];
+  form!: UntypedFormGroup;
 
   makePersistent = false;
 
   private shouldShowError = true;
-  private dataSubscription: Subscription;
-  private operationSubscription: Subscription;
+  private dataSubscription!: Subscription;
+  private operationSubscription!: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -91,7 +91,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
   /**
    * Used by the checkbox for the persistent setting.
    */
-   setMakePersistent(event) {
+   setMakePersistent(event: any) {
     this.makePersistent = event.checked ? true : false;
   }
 

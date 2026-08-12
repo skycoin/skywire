@@ -30,7 +30,7 @@ const SKYSOCKS_CLIENT_PREFIX = 'skysocks-client';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SkysocksTabComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   server: Application | null = null;
   clients: Application[] = [];
   busy = new Set<string>();
@@ -38,7 +38,7 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
   // inline below their row.
   expandedSettings = new Set<string>();
 
-  private nodeSub: Subscription;
+  private nodeSub!: Subscription;
 
   constructor(
     private appsService: AppsService,
@@ -96,7 +96,7 @@ export class SkysocksTabComponent extends PageBaseComponent implements OnInit, O
  this.expandedSettings.delete(name); 
 }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();

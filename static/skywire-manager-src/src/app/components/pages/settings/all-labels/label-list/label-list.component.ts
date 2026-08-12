@@ -39,7 +39,7 @@ export class LabelListComponent implements OnDestroy {
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
-  dataSource: LabelInfo[];
+  dataSource!: LabelInfo[];
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -50,16 +50,16 @@ export class LabelListComponent implements OnDestroy {
    * accessing the full list. If false, the full list is shown, with pagination
    * controls, if needed.
    */
-  showShortList_: boolean;
+  showShortList_!: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
     // Sort the data.
     this.dataSorter.setData(this.filteredLabels);
   }
 
-  allLabels: LabelInfo[];
-  filteredLabels: LabelInfo[];
-  labelsToShow: LabelInfo[];
+  allLabels!: LabelInfo[];
+  filteredLabels!: LabelInfo[];
+  labelsToShow!: LabelInfo[] | null;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is reade asynchronously.
@@ -171,7 +171,7 @@ export class LabelListComponent implements OnDestroy {
 
     // Add the type dor data to the array.
     this.allLabels.forEach(label => {
-      label['identifiedElementType_sort'] = this.getLabelTypeIdentification(label)[0];
+      (label as any)['identifiedElementType_sort'] = this.getLabelTypeIdentification(label)[0];
     });
 
     this.dataFilterer.setData(this.allLabels);
@@ -191,6 +191,10 @@ export class LabelListComponent implements OnDestroy {
     } else if (label.identifiedElementType === LabeledElementTypes.Transport) {
       return ['3', 'labels.filter-dialog.type-options.transport'];
     }
+
+    // Unreachable for the types above; stated so noImplicitReturns can see it,
+    // and returning what the implicit path already returned.
+    return undefined;
   }
 
   /**

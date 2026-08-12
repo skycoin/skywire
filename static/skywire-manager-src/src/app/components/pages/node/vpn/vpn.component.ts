@@ -24,14 +24,14 @@ const VPN_SERVER = 'vpn-server';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   client: Application | null = null;
   server: Application | null = null;
   busy = new Set<string>();
   // Names of apps whose universal settings panel is currently open.
   expandedSettings = new Set<string>();
 
-  private nodeSub: Subscription;
+  private nodeSub!: Subscription;
 
   constructor(
     private appsService: AppsService,
@@ -55,7 +55,7 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
  this.expandedSettings.delete(name); 
 }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();

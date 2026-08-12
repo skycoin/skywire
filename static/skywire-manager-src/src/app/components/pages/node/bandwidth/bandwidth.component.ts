@@ -68,21 +68,21 @@ type WindowDays = 1 | 7 | 30;
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BandwidthComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   rows: Row[] = [];
   loading = true;
   error: string | null = null;
   fetchedAt: Date | null = null;
   windowDays: WindowDays = 7;
 
-  private nodeSub: Subscription;
-  private pollSub: Subscription;
+  private nodeSub!: Subscription;
+  private pollSub!: Subscription;
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;

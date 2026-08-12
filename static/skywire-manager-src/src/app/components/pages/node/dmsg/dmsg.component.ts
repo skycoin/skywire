@@ -47,16 +47,16 @@ interface DmsgClientSessionsResponse {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   loading = true;
   error: string | null = null;
   clients: DmsgClient[] = [];
   fetchedAt: Date | null = null;
   connectAllInFlight = false;
 
-  private nodeSub: Subscription;
-  private pollSub: Subscription;
-  private actionSub: Subscription;
+  private nodeSub!: Subscription;
+  private pollSub!: Subscription;
+  private actionSub!: Subscription;
 
   constructor(
     private api: ApiService,
@@ -66,7 +66,7 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
  super(); 
 }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.node;
       this.node = node;

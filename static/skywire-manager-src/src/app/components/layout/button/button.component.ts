@@ -16,8 +16,8 @@ enum ButtonStates {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ButtonComponent implements OnDestroy {
-  @ViewChild('button1') button1: MatButton;
-  @ViewChild('button2') button2: MatButton;
+  @ViewChild('button1') button1!: MatButton;
+  @ViewChild('button2') button2!: MatButton;
 
   // If the button will be in front of the dark background.
   @Input() forDarkBackground = false;

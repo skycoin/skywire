@@ -52,7 +52,7 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
   @Output() saved = new EventEmitter<void>();
   @Output() cancelled = new EventEmitter<void>();
 
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
   saving = false;
   saveError = '';
   // "Show flags" disclosure state: collapsed by default; the help
