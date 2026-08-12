@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 
 /**
  * Allows to show truncated text. If the text is truncated, a tooltip allows the user
@@ -8,7 +8,8 @@ import { Component, Input } from '@angular/core';
     selector: 'app-truncated-text',
     templateUrl: './truncated-text.component.html',
     styleUrls: ['./truncated-text.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TruncatedTextComponent {
   /**

@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { AppConfig } from 'src/app/app.config';
 
@@ -31,7 +31,8 @@ interface ComponentData {
     selector: 'app-select-option',
     templateUrl: './select-option.component.html',
     styleUrls: ['./select-option.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SelectOptionComponent {
   /**

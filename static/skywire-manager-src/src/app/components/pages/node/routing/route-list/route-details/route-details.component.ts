@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 
 import { AppConfig } from 'src/app/app.config';
@@ -12,7 +12,8 @@ import { StorageService } from 'src/app/services/storage.service';
     selector: 'app-route-details',
     templateUrl: './route-details.component.html',
     styleUrls: ['./route-details.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RouteDetailsComponent {
   routeRule: Route;

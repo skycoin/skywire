@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, timer } from 'rxjs';
 
 import { NodeService } from '../../../../services/node.service';
@@ -78,6 +78,7 @@ const WINDOW = 60; // samples kept (≈ 60s at 1s polling)
   templateUrl: './resource-monitor.component.html',
   styleUrls: ['./resource-monitor.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ResourceMonitorComponent implements OnInit, OnDestroy {
   @Input() nodeKey: string;
@@ -204,6 +205,7 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
     this.pollSub = timer(0, 1000).subscribe(() => {
       this.pollHost();
       this.pollProc();
+      this.cdr.markForCheck();
     });
   }
 
@@ -227,10 +229,14 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
  this.hostSub.unsubscribe(); 
 }
     this.hostSub = this.nodeService.getHostStats(this.nodeKey).subscribe(
-      (s: HostStats) => this.onHostStats(s),
+      (s: HostStats) => {
+ this.onHostStats(s); this.cdr.markForCheck(); 
+},
       // Silent error — keep polling; the snackbar would scream once
       // per second on a broken visor connection.
-      () => {},
+      () => {
+        this.cdr.markForCheck();
+      },
     );
   }
 
@@ -242,8 +248,12 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
  this.procSub.unsubscribe(); 
 }
     this.procSub = this.nodeService.getRuntimeStats(this.nodeKey).subscribe(
-      (s: RuntimeStats) => this.onRuntimeStats(s),
-      () => {},
+      (s: RuntimeStats) => {
+ this.onRuntimeStats(s); this.cdr.markForCheck(); 
+},
+      () => {
+        this.cdr.markForCheck();
+      },
     );
   }
 

@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription, delay, of } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
@@ -108,7 +108,8 @@ interface VpnData {
     selector: 'app-top-bar',
     templateUrl: './top-bar.component.html',
     styleUrls: ['./top-bar.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TopBarComponent implements OnInit, OnDestroy {
   /**
@@ -257,6 +258,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
     private vpnSavedDataService: VpnSavedDataService,
     public appMode: AppModeService,
     private storageService: StorageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   /** Show the per-visor switcher as a full row of tabs (Settings opt-in) vs the
@@ -273,6 +275,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.langSubscriptionsGroup.push(this.languageService.currentLanguage.subscribe(lang => {
       this.language = lang;
+      this.changeDetectorRef.markForCheck();
     }));
 
     this.langSubscriptionsGroup.push(this.languageService.languages.subscribe(langs => {
@@ -281,6 +284,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
       } else {
         this.hideLanguageButton = true;
       }
+      this.changeDetectorRef.markForCheck();
     }));
 
     // Check if the app is being accessed from a remote localtion.
@@ -346,7 +350,9 @@ export class TopBarComponent implements OnInit, OnDestroy {
             if (this.showVpnStateChangeAnimationSubscription) {
               this.showVpnStateChangeAnimationSubscription.unsubscribe();
             }
-            this.showVpnStateChangeAnimationSubscription = of(0).pipe(delay(1)).subscribe(() => this.showVpnStateAnimation = true);
+            this.showVpnStateChangeAnimationSubscription = of(0).pipe(delay(1)).subscribe(() => {
+ this.showVpnStateAnimation = true; this.changeDetectorRef.markForCheck(); 
+});
           }
         }
 
@@ -355,13 +361,17 @@ export class TopBarComponent implements OnInit, OnDestroy {
         if (this.showVpnStateAnimatedDotSubscription) {
           this.showVpnStateAnimatedDotSubscription.unsubscribe();
         }
-        this.showVpnStateAnimatedDotSubscription = of(0).pipe(delay(1)).subscribe(() => this.showVpnStateAnimatedDot = true);
+        this.showVpnStateAnimatedDotSubscription = of(0).pipe(delay(1)).subscribe(() => {
+ this.showVpnStateAnimatedDot = true; this.changeDetectorRef.markForCheck(); 
+});
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     // Check if there are errors getting the updates.
     this.errorsConnectingToVpnSubscription = this.vpnClientService.errorsConnecting.subscribe(errorsFound => {
       this.errorsConnectingToVpn = errorsFound;
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -423,6 +433,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
           this.router.navigate(this.tabsData[result].linkParts);
         }
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 

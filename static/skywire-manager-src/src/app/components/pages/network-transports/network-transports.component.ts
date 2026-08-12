@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -78,6 +78,7 @@ type ViewMode = 'compact' | 'tree';
   templateUrl: './network-transports.component.html',
   styleUrls: ['./network-transports.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NetworkTransportsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];

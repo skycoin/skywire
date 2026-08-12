@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
 
@@ -11,7 +11,8 @@ import { SelectableOption, SelectOptionComponent } from '../select-option/select
     selector: 'app-paginator',
     templateUrl: './paginator.component.html',
     styleUrls: ['./paginator.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PaginatorComponent {
   @Input() currentPage: number;
@@ -33,6 +34,7 @@ export class PaginatorComponent {
   constructor(
     private dialog: MatDialog,
     private router: Router,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   openSelectionDialog() {
@@ -47,6 +49,7 @@ export class PaginatorComponent {
       if (result) {
         this.router.navigate(this.linkParts.concat([result.toString()]), { queryParams: this.queryParams});
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 }

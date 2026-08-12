@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription, Observable, of } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router, ActivatedRoute } from '@angular/router';
@@ -138,7 +138,8 @@ interface VpnServerForList {
     selector: 'app-vpn-server-list',
     templateUrl: './vpn-server-list.component.html',
     styleUrls: ['./vpn-server-list.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnServerListComponent extends PageBaseComponent implements OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.
@@ -227,6 +228,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
     private vpnSavedDataService: VpnSavedDataService,
     private snackbarService: SnackbarService,
     private storageService: StorageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
 
@@ -286,15 +288,19 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
         // so the correct list is shown instead of the one loaded first.
         this.loadData(true);
       }
+      this.changeDetectorRef.markForCheck();
     });
 
-    this.currentServerSubscription = this.vpnSavedDataService.currentServerObservable.subscribe(server => this.currentServer = server);
+    this.currentServerSubscription = this.vpnSavedDataService.currentServerObservable.subscribe(server => {
+ this.currentServer = server; this.changeDetectorRef.markForCheck(); 
+});
 
     this.backendDataSubscription = this.vpnClientService.backendState.subscribe(data => {
       if (data) {
         this.loadingBackendData = false;
         this.vpnRunning = data.vpnClientAppData.running;
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -401,6 +407,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
         // Update the data shown in the UI.
         this.processAllServers();
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -464,6 +471,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
         if (savedData) {
           this.loadData(false);
         }
+        this.changeDetectorRef.markForCheck();
       });
     } else {
       let dataObservable: Observable<LocalServerData[]>;
@@ -502,6 +510,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
 
         this.loading = false;
         this.processAllServers();
+        this.changeDetectorRef.markForCheck();
       });
     }
   }
@@ -615,6 +624,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allServers has already been sorted.
       this.recalculateElementsToShow();
+      this.changeDetectorRef.markForCheck();
     });
 
     // Initialize the data filterer.
@@ -622,6 +632,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredServers = data;
       this.dataSorter.setData(this.filteredServers);
+      this.changeDetectorRef.markForCheck();
     });
 
     // Remove the blocked servers, if needed.

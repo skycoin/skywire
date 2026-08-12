@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
@@ -76,7 +76,8 @@ interface RoutingPoliciesSummary {
     selector: 'app-routing',
     templateUrl: './routing.component.html',
     styleUrls: ['./routing.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RoutingComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
@@ -129,6 +130,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     private formBuilder: UntypedFormBuilder,
     private routeService: RouteService,
     private snackbarService: SnackbarService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
     this.routerForm = this.formBuilder.group({
@@ -145,9 +147,11 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
       this.nodePK = node.localPk;
       this.node = node;
       this.routes = node.routes;
+      this.changeDetectorRef.markForCheck();
     });
     this.trafficSubscription = NodeComponent.currentTrafficData.subscribe((td: TrafficData) => {
       this.trafficData = td;
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();
@@ -253,6 +257,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
       this.routeGroupsError = null;
       this.routeGroupsLoading = false;
       this.routeGroups = Array.isArray(rgs) ? rgs : [];
+      this.changeDetectorRef.markForCheck();
     });
     this.routeGroupsLoading = true;
   }
@@ -281,6 +286,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
       this.routingPoliciesError = null;
       this.routingPoliciesLoading = false;
       this.routingPolicies = summary as RoutingPoliciesSummary;
+      this.changeDetectorRef.markForCheck();
     });
     this.routingPoliciesLoading = true;
   }

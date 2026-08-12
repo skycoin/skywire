@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith, forkJoin, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
@@ -61,6 +61,7 @@ interface VisorRow {
   templateUrl: './multi-visor-resources.component.html',
   styleUrls: ['./multi-visor-resources.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class MultiVisorResourcesComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];

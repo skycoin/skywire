@@ -192,6 +192,7 @@ export class RouteListComponent implements OnDestroy {
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allRoutes has already been sorted.
       this.recalculateElementsToShow();
+      this.cdr.markForCheck();
     });
 
     // Include the known route types in the filterer config array.
@@ -219,6 +220,7 @@ export class RouteListComponent implements OnDestroy {
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredRoutes = data;
       this.dataSorter.setData(this.filteredRoutes);
+      this.cdr.markForCheck();
     });
 
     // Get the page requested in the URL.
@@ -233,6 +235,7 @@ export class RouteListComponent implements OnDestroy {
 
         this.recalculateElementsToShow();
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -339,6 +342,7 @@ export class RouteListComponent implements OnDestroy {
       } else if (selectedOption === 2) {
         this.delete(route.key);
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -356,9 +360,11 @@ export class RouteListComponent implements OnDestroy {
     this.operationSubscriptionsGroup.push(this.startDeleting(routeKey).subscribe(() => {
       NodeComponent.refreshCurrentDisplayedData();
       this.snackbarService.showDone('routes.deleted');
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
       this.snackbarService.showError(err);
+      this.cdr.markForCheck();
     }));
   }
 
@@ -433,6 +439,7 @@ export class RouteListComponent implements OnDestroy {
       } else {
         this.deleteRecursively(ids, confirmationDialog);
       }
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
       err = processServiceError(err);
@@ -441,6 +448,7 @@ export class RouteListComponent implements OnDestroy {
       } else {
         this.snackbarService.showError(err);
       }
+      this.cdr.markForCheck();
     }));
   }
 }

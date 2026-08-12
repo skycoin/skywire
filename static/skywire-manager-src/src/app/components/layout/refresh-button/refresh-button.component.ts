@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 
 import TimeUtils, { ElapsedTime } from '../../../utils/timeUtils';
 
@@ -10,7 +10,8 @@ import TimeUtils, { ElapsedTime } from '../../../utils/timeUtils';
     selector: 'app-refresh-button',
     templateUrl: './refresh-button.component.html',
     styleUrls: ['./refresh-button.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RefreshButtonComponent {
   @Input() set secondsSinceLastUpdate(val: number) {
