@@ -41,8 +41,8 @@ type GroupInfo struct {
 	// The URI form rather than bytes for the same reason Profile carries
 	// one over RPC: JSON-friendly and directly usable as an <img> src,
 	// with the MIME inside it always the validated one.
-	Avatar  string        `json:"avatar,omitempty"`
-	OwnerPK cipher.PubKey `json:"owner_pk"`
+	Avatar  string            `json:"avatar,omitempty"`
+	OwnerPK cipher.PubKey     `json:"owner_pk"`
 	Port    uint16            `json:"port"`
 	Mode    skychatgroup.Mode `json:"mode"`
 	// Kind is the user-facing group type — "public" (open admission,
