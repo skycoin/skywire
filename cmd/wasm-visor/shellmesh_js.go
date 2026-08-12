@@ -54,8 +54,16 @@ import (
 	"github.com/skycoin/skywire/third_party/0magnet/websh/shell"
 )
 
+// visorCallTimeout bounds a call to the visor. Warm, these answer in about
+// 50ms — measured, not assumed. But the shell has been seen to sit with no
+// output and no prompt, which is what an unbounded await looks like from the
+// outside, and a terminal that never comes back is the worst possible way to
+// report a problem. Bounding it turns that into a message.
+const visorCallTimeout = 20 * time.Second
+
 // visorCall invokes a visor method and awaits it, so a proxied promise and a
-// direct return look the same to the caller.
+// direct return look the same to the caller. It gives up rather than blocking
+// the shell forever.
 func visorCall(method string, args ...interface{}) (js.Value, error) {
 	v := js.Global().Get("skywireVisor")
 	if !v.Truthy() {
@@ -65,7 +73,22 @@ func visorCall(method string, args ...interface{}) (js.Value, error) {
 	if fn.Type() != js.TypeFunction {
 		return js.Undefined(), fmt.Errorf("this visor does not expose %s", method)
 	}
-	return jsAwait(v.Call(method, args...))
+
+	type result struct {
+		v   js.Value
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		val, err := jsAwait(v.Call(method, args...))
+		done <- result{val, err}
+	}()
+	select {
+	case r := <-done:
+		return r.v, r.err
+	case <-time.After(visorCallTimeout):
+		return js.Undefined(), fmt.Errorf("%s did not answer within %s", method, visorCallTimeout)
+	}
 }
 
 // meshHost splits a dmsg target into the host the visor's resolver understands
