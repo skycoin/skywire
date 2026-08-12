@@ -20,7 +20,7 @@ export interface TabButtonData {
    * Array with the parts of the route that must be openned by the tab. This array must the
    * same that would be usend in the "routerLink" property of an <a> tag.
    */
-  linkParts: string[];
+  linkParts: string[] | null;
   icon: string;
   label: string;
   /**

@@ -140,7 +140,7 @@ export class LabelListComponent implements OnDestroy {
     // Get the page requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('page')) {
-        let selectedPage = Number.parseInt(params.get('page'), 10);
+        let selectedPage = Number.parseInt(params.get('page')!, 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
           selectedPage = 1;
         }

@@ -18,7 +18,7 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
 export class AllRoutesComponent extends PageBaseComponent implements OnInit, OnDestroy {
   private changeDetectorRef = inject(ChangeDetectorRef);
 
-  routes!: Route[];
+  routes!: Route[] | undefined;
   nodePK!: string;
 
   private dataSubscription!: Subscription;

@@ -54,7 +54,7 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
   }
 
   save() {
-    const label = this.form.get('label').value.trim();
+    const label = this.form.get('label')!.value.trim();
 
     // Save the data only if the label was changed.
     if (label !== this.data.label) {

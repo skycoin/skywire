@@ -23,7 +23,7 @@ export class AppsComponent extends PageBaseComponent implements OnInit, OnDestro
 
   apps!: Application[];
   nodePK!: string;
-  nodeIp!: string;
+  nodeIp!: string | null;
 
   // Active sub-tab. 'list' (default) is the apps table; the other
   // three render the per-app management surfaces inline.
