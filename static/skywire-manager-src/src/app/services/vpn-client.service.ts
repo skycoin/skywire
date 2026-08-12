@@ -51,15 +51,15 @@ export class BackendState {
   /**
    * Public IP of the local visor, from the visor summary.
    */
-  publicIp!: string;
+  publicIp!: string | null;
   /**
    * Country code of the local visor, from the visor summary.
    */
-  countryCode!: string;
+  countryCode!: string | null;
   /**
    * Country name of the local visor, from the visor summary.
    */
-  countryName!: string;
+  countryName!: string | null;
 }
 
 /**
@@ -178,7 +178,7 @@ export class VpnClientService {
   // Public key of the local Skywire visor.
   private nodeKey!: string | null;
   // Subject for sending updates about the state of the VPN.
-  private stateSubject = new BehaviorSubject<BackendState>(null);
+  private stateSubject = new BehaviorSubject<BackendState | null>(null);
   // Subject for sending updates about errors while connecting to the backend.
   private errorSubject = new BehaviorSubject<boolean>(false);
   // Object with the data about the current state of the VPN.
@@ -259,7 +259,7 @@ export class VpnClientService {
   /**
    * Observable which continually emits state updates.
    */
-  get backendState(): Observable<BackendState> {
+  get backendState(): Observable<BackendState | null> {
     return this.stateSubject.asObservable();
   }
 
@@ -409,7 +409,7 @@ export class VpnClientService {
     if (this.working) {
       return CheckPkResults.Busy;
     } else if (this.lastServiceState !== VpnServiceStates.Off) {
-      if (newPk === this.vpnSavedDataService.currentServer.pk) {
+      if (newPk === this.vpnSavedDataService.currentServer?.pk) {
         return CheckPkResults.SamePkRunning;
       } else {
         return CheckPkResults.MustStop;
@@ -426,6 +426,12 @@ export class VpnClientService {
    * the VPN is started.
    */
   private processServerChange() {
+    // nodeKey is cleared when the local visor became unreachable; there is no
+    // visor to change anything on.
+    if (!this.nodeKey) {
+      return;
+    }
+
     if (this.dataSubscription) {
       this.dataSubscription.unsubscribe();
     }
@@ -435,7 +441,7 @@ export class VpnClientService {
     // PK-whitelist based), and the visor's putApp handler rejects unknown
     // JSON fields with DisallowUnknownFields — sending a "passcode" key made
     // the whole request fail with "request format is malformed".
-    const data: { pk: string; env?: { [key: string]: string } } = { pk: this.requestedServer.pk };
+    const data: { pk: string; env?: { [key: string]: string } } = { pk: this.requestedServer!.pk };
 
     // Route options are passed to the vpn-client through its environment (the
     // server PK is managed via the app args, which must not be clobbered).
@@ -460,7 +466,7 @@ export class VpnClientService {
     ).subscribe(
       () => {
         // Save the changes locally.
-        this.vpnSavedDataService.modifyCurrentServer(this.requestedServer);
+        this.vpnSavedDataService.modifyCurrentServer(this.requestedServer!);
 
         // Make the service work normally again.
         this.requestedServer = null;
@@ -492,8 +498,9 @@ export class VpnClientService {
    * @param startApp If the app must be started or stopped.
    */
   private changeAppState(startApp: boolean) {
-    // Cancel if the service is busy.
-    if (this.working) {
+    // Cancel if the service is busy, or if the local visor became unreachable
+    // and its key was cleared.
+    if (this.working || !this.nodeKey) {
       return;
     }
 
