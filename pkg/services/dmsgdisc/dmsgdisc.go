@@ -251,9 +251,7 @@ func (s *service) runDMSG(
 	// server disc is already connected to). Distinct from updateServers,
 	// which resolves from the redis store — empty at cold-start, so it can
 	// never bootstrap an empty deployment on its own.
-	go connectConfiguredServers(ctx, servers, dClient, dmsgDC, log)
-
-	go updateServers(ctx, a, dClient, dmsgDC, cfg.DmsgServerType, log)
+	go connectConfiguredServers(ctx, servers, a, dClient, dmsgDC, cfg.DmsgServerType, log)
 
 	wl := deployment.Prod.SurveyWhitelist
 	if cfg.TestEnvironment {
@@ -395,25 +393,37 @@ func pollServersUntilFound(ctx context.Context, a *api.API, dmsgServerType strin
 // still unreachable, then steady 30s maintenance so dropped sessions are
 // re-established promptly. EnsureSession is idempotent — already-connected
 // servers cost a cheap map check.
-func connectConfiguredServers(ctx context.Context, servers []*disc.Entry, dClient disc.APIClient, dmsgC *dmsg.Client, log logrus.FieldLogger) {
+func connectConfiguredServers(ctx context.Context, servers []*disc.Entry, a *api.API, dClient disc.APIClient, dmsgC *dmsg.Client, dmsgServerType string, log logrus.FieldLogger) {
 	const minInterval, maxInterval = time.Second, 30 * time.Second
 	interval := minInterval
 	for {
+		// A direct-client service must hold a session to EVERY dmsg server to be
+		// equally reachable (a client relaying through a server the disc is NOT on
+		// gets "dmsg error 202 - cannot connect to delegated server"). So each tick
+		// reconcile the dial set against the LIVE registry, not just the static
+		// config: dial the UNION of the static/embedded seed set and every
+		// registered server, with the REGISTERED address winning per PK. This
+		// self-heals server address drift — a stale configured port would otherwise
+		// silently drop a server forever — and picks up servers that register after
+		// cold-start. The static set is the cold-start floor: the registry is empty
+		// until the first server registers, so it can't bring an empty deployment
+		// up on its own. (Folds in the old 10-minute updateServers loop.)
+		set := reconcileServerSet(ctx, servers, a, dmsgServerType, log)
 		connected := 0
-		for _, server := range servers {
+		for _, server := range set {
 			dClient.PostEntry(ctx, server) //nolint:errcheck,gosec
 			if err := dmsgC.EnsureSession(ctx, server); err != nil {
 				log.WithField("remote_pk", server.Static).WithError(err).
-					Debug("dmsg-disc: dialing configured dmsg-server")
+					Debug("dmsg-disc: dialing dmsg-server")
 				continue
 			}
 			connected++
 		}
-		if connected == len(servers) {
+		if connected == len(set) {
 			interval = maxInterval // fully connected: drop to maintenance cadence
 		} else {
-			log.WithField("connected", connected).WithField("total", len(servers)).
-				Info("dmsg-disc: bootstrapping configured dmsg-server sessions")
+			log.WithField("connected", connected).WithField("total", len(set)).
+				Info("dmsg-disc: maintaining dmsg-server sessions")
 			if interval < maxInterval {
 				if interval *= 2; interval > maxInterval {
 					interval = maxInterval
@@ -428,36 +438,42 @@ func connectConfiguredServers(ctx context.Context, servers []*disc.Entry, dClien
 	}
 }
 
-// updateServers periodically re-resolves the dmsg-server transit set
-// and re-establishes sessions to anything new. Was the original
-// runtime sync mechanism before the embedded keyring + config-file
-// preload landed; kept for the case where new servers register after
-// startup.
-func updateServers(ctx context.Context, a *api.API, dClient disc.APIClient, dmsgC *dmsg.Client, dmsgServerType string, log logrus.FieldLogger) {
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			servers, err := a.AllServers(ctx, log)
-			if err != nil {
-				log.WithError(err).Error("error getting dmsg-servers")
-				continue
-			}
-			if dmsgServerType != "" {
-				servers = filterServersByType(servers, dmsgServerType)
-			}
-			for _, server := range servers {
-				dClient.PostEntry(ctx, server) //nolint:errcheck,gosec
-				if err := dmsgC.EnsureSession(ctx, server); err != nil {
-					log.WithField("remote_pk", server.Static).WithError(err).
-						Warn("failed to establish session")
-				}
-			}
+// reconcileServerSet merges the static/embedded seed servers with the live
+// registry (AllServers), deduped by PK, with the REGISTERED entry winning so
+// each server's CURRENT address is dialed even when the static config has
+// drifted. A registry-fetch error degrades to the static seed set for that tick
+// (cold-start, before anything has registered, or a transient registry blip).
+func reconcileServerSet(ctx context.Context, static []*disc.Entry, a *api.API, dmsgServerType string, log logrus.FieldLogger) []*disc.Entry {
+	reg, err := a.AllServers(ctx, log)
+	if err != nil {
+		log.WithError(err).Debug("dmsg-disc: registry fetch failed; using static seed set this tick")
+		reg = nil
+	} else if dmsgServerType != "" {
+		reg = filterServersByType(reg, dmsgServerType)
+	}
+	return mergeServersByPK(static, reg)
+}
+
+// mergeServersByPK unions the static seed set with the registered set, deduped
+// by PK, with a registered entry (current address) winning over a static one.
+// Pure — unit-tested.
+func mergeServersByPK(static, registered []*disc.Entry) []*disc.Entry {
+	byPK := make(map[cipher.PubKey]*disc.Entry, len(static)+len(registered))
+	for _, s := range static {
+		if s != nil {
+			byPK[s.Static] = s
 		}
 	}
+	for _, s := range registered {
+		if s != nil && s.Server != nil {
+			byPK[s.Static] = s // registered (current) address wins over static config
+		}
+	}
+	out := make([]*disc.Entry, 0, len(byPK))
+	for _, s := range byPK {
+		out = append(out, s)
+	}
+	return out
 }
 
 func filterServersByType(in []*disc.Entry, dmsgServerType string) []*disc.Entry {
