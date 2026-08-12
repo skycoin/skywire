@@ -24,6 +24,32 @@ module.exports = tseslint.config(
       "prefer-arrow": preferArrow,
     },
     rules: {
+      // Correctness rules skycoin's shared base applies to its three front-ends
+      // (eslint.base.config.js there). The two projects cannot share the file —
+      // they are separate npm projects in separate repositories — so parity is
+      // kept by matching the rules.
+      "@angular-eslint/component-selector": [
+        "error",
+        {
+          type: "element",
+          prefix: "app",
+          style: "kebab-case",
+        },
+      ],
+      "@angular-eslint/directive-selector": [
+        "error",
+        {
+          type: "attribute",
+          prefix: "app",
+          style: "camelCase",
+        },
+      ],
+      "prefer-const": "error",
+      curly: "error",
+      eqeqeq: ["error", "always", { null: "ignore" }],
+      "valid-typeof": "error",
+      "no-constant-binary-expression": "off",
+
       "@typescript-eslint/consistent-type-definitions": "error",
       "@typescript-eslint/dot-notation": "off",
       "@typescript-eslint/member-ordering": [
