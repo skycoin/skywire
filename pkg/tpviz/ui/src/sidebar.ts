@@ -4,7 +4,7 @@ import * as S from './state';
 import { getVisorStatus, countryToFlag, getBaseVersion, compareVersions, formatBytes, getIPGroupColor } from './utils';
 import { colors } from './constants';
 import { showNodeInfo } from './node-info';
-import { isCosmosActive, cosmosFocusNode } from './cosmos-graph';
+import { webglActive, webglUpdateData, webglFit, webglZoomBy, webglFocusNode, webglSetPhysics } from './webgl-view';
 
 export function toggleSection(sectionId: string): void {
     const section = document.getElementById(sectionId);
@@ -73,8 +73,8 @@ export function updatePkTruncation(): void {
 }
 
 export function focusVisor(pk: string): void {
-    if (isCosmosActive()) {
-        cosmosFocusNode(pk);
+    if (webglActive()) {
+        webglFocusNode(pk);
         showNodeInfo(pk);
         return;
     }
