@@ -1,5 +1,5 @@
 <div class="wrapper highlight-internal-icon"
-  [clipboard]="text"
+  [appClipboard]="text"
   (copyEvent)="onCopyToClipboardClicked()"
   [matTooltip]="(!short && !shortSimple ? 'copy.tooltip' : 'copy.tooltip-with-text') | translate:{ text: text }"
   [matTooltipClass]="{ 'tooltip-word-break': true }"
