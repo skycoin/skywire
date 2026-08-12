@@ -8,8 +8,8 @@ export class Node {
   label!: string;
   localPk!: string;
   isSymmeticNat?: boolean;
-  publicIp?: string;
-  ip!: string;
+  publicIp?: string | null;
+  ip!: string | null;
   version!: string;
   configVersion?: string;
   os?: string;
@@ -145,7 +145,7 @@ interface RouteAppRuleSumary {
   routeDescriptor: RouteDescriptor;
 }
 
-interface RouteForwardRuleSumary {
+export interface RouteForwardRuleSumary {
   nextRid: number;
   nextTid: string;
   routeDescriptor?: RouteDescriptor;

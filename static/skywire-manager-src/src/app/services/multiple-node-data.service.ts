@@ -32,7 +32,7 @@ export class MultipleNodesBackendData {
    * Error found while trying to get the data. It will only have a value if the last
    * try ended in an error.
    */
-  error!: OperationError;
+  error!: OperationError | null;
   /**
    * Time (Date.now()) in which the data returned in the data property was obtained. If
    * the error proterty has a value, this property will still have a valid value if valid
@@ -57,7 +57,7 @@ export class MultipleNodeDataService {
   // Intervals (in ms) in which the service must refresh the data automatically.
   private dataRefreshDelay!: number;
   // Subject for sending the data updates.
-  dataSubject = new BehaviorSubject<MultipleNodesBackendData>(null);
+  dataSubject = new BehaviorSubject<MultipleNodesBackendData | null>(null);
   // Subscription for refreshing the data periodically.
   updateSubscription!: Subscription;
   // Last data sent by dataSubject.
@@ -82,7 +82,7 @@ export class MultipleNodeDataService {
    * Makes the service start returning the node list. Returns an observable for
    * getting the data.
    */
-  startRequestingData(): Observable<MultipleNodesBackendData> {
+  startRequestingData(): Observable<MultipleNodesBackendData | null> {
     if (!this.firstCallToGetDataMade) {
       this.getData(0);
     }
