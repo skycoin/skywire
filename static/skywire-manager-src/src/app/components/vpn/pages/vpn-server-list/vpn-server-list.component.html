@@ -127,10 +127,10 @@
       <div class="center-container mt-4.5" [ngClass]="{'mb-3': !dataFilterer.currentFiltersTexts || dataFilterer.currentFiltersTexts.length < 1}">
         <ng-container *ngTemplateOutlet="topPart"></ng-container>
       </div>
-      @if (dataSource.length !== 0) {
+      @if (dataSource!.length !== 0) {
         <div class="rounded-elevated-box"><div class="box-internal-container">
           <!-- Table. -->
-          @if (dataSource.length > 0) {
+          @if (dataSource!.length > 0) {
             <table
               class="responsive-table-translucid d-none d-md-table"
               cellspacing="0" cellpadding="0"
@@ -259,10 +259,10 @@
                   </td>
                   <td class="name-column">
                     <app-vpn-server-name
-                      [isCurrentServer]="currentServer && server.pk === currentServer.pk"
+                      [isCurrentServer]="!!currentServer && server.pk === currentServer.pk"
                       [isFavorite]="server.flag === serverFlags.Favorite && currentList !== lists.Favorites"
                       [isBlocked]="server.flag === serverFlags.Blocked && currentList !== lists.Blocked"
-                      [isInHistory]="server.inHistory && currentList !== lists.History"
+                      [isInHistory]="!!server.inHistory && currentList !== lists.History"
                       [name]="server.name"
                       [pk]="server.pk"
                       [customName]="server.customName"
@@ -341,7 +341,7 @@
           </app-paginator>
         }
         <!-- Msg shown if the list is empty. -->
-        @if (dataSource.length === 0) {
+        @if (dataSource!.length === 0) {
           <div class="rounded-elevated-box">
             <div class="box-internal-container font-sm">
               <mat-icon [inline]="true" class="alert-icon">warning</mat-icon>

@@ -67,7 +67,7 @@ export class LabelInfo {
   /**
    * Allows to know what the element is (like a node or a dmsg server).
    */
-  identifiedElementType!: LabeledElementTypes;
+  identifiedElementType!: LabeledElementTypes | null;
 }
 
 /**
@@ -293,7 +293,7 @@ export class StorageService {
    * @param nodesPublicKeys Public keys of the nodes to set as hidden.
    * @param nodesIps Ips of the nodes, if known. Must have the same size as nodesPublicKeys.
    */
-  setLocalNodesAsHidden(nodesPublicKeys: string[], nodesIps: string[]) {
+  setLocalNodesAsHidden(nodesPublicKeys: string[], nodesIps: (string | null)[]) {
     this.changeLocalNodesHiddenProperty(nodesPublicKeys, nodesIps, true);
   }
 
@@ -303,15 +303,15 @@ export class StorageService {
    * @param nodesIps Ips of the nodes, if known. Must have the same size as nodesPublicKeys.
    * @param hidden If the nodes will be set as hidden or not.
    */
-  private changeLocalNodesHiddenProperty(nodesPublicKeys: string[], nodesIps: string[], hidden: boolean) {
+  private changeLocalNodesHiddenProperty(nodesPublicKeys: string[], nodesIps: (string | null)[], hidden: boolean) {
     if (nodesPublicKeys.length !== nodesIps.length) {
       throw new Error('Invalid params');
     }
 
     // Create maps for the requested public keys and the ones that have not been saved in
     // local storage yet. The pk is used as key and the IP as value.
-    const publicKeysMap = new Map<string, string>();
-    const newKeysToSave = new Map<string, string>();
+    const publicKeysMap = new Map<string, string | null>();
+    const newKeysToSave = new Map<string, string | null>();
     nodesPublicKeys.forEach((key, i) => {
       publicKeysMap.set(key, nodesIps[i]);
       newKeysToSave.set(key, nodesIps[i]);
@@ -419,7 +419,7 @@ export class StorageService {
    * Saves a label to identify an element via its id. If the provided label is empty, the id
    * is removed from the saved labels list, if it was saved before.
    */
-  saveLabel(id: string, label: string, elementType: LabeledElementTypes): void {
+  saveLabel(id: string, label: string | null, elementType: LabeledElementTypes | null): void {
     if (!label) {
       // Remove the label from the cached map.
       if (this.savedLabels.has(id)) {
@@ -511,8 +511,8 @@ export class StorageService {
    * Gets the label info assigned to an id. If no label has been assigned to the id, null
    * is returned.
    */
-  getLabelInfo(id: string): LabelInfo | null {
-    if (this.savedLabels.has(id)) {
+  getLabelInfo(id: string | undefined): LabelInfo | null {
+    if (id && this.savedLabels.has(id)) {
       return this.savedLabels.get(id)!;
     }
 

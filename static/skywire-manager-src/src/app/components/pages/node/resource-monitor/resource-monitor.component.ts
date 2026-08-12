@@ -151,7 +151,7 @@ export class ResourceMonitorComponent implements OnInit, OnDestroy {
   }
 
   /** Format a byte count as a human-readable string (B/K/M/G). */
-  fmtBytes(n: number): string {
+  fmtBytes(n: number | undefined): string {
     if (n == null || isNaN(n)) {
  return '-'; 
 }

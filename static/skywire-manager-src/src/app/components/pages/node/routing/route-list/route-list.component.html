@@ -104,7 +104,7 @@
             </mat-checkbox>
           </td>
           <td class="mono">{{ route.key }}</td>
-          <td>{{ getTypeName(route.type) }}</td>
+          <td>{{ getTypeName(route.type!) }}</td>
 
           <!-- local-port (src) -->
           <td class="mono">
@@ -244,7 +244,7 @@
               </div>
               <div class="list-row long-content">
                 <span class="title">{{ 'routes.type' | translate }}</span>:
-                {{ getTypeName(route.type) }}
+                {{ getTypeName(route.type!) }}
               </div>
               @if (route.appFields?.routeDescriptor || route.forwardFields?.routeDescriptor) {
                 <div class="list-row long-content">

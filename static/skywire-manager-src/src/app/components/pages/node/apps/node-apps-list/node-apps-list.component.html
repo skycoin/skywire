@@ -315,7 +315,7 @@
     <!-- Link for accessing the full list. -->
     @if (showShortList_ && numberOfPages > 1) {
       <app-view-all-link
-        [numberOfElements]="filteredApps.length"
+        [numberOfElements]="filteredApps!.length"
         [linkParts]="['/nodes', nodePK, 'apps-list', showOfficialApps.toString(), '1']"
         [queryParams]="dataFilterer.currentUrlQueryParams"
       ></app-view-all-link>

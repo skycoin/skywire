@@ -108,9 +108,9 @@ export class VpnHelpers {
     dialog: MatDialog,
     dialogRef: MatDialogRef<any>,
     localPk: string,
-    newServerFromHistory: LocalServerData,
-    newServerFromDiscovery: VpnServer,
-    newServerManually: ManualVpnServerData,
+    newServerFromHistory: LocalServerData | null,
+    newServerFromDiscovery: VpnServer | null,
+    newServerManually: ManualVpnServerData | null,
   ) {
     // Check if the new server param was provided as it should.
     let requestedPk: string;
@@ -210,7 +210,7 @@ export class VpnHelpers {
    */
   static redirectAfterServerChange(
     router: Router,
-    dialogRef: MatDialogRef<any>,
+    dialogRef: MatDialogRef<any> | null,
     localPk: string,
   ) {
     if (dialogRef) {

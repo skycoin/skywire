@@ -34,7 +34,7 @@ export class LabelComponents {
   /**
    * Original saved label info.
    */
-  labelInfo!: LabelInfo;
+  labelInfo!: LabelInfo | null;
 }
 
 /**

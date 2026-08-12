@@ -50,7 +50,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   ]);
 
   @Input() nodePK!: string;
-  @Input() nodeIp!: string;
+  @Input() nodeIp!: string | null;
   @Input() showOfficialApps = true;
 
   // Vars with the data of the columns used for sorting the data.
@@ -92,7 +92,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   allApps!: Application[];
   // All apps the node has for the selected type (official apps or user apps).
   allAppsForType!: Application[];
-  filteredApps!: Application[];
+  filteredApps!: Application[] | null;
   appsToShow!: Application[] | null;
   appsMap!: Map<string, Application>;
   numberOfPages = 1;
