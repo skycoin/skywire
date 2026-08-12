@@ -75,7 +75,7 @@ export class EditVpnServerValueComponent implements OnInit {
     // Use the initially provided version, if there is no saved version.
     updatedSavedServer = updatedSavedServer ? updatedSavedServer : this.data.server;
 
-    const newValue = this.form.get('value').value;
+    const newValue = this.form.get('value')!.value;
     const currentValue = this.data.editName ? this.data.server.customName : this.data.server.personalNote;
     // If no changes were made, just close the modal window.
     if (newValue === currentValue) {

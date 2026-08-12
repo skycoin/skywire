@@ -89,7 +89,7 @@ export class LogFilterComponent implements OnInit, OnDestroy {
       filter: [this.data.days],
     });
 
-    this.formSubscription = this.form.get('filter').valueChanges.subscribe(days => {
+    this.formSubscription = this.form.get('filter')!.valueChanges.subscribe(days => {
       this.dialogRef.close(this.filters.find(filter => filter.days === days));
       this.changeDetectorRef.markForCheck();
     });

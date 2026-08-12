@@ -233,10 +233,10 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
       .filter((s: string) => s.length > 0);
 
     const body: any = {
-      args: (this.form.get('args').value || '').trim(),
+      args: (this.form.get('args')!.value || '').trim(),
       env_full: env,
-      launcher_mode: this.form.get('launcher_mode').value || '',
-      autostart: !!this.form.get('autostart').value,
+      launcher_mode: this.form.get('launcher_mode')!.value || '',
+      autostart: !!this.form.get('autostart')!.value,
     };
 
     const sub = this.appsService.setAppFullConfig(node.localPk, this.app.name, body).subscribe({

@@ -105,7 +105,7 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
     }
 
     this.loading = true;
-    this.loginSubscription = this.authService.login(this.form.get('password').value).subscribe(
+    this.loginSubscription = this.authService.login(this.form.get('password')!.value).subscribe(
       () => {
  this.onLoginSuccess(); this.changeDetectorRef.markForCheck(); 
 },
