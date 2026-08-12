@@ -256,6 +256,7 @@ type API interface {
 	DmsgConnectAll() (*DmsgConnectAllResult, error)
 	SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error)
 	DmsgSessions() (*DmsgClientSessions, error)
+	DmsgConverge(carriers []string) (*DmsgConvergeResult, error)
 
 	// CXO user feeds — visor-published TreeStore feeds beyond the
 	// always-on telemetry one. See pkg/visor/cxo_user_feeds.go.
