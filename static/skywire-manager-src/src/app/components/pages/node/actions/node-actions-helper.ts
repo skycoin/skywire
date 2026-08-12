@@ -116,7 +116,7 @@ export class NodeActionsHelper {
    * Must be called when an option form the top bar is selected.
    * @param actionName Name of the selected option, as defined in the options array.
    */
-  performAction(actionName: string, nodePk: string) {
+  performAction(actionName: string | null, nodePk: string) {
     // Call the adequate function if the user clicks any of the options.
     if (actionName === 'terminal') {
       this.terminal();

@@ -134,7 +134,7 @@ export interface CompleteFilterProperties extends FilterProperties {
  * @param filterProperties Objects with the info for associating the filters objects with the
  * elements of the data list.
  */
-export function filterList(allElements: any[], currentFilters: any, filterPropertiesList: CompleteFilterProperties[]): any[] {
+export function filterList(allElements: any[], currentFilters: any, filterPropertiesList: CompleteFilterProperties[]): any[] | null {
   if (allElements) {
     // Check which filters are valid and create an array including only the properties for
     // those filters.
@@ -191,8 +191,8 @@ export function updateFilterTexts(currentFilters: any, filterPropertiesList: Com
   filterPropertiesList.forEach(filterProperties => {
     // Check if the filter has a valid value.
     if (currentFilters[filterProperties.keyNameInFiltersObject]) {
-      let value: string;
-      let translatableValue: string;
+      let value: string | undefined;
+      let translatableValue: string | undefined;
 
       // Check if there is a translatable var for the current value.
       if (filterProperties.printableLabelsForValues) {

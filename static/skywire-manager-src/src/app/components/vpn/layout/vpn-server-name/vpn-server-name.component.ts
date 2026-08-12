@@ -19,7 +19,7 @@ export class VpnServerNameComponent {
   @Input() isInHistory = false;
   // Names.
   @Input() name = '';
-  @Input() customName = '';
+  @Input() customName: string | null = '';
   // Server pk, for checking if the name of the server is just the PK.
   @Input() pk = '';
   // Text that will be shown if there is no name.

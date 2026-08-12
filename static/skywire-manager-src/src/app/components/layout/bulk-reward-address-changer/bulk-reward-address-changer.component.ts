@@ -28,8 +28,8 @@ export interface NodeToEditData {
  * Extended data about a node, for internal use.
  */
 interface NodeToEditCompleteData extends NodeToEditData {
-  currentAddress?: string;
-  operationError: string;
+  currentAddress?: string | null;
+  operationError: string | null;
   processing: boolean;
 }
 

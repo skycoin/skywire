@@ -62,7 +62,7 @@ export class RouteDetailsComponent {
   /**
    * Gets the label the user has set for an ID or pk.
    */
-  getLabel(id: string) {
+  getLabel(id: string | undefined) {
     const label = this.storageService.getLabelInfo(id);
 
     if (label) {

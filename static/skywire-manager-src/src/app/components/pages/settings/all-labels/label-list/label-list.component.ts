@@ -39,7 +39,7 @@ export class LabelListComponent implements OnDestroy {
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
-  dataSource!: LabelInfo[];
+  dataSource!: LabelInfo[] | null;
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -58,7 +58,7 @@ export class LabelListComponent implements OnDestroy {
   }
 
   allLabels!: LabelInfo[];
-  filteredLabels!: LabelInfo[];
+  filteredLabels!: LabelInfo[] | null;
   labelsToShow!: LabelInfo[] | null;
   numberOfPages = 1;
   currentPage = 1;
@@ -171,7 +171,7 @@ export class LabelListComponent implements OnDestroy {
 
     // Add the type dor data to the array.
     this.allLabels.forEach(label => {
-      (label as any)['identifiedElementType_sort'] = this.getLabelTypeIdentification(label)[0];
+      (label as any)['identifiedElementType_sort'] = this.getLabelTypeIdentification(label)?.[0];
     });
 
     this.dataFilterer.setData(this.allLabels);

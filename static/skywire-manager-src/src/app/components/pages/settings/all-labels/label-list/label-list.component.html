@@ -113,7 +113,7 @@
             {{ label.id }}
           </td>
           <td>
-            {{ getLabelTypeIdentification(label)[0] }} - {{ getLabelTypeIdentification(label)[1] | translate }}
+            {{ getLabelTypeIdentification(label)![0] }} - {{ getLabelTypeIdentification(label)![1] | translate }}
           </td>
           <td class="actions">
             <button
@@ -174,7 +174,7 @@
               </div>
               <div class="list-row">
                 <span class="title">{{ 'labels.type' | translate }}</span>:
-                {{ getLabelTypeIdentification(label)[0] }} - {{ getLabelTypeIdentification(label)[1] | translate }}
+                {{ getLabelTypeIdentification(label)![0] }} - {{ getLabelTypeIdentification(label)![1] | translate }}
               </div>
             </div>
             <div class="margin-part"></div>
@@ -195,7 +195,7 @@
     <!-- Link for accessing the full list. -->
     @if (showShortList_ && numberOfPages > 1) {
       <app-view-all-link
-        [numberOfElements]="filteredLabels.length"
+        [numberOfElements]="filteredLabels!.length"
         [linkParts]="['/settings', 'labels']"
         [queryParams]="dataFilterer.currentUrlQueryParams"
       ></app-view-all-link>

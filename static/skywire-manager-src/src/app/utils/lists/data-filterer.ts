@@ -29,16 +29,16 @@ export class DataFilterer {
     return this.currentUrlQueryParamsInternal;
   }
   // Data to filter.
-  private data!: any[];
+  private data!: any[] | null;
 
-  private dataUpdatedSubject = new Subject<any[]>();
+  private dataUpdatedSubject = new Subject<any[] | null>();
 
   private navigationsSubscription: Subscription;
 
   /**
    * Emits every time the data is filtered. It returns the filtered array.
    */
-  get dataFiltered(): Observable<any[]> {
+  get dataFiltered(): Observable<any[] | null> {
     return this.dataUpdatedSubject.asObservable();
   }
 
@@ -98,7 +98,7 @@ export class DataFilterer {
    * original provided list is not modified.
    * @param data Data to filter.
    */
-  setData(data: any[]) {
+  setData(data: any[] | null) {
     this.data = data;
     this.filter();
   }
@@ -140,7 +140,7 @@ export class DataFilterer {
    */
   private filter() {
     if (this.data) {
-      let filteredData: any[];
+      let filteredData: any[] | null;
 
       // Check if at least one filter is valid.
       let filtersSet = false;

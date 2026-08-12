@@ -52,7 +52,7 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
     this.multipleNodeDataService.stopRequestingData();
 
     this.routeSubscription = this.route.paramMap.subscribe(params => {
-      this.vpnKey = params.get('key');
+      this.vpnKey = params.get('key') || '';
 
       this.isForVpn = window.location.href.indexOf('vpnlogin') !== -1;
 
