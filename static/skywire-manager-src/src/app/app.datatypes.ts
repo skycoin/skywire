@@ -5,20 +5,20 @@ export interface DMSGServerInfo {
 }
 
 export class Node {
-  label: string;
-  localPk: string;
+  label!: string;
+  localPk!: string;
   isSymmeticNat?: boolean;
   publicIp?: string;
-  ip: string;
-  version: string;
+  ip!: string;
+  version!: string;
   configVersion?: string;
   os?: string;
   arch?: string;
-  apps: Application[];
-  transports: Transport[];
-  persistentTransports: PersistentTransport[];
-  routesCount: number;
-  minHops: number;
+  apps!: Application[];
+  transports!: Transport[];
+  persistentTransports!: PersistentTransport[];
+  routesCount!: number;
+  minHops!: number;
   routes?: Route[];
   online?: boolean;
   // Set on rows the hypervisor served from its summary cache because
@@ -45,11 +45,11 @@ export class Node {
   // operators can see which hypervisors a visor reports to.
   hypervisors?: string[];
   connectedHypervisors?: string[];
-  buildTag: string;
+  buildTag!: string;
   skybianBuildVersion?: string;
-  autoconnectTransports: boolean;
+  autoconnectTransports!: boolean;
   isPublic?: boolean;
-  rewardsAddress: string;
+  rewardsAddress!: string;
   // Reward-system verdict on this visor's most recent survey push (see the visor
   // reward_push loop). false = the reward system REJECTED it (e.g. version below the
   // reward floor) → red mark, distinct from the hyphen for no reward address.
@@ -122,6 +122,13 @@ export interface PersistentTransport {
 export interface Route {
   key: number;
   rule: string;
+  // Display fields the route list adds after fetching, so the table can sort
+  // and render them. They are not part of the API response.
+  type?: number;
+  src?: string;
+  dst?: string;
+  src_label?: string;
+  dst_label?: string;
   ruleSummary?: RouteRuleSummary;
   appFields?: RouteAppRuleSumary;
   forwardFields?: RouteForwardRuleSumary;
@@ -159,9 +166,9 @@ export interface HealthInfo {
 }
 
 export class ProxyDiscoveryEntry {
-  address: string;
-  pk: string;
-  port: string;
+  address!: string;
+  pk!: string;
+  port!: string;
   country?: string;
   region?: string;
   location?: string;

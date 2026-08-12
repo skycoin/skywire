@@ -10,10 +10,10 @@ import (
 	"fmt"
 	"strings"
 
-	goawkinterp "github.com/benhoyt/goawk/interp"
-	"github.com/benhoyt/goawk/parser"
 	"github.com/skycoin/skywire/third_party/0magnet/afero"
 	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/interp"
+	goawkinterp "github.com/benhoyt/goawk/interp"
+	"github.com/benhoyt/goawk/parser"
 )
 
 func init() {

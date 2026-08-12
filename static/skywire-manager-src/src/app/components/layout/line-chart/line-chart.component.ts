@@ -1,4 +1,4 @@
-import { Component, DoCheck, ElementRef, Input, IterableDiffers, ViewChild, AfterViewInit, IterableDiffer, OnDestroy } from '@angular/core';
+import { Component, DoCheck, ElementRef, Input, IterableDiffers, ViewChild, AfterViewInit, IterableDiffer, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler } from 'chart.js';
 
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler);
@@ -10,14 +10,15 @@ Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryS
     selector: 'app-line-chart',
     templateUrl: './line-chart.component.html',
     styleUrls: ['./line-chart.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LineChartComponent implements AfterViewInit, DoCheck, OnDestroy {
   // Margin at the top of the chart. The max value will be this many pixels from the top.
   public static topInternalMargin = 5;
 
-  @ViewChild('chart') chartElement: ElementRef;
-  @Input() data: number[];
+  @ViewChild('chart') chartElement!: ElementRef;
+  @Input() data!: number[];
   @Input() height = 100;
   @Input() animated = false;
 

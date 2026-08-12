@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy, NgZone } from '@angular/core';
+import { Component, Input, OnDestroy, NgZone, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription, interval } from 'rxjs';
 
@@ -21,7 +21,8 @@ import { ApiService, RequestOptions, RequestTypes } from 'src/app/services/api.s
     selector: 'app-node-info-content',
     templateUrl: './node-info-content.component.html',
     styleUrls: ['./node-info-content.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeInfoContentComponent implements OnDestroy {
   @Input() set nodeInfo(val: Node) {
@@ -36,8 +37,8 @@ export class NodeInfoContentComponent implements OnDestroy {
     this.fetchPorts(val.localPk);
   }
 
-  node: Node;
-  timeOnline: ElapsedTime;
+  node!: Node;
+  timeOnline!: ElapsedTime;
 
   // Live-counter state for "Time online". The backend refreshes the
   // visor's seconds_online roughly every 10s; the local 1Hz tick
@@ -89,6 +90,7 @@ export class NodeInfoContentComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private apiService: ApiService,
     private ngZone: NgZone,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     // 1Hz tick for the live online-time counter. Runs outside
     // Angular's zone so the periodic emission doesn't cause an
@@ -97,6 +99,7 @@ export class NodeInfoContentComponent implements OnDestroy {
     this.ngZone.runOutsideAngular(() => {
       this.timeTickSub = interval(1000).subscribe(() => {
         this.ngZone.run(() => this.recomputeTimeOnline());
+        this.changeDetectorRef.markForCheck();
       });
     });
   }
@@ -137,6 +140,7 @@ export class NodeInfoContentComponent implements OnDestroy {
       if (changed) {
         NodeComponent.refreshCurrentDisplayedData();
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -172,8 +176,10 @@ return {
       } else {
         this.ports = [];
       }
+      this.changeDetectorRef.markForCheck();
     }, () => {
       this.ports = [];
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -199,10 +205,12 @@ return {
           min_hops: typeof result.min_hops === 'number' ? result.min_hops : 0,
         };
         this.routerSettingsLoaded = true;
+        this.changeDetectorRef.markForCheck();
       },
       () => {
  this.snackbarService.showError('common.loading-error'); 
-},
+        this.changeDetectorRef.markForCheck();
+      },
     );
   }
 
@@ -226,11 +234,13 @@ return {
           min_hops: typeof result.min_hops === 'number' ? result.min_hops : 0,
         };
         this.routerSettingsSaveMsg = 'Saved';
+        this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
         this.routerSettingsSaving = false;
         this.routerSettingsSaveErr = (err && err.message) ? err.message :
           (typeof err === 'string' ? err : 'Save failed');
+        this.changeDetectorRef.markForCheck();
       },
     );
   }
@@ -243,10 +253,12 @@ return {
       this.apiService.get(`visors/${this.node.localPk}/runtime-config`).subscribe(
         (result: any) => {
  this.rawConfig = JSON.stringify(result, null, 2); 
-},
+          this.changeDetectorRef.markForCheck();
+        },
         () => {
  this.snackbarService.showError('common.loading-error'); 
-},
+          this.changeDetectorRef.markForCheck();
+        },
       );
     }
   }
@@ -310,10 +322,12 @@ return {
         this.configSaveMsg = (resp && resp.restart_required)
           ? 'Saved. Restart the visor for changes to take effect.'
           : 'Saved.';
+        this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
         this.configSaving = false;
         this.configSaveErr = err?.originalError?.error?.error || err?.message || 'Save failed';
+        this.changeDetectorRef.markForCheck();
       },
     );
   }

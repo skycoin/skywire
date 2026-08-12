@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs/internal/Subscription';
 
@@ -26,10 +26,11 @@ enum KnownProblems {
     selector: 'app-vpn-error',
     templateUrl: './vpn-error.component.html',
     styleUrls: ['./vpn-error.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnErrorComponent extends PageBaseComponent {
-  private problem = null;
+  private problem: KnownProblems | string = null;
 
   private navigationsSubscription: Subscription;
 
@@ -37,6 +38,7 @@ export class VpnErrorComponent extends PageBaseComponent {
     private route: ActivatedRoute,
     private vpnAuthGuardService: VpnAuthGuardService,
     private vpnClientService: VpnClientService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
     
@@ -52,7 +54,9 @@ export class VpnErrorComponent extends PageBaseComponent {
       // Stop requesting data.
       this.vpnClientService.stopContinuallyUpdatingData();
 
+      // change-detection: no view state — unsubscribes
       setTimeout(() => this.navigationsSubscription.unsubscribe());
+      this.changeDetectorRef.markForCheck();
     });
   }
 

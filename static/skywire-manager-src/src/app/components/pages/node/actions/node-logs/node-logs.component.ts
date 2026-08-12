@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Subscription, delay, mergeMap, of, timer } from 'rxjs';
 
@@ -31,13 +31,13 @@ enum Level {
  */
 class LevelDetails {
   // Name to show on the log entries list for the importance level.
-  name: string;
+  name!: string;
   // CSS class for showing the name of the level.
-  colorClass: string;
+  colorClass!: string;
   // Translatable var for showing the name of a filter which shows entries of this level or more.
-  levelFilterName: string;
+  levelFilterName!: string;
   // Numeric importance of the leve.
-  importance: number;
+  importance!: number;
 }
 
 /**
@@ -45,15 +45,15 @@ class LevelDetails {
  */
 class LogEntry {
   // Date and hour.
-  time: string;
+  time!: string;
   // Importance level.
-  level: Level;
+  level!: Level;
   // Log msg.
-  msg: string;
+  msg!: string;
   // Function that originated the msg.
-  func: string;
+  func!: string;
   // Module that originated the msg.
-  _module: string;
+  _module!: string;
   // Collection of extra key value pairs that form part of the log entry.
   extra: LogEntryExtraValue[] = [];
 }
@@ -62,8 +62,8 @@ class LogEntry {
  * Unknown key value pairs that can be part of an log entry.
  */
 class LogEntryExtraValue {
-  name: string;
-  value: string;
+  name!: string;
+  value!: string;
 }
 
 /**
@@ -73,10 +73,11 @@ class LogEntryExtraValue {
     selector: 'app-node-logs',
     templateUrl: './node-logs.component.html',
     styleUrls: ['./node-logs.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeLogsComponent implements OnInit, OnDestroy {
-  @ViewChild('content') content: ElementRef;
+  @ViewChild('content') content!: ElementRef;
 
   // Map with the properties of each possible log entry importance level.
   levelDetails: Map<Level, LevelDetails> = new Map([
@@ -113,7 +114,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
   // Moment in which the data was loaded.
   LoadingMoment = 0;
   // How much time has passed since the data was loaded.
-  elapsedTime: ElapsedTime;
+  elapsedTime!: ElapsedTime;
 
   // Live tail polling. When true, the dialog re-fetches every
   // livePollMs and appends only the entries newer than its cursor.
@@ -151,8 +152,8 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
    */
   private shouldShowError = true;
 
-  private subscription: Subscription;
-  private timeUpdateSubscription: Subscription;
+  private subscription!: Subscription;
+  private timeUpdateSubscription!: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -170,7 +171,8 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     private nodeService: NodeService,
     private snackbarService: SnackbarService,
     private ngZone: NgZone,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private changeDetectorRef: ChangeDetectorRef
   ) { }
 
   ngOnInit() {
@@ -215,6 +217,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
       // Use the selected option and update the filtered entries list.
       this.currentMinimumLevel = optionTypes[selectedOption - 1];
       this.filter();
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -238,8 +241,12 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
       delay(delayMilliseconds),
       mergeMap(() => this.nodeService.getRuntimeLogsSince(NodeComponent.getCurrentNodeKey(), cursor))
     ).subscribe(
-      (delta: any) => this.onLogsDeltaReceived(delta),
-      (err: OperationError) => this.onLogsError(err)
+      (delta: any) => {
+ this.onLogsDeltaReceived(delta); this.changeDetectorRef.markForCheck(); 
+},
+      (err: OperationError) => {
+ this.onLogsError(err); this.changeDetectorRef.markForCheck(); 
+}
     );
   }
 
@@ -441,6 +448,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     // refresh; otherwise leave their scroll position alone so they
     // can read history without getting yanked.
     if (this.wasAtBottom) {
+      // change-detection: no view state — scrolls a container
       setTimeout(() => {
         if (this.content) {
           (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
@@ -455,9 +463,11 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     this.elapsedTime = TimeUtils.getElapsedTime(Math.floor((Date.now() - this.LoadingMoment) / 1000));
 
     this.removeTimeSubscription();
-    this.timeUpdateSubscription = timer(5000, 5000).subscribe(() => this.ngZone.run(() => {
+    this.timeUpdateSubscription = timer(5000, 5000).subscribe(() => {
+ this.ngZone.run(() => {
       this.elapsedTime = TimeUtils.getElapsedTime(Math.floor((Date.now() - this.LoadingMoment) / 1000));
-    }));
+    }); this.changeDetectorRef.markForCheck(); 
+});
   }
 
   // Returns the URL with the raw log data.

@@ -902,6 +902,13 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, err
 }
 
+// RoutingStats calls RoutingStats.
+func (rc *rpcClient) RoutingStats() (routing.RoutingTableStats, error) {
+	var stats routing.RoutingTableStats
+	err := rc.Call("RoutingStats", &struct{}{}, &stats)
+	return stats, err
+}
+
 // RoutingPolicies calls RoutingPolicies.
 func (rc *rpcClient) RoutingPolicies() (*RoutingPoliciesSummary, error) {
 	var summary RoutingPoliciesSummary
