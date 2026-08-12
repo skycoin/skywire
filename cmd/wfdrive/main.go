@@ -20,9 +20,28 @@
 //	wfdrive serve 9223 127.0.0.1:9224
 //	curl 'http://127.0.0.1:9224/nav?url=https://magnetosphere.net/&wait=10&out=/tmp/mag'
 //	curl 'http://127.0.0.1:9224/nav?url=...&eval=<js>&out=/tmp/x'
-//	curl  http://127.0.0.1:9224/quit          # session.end + exit
+//	curl 'http://127.0.0.1:9224/eval?expr=<js>'   # evaluate, no navigation
+//	curl 'http://127.0.0.1:9224/shoot?out=/tmp/x' # screenshot as it stands
+//	curl  http://127.0.0.1:9224/health            # session + tab usable?
+//	curl  http://127.0.0.1:9224/quit              # session.end + exit
 //
-// /nav writes <out>.png + <out>.console.txt and returns JSON. Testing through
+// Captures land in the temp directory under names wfdrive picks itself
+// (wfdrive-<n>.png / .console.txt); the response says where each one went. The
+// "out" parameter is accepted and ignored — letting a request name a file it
+// writes is a path-injection question nobody needs to have, on a tool whose
+// callers only ever needed to know where the file is.
+//
+// /nav, /shoot and /eval write <out>.png + <out>.console.txt and return JSON.
+// Splitting navigation, evaluation and capture apart matters for anything that
+// has to settle between steps: /nav evaluates immediately before it shoots, so
+// a test that needs to toggle something and wait would otherwise have to cram
+// the whole sequence into one expression.
+//
+// The driver heals itself. Closing its tab in the browser, or losing the
+// socket, used to brick it until a restart — and restarting is precisely what
+// strands the single session, so a closed tab could cost a browser restart.
+// Every operation now runs through withTab, which re-opens the tab (and
+// re-establishes the session if the connection went too) and retries once. Testing through
 // Waterfox exercises the REAL client path (dmsg/skynet through the host visor's
 // resolving SOCKS5 proxy), unlike the in-UI iframe browser.
 package main
@@ -35,9 +54,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -60,6 +81,15 @@ type driver struct {
 	nextID  int
 	waiters map[int]chan bidiMsg
 	console []string
+
+	// port and bctx let the driver rebuild itself. The tab is the fragile
+	// part: close it in the browser and every later command fails with "no
+	// such frame" until a new one is opened, which used to mean restarting
+	// wfdrive — and restarting is exactly what strands Firefox's single BiDi
+	// session. Holding them here lets recover() re-open a tab, or re-dial and
+	// re-establish the session, in place.
+	port string
+	bctx string
 }
 
 func (d *driver) pump() {
@@ -124,39 +154,119 @@ func (d *driver) dumpConsole() string {
 // connect dials BiDi, establishes the single session (waiting out a lagging
 // prior teardown), subscribes to console logs, and opens one tab to drive.
 func connect(ctx context.Context, port string) (*driver, string, error) {
-	c, _, err := websocket.Dial(ctx, "ws://127.0.0.1:"+port+"/session", nil)
+	d := &driver{ctx: ctx, waiters: map[int]chan bidiMsg{}, port: port}
+	if err := d.dial(); err != nil {
+		return nil, "", err
+	}
+	if err := d.newSession(); err != nil {
+		return nil, "", err
+	}
+	if err := d.openTab(); err != nil {
+		return nil, "", err
+	}
+	return d, d.bctx, nil
+}
+
+// dial opens the BiDi websocket and starts the reader.
+func (d *driver) dial() error {
+	c, _, err := websocket.Dial(d.ctx, "ws://127.0.0.1:"+d.port+"/session", nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("BiDi dial: %w", err)
+		return fmt.Errorf("BiDi dial: %w", err)
 	}
 	c.SetReadLimit(96 << 20)
-	d := &driver{c: c, ctx: ctx, waiters: map[int]chan bidiMsg{}}
+	d.mu.Lock()
+	d.c = c
+	d.waiters = map[int]chan bidiMsg{}
+	d.mu.Unlock()
 	go d.pump()
+	return nil
+}
+
+// newSession establishes the one session Firefox allows, waiting out a prior
+// teardown that has not landed yet.
+func (d *driver) newSession() error {
 	var serr error
 	for i := 0; i < 15; i++ {
 		if _, serr = d.cmd("session.new", map[string]interface{}{"capabilities": map[string]interface{}{}}); serr == nil {
-			break
+			_, _ = d.cmd("session.subscribe", map[string]interface{}{"events": []string{"log.entryAdded"}}) //nolint:errcheck
+			return nil
 		}
 		if !strings.Contains(serr.Error(), "Maximum number of active") {
-			return nil, "", fmt.Errorf("session.new: %w", serr)
+			return fmt.Errorf("session.new: %w", serr)
 		}
 		time.Sleep(2 * time.Second)
 	}
-	if serr != nil {
-		return nil, "", fmt.Errorf("session busy (restart Waterfox once to clear a stuck session): %w", serr)
+	return fmt.Errorf("session busy (restart Waterfox once to clear a stuck session): %w", serr)
+}
+
+// openTab opens the tab this driver drives.
+func (d *driver) openTab() error {
+	cr, err := d.cmd("browsingContext.create", map[string]interface{}{"type": "tab"})
+	if err != nil {
+		return fmt.Errorf("browsingContext.create: %w", err)
 	}
-	_, _ = d.cmd("session.subscribe", map[string]interface{}{"events": []string{"log.entryAdded"}}) //nolint:errcheck
-	var bctx string
-	if cr, e := d.cmd("browsingContext.create", map[string]interface{}{"type": "tab"}); e == nil {
-		var cc struct {
-			Context string `json:"context"`
+	var cc struct {
+		Context string `json:"context"`
+	}
+	if e := json.Unmarshal(cr, &cc); e != nil || cc.Context == "" {
+		return fmt.Errorf("could not create a browsing context")
+	}
+	d.mu.Lock()
+	d.bctx = cc.Context
+	d.mu.Unlock()
+	return nil
+}
+
+// gone reports whether an error means the tab or the whole connection went
+// away, rather than the command itself being wrong.
+func gone(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, s := range []string{
+		"no such frame", "no such node", "browsing context",
+		"invalid session id", "failed to write", "broken pipe",
+		"use of closed", "websocket", "eof", "context canceled",
+	} {
+		if strings.Contains(msg, s) {
+			return true
 		}
-		_ = json.Unmarshal(cr, &cc) //nolint:errcheck
-		bctx = cc.Context
 	}
-	if bctx == "" {
-		return nil, "", fmt.Errorf("could not create a browsing context")
+	return false
+}
+
+// recover re-opens the tab, and re-dials and re-establishes the session if the
+// socket itself has gone. It is the difference between a closed tab being a
+// hiccup and being a restart — and since restarting is what leaks Firefox's
+// single session, recovering in place is what keeps that session healthy.
+func (d *driver) recover() error {
+	if err := d.openTab(); err == nil {
+		return nil
 	}
-	return d, bctx, nil
+	if d.c != nil {
+		d.c.Close(websocket.StatusNormalClosure, "reconnecting") //nolint:errcheck,gosec
+	}
+	if err := d.dial(); err != nil {
+		return err
+	}
+	if err := d.newSession(); err != nil {
+		return err
+	}
+	return d.openTab()
+}
+
+// withTab runs fn against the current tab, recovering once if the tab or the
+// connection disappeared underneath it.
+func (d *driver) withTab(fn func(bctx string) error) error {
+	err := fn(d.bctx)
+	if err == nil || !gone(err) {
+		return err
+	}
+	if rerr := d.recover(); rerr != nil {
+		return fmt.Errorf("%v (recovery failed: %v)", err, rerr)
+	}
+	return fn(d.bctx)
 }
 
 func (d *driver) evalStr(bctx, expr string) string {
@@ -181,14 +291,36 @@ func (d *driver) evalStr(bctx, expr string) string {
 	return strings.Trim(out, `"`)
 }
 
-func (d *driver) shoot(bctx, outPrefix string) {
+// captureSeq numbers capture files. wfdrive names them itself rather than
+// letting a request name them: two static analysers both, correctly, refused
+// to believe any amount of validation on a request-supplied name made the
+// resulting path safe, and they are easier to agree with than to argue with.
+// The caller learns where its capture landed from the JSON response, which is
+// all it needed the name for.
+var captureSeq atomic.Uint64
+
+// captureBase is the prefix for this run's captures.
+const captureBase = "wfdrive"
+
+// writeCapture writes one capture into the temp directory under a name of our
+// own making, and returns the path.
+func writeCapture(seq uint64, ext string, b []byte) string {
+	// Every component here is ours: the temp dir, a constant prefix, a counter
+	// and a literal extension. The taint analysers reach os.TempDir (it reads
+	// TMPDIR) rather than anything a request said.
+	path := filepath.Join(os.TempDir(), fmt.Sprintf("%s-%d%s", captureBase, seq, ext))
+	_ = os.WriteFile(path, b, 0o600) //nolint:errcheck,gosec // path is built from constants and a counter
+	return path
+}
+
+func (d *driver) shoot(bctx string, seq uint64) {
 	if shot, e := d.cmd("browsingContext.captureScreenshot", map[string]interface{}{"context": bctx}); e == nil {
 		var s struct {
 			Data string `json:"data"`
 		}
 		_ = json.Unmarshal(shot, &s) //nolint:errcheck
 		if b, de := base64.StdEncoding.DecodeString(s.Data); de == nil {
-			_ = os.WriteFile(outPrefix+".png", b, 0o644) //nolint:errcheck,gosec
+			writeCapture(seq, ".png", b)
 		}
 	}
 }
@@ -204,41 +336,104 @@ func serveMode() error {
 	if err != nil {
 		return err
 	}
+	// Release the session on EVERY exit path, not just the graceful ones.
+	// Firefox allows one BiDi session and does not reclaim it when the socket
+	// drops, so a wfdrive that dies after connecting — a port already in use,
+	// say — strands that session until the browser is restarted. endOnce makes
+	// returning early cost nothing.
+	var endOnce sync.Once
 	end := func() {
-		_, _ = d.cmd("session.end", map[string]interface{}{}) //nolint:errcheck
-		d.c.Close(websocket.StatusNormalClosure, "")          //nolint:errcheck,gosec
+		endOnce.Do(func() {
+			_, _ = d.cmd("session.end", map[string]interface{}{}) //nolint:errcheck
+			d.c.Close(websocket.StatusNormalClosure, "")          //nolint:errcheck,gosec
+		})
 	}
+	defer end()
 
 	srv := &http.Server{Addr: ctrlAddr, ReadHeaderTimeout: 5 * time.Second}
 	mux := http.NewServeMux()
+
+	// report writes the screenshot + console for a step and answers as JSON.
+	report := func(w http.ResponseWriter, _, evalOut string, warn error) {
+		seq := captureSeq.Add(1)
+		_ = d.withTab(func(bctx string) error { d.shoot(bctx, seq); return nil }) //nolint:errcheck
+		con := d.dumpConsole()
+		conPath := writeCapture(seq, ".console.txt", []byte(con+"\n"))
+		body := map[string]interface{}{
+			"png":     strings.TrimSuffix(conPath, ".console.txt") + ".png",
+			"console": con,
+			"eval":    evalOut,
+		}
+		if warn != nil {
+			body["warning"] = warn.Error()
+		}
+		resp, _ := json.Marshal(body) //nolint:errcheck
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(resp) //nolint:errcheck
+	}
 	mux.HandleFunc("/nav", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		wait := 8
 		if n, e := strconv.Atoi(q.Get("wait")); e == nil {
 			wait = n
 		}
-		out := q.Get("out")
-		if out == "" {
-			out = "/tmp/wfdrive"
-		}
 		d.resetConsole()
+		var warn error
 		if u := q.Get("url"); u != "" {
-			if _, e := d.cmd("browsingContext.navigate", map[string]interface{}{"context": bctx, "url": u, "wait": "complete"}); e != nil {
-				_, _ = fmt.Fprintf(w, `{"navWarning":%q}`+"\n", e.Error()) //nolint:errcheck,gosec
-			}
+			warn = d.withTab(func(bctx string) error {
+				_, e := d.cmd("browsingContext.navigate",
+					map[string]interface{}{"context": bctx, "url": u, "wait": "complete"})
+				return e
+			})
 		}
 		time.Sleep(time.Duration(wait) * time.Second)
 		evalOut := ""
 		if ev := q.Get("eval"); ev != "" {
-			evalOut = d.evalStr(bctx, ev)
+			evalOut = d.evalStr(d.bctx, ev)
 		}
-		d.shoot(bctx, out)
-		con := d.dumpConsole()
-		_ = os.WriteFile(out+".console.txt", []byte(con+"\n"), 0o644)                                         //nolint:errcheck,gosec
-		resp, _ := json.Marshal(map[string]interface{}{"png": out + ".png", "eval": evalOut, "console": con}) //nolint:errcheck
+		report(w, q.Get("out"), evalOut, warn)
+	})
+
+	// /shoot screenshots the tab as it stands, without navigating — so a test
+	// can drive the page through several steps (settle, toggle, settle) and
+	// capture each one, instead of having to fold everything into the single
+	// eval that /nav runs immediately before its shot.
+	mux.HandleFunc("/shoot", func(w http.ResponseWriter, r *http.Request) {
+		report(w, r.URL.Query().Get("out"), "", nil)
+	})
+
+	// /eval evaluates in the tab without navigating or resetting the console.
+	mux.HandleFunc("/eval", func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		out := ""
+		_ = d.withTab(func(bctx string) error { //nolint:errcheck
+			out = d.evalStr(bctx, q.Get("expr"))
+			if strings.HasPrefix(out, "ERROR: ") {
+				return fmt.Errorf("%s", strings.TrimPrefix(out, "ERROR: "))
+			}
+			return nil
+		})
+		resp, _ := json.Marshal(map[string]interface{}{"eval": out}) //nolint:errcheck
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write(resp) //nolint:errcheck
 	})
+
+	// /health reports whether the session and tab are still usable, recovering
+	// them if not.
+	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
+		err := d.withTab(func(bctx string) error {
+			_, e := d.cmd("browsingContext.getTree", map[string]interface{}{"root": bctx})
+			return e
+		})
+		status := "ok"
+		if err != nil {
+			status = "unhealthy: " + err.Error()
+		}
+		resp, _ := json.Marshal(map[string]interface{}{"status": status, "tab": d.bctx}) //nolint:errcheck
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(resp) //nolint:errcheck
+	})
+
 	mux.HandleFunc("/quit", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("bye\n"))                                            //nolint:errcheck
 		go func() { time.Sleep(200 * time.Millisecond); end(); _ = srv.Close() }() //nolint:errcheck
@@ -246,7 +441,7 @@ func serveMode() error {
 	srv.Handler = mux
 
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	go func() { <-sig; end(); _ = srv.Close() }() //nolint:errcheck
 
 	fmt.Printf("wfdrive serving control on http://%s (BiDi :%s, tab %s)\n", ctrlAddr, port, bctx)
