@@ -157,19 +157,20 @@ func TestPollServersUntilFound_Found(t *testing.T) {
 	require.Equal(t, srvPK, out[0].Static)
 }
 
-func TestUpdateServers_CtxCanceled(t *testing.T) {
+func TestConnectConfiguredServers_CtxCanceled(t *testing.T) {
 	a := newMockAPI(t)
-	// Returns immediately on a canceled ctx (the 10-minute ticker never
-	// fires). Just must not block or panic.
+	// With a canceled ctx and no servers (mock store empty, no static seed) the
+	// maintenance loop reconciles to an empty set and returns on the first select
+	// instead of waiting out the interval. Must not block or panic.
 	done := make(chan struct{})
 	go func() {
-		updateServers(canceledCtx(), a, nil, nil, "", testLog())
+		connectConfiguredServers(canceledCtx(), nil, a, nil, nil, "", testLog())
 		close(done)
 	}()
 	select {
 	case <-done:
 	case <-time.After(2 * time.Second):
-		t.Fatal("updateServers did not return on canceled ctx")
+		t.Fatal("connectConfiguredServers did not return on canceled ctx")
 	}
 }
 

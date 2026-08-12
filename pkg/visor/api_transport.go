@@ -39,10 +39,10 @@ type RouterSettings struct {
 }
 
 // GetRouterSettings returns the current runtime values of the four
-// router knobs. None of these survive a visor restart on their own —
-// some get persisted via separate config paths (MinHops, MuxRoutes
-// are written to Routing.*) but ForceLocalRoutes / ExistingTPOnly
-// are runtime-only, mirroring the CLI's behavior.
+// router knobs. MinHops and MuxRoutes are persisted to Routing.* and
+// seeded back into the router at boot, so they survive a restart;
+// ForceLocalRoutes / ExistingTPOnly are runtime-only, mirroring the
+// CLI's behavior.
 func (v *Visor) GetRouterSettings() (RouterSettings, error) {
 	if v.router == nil {
 		return RouterSettings{}, errors.New("router not available")

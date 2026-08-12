@@ -249,12 +249,36 @@ func startGroupPoller(parent context.Context) {
 				})
 				// Host-OS notification when no capable browser UI is showing it.
 				// Body = "<sender>: <text>" using the display text (file/reply
-				// overrides applied above).
+				// overrides applied above). Own posts come back through this
+				// same poll — the owner echoes its sends and a member's CXO
+				// subscription returns theirs — and are not news to their
+				// author, so they never notify.
+				if appCl != nil && m.SenderPK == appCl.Config().VisorPK {
+					continue
+				}
 				msgText, _ := envelope["message"].(string)
-				notifyOSInbound("Group message", displayName(m.SenderPK.Hex())+": "+notifPreview(msgText))
+				notifyOSInboundThread(m.GroupID, m.GroupID,
+					"Group message", displayName(m.SenderPK.Hex())+": "+notifPreview(msgText))
 			}
 		}
 	}()
+}
+
+// isGroupMetaInputError classifies GroupSetMeta rejections the user can fix
+// from the dialog. String-matched for the same reason as isProfileInputError:
+// the error crossed net/rpc, which flattens wrapping. The strings come from
+// pkg/skychat/group/meta.go.
+func isGroupMetaInputError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	for _, s := range []string{"needs a name", "name too long", "only the founding visor", "nothing to change"} {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
 }
 
 // joinScanEveryNPolls is how many message-poll ticks pass between
@@ -299,10 +323,18 @@ func scanPendingJoins(seen map[string]int) {
 			"group_name":    g.Name,
 			"pending_joins": g.PendingJoins,
 		}); err == nil {
-			hub.broadcast(string(body))
+			// Live-only, for the same reason as a pair invite: the queue
+			// itself comes back from /group on connect, so replaying this
+			// re-toasts a join request the user has already seen once per
+			// reconnect. See sseHub.broadcastLive.
+			hub.broadcastLive(string(body))
 		}
 		if had {
-			notifyOSInbound("Group join request",
+			// No thread key: an admin parked in the group's chat still wants
+			// to hear about a join request — the queue lives behind a dialog,
+			// not in the message stream. The tag folds repeats for one group
+			// into a single notification on sinks that coalesce.
+			notifyOSInboundThread("", "join:"+g.ID, "Group join request",
 				strconv.Itoa(g.PendingJoins)+" waiting to join "+g.Name)
 		}
 	}
@@ -834,6 +866,57 @@ func groupItemHandler() http.HandlerFunc {
 			var info visor.GroupInfo
 			if err := pairRPCCall("GroupSetListed", func(c visor.API) error {
 				i, e := c.GroupSetListed(id, body.Listed)
+				info = i
+				return e
+			}); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, info)
+
+		case action == "meta" && r.Method == http.MethodPost:
+			// Founder-only display metadata: name and/or picture. Avatar is
+			// a pointer so the three intents stay distinct: absent = leave
+			// it, "" = clear it, data URI = replace it.
+			var body struct {
+				Name   string  `json:"name"`
+				Avatar *string `json:"avatar"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+				return
+			}
+			args := visor.GroupSetMetaArgs{ID: id, Name: body.Name}
+			if body.Avatar != nil {
+				args.SetAvatar = true
+				args.Avatar = *body.Avatar
+			}
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupSetMeta", func(c visor.API) error {
+				i, e := c.GroupSetMeta(args)
+				info = i
+				return e
+			}); err != nil {
+				status := http.StatusInternalServerError
+				// The rejections a user can fix from the dialog (bad image,
+				// name too long/empty, not the founder) come back as 400 so
+				// the UI shows them as input errors, same as /profile does.
+				if isProfileInputError(err) || isGroupMetaInputError(err) {
+					status = http.StatusBadRequest
+				}
+				http.Error(w, err.Error(), status)
+				return
+			}
+			writeJSON(w, info)
+
+		case action == "refresh-meta" && r.Method == http.MethodPost:
+			// Member-side pull of the founder's current name + picture.
+			// Best-effort on the visor side: an unreachable founder returns
+			// the local record unchanged, so this is safe to fire on every
+			// chat open.
+			var info visor.GroupInfo
+			if err := pairRPCCall("GroupRefreshMeta", func(c visor.API) error {
+				i, e := c.GroupRefreshMeta(id)
 				info = i
 				return e
 			}); err != nil {

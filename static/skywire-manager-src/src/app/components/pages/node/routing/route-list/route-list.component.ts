@@ -36,7 +36,7 @@ export class RouteListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
   private readonly listId = 'rl';
 
-  @Input() nodePK: string;
+  @Input() nodePK!: string;
 
   // Vars with the data of the columns used for sorting the data.
   keySortData = new SortingColumn(['key'], 'routes.key', SortingModes.Number);
@@ -52,7 +52,7 @@ export class RouteListComponent implements OnDestroy {
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
-  dataSource: Route[];
+  dataSource!: Route[];
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -63,16 +63,16 @@ export class RouteListComponent implements OnDestroy {
    * accessing the full list. If false, the full list is shown, with pagination
    * controls, if needed.
    */
-  showShortList_: boolean;
+  showShortList_!: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
     // Sort the data.
     this.dataSorter.setData(this.filteredRoutes);
   }
 
-  allRoutes: Route[];
-  filteredRoutes: Route[];
-  routesToShow: Route[];
+  allRoutes!: Route[];
+  filteredRoutes!: Route[];
+  routesToShow!: Route[] | null;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
@@ -101,34 +101,34 @@ export class RouteListComponent implements OnDestroy {
     this.allRoutes.forEach(route => {
       // Save the type in the root of the object to be able to use it with the filterer.
       if (route.ruleSummary.ruleType || route.ruleSummary.ruleType === 0) {
-        route['type'] = route.ruleSummary.ruleType;
+        (route as any)['type'] = route.ruleSummary.ruleType;
       } else {
-        route['type'] = '';
+        (route as any)['type'] = '';
       }
 
       if (route.appFields || route.forwardFields) {
         const routeDescriptor = route.appFields ? route.appFields.routeDescriptor : route.forwardFields.routeDescriptor;
 
         // Save the source and destination visor keys and the associated labels.
-        route['src'] = routeDescriptor.srcPk;
-        route['src_label'] =
-          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, route['src']);
-        route['dst'] = routeDescriptor.dstPk;
-        route['dst_label'] =
-          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, route['dst']);
+        (route as any)['src'] = routeDescriptor.srcPk;
+        (route as any)['src_label'] =
+          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, (route as any)['src']);
+        (route as any)['dst'] = routeDescriptor.dstPk;
+        (route as any)['dst_label'] =
+          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, (route as any)['dst']);
       } else if (route.intermediaryForwardFields) {
         // Save the destination transport id and the associated label. There is no source transport.
-        route['src'] = '';
-        route['src_label'] = '';
-        route['dst'] = route.intermediaryForwardFields.nextTid;
-        route['dst_label'] =
-          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, route['dst']);
+        (route as any)['src'] = '';
+        (route as any)['src_label'] = '';
+        (route as any)['dst'] = route.intermediaryForwardFields.nextTid;
+        (route as any)['dst_label'] =
+          LabeledElementTextComponent.getCompleteLabel(this.storageService, this.translateService, (route as any)['dst']);
       } else {
         // Special case.
-        route['src'] = '';
-        route['src_label'] = '';
-        route['dst'] = '';
-        route['dst_label'] = '';
+        (route as any)['src'] = '';
+        (route as any)['src_label'] = '';
+        (route as any)['dst'] = '';
+        (route as any)['dst_label'] = '';
       }
     });
 
@@ -192,6 +192,7 @@ export class RouteListComponent implements OnDestroy {
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allRoutes has already been sorted.
       this.recalculateElementsToShow();
+      this.cdr.markForCheck();
     });
 
     // Include the known route types in the filterer config array.
@@ -219,6 +220,7 @@ export class RouteListComponent implements OnDestroy {
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredRoutes = data;
       this.dataSorter.setData(this.filteredRoutes);
+      this.cdr.markForCheck();
     });
 
     // Get the page requested in the URL.
@@ -233,6 +235,7 @@ export class RouteListComponent implements OnDestroy {
 
         this.recalculateElementsToShow();
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -339,6 +342,7 @@ export class RouteListComponent implements OnDestroy {
       } else if (selectedOption === 2) {
         this.delete(route.key);
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -356,9 +360,11 @@ export class RouteListComponent implements OnDestroy {
     this.operationSubscriptionsGroup.push(this.startDeleting(routeKey).subscribe(() => {
       NodeComponent.refreshCurrentDisplayedData();
       this.snackbarService.showDone('routes.deleted');
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       err = processServiceError(err);
       this.snackbarService.showError(err);
+      this.cdr.markForCheck();
     }));
   }
 
@@ -433,6 +439,7 @@ export class RouteListComponent implements OnDestroy {
       } else {
         this.deleteRecursively(ids, confirmationDialog);
       }
+      this.cdr.markForCheck();
     }, (err: OperationError) => {
       NodeComponent.refreshCurrentDisplayedData();
       err = processServiceError(err);
@@ -441,6 +448,7 @@ export class RouteListComponent implements OnDestroy {
       } else {
         this.snackbarService.showError(err);
       }
+      this.cdr.markForCheck();
     }));
   }
 }

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, NgZone } from '@angular/core';
+import { Component, OnDestroy, OnInit, NgZone, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { CdkDragDrop, moveItemInArray } from '@angular/cdk/drag-drop';
 import { Observable, Subscription, catchError, mergeMap, of, timer } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
@@ -35,7 +35,8 @@ import { RewardService, VisorRewardData } from 'src/app/services/reward.service'
     selector: 'app-node-list',
     templateUrl: './node-list.component.html',
     styleUrls: ['./node-list.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeListComponent extends PageBaseComponent implements OnInit, OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.
@@ -102,9 +103,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   rewardDataLoaded = false;
 
   // Vars for the pagination functionality.
-  allNodes: Node[];
-  filteredNodes: Node[];
-  nodesToShow: Node[];
+  allNodes!: Node[];
+  filteredNodes!: Node[];
+  nodesToShow!: Node[] | null;
   hasOfflineNodes = false;
   numberOfPages = 1;
   currentPage = 1;
@@ -177,9 +178,9 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
   ];
 
   private authVerificationSubscription: Subscription;
-  private dataSubscription: Subscription;
-  private updateTimeSubscription: Subscription;
-  private updateSubscription: Subscription;
+  private dataSubscription!: Subscription;
+  private updateTimeSubscription!: Subscription;
+  private updateSubscription!: Subscription;
   private navigationsSubscription: Subscription;
   private languageSubscription: Subscription;
 
@@ -207,6 +208,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     private translateService: TranslateService,
     private rewardService: RewardService,
     route: ActivatedRoute,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
 
@@ -217,6 +219,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     this.authVerificationSubscription = this.authService.checkLogin().subscribe(response => {
       this.canLogOut = response !== AuthStates.AuthDisabled;
       this.updateOptionsMenu();
+      this.changeDetectorRef.markForCheck();
     });
 
     // Show the rewards info if the rewards url was used (also catch old dmsg urls via redirect).
@@ -248,6 +251,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allNodes has already been sorted.
       this.recalculateElementsToShow();
+      this.changeDetectorRef.markForCheck();
     });
 
     this.dataFilterer = new DataFilterer(
@@ -287,6 +291,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       });
 
       this.dataSorter.setData(this.filteredNodes);
+      this.changeDetectorRef.markForCheck();
     });
 
     // Get the page requested in the URL.
@@ -301,6 +306,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
 
         this.recalculateElementsToShow();
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     this.tabsData = homeTabsData();
@@ -310,6 +316,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     // are updated.
     this.languageSubscription = this.translateService.onLangChange.subscribe(() => {
       this.multipleNodeDataService.forceRefresh();
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -342,7 +349,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     }
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Restore the user's drag-drop custom order from localStorage so
     // a reload preserves what they explicitly arranged. Empty / parse
     // failure → keep customNodeOrder as the empty default (pure
@@ -365,9 +372,11 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
     // Procedure to keep updated the variable that indicates how long ago the data was updated.
     this.ngZone.runOutsideAngular(() => {
       this.updateTimeSubscription =
-        timer(5000, 5000).subscribe(() => this.ngZone.run(() => {
+        timer(5000, 5000).subscribe(() => {
+ this.ngZone.run(() => {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
-        }));
+        }); this.changeDetectorRef.markForCheck(); 
+});
     });
 
     return super.ngOnInit();
@@ -594,6 +603,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       if (savedData) {
         this.startGettingData(false);
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -807,9 +817,14 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       confirmationDialog.componentInstance.closeModal();
 
       this.authService.logout().subscribe(
-        () => this.router.navigate(['login']),
-        () => this.snackbarService.showError('common.logout-error')
+        () => {
+ this.router.navigate(['login']); this.changeDetectorRef.markForCheck(); 
+},
+        () => {
+ this.snackbarService.showError('common.logout-error'); this.changeDetectorRef.markForCheck(); 
+}
       );
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -932,6 +947,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       } else if (selectedOption === 3) {
         this.deleteNode(node);
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -969,6 +985,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       if (changed) {
         this.forceDataRefresh();
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -983,6 +1000,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.storageService.setLocalNodesAsHidden([node.localPk], [node.ip]);
       this.forceDataRefresh();
       this.snackbarService.showDone('nodes.deleted');
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -1092,6 +1110,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
       this.rewardDateHeaders = this.rewardDates.map(d => this.rewardService.formatDateShort(d));
       this.rewardDataLoading = false;
       this.rewardDataLoaded = true;
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -1192,6 +1211,7 @@ export class NodeListComponent extends PageBaseComponent implements OnInit, OnDe
           this.snackbarService.showDone('nodes.deleted-plural', { number: nodesToRemove.length });
         }
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 }

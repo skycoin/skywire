@@ -8,8 +8,8 @@
 └─┘└─┘┘└┘└  ┴└─┘   └─┘└─┘└─┘ ┴ └─┘ ┴ ┴└─┴ ┴┴  ┴  └─┘┴└─
 Config Bootstrap Server - provides initial configuration for visors.
 
-Production: http://conf.skywire.skycoin.com
-Test:       http://conf.skywire.dev
+Production: dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80
+Test:       dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80
 
 HTTP Endpoints:
   GET  /health     Health check
@@ -31,22 +31,22 @@ GET /health - api.HealthCheckResponse
 
 GET / - visorconfig.Services
 {
-      "address_resolver": "http://ar.skywire.skycoin.com",
-      "dmsg_discovery": "http://dmsgd.skywire.skycoin.com",
-      "route_finder": "http://rf.skywire.skycoin.com",
+      "address_resolver": "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80",
+      "dmsg_discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
+      "route_finder": "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80",
       "route_setup_nodes": [
         "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5",
         "03b160fa44bac22cae9f7eb1311f1648aaab962e1e55d8d9a22a9586ded871eb5e"
       ],
-      "service_discovery": "http://sd.skycoin.com",
+      "service_discovery": "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80",
       "stun_servers": [
         "stun.l.google.com:19302"
       ],
-      "transport_discovery": "http://tpd.skywire.skycoin.com",
+      "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
       "transport_setup": [
         "02a49bc0aa1b5b78f638e9189be4c5d699e6d1358472d8a47f4c20daacd672d7e5"
       ],
-      "uptime_tracker": "http://ut.skywire.skycoin.com"
+      "uptime_tracker": "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80"
     }
 ```
 
@@ -63,8 +63,10 @@ skywire svc confbs
                                    (default ":9082")
   -c, --config string             stun server list file location
                                    (default "./config.json")
-  -D, --dmsg-disc string          url of dmsg-discovery
-                                   (default "http://dmsgd.skywire.skycoin.com")
+  -D, --dmsg-disc string          plain-HTTP url of dmsg-discovery (deprecated; leave empty for dmsg-only)
+                                  
+      --dmsg-disc-dmsg string     dmsg-PK url of dmsg-discovery (default: embedded prod)
+                                   (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --dmsg-port uint16          dmsg port value
                                    (default 80)
       --dmsg-server-type string   type of dmsg server on dmsghttp handler

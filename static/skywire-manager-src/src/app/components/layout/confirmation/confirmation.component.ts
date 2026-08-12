@@ -1,4 +1,4 @@
-import { Component, Inject, Output, EventEmitter, OnDestroy, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, Inject, Output, EventEmitter, OnDestroy, ViewChild, AfterViewInit, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 
 import { ButtonComponent } from '../button/button.component';
@@ -61,20 +61,21 @@ enum ConfirmationStates {
     selector: 'app-confirmation',
     templateUrl: './confirmation.component.html',
     styleUrls: ['./confirmation.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ConfirmationComponent implements AfterViewInit, OnDestroy {
-  @ViewChild('cancelButton') cancelButton: ButtonComponent;
-  @ViewChild('confirmButton') confirmButton: ButtonComponent;
+  @ViewChild('cancelButton') cancelButton!: ButtonComponent;
+  @ViewChild('confirmButton') confirmButton!: ButtonComponent;
 
   disableDismiss = false;
   state = ConfirmationStates.Asking;
   confirmationStates = ConfirmationStates;
 
   // Texts for the Done state.
-  doneTitle: string;
-  doneText: string;
-  doneList: string[];
+  doneTitle!: string;
+  doneText!: string;
+  doneList!: string[];
 
   // Event for when the user confirms.
   @Output() operationAccepted = new EventEmitter();
@@ -89,8 +90,10 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit() {
     if (this.data.cancelButtonText) {
+      // change-detection: no view state — focuses an input
       setTimeout(() => this.cancelButton.focus());
     } else {
+      // change-detection: no view state — focuses an input
       setTimeout(() => this.confirmButton.focus());
     }
   }
@@ -142,7 +145,7 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
    * @param newText New main text for the modal window.
    * @param newList New optional list to show below the main text.
    */
-  showDone(newTitle: string | null, newText: string, newList: string[] = null) {
+  showDone(newTitle: string | null, newText: string, newList: string[] | null = null) {
     if (newTitle) {
       this.doneTitle = newTitle;
     } else {
@@ -152,6 +155,7 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
     this.doneList = newList;
 
     this.confirmButton.reset();
+    // change-detection: no view state — focuses an input
     setTimeout(() => this.confirmButton.focus());
 
     this.state = ConfirmationStates.Done;

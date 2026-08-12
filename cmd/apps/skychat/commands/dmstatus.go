@@ -154,6 +154,56 @@ func deleteHandler(ctx context.Context) http.HandlerFunc {
 	}
 }
 
+// forgetHandler serves POST /history/forget {pk, id}: drop OUR stored copy of
+// one message and tell nobody.
+//
+// This is what makes "delete for me" on a DM stick. The browser's thread cache
+// is not the durable copy — the visor's history store is, and selectRecipient
+// refills an empty thread from it on every open (loadHistoryFor). So a delete
+// that only edited the cache came back the moment the user left the
+// conversation and returned, which is the reported "deleted chat records
+// reappeared when I returned to the chat from another tab". Groups never had
+// this: they reload from history too, but they remember a tombstone per
+// deleted message and filter it out.
+//
+// Deliberately not deleteHandler's little sibling: no chat-delete goes to the
+// peer (their copy is theirs), and no dm-status is broadcast (a tombstone
+// event would tell every other tab to hide a message they may not have chosen
+// to delete). Erasing the bytes rather than remembering a tombstone is also
+// the better answer for a chat that stores its history on the user's own
+// device — a hidden message is still a stored message.
+func forgetHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	if historyStore == nil {
+		// Persistence is off, so there is no stored copy to forget and the
+		// caller's local removal is already the whole story.
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	var body struct {
+		PK string `json:"pk"`
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	peer, err := parsePK(body.PK)
+	if err != nil {
+		http.Error(w, "invalid pk: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if strings.TrimSpace(body.ID) == "" {
+		http.Error(w, "missing id", http.StatusBadRequest)
+		return
+	}
+	forgetPersisted(peer.Hex(), body.ID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func readReceiptHandler(ctx context.Context) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

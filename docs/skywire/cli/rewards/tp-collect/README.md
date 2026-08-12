@@ -23,16 +23,17 @@ skywire cli rewards tp-collect
 ## Flags
 
 ```
-  -s, --loglvl string   [ debug | warn | error | fatal | panic | trace ] (default "info")
-  -m, --min int         minimum transports required (default 2)
-  -a, --all             show all visors with transports (not just those meeting minimum)
-  -n, --no-cache        bypass cache and fetch fresh data
-  -p, --hist string     path to history directory for daily files (default "hist")
-      --rpc string      RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --no-cxo          skip CXO subscriber-cache step
-      --no-rpc          skip visor RPC (DmsgHTTP) step
-      --no-dmsg         skip direct DMSG HTTP step
-      --no-http         skip direct HTTP fallback step
+  -s, --loglvl string      [ debug | warn | error | fatal | panic | trace ] (default "info")
+  -m, --min int            minimum transports required (default 2)
+  -a, --all                show all visors with transports (not just those meeting minimum)
+  -n, --no-cache           bypass cache and fetch fresh data
+  -p, --hist string        path to history directory for daily files (default "hist")
+      --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --no-cxo             skip CXO subscriber-cache step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --no-dmsg            skip direct DMSG HTTP step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 
 ## Global Flags

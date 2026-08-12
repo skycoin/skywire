@@ -44,9 +44,7 @@ skywire dmsg server dial
 ```
   -B, --direct             use dmsg-direct client & don't connect to DMSG Discovery
   -A, --disc-addr string   DMSG Discovery dmsg address (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
-  -U, --disc-url string    DMSG Discovery URL (default "http://dmsgd.skywire.skycoin.com")
   -D, --dmsgconf string    dmsghttp-config path
-  -Z, --http               use regular http to connect to DMSG Discovery
   -l, --loglvl string      [ debug | warn | error | fatal | panic | trace | info ] (default "info")
   -e, --sess int           number of DMSG Servers to connect to (default 2)
   -s, --sk cipher.SecKey   a random key is generated if unspecified (default 0000000000000000000000000000000000000000000000000000000000000000)

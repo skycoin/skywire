@@ -876,15 +876,15 @@ return {
       }
       const version = localStorage.getItem(UpdaterStorageKeys.Version);
       if (version) {
-        body['version'] = version;
+        (body as any)['version'] = version;
       }
       const archiveURL = localStorage.getItem(UpdaterStorageKeys.ArchiveURL);
       if (archiveURL) {
-        body['archive_url'] = archiveURL;
+        (body as any)['archive_url'] = archiveURL;
       }
       const checksumsURL = localStorage.getItem(UpdaterStorageKeys.ChecksumsURL);
       if (checksumsURL) {
-        body['checksums_url'] = checksumsURL;
+        (body as any)['checksums_url'] = checksumsURL;
       }
     }
 

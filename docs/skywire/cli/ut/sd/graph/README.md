@@ -25,14 +25,14 @@ skywire cli ut sd graph
 ```
   -a, --all                  include every day the server returned (default when --days/--since/--until not set)
   -m, --cache-age int        re-fetch if cache is older than N minutes (0 disables) (default 5)
-      --cache-dir string     cache directory ("" disables cache) (default "/tmp/sd.skycoin.com")
+      --cache-dir string     cache directory ("" disables cache) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --config string        path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -d, --days int             number of most-recent days to include (0 = all available; ignored with --hours)
       --hours int            rolling-window mode: show last N hours ending at now
       --json                 emit raw JSON instead of rendering
       --min-version string   filter visors with version >= this
       --no-cxo               skip CXO subscriber-cache step
       --no-dmsg              skip direct DMSG HTTP step
-      --no-http              skip direct HTTP fallback step
       --no-rpc               skip visor RPC (DmsgHTTP) step
   -o, --on                   only include online visors
       --per-day              one row per day instead of a single concatenated bar
@@ -40,9 +40,10 @@ skywire cli ut sd graph
       --shuffle              render rows in random order (test: do visual banding patterns travel with the rows or with PK-sort?)
       --shuffle-seed int     seed for --shuffle; 0 = time-based (different every run)
       --since string         include days on or after this date (YYYY-MM-DD)
+      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --timeout duration     HTTP timeout (default 30s)
       --until string         include days on or before this date (YYYY-MM-DD)
-      --url string           discovery base URL (default "http://sd.skycoin.com")
+      --url string           discovery base URL (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
   -v, --verbose              include version / online state / range header per visor
       --version string       filter visors by exact version
       --visors strings       server-side filter: only return these PKs (comma-separated)

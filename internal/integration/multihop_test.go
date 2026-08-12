@@ -34,7 +34,8 @@ import (
 // repeatedly, breaking the routing rules), and SUDPH is unavailable in Docker
 // E2E. mux stays disabled (mux=1) — this is a single 2-hop route.
 //
-// Topology (min_hops=2 on visor-c forces the route via b even if a direct c↔a exists):
+// Topology (any direct c↔a transport is deleted, and min_hops=2 on visor-c
+// keeps one from being used if autoconnect recreates it):
 //
 //	visor-c (skysocks-client) ──STCPR──► visor-b ──STCPR──► visor-a (skysocks server) ──► transport-discovery
 func TestMultiHopRoute(t *testing.T) {
@@ -84,16 +85,40 @@ func testMultiHopRouteViaB(t *testing.T, env *TestEnv) {
 	require.NoError(t, env.SetVisorMinHops(visorC, 2), "failed to set min_hops=2 on visor-c")
 	defer func() { _ = env.SetVisorMinHops(visorC, 1) }() //nolint:errcheck
 
-	// Sanity-check the bridge leg exists (c↔b STCPR). A direct c↔a transport may
-	// also exist, but min_hops=2 makes the router ignore it; the multi-hop proof
-	// below (both legs carry bytes) is what actually confirms traffic transited b.
+	// Sanity-check the bridge leg exists (c↔b STCPR), and remove every direct
+	// c↔a transport while we are walking the list.
+	//
+	// min_hops=2 is supposed to make a direct 1-hop c→a route unbuildable, and
+	// it is still set above as the defense against autoconnect recreating the
+	// link mid-test. It is not sufficient on its own: this test has watched
+	// route setup build a 1-hop route over a leftover direct c→a SUDPH
+	// transport — the forward rule's nxtTpID was that transport — and then time
+	// out on the route-group handshake, because SUDPH does not carry traffic in
+	// Docker E2E (see this file's header). That transport is not autoconnect's
+	// doing, it is pollution from an earlier test in the same suite, so it can
+	// simply be deleted rather than reasoned around.
+	//
+	// Deleting is safe for the assertion this test makes: the multi-hop proof
+	// below is that BOTH legs carry bytes, which no direct route could satisfy.
 	ctps, err := env.VisorTpLs(visorC)
 	require.NoError(t, err, "Failed to list transports on visor-c")
 	var cbTP string
 	for _, tp := range ctps {
 		if tp.Type == types.STCPR && tp.Remote.String() == bridgePK {
 			cbTP = tp.ID.String()
-			break
+			continue
+		}
+		if tp.Remote.String() == serverPK {
+			out, rmErr := env.VisorTpRm(visorC, tp.ID)
+			// Best-effort: a transport that is already gone (or races
+			// autoconnect re-adding one) must not fail the test — min_hops=2
+			// remains the guard for anything that reappears.
+			if rmErr != nil {
+				t.Logf("could not remove direct c→a %s transport %s: %v (out: %s)",
+					tp.Type, tp.ID, rmErr, out)
+				continue
+			}
+			t.Logf("removed direct c→a %s transport %s", tp.Type, tp.ID)
 		}
 	}
 	require.NotEmpty(t, cbTP, "visor-c → visor-b STCPR transport not found")

@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 
 import { PageBaseComponent } from 'src/app/utils/page-base';
 
@@ -14,5 +14,6 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
   templateUrl: './terminal.component.html',
   styleUrls: ['./terminal.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TerminalComponent extends PageBaseComponent {}

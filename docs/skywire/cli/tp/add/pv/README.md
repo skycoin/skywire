@@ -18,27 +18,28 @@ skywire cli tp add pv
 
 ```
   -m, --cfa int            update cache files if older than n minutes (default 5)
-      --cfdd string        Dmsg Discovery cache file location (default "/tmp/dmsgd.json")
-      --cfs string         SD cache file location (default "/tmp/visorsd.json")
-      --cft string         TPD cache file location (default "/tmp/tpd.json")
-      --cfu string         UT cache file location (default "/tmp/ut.json")
+      --cfdd string        Dmsg Discovery cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//dmsgd.json")
+      --cfs string         SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//visorsd.json")
+      --cft string         TPD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//tpd.json")
+      --cfu string         UT cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//ut.json")
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -n, --count int          number of public visors to add transports to (default 5)
-      --dmsg string        dmsg discovery url (default "http://dmsgd.skywire.skycoin.com")
+      --dmsg string        dmsg discovery url (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --force              attempt dmsg transport without checking dmsg discovery
       --min int            minimum transport count for target visors
       --no-cxo             skip CXO subscriber-cache step
       --no-dmsg            skip direct DMSG HTTP step
-      --no-http            skip direct HTTP fallback step
       --no-rpc             skip visor RPC (DmsgHTTP) step
   -f, --noton              do not filter by online status
       --remote strings     request public visor transports on remote visor(s) via TPS (comma-separated PKs)
       --retries int        number of times to retry per transport type (default 1)
       --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-  -a, --sdurl string       service discovery url (default "http://sd.skycoin.com")
+  -a, --sdurl string       service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -o, --timeout duration   operation timeout
-  -d, --tpdurl string      transport discovery url (default "http://tpd.skywire.skycoin.com")
+  -d, --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -t, --type string        transport type (stcpr, sudph, dmsg)
-  -w, --uturl string       uptime tracker url (TPD integrated) (default "http://tpd.skywire.skycoin.com")
+  -w, --uturl string       uptime tracker url (TPD integrated) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
 ```
 
 ## Global Flags

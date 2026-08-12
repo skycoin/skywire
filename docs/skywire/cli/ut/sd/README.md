@@ -4,7 +4,7 @@
 
 Query the Service-Discovery integrated uptime endpoint.
 
-http://sd.skycoin.com/uptimes
+dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/uptimes
 
 Default is v2 (includes daily percentages). Pass -T / --timeline to
 request v3 and render the per-5-minute bitmap as 24 hourly blocks.
@@ -24,7 +24,8 @@ skywire cli ut sd
 ```
   -a, --all                  include every day the server returned
   -m, --cache-age int        re-fetch if cache is older than N minutes (0 disables) (default 5)
-      --cache-dir string     cache directory ("" disables cache) (default "/tmp/sd.skycoin.com")
+      --cache-dir string     cache directory ("" disables cache) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --config string        path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
   -d, --days int             number of most-recent days to include (0 = latest day only)
       --json                 emit raw JSON
   -l, --list-versions        list version distribution (with --stats) or pk+version pairs
@@ -32,15 +33,15 @@ skywire cli ut sd
       --min-version string   filter visors with version >= this (e.g. v1.3.40)
       --no-cxo               skip CXO subscriber-cache step
       --no-dmsg              skip direct DMSG HTTP step
-      --no-http              skip direct HTTP fallback step
       --no-rpc               skip visor RPC (DmsgHTTP) step
   -o, --on                   only include online visors
   -k, --pk string            only show PKs matching this substring
       --since string         include days on or after this date (YYYY-MM-DD)
+      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats                print count of matching visors only
       --timeout duration     HTTP timeout (default 30s)
       --until string         include days on or before this date (YYYY-MM-DD)
-      --url string           discovery base URL (default "http://sd.skycoin.com")
+      --url string           discovery base URL (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
   -v, --v string             response version (v1|v2) (default "v2")
       --version string       filter visors by exact version
       --visors strings       server-side filter: only return these PKs (comma-separated)

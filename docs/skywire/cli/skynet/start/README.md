@@ -13,6 +13,7 @@ skywire cli skynet start [pk]
 ## Flags
 
 ```
+      --direct                 force a direct-transport-only route: create the transport to the server on demand, dial 1-hop over it, bypass the route-finder; self-heals if the transport drops (e.g. server restart). For reliable control-plane forwards like the rsn-pprof resolving-proxy bridge.
       --external               force external launcher
       --forward-min-hops int   per-direction forward MinHops override (>=2 forces multi-hop on forward only)
       --forward-mux int        per-direction forward MuxRoutes override (>0 sets forward leg count independent of --routes)

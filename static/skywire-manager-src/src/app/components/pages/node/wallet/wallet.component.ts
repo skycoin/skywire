@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
@@ -31,9 +31,10 @@ const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
   templateUrl: './wallet.component.html',
   styleUrls: ['./wallet.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WalletComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   // Possible UI states. The template branches on these.
   state: 'unknown' | 'not-configured' | 'not-running' | 'running' = 'unknown';
   // The URL the iframe / "open in new tab" button points at when
@@ -79,13 +80,14 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
   // don't fight for focus the way dialogs do.
   expandedDaemons = new Set<string>();
 
-  private nodeSub: Subscription;
+  private nodeSub!: Subscription;
 
   constructor(
     private sanitizer: DomSanitizer,
     private appsService: AppsService,
     private snackbar: SnackbarService,
     private router: Router,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
  super();
 }
@@ -98,7 +100,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     }
   };
 
-  ngOnInit() {
+  override ngOnInit() {
     // The config UI lives in the embedded /wallet/config page (same origin, so
     // it reads+writes the same localStorage the /wallet/ shim reads). It's the
     // SAME page the ☰ wallet window uses — one config implementation. Point the
@@ -114,6 +116,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();
@@ -134,6 +137,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     // Re-assign on the next tick so Angular tears down + rebuilds the iframe.
     setTimeout(() => {
       this.iframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl('/wallet/?_=' + Date.now());
+      this.changeDetectorRef.markForCheck();
     }, 0);
   }
 

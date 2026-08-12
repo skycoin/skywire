@@ -1,4 +1,4 @@
-import { Component, Input, OnDestroy } from '@angular/core';
+import { Component, Input, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -21,7 +21,8 @@ import { DataFilterer } from 'src/app/utils/lists/data-filterer';
     selector: 'app-label-list',
     templateUrl: './label-list.component.html',
     styleUrls: ['./label-list.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LabelListComponent implements OnDestroy {
   // Small text for identifying the list, needed for the helper objects.
@@ -38,7 +39,7 @@ export class LabelListComponent implements OnDestroy {
   dataSorter: DataSorter;
   dataFilterer: DataFilterer;
 
-  dataSource: LabelInfo[];
+  dataSource!: LabelInfo[];
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -49,16 +50,16 @@ export class LabelListComponent implements OnDestroy {
    * accessing the full list. If false, the full list is shown, with pagination
    * controls, if needed.
    */
-  showShortList_: boolean;
+  showShortList_!: boolean;
   @Input() set showShortList(val: boolean) {
     this.showShortList_ = val;
     // Sort the data.
     this.dataSorter.setData(this.filteredLabels);
   }
 
-  allLabels: LabelInfo[];
-  filteredLabels: LabelInfo[];
-  labelsToShow: LabelInfo[];
+  allLabels!: LabelInfo[];
+  filteredLabels!: LabelInfo[];
+  labelsToShow!: LabelInfo[] | null;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is reade asynchronously.
@@ -112,6 +113,7 @@ export class LabelListComponent implements OnDestroy {
     private snackbarService: SnackbarService,
     private translateService: TranslateService,
     private storageService: StorageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     // Initialize the data sorter.
     const sortableColumns: SortingColumn[] = [
@@ -123,12 +125,14 @@ export class LabelListComponent implements OnDestroy {
     this.dataSortedSubscription = this.dataSorter.dataSorted.subscribe(() => {
       // When this happens, the data in allLabels has already been sorted.
       this.recalculateElementsToShow();
+      this.changeDetectorRef.markForCheck();
     });
 
     this.dataFilterer = new DataFilterer(this.dialog, this.route, this.router, this.filterProperties, this.listId);
     this.dataFiltererSubscription = this.dataFilterer.dataFiltered.subscribe(data => {
       this.filteredLabels = data;
       this.dataSorter.setData(this.filteredLabels);
+      this.changeDetectorRef.markForCheck();
     });
 
     this.loadData();
@@ -145,6 +149,7 @@ export class LabelListComponent implements OnDestroy {
 
         this.recalculateElementsToShow();
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -166,7 +171,7 @@ export class LabelListComponent implements OnDestroy {
 
     // Add the type dor data to the array.
     this.allLabels.forEach(label => {
-      label['identifiedElementType_sort'] = this.getLabelTypeIdentification(label)[0];
+      (label as any)['identifiedElementType_sort'] = this.getLabelTypeIdentification(label)[0];
     });
 
     this.dataFilterer.setData(this.allLabels);
@@ -186,6 +191,10 @@ export class LabelListComponent implements OnDestroy {
     } else if (label.identifiedElementType === LabeledElementTypes.Transport) {
       return ['3', 'labels.filter-dialog.type-options.transport'];
     }
+
+    // Unreachable for the types above; stated so noImplicitReturns can see it,
+    // and returning what the implicit path already returned.
+    return undefined;
   }
 
   /**
@@ -245,6 +254,7 @@ export class LabelListComponent implements OnDestroy {
 
       this.snackbarService.showDone('labels.deleted');
       this.loadData();
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -263,6 +273,7 @@ export class LabelListComponent implements OnDestroy {
       if (selectedOption === 1) {
         this.delete(label.id);
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -278,6 +289,7 @@ export class LabelListComponent implements OnDestroy {
       this.snackbarService.showDone('labels.deleted');
 
       this.loadData();
+      this.changeDetectorRef.markForCheck();
     });
   }
 

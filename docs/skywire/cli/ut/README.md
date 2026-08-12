@@ -2,9 +2,9 @@
 
 [← skywire cli](../README.md)
 
-query uptime tracker
+query the TPD-integrated uptime tracker
 
-http://ut.skywire.skycoin.com/uptimes?v=v2
+dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes?v=v3
 
 Check local visor daily uptime percent with:
 
@@ -30,11 +30,12 @@ skywire cli ut
 
 ```
       --cdt string           TPD cache dir ("" to disable)
-                              (default "/tmp/tpd.skywire.skycoin.com")
+                              (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
       --cdu string           UT cache dir ("" to disable)
-                              (default "/tmp/ut.skywire.skycoin.com")
+                              (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -m, --cfa int              update cache files if older than n minutes
                               (default 5)
+      --config string        path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
       --date string          only output uptime for this date (YYYY-MM-DD); reduces 7-day response to a single day
   -l, --list-versions        list PKs with their versions
       --max-tp int           filter visors with at most N transports (fetches TPD data) (default -1)
@@ -43,17 +44,17 @@ skywire cli ut
       --min-version string   filter visors with version >= specified (e.g. v1.3.34)
       --no-cxo               skip CXO subscriber-cache step
       --no-dmsg              skip direct DMSG HTTP step
-      --no-http              skip direct HTTP fallback step
       --no-rpc               skip visor RPC (DmsgHTTP) step
   -o, --on                   list currently online visors
   -k, --pk string            check uptime for the specified key
       --rpc string           RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --sk cipher.SecKey     secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
   -s, --stats                count the number of results
   -t, --stats2               count of versions
       --testenv              use test deployment
-      --tpdurl string        transport discovery url (default "http://tpd.skywire.skycoin.com")
-  -u, --url string           specify alternative uptime tracker url
-                              (default "http://ut.skywire.skycoin.com")
+      --tpdurl string        transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -u, --url string           specify alternative (TPD-integrated) uptime tracker url
+                              (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -v, --version string       filter visors by exact version
 ```
 

@@ -29,13 +29,19 @@ import (
 	"github.com/skycoin/skywire/pkg/cipher"
 	skychataddr "github.com/skycoin/skywire/pkg/skychat/address"
 	skychatgroup "github.com/skycoin/skywire/pkg/skychat/group"
+	skychatprofile "github.com/skycoin/skywire/pkg/skychat/profile"
 )
 
 // GroupInfo is the public summary of a chat group, returned by
 // GroupList and GroupGet.
 type GroupInfo struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Avatar is the group's picture as a data URI, empty when unset.
+	// The URI form rather than bytes for the same reason Profile carries
+	// one over RPC: JSON-friendly and directly usable as an <img> src,
+	// with the MIME inside it always the validated one.
+	Avatar  string            `json:"avatar,omitempty"`
 	OwnerPK cipher.PubKey     `json:"owner_pk"`
 	Port    uint16            `json:"port"`
 	Mode    skychatgroup.Mode `json:"mode"`
@@ -928,6 +934,79 @@ func (v *Visor) GroupSetListed(id string, listed bool) (GroupInfo, error) {
 	})
 }
 
+// GroupSetMetaArgs is the input for GroupSetMeta. Zero-valued halves stay
+// untouched, so one call can rename, re-picture, or both.
+type GroupSetMetaArgs struct {
+	ID string `json:"id"`
+
+	// Name is the new display name; empty keeps the current one.
+	Name string `json:"name,omitempty"`
+
+	// Avatar is the new picture as a data URI (or bare base64), consulted
+	// only when SetAvatar is true. SetAvatar with an empty Avatar clears
+	// the picture — the flag is what tells "clear it" apart from "leave
+	// it alone".
+	Avatar    string `json:"avatar,omitempty"`
+	SetAvatar bool   `json:"set_avatar,omitempty"`
+}
+
+// GroupSetMeta updates a group's display metadata — name, picture, or
+// both. Founder-only (the manager enforces it): members mirror the
+// founding visor's record and re-learn these fields from it, so an edit
+// anywhere else would only un-happen.
+func (v *Visor) GroupSetMeta(args GroupSetMetaArgs) (GroupInfo, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupInfo{}, ErrGroupingDisabled
+	}
+	var (
+		r       skychatgroup.Record
+		err     error
+		touched bool
+	)
+	if name := strings.TrimSpace(args.Name); name != "" {
+		if r, err = mgr.Rename(args.ID, name); err != nil {
+			return GroupInfo{}, err
+		}
+		touched = true
+	}
+	if args.SetAvatar {
+		var raw []byte
+		if args.Avatar != "" {
+			if raw, err = skychatprofile.DecodeAvatar(args.Avatar); err != nil {
+				return GroupInfo{}, err
+			}
+		}
+		if r, err = mgr.SetAvatar(args.ID, raw); err != nil {
+			return GroupInfo{}, err
+		}
+		touched = true
+	}
+	if !touched {
+		return GroupInfo{}, errors.New("grouping: set meta: nothing to change")
+	}
+	return v.toInfoFor(r, mgr), nil
+}
+
+// GroupRefreshMeta re-reads a group's display metadata from its founding
+// visor and returns the (possibly updated) info. Best-effort: an
+// unreachable founder returns the local record unchanged rather than an
+// error, because the caller is a UI opening a chat, and the founder being
+// asleep is not a problem the person opening it can act on.
+func (v *Visor) GroupRefreshMeta(id string) (GroupInfo, error) {
+	mgr := v.groupManager()
+	if mgr == nil {
+		return GroupInfo{}, ErrGroupingDisabled
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), groupResolveBudget)
+	defer cancel()
+	r, _, err := mgr.RefreshMeta(ctx, id)
+	if err != nil {
+		return GroupInfo{}, err
+	}
+	return v.toInfoFor(r, mgr), nil
+}
+
 // GroupCatalog asks a visor what groups and channels it publishes.
 //
 // Answered locally when host is this visor, so an operator can see their
@@ -1234,8 +1313,11 @@ func (v *Visor) groupManager() *skychatgroup.Manager {
 
 func toInfo(r skychatgroup.Record) GroupInfo {
 	info := GroupInfo{
-		ID:            r.ID,
-		Name:          r.Name,
+		ID:   r.ID,
+		Name: r.Name,
+		Avatar: skychatprofile.Profile{
+			Avatar: r.Avatar, AvatarMime: r.AvatarMime,
+		}.AvatarDataURI(),
 		OwnerPK:       r.OwnerPK,
 		Port:          r.Port,
 		Mode:          r.Mode,

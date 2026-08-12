@@ -14,7 +14,7 @@ skywire cli vpn ui
 
 ```
   -c, --config string   config path
-  -p, --pkg             use package config path: /opt/skywire
+  -p, --pkg             use package config path: /Library/Application Support/Skywire
 ```
 
 ## Global Flags
