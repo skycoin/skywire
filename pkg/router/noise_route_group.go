@@ -97,3 +97,9 @@ func (nrg *NoiseRouteGroup) RouteHopDetails() []RouteHopInfo {
 func (nrg *NoiseRouteGroup) handlePacket(packet routing.Packet) error {
 	return nrg.rg.handlePacket(packet)
 }
+
+// pruneLegByConsumeRule removes a single retired mux leg without closing the
+// group. See RouteGroup.pruneLegByConsumeRule.
+func (nrg *NoiseRouteGroup) pruneLegByConsumeRule(routeID routing.RouteID) bool {
+	return nrg.rg.pruneLegByConsumeRule(routeID)
+}
