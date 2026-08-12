@@ -154,3 +154,12 @@ android/app/src/main/jniLibs/
 # `make install-shellcheck` drops the binary here for `make lint-shell` to find.
 /shellcheck
 
+
+# Compiled binaries built in place. A `go build` in a cmd/ directory writes its
+# output beside the source, where `git add -A` sweeps it up — which is how an
+# 11MB ELF (cmd/hvinspect/hvinspect) and a stale 11MB wasm (pkg/tpviz/wasm)
+# were committed. Only artifacts something actually embeds belong in the tree:
+# pkg/wasmhv/wasmbin/*, pkg/tpviz/dist/*, pkg/tpviz/legacy/*, pkg/geoip/*.
+/cmd/*/[a-z]*[!.]
+!/cmd/*/*.go
+/pkg/tpviz/wasm/*.wasm
