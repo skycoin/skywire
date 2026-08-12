@@ -119,7 +119,7 @@ var registerMeshApplets = sync.OnceFunc(func() {
 		"fetch over dmsg by public key: dcurl [-s] [-I] dmsg://<pk|alias>[:port][/path]",
 		runDcurl)
 	shell.RegisterApplet("dial",
-		"time a fetch to a peer over dmsg: dial <pk|alias>[:port]",
+		"time a fetch to a peer over dmsg: dial <pk|alias>[:port][/path]",
 		runDial)
 	shell.RegisterApplet("aliases",
 		"list the resolver's service aliases and the public keys they name",
@@ -207,8 +207,11 @@ func runDial(_ context.Context, _ *shell.Shell, hc *interp.HandlerContext, args 
 		return 2
 	}
 	host, path := meshHost(args[0])
+	// GET rather than HEAD: several mesh services close the stream on HEAD
+	// while answering GET, so probing with HEAD reports a reachable peer as
+	// unreachable.
 	start := time.Now()
-	status, _, _, err := fetchMesh("HEAD", host, path)
+	status, _, _, err := fetchMesh("GET", host, path)
 	elapsed := time.Since(start).Round(time.Millisecond)
 	if err != nil {
 		_, _ = fmt.Fprintf(hc.Stderr, "dial: %s unreachable after %s: %v\n", host, elapsed, err) //nolint:errcheck
