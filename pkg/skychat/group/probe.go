@@ -127,6 +127,12 @@ type GroupDescriptor struct {
 	// Banned reports that the ASKING visor is barred from this group, so
 	// a UI can say why rather than offering a join that will be refused.
 	Banned bool `json:"banned,omitempty"`
+
+	// Avatar / AvatarMime are the group's picture, already validated on
+	// receipt (see sanitizeAvatar). As public as the name: whoever may ask
+	// what a group is called may see what it looks like.
+	Avatar     []byte `json:"avatar,omitempty"`
+	AvatarMime string `json:"avatar_mime,omitempty"`
 }
 
 // IsChannel reports whether the described group is a broadcast channel.
@@ -179,17 +185,20 @@ func (m *Manager) ProbeGroup(ctx context.Context, host cipher.PubKey, gid string
 	}
 	switch resp.Status {
 	case JoinStatusInfo:
+		avatar, avatarMime := sanitizeAvatar(resp.Avatar)
 		return GroupDescriptor{
-			ID:        gid,
-			HostPK:    host,
-			Name:      resp.Name,
-			Kind:      probedKind(resp),
-			Mode:      probedMode(resp),
-			Policy:    probedPolicy(resp),
-			Port:      resp.Port,
-			PoWBits:   clampJoinPoWBits(resp.PoWBits),
-			ReadOnly:  resp.ReadOnly,
-			PriceHint: truncate(resp.PriceHint, maxPriceHintLen),
+			ID:         gid,
+			HostPK:     host,
+			Name:       resp.Name,
+			Kind:       probedKind(resp),
+			Mode:       probedMode(resp),
+			Policy:     probedPolicy(resp),
+			Port:       resp.Port,
+			PoWBits:    clampJoinPoWBits(resp.PoWBits),
+			ReadOnly:   resp.ReadOnly,
+			PriceHint:  truncate(resp.PriceHint, maxPriceHintLen),
+			Avatar:     avatar,
+			AvatarMime: avatarMime,
 		}, nil
 	case JoinStatusBanned:
 		// Still a description — the group exists and we now know the one
@@ -216,15 +225,17 @@ func (m *Manager) ProbeGroup(ctx context.Context, host cipher.PubKey, gid string
 // for the local shortcut in ProbeGroup and by the responder.
 func descriptorFor(r Record) GroupDescriptor {
 	return GroupDescriptor{
-		ID:       r.ID,
-		HostPK:   r.OwnerPK,
-		Name:     r.Name,
-		Kind:     r.Kind,
-		Mode:     r.Mode,
-		Policy:   r.JoinPolicy(),
-		Port:     r.Port,
-		PoWBits:  r.JoinPoWRequired(),
-		ReadOnly: r.ReadOnly,
+		ID:         r.ID,
+		HostPK:     r.OwnerPK,
+		Name:       r.Name,
+		Kind:       r.Kind,
+		Mode:       r.Mode,
+		Policy:     r.JoinPolicy(),
+		Port:       r.Port,
+		PoWBits:    r.JoinPoWRequired(),
+		ReadOnly:   r.ReadOnly,
+		Avatar:     append([]byte(nil), r.Avatar...),
+		AvatarMime: r.AvatarMime,
 	}
 }
 
@@ -597,6 +608,10 @@ func (m *Manager) describeGroup(req JoinRequestMsg, asker cipher.PubKey) JoinRes
 	base.Status = JoinStatusInfo
 	base.PoWBits = r.JoinPoWRequired()
 	base.ReadOnly = r.ReadOnly
+	// The picture rides the info answer only — a banned asker gets the
+	// name (which they held anyway) but not a 32 KB download on demand.
+	base.Avatar = append([]byte(nil), r.Avatar...)
+	base.AvatarMime = r.AvatarMime
 	m.log.WithField("id", r.ID).WithField("asker", asker.Hex()).
 		Debug("group: probe: described group")
 	return base

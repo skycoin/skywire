@@ -57,6 +57,12 @@
     <string name="hops_hint_direct">A direct route to the exit — the quickest the network can be. The exit still cannot read your traffic, but it does see that this device is the one asking.</string>
     <string name="hops_hint_multi">Traffic is relayed through intermediaries, so no single node sees both who is asking and what is being asked. Slower, and every hop is another machine that has to stay up.</string>
     <string name="hops_hint_unknown">Waiting for the visor to report its routing settings.</string>
+    <string name="hops_label_custom">Custom</string>
+    <string name="hops_custom_more">4+</string>
+    <string name="hops_custom_title">Custom route length</string>
+    <string name="hops_custom_hint">Every route the visor builds must use at least this many hops. Each hop past the first buys more separation between who is asking and what is asked — and costs latency, plus one more machine that has to stay up. The route finder searches at most 10 hops deep, so higher values can never be built.</string>
+    <string name="hops_custom_label">Minimum hops</string>
+    <string name="hops_custom_invalid">Enter a number between 1 and 10.</string>
 
     <!-- Network address (what SkyVPN does and does not change) -->
     <string name="net_addr_title">Network address</string>
