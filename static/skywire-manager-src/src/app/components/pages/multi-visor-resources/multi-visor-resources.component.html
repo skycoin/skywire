@@ -82,25 +82,25 @@
                   <span>-</span>
                 }
               </td>
-              <td class="num" [class]="pctClass(r.stats?.cpu_percent)">
-                @if (r.stats?.cpu_percent !== undefined) {
+              <td class="num" [class]="pctClass($safeNavigationMigration(r.stats?.cpu_percent))">
+                @if ($safeNavigationMigration(r.stats?.cpu_percent) !== undefined) {
                   {{ r.stats.cpu_percent | number: '1.0-1' }}%
                 } @else { <span class="dim">-</span> }
               </td>
-              <td class="num" [class]="pctClass(r.stats?.mem_percent)">
-                @if (r.stats?.mem_percent !== undefined) {
+              <td class="num" [class]="pctClass($safeNavigationMigration(r.stats?.mem_percent))">
+                @if ($safeNavigationMigration(r.stats?.mem_percent) !== undefined) {
                   {{ r.stats.mem_percent | number: '1.0-1' }}%
                   <div class="dim small">{{ formatBytes(r.stats.mem_used) }} / {{ formatBytes(r.stats.mem_total) }}</div>
                 } @else { <span class="dim">-</span> }
               </td>
-              <td class="num" [class]="pctClass(r.stats?.disk_percent)">
-                @if (r.stats?.disk_percent !== undefined) {
+              <td class="num" [class]="pctClass($safeNavigationMigration(r.stats?.disk_percent))">
+                @if ($safeNavigationMigration(r.stats?.disk_percent) !== undefined) {
                   {{ r.stats.disk_percent | number: '1.0-1' }}%
                 } @else { <span class="dim">-</span> }
               </td>
               <td class="num">{{ formatRate(r.txRate) }}</td>
               <td class="num">{{ formatRate(r.rxRate) }}</td>
-              <td class="num">{{ formatBytes(r.stats?.process?.mem_rss) }}</td>
+              <td class="num">{{ formatBytes($safeNavigationMigration(r.stats?.process?.mem_rss)) }}</td>
               <td class="actions">
                 @if (r.node.online) {
                   <mat-icon [inline]="true">chevron_right</mat-icon>
@@ -130,7 +130,7 @@
                     <div><span class="dim">{{ 'multi-resources.disk' | translate }}:</span> <strong [class]="pctClass(r.stats.disk_percent)">{{ r.stats.disk_percent | number: '1.0-1' }}%</strong></div>
                     <div><span class="dim">{{ 'multi-resources.tx' | translate }}:</span> <strong>{{ formatRate(r.txRate) }}</strong></div>
                     <div><span class="dim">{{ 'multi-resources.rx' | translate }}:</span> <strong>{{ formatRate(r.rxRate) }}</strong></div>
-                    <div><span class="dim">{{ 'multi-resources.proc-rss' | translate }}:</span> <strong>{{ formatBytes(r.stats.process?.mem_rss) }}</strong></div>
+                    <div><span class="dim">{{ 'multi-resources.proc-rss' | translate }}:</span> <strong>{{ formatBytes($safeNavigationMigration(r.stats.process?.mem_rss)) }}</strong></div>
                   </div>
                 }
               </div>
