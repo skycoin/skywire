@@ -1,4 +1,4 @@
-import { TranslateLoader, TranslateModule } from '@ngx-translate/core';
+import { TranslateLoader, TranslateDirective, TranslatePipe, provideTranslateService } from '@ngx-translate/core';
 import { from, Observable } from 'rxjs';
 import { NgModule } from '@angular/core';
 
@@ -16,12 +16,21 @@ export class TranslationModuleLoader implements TranslateLoader {
 }
 
 @NgModule({
-  imports: [TranslateModule.forRoot({
-    loader: {
-      provide: TranslateLoader,
-      useClass: TranslationModuleLoader,
-    },
-  })],
-  exports: [TranslateModule],
+  // ngx-translate 18 removed TranslateModule. The pipe and directive are
+  // standalone now and are imported and re-exported directly; the service is
+  // configured through a provider.
+  imports: [TranslatePipe, TranslateDirective],
+  exports: [TranslatePipe, TranslateDirective],
+  providers: [
+    provideTranslateService({
+      // Declared as an explicit class provider rather than through
+      // provideTranslateLoader(). That helper chooses between useClass and
+      // useFactory with a test against Function.prototype.toString() matching
+      // /^class\s/, and esbuild minifies `class TranslationModuleLoader {` down
+      // to `class{` — no space — so the loader would be registered as a factory
+      // and called without `new`.
+      loader: { provide: TranslateLoader, useClass: TranslationModuleLoader },
+    }),
+  ],
 })
 export class AppTranslationModule { }

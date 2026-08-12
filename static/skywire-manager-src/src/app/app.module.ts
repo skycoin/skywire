@@ -1,7 +1,7 @@
 import { BrowserModule} from '@angular/platform-browser';
 import { ErrorHandler, NgModule } from '@angular/core';
 import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { HttpBackend, provideHttpClient, withInterceptorsFromDi } from '@angular/common/http';
+import { HttpBackend, provideHttpClient, withInterceptorsFromDi, withXhr } from '@angular/common/http';
 import { SkywireHttpBackend } from './services/skywire-http-backend';
 import { AppComponent } from './app.component';
 import { AppRoutingModule } from './app-routing.module';
@@ -150,7 +150,7 @@ const globalRippleConfig: RippleGlobalOptions = {
         { provide: ErrorStateMatcher, useClass: ShowOnDirtyErrorStateMatcher },
         { provide: RouteReuseStrategy, useClass: AppReuseStrategy },
         { provide: MAT_RIPPLE_GLOBAL_OPTIONS, useValue: globalRippleConfig },
-        provideHttpClient(withInterceptorsFromDi()),
+        provideHttpClient(withXhr(), withInterceptorsFromDi()),
         // Swap the bottom of the HttpClient pipeline so the SAME UI build talks to
         // either the native REST API (transparent pass-through) or the in-tab
         // wasm-visor gateway. Dormant unless window.__SKYWIRE_HV__ activates it.
