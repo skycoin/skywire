@@ -1,5 +1,7 @@
 package com.skycoin.skywire.core
 
+import android.content.Context
+import com.skycoin.skywire.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
@@ -19,8 +21,17 @@ import java.util.concurrent.TimeUnit
  * that runs the visor. Nothing is hand-written: `config gen` produces the
  * file, then [applyPhoneProfile] enforces the phone constraints the
  * generator has no flags for.
+ *
+ * [context] is for the failures alone: every one of them is rendered to the
+ * user — the red caption under Connect, or a Settings snackbar — so the prose
+ * comes from the string resources, with the exit code, the binary path and the
+ * captured output passed in as arguments.
  */
-class ConfigManager(private val paths: SkywirePaths, private val secrets: SecretStore) {
+class ConfigManager(
+    private val paths: SkywirePaths,
+    private val secrets: SecretStore,
+    private val context: Context,
+) {
 
     /**
      * Opens the config when it is sealed at rest. Held here rather than passed
@@ -29,7 +40,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
      * fresh identity over a sealed one, which is the single worst thing this
      * class could do.
      */
-    private val vault = ConfigVault(paths)
+    private val vault = ConfigVault(paths, context)
 
     data class CommandResult(val exitCode: Int, val output: String, val timedOut: Boolean) {
         val ok get() = exitCode == 0 && !timedOut
@@ -56,16 +67,23 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         vault.unseal().getOrElse { return@withContext Result.failure(it) }
         if (!paths.visorBinary.canExecute()) {
             return@withContext Result.failure(
-                IllegalStateException("core binary missing or not executable: ${paths.visorBinary}"),
+                IllegalStateException(
+                    context.getString(R.string.core_binary_missing, paths.visorBinary.toString()),
+                ),
             )
         }
         if (!paths.configFile.exists()) {
             val gen = runGen()
             if (!gen.ok) {
+                // Two sentences rather than one with an optional clause: a
+                // timeout is a different answer to "why", and it has to read
+                // as one in every language.
+                val sentence =
+                    if (gen.timedOut) R.string.core_config_gen_timed_out
+                    else R.string.core_config_gen_failed
                 return@withContext Result.failure(
                     IllegalStateException(
-                        "config gen failed (exit ${gen.exitCode}${if (gen.timedOut) ", timed out" else ""}):\n" +
-                            gen.output.takeLast(4000),
+                        context.getString(sentence, gen.exitCode, gen.output.takeLast(4000)),
                     ),
                 )
             }
@@ -92,7 +110,7 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
             // the visor with an opaque fatal — fail here with a usable message.
             Result.failure(
                 IllegalStateException(
-                    "config file is unreadable (${e.message}) — clearing app data regenerates it",
+                    context.getString(R.string.core_config_unreadable, e.message.orEmpty()),
                     e,
                 ),
             )
@@ -374,7 +392,11 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
         val sk = secretKey.trim()
         // A shape check first, so an obvious paste error costs no process.
         if (sk.length != SK_HEX_LENGTH || !sk.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }) {
-            return Result.failure(IllegalArgumentException("not a $SK_HEX_LENGTH-character hex secret key"))
+            return Result.failure(
+                IllegalArgumentException(
+                    context.getString(R.string.settings_sk_invalid, SK_HEX_LENGTH),
+                ),
+            )
         }
         val result = runCommand(
             listOf(paths.visorBinary.absolutePath, "config", "pk", sk),
@@ -387,12 +409,16 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
             .lastOrNull { it.length == PK_HEX_LENGTH && it.all { c -> c.isDigit() || c.lowercaseChar() in 'a'..'f' } }
         return when {
             result.ok && pk != null -> Result.success(pk)
+            // The CLI's own last line is shown as it printed it — it is the
+            // core's answer, and it is what a search or an issue report is
+            // matched against. Only the fallback, when it printed nothing at
+            // all, is ours to write.
             else -> Result.failure(
                 IllegalArgumentException(
                     result.output.lineSequence()
                         .map { it.trim() }
                         .lastOrNull { it.isNotEmpty() }
-                        ?: "the core could not read that secret key",
+                        ?: context.getString(R.string.settings_sk_unreadable),
                 ),
             )
         }
@@ -429,7 +455,13 @@ class ConfigManager(private val paths: SkywirePaths, private val secrets: Secret
                 paths.configFile.writeText(json.encodeToString(JsonObject.serializer(), seeded))
                 val gen = runGen()
                 if (!gen.ok) {
-                    error("config regeneration failed (exit ${gen.exitCode}):\n${gen.output.takeLast(2000)}")
+                    error(
+                        context.getString(
+                            R.string.core_config_regen_failed,
+                            gen.exitCode,
+                            gen.output.takeLast(2000),
+                        ),
+                    )
                 }
                 clearIdentityData()
                 pk

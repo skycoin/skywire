@@ -276,7 +276,12 @@ pre_rg="$("${CLI[@]}" rg ls --json 2>/dev/null || echo '[]')"
 pre_rg_count=$(printf '%s' "$pre_rg" | jq '. // [] | length')
 
 tmpdir=$(mktemp -d -t muxprobe.XXXXXX)
-# shellcheck disable=SC2329 # invoked via trap, not direct call
+# Both codes, because shellcheck has named this one finding two ways: SC2329
+# on the function ("never invoked") and SC2317 on each command inside it
+# ("appears to be unreachable"). Which one you get depends on the version, and
+# lint-shell installs whatever `stable` currently is — so suppressing only the
+# one your local copy prints is how this passed review and then failed CI.
+# shellcheck disable=SC2317,SC2329 # invoked via trap, not direct call
 cleanup() {
     rm -rf "$tmpdir"
     # Restore route minhops if --avoid-direct mutated it. Always

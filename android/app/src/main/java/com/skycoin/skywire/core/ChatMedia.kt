@@ -49,8 +49,12 @@ object ChatMedia {
     private const val CHANNEL_ID = "chat-media"
     private const val NOTIFICATION_ID = 3
 
-    /** What the notification's skip buttons move by. */
-    private const val SEEK_STEP_MS = 10_000L
+    /**
+     * What the notification's skip buttons move by. The seconds are also what
+     * their labels say, so a step changed here changes both.
+     */
+    private const val SEEK_STEP_SECONDS = 10
+    private const val SEEK_STEP_MS = SEEK_STEP_SECONDS * 1000L
 
     private const val ACTION_PLAY = "com.skycoin.skywire.media.PLAY"
     private const val ACTION_PAUSE = "com.skycoin.skywire.media.PAUSE"
@@ -147,7 +151,10 @@ object ChatMedia {
         val session = session(context)
         session.setMetadata(
             MediaMetadata.Builder()
-                .putString(MediaMetadata.METADATA_KEY_TITLE, state.optString("title", "Audio"))
+                .putString(
+                    MediaMetadata.METADATA_KEY_TITLE,
+                    state.optString("title", context.getString(R.string.chat_media_default_title)),
+                )
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, state.optString("artist", "SkyChat"))
                 .putString(MediaMetadata.METADATA_KEY_ALBUM, "SkyChat")
                 .apply {
@@ -218,7 +225,9 @@ object ChatMedia {
         )
         return Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.skywire_logo)
-            .setContentTitle(state.optString("title", "Audio"))
+            .setContentTitle(
+                state.optString("title", context.getString(R.string.chat_media_default_title)),
+            )
             .setContentText(state.optString("artist", "SkyChat"))
             .setContentIntent(open)
             .setDeleteIntent(button(context, ACTION_STOP))
@@ -226,17 +235,37 @@ object ChatMedia {
             .setOnlyAlertOnce(true)
             .setOngoing(playing)
             .addAction(
-                action(context, R.drawable.ic_media_back, "Back 10s", ACTION_BACK),
+                action(
+                    context,
+                    R.drawable.ic_media_back,
+                    context.getString(R.string.chat_media_back, SEEK_STEP_SECONDS),
+                    ACTION_BACK,
+                ),
             )
             .addAction(
                 if (playing) {
-                    action(context, R.drawable.ic_media_pause, "Pause", ACTION_PAUSE)
+                    action(
+                        context,
+                        R.drawable.ic_media_pause,
+                        context.getString(R.string.chat_media_pause),
+                        ACTION_PAUSE,
+                    )
                 } else {
-                    action(context, R.drawable.ic_media_play, "Play", ACTION_PLAY)
+                    action(
+                        context,
+                        R.drawable.ic_media_play,
+                        context.getString(R.string.chat_media_play),
+                        ACTION_PLAY,
+                    )
                 },
             )
             .addAction(
-                action(context, R.drawable.ic_media_forward, "Forward 10s", ACTION_FORWARD),
+                action(
+                    context,
+                    R.drawable.ic_media_forward,
+                    context.getString(R.string.chat_media_forward, SEEK_STEP_SECONDS),
+                    ACTION_FORWARD,
+                ),
             )
             .setStyle(
                 Notification.MediaStyle()

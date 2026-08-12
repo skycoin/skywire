@@ -39,7 +39,9 @@ fun coinIconFile(context: Context, name: String): File =
 fun importCoinIconFrom(context: Context, uri: Uri): String {
     val source = context.contentResolver.openInputStream(uri)?.use {
         BitmapFactory.decodeStream(it)
-    } ?: throw IllegalArgumentException("that image cannot be read")
+    } ?: throw IllegalArgumentException(
+        context.getString(R.string.wallet_add_coin_icon_unreadable),
+    )
     val side = minOf(source.width, source.height)
     val square = Bitmap.createBitmap(
         source,
