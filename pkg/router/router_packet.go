@@ -165,32 +165,54 @@ func (r *router) handleClosePacket(ctx context.Context, packet routing.Packet) e
 		return err
 	}
 
-	defer func() {
-		r.rt.DelRules([]routing.RouteID{routeID})
-	}()
-
 	if t := rule.Type(); t == routing.RuleIntermediary {
+		// Intermediary: reclaim this hop's rule and forward the close onward.
+		// Identical for CloseRequested and CloseLegRetired — a transited relay
+		// tears down the leg's rule either way, which is exactly the reclamation
+		// CloseLegRetired exists to trigger without waiting out the idle GC.
+		defer func() {
+			r.rt.DelRules([]routing.RouteID{routeID})
+		}()
 		return r.forwardPacket(ctx, packet, rule)
 	}
 
+	// Endpoint (consume rule).
 	desc := rule.RouteDescriptor()
 	nrg, ok := r.noiseRouteGroup(desc)
 	if !ok {
+		r.rt.DelRules([]routing.RouteID{routeID})
 		return errRouteDescNotExist
 	}
-
-	defer r.removeNoiseRouteGroup(desc)
-	// Reap the faithful-UDP sibling (if any) with the reliable route (#2607).
-	defer r.closeDatagramSibling(desc)
-
 	if nrg == nil {
+		r.rt.DelRules([]routing.RouteID{routeID})
+		r.removeNoiseRouteGroup(desc)
 		return errNilNoiseRG
 	}
 
 	closeCode, err := closeCodeFromPacket(packet)
 	if err != nil {
+		r.rt.DelRules([]routing.RouteID{routeID})
 		return err
 	}
+
+	// CloseLegRetired: a remote peer retired ONE leg of a mux group. Prune only
+	// the leg whose consume rule this is and keep the group (and its other legs)
+	// live. pruneLegByConsumeRule itself reclaims the leg's forward+consume
+	// rules, so we do NOT run the whole-group DelRules / removeNoiseRouteGroup
+	// teardown here. If it returns false (this was the group's last leg) fall
+	// through to a normal full close.
+	if closeCode == routing.CloseLegRetired {
+		if nrg.pruneLegByConsumeRule(routeID) {
+			return nil
+		}
+	}
+
+	defer func() {
+		r.rt.DelRules([]routing.RouteID{routeID})
+	}()
+	defer r.removeNoiseRouteGroup(desc)
+	// Reap the faithful-UDP sibling (if any) with the reliable route (#2607).
+	defer r.closeDatagramSibling(desc)
 
 	if nrg.isClosed() {
 		return io.ErrClosedPipe

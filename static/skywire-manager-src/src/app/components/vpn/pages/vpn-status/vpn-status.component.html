@@ -169,7 +169,7 @@
               <!-- Uploaded data. -->
               <div class="rounded-elevated-box data-box big-box" [matTooltip]="'vpn.status-page.upload-info' | translate">
                 <div class="chart-container">
-                  <app-line-chart [animated]="false" [data]="sentHistory" [min]="minUploadInGraph" [max]="maxUploadInGraph" height="140" color="#00000080"></app-line-chart>
+                  <app-line-chart [animated]="false" [data]="sentHistory" [min]="minUploadInGraph" [max]="maxUploadInGraph" [height]="140" color="#00000080"></app-line-chart>
                 </div>
                 <div class="chart-label">
                   <div class="label-container label-top">
@@ -206,7 +206,7 @@
               <!-- Downloaded data. -->
               <div class="rounded-elevated-box data-box big-box" [matTooltip]="'vpn.status-page.download-info' | translate">
                 <div class="chart-container">
-                  <app-line-chart [animated]="false" [data]="receivedHistory" [min]="minDownloadInGraph" [max]="maxDownloadInGraph" height="140" color="#00000080"></app-line-chart>
+                  <app-line-chart [animated]="false" [data]="receivedHistory" [min]="minDownloadInGraph" [max]="maxDownloadInGraph" [height]="140" color="#00000080"></app-line-chart>
                 </div>
                 <div class="chart-label top-chart-label">
                   <div class="label-container label-top">
@@ -245,7 +245,7 @@
             <div class="latency-container">
               <div class="rounded-elevated-box data-box small-box" [matTooltip]="'vpn.status-page.latency-info' | translate">
                 <div class="chart-container">
-                  <app-line-chart [animated]="false" [data]="latencyHistory" [min]="minLatencyInGraph" [max]="maxLatencyInGraph" height="50" color="#00000080"></app-line-chart>
+                  <app-line-chart [animated]="false" [data]="latencyHistory" [min]="minLatencyInGraph" [max]="maxLatencyInGraph" [height]="50" color="#00000080"></app-line-chart>
                 </div>
                 <div class="chart-label top-chart-label">
                   <div class="label-container label-top">

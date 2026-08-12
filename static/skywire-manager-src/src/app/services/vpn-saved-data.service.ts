@@ -120,7 +120,7 @@ export class VpnSavedDataService {
   private readonly dataUnitsSettingStorageKey = 'VpnDataUnits';
 
   // Public key of the currently selected server.
-  private currentServerPk: string;
+  private currentServerPk!: string | null;
   // Map with all the locally saved VPN servers, accessible via public key.
   private serversMap = new Map<string, LocalServerData>();
   // Version of the saved server list, as expected by this service. If the number has been changed

@@ -1,4 +1,4 @@
-import { Component, Inject, ViewChild, ElementRef, AfterViewInit, OnInit } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, AfterViewInit, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { UntypedFormGroup, UntypedFormBuilder } from '@angular/forms';
 
@@ -14,12 +14,13 @@ import { AppConfig } from 'src/app/app.config';
     selector: 'app-edit-label',
     templateUrl: './edit-label.component.html',
     styleUrls: ['./edit-label.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EditLabelComponent implements OnInit, AfterViewInit {
-  @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('firstInput') firstInput!: ElementRef;
 
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -48,6 +49,7 @@ export class EditLabelComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit() {
+    // change-detection: no view state — focuses an input
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 

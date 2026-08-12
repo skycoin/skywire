@@ -18,7 +18,7 @@ func TestCarrierConvergeBackoff(t *testing.T) {
 
 	require.False(t, ce.carrierBackedOff(pk), "a never-tried server must not be backed off")
 
-	ce.noteCarrierFailure(pk, "")
+	ce.noteCarrierFailure(pk, "test: unreachable")
 	require.True(t, ce.carrierBackedOff(pk), "a just-failed server must be backed off")
 
 	ce.clearCarrierFailure(pk)
@@ -26,6 +26,6 @@ func TestCarrierConvergeBackoff(t *testing.T) {
 
 	// Distinct servers don't share backoff state.
 	other, _ := cipher.GenerateKeyPair()
-	ce.noteCarrierFailure(pk, "")
+	ce.noteCarrierFailure(pk, "test: unreachable")
 	require.False(t, ce.carrierBackedOff(other), "backoff is per-server")
 }

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef, Input } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, ElementRef, AfterViewChecked, ChangeDetectorRef, Input, ChangeDetectionStrategy } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
@@ -80,9 +80,10 @@ interface GroupMsg {
   templateUrl: './skychat.component.html',
   styleUrls: ['./skychat.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SkychatComponent extends PageBaseComponent implements OnInit, OnDestroy, AfterViewChecked {
-  @ViewChild('logEl') logEl: ElementRef<HTMLDivElement>;
+  @ViewChild('logEl') logEl!: ElementRef<HTMLDivElement>;
 
   // Set when this component is mounted OUTSIDE the router — via
   // window.SkywireNg.mountComponent() into a WinBox window (the wasm desktop's
@@ -92,7 +93,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   @Input() embeddedNodeKey?: string;
   @Input() embeddedPeer?: string;
 
-  node: Node;
+  node!: Node;
   // Bound to the compose form.
   toPK = '';
   message = '';
@@ -236,7 +237,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     }
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Deep-link peer preselect (?peer=<pk>): the wasm desktop's ☰ Chat window
     // and ?chat=<pk> deep links open this tab with the conversation target
     // filled in. Hash routing keeps the query inside location.hash, so parse
@@ -267,6 +268,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
           this.refreshPasswordState();
           this.startVoicePoll();
         }
+        this.cdr.markForCheck();
       });
     }
 
@@ -548,7 +550,8 @@ return {
       Promise.resolve(sv.skychatSend(recipient, text, this.network, replyToId))
         .then(() => {
  this.message = ''; this.cancelReply();
-})
+          this.cdr.markForCheck();
+        })
         .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
         .finally(() => {
  this.sending = false; this.cdr.markForCheck();
@@ -612,6 +615,7 @@ return {
 }
 
         return resp.json();
+        this.cdr.markForCheck();
       })
       .then((rows: any) => {
         if (!Array.isArray(rows)) {
@@ -767,6 +771,7 @@ return {
       if (this.selectedGroup) {
  this.pollGroupMessages(); 
 }
+      this.cdr.markForCheck();
     }, 2000);
   }
 
@@ -808,7 +813,11 @@ return {
       // proxy, so the hooks return Promises (not the raw JSON string the Go
       // side returns synchronously). Promise.resolve() normalizes both.
       Promise.resolve(sv.skychatGroupList())
-        .then((raw: any) => done(JSON.parse(raw || '[]') || []))
+        .then((raw: any) => {
+ const result = done(JSON.parse(raw || '[]') || []); this.cdr.markForCheck();
+
+ return result; 
+})
         .catch(() => { /* hook error — leave list as-is */ });
 
       return;
@@ -896,19 +905,27 @@ return {
     if (sv) {
       // SharedWorker proxy → the hook returns a Promise; normalize.
       Promise.resolve(sv.skychatGroupMessages(id))
-        .then((raw: any) => done(JSON.parse(raw || '[]') || []))
+        .then((raw: any) => {
+ const result = done(JSON.parse(raw || '[]') || []); this.cdr.markForCheck();
+
+ return result; 
+})
         .catch(() => { /* hook error */ });
 
       return;
     }
     // Native: since_ms omitted → full ring for this group.
     this.groupApi(`/messages?group_id=${encodeURIComponent(id)}`, 'GET')
-      .then((arr) => done((arr || []).map((m: any) => {
+      .then((arr) => {
+ const result = done((arr || []).map((m: any) => {
 return {
         group_id: m.group_id, from: m.sender_pk || m.from || '', text: m.text || '',
         ts: m.ts ? (typeof m.ts === 'number' ? m.ts : Date.parse(m.ts)) : Date.now(),
       }
-})))
+})); this.cdr.markForCheck();
+
+ return result; 
+})
       .catch(() => { /* transient */ });
   }
 
@@ -932,8 +949,16 @@ return {
       this.snackbar.showDone('Room created');
     };
     const p = sv
-      ? Promise.resolve(sv.skychatGroupCreate(name, this.newGroupMode)).then((r: any) => after(r.id, r.invite))
-      : this.groupApi('', 'POST', { name: name, mode: this.newGroupMode }).then((r: any) => after(r.info?.id, r.invite));
+      ? Promise.resolve(sv.skychatGroupCreate(name, this.newGroupMode)).then((r: any) => {
+ const result = after(r.id, r.invite); this.cdr.markForCheck();
+
+ return result; 
+})
+      : this.groupApi('', 'POST', { name: name, mode: this.newGroupMode }).then((r: any) => {
+ const result = after(r.info?.id, r.invite); this.cdr.markForCheck();
+
+ return result; 
+});
     p.catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
       .finally(() => {
  this.groupSending = false; this.cdr.markForCheck(); 
@@ -989,6 +1014,7 @@ return {
       });
       this.lastGroupMsgLen = -1; // force the next poll to rebuild+interleave
       this.pollGroupMessages();
+      this.cdr.markForCheck();
     })
       .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
       .finally(() => {
@@ -1013,7 +1039,8 @@ return {
       : this.groupApi('/add-member', 'POST', { id: id, pk: pk });
     p.then(() => {
  this.addMemberPk = ''; this.refreshGroups(); this.snackbar.showDone('Member added'); 
-})
+      this.cdr.markForCheck();
+    })
       .catch((e: any) => this.snackbar.showError(this.groupErrMsg(e)))
       .finally(() => this.cdr.markForCheck());
   }
@@ -1088,7 +1115,9 @@ return {
  return; 
 }
     this.pollVoice();
-    this.voiceTimer = setInterval(() => this.pollVoice(), 1800);
+    this.voiceTimer = setInterval(() => {
+ this.pollVoice(); this.cdr.markForCheck(); 
+}, 1800);
   }
 
   private stopVoicePoll() {
@@ -1145,7 +1174,9 @@ return {
       this.micMuted = false;
       this.spkMuted = false;
       // Defer so the *ngIf'd canvas is in the DOM before the first draw.
-      setTimeout(() => this.startViz(), 300);
+      setTimeout(() => {
+ this.startViz(); this.cdr.markForCheck(); 
+}, 300);
     } else if (!this.voiceActive.length && this.callStartMs) {
       this.callStartMs = 0;
       this.micMuted = false;
@@ -1226,7 +1257,11 @@ return {
   private voiceLevels(id: string): Promise<{ sent: number; recv: number }> {
     const sv = this.voiceSv;
     if (sv && typeof sv.skychatVoiceLevels === 'function') {
-      return Promise.resolve(sv.skychatVoiceLevels(id)).then((r: any) => JSON.parse(r || '{}'));
+      return Promise.resolve(sv.skychatVoiceLevels(id)).then((r: any) => {
+ const result = JSON.parse(r || '{}'); this.cdr.markForCheck();
+
+ return result; 
+});
     }
 
     return this.voiceApi(`/levels?call=${encodeURIComponent(id)}`, 'GET');
@@ -1235,7 +1270,11 @@ return {
   private voiceAudioData(id: string): Promise<{ sent: number[]; recv: number[] }> {
     const sv = this.voiceSv;
     if (sv && typeof sv.skychatVoiceAudio === 'function') {
-      return Promise.resolve(sv.skychatVoiceAudio(id)).then((r: any) => JSON.parse(r || '{}'));
+      return Promise.resolve(sv.skychatVoiceAudio(id)).then((r: any) => {
+ const result = JSON.parse(r || '{}'); this.cdr.markForCheck();
+
+ return result; 
+});
     }
 
     return this.voiceApi(`/audio?call=${encodeURIComponent(id)}`, 'GET');
@@ -1264,7 +1303,9 @@ return {
  return; 
 }
     this.lvlSent = []; this.lvlRecv = [];
-    this.vizTimer = setInterval(() => this.tickViz(), 100);
+    this.vizTimer = setInterval(() => {
+ this.tickViz(); this.cdr.markForCheck(); 
+}, 100);
   }
 
   private stopViz() {
@@ -1294,6 +1335,7 @@ return {
  this.lvlSent.shift(); 
 }
         this.drawLevels(this.vizCanvas?.nativeElement);
+        this.cdr.markForCheck();
       }).catch(() => { /* transient */ });
     }
     if (needAudio) {
@@ -1306,6 +1348,7 @@ return {
           this.drawSpectrogram(this.vizBig?.nativeElement, recv);      // incoming (peer)
           this.drawSpectrogram(this.vizBigSent?.nativeElement, sent);  // outgoing (you)
         }
+        this.cdr.markForCheck();
       }).catch(() => { /* transient */ });
     }
   }
@@ -1388,7 +1431,8 @@ return {
       : this.voiceApi('/call', 'POST', { peer: peer });
     p.then(() => {
  this.snackbar.showDone('Call connected'); done(); 
-})
+      this.cdr.markForCheck();
+    })
       .catch((e: any) => {
  this.snackbar.showError(this.groupErrMsg(e)); done(); 
 });
@@ -1428,7 +1472,8 @@ return {
       : this.voiceApi('/answer', 'POST', { call_id: id });
     p.then(() => {
  this.snackbar.showDone('Call answered'); done(); 
-})
+      this.cdr.markForCheck();
+    })
       .catch((e: any) => {
  this.snackbar.showError(this.groupErrMsg(e)); done(); 
 });
@@ -1467,7 +1512,9 @@ return {
         this.pwIsSet = !!(resp && resp.set);
         this.cdr.markForCheck();
       },
-      () => { /* leave previous state — the form still works */ },
+      () => {
+ /* leave previous state — the form still works */   this.cdr.markForCheck();
+      },
     );
   }
 

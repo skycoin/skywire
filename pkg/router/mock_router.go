@@ -540,6 +540,15 @@ func (_m *MockRouter) ActiveRouteStatuses() []RouteStatus {
 	return nil
 }
 
+// RoutingTableStats provides a mock function with no fields
+func (_m *MockRouter) RoutingTableStats() routing.RoutingTableStats {
+	ret := _m.Called()
+	if r, ok := ret.Get(0).(routing.RoutingTableStats); ok {
+		return r
+	}
+	return routing.RoutingTableStats{}
+}
+
 // GetLastRouteCalcTime provides a mock function with no fields
 func (_m *MockRouter) GetLastRouteCalcTime() time.Duration {
 	ret := _m.Called()

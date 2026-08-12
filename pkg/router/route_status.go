@@ -56,6 +56,13 @@ type RouteTransport struct {
 	RvsRuleID routing.RouteID `json:"rvs_rule_id"`
 }
 
+// RoutingTableStats returns observability counters for this visor's routing
+// table (live rule count, route-ID high-water, per-type breakdown). On a relay
+// this is how the soak harness detects rule/reserved-ID leaks under churn.
+func (r *router) RoutingTableStats() routing.RoutingTableStats {
+	return r.rt.Stats()
+}
+
 // ActiveRouteStatuses returns the status of all active route groups.
 func (r *router) ActiveRouteStatuses() []RouteStatus {
 	r.mx.Lock()

@@ -46,6 +46,16 @@ func (r *RPC) RouteGroups(_ *struct{}, out *[]RouteGroupInfo) (err error) {
 	return err
 }
 
+// RoutingStats retrieves this visor's routing-table observability counters.
+func (r *RPC) RoutingStats(_ *struct{}, out *routing.RoutingTableStats) (err error) {
+	defer rpcutil.LogCall(r.log, "RoutingStats", nil)(out, &err)
+
+	stats, err := r.visor.RoutingStats()
+	*out = stats
+
+	return err
+}
+
 // RoutingPolicies returns the installed routing-policy summary
 // (visor-wide default + per-app overrides) for the hypervisor UI.
 func (r *RPC) RoutingPolicies(_ *struct{}, out *RoutingPoliciesSummary) (err error) {

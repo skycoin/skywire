@@ -145,6 +145,10 @@ func (p *proxiedVisorAPI) RouteGroups() ([]RouteGroupInfo, error) {
 	return s.RouteGroups, nil
 }
 
+func (p *proxiedVisorAPI) RoutingStats() (routing.RoutingTableStats, error) {
+	return routing.RoutingTableStats{}, ErrProxyNotSupported
+}
+
 func (p *proxiedVisorAPI) GetMinHops() (uint16, error) {
 	s, err := p.hvAPI.HVVisorSummary(p.targetPK)
 	if err != nil {

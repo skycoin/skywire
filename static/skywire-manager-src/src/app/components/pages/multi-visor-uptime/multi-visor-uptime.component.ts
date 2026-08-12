@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith, of, forkJoin, timer } from 'rxjs';
 import { switchMap, catchError, takeUntil } from 'rxjs/operators';
 
@@ -99,6 +99,7 @@ const FETCH_TIMEOUT_MS = 45000;
   templateUrl: './multi-visor-uptime.component.html',
   styleUrls: ['./multi-visor-uptime.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class MultiVisorUptimeComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
@@ -138,7 +139,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
   private readonly versionHistoryMinUptime = 75;
 
   private allRows: VisorRow[] = [];
-  private sub: Subscription;
+  private sub!: Subscription;
 
   constructor(
     private nodeService: NodeService,
@@ -149,7 +150,7 @@ export class MultiVisorUptimeComponent extends PageBaseComponent implements OnIn
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // 60s cadence — matches the TPD publisher's recompute tick.
     this.sub = interval(60000).pipe(
       startWith(0),

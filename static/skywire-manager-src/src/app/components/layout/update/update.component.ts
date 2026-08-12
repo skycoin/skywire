@@ -4,7 +4,7 @@
  * Not used anymore, still here just as a precaution.
  */
 
-import { Component, Inject, OnDestroy, AfterViewInit, ChangeDetectorRef } from '@angular/core';
+import { Component, Inject, OnDestroy, AfterViewInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { Subscription, forkJoin, interval } from 'rxjs';
@@ -135,7 +135,8 @@ interface UpdateVersion {
     selector: 'app-update',
     templateUrl: './update.component.html',
     styleUrls: ['./update.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UpdateComponent implements AfterViewInit, OnDestroy {
   // Current state of the window.
@@ -144,18 +145,18 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
   // Text to show in the cancel button.
   cancelButtonText = 'common.cancel';
   // Text to show in the confirm button.
-  confirmButtonText: string;
+  confirmButtonText!: string;
   // Error msg to show if the current state is UpdatingStates.Error.
-  errorText: string;
+  errorText!: string;
   // If it was requested to update only one node and no updates were found, this var contains
   // the current version of the node.
-  currentNodeVersion: string;
+  currentNodeVersion!: string;
 
   // List with the names of all updates found for the nodes, without repeated values.
-  updatesFound: UpdateVersion[];
+  updatesFound!: UpdateVersion[];
   // List with all the nodes that should be updated. It includes all requested nodes, so it
   // may include nodes without updates available and nodes which are already being updated.
-  nodesToUpdate: NodeToUpdate[];
+  nodesToUpdate!: NodeToUpdate[];
   // List with the nodes which had errors during the initial check.
   nodesWithError: NodeWithErrorData[] = [];
   // List with the indexes, inside nodesToUpdate, of all nodes which were detected as already
@@ -163,17 +164,17 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
   indexesAlreadyBeingUpdated: number[] = [];
   // How many nodes inside nodesToUpdate have updates available and are not currently
   // being updated.
-  nodesForUpdatesFound: number;
+  nodesForUpdatesFound!: number;
 
   // Custom channel set by the user for downloading the updates.
   customChannel: string = localStorage.getItem(UpdaterStorageKeys.Channel);
 
   updatingStates = UpdatingStates;
 
-  private subscription: Subscription;
-  private initialCheckSubscriptions: Subscription[];
-  private progressSubscriptions: Subscription[];
-  private uiUpdateSubscription: Subscription;
+  private subscription!: Subscription;
+  private initialCheckSubscriptions!: Subscription[];
+  private progressSubscriptions!: Subscription[];
+  private uiUpdateSubscription!: Subscription;
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".
@@ -236,6 +237,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
           if (checkedVisors === this.nodesToUpdate.length) {
             this.finishInitialCheck();
           }
+          this.changeDetectorRef.markForCheck();
         }, (err: OperationError) => {
           // Save the error.
           this.nodesWithError.push({
@@ -248,6 +250,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
           if (checkedVisors === this.nodesToUpdate.length) {
             this.finishInitialCheck();
           }
+          this.changeDetectorRef.markForCheck();
         })
       );
     });
@@ -335,9 +338,11 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
           this.update();
         }
       }
+      this.changeDetectorRef.markForCheck();
     }, (err: OperationError) => {
       this.changeState(UpdatingStates.Error);
       this.errorText = processServiceError(err).translatableErrorMsg;
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -346,7 +351,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
    * update === true. This makes the update procedure to start, if it was not already
    * started and starts showing the progress.
    */
-  private update() {
+  update() {
     this.changeState(UpdatingStates.Updating);
 
     this.progressSubscriptions = [];
@@ -357,12 +362,15 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
           this.nodeService.update(nodeToUpdate.key).subscribe(response => {
             // Update the progress.
             this.updateProgressInfo(response.status, nodeToUpdate.updateProgressInfo);
+            this.changeDetectorRef.markForCheck();
           }, (err: OperationError) => {
             // Save the error msg.
             nodeToUpdate.updateProgressInfo.errorMsg = processServiceError(err).translatableErrorMsg;
+            this.changeDetectorRef.markForCheck();
           }, () => {
             // Indicate that the connection has been closed.
             nodeToUpdate.updateProgressInfo.closed = true;
+            this.changeDetectorRef.markForCheck();
           })
         );
       }

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { Node, Application } from '../../../../app.datatypes';
@@ -21,16 +21,17 @@ const VPN_SERVER = 'vpn-server';
   templateUrl: './vpn.component.html',
   styleUrls: ['./vpn.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
+  node!: Node;
   client: Application | null = null;
   server: Application | null = null;
   busy = new Set<string>();
   // Names of apps whose universal settings panel is currently open.
   expandedSettings = new Set<string>();
 
-  private nodeSub: Subscription;
+  private nodeSub!: Subscription;
 
   constructor(
     private appsService: AppsService,
@@ -54,10 +55,11 @@ export class VpnComponent extends PageBaseComponent implements OnInit, OnDestroy
  this.expandedSettings.delete(name); 
 }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();

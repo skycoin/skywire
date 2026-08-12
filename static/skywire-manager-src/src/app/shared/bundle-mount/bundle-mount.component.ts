@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnDestroy, Output, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, EventEmitter, Input, OnDestroy, Output, ViewChild, ChangeDetectionStrategy } from '@angular/core';
 
 /**
  * Handle returned by a mountable bundle's `mount()` entry, used to tear it down.
@@ -40,6 +40,7 @@ export interface MountableBundle {
   templateUrl: './bundle-mount.component.html',
   styleUrls: ['./bundle-mount.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BundleMountComponent implements AfterViewInit, OnDestroy {
   /** URL of the bundle script to load (same-origin, relative to the SPA base). */

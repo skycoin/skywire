@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
@@ -14,19 +14,21 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
     selector: 'app-start',
     templateUrl: './start.component.html',
     styleUrls: ['./start.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class StartComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  private verificationSubscription: Subscription;
+  private verificationSubscription!: Subscription;
 
   constructor(
     private authService: AuthService,
     private router: Router,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Check if the user is unauthorized.
     this.verificationSubscription = this.authService.checkLogin().subscribe(response => {
       if (response !== AuthStates.NotLogged) {
@@ -34,10 +36,12 @@ export class StartComponent extends PageBaseComponent implements OnInit, OnDestr
       } else {
         this.router.navigate(['login'], { replaceUrl: true });
       }
+      this.changeDetectorRef.markForCheck();
     }, () => {
       // In case of error, go to the visor list. While trying to get the list, additional
       // comprobations will be performed in that page.
       this.router.navigate(['nodes'], { replaceUrl: true });
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();

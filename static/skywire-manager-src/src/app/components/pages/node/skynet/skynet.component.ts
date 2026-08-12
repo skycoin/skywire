@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { NodeService } from '../../../../services/node.service';
@@ -30,7 +30,8 @@ interface ForwardEntry {
   selector: 'app-skynet',
   templateUrl: './skynet.component.html',
   styleUrls: ['./skynet.component.scss'],
-  standalone: false
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SkynetComponent extends PageBaseComponent implements OnInit, OnDestroy {
   ports: ForwardedPort[] = [];
@@ -61,17 +62,18 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
 
   nodeKey = '';
 
-  private portsSub: Subscription;
-  private fwdsSub: Subscription;
+  private portsSub!: Subscription;
+  private fwdsSub!: Subscription;
 
   constructor(
     private nodeService: NodeService,
     private snackbarService: SnackbarService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeKey = NodeComponent.getCurrentNodeKey();
     this.loadPorts();
     this.loadForwards();
@@ -90,10 +92,12 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
       (ports: any[]) => {
         this.ports = (ports || []).sort((a: any, b: any) => a.port - b.port);
         this.portsLoading = false;
+        this.changeDetectorRef.markForCheck();
       },
       () => {
  this.ports = []; this.portsLoading = false; 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -139,10 +143,12 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.newWhitelist = '';
         this.snackbarService.showDone(`Port ${port} forwarded`);
         this.loadPorts();
+        this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
  this.snackbarService.showError(err?.error?.error || 'Failed'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -150,40 +156,51 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     this.nodeService.deregisterSkynetPort(this.nodeKey, port).subscribe(
       () => {
  this.snackbarService.showDone(`Port ${port} removed`); this.loadPorts(); 
-},
+        this.changeDetectorRef.markForCheck();
+      },
       () => {
  this.snackbarService.showError('Failed to remove port'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
   toggleLanding(fp: ForwardedPort) {
     fp.show_on_landing = !fp.show_on_landing;
     this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
-      () => {},
+      () => {
+        this.changeDetectorRef.markForCheck();
+      },
       () => {
  this.snackbarService.showError('Failed to update'); this.loadPorts(); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
   toggleSkynet(fp: ForwardedPort) {
     fp.skynet = !fp.skynet;
     this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
-      () => {},
+      () => {
+        this.changeDetectorRef.markForCheck();
+      },
       () => {
  this.snackbarService.showError('Failed to update'); this.loadPorts(); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
   toggleDmsg(fp: ForwardedPort) {
     fp.dmsg = !fp.dmsg;
     this.nodeService.updateForwardedPort(this.nodeKey, fp).subscribe(
-      () => {},
+      () => {
+        this.changeDetectorRef.markForCheck();
+      },
       () => {
  this.snackbarService.showError('Failed to update'); this.loadPorts(); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -218,24 +235,28 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
           : `Whitelist set on port ${fp.port} (${pks.length} PK${pks.length === 1 ? '' : 's'})`);
         this.cancelEditWhitelist();
         this.loadPorts();
+        this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
  this.snackbarService.showError(err?.error?.error || 'Failed to update whitelist'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
   clearWhitelist(fp: ForwardedPort) {
-    const updated = { ...fp, whitelist: [] };
+    const updated = { ...fp, whitelist: [] as any[] };
     this.nodeService.updateForwardedPort(this.nodeKey, updated).subscribe(
       () => {
         this.snackbarService.showDone(`Whitelist cleared on port ${fp.port}`);
         this.cancelEditWhitelist();
         this.loadPorts();
+        this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
  this.snackbarService.showError(err?.error?.error || 'Failed to clear whitelist'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -256,10 +277,12 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
           }
         }
         this.forwardsLoading = false;
+        this.changeDetectorRef.markForCheck();
       },
       () => {
  this.forwards = []; this.forwardsLoading = false; 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -291,10 +314,12 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
         this.connectPK = ''; this.connectRemotePort = ''; this.connectLocalPort = '';
         this.snackbarService.showDone(`Connected via ${this.connectNetwork}: remote ${rPort} → localhost:${lPort}`);
         this.loadForwards();
+        this.changeDetectorRef.markForCheck();
       },
       (err: any) => {
  this.snackbarService.showError(err?.error?.error || 'Failed'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 
@@ -302,10 +327,12 @@ export class SkynetComponent extends PageBaseComponent implements OnInit, OnDest
     this.nodeService.skynetDisconnect(this.nodeKey, id).subscribe(
       () => {
  this.snackbarService.showDone('Disconnected'); this.loadForwards(); 
-},
+        this.changeDetectorRef.markForCheck();
+      },
       () => {
  this.snackbarService.showError('Failed'); 
-}
+        this.changeDetectorRef.markForCheck();
+      }
     );
   }
 }

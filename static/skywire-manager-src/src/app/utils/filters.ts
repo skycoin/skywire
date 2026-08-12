@@ -186,7 +186,7 @@ export function filterList(allElements: any[], currentFilters: any, filterProper
  * elements of the data list.
  */
 export function updateFilterTexts(currentFilters: any, filterPropertiesList: CompleteFilterProperties[]): FilterTextElements[] {
-  const response = [];
+  const response: FilterTextElements[] = [];
 
   filterPropertiesList.forEach(filterProperties => {
     // Check if the filter has a valid value.

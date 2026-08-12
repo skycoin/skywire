@@ -1,4 +1,4 @@
-import { Component, OnDestroy, Type } from '@angular/core';
+import { Component, OnDestroy, Type, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Subscription } from 'rxjs';
@@ -39,6 +39,7 @@ const APP_MOUNTS: Record<string, AppMount> = {
   templateUrl: './full-app-host.component.html',
   styleUrls: ['./full-app-host.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FullAppHostComponent implements OnDestroy {
   name = '';
@@ -55,6 +56,7 @@ export class FullAppHostComponent implements OnDestroy {
     route: ActivatedRoute,
     private router: Router,
     private sanitizer: DomSanitizer,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.sub = route.paramMap.subscribe((p) => {
       this.name = (p.get('name') || '').toLowerCase();
@@ -73,6 +75,7 @@ export class FullAppHostComponent implements OnDestroy {
       } else if (m.iframe) {
         this.iframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl(m.iframe(this.key));
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
