@@ -4,7 +4,7 @@
 
 display a tree representation of transports from TPD
 
-http://tpd.skywire.skycoin.com/all-transports
+dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports
 
 Set cache file location to "" to avoid using cache files
 
@@ -17,27 +17,28 @@ skywire cli tp tree
 ## Flags
 
 ```
-  -k, --source string    root node ; defaults to visor with most transports
-  -d, --dest string      map route between source and dest
-  -a, --tpdurl string    transport discovery url (default "http://tpd.skywire.skycoin.com")
-  -w, --uturl string     uptime tracker url (TPD integrated) (default "http://tpd.skywire.skycoin.com")
-  -r, --raw              print raw json data
-  -p, --pretty           print pretty json data
-  -o, --noton            do not filter by online status in UT
-  -g, --good             do not display transports for offline visors
-      --cft string       TPD cache file location (default "/tmp/tpd.json")
-      --cfu string       UT cache file location. (default "/tmp/ut.json")
-  -m, --cfa int          update cache files if older than n minutes (default 5)
-  -P, --pad int          padding between tree and tpid (default 15)
-  -s, --stats            return only statistics
-  -v, --version string   filter by minimum version (e.g., 1.3.34)
-  -K, --keys             output only reachable public keys (requires -k source)
-  -H, --hops int         max hops from source for --keys mode (1 or 2) (default 2)
-  -x, --no-self          exclude source key from --keys output
-      --no-cxo           skip CXO subscriber-cache step
-      --no-rpc           skip visor RPC (DmsgHTTP) step
-      --no-dmsg          skip direct DMSG HTTP step
-      --no-http          skip direct HTTP fallback step
+  -k, --source string      root node ; defaults to visor with most transports
+  -d, --dest string        map route between source and dest
+  -a, --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -w, --uturl string       uptime tracker url (TPD integrated) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -r, --raw                print raw json data
+  -p, --pretty             print pretty json data
+  -o, --noton              do not filter by online status in UT
+  -g, --good               do not display transports for offline visors
+      --cft string         TPD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//tpd.json")
+      --cfu string         UT cache file location. (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//ut.json")
+  -m, --cfa int            update cache files if older than n minutes (default 5)
+  -P, --pad int            padding between tree and tpid (default 15)
+  -s, --stats              return only statistics
+  -v, --version string     filter by minimum version (e.g., 1.3.34)
+  -K, --keys               output only reachable public keys (requires -k source)
+  -H, --hops int           max hops from source for --keys mode (1 or 2) (default 2)
+  -x, --no-self            exclude source key from --keys output
+      --no-cxo             skip CXO subscriber-cache step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --no-dmsg            skip direct DMSG HTTP step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 
 ## Global Flags

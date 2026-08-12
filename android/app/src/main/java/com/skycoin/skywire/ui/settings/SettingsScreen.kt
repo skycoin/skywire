@@ -50,6 +50,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.skycoin.skywire.R
@@ -74,6 +75,12 @@ import kotlinx.coroutines.launch
  * the consequence spelled out rather than implied by the word *destructive*.
  * The key handling itself is never done here: the core binary validates the
  * key and derives its public half, and the confirmation quotes what it said.
+ *
+ * One rule for the buttons, so a card's actions never look like two different
+ * kinds of thing: everything a card offers is a [FilledTonalButton], whatever
+ * its emphasis, and [TextButton] is left to the dialogs, where the platform
+ * expects it. A text button inside a card reads as a hyperlink in a paragraph,
+ * which is not what "Open security settings" or "Not now" are.
  */
 @Composable
 fun SettingsScreen(
@@ -167,6 +174,19 @@ fun SettingsScreen(
                 )
             }
             item {
+                PublicAutoconnectCard(
+                    state = state,
+                    onToggle = viewModel::setPublicAutoconnect,
+                )
+            }
+            item {
+                RemoteManagementCard(
+                    state = state,
+                    onGrant = { dialog = SettingsDialog.EnterRemotePk },
+                    onRevoke = viewModel::revokeRemoteManagement,
+                )
+            }
+            item {
                 AppLockCard(
                     state = state,
                     onToggle = { wanted ->
@@ -219,6 +239,14 @@ fun SettingsScreen(
                         else -> dialog = SettingsDialog.ReplaceWarning(entered, pk)
                     }
                 }
+            },
+        )
+
+        SettingsDialog.EnterRemotePk -> RemotePkDialog(
+            onDismiss = { dialog = null },
+            onSubmit = { entered ->
+                viewModel.grantRemoteManagement(entered)
+                dialog = null
             },
         )
 
@@ -280,6 +308,7 @@ fun SettingsScreen(
 /** Which dialog is open, and what it is carrying. */
 private sealed interface SettingsDialog {
     data object EnterSecretKey : SettingsDialog
+    data object EnterRemotePk : SettingsDialog
     data class ReplaceWarning(val secretKey: String, val publicKey: String) : SettingsDialog
     data class ReplaceFinal(val secretKey: String, val publicKey: String) : SettingsDialog
     data object NewIdentityWarning : SettingsDialog
@@ -339,12 +368,43 @@ private fun IdentityCard(
                 )
             }
         } else {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilledTonalButton(onClick = onReplace) {
-                    Text(stringResource(R.string.settings_replace_sk))
+            val replaceLabel = stringResource(R.string.settings_replace_sk)
+            val resetLabel = stringResource(R.string.settings_new_config)
+            // Equal halves gave the longer label half a row to sit in, which is
+            // less than it needs — it wrapped to two lines and left its
+            // neighbour a short button beside a tall one. Weighting by the
+            // measured label widths instead gives each one the share of the row
+            // its text actually asks for: both stay on one line, and the two
+            // together still fill the width with only the gutter between them.
+            val measurer = rememberTextMeasurer()
+            val labelStyle = MaterialTheme.typography.labelLarge
+            val replaceWidth = remember(replaceLabel, labelStyle) {
+                measurer.measure(replaceLabel, labelStyle).size.width.toFloat()
+            }
+            val resetWidth = remember(resetLabel, labelStyle) {
+                measurer.measure(resetLabel, labelStyle).size.width.toFloat()
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                // Trimmed from the 24dp default: the padding is what decides
+                // whether a proportional share is wide enough for its label.
+                val padding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+                FilledTonalButton(
+                    onClick = onReplace,
+                    contentPadding = padding,
+                    modifier = Modifier.weight(replaceWidth),
+                ) {
+                    Text(replaceLabel, maxLines = 1)
                 }
-                FilledTonalButton(onClick = onReset, enabled = state.hasIdentity) {
-                    Text(stringResource(R.string.settings_new_config))
+                FilledTonalButton(
+                    onClick = onReset,
+                    enabled = state.hasIdentity,
+                    contentPadding = padding,
+                    modifier = Modifier.weight(resetWidth),
+                ) {
+                    Text(resetLabel, maxLines = 1)
                 }
             }
         }
@@ -406,6 +466,155 @@ private fun ConfigCard(
     }
 }
 
+/**
+ * Automatic transports to public visors.
+ *
+ * Off on this build — see [com.skycoin.skywire.core.PublicAutoconnect] for
+ * why a phone opts out by default. Worth surfacing rather than leaving buried
+ * in the config: it is the switch that decides whether this visor holds any
+ * transports of its own, and a visor holding none cannot dial a route through
+ * intermediates at all, which is what a route length above one hop asks for.
+ */
+@Composable
+private fun PublicAutoconnectCard(
+    state: SettingsUiState,
+    onToggle: (Boolean) -> Unit,
+) {
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.settings_autoconnect),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    stringResource(R.string.settings_autoconnect_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = state.publicAutoconnect, onCheckedChange = onToggle)
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            stringResource(R.string.settings_autoconnect_restart),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/**
+ * The remote-management grant — see [com.skycoin.skywire.core.RemoteManagement].
+ *
+ * Rendered as a grant rather than a toggle: what is being switched on is not
+ * a feature of this phone but another machine's full control of it, so the
+ * card always shows *which* key holds that control, and revoking it is one
+ * tap with no key to retype.
+ */
+@Composable
+private fun RemoteManagementCard(
+    state: SettingsUiState,
+    onGrant: () -> Unit,
+    onRevoke: () -> Unit,
+) {
+    SectionCard {
+        Text(
+            stringResource(R.string.settings_remote),
+            style = MaterialTheme.typography.titleMedium,
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
+            stringResource(R.string.settings_remote_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        // Both of these are buttons, not text links. Handing another machine
+        // control of this one — and taking it back — is the same weight of
+        // action as exporting the config or allowing background work, and it
+        // is styled like them rather than like a hyperlink in a paragraph.
+        if (state.remoteManagementPk.isEmpty()) {
+            FilledTonalButton(onClick = onGrant) {
+                Text(stringResource(R.string.settings_remote_grant))
+            }
+        } else {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    shortPk(state.remoteManagementPk),
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                    ),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(12.dp))
+                FilledTonalButton(onClick = onRevoke) {
+                    Text(stringResource(R.string.settings_remote_revoke))
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            stringResource(R.string.settings_remote_restart),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** Paste-a-key dialog for [RemoteManagementCard]. A public key, so no [SecureWindow]. */
+@Composable
+private fun RemotePkDialog(
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_remote_dialog_title)) },
+        text = {
+            Column {
+                Text(
+                    stringResource(R.string.settings_remote_dialog_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it.trim() },
+                    singleLine = false,
+                    maxLines = 3,
+                    label = { Text(stringResource(R.string.settings_remote_label)) },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(
+                        fontFamily = FontFamily.Monospace,
+                    ),
+                    keyboardOptions = KeyboardOptions(
+                        imeAction = ImeAction.Done,
+                    ),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onSubmit(text) },
+                enabled = text.isNotEmpty(),
+            ) {
+                Text(stringResource(R.string.settings_remote_grant_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+        },
+    )
+}
+
 @Composable
 private fun AppLockCard(
     state: SettingsUiState,
@@ -440,8 +649,8 @@ private fun AppLockCard(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(4.dp))
-            TextButton(onClick = onOpenSecuritySettings, contentPadding = PaddingValues(0.dp)) {
+            Spacer(Modifier.height(12.dp))
+            FilledTonalButton(onClick = onOpenSecuritySettings) {
                 Text(stringResource(R.string.settings_open_security))
             }
         }
@@ -548,12 +757,12 @@ private fun BatteryCard(
         )
         if (!state.batteryExempt) {
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 FilledTonalButton(onClick = onGrant) {
                     Text(stringResource(R.string.settings_battery_allow))
                 }
                 if (!state.batteryPromptDismissed) {
-                    TextButton(onClick = onDismiss) {
+                    FilledTonalButton(onClick = onDismiss) {
                         Text(stringResource(R.string.settings_battery_not_now))
                     }
                 }

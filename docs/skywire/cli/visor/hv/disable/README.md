@@ -2,7 +2,7 @@
 
 [← skywire cli visor hv](../README.md)
 
-Disable hypervisor UI at runtime.
+Disable the whole hypervisor — stops the DMSG-RPC listener, disconnects managed visors, and stops the web UI (so `hv ls` no longer works). To stop ONLY the web UI while keeping CLI access, use `hv ui disable`.
 Use -w to also persist the change to the config file.
 
 ## Usage

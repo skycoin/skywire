@@ -826,6 +826,14 @@ func (proxyDefaultAPI) GroupSetListed(_ string, _ bool) (GroupInfo, error) {
 	return GroupInfo{}, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) GroupSetMeta(_ GroupSetMetaArgs) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) GroupRefreshMeta(_ string) (GroupInfo, error) {
+	return GroupInfo{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) GroupCatalog(_ cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
 	return nil, false, ErrProxyNotSupported
 }

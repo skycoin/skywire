@@ -15,9 +15,9 @@ skywire cli rewards systemd
 
 ```
   -o, --out string      path to output systemd services (default "/etc/systemd/system")
-  -p, --path string     reward system data dir path (default "/home/d0mo/go/src/github.com/0pcom/skywire")
+  -p, --path string     reward system data dir path (default "/Users/mohammed/Projects/Skycoin/mohammed/skywire")
   -s, --skyenv string   env config file path (default "fr.conf")
-  -u, --user string     user to set - should have write permission on path (default "d0mo")
+  -u, --user string     user to set - should have write permission on path (default "mohammed")
 ```
 
 ## Global Flags

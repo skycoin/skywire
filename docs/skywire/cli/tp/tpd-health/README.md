@@ -13,11 +13,12 @@ skywire cli tp tpd-health
 ## Flags
 
 ```
-      --no-cxo       skip CXO subscriber-cache step
-      --no-dmsg      skip direct DMSG HTTP step
-      --no-http      skip direct HTTP fallback step
-      --no-rpc       skip visor RPC (DmsgHTTP) step
-      --rpc string   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
+      --no-cxo             skip CXO subscriber-cache step
+      --no-dmsg            skip direct DMSG HTTP step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
 ```
 
 ## Global Flags

@@ -239,8 +239,19 @@ type Record struct {
 	ID string `json:"id"`
 
 	// Name is operator-supplied free-form. Not used as an identity
-	// — just for display.
+	// — just for display. Set at create time; the founding visor may
+	// change it later through Manager.Rename (meta.go), and everyone
+	// else re-learns it from the founder — see Manager.RefreshMeta.
 	Name string `json:"name"`
+
+	// Avatar is the group's picture as raw encoded image bytes, with
+	// AvatarMime naming the format as DECODED (never as declared).
+	// Display-only like Name, bounded by profile.MaxAvatarBytes so it
+	// always fits a probe frame, and owned the same way: the founding
+	// visor sets it (Manager.SetAvatar), members mirror it. Empty means
+	// no picture.
+	Avatar     []byte `json:"avatar,omitempty"`
+	AvatarMime string `json:"avatar_mime,omitempty"`
 
 	// OwnerPK is the founding-creator visor's public key. Historically
 	// this was the single PK with roster authority + the only PK that

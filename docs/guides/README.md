@@ -29,6 +29,7 @@ cobra subcommand tree.
 
 ## Advanced
 
+- [remote-visor-cli.md](remote-visor-cli.md) — drive a visor on another machine with `skywire cli --via`: the trust model (`hypervisors` / dmsgpty whitelist), hypervisor attach vs the full CLI bridge, the two-terminal remote-diagnosis session, and what of it works against the Android app's visor
 - [manual-routing.md](manual-routing.md) — manual route creation, multi-hop routes, route-finder, troubleshooting
 - [privacy-and-performance.md](privacy-and-performance.md) — tuning the visor along the privacy ↔ performance spectrum: IP/data/metadata privacy, `min_hops`, multiplexed & rotating routes, `ar_transport_limit`, `no_direct_transports`, `persistent_transports`, and a maximum-privacy recipe
 

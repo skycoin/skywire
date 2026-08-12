@@ -70,7 +70,7 @@
 		"route_finder_dmsg": "dmsg://02b88fe426b2f6f83f19b151c427c155aae186d734cbd45f12b57ddbd237b49278:80",
 		"route_finder_timeout": "10s",
 		"min_hops": 1,
-		"mux_routes": 2
+		"mux_routes": 1
 	},
 	"launcher": {
 		"service_discovery": "",

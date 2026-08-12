@@ -314,6 +314,17 @@ type JoinResponseMsg struct {
 	// wire change, and so a UI has somewhere to put the number. Bounded
 	// by maxPriceHintLen on receipt.
 	PriceHint string `json:"price_hint,omitempty"`
+
+	// Avatar / AvatarMime are the group's picture, mirroring
+	// Record.Avatar. Describe-only like Port and Policy above, and for a
+	// harder reason than "not needed": an admission response also carries
+	// the full Members list, and members + a 32 KB image could overrun the
+	// single 64 KB frame both answers ride. A describe answer carries no
+	// roster, so here the arithmetic always holds (see
+	// profile.MaxAvatarBytes). A fresh joiner picks the picture up from
+	// its first metadata refresh instead.
+	Avatar     []byte `json:"avatar,omitempty"`
+	AvatarMime string `json:"avatar_mime,omitempty"`
 }
 
 // maxJoinNoteLen bounds the free-text note. Long enough for a sentence

@@ -1379,23 +1379,46 @@ func (env *TestEnv) CheckServicesDmsgReachable(timeout time.Duration) error {
 
 const (
 	// dmsgClientPublishInterval mirrors the client cadence set in dmsg.Config.Ensure.
+	// This is how often the update loop WAKES; whether it publishes on a given
+	// wake is decided by the interval below.
 	dmsgClientPublishInterval = dmsg.DefaultUpdateInterval * 5
+
+	// dmsgClientStretchedPublishInterval mirrors dmsg's unexported
+	// cxoHealthyUpdateInterval. While a client's registration-over-CXO
+	// keepalive is healthy, a re-registration that would change nothing
+	// stretches to this spacing instead of the wake cadence above — the HTTP
+	// re-PUT then exists only to keep the entry under its TTL, because the CXO
+	// mirror is what actually carries liveness. Keep in step with
+	// EntityCommon.effectiveUpdateInterval.
+	dmsgClientStretchedPublishInterval = 30 * time.Minute
 
 	// dmsgEntryMaxAge bounds how old a client's discovery entry may be and
 	// still count as "this visor is registered". A dmsg client publishes as
-	// soon as its first session is up and then only refreshes on the cadence
-	// above, so a healthy, settled visor's entry is routinely minutes old — its
-	// age says nothing about whether the visor is reachable. The bound exists
+	// soon as its first session is up and then re-publishes only when its
+	// delegated-server set changes or the interval above comes round, so a
+	// healthy, settled visor's entry is routinely tens of minutes old — its age
+	// says nothing about whether the visor is reachable. The bound exists
 	// solely to reject an entry left behind by a visor that is no longer
-	// running, so it tracks the publish cadence with one interval of slack for
-	// a missed tick.
+	// running, so it tracks the LONGEST spacing the client may leave between
+	// publishes, plus one wake interval of slack for an attempt that failed and
+	// backed off.
 	//
-	// It was previously a flat 60s, which matched the cadence back when clients
-	// inherited the SERVER's DefaultUpdateInterval. Once clients moved to their
-	// own 5-minute cadence, that bound rejected a perfectly good entry for four
-	// minutes out of every five and every test gated on this helper timed out
-	// against a deployment that was working.
-	dmsgEntryMaxAge = 2 * dmsgClientPublishInterval
+	// It must also stay under the dmsg-discovery client-entry TTL (60m): past
+	// that, discovery drops the entry itself and there is nothing left to judge
+	// the age of.
+	//
+	// This bound has now been wrong twice, in the same direction, for the same
+	// reason — the product stretched its cadence and the constant here did not
+	// follow. First it was a flat 60s, matching the cadence back when clients
+	// inherited the SERVER's DefaultUpdateInterval; once clients moved to their
+	// own 5-minute cadence that rejected a good entry for four minutes out of
+	// every five. Then it was 2x the 5-minute cadence, which the CXO keepalive
+	// stretch turned into a rejection for twenty minutes out of every thirty:
+	// a settled visor's entry simply stops advancing, and every test gated on
+	// this helper fails as "not found in DMSG discovery" against a deployment
+	// that is registered and working. If the effective interval moves again,
+	// this is the line that has to move with it.
+	dmsgEntryMaxAge = dmsgClientStretchedPublishInterval + dmsgClientPublishInterval
 )
 
 // WaitForDmsgDiscoveryEntry waits for a visor's entry to appear in DMSG discovery

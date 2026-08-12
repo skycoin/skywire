@@ -1626,6 +1626,20 @@ func (rc *rpcClient) GroupSetListed(id string, listed bool) (GroupInfo, error) {
 	return resp, err
 }
 
+// GroupSetMeta implements API.
+func (rc *rpcClient) GroupSetMeta(args GroupSetMetaArgs) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupSetMeta", &args, &resp)
+	return resp, err
+}
+
+// GroupRefreshMeta implements API.
+func (rc *rpcClient) GroupRefreshMeta(id string) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupRefreshMeta", &id, &resp)
+	return resp, err
+}
+
 // GroupCatalog implements API.
 func (rc *rpcClient) GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
 	var resp GroupCatalogResponse

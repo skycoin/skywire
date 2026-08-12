@@ -103,8 +103,21 @@ class SkywireCoreService : Service() {
                     prefs.string(TransportPreference.PREF_KEY).first(),
                 )
                 val fleet = prefs.boolean(Fleet.PREF_KEY, Fleet.DEFAULT).first()
+                val autoconnect = prefs.boolean(
+                    PublicAutoconnect.PREF_KEY,
+                    PublicAutoconnect.DEFAULT,
+                ).first()
                 val logLevel = CoreLogLevel.sanitize(prefs.string(CoreLogLevel.PREF_KEY).first())
-                val config = configManager.ensureConfig(primary, fleet, logLevel).getOrElse { err ->
+                val remotePk = RemoteManagement.sanitize(
+                    prefs.string(RemoteManagement.PREF_KEY).first(),
+                )
+                val config = configManager.ensureConfig(
+                    primary,
+                    fleet,
+                    autoconnect,
+                    logLevel,
+                    remotePk,
+                ).getOrElse { err ->
                     log.line("=== config generation failed ===")
                     log.line(err.message ?: "unknown error")
                     CoreServiceState.mutableState.value =

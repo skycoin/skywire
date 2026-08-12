@@ -47,13 +47,13 @@ skywire cli tp
   -m, --more              show more info
   -b, --bw int            show bandwidth usage for last N days (0 = disabled)
       --inactive          show bandwidth for inactive transports (requires --bw)
-      --cfu string        UT cache file location. (default "/tmp/ut.json")
-      --cfsp string       SD cache file location (default "/tmp/proxysd.json")
-      --cfsv string       SD cache file location (default "/tmp/vpnsd.json")
-      --cfsvisor string   SD cache file location (default "/tmp/visorsd.json")
+      --cfu string        UT cache file location. (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//ut.json")
+      --cfsp string       SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//proxysd.json")
+      --cfsv string       SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//vpnsd.json")
+      --cfsvisor string   SD cache file location (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T//visorsd.json")
   -c, --cfa int           use cached service-discovery/UT data if younger than N minutes (default 5)
-  -a, --sdurl string      service discovery url (default "http://sd.skycoin.com")
-  -w, --uturl string      uptime tracker url (TPD integrated) (default "http://tpd.skywire.skycoin.com")
+  -a, --sdurl string      service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+  -w, --uturl string      uptime tracker url (TPD integrated) (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -i, --id string         display transport matching ID
   -u, --tptypes           display transport types used by the local visor
   -s, --stats             show transport statistics (count by type, unique visors)

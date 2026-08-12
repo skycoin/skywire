@@ -3,8 +3,8 @@
 [← skywire cli proxy](../README.md)
 
 List proxy servers from service discovery
-http://sd.skycoin.com/api/services?type=proxy
-http://sd.skycoin.com/api/services?type=proxy&country=US
+dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services?type=proxy
+dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services?type=proxy&country=US
 
 Set cache dir to "" to avoid using cache files
 default virtual port of servers: 3
@@ -20,8 +20,8 @@ skywire cli proxy list
 ## Flags
 
 ```
-      --cds string       SD cache dir ("" to disable) (default "/tmp/sd.skycoin.com")
-      --cdu string       UT cache dir ("" to disable) (default "/tmp/ut.skywire.skycoin.com")
+      --cds string       SD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --cdu string       UT cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -m, --cfa int          update cache files if older than n minutes (default 5)
   -c, --country string   filter by country code
       --json             print output in json
@@ -31,10 +31,10 @@ skywire cli proxy list
       --offline          show only offline servers (red)
   -k, --pk string        check proxy service discovery for public key
   -r, --raw              print raw json data
-  -a, --sdurl string     service discovery url (default "http://sd.skycoin.com")
+  -a, --sdurl string     service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
   -s, --stats            return only a count of the results
       --testenv          use test deployment
-  -w, --uturl string     uptime tracker url (default "http://ut.skywire.skycoin.com")
+  -w, --uturl string     TPD-integrated uptime tracker url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -v, --version string   filter by version
 ```
 

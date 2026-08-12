@@ -17,7 +17,7 @@ skywire cli route find <public-key> | <public-key-visor-1> <public-key-visor-2>
   -n, --min uint16         minimum hops (default 1)
   -x, --max uint16         maximum hops (default 1000)
   -t, --timeout duration   request timeout (default 10s)
-  -a, --addr string        route finder service address (default "http://rf.skywire.skycoin.com")
+  -a, --addr string        route finder service address (default "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80")
 ```
 
 ## Global Flags

@@ -53,10 +53,16 @@
     <string name="hops_title">Route length</string>
     <string name="hops_label_fastest">Fastest</string>
     <string name="hops_label_balanced">Balanced</string>
-    <string name="hops_label_private">Most private</string>
+    <string name="hops_label_private">Private</string>
     <string name="hops_hint_direct">A direct route to the exit — the quickest the network can be. The exit still cannot read your traffic, but it does see that this device is the one asking.</string>
     <string name="hops_hint_multi">Traffic is relayed through intermediaries, so no single node sees both who is asking and what is being asked. Slower, and every hop is another machine that has to stay up.</string>
     <string name="hops_hint_unknown">Waiting for the visor to report its routing settings.</string>
+    <string name="hops_label_custom">Custom</string>
+    <string name="hops_custom_more">4+</string>
+    <string name="hops_custom_title">Custom route length</string>
+    <string name="hops_custom_hint">Every route the visor builds must use at least this many hops. Each hop past the first buys more separation between who is asking and what is asked — and costs latency, plus one more machine that has to stay up. The route finder searches at most 10 hops deep, so higher values can never be built.</string>
+    <string name="hops_custom_label">Minimum hops</string>
+    <string name="hops_custom_invalid">Enter a number between 1 and 10.</string>
 
     <!-- Network address (what SkyVPN does and does not change) -->
     <string name="net_addr_title">Network address</string>
@@ -404,7 +410,56 @@
     <string name="wallet_coin_btc">Bitcoin mainnet</string>
     <string name="wallet_coin_eth">Ethereum mainnet</string>
     <string name="wallet_coin_erc20">ERC-20 token on Ethereum</string>
+    <!-- The visor's own account of the last connection attempt, folded up
+         under the connect control. The failure reason is already on screen in
+         one line; this is the sequence behind it, for pasting to whoever is
+         helping. Same events the CLI prints for a verbose proxy start. -->
+    <string name="vpn_attempt_log">Connection details (%1$d events)</string>
+    <string name="vpn_attempt_log_live">Connection details — collecting…</string>
+    <string name="vpn_attempt_log_empty">The visor logged nothing for this attempt.</string>
+    <string name="vpn_attempt_log_copy">Copy details</string>
+
+    <!-- Automatic transports to public visors. Off on this build because a
+         handset pays for them in battery and a radio that never idles, and
+         they mostly serve the network rather than this device. It is also
+         what gives the visor transports to route THROUGH, so a route length
+         above one hop needs it — hence the second line. -->
+    <!-- Route lengths above one hop need transports to route THROUGH, and on
+         this phone those come from Connect to public visors. Without it the
+         dial fails before the route finder is asked, so the choices are shown
+         disabled with the reason rather than offered and always failing. -->
+    <string name="hops_hint_needs_autoconnect">Only one hop is available: routing through intermediaries needs open transports to public visors, which is off. Turn on “Connect to public visors” in Settings to use 2 or 3 hops.</string>
+
+    <string name="settings_autoconnect">Connect to public visors</string>
+    <string name="settings_autoconnect_hint">Keeps open transports to public visors so the network can route through this phone, and so this phone can route through them. Costs battery and mobile data, which is why it is off. Route lengths above one hop need it.</string>
+    <string name="settings_autoconnect_restart">Applies when the core next starts.</string>
+
+    <string name="settings_remote">Remote management</string>
+    <string name="settings_remote_hint">Lets one other visor — yours, on a desk — drive this one over the network: start and stop apps, change routing, read the logs. Nothing is reachable until a key is granted, and the granted key has full control, so it should be a machine you own. No shell or file access either way.</string>
+    <string name="settings_remote_restart">Granting or revoking applies when the core next starts.</string>
+    <string name="settings_remote_grant">Grant access…</string>
+    <string name="settings_remote_grant_confirm">Grant</string>
+    <string name="settings_remote_revoke">Revoke</string>
+    <string name="settings_remote_dialog_title">Grant remote management</string>
+    <string name="settings_remote_dialog_hint">Paste the public key of the controlling visor — “skywire cli visor pk” on that machine prints it. That machine gains full control of this visor the next time the core starts, and appears in its hypervisor list as this phone.</string>
+    <string name="settings_remote_label">Public key</string>
+    <string name="settings_remote_invalid">Not a visor public key — expected 66 hex characters.</string>
+    <string name="settings_remote_granted">Access granted. Applies when the core next starts.</string>
+    <string name="settings_remote_revoked">Access revoked. Applies when the core next starts.</string>
+
     <string name="wallet_coins_add">Add a coin or token</string>
+    <!-- Removing a coin the user added. Only the list entry goes: no key is
+         touched, which is the whole difference from removing a wallet, and
+         is why this one is safe to say plainly. A coin still holding wallets
+         is refused rather than cascading — see WalletRepository.removeUserCoin. -->
+    <string name="wallet_coin_remove">Remove this coin</string>
+    <string name="wallet_coin_remove_title">Remove %1$s?</string>
+    <string name="wallet_coin_remove_body">It goes from your coin list. Nothing on the chain changes and no keys are touched — you can add it again with the same details.</string>
+    <string name="wallet_coin_remove_blocked_title">%1$s still has wallets</string>
+    <string name="wallet_coin_remove_blocked">Remove its wallets first. Deleting a wallet erases its recovery phrase from this phone, so it is a separate decision from tidying this list.</string>
+    <string name="wallet_coin_remove_confirm">Remove</string>
+    <string name="wallet_coin_remove_ack">Got it</string>
+    <string name="wallet_coin_removed">%1$s removed</string>
     <string name="wallet_hours_sub">%1$s Coin Hours</string>
     <string name="wallet_btc_sub">%1$d confirmed outputs · no Coin Hours on this chain</string>
     <string name="wallet_eth_sub">Ethereum mainnet · fees paid in ETH</string>
