@@ -176,6 +176,7 @@ type API interface {
 	SaveRoutingRule(rule routing.Rule) error
 	RemoveRoutingRule(key routing.RouteID) error
 	RouteGroups() ([]RouteGroupInfo, error)
+	RoutingStats() (routing.RoutingTableStats, error)
 	// RoutingPolicies returns a snapshot of the currently-installed
 	// routing-policy state: the visor-wide default plus any per-app
 	// overrides. Empty struct when no policies are configured.
