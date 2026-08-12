@@ -22,7 +22,7 @@ export class LanguageData {
   providedIn: 'root'
 })
 export class LanguageService {
-  currentLanguage = new ReplaySubject<LanguageData>(1);
+  currentLanguage = new ReplaySubject<LanguageData | undefined>(1);
   languages = new ReplaySubject<LanguageData[]>(1);
 
   private readonly storageKey = 'lang';

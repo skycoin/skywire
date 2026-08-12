@@ -34,7 +34,7 @@ export interface SnackbarConfig {
   /**
    * Text to show on the small lower line. Can be a variable for the "translate" pipe.
    */
-  smallText: string;
+  smallText: string | null;
   /**
    * Object to be passed to the "translate" pipe for smallText, to fill the params of the text.
    */

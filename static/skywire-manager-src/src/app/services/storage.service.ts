@@ -491,7 +491,7 @@ export class StorageService {
    * Overview.Hostname field) falls through to the IP path
    * unchanged.
    */
-  getDefaultLabel(node: Node): string {
+  getDefaultLabel(node: Node | null): string {
     if (!node) {
       return '';
     }
