@@ -67,7 +67,7 @@ self.addEventListener('fetch', (event) => {
   if (IMMUTABLE.test(url.pathname)) {
     // cache-first: hashed bundles can't change under a fixed URL.
     event.respondWith(
-      caches.match(req).then((hit) => hit || fetch(req).then((res) => putInCache(req, res)))
+      caches.match(req).then((hit) => hit || fetch(req).then((res) => putInCache(event, req, res)))
     );
     return;
   }
@@ -75,16 +75,32 @@ self.addEventListener('fetch', (event) => {
   // network-first: online → fresh (autoupdate stays correct); offline → cache.
   event.respondWith(
     fetch(req)
-      .then((res) => putInCache(req, res))
+      .then((res) => putInCache(event, req, res))
       .catch(() => caches.match(req).then((hit) => hit || caches.match('./')))
   );
 });
 
-function putInCache(req, res) {
+function putInCache(event, req, res) {
   // Only cache complete, basic (same-origin) 200s; clone before the body is used.
   if (res && res.status === 200 && res.type === 'basic') {
     const copy = res.clone();
-    caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
+    // Two things this must survive, both of which happen with the wasm blob
+    // because it is tens of megabytes and takes real time to arrive:
+    //
+    // waitUntil — without it the worker may be shut down while the body is
+    // still streaming into the cache, and the write dies half-done.
+    //
+    // catch — cache.put() rejects if the body cannot be read to the end (the
+    // server restarted mid-download, the tab went away, storage is full). That
+    // is a failed optimisation, not a failed request: the response has already
+    // been returned to the page. Unhandled, it surfaced as "Uncaught (in
+    // promise) NetworkError: Failed to execute 'put' on 'Cache'", which reads
+    // like a broken page and is not one.
+    const write = caches
+      .open(CACHE_VERSION)
+      .then((cache) => cache.put(req, copy))
+      .catch(() => {});
+    if (event && typeof event.waitUntil === 'function') { event.waitUntil(write); }
   }
   return res;
 }

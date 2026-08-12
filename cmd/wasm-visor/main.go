@@ -154,15 +154,18 @@ func main() {
 	if wasmRole() == "shell" {
 		installShell()
 		fmt.Println("wasm-visor: shell role — call skywireShell.open(el)")
-		select {}
+		keepAlive()
 	}
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
-		"boot":               js.FuncOf(jsBoot),
-		"status":             js.FuncOf(jsStatus),
-		"hvApi":              js.FuncOf(jsHvAPI),
-		"tpdEdge":            js.FuncOf(jsTPDEdge),
-		"dialTransport":      js.FuncOf(jsDialTransport),
-		"fetchDmsg":          js.FuncOf(jsFetchDmsg),
+		"boot":          js.FuncOf(jsBoot),
+		"status":        js.FuncOf(jsStatus),
+		"hvApi":         js.FuncOf(jsHvAPI),
+		"tpdEdge":       js.FuncOf(jsTPDEdge),
+		"dialTransport": js.FuncOf(jsDialTransport),
+		"fetchDmsg":     js.FuncOf(jsFetchDmsg),
+		// The resolver's alias table, for a shell running in the tab's
+		// second wasm instance — see shellmesh_js.go.
+		"meshAliases":        js.FuncOf(jsMeshAliases),
 		"serveContent":       js.FuncOf(jsServeContent),
 		"hostedContent":      js.FuncOf(jsHostedContent),
 		"unserveContent":     js.FuncOf(jsUnserveContent),
@@ -1531,4 +1534,23 @@ func jsCheckRegistered(_ js.Value, _ []js.Value) interface{} {
 		res.Set("detail", string(body))
 		return res, nil
 	})
+}
+
+// keepAlive parks the shell role without tripping the deadlock detector.
+//
+// select{} is the usual js/wasm idiom for "stay resident and wait for JS to
+// call in", and it works for the visor role because that role has goroutines
+// and timers running. The shell role has neither: it installs
+// skywireShell.open and then has nothing to do until the UI opens a window.
+// Standard Go's runtime sees every goroutine asleep with nothing pending,
+// declares "all goroutines are asleep - deadlock!" and exits 2 — before the
+// shell can ever be opened, so the console window came up empty. A pending
+// timer is enough to satisfy the check.
+//
+// TinyGo has no such detector, which is why only the standard-Go build died
+// and the fault went unnoticed.
+func keepAlive() {
+	for {
+		time.Sleep(time.Hour)
+	}
 }
