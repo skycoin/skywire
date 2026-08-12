@@ -15,7 +15,7 @@
             >
         </div>
         <mat-error>
-          @if (!this.form.get('remoteKey').hasError('pattern')) {
+          @if (!this.form.get('remoteKey')!.hasError('pattern')) {
             <span>{{ 'transports.dialog.errors.remote-key-length-error' | translate }}</span>
           } @else {
             <span>{{ 'transports.dialog.errors.remote-key-chars-error' | translate }}</span>

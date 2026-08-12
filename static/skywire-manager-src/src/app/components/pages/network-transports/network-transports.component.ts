@@ -282,14 +282,14 @@ return {
       const aRep = !!d.a && ((d.a.sent || 0) > 0 || (d.a.recv || 0) > 0);
       const bRep = !!d.b && ((d.b.sent || 0) > 0 || (d.b.recv || 0) > 0);
       if (aRep && bRep) {
-        aToB += Math.min(d.a.sent || 0, d.b.recv || 0);
-        bToA += Math.min(d.a.recv || 0, d.b.sent || 0);
+        aToB += Math.min(d.a!.sent || 0, d.b!.recv || 0);
+        bToA += Math.min(d.a!.recv || 0, d.b!.sent || 0);
       } else if (aRep) {
-        aToB += d.a.sent || 0;
-        bToA += d.a.recv || 0;
+        aToB += d.a!.sent || 0;
+        bToA += d.a!.recv || 0;
       } else if (bRep) {
-        aToB += d.b.recv || 0;
-        bToA += d.b.sent || 0;
+        aToB += d.b!.recv || 0;
+        bToA += d.b!.sent || 0;
       }
     }
 

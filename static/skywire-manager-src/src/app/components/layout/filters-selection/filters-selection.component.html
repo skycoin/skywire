@@ -9,7 +9,7 @@
           @if (fieldParams.type === filterFieldTypes.TextInput) {
             <input
               [formControlName]="fieldParams.keyNameInFiltersObject"
-              [maxlength]="fieldParams.maxlength"
+              [maxlength]="fieldParams.maxlength ?? null"
               matInput
               >
           }

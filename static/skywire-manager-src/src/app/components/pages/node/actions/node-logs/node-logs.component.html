@@ -5,7 +5,7 @@
       <div class="top-dialog-button-content">
         <div>
           <span>{{ 'node.logs.selected-filter' | translate }} </span>
-          <span class="actual-value">{{ ('node.logs.' + levelDetails.get(currentMinimumLevel).levelFilterName) | translate }}</span>
+          <span class="actual-value">{{ ('node.logs.' + levelDetails.get(currentMinimumLevel)!.levelFilterName) | translate }}</span>
         </div>
         @if (logEntries.length > filteredLogEntries.length) {
           <div class="small">
@@ -41,8 +41,8 @@
           <span class="transparent">
             {{ entry.time }}
           </span>
-          <span [class]="levelDetails.get(entry.level).colorClass">
-            {{ levelDetails.get(entry.level).name }}
+          <span [class]="levelDetails.get(entry.level)!.colorClass">
+            {{ levelDetails.get(entry.level)!.name }}
           </span>
           [
           <span class="transparent">

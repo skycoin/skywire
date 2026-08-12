@@ -75,7 +75,7 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
   // Texts for the Done state.
   doneTitle!: string;
   doneText!: string;
-  doneList!: string[];
+  doneList!: string[] | null;
 
   // Event for when the user confirms.
   @Output() operationAccepted = new EventEmitter();

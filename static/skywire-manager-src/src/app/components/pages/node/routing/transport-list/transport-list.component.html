@@ -74,7 +74,7 @@
             <mat-label>{{ 'transports.dialog.remote-key' | translate }}</mat-label>
             <input matInput formControlName="remoteKey" maxlength="66" placeholder="02abc...">
             <mat-error>
-              @if (!addForm.get('remoteKey').hasError('pattern')) {
+              @if (!addForm.get('remoteKey')!.hasError('pattern')) {
                 {{ 'transports.dialog.errors.remote-key-length-error' | translate }}
               } @else {
                 {{ 'transports.dialog.errors.remote-key-chars-error' | translate }}

@@ -35,7 +35,7 @@ export class OperationError {
   /**
    * Original, unprocessed, error msg.
    */
-  originalServerErrorMsg!: string;
+  originalServerErrorMsg!: string | null;
   /**
    * Processed error msg, which can be passed to the 'translate' pipe to display it on the UI.
    */

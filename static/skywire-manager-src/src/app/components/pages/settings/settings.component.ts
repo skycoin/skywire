@@ -136,7 +136,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
    * Called when an option form the top bar is selected.
    * @param actionName Name of the selected option, as defined in the this.options array.
    */
-  performAction(actionName: string) {
+  performAction(actionName: string | null) {
     if (actionName === 'logout') {
       this.logout();
     }

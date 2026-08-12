@@ -24,10 +24,10 @@ export class UpdaterConfigComponent implements OnInit, OnDestroy {
   hasCustomSettings!: boolean;
 
   // Values currently saved in the app.
-  private initialChannel!: string;
-  private initialVersion!: string;
-  private initialArchiveURL!: string;
-  private initialChecksumsURL!: string;
+  private initialChannel!: string | null;
+  private initialVersion!: string | null;
+  private initialArchiveURL!: string | null;
+  private initialChecksumsURL!: string | null;
 
   private subscription!: Subscription;
 
