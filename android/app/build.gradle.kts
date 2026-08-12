@@ -66,6 +66,18 @@ android {
         compose = true
     }
 
+    // The in-app language picker can only offer what is installed. Play's App
+    // Bundle language splits deliver the device's language and nothing else,
+    // so a phone set to English would install without the Chinese resources
+    // and picking 简体中文 would silently give English back. The release
+    // workflow builds an APK today, which is exactly why this is set now: it
+    // is the line nobody would think of on the day a bundle target is added.
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     packaging {
         jniLibs {
             // The core service EXECS libskywire-mobile.so from applicationInfo.nativeLibraryDir
@@ -83,10 +95,22 @@ android {
 // stays UP-TO-DATE through the exact edit it exists to catch, and reports
 // success for a test it never ran. Verified by re-adding the attribute and
 // watching the task run and fail.
+// TranslationCatalogTest reads the string catalogues and the locale config the
+// same way and for the same reason, so they are inputs too. Without this a
+// translation edit — the one thing that guard exists to check — leaves the task
+// UP-TO-DATE and the build green. Verified the same way: break a placeholder in
+// values-zh-rCN and watch the task run and fail.
 tasks.withType<Test>().configureEach {
     inputs.file("src/main/AndroidManifest.xml")
         .withPathSensitivity(PathSensitivity.RELATIVE)
         .withPropertyName("appManifest")
+    inputs.files(
+        fileTree("src/main/res") {
+            include("values*/strings.xml", "xml/locales_config.xml")
+        },
+    )
+        .withPathSensitivity(PathSensitivity.RELATIVE)
+        .withPropertyName("stringCatalogues")
 }
 
 dependencies {

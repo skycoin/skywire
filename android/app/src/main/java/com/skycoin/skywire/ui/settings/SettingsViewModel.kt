@@ -6,6 +6,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.skycoin.skywire.R
 import com.skycoin.skywire.api.VisorApi
+import com.skycoin.skywire.core.AppLanguage
+import com.skycoin.skywire.core.AppLocale
 import com.skycoin.skywire.core.AppLock
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.AppVisibility
@@ -45,6 +47,8 @@ data class SettingsUiState(
     /** False when the phone has no screen lock and no enrolled biometric. */
     val biometricsAvailable: Boolean = true,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
+    /** The interface language — the phone's own until the user picks one. */
+    val language: AppLanguage = AppLanguage.SYSTEM,
     /** The visor config is encrypted at rest while the core is down. */
     val configEncrypted: Boolean = ConfigVault.DEFAULT,
     /** Whether Doze has been told to leave this app's network alone. */
@@ -79,8 +83,8 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     private val prefs = AppPreferences(app)
     private val paths = SkywirePaths(app)
-    private val config = ConfigManager(paths, SecretStore(app))
-    private val vault = ConfigVault(paths)
+    private val config = ConfigManager(paths, SecretStore(app), app)
+    private val vault = ConfigVault(paths, app)
     private val api = VisorApi.get(app)
 
     private val mutable = MutableStateFlow(SettingsUiState())
@@ -89,6 +93,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private var actionJob: Job? = null
 
     init {
+        // Not a flow like the rest: on API 33+ the platform holds this one, and
+        // changing it recreates everything that could be observing it anyway.
+        mutable.update { it.copy(language = AppLocale.current(app)) }
         viewModelScope.launch {
             CoreServiceState.state.collectLatest { core ->
                 mutable.update { it.copy(coreState = core) }
@@ -241,7 +248,9 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
             // the tail of the old file behind.
             resolver.openOutputStream(uri, "wt")?.use { out ->
                 out.write(json.toByteArray(Charsets.UTF_8))
-            } ?: error("could not open the chosen file for writing")
+            } ?: error(
+                getApplication<Application>().getString(R.string.settings_export_unwritable),
+            )
         }
         mutable.update {
             it.copy(message = getApplication<Application>().getString(R.string.settings_export_done))
@@ -306,6 +315,21 @@ class SettingsViewModel(app: Application) : AndroidViewModel(app) {
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { prefs.putString(ThemeMode.PREF_KEY, mode.name) }
+    }
+
+    /**
+     * Written straight through rather than through [prefs], because the very
+     * next thing that happens is the Activity being thrown away and rebuilt on
+     * the new language: an asynchronous write would still be in flight while
+     * the new one reads.
+     *
+     * True back means the caller has to recreate the Activity itself — see
+     * [AppLocale.set].
+     */
+    fun setLanguage(language: AppLanguage): Boolean {
+        val recreate = AppLocale.set(getApplication(), language)
+        mutable.update { it.copy(language = language) }
+        return recreate
     }
 
     fun messageShown() {

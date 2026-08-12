@@ -1,7 +1,9 @@
 package com.skycoin.skywire.core
 
+import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
+import com.skycoin.skywire.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -47,8 +49,12 @@ import javax.crypto.spec.GCMParameterSpec
  * word. Every entry point that touches the config unseals first, and
  * [sealedExists] is checked before any generation, so the failure mode is a
  * refusal rather than a silent new identity.
+ *
+ * [context] is here for one reason: the failures below are read by the user,
+ * on the Home caption or a Settings snackbar, so their text comes from the
+ * string resources like any other sentence the app writes.
  */
-class ConfigVault(private val paths: SkywirePaths) {
+class ConfigVault(private val paths: SkywirePaths, private val context: Context) {
 
     /** [AppPreferences] key holding the user's choice. */
     companion object {
@@ -84,11 +90,7 @@ class ConfigVault(private val paths: SkywirePaths) {
         if (paths.configFile.exists()) return@withContext Result.success(Unit)
         runCatching {
             val plain = decrypt(paths.sealedConfigFile.readBytes())
-                ?: error(
-                    "the sealed config cannot be opened — this phone's keystore key is gone " +
-                        "(a factory reset, or a screen lock that was removed and re-added). " +
-                        "The identity in it is unrecoverable; a new one can be generated.",
-                )
+                ?: error(context.getString(R.string.core_sealed_key_gone))
             writePrivate(paths.configFile, plain)
             paths.sealedConfigFile.delete()
             Unit
@@ -110,7 +112,7 @@ class ConfigVault(private val paths: SkywirePaths) {
             val plain = paths.configFile.readBytes()
             writePrivate(paths.sealedConfigFile, encrypt(plain))
             check(decrypt(paths.sealedConfigFile.readBytes()) != null) {
-                "sealed config failed to read back; leaving the plaintext in place"
+                context.getString(R.string.core_seal_readback_failed)
             }
             paths.configFile.delete()
             Unit
@@ -137,7 +139,8 @@ class ConfigVault(private val paths: SkywirePaths) {
         val sealed = paths.sealedConfigFile
         if (!sealed.exists()) error("no config on disk")
         return String(
-            decrypt(sealed.readBytes()) ?: error("the sealed config cannot be opened"),
+            decrypt(sealed.readBytes())
+                ?: error(context.getString(R.string.core_sealed_unreadable)),
             Charsets.UTF_8,
         )
     }

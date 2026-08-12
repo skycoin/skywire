@@ -45,6 +45,11 @@ import java.util.concurrent.TimeUnit
  */
 class SkywireCoreService : Service() {
 
+    /** Its notification is the user's, so it follows the chosen language. */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLocale.wrap(newBase))
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var paths: SkywirePaths
     private lateinit var configManager: ConfigManager
@@ -61,8 +66,8 @@ class SkywireCoreService : Service() {
     override fun onCreate() {
         super.onCreate()
         paths = SkywirePaths(this)
-        configManager = ConfigManager(paths, SecretStore(this))
-        vault = ConfigVault(paths)
+        configManager = ConfigManager(paths, SecretStore(this), this)
+        vault = ConfigVault(paths, this)
         prefs = AppPreferences(this)
         createChannel()
     }
@@ -120,8 +125,12 @@ class SkywireCoreService : Service() {
                 ).getOrElse { err ->
                     log.line("=== config generation failed ===")
                     log.line(err.message ?: "unknown error")
-                    CoreServiceState.mutableState.value =
-                        CoreState.Failed(err.message ?: "config generation failed")
+                    // The message [ConfigManager] failed with is already the
+                    // user's sentence, in the user's language; the fallback is
+                    // only for a failure that carried none.
+                    CoreServiceState.mutableState.value = CoreState.Failed(
+                        err.message ?: getString(R.string.core_config_failed),
+                    )
                     return@launch
                 }
 
@@ -135,8 +144,9 @@ class SkywireCoreService : Service() {
                         spawnVisor(config)
                     } catch (e: Exception) {
                         log.line("spawn failed: $e")
-                        CoreServiceState.mutableState.value =
-                            CoreState.Failed("could not start the visor: ${e.message}")
+                        CoreServiceState.mutableState.value = CoreState.Failed(
+                            getString(R.string.core_spawn_failed, e.message.orEmpty()),
+                        )
                         return@launch
                     }
                     child = process
@@ -185,7 +195,7 @@ class SkywireCoreService : Service() {
                 // Anything unexpected must land in Failed, not crash the app.
                 log.line("=== core service error: $e ===")
                 CoreServiceState.mutableState.value =
-                    CoreState.Failed(e.message ?: "core service error")
+                    CoreState.Failed(e.message ?: getString(R.string.core_service_error))
             } finally {
                 // The visor has exited, so the config on disk is final —
                 // including anything the visor rewrote while it ran, which is

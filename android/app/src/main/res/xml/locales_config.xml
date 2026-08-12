@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The languages this app ships, for Android 13+: it is what puts Skywire in
+    Settings ▸ Apps ▸ Skywire ▸ Language, and what `LocaleManager` accepts.
+
+    Must stay in step with com.skycoin.skywire.core.AppLanguage — a tag here
+    with no `values-` folder offers the user a translation that does not exist,
+    and a folder with no tag here is a translation the system cannot select.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="zh-CN" />
+</locale-config>

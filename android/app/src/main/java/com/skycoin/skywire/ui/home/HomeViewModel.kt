@@ -176,7 +176,7 @@ class HomeViewModel(app: Application) : AndroidViewModel(app) {
         authResetAttempted = true
         val app = getApplication<Application>()
         SkywireCoreService.restart(app) {
-            ConfigManager(SkywirePaths(app), SecretStore(app)).deleteUsersDb()
+            ConfigManager(SkywirePaths(app), SecretStore(app), app).deleteUsersDb()
         }
     }
 

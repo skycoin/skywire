@@ -149,10 +149,17 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
 
     fun messageShown() = mutable.update { it.copy(message = null) }
 
-    private fun report(e: Exception): String = when (e) {
-        is WalletException -> e.message ?: "rejected"
-        is IOException -> e.message?.take(200) ?: "no route to the node"
-        else -> e.message?.take(200) ?: e::class.java.simpleName
+    private fun report(e: Exception): String {
+        val app: Application = getApplication()
+        // The exception's own message is kept verbatim — it comes from the
+        // node or the core and is what gets pasted into an issue. Only the
+        // fallbacks, written here, are translated. The last one falls back to
+        // the class name, which stays a class name.
+        return when (e) {
+            is WalletException -> e.message ?: app.getString(R.string.wallet_error_rejected)
+            is IOException -> e.message?.take(200) ?: app.getString(R.string.wallet_error_no_route)
+            else -> e.message?.take(200) ?: e::class.java.simpleName
+        }
     }
 
     private fun action(block: suspend () -> Unit) {
@@ -209,8 +216,9 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun addFiberCoin(name: String, ticker: String, nodeUrl: String, icon: String?, onDone: () -> Unit) = action {
-        require(name.isNotBlank()) { "give the coin a name" }
-        require(ticker.isNotBlank()) { "give the coin a ticker" }
+        val app: Application = getApplication()
+        require(name.isNotBlank()) { app.getString(R.string.wallet_add_coin_name_required) }
+        require(ticker.isNotBlank()) { app.getString(R.string.wallet_add_coin_ticker_required) }
         val spec = repo.addFiberCoin(name, ticker, nodeUrl, icon)
         repo.setSelectedCoin(spec.id)
         onDone()
@@ -224,10 +232,11 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         icon: String?,
         onDone: () -> Unit,
     ) = action {
-        require(name.isNotBlank()) { "give the token a name" }
-        require(ticker.isNotBlank()) { "give the token a ticker" }
+        val app: Application = getApplication()
+        require(name.isNotBlank()) { app.getString(R.string.wallet_add_token_name_required) }
+        require(ticker.isNotBlank()) { app.getString(R.string.wallet_add_token_ticker_required) }
         val parsed = decimals.trim().toIntOrNull()
-        requireNotNull(parsed) { "decimals must be a number — 6 for USDT-like tokens, 18 for most" }
+        requireNotNull(parsed) { app.getString(R.string.wallet_add_token_decimals_invalid) }
         val spec = repo.addErc20Token(name, ticker, contract, parsed, icon)
         repo.setSelectedCoin(spec.id)
         onDone()
@@ -337,9 +346,12 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
         val active = st.active ?: return
         val coin = st.coin
         val send = st.send
+        val app: Application = getApplication()
         val amount = if (send.sendMax) 0uL
         else Amounts.parse(send.amountText, coin.exponent) ?: run {
-            mutable.update { it.copy(send = send.copy(planError = "enter a valid amount")) }
+            mutable.update {
+                it.copy(send = send.copy(planError = app.getString(R.string.wallet_send_invalid_amount)))
+            }
             return
         }
         mutable.update { it.copy(send = send.copy(planning = true, planError = null)) }
@@ -358,7 +370,13 @@ class WalletViewModel(app: Application) : AndroidViewModel(app) {
                 mutable.update { it.copy(send = it.send.copy(planning = false, planError = e.message)) }
             } catch (e: IOException) {
                 mutable.update {
-                    it.copy(send = it.send.copy(planning = false, planError = e.message?.take(200) ?: "no route to the node"))
+                    it.copy(
+                        send = it.send.copy(
+                            planning = false,
+                            planError = e.message?.take(200)
+                                ?: app.getString(R.string.wallet_error_no_route),
+                        ),
+                    )
                 }
             }
         }

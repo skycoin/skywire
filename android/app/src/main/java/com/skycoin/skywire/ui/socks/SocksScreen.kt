@@ -66,6 +66,8 @@ import com.skycoin.skywire.ui.components.HelpTopic
 import com.skycoin.skywire.ui.components.SkyTopBar
 import com.skycoin.skywire.ui.components.TransportPreferenceCard
 import com.skycoin.skywire.ui.components.TransportPreferenceSheet
+import com.skycoin.skywire.ui.components.AppStatus
+import com.skycoin.skywire.ui.components.appStatusText
 import com.skycoin.skywire.ui.components.flagEmoji
 import com.skycoin.skywire.ui.components.formatBytes
 import com.skycoin.skywire.ui.components.shortPk
@@ -177,12 +179,13 @@ private fun StatusCard(state: SocksUiState, viewModel: SocksViewModel) {
         // The visor's own wording for what the app is doing ("Starting",
         // "Connection failed, reconnecting", …) — more useful than the
         // numeric status whenever it disagrees with the label above.
+        // Translated by appStatusText, which passes through what it cannot map.
         state.app?.detailedStatus
-            ?.takeIf { it.isNotEmpty() && !it.equals(RUNNING_STATUS, ignoreCase = true) }
+            ?.takeIf { it.isNotEmpty() && !it.equals(AppStatus.RUNNING, ignoreCase = true) }
             ?.let { detail ->
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    detail,
+                    appStatusText(detail),
                     style = MaterialTheme.typography.bodySmall,
                     color = if (state.errored) {
                         MaterialTheme.colorScheme.error
@@ -463,6 +466,5 @@ private fun statusLabel(state: SocksUiState): Pair<String, Color> = when {
         MaterialTheme.colorScheme.onSurfaceVariant
 }
 
-private const val RUNNING_STATUS = "Running"
 private const val MIN_PORT = 1024
 private const val MAX_PORT = 65535

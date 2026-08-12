@@ -78,31 +78,50 @@ fun formatBytes(bytes: Long): String {
  * `2d 3h 4m 5s` — a visor's uptime, which is measured in days rather than the
  * minutes a tunnel session lasts, so the days unit is worth its width and the
  * seconds keep ticking visibly.
+ *
+ * Composable for the units alone: `d`/`h`/`m`/`s` are English abbreviations,
+ * and a language that writes them out (`2天3小时`) also sets them solid — which
+ * is why even the separator between the parts is a resource.
  */
+@Composable
 fun formatUptime(seconds: Double): String {
     val total = seconds.toLong()
     val days = total / 86_400
     val hours = (total % 86_400) / 3_600
     val minutes = (total % 3_600) / 60
-    return buildString {
-        if (days > 0) append("${days}d ")
-        if (hours > 0 || days > 0) append("${hours}h ")
-        if (minutes > 0 || hours > 0 || days > 0) append("${minutes}m ")
-        append("${total % 60}s")
+    val parts = mutableListOf<String>()
+    if (days > 0) parts += stringResource(R.string.unit_days, days.toString())
+    if (hours > 0 || days > 0) parts += stringResource(R.string.unit_hours, hours.toString())
+    if (minutes > 0 || hours > 0 || days > 0) {
+        parts += stringResource(R.string.unit_minutes, minutes.toString())
     }
+    parts += stringResource(R.string.unit_seconds, (total % 60).toString())
+    return parts.joinToString(stringResource(R.string.unit_separator))
 }
 
 /** `1h 04m 12s`, dropping the leading units that are still zero. */
+@Composable
 fun formatDuration(seconds: Long): String {
     val h = seconds / 3600
     val m = (seconds % 3600) / 60
     val s = seconds % 60
+    val separator = stringResource(R.string.unit_separator)
     return when {
-        h > 0 -> String.format(Locale.US, "%dh %02dm %02ds", h, m, s)
-        m > 0 -> String.format(Locale.US, "%dm %02ds", m, s)
-        else -> String.format(Locale.US, "%ds", s)
+        h > 0 -> listOf(
+            stringResource(R.string.unit_hours, h.toString()),
+            stringResource(R.string.unit_minutes, pad(m)),
+            stringResource(R.string.unit_seconds, pad(s)),
+        ).joinToString(separator)
+        m > 0 -> listOf(
+            stringResource(R.string.unit_minutes, m.toString()),
+            stringResource(R.string.unit_seconds, pad(s)),
+        ).joinToString(separator)
+        else -> stringResource(R.string.unit_seconds, s.toString())
     }
 }
+
+/** Zero-padded so a running clock does not change width as it ticks. */
+private fun pad(value: Long): String = value.toString().padStart(2, '0')
 
 /** Status dot colors shared by the app screens — the theme's accents. */
 val CONNECTED_GREEN = SkyAccents.success

@@ -291,7 +291,8 @@ fun WalletTxScreen(
                     DetailRow(stringResource(R.string.wallet_tx_fee), feeText(coin, tx.fee))
                     DetailRow(
                         stringResource(R.string.wallet_tx_confirmations),
-                        if (tx.confirmed) Amounts.groupThousands(tx.confirmations.toString()) else "0 of 1",
+                        if (tx.confirmed) Amounts.groupThousands(tx.confirmations.toString())
+                        else stringResource(R.string.wallet_tx_confirmations_pending),
                     )
                     HorizontalDivider(color = MaterialTheme.colorScheme.surfaceContainerHighest)
                     Row(
@@ -344,7 +345,8 @@ fun WalletTxScreen(
                 Text(
                     stringResource(
                         R.string.wallet_tx_explorer_note,
-                        template.format("").removeSuffix("/").toUri().host ?: "the explorer",
+                        template.format("").removeSuffix("/").toUri().host
+                            ?: stringResource(R.string.wallet_tx_explorer_fallback),
                     ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
