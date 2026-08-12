@@ -65,7 +65,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   dataSorter!: DataSorter;
   dataFilterer!: DataFilterer;
 
-  dataSource!: Application[];
+  dataSource!: Application[] | null;
   /**
    * Keeps track of the state of the check boxes of the elements.
    */
@@ -199,11 +199,11 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     // Get the page and type requested in the URL.
     this.navigationsSubscription = this.route.paramMap.subscribe(params => {
       if (params.has('showOfficialApps')) {
-        this.showOfficialApps = params.get('showOfficialApps').toUpperCase() === 'true'.toUpperCase();
+        this.showOfficialApps = params.get('showOfficialApps')!.toUpperCase() === 'true'.toUpperCase();
       }
 
       if (params.has('page')) {
-        let selectedPage = Number.parseInt(params.get('page'), 10);
+        let selectedPage = Number.parseInt(params.get('page')!, 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
           selectedPage = 1;
         }
@@ -261,7 +261,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   /**
    * Gets the link for openning the UI of an app. Currently only works for the Skychat app.
    */
-  getLink(app: Application): string {
+  getLink(app: Application): string | null {
     if (app.name.toLocaleLowerCase() === 'skychat' && this.nodeIp && app.status !== 0 && app.status !== 2) {
       // Default port and ip.
       let port = '8001';
@@ -326,7 +326,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
       // Try to get the URL arg. If found, return the URL.
       if (app.args) {
         const urlArgsSet = new Set<string>(['url', '-url']);
-        let url: string = null;
+        let url: string | null = null;
 
         for (let i = 0; i < app.args.length; i++) {
           if (urlArgsSet.has((app.args[i] as string).toLowerCase()) && i + 1 < app.args.length) {
@@ -443,8 +443,8 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     this.selections.forEach((val, key) => {
       if (val) {
         if (
-          (startApps && (this.appsMap.get(key).status === 0 || this.appsMap.get(key).status === 2)) ||
-          (!startApps && (this.appsMap.get(key).status !== 0 && this.appsMap.get(key).status !== 2))
+          (startApps && (this.appsMap.get(key)!.status === 0 || this.appsMap.get(key)!.status === 2)) ||
+          (!startApps && (this.appsMap.get(key)!.status !== 0 && this.appsMap.get(key)!.status !== 2))
         ) {
           elementsToChange.push(key);
         }
@@ -464,7 +464,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
     // Ignore all elements which already have the desired settings applied.
     this.selections.forEach((val, key) => {
       if (val) {
-        if ((autostart && !this.appsMap.get(key).autostart) || (!autostart && this.appsMap.get(key).autostart)) {
+        if ((autostart && !this.appsMap.get(key)!.autostart) || (!autostart && this.appsMap.get(key)!.autostart)) {
           elementsToChange.push(key);
         }
       }
@@ -697,7 +697,7 @@ export class NodeAppsListComponent implements OnInit, OnDestroy {
   private startChangingAppState(appName: string, startApp: boolean): Observable<any> {
     return this.appsService.changeAppState(NodeComponent.getCurrentNodeKey(), appName, startApp).pipe(map(response => {
       if (response.status !== null && response.status !== undefined) {
-        this.dataSource.forEach(app => {
+        this.dataSource?.forEach(app => {
           if (app.name === appName) {
             app.status = response.status;
             app.detailedStatus = response.detailed_status;

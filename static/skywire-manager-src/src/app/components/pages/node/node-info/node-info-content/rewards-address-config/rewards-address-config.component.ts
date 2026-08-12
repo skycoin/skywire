@@ -97,7 +97,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const address = this.form.get('address').value as string;
+    const address = this.form.get('address')!.value as string;
 
     if (address) {
       this.finishSaving();
@@ -114,7 +114,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
   // Makes the change on the back-end.
   private finishSaving() {
     this.button.showLoading();
-    const newAddress = this.form.get('address').value;
+    const newAddress = this.form.get('address')!.value;
 
     // If the user entered an address, the operation must save it. If not, the operation is for
     // removing the currently saved address.

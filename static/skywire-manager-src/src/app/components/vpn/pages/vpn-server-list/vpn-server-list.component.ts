@@ -270,7 +270,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
 
       // Get the requested page.
       if (params.has('page')) {
-        let selectedPage = Number.parseInt(params.get('page'), 10);
+        let selectedPage = Number.parseInt(params.get('page')!, 10);
         if (isNaN(selectedPage) || selectedPage < 1) {
           selectedPage = 1;
         }

@@ -99,7 +99,7 @@ export class RouterConfigComponent implements OnInit, OnDestroy {
 
     this.operationSubscription = this.routeService.setMinHops(
       this.data.nodePk,
-      Number.parseInt(this.form.get('min').value, 10)
+      Number.parseInt(this.form.get('min')!.value, 10)
     ).subscribe({
       next: this.onSuccess.bind(this),
       error: this.onError.bind(this)
