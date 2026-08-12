@@ -1,4 +1,4 @@
-import { Component, HostListener, Input } from '@angular/core';
+import { Component, HostListener, Input, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialog, MatDialogRef } from '@angular/material/dialog';
 
 /**
@@ -8,14 +8,15 @@ import { MatDialog, MatDialogRef } from '@angular/material/dialog';
     selector: 'app-dialog',
     templateUrl: './dialog.component.html',
     styleUrls: ['./dialog.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DialogComponent {
-  @Input() headline: string;
+  @Input() headline!: string;
   /**
    * Disables all the ways provided by default by the UI for closing the modal window.
    */
-  @Input() disableDismiss: boolean;
+  @Input() disableDismiss!: boolean;
   /**
    * If true, this control adds the contents of the modal window inside a scrollable container.
    * If false, the contents must include its own scrollable container.
@@ -28,7 +29,7 @@ export class DialogComponent {
 
   // MatDialogRef of the modal window component which is using this component for wrapping
   // the contents.
-  private dialogInternal: MatDialogRef<any>;
+  private dialogInternal!: MatDialogRef<any>;
   @Input() set dialog(val: MatDialogRef<any>) {
     val.disableClose = true;
     this.dialogInternal = val;

@@ -86,7 +86,7 @@ export class DataSorter {
   // If the data must be sorted using the label shown in the cell instead of the data itself.
   private sortByLabel = false;
   // Data to sort.
-  private data: any[];
+  private data!: any[];
   // Index inside sortableColumns of the default column.
   private defaultColumnIndex: number;
   // Index inside sortableColumns of the column used for sorting the data when the currently
@@ -256,7 +256,7 @@ export class DataSorter {
   openSortingOrderModal() {
     // Create options for every sortable column, including variations.
     const options: SelectableOption[] = [];
-    const optionParams = [];
+    const optionParams: any[] = [];
     this.sortableColumns.forEach(column => {
       // Options for the normal and inverted mode.
       const label = this.translateService.instant(column.label);
@@ -352,7 +352,7 @@ export class DataSorter {
    * @param sortByLabelIfRequested if true and this.sortByLabel is also true, the data will be
    * sorted using the label instead of the value itself.
    */
-  private getSortResponse(sortingColumn: SortingColumn, a, b, sortByLabelIfRequested: boolean) {
+  private getSortResponse(sortingColumn: SortingColumn, a: any, b: any, sortByLabelIfRequested: boolean) {
     // List of params for getting the value that will be used for sorting the data.
     const propertiesList = this.sortByLabel && sortByLabelIfRequested && sortingColumn.labelProperties ?
       sortingColumn.labelProperties : sortingColumn.properties;

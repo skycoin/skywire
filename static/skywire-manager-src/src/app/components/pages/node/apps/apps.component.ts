@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { Application, Node } from '../../../../app.datatypes';
@@ -15,12 +15,15 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
     selector: 'app-apps',
     templateUrl: './apps.component.html',
     styleUrls: ['./apps.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AppsComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  apps: Application[];
-  nodePK: string;
-  nodeIp: string;
+  private changeDetectorRef = inject(ChangeDetectorRef);
+
+  apps!: Application[];
+  nodePK!: string;
+  nodeIp!: string;
 
   // Active sub-tab. 'list' (default) is the apps table; the other
   // three render the per-app management surfaces inline.
@@ -33,9 +36,9 @@ export class AppsComponent extends PageBaseComponent implements OnInit, OnDestro
   // node's arch, not the UI mode, for exactly that reason.
   wasmNode = false;
 
-  private dataSubscription: Subscription;
+  private dataSubscription!: Subscription;
 
-  ngOnInit() {
+  override ngOnInit() {
     // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.localPk;
@@ -45,6 +48,7 @@ export class AppsComponent extends PageBaseComponent implements OnInit, OnDestro
       if (this.wasmNode && (this.sub === 'vpn' || this.sub === 'skysocks')) {
         this.sub = 'list';
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();

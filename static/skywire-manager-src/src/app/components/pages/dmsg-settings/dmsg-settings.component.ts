@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
@@ -28,6 +28,7 @@ import { Node } from '../../../app.datatypes';
   templateUrl: './dmsg-settings.component.html',
   styleUrls: ['./dmsg-settings.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   pk = '';
@@ -47,23 +48,25 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
   lastActionResult: DmsgConnectAllResult | null = null;
   lastActionLabel = '';
 
-  private nodeSub: Subscription;
-  private pollSub: Subscription;
+  private nodeSub!: Subscription;
+  private pollSub!: Subscription;
 
   constructor(
     private dmsgSvc: DmsgSettingsService,
     private snackbar: SnackbarService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.pk;
       this.pk = node?.localPk || '';
       if (wasUnset && this.pk) {
         this.startPolling();
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();

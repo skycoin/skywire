@@ -25,6 +25,8 @@ import (
 	"github.com/skycoin/skycoin/src/readable"
 	"github.com/skycoin/skycoin/src/skycoin-web/src/gui"
 	"github.com/skycoin/skycoin/src/wallet"
+
+	"github.com/skycoin/skycoin/src/skycoin-lite/wasmgz"
 )
 
 var (
@@ -136,6 +138,18 @@ var RootCmd = &cobra.Command{
 			log.Fatalf("Server failed: %v", err)
 		}
 	},
+}
+
+// acceptsGzip reports whether the client will decompress a gzipped response.
+// Everything current does; the fallback is for anything that says otherwise.
+func acceptsGzip(r *http.Request) bool {
+	for _, encoding := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+		if strings.EqualFold(strings.TrimSpace(strings.SplitN(encoding, ";", 2)[0]), "gzip") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func init() {
@@ -455,7 +469,26 @@ func serve(ctx context.Context) error {
 	mux.HandleFunc("/assets/scripts/skycoin-lite.wasm", func(w http.ResponseWriter, r *http.Request) {
 		c := newCtx(w, r)
 		c.Header("Content-Type", "application/wasm")
-		c.Data(http.StatusOK, "application/wasm", wasmFile)
+
+		// The blob is committed gzipped. Handing it over as-is lets the browser
+		// decompress it — which every browser does, and which
+		// WebAssembly.instantiateStreaming is happy with — instead of spending
+		// the server's memory and CPU inflating ~5 MB per request.
+		if acceptsGzip(r) {
+			c.Header("Content-Encoding", "gzip")
+			c.Data(http.StatusOK, "application/wasm", wasmFileGz)
+
+			return
+		}
+
+		wasm, err := wasmgz.Decompress(wasmFileGz)
+		if err != nil {
+			c.Data(http.StatusInternalServerError, "text/plain", []byte("could not decompress the wasm cipher: "+err.Error()))
+
+			return
+		}
+
+		c.Data(http.StatusOK, "application/wasm", wasm)
 	})
 
 	mux.HandleFunc("/assets/scripts/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
@@ -589,7 +622,7 @@ func serve(ctx context.Context) error {
 	fileServer := http.FileServer(http.FS(guiFS))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" && r.URL.Path != "/favicon.ico" {
-			log.Printf("[STATIC] %s %s", r.Method, r.URL.Path)
+			log.Printf("[STATIC] %s %s", r.Method, r.URL.Path) //nolint:gosec // logs a request path on a local server; the value is recorded, never interpreted
 		}
 		fileServer.ServeHTTP(w, r)
 	})
@@ -783,13 +816,13 @@ func handleReadOnlyPost(c *webCtx, trimmedPath string, nodeURL string) bool {
 	if trimmedPath == "/v1/transactions" {
 		cacheKey := targetURL + "?" + c.Request.FormValue("addrs")
 		if entry, ok := queryCache.get(cacheKey, 30*time.Second); ok {
-			log.Printf("[PROXY] POST %s -> cached (%s ago)", c.Request.URL.Path, time.Since(entry.cachedAt).Round(time.Second))
+			log.Printf("[PROXY] POST %s -> cached (%s ago)", c.Request.URL.Path, time.Since(entry.cachedAt).Round(time.Second)) //nolint:gosec // logs a request path on a local server; the value is recorded, never interpreted
 			c.Data(entry.statusCode, entry.contentType, entry.body)
 			return true
 		}
 	}
 
-	log.Printf("[PROXY] POST %s -> %s", c.Request.URL.Path, targetURL)
+	log.Printf("[PROXY] POST %s -> %s", c.Request.URL.Path, targetURL) //nolint:gosec // logs a request path on a local server; the value is recorded, never interpreted
 
 	// Build form body from the original request
 	if err := c.Request.ParseForm(); err != nil {
@@ -883,7 +916,7 @@ func proxyToNodeWithBase(c *webCtx, remoteNodeURL string, targetPath string) {
 		targetURL += "?" + c.Request.URL.RawQuery
 	}
 
-	log.Printf("[PROXY] %s %s -> %s", c.Request.Method, c.Request.URL.Path, targetURL)
+	log.Printf("[PROXY] %s %s -> %s", c.Request.Method, c.Request.URL.Path, targetURL) //nolint:gosec // logs a request path on a local server; the value is recorded, never interpreted
 
 	proxyReq, err := http.NewRequest(c.Request.Method, targetURL, c.Request.Body) //nolint:gosec // G704: proxies to operator-configured node URLs, not user input
 	if err != nil {

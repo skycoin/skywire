@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { Node, Route } from '../../../../../app.datatypes';
@@ -12,19 +12,23 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
     selector: 'app-all-routes',
     templateUrl: './all-routes.component.html',
     styleUrls: ['./all-routes.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AllRoutesComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  routes: Route[];
-  nodePK: string;
+  private changeDetectorRef = inject(ChangeDetectorRef);
 
-  private dataSubscription: Subscription;
+  routes!: Route[];
+  nodePK!: string;
 
-  ngOnInit() {
+  private dataSubscription!: Subscription;
+
+  override ngOnInit() {
     // Get the node data from the parent page.
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.nodePK = node.localPk;
       this.routes = node.routes;
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();

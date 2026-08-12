@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/itchyny/gojq"
 	"github.com/skycoin/skywire/third_party/0magnet/afero"
 	"github.com/skycoin/skywire/third_party/0magnet/sh/v3/interp"
+	"github.com/itchyny/gojq"
 )
 
 func init() {

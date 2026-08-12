@@ -690,6 +690,34 @@ func (v *Visor) DmsgSessions() (*DmsgClientSessions, error) {
 	return out, nil
 }
 
+// DmsgConvergeResult reports the outcome of a carrier-convergence pass.
+type DmsgConvergeResult struct {
+	Carriers  []string              `json:"carriers"`  // the effective ordered preference used
+	Converged int                   `json:"converged"` // sessions re-dialed to a more-preferred carrier
+	Sessions  []dmsg.SessionCarrier `json:"sessions"`  // per-session carrier after the pass
+}
+
+// DmsgConverge optionally sets the main dmsg client's ordered carrier
+// preference (empty = leave as-is) and runs one carrier-convergence pass,
+// re-dialing each server session onto the most-preferred carrier it currently
+// advertises. Returns the effective preference, how many sessions converged,
+// and the resulting per-session carriers.
+func (v *Visor) DmsgConverge(carriers []string) (*DmsgConvergeResult, error) {
+	if v.dmsgC == nil {
+		return nil, errors.New("dmsg client not available")
+	}
+	if len(carriers) > 0 {
+		v.dmsgC.SetCarriers(carriers)
+		v.log.WithField("carriers", carriers).Info("dmsg: carrier preference set")
+	}
+	n := v.dmsgC.ConvergeCarriers()
+	return &DmsgConvergeResult{
+		Carriers:  v.dmsgC.Carriers(),
+		Converged: n,
+		Sessions:  v.dmsgC.SessionCarriers(),
+	}, nil
+}
+
 // dmsgClientServerSessions returns the dmsg servers the given client currently
 // has an active session with, both as bare PKs (Servers, kept for existing
 // consumers) and enriched with the protocol each was reached over (Sessions).

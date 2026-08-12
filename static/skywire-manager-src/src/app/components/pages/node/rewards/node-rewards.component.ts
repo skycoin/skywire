@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute } from '@angular/router';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
@@ -24,7 +24,8 @@ interface RewardDay {
   selector: 'app-node-rewards',
   templateUrl: './node-rewards.component.html',
   styleUrls: ['./node-rewards.component.scss'],
-  standalone: false
+  standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeRewardsComponent implements OnInit, OnDestroy {
   pk = '';
@@ -44,10 +45,10 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
   showRewardRules = false;
   rewardRules: string | null = null;
 
-  private nodeSub: Subscription;
-  private dataSub: Subscription;
-  private saveRewardsSubscription: Subscription;
-  private rewardRulesSubscription: Subscription;
+  private nodeSub!: Subscription;
+  private dataSub!: Subscription;
+  private saveRewardsSubscription!: Subscription;
+  private rewardRulesSubscription!: Subscription;
 
   constructor(
     private http: HttpClient,
@@ -57,6 +58,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     private nodeService: NodeService,
     private snackbarService: SnackbarService,
     private formBuilder: UntypedFormBuilder,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.rewardForm = this.formBuilder.group({
       address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
@@ -70,6 +72,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
     // Pull the current reward address from the live node feed.
     this.nodeSub = NodeComponent.currentNode.subscribe(node => {
       this.rewardsAddress = node?.rewardsAddress || '';
+      this.changeDetectorRef.markForCheck();
     });
     this.loadHistory();
   }
@@ -99,6 +102,7 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
       this.history = resp?.history || [];
       this.total = this.history.reduce((sum: number, d: RewardDay) => sum + (d.amount || 0), 0);
       this.loading = false;
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -170,10 +174,12 @@ export class NodeRewardsComponent implements OnInit, OnDestroy {
       this.rewardRulesSubscription = this.nodeService.getRewardRules().subscribe(
         (text: string) => {
  this.rewardRules = text || ''; 
-},
+          this.changeDetectorRef.markForCheck();
+        },
         () => {
  this.rewardRules = ''; this.snackbarService.showError('common.loading-error'); 
-},
+          this.changeDetectorRef.markForCheck();
+        },
       );
     }
   }

@@ -522,6 +522,10 @@ func (proxyDefaultAPI) RouteGroups() ([]RouteGroupInfo, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) RoutingStats() (routing.RoutingTableStats, error) {
+	return routing.RoutingTableStats{}, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RoutingPolicies() (*RoutingPoliciesSummary, error) {
 	return nil, ErrProxyNotSupported
 }
@@ -747,6 +751,10 @@ func (proxyDefaultAPI) SetDmsgSessionsCount(_ int) (*DmsgConnectAllResult, error
 }
 
 func (proxyDefaultAPI) DmsgSessions() (*DmsgClientSessions, error) {
+	return nil, ErrProxyNotSupported
+}
+
+func (proxyDefaultAPI) DmsgConverge(_ []string) (*DmsgConvergeResult, error) {
 	return nil, ErrProxyNotSupported
 }
 

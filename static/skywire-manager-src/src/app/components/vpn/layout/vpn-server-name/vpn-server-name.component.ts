@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 
 /**
  * Shows the name of a server. It includes the custom name, the original name and the
@@ -8,7 +8,8 @@ import { Component, Input } from '@angular/core';
     selector: 'app-vpn-server-name',
     templateUrl: './vpn-server-name.component.html',
     styleUrls: ['./vpn-server-name.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnServerNameComponent {
   // Special conditions.

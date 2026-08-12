@@ -806,6 +806,11 @@ func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 	return nil
 }
 
+// RoutingStats implements API.
+func (mc *mockRPCClient) RoutingStats() (routing.RoutingTableStats, error) {
+	return mc.rt.Stats(), nil
+}
+
 // RouteGroups implements API.
 func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	var routeGroups []RouteGroupInfo
@@ -1259,6 +1264,10 @@ func (mc *mockRPCClient) SetDmsgSessionsCount(_ int) (*DmsgConnectAllResult, err
 // DmsgSessions implements API.
 func (mc *mockRPCClient) DmsgSessions() (*DmsgClientSessions, error) {
 	return &DmsgClientSessions{}, nil
+}
+
+func (mc *mockRPCClient) DmsgConverge(_ []string) (*DmsgConvergeResult, error) {
+	return &DmsgConvergeResult{}, nil
 }
 
 // RegisterCXOFeed implements API.

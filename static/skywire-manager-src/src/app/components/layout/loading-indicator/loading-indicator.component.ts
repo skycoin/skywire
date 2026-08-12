@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 
 /**
  * Big loading animation that is shown when the contents of a page or modal window
@@ -9,7 +9,8 @@ import { Component, Input } from '@angular/core';
     selector: 'app-loading-indicator',
     templateUrl: './loading-indicator.component.html',
     styleUrls: ['./loading-indicator.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LoadingIndicatorComponent {
   @Input() showWhite = true;

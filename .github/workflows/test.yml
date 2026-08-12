@@ -340,10 +340,22 @@ jobs:
       - name: Build UI
         run: cd static/skywire-manager-src && npm run build
 
+      # Under OnPush a field assigned from a subscription or a timer repaints
+      # nothing on its own. Forget the mark and there is no error and no
+      # warning, just a view that keeps showing stale data.
+      - name: Check OnPush change detection marks
+        run: make check-onpush
+
       - name: Test UI
         run: make test-ui
         env:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
+
+      # pkg/visor/static is a build artifact committed to the repository and
+      # embedded in the visor. Building the UI proves the source compiles; this
+      # proves the copy users actually get was built from that source.
+      - name: Verify the committed UI bundle is current
+        run: make check-ui
 
   # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
   # //go:build !no_ci because they need a real Redis (redis://localhost:6379),

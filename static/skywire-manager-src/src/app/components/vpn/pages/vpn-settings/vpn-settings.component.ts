@@ -1,4 +1,4 @@
-import { Component, OnDestroy, ViewChild } from '@angular/core';
+import { Component, OnDestroy, ViewChild, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -31,16 +31,17 @@ enum WorkingOptions {
     selector: 'app-vpn-settings-list',
     templateUrl: './vpn-settings.component.html',
     styleUrls: ['./vpn-settings.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy {
-  @ViewChild('topBarLoading') topBarLoading: TopBarComponent;
-  @ViewChild('topBarLoaded') topBarLoaded: TopBarComponent;
+  @ViewChild('topBarLoading') topBarLoading!: TopBarComponent;
+  @ViewChild('topBarLoaded') topBarLoaded!: TopBarComponent;
 
   // If the data is being loaded.
   loading = true;
   // Current state of the VPN client app in the backend.
-  backendData: BackendState;
+  backendData!: BackendState;
   // If the option for getting the browser IP is active.
   getIpOption: boolean;
   // Units that must be used for displaying the data stats.
@@ -49,7 +50,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
   tabsData = VpnHelpers.vpnTabsData;
 
   // Pk of the local visor.
-  currentLocalPk: string;
+  currentLocalPk!: string;
 
   // Current option being changed asynchronously.
   working: WorkingOptions = WorkingOptions.None;
@@ -57,7 +58,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
 
   private navigationsSubscription: Subscription;
   private dataSubscription: Subscription;
-  private operationSubscription: Subscription;
+  private operationSubscription!: Subscription;
 
   constructor(
     private vpnClientService: VpnClientService,
@@ -66,6 +67,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
     private vpnSavedDataService: VpnSavedDataService,
     private dialog: MatDialog,
     route: ActivatedRoute,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
     
@@ -76,6 +78,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
         VpnHelpers.changeCurrentPk(this.currentLocalPk);
         this.tabsData = VpnHelpers.vpnTabsData;
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     // Get the current state of the VPN client app in the backend.
@@ -85,6 +88,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
 
         this.loading = false;
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     this.getIpOption = this.vpnSavedDataService.getCheckIpSetting();
@@ -160,6 +164,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
         confirmationDialog.componentInstance.closeModal();
 
         this.finishChangingKillswitchOption();
+        this.changeDetectorRef.markForCheck();
       });
     } else {
       this.finishChangingKillswitchOption();
@@ -180,12 +185,14 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
       () => {
         this.working = WorkingOptions.None;
         this.vpnClientService.updateData();
+        this.changeDetectorRef.markForCheck();
       },
       err => {
         this.working = WorkingOptions.None;
 
         err = processServiceError(err);
         this.snackbarService.showError(err);
+        this.changeDetectorRef.markForCheck();
       },
     );
   }
@@ -208,14 +215,14 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
 
     // Get all the available options and mark the currently selected one.
     Object.keys(DataUnits).forEach(key => {
-      const option: SelectableOption = { label: this.getUnitsOptionText(DataUnits[key]) };
+      const option: SelectableOption = { label: this.getUnitsOptionText((DataUnits as any)[key]) };
 
-      if (this.dataUnitsOption === DataUnits[key]) {
+      if (this.dataUnitsOption === (DataUnits as any)[key]) {
         option.icon = 'done';
       }
 
       options.push(option);
-      optionValues.push(DataUnits[key]);
+      optionValues.push((DataUnits as any)[key]);
     });
 
     // Open the option selection modal window.
@@ -234,6 +241,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
             this.topBarLoaded.updateVpnDataStatsUnit();
           }
         }
+        this.changeDetectorRef.markForCheck();
       });
   }
 

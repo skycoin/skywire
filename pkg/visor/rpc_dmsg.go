@@ -142,6 +142,22 @@ func (r *RPC) DmsgSessions(_ *struct{}, out *DmsgClientSessions) (err error) {
 	return nil
 }
 
+// DmsgConverge optionally sets the dmsg carrier preference (empty = leave
+// as-is) and runs one carrier-convergence pass on the main dmsg client.
+func (r *RPC) DmsgConverge(carriers *[]string, out *DmsgConvergeResult) (err error) {
+	defer rpcutil.LogCall(r.log, "DmsgConverge", carriers)(out, &err)
+	var cs []string
+	if carriers != nil {
+		cs = *carriers
+	}
+	resp, err := r.visor.DmsgConverge(cs)
+	if err != nil {
+		return err
+	}
+	*out = *resp
+	return nil
+}
+
 // DmsgPorterStats returns ephemeral port reservation counts.
 func (r *RPC) DmsgPorterStats(_ *struct{}, out *DmsgPorterStatus) (err error) {
 	defer rpcutil.LogCall(r.log, "DmsgPorterStats", nil)(out, &err)

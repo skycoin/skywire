@@ -78,7 +78,7 @@
         <span class="info-line">
           <span class="title">{{ 'node.details.node-info.time.title' | translate }} </span>
           {{ ('node.details.node-info.time.' + timeOnline.translationVarName) | translate:{time: timeOnline.elapsedTime} }}
-          @if (timeOnline.totalMinutes > 60) {
+          @if (+timeOnline.totalMinutes > 60) {
             <mat-icon
               [inline]="true"
               [matTooltip]="'node.details.node-info.time.minutes' | translate:{time: timeOnline.totalMinutes}"

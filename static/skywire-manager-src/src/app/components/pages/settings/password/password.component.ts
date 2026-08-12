@@ -1,4 +1,4 @@
-import { Component, OnInit, Input, ViewChild, ElementRef, AfterViewInit, OnDestroy, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, Input, ViewChild, ElementRef, AfterViewInit, OnDestroy, Output, EventEmitter, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -17,11 +17,12 @@ import { processServiceError } from '../../../../utils/errors';
     selector: 'app-password',
     templateUrl: './password.component.html',
     styleUrls: ['./password.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
-  @ViewChild('button') button: ButtonComponent;
-  @ViewChild('firstInput') firstInput: ElementRef;
+  @ViewChild('button') button!: ButtonComponent;
+  @ViewChild('firstInput') firstInput!: ElementRef;
   @Output() workingState = new EventEmitter<boolean>();
 
   /**
@@ -30,16 +31,17 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   @Input() forInitialConfig = false;
 
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
 
-  private subscription: Subscription;
-  private formSubscription: Subscription;
+  private subscription!: Subscription;
+  private formSubscription!: Subscription;
 
   constructor(
     private authService: AuthService,
     private router: Router,
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
@@ -51,11 +53,14 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
     });
 
     this.formSubscription = this.form.controls['newPassword'].valueChanges
-      .subscribe(() => this.form.controls['newPasswordConfirmation'].updateValueAndValidity());
+      .subscribe(() => {
+ this.form.controls['newPasswordConfirmation'].updateValueAndValidity(); this.changeDetectorRef.markForCheck(); 
+});
   }
 
   ngAfterViewInit() {
     if (this.forInitialConfig) {
+      // change-detection: no view state — focuses an input
       setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
     }
   }
@@ -87,12 +92,14 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
               this.router.navigate(['nodes']);
               this.snackbarService.showDone('settings.password.password-changed');
               this.workingState.next(false);
+              this.changeDetectorRef.markForCheck();
             }, (err: OperationError) => {
               this.button.showError();
               err = processServiceError(err);
 
               this.snackbarService.showError(err);
               this.workingState.next(false);
+              this.changeDetectorRef.markForCheck();
             },
           );
       } else {
@@ -101,6 +108,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
             this.dialog.closeAll();
             this.snackbarService.showDone('settings.password.initial-config.done');
             this.workingState.next(false);
+            this.changeDetectorRef.markForCheck();
           }, err => {
             this.button.showError();
             err = processServiceError(err);
@@ -109,6 +117,7 @@ export class PasswordComponent implements OnInit, AfterViewInit, OnDestroy {
             this.snackbarService.showError(err, null, true);
 
             this.workingState.next(false);
+            this.changeDetectorRef.markForCheck();
           },
         );
       }
