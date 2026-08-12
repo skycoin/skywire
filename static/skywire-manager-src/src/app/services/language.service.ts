@@ -55,7 +55,7 @@ export class LanguageService {
 
     // Config Ngx-Translate.
     this.translate.addLangs(langs);
-    this.translate.setDefaultLang(AppConfig.defaultLanguage);
+    this.translate.setFallbackLang(AppConfig.defaultLanguage);
 
     // Detect when the selected language is changed.
     this.translate.onLangChange
