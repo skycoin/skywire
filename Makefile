@@ -97,10 +97,17 @@ BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAG
 INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 
 # The wasm-visor imports skywire's OWN pkg/buildinfo (not skywire-utilities), so
-# it needs its own -X targets. Stamped explicitly (+ -buildvcs=false in the build)
-# so the embedded blob carries a CLEAN version from a possibly-uncommitted tree
-# instead of Go's VCS "+dirty" stamp — and is deterministic (same source → same
-# blob), which matters for the committed pkg/wasmhv/wasmbin blob.
+# it needs its own -X targets, stamped explicitly below.
+#
+# Go's VCS stamp is deliberately LEFT ON (no -buildvcs=false). It used to be
+# suppressed so the embedded blob carried a clean-looking version even when
+# built from an uncommitted tree, which removed the evidence rather than the
+# problem. The blob is a build artifact carried in the repository, so it can
+# never be verified by rebuilding: the commit that compiles it always precedes
+# the commit that carries it, and the date stamped below makes two builds of
+# identical source differ anyway. vcs.revision/vcs.modified is therefore the
+# only account of what it was built from. TestCommittedWasmBuiltFromCommit
+# rejects a blob built from a dirty tree, or one carrying no stamp at all.
 # The repo's OWN pkg/buildinfo (vs skywire-utilities' above). Despite the
 # historical WASM_ prefix there is nothing wasm about the path — the wasm-visor
 # was simply the first target that needed to stamp it. The skywire-mobile
@@ -394,7 +401,7 @@ test-wasm-headless: ## Tier B headless smoke: run the REAL compiled wasm-visor b
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
 	mkdir -p ./build/wasm-visor-go
-	GOOS=js GOARCH=wasm go build -buildvcs=false -ldflags="$(WASM_BUILDINFO) -s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
+	GOOS=js GOARCH=wasm go build -ldflags="$(WASM_BUILDINFO) -s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor-go/
