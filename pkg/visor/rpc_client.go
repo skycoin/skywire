@@ -902,6 +902,13 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, err
 }
 
+// RoutingStats calls RoutingStats.
+func (rc *rpcClient) RoutingStats() (routing.RoutingTableStats, error) {
+	var stats routing.RoutingTableStats
+	err := rc.Call("RoutingStats", &struct{}{}, &stats)
+	return stats, err
+}
+
 // RoutingPolicies calls RoutingPolicies.
 func (rc *rpcClient) RoutingPolicies() (*RoutingPoliciesSummary, error) {
 	var summary RoutingPoliciesSummary
@@ -1484,6 +1491,16 @@ func (rc *rpcClient) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, err
 	return &resp, nil
 }
 
+// DmsgConverge optionally sets the dmsg carrier preference (empty = leave
+// as-is) and runs one carrier-convergence pass on the main dmsg client.
+func (rc *rpcClient) DmsgConverge(carriers []string) (*DmsgConvergeResult, error) {
+	var resp DmsgConvergeResult
+	if err := rc.Call("DmsgConverge", &carriers, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // DmsgSessions returns the current dmsg session state of every dmsg client
 // running inside the visor (main / route_setup / transport_setup).
 func (rc *rpcClient) DmsgSessions() (*DmsgClientSessions, error) {
@@ -1606,6 +1623,20 @@ func (rc *rpcClient) GroupResolve(args GroupResolveArgs) (GroupResolveResult, er
 func (rc *rpcClient) GroupSetListed(id string, listed bool) (GroupInfo, error) {
 	var resp GroupInfo
 	err := rc.Call("GroupSetListed", &GroupSetListedRequest{ID: id, Listed: listed}, &resp)
+	return resp, err
+}
+
+// GroupSetMeta implements API.
+func (rc *rpcClient) GroupSetMeta(args GroupSetMetaArgs) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupSetMeta", &args, &resp)
+	return resp, err
+}
+
+// GroupRefreshMeta implements API.
+func (rc *rpcClient) GroupRefreshMeta(id string) (GroupInfo, error) {
+	var resp GroupInfo
+	err := rc.Call("GroupRefreshMeta", &id, &resp)
 	return resp, err
 }
 

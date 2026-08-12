@@ -39,27 +39,27 @@ export class BackendState {
   /**
    * Current state of the VPN service.
    */
-  serviceState: VpnServiceStates;
+  serviceState!: VpnServiceStates;
   /**
    * If the VPN service is busy working and will not process changes until finishing.
    */
-  busy: boolean;
+  busy!: boolean;
   /**
    * State and properties of the VPN client app.
    */
-  vpnClientAppData: VpnClientAppData;
+  vpnClientAppData!: VpnClientAppData;
   /**
    * Public IP of the local visor, from the visor summary.
    */
-  publicIp: string;
+  publicIp!: string;
   /**
    * Country code of the local visor, from the visor summary.
    */
-  countryCode: string;
+  countryCode!: string;
   /**
    * Country name of the local visor, from the visor summary.
    */
-  countryName: string;
+  countryName!: string;
 }
 
 /**
@@ -69,36 +69,36 @@ export class VpnClientAppData {
   /**
    * If the app is running.
    */
-  running: boolean;
+  running!: boolean;
   /**
    * Public key of the currently selected server.
    */
-  serverPk: string;
+  serverPk!: string;
   /**
    * if the killswitch option is active.
    */
-  killswitch: boolean;
+  killswitch!: boolean;
   /**
    * Current state of the app.
    */
-  appState: AppState;
+  appState!: AppState;
   /**
    * Data transmission stats, if the app is running.
    */
-  connectionData: VpnClientConnectionsData;
+  connectionData!: VpnClientConnectionsData;
   /**
    * Min hops the reoutes must have.
    */
-  minHops: number;
+  minHops!: number;
   /**
    * Error msg returned by the vpn-client app, for which the last excecution was stopped.
    */
-   lastErrorMsg: string;
+   lastErrorMsg!: string;
    /**
     * Time the VPN has been connected, as returned by the backend. Undefined if the vpn is not connected.
     */
-   connectionDuration: number;
-   dns: string;
+   connectionDuration!: number;
+   dns!: string;
 }
 
 /**
@@ -112,9 +112,9 @@ export class VpnClientConnectionsData {
   totalDownloaded = 0;
   connectionDuration = 0;
   error = '';
-  downloadSpeedHistory: number[];
-  uploadSpeedHistory: number[];
-  latencyHistory: number[];
+  downloadSpeedHistory!: number[];
+  uploadSpeedHistory!: number[];
+  latencyHistory!: number[];
 }
 
 /**
@@ -176,7 +176,7 @@ export class VpnClientService {
   private readonly standardWaitTime = 2000;
 
   // Public key of the local Skywire visor.
-  private nodeKey: string;
+  private nodeKey!: string | null;
   // Subject for sending updates about the state of the VPN.
   private stateSubject = new BehaviorSubject<BackendState>(null);
   // Subject for sending updates about errors while connecting to the backend.
@@ -188,7 +188,7 @@ export class VpnClientService {
   // If the service is currently working (busy).
   private working = true;
   // If has a value, the current server must be replaced by this one.
-  private requestedServer: LocalServerData = null;
+  private requestedServer: LocalServerData | null = null;
   // Route options to apply when (re)connecting: number of parallel
   // multiplexed routes and minimum hops. 0 / <2 means the plain dial.
   private requestedMuxRoutes = 0;
@@ -197,21 +197,21 @@ export class VpnClientService {
   private updatesStopped = false;
 
   // Data transmission history values.
-  private downloadSpeedHistory: number[];
-  private uploadSpeedHistory: number[];
-  private latencyHistory: number[];
+  private downloadSpeedHistory!: number[];
+  private uploadSpeedHistory!: number[];
+  private latencyHistory!: number[];
   // Pk of the server for which the last data transmission history values were obtained.
-  private connectionHistoryPk: string;
+  private connectionHistoryPk!: string | null;
 
   // Public IP of the local visor, obtained from the visor summary.
-  private visorPublicIp: string;
+  private visorPublicIp!: string | null;
   // Country code of the local visor, obtained from the visor summary.
-  private visorCountryCode: string;
+  private visorCountryCode!: string | null;
   // Country name of the local visor, obtained from the visor summary.
-  private visorCountryName: string;
+  private visorCountryName!: string | null;
 
-  private dataSubscription: Subscription;
-  private continuousUpdateSubscription: Subscription;
+  private dataSubscription!: Subscription;
+  private continuousUpdateSubscription!: Subscription;
 
   constructor(
     private apiService: ApiService,
@@ -321,12 +321,12 @@ export class VpnClientService {
     return this.http.request('GET', window.location.protocol + '//ip.skycoin.com/').pipe(
       retryWhen(errors => concat(errors.pipe(delay(this.standardWaitTime), take(4)), throwError(''))),
       map(data => {
-        const ip = data && data['ip_address']
-          ? data['ip_address']
+        const ip = data && (data as any)['ip_address']
+          ? (data as any)['ip_address']
           : this.translateService.instant('common.unknown');
 
-        const country = data && data['country_name']
-          ? data['country_name']
+        const country = data && (data as any)['country_name']
+          ? (data as any)['country_name']
           : this.translateService.instant('common.unknown');
 
         return [ip, country];
@@ -405,7 +405,7 @@ export class VpnClientService {
    * Checks if at this moment it is possible to change the selected server to the provided PK and
    * what must be done for the change to work.
    */
-  checkNewPk(newPk): CheckPkResults {
+  checkNewPk(newPk: any): CheckPkResults {
     if (this.working) {
       return CheckPkResults.Busy;
     } else if (this.lastServiceState !== VpnServiceStates.Off) {
@@ -712,7 +712,7 @@ export class VpnClientService {
         }
         if (nodeInfo.overview.country_code) {
           this.visorCountryCode = nodeInfo.overview.country_code;
-          const countryName = countriesList[nodeInfo.overview.country_code.toUpperCase()];
+          const countryName = (countriesList as any)[nodeInfo.overview.country_code.toUpperCase()];
           this.visorCountryName = countryName ? countryName : nodeInfo.overview.country_code;
         } else {
           this.visorCountryCode = null;

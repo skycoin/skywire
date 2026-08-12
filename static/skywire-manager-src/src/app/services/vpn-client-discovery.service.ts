@@ -27,15 +27,15 @@ export class VpnServer {
   /**
    * Sever name.
    */
-  name: string;
+  name!: string;
   /**
    * Location of the server.
    */
-  location: string;
+  location!: string;
   /**
    * Public key.
    */
-  pk: string;
+  pk!: string;
 
 
   // TODO: used only for columns that are currently deactivated in the server list. Must
@@ -65,7 +65,7 @@ export class VpnServer {
   /**
    * Note the server has in the discovery service.
    */
-  note: string;
+  note!: string;
 }
 
 /**
@@ -90,7 +90,7 @@ export class VpnClientDiscoveryService {
   /**
    * Servers obtained from the discovery service.
    */
-  private servers: VpnServer[];
+  private servers!: VpnServer[];
 
   constructor(
     private http: HttpClient,

@@ -10,9 +10,9 @@ Transport Discovery Server - registers and tracks transports between visors.
 
 Depends: redis
 
-Production: http://tpd.skywire.skycoin.com
+Production: dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80
             dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80
-Test:       http://tpd.skywire.dev
+Test:       dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80
             dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80
 
 HTTP Endpoints:
@@ -188,7 +188,7 @@ skywire svc tpd
   -c, --config string             path to JSON config file. When set, fields below come from the config file. Generate one with: skywire cli config gen --tpd -o /etc/skywire/transport-discovery.json
                                   
       --dmsg-disc string          url of dmsg-discovery
-                                   (default "http://dmsgd.skywire.skycoin.com")
+                                   (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --dmsg-port uint16          dmsg port value
                                    (default 80)
       --dmsg-server-type string   type of dmsg server on dmsghttp handler

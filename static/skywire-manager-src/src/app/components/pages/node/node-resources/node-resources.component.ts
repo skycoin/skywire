@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef, inject } from '@angular/core';
 import { Subscription } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
@@ -14,14 +14,18 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
   selector: 'app-node-resources',
   templateUrl: './node-resources.component.html',
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeResourcesComponent extends PageBaseComponent implements OnInit, OnDestroy {
-  node: Node;
-  private dataSubscription: Subscription;
+  private changeDetectorRef = inject(ChangeDetectorRef);
 
-  ngOnInit() {
+  node!: Node;
+  private dataSubscription!: Subscription;
+
+  override ngOnInit() {
     this.dataSubscription = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();

@@ -11,6 +11,7 @@ import com.skycoin.skywire.api.VisorApi
 import com.skycoin.skywire.core.AppPreferences
 import com.skycoin.skywire.core.CoreServiceState
 import com.skycoin.skywire.core.CoreState
+import com.skycoin.skywire.core.PublicAutoconnect
 import com.skycoin.skywire.core.SkyVpnService
 import com.skycoin.skywire.core.TransportPreference
 import com.skycoin.skywire.core.VpnTunnel
@@ -51,6 +52,12 @@ data class VpnUiState(
      */
     val minHops: Int = 0,
     val killswitch: Boolean = false,
+    /**
+     * Whether this visor builds transports to public visors. Route lengths
+     * above one hop have nothing to route through without it — see
+     * [PublicAutoconnect] and MinHopsCard.
+     */
+    val publicAutoconnect: Boolean = PublicAutoconnect.DEFAULT,
     /** Last summary overview — the device's own address comes off this. */
     val overview: Overview? = null,
     val lastServer: SavedServer? = null,
@@ -59,6 +66,19 @@ data class VpnUiState(
     /** A start/stop/settings call is in flight. */
     val busy: Boolean = false,
     val error: String? = null,
+    /**
+     * What the visor logged while the last connection attempt was running —
+     * the same events `skywire cli proxy start --verbose` prints, scoped to
+     * this attempt.
+     *
+     * A failed connection used to leave the user with a coloured line and no
+     * way to find out more, which is where every "it doesn't work" report
+     * started and stopped. Collected always, shown on request: the reason
+     * belongs on screen, the transcript belongs one tap away.
+     */
+    val attemptLog: List<String> = emptyList(),
+    /** Still collecting — the attempt has not settled either way yet. */
+    val attemptLive: Boolean = false,
 ) {
     val coreReady: Boolean get() = coreState is CoreState.Running && apiUp
 
@@ -128,6 +148,7 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
     val uiState: StateFlow<VpnUiState> = mutable.asStateFlow()
 
     private var actionJob: Job? = null
+    private var attemptLogJob: Job? = null
 
     /** Session total at the last accrual, to turn the counter into a delta. */
     private var lastSessionBytes = 0L
@@ -146,6 +167,11 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
                         prefs.string(TransportPreference.PREF_KEY).first(),
                     ),
                 )
+            }
+        }
+        viewModelScope.launch {
+            prefs.boolean(PublicAutoconnect.PREF_KEY, PublicAutoconnect.DEFAULT).collect { on ->
+                mutable.update { it.copy(publicAutoconnect = on) }
             }
         }
         viewModelScope.launch {
@@ -204,6 +230,11 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
      * to trap the phone after the user asked to be let out.
      */
     fun disconnect() = action {
+        // The user ended the attempt, so there is nothing left to follow. The
+        // transcript itself is kept — someone who disconnects a stuck attempt
+        // still wants to see why it was stuck.
+        attemptLogJob?.cancel()
+        mutable.update { it.copy(attemptLive = false) }
         val stopped = runCatching {
             api.updateApp(VpnArgs.APP, status = VisorApi.APP_STOP)
         }.getOrNull()
@@ -305,8 +336,14 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
      */
     private suspend fun startWith(server: SavedServer) {
         val killswitch = mutable.value.killswitch
+        // Before the app is told to start, or the first events are already
+        // gone. The CLI opens its stream ahead of StartAppWithMode for the
+        // same reason (see proxy.go) — route setup begins immediately and the
+        // interesting part is over in under a second.
+        val from = logCursor()
         SkyVpnService.start(getApplication(), killswitch)
         runCatching { api.updateApp(VpnArgs.APP, status = VisorApi.APP_STOP) }
+        awaitStopped()
         val updated = api.updateApp(
             VpnArgs.APP,
             pk = server.pk,
@@ -315,7 +352,90 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
         )
         saveLastServer(server)
         lastSessionBytes = 0
-        mutable.update { it.copy(app = updated, lastServer = server) }
+        mutable.update {
+            it.copy(app = updated, lastServer = server, attemptLog = emptyList(), attemptLive = true)
+        }
+        collectAttemptLog(from)
+    }
+
+    /**
+     * Wait for the app to actually be gone before starting it again.
+     *
+     * Stopping does not wait: the visor pops the process and signals it
+     * (procManager.Stop), so the RPC returns while the old vpn-client is still
+     * winding down and still holding what it holds. Starting into that window
+     * failed with an address already in use, and the user's own fix was to
+     * wait about ten seconds and press it again — which is precisely this,
+     * minus having to know it.
+     *
+     * Bounded and best-effort: after [STOP_WAIT_MS] it starts anyway rather
+     * than refusing to connect, so the worst case is the behaviour we already
+     * had. A failing status read also proceeds — an unreachable visor is not
+     * evidence that the old app is still up.
+     */
+    private suspend fun awaitStopped() {
+        val deadline = System.currentTimeMillis() + STOP_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val state = runCatching { api.app(VpnArgs.APP) }.getOrNull() ?: return
+            if (!state.running && state.status != AppState.STATUS_STARTING) return
+            delay(STOP_POLL_MS)
+        }
+    }
+
+    /**
+     * The visor's runtime-log position right now, so the collector can ask for
+     * everything after it. Costs one pass of the ring buffer, which is why it
+     * is taken once per attempt and not per poll.
+     *
+     * Failure is not fatal: a missing transcript must never stop a connection
+     * from being attempted, so this returns null and the collector stands down.
+     */
+    private suspend fun logCursor(): Long? =
+        runCatching { api.runtimeLogs(since = 0).latest }.getOrNull()
+
+    /**
+     * Follow the visor's log from [from] until the attempt settles, and keep
+     * what it said.
+     *
+     * Bounded three ways — the app reaching running or errored, [ATTEMPT_LOG_
+     * WINDOW_MS], and [ATTEMPT_LOG_MAX_LINES] — because this runs on a phone
+     * and a connection that neither succeeds nor fails is exactly the case
+     * worth having a transcript for.
+     */
+    private fun collectAttemptLog(from: Long?) {
+        attemptLogJob?.cancel()
+        // Typed non-null, because a smart cast does not reach inside the
+        // coroutine below: no cursor means no transcript, and the connection
+        // attempt itself carries on regardless.
+        val start: Long = from ?: run {
+            mutable.update { it.copy(attemptLive = false) }
+            return
+        }
+        attemptLogJob = viewModelScope.launch {
+            var since = start
+            val deadline = System.currentTimeMillis() + ATTEMPT_LOG_WINDOW_MS
+            try {
+                while (System.currentTimeMillis() < deadline) {
+                    delay(ATTEMPT_LOG_POLL_MS)
+                    val delta = runCatching { api.runtimeLogs(since = since) }.getOrNull()
+                    if (delta != null) {
+                        since = delta.latest
+                        val lines = delta.entries.orEmpty()
+                        if (lines.isNotEmpty()) {
+                            mutable.update {
+                                it.copy(attemptLog = (it.attemptLog + lines).takeLast(ATTEMPT_LOG_MAX_LINES))
+                            }
+                        }
+                    }
+                    // Settled: running is the happy end, errored is the one
+                    // the transcript exists for. Both stop the collection.
+                    val app = mutable.value.app
+                    if (app?.running == true || app?.status == AppState.STATUS_ERRORED) break
+                }
+            } finally {
+                mutable.update { it.copy(attemptLive = false) }
+            }
+        }
     }
 
     /**
@@ -392,8 +512,20 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
                     it.copy(
                         app = state,
                         connection = connection,
-                        killswitch = VpnArgs.killswitch(state.args),
-                        error = null,
+                        // The killswitch is deliberately NOT read back from
+                        // the visor's args. The phone owns that preference and
+                        // pushes it down (applyStoredKillswitch); reading it
+                        // back made this poll overwrite the user's choice with
+                        // the visor's not-yet-updated copy, so a freshly
+                        // flipped switch flipped itself back within two
+                        // seconds and then flipped again once the write
+                        // landed. Truth flows one way.
+                        //
+                        // The error is not cleared here either: a failure
+                        // raised by a user's action would be wiped by the very
+                        // next poll, which is a two-second window to read why
+                        // a connection did not happen. action() clears it when
+                        // the next action starts, which is the right moment.
                     )
                 }
                 accrue(connection)
@@ -459,5 +591,25 @@ class VpnViewModel(app: Application) : AndroidViewModel(app) {
         const val INITIAL_LOAD_ATTEMPTS = 3
         const val RETRY_DELAY_MS = 5_000L
         const val PERSIST_EVERY_BYTES = 8L * 1024 * 1024
+
+        /**
+         * How long to keep following the log after a connect. Route setup is
+         * seconds; this covers a retry or two and then gives up, so a dial
+         * that hangs still leaves a transcript instead of an endless poll.
+         */
+        const val ATTEMPT_LOG_WINDOW_MS = 45_000L
+        const val ATTEMPT_LOG_POLL_MS = 700L
+
+        /** Enough for a full setup sequence with retries, bounded for a phone. */
+        const val ATTEMPT_LOG_MAX_LINES = 400
+
+        /**
+         * How long to let the previous vpn-client finish stopping. Ten
+         * seconds because that is what the workaround needed; teardown is
+         * normally well under one, and the poll below leaves as soon as the
+         * app reports stopped.
+         */
+        const val STOP_WAIT_MS = 10_000L
+        const val STOP_POLL_MS = 250L
     }
 }

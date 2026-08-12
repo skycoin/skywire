@@ -33,7 +33,7 @@ export class SnackbarService {
     body: string | OperationError,
     textTranslationParams: any = null,
     isTemporalError = false,
-    smallBody: string | OperationError = null,
+    smallBody: string | OperationError | null = null,
     smallTextTranslationParams: any = null,
   ) {
     body = processServiceError(body);

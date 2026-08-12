@@ -18,17 +18,28 @@ import (
 type RoutingSessionOpts struct {
 	ExistingTP *bool   // SetExistingTPOnly
 	LocalRoute *bool   // SetForceLocalRoutes
-	MuxRoutes  *int    // SetMuxRoutes — raw flag value; 0=unlimited, 1=disabled (skipped), 2+=N
+	MuxRoutes  *int    // SetMuxRoutes — raw flag value; 0=unlimited, 1=disabled, 2+=N
 	MuxMode    *string // SetMuxMode — "" / "auto" skipped (router default)
 	MinHops    *uint16 // SetMinHops — 0 is rejected (disables routing)
 }
 
 // ApplyRoutingSession applies the non-nil options in canonical order via the
-// visor RPC. It preserves the exact semantics the proxy-start path established:
+// visor RPC:
 //   - mux 0 → MaxInt32 ("unlimited", establishMuxRoutes stops at the discoverable
-//     path count); mux 1 → skipped (single-route default); 2+ → N parallel routes.
+//     path count); 1 → disabled (single route); 2+ → N parallel routes.
 //   - mux-mode "" / "auto" → skipped (router's own default weighting).
 //   - min-hops 0 → error (0 disables routing).
+//
+// mux is applied at exactly the value passed, including 1. It used to skip the
+// call for 1 on the reading that 1 is "the default, so nothing to do" — but
+// SetMuxRoutes is persistent visor state in three ways at once (router runtime,
+// the live networker's dial default, and a config flush), so "nothing to do"
+// actually meant "inherit whatever the last caller set". A `proxy start --mux 2`
+// therefore left every later plain `proxy start` on that visor silently
+// multiplexed, across restarts, with no way to turn it back off from the CLI:
+// --mux 1 was precisely the request the code dropped. This is the same rule
+// --existing-tp and --local-route already follow below — apply what the operator
+// typed, so a later invocation with no flags means what it says.
 func ApplyRoutingSession(rc visor.API, o RoutingSessionOpts) error {
 	if o.ExistingTP != nil {
 		if err := rc.SetExistingTPOnly(*o.ExistingTP); err != nil {
@@ -45,10 +56,8 @@ func ApplyRoutingSession(rc visor.API, o RoutingSessionOpts) error {
 		if n == 0 {
 			n = math.MaxInt32
 		}
-		if n > 1 {
-			if err := rc.SetMuxRoutes(n); err != nil {
-				return fmt.Errorf("failed to set mux routes: %w", err)
-			}
+		if err := rc.SetMuxRoutes(n); err != nil {
+			return fmt.Errorf("failed to set mux routes: %w", err)
 		}
 	}
 	if o.MuxMode != nil && *o.MuxMode != "" && *o.MuxMode != "auto" {

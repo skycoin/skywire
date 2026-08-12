@@ -806,6 +806,11 @@ func (mc *mockRPCClient) RemoveRoutingRule(key routing.RouteID) error {
 	return nil
 }
 
+// RoutingStats implements API.
+func (mc *mockRPCClient) RoutingStats() (routing.RoutingTableStats, error) {
+	return mc.rt.Stats(), nil
+}
+
 // RouteGroups implements API.
 func (mc *mockRPCClient) RouteGroups() ([]RouteGroupInfo, error) {
 	var routeGroups []RouteGroupInfo
@@ -1261,6 +1266,10 @@ func (mc *mockRPCClient) DmsgSessions() (*DmsgClientSessions, error) {
 	return &DmsgClientSessions{}, nil
 }
 
+func (mc *mockRPCClient) DmsgConverge(_ []string) (*DmsgConvergeResult, error) {
+	return &DmsgConvergeResult{}, nil
+}
+
 // RegisterCXOFeed implements API.
 func (mc *mockRPCClient) RegisterCXOFeed(_ string, _ uint16, _ string) error { return nil }
 
@@ -1315,6 +1324,14 @@ func (mc *mockRPCClient) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, e
 
 // GroupSetListed implements API.
 func (mc *mockRPCClient) GroupSetListed(_ string, _ bool) (GroupInfo, error) { return GroupInfo{}, nil }
+
+// GroupSetMeta implements API.
+func (mc *mockRPCClient) GroupSetMeta(_ GroupSetMetaArgs) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupRefreshMeta implements API.
+func (mc *mockRPCClient) GroupRefreshMeta(_ string) (GroupInfo, error) { return GroupInfo{}, nil }
 
 // GroupCatalog implements API.
 func (mc *mockRPCClient) GroupCatalog(_ cipher.PubKey) ([]GroupCatalogEntry, bool, error) {

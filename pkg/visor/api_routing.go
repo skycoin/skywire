@@ -46,6 +46,16 @@ func (v *Visor) RemoveRoutingRule(key routing.RouteID) error {
 // failed and this function returned an empty list. We now drive directly
 // off the router's active route-group set (rgsNs) via ActiveRouteStatuses,
 // which already holds the descriptor, hops, and initiator flag.
+// RoutingStats implements API. Returns this visor's routing-table observability
+// counters (live rule count, route-ID high-water, per-type breakdown). On a
+// relay these are how the soak harness detects rule/reserved-ID leaks.
+func (v *Visor) RoutingStats() (routing.RoutingTableStats, error) {
+	if v.router == nil {
+		return routing.RoutingTableStats{}, nil
+	}
+	return v.router.RoutingTableStats(), nil
+}
+
 func (v *Visor) RouteGroups() (rgs []RouteGroupInfo, err error) {
 	if v.router == nil {
 		return nil, nil

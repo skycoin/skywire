@@ -14,7 +14,7 @@ skywire cli pty url
 
 ```
   -i, --input string   read from specified config file
-  -p, --pkg            read from /opt/skywire/skywire.json
+  -p, --pkg            read from /Library/Application Support/Skywire/skywire-config.json
   -v, --visor string   public key of visor to connect to
 ```
 

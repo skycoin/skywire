@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 
 import { SnackbarService } from '../../../services/snackbar.service';
 
@@ -11,10 +11,11 @@ import { SnackbarService } from '../../../services/snackbar.service';
     selector: 'app-copy-to-clipboard-text',
     templateUrl: './copy-to-clipboard-text.component.html',
     styleUrls: ['./copy-to-clipboard-text.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CopyToClipboardTextComponent {
-  @Input() text: string;
+  @Input() text!: string;
   /**
    * Indicates if the text must be truncated to show an specific amount of characters only,
    * if it is too long.

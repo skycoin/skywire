@@ -27,7 +27,7 @@ export class TransportService {
     };
 
     if (type) {
-      data['transport_type'] = type;
+      (data as any)['transport_type'] = type;
     }
 
     return this.apiService.post(`visors/${nodeKey}/transports`, data);
@@ -63,7 +63,7 @@ export class TransportService {
    */
   changeAutoconnectSetting(nodeKey: string, enable: boolean): Observable<any> {
     const data = {};
-    data['public_autoconnect'] = enable;
+    (data as any)['public_autoconnect'] = enable;
 
     return this.apiService.put(`visors/${nodeKey}/public-autoconnect`, data);
   }

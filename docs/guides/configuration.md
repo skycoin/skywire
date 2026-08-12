@@ -73,6 +73,17 @@ OR:
 ```
 skywire cli config gen --hvpks <public-key>
 ```
+OR, on a running visor (connects out immediately and persists the PK —
+but the *inbound* CLI-bridge access the PK grants starts on the visor's
+next restart, when the RPC listeners and whitelist are rebuilt):
+```
+skywire cli visor hv add <public-key>
+```
+
+A listed hypervisor PK is also what authorizes full remote CLI control
+of the visor (`skywire cli --via dmsg://<pk> …`) — the trust model,
+the remote-diagnosis workflow, and the mobile-visor specifics are in
+[remote-visor-cli.md](remote-visor-cli.md).
 
 ## Network Visualization UI
 

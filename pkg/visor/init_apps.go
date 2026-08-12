@@ -517,9 +517,18 @@ func (a *visorPingAdapter) DialDmsgRPC(pk cipher.PubKey) (net.Conn, error) {
 }
 
 func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
-	if v.conf.CLIAddr == "" {
-		v.log.Debug("'cli_addr' is not configured, skipping.")
-		return nil
+	// An empty cli_addr disables ONLY the local TCP surface (a listener
+	// any process on the host could reach). The dmsg / transport RPC
+	// surfaces further down are independent of it: they are gated on the
+	// config trusting a peer (hypervisor PKs + dmsgpty whitelist) and
+	// stay off otherwise — so an API-only build that blanks cli_addr
+	// (the Android app does) still becomes remotely diagnosable the
+	// moment its owner grants a management PK. This used to be an early
+	// return that silently took every remote surface down with the
+	// local one.
+	cliLocal := v.conf.CLIAddr != ""
+	if !cliLocal {
+		v.log.Debug("'cli_addr' is not configured; local RPC disabled (dmsg/transport RPC surfaces unaffected)")
 	}
 
 	// pingAdapter and grpcLog feed BOTH the local gRPC server (set up
@@ -539,7 +548,7 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 	var cliL net.Listener
 	var rpcS *nrpc.Server
 	var grpcServer *grpc.Server
-	if !v.cliLocalUp {
+	if cliLocal && !v.cliLocalUp {
 		var err error
 		cliL, err = net.Listen("tcp", v.conf.CLIAddr)
 		if err != nil {
@@ -759,8 +768,9 @@ func initCLI(ctx context.Context, v *Visor, log *logging.Logger) error {
 
 	// The cmux + accept goroutines below drive the LOCAL cliL listener,
 	// so they belong to the once-only local surface and are skipped on
-	// Resume (cliL/rpcS/grpcServer are nil then and must not be touched).
-	if !v.cliLocalUp {
+	// Resume and on cli_addr-less builds (cliL/rpcS/grpcServer are nil
+	// then and must not be touched).
+	if cliLocal && !v.cliLocalUp {
 		// Use cmux to multiplex gRPC, the dmsg-bridge protocol, and
 		// standard RPC on the same port. The bridge matcher peeks for
 		// a fixed magic prefix; conns starting with it are dmsg-bridge

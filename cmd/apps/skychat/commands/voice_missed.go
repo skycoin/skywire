@@ -267,9 +267,10 @@ func recordCall(peer, outcome string, duration time.Duration) {
 		})
 	}
 	// Only a missed call is worth interrupting for. The other two are records
-	// of something the user was already part of.
+	// of something the user was already part of — and a miss the user watched
+	// ring out in the open chat is no interruption either.
 	if outcome == callMissed {
-		notifyOSInbound(displayName(peer), text)
+		notifyOSInboundThread(peer, peer, displayName(peer), text)
 	}
 	appLog("Voice: %s with %s logged", strings.ToLower(outcome), shortHexPK(peer))
 }

@@ -9,19 +9,19 @@ export class ElapsedTime {
   /**
    * Explanation of the value in elapsedTime.
    */
-  timeRepresentation: TimeRepresentations;
+  timeRepresentation!: TimeRepresentations;
   /**
    * Amount of time to show in the UI.
    */
-  elapsedTime: string;
+  elapsedTime!: string;
   /**
    * Total time in minutes.
    */
-  totalMinutes: string;
+  totalMinutes!: string;
   /**
    * Var from the translation file to be use to show the elapsed time in the UI.
    */
-  translationVarName: string;
+  translationVarName!: string;
 }
 
 /**

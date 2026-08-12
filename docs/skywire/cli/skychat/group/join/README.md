@@ -2,12 +2,20 @@
 
 [← skywire cli skychat group](../README.md)
 
-Join a group by invite link
+Join a group or channel.
+
+Takes either form:
+
+	skychat:invite:<base64url>      self-contained; works while the host is offline
+	skychat://<host-pk>/<group-id>  short; asks the host what the group is first
+
+Both go through the same admission gate — an address is a shorter way to
+name the group, not a way around its door.
 
 ## Usage
 
 ```
-skywire cli skychat group join <invite-link>
+skywire cli skychat group join <invite-link|address>
 ```
 
 ## Global Flags

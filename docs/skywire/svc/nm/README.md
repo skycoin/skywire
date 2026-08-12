@@ -63,24 +63,24 @@ skywire svc nm
   -a, --addr string          address to bind to
                               (default ":9080")
       --ar-url string        url to address resolver
-                              (default "http://ar.skywire.skycoin.com")
+                              (default "dmsg://03234b2ee4128d1f78c180d06911102906c80795dfe41bd6253f2619c8b6252a02:80")
   -d, --cleaning-delay int   time for delay between each service cleaning routine
                               (default 75)
       --dmsgd-url string     url to dmsg discovery
-                              (default "http://dmsgd.skywire.skycoin.com")
+                              (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
   -l, --loglvl string        [info|error|warn|debug|trace|panic]
                               (default "info")
       --pk string            pk of network monitor
       --pprof string         address to bind pprof debug server (e.g. localhost:6060)
       --sd-url string        url to service discovery
-                              (default "http://sd.skycoin.com")
+                              (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
       --sk string            sk of network monitor
       --tag string           logging tag
                               (default "network_monitor")
       --tpd-url string       url to transport discovery
-                              (default "http://tpd.skywire.skycoin.com")
+                              (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
       --ut-url string        url to uptime tracker visor data
-                              (default "http://ut.skywire.skycoin.com")
+                              (default "dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80")
 ```
 
 ## Global Flags

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
@@ -53,6 +53,7 @@ interface RSNSnapshot {
   templateUrl: './services-health.component.html',
   styleUrls: ['./services-health.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ServicesHealthComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
@@ -72,8 +73,8 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
   rsnStats: RSNRemoteStat[] = [];
   rsnLoading = true;
 
-  private sub: Subscription;
-  private rsnSub: Subscription;
+  private sub!: Subscription;
+  private rsnSub!: Subscription;
 
   // Drill-down state: per-service-name expanded body + the loaded
   // raw JSON. Keyed by service name so clicking "Drill" twice on
@@ -88,7 +89,7 @@ export class ServicesHealthComponent extends PageBaseComponent implements OnInit
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // The deployment-service health table works on every core (a browser wasm
     // core probes each service's /health over dmsg — SelfServiceHealth). Poll
     // every 15s, starting immediately.

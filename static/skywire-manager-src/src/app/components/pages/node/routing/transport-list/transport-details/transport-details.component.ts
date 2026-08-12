@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, ChangeDetectionStrategy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef, MatDialogConfig } from '@angular/material/dialog';
 
 import { Transport } from '../../../../../../app.datatypes';
@@ -11,7 +11,8 @@ import { AppConfig } from 'src/app/app.config';
     selector: 'app-transport-details',
     templateUrl: './transport-details.component.html',
     styleUrls: ['./transport-details.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TransportDetailsComponent {
 

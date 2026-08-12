@@ -1,4 +1,4 @@
-import { Component, Inject } from '@angular/core';
+import { Component, Inject, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 
 import { AppConfig } from 'src/app/app.config';
@@ -20,7 +20,8 @@ export interface NodeData {
     selector: 'app-update-all',
     templateUrl: './update-all.component.html',
     styleUrls: ['./update-all.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UpdateAllComponent {
   updatableNodes: NodeData[];

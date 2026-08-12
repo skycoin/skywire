@@ -19,10 +19,10 @@ Example Config:
       "public_key": "000000000000000000000000000000000000000000000000000000000000000000",
       "secret_key": "0000000000000000000000000000000000000000000000000000000000000000",
       "dmsg": {
-        "discovery": "http://dmsgd.skywire.skycoin.com",
+        "discovery": "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80",
         "sessions_count": 1
       },
-      "transport_discovery": "http://tpd.skywire.skycoin.com",
+      "transport_discovery": "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80",
       "log_level": ""
     }
 

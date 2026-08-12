@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -484,6 +485,38 @@ func Run(parentCtx context.Context, conf *visorconfig.V1) error {
 	return run(parentCtx, conf)
 }
 
+// preflightSingleInstance refuses to start when another visor is already
+// serving on this visor's configured local RPC address (cli_addr). Without it,
+// a second visor races the first for the transport UDP socket and the
+// hypervisor HTTP port and dies deep in init with an opaque bind error; here we
+// detect it up front and say exactly what is already running. Set
+// SKYWIRE_ALLOW_DUPLICATE=1 to bypass (rare — distinct cli_addr per instance is
+// the supported way to run more than one visor on a host).
+func preflightSingleInstance(conf *visorconfig.V1, log logrus.FieldLogger) error {
+	if os.Getenv("SKYWIRE_ALLOW_DUPLICATE") == "1" {
+		return nil
+	}
+	addr := conf.CLIAddr
+	if addr == "" {
+		return nil // no local RPC configured — nothing to probe
+	}
+	// The visor serves its local RPC over TCP on cli_addr (init_apps.go).
+	conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+	if err != nil {
+		return nil // nothing listening → free to start
+	}
+	// Something answered. Identify it over the visor RPC before deciding.
+	rc := NewRPCClient(log, conn, RPCPrefix, 5*time.Second)
+	defer rc.Close() //nolint:errcheck
+	ov, oerr := rc.Overview()
+	if oerr != nil {
+		return fmt.Errorf("visor RPC address %s is already in use by a non-visor process (%v); "+
+			"free it or set a different cli_addr before starting", addr, oerr)
+	}
+	return fmt.Errorf("a visor is already running on %s (pk %s); refusing to start a second instance — "+
+		"run `skywire cli visor halt` first (or set SKYWIRE_ALLOW_DUPLICATE=1 with a distinct cli_addr)", addr, ov.PubKey)
+}
+
 // run is the implementation for both the standalone cobra entry point
 // and the multi-service supervisor. parentCtx is the parent of the
 // SignalContext built around it.
@@ -534,6 +567,13 @@ func run(parentCtx context.Context, conf *visorconfig.V1) error {
 			conf.LogLevel = logLvl
 			mLog.Info("setting log level to: ", logLvl)
 		}
+	}
+
+	// Fail fast if another visor is already up on our cli_addr, before we race
+	// it for the transport UDP socket and hypervisor HTTP port.
+	if err := preflightSingleInstance(conf, mLog); err != nil {
+		mLog.Error(err)
+		return err
 	}
 
 	if conf.Hypervisor != nil {

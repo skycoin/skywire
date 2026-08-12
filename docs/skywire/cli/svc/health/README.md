@@ -2,10 +2,19 @@
 
 [← skywire cli svc](../README.md)
 
-Check the /health endpoint of all skywire deployment services.
+Check the /health endpoint of the skywire DEPLOYMENT services
+    (dmsg-discovery, transport-discovery, address-resolver, route-finder,
+    service-discovery, config-bootstrap, and the dmsg servers).
 
-    By default queries via the local visor RPC (uses visor's configured URLs).
-    Use --direct to query services directly from the CLI.
+    By default queries via the local visor RPC (uses the visor's configured
+    URLs). Use --direct to query the services directly from the CLI.
+
+    This is for the deployment's own services — NOT arbitrary visors. To check
+    one specific visor's /health over dmsg, use:
+        skywire cli dmsg curl dmsg://<visor-pk>:80/health
+
+    --service / --dmsg-server narrow the check to ONE deployment service,
+    optionally pinned through ONE dmsg server (per-server reachability).
 
 ## Usage
 
@@ -21,7 +30,7 @@ skywire cli svc health
       --json                 print output as JSON
       --port uint16          service dmsg port for the /health endpoint (default: 80, the dmsghttp log-server port) (default 80)
       --rpc string           RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --service string       check ONE service by its dmsg PK (e.g. the dmsg-discovery), routed over dmsg; required with --dmsg-server
+      --service string       narrow to ONE deployment service by its dmsg PK; only effective with --dmsg-server or --direct (ignored by the default all-services RPC query). For an arbitrary visor use: dmsg curl dmsg://<pk>:80/health
 ```
 
 ## Global Flags
