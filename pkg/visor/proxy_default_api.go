@@ -750,6 +750,10 @@ func (proxyDefaultAPI) DmsgSessions() (*DmsgClientSessions, error) {
 	return nil, ErrProxyNotSupported
 }
 
+func (proxyDefaultAPI) DmsgConverge(_ []string) (*DmsgConvergeResult, error) {
+	return nil, ErrProxyNotSupported
+}
+
 func (proxyDefaultAPI) RegisterCXOFeed(_ string, _ uint16, _ string) error {
 	return ErrProxyNotSupported
 }
