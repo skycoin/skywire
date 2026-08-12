@@ -99,15 +99,24 @@ INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 # The wasm-visor imports skywire's OWN pkg/buildinfo (not skywire-utilities), so
 # it needs its own -X targets, stamped explicitly below.
 #
-# Go's VCS stamp is deliberately LEFT ON (no -buildvcs=false). It used to be
-# suppressed so the embedded blob carried a clean-looking version even when
-# built from an uncommitted tree, which removed the evidence rather than the
-# problem. The blob is a build artifact carried in the repository, so it can
+# The embedded blob is a build artifact carried in the repository, so it can
 # never be verified by rebuilding: the commit that compiles it always precedes
 # the commit that carries it, and the date stamped below makes two builds of
-# identical source differ anyway. vcs.revision/vcs.modified is therefore the
-# only account of what it was built from. TestCommittedWasmBuiltFromCommit
-# rejects a blob built from a dirty tree, or one carrying no stamp at all.
+# identical source differ anyway. The stamp is the only account of what it was
+# built from, so WASM_VERSION uses --dirty: a blob built from an uncommitted
+# tree says so, in a string TestCommittedWasmBuiltFromCommit can find.
+#
+# It has to come from here rather than from Go. Go's own vcs.revision/
+# vcs.modified — which the equivalent skycoin check reads — is not available:
+# GOOS=js does not emit a readable buildinfo blob at all (no "Go buildinf"
+# magic, and `go version -m` cannot parse wasm). The 0magnet/tinygo build DOES
+# record it, so the test reads both signals and requires Go's stamp only of the
+# TinyGo artifact, which is the only one that has it.
+#
+# -buildvcs=false was previously passed on the std-Go build to keep a "+dirty"
+# suffix out of the version of a blob built from an uncommitted tree. It is gone
+# — suppressing the marker removed the evidence rather than the problem — though
+# on js/wasm it never had an observable effect either way.
 # The repo's OWN pkg/buildinfo (vs skywire-utilities' above). Despite the
 # historical WASM_ prefix there is nothing wasm about the path — the wasm-visor
 # was simply the first target that needed to stamp it. The skywire-mobile
@@ -115,7 +124,10 @@ INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 # read this package.
 SKYWIRE_BUILDINFO_PATH := $(PROJECT_BASE)/pkg/buildinfo
 WASM_BUILDINFO_PATH := $(SKYWIRE_BUILDINFO_PATH)
-WASM_BUILDINFO := -X $(WASM_BUILDINFO_PATH).version=$(VERSION) -X $(WASM_BUILDINFO_PATH).commit=$(COMMIT) -X $(WASM_BUILDINFO_PATH).date=$(DATE)
+# Unlike VERSION, this carries --dirty, so a committed artifact built from an
+# uncommitted tree is detectable afterwards. See the note above.
+WASM_VERSION := $(shell git describe --always --dirty)
+WASM_BUILDINFO := -X $(WASM_BUILDINFO_PATH).version=$(WASM_VERSION) -X $(WASM_BUILDINFO_PATH).commit=$(COMMIT) -X $(WASM_BUILDINFO_PATH).date=$(DATE)
 
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
