@@ -151,3 +151,6 @@ android/app/src/main/jniLibs/
 *.jks
 /wasm-visor
 
+# `make install-shellcheck` drops the binary here for `make lint-shell` to find.
+/shellcheck
+
