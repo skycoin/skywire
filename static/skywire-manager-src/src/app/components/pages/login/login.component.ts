@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormControl, UntypedFormGroup, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -21,7 +21,8 @@ import { PageBaseComponent } from 'src/app/utils/page-base';
     selector: 'app-login',
     templateUrl: './login.component.html',
     styleUrls: ['./login.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LoginComponent extends PageBaseComponent implements OnInit, OnDestroy {
   form: UntypedFormGroup;
@@ -41,6 +42,7 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
     private dialog: MatDialog,
     private route: ActivatedRoute,
     private multipleNodeDataService: MultipleNodeDataService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
   }
@@ -62,9 +64,12 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
           setTimeout(() => {
             const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
             this.router.navigate(destination, { replaceUrl: true });
+            this.changeDetectorRef.markForCheck();
           }, 5);
         }
+        this.changeDetectorRef.markForCheck();
       });
+      this.changeDetectorRef.markForCheck();
     });
 
     this.form = new UntypedFormGroup({
@@ -74,8 +79,12 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
     // Check if a user account has been created to show/hide the
     // "Configure initial launch" button.
     this.authService.userExists().subscribe(
-      exists => this.userExists = exists,
-      () => this.userExists = true // on error, hide the button (safe default)
+      exists => {
+ this.userExists = exists; this.changeDetectorRef.markForCheck(); 
+},
+      () => {
+ this.userExists = true; this.changeDetectorRef.markForCheck(); 
+} // on error, hide the button (safe default)
     );
 
     return super.ngOnInit();
@@ -97,8 +106,12 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
 
     this.loading = true;
     this.loginSubscription = this.authService.login(this.form.get('password').value).subscribe(
-      () => this.onLoginSuccess(),
-      err => this.onLoginError(err)
+      () => {
+ this.onLoginSuccess(); this.changeDetectorRef.markForCheck(); 
+},
+      err => {
+ this.onLoginError(err); this.changeDetectorRef.markForCheck(); 
+}
     );
   }
 
@@ -112,6 +125,7 @@ export class LoginComponent extends PageBaseComponent implements OnInit, OnDestr
     setTimeout(() => {
       const destination = !this.isForVpn ? ['nodes'] : ['vpn', this.vpnKey, 'status'];
       this.router.navigate(destination, { replaceUrl: true });
+      this.changeDetectorRef.markForCheck();
     });
   }
 

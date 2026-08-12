@@ -1,4 +1,4 @@
-import { Component, ViewChild, ElementRef, Inject, OnInit } from '@angular/core';
+import { Component, ViewChild, ElementRef, Inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 
@@ -27,7 +27,8 @@ export interface EditVpnServerParams {
     selector: 'app-edit-vpn-server-value',
     templateUrl: './edit-vpn-server-value.component.html',
     styleUrls: ['./edit-vpn-server-value.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class EditVpnServerValueComponent implements OnInit {
   @ViewChild('firstInput') firstInput: ElementRef;
@@ -62,6 +63,7 @@ export class EditVpnServerValueComponent implements OnInit {
       value: [savedValue ? savedValue : '']
     });
 
+    // change-detection: no view state — focuses an input
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 

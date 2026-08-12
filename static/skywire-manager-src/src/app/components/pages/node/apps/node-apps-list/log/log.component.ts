@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, Inject, OnInit, OnDestroy, ViewChild, ElementRef, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Subscription, delay, mergeMap, of } from 'rxjs';
 
@@ -34,7 +34,8 @@ interface LogMessage {
     selector: 'app-log',
     templateUrl: './log.component.html',
     styleUrls: ['./log.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LogComponent implements OnInit, OnDestroy {
   @ViewChild('content') content: ElementRef;
@@ -78,6 +79,7 @@ export class LogComponent implements OnInit, OnDestroy {
     private dialog: MatDialog,
     private snackbarService: SnackbarService,
     private apiService: ApiService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
@@ -97,6 +99,7 @@ export class LogComponent implements OnInit, OnDestroy {
 
         this.loadData(0);
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -115,8 +118,12 @@ export class LogComponent implements OnInit, OnDestroy {
       // Load the data. The node pk is obtained from the currently openned node page.
       mergeMap(() => this.appsService.getLogMessages(NodeComponent.getCurrentNodeKey(), this.data.name, this.currentFilter.days))
     ).subscribe(
-      (log) => this.onLogsReceived(log),
-      (err: OperationError) => this.onLogsError(err)
+      (log) => {
+ this.onLogsReceived(log); this.changeDetectorRef.markForCheck(); 
+},
+      (err: OperationError) => {
+ this.onLogsError(err); this.changeDetectorRef.markForCheck(); 
+}
     );
   }
 
@@ -162,6 +169,7 @@ export class LogComponent implements OnInit, OnDestroy {
     });
 
     // Scroll to the bottom. Use a timer to wait for the UI to be updated.
+    // change-detection: no view state — scrolls a container
     setTimeout(() => {
       (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
     });

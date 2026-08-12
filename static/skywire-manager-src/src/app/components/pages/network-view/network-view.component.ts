@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
@@ -45,6 +45,7 @@ interface NetworkResponse {
   templateUrl: './network-view.component.html',
   styleUrls: ['./network-view.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NetworkViewComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];

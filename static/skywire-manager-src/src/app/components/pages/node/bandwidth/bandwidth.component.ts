@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { of } from 'rxjs';
@@ -65,6 +65,7 @@ type WindowDays = 1 | 7 | 30;
   templateUrl: './bandwidth.component.html',
   styleUrls: ['./bandwidth.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BandwidthComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
@@ -88,6 +89,7 @@ export class BandwidthComponent extends PageBaseComponent implements OnInit, OnD
       if (wasUnset && node) {
  this.startPolling(); 
 }
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();

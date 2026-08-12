@@ -1,4 +1,4 @@
-import { Component, ViewChild, ElementRef, Inject, OnInit } from '@angular/core';
+import { Component, ViewChild, ElementRef, Inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig, MAT_DIALOG_DATA } from '@angular/material/dialog';
 import { Router } from '@angular/router';
@@ -26,7 +26,8 @@ export interface ManualVpnServerData {
     selector: 'app-add-vpn-server',
     templateUrl: './add-vpn-server.component.html',
     styleUrls: ['./add-vpn-server.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AddVpnServerComponent implements OnInit {
   @ViewChild('firstInput') firstInput: ElementRef;
@@ -68,6 +69,7 @@ export class AddVpnServerComponent implements OnInit {
       note: [''],
     });
 
+    // change-detection: no view state — focuses an input
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 

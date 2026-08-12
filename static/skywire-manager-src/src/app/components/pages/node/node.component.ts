@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, NgZone, Injector, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, NgZone, Injector, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { Subscription } from 'rxjs/internal/Subscription';
@@ -26,7 +26,8 @@ import { AppComponent } from 'src/app/app.component';
     selector: 'app-node',
     templateUrl: './node.component.html',
     styleUrls: ['./node.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeComponent extends PageBaseComponent implements OnInit, OnDestroy {
   /**
@@ -184,6 +185,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
         this.processRouteUpdate();
         this.initialRouteEventFired = true;
       }
+      this.cdr.markForCheck();
     });
   }
 
@@ -191,9 +193,11 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     // Procedure to keep updated the variable that indicates how long ago the data was updated.
     this.ngZone.runOutsideAngular(() => {
       this.updateTimeSubscription =
-        timer(5000, 5000).subscribe(() => this.ngZone.run(() => {
+        timer(5000, 5000).subscribe(() => {
+ this.ngZone.run(() => {
           this.secondsSinceLastUpdate = Math.floor((Date.now() - this.lastUpdate) / 1000);
-        }));
+        }); this.cdr.markForCheck(); 
+});
     });
 
     this.initSubscription = of(0).pipe(delay(500)).subscribe(() => {
@@ -201,6 +205,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
         this.lastUrl = window.location.href;
         this.processRouteUpdate();
       }
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();
@@ -497,7 +502,9 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           this.cdr.markForCheck();
         });
       },
-      () => { /* best-effort — leave the switcher as-is on error */ },
+      () => {
+ /* best-effort — leave the switcher as-is on error */   this.cdr.markForCheck();
+      },
     );
   }
 

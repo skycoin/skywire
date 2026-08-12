@@ -1,6 +1,5 @@
 import {
-  Component, OnInit, OnDestroy, OnChanges, SimpleChanges, Input, Output, EventEmitter,
-} from '@angular/core';
+  Component, OnInit, OnDestroy, OnChanges, SimpleChanges, Input, Output, EventEmitter, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, UntypedFormArray, UntypedFormControl } from '@angular/forms';
 import { Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
@@ -33,6 +32,7 @@ import { Application, Node } from 'src/app/app.datatypes';
   templateUrl: './app-settings.component.html',
   styleUrls: ['./app-settings.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
   // Apps whose binary or name is registered via launcher.RegisterApp
@@ -75,6 +75,7 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     private appsService: AppsService,
     private formBuilder: UntypedFormBuilder,
     private snackbarService: SnackbarService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {}
 
   /** True iff the launcher's "internal" mode is meaningful for this
@@ -197,6 +198,7 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
         },
       });
       this.subs.push(sub);
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -212,6 +214,7 @@ export class AppSettingsComponent implements OnInit, OnChanges, OnDestroy {
     this.saveError = '';
     NodeComponent.currentNode.pipe(take(1)).subscribe((node: Node) => {
       this.doSave(node);
+      this.changeDetectorRef.markForCheck();
     });
   }
 
