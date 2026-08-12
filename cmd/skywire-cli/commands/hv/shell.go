@@ -44,6 +44,7 @@ var (
 	shellBoot      int
 	shellSettle    int
 	shellNoConsole bool
+	shellLogAll    bool
 )
 
 func init() {
@@ -54,6 +55,7 @@ func init() {
 	shellCmd.Flags().IntVar(&shellBoot, "boot", 20, "seconds to wait for the shell wasm after opening the console")
 	shellCmd.Flags().IntVar(&shellSettle, "settle", 8, "seconds to wait after each command")
 	shellCmd.Flags().BoolVar(&shellNoConsole, "no-console", false, "skip opening the visor console window")
+	shellCmd.Flags().BoolVar(&shellLogAll, "log-all", false, "record every console level, not just errors and warnings — a wasm module's fatal error is written at log level")
 	RootCmd.AddCommand(shellCmd)
 }
 
@@ -138,7 +140,10 @@ func (d *cdp) note(m cdpMsg) {
 				Description string      `json:"description"`
 			} `json:"args"`
 		}
-		if json.Unmarshal(m.Params, &p) != nil || (p.Type != "error" && p.Type != "warning") {
+		if json.Unmarshal(m.Params, &p) != nil {
+			return
+		}
+		if !shellLogAll && p.Type != "error" && p.Type != "warning" {
 			return
 		}
 		parts := make([]string, 0, len(p.Args))
