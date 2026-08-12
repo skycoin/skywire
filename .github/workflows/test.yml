@@ -345,6 +345,12 @@ jobs:
         env:
           CHROME_BIN: ${{ steps.setup-chrome.outputs.chrome-path }}
 
+      # pkg/visor/static is a build artifact committed to the repository and
+      # embedded in the visor. Building the UI proves the source compiles; this
+      # proves the copy users actually get was built from that source.
+      - name: Verify the committed UI bundle is current
+        run: make check-ui
+
   # Redis-backed store tests. redis_store_test.go / redis_test.go live behind
   # //go:build !no_ci because they need a real Redis (redis://localhost:6379),
   # so the tag-free unit lanes (which run with -tags no_ci) skip them — leaving
