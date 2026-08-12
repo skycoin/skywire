@@ -53,7 +53,7 @@
     <string name="hops_title">Route length</string>
     <string name="hops_label_fastest">Fastest</string>
     <string name="hops_label_balanced">Balanced</string>
-    <string name="hops_label_private">Most private</string>
+    <string name="hops_label_private">Private</string>
     <string name="hops_hint_direct">A direct route to the exit — the quickest the network can be. The exit still cannot read your traffic, but it does see that this device is the one asking.</string>
     <string name="hops_hint_multi">Traffic is relayed through intermediaries, so no single node sees both who is asking and what is being asked. Slower, and every hop is another machine that has to stay up.</string>
     <string name="hops_hint_unknown">Waiting for the visor to report its routing settings.</string>
