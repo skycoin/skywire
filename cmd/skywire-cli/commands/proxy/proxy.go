@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -517,11 +518,12 @@ var statusCmd = &cobra.Command{
 		w := tabwriter.NewWriter(&b, 0, 0, 5, ' ', tabwriter.TabIndent)
 		internal.Catch(cmd.Flags(), err)
 		type appState struct {
-			Name      string       `json:"name"`
-			Status    string       `json:"status"`
-			AutoStart bool         `json:"autostart"`
-			Args      []string     `json:"args"`
-			AppPort   routing.Port `json:"app_port"`
+			Name      string              `json:"name"`
+			Status    string              `json:"status"`
+			AutoStart bool                `json:"autostart"`
+			Args      []string            `json:"args"`
+			AppPort   routing.Port        `json:"app_port"`
+			Route     []muxRouteGroupInfo `json:"route,omitempty"`
 		}
 		var jsonAppStatus []appState
 		_, err = fmt.Fprintf(w, "---- All Proxy List -----------------------------------------------------\n\n")
@@ -538,13 +540,6 @@ var statusCmd = &cobra.Command{
 					if state.Status == appserver.AppStatusErrored {
 						status = "errored"
 					}
-					jsonAppStatus = append(jsonAppStatus, appState{
-						Name:      state.Name,
-						Status:    status,
-						AutoStart: state.AutoStart,
-						Args:      state.Args,
-						AppPort:   state.Port,
-					})
 					var tmpAddr string
 					var tmpSrv string
 					for idx, arg := range state.Args {
@@ -555,7 +550,24 @@ var statusCmd = &cobra.Command{
 							tmpAddr = "127.0.0.1" + state.Args[idx+1]
 						}
 					}
-					_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart)
+					// For a running client, surface the active route group(s) so
+					// the operator can tell which client owns which route (the
+					// server PK + first-hop transport per leg) without a separate
+					// `proxy mux info` call — and can spot a fragile single-leg
+					// route at a glance.
+					var route []muxRouteGroupInfo
+					if status == "running" {
+						route = fetchProxyRoute(rpcClient, state.Name)
+					}
+					jsonAppStatus = append(jsonAppStatus, appState{
+						Name:      state.Name,
+						Status:    status,
+						AutoStart: state.AutoStart,
+						Args:      state.Args,
+						AppPort:   state.Port,
+						Route:     route,
+					})
+					_, err = fmt.Fprintf(w, "Name: %s\nStatus: %s\nServer: %s\nAddress: %s\nAppPort: %d\nAutoStart: %t\n%s\n", state.Name, status, tmpSrv, tmpAddr, state.Port, state.AutoStart, renderProxyRoute(route))
 					internal.Catch(cmd.Flags(), err)
 				}
 			}
@@ -567,6 +579,59 @@ var statusCmd = &cobra.Command{
 		internal.Catch(cmd.Flags(), w.Flush())
 		internal.PrintOutput(cmd.Flags(), jsonAppStatus, b.String())
 	},
+}
+
+// fetchProxyRoute returns this visor's view of the active route group(s) for a
+// proxy app (same data as `proxy mux info`), decoded via the local mirror
+// struct so the JSON contract stays the boundary. Returns nil on any error — a
+// running proxy that hasn't finished dialing simply has no route yet.
+func fetchProxyRoute(rpcClient visor.API, appName string) []muxRouteGroupInfo {
+	infos, err := rpcClient.RouteGroupMuxInfo(appName)
+	if err != nil {
+		return nil
+	}
+	raw, err := json.Marshal(infos)
+	if err != nil {
+		return nil
+	}
+	var rgs []muxRouteGroupInfo
+	if err := json.Unmarshal(raw, &rgs); err != nil {
+		return nil
+	}
+	return rgs
+}
+
+// renderProxyRoute formats the active route group(s) for `proxy status`: the
+// destination + each leg's first-hop transport (type, remote, latency). A
+// single-leg route is flagged since it has no failover — a first-hop flap drops
+// the whole session (the common cause of intermittent proxy drops).
+func renderProxyRoute(rgs []muxRouteGroupInfo) string {
+	if len(rgs) == 0 {
+		return "Route: (no active route group)"
+	}
+	var sb strings.Builder
+	for i, rg := range rgs {
+		plural := "legs"
+		if len(rg.Legs) == 1 {
+			plural = "leg"
+		}
+		fmt.Fprintf(&sb, "Route: %d %s to %s:%d", len(rg.Legs), plural, shortPK(rg.Desc.DstPK), rg.Desc.DstPort)
+		sort.SliceStable(rg.Legs, func(a, b int) bool { return rg.Legs[a].Index < rg.Legs[b].Index })
+		for _, leg := range rg.Legs {
+			lat := ""
+			if leg.LatencyMS > 0 {
+				lat = fmt.Sprintf(" %.0fms", leg.LatencyMS)
+			}
+			fmt.Fprintf(&sb, "  [%d] %s→%s%s", leg.Index, leg.TpType, shortPK(leg.RemotePK), lat)
+		}
+		if len(rg.Legs) == 1 {
+			sb.WriteString("  (single leg — no failover; grow with `proxy mux set`)")
+		}
+		if i < len(rgs)-1 {
+			sb.WriteByte('\n')
+		}
+	}
+	return sb.String()
 }
 
 var (
