@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Router } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
 import { Observable, Subscription, delay, mergeMap, of } from 'rxjs';
@@ -22,7 +22,8 @@ declare const window: any;
     selector: 'app-settings',
     templateUrl: './settings.component.html',
     styleUrls: ['./settings.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SettingsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   // Keys for persisting the server data, to be able to restore the state after navigation.
@@ -37,7 +38,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
   // Removes the password settings if the auth option is not active in the back-end.
   authActive = false;
 
-  private authSubscription: Subscription;
+  private authSubscription!: Subscription;
 
   // TODO: must be removed if the old updater is removed.
   //mustShowUpdaterSettings = !!localStorage.getItem(UpdaterStorageKeys.UseCustomSettings);
@@ -48,6 +49,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
     private snackbarService: SnackbarService,
     private dialog: MatDialog,
     private storageService: StorageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
 
@@ -57,9 +59,10 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
     this.updateOptionsMenu();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     setTimeout(() => {
       this.waitBeforeShowingLoading = false;
+      this.changeDetectorRef.markForCheck();
     }, 500);
 
     this.checkAuth(0, true);
@@ -98,10 +101,12 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
         if (savedData) {
           this.checkAuth(0, false);
         }
+        this.changeDetectorRef.markForCheck();
       },
       () => {
         // Retry after a small delay.
         this.checkAuth(15000, false);
+        this.changeDetectorRef.markForCheck();
       },
     );
   }
@@ -200,6 +205,7 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
       try {
         window.skywireConfig.reset();
       } catch (e) {}
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -210,9 +216,14 @@ export class SettingsComponent extends PageBaseComponent implements OnInit, OnDe
       confirmationDialog.componentInstance.closeModal();
 
       this.authService.logout().subscribe(
-        () => this.router.navigate(['login']),
-        () => this.snackbarService.showError('common.logout-error')
+        () => {
+ this.router.navigate(['login']); this.changeDetectorRef.markForCheck(); 
+},
+        () => {
+ this.snackbarService.showError('common.logout-error'); this.changeDetectorRef.markForCheck(); 
+}
       );
+      this.changeDetectorRef.markForCheck();
     });
   }
 

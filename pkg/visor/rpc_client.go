@@ -902,6 +902,13 @@ func (rc *rpcClient) RouteGroups() ([]RouteGroupInfo, error) {
 	return routegroups, err
 }
 
+// RoutingStats calls RoutingStats.
+func (rc *rpcClient) RoutingStats() (routing.RoutingTableStats, error) {
+	var stats routing.RoutingTableStats
+	err := rc.Call("RoutingStats", &struct{}{}, &stats)
+	return stats, err
+}
+
 // RoutingPolicies calls RoutingPolicies.
 func (rc *rpcClient) RoutingPolicies() (*RoutingPoliciesSummary, error) {
 	var summary RoutingPoliciesSummary
@@ -1479,6 +1486,16 @@ func (rc *rpcClient) DmsgConnectAll() (*DmsgConnectAllResult, error) {
 func (rc *rpcClient) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, error) {
 	var resp DmsgConnectAllResult
 	if err := rc.Call("SetDmsgSessionsCount", &count, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// DmsgConverge optionally sets the dmsg carrier preference (empty = leave
+// as-is) and runs one carrier-convergence pass on the main dmsg client.
+func (rc *rpcClient) DmsgConverge(carriers []string) (*DmsgConvergeResult, error) {
+	var resp DmsgConvergeResult
+	if err := rc.Call("DmsgConverge", &carriers, &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

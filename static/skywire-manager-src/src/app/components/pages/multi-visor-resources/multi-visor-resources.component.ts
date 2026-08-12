@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith, forkJoin, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
@@ -61,6 +61,7 @@ interface VisorRow {
   templateUrl: './multi-visor-resources.component.html',
   styleUrls: ['./multi-visor-resources.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class MultiVisorResourcesComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
@@ -69,7 +70,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
   error: string | null = null;
   lastUpdated: Date | null = null;
 
-  private sub: Subscription;
+  private sub!: Subscription;
 
   constructor(
     private nodeService: NodeService,
@@ -80,7 +81,7 @@ export class MultiVisorResourcesComponent extends PageBaseComponent implements O
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.sub = interval(5000).pipe(
       startWith(0),
       switchMap(() => this.nodeService.getNodes()),

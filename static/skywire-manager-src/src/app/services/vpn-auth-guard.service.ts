@@ -10,7 +10,7 @@ import { Observable, of } from 'rxjs';
   providedIn: 'root'
 })
 export class VpnAuthGuardService  {
-  private lastErrorInternal: string;
+  private lastErrorInternal!: string;
   /**
    * When set, the user will be redirected to the error page of the VPN client, with
    * the provided error.

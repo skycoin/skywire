@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialog, MatDialogRef, MatDialogConfig } from '@angular/material/dialog';
 
 import { AppConfig } from 'src/app/app.config';
@@ -10,7 +10,8 @@ import { AppConfig } from 'src/app/app.config';
     selector: 'app-initial-setup',
     templateUrl: './initial-setup.component.html',
     styleUrls: ['./initial-setup.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class InitialSetupComponent {
 

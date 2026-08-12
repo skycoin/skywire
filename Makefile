@@ -1,14 +1,9 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race deploy wasm-visor tpviz-gl embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race wasm-visor tpviz-gl embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-apk-debug
-.PHONY : host-apps bin
-.PHONY : docker-image docker-clean docker-network
-.PHONY : docker-apps docker-bin docker-volume
-.PHONY : docker-run docker-stop
-.PHONY : integration-build
-.PHONY : integration-run-generic
+.PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
 VERSION := $(shell git describe --always)
@@ -57,10 +52,7 @@ endif
 
 STATIC_OPTS?= $(OPTS) CC=musl-gcc
 MANAGER_UI_DIR = static/skywire-manager-src
-GO_BUILDER_VERSION=v1.24
 MANAGER_UI_BUILT_DIR=pkg/visor/static
-DOCKER_OPTS?=GO111MODULE=on GOOS=linux
-DOCKER_NETWORK?=SKYWIRE
 DOCKER_COMPOSE_FILE:=./docker/docker-compose.yml
 DOCKER_REGISTRY:=skycoin
 
@@ -112,7 +104,6 @@ WASM_BUILDINFO := -X $(WASM_BUILDINFO_PATH).version=$(VERSION) -X $(WASM_BUILDIN
 
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
-BUILD_OPTS_RACE?="-race"
 
 export COMPOSE_FILE=${DOCKER_COMPOSE_FILE}
 export REGISTRY=${DOCKER_REGISTRY}
@@ -141,9 +132,6 @@ dmsghttp: ## update dmsghttp-config.json
 dmsg-servers: ## update embedded dmsg_servers in deployment/services-config.json from the discovery, over dmsg
 	go run . dmsg conf pull
 	go generate ./deployment/
-
-count-dmsg-disc-entries:
-	curl -sL $(jq -r '.prod.dmsg_discovery' services-config.json)/dmsg-discovery/entries | jq '. | length'
 
 check: ## Run linters and tests (lint, check-cg, check-help, test). Serialized via flock so two concurrent invocations don't trigger overlapping parallel test runs that pin every core and make the machine unresponsive.
 	@if command -v flock >/dev/null 2>&1; then \
@@ -283,7 +271,7 @@ install-system-linux: build ## Install apps and binaries over those provided by 
 	sudo install -Dm755 $(BUILD_PATH)skywire /opt/skywire/bin/
 
 install-generate: ## Installs required execs for go generate.
-	${OPTS} go install github.com/mjibson/esc github.com/vektra/mockery/v2@latest
+	${OPTS} go install github.com/vektra/mockery/v2@latest
 
 	## TO DO: it may be unnecessary to install required execs for go generate into the path. An alternative method may exist which does not require this
 	## https://eli.thegreenplace.net/2021/a-comprehensive-guide-to-go-generate
@@ -503,8 +491,7 @@ test-windows: ## Run tests on windows
 
 install-linters: ## Install linters
 	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-	GOPRIVATE=github.com/skycoin/* go get -u
-	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/incu6us/goimports-reviser/v2@latest github.com/FiloSottile/vendorcheck@latest
+	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/FiloSottile/vendorcheck@latest
 
 install-linters-windows: ## Install linters
 	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest golang.org/x/tools/cmd/goimports@latest
@@ -512,16 +499,15 @@ install-linters-windows: ## Install linters
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
 
-format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
+format: tidy ## Formats the code. Must have goimports installed (use make install-linters).
 	@if grep -qE '^(replace|exclude)' go.mod; then \
 		echo "ERROR: go.mod contains replace or exclude directives which break go install @version and Docker builds"; \
 		grep -E '^(replace|exclude)' go.mod; \
 		exit 1; \
 	fi
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg ./cmd ./internal
-	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} {} \;
 
-format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
+format-windows: tidy ## Formats the code. Must have goimports installed (use make install-linters).
 	powershell 'Get-ChildItem -Directory | where Name -NotMatch vendor | % { Get-ChildItem $$_ -Recurse -Include *.go } | % {goimports -w -local ${PROJECT_BASE} $$_ }'
 
 dep: tidy ## Sorts dependencies
@@ -578,7 +564,7 @@ build-windows: ## Build `skywire-visor`
 
 # Static Bin
 build-static: ## Build `skywire-visor`, `skywire-cli`
-	${STATIC_OPTS} go build 8 -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH) .
+	${STATIC_OPTS} go build -trimpath --ldflags '-linkmode external -extldflags "-static" -buildid=' -o $(BUILD_PATH) .
 
 # Static Bin without Systray
 build-static-wos: ## Build `skywire-visor`, `skywire-cli`
@@ -622,6 +608,8 @@ dep-github-release:
 
 build-docker: ## Build docker image
 	./ci_scripts/docker-push.sh -t latest -b
+
+.PHONY: check-ui check-onpush
 
 # Manager UI
 install-deps-ui:  ## Install the UI dependencies
@@ -670,6 +658,24 @@ build-ui: install-deps-ui  ## Builds the UI
 	rm -rf ${MANAGER_UI_BUILT_DIR}
 	mkdir ${MANAGER_UI_BUILT_DIR}
 	cp -r ${MANAGER_UI_DIR}/dist/. ${MANAGER_UI_BUILT_DIR}
+
+check-onpush:  ## Fail if an OnPush component has an unmarked asynchronous callback
+	node ci-scripts/check-onpush-marks.js $(MANAGER_UI_DIR)/src
+
+check-ui: build-ui  ## Fail if the committed manager UI bundle is stale vs a fresh build
+	@# pkg/visor/static is a build artifact committed to the repository and
+	@# embedded in the visor, so a stale one ships an old UI from source that
+	@# looks current. CI builds the UI already; this is what makes the build
+	@# prove the committed copy matches.
+	@git diff --quiet -- $(MANAGER_UI_BUILT_DIR) && git diff --quiet --cached -- $(MANAGER_UI_BUILT_DIR) \
+		&& test -z "$$(git ls-files --others --exclude-standard -- $(MANAGER_UI_BUILT_DIR))" || { \
+		echo "ERROR: the committed manager UI bundle is stale."; \
+		echo "Run 'make build-ui' and commit the result."; \
+		git --no-pager diff --stat -- $(MANAGER_UI_BUILT_DIR); \
+		git ls-files --others --exclude-standard -- $(MANAGER_UI_BUILT_DIR); \
+		exit 1; \
+	}
+	@echo "The committed manager UI bundle is up to date."
 
 build-ui-windows: install-deps-ui ## Builds the UI on windows
 	cd $(MANAGER_UI_DIR) && npm run build

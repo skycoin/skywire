@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnInit, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription, delay, of } from 'rxjs';
 import { MatDialog } from '@angular/material/dialog';
 import { Router } from '@angular/router';
@@ -108,7 +108,8 @@ interface VpnData {
     selector: 'app-top-bar',
     templateUrl: './top-bar.component.html',
     styleUrls: ['./top-bar.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TopBarComponent implements OnInit, OnDestroy {
   /**
@@ -119,7 +120,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   /**
    * Elements to show in the title. The idea is to show the path of the current page.
    */
-  @Input() titleParts: string[];
+  @Input() titleParts!: string[];
   /**
    * When set, replaces the translated titleParts text with a structured
    * "label + identifier" pair — used by the visor detail page so the
@@ -132,7 +133,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   /**
    * List with the tabs to show.
    */
-  @Input() tabsData: TabButtonData[];
+  @Input() tabsData!: TabButtonData[];
   /**
    * Optional persistent top-level navigation row rendered ABOVE the page tabs
    * (visor list / rewards / resources / …). Shown on node pages so the hypervisor
@@ -164,28 +165,28 @@ export class TopBarComponent implements OnInit, OnDestroy {
   /**
    * List with the options to show.
    */
-  @Input() optionsData: MenuOptionData[];
+  @Input() optionsData!: MenuOptionData[];
   /**
    * Text for the translatable pipe to be shown in the return button. The return button is only
    * shown if this var has a valid value. If the return button is pressed, the optionSelected
    * event is emited with null as value.
    */
-  @Input() returnText: string;
+  @Input() returnText!: string;
 
   /**
    * Seconds since the last time the data was updated.
    */
-  @Input() secondsSinceLastUpdate: number;
+  @Input() secondsSinceLastUpdate!: number;
   /**
    * Makes the refresh button to show a loading animation.
    */
-  @Input() showLoading: boolean;
+  @Input() showLoading!: boolean;
   /**
    * Makes the refresh button to show an alert icon, to inform that there was an error
    * updating the data. It also activates a tooltip in which he user can see how often
    * the system retries to get the data.
    */
-  @Input() showAlert: boolean;
+  @Input() showAlert!: boolean;
   /**
    * How often the system automatically refreshes the data, in seconds.
    */
@@ -219,10 +220,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
 
   hideLanguageButton = true;
   // Currently selecte language.
-  language: LanguageData;
+  language!: LanguageData;
 
   // Data about the current state of the vpn client app.
-  vpnData: VpnData;
+  vpnData!: VpnData;
   // If the vpn data must be shown.
   showVpnInfo = false;
   // If the state of the vpn client app has already been obtained for the first time.
@@ -244,10 +245,10 @@ export class TopBarComponent implements OnInit, OnDestroy {
   errorsConnectingToVpn = false;
 
   private langSubscriptionsGroup: Subscription[] = [];
-  private vpnDataSubscription: Subscription;
-  private showVpnStateChangeAnimationSubscription: Subscription;
-  private showVpnStateAnimatedDotSubscription: Subscription;
-  private errorsConnectingToVpnSubscription: Subscription;
+  private vpnDataSubscription!: Subscription;
+  private showVpnStateChangeAnimationSubscription!: Subscription;
+  private showVpnStateAnimatedDotSubscription!: Subscription;
+  private errorsConnectingToVpnSubscription!: Subscription;
 
   constructor(
     private languageService: LanguageService,
@@ -257,6 +258,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
     private vpnSavedDataService: VpnSavedDataService,
     public appMode: AppModeService,
     private storageService: StorageService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   /** Show the per-visor switcher as a full row of tabs (Settings opt-in) vs the
@@ -273,6 +275,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.langSubscriptionsGroup.push(this.languageService.currentLanguage.subscribe(lang => {
       this.language = lang;
+      this.changeDetectorRef.markForCheck();
     }));
 
     this.langSubscriptionsGroup.push(this.languageService.languages.subscribe(langs => {
@@ -281,6 +284,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
       } else {
         this.hideLanguageButton = true;
       }
+      this.changeDetectorRef.markForCheck();
     }));
 
     // Check if the app is being accessed from a remote localtion.
@@ -346,7 +350,9 @@ export class TopBarComponent implements OnInit, OnDestroy {
             if (this.showVpnStateChangeAnimationSubscription) {
               this.showVpnStateChangeAnimationSubscription.unsubscribe();
             }
-            this.showVpnStateChangeAnimationSubscription = of(0).pipe(delay(1)).subscribe(() => this.showVpnStateAnimation = true);
+            this.showVpnStateChangeAnimationSubscription = of(0).pipe(delay(1)).subscribe(() => {
+ this.showVpnStateAnimation = true; this.changeDetectorRef.markForCheck(); 
+});
           }
         }
 
@@ -355,13 +361,17 @@ export class TopBarComponent implements OnInit, OnDestroy {
         if (this.showVpnStateAnimatedDotSubscription) {
           this.showVpnStateAnimatedDotSubscription.unsubscribe();
         }
-        this.showVpnStateAnimatedDotSubscription = of(0).pipe(delay(1)).subscribe(() => this.showVpnStateAnimatedDot = true);
+        this.showVpnStateAnimatedDotSubscription = of(0).pipe(delay(1)).subscribe(() => {
+ this.showVpnStateAnimatedDot = true; this.changeDetectorRef.markForCheck(); 
+});
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     // Check if there are errors getting the updates.
     this.errorsConnectingToVpnSubscription = this.vpnClientService.errorsConnecting.subscribe(errorsFound => {
       this.errorsConnectingToVpn = errorsFound;
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -423,6 +433,7 @@ export class TopBarComponent implements OnInit, OnDestroy {
           this.router.navigate(this.tabsData[result].linkParts);
         }
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 

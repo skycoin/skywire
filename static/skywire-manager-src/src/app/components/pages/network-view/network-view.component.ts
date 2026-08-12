@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 
@@ -45,6 +45,7 @@ interface NetworkResponse {
   templateUrl: './network-view.component.html',
   styleUrls: ['./network-view.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NetworkViewComponent extends PageBaseComponent implements OnInit, OnDestroy {
   tabsData: TabButtonData[] = [];
@@ -61,14 +62,14 @@ export class NetworkViewComponent extends PageBaseComponent implements OnInit, O
   showOnlineOnly = true;
   searchTerm = '';
 
-  private sub: Subscription;
+  private sub!: Subscription;
 
   constructor(private nodeService: NodeService) {
     super();
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Poll every 5min — the visor caches the aggregation for 5min,
     // so anything finer-grained just hits the cache. The Refresh
     // button below the table forces a fresh fetch when the user
