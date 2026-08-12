@@ -8,7 +8,7 @@ import {ClipboardService} from '../services/clipboard.service';
  */
 @Directive({
      
-    selector: '[clipboard]',
+    selector: '[appClipboard]',
     standalone: false
 })
 export class ClipboardDirective implements OnDestroy {
@@ -21,12 +21,12 @@ export class ClipboardDirective implements OnDestroy {
    */
   @Output() errorEvent: EventEmitter<void>;
    
-  @Input('clipboard') value: string;
+  @Input() appClipboard: string;
 
   constructor(private clipboardService: ClipboardService) {
     this.copyEvent = new EventEmitter();
     this.errorEvent = new EventEmitter();
-    this.value = '';
+    this.appClipboard = '';
   }
 
   ngOnDestroy() {
@@ -36,8 +36,8 @@ export class ClipboardDirective implements OnDestroy {
 
   @HostListener('click') copyToClipboard(): void {
     // Use ClipboardService to copy the text.
-    if (this.clipboardService.copy(this.value)) {
-      this.copyEvent.emit(this.value);
+    if (this.clipboardService.copy(this.appClipboard)) {
+      this.copyEvent.emit(this.appClipboard);
     } else {
       this.errorEvent.emit();
     }
