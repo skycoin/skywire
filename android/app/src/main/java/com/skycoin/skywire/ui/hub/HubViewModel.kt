@@ -60,6 +60,12 @@ data class HubUiState(
     val minHops: Int = 0,
     /** The hero card's toggle is mid-flight. */
     val vpnBusy: Boolean = false,
+    /**
+     * Where the user just put the hero switch, held until the visor reports
+     * the same thing. Null means nothing is pending and the polled state
+     * speaks for itself. See [vpnOn].
+     */
+    val vpnPending: Boolean? = null,
     /** Messages waiting in SkyChat, as skychat itself counts them. */
     val unreadMessages: Int = 0,
     /** The active SKY wallet's cached balance, formatted; null = no wallet. */
@@ -75,9 +81,19 @@ data class HubUiState(
 
     val vpn: AppState? get() = apps[VpnArgs.APP]
 
-    /** The hero's switch state: the tunnel is up or on its way up. */
+    /**
+     * The hero's switch state: the tunnel is up or on its way up — or, until
+     * the visor has caught up, wherever the user just put the switch.
+     *
+     * Without [vpnPending] this read polled truth alone, so flicking the
+     * switch moved it and the next poll (still reporting the old state,
+     * because starting takes seconds) moved it straight back, then forward
+     * again once the app came up. It looked like the switch was toggling
+     * itself. A switch has to stay where it was put until the thing it
+     * commands disagrees.
+     */
     val vpnOn: Boolean
-        get() = vpn?.let { it.running || it.status == AppState.STATUS_STARTING } == true
+        get() = vpnPending ?: (vpn?.let { it.running || it.status == AppState.STATUS_STARTING } == true)
 }
 
 /**
@@ -163,14 +179,17 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
         if (VpnService.prepare(getApplication()) != null) return false
 
         viewModelScope.launch {
-            mutable.update { it.copy(vpnBusy = true) }
-            runCatching {
+            mutable.update { it.copy(vpnBusy = true, vpnPending = true) }
+            val ok = runCatching {
                 val killswitch = prefs.boolean(VpnArgs.PREF_KILLSWITCH).first()
                 // The service first: vpn-client asks it for a descriptor
                 // mid-handshake and must find it listening. Then the
-                // unconditional stop — a stale proc would race the new one.
+                // unconditional stop — a stale proc would race the new one,
+                // which is why awaitStopped follows it rather than trusting
+                // the stop RPC's return (it does not wait for the exit).
                 SkyVpnService.start(getApplication(), killswitch)
                 runCatching { api.updateApp(VpnArgs.APP, status = VisorApi.APP_STOP) }
+                awaitStopped()
                 val updated = api.updateApp(
                     VpnArgs.APP,
                     pk = pk,
@@ -178,8 +197,11 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                     status = VisorApi.APP_START,
                 )
                 mutable.update { withExit(it.copy(apps = it.apps + (VpnArgs.APP to updated))) }
-            }
-            mutable.update { it.copy(vpnBusy = false) }
+            }.isSuccess
+            // A start that failed leaves the switch claiming a tunnel that is
+            // not there, so the pending position is dropped and polled truth
+            // takes over again.
+            mutable.update { it.copy(vpnBusy = false, vpnPending = if (ok) true else null) }
         }
         return true
     }
@@ -191,7 +213,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun stopVpn() {
         viewModelScope.launch {
-            mutable.update { it.copy(vpnBusy = true) }
+            mutable.update { it.copy(vpnBusy = true, vpnPending = false) }
             val stopped = runCatching {
                 api.updateApp(VpnArgs.APP, status = VisorApi.APP_STOP)
             }.getOrNull()
@@ -205,6 +227,22 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                     ),
                 )
             }
+        }
+    }
+
+    /**
+     * Wait for a previous vpn-client to actually be gone before starting the
+     * next one. The stop RPC returns while the old process is still winding
+     * down (procManager.Stop signals it and does not wait), and starting into
+     * that window failed with an address already in use. Bounded: after
+     * [STOP_WAIT_MS] it goes ahead anyway.
+     */
+    private suspend fun awaitStopped() {
+        val deadline = System.currentTimeMillis() + STOP_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            val state = runCatching { api.app(VpnArgs.APP) }.getOrNull() ?: return
+            if (!state.running && state.status != AppState.STATUS_STARTING) return
+            delay(STOP_POLL_MS)
         }
     }
 
@@ -234,6 +272,11 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                 } else {
                     rates.sample(connection.bandwidthSent, connection.bandwidthReceived)
                 }
+                // The visor now agrees with where the switch was put, so the
+                // held position is retired and polled truth speaks again.
+                // Only on agreement: dropping it on any poll would restore
+                // the flicker this exists to stop.
+                val settled = vpn?.let { it.running || it.status == AppState.STATUS_STARTING } == true
                 mutable.update {
                     withExit(
                         it.copy(
@@ -243,6 +286,7 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
                             // Keep the last good reading between samples
                             // rather than blinking back to "—".
                             vpnRates = sampled ?: it.vpnRates.takeIf { connection != null },
+                            vpnPending = it.vpnPending?.takeIf { wanted -> wanted != settled },
                         ),
                     )
                 }
@@ -304,6 +348,10 @@ class HubViewModel(app: Application) : AndroidViewModel(app) {
     private companion object {
         const val PING_INTERVAL_MS = 700L
         const val POLL_INTERVAL_MS = 5_000L
+
+        /** Matches the SkyVPN screen's — see VpnViewModel.awaitStopped. */
+        const val STOP_WAIT_MS = 10_000L
+        const val STOP_POLL_MS = 250L
 
         /**
          * Fleet count cadence, in polls: 3 × 5 s matches FleetViewModel's

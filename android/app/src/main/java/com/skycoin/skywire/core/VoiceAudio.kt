@@ -59,7 +59,44 @@ class VoiceAudioEngine(context: Context) {
     private var playback: Job? = null
     private var priorMode: Int? = null
 
-    /** True while the mic loop is actually recording — false if the permission is missing. */
+    /**
+     * The in-flight stream calls, held so [stop] can cancel them from another
+     * thread. Nulled when their attempt ends; cancelling a finished call is a
+     * no-op, so a stale one is harmless.
+     */
+    @Volatile
+    private var micCall: okhttp3.Call? = null
+
+    @Volatile
+    private var speakerCall: okhttp3.Call? = null
+
+    /**
+     * Cleared by [stop] before anything else, and read by the two innermost
+     * loops — the ones inside a blocking call, where a cancelled coroutine is
+     * invisible.
+     *
+     * A plain flag rather than a generation counter because [stop] is terminal
+     * for an engine: [VoiceCallService] builds one in onCreate and stops it in
+     * onDestroy, so a restart is a new instance. Were an engine ever restarted
+     * in place, a body still draining from the previous run would see the flag
+     * set again and keep recording — that is when this needs to become a
+     * counter the loops compare against.
+     */
+    @Volatile
+    private var live: Boolean = false
+
+    /**
+     * True while the mic loop is actually recording — false if the permission
+     * is missing.
+     *
+     * Written only where the recorder itself is opened and closed, so it
+     * tracks the device rather than the intent to use it. [stop] deliberately
+     * does not clear it: it used to, and that made the flag claim the
+     * microphone was free the instant a call ended while the recorder was in
+     * fact still open — the exact bug, reported by the one value that should
+     * have revealed it. It now goes false when the recorder is released, a
+     * frame period later.
+     */
     @Volatile
     var capturing: Boolean = false
         private set
@@ -77,6 +114,7 @@ class VoiceAudioEngine(context: Context) {
      */
     fun start(scope: CoroutineScope, onMicrophoneReady: () -> Unit = {}) {
         if (playback?.isActive == true) return
+        live = true
         // Voice-call routing: earpiece rather than the media speaker, and the
         // input tuned for speech. Also what makes the platform's echo
         // canceller apply — the Go side has none, so without this the peer
@@ -87,13 +125,36 @@ class VoiceAudioEngine(context: Context) {
         capture = scope.launch(Dispatchers.IO) { captureLoop(onMicrophoneReady) }
     }
 
-    /** Stop both directions and hand the device back to the system. */
+    /**
+     * Stop both directions and hand the device back to the system.
+     *
+     * Cancelling the Jobs is not what does it, and on its own does nothing at
+     * all: both loops spend the call inside a blocking OkHttp `execute()` —
+     * the mic's upload is written from in there — and a coroutine that never
+     * reaches a suspension point never observes its cancellation. The capture
+     * thread would stay in [micBody]'s write loop with the recorder open, and
+     * an open AudioRecord is the microphone indicator the user sees. The
+     * stream client has every timeout disabled, so nothing else would end it.
+     *
+     * So [live] falls first, for a loop about to re-check it, and then the
+     * calls are cancelled, which is what unblocks a thread parked mid-write
+     * when the visor has stopped reading — the ordinary way a call ends.
+     * Either one alone leaves a case open: the flag cannot be read from
+     * inside a blocked write, and the cancel cannot reach a loop that is not
+     * writing yet. Both together bound the release at one frame period.
+     */
     fun stop() {
+        live = false
+        micCall?.cancel()
+        speakerCall?.cancel()
+        micCall = null
+        speakerCall = null
         capture?.cancel()
         playback?.cancel()
         capture = null
         playback = null
-        capturing = false
+        // capturing is NOT cleared here — see its declaration. The recorder's
+        // own teardown owns it, so it reports the device and not the wish.
         priorMode?.let { mode -> runCatching { audioManager.mode = mode } }
         priorMode = null
     }
@@ -110,7 +171,7 @@ class VoiceAudioEngine(context: Context) {
      * up whenever it lands, instead of failing the call.
      */
     private suspend fun captureLoop(onMicrophoneReady: () -> Unit) {
-        while (coroutineContext.isActive) {
+        while (live && coroutineContext.isActive) {
             if (!hasMicPermission()) {
                 capturing = false
                 delay(PERMISSION_RETRY_MS)
@@ -118,18 +179,25 @@ class VoiceAudioEngine(context: Context) {
             }
             onMicrophoneReady()
             try {
-                api.voiceMicStream { micBody() }.use { resp ->
+                api.voiceMicStream(
+                    body = { micBody() },
+                    // Published before the call is executed, so a stop() that
+                    // lands a microsecond later still has something to cancel.
+                    onCall = { micCall = it },
+                ).use { resp ->
                     if (!resp.isSuccessful) {
                         Log.w(TAG, "mic stream rejected: ${resp.code}")
                         delay(RETRY_MS)
                     }
                 }
             } catch (e: IOException) {
-                // The body writer ends by throwing when the recorder stops or
-                // the socket goes; both are "reopen", not "give up".
+                // The body writer ends by throwing when the recorder stops, the
+                // socket goes, or stop() cancelled the call. The first two are
+                // "reopen"; the third is caught by the while condition below.
                 Log.d(TAG, "mic stream ended: ${e.message}")
             } finally {
                 capturing = false
+                micCall = null
             }
             coroutineContext.ensureActive()
             delay(RETRY_MS)
@@ -162,7 +230,12 @@ class VoiceAudioEngine(context: Context) {
                 capturing = true
                 val samples = ShortArray(FRAME_SAMPLES * CHUNK_FRAMES)
                 val bytes = ByteBuffer.allocate(samples.size * 2).order(ByteOrder.LITTLE_ENDIAN)
-                while (true) {
+                // `live`, not `true`: this loop runs on a thread inside OkHttp
+                // with no coroutine to cancel, and the read below returns every
+                // frame period — so this is where a stop is noticed when the
+                // socket is still draining normally and cancelling the call
+                // would otherwise be the only exit.
+                while (live) {
                     val n = record.read(samples, 0, samples.size)
                     if (n <= 0) {
                         // A negative result is a dead recorder (device stolen
@@ -247,9 +320,9 @@ class VoiceAudioEngine(context: Context) {
     // --- visor → speaker ---
 
     private suspend fun playbackLoop() {
-        while (coroutineContext.isActive) {
+        while (live && coroutineContext.isActive) {
             try {
-                api.voiceSpeakerStream().use { resp ->
+                api.voiceSpeakerStream(onCall = { speakerCall = it }).use { resp ->
                     if (!resp.isSuccessful) {
                         Log.w(TAG, "speaker stream rejected: ${resp.code}")
                         return@use
@@ -258,6 +331,8 @@ class VoiceAudioEngine(context: Context) {
                 }
             } catch (e: IOException) {
                 Log.d(TAG, "speaker stream ended: ${e.message}")
+            } finally {
+                speakerCall = null
             }
             coroutineContext.ensureActive()
             delay(RETRY_MS)
@@ -274,7 +349,10 @@ class VoiceAudioEngine(context: Context) {
             // buffer has to lead the next read or every sample after it is
             // built from the wrong pair of bytes.
             var pending = 0
-            while (true) {
+            // `live` for the same reason as the capture loop: this is a
+            // blocking read on an OkHttp thread, and an AudioTrack left
+            // playing holds the earpiece route and the in-call audio mode.
+            while (live) {
                 val n = stream.read(bytes, pending, bytes.size - pending)
                 if (n < 0) return
                 val total = pending + n

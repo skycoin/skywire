@@ -95,6 +95,15 @@ type Config struct {
 	RulesGCInterval  time.Duration
 	MinHops          uint16
 	MaxHops          uint16
+	// MuxRoutes seeds the router's runtime parallel-mux-routes value from
+	// routing.mux_routes at construction, the way MinHops already is. The
+	// dial-time default is applied by the app networker (which the launcher
+	// seeds from the same config field) — this seed is what makes
+	// GetMuxRoutes/GetRouterSettings report the configured value from boot,
+	// so a read-modify-write of the settings (the mobile app's min_hops
+	// control does one) echoes the real value back instead of a zero that
+	// silently turns the configured default off.
+	MuxRoutes int
 	// DisableRaceRouteSetup turns OFF the app-dial race (default: race ON).
 	// Normally, when a dial would create a direct transport to the peer
 	// (min-hops==1, not existing-tp-only), DialRoutes runs that transport
@@ -386,6 +395,13 @@ type Router interface {
 	Serve(context.Context) error
 	SetupIsTrusted(cipher.PubKey) bool
 	SetMinHop(uint16)
+
+	// EffectiveMinHops resolves a dial's min-hops constraint from the
+	// per-dial options and the visor-global setting together. Exposed
+	// because callers OUTSIDE the router take dial shortcuts that bypass
+	// route setup — appnet's direct dial above all — and cannot honor the
+	// operator's constraint without being able to ask what it is.
+	EffectiveMinHops(opts *DialOptions) uint16
 	SetExistingTPOnly(bool)
 	SetForceLocalRoutes(bool)
 	SetMuxRoutes(int)
@@ -457,16 +473,19 @@ type router struct {
 	done               chan struct{}
 	once               sync.Once
 	routeSetupHookMu   sync.Mutex
-	routeSetupHooks    []RouteSetupHook  // see RouteSetupHook description
-	existingTpOnly     bool              // when true, don't create new transports for routing
-	existingTpOnlyMu   sync.Mutex        // protects existingTpOnly
-	forceLocalRoutes   bool              // when true, skip route finder and use local route calculation
-	forceLocalRoutesMu sync.Mutex        // protects forceLocalRoutes
-	muxRoutes          int               // number of parallel mux routes (0 or 1 = disabled)
-	muxMode            WeightMode        // default weight mode for new mux connections
-	lastRouteCalcTime  time.Duration     // last route calculation time (for local routes)
-	lastRouteCalcMu    sync.Mutex        // protects lastRouteCalcTime
-	tpdCache           *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
+	routeSetupHooks    []RouteSetupHook // see RouteSetupHook description
+	existingTpOnly     bool             // when true, don't create new transports for routing
+	existingTpOnlyMu   sync.Mutex       // protects existingTpOnly
+	forceLocalRoutes   bool             // when true, skip route finder and use local route calculation
+	forceLocalRoutesMu sync.Mutex       // protects forceLocalRoutes
+	// protects conf.MinHops, which SetMinHop changes at runtime while dials
+	// are reading it — see SetMinHop / MinHops.
+	minHopsMu         sync.RWMutex
+	muxRoutes         int               // number of parallel mux routes (0 or 1 = disabled)
+	muxMode           WeightMode        // default weight mode for new mux connections
+	lastRouteCalcTime time.Duration     // last route calculation time (for local routes)
+	lastRouteCalcMu   sync.Mutex        // protects lastRouteCalcTime
+	tpdCache          *tpdSnapshotCache // one-snapshot TTL cache of GetAllTransports, see tpd_cache.go
 }
 
 // scopedLog returns a logger augmented with app_name=<n> when the
@@ -525,6 +544,7 @@ func New(dmsgC *dmsg.Client, config *Config, routeSetupHooks []RouteSetupHook) (
 		conf:            config,
 		logger:          config.Logger,
 		mLogger:         config.MasterLogger,
+		muxRoutes:       config.MuxRoutes,
 		tm:              config.TransportManager,
 		rt:              routing.NewTable(config.Logger),
 		sl:              sl,

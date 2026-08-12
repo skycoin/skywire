@@ -29,8 +29,11 @@ skywire cli visor
 - [ports](ports/README.md) — List of Ports
 - [ready](ready/README.md) — Wait for visor startup to complete
 - [reinit](reinit/README.md) — Reinitiate modules
+- [resume](resume/README.md) — Resume a suspended visor
 - [reward](reward/README.md) — Show reward history for a visor
 - [start](start/README.md) — Start visor
+- [suspend](suspend/README.md) — Suspend visor (tear down networking, keep local RPC)
+- [suspended](suspended/README.md) — Report whether the visor is suspended
 - [uptime](uptime/README.md) — Visor session history (version-tagged, with restart-loop / down-window detection)
 - [user](user/README.md) — Show the user the visor process is running as
 - [ver](ver/README.md) — Version and build info

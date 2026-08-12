@@ -13,12 +13,13 @@ skywire cli config update svc
 ## Flags
 
 ```
-  -p, --path string   path of services-config file, default is for pkg installation (default "/opt/skywire/services-config.json")
-      --rpc string    RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-      --no-cxo        skip CXO subscriber-cache step
-      --no-rpc        skip visor RPC (DmsgHTTP) step
-      --no-dmsg       skip direct DMSG HTTP step
-      --no-http       skip direct HTTP fallback step
+  -p, --path string        path of services-config file, default is for pkg installation (default "/opt/skywire/services-config.json")
+      --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+      --no-cxo             skip CXO subscriber-cache step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+      --no-dmsg            skip direct DMSG HTTP step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 
 ## Global Flags
@@ -29,6 +30,7 @@ skywire cli config update svc
       --json              print output as JSON
   -o, --output string     config file to output
       --timeout int       RPC timeout in seconds (0 = unlimited) (default 30)
+  -u, --user              update config at: $HOME/skywire-config.json
       --via dmsg://<pk>   remote visor target — dmsg://<pk> or `skynet://<pk>`
 ```
 

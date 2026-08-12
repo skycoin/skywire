@@ -17,7 +17,7 @@ skywire cli pty start <pk>
       --rpc string         RPC server address (default "localhost:3435")
   -s, --sk cipher.SecKey   local secret key for the --via direct-TCP path's noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
       --via string         bypass local visor + dial remote dmsgpty-host's direct-TCP listener: tcp://<pk>@<host>:<port>
-      --via-visor          borrow local visor's secret key from /opt/skywire/skywire.json for the --via noise handshake (--sk wins if set)
+      --via-visor          borrow local visor's secret key from /Library/Application Support/Skywire/skywire-config.json for the --via noise handshake (--sk wins if set)
 ```
 
 ## Global Flags

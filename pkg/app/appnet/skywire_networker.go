@@ -121,7 +121,13 @@ func (r *SkywireNetworker) DialContextWithOptions(ctx context.Context, addr Addr
 	// Without this gate, --routes N / --min-hops K on a skynet
 	// client were silently dropped whenever AppDirectMux had a
 	// transport — see ping-path counterpart #2751.
-	if opts.MinHops <= 1 && opts.MuxRoutes <= 1 {
+	//
+	// The visor-global setting counts as much as the per-dial one, and
+	// asking the router is the only way to see it: opts.MinHops == 0 means
+	// "inherit Config.MinHops", so testing opts alone let a VPN client
+	// configured for min_hops=3 take this shortcut and get a single direct
+	// hop — the constraint bypassed before route setup was ever reached.
+	if r.r.EffectiveMinHops(opts) <= 1 && opts.MuxRoutes <= 1 {
 		if directConn, ok := r.tryDirectDial(addr, opts.AppName); ok {
 			return &SkywireConn{
 				Conn:     directConn,

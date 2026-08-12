@@ -13,8 +13,13 @@ skywire cli visor app start <name>
 ## Flags
 
 ```
+      --existing-tp             only use existing transports, don't create new ones
       --external                force external launcher
       --internal                force internal launcher
+      --local-route             calculate routes locally instead of using the route finder
+      --min-hops uint16         minimum route hops for this app's routes
+      --mux int                 parallel mux routes: 0=unlimited, 1=disabled (default), 2+=N routes (default 1)
+      --mux-mode string         mux weight mode: auto (latency-based) or equal (round-robin) (default "auto")
       --routing-policy string   per-app routing policy: @/path/to/policy.star or @/path/to/policy.wasm. Installed before the app starts; backend dispatched by file extension. Pass an empty string or "none" to clear a previously-installed override.
 ```
 

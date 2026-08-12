@@ -58,6 +58,67 @@ var (
 	notifyCapAt time.Time // last time a connected UI reported it can notify
 )
 
+// notifyFocusTTL is how long a "the user is looking at conversation X" report
+// stays believable without being refreshed. Short on purpose: the reporter is
+// a web page, and a page that gets backgrounded (an Android WebView above all)
+// has its timers frozen — the clear it would send never arrives, so the lease
+// expiring is what turns notifications back on. The page refreshes every few
+// seconds while focused.
+const notifyFocusTTL = 15 * time.Second
+
+var (
+	notifyFocusMu  sync.Mutex
+	notifyFocusKey string    // conversation an attached UI is showing ("" = none)
+	notifyFocusAt  time.Time // when that was last affirmed
+)
+
+// markUIFocus records (or clears) which conversation an attached UI is
+// actively displaying.
+func markUIFocus(key string, focused bool) {
+	notifyFocusMu.Lock()
+	if focused && key != "" {
+		notifyFocusKey, notifyFocusAt = key, time.Now()
+	} else {
+		notifyFocusKey, notifyFocusAt = "", time.Time{}
+	}
+	notifyFocusMu.Unlock()
+}
+
+// uiShowingThread reports whether an attached UI is displaying conversation
+// `key` right now: at least one SSE client, a matching focus report, and the
+// report still fresh. This is the gate that matters on Android, where the
+// WebView cannot own notifications (no Notifications API) so the capability
+// lease never suppresses anything — without this, a message lands as a system
+// notification while the user is looking at the very chat it belongs to.
+func uiShowingThread(key string) bool {
+	if key == "" || hub == nil || hub.clientCount() == 0 {
+		return false
+	}
+	notifyFocusMu.Lock()
+	defer notifyFocusMu.Unlock()
+	return notifyFocusKey == key && time.Since(notifyFocusAt) < notifyFocusTTL
+}
+
+// notifyFocusHandler serves POST /notify-focus {key, focused}: the UI reports
+// the conversation it is actively showing (group ID or peer PK hex), driving
+// the lease uiShowingThread() reads.
+func notifyFocusHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "POST only", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Key     string `json:"key"`
+		Focused bool   `json:"focused"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	markUIFocus(body.Key, body.Focused)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // markUINotifyCapable refreshes (capable) or clears (!capable) the lease.
 func markUINotifyCapable(capable bool) {
 	notifyCapMu.Lock()
@@ -121,6 +182,16 @@ func logOSNotifyStartup() {
 // `!osNotify` stays the first clause — TestMain flips that single flag to keep
 // the suite from posting real notifications on a developer's desktop.
 func notifyOSInbound(title, body string) {
+	notifyOSInboundThread("", "", title, body)
+}
+
+// notifyOSInboundThread is notifyOSInbound for a message that belongs to a
+// specific conversation. threadKey is the thread identity the UI itself uses
+// (group ID or peer PK hex): a message for the conversation on screen RIGHT
+// NOW is not a notification, it is the screen. tag rides to the visor hub so
+// sinks that coalesce by tag (the Android bridge) stack a conversation into
+// one notification instead of piling them up. Both may be empty.
+func notifyOSInboundThread(threadKey, tag, title, body string) {
 	if !shouldNotifyOS(osNotify, uiCanNotify()) {
 		// The gate is the first place a "why did I get no notification?"
 		// investigation stops, and until now it left no trace at all — an
@@ -134,7 +205,14 @@ func notifyOSInbound(title, body string) {
 		}
 		return
 	}
-	go deliverNotification(title, body)
+	if uiShowingThread(threadKey) {
+		if chatLog != nil {
+			chatLog.WithField("thread", threadKey).
+				Debug("skychat: notification suppressed — thread is on screen")
+		}
+		return
+	}
+	go deliverNotification(title, body, tag)
 }
 
 // uiClientCount reports how many browser UIs are attached, for the trace above:
@@ -158,9 +236,9 @@ func shouldNotifyOS(enabled, uiCapable bool) bool {
 // deliverNotification hands the notification to the visor, which routes it to
 // whichever sink can reach the user. In --standalone mode there is no visor
 // (appCl is nil), so it posts to the host OS itself — today's path, unchanged.
-func deliverNotification(title, body string) {
+func deliverNotification(title, body, tag string) {
 	if appCl != nil {
-		appCl.NotifyOrLog(title, body, "")
+		appCl.NotifyOrLog(title, body, tag)
 		return
 	}
 	if !osnotify.Available() {

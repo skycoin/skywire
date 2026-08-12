@@ -10,6 +10,11 @@ Open Hypervisor UI in default browser
 skywire cli visor hv ui
 ```
 
+## Subcommands
+
+- [disable](disable/README.md) — Stop the hypervisor web UI (keeps DMSG-RPC + hv ls running)
+- [enable](enable/README.md) — Start the hypervisor web UI (leaves DMSG-RPC + hv ls running)
+
 ## Global Flags
 
 ```

@@ -10,9 +10,9 @@ Uptime Tracker Server - tracks visor online status and uptime statistics.
 
 Depends: redis, postgres
 
-Production: http://ut.skywire.skycoin.com
+Production: dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80
             dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80
-Test:       http://ut.skywire.dev
+Test:       dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80
             dmsg://022c424caa6239ba7d1d9d8f7dab56cd5ec6ae2ea9ad97bb94ad4b48f62a540d3f:80
 
 HTTP Endpoints:
@@ -114,8 +114,10 @@ skywire svc ut
 ```
   -a, --addr string              address to bind to
                                   (default ":9096")
-      --dmsg-disc string         url of dmsg discovery
-                                  (default "http://dmsgd.skywire.skycoin.com")
+      --dmsg-disc string         plain-HTTP url of dmsg-discovery (deprecated; leave empty for dmsg-only)
+                                 
+      --dmsg-disc-dmsg string    dmsg-PK url of dmsg-discovery (default: embedded prod)
+                                  (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
       --dmsg-port uint16         dmsg port value
                                   (default 80)
       --enable-load-testing      enable load testing

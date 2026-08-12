@@ -18,6 +18,7 @@ skywire cli dmsg
 - [curl](curl/README.md) — Fetch data over dmsg
 - [diag](diag/README.md) — DMSG runtime diagnostics
 - [iperf](iperf/README.md) — Bulk throughput measurement over a dmsg stream
+- [port-hits](port-hits/README.md) — Inbound dmsg requests to ports with no listener (would-be connectors)
 - [probe](probe/README.md) — Probe a remote port's reachability over dmsg, skynet, or a direct TCP connection
 - [scp](scp/README.md) — Copy a file between this host and a remote visor over dmsg
 - [sessions](sessions/README.md) — List dmsg servers each visor dmsg client is connected to

@@ -34,13 +34,13 @@ skywire cli pty fs
 
 ## Subcommands
 
-- [mount](mount/README.md) — Mount a peer visor's filesystem over the sftp subsystem
-- [umount](umount/README.md) — Unmount a previously-mounted pty fs (calls fusermount -u)
+- [mount](mount/README.md) — Mount a peer visor's filesystem (Linux only)
+- [umount](umount/README.md) — Unmount a previously-mounted pty fs (Linux only)
 
 ## Flags
 
 ```
-      --no-visor-key       don't borrow the local visor's SK from /opt/skywire/skywire.json — use --sk or a random one instead
+      --no-visor-key       don't borrow the local visor's SK from /Library/Application Support/Skywire/skywire-config.json — use --sk or a random one instead
   -p, --port string        default port when the destination omits one (e.g. '<pk>@host' resolves to <pk>@host:<port>) (default "2022")
   -s, --sk cipher.SecKey   local client SK for the noise handshake (random if unset; pin for stable whitelist authorization) (default 0000000000000000000000000000000000000000000000000000000000000000)
 ```

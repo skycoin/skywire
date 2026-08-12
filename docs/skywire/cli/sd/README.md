@@ -5,8 +5,8 @@
 Display combined service discovery and transport statistics
 
 Combines data from:
-- Service Discovery: http://sd.skycoin.com/api/services
-- Transport Discovery: http://tpd.skywire.skycoin.com/all-transports
+- Service Discovery: dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80/api/services
+- Transport Discovery: dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/all-transports
 
 Shows public keys with their services and transport counts by type.
 
@@ -21,24 +21,25 @@ skywire cli sd
 ## Flags
 
 ```
-      --cds string       SD cache dir ("" to disable) (default "/tmp/sd.skycoin.com")
-      --cdt string       TPD cache dir ("" to disable) (default "/tmp/tpd.skywire.skycoin.com")
-      --cdu string       UT cache dir ("" to disable) (default "/tmp/ut.skywire.skycoin.com")
-  -m, --cfa int          update cache files if older than n minutes (default 5)
-  -c, --country string   filter by country code
-      --json             print output in json
-  -n, --min int          filter by minimum transport count
-      --no-cxo           skip CXO subscriber-cache step
-      --no-dmsg          skip direct DMSG HTTP step
-      --no-http          skip direct HTTP fallback step
-      --no-rpc           skip visor RPC (DmsgHTTP) step
-  -o, --noton            do not filter by online status in UT
-      --rpc string       RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
-  -a, --sdurl string     service discovery url (default "http://sd.skycoin.com")
-      --testenv          use test deployment
-  -b, --tpdurl string    transport discovery url (default "http://tpd.skywire.skycoin.com")
-  -w, --uturl string     uptime tracker url (default "http://ut.skywire.skycoin.com")
-  -e, --version string   filter by version
+      --cds string         SD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --cdt string         TPD cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+      --cdu string         UT cache dir ("" to disable) (default "/var/folders/pd/zbl_01w934lgsn0zlvfqbdv40000gn/T/02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -m, --cfa int            update cache files if older than n minutes (default 5)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
+  -c, --country string     filter by country code
+      --json               print output in json
+  -n, --min int            filter by minimum transport count
+      --no-cxo             skip CXO subscriber-cache step
+      --no-dmsg            skip direct DMSG HTTP step
+      --no-rpc             skip visor RPC (DmsgHTTP) step
+  -o, --noton              do not filter by online status in UT
+      --rpc string         RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
+  -a, --sdurl string       service discovery url (default "dmsg://0204890f9def4f9a5448c2e824c6a4afc85fd1f877322320898fafdf407cc6fef7:80")
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --testenv            use test deployment
+  -b, --tpdurl string      transport discovery url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -w, --uturl string       TPD-integrated uptime tracker url (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
+  -e, --version string     filter by version
 ```
 
 ## Global Flags
