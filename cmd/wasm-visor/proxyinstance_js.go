@@ -370,7 +370,7 @@ func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKe
 			_ = setProxyExit(defaultProxyID, r.pk) //nolint:errcheck
 			reArmDefaultAuto()
 			vlog(fmt.Sprintf("[skysocks-lite] active proxy exit: %s", exitShort(r.pk)))
-				prewarmDefaultSession(r.pk) // establish the SHARED user session now → first fetch is instant
+			prewarmDefaultSession(r.pk) // establish the SHARED user session now → first fetch is instant
 			continue
 		}
 		proxyPoolMu.Lock()
