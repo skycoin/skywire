@@ -1,21 +1,21 @@
 // Package skysocksc cmd/skywire-cli/commands/proxy/mux_auto.go c4-vis-cli
 //
-// mux-auto is the adaptive control loop — the "adaptive" leg of the
-// observable -> manual -> adaptive arc. It reads the live mux-info signals
+// mux auto is the adaptive control loop — the "adaptive" leg of the
+// observable -> manual -> adaptive arc. It reads the live mux info signals
 // (per-leg latency) and steers a running proxy's legs toward a preset's
 // intent, reusing the same RouteGroupMuxInfo read and RemoveMuxRoute /
-// AddMuxRoute actuators that mux-info and mux-set proved.
+// AddMuxRoute actuators that mux info and mux set proved.
 //
 // This first increment is PRUNE-based: it converges the mux to the K
 // lowest-latency legs per the preset (the primary route is always kept).
-// Growing the set back to K — route-calc + mux-add when legs are lost, for
+// Growing the set back to K — route-calc + mux add when legs are lost, for
 // failover / demand-scaling — is the next increment (the latency signal +
 // the AddMuxRoute path are already in place; only the route source needs
 // wiring).
 //
-//	skywire cli proxy mux-auto fastest --watch 5s    # keep the single best path
-//	skywire cli proxy mux-auto balanced --watch 5s   # keep a few low-latency legs
-//	skywire cli proxy mux-auto resilient --dry-run   # show the decision, don't act
+//	skywire cli proxy mux auto fastest --watch 5s    # keep the single best path
+//	skywire cli proxy mux auto balanced --watch 5s   # keep a few low-latency legs
+//	skywire cli proxy mux auto resilient --dry-run   # show the decision, don't act
 package skysocksc
 
 import (
@@ -60,7 +60,7 @@ var autoPresets = map[string]autoPreset{
 
 func init() {
 	muxAutoCmd.Flags().StringVarP(&muxAutoApp, "name", "n", "skysocks-client", "app to adapt")
-	muxAutoCmd.Flags().Uint16Var(&muxAutoSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
+	muxAutoCmd.Flags().Uint16Var(&muxAutoSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
 	muxAutoCmd.Flags().DurationVarP(&muxAutoWatch, "watch", "w", 0, "re-evaluate every interval (e.g. 5s); 0 = decide once and exit")
 	muxAutoCmd.Flags().BoolVar(&muxAutoDry, "dry-run", false, "print the prune/grow decision without acting")
 	muxAutoCmd.Flags().IntVar(&muxAutoMinHops, "min-hops", 2, "hop-count floor for legs added when growing toward the preset (>=2 keeps grown legs multihop)")
@@ -70,7 +70,7 @@ func init() {
 var muxAutoCmd = &cobra.Command{
 	Use:   "auto <fastest|balanced|resilient>",
 	Short: "Adapt a proxy session's mux legs to a preset off live latency",
-	Long: `Adaptive control loop: read the live per-leg latency (mux-info) and
+	Long: `Adaptive control loop: read the live per-leg latency (mux info) and
 prune a running proxy's mux toward the preset's intent. The primary route
 is always kept.
 
@@ -80,13 +80,13 @@ Presets converge the mux to the K lowest-latency legs:
   resilient  up to 8 lowest-latency legs (max redundancy)
 
 Each tick PRUNES excess/slowest legs toward the preset, then GROWS the set
-back up with fresh disjoint legs (visor-side route-calc + mux-add, honoring
+back up with fresh disjoint legs (visor-side route-calc + mux add, honoring
 --min-hops) when live legs drop below the target — adaptive failover both
-ways. Pair with 'mux-info --watch' in another terminal to see the effect.
+ways. Pair with 'mux info --watch' in another terminal to see the effect.
 
 Example:
-  skywire cli proxy mux-auto fastest --watch 5s
-  skywire cli proxy mux-auto resilient --dry-run`,
+  skywire cli proxy mux auto fastest --watch 5s
+  skywire cli proxy mux auto resilient --dry-run`,
 	Args:                  cobra.ExactArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -145,7 +145,7 @@ Example:
 			}
 			// GROW: after pruning, restore redundancy. When live legs are
 			// below the preset target, add disjoint legs. Planning runs
-			// visor-side (GrowMuxRoute) because mux-info only exposes each
+			// visor-side (GrowMuxRoute) because mux info only exposes each
 			// leg's first-hop PK, not the full chains needed for a correct
 			// disjoint exclude-set.
 			live := len(rg.Legs) - pruned
@@ -241,10 +241,10 @@ func selectAutoRG(rgs []muxRouteGroupInfo, srcPort uint16) (muxRouteGroupInfo, e
 				return rg, nil
 			}
 		}
-		return muxRouteGroupInfo{}, fmt.Errorf("no active route group with src_port=%d (see 'mux-info')", srcPort)
+		return muxRouteGroupInfo{}, fmt.Errorf("no active route group with src_port=%d (see 'mux info')", srcPort)
 	}
 	if len(rgs) > 1 {
-		return muxRouteGroupInfo{}, fmt.Errorf("app=%s has %d active route groups; pass --rg <src_port> (see 'mux-info')", muxAutoApp, len(rgs))
+		return muxRouteGroupInfo{}, fmt.Errorf("app=%s has %d active route groups; pass --rg <src_port> (see 'mux info')", muxAutoApp, len(rgs))
 	}
 	return rgs[0], nil
 }

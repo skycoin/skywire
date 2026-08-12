@@ -7,26 +7,26 @@
 //
 // Workflow:
 //
-//	skywire cli proxy mux-info                          # see current legs
+//	skywire cli proxy mux info                          # see current legs
 //	skywire cli route calc <peer-pk> --json | \
-//	    skywire cli proxy mux-add                       # add a leg over piped route
-//	skywire cli proxy mux-rm <tp-id>                    # drop a leg by first-hop tp
-//	skywire cli proxy mux-mode auto|equal               # change scheduler
+//	    skywire cli proxy mux add                       # add a leg over piped route
+//	skywire cli proxy mux rm <tp-id>                    # drop a leg by first-hop tp
+//	skywire cli proxy mux mode auto|equal               # change scheduler
 //
-// mux-add reads a {forward, reverse} hop list (JSON) from stdin or
+// mux add reads a {forward, reverse} hop list (JSON) from stdin or
 // from --route <file>. The shape matches what 'cli route calc
-// --json' emits, so the natural pipeline is calc | mux-add. When
+// --json' emits, so the natural pipeline is calc | mux add. When
 // stdin or the file holds an array of routes ('route calc --count N'),
-// mux-add uses the first; pre-filter with jq if you want a specific
+// mux add uses the first; pre-filter with jq if you want a specific
 // one. The visor refuses to attach a leg that starts on a transport
 // already in the rg.
 //
 // When the named app has multiple concurrent rg's (e.g. one per
 // active SOCKS5 client connection on skysocks-client), use --rg
-// <src-port> to pick which one. 'mux-info' prints the src_port
+// <src-port> to pick which one. 'mux info' prints the src_port
 // for every rg so you can copy it across.
 //
-// Combined with 'mux-info --watch' in a second terminal, this gives
+// Combined with 'mux info --watch' in a second terminal, this gives
 // you the basic interactive loop for exploring mux behavior at
 // runtime.
 package skysocksc
@@ -53,10 +53,10 @@ var (
 
 func init() {
 	muxAddCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route group to modify")
-	muxAddCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
+	muxAddCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
 	muxAddCmd.Flags().StringVar(&muxAddRouteSrc, "route", "-", "route JSON file ('-' = stdin); shape is 'cli route calc --json' output")
 	muxRmCmd.Flags().StringVarP(&muxOpsApp, "name", "n", "skysocks-client", "app whose route group to modify")
-	muxRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux-info' (only needed when the app has multiple active rg's)")
+	muxRmCmd.Flags().Uint16Var(&muxOpsSrcPort, "rg", 0, "rg disambiguator: ephemeral src_port from 'mux info' (only needed when the app has multiple active rg's)")
 	addMuxSub(muxAddCmd, "mux-add")
 	addMuxSub(muxRmCmd, "mux-rm")
 	addMuxSub(muxModeCmd, "mux-mode")
@@ -124,12 +124,12 @@ target one of them; otherwise the visor errors with the candidate
 list.
 
 Example:
-  skywire cli proxy mux-info                                # see current legs + rg src_port
+  skywire cli proxy mux info                                # see current legs + rg src_port
   skywire cli route calc <peer-pk> --json | \
-      skywire cli proxy mux-add                             # pipe the calculated route
+      skywire cli proxy mux add                             # pipe the calculated route
   skywire cli route calc <peer-pk> --count 5 --json > r.json
-  skywire cli proxy mux-add --route r.json                  # or read from a file (uses [0])
-  skywire cli proxy mux-info                                # confirm it appeared`,
+  skywire cli proxy mux add --route r.json                  # or read from a file (uses [0])
+  skywire cli proxy mux info                                # confirm it appeared`,
 	Args:                  cobra.NoArgs,
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, _ []string) {
@@ -166,8 +166,8 @@ target one of them; otherwise the visor errors with the candidate
 list.
 
 Example:
-  skywire cli proxy mux-info                            # find the leg
-  skywire cli proxy mux-rm 55d43098-bae7-029e-bd8e-b228f7208930`,
+  skywire cli proxy mux info                            # find the leg
+  skywire cli proxy mux rm 55d43098-bae7-029e-bd8e-b228f7208930`,
 	Args:                  cobra.ExactArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -204,9 +204,9 @@ Affects every active and future mux'd route group on this visor.
 The setting persists to skywire-config.json so it survives restart.
 
 Example:
-  skywire cli proxy mux-mode equal      # before measuring aggregation
-  skywire cli proxy mux-info --watch 1s
-  skywire cli proxy mux-mode auto       # back to weighted`,
+  skywire cli proxy mux mode equal      # before measuring aggregation
+  skywire cli proxy mux info --watch 1s
+  skywire cli proxy mux mode auto       # back to weighted`,
 	Args:                  cobra.ExactArgs(1),
 	DisableFlagsInUseLine: true,
 	Run: func(cmd *cobra.Command, args []string) {
