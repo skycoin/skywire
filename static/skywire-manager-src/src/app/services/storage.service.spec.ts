@@ -78,10 +78,10 @@ describe('StorageService', () => {
   describe('labels', () => {
     it('saves, updates and removes a label', () => {
       service.saveLabel('id1', 'First', LabeledElementTypes.Node);
-      expect(service.getLabelInfo('id1').label).toBe('First');
+      expect(service.getLabelInfo('id1')!.label).toBe('First');
 
       service.saveLabel('id1', 'Renamed', LabeledElementTypes.Node);
-      expect(service.getLabelInfo('id1').label).toBe('Renamed');
+      expect(service.getLabelInfo('id1')!.label).toBe('Renamed');
 
       service.saveLabel('id1', '', LabeledElementTypes.Node);
       expect(service.getLabelInfo('id1')).toBeNull();
