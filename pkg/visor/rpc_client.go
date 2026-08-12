@@ -1484,6 +1484,16 @@ func (rc *rpcClient) SetDmsgSessionsCount(count int) (*DmsgConnectAllResult, err
 	return &resp, nil
 }
 
+// DmsgConverge optionally sets the dmsg carrier preference (empty = leave
+// as-is) and runs one carrier-convergence pass on the main dmsg client.
+func (rc *rpcClient) DmsgConverge(carriers []string) (*DmsgConvergeResult, error) {
+	var resp DmsgConvergeResult
+	if err := rc.Call("DmsgConverge", &carriers, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // DmsgSessions returns the current dmsg session state of every dmsg client
 // running inside the visor (main / route_setup / transport_setup).
 func (rc *rpcClient) DmsgSessions() (*DmsgClientSessions, error) {

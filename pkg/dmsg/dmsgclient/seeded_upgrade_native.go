@@ -25,5 +25,8 @@ func upgradeDiscovery(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Clie
 	dmsgHTTP := &http.Client{Transport: dmsghttp.MakeHTTPTransport(ctx, dmsgC)}
 	httpDisc := disc.NewHTTP(discDmsgAddr, dmsgHTTP, log)
 	dmsgC.SetDiscoveryClients([]disc.APIClient{NewRegisteringFallbackDiscClient(dClient, httpDisc, log)})
+	// Carrier convergence needs a LIVE lookup (fresh AddressWT/CertHashWT) that
+	// bypasses the static-seed-first fallback above, which shadows those.
+	dmsgC.SetLiveDiscovery(httpDisc)
 	return nil
 }
