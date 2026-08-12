@@ -603,6 +603,28 @@ func (s *Server) setupRoutes() {
 		w.Write(content) //nolint:errcheck,gosec
 	})
 
+	// The Go/wasm WebGL view, loaded lazily by bundle.js when that view is
+	// selected from the toggle — it runs alongside the JavaScript WebGL view so
+	// the two engines can be compared on the same data.
+	s.mux.HandleFunc("/tpviz-gl.wasm", func(w http.ResponseWriter, r *http.Request) {
+		content, err := legacyFS.ReadFile("legacy/tpviz-gl.wasm")
+		if err != nil {
+			http.Error(w, "Failed to read tpviz-gl.wasm", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/wasm")
+		w.Write(content) //nolint:errcheck,gosec
+	})
+	s.mux.HandleFunc("/tpviz-gl-exec.js", func(w http.ResponseWriter, r *http.Request) {
+		content, err := legacyFS.ReadFile("legacy/tpviz-gl-exec.js")
+		if err != nil {
+			http.Error(w, "Failed to read tpviz-gl-exec.js", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Write(content) //nolint:errcheck,gosec
+	})
+
 	// Serve textures for globe visualization
 	s.mux.HandleFunc("/textures/", func(w http.ResponseWriter, r *http.Request) {
 		// Extract filename from path
