@@ -3,7 +3,7 @@
 [← skywire cli](../README.md)
 
 skycoin reward address set to:
-    2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+    2GgFvqoyk9RjwVzj8tqfcXVXB4orBwoc9qv
 
 ## Usage
 
@@ -20,10 +20,10 @@ skywire cli reward <address | xpub> || [flags]
 
 ```
   -a, --address string   reward address
-                         default: 2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
-  -o, --out string       write reward address to: /opt/skywire/local/reward.txt
+                         default: 2GgFvqoyk9RjwVzj8tqfcXVXB4orBwoc9qv
+  -o, --out string       write reward address to: /Library/Application Support/Skywire/local/reward.txt
   -r, --read             print the skycoin reward address & exit
-                         2jBbGxZRGoQG1mqhPBnXnLTxK6oxsTf8os6
+                         2GgFvqoyk9RjwVzj8tqfcXVXB4orBwoc9qv
   -d, --delete           delete reward addresss file - opt out of rewards
       --pks string       comma-separated visor PKs (via hypervisor) to set reward address on
       --all-visors       apply reward address to every visor connected to this hypervisor (requires running hypervisor)

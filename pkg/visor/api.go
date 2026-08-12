@@ -301,6 +301,8 @@ type API interface {
 	GroupUnmuteMember(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupSetReadOnly(id string, readOnly bool) (GroupInfo, error)
 	GroupSetListed(id string, listed bool) (GroupInfo, error)
+	GroupSetMeta(args GroupSetMetaArgs) (GroupInfo, error)
+	GroupRefreshMeta(id string) (GroupInfo, error)
 	GroupCatalog(host cipher.PubKey) ([]GroupCatalogEntry, bool, error)
 	GroupPromoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)
 	GroupDemoteAdmin(id string, pk cipher.PubKey) (GroupInfo, error)

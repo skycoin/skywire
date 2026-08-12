@@ -17,7 +17,44 @@ func (r *router) SetupIsTrusted(sPK cipher.PubKey) bool {
 
 // SetMinHop set minhop when visor running
 func (r *router) SetMinHop(minhop uint16) {
+	r.minHopsMu.Lock()
+	defer r.minHopsMu.Unlock()
 	r.conf.MinHops = minhop
+	r.logger.Infof("SetMinHop: %v", minhop)
+}
+
+// MinHops is the visor-global minimum hop count. Read under the same lock
+// [SetMinHop] writes it with: the API can change it while dials are in
+// flight, and every dial reads it to decide whether a direct transport is
+// allowed at all.
+func (r *router) MinHops() uint16 {
+	r.minHopsMu.RLock()
+	defer r.minHopsMu.RUnlock()
+	return r.conf.MinHops
+}
+
+// EffectiveMinHops is the min-hops constraint a dial must satisfy: the
+// strictest of the per-dial overrides and the visor-global setting.
+//
+// This is the one place that resolves the two, and it exists because they
+// were being conflated. DialOptions.MinHops == 0 means "inherit
+// Config.MinHops" (see its doc), but three call sites read the zero as "no
+// constraint" and let a direct transport through — the direct-transport
+// downgrade in DialRoutes, the appnet direct shortcut, and the local-BFS
+// fallback. An operator who set min_hops=3 and happened to have a direct
+// transport to the destination therefore got one hop and no warning, which
+// on the VPN is the privacy setting quietly not applying.
+func (r *router) EffectiveMinHops(opts *DialOptions) uint16 {
+	effective := r.MinHops()
+	if opts == nil {
+		return effective
+	}
+	for _, perDial := range []int{opts.MinHops, opts.EffectiveMinHops(true), opts.EffectiveMinHops(false)} {
+		if perDial > 0 && uint16(perDial) > effective { //nolint:gosec // CLI/RPC values are small
+			effective = uint16(perDial) //nolint:gosec // bounded by the comparison above
+		}
+	}
+	return effective
 }
 
 // SetExistingTPOnly sets whether to only use existing transports for routing.

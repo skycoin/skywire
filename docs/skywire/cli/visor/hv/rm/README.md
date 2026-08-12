@@ -2,14 +2,15 @@
 
 [← skywire cli visor hv](../README.md)
 
-Tear down a runtime-added hypervisor connection. Mirrors hv add
-— only affects connections created via AddHypervisor (this RPC or
-the corresponding CLI). Config-loaded hypervisors aren't affected;
-edit SKYENV HYPERVISORPKS and restart the visor to remove those.
+Tear down a hypervisor connection at runtime AND remove its PK
+from the config's hypervisors list, so it stays removed across a
+restart. Works for both runtime-added (hv add) and config-loaded
+hypervisors. (On a non-file-backed config — wasm tab / STDIN — the
+disconnect happens but cannot be persisted.)
 
-Pass --all to disconnect every runtime-added hypervisor in one
-call. Without --all, exactly one <public-key> argument is
-required.
+Pass --all to disconnect every hypervisor and clear the configured
+list in one call. Without --all, exactly one <public-key> argument
+is required.
 
 ## Usage
 

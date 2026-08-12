@@ -19,18 +19,26 @@ skywire cli skychat group
 ## Subcommands
 
 - [add](add/README.md) — Owner: extend the group allowlist by one member PK
+- [address](address/README.md) — Print the short skychat:// address of a group
+- [ask-again](ask-again/README.md) — Re-request to join a group after an admin declined
+- [catalog](catalog/README.md) — List the groups and channels a visor publishes
 - [create](create/README.md) — Create a new group (this visor becomes the owner)
 - [delete](delete/README.md) — Owner: delete a group (tears down the publisher)
 - [demote](demote/README.md) — Admin: revoke roster authority from PK (founder cannot be demoted)
 - [history](history/README.md) — Print persisted group messages from the visor's history store
 - [info](info/README.md) — Show one group's full record
 - [invite](invite/README.md) — Re-emit the invite link for an owner-side group
-- [join](join/README.md) — Join a group by invite link
+- [join](join/README.md) — Join a group by invite link or short skychat:// address
 - [leave](leave/README.md) — Member: leave a group (tears down the subscriber)
 - [list](list/README.md) — List all groups this visor knows about
 - [listen](listen/README.md) — Stream inbound group messages (across every joined group)
+- [peer-backfill](peer-backfill/README.md) — Admin: allow any online member (on) or only admins (off) to serve history
 - [promote](promote/README.md) — Admin: grant roster authority (add/remove members, issue invites) to PK
+- [publish](publish/README.md) — Publish a group or channel in this visor's discovery catalog
+- [resolve](resolve/README.md) — Report what a skychat address points at
+- [rotate-key](rotate-key/README.md) — Admin: mint a new group key and seal it to each current member
 - [send](send/README.md) — Publish a message to a group (owner-only in v1)
+- [unsend](unsend/README.md) — Delete a message you published, by its UnixNano timestamp
 
 ## Global Flags
 

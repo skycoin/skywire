@@ -9,7 +9,7 @@ pings each intermediate visor over dmsg, reporting RTT per hop. Same
 shape as Unix traceroute: hop number, intermediate PK, RTT.
 
 The route is fetched from the route finder (--rf URL, default
-http://rf.skywire.skycoin.com). Intermediate ping uses the
+dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80). Intermediate ping uses the
 local visor's DmsgPing RPC so the intermediates don't need to be on
 the route to <pk> — only reachable on dmsg (which they must be to
 serve as a route hop in the first place).
@@ -38,13 +38,14 @@ skywire cli route trace <pk>
   -n, --min uint16         minimum hops requested from route finder (default 1)
   -x, --max uint16         maximum hops requested from route finder (default 5)
   -t, --timeout duration   route-finder request timeout (default 10s)
-  -a, --rf string          route finder URL (default "http://rf.skywire.skycoin.com")
+  -a, --rf string          route finder URL (default "dmsg://039d89c5eedfda4a28b0c58b0b643eff949f08e4f68c8357278081d26f5a592d74:80")
   -c, --count int          ping samples per hop (best-of returned as the per-hop RTT) (default 3)
   -q, --quiet              only print the per-hop table; suppress the route-discovery preamble on stderr
       --no-cxo             skip CXO subscriber-cache step
       --no-rpc             skip visor RPC (DmsgHTTP) step
       --no-dmsg            skip direct DMSG HTTP step
-      --no-http            skip direct HTTP fallback step
+      --sk cipher.SecKey   secret key for the CLI-owned dmsg client (random if unset; prefer --config to avoid shell-history leak) (default 0000000000000000000000000000000000000000000000000000000000000000)
+      --config string      path to a JSON file with the CLI's dmsg identity + bootstrap (see clirpc.FetchConfig)
 ```
 
 ## Global Flags

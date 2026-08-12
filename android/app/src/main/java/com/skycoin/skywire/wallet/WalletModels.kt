@@ -45,6 +45,18 @@ data class CoinSpec(
         CoinKind.SKY_FIBER -> 6
     }
 
+    /**
+     * True for the native coin and every ERC-20 — one account on one chain,
+     * one address, differing only in which asset is being looked at. A wallet
+     * for any of them is a wallet for all of them, which is why creating one
+     * mirrors across the rest (WalletRepository.mirrorIntoEthFamily).
+     *
+     * Fiber coins are deliberately not a family: they derive alike but each
+     * is a separate chain with its own ledger, so sharing a wallet between
+     * two of them would claim a balance that is not there.
+     */
+    val isEthFamily: Boolean get() = kind == CoinKind.ETH || kind == CoinKind.ERC20
+
     /** Decimals shown in balances and amount fields. */
     val displayDecimals: Int get() = when (kind) {
         CoinKind.BTC -> 8

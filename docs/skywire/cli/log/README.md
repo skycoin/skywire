@@ -2,9 +2,9 @@
 
 [← skywire cli](../README.md)
 
-Fetch health, survey, and transport logging from visors which are online in the uptime tracker
-http://ut.skywire.skycoin.com/uptimes?v=v2
-http://ut.skywire.skycoin.com/uptimes?v=v2&visors=<pk1>;<pk2>;<pk3>
+Fetch health, survey, and transport logging from visors which are online in the TPD-integrated uptime tracker
+dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes?v=v3
+dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80/uptimes?v=v3&visors=<pk1>;<pk2>;<pk3>
 
 ## Usage
 
@@ -32,22 +32,25 @@ skywire cli log
   -k, --pks string                   fetch only from specific public keys ; semicolon separated
   -d, --dir string                   save files to specified dir (default "log_collecting")
   -c, --clean                        delete files and folders on errors
-      --minv string                  minimum visor version to fetch from (default "v1.3.19")
+      --minv string                  minimum visor version to fetch from ("auto" = the dynamic 14-day reward-eligibility floor from GitHub releases) (default "v1.3.19")
       --include-versions string      list of version that not satisfy our minimum version condition, but we want include them
   -n, --duration int                 number of days before today to fetch transport logs for
       --all                          consider all visors ; no version filtering
       --batchSize int                number of visor in each batch (default 50)
       --maxfilesize int              maximum file size allowed to download during collecting logs, in KB (default 1024)
   -D, --dmsg-disc string             dmsg discovery url
-                                      (default "http://dmsgd.skywire.skycoin.com")
-  -u, --ut string                    uptime tracker url
-                                      (default "http://ut.skywire.skycoin.com")
+                                      (default "dmsg://022e607e0914d6e7ccda7587f95790c09e126bbd506cc476a1eda852325aadd1aa:80")
+  -u, --ut string                    uptime tracker url (default: TPD-integrated /uptimes)
+                                      (default "dmsg://02b307aee5c8ce1666c63891f8af25ad2f0a47a243914c963942b3ba35b9d095ae:80")
   -s, --sk cipher.SecKey             a random key is generated if unspecified
                                       (default 0000000000000000000000000000000000000000000000000000000000000000)
       --cleanup                      run cleanup after collection (remove old/invalid files) (default true)
       --backup-dir string            backup directory to also clean (default "log_backups")
       --max-age int                  maximum age in days for files before deletion (default 7)
-      --prune-below-version string   during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43)
+      --prune-below-version string   during cleanup, also remove existing surveys whose skywire_version is below this (e.g. v1.3.43; "auto" = the dynamic 14-day reward floor)
+      --proxy skywire dmsg web       fetch via a dmsgweb SOCKS5 resolving proxy (host:port, e.g. 127.0.0.1:4443)
+                                     instead of this command's own dmsg client — reuses the proxy's warm
+                                     dmsg sessions (e.g. a running skywire dmsg web), avoiding cold first-contact timeouts
       --rpc string                   RPC server address (env: SKYWIRE_RPC) (default "localhost:3435")
 ```
 

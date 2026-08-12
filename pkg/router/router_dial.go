@@ -143,7 +143,13 @@ func (r *router) DialRoutes(
 			}
 		}
 	}
-	if r.isTpdExist(rPK) && !opts.AnyMinHopsConstraint() {
+	// The downgrade applies only when NOTHING asks for more than one hop —
+	// and "nothing" includes the visor-global setting, not just the per-dial
+	// overrides. opts.MinHops == 0 means "inherit Config.MinHops", so reading
+	// the zero as "no constraint" handed an operator who set min_hops=3 a
+	// one-hop route the moment a direct transport happened to exist, without
+	// a word. On the VPN that is the privacy control silently not applying.
+	if r.isTpdExist(rPK) && r.EffectiveMinHops(opts) <= 1 {
 		baseMinHops = 1
 	}
 
@@ -234,6 +240,25 @@ func (r *router) DialRoutes(
 	// transport for a cold peer, and the loop below waits on it once.
 	if hookDone == nil && r.tm != nil && r.tm.TransportCount() == 0 {
 		log.Debug("No local transports and no pending transport creation; skipping route finder")
+		// Naming min-hops when it is the reason there is no transport to
+		// begin with. The hook that creates one on demand runs only at
+		// baseMinHops == 1 (see above), so a visor holding none — a phone
+		// that has just started, most of all — cannot dial at 2 or more:
+		// route setup is skipped here, before the route finder is ever
+		// asked, and "no transports available" on its own reads as a
+		// network fault rather than a consequence of the chosen setting.
+		if baseMinHops > 1 {
+			// Naming public autoconnect because it is the lever, not a
+			// detail: it is what fills the transport table with public
+			// visors, and those are the intermediates a multi-hop route is
+			// made of. Dialing once at one hop only builds a transport to
+			// the exit — enough to get past this check, not enough to route
+			// THROUGH anything, so the finder would then return nothing.
+			return nil, fmt.Errorf("no transports available and none created for a multi-hop dial "+
+				"(min_hops=%d): this visor holds no transport to route through — "+
+				"enable autoconnect to public visors so it builds some, or lower the setting",
+				baseMinHops)
+		}
 		return nil, fmt.Errorf("no transports available; route setup skipped")
 	}
 
@@ -756,6 +781,33 @@ func (r *router) PingRoute(
 // LOCAL value — applying the direct-transport downgrade there rather than
 // mutating the shared r.conf.MinHops, which used to race across concurrent
 // dials and permanently lose the constraint on any early-return error path.
+// noRouteErr says which constraint could not be met, wrapping ErrNoRouteFound
+// so existing errors.Is checks still hold.
+//
+// "no route founds" on its own is what a user is left with after setting
+// min_hops to 2 or 3 and watching the VPN refuse to connect: it does not say
+// that the hop count is what failed, so the setting is the last thing they
+// suspect. The number they chose belongs in the message, because it is the
+// one thing they can change.
+func noRouteErr(fwdMinHops, revMinHops uint16, dst cipher.PubKey) error {
+	minHops := fwdMinHops
+	if revMinHops > minHops {
+		minHops = revMinHops
+	}
+	if minHops <= 1 {
+		return ErrNoRouteFound
+	}
+	// Hops are transports, so the intermediates are one fewer.
+	intermediates := minHops - 1
+	plural := "s"
+	if intermediates == 1 {
+		plural = ""
+	}
+	return fmt.Errorf("%w: none to %s with at least %d hop%s (min_hops=%d, %d intermediate%s) — "+
+		"lower min_hops or wait for a route through more visors",
+		ErrNoRouteFound, dst, minHops, plural, minHops, intermediates, plural)
+}
+
 func (r *router) fetchBestRoutes(ctx context.Context, log *logging.Logger, src, dst cipher.PubKey, opts *DialOptions, baseMinHops uint16) (fwd, rev []routing.Hop, err error) {
 	if log == nil {
 		log = r.logger
@@ -881,8 +933,9 @@ fetchRoutesAgain:
 			return localFwd, localRev, nil
 		}
 		log.WithError(localErr).Warn("Local route calculation also failed")
-		log.Errorf(ErrNoRouteFound.Error())
-		return nil, nil, ErrNoRouteFound
+		err := noRouteErr(fwdMinHops, revMinHops, dst)
+		log.Error(err.Error())
+		return nil, nil, err
 	}
 	if retries > 0 {
 		retries--
@@ -1448,16 +1501,13 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// that need genuinely asymmetric local paths must use the
 	// route-finder service (fetchBestRoutes path) which queries each
 	// direction independently.
-	bfsMinHops := 0
-	if dialOpts != nil {
-		bfsMinHops = dialOpts.MinHops
-		if fwdEff := dialOpts.EffectiveMinHops(true); fwdEff > bfsMinHops {
-			bfsMinHops = fwdEff
-		}
-		if revEff := dialOpts.EffectiveMinHops(false); revEff > bfsMinHops {
-			bfsMinHops = revEff
-		}
-	}
+	// The visor-global setting is part of the constraint, not a default that
+	// the absence of per-dial options overrides. This is the fallback the
+	// route finder's failure lands in, so reading only dialOpts made it the
+	// place a min_hops=3 dial quietly became a direct one: the finder refused
+	// to serve 3 hops, and the fallback — seeing opts.MinHops == 0 — decided
+	// direct was fine.
+	bfsMinHops := int(r.EffectiveMinHops(dialOpts))
 	allowDirect := bfsMinHops <= 1
 
 	// Check for direct (1-hop) route first
@@ -1602,15 +1652,15 @@ func (r *router) calculateLocalRoutes(ctx context.Context, log *logging.Logger, 
 	// sorted by intermediate-PK string before enqueueing, so the
 	// same (src, dst, minHops, maxHops, transport graph) tuple
 	// always yields the same path.
+	// bfsMinHops (computed above) already resolves the per-dial overrides
+	// against the visor-global setting, so it is the constraint. Local-BFS
+	// mirrors forward→reverse so both directions share one path; satisfying
+	// the higher constraint ensures the stricter direction is honored. The
+	// 2 is only for a router with routing effectively unconfigured — this
+	// branch is multi-hop search, so one hop is not an answer it can give.
 	minHops := 2
-	// Use bfsMinHops computed above (max across symmetric + per-
-	// direction). Local-BFS mirrors forward→reverse so both directions
-	// share one path; satisfying the higher constraint ensures the
-	// stricter direction is honored.
 	if bfsMinHops > 0 {
 		minHops = bfsMinHops
-	} else if dialOpts != nil && dialOpts.MinHops > 0 {
-		minHops = dialOpts.MinHops
 	}
 	// MaxHops is taken from the router-wide config (DialOptions
 	// doesn't currently expose a per-call ceiling). Default to 7 if

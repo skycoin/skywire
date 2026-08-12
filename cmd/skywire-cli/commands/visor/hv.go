@@ -244,7 +244,14 @@ the config file by hand. The visor connects to the hypervisor
 immediately via DMSG AND persists the PK to the config's
 hypervisors list, so the connection survives a restart. (On a
 non-file-backed config — wasm tab / STDIN — the connection is made
-but cannot be persisted.)`,
+but cannot be persisted.)
+
+The outbound connection (hv ls / hv tui / web UI on the hypervisor)
+works right away. The INBOUND access the PK grants — driving this
+visor with 'skywire cli --via dmsg://<this-visor>' from the
+hypervisor's machine — starts on this visor's next restart, when the
+dmsg RPC listeners and the peer whitelist are rebuilt from config.
+See docs/guides/remote-visor-cli.md.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		var pk cipher.PubKey

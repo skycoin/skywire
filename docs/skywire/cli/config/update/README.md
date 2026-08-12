@@ -24,12 +24,13 @@ skywire cli config update
 ```
   -a, --endpoints                update server endpoints
       --log-level string         level of logging in config
-  -b, --url string               service config URL (default "http://conf.skywire.skycoin.com")
+  -b, --url string               service config URL (default "dmsg://021f751cb8690a96585e10c4d253513cd208bd659fd4f6c227ad49d2b75eec1ff2:80")
   -t, --testenv                  use test deployment
       --public-autoconn string   change public autoconnect configuration
       --set-minhop int           change min hops value (default -1)
   -i, --input string             path of input config file.
   -o, --output string            config file to output
+  -u, --user                     update config at: $HOME/skywire-config.json
 ```
 
 ## Global Flags

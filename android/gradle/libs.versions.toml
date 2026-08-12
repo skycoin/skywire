@@ -25,6 +25,12 @@ bouncycastle = "1.80"
 zxingEmbedded = "4.3.0"
 zxingCore = "3.5.3"
 junit = "4.13.2"
+# Instrumented tests. The device is not a convenience here: the audio engine
+# is AudioRecord and a real socket, and "the microphone was released" is only
+# answerable by asking the platform's AudioManager on a running system.
+androidxTestRunner = "1.6.2"
+androidxTestRules = "1.6.1"
+androidxTestExtJunit = "1.2.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -49,6 +55,9 @@ zxing-embedded = { group = "com.journeyapps", name = "zxing-android-embedded", v
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
+androidx-test-runner = { group = "androidx.test", name = "runner", version.ref = "androidxTestRunner" }
+androidx-test-rules = { group = "androidx.test", name = "rules", version.ref = "androidxTestRules" }
+androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidxTestExtJunit" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
