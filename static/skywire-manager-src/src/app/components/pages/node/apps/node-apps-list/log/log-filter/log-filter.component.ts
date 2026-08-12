@@ -1,4 +1,4 @@
-import { Component, OnInit, Inject, OnDestroy } from '@angular/core';
+import { Component, OnInit, Inject, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription } from 'rxjs';
@@ -28,7 +28,8 @@ export interface LogsFilter {
     selector: 'app-log-filter',
     templateUrl: './log-filter.component.html',
     styleUrls: ['./log-filter.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LogFilterComponent implements OnInit, OnDestroy {
   filters: LogsFilter[];
@@ -52,6 +53,7 @@ export class LogFilterComponent implements OnInit, OnDestroy {
     @Inject(MAT_DIALOG_DATA) private data: LogsFilter,
     public dialogRef: MatDialogRef<LogFilterComponent>,
     private formBuilder: UntypedFormBuilder,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
@@ -89,6 +91,7 @@ export class LogFilterComponent implements OnInit, OnDestroy {
 
     this.formSubscription = this.form.get('filter').valueChanges.subscribe(days => {
       this.dialogRef.close(this.filters.find(filter => filter.days === days));
+      this.changeDetectorRef.markForCheck();
     });
   }
 

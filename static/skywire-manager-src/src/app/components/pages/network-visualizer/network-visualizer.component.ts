@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 
@@ -27,6 +27,7 @@ import { MountableBundle } from 'src/app/shared/bundle-mount/bundle-mount.compon
   templateUrl: './network-visualizer.component.html',
   styleUrls: ['./network-visualizer.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NetworkVisualizerComponent extends PageBaseComponent implements OnInit, OnDestroy {
   readonly bundleId = 'tpviz-bundle-script';
@@ -42,7 +43,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
   private tpviz: MountableBundle & { setView?(v: string): void } | null = null;
   private routeSub?: Subscription;
 
-  constructor(private route: ActivatedRoute, private router: Router) {
+  constructor(private route: ActivatedRoute, private router: Router, private changeDetectorRef: ChangeDetectorRef) {
     super();
     this.tabsData = homeTabsData();
     this.mountOpts = {
@@ -61,6 +62,7 @@ export class NetworkVisualizerComponent extends PageBaseComponent implements OnI
       if (v && this.tpviz && typeof this.tpviz.setView === 'function') {
         this.tpviz.setView(v);
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();

@@ -1,4 +1,4 @@
-import { Component, Inject, OnInit } from '@angular/core';
+import { Component, Inject, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogRef, MatDialogConfig } from '@angular/material/dialog';
 import { UntypedFormGroup, UntypedFormBuilder } from '@angular/forms';
 
@@ -31,7 +31,8 @@ export interface FiltersSelectiondParams {
     selector: 'app-filters-selection',
     templateUrl: './filters-selection.component.html',
     styleUrls: ['./filters-selection.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class FiltersSelectionComponent implements OnInit {
   form: UntypedFormGroup;

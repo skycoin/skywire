@@ -1,4 +1,4 @@
-import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { UntypedFormGroup, UntypedFormBuilder, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -33,7 +33,8 @@ export interface RouterConfigParams {
     selector: 'app-router-config',
     templateUrl: './router-config.component.html',
     styleUrls: ['./router-config.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RouterConfigComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
@@ -72,6 +73,7 @@ export class RouterConfigComponent implements OnInit, OnDestroy {
       ])],
     });
 
+    // change-detection: no view state — focuses an input
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 

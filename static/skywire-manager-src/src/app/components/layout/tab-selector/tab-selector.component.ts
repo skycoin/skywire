@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, OnDestroy, Output } from '@angular/core';
+import { Component, EventEmitter, Input, OnDestroy, Output, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { SelectOptionComponent, SelectableOption } from '../select-option/select-option.component';
 import { MatDialog } from '@angular/material/dialog';
 
@@ -9,7 +9,8 @@ import { MatDialog } from '@angular/material/dialog';
     selector: 'app-tab-selector',
     templateUrl: './tab-selector.component.html',
     styleUrls: ['./tab-selector.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TabSelectorComponent implements OnDestroy {
   // Name of the available tabs, for the translation pipe.
@@ -21,7 +22,8 @@ export class TabSelectorComponent implements OnDestroy {
   @Output() tabChanged = new EventEmitter<number>();
 
   constructor(
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private changeDetectorRef: ChangeDetectorRef
   ) { }
 
   ngOnDestroy() {
@@ -39,6 +41,7 @@ export class TabSelectorComponent implements OnDestroy {
     // Show the tab selection modal window.
     SelectOptionComponent.openDialog(this.dialog, options, 'node.logs.filter-title').afterClosed().subscribe((selectedOption: number) => {
       this.tabChanged.emit(selectedOption - 1);
+      this.changeDetectorRef.markForCheck();
     });
   }
 }

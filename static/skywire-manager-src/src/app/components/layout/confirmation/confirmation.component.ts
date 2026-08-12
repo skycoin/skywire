@@ -1,4 +1,4 @@
-import { Component, Inject, Output, EventEmitter, OnDestroy, ViewChild, AfterViewInit } from '@angular/core';
+import { Component, Inject, Output, EventEmitter, OnDestroy, ViewChild, AfterViewInit, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
 
 import { ButtonComponent } from '../button/button.component';
@@ -61,7 +61,8 @@ enum ConfirmationStates {
     selector: 'app-confirmation',
     templateUrl: './confirmation.component.html',
     styleUrls: ['./confirmation.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ConfirmationComponent implements AfterViewInit, OnDestroy {
   @ViewChild('cancelButton') cancelButton: ButtonComponent;
@@ -89,8 +90,10 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit() {
     if (this.data.cancelButtonText) {
+      // change-detection: no view state — focuses an input
       setTimeout(() => this.cancelButton.focus());
     } else {
+      // change-detection: no view state — focuses an input
       setTimeout(() => this.confirmButton.focus());
     }
   }
@@ -152,6 +155,7 @@ export class ConfirmationComponent implements AfterViewInit, OnDestroy {
     this.doneList = newList;
 
     this.confirmButton.reset();
+    // change-detection: no view state — focuses an input
     setTimeout(() => this.confirmButton.focus());
 
     this.state = ConfirmationStates.Done;

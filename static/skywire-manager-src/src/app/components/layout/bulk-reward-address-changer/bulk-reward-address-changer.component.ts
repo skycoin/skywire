@@ -1,4 +1,4 @@
-import { Component, Inject, OnDestroy, ViewChild } from '@angular/core';
+import { Component, Inject, OnDestroy, ViewChild, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Observable, Subscription, delay, mergeMap, of } from 'rxjs';
 
@@ -40,7 +40,8 @@ interface NodeToEditCompleteData extends NodeToEditData {
     selector: 'app-bulk-reward-address-changer',
     templateUrl: './bulk-reward-address-changer.component.html',
     styleUrls: ['./bulk-reward-address-changer.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BulkRewardAddressChangerComponent implements OnDestroy {
   @ViewChild('button') button: ButtonComponent;
@@ -79,6 +80,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
     private nodeService: NodeService,
     private formBuilder: UntypedFormBuilder,
     private dialog: MatDialog,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     this.form = formBuilder.group({
       address: ['', Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
@@ -141,8 +143,10 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
       this.operationSubscriptions.push(
         this.nodeService.getRewardsAddress(node.key).subscribe(response => {
           this.nodesToEdit[i].currentAddress = response;
+          this.changeDetectorRef.markForCheck();
         }, (err: OperationError) => {
           this.nodesToEdit[i].operationError = err.translatableErrorMsg ? err.translatableErrorMsg : err.originalServerErrorMsg;
+          this.changeDetectorRef.markForCheck();
         })
       );
     });
@@ -166,6 +170,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
       confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
         confirmationDialog.componentInstance.closeModal();
         this.startProcessing();
+        this.changeDetectorRef.markForCheck();
       });
     }
   }
@@ -214,6 +219,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
             this.button.reset();
           }
 
+          this.changeDetectorRef.markForCheck();
         }, (err: OperationError) => {
           this.nodesToEdit[i].processing = false;
           this.nodesToEdit[i].operationError = err.translatableErrorMsg ? err.translatableErrorMsg : err.originalServerErrorMsg;
@@ -223,6 +229,7 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
             this.processingFinished = true;
             this.button.reset();
           }
+          this.changeDetectorRef.markForCheck();
         })
       );
     });

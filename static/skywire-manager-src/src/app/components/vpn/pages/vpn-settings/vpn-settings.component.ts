@@ -1,4 +1,4 @@
-import { Component, OnDestroy, ViewChild } from '@angular/core';
+import { Component, OnDestroy, ViewChild, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ActivatedRoute } from '@angular/router';
 import { MatDialog } from '@angular/material/dialog';
@@ -31,7 +31,8 @@ enum WorkingOptions {
     selector: 'app-vpn-settings-list',
     templateUrl: './vpn-settings.component.html',
     styleUrls: ['./vpn-settings.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy {
   @ViewChild('topBarLoading') topBarLoading: TopBarComponent;
@@ -66,6 +67,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
     private vpnSavedDataService: VpnSavedDataService,
     private dialog: MatDialog,
     route: ActivatedRoute,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
     super();
     
@@ -76,6 +78,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
         VpnHelpers.changeCurrentPk(this.currentLocalPk);
         this.tabsData = VpnHelpers.vpnTabsData;
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     // Get the current state of the VPN client app in the backend.
@@ -85,6 +88,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
 
         this.loading = false;
       }
+      this.changeDetectorRef.markForCheck();
     });
 
     this.getIpOption = this.vpnSavedDataService.getCheckIpSetting();
@@ -160,6 +164,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
         confirmationDialog.componentInstance.closeModal();
 
         this.finishChangingKillswitchOption();
+        this.changeDetectorRef.markForCheck();
       });
     } else {
       this.finishChangingKillswitchOption();
@@ -180,12 +185,14 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
       () => {
         this.working = WorkingOptions.None;
         this.vpnClientService.updateData();
+        this.changeDetectorRef.markForCheck();
       },
       err => {
         this.working = WorkingOptions.None;
 
         err = processServiceError(err);
         this.snackbarService.showError(err);
+        this.changeDetectorRef.markForCheck();
       },
     );
   }
@@ -234,6 +241,7 @@ export class VpnSettingsComponent extends PageBaseComponent implements OnDestroy
             this.topBarLoaded.updateVpnDataStatsUnit();
           }
         }
+        this.changeDetectorRef.markForCheck();
       });
   }
 

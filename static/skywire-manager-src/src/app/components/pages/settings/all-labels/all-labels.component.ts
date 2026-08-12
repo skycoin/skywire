@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { TabButtonData } from '../../../layout/top-bar/top-bar.component';
@@ -10,7 +10,8 @@ import { TabButtonData } from '../../../layout/top-bar/top-bar.component';
     selector: 'app-all-labels',
     templateUrl: './all-labels.component.html',
     styleUrls: ['./all-labels.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class AllLabelsComponent {
   tabsData: TabButtonData[] = [];
