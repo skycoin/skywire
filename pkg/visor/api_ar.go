@@ -36,7 +36,7 @@ func (v *Visor) CheckAREntry(pk string) ([]string, error) {
 
 	// Try each transport type — only report whether the entry exists,
 	// not the resolved address (privacy).
-	for _, tpType := range []string{"stcpr", "sudph"} {
+	for _, tpType := range arSelfTypes {
 		_, err := arClient.Resolve(ctx, tpType, pubKey)
 		if err == nil {
 			types = append(types, tpType)
@@ -45,6 +45,14 @@ func (v *Visor) CheckAREntry(pk string) ([]string, error) {
 
 	return types, nil
 }
+
+// arSelfTypes are the transport types whose AR registration this visor tracks
+// for itself. WT is here because a visor that serves WebTransport binds an
+// endpoint AND a certificate hash with AR (BindWT), and a browser has to pin
+// that hash to dial it — so "am I registered for WT, and under which cert?" is
+// a question an operator needs answered, and it was previously unanswerable
+// from the CLI.
+var arSelfTypes = []string{"stcpr", "sudph", "wt"}
 
 // ARSelfEntry is one transport-type-row of this visor's own AR registration:
 // the IP:port it is reachable on according to the address-resolver.
@@ -55,11 +63,18 @@ func (v *Visor) CheckAREntry(pk string) ([]string, error) {
 // that don't capture family — same backward-compat shape as the underlying
 // addrresolver.VisorData (#2715).
 type ARSelfEntry struct {
-	Type         string   `json:"type"`                     // "stcpr" or "sudph"
+	Type         string   `json:"type"`                     // "stcpr", "sudph" or "wt"
 	RemoteAddr   string   `json:"remote_addr,omitempty"`    // public IPv4 as AR sees the visor
 	RemoteAddrV6 string   `json:"remote_addr_v6,omitempty"` // public IPv6 as AR sees the visor (#1525 Phase 4a)
 	Port         string   `json:"port,omitempty"`           // listen port
 	Addresses    []string `json:"addresses,omitempty"`      // local interface addresses the visor advertised
+	// CertHash is the SHA-256 of the self-signed certificate a WebTransport
+	// dialler must pin, lowercase hex. WT only — the other carriers have no
+	// certificate. Empty from a visor too old to report it, which is why the
+	// CLI omits the field rather than rendering "(none)": absent here means
+	// "not said", and only a visor that knows about WT can distinguish that
+	// from "not registered".
+	CertHash string `json:"cert_hash,omitempty"`
 }
 
 // ARSelfRegistration is the visor's own AR record across transport types.
@@ -67,6 +82,21 @@ type ARSelfEntry struct {
 // Empty when the visor has not (yet) bound any transport with AR.
 type ARSelfRegistration struct {
 	Entries []ARSelfEntry `json:"entries,omitempty"`
+	// Queried lists the transport types this visor actually checked, whether or
+	// not it is registered for them. It exists so a caller can tell "asked, not
+	// registered" from "never asked".
+	//
+	// Without it the two are the same silence, and the CLI cannot say which it
+	// is looking at: a type missing from Entries might be unregistered, or the
+	// answering visor might predate that type entirely. That is not
+	// hypothetical here — `--via dmsg://<pk>` and `--rpc` point these commands
+	// at other people's visors across the mesh, running whatever version they
+	// are running. Locally it cannot happen, because the CLI and the visor are
+	// the same binary.
+	//
+	// Empty from a visor too old to report it, which is itself the signal:
+	// nothing can be concluded from a type's absence.
+	Queried []string `json:"queried,omitempty"`
 }
 
 // arSelfState caches the visor's own AR-side bind state, populated by a
@@ -125,8 +155,8 @@ func (s *arSelfState) snapshot() map[string]addrresolver.VisorData { //nolint:un
 // ARSelfInfo returns the visor's own cached AR registration. Reads the
 // in-memory cache populated by the refresh loop — no HTTP round-trip.
 func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
-	out := &ARSelfRegistration{}
-	for _, tpType := range []string{"stcpr", "sudph"} {
+	out := &ARSelfRegistration{Queried: append([]string(nil), arSelfTypes...)}
+	for _, tpType := range arSelfTypes {
 		d, ok := v.arSelf.get(tpType)
 		if !ok {
 			continue
@@ -137,6 +167,7 @@ func (v *Visor) ARSelfInfo() (*ARSelfRegistration, error) {
 			RemoteAddrV6: d.RemoteAddrV6,
 			Port:         d.Port,
 			Addresses:    append([]string(nil), d.Addresses...),
+			CertHash:     d.CertHash, // WT only; empty for the other carriers
 		})
 	}
 	return out, nil
@@ -187,7 +218,7 @@ func (v *Visor) arSelfRefreshOnce(ctx context.Context, _ *logging.Logger) {
 		return
 	}
 
-	for _, tpType := range []string{"stcpr", "sudph"} {
+	for _, tpType := range arSelfTypes {
 		rctx, rcancel := context.WithTimeout(ctx, 10*time.Second)
 		data, err := arClient.Resolve(rctx, tpType, v.conf.PK)
 		rcancel()
