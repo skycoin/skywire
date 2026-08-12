@@ -493,7 +493,7 @@ test-windows: ## Run tests on windows
 install-linters: ## Install linters
 	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
 	GOPRIVATE=github.com/skycoin/* go get -u
-	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/incu6us/goimports-reviser/v2@latest github.com/FiloSottile/vendorcheck@latest
+	${OPTS} go install golang.org/x/tools/cmd/goimports@latest github.com/FiloSottile/vendorcheck@latest
 
 install-linters-windows: ## Install linters
 	${OPTS} go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest golang.org/x/tools/cmd/goimports@latest
@@ -501,16 +501,15 @@ install-linters-windows: ## Install linters
 tidy: ## Tidies and vendors dependencies.
 	${OPTS} go mod tidy -v
 
-format: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
+format: tidy ## Formats the code. Must have goimports installed (use make install-linters).
 	@if grep -qE '^(replace|exclude)' go.mod; then \
 		echo "ERROR: go.mod contains replace or exclude directives which break go install @version and Docker builds"; \
 		grep -E '^(replace|exclude)' go.mod; \
 		exit 1; \
 	fi
 	${OPTS} goimports -w -local ${PROJECT_BASE} ./pkg ./cmd ./internal
-	find . -type f -name '*.go' -not -path "./.git/*" -not -path "./vendor/*"  -exec goimports-reviser -project-name ${PROJECT_BASE} {} \;
 
-format-windows: tidy ## Formats the code. Must have goimports and goimports-reviser installed (use make install-linters).
+format-windows: tidy ## Formats the code. Must have goimports installed (use make install-linters).
 	powershell 'Get-ChildItem -Directory | where Name -NotMatch vendor | % { Get-ChildItem $$_ -Recurse -Include *.go } | % {goimports -w -local ${PROJECT_BASE} $$_ }'
 
 dep: tidy ## Sorts dependencies
