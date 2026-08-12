@@ -25,7 +25,7 @@ export class RequestOptions {
   responseType = ResponseTypes.Json;
   requestType = RequestTypes.Json;
   ignoreAuth = false;
-  vpnKeyForAuth!: string;
+  vpnKeyForAuth!: string | null;
   csrfToken!: string;
 
   public constructor(init?: Partial<RequestOptions>) {
@@ -132,7 +132,7 @@ export class ApiService {
   /**
    * Makes the actual call to the API.
    */
-  private request(method: string, url: string, body: any, options: RequestOptions) {
+  private request(method: string, url: string, body: any, options: RequestOptions | null) {
     body = body ? body : {};
     options = options ? options : new RequestOptions();
 
