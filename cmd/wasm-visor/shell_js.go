@@ -46,6 +46,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall/js"
 
 	"github.com/skycoin/skywire/third_party/0magnet/afero"
@@ -145,20 +146,61 @@ func visorAPI(method, path string, body []byte) (status int, out []byte, err err
 }
 
 // visorPK returns this tab's visor public key, from whichever side holds it.
+// visorPK returns the visor's public key for the prompt, WITHOUT waiting for
+// it. The first call that misses starts a background fetch and returns empty;
+// the prompt says "visor" until the answer lands, and every prompt after that
+// is served from memory.
+//
+// It must not wait, and this is not a matter of taste. Where the visor lives in
+// a worker, skywireVisor is a postMessage proxy: every method returns a promise
+// that only settles once the JS event loop runs. This is called from prompt(),
+// which is called from the line editor's redraw, which is called from the
+// terminal's data handler — a js.Func — and from openShell, itself a js.Func.
+// The standard-Go wasm runtime hands control back to the browser only when
+// every goroutine is blocked, and a js.Func callback must return before that
+// can happen. So waiting here waits for a reply that cannot arrive until we
+// stop waiting: the renderer spins inside wasm at full CPU, the page stops
+// answering anything, the terminal window will not drag, and a stack sample
+// shows a dozen frames of wasm under the Chromium frames.
+//
+// It looked fine everywhere it was tested. With the visor in-page selfPK is
+// already set, so the wait never happens; on a bare page skywireVisor is absent
+// and it returns immediately; under TinyGo the asyncify scheduler can suspend a
+// callback and return to JS, so the same code works. Only the split this build
+// uses — visor in a SharedWorker, shell a second instance in the tab — reaches
+// it, and only under standard Go.
+//
+// A goroutine may block on the proxy safely: it is not a callback, so the
+// runtime can park and let the event loop deliver the reply.
+var (
+	visorPKCache    atomic.Value // string
+	visorPKFetching atomic.Bool
+)
+
 func visorPK() string {
 	if !selfPK.Null() {
 		return selfPK.Hex()
 	}
-	v := js.Global().Get("skywireVisor")
-	if !v.Truthy() || v.Get("status").Type() != js.TypeFunction {
-		return ""
+	if pk, _ := visorPKCache.Load().(string); pk != "" {
+		return pk
 	}
-	st, err := jsAwait(v.Call("status"))
-	if err != nil || !st.Truthy() {
-		return ""
-	}
-	if pk := st.Get("pk"); pk.Type() == js.TypeString {
-		return pk.String()
+	// Not known yet. Fetch it off the callback stack, one attempt at a time —
+	// a failed attempt is retried by the next prompt rather than cached as "".
+	if visorPKFetching.CompareAndSwap(false, true) {
+		go func() {
+			defer visorPKFetching.Store(false)
+			v := js.Global().Get("skywireVisor")
+			if !v.Truthy() || v.Get("status").Type() != js.TypeFunction {
+				return
+			}
+			st, err := jsAwait(v.Call("status"))
+			if err != nil || !st.Truthy() {
+				return
+			}
+			if pk := st.Get("pk"); pk.Type() == js.TypeString && pk.String() != "" {
+				visorPKCache.Store(pk.String())
+			}
+		}()
 	}
 	return ""
 }
