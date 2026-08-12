@@ -28,11 +28,12 @@ import (
 )
 
 var (
-	directQuery     bool
-	healthService   string
-	healthViaServer string
-	healthPort      uint16
-	healthCarriers  string
+	directQuery       bool
+	healthService     string
+	healthViaServer   string
+	healthPort        uint16
+	healthCarriers    string
+	healthHoldCarrier string
 )
 
 // CarrierProbe is the result of a DIRECT per-carrier reachability probe of one
@@ -60,6 +61,7 @@ func init() {
 	healthCmd.Flags().StringVar(&healthViaServer, "dmsg-server", "", "route the /health check through ONE specific dmsg server (PK or PK@host:port) using a standalone direct dmsg client — tests per-server reachability of --service, even for direct-client services not in discovery")
 	healthCmd.Flags().Uint16Var(&healthPort, "port", 80, "service dmsg port for the /health endpoint (default: 80, the dmsghttp log-server port)")
 	healthCmd.Flags().StringVar(&healthCarriers, "carriers", "", "with --dmsg-server: probe THAT dmsg server DIRECTLY over each of these carriers (comma-sep: wt,ws,quic,tcp), one clean standalone session per carrier — reports which protocols actually reach it")
+	healthCmd.Flags().StringVar(&healthHoldCarrier, "hold-carrier", "", "diagnostic: before probing --carriers, open and HOLD a session on this carrier to the same server IN THIS PROCESS — reproduces in-process carrier interference (e.g. --hold-carrier quic while probing wt)")
 	healthCmd.Flags().Bool(internal.JSONString, false, "print output as JSON")
 	RootCmd.AddCommand(healthCmd)
 }
@@ -472,6 +474,35 @@ func probeServerCarriers(cmd *cobra.Command) {
 	entry, err := resolveServerEntryLive(cmd.Flags(), srvPK, log)
 	if err != nil {
 		internal.PrintFatalError(cmd.Flags(), err)
+	}
+	// Diagnostic: hold a session on --hold-carrier to the same server in THIS
+	// process for the duration of the probes. If probing wt fails only while a
+	// quic session is held, that isolates in-process (quic-go) interference.
+	if healthHoldCarrier != "" {
+		if addr := carrierAddr(entry, healthHoldCarrier); addr == "" {
+			fmt.Printf("(hold-carrier %s not advertised by %s; skipping hold)\n", healthHoldCarrier, srvPK.Hex()[:8])
+		} else {
+			hConf := dmsg.DefaultConfig()
+			hConf.Carriers = []string{healthHoldCarrier}
+			hConf.MinSessions = 1
+			hPK, hSK := cipher.GenerateKeyPair()
+			hClient := direct.NewClient(direct.GetAllEntries(cipher.PubKeys{hPK, srvPK}, []*disc.Entry{entry}), log)
+			hCtx, hCancel := context.WithTimeout(ctx, 15*time.Second)
+			hC, hStop, herr := direct.StartDmsg(hCtx, log, hPK, hSK, hClient, hConf)
+			hCancel()
+			if herr != nil {
+				fmt.Printf("(could not hold a %s session to %s: %v; probing anyway)\n", healthHoldCarrier, srvPK.Hex()[:8], herr)
+			} else {
+				got := ""
+				for _, s := range hC.SessionCarriers() {
+					if s.ServerPK == srvPK {
+						got = s.Carrier
+					}
+				}
+				fmt.Printf("holding a %s session to %s (landed on %q) during probes\n", healthHoldCarrier, srvPK.Hex()[:8], got)
+				defer hStop()
+			}
+		}
 	}
 	var results []CarrierProbe
 	for _, c := range splitCarriers(healthCarriers) {
