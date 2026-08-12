@@ -33,19 +33,19 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   /**
    * Mantains a reference to the currently active instance of this page.
    */
-  private static currentInstanceInternal: NodeComponent;
+  private static currentInstanceInternal: NodeComponent | undefined;
   /**
    * Public key of the node loaded in the currently active instance of this page.
    */
-  private static currentNodeKey: string;
+  private static currentNodeKey: string | undefined;
   /**
    * Lastest node data downloaded by the currently active instance of this page.
    */
-  private static nodeSubject: ReplaySubject<Node>;
+  private static nodeSubject: ReplaySubject<Node> | undefined;
   /**
    * Lastest node traffic data downloaded by the currently active instance of this page.
    */
-  private static trafficDataSubject: ReplaySubject<TrafficData>;
+  private static trafficDataSubject: ReplaySubject<TrafficData> | undefined;
 
 
   // Keys for persisting the server data, to be able to restore the state after navigation.
@@ -143,21 +143,25 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
    * Gets the publick key of the node of the currently displayed instance of this page.
    */
   public static getCurrentNodeKey(): string {
-    return NodeComponent.currentNodeKey;
+    // Set in ngOnInit and cleared in ngOnDestroy, so it is present for as long
+    // as there is a page to ask.
+    return NodeComponent.currentNodeKey!;
   }
 
   /**
    * Gets the lastest node data downloaded by the currently active instance of this page.
    */
   public static get currentNode(): Observable<Node> {
-    return NodeComponent.nodeSubject.asObservable();
+    // Created in the constructor, completed and cleared in ngOnDestroy.
+    return NodeComponent.nodeSubject!.asObservable();
   }
 
   /**
    * Gets the lastest node traffic data downloaded by the currently active instance of this page.
    */
   public static get currentTrafficData(): Observable<TrafficData> {
-    return NodeComponent.trafficDataSubject.asObservable();
+    // Created in the constructor, completed and cleared in ngOnDestroy.
+    return NodeComponent.trafficDataSubject!.asObservable();
   }
 
   constructor(
@@ -222,7 +226,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     this.embedMode = (this.lastUrl || '').includes('embed=1') && window.self !== window.top;
     NodeComponent.currentNodeKey = this.route.snapshot.params['key'];
     if (this.nodeActionsHelper) {
-      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
+      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey!);
     }
     this.updateTabBar();
     this.maybeBuildTerminalUrl();
@@ -300,22 +304,22 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           // bar split-view that previously surfaced this content
           // has been removed. DMSG settings folded into Info as a
           // collapsible section to keep the tab row compact.
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'info'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'info'] : null,
         },
         {
           icon: 'shuffle',
           label: 'node.tabs.routing',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'routing'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'routing'] : null,
         },
         {
           icon: 'swap_horiz',
           label: 'node.tabs.transports',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'transports'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'transports'] : null,
         },
         {
           icon: 'equalizer',
           label: 'node.tabs.bandwidth',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'bandwidth'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'bandwidth'] : null,
         },
         // DMSG + Reachability tabs were dropped: DMSG is folded into
         // Info as a collapsible section (the standalone /dmsg route
@@ -326,14 +330,14 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
         {
           icon: 'schedule',
           label: 'node.tabs.uptime',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'uptime'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'uptime'] : null,
         },
         {
           // Apps tab: list view + sub-tabs for VPN / Skysocks. (Skychat
           // was pulled out to its own top-level Chat tab below.)
           icon: 'apps',
           label: 'node.tabs.apps',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'apps'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'apps'] : null,
         },
         {
           // Chat tab: the visor's skychat client, promoted from an Apps
@@ -341,34 +345,34 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           // ☰ Chat entry).
           icon: 'forum',
           label: 'node.tabs.chat',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'chat'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'chat'] : null,
         },
         {
           icon: 'monetization_on',
           label: 'node.tabs.rewards',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'rewards'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'rewards'] : null,
         },
         {
           icon: 'public',
           label: 'node.tabs.skynet',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'skynet'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'skynet'] : null,
         },
         {
           icon: 'language',
           label: 'node.tabs.web-proxy',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'web-proxy'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'web-proxy'] : null,
         },
         {
           // VPN tab: the full VPN UI, iframed in-place here (like the terminal
           // tab) instead of only launchable in a separate window.
           icon: 'vpn_lock',
           label: 'node.tabs.vpn',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'vpn'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'vpn'] : null,
         },
         {
           icon: 'memory',
           label: 'node.tabs.resources',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'resources'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'resources'] : null,
         },
         {
           // 'terminal' was added to Material Icons in 2020 but the
@@ -376,17 +380,17 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           // bundled glyph map and reads as terminal-ish.
           icon: 'code',
           label: 'node.tabs.terminal',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'terminal'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'terminal'] : null,
         },
         {
           icon: 'account_balance_wallet',
           label: 'node.tabs.wallet',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'wallet'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'wallet'] : null,
         },
         {
           icon: 'description',
           label: 'node.tabs.logs',
-          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey, 'logs'] : null,
+          linkParts: NodeComponent.currentNodeKey ? ['/nodes', NodeComponent.currentNodeKey!, 'logs'] : null,
         },
       ];
 
@@ -443,7 +447,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       // Inform that the current subpage is not for showing a full list.
       this.showingFullList = false;
       this.nodeActionsHelper = new NodeActionsHelper(this.injector, this.showingFullList);
-      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
+      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey!);
       if (this.node) {
         this.nodeActionsHelper.setCurrentNode(this.node);
       }
@@ -454,7 +458,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
 
       this.showingFullList = true;
       this.nodeActionsHelper = new NodeActionsHelper(this.injector, this.showingFullList);
-      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey);
+      this.nodeActionsHelper.setCurrentNodeKey(NodeComponent.currentNodeKey!);
       if (this.node) {
         this.nodeActionsHelper.setCurrentNode(this.node);
       }
@@ -579,7 +583,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
    */
   performAction(actionName: string) {
     // The helper object manages the event.
-    this.nodeActionsHelper.performAction(actionName, NodeComponent.currentNodeKey);
+    this.nodeActionsHelper.performAction(actionName, NodeComponent.currentNodeKey!);
   }
 
   /**
@@ -592,7 +596,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
       this.lastUpdateRequestedManually = true;
     }
 
-    this.singleNodeDataService.forceSpecificNodeRefresh(NodeComponent.currentNodeKey);
+    this.singleNodeDataService.forceSpecificNodeRefresh(NodeComponent.currentNodeKey!);
   }
 
   /**
@@ -610,7 +614,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   private startGettingData(checkSavedData: boolean) {
     // Use saved data or get from the server. If there is no saved data, savedData is null.
     const savedData = checkSavedData ? this.getLocalValue(this.persistentDataResponseKey) : null;
-    let nextOperation: Observable<any> = this.singleNodeDataService.startRequestingData(NodeComponent.currentNodeKey);
+    let nextOperation: Observable<any> = this.singleNodeDataService.startRequestingData(NodeComponent.currentNodeKey!);
     if (savedData) {
       nextOperation = of(JSON.parse(savedData.value));
     }
@@ -685,7 +689,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
           // If we never got data and errors persist, stop polling and show error state.
           if (!this.node && this.consecutiveLoadErrors >= 3) {
             this.loadFailed = true;
-            this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
+            this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey!);
             this.snackbarService.showError('common.loading-error', null, true, result.error);
             AppComponent.currentInstance.showDataProblemMsg();
 
@@ -715,7 +719,7 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
   }
 
   ngOnDestroy() {
-    this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey);
+    this.singleNodeDataService.stopRequestingSpecificNode(NodeComponent.currentNodeKey!);
 
     this.dataSubscription.unsubscribe();
     this.updateTimeSubscription.unsubscribe();
@@ -728,10 +732,10 @@ export class NodeComponent extends PageBaseComponent implements OnInit, OnDestro
     NodeComponent.currentInstanceInternal = undefined;
     NodeComponent.currentNodeKey = undefined;
 
-    NodeComponent.nodeSubject.complete();
+    NodeComponent.nodeSubject!.complete();
     NodeComponent.nodeSubject = undefined;
 
-    NodeComponent.trafficDataSubject.complete();
+    NodeComponent.trafficDataSubject!.complete();
     NodeComponent.trafficDataSubject = undefined;
 
     this.nodeActionsHelper.dispose();

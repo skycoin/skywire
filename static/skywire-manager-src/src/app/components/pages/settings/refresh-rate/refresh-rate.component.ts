@@ -35,7 +35,7 @@ export class RefreshRateComponent implements OnInit, OnDestroy {
       refreshRate: [this.storageService.getRefreshTime().toString()],
     });
 
-    this.subscription = this.form.get('refreshRate').valueChanges.subscribe(refreshRate => {
+    this.subscription = this.form.get('refreshRate')!.valueChanges.subscribe(refreshRate => {
       this.storageService.setRefreshTime(refreshRate);
       this.snackbarService.showDone('settings.refresh-rate-confirmation');
       this.changeDetectorRef.markForCheck();

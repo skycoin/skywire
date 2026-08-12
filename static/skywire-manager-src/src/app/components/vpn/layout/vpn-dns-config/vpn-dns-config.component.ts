@@ -86,7 +86,7 @@ export class VpnDnsConfigComponent implements OnInit, OnDestroy {
 
   private validateIp() {
     if (this.form) {
-      const value = this.form.get('ip').value as string;
+      const value = this.form.get('ip')!.value as string;
       const validOrEmpty = GeneralUtils.checkIfIpValidOrEmpty(value);
 
       return validOrEmpty ? null : { invalid: true };
@@ -105,7 +105,7 @@ export class VpnDnsConfigComponent implements OnInit, OnDestroy {
     this.operationSubscription = this.appsService.changeAppSettings(
       this.data.nodePk,
       this.vpnClientService.vpnClientAppName,
-      { dns: this.form.get('ip').value },
+      { dns: this.form.get('ip')!.value },
     ).subscribe({
       next: this.onSuccess.bind(this),
       error: this.onError.bind(this)

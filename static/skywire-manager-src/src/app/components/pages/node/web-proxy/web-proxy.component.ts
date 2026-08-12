@@ -75,8 +75,8 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
         this.loading = false;
         const skynetRunning = status?.skynet_web?.running || false;
         const upstream = status?.skynet_web?.upstream_socks || '';
-        this.form.get('skynetEnabled').setValue(skynetRunning);
-        this.form.get('upstream').setValue(upstream);
+        this.form.get('skynetEnabled')!.setValue(skynetRunning);
+        this.form.get('upstream')!.setValue(upstream);
         this.cdr.markForCheck();
       },
       () => {
@@ -89,7 +89,7 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
     if (!this.node) {
  return; 
 }
-    const enable = this.form.get('skynetEnabled').value;
+    const enable = this.form.get('skynetEnabled')!.value;
     this.loading = true;
     this.nodeService.setProxyEnabled(this.node.localPk, 'skynet', enable).subscribe(
       () => {
@@ -118,7 +118,7 @@ export class WebProxyComponent extends PageBaseComponent implements OnInit, OnDe
     if (!this.node) {
  return; 
 }
-    const addr = (this.form.get('upstream').value || '').trim();
+    const addr = (this.form.get('upstream')!.value || '').trim();
     this.loading = true;
     this.nodeService.setProxyUpstream(this.node.localPk, 'skynet', addr).subscribe(
       () => {

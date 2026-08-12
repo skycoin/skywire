@@ -81,7 +81,7 @@ interface RoutingPoliciesSummary {
 })
 export class RoutingComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node!: Node;
-  routes!: Route[];
+  routes!: Route[] | undefined;
   nodePK!: string;
   trafficData!: TrafficData;
 
@@ -294,7 +294,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
   toggleRouterForm() {
     this.showRouterForm = !this.showRouterForm;
     if (this.showRouterForm && this.node) {
-      this.routerForm.get('min').setValue(this.node.minHops);
+      this.routerForm.get('min')!.setValue(this.node.minHops);
     }
   }
 
@@ -302,7 +302,7 @@ export class RoutingComponent extends PageBaseComponent implements OnInit, OnDes
     if (!this.routerForm.valid || !this.node) {
  return; 
 }
-    const min = parseInt(this.routerForm.get('min').value, 10);
+    const min = parseInt(this.routerForm.get('min')!.value, 10);
     this.saveRouterSubscription = this.routeService.setMinHops(this.node.localPk, min).subscribe({
       next: () => {
         this.snackbarService.showDone('router-config.done');
