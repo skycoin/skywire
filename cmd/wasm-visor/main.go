@@ -157,12 +157,15 @@ func main() {
 		select {}
 	}
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
-		"boot":               js.FuncOf(jsBoot),
-		"status":             js.FuncOf(jsStatus),
-		"hvApi":              js.FuncOf(jsHvAPI),
-		"tpdEdge":            js.FuncOf(jsTPDEdge),
-		"dialTransport":      js.FuncOf(jsDialTransport),
-		"fetchDmsg":          js.FuncOf(jsFetchDmsg),
+		"boot":          js.FuncOf(jsBoot),
+		"status":        js.FuncOf(jsStatus),
+		"hvApi":         js.FuncOf(jsHvAPI),
+		"tpdEdge":       js.FuncOf(jsTPDEdge),
+		"dialTransport": js.FuncOf(jsDialTransport),
+		"fetchDmsg":     js.FuncOf(jsFetchDmsg),
+		// The resolver's alias table, for a shell running in the tab's
+		// second wasm instance — see shellmesh_js.go.
+		"meshAliases":        js.FuncOf(jsMeshAliases),
 		"serveContent":       js.FuncOf(jsServeContent),
 		"hostedContent":      js.FuncOf(jsHostedContent),
 		"unserveContent":     js.FuncOf(jsUnserveContent),
