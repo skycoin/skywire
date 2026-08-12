@@ -18,7 +18,7 @@ import { handleGraphNodeClick } from './node-click';
 import { getCountryColor, getIPGroupColor, countryToFlag } from './utils';
 // (grouping geometry is computed locally below — packCircles / radiusForCount)
 
-interface CosmosNode {
+export interface CosmosNode {
   id: string;
   // Fixed positions used when grouping is active (cosmos renders at these with the
   // simulation disabled). Absent → the GPU force layout places the node.
@@ -31,7 +31,7 @@ interface CosmosNode {
   title: string;
   label: string;
 }
-interface CosmosLink {
+export interface CosmosLink {
   source: string;
   target: string;
   color: string;
@@ -436,7 +436,17 @@ function packCircles(radii: number[], padding: number): { x: number; y: number }
 // buildData projects the vis-network datasets into cosmos node/link arrays,
 // applying the active type/status filters, then — when country/IP grouping is on —
 // assigns fixed group-packed positions + per-group colors.
-function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boolean; connectedIds: string[] } {
+// buildData is exported so the Go/wasm WebGL view (cosmos-go-graph.ts) is fed
+// from exactly this function. The two views exist side by side to be compared,
+// and that comparison is only about the engine if the data reaching them is
+// identical.
+// currentBoundaries exposes the group circles buildData last computed, in graph
+// space, for whichever view is drawing the overlay.
+export function currentBoundaries(): { x: number; y: number; r: number; color: string; label: string; flag: string }[] {
+  return boundaryCircles;
+}
+
+export function buildData(): { nodes: CosmosNode[]; links: CosmosLink[]; grouped: boolean; connectedIds: string[] } {
   const nodesRaw: any[] = S.nodesDataset ? S.nodesDataset.get() : [];
   const edgesRaw: any[] = S.edgesDataset ? S.edgesDataset.get() : [];
 
