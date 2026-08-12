@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, ChangeDetectionStrategy } from '@angular/core';
 
 import { TrafficData } from 'src/app/services/single-node-data.service';
 
@@ -9,7 +9,8 @@ import { TrafficData } from 'src/app/services/single-node-data.service';
     selector: 'app-charts',
     templateUrl: './charts.component.html',
     styleUrls: ['./charts.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ChartsComponent {
   @Input() trafficData: TrafficData;

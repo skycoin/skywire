@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, of, startWith } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
@@ -44,6 +44,7 @@ interface DmsgClientSessionsResponse {
   templateUrl: './dmsg.component.html',
   styleUrls: ['./dmsg.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
@@ -72,6 +73,7 @@ export class DmsgComponent extends PageBaseComponent implements OnInit, OnDestro
       if (wasUnset && node) {
  this.startPolling(); 
 }
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();

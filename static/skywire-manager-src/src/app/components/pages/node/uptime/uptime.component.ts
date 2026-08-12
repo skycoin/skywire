@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ChangeDetectorRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, interval, startWith, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 
@@ -75,6 +75,7 @@ type WindowDays = 1 | 7 | 30;
   templateUrl: './uptime.component.html',
   styleUrls: ['./uptime.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UptimeComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
@@ -111,6 +112,7 @@ export class UptimeComponent extends PageBaseComponent implements OnInit, OnDest
         this.startPolling();
         this.fetchServiceUptime();
       }
+      this.cdr.markForCheck();
     });
 
     return super.ngOnInit();

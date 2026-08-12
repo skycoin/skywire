@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialogConfig, MatDialog, MatDialogRef } from '@angular/material/dialog';
 import { Subscription, delay, mergeMap, of, timer } from 'rxjs';
 
@@ -73,7 +73,8 @@ class LogEntryExtraValue {
     selector: 'app-node-logs',
     templateUrl: './node-logs.component.html',
     styleUrls: ['./node-logs.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NodeLogsComponent implements OnInit, OnDestroy {
   @ViewChild('content') content: ElementRef;
@@ -170,7 +171,8 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     private nodeService: NodeService,
     private snackbarService: SnackbarService,
     private ngZone: NgZone,
-    private dialog: MatDialog
+    private dialog: MatDialog,
+    private changeDetectorRef: ChangeDetectorRef
   ) { }
 
   ngOnInit() {
@@ -215,6 +217,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
       // Use the selected option and update the filtered entries list.
       this.currentMinimumLevel = optionTypes[selectedOption - 1];
       this.filter();
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -238,8 +241,12 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
       delay(delayMilliseconds),
       mergeMap(() => this.nodeService.getRuntimeLogsSince(NodeComponent.getCurrentNodeKey(), cursor))
     ).subscribe(
-      (delta: any) => this.onLogsDeltaReceived(delta),
-      (err: OperationError) => this.onLogsError(err)
+      (delta: any) => {
+ this.onLogsDeltaReceived(delta); this.changeDetectorRef.markForCheck(); 
+},
+      (err: OperationError) => {
+ this.onLogsError(err); this.changeDetectorRef.markForCheck(); 
+}
     );
   }
 
@@ -441,6 +448,7 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     // refresh; otherwise leave their scroll position alone so they
     // can read history without getting yanked.
     if (this.wasAtBottom) {
+      // change-detection: no view state — scrolls a container
       setTimeout(() => {
         if (this.content) {
           (this.content.nativeElement as HTMLElement).scrollTop = (this.content.nativeElement as HTMLElement).scrollHeight;
@@ -455,9 +463,11 @@ export class NodeLogsComponent implements OnInit, OnDestroy {
     this.elapsedTime = TimeUtils.getElapsedTime(Math.floor((Date.now() - this.LoadingMoment) / 1000));
 
     this.removeTimeSubscription();
-    this.timeUpdateSubscription = timer(5000, 5000).subscribe(() => this.ngZone.run(() => {
+    this.timeUpdateSubscription = timer(5000, 5000).subscribe(() => {
+ this.ngZone.run(() => {
       this.elapsedTime = TimeUtils.getElapsedTime(Math.floor((Date.now() - this.LoadingMoment) / 1000));
-    }));
+    }); this.changeDetectorRef.markForCheck(); 
+});
   }
 
   // Returns the URL with the raw log data.

@@ -1,4 +1,4 @@
-import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy, ChangeDetectionStrategy } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { FormGroup, FormBuilder, Validators } from '@angular/forms';
 import { Subscription } from 'rxjs';
@@ -34,7 +34,8 @@ export interface VpnDnsConfigParams {
     selector: 'app-vpn-dns-config',
     templateUrl: './vpn-dns-config.component.html',
     styleUrls: ['./vpn-dns-config.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VpnDnsConfigComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
@@ -73,6 +74,7 @@ export class VpnDnsConfigComponent implements OnInit, OnDestroy {
       ])],
     });
 
+    // change-detection: no view state — focuses an input
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 

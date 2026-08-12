@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup } from '@angular/forms';
 import { Subscription } from 'rxjs';
 
@@ -12,7 +12,8 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
     selector: 'app-refresh-rate',
     templateUrl: './refresh-rate.component.html',
     styleUrls: ['./refresh-rate.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RefreshRateComponent implements OnInit, OnDestroy {
   form: UntypedFormGroup;
@@ -26,6 +27,7 @@ export class RefreshRateComponent implements OnInit, OnDestroy {
     private formBuilder: UntypedFormBuilder,
     private storageService: StorageService,
     private snackbarService: SnackbarService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
@@ -36,6 +38,7 @@ export class RefreshRateComponent implements OnInit, OnDestroy {
     this.subscription = this.form.get('refreshRate').valueChanges.subscribe(refreshRate => {
       this.storageService.setRefreshTime(refreshRate);
       this.snackbarService.showDone('settings.refresh-rate-confirmation');
+      this.changeDetectorRef.markForCheck();
     });
   }
 

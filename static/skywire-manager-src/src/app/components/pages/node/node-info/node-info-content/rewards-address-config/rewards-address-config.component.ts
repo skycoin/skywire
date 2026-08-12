@@ -1,4 +1,4 @@
-import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy } from '@angular/core';
+import { Component, Inject, ViewChild, ElementRef, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialogConfig, MatDialog } from '@angular/material/dialog';
 import { UntypedFormGroup, UntypedFormBuilder, Validators } from '@angular/forms';
 import { Observable, Subscription } from 'rxjs';
@@ -33,7 +33,8 @@ export interface RewardsAddressConfigParams {
     selector: 'app-rewards-address-config',
     templateUrl: './rewards-address-config.component.html',
     styleUrls: ['./rewards-address-config.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RewardsAddressComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
@@ -62,6 +63,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private nodeService: NodeService,
     private dialog: MatDialog,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
@@ -69,6 +71,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
       address: [this.data.currentAddress, Validators.compose([Validators.minLength(20), Validators.maxLength(112)])],
     });
 
+    // change-detection: no view state — focuses an input
     setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
   }
 
@@ -103,6 +106,7 @@ export class RewardsAddressComponent implements OnInit, OnDestroy {
       confirmationDialog.componentInstance.operationAccepted.subscribe(() => {
         confirmationDialog.componentInstance.closeModal();
         this.finishSaving();
+        this.changeDetectorRef.markForCheck();
       });
     }
   }

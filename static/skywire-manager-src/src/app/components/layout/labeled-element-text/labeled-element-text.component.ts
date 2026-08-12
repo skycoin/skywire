@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnDestroy } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 
@@ -47,7 +47,8 @@ export class LabelComponents {
     selector: 'app-labeled-element-text',
     templateUrl: './labeled-element-text.component.html',
     styleUrls: ['./labeled-element-text.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LabeledElementTextComponent implements OnDestroy {
   private idInternal: string;
@@ -145,6 +146,7 @@ export class LabeledElementTextComponent implements OnDestroy {
     private clipboardService: ClipboardService,
     private snackbarService: SnackbarService,
     private router: Router,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnDestroy() {
@@ -195,6 +197,7 @@ export class LabeledElementTextComponent implements OnDestroy {
             this.snackbarService.showDone('edit-label.label-removed-warning');
 
             this.labelEdited.emit();
+            this.changeDetectorRef.markForCheck();
           });
         } else {
           // Navigate to the labels list page.
@@ -217,9 +220,11 @@ export class LabeledElementTextComponent implements OnDestroy {
             if (changed) {
               this.labelEdited.emit();
             }
+            this.changeDetectorRef.markForCheck();
           });
         }
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 }

@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, OnDestroy, ElementRef } from '@angular/core';
+import { Component, OnInit, ViewChild, OnDestroy, ElementRef, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { UntypedFormBuilder, UntypedFormGroup, Validators } from '@angular/forms';
 import { MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { Subscription, delay, mergeMap, of } from 'rxjs';
@@ -22,7 +22,8 @@ import { PersistentTransport } from 'src/app/app.datatypes';
     selector: 'app-create-transport',
     templateUrl: './create-transport.component.html',
     styleUrls: ['./create-transport.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CreateTransportComponent implements OnInit, OnDestroy {
   @ViewChild('button') button: ButtonComponent;
@@ -54,6 +55,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
     private snackbarService: SnackbarService,
     private storageService: StorageService,
     private nodeService: NodeService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngOnInit() {
@@ -127,8 +129,10 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
         } else {
           this.createPersistent(dataToUse, newTransportPk, newTransportType, newTransportLabel);
         }
+        this.changeDetectorRef.markForCheck();
       }, err => {
         this.onError(err);
+        this.changeDetectorRef.markForCheck();
       });
     } else {
       this.createTransport(newTransportPk, newTransportType, newTransportLabel, false);
@@ -158,8 +162,10 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       currentList
     ).subscribe(() => {
       this.createTransport(newTransportPk, newTransportType, newTransportLabel, true);
+      this.changeDetectorRef.markForCheck();
     }, err => {
       this.onError(err);
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -193,6 +199,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
       } else {
         this.snackbarService.showWarning('transports.dialog.success-without-label');
       }
+      this.changeDetectorRef.markForCheck();
     }, err => {
       if (!creatingAfterPersistent) {
         this.onError(err);
@@ -202,6 +209,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
         this.snackbarService.showWarning('transports.dialog.only-persistent-created');
       }
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -247,7 +255,9 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
         // Prepare the UI change.
         this.snackbarService.closeCurrentIfTemporaryError();
+        // change-detection: no view state — focuses an input
         setTimeout(() => (this.firstInput.nativeElement as HTMLElement).focus());
+        this.changeDetectorRef.markForCheck();
       },
       err => {
         err = processServiceError(err);
@@ -260,6 +270,7 @@ export class CreateTransportComponent implements OnInit, OnDestroy {
 
         // Retry after a small delay.
         this.loadData(AppConfig.connectionRetryDelay);
+        this.changeDetectorRef.markForCheck();
       },
     );
   }

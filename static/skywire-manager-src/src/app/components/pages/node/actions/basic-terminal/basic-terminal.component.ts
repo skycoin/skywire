@@ -1,4 +1,4 @@
-import { Component, ElementRef, Inject, OnDestroy, ViewChild, Renderer2, HostListener, AfterViewInit } from '@angular/core';
+import { Component, ElementRef, Inject, OnDestroy, ViewChild, Renderer2, HostListener, AfterViewInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { MAT_DIALOG_DATA, MatDialogRef, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
@@ -37,7 +37,8 @@ export interface BasicTerminalData {
     selector: 'app-basic-terminal',
     templateUrl: './basic-terminal.component.html',
     styleUrls: ['./basic-terminal.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
   @ViewChild('terminal') terminalElement: ElementRef<HTMLDivElement>;
@@ -69,6 +70,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
     private renderer: Renderer2,
     private apiService: ApiService,
     private translate: TranslateService,
+    private changeDetectorRef: ChangeDetectorRef,
   ) { }
 
   ngAfterViewInit() {
@@ -143,6 +145,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
         this.printLines(' ');
         this.waitForInput();
+        this.changeDetectorRef.markForCheck();
       }, (error: OperationError) => {
         error = processServiceError(error);
 
@@ -158,6 +161,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
         this.printLines(' ');
         this.waitForInput();
+        this.changeDetectorRef.markForCheck();
       });
     });
   }
@@ -175,6 +179,7 @@ export class BasicTerminalComponent implements AfterViewInit, OnDestroy {
 
     this.terminal.print(processedText);
 
+    // change-detection: no view state — scrolls a container
     setTimeout(() => {
       this.dialogContentElement.nativeElement.scrollTop = this.dialogContentElement.nativeElement.scrollHeight;
     });

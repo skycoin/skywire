@@ -4,7 +4,7 @@
  * Not used anymore, still here just as a precaution.
  */
 
-import { Component, Inject, OnDestroy, AfterViewInit, ChangeDetectorRef } from '@angular/core';
+import { Component, Inject, OnDestroy, AfterViewInit, ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialog, MatDialogConfig } from '@angular/material/dialog';
 import { TranslateService } from '@ngx-translate/core';
 import { Subscription, forkJoin, interval } from 'rxjs';
@@ -135,7 +135,8 @@ interface UpdateVersion {
     selector: 'app-update',
     templateUrl: './update.component.html',
     styleUrls: ['./update.component.scss'],
-    standalone: false
+    standalone: false,
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UpdateComponent implements AfterViewInit, OnDestroy {
   // Current state of the window.
@@ -236,6 +237,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
           if (checkedVisors === this.nodesToUpdate.length) {
             this.finishInitialCheck();
           }
+          this.changeDetectorRef.markForCheck();
         }, (err: OperationError) => {
           // Save the error.
           this.nodesWithError.push({
@@ -248,6 +250,7 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
           if (checkedVisors === this.nodesToUpdate.length) {
             this.finishInitialCheck();
           }
+          this.changeDetectorRef.markForCheck();
         })
       );
     });
@@ -335,9 +338,11 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
           this.update();
         }
       }
+      this.changeDetectorRef.markForCheck();
     }, (err: OperationError) => {
       this.changeState(UpdatingStates.Error);
       this.errorText = processServiceError(err).translatableErrorMsg;
+      this.changeDetectorRef.markForCheck();
     });
   }
 
@@ -357,12 +362,15 @@ export class UpdateComponent implements AfterViewInit, OnDestroy {
           this.nodeService.update(nodeToUpdate.key).subscribe(response => {
             // Update the progress.
             this.updateProgressInfo(response.status, nodeToUpdate.updateProgressInfo);
+            this.changeDetectorRef.markForCheck();
           }, (err: OperationError) => {
             // Save the error msg.
             nodeToUpdate.updateProgressInfo.errorMsg = processServiceError(err).translatableErrorMsg;
+            this.changeDetectorRef.markForCheck();
           }, () => {
             // Indicate that the connection has been closed.
             nodeToUpdate.updateProgressInfo.closed = true;
+            this.changeDetectorRef.markForCheck();
           })
         );
       }

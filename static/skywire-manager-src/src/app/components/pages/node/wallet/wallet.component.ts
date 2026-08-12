@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, ChangeDetectionStrategy, ChangeDetectorRef } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 
@@ -31,6 +31,7 @@ const SKYCOIN_DAEMON_PREFIX = 'skycoin-daemon';
   templateUrl: './wallet.component.html',
   styleUrls: ['./wallet.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WalletComponent extends PageBaseComponent implements OnInit, OnDestroy {
   node: Node;
@@ -86,6 +87,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     private appsService: AppsService,
     private snackbar: SnackbarService,
     private router: Router,
+    private changeDetectorRef: ChangeDetectorRef,
   ) {
  super();
 }
@@ -114,6 +116,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       this.node = node;
       this.recompute();
+      this.changeDetectorRef.markForCheck();
     });
 
     return super.ngOnInit();
@@ -134,6 +137,7 @@ export class WalletComponent extends PageBaseComponent implements OnInit, OnDest
     // Re-assign on the next tick so Angular tears down + rebuilds the iframe.
     setTimeout(() => {
       this.iframeUrl = this.sanitizer.bypassSecurityTrustResourceUrl('/wallet/?_=' + Date.now());
+      this.changeDetectorRef.markForCheck();
     }, 0);
   }
 

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, ViewChild, ElementRef, NgZone, ChangeDetectorRef, Input } from '@angular/core';
+import { Component, OnDestroy, OnInit, ViewChild, ElementRef, NgZone, ChangeDetectorRef, Input, ChangeDetectionStrategy } from '@angular/core';
 import { Subscription, delay, mergeMap, of } from 'rxjs';
 
 import { Node } from '../../../../app.datatypes';
@@ -51,6 +51,7 @@ interface LogEntry {
   templateUrl: './logs.component.html',
   styleUrls: ['./logs.component.scss'],
   standalone: false,
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LogsComponent extends PageBaseComponent implements OnInit, OnDestroy {
   @ViewChild('content') content: ElementRef;
@@ -122,6 +123,7 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
         if (wasUnset && node) {
           this.loadData(0);
         }
+        this.cdr.markForCheck();
       });
     }
 
@@ -194,8 +196,12 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
       delay(delayMs),
       mergeMap(() => this.nodeService.getRuntimeLogsSince(this.node.localPk, cursor)),
     ).subscribe(
-      (delta: any) => this.onDelta(delta),
-      (err: OperationError) => this.onError(err),
+      (delta: any) => {
+ this.onDelta(delta); this.cdr.markForCheck(); 
+},
+      (err: OperationError) => {
+ this.onError(err); this.cdr.markForCheck(); 
+},
     );
   }
 
@@ -323,6 +329,7 @@ export class LogsComponent extends PageBaseComponent implements OnInit, OnDestro
       return true;
     });
     if (this.wasAtBottom) {
+      // change-detection: no view state — scrolls a container
       setTimeout(() => {
         if (this.content) {
           const el = this.content.nativeElement as HTMLElement;
