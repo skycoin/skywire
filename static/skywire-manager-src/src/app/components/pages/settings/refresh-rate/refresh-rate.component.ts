@@ -16,12 +16,12 @@ import { SnackbarService } from 'src/app/services/snackbar.service';
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class RefreshRateComponent implements OnInit, OnDestroy {
-  form: UntypedFormGroup;
+  form!: UntypedFormGroup;
 
   // Options in seconds.
   readonly timesList = ['3', '5', '10', '15', '30', '60', '90', '150', '300'];
 
-  private subscription: Subscription;
+  private subscription!: Subscription;
 
   constructor(
     private formBuilder: UntypedFormBuilder,

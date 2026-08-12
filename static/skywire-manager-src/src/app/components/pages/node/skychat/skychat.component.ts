@@ -83,7 +83,7 @@ interface GroupMsg {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class SkychatComponent extends PageBaseComponent implements OnInit, OnDestroy, AfterViewChecked {
-  @ViewChild('logEl') logEl: ElementRef<HTMLDivElement>;
+  @ViewChild('logEl') logEl!: ElementRef<HTMLDivElement>;
 
   // Set when this component is mounted OUTSIDE the router — via
   // window.SkywireNg.mountComponent() into a WinBox window (the wasm desktop's
@@ -93,7 +93,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
   @Input() embeddedNodeKey?: string;
   @Input() embeddedPeer?: string;
 
-  node: Node;
+  node!: Node;
   // Bound to the compose form.
   toPK = '';
   message = '';
@@ -237,7 +237,7 @@ export class SkychatComponent extends PageBaseComponent implements OnInit, OnDes
     }
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // Deep-link peer preselect (?peer=<pk>): the wasm desktop's ☰ Chat window
     // and ?chat=<pk> deep links open this tab with the conversation target
     // filled in. Hash routing keeps the query inside location.hash, so parse

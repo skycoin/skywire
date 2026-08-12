@@ -19,22 +19,22 @@ export class SingleNodeBackendData {
    * error, this property may still have a previously obtained value. If no data has already
    * been obtained, it is null
    */
-  data: Node;
+  data!: Node;
   /**
    * Error found while trying to get the data. It will only have a value if the last
    * try ended in an error.
    */
-  error: OperationError;
+  error!: OperationError;
   /**
    * Time (Date.now()) in which the data returned in the data property was obtained. If
    * the error proterty has a value, this property will still have a valid value if valid
    * data was previously found.
    */
-  momentOfLastCorrectUpdate: number;
+  momentOfLastCorrectUpdate!: number;
   /**
    * If the service is currently updating the data.
    */
-  updating: boolean;
+  updating!: boolean;
   /**
    * Stats about the data the node has sent and received.
    */
@@ -74,7 +74,7 @@ export class NodeData {
   /**
    * Public key of the node.
    */
-  pk: string;
+  pk!: string;
   /**
    * Last SingleNodeBackendData instance that was emited with dataSubject.
    */
@@ -83,7 +83,7 @@ export class NodeData {
    * Subscription used for refreshing the node data periodically. Unsubscribe to
    * stop automatic refreshes.
    */
-  updateSubscription: Subscription;
+  updateSubscription!: Subscription;
   /**
    * Subject used for sending events with data about this node.
    */
@@ -120,7 +120,7 @@ export class SingleNodeDataService {
   private readonly expirationTime = 60000;
 
   // Intervals (in ms) in which the service must refresh the node data automatically.
-  private dataRefreshDelay: number;
+  private dataRefreshDelay!: number;
 
   // Map that works as cache, containing the data of the nodes this service has requested
   // data for. Entries here are updated automatically, even if a stop request was made, and

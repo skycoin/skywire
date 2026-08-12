@@ -48,8 +48,8 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
   lastActionResult: DmsgConnectAllResult | null = null;
   lastActionLabel = '';
 
-  private nodeSub: Subscription;
-  private pollSub: Subscription;
+  private nodeSub!: Subscription;
+  private pollSub!: Subscription;
 
   constructor(
     private dmsgSvc: DmsgSettingsService,
@@ -59,7 +59,7 @@ export class DmsgSettingsComponent extends PageBaseComponent implements OnInit, 
     super();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     this.nodeSub = NodeComponent.currentNode.subscribe((node: Node) => {
       const wasUnset = !this.pk;
       this.pk = node?.localPk || '';

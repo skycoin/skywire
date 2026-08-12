@@ -44,7 +44,7 @@ interface NodeToEditCompleteData extends NodeToEditData {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class BulkRewardAddressChangerComponent implements OnDestroy {
-  @ViewChild('button') button: ButtonComponent;
+  @ViewChild('button') button!: ButtonComponent;
 
   // If the process for changing the addresses has already started.
   processingStarted = false;
@@ -55,11 +55,11 @@ export class BulkRewardAddressChangerComponent implements OnDestroy {
 
   // List with all the nodes that should be processed. At the start, it includes all nodes passed when the
   // window was opened. After the process starts, it only includes the nodes the user selected.
-  nodesToEdit: NodeToEditCompleteData[];
+  nodesToEdit!: NodeToEditCompleteData[];
 
   form: UntypedFormGroup;
 
-  private operationSubscriptions: Subscription[];
+  private operationSubscriptions!: Subscription[];
 
   /**
    * Opens the modal window. Please use this function instead of opening the window "by hand".

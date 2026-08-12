@@ -100,14 +100,14 @@ export class NetworkTransportsComponent extends PageBaseComponent implements OnI
   byTransport: ByTransportRow[] = [];
   byVisor: VisorNode[] = [];
 
-  private sub: Subscription;
+  private sub!: Subscription;
 
   constructor(private api: ApiService, private cdr: ChangeDetectorRef) {
     super();
     this.tabsData = homeTabsData();
   }
 
-  ngOnInit() {
+  override ngOnInit() {
     // 5min cadence: TPD metrics roll up daily, no benefit in
     // anything tighter. The Refresh button below the table forces
     // a fresh fetch when the user wants a current sample.

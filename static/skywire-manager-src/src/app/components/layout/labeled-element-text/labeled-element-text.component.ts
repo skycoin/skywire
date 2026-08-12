@@ -34,7 +34,7 @@ export class LabelComponents {
   /**
    * Original saved label info.
    */
-  labelInfo: LabelInfo;
+  labelInfo!: LabelInfo;
 }
 
 /**
@@ -51,7 +51,7 @@ export class LabelComponents {
     changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class LabeledElementTextComponent implements OnDestroy {
-  private idInternal: string;
+  private idInternal!: string;
   /**
    * Id of the element to show.
    */
@@ -87,7 +87,7 @@ export class LabeledElementTextComponent implements OnDestroy {
   /**
    * Parts of the label to be shown.
    */
-  labelComponents: LabelComponents;
+  labelComponents!: LabelComponents;
 
   /**
    * Gets the parts which form the label shown by this component for a particular ID.

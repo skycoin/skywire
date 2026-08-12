@@ -25,8 +25,8 @@ export class NodeActionsHelper {
    * of elements (true) or if it is one dedicated only to show a summary (false).
    */
   private showingFullList: boolean;
-  private currentNode: Node;
-  private currentNodeKey: string;
+  private currentNode!: Node;
+  private currentNodeKey!: string;
   private canBeUpdated = false;
   private canOpenTerminal = false;
 
@@ -34,8 +34,8 @@ export class NodeActionsHelper {
 
   returnButtonText: string;
 
-  private updateSubscription: Subscription;
-  private shutdownSubscription: Subscription;
+  private updateSubscription!: Subscription;
+  private shutdownSubscription!: Subscription;
 
   // Services this class need.
   private dialog: MatDialog;

@@ -146,7 +146,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
   private readonly persistentServerDataResponseKey = 'serv-dat-response';
 
   // Small text for identifying the list, needed for the helper objects.
-  private listId: string;
+  private listId!: string;
 
   // How many elements can be shown per page.
   private readonly maxFullListElements = 50;
@@ -172,36 +172,36 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
   hopsSortData = new SortingColumn(['hops'], 'vpn.server-list.hops-small-table-label', SortingModes.Number);
   */
 
-  private dataSortedSubscription: Subscription;
-  private dataFiltererSubscription: Subscription;
+  private dataSortedSubscription!: Subscription;
+  private dataFiltererSubscription!: Subscription;
   // Objects in charge of sorting and filtering the data.
-  dataSorter: DataSorter;
-  dataFilterer: DataFilterer;
+  dataSorter!: DataSorter;
+  dataFilterer!: DataFilterer;
 
   // If the server list is being loaded.
   loading = true;
   // If the app is still loading the data about the local visor. Must be true for showing the list.
   loadingBackendData = true;
   // Data for populating the list.
-  dataSource: VpnServerForList[];
+  dataSource!: VpnServerForList[];
   // Data for populating the tabs of the top bar.
   tabsData = VpnHelpers.vpnTabsData;
 
   // Vars for the pagination functionality.
-  allServers: VpnServerForList[];
-  filteredServers: VpnServerForList[];
-  serversToShow: VpnServerForList[];
+  allServers!: VpnServerForList[];
+  filteredServers!: VpnServerForList[];
+  serversToShow!: VpnServerForList[] | null;
   numberOfPages = 1;
   currentPage = 1;
   // Used as a helper var, as the URL is read asynchronously.
   currentPageInUrl = 1;
 
   // Pk of the local visor.
-  currentLocalPk: string;
+  currentLocalPk!: string;
   // List currently being shown. It also means which tab is currently selected in the lower tab bar.
   currentList = Lists.Public;
   // Currently selected server.
-  currentServer: LocalServerData;
+  currentServer!: LocalServerData;
   // If the VPN is currently running.
   vpnRunning = false;
 
@@ -209,12 +209,12 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
   lists = Lists;
 
   // Array with the properties of the columns that can be used for filtering the data.
-  filterProperties: FilterProperties[];
+  filterProperties!: FilterProperties[];
 
   private initialLoadStarted = false;
 
   private navigationsSubscription: Subscription;
-  private dataSubscription: Subscription;
+  private dataSubscription!: Subscription;
   private currentServerSubscription: Subscription;
   private backendDataSubscription: Subscription;
 
@@ -436,16 +436,16 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
         }
 
         // Process the result.
-        this.allServers = response.map(server => {
+        this.allServers = response.map((server: any) => {
           return {
             countryCode: server.countryCode,
             countryName: this.getCountryName(server.countryCode),
             name: server.name,
-            customName: null,
+            customName: null as string | null,
             location: server.location,
             pk: server.pk,
             note: server.note,
-            personalNote: null,
+            personalNote: null as string | null,
 
             /*
             // TODO: for currently commented columns, must be deleted or reactivated depending on
@@ -759,7 +759,7 @@ export class VpnServerListComponent extends PageBaseComponent implements OnDestr
    * @param countryCode 2 letter code of the country.
    */
   getCountryName(countryCode: string): string {
-    return countriesList[countryCode.toUpperCase()] ? countriesList[countryCode.toUpperCase()] : countryCode;
+    return (countriesList as any)[countryCode.toUpperCase()] ? (countriesList as any)[countryCode.toUpperCase()] : countryCode;
   }
 
   /**
