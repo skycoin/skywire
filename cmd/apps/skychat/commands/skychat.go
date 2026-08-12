@@ -935,6 +935,7 @@ func RunSkychat(ctx context.Context, args []string) error {
 	mux.HandleFunc("/read-receipt", requireAuthFunc(readReceiptHandler(ctx)))
 	mux.HandleFunc("/delete", requireAuthFunc(deleteHandler(ctx)))
 	mux.HandleFunc("/notify-capable", requireAuthFunc(notifyCapableHandler))
+	mux.HandleFunc("/notify-focus", requireAuthFunc(notifyFocusHandler))
 	registerPairHTTPHandlers(ctx, mux)
 	registerGroupHTTPHandlers(mux)
 	registerProfileHTTPHandlers(mux)
@@ -1773,7 +1774,7 @@ func onChatEvent(ev dm.Event) {
 	// Host-OS notification when no capable browser UI is showing it. Inbound
 	// only — our own outbound mirror is not news to this host.
 	if ev.Dir == "in" {
-		notifyOSInbound(displayName(ev.Peer), notifPreview(ev.Text))
+		notifyOSInboundThread(ev.Peer, ev.Peer, displayName(ev.Peer), notifPreview(ev.Text))
 	}
 }
 

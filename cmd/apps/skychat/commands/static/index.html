@@ -2582,7 +2582,22 @@
     }
 
     .group-avatar { width: 40px; height: 40px; font-size: 18px; }
+    /* A picture fills the same rounded tile the glyph sat in; overflow is
+       clipped by the parent's radius so both render identically. */
+    .group-avatar-sm, .group-avatar { overflow: hidden; }
+    .group-avatar-sm img, .group-avatar img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
     .group-header-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+    /* Founder-only display-metadata editor in the members dialog. */
+    .ga-meta-line { display: flex; gap: 12px; align-items: flex-start; }
+    .ga-meta-fields { flex: 1; min-width: 0; }
+    .ga-meta-fields .cg-input { margin-bottom: 8px; }
+    .ga-meta-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
     .msg-sender {
       font-size: 11px;
@@ -4099,6 +4114,28 @@
   <div id="groupAdminModal" class="modal-overlay">
     <div class="modal modal-wide">
       <h3>Group members</h3>
+      <!-- Display metadata. Founder-only, and honestly so: members mirror
+           the founder's record and re-learn name + picture from it when
+           they open the chat, so an edit anywhere else would un-happen. -->
+      <div id="gaMetaRow" class="ga-row hidden">
+        <div class="ga-meta-line">
+          <div class="group-avatar" id="gaMetaAvatar">#</div>
+          <div class="ga-meta-fields">
+            <input id="gaMetaName" class="cg-input" type="text" maxlength="64" autocomplete="off"
+                   placeholder="Group name" />
+            <div class="ga-meta-actions">
+              <button class="btn" onclick="app.saveGroupName()">Rename</button>
+              <button class="btn" onclick="document.getElementById('gaPictureField').click()">Change picture</button>
+              <button class="btn hidden" id="gaClearAvatarBtn" onclick="app.clearGroupAvatar()">Remove picture</button>
+            </div>
+          </div>
+        </div>
+        <input type="file" id="gaPictureField" accept="image/*" style="display: none;" onchange="app.pickGroupAvatar()">
+        <p class="ga-key-note">
+          Members and new joiners take the name and picture from this visor
+          the next time they open the chat.
+        </p>
+      </div>
       <div id="gaReadOnlyRow" class="ga-row hidden">
         <label class="ga-toggle">
           <input type="checkbox" id="gaReadOnly" onchange="app.toggleGroupReadOnly()" />
@@ -4113,7 +4150,7 @@
           <input type="checkbox" id="gaListed" onchange="app.toggleGroupListed()" />
           <span>List in this visor's public catalog</span>
         </label>
-        <p class="cg-help">
+        <p class="ga-key-note">
           On means anyone holding this visor's public key can discover it by
           asking. Off keeps it reachable only by address or invite link. Other
           admins publish their own copies independently.
@@ -4468,9 +4505,17 @@
         // notification for the thread the user is actively looking at (Telegram
         // behavior) while still notifying for background threads.
         this._winFocused = (typeof document !== 'undefined' && document.hasFocus) ? document.hasFocus() : true;
-        window.addEventListener('focus', () => { this._winFocused = true; });
+        // What /notify-focus was last told, so the report only fires on a real
+        // change (plus a periodic refresh that keeps the server lease alive).
+        this._notifFocusSent = null;
+        this._notifFocusSentAt = 0;
+        window.addEventListener('focus', () => {
+          this._winFocused = true;
+          this._reportNotifFocus();
+        });
         window.addEventListener('blur', () => {
           this._winFocused = false;
+          this._reportNotifFocus();
           // Leaving the window ends a hold we can no longer track: stop and
           // send what was captured rather than holding the mic open. A locked
           // take is hands-free by definition, so it keeps running.
@@ -4484,6 +4529,10 @@
         // requestAnimationFrame is frozen while hidden, so a hands-free take's
         // bars stopped where they were.
         document.addEventListener('visibilitychange', () => {
+          // Hidden must clear the focus lease immediately: in the Android
+          // WebView this handler is often the last JS to run before timers
+          // freeze, and blur may never fire at all.
+          this._reportNotifFocus();
           if (document.hidden) {
             if (this.rec.active && !this.rec.locked) this._stopRecording(false);
           } else if (this.rec.active) {
@@ -4506,6 +4555,15 @@
         // disabled) the lease expires (~45s) and the Go side takes over.
         this._reportNotifCapability();
         setInterval(() => { if (this._notifCapable()) this._reportNotifCapability(); }, 20000);
+        // Tell the server which conversation is on screen, so the background
+        // process holds notifications for the thread the user is already
+        // looking at. Polled rather than hooked into every selection site:
+        // the report itself deduplicates, and a ~2s stale window on a thread
+        // switch is invisible next to message latency. The interval also
+        // serves as the lease heartbeat — when this page freezes (Android
+        // WebView in the background) the server lease simply expires.
+        this._reportNotifFocus();
+        setInterval(() => this._reportNotifFocus(), 2000);
         // Surface the permission banner if this browser was never asked.
         this._refreshNotifNudge();
         // Voice calls: the visor owns the call manager + host audio; this UI is a
@@ -9050,6 +9108,12 @@
             size: dim, budget: 64 * 1024,
             label: `Kept on this device only, at ${dim}×${dim}.`,
           },
+          // The open group's picture. Same wire budget as 'me': it rides
+          // the same probe frames (profile.MaxAvatarBytes).
+          group: {
+            size: dim, budget: 32 * 1024,
+            label: `Shown to every member, at ${dim}×${dim}. Served from this visor.`,
+          },
         };
       }
 
@@ -9057,6 +9121,10 @@
       // end in the same confirmation dialog.
       pickMyAvatar() {
         this._pickAvatar(document.getElementById('myPictureField'), 'me');
+      }
+
+      pickGroupAvatar() {
+        this._pickAvatar(document.getElementById('gaPictureField'), 'group');
       }
 
       _pickAvatar(input, target) {
@@ -9177,6 +9245,13 @@
         if (pending.target === 'me') {
           document.getElementById('myAvatar').src = pending.dataUrl;
           this.showToast('Press Save to publish it.');
+          return;
+        }
+        if (pending.target === 'group') {
+          this._pendingAvatar = null;
+          this._postGroupMeta({ avatar: pending.dataUrl })
+            .then(() => this.showToast('Group picture updated.'))
+            .catch(e => this.showToast(`Failed: ${e.message || e}`, 'error'));
           return;
         }
         if (pending.target === 'newcontact') {
@@ -9866,7 +9941,7 @@
           const badge = pending > 0 ? `<span class="ga-badge">${pending}</span>` : '';
           li.innerHTML = `
             <div class="group-item ${g.id === this.group ? 'active' : ''}" data-gid="${g.id}" onclick="app.selectGroup('${g.id}')">
-              <div class="group-avatar-sm">${g.kind === 'channel' ? icon('megaphone', 20) : icon('hash', 20)}</div>
+              <div class="group-avatar-sm">${this._groupAvatarHTML(g, 20)}</div>
               <div class="recipient-info">
                 <div class="recipient-pk">${this.escapeHtml(g.name || g.id)} ${badge}</div>
                 <div class="recipient-preview">${this.escapeHtml(this._groupSubtitle(g))}</div>
@@ -10022,11 +10097,10 @@
         if (attachBtn) attachBtn.classList.remove('hidden');
 
         const info = this.groups.find(g => g.id === id);
-        const avatar = document.getElementById('groupHeaderAvatar');
-        if (avatar) avatar.innerHTML = icon((info && info.kind === 'channel') ? 'megaphone' : 'hash', 19);
-        document.getElementById('groupHeaderName').textContent = info ? info.name : id;
-        document.getElementById('groupHeaderSub').textContent = info
-          ? this._groupSubtitle(info) : '';
+        this._paintGroupHeader(info, id);
+        // Ask the founder whether the name or picture changed since we
+        // mirrored them — throttled, and a no-op on groups we founded.
+        this._maybeRefreshGroupMeta(id);
         this._updateComposerLock();
         this._updatePendingBadge();
 
@@ -10041,6 +10115,26 @@
         this.renderPinned();
         this._updatePinButtons();
         this._updateMuteButtons();
+      }
+
+      // _paintGroupHeader draws the open group's identity row: picture (or
+      // the kind glyph when there is none), name, subtitle. Split out of
+      // selectGroup so a metadata refresh can repaint without reselecting.
+      _paintGroupHeader(info, id) {
+        const avatar = document.getElementById('groupHeaderAvatar');
+        if (avatar) avatar.innerHTML = this._groupAvatarHTML(info, 19);
+        document.getElementById('groupHeaderName').textContent = info ? info.name : (id || '');
+        document.getElementById('groupHeaderSub').textContent = info
+          ? this._groupSubtitle(info) : '';
+      }
+
+      // _groupAvatarHTML is the inner markup for any group avatar tile: the
+      // picture when one is set, else the kind glyph. The data URI's MIME
+      // was validated server-side and base64 cannot break out of the
+      // attribute, so it is safe to inline.
+      _groupAvatarHTML(info, glyphSize) {
+        if (info && info.avatar) return `<img src="${info.avatar}" alt="" />`;
+        return icon((info && info.kind === 'channel') ? 'megaphone' : 'hash', glyphSize);
       }
 
       // groupHistoryChunk is how many messages one page of backlog carries.
@@ -11498,6 +11592,27 @@
         listedRow.classList.toggle('hidden', !isAdmin);
         document.getElementById('gaListed').checked = !!(info && info.listed);
 
+        // Name + picture editor. Founder-only, a strictly smaller set than
+        // isAdmin: a non-founder admin's edit would be overwritten by their
+        // own next refresh from the founder, so the dialog doesn't offer it.
+        const metaRow = document.getElementById('gaMetaRow');
+        if (metaRow) {
+          const isFounder = !!(info && String(info.owner_pk || '').toLowerCase() === this.myPK);
+          metaRow.classList.toggle('hidden', !isFounder);
+          if (isFounder) {
+            const nameField = document.getElementById('gaMetaName');
+            // Refill only when idle — this dialog re-renders on every poll
+            // of the request queue, and mid-typing is the wrong moment.
+            if (nameField && document.activeElement !== nameField) {
+              nameField.value = info.name || '';
+            }
+            const av = document.getElementById('gaMetaAvatar');
+            if (av) av.innerHTML = this._groupAvatarHTML(info, 19);
+            const clearBtn = document.getElementById('gaClearAvatarBtn');
+            if (clearBtn) clearBtn.classList.toggle('hidden', !info.avatar);
+          }
+        }
+
         // Encryption / key generation. Only private groups have a key, and
         // only admins can rotate it — a public group's bodies are plaintext
         // on the feed by design, so offering a rotation there would imply a
@@ -11767,6 +11882,81 @@
 
       // toggleGroupListed publishes or un-publishes this group in the visor's
       // discovery catalog.
+      // ---- Display metadata (name + picture) -------------------------
+      //
+      // Founder-only writes; the server enforces it and the dialog only
+      // shows the editor to the founder. Members converge through
+      // _maybeRefreshGroupMeta when they open the chat.
+
+      // _postGroupMeta sends a metadata edit for the open group and applies
+      // the returned info. Body: {name} and/or {avatar} — avatar '' clears,
+      // absent leaves alone (the server tells the two apart by presence).
+      _postGroupMeta(body) {
+        const gid = this.group;
+        if (!gid) return Promise.reject(new Error('no group open'));
+        return fetch(`/group/${gid}/meta`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+          .then(res => res.ok ? res.json() : res.text().then(t => Promise.reject(new Error(t.trim() || `HTTP ${res.status}`))))
+          .then(info => { this._applyGroupMeta(info); return info; });
+      }
+
+      // _applyGroupMeta folds fresh display metadata into the cached group
+      // and repaints everywhere the name or picture shows. Merges just the
+      // two display fields rather than replacing the entry: the fresh info
+      // comes from a metadata call, and clobbering live fields like
+      // subscriber_alive with its zero values would flicker the UI.
+      _applyGroupMeta(info) {
+        if (!info || !info.id) return;
+        const g = this.groups.find(x => x.id === info.id);
+        if (g) {
+          g.name = info.name;
+          g.avatar = info.avatar || '';
+        }
+        this.renderGroups();
+        if (this.group === info.id) {
+          this._paintGroupHeader(g || info, info.id);
+          const modal = document.getElementById('groupAdminModal');
+          if (modal && modal.classList.contains('visible')) this.refreshGroupAdmin();
+        }
+      }
+
+      saveGroupName() {
+        const field = document.getElementById('gaMetaName');
+        const name = (field ? field.value : '').trim();
+        if (!name) { this.showToast('A group needs a name.', 'error'); return; }
+        this._postGroupMeta({ name })
+          .then(() => this.showToast('Renamed.'))
+          .catch(e => this.showToast(`Failed: ${e.message || e}`, 'error'));
+      }
+
+      clearGroupAvatar() {
+        this._postGroupMeta({ avatar: '' })
+          .then(() => this.showToast('Picture removed.'))
+          .catch(e => this.showToast(`Failed: ${e.message || e}`, 'error'));
+      }
+
+      // _maybeRefreshGroupMeta pulls the founder's current name + picture
+      // for a group this visor merely mirrors. Fire-and-forget with a
+      // per-group throttle: opening the same chat five times in a minute
+      // must not probe the founder five times. The server side is
+      // best-effort too, so a sleeping founder costs nothing but the call.
+      _maybeRefreshGroupMeta(id) {
+        const g = this.groups.find(x => x.id === id);
+        if (!g) return;
+        if (String(g.owner_pk || '').toLowerCase() === this.myPK) return;
+        const now = Date.now();
+        this._groupMetaAskedAt = this._groupMetaAskedAt || {};
+        if (now - (this._groupMetaAskedAt[id] || 0) < 5 * 60 * 1000) return;
+        this._groupMetaAskedAt[id] = now;
+        fetch(`/group/${id}/refresh-meta`, { method: 'POST' })
+          .then(res => res.ok ? res.json() : null)
+          .then(info => { if (info) this._applyGroupMeta(info); })
+          .catch(() => {});
+      }
+
       toggleGroupListed() {
         const gid = this.group;
         const on = document.getElementById('gaListed').checked;
@@ -12327,6 +12517,35 @@
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ capable: this._notifCapable() }),
+        }).catch(() => {});
+      }
+
+      // _reportNotifFocus tells the server which conversation this UI is
+      // actively showing — '' when none, blurred, or hidden — so the
+      // background process can suppress host-OS notifications for the thread
+      // that is literally on screen (commands/osnotify.go, uiShowingThread).
+      // This matters most where _notifCapable() can never be true (the
+      // Android WebView has no Notifications API): there the Go side posts
+      // everything, and this lease is its only knowledge of what the user is
+      // looking at. Lease-shaped: refreshed every few seconds while focused,
+      // cleared on blur/hide, and expiring server-side regardless, because a
+      // backgrounded WebView freezes before it can say goodbye.
+      _reportNotifFocus() {
+        const visible = typeof document === 'undefined' || document.visibilityState !== 'hidden';
+        // Inside the Skywire app's WebView (recognisable by the injected QR
+        // bridge) there is exactly one window, so visible IS focused — and
+        // document.hasFocus() there can stay false until the first tap,
+        // which would report "not looking" about a chat filling the screen.
+        const embedded = typeof window.SkywireQr !== 'undefined';
+        const key = ((this._winFocused || embedded) && visible) ? (this.activeKey() || '') : '';
+        const now = Date.now();
+        if (key === this._notifFocusSent && now - this._notifFocusSentAt < 5000) return;
+        this._notifFocusSent = key;
+        this._notifFocusSentAt = now;
+        fetch('/notify-focus', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, focused: key !== '' }),
         }).catch(() => {});
       }
 

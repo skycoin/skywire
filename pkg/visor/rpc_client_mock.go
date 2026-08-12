@@ -1316,6 +1316,14 @@ func (mc *mockRPCClient) GroupResolve(_ GroupResolveArgs) (GroupResolveResult, e
 // GroupSetListed implements API.
 func (mc *mockRPCClient) GroupSetListed(_ string, _ bool) (GroupInfo, error) { return GroupInfo{}, nil }
 
+// GroupSetMeta implements API.
+func (mc *mockRPCClient) GroupSetMeta(_ GroupSetMetaArgs) (GroupInfo, error) {
+	return GroupInfo{}, nil
+}
+
+// GroupRefreshMeta implements API.
+func (mc *mockRPCClient) GroupRefreshMeta(_ string) (GroupInfo, error) { return GroupInfo{}, nil }
+
 // GroupCatalog implements API.
 func (mc *mockRPCClient) GroupCatalog(_ cipher.PubKey) ([]GroupCatalogEntry, bool, error) {
 	return nil, false, nil
