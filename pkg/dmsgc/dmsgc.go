@@ -110,7 +110,14 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 	if discURL == "" {
 		discURL = deployments[0].DiscoveryDmsg
 	}
-	primaryC := disc.NewHTTP(discURL, httpC, masterLogger.PackageLogger("dmsgC:disc"))
+	// liveHTTPDisc is the UNWRAPPED live discovery client (queries dmsg-disc
+	// over the client's own sessions). Carrier convergence resolves through it
+	// so it sees a server's CURRENT AddressWT/CertHashWT/AddressUDP — the
+	// primaryC below gets wrapped in a static-seed-first fallback (and the entry
+	// cache is pre-seeded with ws-only config servers), which shadow those
+	// rotating endpoints. See dmsgC.SetLiveDiscovery below.
+	liveHTTPDisc := disc.NewHTTP(discURL, httpC, masterLogger.PackageLogger("dmsgC:disc"))
+	primaryC := liveHTTPDisc
 	// When the operator (or a hypervisor's auto-discovery push) has set
 	// HypervisorDiscovery, wrap the public discovery as the fallback
 	// behind it. The hypervisor's proxy serves locally-known PKs from
@@ -147,6 +154,9 @@ func New(pk cipher.PubKey, sk cipher.SecKey, eb *appevent.Broadcaster, conf *Dms
 	dmsgC := dmsg.NewClient(pk, sk, primaryC, dmsgConf)
 	dmsgC.SetLogger(masterLogger.PackageLogger("dmsgC"))
 	dmsgC.SetMasterLogger(masterLogger)
+	// Give carrier convergence a live lookup that bypasses the static-seed
+	// shadow (see liveHTTPDisc above).
+	dmsgC.SetLiveDiscovery(liveHTTPDisc)
 
 	// Pre-seed the entry cache with every configured server (across
 	// all deployments + LAN servers). EnsureAndObtainSession resolves
