@@ -15,7 +15,11 @@ package flags
 
 import (
 	"fmt"
+	"os"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clihelp"
 
 	"github.com/spf13/cobra"
 )
@@ -106,7 +110,11 @@ Modes (mutually exclusive):
 		Hidden: true,
 		Args:   cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
-			PrintCommandTree(cmd.Parent())
+			// One value, two renderings: the ASCII tree is Node.Human, so the
+			// text and JSON forms cannot describe different trees.
+			if err := cliout.Print(cmd, clihelp.TreeOf(cmd.Parent())); err != nil {
+				fmt.Fprintln(os.Stderr, err) //nolint:errcheck
+			}
 		},
 	})
 }
