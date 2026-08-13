@@ -1,0 +1,288 @@
+package main
+
+// The CLI's JSON output is an API. Callers pipe it into jq, the e2e suite
+// unmarshals it, and other programs depend on the field names. This file is the
+// guard on three ways that API used to rot silently.
+//
+// Each check names what it found and how to fix it, because the failure it
+// prevents is not a crash — it is a command that quietly prints prose to a
+// caller expecting JSON, or two declarations of one shape drifting apart. Both
+// happened: `skywire cli tp` emitted a different document depending on which
+// code path ran, because the shape was declared twice inside function bodies.
+//
+// Every check carries an allowlist of the cases that are legitimately exempt,
+// each with a reason. Shrinking those lists is the work; the numbers they
+// report are the progress.
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"testing"
+)
+
+const commandsDir = "commands"
+
+// streamingCommands print continuously, interactively, or as a byte stream, so
+// there is no single document for --json to shape. Anything added here needs a
+// reason that survives the question "could this have emitted a JSON summary
+// instead?".
+var streamingCommands = map[string]string{
+	"commands/gotop/root.go":                   "a full-screen TUI; there is no document to emit",
+	"commands/visor/top.go":                    "a full-screen TUI; there is no document to emit",
+	"commands/visor/ping/mux_bandwidth_tui.go": "a live bandwidth TUI",
+	"commands/jq/jq.go":                        "it IS jq; the caller's filter decides the shape",
+	"commands/hv/shell.go":                     "drives a browser terminal over CDP; output is a live transcript",
+	"commands/hv/eval.go":                      "prints whatever the page's JS returned; the caller chose the shape",
+	"commands/hv/probe.go":                     "streams CDP events as they arrive, unbounded",
+	"commands/dmsg/curl.go":                    "writes the fetched body, which is the point",
+	"commands/dmsg/iperf.go":                   "a throughput meter; prints intervals as they elapse",
+	"commands/dmsg/probe.go":                   "prints per-port progress while probing",
+	"commands/got/got.go":                      "an HTTP client; writes the response body",
+	"commands/got/got_skywire.go":              "as got.go",
+	"commands/skychat/sendfile.go":             "progress for a file transfer",
+	"commands/util/foreach.go":                 "relays whatever the inner command printed",
+	"commands/log/log.go":                      "bulk log collection; per-file progress",
+	"commands/rewards/server/server.go":        "an HTTP server, not a command that returns a value",
+	"commands/rewards/server/login.go":         "part of the rewards HTTP server",
+	"commands/rewards/server/logging.go":       "part of the rewards HTTP server",
+	"commands/rewards/server/stats.go":         "part of the rewards HTTP server",
+	"commands/rewards/server/htmpl.go":         "part of the rewards HTTP server",
+	"commands/rewards/server/nodeproxy.go":     "part of the rewards HTTP server",
+	"commands/rewards/server/loginchain.go":    "part of the rewards HTTP server",
+}
+
+// localJSONFlags are commands that declare their own --json instead of using
+// the persistent one from the root. Two variables for one concept: a command
+// reading its own package-level bool cannot see the root's flag, so behaviour
+// depends on where the user put the word.
+// pendingJSON is debt, not exemption: each of these prints without
+// consulting --json and should be converted to a typed output in
+// pkg/cliout/<group>. The list only shrinks — report() fails on an entry
+// that no longer applies, so a fix must delete its line.
+var pendingJSON = map[string]string{
+	"commands/config/gen.go":           "TODO(cliout): needs a typed output",
+	"commands/proxy/mux_auto.go":       "TODO(cliout): needs a typed output",
+	"commands/proxy/mux_info.go":       "TODO(cliout): needs a typed output",
+	"commands/proxy/mux_ops.go":        "TODO(cliout): needs a typed output",
+	"commands/proxy/mux_set.go":        "TODO(cliout): needs a typed output",
+	"commands/resolver/ca.go":          "TODO(cliout): needs a typed output",
+	"commands/reward/rules.go":         "TODO(cliout): needs a typed output",
+	"commands/rewards/calc.go":         "TODO(cliout): needs a typed output",
+	"commands/rewards/services.go":     "TODO(cliout): needs a typed output",
+	"commands/rewards/transports.go":   "TODO(cliout): needs a typed output",
+	"commands/rg/rg.go":                "TODO(cliout): needs a typed output",
+	"commands/route/minhops.go":        "TODO(cliout): needs a typed output",
+	"commands/route/policy.go":         "TODO(cliout): needs a typed output",
+	"commands/route/trace.go":          "TODO(cliout): needs a typed output",
+	"commands/survey/root.go":          "TODO(cliout): needs a typed output",
+	"commands/svc/ar_check.go":         "TODO(cliout): needs a typed output",
+	"commands/tps/tps.go":              "TODO(cliout): needs a typed output",
+	"commands/tp/tp-add-edge.go":       "TODO(cliout): needs a typed output",
+	"commands/tp/tp-id.go":             "TODO(cliout): needs a typed output",
+	"commands/tp/tp-route-addr.go":     "TODO(cliout): needs a typed output",
+	"commands/tp/tp-tree.go":           "TODO(cliout): needs a typed output",
+	"commands/tp/tp-viz.go":            "TODO(cliout): needs a typed output",
+	"commands/visor/doctor.go":         "TODO(cliout): needs a typed output",
+	"commands/visor/goroutines.go":     "TODO(cliout): needs a typed output",
+	"commands/visor/ping/bandwidth.go": "TODO(cliout): needs a typed output",
+	"commands/visor/ping/tree.go":      "TODO(cliout): needs a typed output",
+	"commands/visor/reward.go":         "TODO(cliout): needs a typed output",
+	"commands/visor/whois.go":          "TODO(cliout): needs a typed output",
+}
+
+var localJSONFlags = map[string]string{
+	"commands/rg/rg.go":                    "TODO(cliout): delete the local flag; read the inherited one",
+	"commands/serve/serve.go":              "TODO(cliout): delete the local flag; read the inherited one",
+	"commands/visor/ping/mux_bandwidth.go": "TODO(cliout): delete the local flag; read the inherited one",
+	"commands/visor/ping/tree_stream.go":   "TODO(cliout): delete the local flag; read the inherited one",
+	"commands/visor/reward.go":             "TODO(cliout): delete the local flag; read the inherited one",
+}
+
+// funcLocalShapes are output structs declared inside a function body. They
+// cannot be imported, so every other consumer — the e2e suite above all —
+// retypes them by hand and the compiler never compares the copies.
+var funcLocalShapes = map[string]string{
+	"commands/mdisc/root.go":            "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/proxy/proxy.go":           "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/reward/root.go":           "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/rewards/calc.go":          "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/rewards/runday.go":        "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/rewards/server/seo.go":    "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/rewards/server/server.go": "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/route/calc.go":            "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/route/route.go":           "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/tp/tp-disc.go":            "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/tp/tp.go":                 "TODO(cliout): move to pkg/cliout/<group>",
+	"commands/tp/tp-metrics.go":         "TODO(cliout): move to pkg/cliout/<group>",
+}
+
+// TestNoLocalJSONFlag fails on a command that registers its own --json.
+func TestNoLocalJSONFlag(t *testing.T) {
+	var found []string
+	forEachFile(t, func(path string, file *ast.File, fset *token.FileSet) {
+		ast.Inspect(file, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || !strings.HasPrefix(sel.Sel.Name, "BoolVar") {
+				return true
+			}
+			// BoolVar(&v, "name", ...) / BoolVarP(&v, "name", "n", ...)
+			if len(call.Args) < 2 {
+				return true
+			}
+			lit, ok := call.Args[1].(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			if name, _ := strconv.Unquote(lit.Value); name == "json" {
+				found = append(found, path+":"+posLine(fset, call.Pos()))
+			}
+			return true
+		})
+	})
+	report(t, found, localJSONFlags,
+		"declares its own --json, shadowing the persistent flag on RootCmd",
+		"delete the local flag and read the inherited one (cliout.JSONMode)")
+}
+
+// TestNoFunctionLocalOutputShape fails on a struct with json tags declared
+// inside a function.
+func TestNoFunctionLocalOutputShape(t *testing.T) {
+	var found []string
+	forEachFile(t, func(path string, file *ast.File, fset *token.FileSet) {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil {
+				continue
+			}
+			ast.Inspect(fn.Body, func(n ast.Node) bool {
+				ts, ok := n.(*ast.TypeSpec)
+				if !ok {
+					return true
+				}
+				st, ok := ts.Type.(*ast.StructType)
+				if !ok || st.Fields == nil {
+					return true
+				}
+				for _, f := range st.Fields.List {
+					if f.Tag != nil && strings.Contains(f.Tag.Value, "json:") {
+						found = append(found, path+":"+posLine(fset, ts.Pos())+" ("+ts.Name.Name+")")
+						return false
+					}
+				}
+				return true
+			})
+		}
+	})
+	report(t, found, funcLocalShapes,
+		"declares a json-tagged struct inside a function, so nothing can import it",
+		"move it to pkg/cliout/<group> and alias it here")
+}
+
+// TestEveryPrintingCommandHonoursJSON fails on a file that prints but never
+// routes through the printer, so --json is silently ignored.
+func TestEveryPrintingCommandHonoursJSON(t *testing.T) {
+	var found []string
+	forEachFile(t, func(path string, file *ast.File, fset *token.FileSet) {
+		var prints, honours bool
+		ast.Inspect(file, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			pkg, ok := sel.X.(*ast.Ident)
+			if !ok {
+				return true
+			}
+			switch {
+			case pkg.Name == "fmt" && strings.HasPrefix(sel.Sel.Name, "Print"):
+				prints = true
+			case sel.Sel.Name == "PrintOutput" || (pkg.Name == "cliout" && sel.Sel.Name == "Print"),
+				sel.Sel.Name == "JSONMode":
+				honours = true
+			}
+			return true
+		})
+		if prints && !honours {
+			found = append(found, path)
+		}
+	})
+	allowed := map[string]string{}
+	for k, v := range streamingCommands {
+		allowed[k] = v
+	}
+	for k, v := range pendingJSON {
+		allowed[k] = v
+	}
+	report(t, found, allowed,
+		"prints without ever consulting --json, so a caller asking for JSON gets prose",
+		"render through cliout.Print, or add it to streamingCommands with a reason")
+}
+
+// forEachFile parses every non-test Go file under the commands tree.
+func forEachFile(t *testing.T, fn func(path string, file *ast.File, fset *token.FileSet)) {
+	t.Helper()
+	fset := token.NewFileSet()
+	err := filepath.Walk(commandsDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		parsed, perr := parser.ParseFile(fset, path, nil, parser.ParseComments)
+		if perr != nil {
+			return perr
+		}
+		fn(filepath.ToSlash(path), parsed, fset)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walking %s: %v", commandsDir, err)
+	}
+}
+
+func posLine(fset *token.FileSet, p token.Pos) string {
+	return strconv.Itoa(fset.Position(p).Line)
+}
+
+// report fails with everything found that is not allowlisted, and — just as
+// importantly — with anything allowlisted that no longer needs to be, so the
+// lists cannot outlive the problems they describe.
+func report(t *testing.T, found []string, allow map[string]string, problem, fix string) {
+	t.Helper()
+	var unexpected []string
+	seen := map[string]bool{}
+	for _, f := range found {
+		key := strings.SplitN(f, ":", 2)[0]
+		seen[key] = true
+		if _, ok := allow[key]; !ok {
+			unexpected = append(unexpected, f)
+		}
+	}
+	sort.Strings(unexpected)
+	if len(unexpected) > 0 {
+		t.Errorf("%d file(s) %s.\nFix: %s.\n  %s",
+			len(unexpected), problem, fix, strings.Join(unexpected, "\n  "))
+	}
+	var stale []string
+	for k := range allow {
+		if !seen[k] {
+			stale = append(stale, k)
+		}
+	}
+	sort.Strings(stale)
+	if len(stale) > 0 {
+		t.Errorf("%d allowlist entr(ies) no longer apply — delete them:\n  %s",
+			len(stale), strings.Join(stale, "\n  "))
+	}
+}
