@@ -863,8 +863,6 @@ func (hv *Hypervisor) makeMux() chi.Router {
 				r.Post("/visors/{pk}/min-hops", hv.postMinHops())
 				r.Get("/visors/{pk}/persistent-transports", hv.getPersistentTransports())
 				r.Put("/visors/{pk}/persistent-transports", hv.putPersistentTransports())
-				r.Get("/visors/{pk}/log/rotation", hv.getLogRotationInterval())
-				r.Put("/visors/{pk}/log/rotation", hv.putLogRotationInterval())
 				r.Get("/visors/{pk}/reward", hv.getRewardAddress())
 				r.Put("/visors/{pk}/reward", hv.putRewardAddress())
 				r.Delete("/visors/{pk}/reward", hv.deleteRewardAddress())

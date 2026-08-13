@@ -170,14 +170,6 @@ func (proxyDefaultAPI) DmsgPtyExec(_ DmsgPtyExecArgs) (*pty.CommandExecResult, e
 	return nil, ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) GetLogRotationInterval() (visorconfig.Duration, error) {
-	return 0, ErrProxyNotSupported
-}
-
-func (proxyDefaultAPI) SetLogRotationInterval(_ visorconfig.Duration) error {
-	return ErrProxyNotSupported
-}
-
 func (proxyDefaultAPI) IsDMSGClientReady() (bool, error) {
 	return false, ErrProxyNotSupported
 }

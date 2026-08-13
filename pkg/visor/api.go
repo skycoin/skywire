@@ -26,7 +26,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // API represents visor API.
@@ -63,8 +62,6 @@ type API interface {
 	SkychatLocalAddr() (string, error)
 	RemoteVisors() ([]string, error)
 	DmsgPtyExec(args DmsgPtyExecArgs) (*pty.CommandExecResult, error)
-	GetLogRotationInterval() (visorconfig.Duration, error)
-	SetLogRotationInterval(visorconfig.Duration) error
 	IsDMSGClientReady() (bool, error)
 	DMSGServers() ([]DMSGServerInfo, error)
 	Ports() (map[string]PortDetail, error)

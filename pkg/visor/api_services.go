@@ -659,16 +659,6 @@ func addrPort(addr string) string {
 	return ""
 }
 
-// SetLogRotationInterval sets log_rotation_interval config of visor
-func (v *Visor) SetLogRotationInterval(d visorconfig.Duration) error {
-	return v.conf.UpdateLogRotationInterval(d)
-}
-
-// GetLogRotationInterval gets log_rotation_interval config of visor
-func (v *Visor) GetLogRotationInterval() (visorconfig.Duration, error) {
-	return v.conf.GetLogRotationInterval()
-}
-
 // SetPublicAutoconnect sets public_autoconnect config of visor
 func (v *Visor) SetPublicAutoconnect(pAc bool) error {
 	return v.conf.UpdatePublicAutoconnect(pAc)
