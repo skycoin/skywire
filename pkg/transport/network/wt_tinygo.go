@@ -12,6 +12,7 @@ package network
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -24,7 +25,9 @@ func (c *wtClient) dialResolvedWT(_ context.Context, _ cipher.PubKey) (net.Conn,
 }
 
 // errWTServe is returned by Start on TinyGo (no listening socket / no HTTP/3).
-var errWTServe = errors.New("wt: serving not supported on this build (TinyGo) — a browser/embedded target has no HTTP/3 listener")
+// It wraps ErrServeDialOnly so the transport manager logs the expected
+// dial-only condition at Debug rather than ERROR/Fatal.
+var errWTServe = fmt.Errorf("wt: serving not supported on this build (TinyGo) — a browser/embedded target has no HTTP/3 listener: %w", ErrServeDialOnly)
 
 // errWTDial is returned by the WT dial stub on non-browser TinyGo targets.
 var errWTDial = errors.New("wt: WebTransport dial not supported on this TinyGo target")
