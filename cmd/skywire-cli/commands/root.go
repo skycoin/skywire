@@ -45,6 +45,8 @@ import (
 	clivpn "github.com/skycoin/skywire/cmd/skywire-cli/commands/vpn"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clihelp"
 	"github.com/skycoin/skywire/pkg/flags"
 )
 
@@ -176,6 +178,24 @@ func init() {
 	// --all reveals hidden flags and subcommands
 	RootCmd.Flags().BoolVar(&cliShowAll, "all", false, "show all flags and subcommands (including hidden)")
 	RootCmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
+
+	// `--help --json` describes the command instead of rendering help for a
+	// person: name, path, flags with their types and defaults, and the whole
+	// subtree beneath it. Registered once here because cobra hands the help
+	// function down to every child, so this covers all of them.
+	//
+	// Help is not a normal command — cobra intercepts --help before Run — so
+	// this cannot live in a Run body; SetHelpFunc is the hook for it.
+	defaultHelp := RootCmd.HelpFunc()
+	RootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
+		if !cliout.JSONMode(cmd) {
+			defaultHelp(cmd, args)
+			return
+		}
+		if err := cliout.Print(cmd, clihelp.Of(cmd)); err != nil {
+			fmt.Fprintln(os.Stderr, err) //nolint:errcheck
+		}
+	})
 }
 
 var cliShowAll bool
