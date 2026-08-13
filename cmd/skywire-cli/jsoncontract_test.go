@@ -69,22 +69,18 @@ var pendingJSON = map[string]string{
 	"commands/config/gen.go":           "TODO(cliout): needs a typed output",
 	"commands/proxy/mux_auto.go":       "TODO(cliout): needs a typed output",
 	"commands/proxy/mux_info.go":       "TODO(cliout): needs a typed output",
-	"commands/resolver/ca.go":          "TODO(cliout): needs a typed output",
 	"commands/reward/rules.go":         "TODO(cliout): needs a typed output",
 	"commands/rewards/calc.go":         "TODO(cliout): needs a typed output",
 	"commands/rewards/services.go":     "TODO(cliout): needs a typed output",
 	"commands/rewards/transports.go":   "TODO(cliout): needs a typed output",
 	"commands/survey/root.go":          "TODO(cliout): needs a typed output",
-	"commands/svc/ar_check.go":         "TODO(cliout): needs a typed output",
 	"commands/tps/tps.go":              "TODO(cliout): needs a typed output",
 	"commands/tp/tp-add-edge.go":       "TODO(cliout): needs a typed output",
 	"commands/tp/tp-tree.go":           "TODO(cliout): needs a typed output",
 	"commands/tp/tp-viz.go":            "TODO(cliout): needs a typed output",
-	"commands/visor/doctor.go":         "TODO(cliout): needs a typed output",
 	"commands/visor/goroutines.go":     "TODO(cliout): needs a typed output",
 	"commands/visor/ping/bandwidth.go": "TODO(cliout): needs a typed output",
 	"commands/visor/ping/tree.go":      "TODO(cliout): needs a typed output",
-	"commands/visor/whois.go":          "TODO(cliout): needs a typed output",
 }
 
 var localJSONFlags = map[string]string{}

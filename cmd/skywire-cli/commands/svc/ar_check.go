@@ -2,12 +2,12 @@
 package clisvc
 
 import (
-	"fmt"
-
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clisvc"
 )
 
 func init() {
@@ -30,10 +30,8 @@ types the visor is registered for (stcpr, sudph) or "not found".`,
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		if len(result) == 0 {
-			fmt.Printf("%s: not registered in address resolver\n", args[0])
-		} else {
-			fmt.Printf("%s: registered for %v\n", args[0], result)
-		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, clisvc.ARRegistration{
+			PK: args[0], Registered: len(result) > 0, Types: result,
+		}))
 	},
 }
