@@ -6,26 +6,33 @@ import (
 	"testing"
 )
 
-// TestDoesNotImportSkycoinWalletAssembly pins the reason this package exists.
+// TestNoPackageLinksSkycoinsCipherWasm pins the reason this package exists.
 //
-// skywire mounts skycoin's command packages individually rather than importing
-// skycoin's own cmd/skycoin-wallet/commands, because that assembly imports
-// cmd/skycoin-web/commands and so links the thin-client wallet's skycoin-lite
-// cipher wasm into every skywire binary. Nothing about that is visible at the
-// call site: re-adding the one-line import would restore the identical command
-// tree, compile cleanly, pass every other test, and silently put ~1.8 MB of
-// redundant wasm back. A dependency property is the only thing that catches it.
+// skywire assembles the `skywire skycoin` tree itself rather than importing
+// skycoin's cmd/skycoin-wallet/commands, because that assembly imports
+// cmd/skycoin-web/wasmassets — where skycoin's binaries pick up the skycoin-lite
+// cipher wasm. skywire already embeds the wasm visor, which publishes the same
+// Cipher and CipherExtras API, so importing skycoin's assembly means carrying
+// the cipher twice.
 //
-// This does not yet assert the absence of skycoin-lite itself. The `web`
-// subcommand is still mounted from cmd/skycoin-web/commands pending a
-// skywire-native replacement, so the wasm is still linked; see the package
-// comment. When that lands, add skycoin-lite to forbidden below.
-func TestDoesNotImportSkycoinWalletAssembly(t *testing.T) {
-	forbidden := []string{
-		"github.com/skycoin/skycoin/cmd/skycoin-wallet/commands",
+// This asserts over the WHOLE module, not just this package. A per-package
+// check is what let cmd/skycoin-skywire — a second combined binary — keep
+// importing skycoin's assembly after this one stopped: the tree looked right,
+// everything compiled, and `go mod vendor` quietly kept pulling the 1.8 MB blob
+// back in. One importer anywhere is enough to put it in the vendor directory and
+// in that binary.
+//
+// Re-adding any of these imports would compile cleanly and produce an identical
+// command tree. Only the dependency graph shows it.
+func TestNoPackageLinksSkycoinsCipherWasm(t *testing.T) {
+	forbidden := map[string]string{
+		"github.com/skycoin/skycoin/src/skycoin-lite/wasm-go":     "the std-Go cipher wasm blob",
+		"github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo": "the TinyGo cipher wasm blob",
+		"github.com/skycoin/skycoin/cmd/skycoin-web/wasmassets":   "registers skycoin's own cipher wasm",
+		"github.com/skycoin/skycoin/cmd/skycoin-wallet/commands":  "skycoin's assembly, which imports wasmassets",
 	}
 
-	out, err := exec.Command("go", "list", "-deps", ".").Output()
+	out, err := exec.Command("go", "list", "-deps", "github.com/skycoin/skywire/...").Output()
 	if err != nil {
 		t.Skipf("go list unavailable: %v", err)
 	}
@@ -35,10 +42,25 @@ func TestDoesNotImportSkycoinWalletAssembly(t *testing.T) {
 		deps[strings.TrimSpace(line)] = true
 	}
 
-	for _, pkg := range forbidden {
+	for pkg, why := range forbidden {
 		if deps[pkg] {
-			t.Errorf("%s is in this package's dependency graph; "+
-				"skywire assembles skycoin's commands itself precisely to keep it out", pkg)
+			t.Errorf("%s (%s) is in the module's dependency graph; skywire serves the "+
+				"wasm visor's cipher instead — see cmd/skycoin/commands/cipherwasm.go", pkg, why)
 		}
+	}
+}
+
+// TestCipherWasmIsRegisteredForWeb guards the opposite regression.
+//
+// Declining skycoin's cipher means `skywire skycoin web` has none unless this
+// package supplies one. If registerCipherWasm stopped being called, or wasmbin
+// stopped carrying a blob, the two /assets/scripts routes would 404 and the
+// wallet would fail in the browser with no cipher — while everything still
+// compiled and every other test passed.
+func TestCipherWasmIsRegisteredForWeb(t *testing.T) {
+	// init() has already run registerCipherWasm by the time a test executes.
+	if !cipherWasmAvailable() {
+		t.Error("no cipher wasm registered with skycoin-web; `skywire skycoin web` " +
+			"would 404 /assets/scripts/skycoin-lite.wasm and the wallet would have no cipher")
 	}
 }

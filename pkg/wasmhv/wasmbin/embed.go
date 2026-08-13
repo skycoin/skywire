@@ -85,6 +85,17 @@ func GetVariant(v Variant) ([]byte, error) {
 // Get returns the default embedded wasm-visor binary, decompressed.
 func Get() ([]byte, error) { return GetVariant(defaultVariant) }
 
+// GetVariantGz returns the named wasm-visor binary still gzipped, as committed
+// (nil if that variant is not embedded).
+//
+// This is for handing the blob to a consumer that serves it compressed rather
+// than one that instantiates it. Browsers decompress a Content-Encoding: gzip
+// response themselves, and WebAssembly.instantiateStreaming is happy with the
+// result, so passing the committed bytes through avoids inflating tens of
+// megabytes per request on the server. Use GetVariant when you need the wasm
+// itself.
+func GetVariantGz(v Variant) []byte { return variants[v].gz }
+
 // WasmExecJSVariant returns the wasm_exec.js loader matching the named variant
 // (nil if that variant is not embedded). Serve it alongside GetVariant(v)'s
 // bytes — a TinyGo wasm needs TinyGo's loader and a Go wasm needs Go's.
