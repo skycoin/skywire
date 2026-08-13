@@ -13,7 +13,9 @@ import (
 // Mbps side by side, and dropping either would make a caller recompute a
 // number it had already been shown.
 type Bandwidth struct {
-	Carrier       string  `json:"carrier"`
+	// Event marks the last record of the stream; see BandwidthProgress.
+	Event         string  `json:"event,omitempty"`
+	Carrier       string  `json:"carrier,omitempty"`
 	Target        string  `json:"target"`
 	Seconds       float64 `json:"seconds"`
 	BytesSent     uint64  `json:"bytes_sent"`
@@ -58,5 +60,29 @@ func (g Goroutines) Human(w io.Writer) error {
 		return err
 	}
 	_, err := fmt.Fprintln(w, g.Summary)
+	return err
+}
+
+// BandwidthProgress is one sample of a bandwidth test in flight.
+//
+// These stream: a long run emits one JSON object per line (NDJSON) followed by
+// the Bandwidth summary, matching what `visor ping mux-bw` and
+// `visor ping tree-stream` already do. Suppressing them in JSON mode would
+// leave a caller watching a multi-minute test with nothing to read until the
+// end, while the terminal user sees it tick — the wrong way round, since the
+// caller is the one that cannot see a progress line rewrite itself.
+type BandwidthProgress struct {
+	// Event names the record so a reader consuming the stream can tell a
+	// sample from the final summary without guessing by field presence.
+	Event        string  `json:"event"`
+	Seconds      float64 `json:"seconds"`
+	UploadKBps   float64 `json:"upload_kbps"`
+	DownloadKBps float64 `json:"download_kbps"`
+}
+
+// Human writes the in-place progress line the terminal shows.
+func (p BandwidthProgress) Human(w io.Writer) error {
+	_, err := fmt.Fprintf(w, "\rProgress: %.1fs | Up: %.2f KB/s | Down: %.2f KB/s",
+		p.Seconds, p.UploadKBps, p.DownloadKBps)
 	return err
 }

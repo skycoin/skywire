@@ -6,9 +6,11 @@
 // the same facts as fields.
 package cliproxy
 
-import "io"
-
-import "fmt"
+import (
+	"fmt"
+	"io"
+	"time"
+)
 
 // MuxOp is the result of a mux leg operation — add, remove, or a mode change.
 //
@@ -61,5 +63,33 @@ type MuxSet struct {
 func (m MuxSet) Human(w io.Writer) error {
 	_, err := fmt.Fprintf(w, "mux set app=%s: target=%d, +%d added, -%d removed, %d already present%s\n",
 		m.App, m.Target, len(m.Added), len(m.Removed), m.Existing, m.Note)
+	return err
+}
+
+// MuxAuto is one adaptation pass: what the preset asked for and what the run
+// actually did to the session's legs.
+//
+// DryRun is a field rather than a different shape, because the numbers mean
+// the same thing either way — the only difference is whether they happened.
+type MuxAuto struct {
+	App    string `json:"app"`
+	Preset string `json:"preset"`
+	Legs   int    `json:"legs"`
+	Keep   int    `json:"keep"`
+	Pruned int    `json:"pruned"`
+	Grown  int    `json:"grown"`
+	DryRun bool   `json:"dry_run,omitempty"`
+}
+
+// Human writes the timestamped line the command printed. The timestamp is not
+// a field: a JSON consumer has its own clock and the line exists to be read as
+// it scrolls past.
+func (m MuxAuto) Human(w io.Writer) error {
+	verb := "pruned"
+	if m.DryRun {
+		verb = "would prune"
+	}
+	_, err := fmt.Fprintf(w, "[%s] preset=%s: %d legs, keep<=%d, %s %d, grew %d\n",
+		time.Now().Format("15:04:05"), m.Preset, m.Legs, m.Keep, verb, m.Pruned, m.Grown)
 	return err
 }
