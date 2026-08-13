@@ -12,8 +12,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
+	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clirewards"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -129,10 +132,9 @@ This is designed to be run hourly by the reward service.`,
 		tpLog.Infof("Found %d visors with >= %d transports", len(qualifying), minTp)
 
 		if showAll {
-			fmt.Println("Public Keys with sufficient transports:")
-			for _, pk := range qualifying {
-				fmt.Println(pk)
-			}
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, clirewards.QualifyingVisors{
+				MinTransports: minTp, PubKeys: qualifying,
+			}))
 			return
 		}
 
@@ -175,8 +177,10 @@ This is designed to be run hourly by the reward service.`,
 		}
 
 		tpLog.Infof("Added %d new entries to %s (total unique: %d)", newCount, dailyFile, len(existing)+newCount)
-		fmt.Printf("Transport collection complete: %d qualifying visors, %d new entries added to %s\n",
-			len(qualifying), newCount, dailyFile)
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, clirewards.QualifyingVisors{
+			MinTransports: minTp, PubKeys: qualifying,
+			Added: newCount, Path: dailyFile,
+		}))
 	},
 }
 

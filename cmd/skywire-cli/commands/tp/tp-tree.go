@@ -18,6 +18,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cliout"
 )
 
 // transportEntry represents a transport from TPD
@@ -110,7 +111,13 @@ var treeCmd = &cobra.Command{
 		// Fetch transport data
 		tpsRaw := clirpc.FetchCachedServiceURL(cmd.Flags(), cacheFileTPD, tpdURL+"/all-transports", cacheFilesAge)
 		if rawData {
+			// The discovery's own document, passed through verbatim: it is
+			// already JSON, and re-encoding it would only risk changing it.
 			fmt.Print(tpsRaw)
+			return
+		}
+		if cliout.JSONMode(cmd) {
+			fmt.Println(tpsRaw)
 			return
 		}
 		if refinedData {

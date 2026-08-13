@@ -9,6 +9,8 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/cliroute"
 )
 
 func init() {
@@ -36,6 +38,6 @@ config update to make it permanent.`,
 		if err := rpcClient.SetMinHops(uint16(n)); err != nil { //nolint:gosec
 			internal.PrintFatalError(cmd.Flags(), err)
 		}
-		fmt.Printf("Minimum hops set to %d\n", n)
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliroute.MinHops{MinHops: int(n)}))
 	},
 }
