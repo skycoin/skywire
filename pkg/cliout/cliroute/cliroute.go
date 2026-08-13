@@ -19,7 +19,7 @@ import (
 // The optional fields are per rule TYPE, not per flag: an app rule has ports
 // and a remote key, a forward rule has a next hop, and neither carries the
 // other's fields. omitempty is what keeps one type serving all three without a
-// consumer having to recognise three documents.
+// consumer having to recognize three documents.
 type Rule struct {
 	ID   routing.RouteID `json:"id"`
 	Type string          `json:"type"`
@@ -79,7 +79,7 @@ type TraceHop struct {
 }
 
 // Trace is the whole path `route trace` measured. It was an anonymous struct
-// marshalled inline, which is a shape no caller could name.
+// marshaled inline, which is a shape no caller could name.
 type Trace struct {
 	Src  string     `json:"src"`
 	Dst  string     `json:"dst"`
