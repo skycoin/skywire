@@ -26,6 +26,8 @@ import (
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/cliconfig"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -94,10 +96,11 @@ var checkPKCmd = &cobra.Command{
 var genKeysCmd = &cobra.Command{
 	Use:   "gen-keys",
 	Short: "generate public / secret keypair",
-	Run: func(_ *cobra.Command, _ []string) {
+	Run: func(cmd *cobra.Command, _ []string) {
 		pk, sk := cipher.GenerateKeyPair()
-		fmt.Println(pk)
-		fmt.Println(sk)
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliconfig.Keypair{
+			PublicKey: pk.String(), SecretKey: sk.String(),
+		}))
 	},
 }
 
@@ -105,7 +108,7 @@ var pkFromSKCmd = &cobra.Command{
 	Use:   "pk <secret-key-hex>",
 	Short: "derive public key from a secret key",
 	Args:  cobra.ExactArgs(1),
-	Run: func(_ *cobra.Command, args []string) {
+	Run: func(cmd *cobra.Command, args []string) {
 		var sk cipher.SecKey
 		if err := sk.Set(args[0]); err != nil {
 			fmt.Fprintf(os.Stderr, "invalid secret key: %v\n", err) //nolint:errcheck,gosec
@@ -116,7 +119,7 @@ var pkFromSKCmd = &cobra.Command{
 			fmt.Fprintf(os.Stderr, "failed to derive public key: %v\n", err) //nolint:errcheck,gosec
 			os.Exit(1)
 		}
-		fmt.Println(pk.Hex())
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliconfig.Keypair{PublicKey: pk.Hex()}))
 	},
 }
 
