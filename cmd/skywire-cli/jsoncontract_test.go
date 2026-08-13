@@ -64,7 +64,7 @@ var streamingCommands = map[string]string{
 
 // localJSONFlags are commands that declare their own --json instead of using
 // the persistent one from the root. Two variables for one concept: a command
-// reading its own package-level bool cannot see the root's flag, so behaviour
+// reading its own package-level bool cannot see the root's flag, so behavior
 // depends on where the user put the word.
 // pendingJSON is debt, not exemption: each of these prints without
 // consulting --json and should be converted to a typed output in
@@ -100,7 +100,8 @@ func TestNoLocalJSONFlag(t *testing.T) {
 			if !ok || lit.Kind != token.STRING {
 				return true
 			}
-			if name, _ := strconv.Unquote(lit.Value); name == "json" {
+			name, uerr := strconv.Unquote(lit.Value)
+			if uerr == nil && name == "json" {
 				found = append(found, path+":"+posLine(fset, call.Pos()))
 			}
 			return true
@@ -158,7 +159,7 @@ func TestNoFunctionLocalOutputShape(t *testing.T) {
 func TestEveryPrintingCommandHonoursJSON(t *testing.T) {
 	var found []string
 	forEachFile(t, func(path string, file *ast.File, fset *token.FileSet) {
-		var prints, honours bool
+		var prints, honors bool
 		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
 			if !ok {
@@ -177,11 +178,11 @@ func TestEveryPrintingCommandHonoursJSON(t *testing.T) {
 			case sel.Sel.Name == "PrintOutput",
 				pkg.Name == "cliout" && (sel.Sel.Name == "Print" || sel.Sel.Name == "Fprint"),
 				sel.Sel.Name == "JSONMode":
-				honours = true
+				honors = true
 			}
 			return true
 		})
-		if prints && !honours {
+		if prints && !honors {
 			found = append(found, path)
 		}
 	})
