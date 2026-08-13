@@ -169,3 +169,9 @@ android/app/src/main/jniLibs/
 # was the first version of this rule, and it was wrong.
 /cmd/hvinspect/hvinspect
 /pkg/tpviz/wasm/*.wasm
+
+# Angular build cache (static/skywire-manager-src builds emit .angular/cache).
+# Left untracked it is the sole dirty entry in an otherwise clean tree, so
+# `go build -buildvcs` stamps every local visor build +dirty. Ignore it at any
+# depth so a GUI build can't dirty a release binary's version.
+.angular/
