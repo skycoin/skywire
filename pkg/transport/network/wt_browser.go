@@ -17,7 +17,7 @@ package network
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"net"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -31,7 +31,7 @@ func wtDial(ctx context.Context, url, certHashHex string) (net.Conn, error) {
 // Start implements Client: a browser tab cannot run the HTTP/3 WebTransport
 // server a WT listener needs, so it fails closed (dial-only, like ws_browser).
 func (c *wtClient) Start() error {
-	return errors.New("wt: serving not supported in a browser (no HTTP/3 listener) — dial only")
+	return fmt.Errorf("wt: serving not supported in a browser (no HTTP/3 listener) — dial only: %w", ErrServeDialOnly)
 }
 
 // dialResolvedWT is a no-op in the browser: there is no address-resolver client

@@ -769,10 +769,21 @@ func (tm *Manager) runClient(ctx context.Context, netType types.Type) {
 	tm.Logger.Debugf("Serving %s network", client.Type())
 	err := client.Start()
 	if err != nil {
-		tm.Logger.WithError(err).Errorf("Failed to listen on %s network", client.Type())
+		if errors.Is(err, network.ErrServeDialOnly) {
+			// A dial-only build (browser/embedded WT) cannot serve by design —
+			// this is expected, not a failure. Log at Debug, not ERROR.
+			tm.Logger.WithError(err).Debugf("network %s is dial-only on this build (serving unsupported)", client.Type())
+		} else {
+			tm.Logger.WithError(err).Errorf("Failed to listen on %s network", client.Type())
+		}
 	}
 	lis, err := client.Listen(skyenv.TransportPort)
 	if err != nil {
+		if errors.Is(err, network.ErrServeDialOnly) {
+			// A dial-only client that also cannot Listen is expected, not fatal.
+			tm.Logger.WithError(err).Debugf("network %s is dial-only on this build (cannot listen)", client.Type())
+			return
+		}
 		tm.Logger.WithError(err).Fatalf("failed to listen on network '%s' of port '%d'",
 			client.Type(), skyenv.TransportPort)
 		return
