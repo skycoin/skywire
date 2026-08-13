@@ -17,7 +17,7 @@ func TestJSONFieldNames(t *testing.T) {
 	// Everything optional must vanish when unset, or a consumer cannot tell
 	// "not requested" from "zero".
 	if got := string(b); got != `{"type":"","id":"00000000-0000-0000-0000-000000000000","remote_pk":"000000000000000000000000000000000000000000000000000000000000000000","mode":"","label":""}` {
-		t.Errorf("empty Transport marshalled as:\n  %s", got)
+		t.Errorf("empty Transport marshaled as:\n  %s", got)
 	}
 
 	full, err := json.Marshal(Transport{RecvBytes: 1, SentBytes: 2, LatencyMS: 3, Inactive: true, Version: "v1", Country: "US", Services: "x"})
