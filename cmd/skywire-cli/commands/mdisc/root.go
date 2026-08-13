@@ -20,7 +20,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
-	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout/climdisc"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	dmsg "github.com/skycoin/skywire/pkg/dmsg/dmsg"
 	"github.com/skycoin/skywire/pkg/logging"
@@ -202,14 +202,7 @@ would be off by the difference. A pv-t-style readout: most-loaded first.`,
 }
 
 func printAvailableServers(cmdFlags *pflag.FlagSet, entries []*disc.Entry) {
-	type serverEntry struct {
-		PublicKey         cipher.PubKey `json:"public_key"`
-		Connected         int           `json:"connected"` // inferred: DefaultMaxSessions - avail_sess
-		AvailableSessions int           `json:"avail_sess"`
-		Address           string        `json:"address"`
-		Version           string        `json:"version"`
-		Registered        int64         `json:"registered"`
-	}
+	type serverEntry = climdisc.Server
 
 	var serverEntries []serverEntry
 	for _, entry := range entries {

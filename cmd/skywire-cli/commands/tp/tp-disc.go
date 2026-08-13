@@ -17,8 +17,8 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	"github.com/skycoin/skywire/pkg/transport"
-	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
 var (
@@ -169,12 +169,7 @@ func PrintTransportEntries(cmdFlags *pflag.FlagSet, entries ...*transport.Entry)
 	_, err := fmt.Fprintln(w, "id\ttype\tedge1\tedge2")
 	internal.Catch(cmdFlags, err)
 
-	type outputEntry struct {
-		ID    uuid.UUID     `json:"id"`
-		Type  types.Type    `json:"type"`
-		Edge1 cipher.PubKey `json:"edge1"`
-		Edge2 cipher.PubKey `json:"edge2"`
-	}
+	type outputEntry = clitp.DiscEntry
 
 	var outputEntries []outputEntry
 	for _, e := range entries {

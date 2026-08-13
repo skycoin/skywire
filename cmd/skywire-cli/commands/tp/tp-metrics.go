@@ -16,6 +16,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	store "github.com/skycoin/skywire/pkg/transport-discovery/store"
 )
 
@@ -142,16 +143,7 @@ var metricsCmd = &cobra.Command{
 }
 
 func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
-	type tpEntry struct {
-		ID        string                  `json:"id"`
-		Type      string                  `json:"type"`
-		EdgeA     string                  `json:"edge_a"`
-		EdgeB     string                  `json:"edge_b"`
-		Sent      uint64                  `json:"sent"`
-		Recv      uint64                  `json:"recv"`
-		Bandwidth uint64                  `json:"bandwidth"`
-		Latency   *store.TransportLatency `json:"latency,omitempty"`
-	}
+	type tpEntry = clitp.Metric
 
 	var entries []tpEntry
 	for _, m := range metrics {
@@ -225,15 +217,7 @@ func printByTransport(cmd *cobra.Command, metrics []store.TransportMetric) {
 }
 
 func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
-	type visorBW struct {
-		Sent         uint64 `json:"sent"`
-		Recv         uint64 `json:"recv"`
-		Bandwidth    uint64 `json:"bandwidth"`
-		Transports   int    `json:"transports"`
-		LatencySumUS int64  `json:"-"` // running sum for averaging
-		LatencyN     int    `json:"-"`
-		LatencyAvgMS int64  `json:"latency_avg_ms,omitempty"`
-	}
+	type visorBW = clitp.VisorBandwidth
 	byPK := make(map[string]*visorBW)
 
 	var networkTotal uint64
@@ -291,10 +275,7 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 		}
 	}
 
-	type visorEntry struct {
-		PK string  `json:"pk"`
-		BW visorBW `json:"bandwidth"`
-	}
+	type visorEntry = clitp.VisorMetric
 	var sorted []visorEntry
 	for pk, bw := range byPK {
 		sorted = append(sorted, visorEntry{PK: pk, BW: *bw})
@@ -337,21 +318,8 @@ func printByVisor(cmd *cobra.Command, metrics []store.TransportMetric) {
 }
 
 func printTree(cmd *cobra.Command, metrics []store.TransportMetric) {
-	type tpInfo struct {
-		ID        string                  `json:"id"`
-		Type      string                  `json:"type"`
-		Remote    string                  `json:"remote"`
-		Sent      uint64                  `json:"sent"`
-		Recv      uint64                  `json:"recv"`
-		Bandwidth uint64                  `json:"bandwidth"`
-		Latency   *store.TransportLatency `json:"latency,omitempty"`
-	}
-	type visorTree struct {
-		Sent       uint64   `json:"sent"`
-		Recv       uint64   `json:"recv"`
-		Bandwidth  uint64   `json:"bandwidth"`
-		Transports []tpInfo `json:"transports"`
-	}
+	type tpInfo = clitp.TransportInfo
+	type visorTree = clitp.VisorTree
 
 	byPK := make(map[string]*visorTree)
 	var networkTotal uint64

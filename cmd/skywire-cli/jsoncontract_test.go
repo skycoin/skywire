@@ -99,20 +99,7 @@ var localJSONFlags = map[string]string{}
 // funcLocalShapes are output structs declared inside a function body. They
 // cannot be imported, so every other consumer — the e2e suite above all —
 // retypes them by hand and the compiler never compares the copies.
-var funcLocalShapes = map[string]string{
-	"commands/mdisc/root.go":            "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/proxy/proxy.go":           "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/reward/root.go":           "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/rewards/calc.go":          "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/rewards/runday.go":        "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/rewards/server/seo.go":    "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/rewards/server/server.go": "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/route/calc.go":            "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/route/route.go":           "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/tp/tp-disc.go":            "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/tp/tp.go":                 "TODO(cliout): move to pkg/cliout/<group>",
-	"commands/tp/tp-metrics.go":         "TODO(cliout): move to pkg/cliout/<group>",
-}
+var funcLocalShapes = map[string]string{}
 
 // TestNoLocalJSONFlag fails on a command that registers its own --json.
 func TestNoLocalJSONFlag(t *testing.T) {
@@ -156,13 +143,21 @@ func TestNoFunctionLocalOutputShape(t *testing.T) {
 			if !ok || fn.Body == nil {
 				continue
 			}
+			// Only shapes that are actually PRINTED. A json-tagged struct
+			// declared in a function is just as often the other direction —
+			// tp.go decodes the uptime tracker and service discovery into
+			// local types, and those describe someone else's API, not this
+			// command's output. Moving them to pkg/cliout would be a
+			// mislabelling, so the rule is "reaches the printer", not "has
+			// json tags".
+			printed := printedTypes(fn)
 			ast.Inspect(fn.Body, func(n ast.Node) bool {
 				ts, ok := n.(*ast.TypeSpec)
 				if !ok {
 					return true
 				}
 				st, ok := ts.Type.(*ast.StructType)
-				if !ok || st.Fields == nil {
+				if !ok || st.Fields == nil || !printed[ts.Name.Name] {
 					return true
 				}
 				for _, f := range st.Fields.List {
@@ -277,4 +272,64 @@ func report(t *testing.T, found []string, allow map[string]string, problem, fix 
 		t.Errorf("%d allowlist entr(ies) no longer apply — delete them:\n  %s",
 			len(stale), strings.Join(stale, "\n  "))
 	}
+}
+
+// printedTypes returns the names of struct types declared in fn whose values
+// are handed to the printer — i.e. the ones that ARE this command's output.
+//
+// It works by name because that is all the AST gives without type checking:
+// find the local variables declared as T or []T, then see whether any of them
+// is an argument to PrintOutput/cliout.Print. A decode-only type never is.
+func printedTypes(fn *ast.FuncDecl) map[string]bool {
+	varOfType := map[string]string{} // variable name -> struct type name
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		vs, ok := n.(*ast.ValueSpec)
+		if !ok || vs.Type == nil {
+			return true
+		}
+		name := typeName(vs.Type)
+		if name == "" {
+			return true
+		}
+		for _, id := range vs.Names {
+			varOfType[id.Name] = name
+		}
+		return true
+	})
+
+	printed := map[string]bool{}
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok || (sel.Sel.Name != "PrintOutput" && sel.Sel.Name != "Print") {
+			return true
+		}
+		for _, arg := range call.Args {
+			id, ok := arg.(*ast.Ident)
+			if !ok {
+				continue
+			}
+			if t, ok := varOfType[id.Name]; ok {
+				printed[t] = true
+			}
+		}
+		return true
+	})
+	return printed
+}
+
+// typeName unwraps []T, *T and T to the bare identifier.
+func typeName(e ast.Expr) string {
+	switch t := e.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.ArrayType:
+		return typeName(t.Elt)
+	case *ast.StarExpr:
+		return typeName(t.X)
+	}
+	return ""
 }
