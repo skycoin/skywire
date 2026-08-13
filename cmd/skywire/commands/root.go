@@ -24,7 +24,6 @@ import (
 	dmsgprobe "github.com/skycoin/skywire/cmd/dmsg/dmsgprobe/commands"
 	scli "github.com/skycoin/skywire/cmd/skywire-cli/commands"
 	"github.com/skycoin/skywire/cmd/skywire/commands/doc"
-	"github.com/skycoin/skywire/cmd/skywire/commands/web"
 	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
@@ -79,7 +78,6 @@ func init() {
 		cxo.RootCmd,
 		appsCmd,
 		doc.RootCmd,
-		web.RootCmd,
 	)
 
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
