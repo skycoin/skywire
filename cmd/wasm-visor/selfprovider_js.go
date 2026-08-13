@@ -261,7 +261,7 @@ func (s visorSelf) SelfRuntimeConfig() []byte {
 	}
 
 	out := map[string]interface{}{
-		"version":          buildinfo.Version(),
+		"version":          buildinfo.VersionOrCommit(),
 		"pk":               selfPK.Hex(),
 		"note":             "browser wasm-visor — no on-disk config, but this IS the config the runtime uses (it mirrors the native config-gen shape). Service endpoints are runtime-reconfigurable: editing + Save persists an override in this browser and reloads the visor with it. config_overrides lists the currently pinned fields (empty = pure deployment defaults). platform_omitted lists sections a browser tab can't have; the secret key is never shown.",
 		"config_overrides": cfgOverride,
