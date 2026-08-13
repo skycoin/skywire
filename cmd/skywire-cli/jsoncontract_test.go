@@ -72,8 +72,6 @@ var pendingJSON = map[string]string{
 	"commands/reward/rules.go":         "TODO(cliout): needs a typed output",
 	"commands/rewards/calc.go":         "TODO(cliout): needs a typed output",
 	"commands/rewards/services.go":     "TODO(cliout): needs a typed output",
-	"commands/rewards/transports.go":   "TODO(cliout): needs a typed output",
-	"commands/tp/tp-add-edge.go":       "TODO(cliout): needs a typed output",
 	"commands/tp/tp-tree.go":           "TODO(cliout): needs a typed output",
 	"commands/tp/tp-viz.go":            "TODO(cliout): needs a typed output",
 	"commands/visor/goroutines.go":     "TODO(cliout): needs a typed output",
