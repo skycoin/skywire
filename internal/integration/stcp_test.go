@@ -27,21 +27,19 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	skyvisor "github.com/skycoin/skywire/pkg/visor"
 )
 
-// stcpTpView captures the CLI `tp`/`tp -i` JSON fields that the RPC
-// TransportSummary drops: the CLI emits a flat struct with recv_bytes/sent_bytes
-// at the top level (TransportSummary nests them under an omitted "log"), so
-// VisorTpID/VisorTpLs can't see the byte counters. We parse the CLI view directly.
-type stcpTpView struct {
-	ID        string `json:"id"`
-	Type      string `json:"type"`
-	Remote    string `json:"remote_pk"`
-	RecvBytes uint64 `json:"recv_bytes"`
-	SentBytes uint64 `json:"sent_bytes"`
-}
+// stcpTpView is the CLI transport view. It is the CLI's own output type,
+// imported rather than restated: this file used to declare a private copy of
+// the field names, which the compiler never compared against what the CLI
+// actually emits — so a renamed field would have unmarshalled to zero here and
+// asserted on it, instead of failing to build. The RPC TransportSummary is not
+// usable for this: it nests the byte counters under an omitted "log", while the
+// CLI emits them at the top level, which is precisely what these tests read.
+type stcpTpView = clitp.Transport
 
 // VisorTpAddSTCP adds an STCP transport from visor to pk, dialing the given
 // ip:port (or host:port). STCP has no address resolver, so the peer's TCP
