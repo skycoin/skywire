@@ -749,12 +749,14 @@ func (l *AppLauncher) killHangingProcesses() error {
 		appInfo := strings.Split(scan.Text(), " ")
 		if len(appInfo) != 2 {
 			err := errors.New("line should be: [app name] [pid]")
-			log.WithError(err).Fatal("Failed parsing pid file.")
+			log.WithError(err).Warn("skipping malformed pid-file line")
+			continue
 		}
 
 		pid, err := strconv.Atoi(appInfo[1])
 		if err != nil {
-			log.WithError(err).Fatal("Failed parsing pid file.")
+			log.WithError(err).Warnf("skipping malformed pid-file line: %q", scan.Text())
+			continue
 		}
 
 		l.killHangingProc(appInfo[0], pid)
@@ -804,12 +806,14 @@ func (l *AppLauncher) killApp(appName string) error {
 		appInfo := strings.Split(scan.Text(), " ")
 		if len(appInfo) != 2 {
 			err := errors.New("line should be: [app name] [pid]")
-			log.WithError(err).Fatal("Failed parsing pid file.")
+			log.WithError(err).Warn("skipping malformed pid-file line")
+			continue
 		}
 
 		pid, err := strconv.Atoi(appInfo[1])
 		if err != nil {
-			log.WithError(err).Fatal("Failed parsing pid file.")
+			log.WithError(err).Warnf("skipping malformed pid-file line: %q", scan.Text())
+			continue
 		}
 		if appInfo[0] == appName {
 			l.killArbitraryProc(appInfo[0], pid)

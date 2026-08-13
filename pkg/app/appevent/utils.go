@@ -17,13 +17,13 @@ func (eb *Broadcaster) SendTPClose(_ context.Context, netType, addr string) {
 	data := TCPCloseData{RemoteNet: netType, RemoteAddr: addr}
 	event := NewEvent(TCPClose, data)
 	if err := eb.Broadcast(context.Background(), event); err != nil {
-		eb.log.WithError(err).Errorln("Failed to broadcast TCPClose event")
+		eb.log.WithError(err).Warnln("failed to broadcast TCPClose event")
 	}
 }
 
 func (eb *Broadcaster) sendEvent(_ context.Context, event *Event) {
 	err := eb.Broadcast(context.Background(), event)
 	if err != nil {
-		eb.log.Warn("Failed to broadcast event: %v", event)
+		eb.log.WithError(err).Warnf("failed to broadcast event: %v", event)
 	}
 }

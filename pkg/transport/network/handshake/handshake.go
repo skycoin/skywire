@@ -30,7 +30,7 @@ type Error string
 
 // Error implements error.
 func (err Error) Error() string {
-	return fmt.Sprintln("handshake failed:", string(err))
+	return fmt.Sprintf("handshake failed: %s", string(err))
 }
 
 // IsHandshakeError determines whether the error occurred during the handshake.

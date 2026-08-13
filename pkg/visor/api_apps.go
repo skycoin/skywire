@@ -831,7 +831,6 @@ func (v *Visor) SetAppDNS(appName string, dnsAddr string) error {
 
 // DoCustomSetting implents API.
 func (v *Visor) DoCustomSetting(appName string, customSetting map[string]any) error {
-	fmt.Println(customSetting)
 	v.log.Infof("Changing %s Settings to %v", appName, customSetting)
 	if v.appL == nil {
 		return ErrAppLauncherNotAvailable
