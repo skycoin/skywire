@@ -78,16 +78,21 @@ Use --dmsg-only to only test over dmsg.`,
 			}
 			if isFinal {
 				internal.Catch(cmd.Flags(), cliout.Print(cmd, clivisor.Bandwidth{
-					Target: pk.String(), Seconds: elapsed.Seconds(),
+					Event: "final", Target: pk.String(), Seconds: elapsed.Seconds(),
 					BytesSent: bytesSent, BytesReceived: bytesReceived,
 					UploadKBps: uploadSpeed, DownloadKBps: downloadSpeed,
 					UploadMbps: uploadSpeed * 8 / 1024, DownloadMbps: downloadSpeed * 8 / 1024,
 				}))
-			} else if !cliout.JSONMode(cmd) {
-				// Progress belongs to the terminal only: a JSON consumer wants
-				// the final document, not a carriage-return animation.
-				fmt.Printf("\rProgress: %.1fs | Up: %.2f KB/s | Down: %.2f KB/s", elapsed.Seconds(), uploadSpeed, downloadSpeed)
-				os.Stdout.Sync() //nolint:errcheck,gosec
+			} else {
+				// Streams as NDJSON under --json, one sample per line, the way
+				// mux-bw and tree-stream already report a long run.
+				internal.Catch(cmd.Flags(), cliout.Print(cmd, clivisor.BandwidthProgress{
+					Event: "progress", Seconds: elapsed.Seconds(),
+					UploadKBps: uploadSpeed, DownloadKBps: downloadSpeed,
+				}))
+				if !cliout.JSONMode(cmd) {
+					os.Stdout.Sync() //nolint:errcheck,gosec
+				}
 			}
 		}
 
