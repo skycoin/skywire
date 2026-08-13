@@ -26,6 +26,8 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clisvc"
 	"github.com/skycoin/skywire/pkg/skynetca"
 )
 
@@ -84,10 +86,9 @@ var caGenCmd = &cobra.Command{
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("save CA: %w", err))
 		}
 		fp := skynetca.Fingerprint(ca)
-		fmt.Printf("CA generated.\n  cert:        %s\n  key:         %s\n  fingerprint: %s\n",
-			certPath, keyPath, fp)
-		fmt.Println()
-		fmt.Println("Next: skywire cli resolver ca install")
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, clisvc.CA{
+			Cert: certPath, Key: keyPath, Fingerprint: fp,
+		}))
 	},
 }
 

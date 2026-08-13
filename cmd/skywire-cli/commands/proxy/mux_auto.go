@@ -32,6 +32,8 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
 )
 
 var (
@@ -163,13 +165,14 @@ Example:
 				}
 			}
 
-			acted, verb := pruned, "pruned"
+			acted := pruned
 			if muxAutoDry {
-				acted, verb = len(drops), "would prune"
+				acted = len(drops)
 			}
-			fmt.Printf("[%s] preset=%s: %d legs, keep<=%d, %s %d, grew %d\n",
-				time.Now().Format("15:04:05"), args[0], len(rg.Legs), p.keep, verb, acted, grown)
-			return nil
+			return cliout.Print(cmd, cliproxy.MuxAuto{
+				App: muxAutoApp, Preset: args[0], Legs: len(rg.Legs),
+				Keep: p.keep, Pruned: acted, Grown: grown, DryRun: muxAutoDry,
+			})
 		}
 
 		if muxAutoWatch <= 0 {

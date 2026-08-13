@@ -25,6 +25,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -119,10 +120,8 @@ Exit code mirrors the verdict: 0 GREEN, 1 YELLOW, 2 RED. Lets scripts
 gate on doctor without parsing the output.`,
 	Run: func(cmd *cobra.Command, _ []string) {
 		report := runDoctor(cmd)
-		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-		if jsonMode {
-			b, _ := json.MarshalIndent(report, "", "  ") //nolint:errcheck
-			fmt.Println(string(b))
+		if cliout.JSONMode(cmd) {
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, report))
 		} else {
 			fmt.Println(formatDoctorHuman(report))
 		}

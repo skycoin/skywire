@@ -48,6 +48,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
@@ -88,8 +89,6 @@ func init() {
 		"use locally-cached TPD data for route calculation (faster setup; may be stale)")
 	muxBandwidthCmd.Flags().DurationVar(&muxBwIdleBaseline, "idle-baseline", 0,
 		"run an idle RTT-probe phase of this duration BEFORE the bulk pump; the summary then prints queueing delay = loaded_pXX - idle_pXX (implies --probe-rtt)")
-	muxBandwidthCmd.Flags().BoolVar(&muxBwJSON, "json", false,
-		"emit NDJSON on stdout (default: human-readable rows + summary)")
 	muxBandwidthCmd.Flags().BoolVarP(&muxBwQuiet, "quiet", "q", false,
 		"in human mode: suppress per-event rows; print only setup + summary")
 	muxBandwidthCmd.Flags().StringVarP(&muxBwOutFile, "output", "O", "",
@@ -140,7 +139,11 @@ Examples:
 	Run:  runMuxBandwidth,
 }
 
-func runMuxBandwidth(_ *cobra.Command, args []string) {
+func runMuxBandwidth(cmd *cobra.Command, args []string) {
+	// The persistent --json, not a second flag of our own. NDJSON is what
+	// this command means by machine output: one event per line, as they
+	// happen, because the run is long and a caller wants it live.
+	muxBwJSON = cliout.JSONMode(cmd)
 	targetPK := args[0]
 
 	ctx, cancel := muxBwSignalContext()

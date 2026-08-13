@@ -2,13 +2,14 @@
 package clitp
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -46,15 +47,8 @@ Valid transport types: stcpr, squicr, sudph, stcp, webrtc, swsr, swtr, dmsg (def
 
 		id := transport.MakeTransportID(pk1, pk2, tptypes.Type(idTpType))
 
-		// Honor --json if set (PersistentFlag on RootCmd).
-		jsonFlag, _ := cmd.Flags().GetBool("json") //nolint:errcheck,gosec
-		if jsonFlag {
-			out, _ := json.Marshal(map[string]string{ //nolint:errcheck,gosec
-				"output": id.String(),
-			})
-			fmt.Println(string(out))
-			return
-		}
-		fmt.Println(id.String())
+		// Was {"output": "<uuid>"} — the last of the envelope that forced
+		// every consumer through jq '.output'. The field has a name now.
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, clitp.ID{ID: id.String()}))
 	},
 }

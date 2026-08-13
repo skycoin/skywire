@@ -13,6 +13,8 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clivisor"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
@@ -75,15 +77,22 @@ Use --dmsg-only to only test over dmsg.`,
 				return
 			}
 			if isFinal {
-				fmt.Printf("\n=== Final Results ===\n")
-				fmt.Printf("Duration: %.2f seconds\n", elapsed.Seconds())
-				fmt.Printf("Bytes Sent: %d (%.2f MB)\n", bytesSent, float64(bytesSent)/1024/1024)
-				fmt.Printf("Bytes Received: %d (%.2f MB)\n", bytesReceived, float64(bytesReceived)/1024/1024)
-				fmt.Printf("Upload Speed: %.2f KB/s (%.2f Mbps)\n", uploadSpeed, uploadSpeed*8/1024)
-				fmt.Printf("Download Speed: %.2f KB/s (%.2f Mbps)\n", downloadSpeed, downloadSpeed*8/1024)
+				internal.Catch(cmd.Flags(), cliout.Print(cmd, clivisor.Bandwidth{
+					Event: "final", Target: pk.String(), Seconds: elapsed.Seconds(),
+					BytesSent: bytesSent, BytesReceived: bytesReceived,
+					UploadKBps: uploadSpeed, DownloadKBps: downloadSpeed,
+					UploadMbps: uploadSpeed * 8 / 1024, DownloadMbps: downloadSpeed * 8 / 1024,
+				}))
 			} else {
-				fmt.Printf("\rProgress: %.1fs | Up: %.2f KB/s | Down: %.2f KB/s", elapsed.Seconds(), uploadSpeed, downloadSpeed)
-				os.Stdout.Sync() //nolint:errcheck,gosec
+				// Streams as NDJSON under --json, one sample per line, the way
+				// mux-bw and tree-stream already report a long run.
+				internal.Catch(cmd.Flags(), cliout.Print(cmd, clivisor.BandwidthProgress{
+					Event: "progress", Seconds: elapsed.Seconds(),
+					UploadKBps: uploadSpeed, DownloadKBps: downloadSpeed,
+				}))
+				if !cliout.JSONMode(cmd) {
+					os.Stdout.Sync() //nolint:errcheck,gosec
+				}
 			}
 		}
 
