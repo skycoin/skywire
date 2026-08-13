@@ -991,13 +991,32 @@ func (env *TestEnv) ExecInContainerByName(cmd string, containerName string) (str
 	return env.ExecInContainerByID(cmd, container.ID)
 }
 
+// ExecInContainerByID runs cmd in a container and returns its combined output.
+//
+// A non-zero exit is an error. It did not used to be: the exit code was read
+// and dropped, so every `require.NoError` on a command run through here was a
+// no-op — a `cli proxy start` that timed out and exited 1 read as success, and
+// the test carried on to assert against a state the command had failed to
+// reach. That is how TestMultiHopRoute's real failure stayed hidden behind a
+// status assertion. One caller had already noticed and reached past this helper
+// to the lower-level Exec "so we can check ExitCode" (see
+// checkServiceReachableOverDmsg); that workaround is no longer needed.
+//
+// The output is returned alongside the error, not swallowed with it, because a
+// failed command's output is the diagnosis. Callers that legitimately do not
+// care — best-effort cleanup, probes whose failure is a valid answer — discard
+// the error explicitly, which now reads as a decision rather than an oversight.
 func (env *TestEnv) ExecInContainerByID(cmd string, containerID string) (string, error) {
 	result, err := Exec(env.ctx, env.cli, containerID, strings.Split(cmd, " "))
 	if err != nil {
 		return "", err
 	}
-
-	return result.Combined(), nil
+	out := result.Combined()
+	if result.ExitCode != 0 {
+		return out, fmt.Errorf("command exited %d: %s: %s",
+			result.ExitCode, cmd, truncate(strings.TrimSpace(out), 400))
+	}
+	return out, nil
 }
 
 // defaultExecTimeout is the maximum time any single CLI command exec may take.
@@ -1353,9 +1372,10 @@ func (env *TestEnv) WaitForServiceDmsgReachable(serviceName, dmsgURL string, tim
 		// standalone client using self-hosted discovery can't dial dmsg-discovery
 		// over dmsg either ("dmsg error 202 - cannot connect to delegated server").
 		// An already-connected visor reaches services fine. Matches
-		// checkVisorSelfHealthOverDmsg. Use the lower-level Exec (not env.Exec,
-		// which discards the exit code, nor execResult, which caps at 30s) so we
-		// can check ExitCode.
+		// checkVisorSelfHealthOverDmsg. Uses the lower-level Exec rather than
+		// execResult, which caps at 30s. (It also predates env.Exec reporting a
+		// non-zero exit as an error; that half of the reason is gone, but the
+		// timeout one stands, and the loop wants the code rather than an error.)
 		cmd := fmt.Sprintf("/release/skywire cli --rpc %s:3435 dmsg curl %s", visorA, dmsgURL)
 		result, err := Exec(env.ctx, env.cli, env.testRunnerID, strings.Split(cmd, " "))
 		if err == nil && result.ExitCode == 0 {
