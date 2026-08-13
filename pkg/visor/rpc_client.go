@@ -28,7 +28,6 @@ import (
 	"github.com/skycoin/skywire/pkg/skyenv"
 	"github.com/skycoin/skywire/pkg/transport"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 var (
@@ -1089,19 +1088,6 @@ func (rc *rpcClient) GetTransportLogs(days int) ([]TransportLogEntry, error) {
 	var entries []TransportLogEntry
 	err := rc.Call("GetTransportLogs", &days, &entries)
 	return entries, err
-}
-
-// SetLogRotationInterval sets the log_rotation_interval from visor config
-func (rc *rpcClient) SetLogRotationInterval(d visorconfig.Duration) error {
-	err := rc.Call("SetLogRotationInterval", &d, &struct{}{})
-	return err
-}
-
-// GetLogRotationInterval gets the log_rotation_interval from visor config
-func (rc *rpcClient) GetLogRotationInterval() (visorconfig.Duration, error) {
-	var d visorconfig.Duration
-	err := rc.Call("GetLogRotationInterval", &struct{}{}, &d)
-	return d, err
 }
 
 // StatusMessage defines a status of visor update.
