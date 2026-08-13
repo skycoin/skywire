@@ -93,40 +93,20 @@ BUILDTAGINFO := -X $(PROJECT_BASE)/pkg/visor.BuildTag=$(BUILDTAG)
 BUILDINFO?=$(BUILDINFO_VERSION) $(BUILDINFO_DATE) $(BUILDINFO_COMMIT) $(BUILDTAGINFO)
 INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 
-# The wasm-visor imports skywire's OWN pkg/buildinfo (not skywire-utilities), so
-# it needs its own -X targets, stamped explicitly below.
+# The repo's OWN pkg/buildinfo (vs skywire-utilities' above). The skywire-mobile
+# targets stamp it (MOBILE_APPINFO below): /api/about + cobra --version read this
+# package.
 #
-# The embedded blob is a build artifact carried in the repository, so it can
-# never be verified by rebuilding: the commit that compiles it always precedes
-# the commit that carries it, and the date stamped below makes two builds of
-# identical source differ anyway. The stamp is the only account of what it was
-# built from, so WASM_VERSION uses --dirty: a blob built from an uncommitted
-# tree says so, in a string TestCommittedWasmBuiltFromCommit can find.
-#
-# It is stamped here as well as by Go, not instead of it. `go version -m` cannot
-# parse wasm, but that is a limitation of that command rather than of the
-# format: Go writes vcs.revision/vcs.modified into a GOOS=js binary as plain
-# text, and skycoin reads them straight out of its own js/wasm cipher in
-# ci-scripts/check-wasm-version.js. The committed std-Go blob here carries none
-# only because it was built while this file still passed -buildvcs=false; once
-# it is regenerated it will, and the test can require it of both artifacts
-# rather than of the TinyGo one alone.
-#
-# -buildvcs=false was previously passed on the std-Go build to keep a "+dirty"
-# suffix out of the version of a blob built from an uncommitted tree. It is gone:
-# suppressing the marker removed the evidence rather than the problem, and it
-# also removed the vcs records the test would otherwise be able to require.
-# The repo's OWN pkg/buildinfo (vs skywire-utilities' above). Despite the
-# historical WASM_ prefix there is nothing wasm about the path — the wasm-visor
-# was simply the first target that needed to stamp it. The skywire-mobile
-# targets stamp it too (MOBILE_APPINFO below): /api/about + cobra --version
-# read this package.
+# The wasm-visor deliberately takes NO version ldflags. Its blob is a build
+# artifact carried in the repo, compiled at a commit that always precedes the
+# binary that embeds it, so it cannot borrow a stamped version. Instead it
+# self-describes from the VCS info the Go/TinyGo toolchain records automatically
+# (debug.BuildInfo vcs.revision / vcs.modified, written into a GOOS=js binary as
+# plain text via -buildvcs): buildinfo.VersionOrCommit() turns that into a
+# "dev-<commit>[-dirty]" string. No git-describe, no -X, no git dependency for
+# the wasm build. skycoin reads the same vcs records in
+# ci-scripts/check-wasm-version.js.
 SKYWIRE_BUILDINFO_PATH := $(PROJECT_BASE)/pkg/buildinfo
-WASM_BUILDINFO_PATH := $(SKYWIRE_BUILDINFO_PATH)
-# Unlike VERSION, this carries --dirty, so a committed artifact built from an
-# uncommitted tree is detectable afterwards. See the note above.
-WASM_VERSION := $(shell git describe --always --dirty)
-WASM_BUILDINFO := -X $(WASM_BUILDINFO_PATH).version=$(WASM_VERSION) -X $(WASM_BUILDINFO_PATH).commit=$(COMMIT) -X $(WASM_BUILDINFO_PATH).date=$(DATE)
 
 BUILD_OPTS?="-ldflags=$(BUILDINFO)" -mod=vendor
 BUILD_OPTS_DEPLOY?="-ldflags=$(BUILDINFO) -w -s"
@@ -441,7 +421,7 @@ test-wasm-headless: ## Tier B headless smoke: run the REAL compiled wasm-visor b
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
 	mkdir -p ./build/wasm-visor-go
-	GOOS=js GOARCH=wasm go build -ldflags="$(WASM_BUILDINFO) -s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor-go/

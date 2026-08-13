@@ -28,7 +28,8 @@ var (
 	commit    = unknown
 	date      = unknown
 	goversion = ""
-	buildtags = "" // build tags recorded by the toolchain (debug.BuildInfo "-tags")
+	buildtags = ""    // build tags recorded by the toolchain (debug.BuildInfo "-tags")
+	modified  = false // vcs.modified — the build tree had uncommitted changes
 )
 
 // format hint: bi.Main.Version = v1.3.29-rc7.0.20250410212328-dc5d22b7ab2a
@@ -93,6 +94,8 @@ func readDebugBuildInfo() {
 			if s.Value != "" {
 				buildtags = s.Value
 			}
+		case "vcs.modified":
+			modified = s.Value == "true"
 		}
 	}
 }
@@ -151,6 +154,31 @@ func Go() string {
 // Commit returns the extracted commit hash.
 func Commit() string {
 	return commit
+}
+
+// VersionOrCommit returns Version() when a real (non-devel) version is known,
+// otherwise a "dev-<short-commit>[-dirty]" string derived from the VCS info the
+// Go/TinyGo toolchain records automatically (vcs.revision / vcs.modified). It
+// lets a build that injects no version via ldflags — the wasm-visor, whose blob
+// is compiled at an earlier commit than the binary that embeds it and so cannot
+// borrow the host's version — still self-describe the commit it was built from
+// instead of reporting "unknown". Returns unknown only when neither a version
+// nor a commit is recorded.
+func VersionOrCommit() string {
+	if v := Version(); v != unknown {
+		return v
+	}
+	if commit != unknown && commit != "" {
+		short := commit
+		if len(short) > 12 {
+			short = short[:12]
+		}
+		if modified {
+			return "dev-" + short + "-dirty"
+		}
+		return "dev-" + short
+	}
+	return unknown
 }
 
 // Date returns the extracted build date in RFC3339 format.
