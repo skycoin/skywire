@@ -24,6 +24,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout/cliroute"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/router"
 	"github.com/skycoin/skywire/pkg/routing"
@@ -498,16 +499,7 @@ func getNextAvailableRouteID(rules ...routing.Rule) routing.RouteID {
 
 func printRoutingRules(cmdFlags *pflag.FlagSet, rules ...routing.Rule) {
 
-	type jsonRule struct {
-		ID          routing.RouteID `json:"id"`
-		Type        string          `json:"type"`
-		LocalPort   string          `json:"local_port,omitempty"`
-		RemotePort  string          `json:"remote_port,omitempty"`
-		RemotePK    string          `json:"remote_pk,omitempty"`
-		NextRouteID string          `json:"next_route_id,omitempty"`
-		NextTpID    string          `json:"next_transport_id,omitempty"`
-		ExpireAt    time.Duration   `json:"expire-at"`
-	}
+	type jsonRule = cliroute.Rule
 
 	var jsonRules []jsonRule
 

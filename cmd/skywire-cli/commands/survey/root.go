@@ -12,6 +12,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cmdutil"
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/dmsg/dmsg"
@@ -118,11 +119,9 @@ var surveyCmd = &cobra.Command{
 			}
 		}
 
-		s, err := json.MarshalIndent(survey, "", "\t")
-		if err != nil {
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("Could not marshal json: %v", err))
-		}
-		fmt.Printf("%s", s)
+		// Always a document: the survey IS the output, so there is no human
+		// rendering to choose between — the printer just decides indentation.
+		internal.Catch(cmd.Flags(), cliout.Fprint(cmd.OutOrStdout(), true, survey))
 	},
 }
 
