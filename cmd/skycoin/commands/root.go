@@ -7,21 +7,27 @@
 // instead of importing that assembly.
 //
 // The reason is what the assembly drags in. cmd/skycoin-wallet/commands imports
-// cmd/skycoin-web/commands, so importing it links the thin-client wallet's
-// server AND its skycoin-lite cipher wasm (src/skycoin-lite/wasm-go, ~1.8 MB
-// gzipped) into skywire. That wasm is redundant here: a wallet running on the
-// wasm visor gets its cipher from the visor itself, via wasmcipher.Register()
-// in cmd/wasm-visor. None of the four other command packages pull it —
-// skycoin/commands, skycoin-cli/commands, newcoin/commands and
+// cmd/skycoin-web/wasmassets, which is where skycoin's binaries pick up the
+// skycoin-lite cipher wasm (src/skycoin-lite/wasm-go, ~1.8 MB gzipped). That
+// wasm is redundant here: skywire embeds the wasm visor, whose
+// skycoin-lite/wasmcipher.Register() publishes the identical Cipher and
+// CipherExtras API, so importing skycoin's assembly means carrying the cipher
+// twice with no way to decline the second copy. Assembling the tree here means
+// never importing wasmassets, and cipherwasm.go registers the visor's blob for
+// `web` instead.
+//
+// The `web` subcommand itself is still skycoin's — only where its cipher comes
+// from differs. The other four command packages do not pull skycoin-lite at
+// all: skycoin/commands, skycoin-cli/commands, newcoin/commands and
 // explorer/commands each have neither skycoin-web nor skycoin-lite in their
-// dependency graphs — so mounting them individually is what lets it go.
+// dependency graphs.
 //
 // The wallet BUNDLE is a separate matter and is not affected: it stays vendored
 // via pkg/visor's import of skycoin-web/src/gui (visor.WalletUIFS), so a skycoin
 // vendor bump is still the wallet update, with one copy in the tree.
 //
-// Nothing here changes skycoin. The standalone skycoin binary keeps its own
-// assembly, unmodified; this is a second assembly of the same parts.
+// This changes nothing about skycoin's own binaries. They keep their assembly
+// and their own cipher; this is a second assembly of the same parts.
 package commands
 
 import (
@@ -115,12 +121,10 @@ func init() {
 	}
 	RootCmd.Long = long
 
+	registerCipherWasm()
+
 	daemon.RootCmd.Use = "daemon"
 	explorer.RootCmd.Use = "explorer"
-	// Mounted from skycoin for now. This is the one subcommand that still comes
-	// from cmd/skycoin-web/commands, and so the one that still links the
-	// skycoin-lite wasm; replacing it with a skywire-native `web` that serves
-	// the wasm-visor page is what completes the split.
 	skycoinweb.RootCmd.Use = "web"
 	skycoinweb.RootCmd.Short = name + " thin client web wallet"
 
