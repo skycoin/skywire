@@ -45,15 +45,24 @@ func Parse(log *logging.Logger, r io.Reader, confPath string, visorBuildInfo *bu
 		strings.HasPrefix(visorBuildInfo.Version, "v0.0.0")
 	// we check if the version of the visor and config are the same
 	if (conf.Version != "unknown") && !visorUnversioned {
-		cVer, err := semver.Make(strings.TrimPrefix(conf.Version, "v"))
-		if err != nil {
-			log.Debug(`error on semver.Make(strings.TrimPrefix(conf.Version, "v"))`)
-			return conf, compat, err
-		}
-		vVer, err := semver.Make(strings.TrimPrefix(visorBuildInfo.Version, "v"))
-		if err != nil {
-			log.Debug(`error on semver.Make(strings.TrimPrefix(visorBuildInfo.Version, "v"))`)
-			return conf, compat, err
+		cVer, cErr := semver.Make(strings.TrimPrefix(conf.Version, "v"))
+		vVer, vErr := semver.Make(strings.TrimPrefix(visorBuildInfo.Version, "v"))
+		if cErr != nil || vErr != nil {
+			// An unparseable version on either side means the comparison cannot
+			// be made — which is not the same thing as the config being wrong,
+			// and is not worth refusing to start over. A build stamped with a
+			// non-semver version puts that string in BOTH places, because
+			// `config gen` writes the binary's version into the config it
+			// writes: Android APKs built from a `mobile-vX.Y.Z` tag did exactly
+			// that. Failing here left those installs with no way forward but
+			// deleting the config — on a phone, the file holding the identity.
+			// So warn, and treat it like a config that says "unknown".
+			log.WithField("config_version", conf.Version).
+				WithField("visor_version", visorBuildInfo.Version).
+				Warn("Skipping the config version check: not a valid version. Regenerate the config with `skywire autoconfig` to clear this.")
+			compat = true
+			conf.path = confPath
+			return conf, compat, nil
 		}
 		// Surface the config version alongside the visor version (logged
 		// separately at startup) so a mismatch — the usual cause of a
