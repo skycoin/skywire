@@ -60,6 +60,7 @@ import (
 
 	"github.com/google/uuid"
 
+	wasmcipher "github.com/skycoin/skycoin/src/skycoin-lite/wasmcipher"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
@@ -156,6 +157,19 @@ func main() {
 		fmt.Println("wasm-visor: shell role — call skywireShell.open(el)")
 		keepAlive()
 	}
+	// Publish the skycoin browser cipher on the same page.
+	//
+	// The wallet in skycoin's src/skycoin-web reaches its cipher only through
+	// window.SkycoinCipher (see cipher.provider.ts there), so a visor that
+	// registers it is a drop-in for skycoin-lite.wasm and the page cannot tell
+	// the difference. That is what lets one wasm serve both: the wallet gets its
+	// key derivation and transaction signing, and the visor underneath can make
+	// the node requests itself instead of the wallet proxying them.
+	//
+	// Register returns once the objects are in place; it does not block, so the
+	// visor keeps owning the program's lifetime.
+	wasmcipher.Register()
+
 	js.Global().Set("skywireVisor", js.ValueOf(map[string]interface{}{
 		"boot":          js.FuncOf(jsBoot),
 		"status":        js.FuncOf(jsStatus),

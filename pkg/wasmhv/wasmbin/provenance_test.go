@@ -14,13 +14,18 @@ import (
 // committedBlob is a wasm artifact kept in the repository.
 type committedBlob struct {
 	path string
-	// goStamped is true where the toolchain records Go's own
-	// vcs.revision/vcs.modified. Only the TinyGo build does — see the comment
-	// on TestCommittedWasmBuiltFromCommit.
+	// goStamped requires Go's own vcs.revision to be present, rather than only
+	// checking it when it happens to be. See the comment on
+	// TestCommittedWasmBuiltFromCommit for why the std-Go blob does not require
+	// it yet.
 	goStamped bool
 }
 
 var committedBlobs = []committedBlob{
+	// Not goStamped yet: the committed blob predates the removal of
+	// -buildvcs=false, so it carries no vcs.revision. Once it is regenerated it
+	// will, and this can require it. Until then the check below still rejects a
+	// vcs.modified=true if one appears.
 	{path: filepath.Join("wasmgo", "wasm-visor.wasm.gz")},
 	{path: filepath.Join("wasmtinygo", "wasm-visor.wasm.gz"), goStamped: true},
 }
@@ -55,11 +60,15 @@ var goRevision = regexp.MustCompile(`vcs\.revision=[0-9a-f]{40}`)
 //   - the Makefile stamps WASM_VERSION from `git describe --always --dirty`,
 //     which both builds carry. This is the load-bearing one.
 //   - Go's own vcs.revision/vcs.modified, which the equivalent check in skycoin
-//     reads, exists ONLY in the TinyGo artifact. GOOS=js emits no readable
-//     buildinfo — no "Go buildinf" magic, and `go version -m` cannot parse
-//     wasm — so requiring it of the std-Go blob would fail every time. Note
-//     that a bare "vcs.revision" string DOES appear in any binary linking
-//     runtime/debug, which is why the pattern here requires the value too.
+//     reads. `go version -m` cannot parse wasm, but that is a limitation of
+//     that command, not of the format: the records themselves are written into
+//     a GOOS=js binary as plain text and can be read straight out of it, which
+//     is exactly what skycoin's ci-scripts/check-wasm-version.js does to its
+//     own js/wasm cipher. The std-Go blob here carries none only because it was
+//     built while the Makefile still passed -buildvcs=false; the TinyGo one,
+//     built without it, carries them. Note that a bare "vcs.revision" string
+//     DOES appear in any binary linking runtime/debug, which is why the pattern
+//     here requires the value too.
 //
 // The revision is not checked against HEAD. Committing an artifact necessarily
 // moves HEAD past the commit it was built at, so requiring equality would fail
