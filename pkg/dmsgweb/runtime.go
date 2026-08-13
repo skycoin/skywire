@@ -28,6 +28,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/armon/go-socks5"
 	"github.com/chen3feng/safecast"
@@ -275,6 +276,13 @@ func normalize(cfg Config) Config {
 // panics if RemoteAddr() doesn't return *net.TCPAddr, so DMSG
 // streams are wrapped in tcpAddrConn.
 func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Client, cfg Config) error {
+	// Build the upstream SOCKS5 dialer ONCE and reuse it across requests
+	// (proxy.SOCKS5 returns a shareable proxy.Dialer). nil when no upstream
+	// is configured — those requests dial direct.
+	var upstream *upstreamForwarder
+	if cfg.UpstreamSOCKS != "" {
+		upstream = &upstreamForwarder{addr: cfg.UpstreamSOCKS}
+	}
 	conf := &socks5.Config{
 		// Route go-socks5's own [ERR] lines through logrus so they match the
 		// rest of the visor's log format instead of the library's raw stdout
@@ -417,15 +425,11 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 			}
 
 			// Not .dmsg — forward to upstream or direct.
-			if cfg.UpstreamSOCKS != "" {
+			if upstream != nil {
 				if origHost != "" {
 					addr = net.JoinHostPort(origHost, origPort)
 				}
-				upstream, err := proxy.SOCKS5("tcp", cfg.UpstreamSOCKS, nil, proxy.Direct)
-				if err != nil {
-					return nil, err
-				}
-				return upstream.Dial(network, addr)
+				return upstream.dial(network, addr)
 			}
 			return net.Dial(network, addr)
 		},
@@ -451,6 +455,59 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 		return fmt.Errorf("SOCKS5 serve: %w", err)
 	}
 	return nil
+}
+
+// upstreamCooldown is how long forwarded dials fast-fail after a recent
+// upstream failure, so a burst of requests during the boot window (when the
+// upstream, e.g. skysocks-client on :1080, is not yet connected and refuses
+// the connection) doesn't each pay a full refused dial. Short by design —
+// the client retries.
+const upstreamCooldown = 500 * time.Millisecond
+
+// upstreamForwarder lazily builds and caches a SOCKS5 dialer to the upstream
+// proxy and reuses it across requests. proxy.SOCKS5 returns a proxy.Dialer
+// that is safe to share, so building it once — instead of per request —
+// avoids a wasteful allocation on every forwarded CONNECT. After a failed
+// dial it fast-fails subsequent requests for upstreamCooldown rather than
+// blocking or queueing them.
+type upstreamForwarder struct {
+	addr string
+
+	mu       sync.Mutex
+	dialer   proxy.Dialer
+	failedAt time.Time
+}
+
+// dial forwards through the cached upstream dialer, building it on first use.
+// It fast-fails during the cooldown window following a recent failure, and
+// records/clears the failure timestamp based on the dial outcome.
+func (f *upstreamForwarder) dial(network, addr string) (net.Conn, error) {
+	f.mu.Lock()
+	if !f.failedAt.IsZero() && time.Since(f.failedAt) < upstreamCooldown {
+		f.mu.Unlock()
+		return nil, fmt.Errorf("upstream SOCKS %s not ready (cooling down)", f.addr)
+	}
+	d := f.dialer
+	if d == nil {
+		nd, err := proxy.SOCKS5("tcp", f.addr, nil, proxy.Direct)
+		if err != nil {
+			f.mu.Unlock()
+			return nil, err
+		}
+		f.dialer = nd
+		d = nd
+	}
+	f.mu.Unlock()
+
+	conn, err := d.Dial(network, addr)
+	f.mu.Lock()
+	if err != nil {
+		f.failedAt = time.Now()
+	} else {
+		f.failedAt = time.Time{}
+	}
+	f.mu.Unlock()
+	return conn, err
 }
 
 // Context keys used by the SOCKS5 resolver ↔ Dial callback handshake.

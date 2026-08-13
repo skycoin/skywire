@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"net"
 	"regexp"
+	"sync"
+	"time"
 
 	"github.com/armon/go-socks5"
 	"github.com/sirupsen/logrus"
@@ -195,6 +197,13 @@ func (r *skynetResolver) Resolve(ctx context.Context, name string) (context.Cont
 }
 
 func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, cfg Config) error {
+	// Build the upstream SOCKS5 dialer ONCE and reuse it across requests
+	// (proxy.SOCKS5 returns a shareable proxy.Dialer). nil when no upstream
+	// is configured — those requests dial direct.
+	var upstream *upstreamForwarder
+	if cfg.UpstreamSOCKS != "" {
+		upstream = &upstreamForwarder{addr: cfg.UpstreamSOCKS}
+	}
 	conf := &socks5.Config{
 		// Route go-socks5's own [ERR] lines through logrus so they match the
 		// rest of the visor's log format (colored, module-tagged) instead of
@@ -319,7 +328,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 			}
 
 			// Not .skynet — forward to upstream or direct.
-			if cfg.UpstreamSOCKS != "" {
+			if upstream != nil {
 				// Reconstruct host:port using the original hostname
 				// (the resolved addr has 127.0.0.1 instead of the hostname).
 				if origHost != "" {
@@ -330,11 +339,7 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 					addr = net.JoinHostPort(origHost, port)
 				}
 				log.WithField("addr", addr).Debug("SOCKS5 → upstream")
-				up, err := proxy.SOCKS5("tcp", cfg.UpstreamSOCKS, nil, proxy.Direct)
-				if err != nil {
-					return nil, err
-				}
-				return up.Dial(network, addr)
+				return upstream.dial(network, addr)
 			}
 			return net.Dial(network, addr)
 		},
@@ -365,6 +370,61 @@ func serveSOCKS5(ctx context.Context, log *logging.Logger, dialer SkynetDialer, 
 		return fmt.Errorf("SOCKS5 serve: %w", err)
 	}
 	return nil
+}
+
+// upstreamCooldown is how long forwarded dials fast-fail after a recent
+// upstream failure, so a burst of requests during the boot window (when the
+// upstream, e.g. skysocks-client on :1080, is not yet connected and refuses
+// the connection) doesn't each pay a full refused dial. Short by design —
+// the client retries.
+const upstreamCooldown = 500 * time.Millisecond
+
+// upstreamForwarder lazily builds and caches a SOCKS5 dialer to the upstream
+// proxy and reuses it across requests. proxy.SOCKS5 returns a proxy.Dialer
+// that is safe to share, so building it once — instead of per request —
+// avoids a wasteful allocation on every forwarded CONNECT. After a failed
+// dial it fast-fails subsequent requests for upstreamCooldown rather than
+// blocking or queueing them. This is skynetweb's readiness posture toward the
+// upstream: there is no clean "skysocks-client connected" signal to wait on,
+// so the cached dialer + cooldown stands in for one.
+type upstreamForwarder struct {
+	addr string
+
+	mu       sync.Mutex
+	dialer   proxy.Dialer
+	failedAt time.Time
+}
+
+// dial forwards through the cached upstream dialer, building it on first use.
+// It fast-fails during the cooldown window following a recent failure, and
+// records/clears the failure timestamp based on the dial outcome.
+func (f *upstreamForwarder) dial(network, addr string) (net.Conn, error) {
+	f.mu.Lock()
+	if !f.failedAt.IsZero() && time.Since(f.failedAt) < upstreamCooldown {
+		f.mu.Unlock()
+		return nil, fmt.Errorf("upstream SOCKS %s not ready (cooling down)", f.addr)
+	}
+	d := f.dialer
+	if d == nil {
+		nd, err := proxy.SOCKS5("tcp", f.addr, nil, proxy.Direct)
+		if err != nil {
+			f.mu.Unlock()
+			return nil, err
+		}
+		f.dialer = nd
+		d = nd
+	}
+	f.mu.Unlock()
+
+	conn, err := d.Dial(network, addr)
+	f.mu.Lock()
+	if err != nil {
+		f.failedAt = time.Now()
+	} else {
+		f.failedAt = time.Time{}
+	}
+	f.mu.Unlock()
+	return conn, err
 }
 
 // tcpAddrConn wraps a net.Conn so that LocalAddr/RemoteAddr return
