@@ -113,6 +113,13 @@ func newWT(generic *genericClient, table WTTable) Client {
 // ErrWTEntryNotFound is returned when the requested PK has no WT entry in the table.
 var ErrWTEntryNotFound = errors.New("wt: entry not found in table")
 
+// ErrServeDialOnly is the sentinel a network client's Start returns (wrapped)
+// when the build is dial-only and cannot serve (no listening socket). The
+// transport manager checks errors.Is(err, ErrServeDialOnly) to log this expected
+// condition at Debug rather than ERROR/Fatal — a browser/embedded WT client
+// dials peers but never accepts, which is by design, not a failure.
+var ErrServeDialOnly = errors.New("transport network is dial-only on this build (serving unsupported)")
+
 // Dial implements Client: resolve the peer's WT endpoint + cert hash, dial it
 // (build-tagged carrier: webtransport-go on native, the browser WebTransport API
 // on TinyGo/js), and wrap the resulting net.Conn in a skywire transport.
