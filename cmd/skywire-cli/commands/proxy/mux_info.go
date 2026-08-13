@@ -14,6 +14,7 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
 )
 
 var (
@@ -148,13 +149,11 @@ func (t *muxRateTracker) render(cmd *cobra.Command, infos any) {
 	// JSON path: marshal the wire response directly. Re-encoding via
 	// our local mirror struct preserves field naming and avoids
 	// importing the visor type for json contract reasons.
-	isJSON, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-	if isJSON {
+	if cliout.JSONMode(cmd) {
 		raw, _ := json.Marshal(infos) //nolint:errcheck
 		var roundTripped []muxRouteGroupInfo
-		_ = json.Unmarshal(raw, &roundTripped)               //nolint:errcheck
-		out, _ := json.MarshalIndent(roundTripped, "", "  ") //nolint:errcheck
-		fmt.Println(string(out))
+		_ = json.Unmarshal(raw, &roundTripped) //nolint:errcheck
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, roundTripped))
 		return
 	}
 

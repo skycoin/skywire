@@ -9,6 +9,8 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
 )
@@ -64,6 +66,9 @@ are not used for multi-hop routes).`,
 		}
 		labels = append(labels, path[len(path)-1].Hex())
 
-		fmt.Println(strings.Join(labels, ".") + routeAddrSuffix)
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, clitp.RouteAddr{
+			Address: strings.Join(labels, ".") + routeAddrSuffix,
+			Labels:  labels,
+		}))
 	},
 }

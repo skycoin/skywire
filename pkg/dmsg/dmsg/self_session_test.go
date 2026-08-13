@@ -32,12 +32,23 @@ func TestSelfSession_SameKeyClientReachesOwnServer(t *testing.T) {
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	addr := lis.Addr().String()
-	go func() { _ = srv.Serve(lis, addr) }() //nolint:errcheck
 
-	// Server entry advertises the loopback listener (as the production fix does).
+	// Post the entry BEFORE serving. Serve publishes the server's own entry
+	// from a background goroutine, so posting afterwards is a race for
+	// sequence 0: whichever lands second is rejected with "sequence field of
+	// new entry is not sequence of old entry + 1", and the one wrapped in
+	// require.NoError here is the test's. It failed that way on CI while
+	// passing 25 consecutive local runs — a window narrow enough to look like
+	// nothing until a loaded runner widens it.
+	//
+	// Ordered this way the test seeds an empty discovery, and the server's
+	// own loop then updates that entry through the normal fetch-and-increment
+	// path instead of colliding with it.
 	srvEntry := disc.NewServerEntry(pk, 0, addr, 10)
 	require.NoError(t, srvEntry.Sign(sk))
 	require.NoError(t, dc.PostEntry(context.Background(), srvEntry))
+
+	go func() { _ = srv.Serve(lis, addr) }() //nolint:errcheck
 
 	// The transit client shares the server's keypair. It must NOT register (in
 	// production it's a direct client) — MinSessions:0 = connect to all known

@@ -31,6 +31,8 @@ import (
 	"github.com/spf13/cobra"
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clivisor"
 )
 
 var (
@@ -116,11 +118,15 @@ Examples:
 		}
 
 		if grFull {
-			fmt.Print(renderGoroutines(filtered))
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, clivisor.Goroutines{
+				Total: len(filtered), Dump: renderGoroutines(filtered),
+			}))
 			return
 		}
 
-		fmt.Println(buildSummary(filtered, grTopN, grShowLocks))
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, clivisor.Goroutines{
+			Total: len(filtered), Summary: buildSummary(filtered, grTopN, grShowLocks),
+		}))
 	},
 }
 

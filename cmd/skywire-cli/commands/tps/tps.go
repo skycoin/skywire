@@ -12,6 +12,8 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clitps"
 )
 
 var (
@@ -76,13 +78,9 @@ To enable embedded TPS, set 'tps_sk' in the visor config.`,
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("failed to get TPS status: %w", err))
 		}
 
-		if status.Enabled {
-			fmt.Printf("TPS Status: enabled\n")
-			fmt.Printf("TPS Public Key: %s\n", status.PubKey)
-		} else {
-			fmt.Printf("TPS Status: disabled\n")
-			fmt.Printf("To enable, set 'tps_sk' in the visor config\n")
-		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, clitps.Status{
+			Enabled: status.Enabled, PubKey: fmt.Sprint(status.PubKey),
+		}))
 	},
 }
 

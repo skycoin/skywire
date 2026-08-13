@@ -45,7 +45,6 @@ var (
 	serveLanding      bool
 	servePreserveHost bool
 	serveInjectPK     bool
-	serveJSON         bool
 )
 
 func init() {
@@ -64,9 +63,6 @@ func init() {
 		"HTTP mode: inject the authenticated caller's PK as the X-Skywire-Remote-PK header "+
 			"(any client-supplied copy is stripped) so the backend can do per-PK auth. "+
 			"Bind the backend to loopback only — see docs/guides/skynet-website-auth.md")
-
-	servePortLsCmd.Flags().BoolVar(&serveJSON, "json", false, "emit raw JSON")
-	RootCmd.Flags().BoolVar(&serveJSON, "json", false, "emit raw JSON")
 
 	RootCmd.AddCommand(servePortCmd, servePortRmCmd, servePortLsCmd, serveWhitelistCmd)
 }
