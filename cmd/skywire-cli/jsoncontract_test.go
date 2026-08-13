@@ -73,8 +73,6 @@ var pendingJSON = map[string]string{
 	"commands/rewards/calc.go":         "TODO(cliout): needs a typed output",
 	"commands/rewards/services.go":     "TODO(cliout): needs a typed output",
 	"commands/rewards/transports.go":   "TODO(cliout): needs a typed output",
-	"commands/survey/root.go":          "TODO(cliout): needs a typed output",
-	"commands/tps/tps.go":              "TODO(cliout): needs a typed output",
 	"commands/tp/tp-add-edge.go":       "TODO(cliout): needs a typed output",
 	"commands/tp/tp-tree.go":           "TODO(cliout): needs a typed output",
 	"commands/tp/tp-viz.go":            "TODO(cliout): needs a typed output",
@@ -182,7 +180,11 @@ func TestEveryPrintingCommandHonoursJSON(t *testing.T) {
 			switch {
 			case pkg.Name == "fmt" && strings.HasPrefix(sel.Sel.Name, "Print"):
 				prints = true
-			case sel.Sel.Name == "PrintOutput" || (pkg.Name == "cliout" && sel.Sel.Name == "Print"),
+			// Any use of the printer counts, including Fprint — a command whose
+			// output is ALWAYS a document (survey) reaches for that one, since it
+			// has no human rendering to choose between.
+			case sel.Sel.Name == "PrintOutput",
+				pkg.Name == "cliout" && (sel.Sel.Name == "Print" || sel.Sel.Name == "Fprint"),
 				sel.Sel.Name == "JSONMode":
 				honours = true
 			}
