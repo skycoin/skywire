@@ -31,6 +31,7 @@ import (
 
 	"github.com/armon/go-socks5"
 	"github.com/chen3feng/safecast"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/net/proxy"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -277,8 +278,9 @@ func serveSOCKS5Direct(ctx context.Context, log *logging.Logger, dmsgC *dmsg.Cli
 	conf := &socks5.Config{
 		// Route go-socks5's own [ERR] lines through logrus so they match the
 		// rest of the visor's log format instead of the library's raw stdout
-		// default.
-		Logger:   logging.NewStdLogger(log),
+		// default. Cap at Debug: a SOCKS proxy failing a *client-requested*
+		// dial is a routine, client-driven condition, not a visor error.
+		Logger:   logging.NewStdLoggerLevel(log, logrus.DebugLevel),
 		Resolver: &dmsgResolver{cfg: cfg},
 		Dial: func(dialCtx context.Context, network, addr string) (conn net.Conn, dialErr error) {
 			defer func() {

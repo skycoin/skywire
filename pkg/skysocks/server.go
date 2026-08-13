@@ -11,11 +11,13 @@ import (
 	"github.com/armon/go-socks5"
 	"github.com/hashicorp/yamux"
 	ipc "github.com/james-barrow/golang-ipc"
+	"github.com/sirupsen/logrus"
 
 	"github.com/skycoin/skywire/pkg/app"
 	"github.com/skycoin/skywire/pkg/app/appnet"
 	"github.com/skycoin/skywire/pkg/app/appserver"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/skyenv"
 )
 
@@ -32,7 +34,13 @@ type Server struct {
 
 // NewServer constructs a new Server.
 func NewServer(whitelist []cipher.PubKey, appCl *app.Client) (*Server, error) {
-	s, err := socks5.New(&socks5.Config{})
+	// Give go-socks5 an explicit logrus-backed logger so it does not fall back
+	// to its default log.New(os.Stdout, …) and leak lines to stdout. Cap at
+	// Debug: a SOCKS proxy failing a *client-requested* dial is a routine,
+	// client-driven condition, not a proxy error.
+	s, err := socks5.New(&socks5.Config{
+		Logger: logging.NewStdLoggerLevel(logging.MustGetLogger("skysocks"), logrus.DebugLevel),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("socks5: %w", err)
 	}

@@ -94,11 +94,10 @@ func StartDmsg(ctx context.Context, dlog *logging.Logger, pk cipher.PubKey, sk c
 
 	stop = func() {
 		err := dmsgC.Close()
-		dlog.WithError(err).Debug("Disconnected from dmsg network.\n")
+		dlog.WithError(err).Debug("Disconnected from dmsg network.")
 		log.Println()
 	}
-	dlog.WithField("dmsg_disc", dmsgDisc).Debug("Connecting to dmsg network...\n")
-	dlog.WithField("client public_key", pk.String()).Debug("\n")
+	dlog.WithField("dmsg_disc", dmsgDisc).Debug("Connecting to dmsg network...")
 	select {
 	case <-ctx.Done():
 		stop()

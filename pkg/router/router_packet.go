@@ -344,7 +344,7 @@ func (r *router) forwardPacket(ctx context.Context, packet routing.Packet, rule 
 	}
 
 	if err := r.UpdateRuleActivity(rule.KeyRouteID()); err != nil {
-		r.logger.Errorf("Failed to update activity for rule with route ID %d: %v", rule.KeyRouteID(), err)
+		r.logger.Debugf("Failed to update activity for rule with route ID %d: %v", rule.KeyRouteID(), err)
 	}
 
 	return nil
