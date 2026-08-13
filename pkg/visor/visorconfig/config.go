@@ -45,7 +45,10 @@ func MakeBaseConfig(common *Common, testEnv bool, dmsgHTTP bool, services *Servi
 		AddressResolver:   services.AddressResolver,
 		PublicAutoconnect: skyenv.PublicAutoconnect,
 		LogStore: &LogStore{
-			Type:             FileLogStore,
+			// The on-disk CSV log store was retired; "file" is now a no-op that
+			// only earns a deprecation warning at boot (init_transport.go). Default
+			// fresh configs to "memory" so they don't ship that phantom warning.
+			Type:             MemoryLogStore,
 			Location:         skyenv.LocalPath + "/" + skyenv.TpLogStore,
 			RotationInterval: DefaultLogRotationInterval,
 		},
