@@ -23,10 +23,9 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	"github.com/skycoin/skywire/pkg/logging"
 	"github.com/skycoin/skywire/pkg/servicedisc"
-	"github.com/skycoin/skywire/pkg/transport"
-	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -497,19 +496,7 @@ func PrintTransports(cmdFlags *pflag.FlagSet, tps ...*visor.TransportSummary) {
 		internal.Catch(cmdFlags, err)
 	}
 
-	type outputTP struct {
-		Type      types.Type      `json:"type"`
-		ID        uuid.UUID       `json:"id"`
-		Remote    cipher.PubKey   `json:"remote_pk"`
-		TpMode    string          `json:"mode"`
-		Label     transport.Label `json:"label"`
-		Version   string          `json:"version,omitempty"`
-		Country   string          `json:"country,omitempty"`
-		Services  string          `json:"services,omitempty"`
-		LatencyMS float64         `json:"latency_ms,omitempty"`
-		RecvBytes uint64          `json:"recv_bytes,omitempty"`
-		SentBytes uint64          `json:"sent_bytes,omitempty"`
-	}
+	type outputTP = clitp.Transport
 
 	var outputTPS []outputTP
 	for _, tp := range tps {
@@ -738,20 +725,7 @@ func PrintTransportsWithBandwidth(cmdFlags *pflag.FlagSet, bwByTpID map[string]s
 		internal.Catch(cmdFlags, err)
 	}
 
-	type outputTP struct {
-		Type      types.Type      `json:"type"`
-		ID        uuid.UUID       `json:"id"`
-		Remote    cipher.PubKey   `json:"remote_pk"`
-		TpMode    string          `json:"mode"`
-		Label     transport.Label `json:"label"`
-		Version   string          `json:"version,omitempty"`
-		Country   string          `json:"country,omitempty"`
-		Services  string          `json:"services,omitempty"`
-		LatencyMS float64         `json:"latency_ms,omitempty"`
-		RecvBytes uint64          `json:"recv_bytes,omitempty"`
-		SentBytes uint64          `json:"sent_bytes,omitempty"`
-		Inactive  bool            `json:"inactive,omitempty"`
-	}
+	type outputTP = clitp.Transport
 
 	var outputTPS []outputTP
 
