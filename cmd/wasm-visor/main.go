@@ -61,6 +61,7 @@ import (
 	"github.com/google/uuid"
 
 	wasmcipher "github.com/skycoin/skycoin/src/skycoin-lite/wasmcipher"
+
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/app/appcommon"
 	"github.com/skycoin/skywire/pkg/app/appdisc"
