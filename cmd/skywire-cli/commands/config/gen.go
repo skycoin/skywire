@@ -1198,7 +1198,9 @@ func configureTransports() {
 		PublicAutoconnect: skyenv.PublicAutoconnect,
 		TransportSetupPKs: services.TransportSetupPKs,
 		LogStore: &visorconfig.LogStore{
-			Type:             visorconfig.FileLogStore,
+			// "file" (the retired on-disk CSV store) is now a no-op that only warns
+			// at boot; default fresh configs to "memory" so they don't carry it.
+			Type:             visorconfig.MemoryLogStore,
 			Location:         tpLogPath,
 			RotationInterval: visorconfig.DefaultLogRotationInterval,
 		},
