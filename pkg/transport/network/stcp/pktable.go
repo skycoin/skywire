@@ -67,7 +67,9 @@ func NewTableFromFile(path string) (PKTable, error) {
 
 	defer func() {
 		if err := f.Close(); err != nil {
-			fmt.Println("udp_factory: failed to close table file:", err)
+			// No module logger is in scope in this low-level table package;
+			// route to stderr rather than leaking a raw line to stdout.
+			fmt.Fprintln(os.Stderr, "stcp: failed to close pk-table file:", err)
 		}
 	}()
 

@@ -18,6 +18,10 @@ import (
 // is stripped and mapped to the corresponding logrus level.
 type logrusWriter struct {
 	log logrus.FieldLogger
+	// maxLevel caps severity: no record is emitted more severe than this
+	// level. Zero means unset (no cap). Because logrus levels are
+	// more-severe = smaller number, the clamp raises the numeric value.
+	maxLevel logrus.Level
 }
 
 func (w logrusWriter) Write(p []byte) (int, error) {
@@ -35,6 +39,11 @@ func (w logrusWriter) Write(p []byte) (int, error) {
 			}
 			msg = strings.TrimSpace(msg[end+1:])
 		}
+	}
+	// Clamp severity to maxLevel. logrus levels are more-severe = smaller
+	// number, so a level below the cap is raised up to it (0 = unset = no cap).
+	if w.maxLevel != 0 && level < w.maxLevel {
+		level = w.maxLevel
 	}
 	switch level {
 	case logrus.ErrorLevel:
@@ -56,4 +65,12 @@ func (w logrusWriter) Write(p []byte) (int, error) {
 // log format instead of writing uncolored lines straight to stdout.
 func NewStdLogger(log logrus.FieldLogger) *stdlog.Logger {
 	return stdlog.New(logrusWriter{log: log}, "", 0)
+}
+
+// NewStdLoggerLevel is like NewStdLogger but caps severity: no line is logged
+// more severe than `maxLevel`. Use it for libraries (e.g. a SOCKS proxy serving
+// external clients) whose "[ERR]" lines are routine, client-driven conditions
+// rather than faults of this process.
+func NewStdLoggerLevel(log logrus.FieldLogger, maxLevel logrus.Level) *stdlog.Logger {
+	return stdlog.New(logrusWriter{log: log, maxLevel: maxLevel}, "", 0)
 }

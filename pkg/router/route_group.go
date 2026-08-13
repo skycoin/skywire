@@ -617,7 +617,7 @@ func (rg *RouteGroup) writePacket(ctx context.Context, tp *transport.ManagedTran
 
 		if err := rg.rt.UpdateActivity(ruleID); err != nil {
 			if !rg.isClosed() {
-				rg.logger.WithError(err).Errorf("error updating activity of rule %d", ruleID)
+				rg.logger.WithError(err).Debugf("error updating activity of rule %d", ruleID)
 			}
 		}
 	}

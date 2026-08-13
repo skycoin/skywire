@@ -662,7 +662,7 @@ func (c *EntityCommon) updateServerEntryOnEndpoint(ctx context.Context, ep *disc
 	}
 	// Propagate DHT bootstrap status to discovery entry.
 	entry.Server.DHTBootstrap = c.dhtBootstrap
-	log.Debug("Updating entry.\n")
+	log.Debug("Updating entry.")
 
 	return ep.Client.PutEntry(ctx, c.sk, entry)
 }
@@ -993,7 +993,7 @@ func (c *EntityCommon) updateClientEntryOnEndpoint(ctx context.Context, ep *disc
 
 	entry.ClientType = clientType
 	entry.Client.DelegatedServers = srvPKs
-	c.log.WithField("entry", entry).Debug("Updating entry.\n")
+	c.log.WithField("entry", entry).Debug("Updating entry.")
 	if err := ep.Client.PutEntry(ctx, c.sk, entry); err != nil {
 		return nil, err
 	}
@@ -1147,10 +1147,10 @@ func (c *EntityCommon) entryProtocol(ctx context.Context, pk cipher.PubKey) stri
 		if err != nil {
 			continue
 		}
-		c.log.WithField("entry", entry).Debug("Entry's protocol fetch.\n")
+		c.log.WithField("entry", entry).Debug("Entry's protocol fetch.")
 		return entry.Protocol
 	}
-	c.log.WithField("pk", pk).Warn("Entry not found in any discovery; returning empty protocol.\n")
+	c.log.WithField("pk", pk).Warn("Entry not found in any discovery; returning empty protocol.")
 	return ""
 }
 
@@ -1175,7 +1175,7 @@ func (c *EntityCommon) delEntry(ctx context.Context) (err error) {
 			}
 			continue
 		}
-		c.log.WithField("entry", entry).Debug("Deleting entry.\n")
+		c.log.WithField("entry", entry).Debug("Deleting entry.")
 		if delErr := ep.Client.DelEntry(ctx, entry); delErr != nil && firstErr == nil {
 			firstErr = delErr
 		}
