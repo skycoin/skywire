@@ -22,6 +22,9 @@
 package clitp
 
 import (
+	"fmt"
+	"io"
+
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
@@ -126,4 +129,70 @@ type DiscEntry struct {
 	Type  types.Type    `json:"type"`
 	Edge1 cipher.PubKey `json:"edge1"`
 	Edge2 cipher.PubKey `json:"edge2"`
+}
+
+// ID is the deterministic transport ID computed from two public keys by
+// `tp id`. A bare string in text mode; an object in JSON so the field has a
+// name a caller can select. It replaces the last use of the old
+// `{"output": …}` envelope, which forced consumers through jq '.output'.
+type ID struct {
+	ID string `json:"id"`
+}
+
+// Human prints the identifier alone, as before.
+func (i ID) Human(w io.Writer) error {
+	_, err := fmt.Fprintln(w, i.ID)
+	return err
+}
+
+// RouteAddr is the dot-joined route address `tp route-addr` builds.
+type RouteAddr struct {
+	Address string `json:"address"`
+	// Labels are the hops it was assembled from, which the joined form loses.
+	Labels []string `json:"labels,omitempty"`
+}
+
+// Human prints the address alone, as before.
+func (r RouteAddr) Human(w io.Writer) error {
+	_, err := fmt.Fprintln(w, r.Address)
+	return err
+}
+
+// EdgeDial is one attempt to reach a peer's transport edge.
+type EdgeDial struct {
+	PK   string `json:"pk"`
+	Type string `json:"type,omitempty"`
+	OK   bool   `json:"ok"`
+	Err  string `json:"error,omitempty"`
+}
+
+// EdgeConnect is the result of `tp add-edge`: who was tried and what happened.
+type EdgeConnect struct {
+	Target    string     `json:"target"`
+	Attempted int        `json:"attempted"`
+	Connected int        `json:"connected"`
+	Edges     []EdgeDial `json:"edges,omitempty"`
+	// Note explains an empty run — no transports, or no edges but self.
+	Note string `json:"note,omitempty"`
+}
+
+// Human writes the per-edge ticks and the summary the command printed.
+func (e EdgeConnect) Human(w io.Writer) error {
+	if e.Note != "" {
+		_, err := fmt.Fprintf(w, "%s\n", e.Note)
+		return err
+	}
+	for _, d := range e.Edges {
+		var err error
+		if d.OK {
+			_, err = fmt.Fprintf(w, "✓ %s (%s)\n", d.PK, d.Type)
+		} else {
+			_, err = fmt.Fprintf(w, "✗ %s: %s\n", d.PK, d.Err)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintf(w, "\nConnected to %d/%d edges of %s\n", e.Connected, e.Attempted, e.Target)
+	return err
 }
