@@ -64,7 +64,6 @@ func init() {
 			"(any client-supplied copy is stripped) so the backend can do per-PK auth. "+
 			"Bind the backend to loopback only — see docs/guides/skynet-website-auth.md")
 
-
 	RootCmd.AddCommand(servePortCmd, servePortRmCmd, servePortLsCmd, serveWhitelistCmd)
 }
 
