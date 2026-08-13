@@ -11,6 +11,8 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clitp"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -69,7 +71,10 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 		}
 
 		if len(entries) == 0 {
-			fmt.Printf("No transports found for %s\n", targetPK.String())
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, clitp.EdgeConnect{
+				Target: targetPK.String(),
+				Note:   fmt.Sprintf("No transports found for %s", targetPK.String()),
+			}))
 			return
 		}
 
@@ -84,7 +89,10 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 		}
 
 		if len(edgePKs) == 0 {
-			fmt.Printf("No edge keys found for %s (excluding self)\n", targetPK.String())
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, clitp.EdgeConnect{
+				Target: targetPK.String(),
+				Note:   fmt.Sprintf("No edge keys found for %s (excluding self)", targetPK.String()),
+			}))
 			return
 		}
 
@@ -133,7 +141,7 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 
 				results[idx] = res
 
-				if edgeVerbose {
+				if edgeVerbose && !cliout.JSONMode(cmd) {
 					if res.success {
 						fmt.Printf("✓ %s (%s)\n", edgePK.String(), res.tpType)
 					} else {
@@ -152,6 +160,17 @@ connected to (e.g., connecting to all edges of a well-connected hub).`,
 				successCount++
 			}
 		}
-		fmt.Printf("\nConnected to %d/%d edges of %s\n", successCount, len(pksToConnect), targetPK.String())
+		edges := make([]clitp.EdgeDial, 0, len(results))
+		for i, r := range results {
+			d := clitp.EdgeDial{PK: pksToConnect[i].String(), OK: r.success, Type: fmt.Sprint(r.tpType)}
+			if r.err != nil {
+				d.Err = r.err.Error()
+			}
+			edges = append(edges, d)
+		}
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, clitp.EdgeConnect{
+			Target: targetPK.String(), Attempted: len(pksToConnect),
+			Connected: successCount, Edges: edges,
+		}))
 	},
 }

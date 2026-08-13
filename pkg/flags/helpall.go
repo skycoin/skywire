@@ -15,7 +15,11 @@ package flags
 
 import (
 	"fmt"
+	"os"
 	"strings"
+
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/clihelp"
 
 	"github.com/spf13/cobra"
 )
@@ -88,6 +92,31 @@ Modes (mutually exclusive):
 	}
 	root.SetHelpCommand(helpCmd)
 	root.AddCommand(helpCmd)
+
+	// `<root> tree` prints the command hierarchy and nothing else — the same
+	// rendering as `help -t`, reachable as a verb because that is how people
+	// look for it. Hidden, since it duplicates a flag that is already
+	// documented; discoverability is not the point, muscle memory is.
+	//
+	// Installed here rather than on one root so every command group gets it
+	// at its own level: `skywire tree` shows everything, `skywire cli tree`
+	// shows the CLI subtree.
+	if prev := findChild(root, "tree"); prev != nil {
+		root.RemoveCommand(prev)
+	}
+	root.AddCommand(&cobra.Command{
+		Use:    "tree",
+		Short:  "print the subcommand tree",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		Run: func(cmd *cobra.Command, _ []string) {
+			// One value, two renderings: the ASCII tree is Node.Human, so the
+			// text and JSON forms cannot describe different trees.
+			if err := cliout.Print(cmd, clihelp.TreeOf(cmd.Parent())); err != nil {
+				fmt.Fprintln(os.Stderr, err) //nolint:errcheck
+			}
+		},
+	})
 }
 
 // findChild returns the direct child of c matching name, or nil.

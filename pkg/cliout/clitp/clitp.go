@@ -22,10 +22,14 @@
 package clitp
 
 import (
+	"fmt"
+	"io"
+
 	"github.com/google/uuid"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	store "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -66,3 +70,129 @@ type Transport struct {
 // array, never an object wrapping one. The e2e suite unmarshals into a slice
 // and indexes it.
 type Transports []Transport
+
+// Metric is one transport in `tp metrics`: its byte counters and, when the
+// store has one, its latency sample.
+type Metric struct {
+	ID        string                  `json:"id"`
+	Type      string                  `json:"type"`
+	EdgeA     string                  `json:"edge_a"`
+	EdgeB     string                  `json:"edge_b"`
+	Sent      uint64                  `json:"sent"`
+	Recv      uint64                  `json:"recv"`
+	Bandwidth uint64                  `json:"bandwidth"`
+	Latency   *store.TransportLatency `json:"latency,omitempty"`
+}
+
+// VisorBandwidth aggregates one visor's transports. The latency accumulators
+// are json:"-" because they are the means of computing the average, not part
+// of the answer.
+type VisorBandwidth struct {
+	Sent         uint64 `json:"sent"`
+	Recv         uint64 `json:"recv"`
+	Bandwidth    uint64 `json:"bandwidth"`
+	Transports   int    `json:"transports"`
+	LatencySumUS int64  `json:"-"`
+	LatencyN     int    `json:"-"`
+	// LatencyAvgMS is the average of the samples above, in milliseconds.
+	LatencyAvgMS int64 `json:"latency_avg_ms,omitempty"`
+}
+
+// VisorMetric pairs a visor with its aggregate, for the by-visor listing.
+type VisorMetric struct {
+	PK string         `json:"pk"`
+	BW VisorBandwidth `json:"bandwidth"`
+}
+
+// TransportInfo is one transport under a visor in the tree listing.
+type TransportInfo struct {
+	ID        string                  `json:"id"`
+	Type      string                  `json:"type"`
+	Remote    string                  `json:"remote"`
+	Sent      uint64                  `json:"sent"`
+	Recv      uint64                  `json:"recv"`
+	Bandwidth uint64                  `json:"bandwidth"`
+	Latency   *store.TransportLatency `json:"latency,omitempty"`
+}
+
+// VisorTree is a visor and the transports beneath it.
+type VisorTree struct {
+	Sent       uint64          `json:"sent"`
+	Recv       uint64          `json:"recv"`
+	Bandwidth  uint64          `json:"bandwidth"`
+	Transports []TransportInfo `json:"transports"`
+}
+
+// DiscEntry is one transport-discovery record from `tp disc`.
+type DiscEntry struct {
+	ID    uuid.UUID     `json:"id"`
+	Type  types.Type    `json:"type"`
+	Edge1 cipher.PubKey `json:"edge1"`
+	Edge2 cipher.PubKey `json:"edge2"`
+}
+
+// ID is the deterministic transport ID computed from two public keys by
+// `tp id`. A bare string in text mode; an object in JSON so the field has a
+// name a caller can select. It replaces the last use of the old
+// `{"output": …}` envelope, which forced consumers through jq '.output'.
+type ID struct {
+	ID string `json:"id"`
+}
+
+// Human prints the identifier alone, as before.
+func (i ID) Human(w io.Writer) error {
+	_, err := fmt.Fprintln(w, i.ID)
+	return err
+}
+
+// RouteAddr is the dot-joined route address `tp route-addr` builds.
+type RouteAddr struct {
+	Address string `json:"address"`
+	// Labels are the hops it was assembled from, which the joined form loses.
+	Labels []string `json:"labels,omitempty"`
+}
+
+// Human prints the address alone, as before.
+func (r RouteAddr) Human(w io.Writer) error {
+	_, err := fmt.Fprintln(w, r.Address)
+	return err
+}
+
+// EdgeDial is one attempt to reach a peer's transport edge.
+type EdgeDial struct {
+	PK   string `json:"pk"`
+	Type string `json:"type,omitempty"`
+	OK   bool   `json:"ok"`
+	Err  string `json:"error,omitempty"`
+}
+
+// EdgeConnect is the result of `tp add-edge`: who was tried and what happened.
+type EdgeConnect struct {
+	Target    string     `json:"target"`
+	Attempted int        `json:"attempted"`
+	Connected int        `json:"connected"`
+	Edges     []EdgeDial `json:"edges,omitempty"`
+	// Note explains an empty run — no transports, or no edges but self.
+	Note string `json:"note,omitempty"`
+}
+
+// Human writes the per-edge ticks and the summary the command printed.
+func (e EdgeConnect) Human(w io.Writer) error {
+	if e.Note != "" {
+		_, err := fmt.Fprintf(w, "%s\n", e.Note)
+		return err
+	}
+	for _, d := range e.Edges {
+		var err error
+		if d.OK {
+			_, err = fmt.Fprintf(w, "✓ %s (%s)\n", d.PK, d.Type)
+		} else {
+			_, err = fmt.Fprintf(w, "✗ %s: %s\n", d.PK, d.Err)
+		}
+		if err != nil {
+			return err
+		}
+	}
+	_, err := fmt.Fprintf(w, "\nConnected to %d/%d edges of %s\n", e.Connected, e.Attempted, e.Target)
+	return err
+}

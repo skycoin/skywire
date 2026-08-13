@@ -58,7 +58,7 @@ func TestHumanUsesTheValue(t *testing.T) {
 	}
 }
 
-// A value that cannot be marshalled must report it, not exit 0 with empty
+// A value that cannot be marshaled must report it, not exit 0 with empty
 // stdout as the old helper did.
 func TestMarshalErrorIsReturned(t *testing.T) {
 	var b bytes.Buffer

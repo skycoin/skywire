@@ -17,6 +17,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/cliroute"
 	"github.com/skycoin/skywire/pkg/router/policy"
 	policywasm "github.com/skycoin/skywire/pkg/router/policy/wasm"
 )
@@ -179,12 +181,13 @@ deploying a complex policy to confirm it stays inside the
 		avg := total / time.Duration(policyBenchIter)
 		p50 := percentile(samples, 50)
 		p99 := percentile(samples, 99)
-		fmt.Printf("script:  %s\n", policyScriptPath)
-		fmt.Printf("iters:   %d\n", policyBenchIter)
-		fmt.Printf("total:   %s\n", total)
-		fmt.Printf("avg:     %s\n", avg)
-		fmt.Printf("p50:     %s\n", p50)
-		fmt.Printf("p99:     %s\n", p99)
+		if err := cliout.Print(cmd, cliroute.PolicyBench{
+			Script: policyScriptPath, Iterations: policyBenchIter,
+			Total: total.String(), Average: avg.String(),
+			P50: p50.String(), P99: p99.String(),
+		}); err != nil {
+			return err
+		}
 		budget := 50 * time.Millisecond
 		if p99 > budget {
 			fmt.Fprintf(os.Stderr, "\nWARNING: p99 (%s) exceeds the 50ms per-dial budget.\n", p99)
