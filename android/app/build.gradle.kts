@@ -7,8 +7,9 @@ plugins {
 
 // Version comes from the release tag when there is one, and from the
 // fallbacks below otherwise, so a local `./gradlew assembleDebug` needs no
-// arguments. The release workflow derives both from `mobile-vX.Y.Z` — see
-// .github/workflows/android-release.yml.
+// arguments. The release workflow derives both from the `vX.Y.Z` tag (the same
+// tag that cuts every other release artifact) — see the `android` job in
+// .github/workflows/release.yml.
 val appVersionName = (project.findProperty("skywireVersionName") as String?) ?: "0.1.0"
 val appVersionCode = (project.findProperty("skywireVersionCode") as String?)?.toInt() ?: 1
 
@@ -70,8 +71,8 @@ android {
     // Bundle language splits deliver the device's language and nothing else,
     // so a phone set to English would install without the Chinese resources
     // and picking 简体中文 would silently give English back. The release
-    // workflow builds an APK today, which is exactly why this is set now: it
-    // is the line nobody would think of on the day a bundle target is added.
+    // workflow now builds the App Bundle (`make android-aab`) alongside the
+    // APK, so this split-config is what keeps every installed language present.
     bundle {
         language {
             enableSplit = false

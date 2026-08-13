@@ -2,15 +2,16 @@
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race wasm-visor tpviz-gl embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
-.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-apk-debug check-mobile-version
+.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
 .PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
-# --match 'v[0-9]*' pins this to the SKYWIRE release tags. The repo also carries
-# `mobile-vX.Y.Z` tags for APK releases (android-release.yml), and an annotated
-# one of those sitting on HEAD would otherwise become the version every binary
-# in the tree reports. --always still falls back to a bare hash when no release
-# tag is reachable.
+# --match 'v[0-9]*' pins this to the SKYWIRE release tags. Mobile artifacts are
+# now cut from the same `v*` tags as everything else (release.yml), but the repo
+# still carries HISTORICAL `mobile-vX.Y.Z` APK tags, and an annotated one of
+# those sitting on HEAD would otherwise become the version every binary in the
+# tree reports. --always still falls back to a bare hash when no release tag is
+# reachable.
 VERSION := $(shell git describe --always --match 'v[0-9]*')
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
@@ -212,15 +213,17 @@ ANDROID_MOBILE_MAX_BYTES := 83886080
 # on a checkout with no reachable tag `git describe --always` is a bare hash —
 # so fall back to a v0.0.0-<sha> pseudo-version.
 #
-# --match 'v[0-9]*' is what keeps this the VISOR's version rather than the APK's.
-# A phone release is cut by tagging `mobile-vX.Y.Z` on the same commit, and a
-# bare `git describe --tags` returns THAT tag: the release build then stamps
-# "mobile-v0.0.2" as the visor version, `config gen` writes it into the config's
-# `version` field, and every visor start dies in visorconfig.Parse with
-# `Invalid character(s) found in major number "mobile-v0"`. The APK's own
-# version comes from the tag separately (APK_VERSION), so the two never need to
-# share a source. The glob is 'v[0-9]*' and not 'v*' because 'v*' still matches
-# any future `vpn-v1.2.3`-style prefix tag.
+# --match 'v[0-9]*' keeps this a clean SKYWIRE version. Mobile releases are now
+# cut from the same `v*` tag as the rest of the release (release.yml), so on a
+# release build `git describe --tags --match 'v[0-9]*'` resolves to that `vX.Y.Z`
+# tag — exactly the version the visor should report. The guard is kept as
+# defense-in-depth: the repo still carries HISTORICAL `mobile-vX.Y.Z` APK tags,
+# and a bare `git describe --tags` that resolved to one of those would stamp
+# "mobile-v0.0.2" as the visor version — `config gen` writes it into the config's
+# `version` field and every visor start would then die in visorconfig.Parse with
+# `Invalid character(s) found in major number "mobile-v0"`. The APK's own version
+# is passed separately (APK_VERSION, derived from the `v*` tag). The glob is
+# 'v[0-9]*' and not 'v*' because 'v*' still matches any `vpn-v1.2.3`-style tag.
 MOBILE_VERSION := $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null || echo "v0.0.0-$(VERSION)")
 MOBILE_APPINFO := -X $(SKYWIRE_BUILDINFO_PATH).version=$(MOBILE_VERSION) -X $(SKYWIRE_BUILDINFO_PATH).commit=$(COMMIT) -X $(SKYWIRE_BUILDINFO_PATH).date=$(DATE)
 
@@ -287,6 +290,20 @@ android-apk: ## Build the Android APK (release; APK_VERSION=X.Y.Z to stamp it; s
 	else \
 		echo "ANDROID_KEYSTORE_FILE unset — building UNSIGNED (app-release-unsigned.apk)"; fi
 	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleRelease $(APK_GRADLE_ARGS)
+
+android-aab: ## Build the Android App Bundle (release .aab for Play; APK_VERSION=X.Y.Z to stamp it; signed when ANDROID_KEYSTORE_FILE/_PASSWORD + ANDROID_KEY_ALIAS/_PASSWORD are set, else unsigned) — run android-mobile-ndk first for a fresh Go payload
+	@if [ -n "$(APK_VERSION)" ] && [ -z "$(APK_VERSION_CODE)" ]; then \
+		echo "APK_VERSION='$(APK_VERSION)' is not X.Y.Z with minor/patch <= 99"; exit 1; fi
+	@if [ "$(APK_VERSION_CODE)" = "0" ]; then \
+		echo "APK_VERSION=0.0.0 derives versionCode 0, and Android requires a"; \
+		echo "positive integer — the lowest usable version is 0.0.1."; exit 1; fi
+	@if [ -n "$(APK_VERSION)" ]; then \
+		echo "version: $(APK_VERSION) (versionCode $(APK_VERSION_CODE))"; fi
+	@if [ -n "$$ANDROID_KEYSTORE_FILE" ]; then \
+		echo "signing with $$ANDROID_KEYSTORE_FILE"; \
+	else \
+		echo "ANDROID_KEYSTORE_FILE unset — building UNSIGNED App Bundle"; fi
+	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew bundleRelease $(APK_GRADLE_ARGS)
 
 android-apk-debug: ## Build + the debug-signed APK (installable via adb) — the dev loop's CLI twin of Android Studio Run
 	cd android && JAVA_HOME="$(ANDROID_JAVA_HOME)" ./gradlew assembleDebug
