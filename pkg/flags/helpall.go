@@ -88,6 +88,27 @@ Modes (mutually exclusive):
 	}
 	root.SetHelpCommand(helpCmd)
 	root.AddCommand(helpCmd)
+
+	// `<root> tree` prints the command hierarchy and nothing else — the same
+	// rendering as `help -t`, reachable as a verb because that is how people
+	// look for it. Hidden, since it duplicates a flag that is already
+	// documented; discoverability is not the point, muscle memory is.
+	//
+	// Installed here rather than on one root so every command group gets it
+	// at its own level: `skywire tree` shows everything, `skywire cli tree`
+	// shows the CLI subtree.
+	if prev := findChild(root, "tree"); prev != nil {
+		root.RemoveCommand(prev)
+	}
+	root.AddCommand(&cobra.Command{
+		Use:    "tree",
+		Short:  "print the subcommand tree",
+		Hidden: true,
+		Args:   cobra.NoArgs,
+		Run: func(cmd *cobra.Command, _ []string) {
+			PrintCommandTree(cmd.Parent())
+		},
+	})
 }
 
 // findChild returns the direct child of c matching name, or nil.
