@@ -41,17 +41,29 @@ mkdir -p ./scheck
 
 # --fail so an HTML error page is not mistaken for a tarball, and --retry
 # because a release download dying mid-transfer often fixes itself.
+# --fail so an HTML error page is not mistaken for a tarball, and --retry
+# because a release download dying mid-transfer often fixes itself.
+#
+# Everything AFTER curl can still fail without curl saying so, which is the
+# case this used to get wrong: a transfer that dies after the last retry
+# leaves a truncated file that tar unpacks partially, and the path inside the
+# archive is an assumption of its own. Both land here with curl having exited
+# 0, so the download branch has to verify it actually produced a shellcheck
+# rather than assume it. It did not, and the failure was `mv: cannot stat
+# ./scheck/shellcheck-stable/shellcheck` — after which the fallback below,
+# written precisely for a bad release download, was never reached.
 if curl --fail --location --retry 3 --retry-delay 2 --retry-all-errors \
-    -o shellcheck-stable.tar.xz "$url"
+    -o shellcheck-stable.tar.xz "$url" \
+    && tar -xf shellcheck-stable.tar.xz -C ./scheck \
+    && [ -x ./scheck/shellcheck-stable/shellcheck ]
 then
-    tar -xf shellcheck-stable.tar.xz -C ./scheck
     mv ./scheck/shellcheck-stable/shellcheck ./shellcheck
     echo "installed ./shellcheck from $url"
     ./shellcheck --version
 elif command -v shellcheck >/dev/null 2>&1; then
     # No ./shellcheck is written, which is exactly what lint-shell's
     # `command -v ./shellcheck || command -v shellcheck` falls back on.
-    echo "WARNING: could not download $url"
+    echo "WARNING: could not install shellcheck from $url"
     echo "WARNING: falling back to the shellcheck already on PATH:"
     shellcheck --version
     echo "WARNING: its findings may differ from the pinned release — see the"
