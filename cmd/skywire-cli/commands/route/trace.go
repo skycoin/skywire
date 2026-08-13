@@ -33,6 +33,8 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/cliroute"
 	"github.com/skycoin/skywire/pkg/rfclient"
 	"github.com/skycoin/skywire/pkg/routing"
 	"github.com/skycoin/skywire/pkg/visor"
@@ -146,18 +148,10 @@ Output:
 			results[i].RTT = rtt
 		}
 
-		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-		if jsonMode {
-			b, _ := json.MarshalIndent(struct { //nolint:errcheck
-				Src  string           `json:"src"`
-				Dst  string           `json:"dst"`
-				Hops []traceHopResult `json:"hops"`
-			}{
-				Src:  srcPK.String(),
-				Dst:  dstPK.String(),
-				Hops: results,
-			}, "", "  ")
-			fmt.Println(string(b))
+		if cliout.JSONMode(cmd) {
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, cliroute.Trace{
+				Src: srcPK.String(), Dst: dstPK.String(), Hops: results,
+			}))
 			return
 		}
 
@@ -184,13 +178,7 @@ Output:
 // traceHopResult is the per-hop record returned in --json output.
 // Exit-friendly: Error is empty on success and carries the failure
 // reason on failure.
-type traceHopResult struct {
-	Index         int           `json:"hop"`
-	PK            cipher.PubKey `json:"pk"`
-	RTT           time.Duration `json:"rtt_ns,omitempty"` // nanoseconds for scripting; the human path renders ms
-	IsDestination bool          `json:"destination"`
-	Error         string        `json:"error,omitempty"`
-}
+type traceHopResult = cliroute.TraceHop
 
 // fetchForwardRoute calls the route finder for src→dst, returning
 // the first forward path. Failure-exits the CLI on any error —
