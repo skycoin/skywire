@@ -36,7 +36,7 @@ func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (service
 	//create the http request
 	req, err := http.NewRequest(http.MethodGet, serviceConf, nil)
 	if err != nil {
-		mLog.WithError(err).Fatal("Failed to create http request\n")
+		mLog.WithError(err).Fatal("Failed to create http request")
 	}
 	req.Header.Add("Cache-Control", "no-cache")
 	//check for errors in the response
@@ -44,7 +44,7 @@ func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (service
 	if err != nil {
 		//silence errors for stdout
 		if !stdout {
-			mLog.WithError(err).Error("Failed to fetch servers\n")
+			mLog.WithError(err).Error("Failed to fetch servers")
 			mLog.Warn("Falling back on hardcoded servers")
 		}
 	} else {
@@ -54,12 +54,12 @@ func Fetch(mLog *logging.MasterLogger, serviceConf string, stdout bool) (service
 		}
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
-			mLog.WithError(err).Fatal("Failed to read response\n")
+			mLog.WithError(err).Fatal("Failed to read response")
 		}
 		//fill in services struct with the response
 		err = json.Unmarshal(body, &services)
 		if err != nil {
-			mLog.WithError(err).Fatal("Failed to unmarshal json response\n")
+			mLog.WithError(err).Fatal("Failed to unmarshal json response")
 		}
 		if !stdout {
 			mLog.Infof("Fetched service endpoints from '%s'", serviceConf)
