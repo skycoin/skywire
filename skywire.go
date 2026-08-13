@@ -5,11 +5,10 @@ skywire + skycoin
 package main
 
 import (
-	skycoin "github.com/skycoin/skycoin/cmd/skycoin-wallet/commands"
 	skycoinweb "github.com/skycoin/skycoin/cmd/skycoin-web/commands"
 
+	skycoin "github.com/skycoin/skywire/cmd/skycoin/commands"
 	"github.com/skycoin/skywire/cmd/skywire/commands"
-	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/flags"
 )
 
@@ -44,14 +43,12 @@ config-gen sets the default node list via SKYCOINWEBNODES.`
 
 func init() {
 	flags.InitFlags(commands.RootCmd, true)
+	// Use/Short/Version and the subcommand tree are set by the package itself
+	// (cmd/skycoin/commands), which assembles skycoin's commands on skywire's
+	// side rather than importing skycoin's own assembly.
 	commands.RootCmd.AddCommand(
 		skycoin.RootCmd,
 	)
-	skycoin.RootCmd.Use = "skycoin"
-	skycoin.RootCmd.Short = "skycoin daemon & cli"
-	if v := buildinfo.DepVersion("github.com/skycoin/skycoin"); v != "" {
-		skycoin.RootCmd.Version = v
-	}
 	// Augment the imported `skycoin web` help with skywire-mesh usage
 	// (resolving proxy via ENV + dmsg/skynet node URLs). Done here,
 	// after the fact of importing skycoin-web, so the vendored command
