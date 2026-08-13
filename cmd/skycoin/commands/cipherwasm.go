@@ -21,9 +21,24 @@ import (
 // binary entirely (see the package comment on root.go).
 //
 // Both halves come from the SAME variant. A TinyGo wasm needs TinyGo's loader
-// and a Go wasm needs Go's, and which variant is the default depends on how
-// skywire itself was compiled — a TinyGo build embeds only the TinyGo pair. So
-// this asks wasmbin for its default rather than naming one.
+// and a Go wasm needs Go's — so both are taken from one variant, never mixed.
+//
+// The TinyGo variant is preferred here, which is the opposite of what the visor
+// itself defaults to, because this route pays for the whole blob on page load
+// and uses only the cipher out of it:
+//
+//	wasm-visor, std Go     10.0 MB gzip
+//	wasm-visor, TinyGo      3.9 MB gzip
+//	skycoin-lite (was)      1.7 MB gzip
+//
+// `skywire skycoin web` runs the wallet against clearnet nodes with the visor
+// dormant, so serving the std-Go visor would make that page ~6x heavier than the
+// skycoin-lite it replaced for a cipher it does not otherwise use. TinyGo brings
+// that back to ~2x. It is still not free — see the note in the PR — but a
+// standard-Go skywire embeds BOTH pairs, so this costs nothing to prefer.
+//
+// Where the visor is actually running, the page loads the blob regardless and
+// the cipher genuinely is free; that path takes whatever variant it is serving.
 func registerCipherWasm() {
 	if !wasmbin.Embedded() {
 		// No wasm visor is embedded — a build made without the committed blobs.
@@ -32,7 +47,12 @@ func registerCipherWasm() {
 		return
 	}
 
+	// A TinyGo build of skywire embeds only the TinyGo pair; a standard-Go build
+	// embeds both. Falling back to the default covers the former.
 	v := wasmbin.Default()
+	if wasmbin.Has(wasmbin.TinyGo) {
+		v = wasmbin.TinyGo
+	}
 
 	gz, execJS := wasmbin.GetVariantGz(v), wasmbin.WasmExecJSVariant(v)
 	if len(gz) == 0 || len(execJS) == 0 {
