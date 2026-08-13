@@ -131,7 +131,13 @@ func telemetryAnnounceLoop(tpdPK cipher.PubKey) {
 		// half-dead transport); cap it so a stuck dial can't starve the next tick.
 		dctx, cancel := context.WithTimeout(ctx, telemetryAnnounceInterval/2)
 		defer cancel()
-		_ = telemetryPub.AnnounceTo(dctx, tpdPK) //nolint:errcheck // transient during boot/dmsg churn; retried next tick
+		// Feed failures into self-recovery (weaker signal than the uptime
+		// heartbeat, so we only report failures here, not successes). A single
+		// announce miss is transient and retried next tick; recovery only acts
+		// after recoveryFailThreshold consecutive reports.
+		if err := telemetryPub.AnnounceTo(dctx, tpdPK); err != nil {
+			reportDmsgFailure("telemetry announce failed")
+		}
 	}
 	announce()
 	for {
