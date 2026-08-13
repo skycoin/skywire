@@ -523,6 +523,164 @@ jobs:
             --repo ${{ github.repository }} \
             --clobber
 
+  # Android APK + AAB, signed and attached to the SAME `v*` release as every
+  # other artifact. This replaces the retired android-release.yml, which minted
+  # a separate `mobile-vX.Y.Z` tag/release; the version is now the `v*` tag.
+  android:
+    needs: create-release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          fetch-tags: true
+
+      # Publishing an unsigned APK/AAB would ship a file that cannot be
+      # installed (or, for the AAB, uploaded to Play). The debug-signed build is
+      # debuggable and must never reach users of an app that holds wallet seeds,
+      # so an unsigned build is the error here, not a fallback.
+      - name: Require signing secrets
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=""
+          [ -n "$KEYSTORE" ]   || missing="$missing ANDROID_KEYSTORE_BASE64"
+          [ -n "$STORE_PASS" ] || missing="$missing ANDROID_KEYSTORE_PASSWORD"
+          [ -n "$KEY_ALIAS" ]  || missing="$missing ANDROID_KEY_ALIAS"
+          [ -n "$KEY_PASS" ]   || missing="$missing ANDROID_KEY_PASSWORD"
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing"
+            echo ""
+            echo "Create the signing key ONCE and keep it forever — Android"
+            echo "refuses to upgrade an app signed with a different key, so"
+            echo "this key is what lets every future release reach the people"
+            echo "who installed this one. Back it up somewhere you will still"
+            echo "have in five years."
+            echo ""
+            echo "  keytool -genkeypair -v -keystore skywire-release.jks \\"
+            echo "    -alias skywire -keyalg RSA -keysize 4096 -validity 10000"
+            echo ""
+            echo "  gh secret set ANDROID_KEYSTORE_BASE64 < <(base64 -i skywire-release.jks)"
+            echo "  gh secret set ANDROID_KEYSTORE_PASSWORD"
+            echo "  gh secret set ANDROID_KEY_ALIAS       # 'skywire' above"
+            echo "  gh secret set ANDROID_KEY_PASSWORD"
+            exit 1
+          fi
+
+      # vX.Y.Z -> X.Y.Z. The Android versionCode is NOT computed here: `make
+      # android-apk`/`android-aab` derive it, so the tag and a local build
+      # cannot disagree. The shape is validated up front so a `v*` tag that
+      # cannot map to an Android version fails in seconds instead of after the
+      # payload build.
+      - name: Derive Android version from tag
+        id: version
+        run: |
+          raw="${GITHUB_REF_NAME#v}"
+          if ! printf '%s' "$raw" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag '${GITHUB_REF_NAME}' is not vX.Y.Z — cannot derive an Android version"
+            exit 1
+          fi
+          rest=${raw#*.}; minor=${rest%%.*}; patch=${rest#*.}
+          if [ "$minor" -gt 99 ] || [ "$patch" -gt 99 ]; then
+            echo "::error::minor/patch must be <= 99 to keep the Android versionCode monotonic"
+            exit 1
+          fi
+          if [ "$raw" = "0.0.0" ]; then
+            echo "::error::0.0.0 derives versionCode 0; Android requires a positive integer (lowest is 0.0.1)"
+            exit 1
+          fi
+          echo "name=$raw" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+          cache-dependency-path: go.sum
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The NDK lane, not the pure-Go one. cgo builds resolve DNS through
+      # bionic's getaddrinfo, which is the only path that honours the phone's
+      # actual resolver configuration — the pure-Go resolver is fine for CI and
+      # the emulator but is not what should ship.
+      # ANDROID_NDK_LATEST_HOME is set by the runner image, which means it is a
+      # shell variable and NOT in the `env` context — ${{ env.X }} would expand
+      # to empty and the Makefile would stop on its own guard.
+      - name: Build Go payload (NDK/cgo release lane)
+        run: |
+          test -n "$ANDROID_NDK_LATEST_HOME" || {
+            echo "::error::runner exposes no Android NDK"; exit 1; }
+          ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME" make android-mobile-ndk
+
+      - name: Decode keystore
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: printf '%s' "$KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      # Through make, so these are the same commands a maintainer runs locally.
+      # ANDROID_JAVA_HOME points at the runner's JDK instead of the Makefile's
+      # macOS default.
+      - name: Assemble signed release APK + AAB
+        env:
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          make android-apk android-aab \
+            APK_VERSION="${{ steps.version.outputs.name }}" \
+            ANDROID_JAVA_HOME="$JAVA_HOME"
+
+      # An unsigned artifact reaching this point would mean the signingConfig
+      # silently did not apply — catch it here rather than after someone
+      # downloads a file that will not install (APK) or upload (AAB).
+      - name: Verify signatures and stage assets
+        run: |
+          ref="${GITHUB_REF_NAME}"
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          aab=android/app/build/outputs/bundle/release/app-release.aab
+          test -f "$apk" || { echo "::error::$apk not found"; exit 1; }
+          test -f "$aab" || { echo "::error::$aab not found"; exit 1; }
+          # Newest build-tools present, rather than a pinned version that
+          # silently disappears the next time the runner image is rebuilt.
+          signer=$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -name apksigner \
+                     2>/dev/null | sort -V | tail -n1)
+          test -n "$signer" || { echo "::error::apksigner not found"; exit 1; }
+          "$signer" verify --print-certs "$apk" \
+            || { echo "::error::APK is not signed"; exit 1; }
+          # AABs carry a v1 (jar) signature, which apksigner does not read —
+          # jarsigner is the right verifier for the bundle.
+          jarsigner -verify "$aab" | grep -q 'jar verified' \
+            || { echo "::error::AAB is not signed"; exit 1; }
+          apk_out="skywire-${ref}-android-arm64.apk"
+          aab_out="skywire-${ref}-android-arm64.aab"
+          mv "$apk" "$apk_out"
+          mv "$aab" "$aab_out"
+          sha256sum "$apk_out" > "$apk_out.sha256"
+          sha256sum "$aab_out" > "$aab_out.sha256"
+
+      - name: Upload to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ref="${GITHUB_REF_NAME}"
+          gh release upload "$ref" \
+            "skywire-${ref}-android-arm64.apk" \
+            "skywire-${ref}-android-arm64.apk.sha256" \
+            "skywire-${ref}-android-arm64.aab" \
+            "skywire-${ref}-android-arm64.aab.sha256" \
+            --repo "${{ github.repository }}" \
+            --clobber
+
   docker:
     runs-on: ubuntu-latest
     steps:
