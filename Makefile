@@ -2,11 +2,16 @@
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
 .PHONY : build clean install format  bin build-race wasm-visor tpviz-gl embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
-.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-apk-debug
+.PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-apk-debug check-mobile-version
 .PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
 
-VERSION := $(shell git describe --always)
+# --match 'v[0-9]*' pins this to the SKYWIRE release tags. The repo also carries
+# `mobile-vX.Y.Z` tags for APK releases (android-release.yml), and an annotated
+# one of those sitting on HEAD would otherwise become the version every binary
+# in the tree reports. --always still falls back to a bare hash when no release
+# tag is reachable.
+VERSION := $(shell git describe --always --match 'v[0-9]*')
 RFC_3339 := "+%Y-%m-%dT%H:%M:%SZ"
 COMMIT := $(shell git rev-list -1 HEAD)
 
@@ -224,12 +229,34 @@ ANDROID_MOBILE_MAX_BYTES := 83886080
 # parse as semver (visorconfig.Parse semver-checks it and FATALs otherwise), and
 # on a checkout with no reachable tag `git describe --always` is a bare hash —
 # so fall back to a v0.0.0-<sha> pseudo-version.
-MOBILE_VERSION := $(shell git describe --tags 2>/dev/null || echo "v0.0.0-$(VERSION)")
+#
+# --match 'v[0-9]*' is what keeps this the VISOR's version rather than the APK's.
+# A phone release is cut by tagging `mobile-vX.Y.Z` on the same commit, and a
+# bare `git describe --tags` returns THAT tag: the release build then stamps
+# "mobile-v0.0.2" as the visor version, `config gen` writes it into the config's
+# `version` field, and every visor start dies in visorconfig.Parse with
+# `Invalid character(s) found in major number "mobile-v0"`. The APK's own
+# version comes from the tag separately (APK_VERSION), so the two never need to
+# share a source. The glob is 'v[0-9]*' and not 'v*' because 'v*' still matches
+# any future `vpn-v1.2.3`-style prefix tag.
+MOBILE_VERSION := $(shell git describe --tags --match 'v[0-9]*' 2>/dev/null || echo "v0.0.0-$(VERSION)")
 MOBILE_APPINFO := -X $(SKYWIRE_BUILDINFO_PATH).version=$(MOBILE_VERSION) -X $(SKYWIRE_BUILDINFO_PATH).commit=$(COMMIT) -X $(SKYWIRE_BUILDINFO_PATH).date=$(DATE)
-build-mobile: ## Build the skywire-mobile lite core for the HOST OS (desktop smoke of the mobile build variant)
+
+# A MOBILE_VERSION that isn't semver produces a binary whose only symptom is a
+# FATAL in the phone's log the first time a user starts the visor — after the
+# APK has shipped. Every mobile build target goes through this first so the
+# failure lands on the builder instead.
+check-mobile-version:
+	@printf '%s' '$(MOBILE_VERSION)' | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$$' || { \
+		echo "MOBILE_VERSION='$(MOBILE_VERSION)' is not a version the visor accepts."; \
+		echo "config gen writes it into the config's 'version' field, and visorconfig.Parse"; \
+		echo "semver-checks it — the visor would exit at 'Failed to read in config'."; \
+		exit 1; }
+
+build-mobile: check-mobile-version ## Build the skywire-mobile lite core for the HOST OS (desktop smoke of the mobile build variant)
 	${OPTS} go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO)" -mod=vendor -o $(BUILD_PATH)skywire-mobile ./cmd/skywire-mobile
 
-android-mobile: ## Build libskywire-mobile.so (android/arm64) into android jniLibs — pure-Go lane (CI/emulator); use android-mobile-ndk for release (bionic DNS)
+android-mobile: check-mobile-version ## Build libskywire-mobile.so (android/arm64) into android jniLibs — pure-Go lane (CI/emulator); use android-mobile-ndk for release (bionic DNS)
 	mkdir -p $(ANDROID_JNILIBS)
 	GOOS=android GOARCH=arm64 CGO_ENABLED=0 ${OPTS} go build -tags $(MOBILE_TAGS) "-ldflags=$(BUILDINFO) $(MOBILE_APPINFO) -w -s -checklinkname=0" -mod=vendor -o $(ANDROID_JNILIBS)/libskywire-mobile.so ./cmd/skywire-mobile
 	@ls -la $(ANDROID_JNILIBS)/libskywire-mobile.so
@@ -242,7 +269,7 @@ android-mobile-check: android-mobile ## CI lane: android-mobile + fail over the 
 		exit 1; \
 	fi
 
-android-mobile-ndk: ## Release lane: NDK/cgo android build (DNS via bionic getaddrinfo); requires ANDROID_NDK_HOME
+android-mobile-ndk: check-mobile-version ## Release lane: NDK/cgo android build (DNS via bionic getaddrinfo); requires ANDROID_NDK_HOME
 	@set -e; \
 	test -n "$(ANDROID_NDK_HOME)" || { echo "ANDROID_NDK_HOME is not set"; exit 1; }; \
 	CC_BIN=$$(ls $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/*/bin/aarch64-linux-android26-clang 2>/dev/null | head -n1); \
@@ -710,8 +737,10 @@ mac-installer: ## Create unsigned and not-notarized application, run make mac-in
 mac-installer-help: ## Show installer creation help
 	./scripts/mac_installer/create_installer.sh -h
 
+# --match 'v[0-9]*': the latest tag overall can be a `mobile-vX.Y.Z` APK release,
+# and this would then upload a macOS installer to the phone's release.
 mac-installer-release: mac-installer ## Upload created signed and notarized applciation to github
-	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags --match 'v[0-9]*'))
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-amd64.pkg
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-darwin-arm64.pkg
 
@@ -723,8 +752,10 @@ win-installer: ## Build the windows .msi (installer) custom version
 	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION) amd64'
 	@powershell '.\scripts\win_installer\script.ps1 $(CUSTOM_VERSION) 386'
 
+# --match 'v[0-9]*': as in mac-installer-release — never resolve to a
+# `mobile-vX.Y.Z` APK tag.
 windows-installer-release:
-	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags))
+	$(eval GITHUB_TAG=$(shell git describe --abbrev=0 --tags --match 'v[0-9]*'))
 	make win-installer CUSTOM_VERSION=$(GITHUB_TAG)
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-amd64.msi
 	gh release upload --repo skycoin/skywire ${GITHUB_TAG} ./skywire-installer-${GITHUB_TAG}-windows-386.msi
