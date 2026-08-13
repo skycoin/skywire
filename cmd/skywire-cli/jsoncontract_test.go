@@ -38,6 +38,9 @@ var streamingCommands = map[string]string{
 	"commands/visor/ping/mux_bandwidth_tui.go": "a live bandwidth TUI",
 	"commands/tp/tp-viz.go":                    "starts a visualizer HTTP server; it serves pages, it does not return a value",
 	"commands/visor/ping/tree.go":              "an interactive Bubble Tea TUI over a live BFS walk",
+	"commands/reward/rules.go":                 "prints the mainnet rules as markdown or rendered HTML — a document to read, not data",
+	"commands/rewards/services.go":             "emits shell script bodies meant to be piped into sh or redirected to a file",
+	"commands/rewards/calc.go":                 "writes its results to files; stdout is a human narrative of how the calculation went",
 	"commands/jq/jq.go":                        "it IS jq; the caller's filter decides the shape",
 	"commands/hv/shell.go":                     "drives a browser terminal over CDP; output is a live transcript",
 	"commands/hv/eval.go":                      "prints whatever the page's JS returned; the caller chose the shape",
@@ -67,14 +70,7 @@ var streamingCommands = map[string]string{
 // consulting --json and should be converted to a typed output in
 // pkg/cliout/<group>. The list only shrinks — report() fails on an entry
 // that no longer applies, so a fix must delete its line.
-var pendingJSON = map[string]string{
-	"commands/config/gen.go":       "TODO(cliout): needs a typed output",
-	"commands/proxy/mux_info.go":   "TODO(cliout): needs a typed output",
-	"commands/reward/rules.go":     "TODO(cliout): needs a typed output",
-	"commands/rewards/calc.go":     "TODO(cliout): needs a typed output",
-	"commands/rewards/services.go": "TODO(cliout): needs a typed output",
-	"commands/tp/tp-tree.go":       "TODO(cliout): needs a typed output",
-}
+var pendingJSON = map[string]string{}
 
 var localJSONFlags = map[string]string{}
 
