@@ -597,6 +597,11 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 		}
 	}()
 
+	// dmsg self-recovery: watch session health and force a reconnect if the tab
+	// wedges with no connected servers (see recovery_js.go). Signal-driven only —
+	// no periodic self-dial (that would scale fleet traffic with tab count).
+	go startRecoverySupervisor(ctx)
+
 	// 4. in-process app server (RunModeInternal). The browser-adapted
 	// appserver.NewProcManager no longer net.Listen("tcp")s under TinyGo (a
 	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP

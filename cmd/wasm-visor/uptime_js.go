@@ -39,8 +39,10 @@ func startUptimeHeartbeat(ctx context.Context, u tpdclient.UptimeUpdater, log *l
 		defer cancel()
 		if err := u.UpdateUptime(c, buildinfo.Version()); err != nil {
 			log.WithError(err).Warn("uptime heartbeat failed")
+			reportDmsgFailure("uptime heartbeat failed")
 		} else {
 			log.Debug("uptime heartbeat sent")
+			reportDmsgSuccess()
 		}
 	}
 
