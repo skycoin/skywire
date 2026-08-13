@@ -32,6 +32,7 @@ import (
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/transport"
 )
 
@@ -153,10 +154,8 @@ rather than failing the whole command.`,
 			Summary: "use `skywire cli sd --type <skysocks|vpn|visor>` to list a service type",
 		}
 
-		jsonMode, _ := cmd.Flags().GetBool(internal.JSONString) //nolint:errcheck
-		if jsonMode {
-			b, _ := json.MarshalIndent(report, "", "  ") //nolint:errcheck
-			fmt.Println(string(b))
+		if cliout.JSONMode(cmd) {
+			internal.Catch(cmd.Flags(), cliout.Print(cmd, report))
 			return
 		}
 
