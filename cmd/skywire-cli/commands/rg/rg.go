@@ -17,6 +17,7 @@ import (
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	"github.com/skycoin/skywire/cmd/skywire-cli/cliutil/livetui"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -47,6 +48,8 @@ var listCmd = &cobra.Command{
 	Use:   "ls",
 	Short: "List active route groups with app associations and live stats",
 	Run: func(cmd *cobra.Command, _ []string) {
+		// The persistent --json, not a second flag of our own.
+		statusJSON = cliout.JSONMode(cmd)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("unable to create RPC client: %w", err))
@@ -212,7 +215,6 @@ func renderRouteGroupListLive(rpcClient visor.API) (string, error) {
 }
 
 func init() {
-	listCmd.Flags().BoolVar(&statusJSON, "json", false, "output as JSON")
 	listCmd.Flags().StringVar(&statusFilter, "filter", "all",
 		"role filter: all | initiator | responder")
 	listCmd.Flags().BoolVar(&statusHops, "hops", false,

@@ -37,6 +37,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/visor/rpcgrpc"
 )
 
@@ -89,8 +90,6 @@ func init() {
 		"per-ping timeout (after route setup)")
 	pingTreeStreamCmd.Flags().DurationVar(&streamSetupTO, "setup-timeout", 30*time.Second,
 		"per-transport route-setup timeout")
-	pingTreeStreamCmd.Flags().BoolVar(&streamJSON, "json", false,
-		"emit NDJSON on stdout (default: human-readable rows + per-hop summary)")
 	pingTreeStreamCmd.Flags().BoolVarP(&streamQuiet, "quiet", "q", false,
 		"in human mode: suppress per-event rows and print only the final summary")
 	pingTreeStreamCmd.Flags().StringVarP(&streamOutFile, "output", "O", "",
@@ -153,7 +152,9 @@ The TUI variant is 'cli visor ping tree' for interactive use.`,
 // each event to (a) human rows on stdout, (b) NDJSON on stdout, and
 // (c) NDJSON to --output FILE — modes (a)/(b) are mutually exclusive
 // via --json; (c) is always-on when --output is set.
-func runPingTreeStream(_ *cobra.Command, _ []string) {
+func runPingTreeStream(cmd *cobra.Command, _ []string) {
+	// The persistent --json, not a second flag of our own.
+	streamJSON = cliout.JSONMode(cmd)
 	ctx, cancel := signalContext()
 	defer cancel()
 
