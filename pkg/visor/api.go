@@ -232,9 +232,6 @@ type API interface {
 
 	ReinitiateModule(module string) error
 
-	//uptime-tracker tools
-	FetchUptimeTrackerData(pk string) ([]byte, error)
-
 	//service discovery management (network monitor functionality)
 	DeregisterService(pks []cipher.PubKey, serviceType string) error
 

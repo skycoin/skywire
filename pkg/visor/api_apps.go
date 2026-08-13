@@ -925,23 +925,6 @@ func (v *Visor) GetAppConnectionsSummary(appName string) ([]appserver.Connection
 	return nil, ErrProcNotAvailable
 }
 
-// FetchUptimeTrackerData implements API
-func (v *Visor) FetchUptimeTrackerData(pk string) ([]byte, error) {
-	var body []byte
-	var pubkey cipher.PubKey
-
-	if pk != "" {
-		err := pubkey.Set(pk)
-		if err != nil {
-			return body, fmt.Errorf("invalid or missing public key")
-		}
-	}
-	if v.uptimeTracker == nil {
-		return body, fmt.Errorf("uptime tracker module not available")
-	}
-	return v.uptimeTracker.FetchUptimes(context.TODO(), pk)
-}
-
 // GetVPNClientAddress get PK address of server set on vpn-client
 func (v *Visor) GetVPNClientAddress() string {
 	for _, v := range v.conf.Launcher.Apps {

@@ -42,7 +42,6 @@ import (
 	"github.com/skycoin/skywire/pkg/transport/network/addrresolver"
 	"github.com/skycoin/skywire/pkg/transport/network/stcp"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
-	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/visor/dmsgtracker"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
 	"github.com/skycoin/skywire/pkg/visor/logstore"
@@ -105,7 +104,6 @@ type Visor struct {
 
 	startedAt       time.Time
 	startupComplete chan struct{}
-	uptimeTracker   utclient.APIClient
 
 	ebc                *appevent.Broadcaster // event broadcaster
 	dmsgC              *dmsg.Client
