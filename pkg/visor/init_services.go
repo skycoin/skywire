@@ -451,7 +451,6 @@ func initSkywireForwardConn(ctx context.Context, v *Visor, log *logging.Logger) 
 	if v.tpM != nil {
 		appDirectMux := transport.NewVStreamMux(v.tpM, routing.AppDirectPacket, log)
 		v.tpM.SetAppDirectHandler(appDirectMux.HandlePacket)
-		v.appDirectMux = appDirectMux
 		wireDirectDialPolicyHook(v, appDirectMux)
 		if n, err := appnet.ResolveNetworker(appnet.TypeSkynet); err == nil {
 			if sn, ok := n.(*appnet.SkywireNetworker); ok {

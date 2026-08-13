@@ -439,8 +439,10 @@ func initNodeHealth(ctx context.Context, v *Visor, log *logging.Logger) error {
 		WithField("rsn_count", len(rsnNodes)).
 		Info("Initializing node health tracker")
 
-	v.nodeHealthTracker = NewNodeHealthTracker(v.dmsgC, log)
-	v.nodeHealthTracker.Start(ctx, tpsNodes, rsnNodes)
+	v.nodeHealthTracker = NewNodeHealthTracker(v.dmsgC, log,
+		func() []cipher.PubKey { return v.conf.EffectiveTransportSetupPKs() },
+		func() []cipher.PubKey { return v.conf.EffectiveRouteSetupNodes() })
+	v.nodeHealthTracker.Start(ctx)
 
 	return nil
 }

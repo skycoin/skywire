@@ -144,12 +144,11 @@ func ptyPKAllowed(wl pty.Whitelist, remoteHost string) bool {
 
 // New creates a new API.
 //
-// The unused string parameter (formerly the per-day transport-log CSV
-// directory) is preserved for call-site compatibility — historical
-// bandwidth is now served from the bbolt stats store via
-// /stats/transports/history, and the /transport_logs/:file route has
-// been removed along with the on-disk CSV log store.
-func New(log *logging.Logger, _, localPath, _ string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool) *API {
+// The trailing unused string parameter is legacy: historical bandwidth is
+// now served from the bbolt stats store via /stats/transports/history, and
+// the on-disk CSV transport-log store (with its /transport_logs/:file route)
+// has been removed.
+func New(log *logging.Logger, localPath, _ string, whitelistedPKs []cipher.PubKey, survey *visorconfig.Survey, printLog bool) *API {
 	api := &API{
 		logger:    log,
 		startedAt: time.Now(),

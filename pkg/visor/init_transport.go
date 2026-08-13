@@ -957,7 +957,6 @@ func initPublicVisor(_ context.Context, v *Visor, log *logging.Logger) error { /
 func initEnsureVisorIsTransportable(ctx context.Context, v *Visor, log *logging.Logger) error {
 	const tickDuration = 5 * time.Minute
 	ticker := time.NewTicker(tickDuration)
-	_ = ctx // unused after removing AR check
 
 	// Perform transportability check logic - only DMSG is required
 	performCheck := func(tries int) int {

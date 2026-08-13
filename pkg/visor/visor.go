@@ -304,13 +304,6 @@ type Visor struct {
 	// Shared VStreamMux for skynet forwarding (route ID 0).
 	// Used by both the forwarding server (Accept) and the skynetweb dialer (Dial).
 	skynetFwdMux *transport.VStreamMux
-	// VStreamMux for direct skywire-network app dials (route ID 0,
-	// AppDirectPacket type). Lets skysocks-client / vpn-client and
-	// any other skywire-network apps reach their server-side
-	// counterparts over an existing direct transport without going
-	// through the setup-node-mediated route group machinery. Falls
-	// back to router.DialRoutes when no direct transport exists.
-	appDirectMux *transport.VStreamMux
 	// Shared VStreamMux for visor RPC over transport (VisorRPCPacket,
 	// route ID 0). Used by BOTH the TransportRPCServer's Accept loop
 	// AND by TransportRPCCall's outbound dial. Sharing one mux per
