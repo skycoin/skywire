@@ -35,6 +35,8 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
 )
 
 var (
@@ -172,6 +174,7 @@ Example:
 
 		// Add target legs that aren't present yet.
 		added, present := 0, 0
+		var addedTps []string
 		for tp, t := range want {
 			if _, ok := current[tp]; ok {
 				present++
@@ -182,10 +185,14 @@ Example:
 				continue
 			}
 			added++
-			fmt.Printf("+ added leg (first tp=%s)\n", tp)
+			addedTps = append(addedTps, fmt.Sprint(tp))
+			if !cliout.JSONMode(cmd) {
+				fmt.Printf("+ added leg (first tp=%s)\n", tp)
+			}
 		}
 
 		// Prune current legs absent from the target.
+		var removedTps []string
 		removed := 0
 		if muxSetPrune {
 			for tp := range current {
@@ -197,12 +204,18 @@ Example:
 					continue
 				}
 				removed++
-				fmt.Printf("- removed leg (tp=%s)\n", tp)
+				removedTps = append(removedTps, fmt.Sprint(tp))
+				if !cliout.JSONMode(cmd) {
+					fmt.Printf("- removed leg (tp=%s)\n", tp)
+				}
 			}
 		}
 
-		fmt.Printf("mux set app=%s: target=%d, +%d added, -%d removed, %d already present%s\n",
-			muxSetApp, len(want), added, removed, present, pruneNote(muxSetPrune))
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxSet{
+			App: muxSetApp, Target: len(want),
+			Added: addedTps, Removed: removedTps,
+			Existing: present, Note: pruneNote(muxSetPrune),
+		}))
 	},
 }
 

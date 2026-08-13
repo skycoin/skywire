@@ -69,8 +69,6 @@ var pendingJSON = map[string]string{
 	"commands/config/gen.go":           "TODO(cliout): needs a typed output",
 	"commands/proxy/mux_auto.go":       "TODO(cliout): needs a typed output",
 	"commands/proxy/mux_info.go":       "TODO(cliout): needs a typed output",
-	"commands/proxy/mux_ops.go":        "TODO(cliout): needs a typed output",
-	"commands/proxy/mux_set.go":        "TODO(cliout): needs a typed output",
 	"commands/resolver/ca.go":          "TODO(cliout): needs a typed output",
 	"commands/reward/rules.go":         "TODO(cliout): needs a typed output",
 	"commands/rewards/calc.go":         "TODO(cliout): needs a typed output",
