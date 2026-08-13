@@ -76,7 +76,6 @@ var pendingJSON = map[string]string{
 	"commands/rewards/calc.go":         "TODO(cliout): needs a typed output",
 	"commands/rewards/services.go":     "TODO(cliout): needs a typed output",
 	"commands/rewards/transports.go":   "TODO(cliout): needs a typed output",
-	"commands/rg/rg.go":                "TODO(cliout): needs a typed output",
 	"commands/route/minhops.go":        "TODO(cliout): needs a typed output",
 	"commands/route/policy.go":         "TODO(cliout): needs a typed output",
 	"commands/route/trace.go":          "TODO(cliout): needs a typed output",
@@ -92,17 +91,10 @@ var pendingJSON = map[string]string{
 	"commands/visor/goroutines.go":     "TODO(cliout): needs a typed output",
 	"commands/visor/ping/bandwidth.go": "TODO(cliout): needs a typed output",
 	"commands/visor/ping/tree.go":      "TODO(cliout): needs a typed output",
-	"commands/visor/reward.go":         "TODO(cliout): needs a typed output",
 	"commands/visor/whois.go":          "TODO(cliout): needs a typed output",
 }
 
-var localJSONFlags = map[string]string{
-	"commands/rg/rg.go":                    "TODO(cliout): delete the local flag; read the inherited one",
-	"commands/serve/serve.go":              "TODO(cliout): delete the local flag; read the inherited one",
-	"commands/visor/ping/mux_bandwidth.go": "TODO(cliout): delete the local flag; read the inherited one",
-	"commands/visor/ping/tree_stream.go":   "TODO(cliout): delete the local flag; read the inherited one",
-	"commands/visor/reward.go":             "TODO(cliout): delete the local flag; read the inherited one",
-}
+var localJSONFlags = map[string]string{}
 
 // funcLocalShapes are output structs declared inside a function body. They
 // cannot be imported, so every other consumer — the e2e suite above all —

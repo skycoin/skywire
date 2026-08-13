@@ -11,6 +11,7 @@ import (
 
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
 	"github.com/skycoin/skywire/deployment"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/visor"
 )
 
@@ -18,7 +19,6 @@ func init() {
 	rewardCmd.Flags().IntVarP(&rewardDays, "days", "d", 7, "number of days of history")
 	rewardCmd.Flags().StringVarP(&rewardPK, "pk", "k", "", "visor public key (default: local visor)")
 	rewardCmd.Flags().BoolVarP(&rewardAll, "all", "a", false, "show rewards for all visors connected to the hypervisor")
-	rewardCmd.Flags().BoolVarP(&rewardJSON, "json", "j", false, "output as JSON")
 	RootCmd.AddCommand(rewardCmd)
 }
 
@@ -34,6 +34,10 @@ var rewardCmd = &cobra.Command{
 	Short: "Show reward history for a visor",
 	Long:  "Fetches reward history from the reward system via the visor's DMSG connection.",
 	Run: func(cmd *cobra.Command, args []string) {
+		// The persistent --json from RootCmd, not a second flag of our own:
+		// two variables for one concept meant the answer depended on where
+		// the user put the word.
+		rewardJSON = cliout.JSONMode(cmd)
 		rpcClient, err := clirpc.Client(cmd.Flags())
 		if err != nil {
 			logger.Fatal("RPC connection failed: ", err)
