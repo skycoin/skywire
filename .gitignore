@@ -160,6 +160,12 @@ android/app/src/main/jniLibs/
 # 11MB ELF (cmd/hvinspect/hvinspect) and a stale 11MB wasm (pkg/tpviz/wasm)
 # were committed. Only artifacts something actually embeds belong in the tree:
 # pkg/wasmhv/wasmbin/*, pkg/tpviz/dist/*, pkg/tpviz/legacy/*, pkg/geoip/*.
-/cmd/*/[a-z]*[!.]
-!/cmd/*/*.go
+#
+# Named, not matched by shape. The general form of this rule cannot be written
+# safely: gitignore has no way to say "a file, not a directory", so any pattern
+# broad enough to catch an extensionless binary also catches directories like
+# cmd/skywire-cli/commands — and once a directory is excluded, nothing under it
+# can be re-included, so new source files would silently fail to be added. That
+# was the first version of this rule, and it was wrong.
+/cmd/hvinspect/hvinspect
 /pkg/tpviz/wasm/*.wasm
