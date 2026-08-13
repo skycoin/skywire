@@ -32,8 +32,10 @@ type LogEntry struct {
 func MakeLogEntry(ls LogStore, tpID uuid.UUID, log *logging.Logger) *LogEntry {
 	oldLogEntry, err := ls.Entry(tpID)
 	if err != nil {
-		log.Warn(err)
-		log.Warn(fmt.Errorf("new log entry will create for transport %s", tpID.String()))
+		// A miss is the normal first-touch case (the store is in-memory, so
+		// every transport starts without prior byte counters); it is not a
+		// warning. Fresh counters are created below.
+		log.WithField("transport", tpID.String()).Debug("no prior transport log entry; starting fresh")
 	}
 	newEntry := NewLogEntry()
 	if oldLogEntry != nil {
