@@ -26,6 +26,7 @@ import (
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
+	store "github.com/skycoin/skywire/pkg/transport-discovery/store"
 	types "github.com/skycoin/skywire/pkg/transport/types"
 )
 
@@ -66,3 +67,63 @@ type Transport struct {
 // array, never an object wrapping one. The e2e suite unmarshals into a slice
 // and indexes it.
 type Transports []Transport
+
+// Metric is one transport in `tp metrics`: its byte counters and, when the
+// store has one, its latency sample.
+type Metric struct {
+	ID        string                  `json:"id"`
+	Type      string                  `json:"type"`
+	EdgeA     string                  `json:"edge_a"`
+	EdgeB     string                  `json:"edge_b"`
+	Sent      uint64                  `json:"sent"`
+	Recv      uint64                  `json:"recv"`
+	Bandwidth uint64                  `json:"bandwidth"`
+	Latency   *store.TransportLatency `json:"latency,omitempty"`
+}
+
+// VisorBandwidth aggregates one visor's transports. The latency accumulators
+// are json:"-" because they are the means of computing the average, not part
+// of the answer.
+type VisorBandwidth struct {
+	Sent         uint64 `json:"sent"`
+	Recv         uint64 `json:"recv"`
+	Bandwidth    uint64 `json:"bandwidth"`
+	Transports   int    `json:"transports"`
+	LatencySumUS int64  `json:"-"`
+	LatencyN     int    `json:"-"`
+	// LatencyAvgMS is the average of the samples above, in milliseconds.
+	LatencyAvgMS int64 `json:"latency_avg_ms,omitempty"`
+}
+
+// VisorMetric pairs a visor with its aggregate, for the by-visor listing.
+type VisorMetric struct {
+	PK string         `json:"pk"`
+	BW VisorBandwidth `json:"bandwidth"`
+}
+
+// TransportInfo is one transport under a visor in the tree listing.
+type TransportInfo struct {
+	ID        string                  `json:"id"`
+	Type      string                  `json:"type"`
+	Remote    string                  `json:"remote"`
+	Sent      uint64                  `json:"sent"`
+	Recv      uint64                  `json:"recv"`
+	Bandwidth uint64                  `json:"bandwidth"`
+	Latency   *store.TransportLatency `json:"latency,omitempty"`
+}
+
+// VisorTree is a visor and the transports beneath it.
+type VisorTree struct {
+	Sent       uint64          `json:"sent"`
+	Recv       uint64          `json:"recv"`
+	Bandwidth  uint64          `json:"bandwidth"`
+	Transports []TransportInfo `json:"transports"`
+}
+
+// DiscEntry is one transport-discovery record from `tp disc`.
+type DiscEntry struct {
+	ID    uuid.UUID     `json:"id"`
+	Type  types.Type    `json:"type"`
+	Edge1 cipher.PubKey `json:"edge1"`
+	Edge2 cipher.PubKey `json:"edge2"`
+}
