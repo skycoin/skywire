@@ -4,6 +4,11 @@
 // by the cmd/dmsg-wasm harness and by `cli hv serve --harness`. Debug aid for
 // the serverless-UI harness; NOT part of the shipped standalone.
 (function () {
+  // This file is served ONLY when the control surface is mounted, so its
+  // presence IS the harness. Say so explicitly rather than leaving the UI to
+  // infer it from a side effect like __skylog, which the visor also probes for.
+  window.__SKYWIRE_HARNESS__ = true;
+
   var tabId = sessionStorage.getItem('ctlTabId');
   if (!tabId) { tabId = 'hv-' + Math.random().toString(36).slice(2, 8); sessionStorage.setItem('ctlTabId', tabId); }
   var post = function (path, body) {
