@@ -116,23 +116,42 @@ func (env *TestEnv) VisorAppLs(visor string) ([]AppState, error) {
 	return apps, nil
 }
 
-// VerifyAppRunning checks if an app is running and fails the test if not.
+// VerifyAppRunning waits for an app to reach "running" and fails the test if it
+// does not get there within waitForVisorApp's bounded budget.
+//
+// Starting an app is asynchronous. `visor app start` and `cli proxy start`
+// return once the launcher has spawned the process, but the launcher only
+// promotes an app out of "starting" once its proc reports a connection summary
+// or a "Running" detailed status — that is, after the app has dialed its server
+// and the route is up (see AppLauncher.AppState in pkg/app/launcher). An app
+// that reconnects (skysocks-client runs with --reconnect) also drops back to
+// "starting" for the duration of each dial-retry loop.
+//
+// Sampling the status once and asserting it equals "running" therefore races the
+// app and loses intermittently — most visibly for skysocks-client over a
+// multi-hop route, where the extra route-finder query and rule install widen the
+// window. Poll instead, reusing the same bounded wait the rest of this package
+// uses, and still fail if the app never gets there.
+//
 // For apps with HTTP endpoints (like skychat), it also verifies the endpoint is ready.
 func (env *TestEnv) VerifyAppRunning(t *testing.T, visor, appName string) {
-	apps, err := env.VisorAppLs(visor)
-	require.NoError(t, err, "Failed to list apps on %s", visor)
+	t.Helper()
 
-	found := false
-	for _, app := range apps {
-		if app.App == appName {
-			require.Equal(t, "running", app.Status, "App %s on %s is not running (status: %s)", appName, visor, app.Status)
-			found = true
-			break
+	if err := env.waitForVisorApp(AppToRun{VisorHostName: visor, AppName: appName}); err != nil {
+		// Re-read the app list so the failure reports the app's actual final
+		// state rather than only that the wait elapsed.
+		apps, lsErr := env.VisorAppLs(visor)
+		if lsErr != nil {
+			t.Fatalf("App %s on %s never reached running: %v (follow-up app ls on %s also failed: %v)",
+				appName, visor, err, visor, lsErr)
 		}
-	}
-
-	if !found {
-		t.Fatalf("App %s not found on %s", appName, visor)
+		for _, app := range apps {
+			if app.App == appName {
+				t.Fatalf("App %s on %s is not running (status: %s, detailed status: %s): %v",
+					appName, visor, app.Status, app.DetailedStatus, err)
+			}
+		}
+		t.Fatalf("App %s not found on %s: %v", appName, visor, err)
 	}
 
 	// For skychat, verify the HTTP endpoint is actually ready to accept connections
