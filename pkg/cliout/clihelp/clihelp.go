@@ -13,6 +13,8 @@
 package clihelp
 
 import (
+	"fmt"
+	"io"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -111,3 +113,60 @@ func flagsOf(set *pflag.FlagSet) []Flag {
 // method here would be a second layout to keep in step with the first, and a
 // no-op one would silently print nothing. The help function branches instead:
 // JSON from this schema, text from cobra's own help.
+
+// Node is the command tree with the help text stripped out: what `tree`
+// shows, in the shape a program would want it.
+//
+// Deliberately not Command. `tree` exists to show STRUCTURE — it is
+// `help -t`, help with the text removed — so its JSON carries names and
+// nesting and nothing else. Emitting the full Command schema here would make
+// `tree --json` a duplicate of `--help --json`, and the two commands would
+// stop meaning different things.
+type Node struct {
+	Name string `json:"name"`
+	// Path is how the command is typed, e.g. "skywire cli visor info".
+	Path string `json:"path"`
+	// Runnable separates a command that does something from a group that only
+	// holds others — the distinction the ASCII rendering cannot show.
+	Runnable bool   `json:"runnable"`
+	Children []Node `json:"children,omitempty"`
+}
+
+// TreeOf builds the structural tree rooted at cmd, following the same
+// visibility rule as the ASCII rendering: available commands only, so the two
+// forms describe the same thing.
+func TreeOf(cmd *cobra.Command) Node {
+	n := Node{Name: cmd.Name(), Path: cmd.CommandPath(), Runnable: cmd.Runnable()}
+	for _, child := range cmd.Commands() {
+		if !child.IsAvailableCommand() {
+			continue
+		}
+		n.Children = append(n.Children, TreeOf(child))
+	}
+	return n
+}
+
+// Human writes the ASCII tree, so `tree` and `tree --json` are one value in
+// two renderings rather than two code paths that can disagree.
+func (n Node) Human(w io.Writer) error {
+	if _, err := fmt.Fprintln(w, n.Name); err != nil {
+		return err
+	}
+	return n.writeChildren(w, "")
+}
+
+func (n Node) writeChildren(w io.Writer, prefix string) error {
+	for i, c := range n.Children {
+		branch, next := "├── ", prefix+"│   "
+		if i == len(n.Children)-1 {
+			branch, next = "└── ", prefix+"    "
+		}
+		if _, err := fmt.Fprintf(w, "%s%s%s\n", prefix, branch, c.Name); err != nil {
+			return err
+		}
+		if err := c.writeChildren(w, next); err != nil {
+			return err
+		}
+	}
+	return nil
+}

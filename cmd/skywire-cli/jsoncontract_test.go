@@ -26,7 +26,11 @@ import (
 	"testing"
 )
 
-const commandsDir = "commands"
+// scanDirs are the trees searched for commands. pkg/flags is here because
+// commands can be defined outside cmd/skywire-cli/commands and were invisible
+// to these checks when they were: `tree` was added there and shipped ignoring
+// --json, which is exactly what this file exists to prevent.
+var scanDirs = []string{"commands", "../../pkg/flags"}
 
 // streamingCommands print continuously, interactively, or as a byte stream, so
 // there is no single document for --json to shape. Anything added here needs a
@@ -202,7 +206,14 @@ func TestEveryPrintingCommandHonoursJSON(t *testing.T) {
 func forEachFile(t *testing.T, fn func(path string, file *ast.File, fset *token.FileSet)) {
 	t.Helper()
 	fset := token.NewFileSet()
-	err := filepath.Walk(commandsDir, func(path string, info os.FileInfo, err error) error {
+	for _, dir := range scanDirs {
+		walkOne(t, dir, fn, fset)
+	}
+}
+
+func walkOne(t *testing.T, dir string, fn func(path string, file *ast.File, fset *token.FileSet), fset *token.FileSet) {
+	t.Helper()
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -217,7 +228,7 @@ func forEachFile(t *testing.T, fn func(path string, file *ast.File, fset *token.
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("walking %s: %v", commandsDir, err)
+		t.Fatalf("walking %s: %v", dir, err)
 	}
 }
 
