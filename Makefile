@@ -103,17 +103,19 @@ INFO?=$(VERSION) $(DATE) $(COMMIT) $(BUILDTAG)
 # built from, so WASM_VERSION uses --dirty: a blob built from an uncommitted
 # tree says so, in a string TestCommittedWasmBuiltFromCommit can find.
 #
-# It has to come from here rather than from Go. Go's own vcs.revision/
-# vcs.modified — which the equivalent skycoin check reads — is not available:
-# GOOS=js does not emit a readable buildinfo blob at all (no "Go buildinf"
-# magic, and `go version -m` cannot parse wasm). The 0magnet/tinygo build DOES
-# record it, so the test reads both signals and requires Go's stamp only of the
-# TinyGo artifact, which is the only one that has it.
+# It is stamped here as well as by Go, not instead of it. `go version -m` cannot
+# parse wasm, but that is a limitation of that command rather than of the
+# format: Go writes vcs.revision/vcs.modified into a GOOS=js binary as plain
+# text, and skycoin reads them straight out of its own js/wasm cipher in
+# ci-scripts/check-wasm-version.js. The committed std-Go blob here carries none
+# only because it was built while this file still passed -buildvcs=false; once
+# it is regenerated it will, and the test can require it of both artifacts
+# rather than of the TinyGo one alone.
 #
 # -buildvcs=false was previously passed on the std-Go build to keep a "+dirty"
-# suffix out of the version of a blob built from an uncommitted tree. It is gone
-# — suppressing the marker removed the evidence rather than the problem — though
-# on js/wasm it never had an observable effect either way.
+# suffix out of the version of a blob built from an uncommitted tree. It is gone:
+# suppressing the marker removed the evidence rather than the problem, and it
+# also removed the vcs records the test would otherwise be able to require.
 # The repo's OWN pkg/buildinfo (vs skywire-utilities' above). Despite the
 # historical WASM_ prefix there is nothing wasm about the path — the wasm-visor
 # was simply the first target that needed to stamp it. The skywire-mobile

@@ -1070,8 +1070,10 @@ github.com/skycoin/skycoin/src/kvstorage
 github.com/skycoin/skycoin/src/params
 github.com/skycoin/skycoin/src/readable
 github.com/skycoin/skycoin/src/skycoin
+github.com/skycoin/skycoin/src/skycoin-lite/liteclient
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-go
 github.com/skycoin/skycoin/src/skycoin-lite/wasm-tinygo
+github.com/skycoin/skycoin/src/skycoin-lite/wasmcipher
 github.com/skycoin/skycoin/src/skycoin-lite/wasmgz
 github.com/skycoin/skycoin/src/skycoin-web/src/gui
 github.com/skycoin/skycoin/src/skydex/chain
