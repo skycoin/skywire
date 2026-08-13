@@ -118,7 +118,7 @@ func TestPorterReserveEphemeralExhausted(t *testing.T) {
 
 func TestPorterResetEphemeral(t *testing.T) {
 	p := NewPorter(PorterMinEphemeral)
-	p.Reserve(80, "listener") //nolint:errcheck — well-known, must survive
+	p.Reserve(80, "listener") //nolint:errcheck // well-known port, must survive
 	for range 3 {
 		_, _, err := p.ReserveEphemeral(context.Background(), "v")
 		require.NoError(t, err)
@@ -181,7 +181,7 @@ func TestPorterCloseAll(t *testing.T) {
 	p := NewPorter(PorterMinEphemeral)
 	fc := &fakeCloser{}
 	p.Reserve(95, fc)   //nolint:errcheck
-	p.Reserve(96, "no") //nolint:errcheck — not a Closer, skipped
+	p.Reserve(96, "no") //nolint:errcheck // not a Closer, nothing to check
 
 	p.CloseAll(nil) // nil logger → uses a default internally
 	assert.True(t, fc.closed.Load())

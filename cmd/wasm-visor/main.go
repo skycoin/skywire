@@ -859,6 +859,14 @@ func (visorSelf) SelfPK() cipher.PubKey { return selfPK }
 
 func (s visorSelf) SelfOverview() wasmhv.Overview {
 	ov := wasmhv.Overview{PubKey: selfPK, BuildInfo: buildinfo.Get()}
+	// The wasm blob takes no version ldflags, so buildinfo.Get() composes an
+	// "unknown-<commit>" version string. Report the commit-derived version
+	// (from debug.BuildInfo's vcs.revision) so the node header shows a clean
+	// "dev-<commit>" and stays consistent with ConfigVersion (version ==
+	// config_version → the HV UI treats us as up-to-date).
+	if ov.BuildInfo != nil {
+		ov.BuildInfo.Version = buildinfo.VersionOrCommit()
+	}
 	if rtr != nil {
 		ov.RoutesCount = rtr.RoutesCount()
 	}
@@ -1110,7 +1118,7 @@ func (s visorSelf) SelfSummary() wasmhv.Summary {
 		// "config version" — its config IS its build. Report the build version so
 		// the HV UI shows it (and treats version == config_version as up-to-date)
 		// instead of rendering "Unknown".
-		ConfigVersion: buildinfo.Version(),
+		ConfigVersion: buildinfo.VersionOrCommit(),
 		BuildTag:      "wasm",
 		Online:        true,
 		IsHypervisor:  true,

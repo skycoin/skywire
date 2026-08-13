@@ -35,7 +35,7 @@ import (
 // stcpTpView is the CLI transport view. It is the CLI's own output type,
 // imported rather than restated: this file used to declare a private copy of
 // the field names, which the compiler never compared against what the CLI
-// actually emits — so a renamed field would have unmarshalled to zero here and
+// actually emits — so a renamed field would have unmarshaled to zero here and
 // asserted on it, instead of failing to build. The RPC TransportSummary is not
 // usable for this: it nests the byte counters under an omitted "log", while the
 // CLI emits them at the top level, which is precisely what these tests read.

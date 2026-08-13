@@ -30,10 +30,13 @@ var committedBlobs = []committedBlob{
 	{path: filepath.Join("wasmtinygo", "wasm-visor.wasm.gz"), goStamped: true},
 }
 
-// dirtyVersion matches the version stamped by the Makefile when the tree had
-// uncommitted changes: `git describe --always --dirty` appends -dirty after the
-// commit it describes. Anchoring on the hex keeps a stray "-dirty" elsewhere in
-// tens of megabytes of binary from failing the build.
+// dirtyVersion is a legacy guard. The Makefile no longer stamps a version via
+// ldflags (the wasm-visor self-describes from Go's own vcs records instead), so
+// current builds never emit this string; it stays only to reject an artifact
+// built the old way — `git describe --always --dirty` appended -dirty after the
+// commit it described. Anchoring on the hex keeps a stray "-dirty" elsewhere in
+// tens of megabytes of binary from failing the build. The load-bearing signal
+// is now goDirty / goRevision below.
 var dirtyVersion = regexp.MustCompile(`[0-9a-f]{7,}-dirty`)
 
 // goDirty is Go's own marker, recorded by the TinyGo toolchain.
@@ -55,20 +58,17 @@ var goRevision = regexp.MustCompile(`vcs\.revision=[0-9a-f]{40}`)
 // including whoever built it — can reproduce it or say what is in it. That is
 // the state this rejects.
 //
-// Two different signals, because the toolchains differ:
-//
-//   - the Makefile stamps WASM_VERSION from `git describe --always --dirty`,
-//     which both builds carry. This is the load-bearing one.
-//   - Go's own vcs.revision/vcs.modified, which the equivalent check in skycoin
-//     reads. `go version -m` cannot parse wasm, but that is a limitation of
-//     that command, not of the format: the records themselves are written into
-//     a GOOS=js binary as plain text and can be read straight out of it, which
-//     is exactly what skycoin's ci-scripts/check-wasm-version.js does to its
-//     own js/wasm cipher. The std-Go blob here carries none only because it was
-//     built while the Makefile still passed -buildvcs=false; the TinyGo one,
-//     built without it, carries them. Note that a bare "vcs.revision" string
-//     DOES appear in any binary linking runtime/debug, which is why the pattern
-//     here requires the value too.
+// The load-bearing signal is Go's own vcs.revision/vcs.modified, which the
+// equivalent check in skycoin reads. `go version -m` cannot parse wasm, but that
+// is a limitation of that command, not of the format: the records themselves are
+// written into a GOOS=js binary as plain text and can be read straight out of
+// it, which is exactly what skycoin's ci-scripts/check-wasm-version.js does to
+// its own js/wasm cipher. The std-Go blob here carries none only because it was
+// built while the Makefile still passed -buildvcs=false; the TinyGo one, built
+// without it, carries them. Note that a bare "vcs.revision" string DOES appear
+// in any binary linking runtime/debug, which is why the pattern here requires
+// the value too. (The legacy ldflags-stamped WASM_VERSION check, dirtyVersion,
+// still runs but no current build emits it — see its comment above.)
 //
 // The revision is not checked against HEAD. Committing an artifact necessarily
 // moves HEAD past the commit it was built at, so requiring equality would fail

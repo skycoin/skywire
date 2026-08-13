@@ -42,6 +42,8 @@ import (
 
 	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clirpc "github.com/skycoin/skywire/cmd/skywire-cli/commands/rpc"
+	"github.com/skycoin/skywire/pkg/cliout"
+	"github.com/skycoin/skywire/pkg/cliout/cliproxy"
 	"github.com/skycoin/skywire/pkg/routing"
 )
 
@@ -146,8 +148,10 @@ Example:
 		if err := rpcClient.AddMuxRoute(muxOpsApp, pair.Forward, pair.Reverse, muxOpsSrcPort); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("AddMuxRoute: %w", err))
 		}
-		fmt.Printf("added mux leg (%d-hop, first tp=%s) on app=%s\n",
-			len(pair.Forward), pair.Forward[0].TpID, muxOpsApp)
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "add", App: muxOpsApp, Hops: len(pair.Forward),
+			TransportID: fmt.Sprint(pair.Forward[0].TpID),
+		}))
 	},
 }
 
@@ -184,7 +188,9 @@ Example:
 		if err := rpcClient.RemoveMuxRoute(muxOpsApp, tpID, muxOpsSrcPort); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("RemoveMuxRoute: %w", err))
 		}
-		fmt.Printf("removed mux leg via transport %s on app=%s\n", tpID, muxOpsApp)
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "remove", App: muxOpsApp, TransportID: fmt.Sprint(tpID),
+		}))
 	},
 }
 
@@ -223,6 +229,8 @@ Example:
 		if err := rpcClient.SetMuxMode(mode); err != nil {
 			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("SetMuxMode: %w", err))
 		}
-		fmt.Printf("mux mode set to %s\n", mode)
+		internal.Catch(cmd.Flags(), cliout.Print(cmd, cliproxy.MuxOp{
+			Op: "mode", App: muxOpsApp, Mode: mode,
+		}))
 	},
 }
