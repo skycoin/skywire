@@ -574,7 +574,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		}
 	}
 
-	lsAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, "", whitelistedPKs, &v.survey.data, printLog)
+	lsAPI := logserver.New(logger, v.conf.LocalPath, "", whitelistedPKs, &v.survey.data, printLog)
 
 	// Set visor as health stats provider for /health endpoint
 	lsAPI.SetHealthStatsProvider(v)
@@ -716,7 +716,7 @@ func initDmsgHTTPLogServer(ctx context.Context, v *Visor, _ *logging.Logger) err
 		logger.WithField("local_addr", localAddr).Info("Starting localhost log server")
 
 		// Create a separate API without whitelist authentication for localhost
-		localAPI := logserver.New(logger, v.conf.Transport.LogStore.Location, v.conf.LocalPath, "", nil, &v.survey.data, printLog)
+		localAPI := logserver.New(logger, v.conf.LocalPath, "", nil, &v.survey.data, printLog)
 
 		// Set visor as health stats provider for /health endpoint
 		localAPI.SetHealthStatsProvider(v)
@@ -1294,9 +1294,3 @@ func buildPtyAppFunc(v *Visor, host *pty.Host, dmsgPort uint16, sshAddr string) 
 		return nil
 	}
 }
-
-// Ensure the launcher package is referenced. The RegisterApp call
-// in initDmsgpty's body uses launcher.RegisterApp; this nolint hint
-// keeps tooling that scans for unused imports happy in case the
-// init path is conditionally compiled out somewhere.
-var _ = launcher.RegisterApp

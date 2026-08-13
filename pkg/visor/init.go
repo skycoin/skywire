@@ -154,8 +154,6 @@ var (
 	regCXOMod vinit.Module
 	// visor that groups all modules together
 	vis vinit.Module
-	// config initialization
-//	visorConfig vinit.Module
 )
 
 // register all modules: instantiate modules with correct names and dependencies, wrap init
@@ -166,7 +164,6 @@ func registerModules(logger *logging.MasterLogger) {
 	maker := func(name string, f initFn, deps ...*vinit.Module) vinit.Module {
 		return vinit.MakeModule(name, withInitCtx(f), logger, deps...)
 	}
-	//	visorConfig = maker("visor_config", initVisorConfig)
 	dmsgHTTP = maker("dmsg_http", initDmsgHTTP)
 	ebc = maker("event_broadcaster", initEventBroadcaster)
 	ar = maker("address_resolver", initAddressResolver, &dmsgC, &sc, &dmsgHTTP)

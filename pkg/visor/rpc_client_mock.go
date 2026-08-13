@@ -31,7 +31,6 @@ import (
 	types "github.com/skycoin/skywire/pkg/transport/types"
 	"github.com/skycoin/skywire/pkg/util/cipherutil"
 	"github.com/skycoin/skywire/pkg/visor/logserver"
-	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
 // MockRPCClient mocks API.
@@ -973,17 +972,6 @@ func (mc *mockRPCClient) GetPersistentTransports() ([]transport.PersistentTransp
 // GetTransportLogs implements API
 func (mc *mockRPCClient) GetTransportLogs(_ int) ([]TransportLogEntry, error) {
 	return []TransportLogEntry{}, nil
-}
-
-// SetLogRotationInterval implements API
-func (mc *mockRPCClient) SetLogRotationInterval(_ visorconfig.Duration) error {
-	return nil
-}
-
-// GetLogRotationInterval implements API
-func (mc *mockRPCClient) GetLogRotationInterval() (visorconfig.Duration, error) {
-	var d visorconfig.Duration
-	return d, nil
 }
 
 // VPNServers implements API
