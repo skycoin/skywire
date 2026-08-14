@@ -11,7 +11,7 @@
 // circle per frame, which is free when the graph is JavaScript and is a wasm
 // boundary crossing when it is not. Keeping the loop here means the projection
 // and the drawing happen on the same side.
-package main
+package wasmgl
 
 import (
 	"math"
