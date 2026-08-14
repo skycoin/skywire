@@ -28,6 +28,27 @@
 (function () {
   'use strict';
   var V_ORIGIN = "__V_ORIGIN__";      // visor origin (holds the SharedWorker visor + key)
+  // Loopback-family equivalence for the LOCAL model. Browse origins are
+  // *.mesh.localhost (which resolves to 127.0.0.1), but the visor app V may be
+  // loaded at localhost, 127.0.0.1 or [::1] — DISTINCT origins to the browser.
+  // A single hardcoded V_ORIGIN would silently drop the mesh-hello postMessage
+  // (and reject the reply) whenever V is opened via a sibling host, hanging the
+  // whole browser on "Connecting to the mesh…". Treat the loopback hosts as
+  // equivalent: post the hello to each and accept a reply from any of them.
+  // (Non-loopback / hosted V_ORIGIN is left exact — no relaxation.)
+  var V_ORIGINS = (function () {
+    var set = [V_ORIGIN];
+    try {
+      var u = new URL(V_ORIGIN);
+      if (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]') {
+        ['localhost', '127.0.0.1', '[::1]'].forEach(function (h) {
+          var o = u.protocol + '//' + h + (u.port ? ':' + u.port : '');
+          if (set.indexOf(o) < 0) { set.push(o); }
+        });
+      }
+    } catch (e) {}
+    return set;
+  })();
   var SUFFIX   = "__SUFFIX__" || ".mesh.localhost";
   // Content-addressed browse origin: the hostname is a short stable hash of the
   // target (the shortid). V holds shortid -> descriptor and resolves the target;
@@ -60,7 +81,7 @@
       }
       var to = setTimeout(function () { reject(new Error('visor parent timeout')); }, 30000);
       window.addEventListener('message', function onmsg(e) {
-        if (e.origin !== V_ORIGIN) return;               // only trust V
+        if (V_ORIGINS.indexOf(e.origin) < 0) return;     // only trust V (loopback family)
         if (!e.data || e.data.type !== 'mesh-helper-ready') return;
         if (e.data.error) {                              // V rejected our shortid
           clearTimeout(to);
@@ -80,7 +101,7 @@
       (function hello() {
         if (helperPort || tries > 30) return;
         tries++;
-        try { window.parent.postMessage({ type: 'mesh-hello', shortid: SHORTID }, V_ORIGIN); } catch (e) {}
+        V_ORIGINS.forEach(function (o) { try { window.parent.postMessage({ type: 'mesh-hello', shortid: SHORTID }, o); } catch (e) {} });
         setTimeout(hello, 300);
       })();
     });
