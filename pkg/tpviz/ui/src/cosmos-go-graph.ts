@@ -17,11 +17,25 @@
 import { buildData, currentBoundaries, CosmosNode } from './cosmos-graph';
 import { handleGraphNodeClick } from './node-click';
 
-// wasmBase is where the module and its glue are served from, alongside
-// bundle.js (see tpviz.go). Kept relative so the view works under a path
-// prefix, which is how the hypervisor UI embeds tpviz.
-const WASM_MODULE = 'tpviz-gl.wasm';
-const WASM_EXEC = 'tpviz-gl-exec.js';
+// wasmBase resolves the module + its glue against where THIS bundle.js was
+// loaded from, not the document. On the standalone /tp-viz/ page both are the
+// same, but when the Angular HV UI mounts the bundle (base href '/', route
+// #/nodes/visualizer via BundleMountComponent) a bare 'tpviz-gl.wasm' resolves
+// to '/tpviz-gl.wasm' → 404, and tpviz-gl-exec.js never defines window.Go, so
+// the view fails to load. The bundle is always injected as a <script
+// src=".../tp-viz/bundle.js"> (id "tpviz-bundle-script" when embedded), so its
+// resolved .src gives the correct '.../tp-viz/' prefix on every surface.
+function wasmBase(): string {
+  const s = (document.currentScript
+    || document.getElementById('tpviz-bundle-script')
+    || document.querySelector('script[src*="tp-viz/bundle.js"]')) as HTMLScriptElement | null;
+  const src = s?.src || '';
+  // strip query/hash, then the filename, leaving the trailing-slash base
+  return src.replace(/[?#].*$/, '').replace(/[^/]*$/, '');
+}
+const WASM_BASE = wasmBase();
+const WASM_MODULE = WASM_BASE + 'tpviz-gl.wasm';
+const WASM_EXEC = WASM_BASE + 'tpviz-gl-exec.js';
 
 let active = false;
 let loading: Promise<boolean> | null = null;
