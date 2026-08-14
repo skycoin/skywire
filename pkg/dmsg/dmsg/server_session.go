@@ -9,7 +9,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 	"github.com/sirupsen/logrus"
 	"github.com/xtaci/smux"
 

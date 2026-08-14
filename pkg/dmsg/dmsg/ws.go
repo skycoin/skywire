@@ -25,7 +25,7 @@ import (
 	"fmt"
 
 	"github.com/coder/websocket"
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 )

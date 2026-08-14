@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 
 	"github.com/armon/go-socks5"
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 	ipc "github.com/james-barrow/golang-ipc"
 	"github.com/sirupsen/logrus"
 

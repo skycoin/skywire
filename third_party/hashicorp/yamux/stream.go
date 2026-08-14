@@ -146,6 +146,15 @@ WAIT:
 	}
 	select {
 	case <-s.session.shutdownCh:
+		// Session is gone: no more data will ever arrive on this stream. The
+		// bare fall-through to `goto START` upstream ships spins forever here —
+		// START only inspects the per-stream state, which stays streamEstablished
+		// when a session is torn down mid-Read (common when a dmsg WS/WebRTC
+		// carrier drops during an in-flight dial). shutdownCh is a CLOSED channel,
+		// so the select re-fires it every iteration, re-allocating a timer each
+		// pass: a single goroutine pegs the (single) wasm thread at ~370k
+		// time.NewTimer/s. Return instead of looping.
+		return 0, ErrSessionShutdown
 	case <-s.recvNotifyCh:
 	case <-timeout:
 		return 0, ErrTimeout
@@ -233,6 +242,10 @@ WAIT:
 	}
 	select {
 	case <-s.session.shutdownCh:
+		// Symmetric to Read: a torn-down session can never drain the send
+		// window, so the upstream fall-through to `goto START` spins on the
+		// closed shutdownCh (window stays 0) instead of failing the write.
+		return 0, ErrSessionShutdown
 	case <-s.sendNotifyCh:
 	case <-timeout:
 		return 0, ErrTimeout

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 	ipc "github.com/james-barrow/golang-ipc"
 
 	"github.com/skycoin/skywire/pkg/app"
