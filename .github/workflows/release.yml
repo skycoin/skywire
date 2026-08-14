@@ -606,7 +606,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # The NDK lane, not the pure-Go one. cgo builds resolve DNS through
       # bionic's getaddrinfo, which is the only path that honours the phone's

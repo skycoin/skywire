@@ -39,7 +39,7 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # The pure-Go payload rather than the NDK one: this lane is a build
       # check, and the cgo/bionic-DNS difference does not change whether the
