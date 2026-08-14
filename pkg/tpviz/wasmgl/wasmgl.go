@@ -59,13 +59,14 @@ type glView struct {
 
 // Register publishes the WebGL view's API on globalThis.tpvizGL. It returns
 // immediately — it does NOT block — so the caller owns the program's lifetime:
-// the standalone build (pkg/tpviz/wasmgl/standalone, served as a separate
-// module by the native tpviz server) parks in select{}, and the wasm-visor
-// "netview" role parks in keepAlive(). The TypeScript side (cosmos-go-graph.ts)
-// calls tpvizGL.init/setData/... identically whether this global came from a
-// separately-fetched wasm module or from the visor blob it is already running —
-// which is what lets the same view be a role of the one wasm-visor rather than
-// a second wasm to fetch.
+// the wasm-visor "netview" role (cmd/wasm-visor, tpviz_js.go) parks in
+// keepAlive() after calling this. There is no longer a standalone tpviz-gl.wasm;
+// the view is served from the one wasm-visor blob (pkg/tpviz serves it out of
+// pkg/wasmhv/wasmbin), run in the netview role. The TypeScript side
+// (cosmos-go-graph.ts) calls tpvizGL.init/setData/... identically — it can't
+// tell whether tpvizGL came from a dedicated module or from the visor blob it is
+// already running — which is what lets the same view be a role of the one
+// wasm-visor rather than a second wasm to embed.
 func Register() {
 	api := map[string]interface{}{
 		"init":       js.FuncOf(jsInit),

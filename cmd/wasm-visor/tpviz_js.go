@@ -22,9 +22,10 @@
 //
 // installNetView just publishes the tpvizGL API (pkg/tpviz/wasmgl.Register);
 // the TypeScript view (pkg/tpviz/ui/src/cosmos-go-graph.ts) then drives
-// tpvizGL.init/setData/... exactly as it does against the standalone module —
-// so the only browser-side change is "use the in-visor global if present,
-// else fetch tpviz-gl.wasm" (the native tpviz server keeps the fetch path).
+// tpvizGL.init/setData/... unchanged. There is no separate tpviz-gl.wasm any
+// more: the native tpviz server serves THIS blob at /tpviz-gl.wasm (out of
+// pkg/wasmhv/wasmbin), so the only browser-side change is that
+// cosmos-go-graph.ts sets __SKYWIRE_WASM_ROLE__="netview" before instantiating.
 package main
 
 import (
