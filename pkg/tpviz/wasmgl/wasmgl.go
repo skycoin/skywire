@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Package main pkg/tpviz/wasmgl/main.go
+// Package wasmgl pkg/tpviz/wasmgl/wasmgl.go
 // The Go/wasm WebGL view for tpviz: the same GPU force-directed graph the
 // TypeScript view draws, with the engine (third_party/0magnet/cosmos-go, a Go
 // port of cosmos.gl 2.6.3) and the group-boundary overlay both in Go.
@@ -28,7 +28,7 @@
 // boundary. Drawing it in Go keeps that loop on one side.
 //
 // Exposed to the page as globalThis.tpvizGL.
-package main
+package wasmgl
 
 import (
 	"syscall/js"
@@ -57,7 +57,16 @@ type glView struct {
 	funcs []js.Func
 }
 
-func main() {
+// Register publishes the WebGL view's API on globalThis.tpvizGL. It returns
+// immediately — it does NOT block — so the caller owns the program's lifetime:
+// the standalone build (pkg/tpviz/wasmgl/standalone, served as a separate
+// module by the native tpviz server) parks in select{}, and the wasm-visor
+// "netview" role parks in keepAlive(). The TypeScript side (cosmos-go-graph.ts)
+// calls tpvizGL.init/setData/... identically whether this global came from a
+// separately-fetched wasm module or from the visor blob it is already running —
+// which is what lets the same view be a role of the one wasm-visor rather than
+// a second wasm to fetch.
+func Register() {
 	api := map[string]interface{}{
 		"init":       js.FuncOf(jsInit),
 		"setData":    js.FuncOf(jsSetData),
@@ -75,7 +84,6 @@ func main() {
 	}
 	js.Global().Set("tpvizGL", js.ValueOf(api))
 	js.Global().Get("console").Call("log", "[tpviz-gl] Go WebGL view loaded")
-	select {}
 }
 
 // arg returns the i'th argument, or undefined when it was not supplied.

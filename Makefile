@@ -419,7 +419,7 @@ TINYGO ?= tinygo
 # directory is go:embed'ed and served next to bundle.js, which loads the module
 # lazily when the "WebGL (Go)" view is selected.
 tpviz-gl: ## Build the Go/wasm WebGL tpviz view into pkg/tpviz/legacy/ (TinyGo, ~630 KB). Runs alongside the JS WebGL view for comparison.
-	$(TINYGO) build -target wasm -no-debug -opt=z -o ./pkg/tpviz/legacy/tpviz-gl.wasm ./pkg/tpviz/wasmgl
+	$(TINYGO) build -target wasm -no-debug -opt=z -o ./pkg/tpviz/legacy/tpviz-gl.wasm ./pkg/tpviz/wasmgl/standalone
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/legacy/tpviz-gl-exec.js
 	@echo "built pkg/tpviz/legacy/tpviz-gl.wasm — commit it intentionally; select it with the 'WebGL (Go)' toggle or ?view=go"
 
