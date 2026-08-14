@@ -116,6 +116,39 @@ def decide_route(ctx, candidates):
 	}
 }
 
+func TestPeers_HasTransport(t *testing.T) {
+	prov := NewFakeProvider().SetHasTransport("pk_connected")
+	src := `
+def decide_route(ctx, candidates):
+    if peers.has_transport(ctx.peer_pk):
+        return RouteSpec(mux = 1, min_hops = 1)
+    return RouteSpec(mux = 2, min_hops = 2)
+`
+	eval, err := NewEvaluator("has_transport.star", src, WithProvider(prov))
+	if err != nil {
+		t.Fatalf("NewEvaluator: %v", err)
+	}
+	cases := []struct {
+		pk          string
+		wantMux     int
+		wantMinHops int
+	}{
+		{"pk_connected", 1, 1},
+		{"pk_stranger", 2, 2},
+	}
+	for _, tc := range cases {
+		spec, err := eval.Decide(context.Background(), RoutingContext{PeerPK: tc.pk}, nil)
+		if err != nil {
+			t.Errorf("Decide(%s): %v", tc.pk, err)
+			continue
+		}
+		if spec.Mux != tc.wantMux || spec.MinHops != tc.wantMinHops {
+			t.Errorf("has_transport branch for %s: mux=%d min_hops=%d, want mux=%d min_hops=%d",
+				tc.pk, spec.Mux, spec.MinHops, tc.wantMux, tc.wantMinHops)
+		}
+	}
+}
+
 func TestLogging_InfoAndWarn(t *testing.T) {
 	// Capture the messages the policy emits via logging.info /
 	// logging.warn and assert both reach the logger.

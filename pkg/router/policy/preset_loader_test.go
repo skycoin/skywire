@@ -72,4 +72,51 @@ func TestPresetLoader(t *testing.T) {
 		assert.Equal(t, 1, spec.Mux)
 		assert.Equal(t, 1, spec.MinHops)
 	})
+
+	t.Run("prefer-connected: direct when a transport already exists", func(t *testing.T) {
+		prov := NewFakeProvider().SetHasTransport("pk_connected")
+		l, err := NewLoader("preset:prefer-connected", WithProvider(prov))
+		require.NoError(t, err)
+		spec, err := l.Decide(context.Background(), RoutingContext{App: "x", PeerPK: "pk_connected"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 1, spec.Mux, "connected peer → single direct leg")
+		assert.Equal(t, 1, spec.MinHops)
+		assert.Equal(t, 0, spec.RotationIntervalSeconds, "connected path is stable")
+	})
+
+	t.Run("prefer-connected: multihop fan-out when not connected", func(t *testing.T) {
+		// No provider (Nop → has_transport=false), or a provider that
+		// doesn't know this PK: fall back to the cold multihop path.
+		l, err := NewLoader("preset:prefer-connected")
+		require.NoError(t, err)
+		spec, err := l.Decide(context.Background(), RoutingContext{App: "x", PeerPK: "pk_stranger"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 2, spec.Mux, "cold peer → modest fan-out")
+		assert.Equal(t, 2, spec.MinHops)
+		assert.Greater(t, spec.RotationIntervalSeconds, 0, "cold path rotates to spread relays")
+	})
+
+	t.Run("balanced is a two-leg min_hops=1 default", func(t *testing.T) {
+		l, err := NewLoader("preset:balanced")
+		require.NoError(t, err)
+		spec, err := l.Decide(context.Background(), RoutingContext{App: "x"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 2, spec.Mux)
+		assert.Equal(t, 1, spec.MinHops)
+	})
+
+	t.Run("hypervisor-priority fans out to the control plane", func(t *testing.T) {
+		prov := NewFakeProvider().SetHypervisor("pk_hv").SetTrusted("pk_ok")
+		l, err := NewLoader("preset:hypervisor-priority", WithProvider(prov))
+		require.NoError(t, err)
+
+		hv, err := l.Decide(context.Background(), RoutingContext{PeerPK: "pk_hv"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 4, hv.Mux, "hypervisor → wide fan-out")
+		assert.Equal(t, 1, hv.MinHops)
+
+		other, err := l.Decide(context.Background(), RoutingContext{PeerPK: "pk_stranger"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 2, other.MinHops, "untrusted peer → real intermediate")
+	})
 }

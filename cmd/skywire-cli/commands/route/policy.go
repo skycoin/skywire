@@ -20,6 +20,7 @@ import (
 	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/cliout/cliroute"
 	"github.com/skycoin/skywire/pkg/router/policy"
+	"github.com/skycoin/skywire/pkg/router/policy/presets"
 	policywasm "github.com/skycoin/skywire/pkg/router/policy/wasm"
 )
 
@@ -55,23 +56,112 @@ func loadPolicyEngine(path string, src []byte, clock fixedClock) (policyTestEngi
 
 var (
 	policyScriptPath string
+	policyPresetName string
 	policyDialJSON   string
 	policyBenchIter  int
 )
 
 func init() {
 	routeCmd.AddCommand(policyCmd)
-	policyCmd.AddCommand(policyTestCmd, policyBenchCmd)
+	policyCmd.AddCommand(policyListCmd, policyShowCmd, policyTestCmd, policyBenchCmd)
 
 	policyTestCmd.Flags().StringVarP(&policyScriptPath, "script", "s", "",
 		"path to the skylark policy file (.star)")
+	policyTestCmd.Flags().StringVarP(&policyPresetName, "preset", "p", "",
+		"built-in preset name to test instead of a --script file (see `route policy list`)")
 	policyTestCmd.Flags().StringVarP(&policyDialJSON, "dial", "d", "{}",
 		"synthetic dial context as JSON — see the docs for the schema")
 
 	policyBenchCmd.Flags().StringVarP(&policyScriptPath, "script", "s", "",
 		"path to the skylark policy file (.star)")
+	policyBenchCmd.Flags().StringVarP(&policyPresetName, "preset", "p", "",
+		"built-in preset name to benchmark instead of a --script file")
 	policyBenchCmd.Flags().IntVarP(&policyBenchIter, "iter", "n", 100_000,
 		"number of evaluations to run")
+}
+
+// presetSummary returns the first non-empty comment line of a preset's
+// source — its human-readable one-liner. Empty when the preset is unknown
+// or has no leading comment.
+func presetSummary(name string) string {
+	src, ok := presets.Source(name)
+	if !ok {
+		return ""
+	}
+	for _, line := range strings.Split(src, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") {
+			if desc := strings.TrimSpace(strings.TrimPrefix(line, "#")); desc != "" {
+				return desc
+			}
+			continue
+		}
+		if line != "" {
+			break // hit code before any comment
+		}
+	}
+	return ""
+}
+
+var policyListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List the built-in routing-policy presets",
+	Long: `Lists the presets embedded in the binary. Select one without
+compiling a file via the config value:
+
+  "routing": { "policy_per_dial": "preset:<name>" }
+
+Preview one with ` + "`route policy test --preset <name>`" + ` or read its
+source with ` + "`route policy show <name>`" + `.`,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		for _, name := range presets.Names() {
+			if s := presetSummary(name); s != "" {
+				fmt.Printf("%-20s %s\n", name, s)
+			} else {
+				fmt.Println(name)
+			}
+		}
+		return nil
+	},
+}
+
+var policyShowCmd = &cobra.Command{
+	Use:   "show <name>",
+	Short: "Print a built-in preset's Starlark source",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(_ *cobra.Command, args []string) error {
+		src, ok := presets.Source(args[0])
+		if !ok {
+			return fmt.Errorf("unknown preset %q; available: %s", args[0], strings.Join(presets.Names(), ", "))
+		}
+		fmt.Print(src)
+		return nil
+	},
+}
+
+// resolvePolicySource returns (path, source) for whichever of --preset or
+// --script the operator supplied, preferring --preset. The returned path is
+// a display/dispatch label (preset:<name> is treated as Starlark). Errors
+// when neither or both are given.
+func resolvePolicySource() (string, []byte, error) {
+	switch {
+	case policyPresetName != "" && policyScriptPath != "":
+		return "", nil, errors.New("pass only one of --preset or --script")
+	case policyPresetName != "":
+		src, ok := presets.Source(policyPresetName)
+		if !ok {
+			return "", nil, fmt.Errorf("unknown preset %q; available: %s", policyPresetName, strings.Join(presets.Names(), ", "))
+		}
+		return "preset:" + policyPresetName + ".star", []byte(src), nil
+	case policyScriptPath != "":
+		src, err := os.ReadFile(policyScriptPath) //nolint:gosec
+		if err != nil {
+			return "", nil, fmt.Errorf("read script: %w", err)
+		}
+		return policyScriptPath, src, nil
+	default:
+		return "", nil, errors.New("one of --preset or --script is required")
+	}
 }
 
 var policyCmd = &cobra.Command{
@@ -108,12 +198,9 @@ The --dial JSON accepts: app (string), peer_pk (string), port
 (int), now (RFC3339 timestamp). Missing fields default to zero
 values.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if policyScriptPath == "" {
-			return errors.New("--script is required")
-		}
-		src, err := os.ReadFile(policyScriptPath) //nolint:gosec
+		path, src, err := resolvePolicySource()
 		if err != nil {
-			return fmt.Errorf("read script: %w", err)
+			return err
 		}
 		var dial dialJSON
 		if err := json.Unmarshal([]byte(policyDialJSON), &dial); err != nil {
@@ -128,7 +215,7 @@ values.`,
 		// unset) so the test result is deterministic regardless
 		// of when the operator runs the command.
 		clock := fixedClock{t: rctx.Now}
-		eval, err := loadPolicyEngine(policyScriptPath, src, clock)
+		eval, err := loadPolicyEngine(path, src, clock)
 		if err != nil {
 			return fmt.Errorf("load policy: %w", err)
 		}
@@ -153,14 +240,11 @@ reports p50 + average per-call eval time. Use this before
 deploying a complex policy to confirm it stays inside the
 50ms per-dial timeout budget.`,
 	RunE: func(cmd *cobra.Command, _ []string) error {
-		if policyScriptPath == "" {
-			return errors.New("--script is required")
-		}
-		src, err := os.ReadFile(policyScriptPath) //nolint:gosec
+		path, src, err := resolvePolicySource()
 		if err != nil {
-			return fmt.Errorf("read script: %w", err)
+			return err
 		}
-		eval, err := loadPolicyEngine(policyScriptPath, src, fixedClock{t: time.Now()})
+		eval, err := loadPolicyEngine(path, src, fixedClock{t: time.Now()})
 		if err != nil {
 			return fmt.Errorf("load policy: %w", err)
 		}
@@ -182,7 +266,7 @@ deploying a complex policy to confirm it stays inside the
 		p50 := percentile(samples, 50)
 		p99 := percentile(samples, 99)
 		if err := cliout.Print(cmd, cliroute.PolicyBench{
-			Script: policyScriptPath, Iterations: policyBenchIter,
+			Script: path, Iterations: policyBenchIter,
 			Total: total.String(), Average: avg.String(),
 			P50: p50.String(), P99: p99.String(),
 		}); err != nil {
