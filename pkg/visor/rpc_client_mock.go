@@ -356,11 +356,6 @@ func (*mockRPCClient) StopVPNClient(string) error {
 	return nil
 }
 
-// FetchUptimeTrackerData implements API.
-func (*mockRPCClient) FetchUptimeTrackerData(string) ([]byte, error) {
-	return []byte{}, nil
-}
-
 // StartSkysocksClient implements API.
 func (*mockRPCClient) StartSkysocksClient(string) error {
 	return nil

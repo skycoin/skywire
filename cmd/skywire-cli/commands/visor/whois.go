@@ -1,12 +1,11 @@
 // Package clivisor cmd/skywire-cli/commands/visor/whois.go c4-vis-cli
-// visor whois <pk>` — single-PK rollup combining transport-discovery,
-// uptime-tracker, and service-discovery state into one report.
+// visor whois <pk>` — single-PK rollup combining transport-discovery
+// and service-discovery state into one report.
 //
 // Today an operator answering "what do we know about this visor PK"
-// has to hit three separate services:
+// has to hit two separate services:
 //
 //	cli tp ls --remote <pk>      — transports the visor is on
-//	cli ut tpd | grep <pk>       — uptime in the tpd-integrated UT
 //	cli sd | grep <pk>           — services the visor advertises
 //
 // whois collapses those into one report. Useful when triaging a peer
@@ -39,7 +38,6 @@ import (
 var (
 	whoisTimeout time.Duration
 	whoisTpdURL  string
-	whoisUtURL   string
 	whoisSdURL   string
 )
 
@@ -49,8 +47,6 @@ func init() {
 		"per-service request timeout")
 	whoisCmd.Flags().StringVar(&whoisTpdURL, "tpd", deployment.Prod.TransportDiscovery,
 		"transport-discovery URL")
-	whoisCmd.Flags().StringVar(&whoisUtURL, "ut", deployment.Prod.TransportDiscovery,
-		"TPD-integrated uptime-tracker URL")
 	whoisCmd.Flags().StringVar(&whoisSdURL, "sd", deployment.Prod.ServiceDiscovery,
 		"service-discovery URL")
 	RootCmd.AddCommand(whoisCmd)
@@ -62,7 +58,6 @@ func init() {
 type whoisReport struct {
 	PK         string     `json:"pk"`
 	Transports whoisBlock `json:"transports"`
-	Uptime     whoisBlock `json:"uptime"`
 	Services   whoisBlock `json:"services"`
 }
 
@@ -79,11 +74,10 @@ type whoisBlock struct {
 
 var whoisCmd = &cobra.Command{
 	Use:   "whois <pk>",
-	Short: "Combined TPD + UT + SD rollup for a single visor PK",
-	Long: `Single-PK rollup over transport-discovery, uptime-tracker, and
-service-discovery. Useful for triaging a peer from a log line, a
-chat message, or a transport-id without manually hitting three
-services.
+	Short: "Combined TPD + SD rollup for a single visor PK",
+	Long: `Single-PK rollup over transport-discovery and service-discovery.
+Useful for triaging a peer from a log line, a chat message, or a
+transport-id without manually hitting two services.
 
 Examples:
   skywire cli visor whois <pk>             # human-readable table
@@ -128,17 +122,6 @@ rather than failing the whole command.`,
 			}
 		}
 
-		// Uptime: prefer the visor RPC (auth + retry handled by the
-		// visor). On any failure, surface the error and move on.
-		if rc != nil {
-			report.Uptime = uptimeFromVisor(rc, pk.String())
-		} else {
-			report.Uptime = whoisBlock{
-				URL:   "(visor RPC unavailable)",
-				Error: "visor RPC client not initialized; uptime lookup needs a local visor",
-			}
-		}
-
 		// Services: SD doesn't have a "give me everything this PK
 		// advertises" endpoint — its public API is keyed by service
 		// type (?type=skysocks, ?type=vpn, etc.) and filters within
@@ -163,7 +146,6 @@ rather than failing the whole command.`,
 		w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 		fmt.Fprintln(w, "SOURCE\tHTTP\tSUMMARY")                                                         //nolint:errcheck
 		fmt.Fprintf(w, "transports\t%s\t%s\n", httpCell(report.Transports), valOrErr(report.Transports)) //nolint:errcheck
-		fmt.Fprintf(w, "uptime\t%s\t%s\n", httpCell(report.Uptime), valOrErr(report.Uptime))             //nolint:errcheck
 		fmt.Fprintf(w, "services\t%s\t%s\n", httpCell(report.Services), valOrErr(report.Services))       //nolint:errcheck
 		_ = w.Flush()                                                                                    //nolint:errcheck
 	},
@@ -200,78 +182,6 @@ func transportsFromVisor(rc interface {
 	}
 	block.Summary = fmt.Sprintf("%d total (%s)", len(entries), strings.Join(parts, " "))
 	return block
-}
-
-// uptimeFromVisor uses FetchUptimeTrackerData. The RPC returns the
-// raw JSON body the visor's UT client received — we re-parse to
-// pull the percentage out for the one-line summary.
-func uptimeFromVisor(rc interface {
-	FetchUptimeTrackerData(pk string) ([]byte, error)
-}, pk string) whoisBlock {
-	block := whoisBlock{URL: "visor-RPC: FetchUptimeTrackerData"}
-	body, err := rc.FetchUptimeTrackerData(pk)
-	if err != nil {
-		block.Error = err.Error()
-		return block
-	}
-	if len(body) == 0 {
-		block.Summary = "no uptime data"
-		return block
-	}
-	block.Raw = json.RawMessage(body)
-	block.Summary = summarizeUptime(block.Raw)
-	return block
-}
-
-// summarizeUptime extracts a headline from a UT response. The
-// production UT endpoint returns an array of {pk, on, version,
-// daily: {YYYY-MM-DD: "pct"}} records — newest date in `daily` is
-// the most recent day's uptime %, and `on` is the current visor
-// liveness flag from the tracker's POV.
-func summarizeUptime(raw json.RawMessage) string {
-	var record map[string]interface{}
-	if err := json.Unmarshal(raw, &record); err != nil {
-		var arr []map[string]interface{}
-		if err2 := json.Unmarshal(raw, &arr); err2 != nil || len(arr) == 0 {
-			return "no uptime data"
-		}
-		record = arr[0]
-	}
-	on := "?"
-	if v, ok := record["on"].(bool); ok {
-		if v {
-			on = "online"
-		} else {
-			on = "offline"
-		}
-	}
-	version, _ := record["version"].(string)
-	// daily map → find the most recent date + show its percentage.
-	if daily, ok := record["daily"].(map[string]interface{}); ok && len(daily) > 0 {
-		mostRecent := ""
-		var mostRecentPct string
-		for k, v := range daily {
-			if k > mostRecent {
-				mostRecent = k
-				if s, sok := v.(string); sok {
-					mostRecentPct = s
-				}
-			}
-		}
-		out := fmt.Sprintf("%s (today %s%%", on, mostRecentPct)
-		if mostRecent != "" {
-			out += " on " + mostRecent
-		}
-		out += ")"
-		if version != "" {
-			out += " v=" + version
-		}
-		return out
-	}
-	if version != "" {
-		return fmt.Sprintf("%s v=%s (no daily uptime data)", on, version)
-	}
-	return on + " (uptime payload missing daily map)"
 }
 
 // httpCell renders the status as "200", "404", "rpc" (for visor-
