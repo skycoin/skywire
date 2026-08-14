@@ -251,12 +251,13 @@ export function wireEventListeners(): void {
     // change on an already-open page) can drive the view without re-mounting.
     (window as any).__tpvizSetView = (v: ViewMode) => activateView(v);
 
-    // Reset: clear persisted filters + view, restore markup defaults, back to WebGL.
+    // Reset: clear persisted filters + view, restore markup defaults, back to the
+    // cosmos-go (Go/WebGL2) default view (not the WebGL1 cosmograph-JS one).
     document.getElementById('reset-filters')?.addEventListener('click', () => {
         resetControls();
         applyFilters();
         updateLegend();
-        activateView('cosmos');
+        activateView('cosmosgo');
     });
 
     // Data initialization. WebGL is the default view — at the full
