@@ -38,6 +38,12 @@ function loadModule(): Promise<boolean> {
   if (loading) { return loading; }
   loading = new Promise<boolean>((resolve) => {
     if (gl()) { resolve(true); return; }
+    // The module served at WASM_MODULE is the one wasm-visor blob, not a
+    // separate tpviz-gl build. Run it in its "netview" role so its main()
+    // installs only the WebGL view (globalThis.tpvizGL) and never boots a
+    // visor — the same one-binary-many-roles trick as the websh terminal.
+    // Must be set before go.run() executes the module's main().
+    (window as any).__SKYWIRE_WASM_ROLE__ = 'netview';
     const script = document.createElement('script');
     script.src = WASM_EXEC;
     script.onerror = () => resolve(false);
