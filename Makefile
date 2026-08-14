@@ -374,19 +374,19 @@ test-wasm-policy: ## Rebuild app-mux.wasm from source with TinyGo and run the po
 	cd docs/examples/routing-policies/wasm/app-mux && tinygo build -target=wasi -no-debug -opt=2 -o "$(CURDIR)/build/wasm-fixtures/app-mux.wasm" .
 	SKYWIRE_APPMUX_WASM="$(CURDIR)/build/wasm-fixtures/app-mux.wasm" go test -mod=vendor -count=1 -v -run TestWasmEvaluator ./pkg/router/policy/wasm/
 
-tpviz-wasm: ## Build transport visualizer WASM binary into pkg/tpviz/dist for embedding
-	GOOS=js GOARCH=wasm go build -o ./pkg/tpviz/dist/main.wasm ./pkg/tpviz/wasm
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/tpviz/dist/
-
-tpviz-wasm-standalone: ## Build transport visualizer WASM binary to build/tpviz (standalone)
+tpviz-wasm: ## Build transport visualizer WASM binary to build/tpviz (standalone)
 	mkdir -p ./build/tpviz
 	GOOS=js GOARCH=wasm go build -o ./build/tpviz/main.wasm ./pkg/tpviz/wasm
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/tpviz/
 	cp ./pkg/tpviz/dist/index.html ./build/tpviz/
 
-tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo (smaller, ~750KB)
-	tinygo build -o ./pkg/tpviz/dist/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
-	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/dist/
+tpviz-wasm-standalone: tpviz-wasm ## Alias for tpviz-wasm (both build standalone now)
+
+tpviz-wasm-tinygo: ## Build transport visualizer WASM binary with tinygo to build/tpviz (smaller, ~750KB)
+	mkdir -p ./build/tpviz
+	tinygo build -o ./build/tpviz/main.wasm -target wasm -no-debug -opt=z -panic=trap ./pkg/tpviz/wasm
+	cp "$$(tinygo env TINYGOROOT)/targets/wasm_exec.js" ./build/tpviz/
+	cp ./pkg/tpviz/dist/index.html ./build/tpviz/
 
 tinygo-dmsg: ## Build-check the dmsg client under TinyGo (IoT target wasip1); ~2.2MB -opt=z
 	tinygo build -target wasip1 -no-debug -opt=z -o ./build/dmsg-tinygo.wasm ./cmd/dmsg-tinygo-probe
