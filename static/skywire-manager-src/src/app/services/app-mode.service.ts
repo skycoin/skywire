@@ -103,6 +103,7 @@ export class AppModeService {
     if (this.harness) {
       parts.push('harness');
     }
+
     return parts.join(' · ');
   }
 
