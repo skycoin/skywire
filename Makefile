@@ -438,7 +438,12 @@ test-wasm-headless: ## Tier B headless smoke: run the REAL compiled wasm-visor b
 
 wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into build/wasm-visor-go — larger (~38MB) but full crypto/tls + net/http (https clearnet via skysocks). Does NOT touch the committed embed blob.
 	mkdir -p ./build/wasm-visor-go
-	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
+	# -buildvcs=true (not the default auto): the committed blob self-describes its
+	# version from the VCS stamp, and auto SILENTLY omits it if the git probe
+	# fails (e.g. under heavy load / concurrent git ops) — shipping a "(devel)"
+	# blob that renders its version as "unknown". Force it so the build fails loud
+	# instead.
+	GOOS=js GOARCH=wasm go build -buildvcs=true -ldflags="-s -w" -o ./build/wasm-visor-go/wasm-visor.wasm ./cmd/wasm-visor
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./build/wasm-visor-go/wasm_exec.js
 	cp ./pkg/wasmhv/browseui/winbox.min.js ./build/wasm-visor-go/
 	cp ./pkg/wasmhv/browseui/browse.js ./build/wasm-visor-go/
