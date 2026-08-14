@@ -173,6 +173,31 @@
     var d = document.getElementById('skywire-singleton-notice');
     if (d && d.parentNode) d.parentNode.removeChild(d);
   }
+
+  // --- shared-visor "connecting" status (non-blocking) ---
+  //
+  // Shown while THIS tab waits for the one shared visor (SharedWorker) to finish
+  // its first boot. Deliberately unlike showSingletonNotice: a small corner toast,
+  // NOT a full-screen takeover, and it does NOT claim the identity is unusable — a
+  // slow cold boot of the single shared visor is normal, and this tab is a thin
+  // viewer that attaches once the worker reports ready. Removed the instant 'up'
+  // arrives (or if the shared path falls back / fails).
+  function showConnectingNotice() {
+    function add() {
+      if (document.getElementById('skywire-connecting-notice')) return;
+      var d = document.createElement('div');
+      d.id = 'skywire-connecting-notice';
+      d.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:2147483646;background:rgba(21,21,31,.92);color:#cdd6e0;' +
+        'font:12px/1.5 system-ui,sans-serif;padding:6px 12px;border-radius:6px;border:1px solid #333;box-shadow:0 1px 4px rgba(0,0,0,.4)';
+      d.textContent = 'Connecting to the shared Skywire visor…';
+      document.body.appendChild(d);
+    }
+    if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
+  }
+  function hideConnectingNotice() {
+    var d = document.getElementById('skywire-connecting-notice');
+    if (d && d.parentNode) d.parentNode.removeChild(d);
+  }
   function becomeLeader(name) {
     if (!(navigator.locks && navigator.locks.request)) {
       try { console.log('[hv-boot] Web Locks unsupported; single-instance guard disabled'); } catch (e) {}
@@ -211,16 +236,31 @@
       try { sw = new SharedWorker('worker.js' + variantQS(), { name: 'skywire-wasm-visor' + variantSuffix() }); } catch (e) { reject(e); return; }
       var port = sw.port;
       var nextId = 1, pending = Object.create(null);
-      var upTimer = setTimeout(function () { reject(new Error('shared worker did not report ready in time')); }, 45000);
-      // A live worker greets the port on connect, whether or not the visor has
-      // finished booting. No greeting means the connection was never delivered
-      // — an orphaned worker the browser has marked for termination but cannot
-      // kill (the Go runtime holds its thread). Waiting out the 45s ready
-      // timeout for that is 45s of nothing; give up on it in seconds instead.
-      var helloTimer = setTimeout(function () {
-        clearTimeout(upTimer);
-        reject(new Error('shared worker did not answer connect (orphaned worker)'));
-      }, 5000);
+      // The ONLY conditions that fall back to the per-tab dedicated worker are a
+      // genuine absence of SharedWorker support: the constructor is missing, it
+      // throws synchronously (both handled above), or the browser reports the
+      // worker SCRIPT failed to load (onerror below — a construct-failure class).
+      // A SharedWorker that is merely SLOW to finish its FIRST boot is NOT a
+      // fallback condition: a second (or cold-booting first) tab must attach to
+      // the one shared visor and WAIT — however long that boot takes — rather
+      // than spawn a competing dedicated-worker visor with the SAME identity
+      // (which is the exact multi-visor collision the fallback's singleton guard
+      // exists to prevent). So there is no ready-timeout that rejects into the
+      // fallback; the tab waits patiently on the port for the worker's 'up'.
+      var settled = false;
+      // A worker-script load error is the one "not ready" that DOES fall back:
+      // the shared visor can never come up, so a slow-boot wait would hang the
+      // tab forever. This fires only for a broken/absent script, never for a
+      // slow boot of a script that loaded fine.
+      sw.onerror = function (ev) {
+        if (settled) return;
+        settled = true;
+        hideConnectingNotice();
+        reject(new Error('shared worker failed to load: ' + ((ev && ev.message) || 'load error')));
+      };
+      // Lightweight, non-blocking status while this tab connects to / waits for
+      // the shared visor's first boot. Removed the instant the worker reports up.
+      showConnectingNotice();
 
       function makeProxy(methods) {
         var proxy = {};
@@ -242,7 +282,9 @@
         var m = ev.data || {};
         switch (m.t) {
           case 'hello':
-            clearTimeout(helloTimer);
+            // The worker is alive and this port is connected; the visor itself
+            // may still be booting. Keep waiting patiently for 'up' — there is
+            // deliberately no timeout and no fallback on a live connection.
             break;
           case 'ping':
             // Liveness. The worker cannot see a tab go away (a MessagePort
@@ -256,8 +298,8 @@
             try { if (typeof self.__skylog === 'function') self.__skylog(m.line); } catch (e) {}
             break;
           case 'up':
-            clearTimeout(helloTimer);
-            clearTimeout(upTimer);
+            settled = true;
+            hideConnectingNotice();
             // The worker has already booted the shared visor; install the proxy and
             // resolve with the booted PK (do NOT call boot() again — that's the
             // whole point: one boot, shared).
@@ -271,7 +313,10 @@
             if (pending[m.id]) { pending[m.id].rej(new Error(m.msg)); delete pending[m.id]; }
             break;
           case 'fatal':
-            clearTimeout(upTimer);
+            // An explicit, terminal boot failure from the worker (not a slow
+            // boot) — the shared visor is dead, so surface it to the caller.
+            settled = true;
+            hideConnectingNotice();
             reject(new Error(m.msg));
             break;
           case 'cfg-save':
@@ -303,7 +348,7 @@
 
       // First tab supplies the key + seed config; the worker boots the visor once.
       try { port.postMessage({ t: 'init', sk: sk, seedpk: CFG.seedpk || '', seedws: CFG.seedws || '', disc: CFG.disc || '', cfg: loadCfgOverride() }); }
-      catch (e) { clearTimeout(upTimer); reject(e); return; }
+      catch (e) { settled = true; hideConnectingNotice(); reject(e); return; }
 
       // Report visibility so the worker prefers a foreground tab as WebRTC/STUN
       // agent (background tabs are throttled). And tell the worker when this tab is
@@ -571,7 +616,11 @@
       try { console.warn('[hv-boot] shared-worker boot unavailable (' + ((eShared && eShared.message) || eShared) + '); falling back to per-tab worker + single-instance guard'); } catch (e2) {}
     }
     // Fallback: per-tab dedicated worker, guarded by Web Locks so two tabs don't run
-    // the same identity at once. Only reached where SharedWorker is unavailable.
+    // the same identity at once. Reached ONLY where SharedWorker is genuinely
+    // unavailable — the constructor is missing or threw, or the worker script
+    // failed to load. A SharedWorker that is merely slow to boot does NOT land
+    // here: bootInSharedWorker waits it out, so multiple tabs always share the one
+    // shared visor rather than each spawning a competing dedicated-worker visor.
     await becomeLeader('skywire-wasm-visor');
     try {
       pk = await bootInWorker(sk);
