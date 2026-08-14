@@ -431,13 +431,6 @@ func (rc *rpcClient) StopVPNClient(appName string) error {
 	return rc.Call("StopVPNClient", &appName, &struct{}{})
 }
 
-// FetchUptimeTrackerData calls FetchUptimeTrackerData.
-func (rc *rpcClient) FetchUptimeTrackerData(pk string) ([]byte, error) {
-	var data []byte
-	err := rc.Call("FetchUptimeTrackerData", pk, &data)
-	return data, err
-}
-
 // StartSkysocksClient calls StartSkysocksClient.
 func (rc *rpcClient) StartSkysocksClient(pk string) error {
 	return rc.Call("StartSkysocksClient", pk, &struct{}{})

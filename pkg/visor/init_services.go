@@ -73,10 +73,15 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 	// uptime_tracker was empty, so decommissioning the standalone tracker
 	// silently disabled the TPD heartbeat too — a fleet-wide reward-uptime
 	// regression. resolveUptimeTargets keeps that invariant unit-testable.
-	utURL, tpdURL := resolveUptimeTargets(v.conf.UptimeTracker, v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg)
+	// The standalone uptime-tracker client has been decommissioned; only the
+	// reward-critical TPD heartbeat target is consumed now. resolveUptimeTargets
+	// is retained (and its regression test with it) because it guarantees the TPD
+	// heartbeat URL is derived INDEPENDENTLY of the (now-absent) uptime_tracker
+	// config — the invariant whose violation once collapsed fleet reward uptime.
+	_, tpdURL := resolveUptimeTargets(v.conf.UptimeTracker, v.conf.Transport.Discovery, v.conf.Transport.DiscoveryDmsg)
 
-	if utURL == "" && tpdURL == "" {
-		v.log.Debug("uptime: no uptime_tracker and no transport-discovery addr; skipping heartbeat.")
+	if tpdURL == "" {
+		v.log.Debug("uptime: no transport-discovery addr; skipping TPD heartbeat.")
 		return nil
 	}
 
@@ -90,21 +95,12 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 		bgCtx = context.Background()
 	}
 	go func() { //nolint:gosec,contextcheck
-		var ut utclient.APIClient
-		if utURL != "" {
-			if ut = buildUptimeClient(bgCtx, v, utURL, "uptime tracker"); ut != nil {
-				v.initLock.Lock()
-				v.uptimeTracker = ut
-				v.initLock.Unlock()
-			}
-		}
-
 		var tpdUT utclient.APIClient
 		if tpdURL != "" {
 			tpdUT = buildUptimeClient(bgCtx, v, tpdURL, "TPD heartbeat")
 		}
 
-		if ut == nil && tpdUT == nil {
+		if tpdUT == nil {
 			v.log.Warn("uptime: no heartbeat client could be built; visor presence will not be reported")
 			return
 		}
@@ -114,11 +110,6 @@ func initUptimeTracker(_ context.Context, v *Visor, log *logging.Logger) error {
 		sendHeartbeats := func() {
 			c, cancel := context.WithTimeout(context.Background(), heartbeatSendTimeout)
 			defer cancel()
-			if ut != nil {
-				if err := ut.UpdateVisorUptime(c, v.conf.Version); err != nil {
-					log.WithError(err).Warn("Failed to update visor uptime (standalone tracker).")
-				}
-			}
 			// The TPD heartbeat is the reward-critical presence signal. Surface
 			// failures at Warn and flip the health flags so a persistent 401 /
 			// auth / connectivity failure is visible in the visor's own logs and

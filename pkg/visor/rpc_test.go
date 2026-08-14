@@ -7,12 +7,10 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/skycoin/skywire/pkg/cipher"
 	"github.com/skycoin/skywire/pkg/transport"
-	"github.com/skycoin/skywire/pkg/utclient"
 	"github.com/skycoin/skywire/pkg/visor/visorconfig"
 )
 
@@ -34,10 +32,6 @@ func TestHealth(t *testing.T) {
 			RouteSetupNodes: []cipher.PubKey{c.PK},
 		}
 
-		utClient := &utclient.MockAPIClient{}
-		utClient.On("UpdateVisorUptime", mock.Anything).Return(nil)
-		utClient.On("Health", mock.Anything).Return(nil)
-
 		v := &Visor{
 			conf: c,
 			tpM: &transport.Manager{
@@ -45,7 +39,6 @@ func TestHealth(t *testing.T) {
 					DiscoveryClient: transport.NewDiscoveryMock(),
 				},
 			},
-			uptimeTracker:     utClient,
 			isServicesHealthy: newInternalHealthInfo(),
 		}
 		v.isServicesHealthy.init()
