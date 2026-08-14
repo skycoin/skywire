@@ -282,6 +282,23 @@ func (p *visorPolicyProvider) IsHypervisor(pk string) bool {
 	return ok
 }
 
+// HasTransport implements policy.Provider. True when the visor
+// already holds a live transport to the peer (any type). Backed by
+// the same preferred-transport lookup Latency/Kind use, so it's a
+// near-instant map hit in the transport manager — cheap enough for
+// the dial hot path. Lets "prefer-connected" policies bias toward
+// peers we're already wired to, avoiding a fresh-transport setup.
+func (p *visorPolicyProvider) HasTransport(pk string) bool {
+	if p.tpM == nil {
+		return false
+	}
+	pubkey, ok := parsePK(pk)
+	if !ok {
+		return false
+	}
+	return p.preferredTransport(pubkey) != nil
+}
+
 // preferredTransport returns the most-preferred existing transport
 // to the peer (stcpr > sudph > stcp > dmsg) or nil. Used by
 // Latency() and Kind() to get a single representative transport
