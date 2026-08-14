@@ -1762,7 +1762,11 @@
       { wasmOnly: true, action: "wallet", sel: "@appwin", title: "App: Skycoin wallet",
         body: "The <b>Skycoin wallet</b> — a client-side wallet served from this tab. Your keys never leave the browser; only node and BTC queries cross the mesh. This is where the reward system pays visors that stay online." },
       { wasmOnly: true, action: "log", sel: "@appwin", title: "App: live visor logs",
-        body: "The <b>visor log</b> — a live tail of this visor's own runtime (dmsg, transports, routing, apps), straight from the wasm core in this tab. Watch the mesh work in real time; the ☰ console runs CLI commands against the same visor." },
+        body: "The <b>visor log</b> — a live tail of this visor's own runtime (dmsg, transports, routing, apps), straight from the wasm core in this tab. Watch the mesh work in real time — and the <b>console</b>, next, drives the same visor from a command line." },
+      { wasmOnly: true, action: "cli", sel: "@appwin", title: "App: the visor console",
+        body: "The <b>console</b> is a real shell running <i>inside</i> this browser visor — pipes, globbing, control flow, an editor, even <code>jq</code> and <code>awk</code>. Its built-in visor commands — <code>pk</code>, <code>about</code>, <code>visors</code>, <code>net</code>, <code>health</code>, <code>apps</code>, <code>tps</code>, <code>routes</code> — emit JSON straight into the terminal, so you can inspect and script this visor exactly like a native one. No SSH, no install: a full shell for your visor, in the tab.",
+        more: { summary: "A shell, in a browser tab",
+          panel: "This isn't a remote terminal — there's no server on the other end. The shell (<b>websh</b>) runs in the same wasm runtime as the visor, and its visor commands call straight into the in-tab core, emitting JSON you can pipe through <code>jq</code>/<code>awk</code> like any Unix pipeline. A native visor exposes the same commands through <code>skywire cli</code> on the host; here they live in the browser." } },
 
       { sel: "#tb-menu", title: "Your keys, your visor",
         body: {
