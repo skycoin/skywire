@@ -20,7 +20,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
 // Bridge fronts ONE tab: a yamux session over the tab's WebSocket connection,

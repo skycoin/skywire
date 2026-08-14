@@ -12,8 +12,11 @@
 package main
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"runtime"
+	"runtime/pprof"
 	"syscall/js"
 	"time"
 )
@@ -68,4 +71,38 @@ func jsVisorStats(js.Value, []js.Value) interface{} {
 		return "{}"
 	}
 	return string(b)
+}
+
+// jsGoroutineDump() → the full text stack trace of EVERY goroutine
+// (runtime.Stack(_, true): the SIGQUIT-style dump). The one thing visorStats()
+// can't show is WHICH goroutine is hot — a goroutine wedged in a busy
+// select+time.After loop shows up here by its stack, and counting identical
+// stacks reveals a per-transport / per-session spinner. Uses a 2 MB scratch
+// buffer (trivial next to the heap).
+func jsGoroutineDump(js.Value, []js.Value) interface{} {
+	buf := make([]byte, 2<<20)
+	n := runtime.Stack(buf, true)
+	return string(buf[:n])
+}
+
+// jsPprof(name) → a runtime/pprof profile in the binary protobuf format that
+// `go tool pprof` reads, base64-encoded so the JS side can Blob-download it as
+// <name>.pb.gz. SNAPSHOT profiles only (goroutine / heap / allocs /
+// threadcreate / mutex / block) — those work under wasm; CPU profiling needs
+// SIGPROF, which wasm has no equivalent for (use the DevTools sampler for CPU).
+// mutex/block are empty unless their rate was enabled. Defaults to "goroutine".
+func jsPprof(_ js.Value, args []js.Value) interface{} {
+	name := "goroutine"
+	if len(args) > 0 && args[0].Type() == js.TypeString && args[0].String() != "" {
+		name = args[0].String()
+	}
+	p := pprof.Lookup(name)
+	if p == nil {
+		return ""
+	}
+	var b bytes.Buffer
+	if err := p.WriteTo(&b, 0); err != nil { // 0 = protobuf (for `go tool pprof`)
+		return ""
+	}
+	return base64.StdEncoding.EncodeToString(b.Bytes())
 }

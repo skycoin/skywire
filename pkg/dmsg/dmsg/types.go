@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 	"github.com/xtaci/smux"
 
 	"github.com/skycoin/skywire/pkg/cipher"
