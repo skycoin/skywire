@@ -16,13 +16,13 @@ type DecPrivateModes struct {
 	ApplicationKeypad     bool
 	BracketedPasteMode    bool
 	// CursorBlink/CursorStyle: nil = not overridden by DECSCUSR.
-	CursorBlink       *bool
-	CursorStyle       *string
-	Origin            bool
-	ReverseWraparound bool
-	SendFocus         bool
+	CursorBlink        *bool
+	CursorStyle        *string
+	Origin             bool
+	ReverseWraparound  bool
+	SendFocus          bool
 	SynchronizedOutput bool
-	Wraparound        bool // defaults: xterm - true, vt100 - false
+	Wraparound         bool // defaults: xterm - true, vt100 - false
 }
 
 func defaultDecPrivateModes() DecPrivateModes {

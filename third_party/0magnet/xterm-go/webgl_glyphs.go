@@ -473,7 +473,9 @@ func drawPatternChar(ctx js.Value, def [][]int, xOffset, yOffset, cellW, cellH f
 	var r, g, b int
 	a := 1.0
 	if strings.HasPrefix(fillStyle, "#") && len(fillStyle) >= 7 {
-		fmt.Sscanf(fillStyle[1:7], "%02x%02x%02x", &r, &g, &b)
+		if _, err := fmt.Sscanf(fillStyle[1:7], "%02x%02x%02x", &r, &g, &b); err != nil {
+			r, g, b = 0, 0, 0 // unparsable color: fall back to black
+		}
 	}
 	imageData := tmpCtx.Call("createImageData", width, height)
 	data := imageData.Get("data")
@@ -538,7 +540,10 @@ func runSVGPath(ctx js.Value, path string, cellW, cellH, xOffset, yOffset float6
 		typ := instruction[0]
 		var args []float64
 		for _, s := range strings.Split(instruction[1:], ",") {
-			v, _ := strconv.ParseFloat(s, 64)
+			v, err := strconv.ParseFloat(s, 64)
+			if err != nil {
+				v = 0 // malformed path component: keep the historical zero
+			}
 			args = append(args, v)
 		}
 		if len(args) < 2 {

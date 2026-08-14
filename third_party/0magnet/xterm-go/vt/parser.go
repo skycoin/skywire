@@ -423,7 +423,7 @@ func (p *Parser) Parse(data []uint32, length int) {
 				}
 			}
 		case actionExecute:
-			if handler, ok := p.executeHandlers[byte(code)]; ok {
+			if handler, ok := p.executeHandlers[byte(code)]; ok { // #nosec G115 -- single-byte C0/C1 controls and ASCII digits
 				handler()
 			} else {
 				p.executeHandlerFb(code)
@@ -462,7 +462,7 @@ func (p *Parser) Parse(data []uint32, length int) {
 				case 0x3a:
 					p.params.AddSubParam(-1)
 				default: // 0x30 - 0x39
-					p.params.AddDigit(int32(code) - 48)
+					p.params.AddDigit(int32(code) - 48) // #nosec G115 -- single-byte C0/C1 controls and ASCII digits
 				}
 				i++
 				if i >= length {

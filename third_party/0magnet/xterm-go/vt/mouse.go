@@ -126,7 +126,7 @@ var mouseProtocols = map[string]mouseProtocol{
 		events: MouseEventDown | MouseEventUp | MouseEventWheel | MouseEventDrag,
 		restrict: func(e *MouseEvent) bool {
 			// no move without button
-			return !(e.Action == MouseActionMove && e.Button == MouseButtonNone)
+			return e.Action != MouseActionMove || e.Button != MouseButtonNone
 		},
 	},
 	"ANY": {
