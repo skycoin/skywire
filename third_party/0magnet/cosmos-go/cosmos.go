@@ -918,7 +918,7 @@ func (g *Graph) runSimulationStep(forceExecution bool) {
 	}
 
 	shouldRunSimulation := forceExecution ||
-		(st.isSimulationRunning && !(g.zoom.isRunning && !cfg.EnableSimulationDuringZoom))
+		(st.isSimulationRunning && (!g.zoom.isRunning || cfg.EnableSimulationDuringZoom))
 
 	if shouldRunSimulation {
 		if cfg.SimulationGravity != 0 {

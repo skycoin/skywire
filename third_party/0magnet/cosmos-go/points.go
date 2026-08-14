@@ -111,7 +111,7 @@ func (p *points) updatePositions() {
 	}
 	if shouldRescale {
 		p.rescaleInitialPointPositions()
-	} else if !(p.hasSkipRescale && p.shouldSkipRescale) {
+	} else if !p.hasSkipRescale || !p.shouldSkipRescale {
 		p.scaleXFn = nil
 		p.scaleYFn = nil
 	}

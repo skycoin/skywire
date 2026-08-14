@@ -274,8 +274,8 @@ func (z *zoomState) getTransform(positions [][2]float64, scale float64, hasScale
 		xs[i] = p[0]
 		ys[i] = p[1]
 	}
-	xMin, xMax, _ := extent(xs)
-	yMin, yMax, _ := extent(ys)
+	xMin, xMax := extent(xs)
+	yMin, yMax := extent(ys)
 	xMin = z.st.scaleX(xMin)
 	xMax = z.st.scaleX(xMax)
 	yMin = z.st.scaleY(yMin)
