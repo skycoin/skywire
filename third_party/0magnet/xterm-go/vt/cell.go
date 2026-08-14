@@ -90,9 +90,9 @@ func utf16Units(s string) []uint16 {
 	for _, r := range s {
 		if r > 0xFFFF {
 			r -= 0x10000
-			units = append(units, uint16(r>>10)+0xD800, uint16(r&0x3FF)+0xDC00)
+			units = append(units, uint16(r>>10)+0xD800, uint16(r&0x3FF)+0xDC00) // #nosec G115 -- UTF-16 code units and a 0-2 cell width
 		} else {
-			units = append(units, uint16(r))
+			units = append(units, uint16(r)) // #nosec G115 -- UTF-16 code units and a 0-2 cell width
 		}
 	}
 	return units
@@ -115,7 +115,7 @@ func (c *CellData) SetFromCharData(value CharData) {
 			second := units[1]
 			if second >= 0xDC00 && second <= 0xDFFF {
 				c.Content = (uint32(code)-0xD800)*0x400 + uint32(second) - 0xDC00 + 0x10000 |
-					uint32(value.Width)<<ContentWidthShift
+					uint32(value.Width)<<ContentWidthShift // #nosec G115 -- UTF-16 code units and a 0-2 cell width
 			} else {
 				combined = true
 			}
@@ -123,13 +123,13 @@ func (c *CellData) SetFromCharData(value CharData) {
 			combined = true
 		}
 	case len(units) == 1:
-		c.Content = uint32(units[0]) | uint32(value.Width)<<ContentWidthShift
+		c.Content = uint32(units[0]) | uint32(value.Width)<<ContentWidthShift // #nosec G115 -- UTF-16 code units and a 0-2 cell width
 	default:
-		c.Content = uint32(value.Width) << ContentWidthShift
+		c.Content = uint32(value.Width) << ContentWidthShift // #nosec G115 -- UTF-16 code units and a 0-2 cell width
 	}
 	if combined {
 		c.CombinedData = value.Chars
-		c.Content = ContentIsCombinedMask | uint32(value.Width)<<ContentWidthShift
+		c.Content = ContentIsCombinedMask | uint32(value.Width)<<ContentWidthShift // #nosec G115 -- UTF-16 code units and a 0-2 cell width
 	}
 }
 

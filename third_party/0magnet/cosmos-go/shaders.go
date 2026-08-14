@@ -283,7 +283,7 @@ float squareDistance(vec2 p) {
 float triangleDistance(vec2 p) {
     const float k = sqrt(3.0);   // ≈1.732; slope of 60° lines for an equilateral triangle
     p.x = abs(p.x) - 0.9;        // fold the X axis and shift: brings left and right halves together
-    p.y = p.y + 0.55;             // move the whole shape up slightly so it is centred vertically
+    p.y = p.y + 0.55;             // move the whole shape up slightly so it is centered vertically
 
     // reflect points that fall outside the main triangle back inside, to reuse the same maths
     if (p.x + k * p.y > 0.0)

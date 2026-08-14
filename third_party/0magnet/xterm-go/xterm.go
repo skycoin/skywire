@@ -57,13 +57,13 @@ type Terminal struct {
 
 	cellW, cellH float64
 
-	keyDownHandled        bool
-	renderQueued          bool
-	allDirty              bool
-	dirtyStart, dirtyEnd  int
-	syncingScroll         bool
-	blinkVisible          bool
-	opened                bool
+	keyDownHandled       bool
+	renderQueued         bool
+	allDirty             bool
+	dirtyStart, dirtyEnd int
+	syncingScroll        bool
+	blinkVisible         bool
+	opened               bool
 
 	funcs []js.Func
 }
@@ -812,7 +812,7 @@ func (t *Terminal) Attach(ws js.Value, bidirectional bool) {
 			// binary is passed as latin-1 bytes
 			buf := make([]byte, len(data))
 			for i := 0; i < len(data); i++ {
-				buf[i] = byte(data[i])
+				buf[i] = data[i]
 			}
 			u8 := js.Global().Get("Uint8Array").New(len(buf))
 			js.CopyBytesToJS(u8, buf)

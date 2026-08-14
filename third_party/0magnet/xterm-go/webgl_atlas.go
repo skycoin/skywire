@@ -134,7 +134,7 @@ func (a *textureAtlas) clearTexture() {
 }
 
 func (a *textureAtlas) getRasterizedGlyph(code uint32, bg, fg, ext uint32) *rasterizedGlyph {
-	key := glyphKey{chars: string(rune(code)), bg: bg, fg: fg, ext: ext}
+	key := glyphKey{chars: string(rune(code)), bg: bg, fg: fg, ext: ext} // #nosec G115 -- a glyph code is a Unicode codepoint
 	if g, ok := a.cache[key]; ok {
 		return g
 	}
@@ -165,8 +165,8 @@ func (a *textureAtlas) backgroundColor(bgColorMode uint32, bgColor int, inverse 
 	case vt.AttrCMP16, vt.AttrCMP256:
 		return a.ansiColor(bgColor)
 	case vt.AttrCMRGB:
-		arr := vt.ToColorRGB(uint32(bgColor))
-		return rgbCSS([3]int{arr[0], arr[1], arr[2]}), uint32(bgColor) & vt.AttrRGBMask
+		arr := vt.ToColorRGB(uint32(bgColor))                                           // #nosec G115 -- 24-bit RGB channels and palette indices
+		return rgbCSS([3]int{arr[0], arr[1], arr[2]}), uint32(bgColor) & vt.AttrRGBMask // #nosec G115 -- 24-bit RGB channels and palette indices
 	default:
 		if inverse {
 			return a.cfg.colors.Foreground, cssToRGB(a.cfg.colors.Foreground)
@@ -184,8 +184,8 @@ func (a *textureAtlas) foregroundColor(fgColorMode uint32, fgColor int, inverse,
 		}
 		css, rgb = a.ansiColor(fgColor)
 	case vt.AttrCMRGB:
-		arr := vt.ToColorRGB(uint32(fgColor))
-		css, rgb = rgbCSS([3]int{arr[0], arr[1], arr[2]}), uint32(fgColor)&vt.AttrRGBMask
+		arr := vt.ToColorRGB(uint32(fgColor))                                             // #nosec G115 -- 24-bit RGB channels and palette indices
+		css, rgb = rgbCSS([3]int{arr[0], arr[1], arr[2]}), uint32(fgColor)&vt.AttrRGBMask // #nosec G115 -- 24-bit RGB channels and palette indices
 	default:
 		if inverse {
 			css, rgb = a.cfg.colors.Background, cssToRGB(a.cfg.colors.Background)
@@ -207,14 +207,6 @@ func isPowerlineGlyph(codepoint uint32) bool {
 
 func isRestrictedPowerlineGlyph(codepoint uint32) bool {
 	return 0xE0B0 <= codepoint && codepoint <= 0xE0B7
-}
-
-func isBoxOrBlockGlyph(codepoint uint32) bool {
-	return 0x2500 <= codepoint && codepoint <= 0x259F
-}
-
-func treatGlyphAsBackgroundColor(codepoint uint32) bool {
-	return isPowerlineGlyph(codepoint) || isBoxOrBlockGlyph(codepoint)
 }
 
 func computeNextVariantOffset(cellWidth, lineWidth float64, currentOffset float64) float64 {
@@ -346,7 +338,7 @@ func (a *textureAtlas) drawToCache(chars string, code uint32, bg, fg, ext uint32
 			ctx.Set("strokeStyle", ctx.Get("fillStyle"))
 		} else if ucMode == vt.AttrCMRGB {
 			enableClearThresholdCheck = false
-			arr := vt.ToColorRGB(uint32(attr.GetUnderlineColor()))
+			arr := vt.ToColorRGB(uint32(attr.GetUnderlineColor())) // #nosec G115 -- 24-bit RGB channels and palette indices
 			ctx.Set("strokeStyle", rgbCSS([3]int{arr[0], arr[1], arr[2]}))
 		} else {
 			enableClearThresholdCheck = false
@@ -689,9 +681,9 @@ found4:
 // contrast-relative threshold of it) fully transparent. Returns true
 // if the glyph is empty.
 func clearColorPixels(pix []byte, bg, fg uint32, enableThresholdCheck bool) bool {
-	r := byte(bg >> 16)
-	g := byte(bg >> 8)
-	b := byte(bg)
+	r := byte(bg >> 16) // #nosec G115 -- 24-bit RGB channels and palette indices
+	g := byte(bg >> 8)  // #nosec G115 -- 24-bit RGB channels and palette indices
+	b := byte(bg)       // #nosec G115 -- 24-bit RGB channels and palette indices
 	fgR := int(fg >> 16 & 0xff)
 	fgG := int(fg >> 8 & 0xff)
 	fgB := int(fg & 0xff)
@@ -758,7 +750,7 @@ func jsCeil(v float64) float64 {
 // cssToRGB parses #rgb / #rrggbb to 0xRRGGBB (white on failure).
 func cssToRGB(css string) uint32 {
 	if rgb, ok := vt.ParseColor(css); ok {
-		return uint32(rgb[0])<<16 | uint32(rgb[1])<<8 | uint32(rgb[2])
+		return uint32(rgb[0])<<16 | uint32(rgb[1])<<8 | uint32(rgb[2]) // #nosec G115 -- 24-bit RGB channels and palette indices
 	}
 	return 0xFFFFFF
 }

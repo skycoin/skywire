@@ -63,15 +63,15 @@ func parseRGBA(value string) [4]float64 {
 		var r, g, b, a uint64 = 0, 0, 0, 255
 		switch len(hex) {
 		case 3:
-			r, _ = strconv.ParseUint(strings.Repeat(hex[0:1], 2), 16, 16)
-			g, _ = strconv.ParseUint(strings.Repeat(hex[1:2], 2), 16, 16)
-			b, _ = strconv.ParseUint(strings.Repeat(hex[2:3], 2), 16, 16)
+			r = hexComponent(strings.Repeat(hex[0:1], 2))
+			g = hexComponent(strings.Repeat(hex[1:2], 2))
+			b = hexComponent(strings.Repeat(hex[2:3], 2))
 		case 6, 8:
-			r, _ = strconv.ParseUint(hex[0:2], 16, 16)
-			g, _ = strconv.ParseUint(hex[2:4], 16, 16)
-			b, _ = strconv.ParseUint(hex[4:6], 16, 16)
+			r = hexComponent(hex[0:2])
+			g = hexComponent(hex[2:4])
+			b = hexComponent(hex[4:6])
 			if len(hex) == 8 {
-				a, _ = strconv.ParseUint(hex[6:8], 16, 16)
+				a = hexComponent(hex[6:8])
 			}
 		}
 		return [4]float64{float64(r) / 255, float64(g) / 255, float64(b) / 255, float64(a) / 255}
@@ -83,7 +83,10 @@ func parseRGBA(value string) [4]float64 {
 			parts := strings.Split(value[open+1:close], ",")
 			if len(parts) >= 3 {
 				parse := func(s string) float64 {
-					v, _ := strconv.ParseFloat(strings.TrimSpace(s), 64)
+					v, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+					if err != nil {
+						return 0 // malformed component: treat as zero, as before
+					}
 					return v
 				}
 				r := parse(parts[0]) / 255
@@ -110,7 +113,7 @@ func parseRGBA(value string) [4]float64 {
 			1,
 		}
 	}
-	// Anything else — modern CSS colour syntax, or a keyword this table does
+	// Anything else — modern CSS color syntax, or a keyword this table does
 	// not carry — goes to the browser, which knows every format there is.
 	// cosmos.gl's own getRgbaColor delegates to the browser for everything, so
 	// falling back keeps parity; silently returning black does not.
@@ -202,8 +205,8 @@ func mod(v, m float64) float64 {
 	return r
 }
 
-// browserColorCtx is a 1x1 canvas context kept for colour normalisation; the
-// browser rewrites any CSS colour assigned to fillStyle into #rrggbb or
+// browserColorCtx is a 1x1 canvas context kept for color normalisation; the
+// browser rewrites any CSS color assigned to fillStyle into #rrggbb or
 // rgba(...), which the parsers above already understand.
 var browserColorCtx js.Value
 
@@ -221,7 +224,7 @@ func parseViaBrowser(value string) ([4]float64, bool) {
 			return [4]float64{}, false
 		}
 	}
-	// An invalid colour leaves fillStyle unchanged, so seed a known value and
+	// An invalid color leaves fillStyle unchanged, so seed a known value and
 	// treat "unchanged" as a parse failure.
 	const sentinel = "#010203"
 	browserColorCtx.Set("fillStyle", sentinel)
@@ -242,4 +245,14 @@ func parseViaBrowser(value string) ([4]float64, bool) {
 func GetRgbaColor(value string) [4]float32 {
 	c := parseRGBA(value)
 	return [4]float32{float32(c[0]), float32(c[1]), float32(c[2]), float32(c[3])}
+}
+
+// hexComponent parses a two-digit hex color component. A malformed component
+// is zero, which is how a browser treats an unparsable channel.
+func hexComponent(s string) uint64 {
+	v, err := strconv.ParseUint(s, 16, 16)
+	if err != nil {
+		return 0
+	}
+	return v
 }

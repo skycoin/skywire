@@ -43,16 +43,16 @@ func (c *compositionHelper) value() string {
 	return c.textarea.Get("value").String()
 }
 
-// setTimeout schedules f on the JS event loop after ms (releasing the
-// callback after one shot).
-func setTimeout(f func(), ms int) {
+// setTimeout schedules f on the JS event loop for the next tick (releasing
+// the callback after one shot).
+func setTimeout(f func()) {
 	var cb js.Func
 	cb = js.FuncOf(func(js.Value, []js.Value) any {
 		f()
 		cb.Release()
 		return nil
 	})
-	window.Call("setTimeout", cb, ms)
+	window.Call("setTimeout", cb, 0)
 }
 
 // CompositionStart handles the compositionstart event, activating the
@@ -72,7 +72,7 @@ func (c *compositionHelper) CompositionUpdate(data string) {
 	c.UpdateCompositionElements(false)
 	setTimeout(func() {
 		c.posEnd = len(utf16UnitsOf(c.value()))
-	}, 0)
+	})
 }
 
 // CompositionEnd handles the compositionend event, hiding the view and
@@ -149,7 +149,7 @@ func (c *compositionHelper) finalizeComposition(waitForPropagation bool) {
 		if len(input) > 0 {
 			c.term.Core.Input(input, true)
 		}
-	}, 0)
+	})
 }
 
 // handleAnyTextareaChanges applies textarea changes after the current
@@ -172,7 +172,7 @@ func (c *compositionHelper) handleAnyTextareaChanges() {
 		} else if newValue != oldValue {
 			c.term.Core.Input(newValue, true)
 		}
-	}, 0)
+	})
 }
 
 // UpdateCompositionElements positions the composition view on top of
@@ -222,7 +222,7 @@ func (c *compositionHelper) UpdateCompositionElements(dontRecurse bool) {
 	}
 
 	if !dontRecurse {
-		setTimeout(func() { c.UpdateCompositionElements(true) }, 0)
+		setTimeout(func() { c.UpdateCompositionElements(true) })
 	}
 }
 
