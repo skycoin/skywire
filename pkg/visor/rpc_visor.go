@@ -171,14 +171,6 @@ func (r *RPC) Overview(_ *struct{}, out *Overview) (err error) {
 	return err
 }
 
-// FetchUptimeTrackerData trying to fetch ut data
-func (r *RPC) FetchUptimeTrackerData(pk string, data *[]byte) (err error) {
-	defer rpcutil.LogCall(r.log, "FetchUptimeTrackerData", pk)(data, &err)
-	rep, err := r.visor.FetchUptimeTrackerData(pk)
-	*data = rep
-	return err
-}
-
 // Reload reloads the config - without restarting the visor
 func (r *RPC) Reload(_ *struct{}, _ *struct{}) (err error) {
 	// @evanlinjin: do not defer this log statement, as the underlying visor.Logger will get closed.

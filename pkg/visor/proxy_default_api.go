@@ -686,10 +686,6 @@ func (proxyDefaultAPI) ReinitiateModule(_ string) error {
 	return ErrProxyNotSupported
 }
 
-func (proxyDefaultAPI) FetchUptimeTrackerData(_ string) ([]byte, error) {
-	return nil, ErrProxyNotSupported
-}
-
 func (proxyDefaultAPI) DeregisterService(_ []cipher.PubKey, _ string) error {
 	return ErrProxyNotSupported
 }
