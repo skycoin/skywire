@@ -602,6 +602,11 @@ func bootEdge(skHex, seedPKHex, seedWSURL, discDmsgAddr, cfgOverrideJSON string)
 	// no periodic self-dial (that would scale fleet traffic with tab count).
 	go startRecoverySupervisor(ctx)
 
+	// dynamic config-refresh: re-fetch the deployment conf service hourly and
+	// adopt rotated route/transport setup nodes without a reload — the wasm port
+	// of the native visor's startConfigRefresh (see configrefresh_js.go).
+	go startConfigRefresh(ctx)
+
 	// 4. in-process app server (RunModeInternal). The browser-adapted
 	// appserver.NewProcManager no longer net.Listen("tcp")s under TinyGo (a
 	// browser can't); in-process apps connect over net.Pipe. addr "" → no TCP
