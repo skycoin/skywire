@@ -29,7 +29,28 @@ import (
 	"github.com/skycoin/skywire/pkg/servicedisc"
 	"github.com/skycoin/skywire/pkg/transport"
 	tptypes "github.com/skycoin/skywire/pkg/transport/types"
+	"github.com/skycoin/skywire/pkg/wasmhv/wasmbin"
 )
+
+// tpvizNetviewVariant picks which embedded wasm-visor variant the cosmos-go
+// ("netview") WebGL view is served from. The view is no longer a separate
+// tpviz-gl.wasm blob: it is a ROLE of the one wasm-visor binary (cmd/wasm-visor,
+// __SKYWIRE_WASM_ROLE__="netview"), served straight from pkg/wasmhv/wasmbin —
+// exactly how `skywire skycoin web` serves the wallet cipher out of the same
+// blob (cmd/skycoin/commands/cipherwasm.go). TinyGo is preferred (far smaller —
+// ~4 MB vs ~10 MB gz) because this page pays for the whole blob just to run the
+// view out of it. Returns ok=false when no blob is embedded, so the view fails
+// to load gracefully and the operator can pick another one.
+func tpvizNetviewVariant() (wasmbin.Variant, bool) {
+	switch {
+	case !wasmbin.Embedded():
+		return wasmbin.Default(), false
+	case wasmbin.Has(wasmbin.TinyGo):
+		return wasmbin.TinyGo, true
+	default:
+		return wasmbin.Default(), true
+	}
+}
 
 // legacyFS (the embedded legacy JavaScript UI, `//go:embed legacy/*`) lives in
 // tpviz_legacy_on.go; the `mobile` build variant leaves it empty
@@ -604,25 +625,32 @@ func (s *Server) setupRoutes() {
 	})
 
 	// The Go/wasm WebGL view, loaded lazily by bundle.js when that view is
-	// selected from the toggle — it runs alongside the JavaScript WebGL view so
-	// the two engines can be compared on the same data.
+	// selected from the toggle. It is served from the embedded wasm-visor blob
+	// (run in its "netview" role) rather than a separate tpviz-gl.wasm, so the
+	// binary carries one fewer wasm — the URLs are kept the same so bundle.js
+	// needs no path change, only the role flag it sets before instantiating.
 	s.mux.HandleFunc("/tpviz-gl.wasm", func(w http.ResponseWriter, r *http.Request) {
-		content, err := legacyFS.ReadFile("legacy/tpviz-gl.wasm")
+		v, ok := tpvizNetviewVariant()
+		if !ok {
+			http.Error(w, "no wasm-visor blob embedded in this build", http.StatusServiceUnavailable)
+			return
+		}
+		wasm, err := wasmbin.GetVariant(v)
 		if err != nil {
-			http.Error(w, "Failed to read tpviz-gl.wasm", http.StatusInternalServerError)
+			http.Error(w, "Failed to read wasm-visor blob", http.StatusInternalServerError)
 			return
 		}
 		w.Header().Set("Content-Type", "application/wasm")
-		w.Write(content) //nolint:errcheck,gosec
+		w.Write(wasm) //nolint:errcheck,gosec
 	})
 	s.mux.HandleFunc("/tpviz-gl-exec.js", func(w http.ResponseWriter, r *http.Request) {
-		content, err := legacyFS.ReadFile("legacy/tpviz-gl-exec.js")
-		if err != nil {
-			http.Error(w, "Failed to read tpviz-gl-exec.js", http.StatusInternalServerError)
+		v, ok := tpvizNetviewVariant()
+		if !ok {
+			http.Error(w, "no wasm-visor blob embedded in this build", http.StatusServiceUnavailable)
 			return
 		}
 		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Write(content) //nolint:errcheck,gosec
+		w.Write(wasmbin.WasmExecJSVariant(v)) //nolint:errcheck,gosec
 	})
 
 	// Serve textures for globe visualization

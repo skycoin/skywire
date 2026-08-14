@@ -150,12 +150,22 @@ func pageHTTPS() bool {
 
 func main() {
 	ctx = context.Background()
-	// One binary, two roles (see shell_js.go): the tab loads this same wasm a
-	// second time as "shell" when the visor itself lives in a worker, which
-	// has no DOM to draw a terminal into.
-	if wasmRole() == "shell" {
+	// One binary, several roles (see shell_js.go / tpviz_js.go): the tab loads
+	// this same wasm a second time in a DOM-bearing context when the visor
+	// itself lives in a worker (which has no DOM). Each role installs only its
+	// surface and never boots a visor.
+	//   - "shell":   the websh terminal (shell_js.go).
+	//   - "netview": the tpviz WebGL network visualizer (tpviz_js.go) — runs in
+	//                the main thread so it can own a WebGL canvas, and reaches
+	//                the worker-side visor for data over the skywireVisor proxy.
+	switch wasmRole() {
+	case "shell":
 		installShell()
 		fmt.Println("wasm-visor: shell role — call skywireShell.open(el)")
+		keepAlive()
+	case "netview":
+		installNetView()
+		fmt.Println("wasm-visor: netview role — call tpvizGL.init(elId, onEvent)")
 		keepAlive()
 	}
 	// Publish the skycoin browser cipher on the same page.

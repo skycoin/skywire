@@ -1,7 +1,7 @@
 
 .PHONY : check lint install-linters dep test lint-extra
 .PHONY : update-deps update-dmsg update-skycoin push-deps
-.PHONY : build clean install format  bin build-race wasm-visor tpviz-gl embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
+.PHONY : build clean install format  bin build-race wasm-visor embed-wasm-visor embed-wasm-visor-tinygo prune-wasm-embed-history
 .PHONY : build-mobile android-mobile android-mobile-check android-mobile-ndk android-apk android-aab android-apk-debug check-mobile-version
 .PHONY : generate services vet check-cg check-help check-inner check-ci
 .PHONY : e2e-build e2e-run e2e-test e2e-stop e2e-clean e2e-skychat
@@ -418,10 +418,11 @@ TINYGO ?= tinygo
 # 0.41+ builds it. The artifacts live in pkg/tpviz/legacy/ because that whole
 # directory is go:embed'ed and served next to bundle.js, which loads the module
 # lazily when the "WebGL (Go)" view is selected.
-tpviz-gl: ## Build the Go/wasm WebGL tpviz view into pkg/tpviz/legacy/ (TinyGo, ~630 KB). Runs alongside the JS WebGL view for comparison.
-	$(TINYGO) build -target wasm -no-debug -opt=z -o ./pkg/tpviz/legacy/tpviz-gl.wasm ./pkg/tpviz/wasmgl
-	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/tpviz/legacy/tpviz-gl-exec.js
-	@echo "built pkg/tpviz/legacy/tpviz-gl.wasm — commit it intentionally; select it with the 'WebGL (Go)' toggle or ?view=go"
+# NOTE: the cosmos-go WebGL tpviz view no longer builds a separate
+# tpviz-gl.wasm. It is a role of the one wasm-visor blob (cmd/wasm-visor,
+# __SKYWIRE_WASM_ROLE__="netview"); pkg/tpviz serves that blob from
+# pkg/wasmhv/wasmbin. Rebuild it with the wasm-visor blob (make wasm-visor /
+# wasm-visor-tinygo), not a standalone target.
 
 tinygo-wasm-visor: ## Build the FULL browser WASM visor (dmsg+transport+router+appserver, net/http+crypto/tls, route origination) into build/wasm-visor — TinyGo FORK (~7MB / ~2.9MB gzip vs 43MB/9.5MB std-Go). Needs the 0magnet/tinygo fork; set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>
 	mkdir -p ./build/wasm-visor
