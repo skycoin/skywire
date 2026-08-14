@@ -36,4 +36,40 @@ func TestPresetLoader(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "spread-bw")
 	})
+
+	t.Run("every preset loads and evaluates decide_route", func(t *testing.T) {
+		for _, name := range presets.Names() {
+			l, err := NewLoader("preset:" + name)
+			require.NoError(t, err, name)
+			_, err = l.Decide(context.Background(), RoutingContext{App: "skysocks-client"}, nil)
+			require.NoError(t, err, name)
+		}
+	})
+
+	t.Run("asymmetric-fanout sets per-direction mux", func(t *testing.T) {
+		l, err := NewLoader("preset:asymmetric-fanout")
+		require.NoError(t, err)
+		spec, err := l.Decide(context.Background(), RoutingContext{App: "skysocks-client"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 1, spec.ForwardMux)
+		assert.Equal(t, 4, spec.ReverseMux)
+	})
+
+	t.Run("privacy-max forces >=3 hops", func(t *testing.T) {
+		l, err := NewLoader("preset:privacy-max")
+		require.NoError(t, err)
+		spec, err := l.Decide(context.Background(), RoutingContext{App: "x"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 3, spec.MinHops)
+		assert.Equal(t, 2, spec.Mux)
+	})
+
+	t.Run("low-latency-direct is a single low-hop path", func(t *testing.T) {
+		l, err := NewLoader("preset:low-latency-direct")
+		require.NoError(t, err)
+		spec, err := l.Decide(context.Background(), RoutingContext{App: "x"}, nil)
+		require.NoError(t, err)
+		assert.Equal(t, 1, spec.Mux)
+		assert.Equal(t, 1, spec.MinHops)
+	})
 }
