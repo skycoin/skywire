@@ -77,10 +77,10 @@ func (nopProvider) HasTransport(string) bool { return false }
 // FakeProvider is a test helper. Construct via NewFakeProvider
 // with the visor state the test wants to simulate.
 type FakeProvider struct {
-	mu          sync.RWMutex
-	geo         map[string]string
-	latency     map[string]int
-	kind        map[string]string
+	mu           sync.RWMutex
+	geo          map[string]string
+	latency      map[string]int
+	kind         map[string]string
 	trusted      map[string]bool
 	hypervisors  map[string]bool
 	hasTransport map[string]bool
