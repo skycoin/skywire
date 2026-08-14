@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1181,6 +1182,30 @@ func storeLog(conf *visorconfig.V1) {
 	// Create log directory with readable permissions for log access
 	if err := os.MkdirAll(logPath, 0750); err != nil { //nolint:gosec
 		mLog.WithError(err).Warn("Failed to create log directory")
+	}
+
+	// Capture unhandled panics / fatal runtime errors to disk. The Go runtime
+	// writes these straight to stderr (the terminal) and NOT through logrus, so a
+	// crash otherwise leaves nothing in skywire.log — worst of all a panic on a
+	// background goroutine, which a top-level recover() can neither catch nor even
+	// stack-trace correctly (by the time a deferred recover runs the stack has
+	// unwound). SetCrashOutput (Go 1.23+) mirrors the FULL original traceback of
+	// any unrecovered panic/fatal error to skywire-crash.log, in ADDITION to
+	// stderr — so the terminal still shows it live and it survives the run for
+	// postmortem. A crash left there by a previous run is surfaced in skywire.log
+	// on the next boot so it isn't missed.
+	crashPath := logPath + "/skywire-crash.log"
+	if prev, err := os.Stat(crashPath); err == nil && prev.Size() > 0 {
+		mLog.PackageLogger("visor").Warnf(
+			"previous run recorded a crash — full traceback in %s (%d bytes)", crashPath, prev.Size())
+	}
+	if cf, err := os.OpenFile(crashPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err != nil { //nolint:gosec
+		mLog.WithError(err).Warn("Failed to open crash-output file; panics will print to stderr only")
+	} else {
+		if err := debug.SetCrashOutput(cf, debug.CrashOptions{}); err != nil {
+			mLog.WithError(err).Warn("Failed to set crash output; panics will print to stderr only")
+		}
+		_ = cf.Close() //nolint:errcheck // SetCrashOutput dup'd the fd; this handle is no longer needed
 	}
 
 	// Pre-create or fix permissions on the log file to make it readable
