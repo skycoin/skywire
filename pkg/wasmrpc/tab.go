@@ -5,7 +5,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/hashicorp/yamux"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 )
 
 // ServeTab runs the TAB end of the bridge: it wraps tabConn (the tab's WebSocket
