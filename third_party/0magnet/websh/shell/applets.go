@@ -75,7 +75,7 @@ func RegisterApplet(name, help string, run func(ctx context.Context, s *Shell, h
 }
 
 func fail(hc *interp.HandlerContext, name string, err error) int {
-	fmt.Fprintf(hc.Stderr, "%s: %v\n", name, err)
+	fprintf(hc.Stderr, "%s: %v\n", name, err)
 	return 1
 }
 
@@ -84,8 +84,11 @@ func parseFlags(args []string) (flags map[byte]bool, rest []string) {
 	flags = map[byte]bool{}
 	for i, a := range args {
 		if len(a) > 1 && a[0] == '-' && a != "--" {
-			for _, c := range a[1:] {
-				flags[byte(c)] = true
+			// Flags are single ASCII letters. Iterate bytes rather than
+			// runes so that a multi-byte rune cannot be truncated into a
+			// byte that reads as some unrelated flag.
+			for j := 1; j < len(a); j++ {
+				flags[a[j]] = true
 			}
 			continue
 		}
@@ -122,7 +125,7 @@ func runLs(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 			continue
 		}
 		if !info.IsDir() {
-			fmt.Fprintln(hc.Stdout, stringer.FileString(ls.FromOSFileInfo(path, info)))
+			fprintln(hc.Stdout, stringer.FileString(ls.FromOSFileInfo(path, info)))
 			continue
 		}
 		infos, err := afero.ReadDir(s.FS, path)
@@ -131,7 +134,7 @@ func runLs(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 			continue
 		}
 		if len(rest) > 1 {
-			fmt.Fprintf(hc.Stdout, "%s:\n", arg)
+			fprintf(hc.Stdout, "%s:\n", arg)
 		}
 		for _, fi := range infos {
 			if !flags['a'] && strings.HasPrefix(fi.Name(), ".") {
@@ -141,7 +144,7 @@ func runLs(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 			if fi.IsDir() && !flags['l'] {
 				name += "/"
 			}
-			fmt.Fprintln(hc.Stdout, name)
+			fprintln(hc.Stdout, name)
 		}
 	}
 	return code
@@ -150,7 +153,9 @@ func runLs(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 func runCat(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	_, rest := parseFlags(args)
 	if len(rest) == 0 {
-		_, _ = io.Copy(hc.Stdout, hc.Stdin)
+		if _, err := io.Copy(hc.Stdout, hc.Stdin); err != nil {
+			return fail(hc, "cat", err)
+		}
 		return 0
 	}
 	for _, arg := range rest {
@@ -158,8 +163,11 @@ func runCat(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 		if err != nil {
 			return fail(hc, "cat", err)
 		}
-		_, _ = io.Copy(hc.Stdout, f)
-		f.Close()
+		_, err = io.Copy(hc.Stdout, f)
+		closeRead(f)
+		if err != nil {
+			return fail(hc, "cat", err)
+		}
 	}
 	return 0
 }
@@ -167,7 +175,7 @@ func runCat(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 func runMkdir(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	flags, rest := parseFlags(args)
 	if len(rest) == 0 {
-		fmt.Fprintln(hc.Stderr, "mkdir: missing operand")
+		fprintln(hc.Stderr, "mkdir: missing operand")
 		return 1
 	}
 	for _, arg := range rest {
@@ -194,7 +202,7 @@ func runRmdir(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []s
 			return fail(hc, "rmdir", err)
 		}
 		if len(infos) > 0 {
-			fmt.Fprintf(hc.Stderr, "rmdir: %s: directory not empty\n", arg)
+			fprintf(hc.Stderr, "rmdir: %s: directory not empty\n", arg)
 			return 1
 		}
 		if err := s.FS.Remove(path); err != nil {
@@ -207,7 +215,7 @@ func runRmdir(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []s
 func runRm(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	flags, rest := parseFlags(args)
 	if len(rest) == 0 {
-		fmt.Fprintln(hc.Stderr, "rm: missing operand")
+		fprintln(hc.Stderr, "rm: missing operand")
 		return 1
 	}
 	for _, arg := range rest {
@@ -220,7 +228,7 @@ func runRm(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 			return fail(hc, "rm", err)
 		}
 		if info.IsDir() && !flags['r'] {
-			fmt.Fprintf(hc.Stderr, "rm: %s: is a directory\n", arg)
+			fprintf(hc.Stderr, "rm: %s: is a directory\n", arg)
 			return 1
 		}
 		if err := s.FS.RemoveAll(path); err != nil && !flags['f'] {
@@ -235,7 +243,7 @@ func copyFile(s *Shell, src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer closeRead(in)
 	info, err := in.Stat()
 	if err != nil {
 		return err
@@ -244,9 +252,13 @@ func copyFile(s *Shell, src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
+	if _, err := io.Copy(out, in); err != nil {
+		closeRead(out) // the copy error is the one worth reporting
+		return err
+	}
+	// Closing a file that was written to can still fail, and that failure
+	// means the copy did not land — so it is returned rather than dropped.
+	return out.Close()
 }
 
 func copyAny(s *Shell, src, dst string, recursive bool) error {
@@ -282,7 +294,7 @@ func copyAny(s *Shell, src, dst string, recursive bool) error {
 func runCp(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	flags, rest := parseFlags(args)
 	if len(rest) < 2 {
-		fmt.Fprintln(hc.Stderr, "cp: missing operand")
+		fprintln(hc.Stderr, "cp: missing operand")
 		return 1
 	}
 	dst := resolveArg(hc, rest[len(rest)-1])
@@ -297,7 +309,7 @@ func runCp(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 func runMv(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	_, rest := parseFlags(args)
 	if len(rest) < 2 {
-		fmt.Fprintln(hc.Stderr, "mv: missing operand")
+		fprintln(hc.Stderr, "mv: missing operand")
 		return 1
 	}
 	dst := resolveArg(hc, rest[len(rest)-1])
@@ -324,10 +336,14 @@ func runTouch(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []s
 			if err != nil {
 				return fail(hc, "touch", err)
 			}
-			f.Close()
+			if err := f.Close(); err != nil {
+				return fail(hc, "touch", err)
+			}
 			continue
 		}
-		_ = s.FS.Chtimes(path, now, now)
+		if err := s.FS.Chtimes(path, now, now); err != nil {
+			return fail(hc, "touch", err)
+		}
 	}
 	return 0
 }
@@ -380,7 +396,7 @@ func runHead(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		lines = lines[:n]
 	}
 	for _, l := range lines {
-		fmt.Fprintln(hc.Stdout, l)
+		fprintln(hc.Stdout, l)
 	}
 	return 0
 }
@@ -396,7 +412,7 @@ func runTail(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		lines = lines[len(lines)-n:]
 	}
 	for _, l := range lines {
-		fmt.Fprintln(hc.Stdout, l)
+		fprintln(hc.Stdout, l)
 	}
 	return 0
 }
@@ -424,7 +440,7 @@ func runWc(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 	words := len(strings.Fields(string(data)))
 	bytes := len(data)
 	if !flags['l'] && !flags['w'] && !flags['c'] {
-		fmt.Fprintf(hc.Stdout, "%7d %7d %7d\n", lines, words, bytes)
+		fprintf(hc.Stdout, "%7d %7d %7d\n", lines, words, bytes)
 		return 0
 	}
 	var out []string
@@ -437,14 +453,14 @@ func runWc(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 	if flags['c'] {
 		out = append(out, strconv.Itoa(bytes))
 	}
-	fmt.Fprintln(hc.Stdout, strings.Join(out, " "))
+	fprintln(hc.Stdout, strings.Join(out, " "))
 	return 0
 }
 
 func runGrep(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	flags, rest := parseFlags(args)
 	if len(rest) == 0 {
-		fmt.Fprintln(hc.Stderr, "grep: missing pattern")
+		fprintln(hc.Stderr, "grep: missing pattern")
 		return 2
 	}
 	pattern := rest[0]
@@ -471,14 +487,14 @@ func runGrep(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 				continue
 			}
 			if flags['n'] {
-				fmt.Fprintf(hc.Stdout, "%d:%s\n", i+1, l)
+				fprintf(hc.Stdout, "%d:%s\n", i+1, l)
 			} else {
-				fmt.Fprintln(hc.Stdout, l)
+				fprintln(hc.Stdout, l)
 			}
 		}
 	}
 	if flags['c'] {
-		fmt.Fprintln(hc.Stdout, count)
+		fprintln(hc.Stdout, count)
 	}
 	if count == 0 {
 		return 1
@@ -507,15 +523,15 @@ func runSeq(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 			last, err = strconv.Atoi(rest[2])
 		}
 	default:
-		fmt.Fprintln(hc.Stderr, "usage: seq [first [incr]] last")
+		fprintln(hc.Stderr, "usage: seq [first [incr]] last")
 		return 1
 	}
 	if err != nil || incr == 0 {
-		fmt.Fprintln(hc.Stderr, "seq: invalid arguments")
+		fprintln(hc.Stderr, "seq: invalid arguments")
 		return 1
 	}
 	for i := first; (incr > 0 && i <= last) || (incr < 0 && i >= last); i += incr {
-		fmt.Fprintln(hc.Stdout, i)
+		fprintln(hc.Stdout, i)
 	}
 	return 0
 }
@@ -528,9 +544,7 @@ func runSort(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 	}
 	if flags['n'] {
 		sort.SliceStable(lines, func(i, j int) bool {
-			a, _ := strconv.Atoi(strings.TrimSpace(lines[i]))
-			b, _ := strconv.Atoi(strings.TrimSpace(lines[j]))
-			return a < b
+			return numericKey(lines[i]) < numericKey(lines[j])
 		})
 	} else {
 		sort.Strings(lines)
@@ -541,7 +555,7 @@ func runSort(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		}
 	}
 	for _, l := range lines {
-		fmt.Fprintln(hc.Stdout, l)
+		fprintln(hc.Stdout, l)
 	}
 	return 0
 }
@@ -559,9 +573,9 @@ func runUniq(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 			return
 		}
 		if flags['c'] {
-			fmt.Fprintf(hc.Stdout, "%7d %s\n", count, prev)
+			fprintf(hc.Stdout, "%7d %s\n", count, prev)
 		} else {
-			fmt.Fprintln(hc.Stdout, prev)
+			fprintln(hc.Stdout, prev)
 		}
 	}
 	for _, l := range lines {
@@ -584,7 +598,7 @@ func runTree(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		root = rest[0]
 	}
 	path := resolveArg(hc, root)
-	fmt.Fprintln(hc.Stdout, root)
+	fprintln(hc.Stdout, root)
 	var walk func(dir, prefix string) error
 	walk = func(dir, prefix string) error {
 		infos, err := afero.ReadDir(s.FS, dir)
@@ -596,7 +610,7 @@ func runTree(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 			if i == len(infos)-1 {
 				connector, childPrefix = "└── ", "    "
 			}
-			fmt.Fprintln(hc.Stdout, prefix+connector+fi.Name())
+			fprintln(hc.Stdout, prefix+connector+fi.Name())
 			if fi.IsDir() {
 				if err := walk(filepath.Join(dir, fi.Name()), prefix+childPrefix); err != nil {
 					return err
@@ -613,30 +627,30 @@ func runTree(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 
 func runBasename(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(hc.Stderr, "basename: missing operand")
+		fprintln(hc.Stderr, "basename: missing operand")
 		return 1
 	}
-	fmt.Fprintln(hc.Stdout, filepath.Base(args[0]))
+	fprintln(hc.Stdout, filepath.Base(args[0]))
 	return 0
 }
 
 func runDirname(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(hc.Stderr, "dirname: missing operand")
+		fprintln(hc.Stderr, "dirname: missing operand")
 		return 1
 	}
-	fmt.Fprintln(hc.Stdout, filepath.Dir(args[0]))
+	fprintln(hc.Stdout, filepath.Dir(args[0]))
 	return 0
 }
 
 func runDate(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
-	fmt.Fprintln(hc.Stdout, time.Now().Format("Mon Jan  2 15:04:05 MST 2006"))
+	fprintln(hc.Stdout, time.Now().Format("Mon Jan  2 15:04:05 MST 2006"))
 	return 0
 }
 
 func runSleep(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(hc.Stderr, "sleep: missing operand")
+		fprintln(hc.Stderr, "sleep: missing operand")
 		return 1
 	}
 	secs, err := strconv.ParseFloat(args[0], 64)
@@ -652,14 +666,14 @@ func runSleep(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []s
 }
 
 func runClear(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
-	fmt.Fprint(hc.Stdout, "\x1b[2J\x1b[H")
+	fprint(hc.Stdout, "\x1b[2J\x1b[H")
 	return 0
 }
 
 func runEnv(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	hc.Env.Each(func(name string, vr expand.Variable) bool {
 		if vr.Exported {
-			fmt.Fprintf(hc.Stdout, "%s=%s\n", name, vr.String())
+			fprintf(hc.Stdout, "%s=%s\n", name, vr.String())
 		}
 		return true
 	})
@@ -670,9 +684,9 @@ func runWhich(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []s
 	code := 0
 	for _, arg := range args {
 		if _, ok := applets[arg]; ok {
-			fmt.Fprintf(hc.Stdout, "/bin/%s\n", arg)
+			fprintf(hc.Stdout, "/bin/%s\n", arg)
 		} else {
-			fmt.Fprintf(hc.Stderr, "which: %s not found\n", arg)
+			fprintf(hc.Stderr, "which: %s not found\n", arg)
 			code = 1
 		}
 	}
@@ -680,12 +694,12 @@ func runWhich(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []s
 }
 
 func runUname(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
-	fmt.Fprintln(hc.Stdout, "websh wasm")
+	fprintln(hc.Stdout, "websh wasm")
 	return 0
 }
 
 func runHostname(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
-	fmt.Fprintln(hc.Stdout, "websh")
+	fprintln(hc.Stdout, "websh")
 	return 0
 }
 
@@ -695,11 +709,11 @@ func runHelp(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	fmt.Fprintln(hc.Stdout, "websh applets:")
+	fprintln(hc.Stdout, "websh applets:")
 	for _, name := range names {
-		fmt.Fprintf(hc.Stdout, "  %-10s %s\n", name, applets[name].help)
+		fprintf(hc.Stdout, "  %-10s %s\n", name, applets[name].help)
 	}
-	fmt.Fprintln(hc.Stdout, "plus the shell builtins: cd pwd echo printf read exit export unset source test [ ...")
-	fmt.Fprintln(hc.Stdout, "for those, bash-style: \x1b[1mbuiltin help\x1b[0m  (or \x1b[1mbuiltin help cd\x1b[0m for one)")
+	fprintln(hc.Stdout, "plus the shell builtins: cd pwd echo printf read exit export unset source test [ ...")
+	fprintln(hc.Stdout, "for those, bash-style: \x1b[1mbuiltin help\x1b[0m  (or \x1b[1mbuiltin help cd\x1b[0m for one)")
 	return 0
 }

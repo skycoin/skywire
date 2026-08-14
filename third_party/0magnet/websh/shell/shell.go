@@ -6,7 +6,6 @@ package shell
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -40,7 +39,9 @@ type Shell struct {
 func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) (*Shell, error) {
 	if vfs == nil {
 		vfs = afero.NewMemMapFs()
-		Seed(vfs)
+		if err := Seed(vfs); err != nil {
+			return nil, err
+		}
 	}
 	s := &Shell{
 		FS:     vfs,
@@ -72,7 +73,9 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) (*Shell, error
 	// virtual cwd directly instead
 	runner.Dir = "/home/user"
 	s.Runner = runner
-	s.PopulateBin()
+	if err := s.PopulateBin(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -80,26 +83,33 @@ func New(vfs afero.Fs, stdin io.Reader, stdout, stderr io.Writer) (*Shell, error
 // interpreter never reads input lines itself, so only the line editor above it
 // has one; call this with [LineEditor.History] and [LineEditor.ClearHistory]
 // once the editor exists.
-func (s *Shell) UseHistory(list func() []string, clear func()) {
-	_ = interp.History(list, clear)(s.Runner)
+func (s *Shell) UseHistory(list func() []string, clear func()) error {
+	return interp.History(list, clear)(s.Runner)
 }
 
 // PopulateBin creates a stub file in /bin for every registered applet
 // so the command set is discoverable with ls. Call again after
 // registering extra applets.
-func (s *Shell) PopulateBin() {
-	_ = s.FS.MkdirAll("/bin", 0o755)
-	for name, a := range applets {
-		_ = afero.WriteFile(s.FS, "/bin/"+name,
-			[]byte("websh built-in applet: "+a.help+"\n"), 0o755)
+func (s *Shell) PopulateBin() error {
+	if err := s.FS.MkdirAll("/bin", 0o755); err != nil {
+		return err
 	}
+	for name, a := range applets {
+		if err := afero.WriteFile(s.FS, "/bin/"+name,
+			[]byte("websh built-in applet: "+a.help+"\n"), 0o755); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Seed populates a fresh filesystem with the default home directory.
-func Seed(vfs afero.Fs) {
+func Seed(vfs afero.Fs) error {
 	dirs := []string{"/home/user", "/tmp", "/etc", "/bin"}
 	for _, d := range dirs {
-		_ = vfs.MkdirAll(d, 0o755)
+		if err := vfs.MkdirAll(d, 0o755); err != nil {
+			return err
+		}
 	}
 	files := map[string]string{
 		"/etc/motd": "welcome to websh — a bash-like shell running entirely in your browser\n",
@@ -122,8 +132,11 @@ func Seed(vfs afero.Fs) {
 			"echo \"the answer is $x\"\n",
 	}
 	for path, content := range files {
-		_ = afero.WriteFile(vfs, path, []byte(content), 0o644)
+		if err := afero.WriteFile(vfs, path, []byte(content), 0o644); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // Dir returns the current working directory.
@@ -224,11 +237,17 @@ func (s *Shell) execHandler(next interp.ExecHandlerFunc) interp.ExecHandlerFunc 
 			hc := interp.HandlerCtx(ctx)
 			code := applet.run(ctx, s, &hc, args[1:])
 			if code != 0 {
+				// A shell exit status is a single byte. Clamp instead of
+				// letting an out-of-range applet return wrap around — 256
+				// would otherwise be reported to the caller as success.
+				if code < 0 || code > 255 {
+					code = 1
+				}
 				return interp.ExitStatus(code)
 			}
 			return nil
 		}
-		fmt.Fprintf(interp.HandlerCtx(ctx).Stderr, "websh: %s: command not found\n", args[0])
+		fprintf(interp.HandlerCtx(ctx).Stderr, "websh: %s: command not found\n", args[0])
 		return interp.ExitStatus(127)
 	}
 }

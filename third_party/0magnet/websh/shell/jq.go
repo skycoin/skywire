@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 
 	"github.com/skycoin/skywire/third_party/0magnet/afero"
@@ -21,7 +20,7 @@ func init() {
 func runJq(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	flags, rest := parseFlags(args)
 	if len(rest) == 0 {
-		fmt.Fprintln(hc.Stderr, "usage: jq [-r] [-c] 'filter' [file...]")
+		fprintln(hc.Stderr, "usage: jq [-r] [-c] 'filter' [file...]")
 		return 2
 	}
 	query, err := gojq.Parse(rest[0])
@@ -33,7 +32,7 @@ func runJq(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 		return fail(hc, "jq", err)
 	}
 
-	var input io.Reader = hc.Stdin
+	input := hc.Stdin
 	if len(rest) > 1 {
 		data, err := afero.ReadFile(s.FS, resolveArg(hc, rest[1]))
 		if err != nil {
@@ -59,12 +58,12 @@ func runJq(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 				break
 			}
 			if err, isErr := v.(error); isErr {
-				fmt.Fprintf(hc.Stderr, "jq: %v\n", err)
+				fprintf(hc.Stderr, "jq: %v\n", err)
 				status = 5
 				continue
 			}
 			if str, isStr := v.(string); isStr && flags['r'] {
-				fmt.Fprintln(hc.Stdout, str)
+				fprintln(hc.Stdout, str)
 				continue
 			}
 			var out []byte
@@ -74,11 +73,11 @@ func runJq(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 				out, err = json.MarshalIndent(v, "", "  ")
 			}
 			if err != nil {
-				fmt.Fprintf(hc.Stderr, "jq: %v\n", err)
+				fprintf(hc.Stderr, "jq: %v\n", err)
 				status = 5
 				continue
 			}
-			fmt.Fprintln(hc.Stdout, string(out))
+			fprintln(hc.Stdout, string(out))
 		}
 	}
 	return status
