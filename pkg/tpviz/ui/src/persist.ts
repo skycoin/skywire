@@ -48,10 +48,13 @@ function viewFromURL(): ViewMode | null {
 }
 
 // getInitialView resolves the view to show on load: host opt → URL ?view= →
-// localStorage → WebGL default.
+// localStorage → cosmos-go (Go/WebGL2) default. The @cosmograph/cosmos ('cosmos')
+// view needs WebGL1 + OES_texture_float, which fails under software WebGL (e.g.
+// Brave with HW accel off) — the Go port renders on plain WebGL2, so it's the
+// safe default.
 export function getInitialView(): ViewMode {
   return normalizeView(host.view) || viewFromURL() ||
-    normalizeView(safeGet(VIEW_KEY)) || 'cosmos';
+    normalizeView(safeGet(VIEW_KEY)) || 'cosmosgo';
 }
 
 // saveView records the active view (localStorage) and reflects it to the URL:
