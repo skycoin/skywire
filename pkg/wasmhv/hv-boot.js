@@ -182,8 +182,14 @@
   // slow cold boot of the single shared visor is normal, and this tab is a thin
   // viewer that attaches once the worker reports ready. Removed the instant 'up'
   // arrives (or if the shared path falls back / fails).
+  // connectingHidden latches once the visor is up (or the wait ends): it makes
+  // show/hide order-independent so a deferred add() (DOMContentLoaded) or a
+  // re-show can't resurrect the notice after 'up' already hid it — the bug where
+  // the toast lingered in the corner over a fully-booted UI.
+  var connectingHidden = false;
   function showConnectingNotice() {
     function add() {
+      if (connectingHidden) return;
       if (document.getElementById('skywire-connecting-notice')) return;
       var d = document.createElement('div');
       d.id = 'skywire-connecting-notice';
@@ -192,9 +198,11 @@
       d.textContent = 'Connecting to the shared Skywire visor…';
       document.body.appendChild(d);
     }
+    if (connectingHidden) return;
     if (document.body) add(); else document.addEventListener('DOMContentLoaded', add);
   }
   function hideConnectingNotice() {
+    connectingHidden = true;
     var d = document.getElementById('skywire-connecting-notice');
     if (d && d.parentNode) d.parentNode.removeChild(d);
   }
