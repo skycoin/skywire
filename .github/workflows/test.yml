@@ -297,7 +297,7 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - uses: acifani/setup-tinygo@v2
+      - uses: acifani/setup-tinygo@v3
         with:
           tinygo-version: '0.41.1'
 
