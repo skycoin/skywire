@@ -368,7 +368,9 @@ func openShell(el js.Value) *shellSession {
 	s.stdinW = stdinW
 
 	vfs := afero.NewMemMapFs()
-	shell.Seed(vfs)
+	if err := shell.Seed(vfs); err != nil {
+		term.WriteString("failed to seed the shell filesystem: " + err.Error() + "\r\n")
+	}
 	sh, err := shell.New(vfs, stdinR, out, out)
 	if err != nil {
 		term.WriteString("failed to start the shell: " + err.Error() + "\r\n")
@@ -377,7 +379,9 @@ func openShell(el js.Value) *shellSession {
 	s.sh = sh
 	sh.RawMode = func(on bool) { s.rawInput = on }
 	sh.Size = func() (int, int) { return term.Core.Cols(), term.Core.Rows() }
-	sh.PopulateBin()
+	if err := sh.PopulateBin(); err != nil {
+		term.WriteString("failed to populate /bin: " + err.Error() + "\r\n")
+	}
 
 	s.editor = &shell.LineEditor{
 		Echo: func(str string) { term.WriteString(str) },
@@ -415,7 +419,9 @@ func openShell(el js.Value) *shellSession {
 	}
 
 	// the history builtin reads the line editor's list
-	sh.UseHistory(s.editor.History, s.editor.ClearHistory)
+	if err := sh.UseHistory(s.editor.History, s.editor.ClearHistory); err != nil {
+		term.WriteString("history unavailable: " + err.Error() + "\r\n")
+	}
 
 	// keep the grid in step with the WinBox window as it is resized
 	if ro := js.Global().Get("ResizeObserver"); ro.Truthy() {
