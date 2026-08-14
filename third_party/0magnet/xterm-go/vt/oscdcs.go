@@ -159,7 +159,7 @@ func (h *OscHandler) Put(data []uint32, start, end int) {
 		return
 	}
 	for i := start; i < end; i++ {
-		h.data = append(h.data, rune(data[i]))
+		h.data = append(h.data, rune(data[i])) // #nosec G115 -- UTF-16 code units supplied by the parser
 	}
 	if len(h.data) > payloadLimit {
 		h.data = h.data[:0]
@@ -286,7 +286,7 @@ func (h *DcsHandlerFunc) Put(data []uint32, start, end int) {
 		return
 	}
 	for i := start; i < end; i++ {
-		h.data = append(h.data, rune(data[i]))
+		h.data = append(h.data, rune(data[i])) // #nosec G115 -- UTF-16 code units supplied by the parser
 	}
 	if len(h.data) > payloadLimit {
 		h.data = h.data[:0]

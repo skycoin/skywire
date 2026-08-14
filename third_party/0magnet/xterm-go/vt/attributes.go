@@ -89,7 +89,7 @@ type ExtendedAttrs struct {
 // Ext returns the packed extended attribute value.
 func (e *ExtendedAttrs) Ext() uint32 {
 	if e.URLID != 0 {
-		return (e.ext & ^ExtUnderlineStyle) | (uint32(e.UnderlineStyle()) << 26)
+		return (e.ext & ^ExtUnderlineStyle) | (uint32(e.UnderlineStyle()) << 26) // #nosec G115 -- the value is masked to its bitfield width on the same line
 	}
 	return e.ext
 }
@@ -108,7 +108,7 @@ func (e *ExtendedAttrs) UnderlineStyle() int {
 // SetUnderlineStyle sets the underline style.
 func (e *ExtendedAttrs) SetUnderlineStyle(value int) {
 	e.ext &= ^ExtUnderlineStyle
-	e.ext |= (uint32(value) << 26) & ExtUnderlineStyle
+	e.ext |= (uint32(value) << 26) & ExtUnderlineStyle // #nosec G115 -- the value is masked to its bitfield width on the same line
 }
 
 // UnderlineColor returns the packed underline color (mode+rgb).
@@ -129,7 +129,7 @@ func (e *ExtendedAttrs) HasUnderlineColor() bool { return true }
 
 // UnderlineVariantOffset returns the variant offset.
 func (e *ExtendedAttrs) UnderlineVariantOffset() int {
-	val := int32(e.ext&ExtVariantOffset) >> 29
+	val := int32(e.ext&ExtVariantOffset) >> 29 // #nosec G115 -- the value is masked to its bitfield width on the same line
 	if val < 0 {
 		return int(uint32(val) ^ 0xFFFFFFF8)
 	}
@@ -139,7 +139,7 @@ func (e *ExtendedAttrs) UnderlineVariantOffset() int {
 // SetUnderlineVariantOffset sets the variant offset.
 func (e *ExtendedAttrs) SetUnderlineVariantOffset(value int) {
 	e.ext &= ^ExtVariantOffset
-	e.ext |= (uint32(value) << 29) & ExtVariantOffset
+	e.ext |= (uint32(value) << 29) & ExtVariantOffset // #nosec G115 -- the value is masked to its bitfield width on the same line
 }
 
 // NewExtendedAttrs creates empty extended attributes.

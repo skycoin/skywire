@@ -180,7 +180,7 @@ func CreatePropertyValue(state, width int, shouldJoin bool) uint32 {
 	if shouldJoin {
 		join = 1
 	}
-	return (uint32(state)&0xffffff)<<3 | (uint32(width)&3)<<1 | join
+	return (uint32(state)&0xffffff)<<3 | (uint32(width)&3)<<1 | join // #nosec G115 -- each field is masked before it is shifted into place
 }
 
 // GetStringCellWidth returns the number of terminal cells a string

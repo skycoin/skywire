@@ -126,7 +126,7 @@ func (l *BufferLine) SetCellFromCodepoint(index int, codePoint uint32, width int
 	if attrs.Bg&BgHasExtended != 0 {
 		l.extendedAttrs[index] = attrs.Extended
 	}
-	l.data[index*cellSize+cellContent] = codePoint | uint32(width)<<ContentWidthShift
+	l.data[index*cellSize+cellContent] = codePoint | uint32(width)<<ContentWidthShift // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
 	l.data[index*cellSize+cellFG] = attrs.Fg
 	l.data[index*cellSize+cellBG] = attrs.Bg
 }
@@ -136,11 +136,11 @@ func (l *BufferLine) AddCodepointToCell(index int, codePoint uint32, width int) 
 	content := l.data[index*cellSize+cellContent]
 	if content&ContentIsCombinedMask != 0 {
 		// we already have a combined string, simply add
-		l.combined[index] += string(rune(codePoint))
+		l.combined[index] += string(rune(codePoint)) // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
 	} else {
 		if content&ContentCodepointMask != 0 {
 			// move current leading char + new one into combined string
-			l.combined[index] = string(rune(content&ContentCodepointMask)) + string(rune(codePoint))
+			l.combined[index] = string(rune(content&ContentCodepointMask)) + string(rune(codePoint)) // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
 			content &= ^ContentCodepointMask
 			content |= ContentIsCombinedMask
 		} else {
@@ -150,7 +150,7 @@ func (l *BufferLine) AddCodepointToCell(index int, codePoint uint32, width int) 
 	}
 	if width != 0 {
 		content &= ^ContentWidthMask
-		content |= uint32(width) << ContentWidthShift
+		content |= uint32(width) << ContentWidthShift // #nosec G115 -- cell width is 0-2 and codepoints are at most 0x10FFFF
 	}
 	l.data[index*cellSize+cellContent] = content
 }
