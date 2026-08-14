@@ -24,9 +24,7 @@ var defaultAnsi16 = [16]string{
 // applied to the base 16.
 func BuildPalette(theme vt.Theme) [256]string {
 	var p [256]string
-	for i, c := range defaultAnsi16 {
-		p[i] = c
-	}
+	copy(p[:], defaultAnsi16[:])
 	overrides := []struct {
 		idx int
 		val string
@@ -116,7 +114,7 @@ func (cs *ColorSet) ResolveCellColors(attr *vt.AttributeData) (fg, bg string) {
 		}
 		fg = cs.Ansi[fgColor&0xff]
 	case vt.AttrCMRGB:
-		rgb := vt.ToColorRGB(uint32(attr.GetFgColor()))
+		rgb := vt.ToColorRGB(uint32(attr.GetFgColor())) // #nosec G115 -- a color attribute holds either a 24-bit RGB value or a palette index
 		fg = fmt.Sprintf("#%02x%02x%02x", rgb[0], rgb[1], rgb[2])
 	}
 
@@ -126,7 +124,7 @@ func (cs *ColorSet) ResolveCellColors(attr *vt.AttributeData) (fg, bg string) {
 	case vt.AttrCMP16, vt.AttrCMP256:
 		bg = cs.Ansi[attr.GetBgColor()&0xff]
 	case vt.AttrCMRGB:
-		rgb := vt.ToColorRGB(uint32(attr.GetBgColor()))
+		rgb := vt.ToColorRGB(uint32(attr.GetBgColor())) // #nosec G115 -- a color attribute holds either a 24-bit RGB value or a palette index
 		bg = fmt.Sprintf("#%02x%02x%02x", rgb[0], rgb[1], rgb[2])
 	}
 
@@ -152,7 +150,7 @@ func (cs *ColorSet) UnderlineColor(attr *vt.AttributeData) string {
 	case vt.AttrCMP16, vt.AttrCMP256:
 		return cs.Ansi[attr.GetUnderlineColor()&0xff]
 	case vt.AttrCMRGB:
-		rgb := vt.ToColorRGB(uint32(attr.GetUnderlineColor()))
+		rgb := vt.ToColorRGB(uint32(attr.GetUnderlineColor())) // #nosec G115 -- a color attribute holds either a 24-bit RGB value or a palette index
 		return fmt.Sprintf("#%02x%02x%02x", rgb[0], rgb[1], rgb[2])
 	}
 	return ""

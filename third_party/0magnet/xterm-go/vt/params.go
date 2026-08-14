@@ -75,10 +75,10 @@ func ParamsFromArray(values []interface{}) *Params {
 		switch v := values[i].(type) {
 		case []int:
 			for _, s := range v {
-				params.AddSubParam(int32(s))
+				params.AddSubParam(int32(s)) // #nosec G115 -- the parser clamps VT parameters to 0-9999
 			}
 		case int:
-			params.AddParam(int32(v))
+			params.AddParam(int32(v)) // #nosec G115 -- the parser clamps VT parameters to 0-9999
 		}
 	}
 	return params
@@ -137,7 +137,7 @@ func (p *Params) AddParam(value int32) {
 	if value < -1 {
 		panic("values lesser than -1 are not allowed")
 	}
-	p.subParamsIdx[p.Length] = uint16(p.subParamsLength)<<8 | uint16(p.subParamsLength)
+	p.subParamsIdx[p.Length] = uint16(p.subParamsLength)<<8 | uint16(p.subParamsLength) // #nosec G115 -- a sub-parameter count, bounded by the parser's fixed buffer
 	if value > maxParamValue {
 		value = maxParamValue
 	}

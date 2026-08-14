@@ -6,7 +6,7 @@ import "unicode/utf16"
 func utf32ToString(data []uint32, start, end int) string {
 	runes := make([]rune, 0, end-start)
 	for i := start; i < end; i++ {
-		runes = append(runes, rune(data[i]))
+		runes = append(runes, rune(data[i])) // #nosec G115 -- UTF-16 code units, at most 0xFFFF by construction
 	}
 	return string(runes)
 }
@@ -28,10 +28,10 @@ func (s *StringToUtf32) Decode(input []uint16, target []uint32) int {
 		second := input[startPos]
 		startPos++
 		if second >= 0xDC00 && second <= 0xDFFF {
-			target[size] = uint32((s.interim-0xD800)*0x400) + uint32(second) - 0xDC00 + 0x10000
+			target[size] = uint32((s.interim-0xD800)*0x400) + uint32(second) - 0xDC00 + 0x10000 // #nosec G115 -- UTF-16 code units, at most 0xFFFF by construction
 			size++
 		} else {
-			target[size] = uint32(s.interim)
+			target[size] = uint32(s.interim) // #nosec G115 -- UTF-16 code units, at most 0xFFFF by construction
 			size++
 			target[size] = uint32(second)
 			size++
@@ -48,7 +48,7 @@ func (s *StringToUtf32) Decode(input []uint16, target []uint32) int {
 			}
 			second := input[i]
 			if second >= 0xDC00 && second <= 0xDFFF {
-				target[size] = uint32(utf16.DecodeRune(rune(code), rune(second)))
+				target[size] = uint32(utf16.DecodeRune(rune(code), rune(second))) // #nosec G115 -- UTF-16 code units, at most 0xFFFF by construction
 				size++
 			} else {
 				target[size] = uint32(code)

@@ -4,10 +4,6 @@ package cosmos
 
 import "math"
 
-func clamp(num, min, max float64) float64 {
-	return math.Min(math.Max(num, min), max)
-}
-
 // linearScale maps [d0,d1] → [r0,r1] (the d3 scaleLinear subset in use).
 type linearScale struct {
 	d0, d1, r0, r1 float64
@@ -20,9 +16,9 @@ func (s linearScale) scale(v float64) float64 {
 	return s.r0 + (v-s.d0)/(s.d1-s.d0)*(s.r1-s.r0)
 }
 
-func extent(values []float64) (min, max float64, ok bool) {
+func extent(values []float64) (min, max float64) {
 	if len(values) == 0 {
-		return 0, 0, false
+		return 0, 0
 	}
 	min, max = math.Inf(1), math.Inf(-1)
 	for _, v := range values {
@@ -37,9 +33,9 @@ func extent(values []float64) (min, max float64, ok bool) {
 		}
 	}
 	if math.IsInf(min, 1) {
-		return 0, 0, false
+		return 0, 0
 	}
-	return min, max, true
+	return min, max
 }
 
 // mat3 helpers (column-major, gl-matrix layout)

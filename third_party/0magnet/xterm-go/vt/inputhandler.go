@@ -206,19 +206,19 @@ type InputHandler struct {
 	dirtyTracker dirtyRowTracker
 
 	// Event callbacks (Emitter fields of the original).
-	OnRequestBell     func()
-	OnRequestRefreshRows func(start, end int) // -1,-1 = full refresh
-	OnRequestReset       func()
-	OnRequestSendFocus   func()
-	OnRequestSyncScrollBar func()
+	OnRequestBell                 func()
+	OnRequestRefreshRows          func(start, end int) // -1,-1 = full refresh
+	OnRequestReset                func()
+	OnRequestSendFocus            func()
+	OnRequestSyncScrollBar        func()
 	OnRequestWindowsOptionsReport func(reportType int)
-	OnA11yChar    func(char string)
-	OnA11yTab     func(spaces int)
-	OnCursorMove  func()
-	OnLineFeed    func()
-	OnScroll      func(ydisp int)
-	OnTitleChange func(title string)
-	OnColor       func(events []ColorEvent)
+	OnA11yChar                    func(char string)
+	OnA11yTab                     func(spaces int)
+	OnCursorMove                  func()
+	OnLineFeed                    func()
+	OnScroll                      func(ydisp int)
+	OnTitleChange                 func(title string)
+	OnColor                       func(events []ColorEvent)
 }
 
 // NewInputHandler creates the handler and registers all sequence
@@ -450,14 +450,14 @@ func (h *InputHandler) Print(data []uint32, start, end int) {
 		bufferRow.SetCellFromCodepoint(h.activeBuffer.X-1, 0, 1, curAttr)
 	}
 
-	precedingJoinState := uint32(h.parser.PrecedingJoinState)
+	precedingJoinState := uint32(h.parser.PrecedingJoinState) // #nosec G115 -- Unicode codepoints and the parser's join state
 	for pos := start; pos < end; pos++ {
 		code := data[pos]
 
 		// charset replacement is only defined for ASCII
 		if code < 127 && charset != nil {
 			if ch, ok := charset[byte(code)]; ok {
-				code = uint32(ch)
+				code = uint32(ch) // #nosec G115 -- Unicode codepoints and the parser's join state
 			}
 		}
 
@@ -471,7 +471,7 @@ func (h *InputHandler) Print(data []uint32, start, end int) {
 		precedingJoinState = currentInfo
 
 		if h.options.ScreenReaderMode && h.OnA11yChar != nil {
-			h.OnA11yChar(string(rune(code)))
+			h.OnA11yChar(string(rune(code))) // #nosec G115 -- Unicode codepoints and the parser's join state
 		}
 
 		// goto next line if ch would overflow
@@ -1136,7 +1136,7 @@ func (h *InputHandler) EraseChars(params *Params) bool {
 // RepeatPrecedingCharacter handles REP; repeats entire grapheme
 // clusters like the original's extension of xterm's behavior.
 func (h *InputHandler) RepeatPrecedingCharacter(params *Params) bool {
-	joinState := uint32(h.parser.PrecedingJoinState)
+	joinState := uint32(h.parser.PrecedingJoinState) // #nosec G115 -- Unicode codepoints and the parser's join state
 	if joinState == 0 {
 		return true
 	}
@@ -1148,7 +1148,7 @@ func (h *InputHandler) RepeatPrecedingCharacter(params *Params) bool {
 	text := bufferRow.GetString(x)
 	var codepoints []uint32
 	for _, r := range text {
-		codepoints = append(codepoints, uint32(r))
+		codepoints = append(codepoints, uint32(r)) // #nosec G115 -- Unicode codepoints and the parser's join state
 	}
 	data := make([]uint32, 0, len(codepoints)*length)
 	for i := 0; i < length; i++ {
@@ -1363,11 +1363,11 @@ func (h *InputHandler) ResetModePrivate(params *Params) bool {
 
 // DECRPM mode values.
 const (
-	modeNotRecognized     = 0
-	modeSet               = 1
-	modeReset             = 2
-	modePermanentlySet    = 3
-	modePermanentlyReset  = 4
+	modeNotRecognized    = 0
+	modeSet              = 1
+	modeReset            = 2
+	modePermanentlySet   = 3
+	modePermanentlyReset = 4
 )
 
 // RequestMode handles DECRQM (reports via DECRPM).
@@ -1468,11 +1468,12 @@ func (h *InputHandler) RequestMode(params *Params, ansi bool) bool {
 
 // updateAttrColor writes color information packed with the color mode.
 func updateAttrColor(color uint32, mode, c1, c2, c3 int) uint32 {
-	if mode == 2 {
+	switch mode {
+	case 2:
 		color |= AttrCMRGB
 		color &= ^AttrRGBMask
 		color |= FromColorRGB([3]int{c1, c2, c3})
-	} else if mode == 5 {
+	case 5:
 		color &= ^(AttrCMMask | AttrPColorMask)
 		color |= AttrCMP256 | uint32(c1&0xff)
 	}
@@ -1502,7 +1503,7 @@ func (h *InputHandler) extractColor(params *Params, pos int, attr *AttributeData
 					accu[idx] = int(subparams[i])
 				}
 				i++
-				if !(i < len(subparams) && i+advance+1+cSpace < len(accu)) {
+				if i >= len(subparams) || i+advance+1+cSpace >= len(accu) {
 					break
 				}
 			}
@@ -1518,7 +1519,7 @@ func (h *InputHandler) extractColor(params *Params, pos int, attr *AttributeData
 			cSpace = 1
 		}
 		advance++
-		if !(advance+pos < params.Length && advance+cSpace < len(accu)) {
+		if advance+pos >= params.Length || advance+cSpace >= len(accu) {
 			break
 		}
 	}

@@ -20,32 +20,32 @@ import (
 
 // WebGL2 constants (spec-fixed values).
 const (
-	glDepthBufferBit      = 0x00000100
-	glColorBufferBit      = 0x00004000
-	glTriangleStrip       = 0x0005
-	glBlend               = 0x0BE2
-	glMaxTextureSize      = 0x0D33
-	glTexture2D           = 0x0DE1
-	glUnsignedByte        = 0x1401
-	glFloat               = 0x1406
-	glRGBA                = 0x1908
-	glVertexShader        = 0x8B31
-	glFragmentShader      = 0x8B30
-	glCompileStatus       = 0x8B81
-	glLinkStatus          = 0x8B82
-	glArrayBuffer         = 0x8892
-	glElementArrayBuffer  = 0x8893
-	glStaticDraw          = 0x88E4
-	glStreamDraw          = 0x88E0
-	glDynamicDraw         = 0x88E8
-	glTexture0            = 0x84C0
-	glTextureWrapS        = 0x2802
-	glTextureWrapT        = 0x2803
-	glClampToEdge         = 0x812F
-	glSrcAlpha            = 0x0302
-	glOneMinusSrcAlpha    = 0x0303
-	glTextureMinFilter    = 0x2801
-	glLinear              = 0x2601
+	glDepthBufferBit     = 0x00000100
+	glColorBufferBit     = 0x00004000
+	glTriangleStrip      = 0x0005
+	glBlend              = 0x0BE2
+	glMaxTextureSize     = 0x0D33
+	glTexture2D          = 0x0DE1
+	glUnsignedByte       = 0x1401
+	glFloat              = 0x1406
+	glRGBA               = 0x1908
+	glVertexShader       = 0x8B31
+	glFragmentShader     = 0x8B30
+	glCompileStatus      = 0x8B81
+	glLinkStatus         = 0x8B82
+	glArrayBuffer        = 0x8892
+	glElementArrayBuffer = 0x8893
+	glStaticDraw         = 0x88E4
+	glStreamDraw         = 0x88E0
+	glDynamicDraw        = 0x88E8
+	glTexture0           = 0x84C0
+	glTextureWrapS       = 0x2802
+	glTextureWrapT       = 0x2803
+	glClampToEdge        = 0x812F
+	glSrcAlpha           = 0x0302
+	glOneMinusSrcAlpha   = 0x0303
+	glTextureMinFilter   = 0x2801
+	glLinear             = 0x2601
 )
 
 // A matrix that translates 0-1 coordinates (left-right, top-bottom) to
@@ -122,6 +122,9 @@ func f32bytes(s []float32) []byte {
 	if len(s) == 0 {
 		return nil
 	}
+	// #nosec G103 -- reinterpreting the float32 backing array as bytes is the
+	// point: WebGL buffer uploads take raw bytes, and the slice header is
+	// built from the same allocation with a length derived from it.
 	return unsafe.Slice((*byte)(unsafe.Pointer(unsafe.SliceData(s))), len(s)*4)
 }
 
@@ -185,16 +188,16 @@ func createProgram(gl js.Value, vertexSource, fragmentSource string) (js.Value, 
 
 // renderDimensions is the subset of IRenderDimensions used.
 type renderDimensions struct {
-	deviceCharWidth   int
-	deviceCharHeight  int
-	deviceCharLeft    int
-	deviceCharTop     int
-	deviceCellWidth   int
-	deviceCellHeight  int
+	deviceCharWidth    int
+	deviceCharHeight   int
+	deviceCharLeft     int
+	deviceCharTop      int
+	deviceCellWidth    int
+	deviceCellHeight   int
 	deviceCanvasWidth  int
 	deviceCanvasHeight int
-	cssCanvasWidth    float64
-	cssCanvasHeight   float64
+	cssCanvasWidth     float64
+	cssCanvasHeight    float64
 }
 
 // renderModel caches per-cell state to detect changes (RenderModel).
@@ -295,12 +298,12 @@ func newGlyphRenderer(term *Terminal, gl js.Value, dims *renderDimensions) (*gly
 	r.attributesBuf = gl.Call("createBuffer")
 	gl.Call("bindBuffer", glArrayBuffer, r.attributesBuf)
 	attribs := []struct{ loc, size, offset int }{
-		{2, 2, 0},  // a_offset
-		{3, 2, 2},  // a_size
-		{4, 1, 4},  // a_texpage
-		{5, 2, 5},  // a_texcoord
-		{6, 2, 7},  // a_texsize
-		{1, 2, 9},  // a_cellpos
+		{2, 2, 0}, // a_offset
+		{3, 2, 2}, // a_size
+		{4, 1, 4}, // a_texpage
+		{5, 2, 5}, // a_texcoord
+		{6, 2, 7}, // a_texsize
+		{1, 2, 9}, // a_cellpos
 	}
 	for _, a := range attribs {
 		gl.Call("enableVertexAttribArray", a.loc)
@@ -343,7 +346,7 @@ func (r *glyphRenderer) setAtlas(atlas *textureAtlas) {
 	r.textureVersion = -1
 }
 
-func (r *glyphRenderer) updateCell(x, y int, code uint32, bg, fg, ext uint32, chars string, width int, lastBg uint32) {
+func (r *glyphRenderer) updateCell(x, y int, code uint32, bg, fg, ext uint32, chars string, lastBg uint32) {
 	i := (y*r.term.Core.Cols() + x) * glyphIndicesPerCell
 	array := r.attributes
 
@@ -535,7 +538,9 @@ func rgbToFloats(rgb uint32) (float32, float32, float32) {
 }
 
 func (r *rectangleRenderer) renderBackgrounds() { r.renderVertices(r.bgAttrs, r.bgCount, &r.upload) }
-func (r *rectangleRenderer) renderCursor()      { r.renderVertices(r.cursorAttrs, r.cursorCount, &r.uploadCursor) }
+func (r *rectangleRenderer) renderCursor() {
+	r.renderVertices(r.cursorAttrs, r.cursorCount, &r.uploadCursor)
+}
 
 func (r *rectangleRenderer) renderVertices(attrs []float32, count int, up *jsF32) {
 	gl := r.gl
@@ -557,7 +562,7 @@ func (r *rectangleRenderer) updateViewportRectangle() {
 	r.addRectangle(r.bgAttrs, 0, 0, 0,
 		float64(r.term.Core.Cols()*r.dims.deviceCellWidth),
 		float64(r.term.Core.Rows()*r.dims.deviceCellHeight),
-		br, bgc, bb, 1)
+		br, bgc, bb)
 }
 
 func (r *rectangleRenderer) updateBackgrounds(model *renderModel) {
@@ -626,26 +631,26 @@ func (r *rectangleRenderer) updateCursor(model *renderModel) {
 			w = cursor.dpr * float64(cursor.cursorWidth)
 		}
 		r.addRectangle(r.cursorAttrs, rectangleCount*rectIndices,
-			float64(cursor.x)*cellW, float64(cursor.y)*cellH, w, cellH, cr, cg, cb, 1)
+			float64(cursor.x)*cellW, float64(cursor.y)*cellH, w, cellH, cr, cg, cb)
 		rectangleCount++
 	}
 	if cursor.style == "underline" || cursor.style == "outline" {
 		// bottom edge
 		r.addRectangle(r.cursorAttrs, rectangleCount*rectIndices,
 			float64(cursor.x)*cellW, float64(cursor.y+1)*cellH-cursor.dpr,
-			float64(cursor.width)*cellW, cursor.dpr, cr, cg, cb, 1)
+			float64(cursor.width)*cellW, cursor.dpr, cr, cg, cb)
 		rectangleCount++
 	}
 	if cursor.style == "outline" {
 		// top edge
 		r.addRectangle(r.cursorAttrs, rectangleCount*rectIndices,
 			float64(cursor.x)*cellW, float64(cursor.y)*cellH,
-			float64(cursor.width)*cellW, cursor.dpr, cr, cg, cb, 1)
+			float64(cursor.width)*cellW, cursor.dpr, cr, cg, cb)
 		rectangleCount++
 		// right edge
 		r.addRectangle(r.cursorAttrs, rectangleCount*rectIndices,
 			float64(cursor.x+cursor.width)*cellW-cursor.dpr, float64(cursor.y)*cellH,
-			cursor.dpr, cellH, cr, cg, cb, 1)
+			cursor.dpr, cellH, cr, cg, cb)
 		rectangleCount++
 	}
 	r.cursorCount = rectangleCount
@@ -677,10 +682,10 @@ func (r *rectangleRenderer) updateRectangle(attrs []float32, offset int, fg, bg 
 	rr, rg, rb := rgbToFloats(rgb)
 	r.addRectangle(attrs, offset, x1, y1,
 		float64((endX-startX)*r.dims.deviceCellWidth), float64(r.dims.deviceCellHeight),
-		rr, rg, rb, 1)
+		rr, rg, rb)
 }
 
-func (r *rectangleRenderer) addRectangle(attrs []float32, offset int, x1, y1, width, height float64, cr, cg, cb, ca float32) {
+func (r *rectangleRenderer) addRectangle(attrs []float32, offset int, x1, y1, width, height float64, cr, cg, cb float32) {
 	cw := float64(r.dims.deviceCanvasWidth)
 	ch := float64(r.dims.deviceCanvasHeight)
 	if cw == 0 || ch == 0 {
@@ -693,7 +698,7 @@ func (r *rectangleRenderer) addRectangle(attrs []float32, offset int, x1, y1, wi
 	attrs[offset+4] = cr
 	attrs[offset+5] = cg
 	attrs[offset+6] = cb
-	attrs[offset+7] = ca
+	attrs[offset+7] = 1 // alpha: rectangles are always drawn opaque
 }
 
 // webglRenderer coordinates the model, atlas and both sub-renderers
@@ -893,7 +898,7 @@ func (r *webglRenderer) updateModel(start, end int) {
 			line.LoadCell(x, cell)
 
 			chars := cell.GetChars()
-			code := uint32(cell.GetCode())
+			code := uint32(cell.GetCode()) // #nosec G115 -- a cell code is a Unicode codepoint
 			i := (y*cols + x) * modelIndiciesPerCell
 
 			// resolve colors (no selection/decoration overrides)
@@ -958,7 +963,7 @@ func (r *webglRenderer) updateModel(start, end int) {
 			r.model.cells[i+modelFgOffset] = resFg
 			r.model.cells[i+modelExtOffset] = resExt
 
-			r.glyphs.updateCell(x, y, code, resBg, resFg, resExt, chars, cell.GetWidth(), prevBg)
+			r.glyphs.updateCell(x, y, code, resBg, resFg, resExt, chars, prevBg)
 		}
 	}
 	if modelUpdated {

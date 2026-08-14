@@ -50,6 +50,9 @@ func consoleWarn(msg string) {
 func f32ToJS(data []float32) js.Value {
 	arr := js.Global().Get("Float32Array").New(len(data))
 	if len(data) > 0 {
+		// #nosec G103 -- viewing the float32 backing array as bytes is the point:
+		// js.CopyBytesToJS takes a byte slice, and the length is derived from
+		// the same allocation.
 		bytes := unsafe.Slice((*byte)(unsafe.Pointer(&data[0])), len(data)*4)
 		u8 := js.Global().Get("Uint8Array").New(arr.Get("buffer"), arr.Get("byteOffset"), len(data)*4)
 		js.CopyBytesToJS(u8, bytes)
@@ -62,6 +65,7 @@ func f32FromJS(arr js.Value) []float32 {
 	out := make([]float32, n)
 	if n > 0 {
 		u8 := js.Global().Get("Uint8Array").New(arr.Get("buffer"), arr.Get("byteOffset"), n*4)
+		// #nosec G103 -- see f32ToJS; the byte view is how the copy back is made.
 		bytes := unsafe.Slice((*byte)(unsafe.Pointer(&out[0])), n*4)
 		js.CopyBytesToGo(bytes, u8)
 	}
@@ -118,7 +122,7 @@ func (c *glCtx) newFloatTexture(w, h int, data []float32) *texture {
 	gl.Call("texParameteri", gl.Get("TEXTURE_2D"), gl.Get("TEXTURE_MAG_FILTER"), gl.Get("NEAREST"))
 	gl.Call("texParameteri", gl.Get("TEXTURE_2D"), gl.Get("TEXTURE_WRAP_S"), gl.Get("CLAMP_TO_EDGE"))
 	gl.Call("texParameteri", gl.Get("TEXTURE_2D"), gl.Get("TEXTURE_WRAP_T"), gl.Get("CLAMP_TO_EDGE"))
-	var jsData js.Value = js.Null()
+	jsData := js.Null()
 	if data != nil {
 		jsData = f32ToJS(data)
 	}
@@ -136,7 +140,7 @@ func (c *glCtx) newUint8Texture(w, h int, data []byte) *texture {
 	gl.Call("texParameteri", gl.Get("TEXTURE_2D"), gl.Get("TEXTURE_MAG_FILTER"), gl.Get("LINEAR"))
 	gl.Call("texParameteri", gl.Get("TEXTURE_2D"), gl.Get("TEXTURE_WRAP_S"), gl.Get("CLAMP_TO_EDGE"))
 	gl.Call("texParameteri", gl.Get("TEXTURE_2D"), gl.Get("TEXTURE_WRAP_T"), gl.Get("CLAMP_TO_EDGE"))
-	var jsData js.Value = js.Null()
+	jsData := js.Null()
 	if data != nil {
 		arr := js.Global().Get("Uint8Array").New(len(data))
 		js.CopyBytesToJS(arr, data)
@@ -293,13 +297,12 @@ func (p *program) uniformLoc(name string) js.Value {
 // bytes; size is the number of float components. A nil bufferFn buffer is
 // skipped (matches regl behavior with missing buffers).
 type attrBinding struct {
-	name     string
-	buffer   func() *buffer
-	size     int
-	stride   int
-	offset   int
-	divisor  int
-	location int // resolved lazily; -2 = unresolved
+	name    string
+	buffer  func() *buffer
+	size    int
+	stride  int
+	offset  int
+	divisor int
 }
 
 // uniformValue is the value of a uniform at draw time.
