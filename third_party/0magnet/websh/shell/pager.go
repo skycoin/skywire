@@ -44,8 +44,8 @@ func runLess(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 	}
 	out := hc.Stdout
 	// enter alt screen, hide cursor
-	fmt.Fprint(out, "\x1b[?1049h\x1b[?25l")
-	defer fmt.Fprint(out, "\x1b[?25h\x1b[?1049l")
+	fprint(out, "\x1b[?1049h\x1b[?25l")
+	defer fprint(out, "\x1b[?25h\x1b[?1049l")
 
 	top := 0
 	maxTop := len(lines) - page
@@ -76,9 +76,10 @@ func runLess(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 			}
 			pct = end * 100 / len(lines)
 		}
-		b.WriteString(fmt.Sprintf("\x1b[7m %s  %d-%d/%d (%d%%)  q:quit \x1b[0m",
-			name, top+1, minInt(top+page, len(lines)), len(lines), pct))
-		fmt.Fprint(out, b.String())
+		status := fmt.Sprintf("\x1b[7m %s  %d-%d/%d (%d%%)  q:quit \x1b[0m",
+			name, top+1, minInt(top+page, len(lines)), len(lines), pct)
+		b.WriteString(status)
+		fprint(out, b.String())
 	}
 
 	clampTop := func() {
@@ -118,21 +119,21 @@ func runLess(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		case 'G':
 			top = maxTop
 		case 0x1b: // arrow/page keys: ESC [ X or ESC [ N ~
-			b1, _ := reader.ReadByte()
+			b1 := readByte(reader)
 			if b1 != '[' && b1 != 'O' {
 				continue
 			}
-			b2, _ := reader.ReadByte()
+			b2 := readByte(reader)
 			switch b2 {
 			case 'A':
 				top--
 			case 'B':
 				top++
 			case '5': // page up: ESC [ 5 ~
-				reader.ReadByte()
+				skipByte(reader)
 				top -= page
 			case '6': // page down
-				reader.ReadByte()
+				skipByte(reader)
 				top += page
 			case 'H':
 				top = 0

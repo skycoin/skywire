@@ -111,7 +111,7 @@ func format(v js.Value) string {
 func runJS(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
 	expr := strings.TrimSpace(strings.Join(args, " "))
 	if expr == "" {
-		fmt.Fprintln(hc.Stderr, "usage: js <expression>    eg: js 'document.title'")
+		shell.Println(hc.Stderr, "usage: js <expression>    eg: js 'document.title'")
 		return 2
 	}
 	var res js.Value
@@ -126,26 +126,26 @@ func runJS(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args 
 		return nil
 	}()
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "js: %v\n", err)
+		shell.Printf(hc.Stderr, "js: %v\n", err)
 		return 1
 	}
 	settled, err := await(res)
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "js: %v\n", err)
+		shell.Printf(hc.Stderr, "js: %v\n", err)
 		return 1
 	}
-	fmt.Fprintln(hc.Stdout, format(settled))
+	shell.Println(hc.Stdout, format(settled))
 	return 0
 }
 
 func runDownload(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(hc.Stderr, "usage: download <file>")
+		shell.Println(hc.Stderr, "usage: download <file>")
 		return 1
 	}
 	data, err := shell.ReadFile(s, hc, args[0])
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "download: %v\n", err)
+		shell.Printf(hc.Stderr, "download: %v\n", err)
 		return 1
 	}
 	u8 := js.Global().Get("Uint8Array").New(len(data))
@@ -159,7 +159,7 @@ func runDownload(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext,
 	a.Set("download", shell.Base(args[0]))
 	a.Call("click")
 	js.Global().Get("URL").Call("revokeObjectURL", url)
-	fmt.Fprintf(hc.Stdout, "downloading %s (%d bytes)\n", shell.Base(args[0]), len(data))
+	shell.Printf(hc.Stdout, "downloading %s (%d bytes)\n", shell.Base(args[0]), len(data))
 	return 0
 }
 
@@ -181,22 +181,22 @@ func runUpload(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, a
 	defer onChange.Release()
 	input.Set("onchange", onChange)
 	input.Call("click")
-	fmt.Fprintln(hc.Stdout, "waiting for file selection... (Ctrl+C to cancel)")
+	shell.Println(hc.Stdout, "waiting for file selection... (Ctrl+C to cancel)")
 
 	var file js.Value
 	select {
 	case file = <-picked:
 	case <-ctx.Done():
-		fmt.Fprintln(hc.Stderr, "upload: cancelled")
+		shell.Println(hc.Stderr, "upload: canceled")
 		return 130
 	}
 	if file.IsNull() {
-		fmt.Fprintln(hc.Stderr, "upload: no file selected")
+		shell.Println(hc.Stderr, "upload: no file selected")
 		return 1
 	}
 	buf, err := await(file.Call("arrayBuffer"))
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "upload: %v\n", err)
+		shell.Printf(hc.Stderr, "upload: %v\n", err)
 		return 1
 	}
 	u8 := js.Global().Get("Uint8Array").New(buf)
@@ -209,10 +209,10 @@ func runUpload(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, a
 	}
 	written, err := shell.WriteFile(s, hc, dest, data)
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "upload: %v\n", err)
+		shell.Printf(hc.Stderr, "upload: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(hc.Stdout, "%s (%d bytes)\n", written, len(data))
+	shell.Printf(hc.Stdout, "%s (%d bytes)\n", written, len(data))
 	return 0
 }
 
@@ -231,7 +231,7 @@ func runCurl(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, arg
 		}
 	}
 	if urlArg == "" {
-		fmt.Fprintln(hc.Stderr, "usage: curl [-o file] <url>   (subject to CORS)")
+		shell.Println(hc.Stderr, "usage: curl [-o file] <url>   (subject to CORS)")
 		return 1
 	}
 	if !strings.Contains(urlArg, "://") {
@@ -239,16 +239,16 @@ func runCurl(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, arg
 	}
 	resp, err := await(js.Global().Call("fetch", urlArg))
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "curl: %v (cross-origin requests need CORS headers)\n", err)
+		shell.Printf(hc.Stderr, "curl: %v (cross-origin requests need CORS headers)\n", err)
 		return 1
 	}
 	if !resp.Get("ok").Bool() {
-		fmt.Fprintf(hc.Stderr, "curl: HTTP %d\n", resp.Get("status").Int())
+		shell.Printf(hc.Stderr, "curl: HTTP %d\n", resp.Get("status").Int())
 		return 22
 	}
 	buf, err := await(resp.Call("arrayBuffer"))
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "curl: %v\n", err)
+		shell.Printf(hc.Stderr, "curl: %v\n", err)
 		return 1
 	}
 	u8 := js.Global().Get("Uint8Array").New(buf)
@@ -257,19 +257,19 @@ func runCurl(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, arg
 	if outFile != "" {
 		written, err := shell.WriteFile(s, hc, outFile, data)
 		if err != nil {
-			fmt.Fprintf(hc.Stderr, "curl: %v\n", err)
+			shell.Printf(hc.Stderr, "curl: %v\n", err)
 			return 1
 		}
-		fmt.Fprintf(hc.Stdout, "saved %d bytes to %s\n", len(data), written)
+		shell.Printf(hc.Stdout, "saved %d bytes to %s\n", len(data), written)
 		return 0
 	}
-	hc.Stdout.Write(data)
+	shell.Write(hc.Stdout, data)
 	return 0
 }
 
 func runNc(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(hc.Stderr, "usage: nc <ws://host/path | wss://host/path>")
+		shell.Println(hc.Stderr, "usage: nc <ws://host/path | wss://host/path>")
 		return 1
 	}
 	url := args[0]
@@ -281,18 +281,18 @@ func runNc(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args 
 
 	closed := make(chan int, 1)
 	onOpen := js.FuncOf(func(js.Value, []js.Value) any {
-		fmt.Fprintf(hc.Stderr, "nc: connected to %s\n", url)
+		shell.Printf(hc.Stderr, "nc: connected to %s\n", url)
 		return nil
 	})
 	onMessage := js.FuncOf(func(_ js.Value, cbArgs []js.Value) any {
 		data := cbArgs[0].Get("data")
 		if data.Type() == js.TypeString {
-			fmt.Fprintln(hc.Stdout, data.String())
+			shell.Println(hc.Stdout, data.String())
 		} else {
 			u8 := js.Global().Get("Uint8Array").New(data)
 			buf := make([]byte, u8.Get("length").Int())
 			js.CopyBytesToGo(buf, u8)
-			hc.Stdout.Write(buf)
+			shell.Write(hc.Stdout, buf)
 		}
 		return nil
 	})
@@ -304,7 +304,7 @@ func runNc(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args 
 		return nil
 	})
 	onError := js.FuncOf(func(js.Value, []js.Value) any {
-		fmt.Fprintln(hc.Stderr, "nc: connection error")
+		shell.Println(hc.Stderr, "nc: connection error")
 		select {
 		case closed <- 1:
 		default:
@@ -338,16 +338,16 @@ func runNc(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args 
 func runPbcopy(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
 	data, err := shell.ReadAll(hc.Stdin)
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "pbcopy: %v\n", err)
+		shell.Printf(hc.Stderr, "pbcopy: %v\n", err)
 		return 1
 	}
 	clip := js.Global().Get("navigator").Get("clipboard")
 	if clip.IsUndefined() {
-		fmt.Fprintln(hc.Stderr, "pbcopy: clipboard API unavailable")
+		shell.Println(hc.Stderr, "pbcopy: clipboard API unavailable")
 		return 1
 	}
 	if _, err := await(clip.Call("writeText", string(data))); err != nil {
-		fmt.Fprintf(hc.Stderr, "pbcopy: %v\n", err)
+		shell.Printf(hc.Stderr, "pbcopy: %v\n", err)
 		return 1
 	}
 	return 0
@@ -356,14 +356,14 @@ func runPbcopy(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, a
 func runPbpaste(ctx context.Context, s *shell.Shell, hc *interp.HandlerContext, args []string) int {
 	clip := js.Global().Get("navigator").Get("clipboard")
 	if clip.IsUndefined() {
-		fmt.Fprintln(hc.Stderr, "pbpaste: clipboard API unavailable")
+		shell.Println(hc.Stderr, "pbpaste: clipboard API unavailable")
 		return 1
 	}
 	text, err := await(clip.Call("readText"))
 	if err != nil {
-		fmt.Fprintf(hc.Stderr, "pbpaste: %v\n", err)
+		shell.Printf(hc.Stderr, "pbpaste: %v\n", err)
 		return 1
 	}
-	fmt.Fprint(hc.Stdout, text.String())
+	shell.Print(hc.Stdout, text.String())
 	return 0
 }

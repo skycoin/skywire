@@ -5,11 +5,13 @@ package shell
 
 import (
 	"context"
+	// #nosec G501 -- md5sum(1) is being implemented here. The digest is the
+	// command's output, not a security control; a stronger hash would make
+	// the applet produce wrong answers.
 	"crypto/md5"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
-	"fmt"
 	"io"
 	"os"
 	"path"
@@ -76,7 +78,11 @@ func runFind(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 			return nil
 		}
 		if namePat != "" {
-			if ok, _ := path.Match(namePat, info.Name()); !ok {
+			ok, err := path.Match(namePat, info.Name())
+			if err != nil {
+				return err // a malformed pattern is worth reporting, not ignoring
+			}
+			if !ok {
 				return nil
 			}
 		}
@@ -89,7 +95,7 @@ func runFind(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 				rel = filepath.Join(root, r)
 			}
 		}
-		fmt.Fprintln(hc.Stdout, rel)
+		fprintln(hc.Stdout, rel)
 		return nil
 	})
 	if err != nil {
@@ -156,7 +162,7 @@ func runCut(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 		}
 	}
 	if fieldSpec == "" && charSpec == "" {
-		fmt.Fprintln(hc.Stderr, "cut: specify -f or -c")
+		fprintln(hc.Stderr, "cut: specify -f or -c")
 		return 1
 	}
 	lines, err := readLines(s, hc, files)
@@ -172,14 +178,14 @@ func runCut(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 					b.WriteRune(r)
 				}
 			}
-			fmt.Fprintln(hc.Stdout, b.String())
+			fprintln(hc.Stdout, b.String())
 		}
 		return 0
 	}
 	want := parseFieldList(fieldSpec)
 	for _, l := range lines {
 		if !strings.Contains(l, delim) {
-			fmt.Fprintln(hc.Stdout, l)
+			fprintln(hc.Stdout, l)
 			continue
 		}
 		parts := strings.Split(l, delim)
@@ -189,7 +195,7 @@ func runCut(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 				out = append(out, p)
 			}
 		}
-		fmt.Fprintln(hc.Stdout, strings.Join(out, delim))
+		fprintln(hc.Stdout, strings.Join(out, delim))
 	}
 	return 0
 }
@@ -214,7 +220,7 @@ func expandTrSet(s string) []rune {
 func runTr(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	flags, rest := parseFlags(args)
 	if len(rest) == 0 {
-		fmt.Fprintln(hc.Stderr, "usage: tr [-d] set1 [set2]")
+		fprintln(hc.Stderr, "usage: tr [-d] set1 [set2]")
 		return 1
 	}
 	data, err := io.ReadAll(hc.Stdin)
@@ -233,11 +239,11 @@ func runTr(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 				b.WriteRune(r)
 			}
 		}
-		fmt.Fprint(hc.Stdout, b.String())
+		fprint(hc.Stdout, b.String())
 		return 0
 	}
 	if len(rest) < 2 {
-		fmt.Fprintln(hc.Stderr, "tr: missing set2")
+		fprintln(hc.Stderr, "tr: missing set2")
 		return 1
 	}
 	set2 := expandTrSet(rest[1])
@@ -259,7 +265,7 @@ func runTr(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 			b.WriteRune(r)
 		}
 	}
-	fmt.Fprint(hc.Stdout, b.String())
+	fprint(hc.Stdout, b.String())
 	return 0
 }
 
@@ -267,18 +273,18 @@ func runSed(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 	flags, rest := parseFlags(args)
 	_ = flags
 	if len(rest) == 0 {
-		fmt.Fprintln(hc.Stderr, "usage: sed s/regex/replacement/[gi] [file...]")
+		fprintln(hc.Stderr, "usage: sed s/regex/replacement/[gi] [file...]")
 		return 1
 	}
 	script := rest[0]
 	if len(script) < 4 || script[0] != 's' {
-		fmt.Fprintln(hc.Stderr, "sed: only s/// scripts are supported")
+		fprintln(hc.Stderr, "sed: only s/// scripts are supported")
 		return 1
 	}
 	delim := string(script[1])
 	parts := strings.Split(script[2:], delim)
 	if len(parts) < 2 {
-		fmt.Fprintln(hc.Stderr, "sed: malformed s command")
+		fprintln(hc.Stderr, "sed: malformed s command")
 		return 1
 	}
 	pattern, replacement := parts[0], parts[1]
@@ -307,7 +313,7 @@ func runSed(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 		} else if loc := re.FindStringIndex(l); loc != nil {
 			l = l[:loc[0]] + re.ReplaceAllString(l[loc[0]:loc[1]], replacement) + l[loc[1]:]
 		}
-		fmt.Fprintln(hc.Stdout, l)
+		fprintln(hc.Stdout, l)
 	}
 	return 0
 }
@@ -326,13 +332,13 @@ func runXargs(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []s
 	name := cmd[0]
 	// echo is an interpreter builtin, not an applet: handle inline
 	if name == "echo" {
-		fmt.Fprintln(hc.Stdout, strings.Join(full, " "))
+		fprintln(hc.Stdout, strings.Join(full, " "))
 		return 0
 	}
 	if a, ok := applets[name]; ok {
 		return a.run(ctx, s, hc, full)
 	}
-	fmt.Fprintf(hc.Stderr, "xargs: %s: not an applet (xargs can only run applets and echo)\n", name)
+	fprintf(hc.Stderr, "xargs: %s: not an applet (xargs can only run applets and echo)\n", name)
 	return 127
 }
 
@@ -343,7 +349,7 @@ func runTac(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 		return fail(hc, "tac", err)
 	}
 	for i := len(lines) - 1; i >= 0; i-- {
-		fmt.Fprintln(hc.Stdout, lines[i])
+		fprintln(hc.Stdout, lines[i])
 	}
 	return 0
 }
@@ -355,7 +361,7 @@ func runNl(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 		return fail(hc, "nl", err)
 	}
 	for i, l := range lines {
-		fmt.Fprintf(hc.Stdout, "%6d\t%s\n", i+1, l)
+		fprintf(hc.Stdout, "%6d\t%s\n", i+1, l)
 	}
 	return 0
 }
@@ -369,7 +375,7 @@ func runDu(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 	base := resolveArg(hc, root)
 	dirTotals := map[string]int64{}
 	var grand int64
-	_ = afero.Walk(s.FS, base, func(p string, info os.FileInfo, err error) error {
+	walkErr := afero.Walk(s.FS, base, func(p string, info os.FileInfo, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -381,8 +387,11 @@ func runDu(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 		}
 		return nil
 	})
+	if walkErr != nil {
+		return fail(hc, "du", walkErr)
+	}
 	if flags['s'] {
-		fmt.Fprintf(hc.Stdout, "%d\t%s\n", grand, root)
+		fprintf(hc.Stdout, "%d\t%s\n", grand, root)
 		return 0
 	}
 	for dir, size := range dirTotals {
@@ -392,7 +401,7 @@ func runDu(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 		} else if r == "." {
 			rel = root
 		}
-		fmt.Fprintf(hc.Stdout, "%d\t%s\n", size, rel)
+		fprintf(hc.Stdout, "%d\t%s\n", size, rel)
 	}
 	return 0
 }
@@ -400,7 +409,7 @@ func runDu(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []stri
 func runStat(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	_, rest := parseFlags(args)
 	if len(rest) == 0 {
-		fmt.Fprintln(hc.Stderr, "stat: missing operand")
+		fprintln(hc.Stderr, "stat: missing operand")
 		return 1
 	}
 	code := 0
@@ -414,7 +423,7 @@ func runStat(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		if info.IsDir() {
 			kind = "directory"
 		}
-		fmt.Fprintf(hc.Stdout, "  File: %s\n  Size: %d\t%s\n  Mode: %s\nModify: %s\n",
+		fprintf(hc.Stdout, "  File: %s\n  Size: %d\t%s\n  Mode: %s\nModify: %s\n",
 			arg, info.Size(), kind, info.Mode(), info.ModTime().Format("2006-01-02 15:04:05"))
 	}
 	return code
@@ -423,7 +432,7 @@ func runStat(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 func runChmod(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []string) int {
 	_, rest := parseFlags(args)
 	if len(rest) < 2 {
-		fmt.Fprintln(hc.Stderr, "usage: chmod octal-mode file...")
+		fprintln(hc.Stderr, "usage: chmod octal-mode file...")
 		return 1
 	}
 	mode, err := strconv.ParseUint(rest[0], 8, 32)
@@ -443,7 +452,7 @@ func hashApplet(name string) func(ctx context.Context, s *Shell, hc *interp.Hand
 		_, rest := parseFlags(args)
 		digest := func(data []byte) string {
 			if name == "md5sum" {
-				sum := md5.Sum(data)
+				sum := md5.Sum(data) // #nosec G401 -- see the crypto/md5 import comment
 				return hex.EncodeToString(sum[:])
 			}
 			sum := sha256.Sum256(data)
@@ -454,7 +463,7 @@ func hashApplet(name string) func(ctx context.Context, s *Shell, hc *interp.Hand
 			if err != nil {
 				return fail(hc, name, err)
 			}
-			fmt.Fprintf(hc.Stdout, "%s  -\n", digest(data))
+			fprintf(hc.Stdout, "%s  -\n", digest(data))
 			return 0
 		}
 		code := 0
@@ -464,7 +473,7 @@ func hashApplet(name string) func(ctx context.Context, s *Shell, hc *interp.Hand
 				code = fail(hc, name, err)
 				continue
 			}
-			fmt.Fprintf(hc.Stdout, "%s  %s\n", digest(data), arg)
+			fprintf(hc.Stdout, "%s  %s\n", digest(data), arg)
 		}
 		return code
 	}
@@ -487,10 +496,10 @@ func runBase64(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []
 		if err != nil {
 			return fail(hc, "base64", err)
 		}
-		hc.Stdout.Write(decoded)
+		write(hc.Stdout, decoded)
 		return 0
 	}
-	fmt.Fprintln(hc.Stdout, base64.StdEncoding.EncodeToString(data))
+	fprintln(hc.Stdout, base64.StdEncoding.EncodeToString(data))
 	return 0
 }
 
@@ -515,7 +524,7 @@ func runXxd(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 		var hexPart strings.Builder
 		for i := 0; i < 16; i++ {
 			if i < len(chunk) {
-				fmt.Fprintf(&hexPart, "%02x", chunk[i])
+				fprintf(&hexPart, "%02x", chunk[i])
 			} else {
 				hexPart.WriteString("  ")
 			}
@@ -531,7 +540,7 @@ func runXxd(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 				ascii.WriteByte('.')
 			}
 		}
-		fmt.Fprintf(hc.Stdout, "%08x: %s %s\n", off, hexPart.String(), ascii.String())
+		fprintf(hc.Stdout, "%08x: %s %s\n", off, hexPart.String(), ascii.String())
 	}
 	return 0
 }

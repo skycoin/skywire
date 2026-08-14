@@ -58,3 +58,18 @@ func CopyLines(r io.Reader, fn func(line string)) {
 		}
 	}
 }
+
+// Printf, Println, Print and Write are the applet-output wrappers used by
+// applets in other packages (see shell/browser). They drop the write error for
+// the reason documented in write.go: a shell that cannot write its output has
+// nowhere left to report that.
+func Printf(w io.Writer, format string, a ...any) { fprintf(w, format, a...) }
+
+// Println writes its operands and a newline, discarding any write error.
+func Println(w io.Writer, a ...any) { fprintln(w, a...) }
+
+// Print writes its operands, discarding any write error.
+func Print(w io.Writer, a ...any) { fprint(w, a...) }
+
+// Write writes raw bytes, discarding any write error.
+func Write(w io.Writer, b []byte) { write(w, b) }

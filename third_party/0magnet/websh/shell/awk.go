@@ -7,7 +7,6 @@ package shell
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/skycoin/skywire/third_party/0magnet/afero"
@@ -41,7 +40,7 @@ func runAwk(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []str
 		}
 	}
 	if len(rest) == 0 {
-		fmt.Fprintln(hc.Stderr, "usage: awk [-F sep] [-v var=val] 'program' [file...]")
+		fprintln(hc.Stderr, "usage: awk [-F sep] [-v var=val] 'program' [file...]")
 		return 2
 	}
 	prog, err := parser.ParseProgram([]byte(rest[0]), nil)

@@ -61,8 +61,8 @@ func runEdit(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		defer s.RawMode(false)
 	}
 	out := hc.Stdout
-	fmt.Fprint(out, "\x1b[?1049h")
-	defer fmt.Fprint(out, "\x1b[?1049l")
+	fprint(out, "\x1b[?1049h")
+	defer fprint(out, "\x1b[?1049l")
 
 	save := func() {
 		if ed.filename == "untitled" {
@@ -142,8 +142,9 @@ func runEdit(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		}
 		b.WriteString("\x1b[7m" + status + "\x1b[0m")
 		// place the cursor
-		b.WriteString(fmt.Sprintf("\x1b[%d;%dH", ed.cy-ed.topY+1, ed.cx-ed.leftX+1))
-		fmt.Fprint(out, b.String())
+		cursor := fmt.Sprintf("\x1b[%d;%dH", ed.cy-ed.topY+1, ed.cx-ed.leftX+1)
+		b.WriteString(cursor)
+		fprint(out, b.String())
 	}
 
 	insertRune := func(r rune) {
@@ -217,11 +218,11 @@ func runEdit(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 		case '\t':
 			insertRune('\t')
 		case 0x1b: // escape sequences
-			b1, _ := reader.ReadByte()
+			b1 := readByte(reader)
 			if b1 != '[' && b1 != 'O' {
 				continue
 			}
-			b2, _ := reader.ReadByte()
+			b2 := readByte(reader)
 			switch b2 {
 			case 'A':
 				ed.cy--
@@ -236,7 +237,7 @@ func runEdit(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 			case 'F':
 				ed.cx = len(ed.lines[ed.cy])
 			case '3': // delete: ESC [ 3 ~
-				reader.ReadByte()
+				skipByte(reader)
 				l := ed.lines[ed.cy]
 				if ed.cx < len(l) {
 					ed.lines[ed.cy] = append(l[:ed.cx], l[ed.cx+1:]...)
@@ -247,10 +248,10 @@ func runEdit(ctx context.Context, s *Shell, hc *interp.HandlerContext, args []st
 					ed.dirty = true
 				}
 			case '5': // page up
-				reader.ReadByte()
+				skipByte(reader)
 				ed.cy -= textRows
 			case '6': // page down
-				reader.ReadByte()
+				skipByte(reader)
 				ed.cy += textRows
 			}
 		default:
