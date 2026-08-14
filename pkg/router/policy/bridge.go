@@ -78,6 +78,9 @@ func peersModule(p Provider) *starlarkstruct.Module {
 			"is_hypervisor": starlark.NewBuiltin("is_hypervisor", oneStringArg(func(pk string) starlark.Value {
 				return starlark.Bool(p.IsHypervisor(pk))
 			})),
+			"has_transport": starlark.NewBuiltin("has_transport", oneStringArg(func(pk string) starlark.Value {
+				return starlark.Bool(p.HasTransport(pk))
+			})),
 		},
 	}
 }

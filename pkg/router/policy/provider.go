@@ -48,6 +48,15 @@ type Provider interface {
 	// dial hypervisors with minimum hops + maximum mux for low-
 	// latency control-plane traffic.
 	IsHypervisor(pk string) bool
+
+	// HasTransport reports whether the visor already holds a live
+	// transport to this peer (of any type). Policies use it to
+	// prefer routing over peers we're already connected to —
+	// reusing existing plumbing instead of paying the setup cost of
+	// a fresh transport (handshake + AR register + route-finder) on
+	// the dial hot path. False when the peer is only reachable
+	// through intermediates, or unknown.
+	HasTransport(pk string) bool
 }
 
 // NopProvider returns a Provider that knows nothing — Geo
@@ -63,6 +72,7 @@ func (nopProvider) Latency(string) int       { return 0 }
 func (nopProvider) Kind(string) string       { return "" }
 func (nopProvider) IsTrusted(string) bool    { return false }
 func (nopProvider) IsHypervisor(string) bool { return false }
+func (nopProvider) HasTransport(string) bool { return false }
 
 // FakeProvider is a test helper. Construct via NewFakeProvider
 // with the visor state the test wants to simulate.
@@ -71,19 +81,21 @@ type FakeProvider struct {
 	geo         map[string]string
 	latency     map[string]int
 	kind        map[string]string
-	trusted     map[string]bool
-	hypervisors map[string]bool
+	trusted      map[string]bool
+	hypervisors  map[string]bool
+	hasTransport map[string]bool
 }
 
 // NewFakeProvider returns an empty FakeProvider. Tests call the
 // Set* methods to populate it before passing to the Evaluator.
 func NewFakeProvider() *FakeProvider {
 	return &FakeProvider{
-		geo:         map[string]string{},
-		latency:     map[string]int{},
-		kind:        map[string]string{},
-		trusted:     map[string]bool{},
-		hypervisors: map[string]bool{},
+		geo:          map[string]string{},
+		latency:      map[string]int{},
+		kind:         map[string]string{},
+		trusted:      map[string]bool{},
+		hypervisors:  map[string]bool{},
+		hasTransport: map[string]bool{},
 	}
 }
 
@@ -127,6 +139,15 @@ func (p *FakeProvider) SetHypervisor(pk string) *FakeProvider {
 	return p
 }
 
+// SetHasTransport marks a peer as one the visor already holds a
+// live transport to.
+func (p *FakeProvider) SetHasTransport(pk string) *FakeProvider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.hasTransport[pk] = true
+	return p
+}
+
 // Geo implements Provider.
 func (p *FakeProvider) Geo(pk string) string {
 	p.mu.RLock()
@@ -163,4 +184,11 @@ func (p *FakeProvider) IsHypervisor(pk string) bool {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 	return p.hypervisors[pk]
+}
+
+// HasTransport implements Provider.
+func (p *FakeProvider) HasTransport(pk string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.hasTransport[pk]
 }
