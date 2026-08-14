@@ -699,6 +699,18 @@ func restartOrPrompt(r resolvedConfig) {
 		systemctlArgs = append(systemctlArgs, "--user")
 	}
 
+	// A running `hv serve` (the standalone wasm-visor page) serves the wasm build
+	// EMBEDDED in the running binary, so it goes stale after a binary update until
+	// its service restarts — the reason theskywirenetwork.net can lag develop.
+	// Refresh it here as part of autoconfig, but only if it's ALREADY active
+	// (never start it), and always as a system unit (it isn't a --user service).
+	// A no-op when the unit isn't installed, so this is safe whether or not the
+	// package ships skywire-wasm-visor-serve.service yet.
+	if exec.Command("systemctl", "is-active", "--quiet", "skywire-wasm-visor-serve.service").Run() == nil { //nolint:gosec
+		msg3("Restarting skywire-wasm-visor-serve (hv serve re-embeds the updated blob)…")
+		_ = exec.Command("systemctl", "restart", "skywire-wasm-visor-serve.service").Run() //nolint:errcheck,gosec
+	}
+
 	checkArgs := append(append([]string{}, systemctlArgs...), "is-active", "--quiet", "skywire")
 	if exec.Command("systemctl", checkArgs...).Run() == nil { //nolint:gosec
 		restartArgs := append(append([]string{}, systemctlArgs...), "restart", "skywire")
