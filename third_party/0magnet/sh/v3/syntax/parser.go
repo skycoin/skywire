@@ -527,6 +527,9 @@ type Parser struct {
 	openNodes int
 	// openBquotes is how many levels of backquotes are open at the moment.
 	openBquotes int
+	// openBquoteDbls is how many of those backquote levels began inside
+	// double quotes, where backslashes also escape double quotes.
+	openBquoteDbls int
 
 	// lastBquoteEsc is how many times the last backquote token was escaped
 	lastBquoteEsc int
@@ -572,6 +575,7 @@ func (p *Parser) reset() {
 	p.hdocStops = nil
 	p.parsingDoc = false
 	p.openBquotes = 0
+	p.openBquoteDbls = 0
 	p.accComs = nil
 	p.accComs, p.curComs = nil, &p.accComs
 	p.litBatch = nil
@@ -661,6 +665,9 @@ const (
 
 	subCmd
 	subCmdBckquo
+	// subCmdBraces is like subCmd, but for `${ stmts;}` and `${|stmts;}`,
+	// whose bodies end at a word beginning with `}`.
+	subCmdBraces
 	dblQuotes
 	hdocWord
 	hdocBody
@@ -678,8 +685,8 @@ const (
 
 	allKeepSpaces = runeByRune | paramExpRepl | dblQuotes | hdocBody |
 		hdocBodyTabs | paramExpRepl | paramExpExp
-	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | hdocWord |
-		switchCase | arrayElems | testExpr
+	allRegTokens = noState | unquotedWordCont | subCmd | subCmdBckquo | subCmdBraces |
+		hdocWord | switchCase | arrayElems | testExpr
 	allArithmExpr = arithmExpr | arithmExprLet | arithmExprCmd | paramExpArithm
 	allParamExp   = paramExpArithm | paramExpRepl | paramExpExp
 )
@@ -1211,7 +1218,7 @@ func (p *Parser) wordPart() WordPart {
 				TempFile: p.r != '|',
 				ReplyVar: p.r == '|',
 			}
-			old := p.preNested(subCmd)
+			old := p.preNested(subCmdBraces)
 			p.rune() // don't tokenize '|'
 			p.next()
 			cs.Stmts, cs.Last = p.stmtList("}")
@@ -1238,6 +1245,10 @@ func (p *Parser) wordPart() WordPart {
 		ar.X = p.followArithm(left, ar.Left)
 		if ar.Bracket {
 			if p.tok != rightBrack {
+				if p.recoverError() {
+					ar.Right = recoveredPos
+					return ar
+				}
 				p.arithmMatchingErr(ar.Left, dollBrack, rightBrack)
 			}
 			p.postNested(old)
@@ -1313,6 +1324,9 @@ func (p *Parser) wordPart() WordPart {
 		cs := &CmdSubst{Left: p.pos, Backquotes: true}
 		old := p.preNested(subCmdBckquo)
 		p.openBquotes++
+		if old.quote == dblQuotes {
+			p.openBquoteDbls++
+		}
 
 		// The lexer didn't call p.rune for us, so that it could have
 		// the right p.openBquotes to properly handle backslashes.
@@ -1327,6 +1341,9 @@ func (p *Parser) wordPart() WordPart {
 		}
 		p.postNested(old)
 		p.openBquotes--
+		if old.quote == dblQuotes {
+			p.openBquoteDbls--
+		}
 		cs.Right = p.pos
 
 		// Like above, the lexer didn't call p.rune for us.

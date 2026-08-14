@@ -107,8 +107,10 @@ retry:
 			}
 			// TODO: why is this necessary to ensure correct position info?
 			p.readEOF = false
-			if p.openBquotes > 0 && bquotes < p.openBquotes &&
-				p.bsp < uint(len(p.bs)) && bquoteEscaped(p.bs[p.bsp]) {
+			if p.openBquotes > 0 && p.bsp < uint(len(p.bs)) &&
+				((bquotes < p.openBquotes && bquoteEscaped(p.bs[p.bsp])) ||
+					// Backquotes within double quotes also escape double quotes.
+					(bquotes < p.openBquoteDbls && p.bs[p.bsp] == '"')) {
 				// We turn backquote command substitutions into $(),
 				// so we remove the extra backslashes needed by the backquotes.
 				bquotes++
@@ -985,7 +987,14 @@ func (p *Parser) endLit() (s string) {
 func (p *Parser) isLitRedir() bool {
 	lit := p.litBs[:len(p.litBs)-1]
 	if lit[0] == '{' && lit[len(lit)-1] == '}' {
-		return ValidName(string(lit[1 : len(lit)-1]))
+		name := lit[1 : len(lit)-1]
+		// Bash also allows an array element such as {name[idx]}.
+		if p.lang.in(langBashLike) && len(name) > 0 && name[len(name)-1] == ']' {
+			if i := bytes.IndexByte(name, '['); i > 0 && i < len(name)-2 {
+				name = name[:i]
+			}
+		}
+		return ValidName(string(name))
 	}
 	return numberLiteral(lit)
 }
@@ -1118,7 +1127,20 @@ loop:
 			if p.eqlOffs < 0 {
 				p.eqlOffs = len(p.litBs) - 1
 			}
+		case '}':
+			if p.quote == subCmdBraces && len(p.litBs) == 1 {
+				// A word-initial `}` closes the substitution even if
+				// more characters follow, as in `${ foo;}bar`.
+				p.rune()
+				break loop
+			}
 		case '[':
+			if p.litBs[0] == '{' && p.lang.in(langBashLike) {
+				// In bash, words beginning with '{' are always kept whole,
+				// so that {name[idx]} literals can prefix a redirect
+				// operator below.
+				break
+			}
 			if p.lang.in(langBashLike|LangMirBSDKorn|LangZsh) && len(p.litBs) > 1 && p.litBs[0] != '[' {
 				tok = _Lit
 				break loop
