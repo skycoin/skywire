@@ -389,11 +389,23 @@ func selectProxyPool(ctx context.Context, sdPK cipher.PubKey, avoid cipher.PubKe
 			continue
 		}
 		proxyPoolMu.Lock()
+		added := false
 		if len(proxyPool) < proxyPoolTarget {
 			proxyPool = append(proxyPool, r.pk)
-			vlog(fmt.Sprintf("[skysocks-lite] standby proxy exit ready: %s", exitShort(r.pk)))
+			added = true
 		}
 		proxyPoolMu.Unlock()
+		if added {
+			vlog(fmt.Sprintf("[skysocks-lite] standby proxy exit ready: %s", exitShort(r.pk)))
+			// Keep the standby's route WARM under the shared default owner (same key
+			// a user fetch resolves to) so promotion — rotateAwayFromExit on a real
+			// exit failure, or a manual switch — REUSES a live session instead of
+			// cold-dialing. probeExit closed the vetting route, so without this the
+			// "hot standby" is cold: promotion re-dials from scratch and can hang
+			// ~30s, dropping a navigation the native chain would serve. This makes it
+			// actually hot: on promotion the first fetch hits the warm session.
+			prewarmDefaultSession(r.pk)
+		}
 	}
 	return installed
 }
