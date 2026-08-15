@@ -452,12 +452,39 @@ wasm-visor: ## Build the browser WASM visor edge with STANDARD Go js/wasm into b
 	cp ./pkg/wasmhv/worker.js ./build/wasm-visor-go/
 	@echo "built ./build/wasm-visor-go (standard Go js/wasm) — serve dev: 'go run cmd/dmsg-wasm/serve.go -dir build/wasm-visor-go'"
 
-embed-wasm-visor: wasm-visor ## Update the COMMITTED std-Go embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmgo/) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
+# embeddable-tree refuses the two ways a committed wasm artifact silently
+# loses its provenance. Both have already happened here:
+#
+#   dirty tree — Go stamps vcs.modified=true, so the artifact records that
+#   no commit describes it. That is what TestCommittedWasmBuiltFromCommit
+#   rejects, and what a recent blob shipped with.
+#
+#   git worktree — .git is a FILE there, not a directory, and Go's buildvcs
+#   skips stamping entirely, without warning. The result carries no
+#   vcs.revision at all, which is worse than a dirty stamp and currently
+#   passes the test only because wasmgo is not yet goStamped.
+#
+# Commit the source first, then rebuild, then commit the artifact.
+# ALLOW_DIRTY=1 overrides the dirty check for local experiments — never for
+# a blob you intend to commit.
+embeddable-tree:
+	@test -d .git || { \
+	  echo "refusing: .git is not a directory — this looks like a git worktree."; \
+	  echo "Go's buildvcs will not stamp vcs.revision here, so the artifact could"; \
+	  echo "not say what it was built from. Build from the main clone."; \
+	  exit 1; }
+	@test -n "$(ALLOW_DIRTY)" || test -z "$$(git status --porcelain)" || { \
+	  echo "refusing: working tree is dirty, so the artifact would be stamped"; \
+	  echo "vcs.modified=true and no commit would describe it. Commit the source"; \
+	  echo "first, then rebuild. (ALLOW_DIRTY=1 overrides, for local testing only.)"; \
+	  exit 1; }
+
+embed-wasm-visor: embeddable-tree wasm-visor ## Update the COMMITTED std-Go embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmgo/) — run intentionally, then `git add` + commit it. Deterministic gzip (-n) so re-running on the same wasm yields no diff.
 	gzip -9 -n -c ./build/wasm-visor-go/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasmgo/wasm-visor.wasm.gz
 	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmgo/wasm_exec.js
 	@echo "updated pkg/wasmhv/wasmbin/wasmgo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~9.5MB blob)."
 
-embed-wasm-visor-tinygo: tinygo-wasm-visor ## Update the COMMITTED TinyGo embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmtinygo/) — needs the 0magnet/tinygo fork (set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>). Pairs the TinyGo wasm with TinyGo's wasm_exec.js.
+embed-wasm-visor-tinygo: embeddable-tree tinygo-wasm-visor ## Update the COMMITTED TinyGo embedded wasm-visor blob (pkg/wasmhv/wasmbin/wasmtinygo/) — needs the 0magnet/tinygo fork (set TINYGO=<fork>/build/tinygo TINYGOROOT=<fork>). Pairs the TinyGo wasm with TinyGo's wasm_exec.js.
 	gzip -9 -n -c ./build/wasm-visor/wasm-visor.wasm > ./pkg/wasmhv/wasmbin/wasmtinygo/wasm-visor.wasm.gz
 	cp "$$($(TINYGO) env TINYGOROOT)/targets/wasm_exec.js" ./pkg/wasmhv/wasmbin/wasmtinygo/wasm_exec.js
 	@echo "updated pkg/wasmhv/wasmbin/wasmtinygo/ (wasm-visor.wasm.gz + wasm_exec.js) — review with 'git status', commit intentionally (~2.9MB blob)."
