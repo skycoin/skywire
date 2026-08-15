@@ -103,8 +103,12 @@ func sessionOwner(winID string) string {
 // pool is topped up in the background. This is what makes the wallet / iframe
 // browser "just work" AND survive a dead first pick.
 const (
-	proxyRaceN      = 3 // candidates probed concurrently each selection round
-	proxyPoolTarget = 2 // vetted exits kept: 1 active + up to 1 hot standby
+	proxyRaceN      = 8 // candidates probed concurrently each round — over a
+	//                     heterogeneous mesh, random exits range from ~1s to the
+	//                     ~18s probe cap; racing more and taking the first to route
+	//                     (= fastest route setup) keeps the active + warm standbys
+	//                     on fast exits instead of landing on a slow multihop one.
+	proxyPoolTarget = 3 // vetted exits kept: 1 active + up to 2 hot standbys
 )
 
 var (
