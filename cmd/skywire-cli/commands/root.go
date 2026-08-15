@@ -163,6 +163,10 @@ func init() {
 	)
 	var jsonOutput bool
 	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output as JSON")
+	var jqFilter string
+	RootCmd.PersistentFlags().StringVar(&jqFilter, internal.JQString, "", "filter JSON output through a jq/gojq expression (implies --json)")
+	var shapeOutput bool
+	RootCmd.PersistentFlags().BoolVar(&shapeOutput, internal.ShapeString, false, "print the output schema skeleton (zero values, all fields) instead of data")
 	RootCmd.PersistentFlags().IntVar(&clirpc.Timeout, "timeout", 30, "RPC timeout in seconds (0 = unlimited)")
 	RootCmd.PersistentFlags().MarkHidden("timeout") //nolint:errcheck,gosec
 

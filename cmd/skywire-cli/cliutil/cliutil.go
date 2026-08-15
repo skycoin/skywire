@@ -103,14 +103,38 @@ type CLIOutput struct {
 //
 //nolint:errcheck
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
+	// --shape: print the output type's skeleton instead of live data.
+	if shape, _ := cmdFlags.GetBool(ShapeString); shape {
+		if outputJSON == nil {
+			return
+		}
+		b, err := json.MarshalIndent(jsonSkeleton(outputJSON), "", "  ")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+		fmt.Print(string(b) + "\n")
+		return
+	}
+	// --jq implies JSON output even without --json.
+	jqFilter, _ := cmdFlags.GetString(JQString)
 	isJSON, _ := cmdFlags.GetBool(JSONString)
-	if isJSON {
+	if isJSON || jqFilter != "" {
 		if outputJSON == nil {
 			return
 		}
 		b, err := json.MarshalIndent(outputJSON, "", "  ")
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
+			return
+		}
+		if jqFilter != "" {
+			filtered, err := applyJQ(b, jqFilter)
+			if err != nil {
+				fmt.Fprintln(os.Stderr, err)
+				return
+			}
+			fmt.Print(filtered)
 			return
 		}
 		fmt.Print(string(b) + "\n")
