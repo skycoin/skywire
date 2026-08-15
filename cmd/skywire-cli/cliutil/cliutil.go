@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"github.com/skycoin/skywire/pkg/cipher"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/logging"
 )
 
@@ -103,12 +104,15 @@ type CLIOutput struct {
 //
 //nolint:errcheck
 func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
-	// --shape: print the output type's skeleton instead of live data.
-	if shape, _ := cmdFlags.GetBool(ShapeString); shape {
+	// --shape / --jq are handled by the canonical cliout package so this
+	// legacy helper and cliout.Print behave identically. Flags are read off
+	// the passed set (they are registered persistently on the root, so they
+	// are present as inherited flags here).
+	if shape, _ := cmdFlags.GetBool(cliout.ShapeFlag); shape {
 		if outputJSON == nil {
 			return
 		}
-		b, err := json.MarshalIndent(jsonSkeleton(outputJSON), "", "  ")
+		b, err := json.MarshalIndent(cliout.Skeleton(outputJSON), "", "  ")
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return
@@ -116,8 +120,7 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 		fmt.Print(string(b) + "\n")
 		return
 	}
-	// --jq implies JSON output even without --json.
-	jqFilter, _ := cmdFlags.GetString(JQString)
+	jqFilter, _ := cmdFlags.GetString(cliout.JQFlag)
 	isJSON, _ := cmdFlags.GetBool(JSONString)
 	if isJSON || jqFilter != "" {
 		if outputJSON == nil {
@@ -129,7 +132,7 @@ func PrintOutput(cmdFlags *pflag.FlagSet, outputJSON, output interface{}) {
 			return
 		}
 		if jqFilter != "" {
-			filtered, err := applyJQ(b, jqFilter)
+			filtered, err := cliout.ApplyJQ(b, jqFilter)
 			if err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return
