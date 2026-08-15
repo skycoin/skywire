@@ -718,6 +718,48 @@ func jsHvAPI(_ js.Value, args []js.Value) interface{} {
 // websites from the tab and for reaching any dmsg-served HTTP endpoint. pkHost is a
 // PK or "pk:port" (port defaults to 80). IP-anonymous + uncensorable: no DNS, no
 // IP, all over dmsg.
+// jsBodyBytes reads a JS request-body argument into raw bytes. The
+// real-origin browse responder (browse-responder.js) passes the body as a
+// Uint8Array; skycoin-API callers pass a string. syscall/js Value.String()
+// on a non-string returns the literal "<object>", so a typed-array body must
+// be copied out with CopyBytesToGo — stringifying it silently replaced every
+// browser POST/PUT body with the 8 bytes "<object>".
+func jsBodyBytes(v js.Value) []byte {
+	if v.IsNull() || v.IsUndefined() {
+		return nil
+	}
+	if v.Type() == js.TypeString {
+		s := v.String()
+		if s == "" {
+			return nil
+		}
+		return []byte(s)
+	}
+	u8Ctor := js.Global().Get("Uint8Array")
+	if v.InstanceOf(u8Ctor) {
+		b := make([]byte, v.Get("length").Int())
+		js.CopyBytesToGo(b, v)
+		return b
+	}
+	if v.InstanceOf(js.Global().Get("ArrayBuffer")) {
+		view := u8Ctor.New(v)
+		b := make([]byte, view.Get("length").Int())
+		js.CopyBytesToGo(b, view)
+		return b
+	}
+	// Other typed arrays / DataView: wrap their underlying buffer.
+	if buf := v.Get("buffer"); buf.Truthy() && buf.InstanceOf(js.Global().Get("ArrayBuffer")) {
+		view := u8Ctor.New(buf, v.Get("byteOffset"), v.Get("byteLength"))
+		b := make([]byte, view.Get("length").Int())
+		js.CopyBytesToGo(b, view)
+		return b
+	}
+	if s := v.String(); s != "" {
+		return []byte(s)
+	}
+	return nil
+}
+
 func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 	pkHost := args[0].String()
 	method := "GET"
@@ -729,8 +771,8 @@ func jsFetchDmsg(_ js.Value, args []js.Value) interface{} {
 		path = args[2].String()
 	}
 	var body []byte
-	if len(args) > 3 && !args[3].IsNull() && !args[3].IsUndefined() {
-		body = []byte(args[3].String())
+	if len(args) > 3 {
+		body = jsBodyBytes(args[3])
 	}
 	// Optional 5th arg: a headers object (e.g. {"Content-Type":"application/
 	// x-www-form-urlencoded"}). Forwarded as request headers so POSTs keep their
