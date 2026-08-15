@@ -138,6 +138,7 @@ Outcomes (--wait > 0):
 		//      no --to needed (and if both set, the existing
 		//      sendViaTCP cross-validation enforces they match)
 		// Bail with one clear error when neither is provided.
+		internal.CheckDirectViaScheme(cmd.Flags(), sendVia, "a direct noise-TCP target (tcp://<pk>@host:port)")
 		if recipient == "" && sendVia == "" {
 			internal.PrintFatalError(cmd.Flags(),
 				errors.New("either --to <pk> or --via tcp://<pk>@host:port is required"))
