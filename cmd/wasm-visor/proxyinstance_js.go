@@ -563,6 +563,22 @@ func jsProxyInstances(_ js.Value, _ []js.Value) interface{} {
 
 // jsSetProxyExit(id, pkHex) sets an instance's exit ("" clears it). Returns an
 // error string on failure, else null.
+// jsProxyKillActive is a TEST/DEBUG hook: it simulates the active auto exit's
+// route dying mid-session by severing its sessions and routing it through the
+// real failure path (reportProxyExitDead → sticky-reconnect if it had connected,
+// else rotate to a warm standby). Lets a harness inject an exit failure and
+// verify self-heal without an actual network fault. Not part of the normal API
+// surface consumers use.
+func jsProxyKillActive(_ js.Value, _ []js.Value) interface{} {
+	pk, ok := proxyDefaultExit()
+	if !ok || pk.Null() {
+		return "no active exit"
+	}
+	n := closeSkysocksExit(pk)
+	go reportProxyExitDead(pk)
+	return fmt.Sprintf("killed active exit %s (%d sessions severed)", pk.Hex()[:8], n)
+}
+
 func jsSetProxyExit(_ js.Value, args []js.Value) interface{} {
 	if len(args) < 1 || args[0].String() == "" {
 		return "setProxyExit(id, pkHex)"

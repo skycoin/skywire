@@ -204,6 +204,7 @@ func main() {
 		"closeWindow":        js.FuncOf(jsCloseWindow),
 		"proxyInstances":     js.FuncOf(jsProxyInstances),
 		"setProxyExit":       js.FuncOf(jsSetProxyExit),
+		"proxyKillActive":    js.FuncOf(jsProxyKillActive),
 		"proxyBind":          js.FuncOf(jsProxyBind),
 		"proxyConsumers":     js.FuncOf(jsProxyConsumers),
 		"visorStats":         js.FuncOf(jsVisorStats),
