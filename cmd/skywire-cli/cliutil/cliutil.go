@@ -141,3 +141,27 @@ func writeJSONError(w *os.File, err error) {
 // Callers now use clirpc.FetchCachedServiceURL which routes the fetch
 // through the visor RPC → DMSG direct → HTTP fallback chain, so it
 // honors whatever transport the visor is actually configured to use.
+
+// CheckDirectViaScheme rejects a remote-visor target passed to a subcommand
+// whose own --via means a direct dial instead.
+//
+// The root command has a persistent --via that proxies the RPC to a remote
+// visor (dmsg://<pk> or skynet://<pk>). Four subcommands define a local --via
+// with an incompatible meaning — skychat send, dmsg probe, dmsg pty start and
+// dmsg pty exec dial tcp://<pk>@host:port directly, and proxy test takes a
+// bare PK to route a 2-hop test through. A local flag shadows the persistent
+// one, so on those commands the remote-visor form is not merely wrong, it is
+// unreachable. Without this the value is parsed as a host and the failure
+// surfaces much later as an opaque dial error.
+func CheckDirectViaScheme(cmdFlags *pflag.FlagSet, value, want string) {
+	if value == "" {
+		return
+	}
+	for _, scheme := range []string{"dmsg://", "skynet://", "tp://"} {
+		if len(value) >= len(scheme) && value[:len(scheme)] == scheme {
+			PrintFatalError(cmdFlags, fmt.Errorf(
+				"--via on this command means %s, not a remote-visor target; %q is the root command's --via form, which this command's own --via shadows",
+				want, value))
+		}
+	}
+}
