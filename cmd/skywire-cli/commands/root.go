@@ -10,7 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	internal "github.com/skycoin/skywire/cmd/skywire-cli/cliutil"
 	clicompletion "github.com/skycoin/skywire/cmd/skywire-cli/commands/completion"
 	cliconfig "github.com/skycoin/skywire/cmd/skywire-cli/commands/config"
 	clidmsg "github.com/skycoin/skywire/cmd/skywire-cli/commands/dmsg"
@@ -47,7 +46,6 @@ import (
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
 	"github.com/skycoin/skywire/pkg/cliout"
-	"github.com/skycoin/skywire/pkg/cliout/clihelp"
 	"github.com/skycoin/skywire/pkg/flags"
 )
 
@@ -161,8 +159,9 @@ func init() {
 		statusCmd,
 		haltCmd,
 	)
-	var jsonOutput bool
-	RootCmd.PersistentFlags().BoolVar(&jsonOutput, internal.JSONString, false, "print output as JSON")
+	// --json / --jq / --shape output flags, shared with the top-level
+	// `skywire` binary so both roots behave identically.
+	cliout.RegisterOutputFlags(RootCmd)
 	RootCmd.PersistentFlags().IntVar(&clirpc.Timeout, "timeout", 30, "RPC timeout in seconds (0 = unlimited)")
 	RootCmd.PersistentFlags().MarkHidden("timeout") //nolint:errcheck,gosec
 
@@ -182,23 +181,10 @@ func init() {
 	RootCmd.Flags().BoolVar(&cliShowAll, "all", false, "show all flags and subcommands (including hidden)")
 	RootCmd.Flags().MarkHidden("all") //nolint:errcheck,gosec
 
-	// `--help --json` describes the command instead of rendering help for a
-	// person: name, path, flags with their types and defaults, and the whole
-	// subtree beneath it. Registered once here because cobra hands the help
-	// function down to every child, so this covers all of them.
-	//
-	// Help is not a normal command — cobra intercepts --help before Run — so
-	// this cannot live in a Run body; SetHelpFunc is the hook for it.
-	defaultHelp := RootCmd.HelpFunc()
-	RootCmd.SetHelpFunc(func(cmd *cobra.Command, args []string) {
-		if !cliout.JSONMode(cmd) {
-			defaultHelp(cmd, args)
-			return
-		}
-		if err := cliout.Print(cmd, clihelp.Of(cmd)); err != nil {
-			fmt.Fprintln(os.Stderr, err) //nolint:errcheck
-		}
-	})
+	// `--help --json` describes the command (name, path, flags, subtree) as a
+	// machine-readable value instead of human help. Shared with the top-level
+	// binary via cliout so every command under either root supports it.
+	cliout.SetJSONHelp(RootCmd)
 }
 
 var cliShowAll bool
