@@ -36,10 +36,10 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 	"github.com/quic-go/quic-go"
 	"github.com/quic-go/quic-go/http3"
 	"github.com/quic-go/webtransport-go"
+	"github.com/skycoin/skywire/third_party/hashicorp/yamux"
 
 	"github.com/skycoin/skywire/pkg/dmsg/disc"
 	"github.com/skycoin/skywire/pkg/skyquic"
