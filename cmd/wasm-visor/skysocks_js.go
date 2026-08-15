@@ -335,16 +335,25 @@ func jsFetchClearnet(_ js.Value, args []js.Value) interface{} {
 		}
 		tried := map[cipher.PubKey]bool{}
 		var lastErr error
+		// Total budget to acquire a working exit, spanning re-selection. A native
+		// skysocks-client browser just keeps waiting for a connection, so a clearnet
+		// fetch here must too: hard-failing during the pool-empty recovery window
+		// (re-select can take 30-50s when a probed candidate is slow) is the gap
+		// that made the iframe browser less reliable than the native chain.
+		acquireDeadline := time.Now().Add(55 * time.Second)
 		for attempt := 0; attempt < maxTries; attempt++ {
 			var spk cipher.PubKey
 			if pinned {
 				spk = pinnedPK
 			} else {
-				// Wait for a fresh (not-yet-tried) auto exit. After a rotate the pool
-				// can be momentarily empty while it re-selects a replacement (~10s),
-				// so POLL rather than give up — that wait is what lets a fetch survive
-				// the active exit dying with no warm standby ready.
+				// Wait for a fresh (not-yet-tried) auto exit. After a rotate/clear the
+				// pool can be momentarily empty while it re-selects; kick the selector
+				// and keep waiting (bounded by acquireDeadline) rather than giving up.
 				pk := waitFreshProxyExit(tried, 16*time.Second)
+				for pk.Null() && time.Now().Before(acquireDeadline) {
+					kickDefaultProxyReselect()
+					pk = waitFreshProxyExit(tried, 12*time.Second)
+				}
 				if pk.Null() {
 					lastErr = errors.New("no working proxy exit available")
 					break

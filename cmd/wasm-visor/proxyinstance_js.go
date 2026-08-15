@@ -149,6 +149,21 @@ func waitFreshProxyExit(tried map[cipher.PubKey]bool, timeout time.Duration) cip
 	}
 }
 
+// kickDefaultProxyReselect ensures the auto-selector is running so an empty pool
+// gets refilled. Single-flight (startDefaultProxyAuto no-ops if a selection is
+// already in flight), using the ctx + SD key captured when auto first started.
+// Called by a clearnet fetch that found the pool momentarily empty so it can
+// wait for a replacement instead of hard-failing during the recovery window.
+func kickDefaultProxyReselect() {
+	proxyPoolMu.Lock()
+	ctx, sdPK, running := proxyAutoCtx, proxyAutoSDPK, proxyAutoRunning
+	proxyPoolMu.Unlock()
+	if running || ctx == nil || sdPK.Null() {
+		return
+	}
+	go startDefaultProxyAuto(ctx, sdPK)
+}
+
 // setProxyExit sets an instance's exit PK (the wasm analog of the native
 // SetAppPK). Clearing (null pk) is allowed. Turns off Auto once the operator
 // pins an exit explicitly.
