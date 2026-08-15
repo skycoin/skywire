@@ -56,7 +56,9 @@ func TestWasmPasswordGate(t *testing.T) {
 	const password = "hunter2"
 	protected := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("PROTECTED"))
+		if _, err := w.Write([]byte("PROTECTED")); err != nil {
+			t.Errorf("write protected body: %v", err)
+		}
 	})
 
 	t.Run("unauthenticated request gets the login page, not the content", func(t *testing.T) {
