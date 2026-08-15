@@ -546,6 +546,18 @@ func (mt *ManagedTransport) sendTransportPing() {
 		return
 	}
 
+	// Set a fresh write deadline. SetWriteDeadline is absolute and sticky
+	// on the conn: WritePacket/WriteRawPacket set it to now+writeTimeout on
+	// every route write, and it is NEVER cleared. Without resetting it here,
+	// an idle transport that last carried route traffic > writeTimeout ago
+	// writes against a deadline that already passed — so this ping fails
+	// instantly with "i/o timeout" even though the link is perfectly alive.
+	// That is the self-inflicted "receives fine but can't send" state that
+	// piled up half-open transports on hubs (types that honor the deadline —
+	// stcpr/sudph/squicr; webrtc's SetWriteDeadline is a no-op and was immune).
+	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		mt.log.WithError(err).Debug("Failed to set ping write deadline")
+	}
 	p := routing.MakeTransportPingPacket(time.Now().UnixNano())
 	n, err := tp.Write(p)
 	if err != nil {
@@ -590,6 +602,12 @@ func (mt *ManagedTransport) handleTransportPing(p routing.Packet) {
 		return
 	}
 
+	// Fresh write deadline — same stale-absolute-deadline hazard as
+	// sendTransportPing (a bare Write here inherits the last route write's
+	// now-passed deadline, so we fail to pong a live peer that just pinged us).
+	if err := tp.SetWriteDeadline(time.Now().Add(writeTimeout)); err != nil {
+		mt.log.WithError(err).Debug("Failed to set pong write deadline")
+	}
 	pong := routing.MakeTransportPongPacket(timestamp)
 	n, err := tp.Write(pong)
 	if err != nil {
