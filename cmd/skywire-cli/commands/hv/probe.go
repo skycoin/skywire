@@ -30,11 +30,13 @@ import (
 )
 
 var (
-	probePort     string
-	probeWS       string
-	probeNavigate string
-	probeEval     string
-	probeSeconds  int
+	probePort        string
+	probeWS          string
+	probeNavigate    string
+	probeEval        string
+	probeSeconds     int
+	probeFailOnFault bool
+	probeExpect      string
 )
 
 func init() {
@@ -43,6 +45,10 @@ func init() {
 	probeCmd.Flags().StringVar(&probeNavigate, "navigate", "", "URL to load while watching")
 	probeCmd.Flags().StringVar(&probeEval, "eval", "", "expression to evaluate; the stream is printed until the result arrives")
 	probeCmd.Flags().IntVar(&probeSeconds, "seconds", 60, "how long to watch")
+	probeCmd.Flags().BoolVar(&probeFailOnFault, "fail-on-fault", false,
+		"exit non-zero if an uncaught exception or a renderer crash is seen — turns this watch into a CI gate. Implies watching for the full --seconds, so a fault thrown from a timer or promise after --eval returns is still caught")
+	probeCmd.Flags().StringVar(&probeExpect, "expect", "",
+		"require the --eval result to contain this substring; exit non-zero if it does not, or if no result arrives before --seconds elapse")
 	RootCmd.AddCommand(probeCmd)
 }
 
@@ -117,22 +123,74 @@ func probeRun() error {
 	}
 
 	deadline := time.Now().Add(time.Duration(probeSeconds) * time.Second)
+	var faults []string
+	var evalResult string
+	var gotResult bool
 	for time.Now().Before(deadline) {
 		_, data, err := c.Read(ctx)
 		if err != nil {
 			// A watch that runs out its clock is the normal ending, not a fault.
 			fmt.Printf("%s stream ended: %v\n", at(), err)
-			return nil
+			return probeVerdict(faults, evalResult, gotResult)
 		}
 		var m probeMsg
 		if json.Unmarshal(data, &m) != nil {
 			continue
 		}
 		printProbeEvent(at(), m)
-		if wantID != 0 && m.ID == wantID {
-			fmt.Printf("%s result %s\n", at(), string(m.Result))
-			return nil
+		if f := probeFault(m); f != "" {
+			faults = append(faults, f)
 		}
+		if wantID != 0 && m.ID == wantID {
+			evalResult, gotResult = string(m.Result), true
+			fmt.Printf("%s result %s\n", at(), evalResult)
+			// Normally the result is the end of the watch. But a fault
+			// gate has to outlive it: an exception thrown from a timer or
+			// a promise lands after the expression that scheduled it has
+			// already returned, so returning here would report success
+			// for a page that faults a moment later. With --fail-on-fault
+			// the watch runs its full --seconds and the window is the
+			// observation period.
+			if !probeFailOnFault {
+				return probeVerdict(faults, evalResult, gotResult)
+			}
+		}
+	}
+	return probeVerdict(faults, evalResult, gotResult)
+}
+
+// probeFault names a page-level failure worth failing a CI run over. Console
+// noise is deliberately not one: pages log errors they have already handled,
+// so gating on it would make the check useless. An uncaught exception or a
+// dead renderer is unambiguous.
+func probeFault(m probeMsg) string {
+	switch m.Method {
+	case "Runtime.exceptionThrown":
+		d := m.Params.ExceptionDetails.Exception.Description
+		if d == "" {
+			d = m.Params.ExceptionDetails.Text
+		}
+		return "uncaught exception: " + d
+	case "Inspector.targetCrashed":
+		return "renderer crashed"
+	}
+	return ""
+}
+
+// probeVerdict converts the watch into an exit status. Without --expect or
+// --fail-on-fault it always succeeds, so the default diagnostic behavior of
+// this command is unchanged; both flags are opt-in for scripted use.
+func probeVerdict(faults []string, result string, gotResult bool) error {
+	if probeExpect != "" {
+		if !gotResult {
+			return fmt.Errorf("--expect %q: the evaluation returned no result within %ds", probeExpect, probeSeconds)
+		}
+		if !strings.Contains(result, probeExpect) {
+			return fmt.Errorf("--expect %q not found in result: %s", probeExpect, result)
+		}
+	}
+	if probeFailOnFault && len(faults) > 0 {
+		return fmt.Errorf("%d page fault(s): %s", len(faults), strings.Join(faults, "; "))
 	}
 	return nil
 }
