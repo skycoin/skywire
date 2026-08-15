@@ -178,7 +178,7 @@ func probeFault(m probeMsg) string {
 }
 
 // probeVerdict converts the watch into an exit status. Without --expect or
-// --fail-on-fault it always succeeds, so the default diagnostic behaviour of
+// --fail-on-fault it always succeeds, so the default diagnostic behavior of
 // this command is unchanged; both flags are opt-in for scripted use.
 func probeVerdict(faults []string, result string, gotResult bool) error {
 	if probeExpect != "" {
