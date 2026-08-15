@@ -135,6 +135,28 @@ func skysocksSession(winID string, serverPK cipher.PubKey) (*yamux.Session, erro
 	// data plane never carries the skysocks bytes. mux-auto GROW can still adapt an
 	// established single route later.
 	conn, err := rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
+	// "already being initialized" is NOT an exit failure: another dial to this
+	// exit (a probe, the pre-warm, or a sibling window) is mid-handshake on the
+	// SAME router route-group descriptor, so this concurrent dial is rejected
+	// until that one lands (≤ the 18s dial cap). Treat it as transient — poll our
+	// session cache for the landing session and re-dial a few times — instead of
+	// failing the fetch and (via reportProxyExitDead) marking a perfectly good
+	// exit dead, which caused rotation churn and the "all exits failed" wedge.
+	for attempt := 0; err != nil && strings.Contains(err.Error(), "already being initialized") && attempt < 4; attempt++ {
+		skysocksMu.Lock()
+		if s, ok := skysocksSessions[key]; ok && !s.IsClosed() {
+			skysocksMu.Unlock()
+			emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] reusing concurrently-established session to exit %s", winID, serverPK.Hex()[:8]))
+			return s, nil
+		}
+		skysocksMu.Unlock()
+		select {
+		case <-time.After(600 * time.Millisecond):
+		case <-dctx.Done():
+			return nil, dctx.Err()
+		}
+		conn, err = rtr.DialRoutes(dctx, serverPK, 0, skysocksPort, router.DefaultDialOptions())
+	}
 	if err != nil {
 		emitProxyLog(winID, fmt.Sprintf("[skysocks-lite %s] route dial to exit %s FAILED (%dms): %v", winID, serverPK.Hex()[:8], time.Since(t0).Milliseconds(), err))
 		// If this was the default instance's auto-selected active exit, hand it to
