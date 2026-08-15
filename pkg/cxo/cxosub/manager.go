@@ -511,13 +511,59 @@ func (m *Manager) RefreshNow(ctx context.Context, feed Feed) (FeedStatus, error)
 		f = &managedFeed{}
 		m.feeds[feed] = f
 	}
+	// f.cancel != nil means a cycle goroutine is running (set in
+	// acquireFeedLocked, cleared by the grace-stop). Under the live
+	// model that cycle owns a persistent subscriber on this feed's
+	// dmsg port and holds syncMu for its whole life, so calling
+	// syncOnce here would block forever on syncMu (and collide on the
+	// port). The live snapshot is already the freshest data available,
+	// so wait (bounded) for it to be populated instead of forcing a
+	// second subscribe.
+	cycleRunning := f.cancel != nil
 	m.mu.Unlock()
-	m.syncOnce(ctx, feed, f)
+
+	if cycleRunning {
+		m.waitForSnapshot(ctx, feed, f)
+	} else {
+		m.syncOnce(ctx, feed, f)
+	}
 	st := m.statusFor(feed, f)
 	if f.lastErr != nil {
 		return st, f.lastErr
 	}
 	return st, nil
+}
+
+// waitForSnapshot blocks until the live cycle has populated a non-empty
+// snapshot for the feed, ctx is done, or the feed's first-sync timeout
+// elapses. Used by RefreshNow when a persistent cycle already owns the
+// feed's subscriber (see RefreshNow).
+func (m *Manager) waitForSnapshot(ctx context.Context, feed Feed, f *managedFeed) {
+	f.snapMu.RLock()
+	has := len(f.snapshot) > 0
+	f.snapMu.RUnlock()
+	if has {
+		return
+	}
+	deadline := time.NewTimer(FeedFirstSyncTimeout(feed))
+	defer deadline.Stop()
+	tick := time.NewTicker(200 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-deadline.C:
+			return
+		case <-tick.C:
+			f.snapMu.RLock()
+			has := len(f.snapshot) > 0
+			f.snapMu.RUnlock()
+			if has {
+				return
+			}
+		}
+	}
 }
 
 // statusFor builds a FeedStatus for one feed under the manager's lock
@@ -675,21 +721,131 @@ func (m *Manager) releaseFeedLocked(fk Feed) {
 	})
 }
 
-// cycleLoop is the per-feed goroutine. Runs syncOnce immediately,
-// then on every `interval` tick, until ctx is canceled.
+// cycleLoop is the per-feed goroutine. It keeps a single subscriber
+// connected to the publisher for the whole time the feed is held and
+// re-walks the snapshot on every Root the publisher pushes (liveServe).
+// This is both snappier and lighter than the old subscribe→walk→close→
+// sleep(interval) poll: one dmsg dial instead of a re-dial every
+// interval, and no publisher-side load beyond the Roots it already
+// pushes. liveServe only returns on a setup/first-Root failure; the
+// loop then retries with capped backoff so a temporarily-down publisher
+// is picked up without hammering it.
 func (m *Manager) cycleLoop(ctx context.Context, fk Feed, f *managedFeed) {
 	defer close(f.done)
-	m.syncOnce(ctx, fk, f)
-	t := time.NewTicker(m.interval)
-	defer t.Stop()
+	backoff := initialLiveRetry
 	for {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := m.liveServe(ctx, fk, f); err != nil && ctx.Err() == nil {
+			f.recordErr(err)
+		}
+		if ctx.Err() != nil {
+			return
+		}
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
-			m.syncOnce(ctx, fk, f)
+		case <-time.After(backoff):
+		}
+		backoff *= 2
+		if backoff > m.interval {
+			backoff = m.interval
 		}
 	}
+}
+
+// initialLiveRetry is the first backoff after a failed subscribe/first-
+// Root before liveServe is retried; it doubles up to m.interval.
+const initialLiveRetry = 5 * time.Second
+
+// liveServe holds one subscriber connected for as long as ctx is live.
+// It waits for the first Root (snapshotting it), then re-walks on every
+// subsequent Root the publisher pushes. The subscriber's own reconnect
+// watchdog recovers dropped dmsg sessions after the first Root, so a
+// drop does not return here — liveServe returns only when ctx is done
+// (clean, nil) or the initial subscribe/connect/first-Root fails (the
+// error, so cycleLoop can back off and retry). syncMu is held for the
+// whole session: it owns the feed's fixed dmsg port until it returns,
+// which is what keeps RefreshNow from binding a second subscriber on the
+// same port (RefreshNow detects the running cycle and waits instead).
+func (m *Manager) liveServe(ctx context.Context, fk Feed, f *managedFeed) error {
+	f.syncMu.Lock()
+	defer f.syncMu.Unlock()
+
+	dmsgC := m.dmsgClient()
+	if dmsgC == nil {
+		return errors.New("dmsg client not ready")
+	}
+	peerPK, port, prefix, err := m.feedSpec(fk)
+	if err != nil {
+		return err
+	}
+	sub, err := treestore.NewSubscriber(dmsgC, peerPK, treestore.SubConfig{
+		InMemoryDB: true,
+		DmsgPort:   port,
+	})
+	if err != nil {
+		return fmt.Errorf("create subscriber: %w", err)
+	}
+	sub.SetPrefixes([]string{prefix})
+	defer func() { _ = sub.Close() }() //nolint:errcheck
+
+	// Buffered(1) so a burst of Roots coalesces into a single pending
+	// re-walk (natural debounce → bounds subscriber CPU on chatty feeds).
+	updateCh := make(chan struct{}, 1)
+	sub.OnUpdate(func(_ []treestore.UpdateEvent) {
+		select {
+		case updateCh <- struct{}{}:
+		default:
+		}
+	})
+
+	if err := sub.Connect(ctx, peerPK); err != nil {
+		return fmt.Errorf("dial publisher: %w", err)
+	}
+
+	syncTimeout := FeedFirstSyncTimeout(fk)
+	first := time.NewTimer(syncTimeout)
+	defer first.Stop()
+	select {
+	case <-updateCh:
+		first.Stop()
+		m.walkIntoSnapshot(sub, prefix, f)
+	case <-first.C:
+		return fmt.Errorf("timeout waiting for Root after %s", syncTimeout)
+	case <-ctx.Done():
+		return nil
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-updateCh:
+			m.walkIntoSnapshot(sub, prefix, f)
+		}
+	}
+}
+
+// walkIntoSnapshot re-walks the subscriber's cache under prefix and
+// replaces the feed snapshot. Cache stats are captured while the
+// subscriber is still open (live mode never closes it between walks).
+func (m *Manager) walkIntoSnapshot(sub *treestore.Subscriber, prefix string, f *managedFeed) {
+	snapshot := make(map[string][]byte)
+	sub.Walk(prefix, func(path string, body []byte) bool {
+		// Walk passes a copy of body, so storing it is safe.
+		snapshot[path] = body
+		return true
+	})
+	cacheSize, cacheKeys := sub.CacheSizeAndSampleKeys(5)
+	f.snapMu.Lock()
+	f.snapshot = snapshot
+	f.lastSyncAt = time.Now()
+	f.lastSyncCachePaths = cacheSize
+	f.lastSyncCacheKeys = cacheKeys
+	f.lastErr = nil
+	f.snapMu.Unlock()
 }
 
 // syncOnce performs a single subscribe → wait-for-first-Root →
