@@ -1077,6 +1077,7 @@ Use --testenv or SKYWIRETEST=1 to use test deployment services.`,
 		}
 		defer rpcClient.Close() //nolint:errcheck // Ensure connection is closed when command finishes
 
+		internal.CheckDirectViaScheme(cmd.Flags(), viaVisor, "a visor public key to route a 2-hop test through")
 		// If --via is specified, auto-enable local routes and existing-tp-only
 		if viaVisor != "" {
 			forceLocalRoutes = true

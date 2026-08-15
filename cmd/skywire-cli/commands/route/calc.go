@@ -50,7 +50,7 @@ func init() {
 	calcCmd.Flags().Uint16VarP(&calcMinHops, "min", "n", 0, "minimum hops (0 = use visor's routing.min_hops, fallback 1)")
 	calcCmd.Flags().Uint16VarP(&calcMaxHops, "max", "x", 5, "maximum hops")
 	calcCmd.Flags().IntVarP(&calcCount, "count", "c", 1, "max routes to return (0 = all matching)")
-	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP), dht (visor's local DHT store), auto (DHT then TPD)")
+	calcCmd.Flags().StringVar(&calcSource, "source", "tpd", "transport graph source: tpd (HTTP). dht|auto are accepted for compatibility and also read from TPD, since the DHT store was removed; dht additionally forces the non-streaming local-compute path")
 	calcCmd.Flags().IntVar(&calcQueueCap, "queue-cap", 0, "BFS queue cap (0 = server/local default ~200K, negative = unbounded)")
 	calcCmd.Flags().BoolVar(&calcByLatency, "by-latency", false, "rank routes by cumulative transport latency (lowest first); skips the streaming gRPC path since the full set has to be in hand to sort")
 	clirpc.RegisterFetchFlags(calcCmd)
@@ -182,12 +182,14 @@ var calcCmd = &cobra.Command{
 		var err error
 		// --source dht / auto previously walked the local DHT store
 		// before falling back to TPD. The DHT subsystem has been
-		// removed; both modes now go straight to TPD.
+		// removed; both modes now go straight to TPD. Note that dht is
+		// not merely an alias: it is excluded from the streaming gRPC
+		// path above, so it still selects the local-compute branch.
 		switch strings.ToLower(calcSource) {
 		case "tpd", "auto", "dht":
 			entries, err = fetchAllTransports(ctx, cmd.Flags(), tpdURL)
 		default:
-			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|auto", calcSource))
+			internal.PrintFatalError(cmd.Flags(), fmt.Errorf("invalid --source %q; expected tpd|auto|dht", calcSource))
 		}
 		if err != nil {
 			internal.PrintFatalError(cmd.Flags(), err)
