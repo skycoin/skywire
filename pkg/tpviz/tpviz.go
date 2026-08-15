@@ -56,12 +56,6 @@ func tpvizNetviewVariant() (wasmbin.Variant, bool) {
 // tpviz_legacy_on.go; the `mobile` build variant leaves it empty
 // (tpviz_legacy_off.go) so the ~2.8 MB bundle stays out of the phone binary.
 
-// wasmDistFS holds the experimental WebGL/WASM tpviz view (dist/*). It is only
-// populated in a build with `-tags tpvizwasm` (see tpviz_wasm_on.go); the
-// default build leaves it empty so the ~11 MB main.wasm doesn't bloat every
-// visor/dmsg-server binary. The primary legacy JS view (legacyFS, served at /)
-// is always embedded. See tpviz_wasm_off.go.
-
 // Config holds the configuration for the visualizer server
 type Config struct {
 	// Addr is the address to bind to (default: 127.0.0.1)
@@ -672,50 +666,6 @@ func (s *Server) setupRoutes() {
 		} else if strings.HasSuffix(filename, ".png") {
 			w.Header().Set("Content-Type", "image/png")
 		}
-		w.Write(content) //nolint:errcheck,gosec
-	})
-
-	// WASM UI at /wasm (experimental; only present with -tags tpvizwasm)
-	s.mux.HandleFunc("/wasm", func(w http.ResponseWriter, r *http.Request) {
-		if !wasmViewBuilt {
-			http.Error(w, "tpviz WASM view not included in this build (rebuild with -tags tpvizwasm)", http.StatusNotFound)
-			return
-		}
-		content, err := wasmDistFS.ReadFile("dist/index.html")
-		if err != nil {
-			http.Error(w, "Failed to read WASM index.html", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(content) //nolint:errcheck,gosec
-	})
-
-	s.mux.HandleFunc("/main.wasm", func(w http.ResponseWriter, r *http.Request) {
-		if !wasmViewBuilt {
-			http.Error(w, "tpviz WASM view not included in this build (rebuild with -tags tpvizwasm)", http.StatusNotFound)
-			return
-		}
-		content, err := wasmDistFS.ReadFile("dist/main.wasm")
-		if err != nil {
-			http.Error(w, "Failed to read main.wasm", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/wasm")
-		w.Header().Set("Cache-Control", "no-cache")
-		w.Write(content) //nolint:errcheck,gosec
-	})
-
-	s.mux.HandleFunc("/wasm_exec.js", func(w http.ResponseWriter, r *http.Request) {
-		if !wasmViewBuilt {
-			http.Error(w, "tpviz WASM view not included in this build (rebuild with -tags tpvizwasm)", http.StatusNotFound)
-			return
-		}
-		content, err := wasmDistFS.ReadFile("dist/wasm_exec.js")
-		if err != nil {
-			http.Error(w, "Failed to read wasm_exec.js", http.StatusInternalServerError)
-			return
-		}
-		w.Header().Set("Content-Type", "application/javascript")
 		w.Write(content) //nolint:errcheck,gosec
 	})
 

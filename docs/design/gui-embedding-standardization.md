@@ -33,7 +33,7 @@ Grouped by stack:
   (`cmd/skywire-cli/commands/rewards/server`), proxied into the SPA at
   `/api/rewards/*`.
 - **WASM**: **`skywire web`** (`cmd/skywire/commands/web`, TinyGo `b.wasm` CLI-
-  tree browser), **tpviz-wasm** (`-tags tpvizwasm`), **wasm-visor** (its UI is
+  tree browser), **tpviz-wasm** (`make tpviz-wasm`, standalone only), **wasm-visor** (its UI is
   the reused Angular SPA).
 - **Non-web**: **systray** (fyne).
 
