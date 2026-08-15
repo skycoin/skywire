@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"net"
 	"testing"
 	"time"
@@ -33,6 +34,14 @@ func (o *okTransport) RemotePort() uint16               { return 0 }
 func (o *okTransport) LocalRawAddr() net.Addr           { return &net.TCPAddr{} }
 func (o *okTransport) RemoteRawAddr() net.Addr          { return &net.TCPAddr{} }
 func (o *okTransport) Network() types.Type              { return "test" }
+
+// failWriteTransport models an asymmetric half-open link: writes always error
+// (the peer is unreachable in the send direction) while reads block (the local
+// socket still looks alive and the peer may keep sending). It reuses
+// okTransport for every method except Write.
+type failWriteTransport struct{ okTransport }
+
+func (o *failWriteTransport) Write([]byte) (int, error) { return 0, errors.New("i/o timeout") }
 
 func testPong() routing.Packet { return routing.MakeTransportPongPacket(time.Now().UnixNano()) }
 
@@ -91,4 +100,39 @@ func TestManagedTransport_HealthyPeerStaysOpen(t *testing.T) {
 		mt.handleTransportPong(testPong())
 	}
 	assert.False(t, mt.IsClosed(), "a peer that keeps answering pings must stay open")
+}
+
+// TestManagedTransport_UnwritableClosesAfterFailedPings: a transport whose
+// writes persistently fail (peer unreachable in the send direction) must be
+// closed after pongMissThreshold consecutive ping-write failures — even though
+// it never armed (pongSeen stays false, so the missed-pong reaper is inert) and
+// keeps receiving (lastRecv fresh, so the unarmed-silence reaper never fires).
+// This is the receive-alive/write-dead half-open that otherwise leaked by the
+// thousands on public hubs and got re-published to TPD every cycle.
+func TestManagedTransport_UnwritableClosesAfterFailedPings(t *testing.T) {
+	mt := NewManagedTransportForTest(&failWriteTransport{})
+	require.False(t, mt.pongSeen.Load(), "precondition: never armed")
+
+	closed := false
+	for i := 0; i < pongMissThreshold+3; i++ {
+		mt.lastRecvNanos.Store(time.Now().UnixNano()) // still receiving — unarmed-silence must NOT be the reason
+		mt.tickPing()
+		if mt.IsClosed() {
+			closed = true
+			break
+		}
+	}
+	assert.True(t, closed, "unwritable transport must close after pongMissThreshold failed ping writes")
+}
+
+// TestManagedTransport_TransientWriteFailureRecovers: a single write failure
+// followed by a success must NOT reap — pingWriteFails resets on any successful
+// write, so only a sustained unwritable link (pongMissThreshold in a row) closes.
+func TestManagedTransport_TransientWriteFailureRecovers(t *testing.T) {
+	mt := NewManagedTransportForTest(&okTransport{})
+	// Simulate a couple of failures short of the threshold, then a success.
+	mt.pingWriteFails.Store(pongMissThreshold - 1)
+	mt.tickPing() // okTransport.Write succeeds → pingWriteFails resets to 0
+	assert.Equal(t, int64(0), mt.pingWriteFails.Load(), "a successful write must reset the failure counter")
+	assert.False(t, mt.IsClosed(), "a recovered transport must stay open")
 }
