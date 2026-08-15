@@ -58,7 +58,16 @@ type Output interface {
 // The value is the single source of truth: its json tags define the machine
 // shape, its Human method (when it has one) the text.
 func Print(cmd *cobra.Command, v interface{}) error {
-	return Fprint(cmd.OutOrStdout(), JSONMode(cmd), v)
+	w := cmd.OutOrStdout()
+	// --shape: print the type skeleton instead of the value.
+	if ShapeMode(cmd) {
+		return Fprint(w, true, Skeleton(v))
+	}
+	// --jq: filter the JSON value through gojq (implies --json).
+	if filter := JQFilter(cmd); filter != "" {
+		return printJQ(w, v, filter)
+	}
+	return Fprint(w, JSONMode(cmd), v)
 }
 
 // Fprint is Print against an explicit writer, for callers that are not a

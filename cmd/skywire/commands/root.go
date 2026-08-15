@@ -27,6 +27,7 @@ import (
 	services "github.com/skycoin/skywire/cmd/svc/skywire-services/commands"
 	"github.com/skycoin/skywire/pkg/buildinfo"
 	"github.com/skycoin/skywire/pkg/calvin"
+	"github.com/skycoin/skywire/pkg/cliout"
 	"github.com/skycoin/skywire/pkg/flags"
 	"github.com/skycoin/skywire/pkg/visor"
 )
@@ -79,6 +80,13 @@ func init() {
 		appsCmd,
 		doc.RootCmd,
 	)
+
+	// --json / --jq / --shape and the `--help --json` machine description on the
+	// top-level binary root, so they work on top-level commands (e.g.
+	// `skywire tree --json`, `skywire --help --json`) — not only under
+	// `skywire cli`, whose subtree registers them on its own root as well.
+	cliout.RegisterOutputFlags(RootCmd)
+	cliout.SetJSONHelp(RootCmd)
 
 	visor.RootCmd.Long = calvin.AsciiFont("skywire-visor")
 	dmsg.RootCmd.Use = "dmsg"
