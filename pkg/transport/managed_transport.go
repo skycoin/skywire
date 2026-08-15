@@ -134,6 +134,21 @@ type ManagedTransport struct {
 	// hundreds of them, driving the scheduler/timer load.
 	lastRecvNanos atomic.Int64
 
+	// pingWriteFails counts consecutive transport-ping WRITES that
+	// errored (e.g. i/o timeout to a peer that vanished). Reset to 0 on
+	// any successful write and whenever the underlying transport is
+	// (re)set. This closes the reaper gap the two counters above miss:
+	// an ASYMMETRIC half-open link where the peer still sends us data
+	// (so the readLoop's read deadline never fires and lastRecvNanos
+	// stays fresh — unarmed-silence never triggers) but our writes to it
+	// fail. Because our pings never reach the peer, it never pongs, so
+	// pongSeen stays false and the missedPongs half-open detector never
+	// arms either. Such a transport cannot carry a route (writes fail)
+	// yet was never reaped — on a public hub these pile up in the
+	// thousands and get re-published to TPD every cycle. Once writes
+	// have failed pongMissThreshold consecutive ticks the link is closed.
+	pingWriteFails atomic.Int64
+
 	// cascadeHandler handles cascade protocol packets (route ID 0).
 	// Set by the transport manager from the router's CascadeHandler.
 	cascadeHandler func(p routing.Packet, mt *ManagedTransport)
@@ -535,8 +550,22 @@ func (mt *ManagedTransport) sendTransportPing() {
 	n, err := tp.Write(p)
 	if err != nil {
 		mt.log.WithError(err).Debug("Failed to send transport ping")
+		// A persistently failing write means the link is dead in the
+		// send direction — it cannot carry a route even if the peer keeps
+		// dribbling data to us (which keeps the read deadline alive and,
+		// with no pong reaching us, leaves pongSeen false so neither the
+		// half-open nor the unarmed-silence reaper fires). Reap after
+		// pongMissThreshold consecutive failures, matching the missed-pong
+		// debounce. Reset happens on the first successful write below.
+		if mt.pingWriteFails.Add(1) >= pongMissThreshold {
+			mt.log.WithField("write_fails", mt.pingWriteFails.Load()).
+				WithField("remote", mt.Remote()).
+				Warn("Transport unwritable across consecutive pings; closing dead half-open link")
+			mt.close()
+		}
 		return
 	}
+	mt.pingWriteFails.Store(0)
 	// Count this ping as awaiting a pong; handleTransportPong resets it.
 	mt.missedPongs.Add(1)
 	if n > routing.PacketHeaderSize {
@@ -583,6 +612,7 @@ func (mt *ManagedTransport) handleTransportPong(p routing.Packet) {
 	// below (an outlier-RTT pong still proves liveness).
 	mt.pongSeen.Store(true)
 	mt.missedPongs.Store(0)
+	mt.pingWriteFails.Store(0)
 	sentAt := int64(binary.BigEndian.Uint64(payload[:8])) //nolint:gosec
 	rttMs := float64(time.Now().UnixNano()-sentAt) / 1e6
 	if rttMs <= 0 {
@@ -793,6 +823,7 @@ func (mt *ManagedTransport) setTransport(newTransport network.Transport) {
 	// Fresh underlying connection — reset the half-open miss counter so a
 	// stale count from a prior connection can't immediately reap the new one.
 	mt.missedPongs.Store(0)
+	mt.pingWriteFails.Store(0)
 
 	// Set new underlying transport.
 	mt.transport = newTransport
